@@ -180,6 +180,16 @@ def test_generate_runs_min_then_all_segments_in_order(alpine, gpu_resources):
     assert i_min < i_s1 < i_s2
 
 
+def test_generate_preserves_failure_tail_in_output(alpine, gpu_resources):
+    script = ss.generate_sbatch(_manifest(), alpine, gpu_resources, "/scratch/x")
+    assert "trap nadoc_on_exit EXIT" in script
+    assert "> output/nadoc_failure.log 2>&1" in script
+    assert 'echo "ERROR: NADOC remote stage failed (exit code $rc)"' in script
+    assert 'tail -n 240 "$NADOC_CURRENT_LOG"' in script
+    assert "NADOC_CURRENT_STAGE='6hb_demo_00_min'" in script
+    assert "NADOC_CURRENT_LOG='6hb_demo_00_min.log'" in script
+
+
 def test_ladder_is_idempotent_skip_guarded(alpine, gpu_resources):
     """Each step is guarded by an ``output/<conf>.coor`` existence check so a
     resubmit onto the same scratch resumes at the first unfinished segment
@@ -656,5 +666,6 @@ def test_sbatch_runs_the_live_metrics_collector_in_background(alpine):
     assert "nadoc_live_metrics.py . 30 >/dev/null 2>&1 &" in script
     assert "NADOC_METRICS_PID=$!" in script
     # However the job ends, the collector must not outlive it.
-    assert "trap 'kill $NADOC_METRICS_PID" in script
+    assert "kill $NADOC_METRICS_PID 2>/dev/null || true" in script
+    assert "trap nadoc_on_exit EXIT" in script
     assert script.index("nadoc_live_metrics.py") < script.index("namd3")

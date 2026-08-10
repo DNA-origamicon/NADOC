@@ -46,6 +46,20 @@ def test_parse_state_lines_sacct_substeps_and_cancelled():
     assert parsed["1234568"] == "CANCELLED"
 
 
+def test_parse_sacct_diagnostics_keeps_allocation_evidence():
+    out = (
+        "42|FAILED|1:0|0:0|19:38:21|gpu021\n"
+        "42.batch|FAILED|1:0|0:0|19:38:20|gpu021\n"
+    )
+    parsed = ex.parse_sacct_diagnostics(out, "42")
+    assert parsed["state"] == "FAILED"
+    assert parsed["exit_code"] == "1:0"
+    assert parsed["derived_exit_code"] == "0:0"
+    assert parsed["elapsed"] == "19:38:21"
+    assert parsed["node_list"] == "gpu021"
+    assert parsed["captured_at"] > 0
+
+
 def test_map_slurm_state_buckets():
     assert ex.map_slurm_state("PENDING") == "pending"
     assert ex.map_slurm_state("R") == "running"
@@ -352,6 +366,21 @@ def test_poll_status_falls_back_to_sacct(tmp_path):
     assert bucket == "completed"
 
 
+def test_poll_status_persists_sacct_diagnostics(tmp_path):
+    job = new_job("d", "p", name_stem="d", package_subdir="pkg")
+    job.slurm_job_id = "42"
+    conn = FakeConn(
+        canned={
+            "squeue": RunResult(0, "", ""),
+            "sacct": RunResult(0, "42|FAILED|1:0|0:0|00:12:03|gpu9", ""),
+        }
+    )
+    raw, bucket = _run(ex.poll_status(job, conn=conn))
+    assert (raw, bucket) == ("FAILED", "failed")
+    assert job.slurm_diagnostics["exit_code"] == "1:0"
+    assert job.slurm_diagnostics["node_list"] == "gpu9"
+
+
 def test_poll_status_absent_everywhere_is_completed(tmp_path):
     job = new_job("d", "p", name_stem="d", package_subdir="pkg")
     job.slurm_job_id = "42"
@@ -541,6 +570,50 @@ def test_reconcile_failed_surfaces_namd_cause(tmp_path):
     assert "GPUresident not supported" in (out.error or "")
     assert "FAILED" in (out.error or "")  # keeps the SLURM state too
     assert out.failure_kind == "other"
+
+
+def test_reconcile_failed_surfaces_and_histories_slurm_diagnostics(tmp_path):
+    job = _make_prepared_job(tmp_path)
+    job.slurm_job_id = "42"
+    job.remote_scratch_dir = "/scratch/x/" + job.job_id
+    conn = FakeConn(
+        canned={
+            "squeue": RunResult(0, "", ""),
+            "sacct": RunResult(0, "42|FAILED|7:0|0:0|03:02:01|gpu17", ""),
+            "find": RunResult(0, "", ""),
+        }
+    )
+    out = _run(ex.reconcile_remote_job(job, tmp_path, conn=conn))
+    assert "exit 7:0" in out.error
+    assert "elapsed 03:02:01" in out.error
+    assert "node gpu17" in out.error
+    assert out.resume_history[-1]["slurm_diagnostics"]["exit_code"] == "7:0"
+
+
+def test_fetch_outputs_prioritizes_failure_log_before_checkpoints(tmp_path):
+    job = _make_prepared_job(tmp_path)
+    job.remote_scratch_dir = "/scratch/x/" + job.job_id
+    failure = "ERROR: CUDA launch failed\n"
+    checkpoint = "x" * 100
+    conn = FakeConn(
+        canned={
+            "find": RunResult(
+                0,
+                f"{len(checkpoint)}\toutput/big.restart.coor\n"
+                f"{len(failure)}\toutput/nadoc_failure.log\n",
+                "",
+            ),
+        },
+        get_contents={
+            "nadoc_failure.log": failure,
+            "big.restart.coor": checkpoint,
+        },
+    )
+    assert _run(ex.fetch_outputs(job, tmp_path, conn=conn)) is True
+    assert conn.gets[0][0].endswith("output/nadoc_failure.log")
+    excerpt, source, _kind = ex._scan_logs_for_error(job.package_dir(tmp_path))
+    assert excerpt == "ERROR: CUDA launch failed"
+    assert source == "nadoc_failure.log"
 
 
 def test_scan_logs_prefers_namd_log_over_slurm_err(tmp_path):

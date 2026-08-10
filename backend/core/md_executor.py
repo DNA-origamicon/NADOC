@@ -100,10 +100,33 @@ def parse_state_lines(text: str) -> dict[str, str]:
             continue
         job_field, _, state_field = line.partition("|")
         base = job_field.strip().split(".")[0]
-        state = state_field.strip().split()[0] if state_field.strip() else ""
+        state_text = state_field.partition("|")[0].strip()
+        state = state_text.split()[0] if state_text else ""
         if base and state and base not in states:
             states[base] = state.upper()
     return states
+
+
+def parse_sacct_diagnostics(text: str, job_id: str) -> dict | None:
+    """Persistable accounting evidence from a parsable2 sacct row.
+
+    Expected columns are JobIDRaw,State,ExitCode,DerivedExitCode,Elapsed,NodeList.
+    Older/injected outputs with only JobID|State remain valid and simply yield the
+    available fields.  The allocation row wins over .batch/.extern steps.
+    """
+    for raw in (text or "").splitlines():
+        cols = raw.strip().split("|")
+        if len(cols) < 2 or cols[0].strip() != str(job_id):
+            continue
+        keys = (
+            "job_id", "state", "exit_code", "derived_exit_code", "elapsed", "node_list"
+        )
+        out = {key: value.strip() for key, value in zip(keys, cols) if value.strip()}
+        if "state" in out:
+            out["state"] = out["state"].split()[0].upper()
+        out["captured_at"] = time.time()
+        return out
+    return None
 
 
 # SLURM state code → NADOC lifecycle bucket.  Mirrors the Appendix status-code map.
@@ -535,8 +558,12 @@ async def poll_status(job: MdJob, *, conn=None) -> tuple[str, str]:
     raw = states.get(jid)
     if raw is None:
         sa = await conn.run(
-            f"sacct -j {jid} --format=JobID,State --parsable2 --noheader"
+            f"sacct -j {jid} --format=JobIDRaw,State,ExitCode,DerivedExitCode,Elapsed,NodeList "
+            "--parsable2 --noheader"
         )
+        diagnostics = parse_sacct_diagnostics(sa.stdout, jid)
+        if diagnostics:
+            job.slurm_diagnostics = diagnostics
         raw = parse_state_lines(sa.stdout).get(jid)
     if raw is None:
         return ("", "completed")
@@ -892,7 +919,18 @@ async def _fetch_outputs_locked(job: MdJob, workspace_dir: Path, *, conn=None) -
     package_dir = job.package_dir(workspace_dir)
     # List the remote files to pull: output/ tree + top-level logs + sbatch out/err.
     inventory = await remote_output_inventory(job, conn=conn)
-    rels = list(inventory)
+    # Failure evidence is tiny and irreplaceable once sacct/scratch age out. Fetch it
+    # before multi-GB trajectories and 100+ MB checkpoints so a transport drop still
+    # leaves the reason locally.
+    def _fetch_priority(rel: str) -> tuple[int, str]:
+        name = PurePosixPath(rel).name
+        if name == "nadoc_failure.log":
+            return (0, rel)
+        if name.endswith((".log", ".err", ".out")):
+            return (1, rel)
+        return (2, rel)
+
+    rels = sorted(inventory, key=_fetch_priority)
     total_bytes = sum(inventory.values())
     job.download_status = {
         "state": "downloading", "total_bytes": total_bytes, "verified_bytes": 0,
@@ -1287,7 +1325,17 @@ async def reconcile_remote_job(job: MdJob, workspace_dir: Path, *, conn=None) ->
     else:  # genuine failure (FAILED/OOM/NODE_FAIL/…) — do not offer resume.
         job.status = MdStatus.failed
         job.resumable = False
-        base = f"Remote job {job.slurm_job_id} ended in SLURM state {raw or 'unknown'}."
+        diag = job.slurm_diagnostics or {}
+        detail = ", ".join(
+            f"{label} {diag[key]}"
+            for key, label in (
+                ("exit_code", "exit"), ("derived_exit_code", "derived exit"),
+                ("elapsed", "elapsed"), ("node_list", "node"),
+            )
+            if diag.get(key)
+        )
+        base = f"Remote job {job.slurm_job_id} ended in SLURM state {raw or 'unknown'}"
+        base += f" ({detail})." if detail else "."
         excerpt, src, kind = _scan_logs_for_error(job.package_dir(workspace_dir))
         if excerpt:
             job.error = f"{base} {excerpt}" + (f" (see {src})" if src else "")
@@ -1372,7 +1420,10 @@ def _scan_logs_for_error(
 
     package_dir = Path(package_dir)
     ordered: list[Path] = []
-    ordered += _by_mtime(package_dir.rglob("*.log"))
+    diagnostic = package_dir / "output" / "nadoc_failure.log"
+    if diagnostic.is_file():
+        ordered.append(diagnostic)
+    ordered += [p for p in _by_mtime(package_dir.rglob("*.log")) if p != diagnostic]
     ordered += _by_mtime(package_dir.glob("*.err"))
     ordered += _by_mtime(package_dir.glob("*.out"))
     for path in ordered:
@@ -1427,6 +1478,7 @@ def _append_history(job: MdJob, state: str) -> None:
             "segment_reached": min(job.current_segment_idx + 1, n) if n else 0,
             "segments_total": n,
             "walltime": (job.resources or {}).get("walltime"),
+            "slurm_diagnostics": dict(job.slurm_diagnostics or {}),
             "at": time.time(),
         }
     )

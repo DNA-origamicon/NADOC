@@ -456,18 +456,42 @@ def generate_sbatch(
         "set -eo pipefail",
         "export SLURM_EXPORT_ENV=ALL",  # required for OpenMPI
         "",
-        *_module_block(profile, gpu),
-        "",
         f"cd '{remote_scratch_dir}'",
         # A freshly-staged package has no output/ (local run artifacts are excluded
         # from the upload); each conf writes to output/<name>.* so it must exist.
         "mkdir -p output",
         "",
-        # Background live-metrics collector.  Losing it must never fail the run, so
-        # every failure is swallowed; the trap kills it however the job ends.
+        # Install failure capture before module loading / NAMD startup. The scratch
+        # output directory now exists, so even an environment failure leaves evidence.
+        "NADOC_METRICS_PID=''",
+        "NADOC_CURRENT_STAGE=''",
+        "NADOC_CURRENT_LOG=''",
+        "nadoc_on_exit() {",
+        "  rc=$?",
+        "  kill $NADOC_METRICS_PID 2>/dev/null || true",
+        "  if [ $rc -ne 0 ]; then",
+        "    {",
+        '      echo "ERROR: NADOC remote stage failed (exit code $rc)"',
+        '      echo "stage=${NADOC_CURRENT_STAGE:-unknown}"',
+        '      echo "host=$(hostname)"',
+        '      echo "slurm_job_id=${SLURM_JOB_ID:-unknown}"',
+        '      echo "log=${NADOC_CURRENT_LOG:-unknown}"',
+        '      if [ -n "$NADOC_CURRENT_LOG" ] && [ -f "$NADOC_CURRENT_LOG" ]; then',
+        '        echo "--- last 240 log lines ---"',
+        '        tail -n 240 "$NADOC_CURRENT_LOG"',
+        "      fi",
+        "    } > output/nadoc_failure.log 2>&1",
+        "  fi",
+        "  return $rc",
+        "}",
+        "trap nadoc_on_exit EXIT",
+        "",
+        *_module_block(profile, gpu),
+        "",
+        # Background live-metrics collector. Losing it must never fail the run; the
+        # combined EXIT trap stops it and preserves diagnostics however the job ends.
         f"python3 {LIVE_METRICS_NAME} . {LIVE_METRICS_INTERVAL_S} >/dev/null 2>&1 &",
         "NADOC_METRICS_PID=$!",
-        "trap 'kill $NADOC_METRICS_PID 2>/dev/null || true' EXIT",
         "",
         "# NADOC MD ladder: minimization, then each relaxation segment in order.",
         "# Each conf reads the previous segment's restart coords by relative path.",
@@ -486,6 +510,8 @@ def generate_sbatch(
         lines.append(f'  echo "[NADOC] skip {conf} (already complete)"')
         lines.append("else")
         lines.append(f'  echo "[NADOC] {verb} {conf}"')
+        lines.append(f"  NADOC_CURRENT_STAGE='{conf}'")
+        lines.append(f"  NADOC_CURRENT_LOG='{log}'")
         lines.append(
             "  " + _exec_line(run_conf, log, resources, gpu, profile.namd_command(gpu))
         )

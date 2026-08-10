@@ -300,6 +300,10 @@ class MdJob:
     live_frame: Optional[dict] = None
     slurm_job_id: Optional[str] = None
     slurm_state: Optional[str] = None
+    # Accounting evidence captured while sacct still retains the submission.  A job can
+    # age out before anyone investigates it, so exit codes / elapsed time / node must be
+    # persisted with the job rather than queried on demand after failure.
+    slurm_diagnostics: Optional[dict] = None
     remote_project_dir: Optional[str] = None
     remote_scratch_dir: Optional[str] = None
     resources: Optional[dict] = None
@@ -455,6 +459,7 @@ class MdJob:
         data.setdefault("pending_scancel", False)
         data.setdefault("download_status", None)
         data.setdefault("slurm_state", None)
+        data.setdefault("slurm_diagnostics", None)
         data.setdefault("remote_project_dir", None)
         data.setdefault("remote_scratch_dir", None)
         data.setdefault("resources", None)
