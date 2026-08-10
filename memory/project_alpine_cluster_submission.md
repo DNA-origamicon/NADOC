@@ -496,6 +496,13 @@ atomically rename only after fsync + size verification. The offline verifier nev
 transfer state is `downloading`; after interruption it may promote an exact-size `.part` without Alpine.
 Filesystem/permission errors fail the file operation but do **not** expire a healthy SSH/Duo session.
 
+Byte verification is followed by a separately persisted `processing` phase while NADOC reads the fetched
+trajectory to compute final health and metrics. This pass can take minutes for a multi-GB DCD. The unified
+Jobs card keeps a striped 100% bar visible, says **Download verified — processing trajectory health and
+metrics…**, and disables the action as **Processing…** until bookkeeping finishes. Browser refreshes and
+offline verification preserve this state; successful finalization returns it to `verified` and marks the
+job/segment complete.
+
 Size authority follows the lifecycle: live remote heartbeat bytes while the job is active; actual local
 directory size after download; verified inventory totals in the transfer UI. Directory-size caches are
 invalidated after a transfer. This prevents a terminal card from retaining the last-running remote size.

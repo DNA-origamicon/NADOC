@@ -3883,7 +3883,8 @@ async def list_md_jobs() -> list[dict]:
         if (
             j.execution_target in {"alpine", "runpod"}
             and j.status not in {MdStatus.preparing, MdStatus.queued, MdStatus.running}
-            and (j.download_status or {}).get("state") not in {"verified", "downloading"}
+            and (j.download_status or {}).get("state")
+            not in {"verified", "downloading", "processing"}
         ):
             from backend.core.md_executor import verify_local_download
 
@@ -4182,7 +4183,9 @@ async def finish_and_download_md_job(job_id: str, body: ArchiveRequest) -> dict:
 async def md_download_status(job_id: str) -> dict:
     """Persisted, server-owned result-transfer truth; safe across browser reloads."""
     job = _load_job(job_id)
-    if (job.download_status or {}).get("state") not in {"verified", "downloading"}:
+    if (job.download_status or {}).get("state") not in {
+        "verified", "downloading", "processing"
+    }:
         from backend.core.md_executor import verify_local_download
 
         verify_local_download(job, _workspace())

@@ -1179,8 +1179,6 @@ async def reconcile_remote_job(job: MdJob, workspace_dir: Path, *, conn=None) ->
     if bucket in ("pending", "running"):
         changed = job.slurm_state != prev_state
         if bucket == "running" and job.slurm_started_at is None:
-            import time
-
             job.slurm_started_at = time.time()
             changed = True
         if job.status != new_status:
@@ -1253,8 +1251,19 @@ async def reconcile_remote_job(job: MdJob, workspace_dir: Path, *, conn=None) ->
     _append_history(job, raw or "unknown")
 
     if bucket == "completed":
+        # The result bytes are present, but final health/metrics extraction can spend
+        # minutes reading a multi-GB trajectory.  Persist that distinct phase before
+        # entering the synchronous bookkeeping pass so the UI never looks frozen in
+        # the synthetic retry/running state left by an interrupted fetch.
+        if job.download_status and job.download_status.get("state") == "verified":
+            job.download_status["state"] = "processing"
+            job.download_status["processing_started_at"] = time.time()
+            job.save(workspace_dir)
         _finalize_local_bookkeeping(job, workspace_dir)
         _record_learned_throughput(job, workspace_dir)
+        if job.download_status and job.download_status.get("state") == "processing":
+            job.download_status["state"] = "verified"
+            job.download_status["processing_finished_at"] = time.time()
         job.status = MdStatus.completed
         job.error = None
         job.resumable = False

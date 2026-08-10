@@ -401,6 +401,39 @@ def test_reconcile_completed_fetches_and_marks_done(tmp_path, alpine, resources)
     assert conn.gets
 
 
+def test_reconcile_completed_persists_processing_during_final_bookkeeping(
+    tmp_path, alpine, resources, monkeypatch
+):
+    job = _make_prepared_job(tmp_path)
+    job.slurm_job_id = "42"
+    job.remote_scratch_dir = "/scratch/alpine/jojo/nadoc_jobs/" + job.job_id
+    conn = FakeConn(
+        canned={
+            "squeue": RunResult(0, "", ""),
+            "sacct": RunResult(0, "42|COMPLETED", ""),
+            "find": RunResult(
+                0,
+                "7\toutput/6hb_demo_01_p100.coor\n"
+                "7\toutput/6hb_demo_01_p100.vel\n"
+                "7\toutput/6hb_demo_01_p100.xsc\n",
+                "",
+            ),
+        }
+    )
+
+    def assert_processing(saved_job, workspace_dir):
+        persisted = MdJob.load(saved_job.job_id, workspace_dir)
+        assert persisted.download_status["state"] == "processing"
+        assert persisted.download_status["processing_started_at"] > 0
+
+    monkeypatch.setattr(ex, "_finalize_local_bookkeeping", assert_processing)
+    out = _run(ex.reconcile_remote_job(job, tmp_path, conn=conn))
+
+    assert out.status == MdStatus.completed
+    assert out.download_status["state"] == "verified"
+    assert out.download_status["processing_finished_at"] >= out.download_status["processing_started_at"]
+
+
 def test_reconcile_completed_missing_checkpoint_stays_repollable(
     tmp_path, alpine, resources
 ):

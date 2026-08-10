@@ -609,6 +609,7 @@ export function initSimulateJobs({
     if (!transfer && node?.execution_target === 'alpine') {
       const ds = node.download_status
       if (ds?.state === 'verified') transfer = { phase: 'done', pct: 100, ...ds }
+      else if (ds?.state === 'processing') transfer = { phase: 'processing', pct: 100, ...ds }
       else if (ds?.state === 'downloading') {
         const moved = Math.min(Number(ds.transferred_bytes ?? ds.verified_bytes) || 0,
           Number(ds.total_bytes) || Infinity)
@@ -623,6 +624,8 @@ export function initSimulateJobs({
       ? `Downloading results from Alpine${transfer.total ? ` · ${formatBytes(transfer.moved || 0)} / ${formatBytes(transfer.total)} (${transfer.pct || 0}%)` : ''}…`
       : transfer?.phase === 'moving'
         ? `Moving downloaded results · ${formatBytes(transfer.moved || 0)} / ${formatBytes(transfer.total || 0)} (${transfer.pct || 0}%)`
+        : transfer?.phase === 'processing'
+          ? 'Download verified — processing trajectory health and metrics…'
         : transfer?.phase === 'done' ? 'Download verified complete — every Alpine result file matches its remote size.'
           : transfer?.phase === 'unverified' || transfer?.phase === 'interrupted'
             ? `Download incomplete locally${transfer.total_bytes ? ` · ${formatBytes(transfer.verified_bytes || 0)} / ${formatBytes(transfer.total_bytes)}` : ''}`
@@ -640,13 +643,13 @@ export function initSimulateJobs({
     // detailed stage/segment text as a hover tooltip.
     if (progressBar) {
       progressBar.style.width = transfer
-        ? `${transfer.phase === 'downloading' && !transfer.total ? 100 : transfer.phase === 'done' ? 100 : transfer.pct || 0}%`
+        ? `${transfer.phase === 'downloading' && !transfer.total ? 100 : ['done', 'processing'].includes(transfer.phase) ? 100 : transfer.pct || 0}%`
         : `${node ? masterProgressPct(node) : 0}%`
       progressBar.style.background = transfer?.phase === 'done' ? _C.ok
         : ['unverified', 'interrupted'].includes(transfer?.phase) ? _C.warn
         : transfer ? 'repeating-linear-gradient(135deg,#4a9eff 0,#4a9eff 8px,#2f6fae 8px,#2f6fae 16px)'
           : node ? masterProgressColor(node) : _C.accent
-      progressBar.style.opacity = transfer?.phase === 'downloading' ? '0.65' : '1'
+      progressBar.style.opacity = ['downloading', 'processing'].includes(transfer?.phase) ? '0.65' : '1'
     }
     if (progressWrap) progressWrap.title = transferText || (node ? masterProgressTooltip(node) : '')
     if (detailEl) {
@@ -661,11 +664,12 @@ export function initSimulateJobs({
     _renderActions(node)
     if (endDownloadBtn) {
       const show = canEndAndDownload(node)
-      const transferLocked = ['downloading', 'moving', 'done'].includes(transfer?.phase)
+      const transferLocked = ['downloading', 'moving', 'processing', 'done'].includes(transfer?.phase)
       endDownloadBtn.style.display = show ? '' : 'none'
       endDownloadBtn.disabled = _busy || transferLocked
       endDownloadBtn.textContent = transfer?.phase === 'done' ? 'Download complete'
-        : ['downloading', 'moving'].includes(transfer?.phase) ? 'Downloading…'
+        : transfer?.phase === 'processing' ? 'Processing…'
+          : ['downloading', 'moving'].includes(transfer?.phase) ? 'Downloading…'
           : transfer ? 'Retry download' : 'End run and download'
       endDownloadBtn.style.opacity = endDownloadBtn.disabled ? '0.5' : '1'
       endDownloadBtn.style.cursor = endDownloadBtn.disabled ? 'not-allowed' : 'pointer'

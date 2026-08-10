@@ -515,6 +515,19 @@ describe('End run and download feedback', () => {
     expect(document.getElementById('simulate-jobs-status').textContent).toContain('verified complete')
   })
 
+  it('shows post-download processing as active instead of a failed or frozen run', async () => {
+    mount()
+    const node = mdNode({ status: 'running', execution_target: 'alpine',
+      download_status: { state: 'processing', total_bytes: 80e9, verified_bytes: 80e9 } })
+    const { sim } = make([node])
+    await sim.refresh(); sim.selectJob('md1')
+    const btn = document.getElementById('simulate-jobs-end-download-btn')
+    expect(btn.disabled).toBe(true)
+    expect(btn.textContent).toBe('Processing…')
+    expect(document.getElementById('simulate-jobs-status').textContent)
+      .toContain('processing trajectory health and metrics')
+  })
+
   it('locks and greys the button immediately and repurposes the master progress bar', async () => {
     localStorage.setItem('nadoc.runDir', '/storage')
     let finish
