@@ -141,6 +141,7 @@ PRESETS: dict[str, RelaxPreset] = {
         ),
         defaults={
             "protocol": EXPLICIT_PROTOCOL,
+            "box_mode": "rotation",
             "water_shell_nm": 0.0,  # full box; the carve is a memory fallback only
             # The tutorial's own recipe is the DNA bbox ± 20 Å.  NADOC shipped 1.2 nm,
             # 40 % tighter.  namd_solvate.resolve_padding_nm trims this back down when
@@ -162,6 +163,7 @@ PRESETS: dict[str, RelaxPreset] = {
         ),
         defaults={
             "protocol": EXPLICIT_PROTOCOL,
+            "box_mode": "rotation",
             "water_shell_nm": 0.0,
             # Wider than Standard's (now-faithful) 2.0 nm: this is the tier whose
             # numbers go in a paper, so give the solute more room to tumble than the
@@ -187,6 +189,7 @@ PRESETS: dict[str, RelaxPreset] = {
         ),
         defaults={
             "protocol": EXPLICIT_PROTOCOL,
+            "box_mode": "bbox",
             # 0 = auto: Gate A fits a water-shell carve if this design will not otherwise
             # fit the card.  Losing the barostat costs the settle stage and the box trace,
             # which matters far less when the point is turnaround time.
@@ -195,7 +198,6 @@ PRESETS: dict[str, RelaxPreset] = {
             "salt_mode": "screening",
             "early_stop_relax": True,
             "fast": True,
-            "production_timestep_fs": 4.0,
         },
         reference=(
             "NADOC measured defaults: exp47 electrostatics (+39 % throughput, "
@@ -210,12 +212,13 @@ PRESETS: dict[str, RelaxPreset] = {
             "The published protocol with nothing traded for speed. Full water box (a "
             "carve is REFUSED rather than auto-fitted, because it would take the barostat "
             "and with it the settle stage and the box-size equilibration criterion), every "
-            "stage run to its full length, standard hydrogen masses, and the paper's own "
-            "2 fs production integrator rather than NADOC's 4 fs default. Slower, and "
+            "stage run to its full length, standard hydrogen masses, and the paper's "
+            "2 fs relaxation integrator rather than NADOC's 4 fs fast path. Slower, and "
             "reproducible against the reference."
         ),
         defaults={
             "protocol": EXPLICIT_PROTOCOL,
+            "box_mode": "rotation",
             "water_shell_nm": 0.0,
             "allow_water_shell_carve": False,
             # The tutorial's own recipe is the DNA bounding box +/- 20 A.
@@ -228,10 +231,6 @@ PRESETS: dict[str, RelaxPreset] = {
             "minimize_steps": 4_800,
             "early_stop_relax": False,
             "fast": False,
-            # 2 fs + rigidBonds all is what the paper ran.  This is the "manual medium"
-            # integrator, which is never auto-selected — choosing this preset IS the
-            # explicit choice, and the wizard says so in as many words.
-            "production_timestep_fs": 2.0,
         },
         # NOT overridable, unlike every other default here.  A carved cell has no bulk
         # phase, so the published 12.5 mM Mg(2+) condition is not a concentration OF

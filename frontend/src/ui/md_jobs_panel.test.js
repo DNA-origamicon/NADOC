@@ -787,7 +787,7 @@ describe('mdRemoteAwaitingSubmit', () => {
   })
 })
 
-import { mdDetailErrorText } from './md_jobs_panel.js'
+import { mdDetailErrorText, mdFailureDetailsText } from './md_jobs_panel.js'
 
 describe('mdDetailErrorText', () => {
   it('shows nothing for a clean user-stop (no error)', () => {
@@ -809,6 +809,28 @@ describe('mdDetailErrorText', () => {
     expect(mdDetailErrorText({ status: 'running' })).toBe(null)
     expect(mdDetailErrorText({ status: 'preparing' })).toBe(null)
     expect(mdDetailErrorText({ status: 'completed' })).toBe(null)
+  })
+})
+
+describe('mdFailureDetailsText', () => {
+  it('shows structured NAMD diagnostics and the log tail', () => {
+    const text = mdFailureDetailsText({
+      status: 'failed', error: 'NAMD failed (rc=1). See stage.log',
+      failure_kind: 'instability',
+      failure_details: { failure_kind: 'instability', phase: 'NAMD execution',
+        stage: '300K NPT', segment: 'stage_p10', exit_code: 1,
+        log_file: 'stage.log', log_excerpt: 'FATAL ERROR: constraint failure' },
+    })
+    expect(text).toContain('NAMD exit code: 1')
+    expect(text).toContain('Stage: 300K NPT')
+    expect(text).toContain('FATAL ERROR: constraint failure')
+  })
+
+  it('diagnoses preparation failures without inventing a NAMD code', () => {
+    const text = mdFailureDetailsText({ status: 'failed', error: 'Preparation failed: bad topology',
+      failure_details: { failure_kind: 'other', phase: 'preparation', exit_code: null } })
+    expect(text).toContain('Phase: preparation')
+    expect(text).not.toContain('NAMD exit code')
   })
 })
 

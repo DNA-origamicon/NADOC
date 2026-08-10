@@ -86,17 +86,20 @@ _EXTRA_BASE_FRAME_ROT_M: _np.ndarray = _np.array(
 _EXTRA_BASE_FRAME_ROT_M.setflags(write=False)
 
 # Junction-local poses measured from the two manually positioned residues in
-# workspace/2hb_1xT.nadoc (2026-08-09).  The two records are the two possible chemical
-# traversal orientations through a crossover.  Values are expressed in the unposed
-# residue frame, so they transfer to any helix pair/orientation instead of baking in the
-# source design's world coordinates.  Quaternion order is x, y, z, w.
+# workspace/2hb_1xT.nadoc (2026-08-09), then translated +0.005 nm along local X
+# after a full 24hb_1xT topology sweep.  That sub-angstrom clearance removes the
+# residual grazing ring intersections without changing residue orientation.  The two
+# records are the two possible chemical traversal orientations through a crossover.
+# Values are expressed in the unposed residue frame, so they transfer to any helix
+# pair/orientation instead of baking in the source design's world coordinates.
+# Quaternion order is x, y, z, w.
 _ONE_BASE_DEFAULT_LOCAL_POSES: dict[bool, tuple[tuple[float, ...], tuple[float, ...]]] = {
     False: (
-        (-0.11838409398784218, -0.22868023153856676, -0.035012651628871135),
+        (-0.11338409398784218, -0.22868023153856676, -0.035012651628871135),
         (-0.10871135764025318, 0.05191393506416845, -0.3845073158890162, 0.9152272439640281),
     ),
     True: (
-        (-0.021056163944091474, -0.2061734603038539, -0.07055908771081991),
+        (-0.016056163944091473, -0.2061734603038539, -0.07055908771081991),
         (-0.0653133319390967, -0.08778461219542308, -0.20145497692027542, 0.9733673113510458),
     ),
 }

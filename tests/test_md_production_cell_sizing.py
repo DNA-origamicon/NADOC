@@ -110,7 +110,7 @@ class TestFreeRunCellGuard:
         assert exc.value.status_code == 400
         detail = exc.value.detail
         assert "33" in detail  # how far it overlaps
-        assert "production_ns_intent" in detail  # the actual remedy
+        assert "Cell sizing set to rotation" in detail  # the actual remedy
         assert "allow_undersized_cell" in detail  # the override
 
     def test_a_negative_gap_reads_as_an_overlap_not_a_clearance(self, tmp_path) -> None:

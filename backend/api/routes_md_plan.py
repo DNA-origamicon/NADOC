@@ -134,18 +134,13 @@ FIELD_SCOPE: dict[str, str] = {
     "allow_catenated_seed": "relaxation",
     "minimize_steps": "relaxation",
     "protocol": "relaxation",
-    # The production run only — recorded at prep, applied when production runs.
-    "production_timestep_fs": "production",
-    "production_rigid_bonds": "production",
-    "production_hmr": "production",
-    "production_ns_intent": "production",
     # Everything else — solvation, chemistry, hardware — is shared by both, because the
     # cell and the PSF a relaxation builds are the ones production inherits verbatim.
 }
 
 
 def _integrator_conditions(resolved: CreateJobRequest) -> list[dict]:
-    """Every measured objection to the chosen integrator combinations, both scopes.
+    """Every measured objection to the relaxation integrator combination.
 
     The ladder's base timestep still falls back to `fast` when the caller has not chosen
     one, so this reports on what the confs will actually carry rather than on the raw
@@ -158,19 +153,10 @@ def _integrator_conditions(resolved: CreateJobRequest) -> list[dict]:
     )
     if resolved.force_soft:
         ladder_dt = 1.0
-    out = integrator_warnings(
+    return integrator_warnings(
         resolve_integrator(ladder_dt, resolved.relax_rigid_bonds, resolved.relax_hmr),
         scope="relaxation",
     )
-    out += integrator_warnings(
-        resolve_integrator(
-            float(resolved.production_timestep_fs or 4.0),
-            resolved.production_rigid_bonds,
-            resolved.production_hmr,
-        ),
-        scope="production",
-    )
-    return out
 
 
 def _provenance(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> dict:
@@ -1036,6 +1022,7 @@ def _production_provenance(
     chained: bool = False,
 ) -> dict:
     explicit = set(body.model_fields_set)
+    relax_integrator = manifest.get("relax_integrator") or {}
 
     def entry(value, name, *, reason="", inherited_key=None, inherited_reason=""):
         if name in explicit and getattr(body, name, None) is not None:
@@ -1049,6 +1036,25 @@ def _production_provenance(
             }
         return {"value": value, "provenance": "default", "reason": reason}
 
+    def integrator_entry(value, name, axis):
+        if name in explicit and getattr(body, name, None) is not None:
+            return {"value": value, "provenance": "user", "reason": ""}
+        if relax_integrator.get(axis) is not None:
+            return {
+                "value": value,
+                "provenance": "inherited",
+                "reason": "starts from the parent relaxation's resolved integrator; "
+                "this production run may override it",
+            }
+        legacy_key = name
+        if manifest.get(legacy_key) is not None:
+            return {
+                "value": value,
+                "provenance": "inherited",
+                "reason": "legacy default recorded when the relaxation was prepared",
+            }
+        return {"value": value, "provenance": "default", "reason": "compatibility default"}
+
     return {
         "length_ns": entry(
             float(plan["length_ns"]),
@@ -1061,24 +1067,20 @@ def _production_provenance(
             reason=f"the protocol default ({_p.PRODUCTION_DCD_FREQ} steps "
             f"= 10 ps at 4 fs)",
         ),
-        "production_timestep_fs": entry(
+        "production_timestep_fs": integrator_entry(
             float(plan["timestep_fs"]),
             "production_timestep_fs",
-            inherited_key="production_timestep_fs",
-            reason="derived: 4 fs when the ladder validated rigid 4 fs dynamics for this "
-            "design, else the 1 fs conservative reference",
+            "timestep_fs",
         ),
-        "production_rigid_bonds": entry(
+        "production_rigid_bonds": integrator_entry(
             choice.rigid_bonds,
             "production_rigid_bonds",
-            inherited_key="production_rigid_bonds",
-            reason=f"auto from the {choice.timestep_fs:g} fs timestep",
+            "rigid_bonds",
         ),
-        "production_hmr": entry(
+        "production_hmr": integrator_entry(
             bool(choice.hmr),
             "production_hmr",
-            inherited_key="production_hmr",
-            reason=f"auto from the {choice.timestep_fs:g} fs timestep",
+            "hmr",
         ),
         "gpu_resident": entry(
             body.gpu_resident if "gpu_resident" in explicit else "auto",

@@ -190,9 +190,9 @@ export const ENGINE_CAPABILITIES = {
     // Wizard REQUEST fields, not DOM ids — the controls are built at runtime by
     // md_job_wizard.js rather than declared in index.html.
     advancedParams: [
-      'padding_nm', 'water_shell_nm', 'production_ns_intent', 'salt_mode', 'mg_conc_mM',
+      'padding_nm', 'water_shell_nm', 'box_mode', 'salt_mode', 'mg_conc_mM',
       'ion_conc_mM', 'minimize_steps', 'fast', 'early_stop_relax',
-      'production_timestep_fs', 'allow_water_shell_carve', 'gpu_resident',
+      'allow_water_shell_carve', 'gpu_resident',
       'gpu_fallback_policy', 'threads', 'devices', 'force_soft',
     ],
   },

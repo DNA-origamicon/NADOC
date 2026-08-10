@@ -162,7 +162,7 @@ describe('isUndersizedCellRefusal', () => {
     // part of the contract and must survive any further rewording.
     expect(isUndersizedCellRefusal(
       'A 1000 ns run drifts this structure into its own periodic image (33 Å overlap). ' +
-      'Re-prep with a larger cell (production_ns_intent), keep the run under 20 ns, or ' +
+      'Re-prep with Cell sizing set to rotation, keep the run under 20 ns, or ' +
       'resend with allow_undersized_cell=true.')).toBe(true)
   })
 })

@@ -2694,6 +2694,7 @@ def build_namd_solvated_package(
     design: Design,
     *,
     padding_nm: float = 1.2,
+    box_mode: str = DEFAULT_BOX_MODE,
     ion_conc_mM: float = 150.0,
     mg_conc_mM: float = 0.0,
     mg_hexahydrate: bool = False,
@@ -2808,7 +2809,8 @@ def build_namd_solvated_package(
         if padding_note:
             logger.info("box sizing: %s", padding_note)
         box_mode, box_mode_note = resolve_box_mode(
-            dna_pdb, padding_nm, max_atoms=_atom_cap, free_ns=free_ns
+            dna_pdb, padding_nm, max_atoms=_atom_cap, free_ns=free_ns,
+            preferred=box_mode,
         )
         if box_mode_note:
             logger.warning("box sizing: %s", box_mode_note)

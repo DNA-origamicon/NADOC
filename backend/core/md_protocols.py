@@ -3214,9 +3214,9 @@ def prepare_mgh_slow_release(
     mg_conc_mM: float = 12.5,
     salt_mode: str = "custom",
     padding_nm: float = 1.2,
-    #: Unrestrained ns this package will run.  None = the ladder's own 4.8 ns free
-    #: stage, which is what a relaxation-only package needs.  Pass the intended
-    #: PRODUCTION length to size the cell for a solute that will actually turn.
+    box_mode: str = "rotation",
+    #: Deprecated compatibility input. Cell geometry is now selected directly with
+    #: ``box_mode`` instead of inferred from a future run length.
     free_ns: Optional[float] = None,
     water_shell_nm: float = 0.0,
     minimize_steps: int = 4_800,
@@ -3376,17 +3376,10 @@ def prepare_mgh_slow_release(
         # Without this the box sizer's atom cap always resolved against device "0",
         # so a CPU-targeted job was sized against VRAM on any host that has a GPU.
         devices=devices,
-        # A relaxation package runs exactly ONE unrestrained stage (k=0).  Telling the
-        # sizer so lets it use a bbox cell — the solute cannot turn far enough in a few
-        # nanoseconds to meet its own image, and a rotation-sized cell costs several
-        # times the water for nothing.
-        #
-        # But a production CHILD re-uses this package's cell verbatim, so a bbox cell
-        # is a decision made here on behalf of every run that will ever seed from it.
-        # A caller that already knows it wants a long free run passes that length and
-        # gets a rotation-sized cell up front — the only point where it is cheap to
-        # choose, since no later step re-solvates.
-        free_ns=_LADDER_FREE_NS if free_ns is None else max(free_ns, _LADDER_FREE_NS),
+        box_mode=box_mode,
+        # Cell geometry is an explicit preparation choice. Production children inherit
+        # it verbatim and cannot re-solvate, so run length must not silently change it.
+        free_ns=None,
         progress=progress,
     )
 
@@ -3884,16 +3877,9 @@ def prepare_mgh_slow_release(
             ),
         },
         "aksimentiev_enm": enm_report,
-        # User-selected PRODUCTION integrator timestep (Advanced card, 1/2/4 fs).  The
-        # production plan (routes_md._production_fast_plan) reads this; absent (older
-        # packages) it falls back to the fast-derived 4/1 fs default.  2.0 fs is only ever
-        # here because the user picked it — never an automatic downgrade.
-        "production_timestep_fs": float(production_timestep_fs),
-        # The two axes production used to derive from its timestep alone.  None = auto.
-        "production_rigid_bonds": production_rigid_bonds,
-        "production_hmr": production_hmr,
         # What the LADDER actually ran, resolved — so a reader never has to re-derive it
-        # from `fast` and guess which tier applied.
+        # from `fast` and guess which tier applied. An untouched production run starts
+        # from these values, but its own request always wins.
         "relax_integrator": ladder_choice.as_dict(),
         # The Advanced-card GPU-resident choice, so a later PRODUCTION run inherits it
         # instead of hard-coding resident on (which ignored both the size gate and the

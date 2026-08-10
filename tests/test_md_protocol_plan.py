@@ -676,9 +676,8 @@ def test_custom_salt_mode_leaves_the_ion_fields_alone(client):
     }
 
 
-def test_the_literature_preset_runs_the_papers_integrator_everywhere(client):
+def test_the_literature_preset_runs_the_papers_relaxation_integrator(client):
     plan = _plan(client, relax_preset="literature")
-    assert plan["request"]["production_timestep_fs"]["value"] == 2.0
     assert all(s["params"]["timestep"] == "2" for s in plan["stages"][1:])
     assert all(s["params"]["rigidbonds"] == "all" for s in plan["stages"][1:])
 
@@ -830,8 +829,12 @@ def parent_job(tmp_path, monkeypatch):
                     "sized_for_free_ns": 100.0,
                 },
                 "relax_protocol_settings": {"timestep_fs": 2.0},
+                "relax_integrator": {
+                    "timestep_fs": 2.0,
+                    "rigid_bonds": "all",
+                    "hmr": False,
+                },
                 "fast_relaxation": {"enabled": False},
-                "production_timestep_fs": 2.0,
                 "minimization": {"name": "demo_00_min", "steps": 4800},
                 "segments": [
                     {
@@ -908,12 +911,17 @@ def test_an_untouched_production_setting_reports_where_it_really_came_from(
 ):
     """Without this every production control rendered with no chip at all."""
     req = _prod_plan(client, parent_job)["production_request"]
-    # The package pinned 2 fs at prep; the create-request merge would have said 4.
+    # Production starts from the parent relaxation's resolved integrator.
     assert req["production_timestep_fs"] == {
         "value": 2.0,
         "provenance": "inherited",
-        "reason": "recorded when the relaxation package was prepared",
+        "reason": "starts from the parent relaxation's resolved integrator; "
+        "this production run may override it",
     }
+    assert req["production_rigid_bonds"]["value"] == "all"
+    assert req["production_rigid_bonds"]["provenance"] == "inherited"
+    assert req["production_hmr"]["value"] is False
+    assert req["production_hmr"]["provenance"] == "inherited"
     assert req["length_ns"]["provenance"] == "default"
     assert req["length_ns"]["value"] == 100.0
     # 'auto' resolved against the parent's protocol, with the reason it decided that way.
@@ -941,11 +949,15 @@ def test_the_production_integrator_axes_reach_the_previewed_conf(client, parent_
     values while the job ran the chosen ones.
     """
     plan = _prod_plan(
-        client, parent_job, production_timestep_fs=2.0, production_rigid_bonds="none"
+        client, parent_job, production_timestep_fs=2.0,
+        production_rigid_bonds="none", production_hmr=True,
     )
     run = plan["stages"][plan["run_stage_index"]]
     assert run["params"]["timestep"] == "2"
     assert run["params"]["rigidbonds"] == "none"
+    assert plan["production_request"]["production_hmr"] == {
+        "value": True, "provenance": "user", "reason": ""
+    }
 
 
 def test_the_form_and_the_preview_agree_about_the_default_run_length(

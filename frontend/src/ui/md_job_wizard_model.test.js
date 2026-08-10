@@ -1109,7 +1109,6 @@ describe('field scope', () => {
 
   it('falls back to the local table before the plan arrives', () => {
     expect(fieldScope('relax_hmr', null)).toBe('relaxation')
-    expect(fieldScope('production_hmr', null)).toBe('production')
   })
 
   it('defaults an unknown field to both, not to one run', () => {
@@ -1119,9 +1118,8 @@ describe('field scope', () => {
     expect(fieldScope('who_knows', null)).toBe('both')
   })
 
-  it('separates the two timesteps, which is the whole point', () => {
+  it('keeps the relaxation timestep in the relaxation scope', () => {
     expect(fieldScope('relax_timestep_fs', null)).toBe('relaxation')
-    expect(fieldScope('production_timestep_fs', null)).toBe('production')
   })
 })
 
@@ -1141,12 +1139,14 @@ describe('fieldAlert', () => {
   })
 })
 
-describe('WIZARD_FIELDS carries the separated axes', () => {
-  it('sends each axis, so a deliberate combination is not silently dropped', () => {
-    for (const key of ['relax_timestep_fs', 'relax_rigid_bonds', 'relax_hmr',
-                       'production_rigid_bonds', 'production_hmr']) {
+describe('WIZARD_FIELDS carries the relaxation axes', () => {
+  it('sends each relaxation axis, so a deliberate combination is not silently dropped', () => {
+    for (const key of ['relax_timestep_fs', 'relax_rigid_bonds', 'relax_hmr']) {
       expect(WIZARD_FIELDS).toContain(key)
     }
+    expect(WIZARD_FIELDS).not.toContain('production_timestep_fs')
+    expect(WIZARD_FIELDS).not.toContain('production_rigid_bonds')
+    expect(WIZARD_FIELDS).not.toContain('production_hmr')
   })
 
   it('passes a false HMR through — false is a choice, not an absence', () => {

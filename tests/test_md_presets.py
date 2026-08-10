@@ -90,7 +90,6 @@ def test_literature_trades_nothing_for_speed():
     d = PRESETS[LITERATURE].defaults
     assert d["early_stop_relax"] is False  # never truncate a stage you will publish
     assert d["fast"] is False  # no hydrogen-mass repartitioning
-    assert d["production_timestep_fs"] == 2.0  # the paper's 2 fs + rigidBonds all
     assert d["padding_nm"] == 2.0  # the tutorial's bounding box +/- 20 A
     assert d["salt_mode"] == "screening"  # Mg(H2O)6 neutralises, no sodium
     assert d["minimize_steps"] == 4_800  # the tutorial's literal figure
@@ -155,7 +154,6 @@ def test_design_speed_turns_every_measured_accelerator_on():
     d = PRESETS[DESIGN_SPEED].defaults
     assert d["fast"] is True  # HMR + 4 fs + GPU-resident
     assert d["early_stop_relax"] is True
-    assert d["production_timestep_fs"] == 4.0
     assert d["padding_nm"] == 1.2  # the cheap bounding-box cell
     assert d["protocol"] == EXPLICIT_PROTOCOL  # same chemistry, only scheduling moves
 
@@ -163,7 +161,7 @@ def test_design_speed_turns_every_measured_accelerator_on():
 def test_the_two_wizard_tiers_disagree_on_every_speed_axis():
     """If they ever agreed on one, that axis would be a control with no effect."""
     fast, lit = PRESETS[DESIGN_SPEED].defaults, PRESETS[LITERATURE].defaults
-    for key in ("fast", "early_stop_relax", "production_timestep_fs", "padding_nm"):
+    for key in ("fast", "early_stop_relax", "padding_nm"):
         assert fast[key] != lit[key], key
 
 

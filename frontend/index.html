@@ -5846,8 +5846,11 @@
                     <div id="md-jobs-metrics"
                          style="display:grid;grid-template-columns:1fr 1fr;gap:4px"></div>
                     <!-- Error message (part of the Health card) -->
-                    <div id="md-jobs-detail-error"
-                         style="display:none;font-size:var(--text-xs);color:#f85149;background:#1a0a0a;border:1px solid #5e1a1a;border-radius:3px;padding:5px;margin-top:6px;white-space:pre-wrap;word-break:break-word"></div>
+                    <details id="md-jobs-detail-error"
+                         style="display:none;font-size:var(--text-xs);color:#f85149;background:#1a0a0a;border:1px solid #5e1a1a;border-radius:3px;padding:5px;margin-top:6px;word-break:break-word">
+                      <summary style="cursor:pointer;font-weight:600">Failure details</summary>
+                      <pre id="md-jobs-detail-error-body" style="margin:6px 0 0;white-space:pre-wrap;font:inherit;color:inherit"></pre>
+                    </details>
                   </div>
                 </div>
 

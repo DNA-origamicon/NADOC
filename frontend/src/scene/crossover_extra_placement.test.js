@@ -27,8 +27,8 @@ describe('crossover extra-base placement abstraction', () => {
   })
 
   it.each([
-    [false, [1.0350126516288711, -0.0677414490623244, -0.11119985396656734]],
-    [true, [0.9294409122891801, -0.15898318445001028, 0.15187203661584792]],
+    [false, [1.0350126516288711, -0.07173220248105638, -0.11421214332034445]],
+    [true, [0.9294409122891801, -0.16297393786874226, 0.154884325969625]],
   ])('uses the measured off-curve 1xT pose (reversed=%s)', (simReversed, expected) => {
     const [p] = buildCrossoverExtraPlacements({
       xoId: 'xo', count: 1, pointA: new THREE.Vector3(),

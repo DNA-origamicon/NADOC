@@ -29,7 +29,7 @@ from dataclasses import asdict
 from collections import OrderedDict
 from pathlib import Path
 import os
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
@@ -142,19 +142,16 @@ class CreateJobRequest(BaseModel):
     ion_conc_mM: float = Field(0.0, ge=0.0)
     mg_conc_mM: float = Field(12.5, ge=0.0)
     padding_nm: float = Field(1.2, gt=0.0)
-    production_ns_intent: Optional[float] = Field(
-        None,
-        gt=0.0,
-        le=MAX_PRODUCTION_NS,
-        description="How many UNRESTRAINED nanoseconds you intend to run off this "
-        "package. Drives the cell-sizing rule: above "
-        "ROTATION_FREE_NS_THRESHOLD (20 ns) the box is sized so the solute "
-        "can turn through any orientation without meeting its periodic "
-        "image, instead of the cheap bbox cell the restrained ladder needs. "
-        "Costs several times the water — set it only when you will actually "
-        "run a long production, which a production CHILD cannot fix later "
-        "because it re-uses this package's cell verbatim.",
+    box_mode: Literal["bbox", "rotation"] = Field(
+        "rotation",
+        description="Cell geometry chosen at solvation. 'rotation' is a cubic cell "
+        "that remains safe at every solute orientation; 'bbox' is the smaller "
+        "axis-aligned cell and is appropriate only while overall orientation is "
+        "restrained or for short relaxation-only work.",
     )
+    # Backward-compatible input for saved drafts and older API clients. It no longer
+    # controls cell geometry; callers should send box_mode explicitly.
+    production_ns_intent: Optional[float] = Field(None, gt=0.0, le=MAX_PRODUCTION_NS)
     water_shell_nm: float = Field(
         0.0,
         ge=0.0,
@@ -198,8 +195,8 @@ class CreateJobRequest(BaseModel):
         description="RELAXATION LADDER timestep (fs): 4.0, 2.0 or 1.0. None → derived from "
         "`fast` (4.0 on, 2.0 off), which is the historical behaviour. Per-stage "
         "tiers still apply on top: a soft stage runs 1 fs and a gentle stage "
-        "2 fs whatever this says. Does NOT affect production — that is "
-        "`production_timestep_fs`.",
+        "2 fs whatever this says. A new production run starts from this resolved "
+        "integrator but may override it.",
     )
     relax_rigid_bonds: Optional[str] = Field(
         None,
@@ -1817,16 +1814,18 @@ def _production_fast_plan(job: MdJob, body: ProductionRequest) -> dict:
         manifest = {}
     relaxed_fast = bool(manifest.get("fast_relaxation", {}).get("enabled"))
     declash = bool(manifest.get("declash"))
-    # Precedence: THIS request's dt (the panel's dropdown, chosen at production time) >
-    # the value baked into the manifest when the package was PREPARED > the auto default.
-    # The request level exists because the dropdown used to reach prep only: changing it
-    # before pressing Start Production had no effect on the run, so a user could select
-    # 2 fs, watch a "2 fs" estimate, and get a 1 fs trajectory.
+    # Precedence: THIS production request > the parent relaxation's resolved integrator >
+    # legacy production defaults from old manifests > the conservative compatibility
+    # default. Production is allowed to depart from relaxation; inheritance only supplies
+    # the untouched starting values in the production wizard.
+    relax_choice = manifest.get("relax_integrator") or {}
     requested = body.production_timestep_fs
     if requested not in (1.0, 2.0, 4.0):
+        requested = relax_choice.get("timestep_fs")
+    if requested not in (1.0, 2.0, 4.0):
         requested = manifest.get("production_timestep_fs")
-    pinned = requested in (1.0, 2.0, 4.0)
-    if pinned:
+    pinned = body.production_timestep_fs in (1.0, 2.0, 4.0)
+    if requested in (1.0, 2.0, 4.0):
         timestep_fs = float(requested)
     else:
         timestep_fs = 4.0 if (relaxed_fast and not declash) else 1.0
@@ -1843,8 +1842,12 @@ def _production_fast_plan(job: MdJob, body: ProductionRequest) -> dict:
     # measured them to be separate questions.
     req_rigid = body.rigid_bonds if getattr(body, "rigid_bonds", None) else None
     if req_rigid is None:
+        req_rigid = relax_choice.get("rigid_bonds")
+    if req_rigid is None:
         req_rigid = manifest.get("production_rigid_bonds")
     req_hmr = getattr(body, "hmr", None)
+    if req_hmr is None:
+        req_hmr = relax_choice.get("hmr")
     if req_hmr is None:
         req_hmr = manifest.get("production_hmr")
     choice = resolve_integrator(timestep_fs, rigid_bonds=req_rigid, hmr=req_hmr)
@@ -3519,7 +3522,7 @@ async def _prepare_job_bg(
             mg_conc_mM=mg_conc_mM,
             salt_mode=body.salt_mode,
             padding_nm=body.padding_nm,
-            free_ns=body.production_ns_intent,
+            box_mode=body.box_mode,
             water_shell_nm=water_shell_nm,
             minimize_steps=body.minimize_steps,
             atomistic_model=seed_model,
@@ -3532,9 +3535,6 @@ async def _prepare_job_bg(
             relax_timestep_fs=body.relax_timestep_fs,
             relax_rigid_bonds=body.relax_rigid_bonds,
             relax_hmr=body.relax_hmr,
-            production_timestep_fs=body.production_timestep_fs,
-            production_rigid_bonds=body.production_rigid_bonds,
-            production_hmr=body.production_hmr,
             devices=body.devices,
             anchors=body.anchors,
             anchor_atoms=body.anchor_atoms,
@@ -3560,6 +3560,9 @@ async def _prepare_job_bg(
         hb.cancel()
         job = MdJob.load(job_id, ws)
         job.status = MdStatus.failed
+        msg = str(exc)
+        if "threaded through a nucleotide ring" in msg or "catenated" in msg.lower():
+            job.failure_kind = "seed_topology"
         job.error = f"Preparation failed: {exc}"
         job.save(ws)
         clear_prep_progress(job_dir)
@@ -3637,6 +3640,38 @@ def _backfill_failure_kind(job: MdJob) -> None:
                 break
     job.failure_kind = kind
     job.save(_workspace())
+
+
+def _failure_diagnostics(job: MdJob) -> Optional[dict]:
+    """Compact, UI-ready evidence for a failed job's disclosure panel.
+
+    Keep the human-facing ``error`` intact, but also expose the machine exit code and
+    failed stage separately so diagnosing a crash does not require parsing prose.
+    """
+    if job.status != MdStatus.failed and not job.error:
+        return None
+    import re
+
+    error = job.error or "Unknown error"
+    kind = job.failure_kind or "other"
+    if kind == "other" and (
+        "threaded through a nucleotide ring" in error or "catenated" in error.lower()
+    ):
+        kind = "seed_topology"
+    match = re.search(r"\brc=(-?\d+)\b", error)
+    seg = None
+    if 0 <= job.current_segment_idx < len(job.segments):
+        seg = job.segments[job.current_segment_idx]
+    log_match = re.search(r"\(see ([^)]+\.log)\)", error)
+    return {
+        "failure_kind": kind,
+        "exit_code": int(match.group(1)) if match else None,
+        "phase": "preparation" if not job.package_subdir else "NAMD execution",
+        "segment": seg.name if seg else None,
+        "stage": seg.stage if seg else None,
+        "log_file": log_match.group(1) if log_match else None,
+        "log_excerpt": _failed_log_excerpt(job),
+    }
 
 
 def _remote_projected_step(
@@ -3890,6 +3925,7 @@ async def list_md_jobs() -> list[dict]:
 
             verify_local_download(j, ws)
         d = j.to_dict()
+        d["failure_details"] = _failure_diagnostics(j)
         _decorate_terminal_segment_progress(j, d, ws)
         d["out_of_date"] = _md_job_out_of_date(j, current_fp)
         # Cache-only: never block the poll on a multi-GB archived-run stat-walk.  An
@@ -3977,6 +4013,7 @@ async def get_md_job(job_id: str) -> dict:
 
     job = _load_job(job_id)
     d = job.to_dict()
+    d["failure_details"] = _failure_diagnostics(job)
     _decorate_terminal_segment_progress(job, d, _workspace())
     # Every job that predates MdJob.minimization has None here.  Read it back off the
     # package manifest — ONE file per opened job, so the timeline shows the minimisation
@@ -4306,7 +4343,7 @@ def _assert_cell_fits_a_free_run(job: MdJob, length_ns: float, *, allow: bool) -
         400,
         (
             f"A {length_ns:g} ns run drifts this structure into its own periodic "
-            f"image{how_close}. Re-prep with a larger cell (production_ns_intent), keep the "
+            f"image{how_close}. Re-prep with Cell sizing set to rotation, keep the "
             f"run under {ROTATION_FREE_NS_THRESHOLD:g} ns, or resend with "
             f"allow_undersized_cell=true."
         ),

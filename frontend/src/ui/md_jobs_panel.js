@@ -245,6 +245,23 @@ export function mdDetailErrorText(job) {
   return showErr ? (job?.error ?? 'Unknown error') : null
 }
 
+/** Diagnostic text for the native failure <details> disclosure. The primary error stays
+ * first; structured runner evidence follows so an NAMD return code cannot be buried in a
+ * sentence or omitted merely because this was a preparation failure. */
+export function mdFailureDetailsText(job) {
+  const error = mdDetailErrorText(job)
+  if (!error) return null
+  const d = job?.failure_details || {}
+  const rows = [error, '', `Kind: ${d.failure_kind || job?.failure_kind || 'other'}`]
+  if (d.phase) rows.push(`Phase: ${d.phase}`)
+  if (d.stage) rows.push(`Stage: ${d.stage}`)
+  if (d.segment) rows.push(`Segment: ${d.segment}`)
+  if (d.exit_code != null) rows.push(`NAMD exit code: ${d.exit_code}`)
+  if (d.log_file) rows.push(`Log: ${d.log_file}`)
+  if (d.log_excerpt) rows.push('', 'Last log lines:', d.log_excerpt)
+  return rows.join('\n')
+}
+
 /** Pure: is the job in an in-progress state (a spinner should show)?  A remote job
  *  that hasn't been submitted to SLURM yet is prepared-but-idle, not running — so a
  *  failed/never-attempted Alpine submit doesn't masquerade as a live job. */
@@ -1256,6 +1273,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // (#namd-live-controls-host), not inside this panel. Pending badge: #md-jobs-early-stop-pending.
   const earlyStopPending = document.getElementById('md-jobs-early-stop-pending')
   const errorEl     = document.getElementById('md-jobs-detail-error')
+  const errorBodyEl = document.getElementById('md-jobs-detail-error-body')
   const timelineEl  = document.getElementById('md-jobs-timeline')
   const metricsEl   = document.getElementById('md-jobs-metrics')
   const healthToggle  = document.getElementById('md-jobs-health-toggle')
@@ -1863,7 +1881,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (resumeHistWrap) resumeHistWrap.style.display = 'none'
     if (errorEl) {
       errorEl.style.display = 'none'
-      errorEl.textContent = ''
+      errorEl.open = false
+      if (errorBodyEl) errorBodyEl.textContent = ''
     }
     if (timelineEl) timelineEl.textContent = ''
     if (metricsEl) metricsEl.textContent = ''
@@ -3997,8 +4016,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const out = {}
     for (const key of ['threads', 'devices', 'salt_mode', 'mg_conc_mM', 'ion_conc_mM',
                        'padding_nm', 'water_shell_nm', 'minimize_steps', 'fast',
-                       'production_timestep_fs', 'gpu_resident', 'early_stop_relax',
-                       'production_ns_intent']) {
+                       'gpu_resident', 'early_stop_relax',
+                       'box_mode']) {
       if (p[key] != null) out[key] = p[key]
     }
     return { presetId: p.relax_preset || null, touched: out }
@@ -4209,7 +4228,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
     // Show the error box for terminal failures AND for a failed Alpine submit
     // (queued-but-errored) so the rejection reason is visible with the retry button.
-    _showDetailError(mdDetailErrorText(job))
+    _showDetailError(job)
     _renderTimeline(job)
     _renderMetrics(job, liveMetrics)
     _renderProductionControls(job)
@@ -4226,13 +4245,20 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (resumeHistEl) resumeHistEl.textContent = rows.join('\n')
   }
 
-  function _showDetailError(msg) {
+  function _showDetailError(job) {
     if (!errorEl) return
+    const msg = mdFailureDetailsText(job)
     if (msg) {
-      errorEl.textContent = msg
+      const wasHidden = errorEl.style.display === 'none'
+      if (errorBodyEl) errorBodyEl.textContent = msg
       errorEl.style.display = ''
+      // Open on the transition into a real failure. A user may collapse it afterward;
+      // routine status polls must not fight that choice by reopening it every time.
+      if (wasHidden && job?.status === 'failed') errorEl.open = true
     } else {
       errorEl.style.display = 'none'
+      errorEl.open = false
+      if (errorBodyEl) errorBodyEl.textContent = ''
     }
   }
 

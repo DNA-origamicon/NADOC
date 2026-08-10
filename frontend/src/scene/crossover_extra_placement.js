@@ -23,11 +23,11 @@ const BOW_FRACTION = 0.3
 // them in the residue frame makes them transferable to every helix pair/orientation.
 const ONE_BASE_DEFAULT_LOCAL_POSES = Object.freeze({
   direct: Object.freeze({
-    translation: Object.freeze([-0.11838409398784218, -0.22868023153856676, -0.035012651628871135]),
+    translation: Object.freeze([-0.11338409398784218, -0.22868023153856676, -0.035012651628871135]),
     rotation: Object.freeze([-0.10871135764025318, 0.05191393506416845, -0.3845073158890162, 0.9152272439640281]),
   }),
   reversed: Object.freeze({
-    translation: Object.freeze([-0.021056163944091474, -0.2061734603038539, -0.07055908771081991]),
+    translation: Object.freeze([-0.016056163944091473, -0.2061734603038539, -0.07055908771081991]),
     rotation: Object.freeze([-0.0653133319390967, -0.08778461219542308, -0.20145497692027542, 0.9733673113510458]),
   }),
 })
