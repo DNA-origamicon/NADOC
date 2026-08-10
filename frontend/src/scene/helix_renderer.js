@@ -205,6 +205,15 @@ const _cylQRolled     = new THREE.Quaternion()  // scratch for the rolled bindin
 function _setInstColor(entry, hexColor) {
   entry.instMesh.setColorAt(entry.id, _tColor.setHex(hexColor))
   if (entry.instMesh.instanceColor) entry.instMesh.instanceColor.needsUpdate = true
+  // A slab's bead-to-slab rod is part of that slab, not an independently-coloured
+  // overlay. Keep it on the exact same instance colour for sidebar colouring modes,
+  // strand edits, highlights and every other caller of the shared recolour helper.
+  if (entry.connectorMesh && entry.connectorId != null) {
+    entry.connectorMesh.setColorAt(entry.connectorId, _tColor.setHex(hexColor))
+    if (entry.connectorMesh.instanceColor) {
+      entry.connectorMesh.instanceColor.needsUpdate = true
+    }
+  }
 }
 
 /**
@@ -2073,6 +2082,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const _connectorMid = new THREE.Vector3()
   const _connectorDirection = new THREE.Vector3()
   const _connectorRodQuat = new THREE.Quaternion()
+  const _connectorColor = new THREE.Color()
   function _refreshSlabConnectors() {
     if (!_slabConnectorsReady) return
     for (let i = 0; i < slabEntries.length; i++) {
@@ -2094,7 +2104,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         _tScale.set(SLAB_CONNECTOR_RADIUS, length, SLAB_CONNECTOR_RADIUS),
       )
       iSlabConnectors.setMatrixAt(i, _tMatrix)
-      iSlabConnectors.setColorAt(i, _tColor.setHex(slab.defaultColor))
+      // Geometry refreshes happen during trajectory/FEM/flexible displays. Never reset
+      // the rod to the design default: mirror the slab's CURRENT colour so an active
+      // flex map or right-sidebar colouring mode survives the position update.
+      iSlabs.getColorAt(slab.id, _connectorColor)
+      iSlabConnectors.setColorAt(i, _connectorColor)
     }
     iSlabConnectors.instanceMatrix.needsUpdate = true
     if (iSlabConnectors.instanceColor) iSlabConnectors.instanceColor.needsUpdate = true
@@ -2107,7 +2121,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   let _savedScalarColors = null
   const _scalarColorScratch = new THREE.Color()
   function _flagScalarColorMeshes() {
-    for (const m of [iSpheres, iCubes, iCones, iSlabs]) {
+    for (const m of [iSpheres, iCubes, iCones, iSlabs, iSlabConnectors]) {
       if (m && m.instanceColor) m.instanceColor.needsUpdate = true
     }
   }
@@ -3960,6 +3974,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         const hex = get(`${n.helix_id}:${n.bp_index}:${n.direction}:${slab._copy ?? 0}`)
         if (hex === undefined || hex === null) continue
         recolor(slab.instMesh, slab.id, hex)
+        recolor(slab.connectorMesh, slab.connectorId, hex)
       }
       _flagScalarColorMeshes()
     },

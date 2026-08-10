@@ -337,6 +337,13 @@ describe('mdJobIsRunning / mdJobIsStartable / mdJobIsResumable (what the one con
 })
 
 describe('mdRunControl (ONE control for the selected job: Run / Stop / Resume)', () => {
+  it('offers Run for a sequence-deferred job so the click can show the sequence refusal', () => {
+    const job = { status: 'draft', execution_target: 'local', awaiting_sequence: true }
+    expect(mdJobIsDraft(job)).toBe(false)
+    expect(mdRunControl(job)).toMatchObject({ action: 'run', label: '▶ Run', disabled: false })
+    expect(mdQueueable(job)).toBe(false)
+  })
+
   it('nothing selected → disabled, pointing at ＋ New job', () => {
     // Creating a run is a separate act now, so an empty selection has nothing to do
     // rather than silently launching whatever the form happens to hold.

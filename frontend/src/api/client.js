@@ -2760,6 +2760,7 @@ export const getMdMetricsRun     = (runId)       => _oxdnaJSON('GET',  `/md/metr
 export const getMdJob            = (id)          => _oxdnaJSON('GET',    `/md/jobs/${id}`)
 export const deleteMdJob         = (id)          => _oxdnaJSON('DELETE', `/md/jobs/${id}`)
 export const startMdJob          = (id)          => _oxdnaJSON('POST',   `/md/jobs/${id}/start`)
+export const prepareMdSequenceJob = (id)         => _oxdnaJSON('POST',   `/md/jobs/${id}/prepare-sequence`)
 /** Attach (or clear) anchors + E-field on a PREPARED-but-not-started job. Patches the
  *  existing package's confs in place — no re-solvation. Send `anchors: []`/`field: null`
  *  to clear. NAMD has no floor implementation, so no surface is sent. */

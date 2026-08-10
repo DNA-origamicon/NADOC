@@ -170,6 +170,12 @@ class MdJob:
     # None on jobs created before this was recorded — the viewer then falls back to
     # showing every stored value, and says so.
     prep_params_set: Optional[list] = None
+    # A locally-created relaxation may exist before its design has sequences.  In that
+    # case preparation is deliberately deferred: the Run boundary validates the live
+    # design, then rebuilds every atom-count-dependent artefact from that design before
+    # launching NAMD.  This is distinct from a seeded draft, whose preparation is
+    # deferred so the user can choose protocol settings.
+    awaiting_sequence: bool = False
     # The PRODUCTION-spawn request (``ProductionRunRequest``) and its explicit-key set, for
     # a child created by "Production".  Deliberately NOT ``prep_params``: that field is a
     # ``CreateJobRequest`` dump, and several call sites (refit, the plan's preset lookup,
@@ -432,6 +438,7 @@ class MdJob:
         data.setdefault("decision", None)
         data.setdefault("prep_params", None)
         data.setdefault("prep_params_set", None)
+        data.setdefault("awaiting_sequence", False)
         data.setdefault("spawn_params", None)
         data.setdefault("spawn_params_set", None)
         data.setdefault("design_fingerprint", None)

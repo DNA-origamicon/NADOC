@@ -43,6 +43,19 @@ early (before the expensive solvation step).
 See [external_tools.md](external_tools.md) for the full environment-variable
 reference shared across all simulation back-ends.
 
+## Sequence gate and deferred preparation
+
+Creating a NAMD job records the intended protocol and is allowed before sequences are
+assigned. Such a job is marked as waiting for sequence rather than being atomized through
+the implicit poly-T fallback. Pressing **Run** while any non-reference scaffold or staple
+strand is unassigned or under-sequenced is rejected with a popup naming the affected
+strand and missing nucleotide count.
+
+After sequence assignment, NADOC automatically prepares the deferred job without starting
+NAMD. Base identity changes the exact CHARMM atom count, so the sequenced topology is rebuilt
+first and its PSF/manifest count is propagated to disk, VRAM, throughput, and cluster/RunPod
+resource projections. Once preparation completes, **Run** launches that prepared package.
+
 ### Which build do I need?
 
 NADOC launches NAMD as:

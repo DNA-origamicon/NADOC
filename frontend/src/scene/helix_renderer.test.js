@@ -178,3 +178,26 @@ describe('instanceAlpha coverage', () => {
     expect(fnBody(HR, '_curvedTubeFactor')).toContain('_cylRepVis')
   })
 })
+
+describe('slab connector colour parity', () => {
+  it('the shared recolour path updates a slab connector with its slab', () => {
+    const body = fnBody(HR, '_setInstColor')
+    expect(body).toContain('entry.connectorMesh.setColorAt(entry.connectorId')
+  })
+
+  it('geometry refresh mirrors the current slab colour instead of its default', () => {
+    const body = fnBody(HR, '_refreshSlabConnectors')
+    expect(body).toContain('iSlabs.getColorAt(slab.id, _connectorColor)')
+    expect(body).toContain('iSlabConnectors.setColorAt(i, _connectorColor)')
+    expect(body).not.toContain('slab.defaultColor')
+  })
+
+  it('flex-map recolouring captures and recolours both slab and connector', () => {
+    const start = HR.indexOf('applyScalarColors(colorByKey)')
+    const body = HR.slice(start, HR.indexOf('clearScalarColors()', start))
+    expect(body).toContain('recolor(slab.instMesh, slab.id, hex)')
+    expect(body).toContain('recolor(slab.connectorMesh, slab.connectorId, hex)')
+    const dirty = fnBody(HR, '_flagScalarColorMeshes')
+    expect(dirty).toContain('iSlabConnectors')
+  })
+})

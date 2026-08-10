@@ -2147,6 +2147,16 @@ _NO_SEQUENCE_MSG = (
 )
 
 
+def _sequence_problem(design) -> Optional[str]:
+    """Return the actionable MD sequence refusal, or ``None`` when runnable."""
+    if _sequenced_base_count(design) == 0:
+        return _NO_SEQUENCE_MSG
+    from backend.core.md_sequence_guard import all_sequence_problems  # noqa: PLC0415
+
+    problems = all_sequence_problems(design)
+    return "; ".join(problems) if problems else None
+
+
 @router.get("/md/relax-presets")
 async def list_relax_presets() -> dict:
     """The named relaxation protocols the panel offers, cheapest first.
@@ -2331,21 +2341,19 @@ async def create_md_job(body: CreateJobRequest) -> dict:
         # The active design is request-scoped (doc session contextvar), so it must
         # be captured here on the request thread, not in the background worker.
         design = design_state.get_or_404()
-        if _sequenced_base_count(design) == 0:
-            raise HTTPException(400, _NO_SEQUENCE_MSG)
-        # Scaffold-specific: sequenced STAPLES with a None SCAFFOLD slip past the
-        # count check above but still build as poly-T (the 6hbx100_90deg incident).
-        # Block up front so the user gets an immediate, actionable message rather than
-        # a job that spawns "preparing" then dies in background prep.  The build-time
-        # guard in prepare_mgh_slow_release stays as the backstop for seeded/RunPod paths.
-        from backend.core.md_sequence_guard import require_sequenced_scaffold  # noqa: PLC0415
-
-        try:
-            require_sequenced_scaffold(design)
-        except ValueError as exc:
-            raise HTTPException(400, str(exc))
         name = (design.metadata.name or "design").replace(" ", "_")
         size_factor = design_size_factor(design)
+
+        # Creating a job is planning, not running it.  Preserve the request as a draft
+        # when sequence is missing, but do not build a poly-T package.  Run is the hard
+        # boundary: it re-reads the live design and prepares from the now-current
+        # sequence, so exact atom count, storage/throughput projections and every other
+        # package consumer all see the updated topology before NAMD can start.
+        if _sequence_problem(design):
+            job = _spawn_draft_job(body, name=name)
+            job.awaiting_sequence = True
+            job.save(_workspace())
+            return job.to_dict()
 
     # Draft: record the seed + provenance now, DEFER solvation.  The job appears in
     # the list as 'draft' and is prepared+started later via POST /md/jobs/{id}/prepare
@@ -5243,6 +5251,15 @@ async def start_md_job(job_id: str) -> dict:
     """Start or resume a queued/stopped/failed job."""
     job = _load_job(job_id)
 
+    if job.awaiting_sequence:
+        prepared = _prepare_sequence_deferred_job(job, autostart=True)
+        return {
+            "ok": True,
+            "job_id": prepared.job_id,
+            "status": prepared.status.value,
+            "message": "Sequences accepted; refreshing atom counts and preparing the run.",
+        }
+
     if is_running(job_id):
         return {"ok": True, "message": "Job already running"}
 
@@ -5270,6 +5287,46 @@ async def start_md_job(job_id: str) -> dict:
 
     start_job(job, _workspace())
     return {"ok": True, "job_id": job_id, "status": "running"}
+
+
+def _prepare_sequence_deferred_job(job: MdJob, *, autostart: bool) -> MdJob:
+    """Prepare an awaiting-sequence job from the current design, in place."""
+    design = design_state.get_or_404()
+    problem = _sequence_problem(design)
+    if problem:
+        raise HTTPException(400, problem)
+
+    # Sequence assignment can change the exact CHARMM atom count by base identity.
+    # Rebuilding from the live design makes the PSF/manifest count authoritative for
+    # disk, throughput, VRAM and remote-resource consumers before dynamics can start.
+    params = dict(job.prep_params or {})
+    params.update(autostart=autostart, draft=False)
+    body = CreateJobRequest(**params)
+    job.awaiting_sequence = False
+    job.save(_workspace())
+    return _spawn_prep_job(
+        body,
+        design=design,
+        seeded=False,
+        name=(design.metadata.name or "design").replace(" ", "_"),
+        size_factor=design_size_factor(design),
+        existing_job=job,
+    )
+
+
+@router.post("/md/jobs/{job_id}/prepare-sequence")
+async def prepare_sequence_deferred_job(job_id: str) -> dict:
+    """Refresh a deferred job as soon as sequence assignment makes it buildable.
+
+    The design-change listener calls this before the user presses Run, so atom-count
+    projections are based on the sequenced package. Missing sequence is still a 400—the
+    Run route uses the same guard and the UI surfaces that rejection explicitly.
+    """
+    job = _load_job(job_id)
+    if not job.awaiting_sequence:
+        raise HTTPException(400, "Job is not waiting for sequence assignment.")
+    prepared = _prepare_sequence_deferred_job(job, autostart=False)
+    return {"ok": True, "job_id": prepared.job_id, "status": prepared.status.value}
 
 
 @router.post("/md/jobs/{job_id}/gpu-decision")

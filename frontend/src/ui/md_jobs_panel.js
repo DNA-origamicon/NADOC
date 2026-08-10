@@ -371,6 +371,7 @@ export function mdQueueRowLabel(job, entry = null, formatTime = null) {
 export function mdQueueable(job) {
   if (!job) return false
   if (job.execution_target && job.execution_target !== 'local') return false
+  if (job.awaiting_sequence) return false
   if (mdJobIsDraft(job) || hasPendingGpuDecision(job)) return false
   return mdJobIsStartable(job) || ['stopped', 'failed'].includes(job.status)
 }
@@ -430,6 +431,12 @@ export function mdRunControl(selectedJob, {
     return {
       action: RUN_ACTION.RUN, label: '▶ Run', disabled: true,
       title: 'Select a run in the list, or create one with ＋ New job.',
+    }
+  }
+  if (selectedJob.awaiting_sequence) {
+    return {
+      action: RUN_ACTION.RUN, label: '▶ Run', disabled: busy,
+      title: 'Sequence assignment is checked when you run. The job itself may be created first.',
     }
   }
   if (mdJobIsDraft(selectedJob)) {
@@ -611,7 +618,7 @@ export function mdRemoteReconnectPrompt(jobs, clusterState, runpodState = 'conne
  *  yet solvated?  Its run control reads "Relax from oxDNA/mrDNA" and clicking it runs
  *  the standard prep+relax (POST /md/jobs/{id}/prepare) from the seed's coordinates. */
 export function mdJobIsDraft(job) {
-  return job?.status === 'draft'
+  return job?.status === 'draft' && !job?.awaiting_sequence
 }
 
 /** Pure: the run-button label for a selected draft — names the seed engine so the
@@ -2931,6 +2938,17 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     clearTimeout(_designChangeRefreshTimer)
     _designChangeRefreshTimer = setTimeout(async () => {
       await _fetchJobs()
+      // Sequence assignment changes the exact CHARMM atom count by base identity.  As
+      // soon as a previously-unsequenced job becomes buildable, prepare it in place
+      // (without running) so disk/VRAM/throughput/resource projections consume the
+      // sequenced PSF count before the user presses Run.
+      for (const job of _jobs.filter(j => j?.awaiting_sequence)) {
+        const prepared = await api.prepareMdSequenceJob(job.job_id)
+        if (prepared) {
+          showToast('Sequences assigned — refreshing atom counts and preparing the job', 'ok')
+          await _fetchJobs()
+        }
+      }
       if (!displayToggle?.checked) _startMdPrewarm()
     }, 150)
   })
@@ -3171,6 +3189,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const runpod = mdRunpodStartable(_selectedJob())
     return runExclusive(btn, async () => {
       if (!_selectedId) return
+      const awaitingSequence = !!_selectedJob()?.awaiting_sequence
       // The concurrency confirm is about THIS machine's single GPU. A rented pod is a
       // different computer, so asking "another job is already running here, continue?"
       // before renting one is a question about nothing.
@@ -3180,11 +3199,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         // anchors/field cards describe THIS job and are applied to its prepared package
         // before it starts. Reported in the toast rather than applied silently — a force
         // the user cannot see landing is the bug this whole flow replaced.
-        const forced = await _applyForcesToSelected()
+        // A sequence-deferred job has no package yet.  Let /start perform the sequence
+        // gate first; forces can only be attached after preparation has produced confs.
+        const forced = awaitingSequence ? '' : await _applyForcesToSelected()
         const d = await api.startMdJob(_selectedId)
         if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
         showToast(
-          (runpod ? 'Renting a GPU — the pod is destroyed when the run finishes' : 'Run started')
+          (awaitingSequence
+            ? (d.message || 'Refreshing atom counts and preparing the run')
+            : runpod ? 'Renting a GPU — the pod is destroyed when the run finishes' : 'Run started')
           + (forced ? ` — ${forced}` : ''), 'ok')
         await _fetchJobs()
         _reselectJob(_selectedId)
@@ -3255,7 +3278,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // _start_runpod_job, which pre-flights and provisions. This line is what makes the
     // button at the top actually launch a RunPod run; before it, the click fell through
     // and nothing happened at all.
-    if (mdJobIsStartable(sel) || mdRunpodStartable(sel)) return _startSelected(runBtn)
+    if (sel?.awaiting_sequence || mdJobIsStartable(sel) || mdRunpodStartable(sel)) {
+      return _startSelected(runBtn)
+    }
   })
   // "New job" opens the Job Wizard, which supplies a protocol payload to the same
   // _launchRelax gate sequence the Advanced form uses.
@@ -3573,6 +3598,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       }
 
       console.log(`[${_ts()}] md-jobs: job created OK job_id=${job.job_id} status=${job.status}`)
+      if (job.awaiting_sequence) {
+        showToast('Job created — assign scaffold and staple sequences before Run', 'warn')
+        await _fetchJobs()
+        _reselectJob(job.job_id)
+        return job
+      }
       // Alpine target: prep runs locally and then STOPS. Nothing is submitted until the
       // user says so — the wizard already sized the request, and this is the window in
       // which anchors and an electric field get attached to the prepared job. A popup

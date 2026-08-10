@@ -92,6 +92,37 @@ def scaffold_sequence_problems(design) -> list[str]:
     return problems
 
 
+def all_sequence_problems(design) -> list[str]:
+    """Problems for any built DNA strand, including staples and overhang bases.
+
+    NAMD does not know that an ``N`` is a placeholder: the atomistic builder turns it
+    into thymine.  The Run boundary therefore requires complete A/C/G/T coverage on
+    every non-reference strand, not merely a non-empty scaffold.
+    """
+    problems: list[str] = []
+    for strand in design.strands:
+        if getattr(strand, "is_reference", False):
+            continue
+        expected = _strand_build_nt_count(design, strand)
+        if expected == 0:
+            continue
+        acgt = sum(1 for c in (strand.sequence or "") if c.upper() in "ACGT")
+        if acgt >= expected:
+            continue
+        kind = getattr(getattr(strand, "strand_type", None), "value", None) or "strand"
+        if acgt == 0:
+            problems.append(
+                f"{kind} {strand.id!r}: NO sequence assigned "
+                f"({expected} nt would build as poly-T)"
+            )
+        else:
+            problems.append(
+                f"{kind} {strand.id!r}: under-sequenced "
+                f"({acgt}/{expected} nt; the remaining {expected - acgt} build as poly-T)"
+            )
+    return problems
+
+
 def require_sequenced_scaffold(design) -> None:
     """Raise ``ValueError`` if the scaffold isn't fully sequenced. Call before any
     all-atom MD build or run."""

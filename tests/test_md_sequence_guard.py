@@ -9,6 +9,7 @@ import pytest
 
 from backend.core.models import Design, StrandType
 from backend.core.md_sequence_guard import (
+    all_sequence_problems,
     scaffold_sequence_problems,
     require_sequenced_scaffold,
     _strand_build_nt_count,
@@ -58,12 +59,16 @@ def test_partial_scaffold_is_flagged():
     assert probs and any("under-sequenced" in p for p in probs)
 
 
-def test_route_blocks_unsequenced_scaffold_up_front(monkeypatch, tmp_path):
-    """POST /md/jobs returns 400 UP FRONT (not a born-then-failed job) when the STAPLES are
-    sequenced but the SCAFFOLD is None — the 6hbx100_90deg incident's exact shape, which the
-    generic zero-sequence guard misses (sequenced staples make the count > 0).  Locks the
-    scaffold-specific block added to create_md_job so the user gets an immediate, actionable
-    message instead of a job that spawns 'preparing' then dies in background prep."""
+def test_run_guard_requires_staple_sequences_too():
+    d = _load("U6hb")
+    staple = next(s for s in d.strands if s.strand_type == StrandType.STAPLE)
+    staple.sequence = None
+    probs = all_sequence_problems(d)
+    assert any("staple" in p and "NO sequence assigned" in p for p in probs)
+
+
+def test_create_allows_unsequenced_but_run_rejects_with_message(monkeypatch, tmp_path):
+    """Creation records the plan; Run is the explicit sequence safety boundary."""
     from fastapi.testclient import TestClient
     from backend.api.main import app
     from backend.api import state as design_state
@@ -90,10 +95,43 @@ def test_route_blocks_unsequenced_scaffold_up_front(monkeypatch, tmp_path):
     doc_context.set_current_doc(None)
     try:
         design_state.set_design(d)
-        r = TestClient(app).post(
+        client = TestClient(app)
+        r = client.post(
             "/api/md/jobs", json={"protocol": "mgh_slow_release", "autostart": False}
         )
-        assert r.status_code == 400, r.text
-        assert "scaffold" in r.json()["detail"].lower()
+        assert r.status_code == 200, r.text
+        job = r.json()
+        assert job["status"] == "draft"
+        assert job["awaiting_sequence"] is True
+
+        started = client.post(f'/api/md/jobs/{job["job_id"]}/start')
+        assert started.status_code == 400, started.text
+        assert "scaffold" in started.json()["detail"].lower()
+
+        # Assigning sequence after creation must make Run prepare THIS job from the
+        # updated live design.  That preparation boundary is where the exact PSF atom
+        # count and every consumer of it are regenerated, before autostart.
+        for strand in d.strands:
+            if strand.strand_type == StrandType.SCAFFOLD:
+                strand.sequence = "A" * _strand_build_nt_count(d, strand)
+        design_state.set_design(d)
+        captured = {}
+
+        def fake_prepare(body, *, design, existing_job, **kwargs):
+            captured.update(
+                sequenced_bases=_sequenced_base_count(design),
+                autostart=body.autostart,
+                same_job=existing_job.job_id == job["job_id"],
+            )
+            existing_job.status = routes_md.MdStatus.preparing
+            return existing_job
+
+        monkeypatch.setattr(routes_md, "_spawn_prep_job", fake_prepare)
+        started = client.post(f'/api/md/jobs/{job["job_id"]}/start')
+        assert started.status_code == 200, started.text
+        assert started.json()["status"] == "preparing"
+        assert captured["sequenced_bases"] > 0
+        assert captured["autostart"] is True
+        assert captured["same_job"] is True
     finally:
         design_state.drop_doc(doc_context.DEFAULT_DOC_ID)

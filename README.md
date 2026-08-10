@@ -121,6 +121,17 @@ legend bounds and colormap; the export dialog enables this by default, and the
 `?` controls beside colored visualization modes provide the matching ChimeraX
 `color byattribute bfactor` command.
 
+NAMD job creation is intentionally separate from execution. A design without complete
+scaffold and staple sequences may be saved as a deferred job, but **Run** refuses it with
+an actionable sequence warning. Assigning the sequences automatically prepares that job
+without starting dynamics; the resulting sequenced PSF atom count then drives disk, VRAM,
+throughput, and remote-resource projections before the prepared package can run.
+
+In ball-and-slab views, each bead-to-slab connector inherits the slab's current instance
+color. This applies equally to right-sidebar strand/base/cluster coloring and visualization
+card scalar maps (RMSF flexibility, deviation, strain, and CanDo), including animated
+geometry refreshes and restoration when a map is cleared.
+
 Large-design exports use the validated interpolated phosphate-bridge builder,
 reuse cached native atomistic models and already-computed oxDNA RMSF average
 frames, and precompute PDB hybrid-36 identifiers. HTTP gzip reduces the transfer
