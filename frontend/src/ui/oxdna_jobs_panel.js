@@ -2344,9 +2344,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (!_selectedId) return
     const job = _selectedJob()
     if (!job) return
-    const action = job.archived ? _archive.unarchive : _archive.archive
     try {
-      await action(job, { onProgress })
+      await _archive.changeDirectory(job, { onProgress })
     } finally {
       await _fetchJobs()
     }

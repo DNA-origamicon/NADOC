@@ -1,10 +1,10 @@
 /**
  * Run-location — one shared "📁 Directory" control (above the jobs list, universal for every
- * engine) that chooses where new runs write, and a low-disk recommendation to archive to a
+ * engine) that chooses where new runs write, and a low-disk recommendation to move to a
  * roomier drive and run there.
  *
  * A simulation run can write multi-GB trajectories; pointing it at a spacious volume (e.g. an
- * external Archive drive) keeps them off a full system disk — the run reads/writes from Archive
+ * external drive) keeps them off a full system disk — simulations read/write there normally
  * fine (the GPU is the bottleneck, not the periodic flushes). The chosen folder is a SINGLE
  * preference in localStorage, so it applies to whichever engine you launch; every engine's
  * create reads `getRunDir()`. Backed by the existing server-side folder browser
@@ -70,9 +70,9 @@ export async function recommendArchive(forecast) {
   const choice = await showChoice({
     title: 'Low disk space for this run',
     message: `This run may not fit on the target drive. ${rec.path} has `
-           + `${formatBytes(rec.freeBytes)} free — archive the run there and write to it instead?`,
+           + `${formatBytes(rec.freeBytes)} free — store the run there instead?`,
     options: [
-      { label: `Archive to “${runDirLabel(rec.path)}” & run there`, value: 'archive',
+      { label: `Store in “${runDirLabel(rec.path)}” & run there`, value: 'archive',
         variant: 'primary', tooltip: rec.path },
       { label: 'Run here anyway', value: 'here', variant: 'ghost' },
     ],

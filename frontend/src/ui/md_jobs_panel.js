@@ -457,6 +457,13 @@ export function mdRunControl(selectedJob, {
         title: 'Uploading the package to Alpine, then sbatch.',
       }
     }
+    if (selectedJob.resumable) {
+      const blocked = alpineTargetDisabledReason(clusterState)
+      return {
+        action: RUN_ACTION.RESUME, label: '↻ Continue', disabled: busy || !!blocked,
+        title: blocked || 'Review or adjust SLURM resources, then continue this same run from its checkpoint.',
+      }
+    }
     if (mdRemoteAwaitingSubmit(selectedJob)) {
       const blocked = alpineTargetDisabledReason(clusterState)
       return {
@@ -2874,9 +2881,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (!_selectedId) return
     const job = _jobs.find(j => j.job_id === _selectedId)
     if (!job) return
-    const action = job.archived ? _archive.unarchive : _archive.archive
     try {
-      await action(job, { onProgress })
+      await _archive.changeDirectory(job, { onProgress })
     } finally {
       await _fetchJobs()
     }
@@ -3223,7 +3229,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (!sel) return
     const act = runBtn.dataset.runAction
     if (act === RUN_ACTION.STOP) return _stopSelected(runBtn)
-    if (act === RUN_ACTION.RESUME) return _resumeSelected(runBtn)
+    if (act === RUN_ACTION.RESUME) {
+      if (sel.execution_target === 'alpine' && sel.resumable) {
+        if (_remoteSubmitting) return
+        return _submitReview.open(sel.job_id, { mode: 'resume' })
+      }
+      return _resumeSelected(runBtn)
+    }
     if (act === RUN_ACTION.QUEUE) return _queueSelected(runBtn)
     if (act === RUN_ACTION.DEQUEUE) return _dequeueSelected(runBtn)
     // The cluster hand-off: same review card the ☁ button in the Cluster card used to
@@ -4159,14 +4171,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // Submitting a prepared job is the PRIMARY control's job now (☁ Submit to Alpine),
     // so there is no separate button here to show or hide.
     // Resume: a timed-out remote job, one-click continue from its last checkpoint.
-    if (resumeBtn) {
-      const rs = mdResumeButtonState(job, getClusterState?.() ?? 'disconnected')
-      resumeBtn.style.display = rs.show ? '' : 'none'
-      resumeBtn.disabled = rs.disabled
-      resumeBtn.style.opacity = rs.disabled ? '0.5' : ''
-      resumeBtn.style.cursor = rs.disabled ? 'not-allowed' : 'pointer'
-      resumeBtn.title = rs.reason
-    }
+    if (resumeBtn) resumeBtn.style.display = 'none'
     _renderResumeHistory(job)
     _maybeAnnounceAlpineReady(job)
     // Archive/Delete live in the section-level #simulate-job-actions (visibility/label
@@ -4583,6 +4588,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const stage = String(seg?.stage ?? '—')
     const name = String(seg?.name ?? '')
     const prodNs = stage.match(/production\s+([0-9.]+)\s*ns/i) || name.match(/production_([0-9p]+)ns/i)
+    const completedNs = Number(seg?.completed_ns)
+    if (prodNs && Number.isFinite(completedNs) && completedNs >= 0) {
+      const shown = completedNs.toFixed(2)
+      return `${shown.replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')} ns production complete`
+    }
     if (prodNs) return `${prodNs[1].replace(/p/g, '.')} ns production run`
     if (/MGHH-only handoff/i.test(stage)) return '300K NPT k=0'
     return stage

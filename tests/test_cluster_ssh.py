@@ -51,6 +51,59 @@ def _run(coro):
     return asyncio.run(coro)
 
 
+class _FakeRemoteFile:
+    def __init__(self, data: bytes, fail_after: int | None = None):
+        self.data = data
+        self.pos = 0
+        self.fail_after = fail_after
+
+    async def __aenter__(self): return self
+    async def __aexit__(self, *_): return None
+    def seek(self, pos): self.pos = pos
+
+    async def read(self, size):
+        if self.fail_after is not None and self.pos >= self.fail_after:
+            raise BrokenPipeError("interrupted")
+        chunk = self.data[self.pos : self.pos + min(size, 4)]
+        self.pos += len(chunk)
+        return chunk
+
+
+class _FakeSftp:
+    def __init__(self, data: bytes, fail_after: int | None = None):
+        self.data = data
+        self.fail_after = fail_after
+        self.open_offsets = []
+
+    async def stat(self, _):
+        return type("Stat", (), {"size": len(self.data)})()
+
+    def open(self, *_):
+        f = _FakeRemoteFile(self.data, self.fail_after)
+        original_seek = f.seek
+        def seek(pos):
+            self.open_offsets.append(pos)
+            original_seek(pos)
+        f.seek = seek
+        return f
+
+
+def test_stream_get_resumes_partial_atomically(tmp_path):
+    data = b"abcdefghijklmnop"
+    target = tmp_path / "large.dcd"
+    broken = _FakeSftp(data, fail_after=8)
+    with pytest.raises(BrokenPipeError):
+        _run(cluster_ssh._stream_get(broken, "/remote/large.dcd", str(target)))
+    assert not target.exists()  # an incomplete file never masquerades as final
+    assert (tmp_path / "large.dcd.part").read_bytes() == data[:8]
+
+    resumed = _FakeSftp(data)
+    _run(cluster_ssh._stream_get(resumed, "/remote/large.dcd", str(target)))
+    assert resumed.open_offsets == [8]
+    assert target.read_bytes() == data
+    assert not (tmp_path / "large.dcd.part").exists()
+
+
 def test_initial_state_disconnected():
     c = ClusterConnection()
     assert c.state == ConnState.DISCONNECTED
@@ -116,6 +169,20 @@ def test_run_requires_connection():
     c = ClusterConnection()
     with pytest.raises(ClusterSSHError):
         _run(c.run("whoami"))
+
+
+def test_download_filesystem_error_does_not_expire_connection(tmp_path, monkeypatch):
+    c = ClusterConnection()
+    _run(c.connect("h", "u", "pw", connector=_connector_returning(_FakeConn())))
+
+    async def missing(*args, **kwargs):
+        raise FileNotFoundError(2, "No such file or directory", str(tmp_path / "x.part"))
+
+    monkeypatch.setattr("backend.core.cluster_ssh._stream_get", missing)
+    with pytest.raises(ClusterSSHError) as caught:
+        _run(c.sftp_get("/remote/x", str(tmp_path / "x")))
+    assert caught.value.kind == "filesystem"
+    assert c.is_connected()
 
 
 def test_run_returns_result():

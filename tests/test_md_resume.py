@@ -282,10 +282,9 @@ class TestReconcileDuringMinimisation:
         assert nr.reconcile_job_status(job, tmp_path).status == MdStatus.failed
 
 
-class TestReconcileAbandonedRemoteQueued:
-    """An ARCHIVED remote job stuck at ``queued`` with no remote handle, older than
-    the launch-race window, is retired to ``stopped`` — it can never be started from
-    the archive and otherwise renders as an active "queued" row forever."""
+class TestRemoteQueuedStorageLocation:
+    """Storage outside the workspace is not a lifecycle state. A prepared remote job
+    remains startable regardless of its directory or age."""
 
     def _remote_queued(self, tmp_path: Path, *, exec_target: str = "runpod") -> MdJob:
         job = _make_job(tmp_path)
@@ -296,19 +295,16 @@ class TestReconcileAbandonedRemoteQueued:
         job.save(tmp_path)
         return job
 
-    def test_archived_runpod_queued_retired_to_stopped(self, tmp_path: Path) -> None:
+    def test_off_workspace_runpod_stays_queued(self, tmp_path: Path) -> None:
         job = self._remote_queued(tmp_path, exec_target="runpod")
         result = nr.reconcile_job_status(job, tmp_path)
-        assert result.status == MdStatus.stopped
-        assert result.user_stopped is True
-        assert result.error is None
-        # persisted, so the panel/list reads the healed state next load
-        assert MdJob.load(job.job_id, tmp_path).status == MdStatus.stopped
+        assert result.status == MdStatus.queued
+        assert result.user_stopped is False
 
-    def test_archived_alpine_queued_retired_to_stopped(self, tmp_path: Path) -> None:
+    def test_off_workspace_alpine_stays_queued(self, tmp_path: Path) -> None:
         job = self._remote_queued(tmp_path, exec_target="alpine")
         result = nr.reconcile_job_status(job, tmp_path)
-        assert result.status == MdStatus.stopped
+        assert result.status == MdStatus.queued
 
     def test_non_archived_queued_is_protected(self, tmp_path: Path) -> None:
         # panel "prepared, awaiting Start/submit" — must persist, never reaped

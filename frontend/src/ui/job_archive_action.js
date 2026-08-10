@@ -1,5 +1,5 @@
 /**
- * Job archive/unarchive flow — shared by the oxDNA and MD job panels.
+ * Job directory-move flow — shared by the oxDNA and MD job panels.
  *
  * `initJobArchive({ api, kind })` (kind: 'oxdna' | 'md') → { archive, unarchive }.
  * Each drives the full flow: pick a destination folder (archive) or confirm
@@ -39,20 +39,20 @@ export function initJobArchive({ api, kind }) {
     })
   }
 
-  async function archive(job, { onProgress } = {}) {
+  async function changeDirectory(job, { onProgress } = {}) {
     const dest = await pickSystemFolder({
       api,
-      title: `Archive job ${job.job_id} — choose destination folder`,
+      title: `Move job ${job.job_id} — choose destination folder`,
       initialPath: localStorage.getItem(_LS_KEY) || null,
     })
     if (!dest) return false
     localStorage.setItem(_LS_KEY, dest)
     const r = await _fns().archive(job.job_id, dest)
-    if (!r) { showToast(`Archive failed: ${api.lastErrorMessage?.() ?? 'error'}`, { severity: 'error' }); return false }
+    if (!r) { showToast(`Move failed: ${api.lastErrorMessage?.() ?? 'error'}`, { severity: 'error' }); return false }
     onProgress?.({ state: 'running', moved_bytes: 0, total_bytes: 0 })
     const st = await _poll(job.job_id, onProgress)
-    if (st.state === 'error') { showToast(`Archive failed: ${st.error}`, { severity: 'error' }); return false }
-    showToast('Job archived', { severity: 'success' })
+    if (st.state === 'error') { showToast(`Move failed: ${st.error}`, { severity: 'error' }); return false }
+    showToast('Job directory changed', { severity: 'success' })
     return true
   }
 
@@ -72,5 +72,5 @@ export function initJobArchive({ api, kind }) {
     return true
   }
 
-  return { archive, unarchive }
+  return { archive: changeDirectory, changeDirectory, unarchive }
 }

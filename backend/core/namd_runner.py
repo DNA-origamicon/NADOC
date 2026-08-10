@@ -733,32 +733,6 @@ def _reconcile_preparing(job: MdJob, workspace_dir: Path) -> MdJob:
     return job
 
 
-# A remote (runpod/alpine) job sitting at ``queued`` is normally a LEGITIMATE
-# "prepared, awaiting Start/submit" state that persists indefinitely (nothing
-# auto-launches it).  The ONE exception is a job the user has ARCHIVED (put away)
-# that never got a remote handle: it can never be started from the archive, yet it
-# renders as an active "queued" row forever.  Only retire it once it is comfortably
-# past any in-flight CLI archive-from-birth launch window (launch_production.py
-# creates the child ``queued`` + archived, then drives it to ``running`` and stamps
-# ``runpod_pod_id`` within seconds), so a generous age gate can't race a live launch.
-_ABANDONED_QUEUED_MIN_AGE_S = 3600  # 1 h — no real launch stays queued this long
-
-
-def _remote_job_abandoned_queued(job: MdJob) -> bool:
-    """True for an archived remote job stuck at ``queued`` with no remote handle and
-    no launch in flight — safe to retire to a terminal ``stopped`` state.  A
-    non-archived queued job (panel "awaiting Start"/"awaiting submit") is protected."""
-    if not getattr(job, "archived", False):
-        return False
-    if job.status != MdStatus.queued:
-        return False
-    # Never launched: no pod (runpod) and no SLURM id (alpine).
-    if getattr(job, "runpod_pod_id", None) or getattr(job, "slurm_job_id", None):
-        return False
-    created = getattr(job, "created_at", None) or 0.0
-    return (time.time() - created) >= _ABANDONED_QUEUED_MIN_AGE_S
-
-
 def _reconcile_min_name(job: MdJob, manifest_path: Path) -> Optional[str]:
     """The minimisation output stem, from the job or its manifest, or None.
 
@@ -793,19 +767,6 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
     if getattr(job, "execution_target", "local") != "local":
         # Remote job — its status is driven by the SlurmExecutor / RunPod supervisor
         # poll pass, not the local /proc reconciliation.  Leave it untouched, EXCEPT
-        # an archived job abandoned at ``queued`` (never launched, off in the archive):
-        # retire it so it stops rendering as a perpetually-active "queued" row.
-        if _remote_job_abandoned_queued(job):
-            job.status = MdStatus.stopped
-            job.user_stopped = True  # terminal + benign — no resume, clean-stop UI
-            job.error = None
-            try:
-                job.save(workspace_dir)
-            except Exception:  # noqa: BLE001 — archive drive may be offline; heal next load
-                logger.warning(
-                    "reconcile: could not persist retire of abandoned remote job %s",
-                    job.job_id,
-                )
         return job
     if job.status == MdStatus.preparing:
         return _reconcile_preparing(job, workspace_dir)
@@ -1598,7 +1559,7 @@ def _fail_on_disk_abort(
     job.error = (
         f"Stopped: free disk fell below {ABORT_MIN_FREE_BYTES / GiB:.0f} GB "
         f"while running {spec.name} ({fb / GiB:.1f} GB free). "
-        "Free up space (delete/archive old jobs), then resume."
+        "Free up space (delete old jobs or change their directory), then resume."
     )
     job.save(workspace_dir)
 
@@ -2143,7 +2104,7 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
         job.error = (
             f"Not enough free disk to start {label}: {fb / GiB:.1f} GB free, "
             f"need at least {ABORT_MIN_FREE_BYTES / GiB:.0f} GB. "
-            "Free up space (delete/archive old jobs), then resume."
+            "Free up space (delete old jobs or change their directory), then resume."
         )
         job.save(workspace_dir)
         return False

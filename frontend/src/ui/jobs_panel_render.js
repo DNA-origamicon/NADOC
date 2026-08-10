@@ -48,7 +48,7 @@ export function renderJobRow(m, { doc = document, onClick, onAction, onChevron,
   const size = doc.createElement('span')
   size.textContent = m.sizeStr
   size.style.cssText = `flex-shrink:0;color:${m.archived ? m.colors.warn : m.colors.dim};font-size:10px;font-family:var(--font-mono)`
-  if (m.archived) size.title = `Archived → ${m.archivePath}`
+  if (m.archived) size.title = `Stored outside the main server directory → ${m.archivePath}`
 
   // Status symbol: an explicit override (e.g. NAMD's ⧗ remote-queued hourglass) wins;
   // else an animated spinner while active, else the badge shape.
@@ -111,7 +111,7 @@ export function renderJobRow(m, { doc = document, onClick, onAction, onChevron,
   if (!m.compactColumns && m.archived) {
     const box = Object.assign(doc.createElement('span'), { textContent: '📦' })
     box.style.cssText = 'flex-shrink:0;font-size:10px'
-    box.title = `Archived → ${m.archivePath}`
+    box.title = `Stored outside the main server directory → ${m.archivePath}`
     row.append(box)
   }
   const warningCol = m.compactColumns ? doc.createElement('span') : row
@@ -127,8 +127,8 @@ export function renderJobRow(m, { doc = document, onClick, onAction, onChevron,
   if (m.compactColumns) {
     const box = Object.assign(doc.createElement('span'), { textContent: m.archived ? '📦' : '' })
     box.style.cssText = 'flex:0 0 10px;width:10px;text-align:center;font-size:10px'
-    box.setAttribute('aria-label', m.archived ? 'Archived' : 'Not archived')
-    if (m.archived) box.title = `Archived → ${m.archivePath}`
+    box.setAttribute('aria-label', m.archived ? 'Stored on another drive' : 'Stored on main server drive')
+    if (m.archived) box.title = `Stored outside the main server directory → ${m.archivePath}`
     row.append(box)
 
     const statusCol = doc.createElement('span')

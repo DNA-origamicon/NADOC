@@ -2828,6 +2828,9 @@ export const getMdRemoteRecommendation = (id, { clusterName = 'alpine', safetyFa
 export const submitMdJobRemote   = (id, body = {}) => _oxdnaJSON('POST', `/md/jobs/${id}/submit-remote`, body)
 /** Resume a timed-out remote job from its last checkpoint (new SLURM submission). */
 export const resumeMdJobRemote   = (id, body = {}) => _oxdnaJSON('POST', `/md/jobs/${id}/resume-remote`, body)
+export const finishMdJob = (id, destRoot) =>
+  _oxdnaJSON('POST', `/md/jobs/${id}/finish-and-download`, { dest_root: destRoot })
+export const mdDownloadStatus = (id) => _oxdnaJSON('GET', `/md/jobs/${id}/download-status`)
 /** Stage N production replicas (distinct seeds) from a completed parent (offline; no cluster session). */
 export const stageMdEnsemble     = (id, body = {}) => _oxdnaJSON('POST', `/md/jobs/${id}/ensemble-production`, body)
 /** Submit every prepared replica of a parent to the cluster in one action (needs a live session). */

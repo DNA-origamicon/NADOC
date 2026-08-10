@@ -3676,7 +3676,9 @@ def _namd_live_progress(job: MdJob, ws) -> tuple[float | None, float | None, boo
     """
     segs = job.segments or []
     total = len(segs)
-    if not total:
+    min_row = job.minimization
+    units = total + (1 if min_row else 0)
+    if not units:
         return None, None, False
     from backend.core.namd_metrics import (  # noqa: PLC0415
         benchmark_s_per_step,
@@ -3690,6 +3692,29 @@ def _namd_live_progress(job: MdJob, ws) -> tuple[float | None, float | None, boo
     steps = None
     eta = None
     estimated = False
+
+    # The minimisation precedes ``segments`` and remote runners leave its persisted
+    # status pending.  Its live-metrics segment name is definitive.  Previously this
+    # branch was absent, so a multi-hour Alpine minimisation collected an exact step
+    # while the job card remained at 0 % with no ETA.
+    live = job.live_metrics or {}
+    min_running = (
+        job.status == MdStatus.running
+        and min_row is not None
+        and live.get("segment") == min_row.name
+        and not any(s.status in {"running", "done", "failed"} for s in segs)
+    )
+    if min_running:
+        steps = int(min_row.steps or 0)
+        ts, estimated = _remote_projected_step(job, steps)
+        rate = live.get("s_per_step")
+        eta = eta_seconds(max(0, steps - int(ts or 0)), rate) if steps else None
+        min_fraction = min(1.0, max(0.0, float(ts or 0) / steps)) if steps else 0.0
+        return min_fraction / units, eta, estimated
+
+    # Once a real segment starts, the minimisation is one completed unit.
+    if min_row:
+        done += 1
     idx = job.current_segment_idx
     if 0 <= idx < total and segs[idx].status == "running":
         seg = segs[idx]
@@ -3720,7 +3745,56 @@ def _namd_live_progress(job: MdJob, ws) -> tuple[float | None, float | None, boo
                 int(s.steps or 0) for s in segs[idx + 1 :]
             )
             eta = eta_seconds(remaining, rate) if rate else eta
-    return overall_fraction(done, total, ts, steps), eta, estimated
+    return overall_fraction(done, units, ts, steps), eta, estimated
+
+
+def _local_dcd_bytes(package_dir: Path) -> int:
+    """Exact local trajectory bytes for a terminal job (normally only a few files)."""
+    total = 0
+    try:
+        for path in (package_dir / "output").glob("*.dcd"):
+            if path.is_file():
+                total += path.stat().st_size
+    except OSError:
+        pass
+    return total
+
+
+def _decorate_terminal_segment_progress(job: MdJob, payload: dict, ws: Path) -> None:
+    """Expose what a deliberately-finished partial production actually completed.
+
+    ``End run and download`` marks the job complete even when its requested production
+    length was intentionally shortened. Persisted segment status can therefore still
+    say ``running``. The downloaded XST/restart markers are the durable truth for steps;
+    the conf's timestep is the durable truth for simulated nanoseconds.
+    """
+    if job.status != MdStatus.completed:
+        return
+    from backend.core.namd_metrics import live_segment_step
+
+    package = job.package_dir(ws)
+    for seg in payload.get("segments") or []:
+        name = str(seg.get("name") or "")
+        step = live_segment_step(package, name)
+        if step is None:
+            continue
+        planned = int(seg.get("steps") or 0)
+        step = min(step, planned) if planned > 0 else step
+        timestep_fs = None
+        conf = package / f"{name}.conf"
+        try:
+            for line in conf.read_text(errors="replace").splitlines():
+                fields = line.split()
+                if fields and fields[0].lower() == "timestep" and len(fields) > 1:
+                    timestep_fs = float(fields[1])
+                    break
+        except (OSError, ValueError):
+            pass
+        if timestep_fs is None:
+            timestep_fs = float((job.live_metrics or {}).get("timestep_fs") or 1.0)
+        seg["completed_steps"] = step
+        seg["completed_ns"] = step * timestep_fs / 1_000_000.0
+        seg["status"] = "done"
 
 
 # Strong refs to in-flight background dir-size walks so the event loop can't GC them
@@ -3798,7 +3872,16 @@ async def list_md_jobs() -> list[dict]:
     to_warm: list = []
     for j in jobs:
         _backfill_failure_kind(j)
+        if (
+            j.execution_target in {"alpine", "runpod"}
+            and j.status not in {MdStatus.preparing, MdStatus.queued, MdStatus.running}
+            and (j.download_status or {}).get("state") not in {"verified", "downloading"}
+        ):
+            from backend.core.md_executor import verify_local_download
+
+            verify_local_download(j, ws)
         d = j.to_dict()
+        _decorate_terminal_segment_progress(j, d, ws)
         d["out_of_date"] = _md_job_out_of_date(j, current_fp)
         # Cache-only: never block the poll on a multi-GB archived-run stat-walk.  An
         # uncached size comes back None (frontend renders it blank) and is filled in by
@@ -3813,7 +3896,10 @@ async def list_md_jobs() -> list[dict]:
         # trajectory and whole-tree sizes, so the jobs list can show growth now rather
         # than remaining frozen at the staged-input size until the final download.
         live = j.live_metrics or {}
-        if j.execution_target in {"alpine", "runpod"}:
+        remote_is_authoritative = j.status in {
+            MdStatus.preparing, MdStatus.queued, MdStatus.running
+        }
+        if j.execution_target in {"alpine", "runpod"} and remote_is_authoritative:
             remote_total = live.get("total_size_bytes")
             remote_dcd = live.get("dcd_size_bytes")
             if isinstance(remote_total, int) and remote_total >= 0:
@@ -3821,6 +3907,15 @@ async def list_md_jobs() -> list[dict]:
                 d["dcd_size_bytes"] = (
                     remote_dcd if isinstance(remote_dcd, int) and remote_dcd >= 0 else 0
                 )
+        elif j.download_status and j.download_status.get("state") == "verified":
+            # A terminal remote job is local now.  The verified remote inventory is
+            # exact for result files; the directory-size cache includes those results
+            # plus the staged inputs and is the correct job-card disk footprint.
+            verified_dcd = j.download_status.get("dcd_bytes")
+            d["dcd_size_bytes"] = (
+                verified_dcd if isinstance(verified_dcd, int) and verified_dcd >= 0
+                else _local_dcd_bytes(j.package_dir(ws))
+            )
         d["early_stop_pending"] = pending_early_stop(j.job_id)
         frac, eta, estimated = _namd_live_progress(j, ws)
         if frac is not None:
@@ -3873,6 +3968,7 @@ async def get_md_job(job_id: str) -> dict:
 
     job = _load_job(job_id)
     d = job.to_dict()
+    _decorate_terminal_segment_progress(job, d, _workspace())
     # Every job that predates MdJob.minimization has None here.  Read it back off the
     # package manifest — ONE file per opened job, so the timeline shows the minimisation
     # for existing runs too.  Deliberately not persisted: a GET should not write job.json.
@@ -3985,8 +4081,8 @@ async def delete_md_job(job_id: str) -> dict:
     if job.archived and job.archive_path and not job_dir.exists():
         raise HTTPException(
             409,
-            f"This job is archived to {job_dir}, which is not reachable right now — "
-            "mount the archive drive and try again. Deleting it from the list without "
+            f"This job is stored at {job_dir}, which is not reachable right now — "
+            "mount that storage drive and try again. Deleting it from the list without "
             "removing the folder would leave the files behind with nothing pointing at "
             "them.",
         )
@@ -4003,6 +4099,91 @@ class ArchiveRequest(BaseModel):
     dest_root: str  # parent directory; the job moves to <dest_root>/<job_id>
 
 
+@router.post("/md/jobs/{job_id}/finish-and-download", status_code=202)
+async def finish_and_download_md_job(job_id: str, body: ArchiveRequest) -> dict:
+    """End an Alpine allocation, retain its partial output as complete, and archive it."""
+    from backend.core import job_archive
+
+    job = _load_job(job_id)
+    if job.execution_target != "alpine":
+        raise HTTPException(400, "End run and download currently applies to Alpine runs.")
+    # A stop requested while Duo was disconnected is locally terminal but the allocation
+    # may still be running and its output is still remote. Put it through the ordinary
+    # stop path too; that drains the deferred scancel and fetches scratch before archival.
+    if job.status in {MdStatus.queued, MdStatus.running, MdStatus.preparing} or job.pending_scancel:
+        result = await stop_md_job(job_id)
+        if result.get("pending_scancel"):
+            raise HTTPException(
+                409,
+                "Connect to Alpine first so the SLURM job can be ended and its results downloaded.",
+            )
+    # Terminal does not mean downloaded: TIMEOUT/killed/stopped jobs may have had their
+    # earlier SFTP request interrupted. Always reconcile the remote inventory here. The
+    # resumable SFTP primitive skips exact-size local files and continues `.part` files.
+    from backend.core import cluster_ssh, md_executor
+
+    mgr = cluster_ssh.get_manager()
+    if not mgr.is_connected():
+        raise HTTPException(409, "Connect to Alpine to download and verify the run output.")
+    job = _load_job(job_id)
+    try:
+        fetched = await md_executor.fetch_outputs(job, _workspace(), conn=mgr)
+    except cluster_ssh.ClusterSSHError as exc:
+        raise HTTPException(502, f"Cluster download interrupted: {exc}") from exc
+    if not fetched:
+        raise HTTPException(
+            502,
+            "Some Alpine output files did not finish downloading. Retry End run and download; completed bytes are preserved.",
+        )
+    # stop_md_job fetches Alpine scratch output before writing its terminal state. Re-read
+    # that record, deliberately accept the shortened trajectory, then use the existing
+    # background archive mover for the selected storage location.
+    job = _load_job(job_id)
+    job.status = MdStatus.completed
+    job.resumable = False
+    job.user_stopped = True
+    job.error = None
+    job.save(_workspace())
+    # Archive-from-birth runs (including the real 24hb_0xT Alpine run) already resolve
+    # package_dir into the chosen storage volume. stop_md_job/fetch_outputs downloaded
+    # straight there, so starting another archive move would fail with "already archived"
+    # even though the requested operation succeeded.
+    requested_path = (Path(body.dest_root).expanduser() / job.job_id).resolve()
+    current_path = Path(job.archive_path).resolve() if job.archived and job.archive_path else None
+    if current_path == requested_path:
+        return {
+            "ok": True,
+            "job_id": job_id,
+            "status": "completed",
+            "action": "download",
+            "archive_path": job.archive_path,
+            "verified": True,
+            "download_status": job.download_status,
+        }
+    try:
+        job_archive.start_archive(job, _workspace(), "md_jobs", Path(body.dest_root))
+    except (ValueError, FileExistsError, FileNotFoundError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {
+        "ok": True, "job_id": job_id, "status": "completed", "action": "archive",
+        "verified": True, "download_status": job.download_status,
+    }
+
+
+@router.get("/md/jobs/{job_id}/download-status")
+async def md_download_status(job_id: str) -> dict:
+    """Persisted, server-owned result-transfer truth; safe across browser reloads."""
+    job = _load_job(job_id)
+    if (job.download_status or {}).get("state") not in {"verified", "downloading"}:
+        from backend.core.md_executor import verify_local_download
+
+        verify_local_download(job, _workspace())
+    return job.download_status or {
+        "state": "not_verified", "total_bytes": None, "verified_bytes": 0,
+        "files_total": None, "files_verified": 0,
+    }
+
+
 @router.post("/md/jobs/{job_id}/archive", status_code=202)
 async def archive_md_job(job_id: str, body: ArchiveRequest) -> dict:
     """Start moving a job's folder to ``dest_root`` in the background (poll status)."""
@@ -4011,7 +4192,7 @@ async def archive_md_job(job_id: str, body: ArchiveRequest) -> dict:
     ws = _workspace()
     job = _load_job(job_id)
     if is_running(job_id) or job.status == MdStatus.running:
-        raise HTTPException(400, "Stop the MD job before archiving it")
+        raise HTTPException(400, "Stop the MD job before changing its directory")
     try:
         job_archive.start_archive(job, ws, "md_jobs", Path(body.dest_root))
     except (ValueError, FileExistsError, FileNotFoundError) as e:

@@ -835,7 +835,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
                     value: c.job.job_id,
                     label: [c.label,
                             c.stale ? '(design has changed since)' : '',
-                            c.archived ? '(archived — needs the archive drive mounted)' : '']
+                            c.archived ? '(stored on another drive — that drive must be mounted)' : '']
                       .filter(Boolean).join(' '),
                   })),
                   onChange: v => {

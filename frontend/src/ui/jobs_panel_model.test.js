@@ -82,7 +82,7 @@ function oldOxdnaJobRow(job, { isChild = false, index = 0, depth = 0, listIndex 
   const size = doc.createElement('span')
   size.textContent = job.size_bytes ? formatBytes(job.size_bytes) : ''
   size.style.cssText = `flex-shrink:0;color:${job.archived ? _C.warn : _C.dim};font-size:10px;font-family:var(--font-mono)`
-  if (job.archived) size.title = `Archived → ${job.archive_path || ''}`
+  if (job.archived) size.title = `Stored outside the main server directory → ${job.archive_path || ''}`
   const sym = jobIsActive(job)
     ? makeSpinner(badge.color, 10, doc)
     : Object.assign(doc.createElement('span'), { textContent: badge.symbol })
@@ -100,7 +100,7 @@ function oldOxdnaJobRow(job, { isChild = false, index = 0, depth = 0, listIndex 
   if (job.archived) {
     const box = Object.assign(doc.createElement('span'), { textContent: '📦' })
     box.style.cssText = 'flex-shrink:0;font-size:10px'
-    box.title = `Archived → ${job.archive_path || ''}`
+    box.title = `Stored outside the main server directory → ${job.archive_path || ''}`
     row.append(box)
   }
   if (jobOutOfDate(job) && !autorefineRunning) {

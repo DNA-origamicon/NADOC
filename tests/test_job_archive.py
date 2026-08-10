@@ -97,23 +97,28 @@ class TestArchiveRoundTrip:
         j2 = OxdnaJob.list_jobs(ws)[0]
         assert j2.archived and j2.job_dir(ws) == arch / job.job_id
 
-    def test_archive_job_sync_rejects_double_archive(self, tmp_path: Path) -> None:
+    def test_job_can_move_from_one_external_directory_to_another(self, tmp_path: Path) -> None:
         ws = tmp_path / "ws"
         ws.mkdir()
         job = new_oxdna_job("d", [])
         job.save(ws)
-        job.archived = True
-        with pytest.raises(ValueError):
-            ja.archive_job(job, ws, "oxdna_jobs", tmp_path / "ext")
+        first = tmp_path / "first"
+        second = tmp_path / "second"
+        ja.archive_job(job, ws, "oxdna_jobs", first)
+        moved = OxdnaJob.list_jobs(ws)[0]
+        ja.archive_job(moved, ws, "oxdna_jobs", second)
+        assert not (first / job.job_id).exists()
+        assert (second / job.job_id / "job.json").exists()
+        assert OxdnaJob.list_jobs(ws)[0].archive_path == str(second / job.job_id)
 
-    def test_archive_rejects_double_archive(self, tmp_path: Path) -> None:
+    def test_move_rejects_unmounted_source(self, tmp_path: Path) -> None:
         ws = tmp_path / "ws"
         ws.mkdir()
         job = new_oxdna_job("d", [])
         job.save(ws)
         job.archived = True
         job.archive_path = "/somewhere"
-        with pytest.raises(ValueError):
+        with pytest.raises(FileNotFoundError):
             ja.start_archive(job, ws, "oxdna_jobs", tmp_path / "ext")
 
     def test_archive_rejects_symlinked_job_dir(self, tmp_path: Path) -> None:

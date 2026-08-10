@@ -83,6 +83,12 @@ def dir_size_bytes_cached_only(path: Path, ttl: float = _SIZE_TTL_S) -> int | No
     return None
 
 
+def invalidate_dir_size(path: Path) -> None:
+    """Drop a cached footprint after a transfer materially changes the directory."""
+    with _warm_lock:
+        _size_cache.pop(str(path), None)
+
+
 def warm_dir_sizes(paths, ttl: float = _SIZE_TTL_S) -> None:
     """Walk + cache the size of each of ``paths`` that isn't already cached-fresh.
 

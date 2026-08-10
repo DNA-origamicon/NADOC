@@ -3818,14 +3818,14 @@
                 <div id="namd-run-controls" style="display:none"></div>
               </div>
 
-              <!-- ── Consolidated job actions (Archive / Delete) — one pair for ALL engines,
+              <!-- ── Consolidated job actions (Change directory / Delete) for ALL engines,
                    above the jobs card. Acts on the selected run; dispatches to that run's
                    engine panel (simulate_jobs.js). Hidden until a deletable run is selected;
-                   Archive shows only for engines that support it (oxDNA / NAMD). -->
+                   Directory moves show only for engines that support them (oxDNA / NAMD). -->
               <div id="simulate-job-actions" style="display:none;margin-bottom:2px">
                 <div style="display:flex;gap:5px">
                   <button id="simulate-jobs-archive-btn"
-                          style="flex:1;font-size:var(--text-xs);padding:4px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Archive</button>
+                          style="flex:1;font-size:var(--text-xs);padding:4px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Change directory</button>
                   <button id="simulate-jobs-delete-btn"
                           style="flex:1;font-size:var(--text-xs);padding:4px;background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;cursor:pointer">Delete</button>
                 </div>
@@ -3838,6 +3838,10 @@
                    default; "Show all job types" reveals every engine's runs (each tagged).
                    Selecting a row routes to that engine's tab + detail/viz (an [L] node's
                    viz uses the LAMMPS controller this card owns). -->
+              <button id="simulate-jobs-end-download-btn"
+                      style="display:none;width:100%;font-size:var(--text-xs);padding:6px;margin-bottom:4px;background:#2d2119;border:1px solid #d29922;color:#e3b341;border-radius:3px;cursor:pointer;font-weight:600">
+                End run and download
+              </button>
               <!-- Shared run-location: one "📁 Directory" button for ALL engines, above the
                    jobs list. Sets where new runs write (large trajectories → a roomy drive);
                    mounted by simulate_jobs.js (run_location.js). -->
@@ -3856,6 +3860,7 @@
                     <div class="bar" style="height:100%;width:0%;background:#4a9eff;transition:width .3s"></div>
                   </div>
                 </div>
+                <div id="simulate-jobs-allocation" style="display:none;font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
                 <div id="simulate-jobs-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
                 <!-- LAMMPS-only context control: an oxDNA job's Relax/Stop/Resume lives in
                      the oxDNA panel below, so this stays hidden for oxDNA / no selection to
@@ -5810,11 +5815,6 @@
                          style="display:none;font-size:var(--text-xs);color:#d29922;background:#1c1400;border:1px solid #6b4e00;border-radius:3px;padding:5px;margin-bottom:6px"></div>
                     <div id="md-jobs-cluster-status" style="display:none;font-size:var(--text-xs);color:#8b949e;margin-bottom:6px"></div>
                     <div id="md-jobs-alpine-availability" style="margin-bottom:6px"></div>
-                    <button id="md-jobs-resume-btn"
-                            title="Resume this timed-out job from its last checkpoint (new SLURM submission)"
-                            style="font-size:var(--text-xs);padding:3px 8px;margin-bottom:6px;background:#10243a;border:1px solid #58a6ff;color:#58a6ff;border-radius:3px;cursor:pointer;display:none">
-                      ⟳ Resume
-                    </button>
                     <div id="md-jobs-resume-history-wrap" style="display:none">
                       <div id="md-jobs-resume-history-toggle" style="cursor:pointer;font-size:var(--text-xs);color:#8b949e;user-select:none">
                         <span id="md-jobs-resume-history-arrow">▸</span> Resumptions (<span id="md-jobs-resume-history-count">0</span>)

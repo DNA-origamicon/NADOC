@@ -157,6 +157,31 @@ def test_list_md_jobs_uses_live_remote_dcd_and_total_sizes(monkeypatch, tmp_path
     assert row["size_bytes"] == 1200
 
 
+def test_terminal_remote_job_uses_local_size_not_stale_live_metrics(monkeypatch, tmp_path):
+    import asyncio
+
+    from backend.core.design_disk_usage import warm_dir_sizes
+
+    monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
+    job = new_job("6hb", "equilibrium_aware", "6hb", "pkg")
+    job.execution_target = "alpine"
+    job.status = MdStatus.completed
+    job.live_metrics = {"dcd_size_bytes": 700, "total_size_bytes": 1200}
+    job.download_status = {
+        "state": "verified", "total_bytes": 5000, "verified_bytes": 5000,
+        "dcd_bytes": 4000,
+    }
+    job.save(tmp_path)
+    (job.job_dir(tmp_path) / "local-results.bin").write_bytes(b"x" * 8000)
+    warm_dir_sizes([job.job_dir(tmp_path)], ttl=0.0)
+
+    rows = asyncio.run(routes_md.list_md_jobs())
+    row = next(r for r in rows if r["job_id"] == job.job_id)
+    assert row["size_bytes"] >= 8000
+    assert row["size_bytes"] != 1200
+    assert row["dcd_size_bytes"] == 4000
+
+
 def test_list_md_jobs_repairs_running_runpod_job_when_pod_is_gone(
     monkeypatch, tmp_path
 ):

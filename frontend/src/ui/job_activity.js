@@ -325,7 +325,7 @@ export function diskWarningMessage(forecast) {
     `This run is estimated to write about ${predicted} of trajectory and restart ` +
     `data. You currently have ${free} free${on}, so finishing it would ${afterStr}.\n\n` +
     'Simulations that fill the disk can corrupt their output and wedge the machine. ' +
-    'Free up space (delete or archive old jobs) first, or start anyway if you know ' +
+    'Free up space (delete old jobs or change their directory) first, or start anyway if you know ' +
     'the run will be stopped early.'
   )
 }

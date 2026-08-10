@@ -481,6 +481,31 @@ backend edits, then reconnect once.
 
 ---
 
+### Result download is a separate, verified lifecycle (2026-08-09)
+
+SLURM completion and local result availability are deliberately independent. `MdJob.download_status`
+persists the exact remote `relative path -> byte size` inventory, verified/transferred byte counts and
+file counts. The unified Jobs card says **Download complete** only after every local file matches that
+inventory; a browser reload or expired Duo session cannot invent success. For older jobs that predate
+the per-file inventory, exact aggregate bytes plus exact file count are the conservative offline proof.
+
+Every entry point (automatic completion reconciliation, Stop, Fetch remote, End run and download) goes
+through one per-job async lock plus an advisory filesystem lock. This covers concurrent routes, dev-server
+reload overlap and multiple backend processes. Downloads use `.part`, resume by exact byte offset and
+atomically rename only after fsync + size verification. The offline verifier never touches a job whose
+transfer state is `downloading`; after interruption it may promote an exact-size `.part` without Alpine.
+Filesystem/permission errors fail the file operation but do **not** expire a healthy SSH/Duo session.
+
+Size authority follows the lifecycle: live remote heartbeat bytes while the job is active; actual local
+directory size after download; verified inventory totals in the transfer UI. Directory-size caches are
+invalidated after a transfer. This prevents a terminal card from retaining the last-running remote size.
+
+Remote minimisation also participates in progress: node metrics carry the real minimisation step, successive
+samples derive seconds/step when NAMD emits no TIMING record, and the card shows step/total, percent and ETA.
+For a deliberately ended production, downloaded XST/restart markers supply actual completed steps and the
+conf supplies the real timestep. The stage row reports actual ns (SLURM 30958617: **65.97 ns**) and renders
+the green completion check because the job is marked complete, rather than claiming its requested 200 ns ran.
+
 > **History.** Phase 1–5 build detail, in-sbatch early-stop, ensemble production, run logs + the appendix live in [project_alpine_cluster_submission_archive.md](project_alpine_cluster_submission_archive.md). Read on demand only.
 
 ### Flexibility-map / replica-package invariant (from upstream 2026-07-09)
@@ -495,4 +520,3 @@ backend edits, then reconnect once.
   `charge_audit` field when the standalone file is absent (fixes replicas already on disk —
   the child manifest already carries the map). Verified on prod job `6d7c2e38e455`: RMSF
   route now returns 1328/1328. See LESSONS A10.
-

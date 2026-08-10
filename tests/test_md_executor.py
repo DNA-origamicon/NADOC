@@ -386,9 +386,9 @@ def test_reconcile_completed_fetches_and_marks_done(tmp_path, alpine, resources)
             "sacct": RunResult(0, "42|COMPLETED", ""),
             "find": RunResult(
                 0,
-                "output/6hb_demo_01_p100.coor\noutput/6hb_demo_01_p100.vel\n"
-                "output/6hb_demo_01_p100.xsc\noutput/6hb_demo_01_p100.dcd\n"
-                "6hb_demo_01_p100.log\n",
+                    "7\toutput/6hb_demo_01_p100.coor\n7\toutput/6hb_demo_01_p100.vel\n"
+                    "7\toutput/6hb_demo_01_p100.xsc\n7\toutput/6hb_demo_01_p100.dcd\n"
+                    "7\t6hb_demo_01_p100.log\n",
                 "",
             ),
         }
@@ -1164,6 +1164,125 @@ def test_live_metrics_no_change_reports_false(tmp_path):
     j = _make_prepared_job(tmp_path)
     assert ex.apply_live_metrics(j, '{"ns_per_day": 5}') is True
     assert ex.apply_live_metrics(j, '{"ns_per_day": 5}') is False
+
+
+def test_live_metrics_derives_minimization_rate_from_successive_steps(tmp_path):
+    j = _make_prepared_job(tmp_path)
+    j.live_metrics = {
+        "segment": "demo_00_min", "step": 100, "collected_at": 10.0,
+        "retrieved_at": 11.0,
+    }
+    assert ex.apply_live_metrics(
+        j, '{"segment":"demo_00_min","step":140,"collected_at":20.0}'
+    ) is True
+    assert j.live_metrics["s_per_step"] == 0.25
+
+
+def test_fetch_outputs_serializes_duplicate_requests(tmp_path, monkeypatch):
+    """Auto-fetch and a user click may race, but only one may touch a .part file."""
+    job = _make_prepared_job(tmp_path)
+    active = 0
+    peak = 0
+
+    async def fake_fetch(*args, **kwargs):
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.02)
+        active -= 1
+        return True
+
+    monkeypatch.setattr(ex, "_fetch_outputs_locked", fake_fetch)
+
+    async def race():
+        return await asyncio.gather(
+            ex.fetch_outputs(job, tmp_path, conn=object()),
+            ex.fetch_outputs(job, tmp_path, conn=object()),
+        )
+
+    assert asyncio.run(race()) == [True, True]
+    assert peak == 1
+
+
+def test_offline_download_verification_uses_exact_persisted_inventory(tmp_path):
+    job = _make_prepared_job(tmp_path)
+    pkg = job.package_dir(tmp_path)
+    (pkg / "output").mkdir(exist_ok=True)
+    (pkg / "output" / "run.dcd").write_bytes(b"dcd")
+    (pkg / "run.log").write_bytes(b"log!")
+    job.download_status = {
+        "state": "interrupted", "total_bytes": 7, "verified_bytes": 0,
+        "files_total": 2,
+        "inventory": {"output/run.dcd": 3, "run.log": 4},
+    }
+
+    assert ex.verify_local_download(job, tmp_path) is True
+    assert job.download_status["state"] == "verified"
+    assert job.download_status["verified_bytes"] == 7
+    assert job.download_status["dcd_bytes"] == 3
+    assert job.download_status["verified_offline"] is True
+
+
+def test_offline_download_verification_rejects_missing_or_wrong_sized_file(tmp_path):
+    job = _make_prepared_job(tmp_path)
+    pkg = job.package_dir(tmp_path)
+    (pkg / "output").mkdir(exist_ok=True)
+    (pkg / "output" / "run.dcd").write_bytes(b"short")
+    job.download_status = {
+        "state": "interrupted", "total_bytes": 10, "verified_bytes": 0,
+        "files_total": 1, "inventory": {"output/run.dcd": 10},
+    }
+
+    assert ex.verify_local_download(job, tmp_path) is False
+    assert job.download_status["state"] == "interrupted"
+    assert "expected 10" in job.download_status["local_verification_error"]
+
+
+def test_offline_download_verification_promotes_complete_partial(tmp_path):
+    job = _make_prepared_job(tmp_path)
+    pkg = job.package_dir(tmp_path)
+    (pkg / "output").mkdir(exist_ok=True)
+    part = pkg / "output" / "run.dcd.part"
+    part.write_bytes(b"complete")
+    job.download_status = {
+        "state": "interrupted", "total_bytes": 8, "verified_bytes": 0,
+        "files_total": 1, "inventory": {"output/run.dcd": 8},
+    }
+
+    assert ex.verify_local_download(job, tmp_path) is True
+    assert (pkg / "output" / "run.dcd").read_bytes() == b"complete"
+    assert not part.exists()
+
+
+def test_offline_verifier_never_touches_active_download_partial(tmp_path):
+    job = _make_prepared_job(tmp_path)
+    pkg = job.package_dir(tmp_path)
+    (pkg / "output").mkdir(exist_ok=True)
+    part = pkg / "output" / "run.dcd.part"
+    part.write_bytes(b"complete")
+    job.download_status = {
+        "state": "downloading", "total_bytes": 8, "verified_bytes": 0,
+        "files_total": 1, "inventory": {"output/run.dcd": 8},
+    }
+
+    assert ex.verify_local_download(job, tmp_path) is False
+    assert part.read_bytes() == b"complete"
+    assert not (pkg / "output" / "run.dcd").exists()
+
+
+def test_offline_download_verification_supports_legacy_count_and_total(tmp_path):
+    job = _make_prepared_job(tmp_path)
+    pkg = job.package_dir(tmp_path)
+    (pkg / "output").mkdir(exist_ok=True)
+    (pkg / "output" / "run.dcd").write_bytes(b"12345")
+    (pkg / "run.log").write_bytes(b"678")
+    job.download_status = {
+        "state": "interrupted", "total_bytes": 8, "verified_bytes": 0,
+        "files_total": 2,
+    }
+
+    assert ex.verify_local_download(job, tmp_path) is True
+    assert job.download_status["state"] == "verified"
 
 
 def test_submit_stages_the_live_metrics_collector(tmp_path, alpine, resources):

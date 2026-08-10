@@ -307,17 +307,25 @@ class ClusterConnection:
         except Exception as exc:  # noqa: BLE001
             raise self._fail_transport(f"upload failed: {exc}") from exc
 
-    async def sftp_get(self, remote_path: str, local_path: str) -> None:
+    async def sftp_get(self, remote_path: str, local_path: str, on_progress=None) -> None:
         """Download one file, chunked."""
 
         conn = self._require()
         try:
             async with conn.start_sftp_client() as sftp:
-                await _stream_get(sftp, remote_path, local_path)
+                await _stream_get(sftp, remote_path, local_path, on_progress=on_progress)
         except ClusterSSHError:
             raise
         except Exception as exc:  # noqa: BLE001
-            raise self._fail_transport(f"download failed: {exc}") from exc
+            message = f"download failed: {exc}"
+            kind = classify_ssh_error(message)
+            # A missing remote/local file, permissions problem, full disk, etc. fails
+            # this transfer but says nothing about the authenticated SSH transport.
+            # Expiring the Duo session here turns a recoverable file retry into a forced
+            # reconnect. Only transport-shaped failures invalidate the connection.
+            if kind in {"filesystem", "permission"}:
+                raise ClusterSSHError(message, kind=kind) from exc
+            raise self._fail_transport(message) from exc
 
     async def mirror(self, src: str, dst: str) -> RunResult:
         """rsync one remote dir tree to another (project↔scratch two-filesystem model)."""
@@ -354,12 +362,30 @@ async def _stream_put(sftp, local_path: str, remote_path: str) -> None:
                 await asyncio.wait_for(rf.write(chunk), timeout=_CHUNK_TIMEOUT_S)
 
 
-async def _stream_get(sftp, remote_path: str, local_path: str) -> None:
+async def _stream_get(sftp, remote_path: str, local_path: str, on_progress=None) -> None:
     import os
 
     os.makedirs(os.path.dirname(local_path) or ".", exist_ok=True)
+    remote_size = int((await sftp.stat(remote_path)).size)
+    part_path = local_path + ".part"
+    # Older NADOC downloads wrote directly to the final path. Adopt a short file as the
+    # resumable partial instead of throwing away gigabytes already transferred.
+    if os.path.exists(local_path):
+        local_size = os.path.getsize(local_path)
+        if local_size == remote_size:
+            return
+        if local_size < remote_size and not os.path.exists(part_path):
+            os.replace(local_path, part_path)
+    offset = os.path.getsize(part_path) if os.path.exists(part_path) else 0
+    if offset > remote_size:
+        os.unlink(part_path)
+        offset = 0
+    if on_progress:
+        on_progress(offset, remote_size)
     async with sftp.open(remote_path, "rb") as rf:
-        with open(local_path, "wb") as fh:
+        if offset:
+            rf.seek(offset)
+        with open(part_path, "ab" if offset else "wb") as fh:
             while True:
                 chunk = await asyncio.wait_for(
                     rf.read(_SFTP_CHUNK), timeout=_CHUNK_TIMEOUT_S
@@ -367,6 +393,17 @@ async def _stream_get(sftp, remote_path: str, local_path: str) -> None:
                 if not chunk:
                     break
                 fh.write(chunk)
+                offset += len(chunk)
+                if on_progress:
+                    on_progress(offset, remote_size)
+            fh.flush()
+            os.fsync(fh.fileno())
+    if os.path.getsize(part_path) != remote_size:
+        raise OSError(
+            f"incomplete download for {remote_path}: "
+            f"{os.path.getsize(part_path)}/{remote_size} bytes"
+        )
+    os.replace(part_path, local_path)
 
 
 # ── module singleton (one live connection per backend session) ─────────────────────

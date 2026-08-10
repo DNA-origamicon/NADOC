@@ -27,6 +27,8 @@ import {
   initSimulateJobs, nodeIsActive, nodeNeedsPolling, nodeIsResumable, verbForNode,
   masterProgressPct, masterProgressColor, masterProgressTooltip, masterStatusText, nodeDetailText, formatEta,
   masterStepText,
+  slurmAllocationText,
+  canEndAndDownload,
 } from './simulate_jobs.js'
 
 // ── pure helpers ──────────────────────────────────────────────────────────────
@@ -177,6 +179,15 @@ describe('pure helpers', () => {
       segments: [{ status: 'running', num_steps: 4000 }] }))
       .toBe('50% · 2,000 / 4,000 steps · 2,000 left')
   })
+
+  it('shows the exact live minimization counter instead of deriving segment steps', () => {
+    const node = { engine: 'namd', status: 'running', progress_fraction: 0.05,
+      minimization: { name: 'V_00_min', stage: 'Minimization', steps: 1000, status: 'pending' },
+      segments: [{ name: 's1', status: 'pending', steps: 5000 }],
+      live_metrics: { segment: 'V_00_min', step: 250 }, eta_seconds: 1500 }
+    expect(masterStepText(node)).toBe('25% minimization · 250 / 1,000 steps · 750 left · ~25m 00s remaining')
+    expect(masterProgressTooltip(node)).toContain('250 / 1,000 steps')
+  })
   it('masterStatusText carries the SNUPI %, ETA and phase under the one master bar', () => {
     // SNUPI has a SINGLE stage, so the stage-count fallback would read 0% for the whole solve —
     // it stamps a real progress_fraction instead, and the master bar/status is the only place it shows.
@@ -243,6 +254,31 @@ describe('pure helpers', () => {
   })
 })
 
+describe('slurmAllocationText', () => {
+  it('shows the requested allocation and excludes queue time until SLURM starts it', () => {
+    const node = { engine: 'namd', execution_target: 'alpine', resources: { walltime: '48:00:00' } }
+    expect(slurmAllocationText(node, 1_000_000)).toContain('48:00:00')
+    expect(slurmAllocationText(node, 1_000_000)).toContain('starts counting')
+  })
+
+  it('counts down from the scheduler RUNNING timestamp', () => {
+    const node = { engine: 'namd', execution_target: 'alpine', slurm_started_at: 1_000,
+      resources: { walltime: '48:00:00' } }
+    expect(slurmAllocationText(node, (1_000 + 3600) * 1000)).toBe(
+      'SLURM runtime requested: 48:00:00 · 1h 00m run · 1d 23h remaining')
+  })
+})
+
+describe('canEndAndDownload', () => {
+  it.each(['running', 'paused', 'stopped', 'failed'])('allows an Alpine %s job', (status) => {
+    expect(canEndAndDownload({ engine: 'namd', execution_target: 'alpine', status })).toBe(true)
+  })
+
+  it('allows archive-from-birth jobs because remote output may still need fetching', () => {
+    expect(canEndAndDownload({ engine: 'namd', execution_target: 'alpine', status: 'paused', archived: true })).toBe(true)
+  })
+})
+
 // ── factory drive (jsdom) ──────────────────────────────────────────────────────
 
 function mount() {
@@ -253,6 +289,8 @@ function mount() {
         <button id="simulate-jobs-delete-btn"></button>
         <div id="simulate-jobs-archive-progress" style="display:none"></div>
       </div>
+      <button id="simulate-jobs-end-download-btn"></button>
+      <div id="simulate-run-dir"></div>
       <div id="simulate-jobs">
         <div id="simulate-jobs-toggle"><span id="simulate-jobs-arrow"></span><span id="simulate-jobs-engine-label"></span></div>
         <div id="simulate-jobs-body">
@@ -376,7 +414,7 @@ describe('unified list + master card', () => {
   })
 })
 
-describe('consolidated Archive / Delete (above the jobs card)', () => {
+describe('consolidated Change directory / Delete (above the jobs card)', () => {
   const host = () => document.getElementById('simulate-job-actions')
   const archiveBtn = () => document.getElementById('simulate-jobs-archive-btn')
   const deleteBtn = () => document.getElementById('simulate-jobs-delete-btn')
@@ -390,7 +428,7 @@ describe('consolidated Archive / Delete (above the jobs card)', () => {
     expect(host().style.display).toBe('')
     expect(deleteBtn().style.display).toBe('')
     expect(archiveBtn().style.display).toBe('')            // oxDNA supports archive
-    expect(archiveBtn().textContent).toBe('Archive')
+    expect(archiveBtn().textContent).toBe('Change directory')
   })
 
   it('mrDNA / CanDo offer Delete only (no Archive)', async () => {
@@ -402,12 +440,12 @@ describe('consolidated Archive / Delete (above the jobs card)', () => {
     expect(archiveBtn().style.display).toBe('none')
   })
 
-  it('an archived run shows Unarchive', async () => {
+  it('an off-workspace run can change directory again', async () => {
     mount()
     const { sim } = make([mdNode({ archived: true })])
     await sim.refresh()
     sim.selectJob('md1')
-    expect(archiveBtn().textContent).toBe('Unarchive')
+    expect(archiveBtn().textContent).toBe('Change directory')
   })
 
   it('hidden for a LAMMPS run (no per-job delete UI) and while a run is running', async () => {
@@ -430,7 +468,7 @@ describe('consolidated Archive / Delete (above the jobs card)', () => {
     expect(mdPanel.deleteSelected).toHaveBeenCalled()
   })
 
-  it('Archive dispatches to the selected run’s engine panel with a progress callback', async () => {
+  it('Change directory dispatches to the selected run’s engine panel with a progress callback', async () => {
     mount()
     const { sim, oxdnaPanel } = make([oxNode()])
     await sim.refresh()
@@ -439,6 +477,65 @@ describe('consolidated Archive / Delete (above the jobs card)', () => {
     await Promise.resolve(); await Promise.resolve()
     expect(oxdnaPanel.archiveSelected).toHaveBeenCalledWith(
       expect.objectContaining({ onProgress: expect.any(Function) }))
+  })
+})
+
+describe('End run and download feedback', () => {
+  it('never equates simulation completed with download complete after a reload', async () => {
+    mount()
+    const node = mdNode({ status: 'completed', execution_target: 'alpine', download_status: null })
+    const { sim } = make([node])
+    await sim.refresh(); sim.selectJob('md1')
+    const btn = document.getElementById('simulate-jobs-end-download-btn')
+    expect(btn.disabled).toBe(false)
+    expect(btn.textContent).toBe('Retry download')
+    expect(document.getElementById('simulate-jobs-status').textContent).toContain('incomplete locally')
+  })
+
+  it('surfaces the offline verifier evidence instead of blaming cluster connectivity', async () => {
+    mount()
+    const node = mdNode({ status: 'completed', execution_target: 'alpine',
+      download_status: { state: 'interrupted', total_bytes: 1000, verified_bytes: 100,
+        local_verification_error: 'Local result output/run.dcd is missing' } })
+    const { sim } = make([node])
+    await sim.refresh(); sim.selectJob('md1')
+    expect(document.getElementById('simulate-jobs-status').textContent)
+      .toContain('Local result output/run.dcd is missing')
+  })
+
+  it('shows complete only from persisted server verification', async () => {
+    mount()
+    const node = mdNode({ status: 'completed', execution_target: 'alpine',
+      download_status: { state: 'verified', total_bytes: 80e9, verified_bytes: 80e9 } })
+    const { sim } = make([node])
+    await sim.refresh(); sim.selectJob('md1')
+    const btn = document.getElementById('simulate-jobs-end-download-btn')
+    expect(btn.disabled).toBe(true)
+    expect(btn.textContent).toBe('Download complete')
+    expect(document.getElementById('simulate-jobs-status').textContent).toContain('verified complete')
+  })
+
+  it('locks and greys the button immediately and repurposes the master progress bar', async () => {
+    localStorage.setItem('nadoc.runDir', '/storage')
+    let finish
+    const pending = new Promise((resolve) => { finish = resolve })
+    mount()
+    const node = mdNode({ status: 'paused', execution_target: 'alpine', archived: true })
+    const { sim } = make([node], { finishMdJob: vi.fn(() => pending) })
+    await sim.refresh()
+    sim.selectJob('md1')
+    const btn = document.getElementById('simulate-jobs-end-download-btn')
+    btn.click()
+    await Promise.resolve()
+    expect(btn.disabled).toBe(true)
+    expect(btn.textContent).toBe('Downloading…')
+    expect(btn.style.cursor).toBe('not-allowed')
+    expect(document.getElementById('simulate-jobs-status').textContent).toContain('Downloading results')
+    expect(document.querySelector('#simulate-jobs-progress .bar').style.width).toBe('100%')
+    finish({ ok: true, action: 'download', verified: true })
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+    expect(btn.disabled).toBe(true)
+    expect(btn.textContent).toBe('Download complete')
   })
 })
 

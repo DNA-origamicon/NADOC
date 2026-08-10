@@ -1431,7 +1431,7 @@ async def archive_oxdna_job(job_id: str, body: _ArchiveBody) -> dict:
     ws = _workspace()
     job = _load_job(job_id)
     if is_running(job_id) or job.status == OxdnaStatus.running:
-        raise HTTPException(400, "Stop the oxDNA job before archiving it")
+        raise HTTPException(400, "Stop the oxDNA job before changing its directory")
     try:
         job_archive.start_archive(job, ws, "oxdna_jobs", Path(body.dest_root))
     except (ValueError, FileExistsError, FileNotFoundError) as e:

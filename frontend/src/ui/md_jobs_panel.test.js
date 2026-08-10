@@ -369,6 +369,13 @@ describe('mdRunControl (ONE control for the selected job: Run / Stop / Resume)',
     expect(rc.disabled).toBe(true)
     expect(rc.title).toMatch(/finished/)
   })
+  it('a timed-out Alpine job continues through the top control', () => {
+    const rc = mdRunControl(
+      { status: 'paused', execution_target: 'alpine', resumable: true },
+      { clusterState: 'connected' },
+    )
+    expect(rc).toMatchObject({ action: 'resume', label: '↻ Continue', disabled: false })
+  })
   it('a prepared RunPod job → ▶ Rent & Run, and it is the button that starts it', () => {
     // It used to be DISABLED with "submit it from the review card" — a card the Job Wizard
     // replaced, so the top button did nothing at all for a RunPod job.
@@ -1624,6 +1631,19 @@ describe('initMdJobsPanel — minimisation timeline row', () => {
       segments: [{ ...LADDER[0], status: 'running' }, LADDER[1]],
     }))
     expect(done.children[0].textContent).toMatch(/✓/)
+  })
+
+  it('shows actual completed production ns and a green completion check', async () => {
+    const el = await openWith(jobWith({
+      status: 'completed',
+      minimization: { ...MIN, status: 'done' },
+      segments: [{ ...LADDER[0], name: 'D_01_production_200ns',
+        stage: '200 ns production replica', completed_ns: 65.97, status: 'done' }],
+    }))
+    expect(el.textContent).toContain('65.97 ns production complete')
+    expect(el.textContent).toContain('✓')
+    const check = [...el.querySelectorAll('span')].find(s => s.textContent === '✓')
+    expect(check?.style.color).toBe('rgb(63, 185, 80)')
   })
 
   it('is omitted for a job prepared before the backend recorded it', async () => {

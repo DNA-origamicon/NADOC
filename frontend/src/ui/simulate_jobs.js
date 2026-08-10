@@ -24,7 +24,7 @@
  */
 
 import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
-import { mountDirectoryButton } from './run_location.js'
+import { getRunDir, mountDirectoryButton } from './run_location.js'
 import { renderJobList } from './jobs_panel_render.js'
 import { createContextMenu } from './primitives/context_menu.js'
 import { runControlState, RUN_ACTION } from './job_run_control.js'
@@ -177,7 +177,14 @@ export function masterProgressTooltip(node) {
     // Minimisation runs before segment 1 and is not one of them, so the bar legitimately
     // sits at 0 % throughout — say what it is doing rather than let it look stalled.
     const min = mdMinimizationRow(node)
-    if (min && min.status === 'running') lines.push(`Current: ${min.stage} (before segment 1)`)
+    if (min && min.status === 'running') {
+      const step = Number(node?.live_metrics?.segment === min.name ? node.live_metrics?.step : NaN)
+      const total = Number(min.steps)
+      const detail = Number.isFinite(step) && total > 0
+        ? ` · ${Math.max(0, Math.min(total, Math.round(step))).toLocaleString()} / ${total.toLocaleString()} steps`
+        : ''
+      lines.push(`Current: ${min.stage} (before segment 1)${detail}`)
+    }
     if (run) lines.push(`Current: ${run.name || run.stage || 'running'}${run.percent != null ? ` · ${run.percent}%` : ''}`)
     return lines.join('\n') + stale
   }
@@ -243,6 +250,18 @@ function _estPrefix(node) {
 export function masterStepText(node) {
   if (!node) return ''
   const pct = masterProgressPct(node)
+  const min = node?.engine === 'namd' ? mdMinimizationRow(node) : null
+  const liveMinStep = Number(node?.live_metrics?.segment === min?.name ? node.live_metrics?.step : NaN)
+  // While minimising, show that phase's exact counter. The backend's progress_fraction
+  // is whole-job progress (minimisation + ladder), so deriving a minimisation step from
+  // it would display a plausible but incorrect number.
+  if (min?.status === 'running' && Number(min.steps) > 0 && Number.isFinite(liveMinStep)) {
+    const total = Number(min.steps)
+    const completed = Math.max(0, Math.min(total, Math.round(liveMinStep)))
+    const phasePct = _pct1(completed / total)
+    return `${phasePct}% minimization · ${completed.toLocaleString()} / ${total.toLocaleString()} steps`
+      + ` · ${(total - completed).toLocaleString()} left${_etaSuffix(node)}`
+  }
   const total = _stepTotal(node)
   const est = _estPrefix(node)
   const tail = progressIsEstimated(node)
@@ -305,6 +324,34 @@ export function masterStatusText(node) {
   return [`${eng} · ${node.status}`, stageText, masterStepText(node)].filter(Boolean).join(' · ')
 }
 
+/** Requested SLURM allocation and its wall-clock remainder. Queue time is deliberately
+ * excluded: slurm_started_at is stamped only when the scheduler reports RUNNING. */
+export function slurmAllocationText(node, nowMs = Date.now()) {
+  if (node?.engine !== 'namd' || node?.execution_target !== 'alpine') return ''
+  const walltime = node?.resources?.walltime || node?.requested_resources?.walltime
+  if (!walltime) return ''
+  const parts = String(walltime).split(':').map(Number)
+  if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n) || n < 0)) return ''
+  const total = parts[0] * 3600 + parts[1] * 60 + parts[2]
+  if (!(total > 0)) return ''
+  const started = Number(node.slurm_started_at)
+  if (!Number.isFinite(started) || started <= 0) {
+    return `SLURM runtime requested: ${walltime} · starts counting when the job begins`
+  }
+  const ran = Math.max(0, nowMs / 1000 - started)
+  const remaining = Math.max(0, total - ran)
+  const state = remaining > 0 ? `${formatEta(remaining)} remaining` : 'allocation elapsed'
+  return `SLURM runtime requested: ${walltime} · ${formatEta(ran)} run · ${state}`
+}
+
+/** Alpine output can be accepted and transferred whether the allocation is live or has
+ * already paused/stopped/failed. `archived` does NOT exclude it: archive-from-birth jobs
+ * already have a destination directory but can still have unfetched output on Alpine. */
+export function canEndAndDownload(node) {
+  return node?.engine === 'namd'
+    && node?.execution_target === 'alpine'
+}
+
 /** Seconds → a two-unit duration: `45s` · `1m 35s` · `3h 07m` · `2d 06h`.
  *
  *  Coarsens as it grows: a NAMD production is measured in DAYS (a 500 ns run at 221
@@ -364,9 +411,11 @@ export function initSimulateJobs({
   const root = $('simulate-jobs')
   const listEl = $('simulate-jobs-list')
   const statusEl = $('simulate-jobs-status')
+  const allocationEl = $('simulate-jobs-allocation')
   const progressBar = root?.querySelector('#simulate-jobs-progress .bar')
   const progressWrap = $('simulate-jobs-progress')
   const runBtn = $('simulate-jobs-run-btn')
+  const endDownloadBtn = $('simulate-jobs-end-download-btn')
   const detailEl = $('simulate-jobs-detail')
   // The one stage-timeline block at the bottom of the jobs card + each engine's timeline
   // element (relocated here from its panel by main.js); the selected engine's is shown.
@@ -387,9 +436,9 @@ export function initSimulateJobs({
   const engineLabel = $('simulate-jobs-engine-label')
   const showAllToggle = $('simulate-jobs-show-all-types')
 
-  // Consolidated Archive/Delete (one pair for all engines, above the jobs card). Acts on
+  // Consolidated Change-directory/Delete controls above the jobs card. Acts on
   // the selected run by dispatching to that run's engine panel; hidden until a deletable
-  // run is selected. Archive shows only for engines that support it (oxDNA / NAMD).
+  // run is selected. Directory moves are supported by oxDNA / NAMD.
   const actionsHost = $('simulate-job-actions')
   const archiveActionBtn = $('simulate-jobs-archive-btn')
   const deleteActionBtn = $('simulate-jobs-delete-btn')
@@ -407,6 +456,9 @@ export function initSimulateJobs({
   let _pollTimer = null
   let _activeEngine = engineSelector?.getSelected?.() || 'oxdna'
   let _showAllTypes = false
+  // job_id → {phase:'downloading'|'moving'|'done', pct, moved, total}. Kept outside the
+  // fetched node so a list refresh cannot erase feedback while the request is in flight.
+  const _endTransfers = new Map()
   const _legend = { el: null }
 
   // Nodes shown for the current view: the active engine tab's runs (LAMMPS grouped under
@@ -553,15 +605,50 @@ export function initSimulateJobs({
 
   function _renderMaster() {
     const node = _selectedNode()
-    _setStatus(statusEl, masterStatusText(node),
-      node?.status === 'failed' ? _C.err : node && nodeIsActive(node) ? _C.warn : _C.dim)
+    let transfer = node ? _endTransfers.get(node.job_id) : null
+    if (!transfer && node?.execution_target === 'alpine') {
+      const ds = node.download_status
+      if (ds?.state === 'verified') transfer = { phase: 'done', pct: 100, ...ds }
+      else if (ds?.state === 'downloading') {
+        const moved = Math.min(Number(ds.transferred_bytes ?? ds.verified_bytes) || 0,
+          Number(ds.total_bytes) || Infinity)
+        const pct = ds.total_bytes ? Math.min(100, Math.round(moved / ds.total_bytes * 100)) : 0
+        transfer = { phase: 'downloading', moved, total: ds.total_bytes, pct, ...ds }
+      } else if (ds?.state === 'interrupted' || node.status === 'completed') {
+        const pct = ds?.total_bytes ? Math.round((ds.verified_bytes || 0) / ds.total_bytes * 100) : 0
+        transfer = { phase: 'unverified', pct, ...(ds || {}) }
+      }
+    }
+    const transferText = transfer?.phase === 'downloading'
+      ? `Downloading results from Alpine${transfer.total ? ` · ${formatBytes(transfer.moved || 0)} / ${formatBytes(transfer.total)} (${transfer.pct || 0}%)` : ''}…`
+      : transfer?.phase === 'moving'
+        ? `Moving downloaded results · ${formatBytes(transfer.moved || 0)} / ${formatBytes(transfer.total || 0)} (${transfer.pct || 0}%)`
+        : transfer?.phase === 'done' ? 'Download verified complete — every Alpine result file matches its remote size.'
+          : transfer?.phase === 'unverified' || transfer?.phase === 'interrupted'
+            ? `Download incomplete locally${transfer.total_bytes ? ` · ${formatBytes(transfer.verified_bytes || 0)} / ${formatBytes(transfer.total_bytes)}` : ''}`
+              + `${transfer.local_verification_error ? ` · ${transfer.local_verification_error}` : ''}. Retry to resume.` : ''
+    _setStatus(statusEl, transferText || masterStatusText(node),
+      transfer ? (transfer.phase === 'done' ? _C.ok
+        : ['unverified', 'interrupted'].includes(transfer.phase) ? _C.warn : _C.accent)
+        : node?.status === 'failed' ? _C.err : node && nodeIsActive(node) ? _C.warn : _C.dim)
+    if (allocationEl) {
+      const allocation = slurmAllocationText(node)
+      allocationEl.textContent = allocation
+      allocationEl.style.display = allocation ? '' : 'none'
+    }
     // ONE progress bar (below the list): width from the node, colour by status, and the
     // detailed stage/segment text as a hover tooltip.
     if (progressBar) {
-      progressBar.style.width = `${node ? masterProgressPct(node) : 0}%`
-      progressBar.style.background = node ? masterProgressColor(node) : _C.accent
+      progressBar.style.width = transfer
+        ? `${transfer.phase === 'downloading' && !transfer.total ? 100 : transfer.phase === 'done' ? 100 : transfer.pct || 0}%`
+        : `${node ? masterProgressPct(node) : 0}%`
+      progressBar.style.background = transfer?.phase === 'done' ? _C.ok
+        : ['unverified', 'interrupted'].includes(transfer?.phase) ? _C.warn
+        : transfer ? 'repeating-linear-gradient(135deg,#4a9eff 0,#4a9eff 8px,#2f6fae 8px,#2f6fae 16px)'
+          : node ? masterProgressColor(node) : _C.accent
+      progressBar.style.opacity = transfer?.phase === 'downloading' ? '0.65' : '1'
     }
-    if (progressWrap) progressWrap.title = node ? masterProgressTooltip(node) : ''
+    if (progressWrap) progressWrap.title = transferText || (node ? masterProgressTooltip(node) : '')
     if (detailEl) {
       // oxDNA-only note, gated to the oxDNA tab. Collapse the element when there's nothing to say,
       // so other engines don't get a blank gap under the bar.
@@ -572,12 +659,20 @@ export function initSimulateJobs({
     _renderTimeline(node)
     _renderRunButton()
     _renderActions(node)
+    if (endDownloadBtn) {
+      const show = canEndAndDownload(node)
+      const transferLocked = ['downloading', 'moving', 'done'].includes(transfer?.phase)
+      endDownloadBtn.style.display = show ? '' : 'none'
+      endDownloadBtn.disabled = _busy || transferLocked
+      endDownloadBtn.textContent = transfer?.phase === 'done' ? 'Download complete'
+        : ['downloading', 'moving'].includes(transfer?.phase) ? 'Downloading…'
+          : transfer ? 'Retry download' : 'End run and download'
+      endDownloadBtn.style.opacity = endDownloadBtn.disabled ? '0.5' : '1'
+      endDownloadBtn.style.cursor = endDownloadBtn.disabled ? 'not-allowed' : 'pointer'
+    }
   }
 
-  // ── consolidated Archive / Delete (above the jobs card) ────────────────────
-  // Show the pair only when a deletable run is selected (any engine except LAMMPS, and
-  // not while it is running). Archive is offered only for engines that support it
-  // (oxDNA / NAMD); its label tracks the selected run's archived state.
+  // ── consolidated Change directory / Delete (above the jobs card) ───────────
   function _renderActions(node = _selectedNode()) {
     const eng = node?.engine
     const canDelete = !!node && eng !== 'lammps' && node.status !== 'running'
@@ -586,7 +681,7 @@ export function initSimulateJobs({
     if (deleteActionBtn) deleteActionBtn.style.display = canDelete ? '' : 'none'
     if (archiveActionBtn) {
       archiveActionBtn.style.display = canArchive ? '' : 'none'
-      archiveActionBtn.textContent = node?.archived ? 'Unarchive' : 'Archive'
+      archiveActionBtn.textContent = 'Change directory'
     }
   }
 
@@ -748,6 +843,76 @@ export function initSimulateJobs({
     else showToast(`LAMMPS run started (${job.n_atoms} nt)`, { severity: 'ok' })
   }
   runBtn?.addEventListener('click', _onRun)
+  async function _pollEndMove(jobId) {
+    for (;;) {
+      const st = await api.mdArchiveStatus(jobId)
+      if (!st) throw new Error(api.lastErrorMessage?.() || 'Could not read transfer progress')
+      if (st.state === 'error') throw new Error(st.error || 'Directory move failed')
+      const total = Number(st.total_bytes) || 0
+      const moved = Number(st.moved_bytes) || 0
+      _endTransfers.set(jobId, {
+        phase: st.state === 'done' ? 'done' : 'moving', moved, total,
+        pct: total > 0 ? Math.min(100, Math.round(moved / total * 100)) : 0,
+      })
+      _renderMaster()
+      if (st.state === 'done') return
+      await new Promise((resolve) => setTimeout(resolve, 700))
+    }
+  }
+  function _watchDownloadProgress(jobId) {
+    let stopped = false
+    void (async () => {
+      while (!stopped) {
+        try {
+          const st = await api.mdDownloadStatus(jobId)
+          if (st?.state === 'downloading') {
+            const transferred = Number(st.transferred_bytes ?? st.verified_bytes) || 0
+            const total = Number(st.total_bytes) || 0
+            _endTransfers.set(jobId, {
+              phase: 'downloading', moved: transferred, total,
+              pct: total > 0 ? Math.min(100, Math.round(transferred / total * 100)) : 0,
+            })
+            _renderMaster()
+          }
+        } catch { /* the POST owns the actionable error; polling is advisory */ }
+        if (!stopped) await new Promise((resolve) => setTimeout(resolve, 700))
+      }
+    })()
+    return () => { stopped = true }
+  }
+  endDownloadBtn?.addEventListener('click', async () => {
+    const node = _selectedNode()
+    if (_busy || node?.engine !== 'namd') return
+    const destRoot = getRunDir()
+    if (!destRoot) {
+      showToast('Choose a storage directory first.', { severity: 'warning' })
+      return
+    }
+    _busy = true
+    _endTransfers.set(node.job_id, { phase: 'downloading', pct: 0, moved: 0, total: 0 })
+    _renderMaster()
+    const stopWatching = _watchDownloadProgress(node.job_id)
+    try {
+      const result = await api.finishMdJob(node.job_id, destRoot)
+      await stopWatching()
+      if (!result) throw new Error(api.lastErrorMessage?.() || 'Transfer could not be started')
+      if (result.verified !== true) throw new Error('Server did not verify the downloaded files')
+      if (result.action === 'archive') await _pollEndMove(node.job_id)
+      else {
+        _endTransfers.set(node.job_id, { phase: 'done', pct: 100, moved: 0, total: 0 })
+        _renderMaster()
+      }
+      showToast('Run ended and results downloaded.', { severity: 'ok' })
+      await _fetch()
+    } catch (err) {
+      await stopWatching()
+      _endTransfers.delete(node.job_id) // unlock retry after a genuine failure
+      showToast(err.message, { severity: 'error' })
+    } finally {
+      await stopWatching()
+      _busy = false; _renderMaster()
+    }
+  })
 
   // ── fetch + poll ──────────────────────────────────────────────────────────
   async function _fetch() {

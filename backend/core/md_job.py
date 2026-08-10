@@ -301,6 +301,10 @@ class MdJob:
     # resume) — i.e. when it entered PENDING.  Drives the queued icon's "waiting Nm"
     # tooltip.  None for local jobs / never-submitted.
     queued_at: Optional[float] = None
+    # Epoch seconds when SLURM first reported RUNNING for the current submission.
+    # Unlike queued_at this excludes scheduler wait and therefore drives the requested
+    # walltime countdown honestly. Reset on every continuation submission.
+    slurm_started_at: Optional[float] = None
     # Count of user-triggered resume-from-checkpoint submissions after SLURM
     # TIMEOUTs (walltime under-estimate).  Resume is NEVER automatic — Duo 2FA
     # requires the user present — so a timed-out job goes ``resumable`` and waits
@@ -315,6 +319,10 @@ class MdJob:
     # scancel to the next reconnect (poll_remote_jobs drains it) — otherwise the SLURM
     # job keeps running and burning SUs while the UI reads "stopped".  Cleared once sent.
     pending_scancel: bool = False
+    # Server-owned Alpine result-transfer state. Simulation completion and download
+    # completion are independent; only state="verified" means every remote file's size
+    # matches its local counterpart. Persisted so a browser reload cannot invent success.
+    download_status: Optional[dict] = None
     # One entry per finished remote SLURM submission (the original + each resume),
     # so the panel's expand chevron can show the full resumption chain.  Shape:
     # {slurm_job_id, state, segment_reached, segments_total, walltime, at}.
@@ -438,11 +446,13 @@ class MdJob:
         data.setdefault("live_frame", None)
         data.setdefault("slurm_job_id", None)
         data.setdefault("pending_scancel", False)
+        data.setdefault("download_status", None)
         data.setdefault("slurm_state", None)
         data.setdefault("remote_project_dir", None)
         data.setdefault("remote_scratch_dir", None)
         data.setdefault("resources", None)
         data.setdefault("queued_at", None)
+        data.setdefault("slurm_started_at", None)
         data.setdefault("resubmit_count", 0)
         data.setdefault("resumable", False)
         data.setdefault("resume_history", [])

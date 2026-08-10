@@ -1,4 +1,4 @@
-"""Archive / unarchive a simulation job's folder to / from an external location.
+"""Move a simulation job's bulky folder between storage locations.
 
 Heavy job folders (multi-GB trajectories) can be moved off the workspace onto an
 archive directory anywhere on the host (e.g. an external drive) while keeping the
@@ -162,7 +162,7 @@ def _run_archive(job, workspace_dir: Path, kind: str, dest_root: Path) -> None:
     _set_task(
         kind,
         job.job_id,
-        action="archive",
+        action="move",
         state="running",
         dest=str(dest),
         moved_bytes=0,
@@ -175,11 +175,15 @@ def _run_archive(job, workspace_dir: Path, kind: str, dest_root: Path) -> None:
         # reports live byte progress.
         _set_task(kind, job.job_id, _progress=progress)
         _copy_tree_with_progress(src, dest, progress)
-        job.archived = True
-        job.archive_path = str(dest)
+        on_main_drive = dest_root.resolve() == (workspace_dir / kind).resolve()
+        job.archived = not on_main_drive
+        job.archive_path = None if on_main_drive else str(dest)
         job.save(workspace_dir)  # writes job.json into dest
         idx = read_index(workspace_dir, kind)
-        idx[job.job_id] = str(dest)
+        if on_main_drive:
+            idx.pop(job.job_id, None)
+        else:
+            idx[job.job_id] = str(dest)
         _write_index(workspace_dir, kind, idx)
         # Only after dest is complete.  rmtree refuses symlinks (silently, with
         # ignore_errors) — unlink those so a symlinked source never leaves a
@@ -238,9 +242,7 @@ def _run_unarchive(job, workspace_dir: Path, kind: str) -> None:
 def _check_archive_preconditions(
     job, workspace_dir: Path, kind: str, dest_root: Path
 ) -> None:
-    """Shared validation for archiving a job (async or sync).  Raises on any problem."""
-    if job.archived:
-        raise ValueError("job is already archived")
+    """Shared validation for moving a job directory. Raises on any problem."""
     if is_running(kind, job.job_id):
         raise ValueError("an archive operation is already in progress for this job")
     src = job.job_dir(workspace_dir)
@@ -256,16 +258,16 @@ def _check_archive_preconditions(
             "archive does not apply — move or relink it manually"
         )
     dest = dest_root / job.job_id
+    if dest.resolve() == src.resolve():
+        raise ValueError("job is already in that directory")
     if dest.exists():
         raise FileExistsError(f"destination already exists: {dest}")
-    if dest_root.resolve() == (workspace_dir / kind).resolve() or _within(
-        dest_root.resolve(), src.resolve()
-    ):
+    if _within(dest_root.resolve(), src.resolve()):
         raise ValueError("invalid archive destination")
 
 
 def start_archive(job, workspace_dir: Path, kind: str, dest_root: Path) -> None:
-    """Spawn the background archive move. Raises if it can't be started."""
+    """Spawn a background directory move (legacy name retained for API compatibility)."""
     dest_root = Path(dest_root).expanduser()
     _check_archive_preconditions(job, workspace_dir, kind, dest_root)
     t = threading.Thread(

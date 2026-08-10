@@ -24,6 +24,8 @@ reconcile) treats ``execution_target != "local"`` jobs as hands-off.
 
 from __future__ import annotations
 
+import asyncio
+import fcntl
 import json
 import logging
 import re
@@ -475,6 +477,7 @@ async def submit_job(
     job.resources = resources
     job.status = MdStatus.queued
     job.queued_at = time.time()
+    job.slurm_started_at = None
     job.error = None
     job.failure_kind = None
     job.user_stopped = False
@@ -614,11 +617,25 @@ def apply_live_metrics(job: MdJob, blob: str) -> bool:
     # `collected_at` inside the blob is the COMPUTE NODE's clock.  Progress is
     # extrapolated from this reading between sign-ins, so it needs an anchor on
     # NADOC's own clock — otherwise any host/node skew becomes fake progress.
-    prior = {k: v for k, v in (job.live_metrics or {}).items() if k != "retrieved_at"}
+    old = job.live_metrics or {}
+    prior = {k: v for k, v in old.items() if k != "retrieved_at"}
     if data == prior:
         # Identical blob = the collector has not rewritten it, so the run HAS advanced
         # since we first saw this step.  Re-anchoring now would throw that away.
         return False
+    # Minimisation logs do not emit NAMD's Benchmark/TIMING records, so the node
+    # parser cannot obtain ``s_per_step`` from a single snapshot.  Successive ENERGY
+    # snapshots are still a real stopwatch: carry their observed rate into the same
+    # field used by the progress/ETA code.  Require the same segment and increasing
+    # node time/step so a restart or clock discontinuity cannot manufacture a rate.
+    if not data.get("s_per_step") and old.get("segment") == data.get("segment"):
+        try:
+            ds = int(data.get("step")) - int(old.get("step"))
+            dt = float(data.get("collected_at")) - float(old.get("collected_at"))
+            if ds > 0 and dt > 0:
+                data["s_per_step"] = dt / ds
+        except (TypeError, ValueError):
+            pass
     data["retrieved_at"] = time.time()
     job.live_metrics = data
     return True
@@ -783,6 +800,7 @@ async def resume_job(
     job.slurm_state = "PENDING"
     job.status = MdStatus.queued
     job.queued_at = time.time()
+    job.slurm_started_at = None
     job.resubmit_count = (job.resubmit_count or 0) + 1
     job.resumable = False
     job.error = None
@@ -827,7 +845,33 @@ def _segment_total_steps(manifest: dict, seg_name: str) -> int:
     return 0
 
 
+_FETCH_LOCKS: dict[str, asyncio.Lock] = {}
+
+
 async def fetch_outputs(job: MdJob, workspace_dir: Path, *, conn=None) -> bool:
+    """Serialize every result fetch for a job, including across backend processes.
+
+    Completion reconciliation, Stop, Fetch remote, and End-and-download can all reach
+    this function.  Without a shared lock two SFTP readers opened the same ``.part`` in
+    append mode and interleaved a remote DCD twice, producing a partial larger than the
+    entire remote inventory.  The asyncio lock handles concurrent routes in this
+    process; flock also covers a dev-server reload or a second server process.
+    """
+    key = str(job.job_dir(workspace_dir).resolve())
+    lock = _FETCH_LOCKS.setdefault(key, asyncio.Lock())
+    async with lock:
+        lock_path = job.job_dir(workspace_dir) / ".download.lock"
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_file = lock_path.open("a+b")
+        try:
+            await asyncio.to_thread(fcntl.flock, lock_file.fileno(), fcntl.LOCK_EX)
+            return await _fetch_outputs_locked(job, workspace_dir, conn=conn)
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            lock_file.close()
+
+
+async def _fetch_outputs_locked(job: MdJob, workspace_dir: Path, *, conn=None) -> bool:
     """Bring a finished remote run's results back to the login node and locally.
 
     Mirrors scratch → project (persist before scratch is purged), then downloads the
@@ -847,13 +891,54 @@ async def fetch_outputs(job: MdJob, workspace_dir: Path, *, conn=None) -> bool:
 
     package_dir = job.package_dir(workspace_dir)
     # List the remote files to pull: output/ tree + top-level logs + sbatch out/err.
-    rels = await _remote_relpaths(conn, scratch)
+    inventory = await remote_output_inventory(job, conn=conn)
+    rels = list(inventory)
+    total_bytes = sum(inventory.values())
+    job.download_status = {
+        "state": "downloading", "total_bytes": total_bytes, "verified_bytes": 0,
+        "dcd_bytes": sum(size for rel, size in inventory.items() if rel.endswith(".dcd")),
+        "inventory": inventory,
+        "files_total": len(rels), "files_verified": 0, "current_file": None,
+    }
+    job.save(workspace_dir)
+    if not inventory:
+        job.download_status.update(
+            state="interrupted", current_file=None,
+            failed_files=["Remote output inventory was empty or unavailable"],
+        )
+        job.save(workspace_dir)
+        return False
     failed: list[str] = []
+    verified_bytes = 0
     for rel in rels:
         local = package_dir / rel
+        job.download_status["current_file"] = rel
+        job.save(workspace_dir)
+        last_saved = {"bytes": -1}
+
+        def _progress(current: int, _file_total: int) -> None:
+            # Persist at ~16 MiB intervals: smooth enough for the UI without rewriting
+            # job.json on every 256 KiB SFTP chunk.
+            # ``current`` is the absolute size of the resumable partial. Clamp it to
+            # the inventory size defensively: progress can never truthfully exceed
+            # 100 %, even if an old corrupt partial is encountered and reset.
+            current = min(max(0, current), max(0, _file_total))
+            transferred = min(total_bytes, verified_bytes + current)
+            job.download_status["transferred_bytes"] = transferred
+            job.download_status["current_file_bytes"] = current
+            if current == _file_total or transferred - last_saved["bytes"] >= 16 * 1024**2:
+                job.save(workspace_dir)
+                last_saved["bytes"] = transferred
         for attempt in range(3):
             try:
-                await conn.sftp_get(f"{scratch}/{rel}", str(local))
+                import inspect
+
+                if "on_progress" in inspect.signature(conn.sftp_get).parameters:
+                    await conn.sftp_get(
+                        f"{scratch}/{rel}", str(local), on_progress=_progress
+                    )
+                else:  # legacy/injected connection implementations
+                    await conn.sftp_get(f"{scratch}/{rel}", str(local))
                 break
             except Exception as exc:  # noqa: BLE001 — retry transient SSH/SFTP failures
                 logger.warning(
@@ -865,6 +950,18 @@ async def fetch_outputs(job: MdJob, workspace_dir: Path, *, conn=None) -> bool:
                 )
         else:
             failed.append(rel)
+            continue
+        expected = inventory[rel]
+        if not local.exists() or local.stat().st_size != expected:
+            failed.append(rel)
+            continue
+        verified_bytes += expected
+        job.download_status.update(
+            verified_bytes=verified_bytes,
+            transferred_bytes=verified_bytes,
+            files_verified=job.download_status["files_verified"] + 1,
+        )
+        job.save(workspace_dir)
 
     # Real trajectories have landed on top of any one-frame stand-in, so the marker
     # is void.  Leaving it set would let `remote_live_frame` overwrite real results
@@ -872,7 +969,137 @@ async def fetch_outputs(job: MdJob, workspace_dir: Path, *, conn=None) -> bool:
     from backend.core import remote_live_frame  # noqa: PLC0415 — cycle
 
     remote_live_frame.clear_live_frame(job, package_dir=package_dir)
+    job.download_status.update(
+        state="verified" if not failed else "interrupted",
+        verified_bytes=verified_bytes,
+        current_file=None,
+        failed_files=failed,
+    )
+    job.save(workspace_dir)
+    from backend.core.design_disk_usage import invalidate_dir_size
+
+    invalidate_dir_size(job.job_dir(workspace_dir))
     return not failed
+
+
+def verify_local_download(job: MdJob, workspace_dir: Path) -> bool:
+    """Prove a remote result inventory is complete using local files only.
+
+    New downloads persist the exact ``relative path -> byte size`` inventory. Older
+    records retain only the exact aggregate byte count and file count, which still form
+    a conservative offline proof when both match. This never contacts Alpine and never
+    upgrades an incomplete or ambiguous directory.
+    """
+    status = job.download_status or {}
+    # Never inspect/promote a .part owned by the active downloader. At exact size it
+    # has not necessarily fsync'd or performed its own atomic rename yet; stealing it
+    # here makes the downloader raise ENOENT and used to disconnect Alpine.
+    if status.get("state") == "downloading":
+        return False
+    total = status.get("total_bytes")
+    files_total = status.get("files_total")
+    if not isinstance(total, int) or total < 0 or not isinstance(files_total, int):
+        return False
+    package_dir = job.package_dir(workspace_dir)
+    inventory = status.get("inventory")
+    local: dict[str, int] = {}
+    if isinstance(inventory, dict) and inventory:
+        try:
+            expected = {str(rel): int(size) for rel, size in inventory.items()}
+        except (TypeError, ValueError):
+            return False
+        for rel, size in expected.items():
+            path = package_dir / rel
+            try:
+                part = Path(str(path) + ".part")
+                # A transport can drop after fsync and before the final atomic rename.
+                # Exact inventory size is sufficient to finish that rename offline.
+                if not path.exists() and part.is_file() and part.stat().st_size == size:
+                    part.replace(path)
+                if not path.is_file() or path.stat().st_size != size:
+                    actual = path.stat().st_size if path.is_file() else None
+                    status["local_verification_error"] = (
+                        f"Local result {rel} is missing"
+                        if actual is None
+                        else f"Local result {rel} is {actual} bytes; expected {size}"
+                    )
+                    job.download_status = status
+                    job.save(workspace_dir)
+                    return False
+            except OSError:
+                return False
+        local = expected
+    else:
+        # Legacy metadata: mirror remote_output_inventory's selection exactly.
+        try:
+            output = package_dir / "output"
+            for path in output.rglob("*") if output.is_dir() else ():
+                if path.is_file() and not path.name.endswith(".part"):
+                    local[path.relative_to(package_dir).as_posix()] = path.stat().st_size
+            for pattern in ("*.log", "*.out", "*.err"):
+                for path in package_dir.glob(pattern):
+                    if path.is_file():
+                        local[path.name] = path.stat().st_size
+        except OSError:
+            return False
+        if len(local) != files_total or sum(local.values()) != total:
+            status["local_verification_error"] = (
+                f"Local results contain {len(local)} of {files_total} files and "
+                f"{sum(local.values())} of {total} bytes"
+            )
+            job.download_status = status
+            job.save(workspace_dir)
+            return False
+
+    # Exact inventories also defend their own persisted aggregate/count metadata.
+    if len(local) != files_total or sum(local.values()) != total:
+        status["local_verification_error"] = "Persisted result inventory is inconsistent"
+        job.download_status = status
+        job.save(workspace_dir)
+        return False
+    dcd_bytes = sum(size for rel, size in local.items() if rel.endswith(".dcd"))
+    status.update(
+        state="verified",
+        verified_bytes=total,
+        transferred_bytes=total,
+        files_verified=files_total,
+        current_file=None,
+        current_file_bytes=0,
+        failed_files=[],
+        dcd_bytes=dcd_bytes,
+        verified_offline=True,
+        verified_at=time.time(),
+        local_verification_error=None,
+    )
+    job.download_status = status
+    job.save(workspace_dir)
+    from backend.core.design_disk_usage import invalidate_dir_size
+
+    invalidate_dir_size(job.job_dir(workspace_dir))
+    return True
+
+
+async def remote_output_inventory(job: MdJob, *, conn=None) -> dict[str, int]:
+    """Remote result files and exact byte sizes; empty is never a verified download."""
+    conn = conn or _default_conn()
+    scratch = job.remote_scratch_dir
+    if not scratch:
+        return {}
+    listing = await conn.run(
+        f"cd {_shq(scratch)} && "
+        "find output -type f -printf '%s\\t%p\\n' 2>/dev/null; "
+        "for f in *.log *.out *.err; do [ -f \"$f\" ] && stat -c '%s\\t%n' \"$f\"; done"
+    )
+    out: dict[str, int] = {}
+    for line in (listing.stdout or "").splitlines():
+        try:
+            size_text, rel = line.split("\t", 1)
+            rel = rel.strip()
+            if rel and not rel.startswith("/") and ".." not in PurePosixPath(rel).parts:
+                out[rel] = int(size_text)
+        except (ValueError, TypeError):
+            continue
+    return out
 
 
 async def cancel_job(job: MdJob, *, conn=None) -> bool:
@@ -951,6 +1178,11 @@ async def reconcile_remote_job(job: MdJob, workspace_dir: Path, *, conn=None) ->
 
     if bucket in ("pending", "running"):
         changed = job.slurm_state != prev_state
+        if bucket == "running" and job.slurm_started_at is None:
+            import time
+
+            job.slurm_started_at = time.time()
+            changed = True
         if job.status != new_status:
             job.status = new_status
             changed = True
