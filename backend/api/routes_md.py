@@ -1214,6 +1214,13 @@ class MdFramesSurfaceBody(BaseModel):
     stride: int | None = None
 
 
+class MdRmsfSurfaceBody(BaseModel):
+    probe_radius: float = 0.28
+    grid_spacing: float = 0.20
+    radius_inflate: float = 1.30
+    smooth: int = 15
+
+
 class MdFramesSolventBody(BaseModel):
     """Explicit water / ions / periodic cell for the Visualizations card's solvent
     toggles.  COMPOSITE frame indices, same ``stride`` rule as frames-atomistic."""
@@ -1315,6 +1322,51 @@ async def md_atomistic_model_route(job_id: str, request: Request) -> dict:
         "md_atomistic_model",
         (psf, segments, ref, design),
         timeout_s=600.0,
+    )
+
+
+@router.post("/md/jobs/{job_id}/rmsf-atomistic")
+async def md_rmsf_atomistic_route(job_id: str, request: Request) -> dict:
+    """The flexibility ensemble's average coordinates in the NAMD atom serial space."""
+    inputs = _md_traj_inputs(job_id)
+    if inputs is None:
+        return {"ready": False, "atomistic": []}
+    psf, ref, segments, design = inputs
+    return await _run_md_analysis(
+        request,
+        job_id,
+        "rmsf-atomistic",
+        "md_rmsf_atomistic",
+        (psf, segments, ref, design),
+        timeout_s=600.0,
+    )
+
+
+@router.post("/md/jobs/{job_id}/rmsf-surface")
+async def md_rmsf_surface_route(
+    job_id: str, body: MdRmsfSurfaceBody, request: Request
+) -> dict:
+    """NAMD mean molecular surface coloured by per-nucleotide flexibility."""
+    inputs = _md_traj_inputs(job_id)
+    if inputs is None:
+        return {"ready": False, "surface": None}
+    psf, ref, segments, design = inputs
+    return await _run_md_analysis(
+        request,
+        job_id,
+        "rmsf-surface",
+        "md_rmsf_surface",
+        (
+            psf,
+            segments,
+            ref,
+            design,
+            body.probe_radius,
+            body.grid_spacing,
+            body.radius_inflate,
+            body.smooth,
+        ),
+        timeout_s=900.0,
     )
 
 

@@ -2646,6 +2646,12 @@ export const getMdTrajectoryMeta = (id, opts = {})       =>
 /** Per-nucleotide flexibility map (RMSF) over the NAMD run — same shape as
  *  getOxdnaRmsf, so the flexibility-map display code is shared. */
 export const getMdRmsf           = (id, signal)  => _oxdnaJSON('GET',  `/md/jobs/${id}/rmsf`, undefined, { signal })
+/** NAMD atom coordinates for the flexibility ensemble's average structure. */
+export const getMdRmsfAtomistic  = (id) =>
+  _oxdnaJSON('POST', `/md/jobs/${id}/rmsf-atomistic`)
+/** NAMD molecular surface for the average structure, carrying per-vertex RMSF. */
+export const getMdRmsfSurface    = (id, params = {}) =>
+  _oxdnaJSON('POST', `/md/jobs/${id}/rmsf-surface`, params)
 /** Occupancy clouds for a NAMD run — same payload shape as the oxDNA twin, so the same
  *  overlay draws it. Only PRODUCTION (unrestrained) dynamics is clustered — frames from
  *  the restrained relaxation ladder describe the ramp, not the structure. */

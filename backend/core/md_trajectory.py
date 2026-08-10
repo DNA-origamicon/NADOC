@@ -582,6 +582,8 @@ def _extract_md_atoms_frame(
             "helix_id": m.get("helix_id", ""),
             "bp_index": m.get("bp_index", -1),
             "direction": m.get("direction", ""),
+            "copy_k": m.get("copy_k", 0),
+            "scalar_key": m.get("scalar_key", ""),
             "x": float(pos_nm[i, 0]),
             "y": float(pos_nm[i, 1]),
             "z": float(pos_nm[i, 2]),
@@ -609,6 +611,7 @@ class _SurfAtom:
         "helix_id",
         "bp_index",
         "direction",
+        "scalar_key",
     )
 
     def __init__(
@@ -621,6 +624,7 @@ class _SurfAtom:
         helix_id="",
         bp_index=0,
         direction="FORWARD",
+        scalar_key="",
     ):
         self.x = x
         self.y = y
@@ -630,6 +634,7 @@ class _SurfAtom:
         self.helix_id = helix_id
         self.bp_index = bp_index
         self.direction = direction
+        self.scalar_key = scalar_key
 
 
 def composite_raw_frame_map(
@@ -975,6 +980,124 @@ def md_frames_surface(
         entry.update(vertex_index_tables(mesh))
         out[str(idx)] = entry
     return out
+
+
+def md_rmsf_atomistic(
+    topology_path, segments, coordinate_path, design, max_frames: int = 150
+) -> dict:
+    """Average all-atom DNA coordinates for the NAMD flexibility-map ensemble.
+
+    Coordinates use the same per-frame PBC repair and Kabsch transform as
+    :func:`md_rmsf`, then average the simulation's *own* atoms in their stable serial
+    space.  The resulting flat array can therefore be applied to the topology fetched
+    from :func:`md_atomistic_model` without rebuilding an idealized design model.
+    """
+    seg_paths = [s[2] for s in segments]
+    ctx = _build_md_nadoc_ctx(
+        topology_path, seg_paths, coordinate_path, design, with_atoms=True
+    )
+    n = ctx["n_frames"]
+    meta = ctx.get("atom_meta") or []
+    if n <= 0 or not meta:
+        return {"ready": False, "atomistic": [], "n_frames": 0}
+
+    idxs = (
+        list(range(n)) if n <= max_frames else _stride_pick(list(range(n)), max_frames)
+    )
+    n_serials = max((int(m["serial"]) for m in meta), default=-1) + 1
+    sums = np.zeros((n_serials, 3), dtype=np.float64)
+    present = np.zeros(n_serials, dtype=bool)
+    used = 0
+    for gidx in idxs:
+        atoms = _extract_md_atoms_frame(ctx, gidx)
+        if len(atoms) != len(meta):
+            continue
+        for atom in atoms:
+            serial = int(atom["serial"])
+            sums[serial] += (atom["x"], atom["y"], atom["z"])
+            present[serial] = True
+        used += 1
+    if used == 0:
+        return {"ready": False, "atomistic": [], "n_frames": 0}
+    sums[present] /= used
+    return {
+        "ready": True,
+        "atomistic": sums.astype(np.float32).ravel().tolist(),
+        "n_frames": used,
+    }
+
+
+def md_rmsf_surface(
+    topology_path,
+    segments,
+    coordinate_path,
+    design,
+    probe_radius: float = 0.28,
+    grid_spacing: float = 0.20,
+    radius_inflate: float = 1.30,
+    smooth: int = 15,
+    max_frames: int = 150,
+) -> dict:
+    """Surface of the NAMD mean all-atom structure with per-vertex nucleotide RMSF."""
+    from backend.core.oxdna_health import _vertex_rmsf
+    from backend.core.surface import compute_surface, smooth_mesh, vertex_index_tables
+
+    average = md_rmsf_atomistic(
+        topology_path, segments, coordinate_path, design, max_frames=max_frames
+    )
+    if not average.get("ready"):
+        return {"ready": False, "surface": None, "n_frames": 0}
+    rmsf = md_rmsf(
+        topology_path, segments, coordinate_path, design, max_frames=max_frames
+    )
+    if not rmsf.get("ready"):
+        return {"ready": False, "surface": None, "n_frames": 0}
+
+    flat = average["atomistic"]
+    model = md_atomistic_model(topology_path, segments, coordinate_path, design)
+    atoms = []
+    for atom in model.get("atoms", []):
+        serial = int(atom["serial"])
+        off = serial * 3
+        atoms.append(
+            _SurfAtom(
+                flat[off],
+                flat[off + 1],
+                flat[off + 2],
+                atom["element"],
+                atom.get("strand_id", ""),
+                atom.get("helix_id", ""),
+                atom.get("bp_index", 0),
+                atom.get("direction", "FORWARD"),
+                atom.get("scalar_key", ""),
+            )
+        )
+    mesh = compute_surface(
+        atoms,
+        grid_spacing=grid_spacing,
+        probe_radius=probe_radius,
+        radius_scale=1.2 * radius_inflate,
+    )
+    mesh = smooth_mesh(mesh, iterations=smooth)
+    rmsf_by_key = {
+        (p["helix_id"], p["bp_index"], p["direction"]): p["rmsf"]
+        for p in rmsf["positions"]
+    }
+    rmsf_by_key.update(
+        {
+            f"{p['helix_id']}:{p['bp_index']}:{p['direction']}:{p.get('copy', 0)}": p[
+                "rmsf"
+            ]
+            for p in rmsf["positions"]
+        }
+    )
+    surface = {
+        "vertices": [round(float(v), 5) for v in mesh.vertices.ravel()],
+        "faces": [int(f) for f in mesh.faces.ravel()],
+        "vertex_rmsf": _vertex_rmsf(mesh, atoms, rmsf_by_key),
+    }
+    surface.update(vertex_index_tables(mesh))
+    return {"ready": True, "surface": surface, "n_frames": average["n_frames"]}
 
 
 def md_rmsf(

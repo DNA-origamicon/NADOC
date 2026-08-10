@@ -80,7 +80,10 @@ export function colorForAtom(ctx, atom, sel, multiIds) {
 /** Normal display colour, including scalar overlays, with no selection treatment. */
 function _normalColor(ctx, atom, cpk) {
   if (ctx.scalarColors) {
-    const c = ctx.scalarColors.get(`${atom.helix_id}:${atom.bp_index}:${atom.direction}`)
+    const copy = Number(atom.copy_k ?? atom.copy ?? 0)
+    const c = (atom.scalar_key ? ctx.scalarColors.get(atom.scalar_key) : null)
+      ?? ctx.scalarColors.get(`${atom.helix_id}:${atom.bp_index}:${atom.direction}:${copy}`)
+      ?? ctx.scalarColors.get(`${atom.helix_id}:${atom.bp_index}:${atom.direction}`)
     if (c != null) return c
   }
   return _colorByMode(ctx, atom, cpk)

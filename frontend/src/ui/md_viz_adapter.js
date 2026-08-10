@@ -20,9 +20,8 @@
  * template), while NAMD renders the SIMULATION's own atoms, so each frame carries its
  * own `{atoms, bonds}` set. The controller branches on that shape; nothing is faked here.
  *
- * Still NOT mapped: the FLEXIBILITY-map heavy reps (`getOxdnaRmsfAtomistic|Surface`).
- * Those colour a mean structure by per-atom RMSF, which needs its own MD mapping — the
- * controller's heavy path fails closed for them, as before.
+ * Flexibility-map heavy reps are mapped too: NAMD supplies its own atoms at their
+ * trajectory-average positions and a surface carrying per-vertex nucleotide RMSF.
  *
  * Display-state only — never writes topology.
  */
@@ -49,6 +48,8 @@ export function mdVizApiAdapter(api) {
     heavyBatch: true,
     getOxdnaTrajectory: (id, { signal, stride } = {}) => api.getMdTrajectory(id, signal, { stride }),
     getOxdnaRmsf:       (id, { signal } = {}) => api.getMdRmsf(id, signal),
+    getOxdnaRmsfAtomistic: (id) => api.getMdRmsfAtomistic(id),
+    getOxdnaRmsfSurface: (id, params = {}) => api.getMdRmsfSurface(id, params),
     // Heavy trajectory frames. The controller calls these POSITIONALLY as
     // `(id, frameIndices, align, scope, stride)` / `(id, frameIndices, params, align,
     // scope)`. `align`/`scope` are oxDNA-only and dropped (md_trajectory.py always

@@ -54,12 +54,13 @@ describe('mdVizApiAdapter', () => {
     expect(api.getMdFramesSurface).toHaveBeenCalledWith('J1', [3], { stride: 20, probe_radius: 0.3 })
   })
 
-  it('still does NOT expose the FLEXIBILITY-map heavy reps (they fail closed)', () => {
-    // Those colour a mean structure by per-atom RMSF and need their own MD mapping;
-    // the per-frame trajectory reps above are a different payload entirely.
-    const a = mdVizApiAdapter({})
-    expect(a.getOxdnaRmsfAtomistic).toBeUndefined()
-    expect(a.getOxdnaRmsfSurface).toBeUndefined()
+  it('maps the FLEXIBILITY-map atomistic and surface representations', () => {
+    const api = { getMdRmsfAtomistic: vi.fn(), getMdRmsfSurface: vi.fn() }
+    const a = mdVizApiAdapter(api)
+    a.getOxdnaRmsfAtomistic('J1', { align: true })
+    expect(api.getMdRmsfAtomistic).toHaveBeenCalledWith('J1')
+    a.getOxdnaRmsfSurface('J1', { probe_radius: 0.3 }, { align: true })
+    expect(api.getMdRmsfSurface).toHaveBeenCalledWith('J1', { probe_radius: 0.3 })
   })
 
   // ── Contract test: the REAL controller, not a hand-written stand-in ──────────

@@ -22,6 +22,9 @@ overlays, alignment, and atomistic/surface representations. Detailed incident hi
   box uses the same display affine as DNA.
 - Trajectory playback prebuild is visible on the play button. Scrubbing may fetch one frame, while
   smooth playback requires the prepared runway/cache.
+- The flexibility map drives every representation. For NAMD, all-atom modes use the simulation's
+  own atom topology at trajectory-average, PBC-repaired/Kabsch-aligned coordinates; surface mode
+  builds the mean molecular envelope and carries the same per-nucleotide RMSF onto its vertices.
 
 ## Binding invariants
 

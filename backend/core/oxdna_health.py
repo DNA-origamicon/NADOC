@@ -3612,7 +3612,11 @@ def _vertex_rmsf(mesh, atoms, rmsf_by_key: dict) -> list:
     for i in nn:
         a = atoms[int(i)]
         d = a.direction.value if hasattr(a.direction, "value") else a.direction
-        out.append(round(float(rmsf_by_key.get((a.helix_id, a.bp_index, d), 0.0)), 5))
+        scalar_key = getattr(a, "scalar_key", "")
+        value = rmsf_by_key.get(scalar_key) if scalar_key else None
+        if value is None:
+            value = rmsf_by_key.get((a.helix_id, a.bp_index, d), 0.0)
+        out.append(round(float(value), 5))
     return out
 
 

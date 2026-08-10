@@ -79,6 +79,27 @@ describe('resolveAtomColor — crossover extra bases and extension tails', () =>
     expect(resolveAtomColor(ctx, XB, null, [], false)).toBe(0x123456)
   })
 
+  it('uses the full synthetic keys for crossover inserts and extension tails', () => {
+    const xb = atom({ helix_id: '__xb__', bp_index: -1, direction: '', scalar_key: '__xb__:xo7:2:0' })
+    const ext = atom({ helix_id: '__ext_tail7', bp_index: 3, direction: 'REVERSE',
+      scalar_key: '__ext_tail7:3:REVERSE:0' })
+    const ctx = { ...ctxFor('cpk'), scalarColors: new Map([
+      ['__xb__:xo7:2:0', 0x112233],
+      ['__ext_tail7:3:REVERSE:0', 0x445566],
+    ]) }
+    expect(resolveAtomColor(ctx, xb, null, [], false)).toBe(0x112233)
+    expect(resolveAtomColor(ctx, ext, null, [], false)).toBe(0x445566)
+  })
+
+  it('does not collapse a loop copy onto its parent nucleotide colour', () => {
+    const copied = atom({ copy_k: 1 })
+    const ctx = { ...ctxFor('cpk'), scalarColors: new Map([
+      ['h0:3:FORWARD:0', 0x111111],
+      ['h0:3:FORWARD:1', 0xeeeeee],
+    ]) }
+    expect(resolveAtomColor(ctx, copied, null, [], false)).toBe(0xeeeeee)
+  })
+
   it('an ordinary atom is unaffected in every mode', () => {
     const base = new Map([['s0:3:FORWARD', 0x00ff00]])
     expect(resolveAtomColor(ctxFor('cpk'), atom(), null, [], false)).toBe(ELEMENTS.C.color)

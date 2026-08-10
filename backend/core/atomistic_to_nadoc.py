@@ -441,7 +441,37 @@ def build_termini_specs(u, chain_map: ChainMap, seg2chain: dict[str, str], p_ord
 # Placeholder identity for a heavy atom whose residue has no design key (a residue the
 # chain map doesn't cover).  strand_id "" misses every colour lookup → the atom keeps its
 # CPK element colour, which is the right fallback for an unidentifiable atom.
-_NO_DESIGN_IDENT = {"strand_id": "", "helix_id": "", "bp_index": -1, "direction": ""}
+_NO_DESIGN_IDENT = {
+    "strand_id": "",
+    "helix_id": "",
+    "bp_index": -1,
+    "direction": "",
+}
+
+
+def atom_design_ident(key: tuple, strand_id: str = "") -> dict:
+    """Renderer identity for one MD nucleotide key, without erasing synthetic keys.
+
+    Crossover inserts use ``("__xb__", crossover_id, extra_base_k)`` and extensions
+    use ``("__ext_<id>", bead_index, direction)``.  Their slot types intentionally do
+    not match ordinary ``(helix, bp:int, direction:str)`` keys, but scalar overlays use
+    the serialized triple verbatim.  Replacing the unusual slots with ``-1``/``""``
+    made every crossover insert miss its own RMSF colour.
+    """
+    synthetic = is_synthetic_pkey(key)
+    bp = key[1] if len(key) > 1 and isinstance(key[1], (int, np.integer)) else -1
+    direction = key[2] if len(key) > 2 and isinstance(key[2], str) else ""
+    copy = int(key[3]) if len(key) > 3 else 0
+    return {
+        "strand_id": strand_id or "",
+        "helix_id": str(key[0]),
+        # Keep the ordinary renderer fields type-stable for selection and the compact
+        # live-stream metadata; scalar_key below carries the unusual synthetic slots.
+        "bp_index": int(bp),
+        "direction": direction,
+        "copy_k": copy,
+        "scalar_key": f"{key[0]}:{key[1]}:{key[2]}:{copy}" if synthetic else "",
+    }
 
 
 def build_atom_design_meta(
@@ -499,20 +529,7 @@ def build_atom_design_meta(
         if key is None:
             rows.append(dict(_NO_DESIGN_IDENT))
             continue
-        # A synthetic key's slot 1/2 are not (bp_index, direction) — ("__xb__",
-        # crossover_id, extra_base_k) puts a str in slot 1 and an int in slot 2.  Type-
-        # check rather than positionally trust, so an extra base still gets its strand
-        # colour and simply falls back from the base-letter lookup.
-        bp = key[1] if len(key) > 1 and isinstance(key[1], (int, np.integer)) else -1
-        dr = key[2] if len(key) > 2 and isinstance(key[2], str) else ""
-        rows.append(
-            {
-                "strand_id": sid_by_key.get(key, ""),
-                "helix_id": str(key[0]),
-                "bp_index": int(bp),
-                "direction": dr,
-            }
-        )
+        rows.append(atom_design_ident(key, sid_by_key.get(key, "")))
     return rows
 
 
