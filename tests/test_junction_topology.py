@@ -45,9 +45,9 @@ from backend.core.models import (
 
 
 # Whether a junction catenates depends on the HELICAL PHASE of the crossover, so a
-# fixture pinned to one bp proves little.  bp 12 is a phase that catenates under the
-# legacy placement for both 1 and 2 inserts; _CLEAN_BP is a phase that does not.
-# ``test_no_phase_catenates`` sweeps the whole range — that is the real regression gate.
+# fixture pinned to one bp proves little.  The calibrated 1xT default is clean across
+# the full sweep; bp 16 still catenates with two inserts and remains the detector's
+# positive control.  The exhaustive gate below checks every supported insert count.
 _CATENATING_BP = 16
 # One full helical turn (~10.5 bp) covers every distinct crossover phase; sweeping more
 # only repeats it at real cost (the 2-insert builds run a 29-DOF L-BFGS-B solve each).
@@ -235,7 +235,7 @@ def test_detector_fires_when_repair_is_disabled():
     inserts of a reciprocal pair through one another.  The detector must find exactly
     one catenated pair, flag it reciprocal, and report |Lk| = 1.
     """
-    design = _reciprocal_design("T")
+    design = _reciprocal_design("TT")
     with _repair_disabled():
         report = catenation_report(design)
 
@@ -244,7 +244,7 @@ def test_detector_fires_when_repair_is_disabled():
     hit = report["catenated"][0]
     assert hit["reciprocal"] is True
     assert abs(abs(hit["lk"]) - 1.0) < 1e-2
-    assert hit["n_inserts"] == [1, 1]
+    assert hit["n_inserts"] == [2, 2]
     assert report["n_closure_ambiguous"] == 0
 
 
@@ -276,29 +276,44 @@ def test_no_inserts_is_clean_at_every_helical_phase():
 
 
 @pytest.mark.slow
+def test_calibrated_one_insert_is_uncatenated_at_every_helical_phase():
+    """The measured 1xT default removes the need for a catenation repair pass."""
+    linked = [
+        bp
+        for bp in _PHASE_SWEEP
+        if catenation_report(_reciprocal_design("T", bp=bp))["n_catenated"]
+    ]
+    assert linked == []
+
+
+@pytest.mark.slow
 @pytest.mark.parametrize("extra", ["T", "TT", "TTT"])
 @pytest.mark.parametrize("bp", list(_PHASE_SWEEP))
 def test_a_catenating_phase_cannot_reach_a_seed(extra, bp):
-    """EXHAUSTIVE GATE — a linked junction must be REFUSED, not silently shipped.
+    """EXHAUSTIVE GATE — a topologically bad junction never reaches a seed.
 
-    Extra-base positions come from the CG representation and nothing adjusts them
-    afterwards, so some helical phases do link (measured 2026-08-05: 3 of 14 on the
-    reciprocal fixture). There is no repair pass any more. The property that still
-    protects a trajectory is therefore the gate: a build either measures clean or it
-    raises, and never reaches an MD seed carrying a permanent entanglement.
+    Extra-base positions come from the shared placement abstraction and nothing adjusts
+    them afterwards.  The calibrated one-insert default is clean across this sweep, while
+    longer insert runs can still link at some phases.  There is no repair pass any more;
+    the combined gate refuses measured catenation or ring piercing before either can
+    reach an MD seed.
     """
+    from backend.core.ring_piercing import RingPiercedError, piercing_report
+
     design = _reciprocal_design(extra, bp=bp)
-    report = catenation_report(design)
-    if report["n_catenated"] == 0:
-        gate_seed_topology(design)  # clean → builds without raising
+    model = build_atomistic_model(design)
+    catenation = catenation_report(design, model=model)
+    piercing = piercing_report(design, model=model)
+    if catenation["ok"] and piercing["ok"]:
+        gate_seed_topology(design, model=model)  # clean → returns without raising
     else:
-        with pytest.raises(CatenatedJunctionError):
-            gate_seed_topology(design)
+        with pytest.raises((CatenatedJunctionError, RingPiercedError)):
+            gate_seed_topology(design, model=model)
 
 
 def test_positions_override_matches_model_coordinates():
     """The trajectory path (explicit positions) must agree with the model's own coords."""
-    design = _reciprocal_design("T")
+    design = _reciprocal_design("TT")
     with _repair_disabled():
         model = build_atomistic_model(design)
     pos = np.array([[a.x, a.y, a.z] for a in model.atoms], dtype=float)
@@ -320,7 +335,7 @@ def test_positions_with_wrong_atom_count_is_rejected():
 
 def test_translating_the_whole_design_does_not_change_linking():
     """Lk is a topological invariant — a rigid shift must not alter it."""
-    design = _reciprocal_design("T")
+    design = _reciprocal_design("TT")
     with _repair_disabled():
         model = build_atomistic_model(design)
     pos = np.array([[a.x, a.y, a.z] for a in model.atoms], dtype=float)
@@ -416,7 +431,7 @@ def test_pulling_the_arcs_apart_does_register_as_a_change():
 
 def test_assert_not_catenated_raises_on_a_linked_build():
     with _repair_disabled(), pytest.raises(CatenatedJunctionError) as excinfo:
-        assert_not_catenated(_reciprocal_design("T"))
+        assert_not_catenated(_reciprocal_design("TT"))
     assert excinfo.value.report["n_catenated"] == 1
     assert "linking number" in str(excinfo.value)
 
@@ -429,7 +444,7 @@ def test_assert_not_catenated_passes_a_clean_build():
 
 def test_override_returns_the_report_instead_of_raising():
     with _repair_disabled():
-        report = assert_not_catenated(_reciprocal_design("T"), allow=True)
+        report = assert_not_catenated(_reciprocal_design("TT"), allow=True)
     assert report["ok"] is False
     assert report["override_used"] is True
     assert report["n_catenated"] == 1
@@ -437,7 +452,7 @@ def test_override_returns_the_report_instead_of_raising():
 
 def test_catenated_rows_carry_integer_lk_and_residual():
     with _repair_disabled():
-        hit = catenation_report(_reciprocal_design("T"))["catenated"][0]
+        hit = catenation_report(_reciprocal_design("TT"))["catenated"][0]
     assert hit["lk_int"] in (-1, 1)
     assert hit["lk_residual"] < 0.15  # a well-conditioned closure
 
@@ -451,12 +466,12 @@ def test_gate_skips_the_build_for_a_design_with_no_inserts():
 
 def test_gate_raises_on_a_catenated_seed():
     with _repair_disabled(), pytest.raises(CatenatedJunctionError):
-        gate_seed_topology(_reciprocal_design("T"))
+        gate_seed_topology(_reciprocal_design("TT"))
 
 
 def test_gate_records_override_in_the_verdict():
     with _repair_disabled():
-        verdict = gate_seed_topology(_reciprocal_design("T"), allow=True)
+        verdict = gate_seed_topology(_reciprocal_design("TT"), allow=True)
     assert verdict["gate"] == "overridden"
     assert verdict["override_requested"] is True
     assert verdict["n_catenated"] == 1
@@ -465,7 +480,7 @@ def test_gate_records_override_in_the_verdict():
 def test_gate_uses_the_supplied_model_not_a_fresh_build():
     """A seeded run must be gated on ITS OWN seed — that is the whole point of the
     ``model`` argument, since a freshly built model would not be what ships."""
-    design = _reciprocal_design("T")
+    design = _reciprocal_design("TT")
     with _repair_disabled():
         model = build_atomistic_model(design)
     # Collapse the inserts onto a single point: no longer threaded, so no longer linked.

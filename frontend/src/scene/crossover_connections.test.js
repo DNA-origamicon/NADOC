@@ -44,16 +44,24 @@ describe('saved crossover-extra transforms', () => {
         backbone_position: [2, 0, 0], axis_tangent: [0, 0, 1], base_normal: [-1, 0, 0] },
     ]
     const result = buildCrossoverConnections(design, geometry, new Map(), {})
+    const native = buildCrossoverConnections(
+      { ...design, nucleotide_transforms: [] }, geometry, new Map(), {},
+    )
     const bm = new THREE.Matrix4(), sm = new THREE.Matrix4()
+    const nbm = new THREE.Matrix4(), nsm = new THREE.Matrix4()
     result.beadsMesh.getMatrixAt(0, bm); result.slabsMesh.getMatrixAt(0, sm)
+    native.beadsMesh.getMatrixAt(0, nbm); native.slabsMesh.getMatrixAt(0, nsm)
     const bead = new THREE.Vector3().setFromMatrixPosition(bm)
     const slab = new THREE.Vector3().setFromMatrixPosition(sm)
-    expect(bead.x).toBeCloseTo(5)
-    expect(slab.x).toBeCloseTo(5.0467889) // atom-template base centroid + saved +4 once
+    const nativeBead = new THREE.Vector3().setFromMatrixPosition(nbm)
+    const nativeSlab = new THREE.Vector3().setFromMatrixPosition(nsm)
+    expect(bead.x - nativeBead.x).toBeCloseTo(4)
+    expect(slab.x - nativeSlab.x).toBeCloseTo(4) // saved translation applied once
   })
 
   it('keeps the saved pose through a live arc refresh', () => {
     const beads = mockMesh(1), slabs = mockMesh(1)
+    const nativeBeads = mockMesh(1), nativeSlabs = mockMesh(1)
     const pose = new THREE.Matrix4().makeTranslation(4, 0, 0)
     updateExtraBaseInstances(
       beads, slabs, 0, 1,
@@ -61,8 +69,13 @@ describe('saved crossover-extra transforms', () => {
       new THREE.Vector3(2, 0, 0), new THREE.Vector3(0, 0, 1),
       false, new Map([[0, pose]]),
     )
-    expect(decompose(beads, 0).pos.x).toBeCloseTo(5)
-    expect(decompose(slabs, 0).pos.x).toBeCloseTo(5.0467889)
+    updateExtraBaseInstances(
+      nativeBeads, nativeSlabs, 0, 1,
+      new THREE.Vector3(0, 0, 0), new THREE.Vector3(1, 1, 0),
+      new THREE.Vector3(2, 0, 0), new THREE.Vector3(0, 0, 1),
+    )
+    expect(decompose(beads, 0).pos.x - decompose(nativeBeads, 0).pos.x).toBeCloseTo(4)
+    expect(decompose(slabs, 0).pos.x - decompose(nativeSlabs, 0).pos.x).toBeCloseTo(4)
   })
 })
 

@@ -3216,12 +3216,18 @@ def composite_trajectory_meta(design, stages, max_frames: int = 200) -> dict:
     }
 
 
-def _frame_atomistic_overrides(design, frame: dict, base_orient: str = "design_axis"):
+def _frame_atomistic_overrides(
+    design,
+    frame: dict,
+    base_orient: str = "design_axis",
+    sigma: float = 2.0,
+):
     """Build (nuc_pos_override, axis_override) for one relaxed/trajectory frame.
 
-    ``base_orient`` is forwarded to ``deformed_helix_axes`` and selects the base
-    stacking-axis source for the DUPLEX path (``"oxdna_a3"`` = oxDNA's own a3, which
-    removes the ~12° off-axis tilt the design-axis tangent carries; see that function).
+    ``base_orient`` and ``sigma`` are forwarded to ``deformed_helix_axes`` and select
+    the base stacking-axis source and centerline smoothing for the DUPLEX path
+    (``"oxdna_a3"`` = oxDNA's own a3, which removes the ~12° off-axis tilt the
+    design-axis tangent carries; see that function).
 
     Positions each nucleotide at its true backbone site reconstructed from the oxDNA
     CM (``oxdna_backbone_site``), and supplies a Gaussian-smoothed DEFORMED helix
@@ -3303,7 +3309,7 @@ def _frame_atomistic_overrides(design, frame: dict, base_orient: str = "design_a
         for key, rec in frame3.items()
     }
     axis_override = deformed_helix_axes(
-        design, frame3, sigma=2.0, base_orient=base_orient
+        design, frame3, sigma=sigma, base_orient=base_orient
     )
     return nuc_pos_override, axis_override, xb_pos_override, ext_pos_override
 

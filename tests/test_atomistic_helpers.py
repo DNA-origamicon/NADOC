@@ -595,10 +595,60 @@ def test_crossover_extra_base_placement_contract():
         assert p["bow"].shape == (3,)
 
     reversed_placements = crossover_extra_base_placements(
-        a, b, axis, axis, 3, sim_reversed=True)
+        a, b, axis, axis, 3, sim_reversed=True
+    )
     assert [p["sim_k"] for p in reversed_placements] == [2, 1, 0]
     for p in reversed_placements:
         assert p["chain_tangent"] == pytest.approx(-p["tangent"])
+
+
+@pytest.mark.parametrize(
+    ("sim_reversed", "expected_center", "expected_quaternion"),
+    [
+        (
+            False,
+            np.array([1.0350126516288711, -0.0677414490623244, -0.11119985396656734]),
+            np.array(
+                [
+                    -0.10871135764025318,
+                    0.05191393506416845,
+                    -0.3845073158890162,
+                    0.9152272439640281,
+                ]
+            ),
+        ),
+        (
+            True,
+            np.array([0.9294409122891801, -0.15898318445001028, 0.15187203661584792]),
+            np.array(
+                [
+                    -0.0653133319390967,
+                    -0.08778461219542308,
+                    -0.20145497692027542,
+                    0.9733673113510458,
+                ]
+            ),
+        ),
+    ],
+)
+def test_one_base_default_uses_measured_junction_local_pose(
+    sim_reversed, expected_center, expected_quaternion
+):
+    """1xT is deliberately off the Bezier; both traversal cases are pinned."""
+    from backend.core.atomistic_helpers import crossover_extra_base_placements
+
+    a = np.array([0.0, 0.0, 0.0])
+    b = np.array([2.0, 0.0, 0.0])
+    axis = np.array([0.0, 0.0, 1.0])
+    [placement] = crossover_extra_base_placements(
+        a, b, axis, axis, 1, sim_reversed=sim_reversed
+    )
+    assert placement["geometric_center"] == pytest.approx([1.0, -0.3, 0.0])
+    assert placement["center"] == pytest.approx(expected_center, abs=1e-12)
+    assert placement["default_local_quaternion"] == pytest.approx(
+        expected_quaternion, abs=1e-15
+    )
+    assert np.linalg.norm(placement["center"] - placement["geometric_center"]) > 0.2
 
 
 class TestArcBowDir:

@@ -18,7 +18,10 @@ CG-to-atomistic handoff. Historical phases and experiments are in
   convergence checks. Headless production defaults must be scientifically scaled, not mock-sized.
 - Absolute-coordinate forces such as surfaces and anchors require `fix_diffusion = false`.
 - The NAMD seed is a pure function of oxDNA coordinates and orientation; design transforms must not
-  be applied a second time. Unpaired ssDNA is rigid-stamped during backmapping.
+  be applied a second time. Unpaired ssDNA is rigid-stamped during backmapping. Synthetic crossover
+  inserts must be read with `include_extra_bases=True` and flow through the same
+  `_frame_atomistic_overrides` used by the atomistic display, so their simulated CM/a1/a3 pose
+  replaces the native placement. The seed's final global recenter preserves relative coordinates.
 - Atomistic display uses vectorized stamping and compact binary transport. Fine molecular surfaces
   are generated per strand to preserve geometric separation rather than only coloring one fused mesh.
 

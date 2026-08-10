@@ -132,6 +132,13 @@ color. This applies equally to right-sidebar strand/base/cluster coloring and vi
 card scalar maps (RMSF flexibility, deviation, strain, and CanDo), including animated
 geometry refreshes and restoration when a map is cleared.
 
+Crossover extra bases use one representation-neutral residue placement shared by Full
+beads/slabs/connectors and the atomistic model. A one-base crossover uses the calibrated
+junction-local 1xT pose rather than the legacy Bézier midpoint; both chemical traversal
+orientations are covered. Longer insert runs retain their flexible arc placement. A saved
+per-base transform composes on the native pose, while a simulated oxDNA frame supersedes
+the native placement with that insert particle's actual centre-of-mass and orientation.
+
 Large-design exports use the validated interpolated phosphate-bridge builder,
 reuse cached native atomistic models and already-computed oxDNA RMSF average
 frames, and precompute PDB hybrid-36 identifiers. HTTP gzip reduces the transfer
@@ -150,7 +157,11 @@ feeds NAMD via **"Use as NAMD seed"**: the relaxed coordinates (reconstructed at
 the true backbone site, ~1.6 nm cross-pair) seed the all-atom run so it starts
 pre-relaxed instead of from ideal B-DNA — for seeded jobs the NAMD relaxation
 ladder is optional and production can run minimize-then-produce directly from the
-seeded structure.
+seeded structure. Crossover-extra particles are retained during this backmapping:
+the atomistic trajectory display and NAMD seed consume the same simulated
+`(__xb__, crossover_id, index)` position/orientation override. NAMD then applies only
+a global recentering, which changes the coordinate origin but not the insert's pose
+relative to the structure.
 
 ### Live MD display
 A **"Display MD (live)"** toggle in the Dynamics tab streams the latest frame of a

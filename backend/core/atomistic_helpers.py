@@ -71,6 +71,36 @@ _FRAC_O5_B: float = (_CANON_O3P + _CANON_PO5) / _TOTAL_LINKER_B
 # Extra-base arc geometry constant (matches crossover_connections.js BOW_FRAC_3D)
 _BOW_FRAC_3D: float = 0.3
 
+# The legacy atom templates carry a +37.05 degree in-plane pre-compensation.  The
+# representation-neutral crossover frame cancels it before projecting either a Full
+# slab or an atom template.  Keep this numerically identical to atomistic._FRAME_ROT_RAD.
+_EXTRA_BASE_FRAME_ROT_RAD: float = -0.646577
+_EXTRA_BASE_FRAME_ROT_M: _np.ndarray = _np.array(
+    [
+        [_math.cos(_EXTRA_BASE_FRAME_ROT_RAD), -_math.sin(_EXTRA_BASE_FRAME_ROT_RAD), 0.0],
+        [_math.sin(_EXTRA_BASE_FRAME_ROT_RAD), _math.cos(_EXTRA_BASE_FRAME_ROT_RAD), 0.0],
+        [0.0, 0.0, 1.0],
+    ],
+    dtype=float,
+)
+_EXTRA_BASE_FRAME_ROT_M.setflags(write=False)
+
+# Junction-local poses measured from the two manually positioned residues in
+# workspace/2hb_1xT.nadoc (2026-08-09).  The two records are the two possible chemical
+# traversal orientations through a crossover.  Values are expressed in the unposed
+# residue frame, so they transfer to any helix pair/orientation instead of baking in the
+# source design's world coordinates.  Quaternion order is x, y, z, w.
+_ONE_BASE_DEFAULT_LOCAL_POSES: dict[bool, tuple[tuple[float, ...], tuple[float, ...]]] = {
+    False: (
+        (-0.11838409398784218, -0.22868023153856676, -0.035012651628871135),
+        (-0.10871135764025318, 0.05191393506416845, -0.3845073158890162, 0.9152272439640281),
+    ),
+    True: (
+        (-0.021056163944091474, -0.2061734603038539, -0.07055908771081991),
+        (-0.0653133319390967, -0.08778461219542308, -0.20145497692027542, 0.9733673113510458),
+    ),
+}
+
 
 # ── Pure-math primitives ──────────────────────────────────────────────────────
 
@@ -516,6 +546,67 @@ def _arc_ctrl_pt(
     return mid + bow_dir * (dist * _BOW_FRAC_3D)
 
 
+def _quat_matrix_xyzw(q: tuple[float, ...]) -> _np.ndarray:
+    """3x3 rotation matrix for an (x, y, z, w) unit quaternion."""
+    x, y, z, w = q
+    return _np.array(
+        [
+            [1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y - z * w), 2.0 * (x * z + y * w)],
+            [2.0 * (x * y + z * w), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z - x * w)],
+            [2.0 * (x * z - y * w), 2.0 * (y * z + x * w), 1.0 - 2.0 * (x * x + y * y)],
+        ],
+        dtype=float,
+    )
+
+
+def crossover_extra_base_default_local_pose(
+    count: int, *, sim_reversed: bool = False
+) -> tuple[_np.ndarray, _np.ndarray, _np.ndarray]:
+    """Return (translation, rotation-matrix, quaternion) for a default insert pose.
+
+    Only a one-base run is calibrated. Longer runs retain their existing Bezier
+    placements. The pose is junction-local and keyed by chemical traversal direction.
+    """
+    if count != 1:
+        return _np.zeros(3), _np.eye(3), _np.array([0.0, 0.0, 0.0, 1.0])
+    translation, quaternion = _ONE_BASE_DEFAULT_LOCAL_POSES[bool(sim_reversed)]
+    return (
+        _np.asarray(translation, dtype=float),
+        _quat_matrix_xyzw(quaternion),
+        _np.asarray(quaternion, dtype=float),
+    )
+
+
+def crossover_extra_base_frame(
+    origin: _np.ndarray,
+    line_dir: _np.ndarray,
+    bow_dir: _np.ndarray,
+) -> tuple[_np.ndarray, _np.ndarray]:
+    """Canonical atom-template frame shared by default Full and atomistic inserts."""
+    e_z = -_normalise(_np.asarray(line_dir, dtype=float))
+    bow = _np.asarray(bow_dir, dtype=float)
+    bow_proj = bow - float(_np.dot(bow, e_z)) * e_z
+    bow_n = float(_np.linalg.norm(bow_proj))
+    if bow_n < 1e-6:
+        fallback = _np.array([0.0, 0.0, 1.0])
+        if abs(float(_np.dot(e_z, fallback))) > 0.9:
+            fallback = _np.array([1.0, 0.0, 0.0])
+        bow_proj = fallback - float(_np.dot(fallback, e_z)) * e_z
+        bow_n = float(_np.linalg.norm(bow_proj))
+    e_n = bow_proj / bow_n
+    e_y = _np.cross(e_z, e_n)
+    norm_y = float(_np.linalg.norm(e_y))
+    if norm_y < 1e-9:
+        fallback = _np.array([0.0, 0.0, 1.0])
+        if abs(float(_np.dot(e_n, fallback))) > 0.9:
+            fallback = _np.array([1.0, 0.0, 0.0])
+        e_y = _np.cross(e_z, fallback)
+        norm_y = float(_np.linalg.norm(e_y))
+    e_y /= norm_y
+    rotation = _np.column_stack([e_n, e_y, e_z]) @ _EXTRA_BASE_FRAME_ROT_M
+    return _np.asarray(origin, dtype=float).copy(), rotation
+
+
 def crossover_extra_base_placements(
     pos_a: _np.ndarray,
     pos_b: _np.ndarray,
@@ -527,26 +618,56 @@ def crossover_extra_base_placements(
 ) -> list[dict]:
     """Canonical, representation-neutral crossover-insert residue placements.
 
-    The Full renderer consumes the equivalent wire contract (center/tangent/bow/t)
-    in ``crossover_extra_placement.js``; the atomistic builder consumes these records
+    The Full renderer consumes the equivalent wire contract in
+    ``crossover_extra_placement.js``; the atomistic builder consumes these records
     directly. Atom templates, CG beads, slabs, and bonds are deliberately outside this
     abstraction so placement can be revised without rewriting either representation.
+
+    For a one-base run, ``center`` and ``frame_rotation`` include the measured default
+    junction-local pose. ``geometric_center`` and ``geometric_tangent`` retain the raw
+    Bezier construction for diagnostics and animated endpoint updates.
     """
     if count <= 0:
         return []
     bow = _arc_bow_dir(pos_a, pos_b, axis_a, axis_b)
     ctrl = _arc_ctrl_pt(pos_a, pos_b, bow)
+    local_t, local_r, local_q = crossover_extra_base_default_local_pose(
+        count, sim_reversed=sim_reversed
+    )
     out: list[dict] = []
     for geometric_index in range(count):
         t = float(geometric_index + 1) / float(count + 1)
-        tangent = _bezier_tan(pos_a, ctrl, pos_b, t)
-        out.append({
-            "geometric_index": geometric_index,
-            "sim_k": count - 1 - geometric_index if sim_reversed else geometric_index,
-            "t": t,
-            "center": _bezier_pt(pos_a, ctrl, pos_b, t),
-            "tangent": tangent,
-            "chain_tangent": -tangent if sim_reversed else tangent.copy(),
-            "bow": bow.copy(),
-        })
+        geometric_center = _bezier_pt(pos_a, ctrl, pos_b, t)
+        geometric_tangent = _bezier_tan(pos_a, ctrl, pos_b, t)
+        source_chain_tangent = (
+            -geometric_tangent if sim_reversed else geometric_tangent.copy()
+        )
+        _, source_rotation = crossover_extra_base_frame(
+            geometric_center, source_chain_tangent, bow
+        )
+        center = geometric_center + source_rotation @ local_t
+        frame_rotation = source_rotation @ local_r
+        # Rotate the geometric tangent by the local pose expressed in world space.
+        world_delta = source_rotation @ local_r @ source_rotation.T
+        tangent = world_delta @ geometric_tangent
+        chain_tangent = world_delta @ source_chain_tangent
+        out.append(
+            {
+                "geometric_index": geometric_index,
+                "sim_k": count - 1 - geometric_index if sim_reversed else geometric_index,
+                "t": t,
+                "geometric_center": geometric_center,
+                "geometric_tangent": geometric_tangent,
+                "source_chain_tangent": source_chain_tangent,
+                "source_frame_rotation": source_rotation,
+                "default_local_translation": local_t.copy(),
+                "default_local_rotation": local_r.copy(),
+                "default_local_quaternion": local_q.copy(),
+                "center": center,
+                "tangent": tangent,
+                "chain_tangent": chain_tangent,
+                "frame_rotation": frame_rotation,
+                "bow": bow.copy(),
+            }
+        )
     return out

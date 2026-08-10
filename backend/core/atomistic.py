@@ -51,6 +51,7 @@ from backend.core.atomistic_helpers import (
     _bezier_pt,
     _bezier_tan,
     _make_spin_rotation,
+    crossover_extra_base_frame,
     crossover_extra_base_placements,
     _normalise,
 )
@@ -469,7 +470,10 @@ def apply_nucleotide_transforms(atoms: list[Atom], design: Design) -> set[str]:
             key = ("extra_base", atom.crossover_id, atom.extra_base_k)
         elif atom.helix_id:
             key = (
-                "base", atom.helix_id, atom.bp_index, atom.direction,
+                "base",
+                atom.helix_id,
+                atom.bp_index,
+                atom.direction,
                 int(atom.copy_k or 0),
             )
         else:
@@ -480,11 +484,14 @@ def apply_nucleotide_transforms(atoms: list[Atom], design: Design) -> set[str]:
         parts = matrix_cache.get(transform.id)
         if parts is None:
             x, y, z, w = transform.rotation
-            rotation = _np.array([
-                [1 - 2 * (y*y + z*z), 2 * (x*y - z*w), 2 * (x*z + y*w)],
-                [2 * (x*y + z*w), 1 - 2 * (x*x + z*z), 2 * (y*z - x*w)],
-                [2 * (x*z - y*w), 2 * (y*z + x*w), 1 - 2 * (x*x + y*y)],
-            ], dtype=float)
+            rotation = _np.array(
+                [
+                    [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+                    [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+                    [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+                ],
+                dtype=float,
+            )
             parts = (
                 rotation,
                 _np.asarray(transform.pivot, dtype=float),
@@ -768,9 +775,7 @@ _ATOMISTIC_PHASE_OFFSET_RAD: float = _math.radians(-32.0)
 # layer is NOT touched, so the oxDNA / mrDNA / LAMMPS seeds and every pose fitter are
 # byte-identical; rolling the SHARED phase instead would have put half of every design's
 # crossover bonds over the FENE cliff (measured: honeycomb 114/228, square 305/610).
-_ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG: float = (
-    ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG
-)
+_ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG: float = ATOMISTIC_TEMPLATE_BALANCE_OFFSET_DEG
 
 
 def atomistic_phase_offset_rad(design: "Design") -> float:
@@ -1751,7 +1756,8 @@ def build_atomistic_model(
                 if include_proteins
                 else ref_model
             )
-            apply_nucleotide_transforms(model.atoms, design)
+            if apply_design_geometry:
+                apply_nucleotide_transforms(model.atoms, design)
             return model
 
     from backend.core.deformation import effective_helix_for_geometry
@@ -1793,9 +1799,7 @@ def build_atomistic_model(
                 extra_base_xover_src.add(
                     (_prev_d.helix_id, _prev_d.end_bp, _prev_d.direction.value)
                 )
-                extra_base_xover_dst.add(
-                    (_d.helix_id, _d.start_bp, _d.direction.value)
-                )
+                extra_base_xover_dst.add((_d.helix_id, _d.start_bp, _d.direction.value))
             _prev_d = _d
 
     # Build chain_id assignment: one letter per strand, wrapping A-Z then AA-AZ etc.
@@ -2307,7 +2311,31 @@ def build_atomistic_model(
     # must sample those SAME sites; using nuc_pos_cache directly left atomistic origins
     # on the legacy Bezier while rendered Full beads followed the measured one.
     xb_nuc_pos_cache = nuc_pos_cache
-    if measured_positioning:
+    endpoint_keys = []
+    for xo in design.crossovers:
+        if xo.extra_bases:
+            endpoint_keys.extend(
+                [
+                    (xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand),
+                    (xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand),
+                ]
+            )
+    for fl in design.forced_ligations:
+        if fl.extra_bases:
+            endpoint_keys.extend(
+                [
+                    (
+                        fl.three_prime_helix_id,
+                        fl.three_prime_bp,
+                        fl.three_prime_direction,
+                    ),
+                    (fl.five_prime_helix_id, fl.five_prime_bp, fl.five_prime_direction),
+                ]
+            )
+    # Do not touch the display geometry serializer on designs with no inserts. Besides
+    # avoiding needless work, this preserves the rigid oxDNA-frame calibration's hard
+    # dependency firewall: that constant is derived only from raw helical sites.
+    if measured_positioning and endpoint_keys:
         from backend.core.design_geometry import _geometry_for_design
 
         placement_design = design.model_copy(
@@ -2320,37 +2348,22 @@ def build_atomistic_model(
             (g["helix_id"], g["bp_index"], Direction(g["direction"])): g
             for g in measured_geometry
         }
-        xb_nuc_pos_cache = {hid: dict(entries) for hid, entries in nuc_pos_cache.items()}
-        endpoint_keys = []
-        for xo in design.crossovers:
-            if xo.extra_bases:
-                endpoint_keys.extend([
-                    (xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand),
-                    (xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand),
-                ])
-        for fl in design.forced_ligations:
-            if fl.extra_bases:
-                endpoint_keys.extend([
-                    (fl.three_prime_helix_id, fl.three_prime_bp, fl.three_prime_direction),
-                    (fl.five_prime_helix_id, fl.five_prime_bp, fl.five_prime_direction),
-                ])
+        xb_nuc_pos_cache = {
+            hid: dict(entries) for hid, entries in nuc_pos_cache.items()
+        }
         for helix_id, bp_index, direction in endpoint_keys:
             g = measured_by_key.get((helix_id, bp_index, direction))
-            old = xb_nuc_pos_cache.get(helix_id, {}).get(
-                (bp_index, direction, 0)
-            )
+            old = xb_nuc_pos_cache.get(helix_id, {}).get((bp_index, direction, 0))
             if g is None or old is None:
                 continue
-            xb_nuc_pos_cache[helix_id][(bp_index, direction, 0)] = (
-                NucleotidePosition(
-                    helix_id=old.helix_id,
-                    bp_index=old.bp_index,
-                    direction=old.direction,
-                    position=_np.asarray(g["backbone_position"], dtype=float),
-                    base_position=_np.asarray(g["base_position"], dtype=float),
-                    base_normal=_np.asarray(g["base_normal"], dtype=float),
-                    axis_tangent=_np.asarray(g["axis_tangent"], dtype=float),
-                )
+            xb_nuc_pos_cache[helix_id][(bp_index, direction, 0)] = NucleotidePosition(
+                helix_id=old.helix_id,
+                bp_index=old.bp_index,
+                direction=old.direction,
+                position=_np.asarray(g["backbone_position"], dtype=float),
+                base_position=_np.asarray(g["base_position"], dtype=float),
+                base_normal=_np.asarray(g["base_normal"], dtype=float),
+                axis_tangent=_np.asarray(g["axis_tangent"], dtype=float),
             )
     serial = _build_extra_base_atoms(
         design=design,
@@ -2370,9 +2383,7 @@ def build_atomistic_model(
     # Linker closure above re-seats P/O5′ on the downstream duplex residue.
     # Apply its 45°-CW γ torsion now, after closure, so the requested final
     # angle survives in both the fast display and exact MD/PDB build paths.
-    _extra_base_gamma_rad = (
-        -_EXTRA_BASE_3PRIME_GAMMA_CW_DEG * _math.pi / 180.0
-    )
+    _extra_base_gamma_rad = -_EXTRA_BASE_3PRIME_GAMMA_CW_DEG * _math.pi / 180.0
     for _dst_key in extra_base_xover_dst:
         _dst_sugar = bp_to_sugar_serials.get(_dst_key)
         if _dst_sugar is not None:
@@ -2430,8 +2441,11 @@ def build_atomistic_model(
         from backend.core.deformation import apply_deformations_to_atoms
 
         apply_deformations_to_atoms(atoms, design)
-
-    apply_nucleotide_transforms(atoms, design)
+        # Saved residue poses are part of the authored design geometry too. A relaxed
+        # CG frame already contains the final physical pose, so applying these deltas
+        # after a simulation override would move the rendered/seeded residue away from
+        # the actual trajectory particle (and double-apply any pose used to seed CG).
+        apply_nucleotide_transforms(atoms, design)
 
     model = AtomisticModel(atoms=atoms, bonds=bonds)
     if include_proteins:
@@ -3438,34 +3452,7 @@ def _extra_base_frame(
       e_y = cross(e_z, e_n)
       R   = [e_n | e_y | e_z] with _FRAME_ROT_RAD pre-compensation cancel
     """
-    e_z = -line_dir
-
-    # Project bow_dir onto the plane normal to e_z so e_n ⊥ e_z
-    bow_proj = bow_dir - float(_np.dot(bow_dir, e_z)) * e_z
-    bow_n = float(_np.linalg.norm(bow_proj))
-    if bow_n < 1e-6:
-        # bow_dir is parallel to line — pick any perpendicular
-        fallback = _np.array([0.0, 0.0, 1.0])
-        if abs(float(_np.dot(e_z, fallback))) > 0.9:
-            fallback = _np.array([1.0, 0.0, 0.0])
-        bow_proj = fallback - float(_np.dot(fallback, e_z)) * e_z
-        bow_n = float(_np.linalg.norm(bow_proj))
-    e_n = bow_proj / bow_n
-
-    e_y = _cross3(e_z, e_n)
-    norm_y = float(_np.linalg.norm(e_y))
-    if norm_y < 1e-9:
-        fallback = _np.array([0.0, 0.0, 1.0])
-        if abs(float(_np.dot(e_n, fallback))) > 0.9:
-            fallback = _np.array([1.0, 0.0, 0.0])
-        e_y = _cross3(e_z, fallback)
-        norm_y = float(_np.linalg.norm(e_y))
-    e_y = e_y / norm_y
-
-    R = _np.column_stack([e_n, e_y, e_z])
-    # Cancel template pre-compensation (+37.05° baked into all templates)
-    R = R @ _FRAME_ROT_M
-    return origin.copy(), R
+    return crossover_extra_base_frame(origin, line_dir, bow_dir)
 
 
 def _sim_override_parts(
@@ -3510,9 +3497,9 @@ def _build_extra_base_atoms(
     Place atomistic atoms for all extra crossover bases in the design.
 
     Each extra base gets a full ribose ring (rigid transform of the default
-    sugar template) oriented so that C3′–C4′ is parallel to the interpolation
-    line between the two junction nucleotides, with the nitrogenous base
-    facing the bow direction (outward from the Holliday junction).  Backbone
+    sugar template) placed from the representation-neutral crossover placement
+    record. One-base runs use its calibrated junction-local residue pose; longer
+    runs retain the geometric arc frame. Backbone
     linker atoms (O3′/P/O5′) between each consecutive nucleotide pair are
     placed by a scipy L-BFGS-B minimisation of bond-length and bond-angle
     deviations from canonical B-DNA values.
@@ -3612,21 +3599,22 @@ def _build_extra_base_atoms(
         src_s = bp_to_sugar_serials.get(src_key)
         dst_s = bp_to_sugar_serials.get(dst_key)
 
-        # Interpolation line: the two junction nucleotides' CG BACKBONE positions.
-        #
-        # These atoms are placed FROM the CG representation, not independently of it:
-        # the CG view is the single definition of where an extra base sits, and this
-        # reproduces it. Same endpoints, same quadratic Bezier, same bow as
-        # crossover_connections.js — so an insert's atoms land on the bead the user
-        # is looking at, by construction rather than by agreement.
+        # The two junction nucleotides' shared backbone positions. The placement
+        # abstraction below owns the native residue center and orientation consumed by
+        # both atomistic and Full representations, including the calibrated 1xT pose.
         line_p0 = _np.array(pos_src)
         line_p1 = _np.array(pos_dst)
-        placements_by_k = {p["sim_k"]: p for p in crossover_extra_base_placements(
-            _np.asarray(posA), _np.asarray(posB),
-            _np.asarray(nucA.axis_tangent), _np.asarray(nucB.axis_tangent),
-            len(xo.extra_bases),
-            sim_reversed=sim_reversed,
-        )}
+        placements_by_k = {
+            p["sim_k"]: p
+            for p in crossover_extra_base_placements(
+                _np.asarray(posA),
+                _np.asarray(posB),
+                _np.asarray(nucA.axis_tangent),
+                _np.asarray(nucB.axis_tangent),
+                len(xo.extra_bases),
+                sim_reversed=sim_reversed,
+            )
+        }
 
         # Chain-direction endpoints for a SIMULATED insert stay the real C3'/C5'
         # ATOMS.  That path orients a nucleotide from measured a1 against the
@@ -3656,10 +3644,10 @@ def _build_extra_base_atoms(
         for i, base_char in enumerate(xo.extra_bases, start=1):
             placement = placements_by_k[i - 1]
             origin_pos = placement["center"].copy()
-            arc_dir = placement["chain_tangent"].copy()
-            # Relaxed/trajectory display: place this insert at its REAL simulated
-            # backbone position (keeping the arc-derived orientation), so the heavy
-            # rep shows the true ssDNA conformation instead of the geometric arc.
+            arc_dir = placement["source_chain_tangent"].copy()
+            # Relaxed/trajectory display: place this insert at its real simulated
+            # backbone position, so the heavy representation shows the simulated
+            # ssDNA conformation instead of its native placement.
             _xb_sim = (
                 xb_pos_override.get((xo.id, i - 1))
                 if xb_pos_override is not None
@@ -3680,7 +3668,16 @@ def _build_extra_base_atoms(
                 # perpendicular to that chain.  Raw a3 is a nucleotide body axis,
                 # not a guarantee that C5'/C3' point at the bonded neighbours.
                 origin, R = _extra_base_frame(origin_pos, arc_dir, _normalise(sim_a1))
+            elif _xb_sim is None:
+                # Native/default placement comes straight from the shared residue
+                # abstraction. For 1xT this includes the measured junction-local pose;
+                # longer runs retain their historical Bezier frame.
+                origin = placement["center"].copy()
+                R = placement["frame_rotation"].copy()
             else:
+                # A position-only simulation override owns the center but retains the
+                # uncalibrated native bow/orientation. Never apply the 1xT default pose
+                # on top of an actual trajectory position.
                 origin, R = _extra_base_frame(origin_pos, arc_dir, placement["bow"])
 
             residue = _BASE_CHAR_TO_RESIDUE.get(base_char.upper(), "DT")

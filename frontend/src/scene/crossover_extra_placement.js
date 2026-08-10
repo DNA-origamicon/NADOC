@@ -17,6 +17,21 @@ const _frameRotation = new THREE.Matrix4().makeRotationZ(-0.646577)
 const _local = new THREE.Vector3()
 const BOW_FRACTION = 0.3
 
+// Junction-local poses recovered from the two manually positioned 1xT residues in
+// workspace/2hb_1xT.nadoc. They cover the two chemical traversal orientations through
+// a crossover. Keep these values in exact parity with atomistic_helpers.py; expressing
+// them in the residue frame makes them transferable to every helix pair/orientation.
+const ONE_BASE_DEFAULT_LOCAL_POSES = Object.freeze({
+  direct: Object.freeze({
+    translation: Object.freeze([-0.11838409398784218, -0.22868023153856676, -0.035012651628871135]),
+    rotation: Object.freeze([-0.10871135764025318, 0.05191393506416845, -0.3845073158890162, 0.9152272439640281]),
+  }),
+  reversed: Object.freeze({
+    translation: Object.freeze([-0.021056163944091474, -0.2061734603038539, -0.07055908771081991]),
+    rotation: Object.freeze([-0.0653133319390967, -0.08778461219542308, -0.20145497692027542, 0.9733673113510458]),
+  }),
+})
+
 // Heavy-atom base-ring centroids in the FORWARD 1ZEW templates stamped for crossover
 // inserts by backend/core/atomistic.py. These are projection sites, not additional
 // placement rules: the canonical residue frame below maps both atom templates and Full
@@ -98,6 +113,12 @@ export function crossoverExtraSlabQuaternion(frameQuaternion, out = new THREE.Qu
   return out.setFromRotationMatrix(_basis)
 }
 
+/** Measured default local pose for a one-base insert; longer runs remain unchanged. */
+export function crossoverExtraBaseDefaultLocalPose(count, simReversed = false) {
+  if (count !== 1) return null
+  return ONE_BASE_DEFAULT_LOCAL_POSES[simReversed ? 'reversed' : 'direct']
+}
+
 /** Build one canonical placement per insert, in geometric A→B order. */
 export function buildCrossoverExtraPlacements({ xoId, count, pointA, control, pointB,
   helixAxis, sequence = '', simReversed = false, savedTransforms = new Map() }) {
@@ -110,10 +131,26 @@ export function buildCrossoverExtraPlacements({ xoId, count, pointA, control, po
   for (let geometricIndex = 0; geometricIndex < count; geometricIndex++) {
     const t = (geometricIndex + 1) / (count + 1)
     const simK = simReversed ? count - 1 - geometricIndex : geometricIndex
-    const sourceCenter = quadraticPoint(pointA, control, pointB, t, _point).clone()
-    const sourceTangent = quadraticTangent(pointA, control, pointB, t, _tangent).clone()
-    const chainTangent = simReversed ? sourceTangent.clone().negate() : sourceTangent.clone()
-    const frameQuaternion = crossoverExtraFrameQuaternion(chainTangent, runBow).clone()
+    const geometricCenter = quadraticPoint(pointA, control, pointB, t, _point).clone()
+    const geometricTangent = quadraticTangent(pointA, control, pointB, t, _tangent).clone()
+    const geometricChainTangent = simReversed
+      ? geometricTangent.clone().negate() : geometricTangent.clone()
+    const sourceFrameQuaternion = crossoverExtraFrameQuaternion(
+      geometricChainTangent, runBow,
+    ).clone()
+    const defaultPose = crossoverExtraBaseDefaultLocalPose(count, simReversed)
+    const defaultLocalTranslation = defaultPose
+      ? new THREE.Vector3(...defaultPose.translation) : new THREE.Vector3()
+    const defaultLocalQuaternion = defaultPose
+      ? new THREE.Quaternion(...defaultPose.rotation) : new THREE.Quaternion()
+    const sourceCenter = defaultLocalTranslation.applyQuaternion(sourceFrameQuaternion)
+      .add(geometricCenter)
+    const frameQuaternion = sourceFrameQuaternion.clone().multiply(defaultLocalQuaternion)
+    const defaultWorldQuaternion = sourceFrameQuaternion.clone()
+      .multiply(defaultLocalQuaternion)
+      .multiply(sourceFrameQuaternion.clone().invert())
+    const sourceTangent = geometricTangent.clone().applyQuaternion(defaultWorldQuaternion)
+    const chainTangent = geometricChainTangent.clone().applyQuaternion(defaultWorldQuaternion)
     const baseLetter = (sequence[simK] ?? 'T').toUpperCase()
     const localBaseCenter = BASE_CENTROID[baseLetter] ?? BASE_CENTROID.T
     const sourceBaseCenter = _local.copy(localBaseCenter).applyQuaternion(frameQuaternion)
@@ -128,8 +165,10 @@ export function buildCrossoverExtraPlacements({ xoId, count, pointA, control, po
       baseCenter.applyMatrix4(pose)
     }
     out.push({
-      xoId, geometricIndex, simK, t, sourceCenter, sourceTangent,
-      chainTangent, bow: runBow.clone(), sourceBaseCenter, baseCenter, frameQuaternion,
+      xoId, geometricIndex, simK, t, geometricCenter, geometricTangent,
+      geometricChainTangent, sourceFrameQuaternion, defaultPose,
+      sourceCenter, sourceTangent, chainTangent, bow: runBow.clone(),
+      sourceBaseCenter, baseCenter, frameQuaternion,
       center, tangent, helixAxis: helixAxis.clone(), pose,
     })
   }

@@ -1,11 +1,12 @@
 /**
  * Crossover connection renderer — 3D line segments between backbone beads,
- * plus arc-interpolated beads and slabs for crossovers with extra bases.
+ * plus beads and slabs for crossovers with extra bases.
  *
  * Reads design.crossovers and draws a line between the backbone_position of
  * each half-crossover's nucleotide.  When a crossover has extra_bases (e.g.
- * "TT"), the straight line is replaced with a quadratic Bezier arc and
- * backbone beads + nucleotide slabs are interpolated along the arc.
+ * "TT"), the straight line is replaced with a run of backbone beads and
+ * nucleotide slabs supplied by the shared placement abstraction. One-base runs
+ * use the calibrated junction-local residue pose; longer runs use a Bezier arc.
  *
  * RULE: no geometry or topology reasoning here.  The crossover record is the
  * single source of truth.  Look up nucleotide positions by key, draw the line.
@@ -87,7 +88,7 @@ export function domainEndKeys(design) {
  * Does this crossover's extra-base run need its simulated `k` indices reversed
  * before they address bead instances?
  *
- * Beads are laid out along the Bezier from `half_a` to `half_b`, so bead 0 is the one
+ * Beads are laid out from `half_a` to `half_b`, so bead 0 is the one
  * next to `half_a`.  The emitters (NAMD atomistic.py:2795-2802, oxDNA
  * oxdna_interface.py:394-403) number the run **5′→3′ from `src`**, where `src` is
  * whichever half is a domain END — which is `half_b` whenever the strand happens to
@@ -334,7 +335,7 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
       beadIdx++
     }
 
-    // Initial connector positions along the geometric arc (sim frames re-thread
+    // Initial connector positions follow the native placements (sim frames re-thread
     // them through the live bead positions later via setExtraBaseConnectors).
     const cpts = [posA.clone()]
     cpts.push(...posedPoints)

@@ -777,12 +777,10 @@ def test_namd_bundle_zip_contents():
     assert "README.txt" in names, "ZIP missing README.txt"
 
 
-# ── Extra-base placement: the Bezier arc is the default pose ──────────────────
+# ── Extra-base placement: shared representation-neutral residue frames ────────
 #
-# Changed 2026-08-05. Inserts used to be seeded on the arc and then dragged off it
-# by a per-insert rigid-body L-BFGS-B solve; that solve is the catenation/ring-pierce
-# source and is now opt-in (`solve_extra_base_pose=True`). See
-# memory/project_extra_base_spacing.md and memory/project_crossover_catenation.md.
+# 1xT uses the two measured junction-local poses recovered from 2hb_1xT; longer
+# runs retain the Bezier defaults. Atomistic and Full both project the same record.
 
 
 def _insert_sugar_origins(model, design):
@@ -873,40 +871,46 @@ def test_three_prime_anchor_of_extra_base_run_has_clockwise_gamma_rotation(
         assert rotated[name] == pytest.approx(ordinary[name], abs=1e-12)
 
 
-def test_extra_bases_are_placed_from_the_cg_representation():
-    """Insert atoms are stamped AT the CG view's own insert positions.
-
-    Oracle is the CG chord: an insert's frame origin must sit on the quadratic
-    Bezier between its two junction nucleotides' CG BACKBONE positions — the same
-    curve crossover_connections.js draws. Nothing here asserts where an extra base
-    *ought* to go; it asserts that the atoms follow the representation.
-    """
+def test_extra_bases_are_placed_from_the_shared_residue_abstraction():
+    """The built atom frame exactly equals the representation-neutral 1xT frame."""
     import numpy as np
 
     from backend.core.design_geometry import _geometry_for_design
     from backend.core.atomistic_helpers import crossover_extra_base_placements
     from tests.test_junction_topology import _reciprocal_design
 
-    design = _reciprocal_design("TT", bp=8)
+    design = _reciprocal_design("T", bp=8)
     model = build_atomistic_model(design)
 
     xo = next(x for x in design.crossovers if x.extra_bases)
     geometry = _geometry_for_design(
-        design, measured_positioning=True, junction_balance=True)
+        design, measured_positioning=True, junction_balance=True
+    )
     nucs = {(n["helix_id"], n["bp_index"], n["direction"]): n for n in geometry}
     a = nucs[(xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand.value)]
     b = nucs[(xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand.value)]
+    domain_end_keys = {
+        (domain.helix_id, domain.end_bp, domain.direction.value)
+        for strand in design.strands
+        for domain in strand.domains
+    }
+    sim_reversed = (
+        xo.half_a.helix_id,
+        xo.half_a.index,
+        xo.half_a.strand.value,
+    ) not in domain_end_keys
 
     placements = crossover_extra_base_placements(
         np.asarray(a["backbone_position"]), np.asarray(b["backbone_position"]),
         np.asarray(a["axis_tangent"]), np.asarray(b["axis_tangent"]),
         len(xo.extra_bases),
+        sim_reversed=sim_reversed,
     )
-    on_curve = [p["center"] for p in placements]
+    expected = {p["sim_k"]: p for p in placements}
 
     # No template atom sits AT the frame origin (C4' is exactly 0.5 nm out), so
     # recover each insert's origin by rigid-body fit of the sugar template onto the
-    # built atoms — that point is what the Bezier placed.
+    # built atoms — that point is what the shared abstraction placed.
     # Ribose ring only: the phosphodiester atoms (P/OP1/OP2/O5'/O3') are re-placed
     # by the linker minimiser afterwards, so including them would fit the bridge
     # rather than the insert.
@@ -918,7 +922,7 @@ def test_extra_bases_are_placed_from_the_cg_representation():
             by_k.setdefault(at.extra_base_k, {})[at.name] = np.array([at.x, at.y, at.z])
     assert by_k, "fixture built no extra-base atoms"
 
-    for names in by_k.values():
+    for k, names in by_k.items():
         L = np.array([local[k] for k in names])
         W = np.array([names[k] for k in names])
         Lc, Wc = L - L.mean(0), W - W.mean(0)
@@ -926,9 +930,9 @@ def test_extra_bases_are_placed_from_the_cg_representation():
         d = np.sign(np.linalg.det(Vt.T @ U.T))
         R = Vt.T @ np.diag([1.0, 1.0, d]) @ U.T
         origin = W.mean(0) - R @ L.mean(0)
-        assert min(float(np.linalg.norm(origin - c)) for c in on_curve) < 1e-4, (
-            "insert origin is off the CG chord — something is re-placing it"
-        )
+        assert origin == pytest.approx(expected[k]["center"], abs=1e-4)
+        assert R == pytest.approx(expected[k]["frame_rotation"], abs=1e-4)
+        assert np.linalg.norm(origin - expected[k]["geometric_center"]) > 0.1
 
 
 def test_saved_extra_base_pose_maps_to_the_same_simulation_index_as_full():
@@ -959,7 +963,7 @@ def test_saved_extra_base_pose_maps_to_the_same_simulation_index_as_full():
 
 
 def test_a_linked_phase_is_refused_rather_than_re_placed():
-    """Nothing adjusts an insert after the CG mapping, so some phases DO link.
+    """Nothing adjusts an insert after native placement, so some longer runs link.
 
     The protection is the gate, not a repair: a linked build must raise rather than
     reach a seed. Pinned because the previous contract was the opposite — "the
@@ -972,8 +976,9 @@ def test_a_linked_phase_is_refused_rather_than_re_placed():
     )
     from tests.test_junction_topology import _reciprocal_design
 
-    # bp 16 is linked under the fixed 45°-CW 3′-flank γ geometry.
-    design = _reciprocal_design("T", bp=16)
+    # The calibrated 1xT default is clean; bp 16 with two inserts remains a linked
+    # positive control for the topology gate.
+    design = _reciprocal_design("TT", bp=16)
     assert (
         catenation_report(design, model=build_atomistic_model(design))["n_catenated"]
         > 0

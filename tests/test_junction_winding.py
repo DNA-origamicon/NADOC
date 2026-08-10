@@ -177,10 +177,9 @@ def test_verdict_wording_never_claims_strands_are_linked():
 # ── The duplex clamp, on a real build ────────────────────────────────────────
 
 
-#: Helical phases of the reciprocal fixture that do / do not link, measured
-#: 2026-08-05 once extra-base positions became a straight read of the CG
-#: representation. There is no repair pass to switch on and off any more, so a
-#: wound build and a clean one are two different PHASES, not two settings.
+#: Helical phases of the reciprocal fixture that do / do not link. The calibrated
+#: 1xT default is clean at both phases; the wound positive control therefore uses
+#: the still-arc-seeded 2xT run at bp 16, while bp 8 remains clean.
 _WOUND_BP = 16
 _CLEAN_BP = 8
 
@@ -210,7 +209,7 @@ def _reciprocal_pair_inputs(extra_bases, bp):
 def test_clamp_converges_and_separates_wound_from_clean():
     """The duplex clamp's self-check: a genuine invariant settles on an integer as the
     rung retreats into the duplex. Wound -> ~1, clean -> ~0, both converged."""
-    wound = clamp_sweep(*_reciprocal_pair_inputs("T", bp=_WOUND_BP))
+    wound = clamp_sweep(*_reciprocal_pair_inputs("TT", bp=_WOUND_BP))
     clean = clamp_sweep(*_reciprocal_pair_inputs("T", bp=_CLEAN_BP))
 
     assert wound["converged"] and clean["converged"]

@@ -16,8 +16,9 @@ import pytest
 
 from backend.api import headless_build as hb
 from backend.api import state as design_state
+from backend.core.constants import NM_TO_OXDNA
 from backend.core.design_geometry import _geometry_for_design
-from backend.core.models import LatticeType
+from backend.core.models import LatticeType, NucleotideTransform
 from backend.physics import oxdna_interface as ox
 
 from tests.automation_harness import assert_extra_bases_in_oxdna
@@ -302,6 +303,116 @@ def test_heavy_rep_extra_base_uses_full_simulated_orientation(routed_6hb):
         for b in vs[i + 1 :]
     ]
     assert min(cosines) < 0.5, "changing simulated a1 must change base orientation"
+
+
+def test_namd_seed_extra_base_matches_relaxed_display_pose(routed_6hb, tmp_path):
+    """The oxDNA→NAMD backmap must consume the simulated ``__xb__`` row.
+
+    Regression for the split-brain seed path: the relaxed atomistic display retained
+    crossover-extra particles, but ``build_atomistic_model_from_cg_spline`` read the
+    same file with the reader's default synthetic-particle filter.  The display then
+    showed the simulated insert while the NAMD starting structure silently rebuilt it
+    at the native default pose.
+
+    Move the actual oxDNA particle row, reconstruct both paths, and compare the rigid
+    sugar/base atoms.  Display-only fast linker closure may move P/O3'/O5' by a few
+    picometres, so those linker atoms are deliberately outside this pose oracle.
+    """
+    from backend.core.cg_to_atomistic import build_atomistic_model_from_cg_spline
+    from backend.core.oxdna_health import build_display_model
+
+    d = _with_extra(routed_6hb, "T")
+    conf = tmp_path / "moved-extra.dat"
+    ox.write_configuration(d, _geometry_for_design(d), conf, oxdna_native_seed=True)
+
+    order = ox._strand_nucleotide_order(d)
+    xb_key = next(key for key in order if key[0] == ox._XB_SENTINEL)
+    lines = conf.read_text().splitlines()
+    data_rows = [
+        i
+        for i, line in enumerate(lines)
+        if line.strip() and not line.startswith(("t ", "b ", "E "))
+    ]
+    row = data_rows[order.index(xb_key)]
+    fields = lines[row].split()
+    delta_nm = np.array([3.0, -2.0, 1.5])
+    for axis in range(3):
+        fields[axis] = f"{float(fields[axis]) + delta_nm[axis] * NM_TO_OXDNA:.6f}"
+    lines[row] = " ".join(fields)
+    conf.write_text("\n".join(lines) + "\n")
+
+    frame = ox.read_configuration_full_unwrapped(conf, d, include_extra_bases=True)
+    assert np.allclose(
+        frame[xb_key]["backbone_position"],
+        ox.read_configuration_full(conf, d, include_extra_bases=True)[xb_key][
+            "backbone_position"
+        ],
+    ), "fixture should remain away from a periodic boundary"
+
+    # A saved design-space delta must not be applied on top of a physical frame. The
+    # oxDNA coordinates are already final; retaining this deliberately huge transform
+    # would make both the trajectory display and NAMD seed wrong by many nanometres.
+    posed = d.model_copy(
+        update={
+            "nucleotide_transforms": [
+                NucleotideTransform(
+                    kind="extra_base",
+                    crossover_id=xb_key[1],
+                    extra_base_k=xb_key[2],
+                    pivot=[0.0, 0.0, 0.0],
+                    translation=[9.0, -8.0, 7.0],
+                    rotation=[0.0, 0.0, 0.0, 1.0],
+                )
+            ]
+        }
+    )
+    expected_display = build_display_model(d, frame)
+    display = build_display_model(posed, frame)
+    seed = build_atomistic_model_from_cg_spline(posed, conf)
+    rigid_names = {
+        "C1'",
+        "C2'",
+        "C3'",
+        "C4'",
+        "O4'",
+        "N1",
+        "C2",
+        "O2",
+        "N3",
+        "C4",
+        "O4",
+        "C5",
+        "C7",
+        "C6",
+    }
+
+    def rigid_positions(model):
+        return {
+            atom.name: np.array([atom.x, atom.y, atom.z])
+            for atom in model.atoms
+            if atom.crossover_id == xb_key[1]
+            and atom.extra_base_k == xb_key[2]
+            and atom.name in rigid_names
+        }
+
+    seed_pos = rigid_positions(seed)
+    display_pos = rigid_positions(display)
+    expected_pos = rigid_positions(expected_display)
+    assert set(seed_pos) == rigid_names == set(display_pos) == set(expected_pos)
+    errors_nm = np.array(
+        [np.linalg.norm(seed_pos[name] - display_pos[name]) for name in rigid_names]
+    )
+    assert float(errors_nm.max()) < 1e-9, (
+        f"NAMD seed/display crossover-extra pose diverged: "
+        f"RMS={np.sqrt(np.mean(errors_nm**2)):.6g} nm, "
+        f"max={errors_nm.max():.6g} nm"
+    )
+    authored_delta_errors_nm = np.array(
+        [np.linalg.norm(display_pos[name] - expected_pos[name]) for name in rigid_names]
+    )
+    assert float(authored_delta_errors_nm.max()) < 1e-9, (
+        "saved design transform was applied on top of the physical trajectory pose"
+    )
 
 
 # ── MD viz: extra-base P atoms get unique keys (no source collision) ──────────

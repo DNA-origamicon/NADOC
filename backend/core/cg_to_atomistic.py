@@ -298,25 +298,13 @@ def build_atomistic_model_from_cg_spline(
     # PBC make-whole: DEFENSIVE — an E-field/surface run can stream the structure
     # across a box face; a wrapped strand would make the backbone spline overshoot.
     # No-op for a structure already whole in [0,L) (the common case).
-    full_map = read_configuration_full_unwrapped(conf_path, design)
-    # RAW backbone sites (no per-nucleotide smoothing): the override supplies each
-    # nucleotide's radial DIRECTION (its helical phase) relative to the deformed
-    # axis below; Gaussian-smoothing the per-nucleotide positions flattens the
-    # spiral and collapses the ~34°/bp twist, stacking adjacent nucleotides (clash).
-    # The axis (not the per-nucleotide phase) is what gets smoothed.
-    pos_override = {
-        key: oxdna_backbone_site(rec["backbone_position"], rec["a1"], rec["a3"])
-        for key, rec in full_map.items()
-    }
-    # Deformed centerline so the placer measures each nucleotide's radial (helical
-    # phase) against the BENT axis, not the ideal straight one — without this a
-    # displaced helix collapses the twist and piles atoms together (seed clashes).
-    # base_orient="oxdna_a3": derive the base stacking axis (e_z) from oxDNA's own a3,
-    # not the ~12°-off-axis centerline tangent — the tangent rotates WC pairs OPEN
-    # (primary H-bond 3.35 Å, 55% closed on VoltronCore) whereas a3 seats them at the
-    # native duplex geometry (2.85 Å, 77% closed).  Same fix the display path uses.
-    axis_override = deformed_helix_axes(
-        design, full_map, sigma=sigma, base_orient="oxdna_a3"
+    # Keep the synthetic crossover-extra particles in the readback.  They occupy real
+    # oxDNA particle rows but are not design nucleotide keys, so the default reader
+    # deliberately drops them.  Dropping them here made the relaxed display follow the
+    # simulated insert while the NAMD seed silently rebuilt that insert at its native
+    # default pose.
+    full_map = read_configuration_full_unwrapped(
+        conf_path, design, include_extra_bases=True
     )
     # UNPAIRED ssDNA (overhangs / tails / unpaired scaffold loops) has no helix axis to
     # fit, so the axis-derived placement above collapses distinct ssDNA nucleotides —
@@ -326,10 +314,22 @@ def build_atomistic_model_from_cg_spline(
     # Stamp each unpaired nucleotide from its oxDNA a1/a3 RIGID frame instead — exactly the
     # fix the display path already uses (oxdna_health._ssdna_frame_override); the formed
     # duplex stays on the axis path (the rigid stamp collapses WC pairs, ssDNA has none).
-    # Lazy import breaks the cg_to_atomistic <-> oxdna_health cycle (oxdna_health imports
-    # deformed_helix_axes from this module).
-    from backend.core.oxdna_health import _ssdna_frame_override
+    # Use the canonical relaxed-frame override builder shared with the display.  In
+    # particular this converts each ``(__xb__, crossover_id, k)`` particle's simulated
+    # CM+a1+a3 into the exact ``xb_pos_override`` contract consumed by the atomistic
+    # placer.  Keeping this in one helper makes display and NAMD seed reconstruction
+    # agree by construction.  The lazy import breaks the cg_to_atomistic <->
+    # oxdna_health cycle (oxdna_health imports deformed_helix_axes from this module).
+    from backend.core.oxdna_health import (
+        _frame_atomistic_overrides,
+        _ssdna_frame_override,
+    )
 
+    pos_override, axis_override, xb_pos_override, _ext_pos_override = (
+        _frame_atomistic_overrides(
+            design, full_map, base_orient="oxdna_a3", sigma=sigma
+        )
+    )
     ssdna_override = _ssdna_frame_override(design, full_map)
     # apply_design_geometry=False: the CG override already gives each nucleotide's FINAL
     # world position (deformed + cluster-transformed, then oxDNA-relaxed).  Letting
@@ -346,6 +346,7 @@ def build_atomistic_model_from_cg_spline(
         nuc_pos_override=pos_override,
         axis_override=axis_override,
         frame_override=ssdna_override,
+        xb_pos_override=xb_pos_override,
         apply_design_geometry=False,
         relaxed_oxdna_phase=True,
     )
