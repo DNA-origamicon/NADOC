@@ -287,6 +287,7 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
     const { xo, nucA, nucB, posA, posB } = ac
     const n = xo.extra_bases.length
     const simReversed = extraBaseOrderReversed(xo, endKeys)
+    const localFrameReversed = xo.half_a.strand === 'REVERSE'
     const savedTransforms = new Map((design.nucleotide_transforms ?? [])
       .filter(tr => tr.kind === 'extra_base' && tr.crossover_id === xo.id)
       .map(tr => [tr.extra_base_k, new THREE.Matrix4()
@@ -312,7 +313,8 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
 
     const placements = buildCrossoverExtraPlacements({
       xoId: xo.id, count: n, pointA: posA, control: ctrl, pointB: posB,
-      helixAxis: avgAx, sequence: xo.extra_bases, simReversed, savedTransforms,
+      helixAxis: avgAx, sequence: xo.extra_bases, simReversed, localFrameReversed,
+      savedTransforms,
     })
     const posedPoints = placements.map(p => p.center.clone())
 
@@ -360,6 +362,7 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
       // Simulated inserts arrive numbered 5′→3′ from the strand's exit half; beads are
       // laid out A→B.  True when those two disagree — see extraBaseOrderReversed.
       simReversed,
+      localFrameReversed,
       bowDir: bowDir.clone(),
       beadBaseColor: beadColor,
       slabBaseColor: slabColor,
@@ -410,11 +413,12 @@ const _uScl  = new THREE.Vector3()
 export function updateExtraBaseInstances(
   beadsMesh, slabsMesh, beadStartIdx, beadCount,
   posA, ctrl, posB, avgAx,
-  simReversed = false, savedTransforms = new Map(), sequence = '',
+  simReversed = false, localFrameReversed = false,
+  savedTransforms = new Map(), sequence = '',
 ) {
   const placements = buildCrossoverExtraPlacements({
     xoId: null, count: beadCount, pointA: posA, control: ctrl, pointB: posB,
-    helixAxis: avgAx, sequence, simReversed, savedTransforms,
+    helixAxis: avgAx, sequence, simReversed, localFrameReversed, savedTransforms,
   })
   for (const placement of placements) {
     const idx = beadStartIdx + placement.geometricIndex

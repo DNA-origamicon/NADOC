@@ -651,6 +651,39 @@ def test_one_base_default_uses_measured_junction_local_pose(
     assert np.linalg.norm(placement["center"] - placement["geometric_center"]) > 0.2
 
 
+@pytest.mark.parametrize("sim_reversed", [False, True])
+def test_one_base_local_frame_tracks_independent_half_a_polarity(sim_reversed):
+    """Opposite 2HB polarity rotates the calibrated frame without changing its arc."""
+    from backend.core.atomistic_helpers import crossover_extra_base_placements
+
+    a = np.array([0.0, 0.0, 0.0])
+    b = np.array([2.0, 0.0, 0.0])
+    axis = np.array([0.0, 0.0, 1.0])
+    [forward] = crossover_extra_base_placements(
+        a, b, axis, axis, 1, sim_reversed=sim_reversed
+    )
+    [reverse] = crossover_extra_base_placements(
+        a, b, axis, axis, 1,
+        sim_reversed=sim_reversed,
+        local_frame_reversed=True,
+    )
+
+    assert reverse["geometric_center"] == pytest.approx(forward["geometric_center"])
+    assert reverse["bow"] == pytest.approx(-forward["bow"])
+    assert reverse["center"] != pytest.approx(forward["center"])
+    # This parity belongs only to the measured 1xT calibration; legacy arcs retain
+    # their established placement for longer insert runs.
+    ordinary_two = crossover_extra_base_placements(a, b, axis, axis, 2)
+    reversed_two = crossover_extra_base_placements(
+        a, b, axis, axis, 2, local_frame_reversed=True
+    )
+    for ordinary, reversed_frame in zip(ordinary_two, reversed_two):
+        assert reversed_frame["center"] == pytest.approx(ordinary["center"])
+        assert reversed_frame["frame_rotation"] == pytest.approx(
+            ordinary["frame_rotation"]
+        )
+
+
 class TestArcBowDir:
     def test_perpendicular_chord_axis(self) -> None:
         posA = np.array([0.0, 0.0, 0.0])

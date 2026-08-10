@@ -67,7 +67,7 @@ describe('saved crossover-extra transforms', () => {
       beads, slabs, 0, 1,
       new THREE.Vector3(0, 0, 0), new THREE.Vector3(1, 1, 0),
       new THREE.Vector3(2, 0, 0), new THREE.Vector3(0, 0, 1),
-      false, new Map([[0, pose]]),
+      false, false, new Map([[0, pose]]),
     )
     updateExtraBaseInstances(
       nativeBeads, nativeSlabs, 0, 1,

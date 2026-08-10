@@ -121,13 +121,18 @@ export function crossoverExtraBaseDefaultLocalPose(count, simReversed = false) {
 
 /** Build one canonical placement per insert, in geometric A→B order. */
 export function buildCrossoverExtraPlacements({ xoId, count, pointA, control, pointB,
-  helixAxis, sequence = '', simReversed = false, savedTransforms = new Map() }) {
+  helixAxis, sequence = '', simReversed = false, localFrameReversed = false,
+  savedTransforms = new Map() }) {
   const out = []
   const runBow = new THREE.Vector3().lerpVectors(pointA, pointB, 0.5)
     .sub(control).negate()
   if (runBow.lengthSq() < 1e-12) runBow.crossVectors(_chord.subVectors(pointB, pointA), helixAxis)
   if (runBow.lengthSq() < 1e-12) runBow.set(0, 0, 1)
   else runBow.normalize()
+  // The measured pose's source 2HB had a FORWARD->REVERSE half-a/half-b
+  // polarity.  The opposite polarity is a half-turn about the crossover chord,
+  // independent of chemical traversal (simReversed).
+  if (count === 1 && localFrameReversed) runBow.negate()
   for (let geometricIndex = 0; geometricIndex < count; geometricIndex++) {
     const t = (geometricIndex + 1) / (count + 1)
     const simK = simReversed ? count - 1 - geometricIndex : geometricIndex

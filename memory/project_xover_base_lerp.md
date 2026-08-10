@@ -15,8 +15,15 @@ project from that same pose. Do not add downstream offsets in an individual rend
 
 For `extra_bases` length 1, the native pose is a junction-local translation and quaternion
 calibrated from the two manually assigned residues in `workspace/2hb_1xT.nadoc` on
-2026-08-09. Separate records cover direct and reversed chemical traversal. The source
-Bézier centre/tangent remain diagnostic inputs, but are not the rendered 1xT location.
+2026-08-09. Separate records cover direct and reversed chemical traversal. A second,
+independent parity bit canonicalises the local 2HB polarity: the calibration fixture is
+`FORWARD -> REVERSE`; a `REVERSE -> FORWARD` half-a/half-b junction rotates the residue
+frame 180 degrees about the crossover chord (negates its frame bow). This was added after
+`workspace/6hbx32_1xT.nadoc` exposed 43/40 sub-1.5 A nonlocal contacts on its two reverse-
+polarity interfaces; the canonical frames leave 4/4, matching the other four interfaces.
+Do not fold this bit into `sim_reversed`: both members of a reciprocal pair can share 2HB
+polarity while having opposite chemical traversal. The source Bézier centre/tangent remain
+diagnostic inputs, but are not the rendered 1xT location.
 Runs longer than one base retain their existing Bézier/flexible-arc placement until they
 receive their own calibrated abstraction.
 

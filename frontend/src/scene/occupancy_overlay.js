@@ -264,7 +264,8 @@ export function initOccupancyOverlay({
       arcControlPoint(a, b, ad.nucA, ad.nucB, ctrlPt)
       updateExtraBaseInstances(xo.beadsMesh, xo.slabsMesh, ad.beadStartIdx, ad.beadCount,
                                a, ctrlPt, b, ad.avgAx,
-                               ad.simReversed, ad.savedTransforms, ad.sequence)
+                               ad.simReversed, ad.localFrameReversed,
+                               ad.savedTransforms, ad.sequence)
     }
     xo.beadsMesh.instanceMatrix.needsUpdate = true
     xo.slabsMesh.instanceMatrix.needsUpdate = true

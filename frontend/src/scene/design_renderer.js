@@ -450,7 +450,7 @@ export function initDesignRenderer(scene, storeRef) {
           _xoverBeadsMesh, _xoverSlabsMesh,
           ad.beadStartIdx, ad.beadCount,
           posA, _clusterXoverCtrl, posB, ad.avgAx,
-          ad.simReversed, ad.savedTransforms, ad.sequence,
+          ad.simReversed, ad.localFrameReversed, ad.savedTransforms, ad.sequence,
         )
         dirty = true
       }
@@ -1699,12 +1699,13 @@ export function initDesignRenderer(scene, storeRef) {
           _xoverBeadsMesh, _xoverSlabsMesh,
           ad.beadStartIdx, ad.beadCount,
           posA, _clusterXoverCtrl, posB, ad.avgAx,
-          ad.simReversed, ad.savedTransforms, ad.sequence,
+          ad.simReversed, ad.localFrameReversed, ad.savedTransforms, ad.sequence,
         )
         const placements = buildCrossoverExtraPlacements({
           xoId: ad.xoId, count: ad.beadCount, pointA: posA,
           control: _clusterXoverCtrl, pointB: posB, helixAxis: ad.avgAx,
           sequence: ad.sequence, simReversed: ad.simReversed,
+          localFrameReversed: ad.localFrameReversed,
           savedTransforms: ad.savedTransforms,
         })
         for (const g of _xoverGlowLive) {
@@ -1760,12 +1761,13 @@ export function initDesignRenderer(scene, storeRef) {
         _xoverBeadsMesh, _xoverSlabsMesh,
         ad.beadStartIdx, ad.beadCount,
         liveA, _clusterXoverCtrl, liveB, ad.avgAx,
-        ad.simReversed, ad.savedTransforms, ad.sequence,
+        ad.simReversed, ad.localFrameReversed, ad.savedTransforms, ad.sequence,
       )
       // Keep selection glow positions on the exact same placement records as the meshes.
       const placements = buildCrossoverExtraPlacements({
         xoId: ad.xoId, count: ad.beadCount, pointA: liveA, control: _clusterXoverCtrl,
         pointB: liveB, helixAxis: ad.avgAx, simReversed: ad.simReversed,
+        localFrameReversed: ad.localFrameReversed,
         sequence: ad.sequence, savedTransforms: ad.savedTransforms,
       })
       for (const g of _xoverGlowLive) {

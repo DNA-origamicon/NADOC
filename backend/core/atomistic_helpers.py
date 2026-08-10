@@ -615,6 +615,7 @@ def crossover_extra_base_placements(
     count: int,
     *,
     sim_reversed: bool = False,
+    local_frame_reversed: bool = False,
 ) -> list[dict]:
     """Canonical, representation-neutral crossover-insert residue placements.
 
@@ -624,8 +625,10 @@ def crossover_extra_base_placements(
     abstraction so placement can be revised without rewriting either representation.
 
     For a one-base run, ``center`` and ``frame_rotation`` include the measured default
-    junction-local pose. ``geometric_center`` and ``geometric_tangent`` retain the raw
-    Bezier construction for diagnostics and animated endpoint updates.
+    junction-local pose. ``local_frame_reversed`` canonicalises the independent
+    half-a strand polarity that was absent from the original two-pose calibration.
+    ``geometric_center`` and ``geometric_tangent`` retain the raw Bezier construction
+    for diagnostics and animated endpoint updates.
     """
     if count <= 0:
         return []
@@ -642,8 +645,15 @@ def crossover_extra_base_placements(
         source_chain_tangent = (
             -geometric_tangent if sim_reversed else geometric_tangent.copy()
         )
+        # The measured 1xT poses came from a FORWARD->REVERSE half-a/half-b
+        # junction.  The opposite local 2HB polarity is related by a half-turn
+        # about the crossover chord: its outward residue-frame axis is -bow.
+        # ``sim_reversed`` only describes chemical traversal and therefore cannot
+        # encode this independent parity.  Keep the legacy Bezier itself unchanged;
+        # only canonicalise the calibrated one-residue frame.
+        frame_bow = -bow if count == 1 and local_frame_reversed else bow
         _, source_rotation = crossover_extra_base_frame(
-            geometric_center, source_chain_tangent, bow
+            geometric_center, source_chain_tangent, frame_bow
         )
         center = geometric_center + source_rotation @ local_t
         frame_rotation = source_rotation @ local_r
@@ -667,7 +677,7 @@ def crossover_extra_base_placements(
                 "tangent": tangent,
                 "chain_tangent": chain_tangent,
                 "frame_rotation": frame_rotation,
-                "bow": bow.copy(),
+                "bow": frame_bow.copy(),
             }
         )
     return out

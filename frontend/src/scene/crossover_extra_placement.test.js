@@ -40,4 +40,25 @@ describe('crossover extra-base placement abstraction', () => {
     expect(p.sourceCenter.distanceTo(p.geometricCenter)).toBeGreaterThan(0.2)
     expect(crossoverExtraBaseDefaultLocalPose(2, simReversed)).toBeNull()
   })
+
+  it.each([false, true])('canonicalises the independent 2HB polarity (reversed=%s)', (simReversed) => {
+    const args = {
+      xoId: 'xo', count: 1, pointA: new THREE.Vector3(),
+      control: new THREE.Vector3(1, -0.6, 0), pointB: new THREE.Vector3(2, 0, 0),
+      helixAxis: new THREE.Vector3(0, 0, 1), simReversed,
+    }
+    const [forward] = buildCrossoverExtraPlacements(args)
+    const [reverse] = buildCrossoverExtraPlacements({ ...args, localFrameReversed: true })
+    expect(reverse.geometricCenter.distanceTo(forward.geometricCenter)).toBeLessThan(1e-14)
+    expect(reverse.bow.distanceTo(forward.bow.clone().negate())).toBeLessThan(1e-14)
+    expect(reverse.sourceCenter.distanceTo(forward.sourceCenter)).toBeGreaterThan(0.2)
+
+    const twoArgs = { ...args, count: 2 }
+    const twoForward = buildCrossoverExtraPlacements(twoArgs)
+    const twoReverse = buildCrossoverExtraPlacements({ ...twoArgs, localFrameReversed: true })
+    twoForward.forEach((placement, i) => {
+      expect(twoReverse[i].sourceCenter.distanceTo(placement.sourceCenter)).toBeLessThan(1e-14)
+      expect(twoReverse[i].frameQuaternion.angleTo(placement.frameQuaternion)).toBeLessThan(1e-14)
+    })
+  })
 })

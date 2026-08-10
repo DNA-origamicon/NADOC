@@ -905,6 +905,7 @@ def test_extra_bases_are_placed_from_the_shared_residue_abstraction():
         np.asarray(a["axis_tangent"]), np.asarray(b["axis_tangent"]),
         len(xo.extra_bases),
         sim_reversed=sim_reversed,
+        local_frame_reversed=xo.half_a.strand is Direction.REVERSE,
     )
     expected = {p["sim_k"]: p for p in placements}
 
@@ -933,6 +934,58 @@ def test_extra_bases_are_placed_from_the_shared_residue_abstraction():
         assert origin == pytest.approx(expected[k]["center"], abs=1e-4)
         assert R == pytest.approx(expected[k]["frame_rotation"], abs=1e-4)
         assert np.linalg.norm(origin - expected[k]["geometric_center"]) > 0.1
+
+
+def test_reverse_polarity_2hb_frames_do_not_clash_in_6hbx32():
+    """Regression for the two inward-facing 1xT interfaces in 6hbx32_1xT."""
+    from pathlib import Path
+
+    import numpy as np
+    from scipy.spatial import cKDTree
+
+    from backend.core.models import Design
+
+    fixture = Path("workspace/6hbx32_1xT.nadoc")
+    if not fixture.exists():
+        pytest.skip("workspace/6hbx32_1xT.nadoc not available")
+    design = Design.model_validate_json(fixture.read_text())
+    model = build_atomistic_model(design, fast_bridges=True)
+    atoms = model.atoms
+    xyz = np.asarray([[a.x, a.y, a.z] for a in atoms])
+    tree = cKDTree(xyz)
+    bad_interfaces = {
+        frozenset(("h_XY_1_1", "h_XY_1_2")),
+        frozenset(("h_XY_1_3", "h_XY_0_3")),
+    }
+    contacts = {interface: 0 for interface in bad_interfaces}
+
+    for xo in design.crossovers:
+        interface = frozenset((xo.half_a.helix_id, xo.half_b.helix_id))
+        if not xo.extra_bases or interface not in bad_interfaces:
+            continue
+        insert_rows = {
+            i for i, atom in enumerate(atoms)
+            if atom.crossover_id == xo.id and atom.extra_base_k is not None
+        }
+        for i in insert_rows:
+            for j in tree.query_ball_point(xyz[i], 0.15):
+                if j in insert_rows:
+                    continue
+                other = atoms[j]
+                # The calibrated residue is covalently joined to the two same-bp
+                # flanks; those close linker contacts are intentional.  The bug was
+                # collision with the adjacent duplex residues.
+                if (
+                    other.bp_index == xo.half_a.index
+                    and other.helix_id in interface
+                ):
+                    continue
+                contacts[interface] += 1
+
+    assert all(count > 0 for count in contacts.values())  # non-vacuous fixture
+    # Before polarity canonicalisation these interfaces have 43 and 40 atom pairs
+    # below 1.5 A; the corrected frames leave four apiece, matching the other edges.
+    assert contacts == {interface: 4 for interface in bad_interfaces}
 
 
 def test_saved_extra_base_pose_maps_to_the_same_simulation_index_as_full():

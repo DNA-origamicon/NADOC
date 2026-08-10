@@ -3613,6 +3613,7 @@ def _build_extra_base_atoms(
                 _np.asarray(nucB.axis_tangent),
                 len(xo.extra_bases),
                 sim_reversed=sim_reversed,
+                local_frame_reversed=ha.strand.value == "REVERSE",
             )
         }
 
