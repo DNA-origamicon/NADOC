@@ -201,8 +201,10 @@ the published "unrestrained" runs retain an ENM at k = 0.1 — FIXED, see
 value that overdamps every kinetic observable — FIXED, now 1. (3) Early-stop truncates
 stages on an unpublished criterion and is ON by default, so "19.2 ns ladder" is false for
 most runs — now DECLARED in `protocol_fidelity`; `literature`/`full_physics` disable it.
-(4) The declash ns defect (2.4 ns/rung instead of 4.8) — pinned, displayed, and the
-trigger is marked for re-audit.
+(4) The declash ns defect (2.4 ns/rung instead of 4.8) — pinned and displayed. The
+automatic trigger was narrowed on 2026-08-09: a one-base insertion no longer selects
+declash; any individual junction above one base remains conservative pending a full-ladder
+audit. Extensions and explicit declash requests are unchanged.
 
 **Tier 2 — defensible, now declared.** Production piston 200/100 vs 1000/500 ·
 `stepspercycle` 20/10 vs 12 (with `pairlistdist` 13.5 to compensate; the constant

@@ -32,9 +32,26 @@ def test_design_has_extra_bases_detects_crossover_insertions():
     assert M.design_has_extra_bases(twoxt)
 
 
+def test_only_multi_base_crossover_insertions_auto_enable_declash():
+    one_per_junction = NS(
+        crossovers=[NS(extra_bases="T"), NS(extra_bases="A")],
+        forced_ligations=[],
+    )
+    two_at_one_junction = NS(
+        crossovers=[NS(extra_bases="T"), NS(extra_bases="TT")],
+        forced_ligations=[],
+    )
+    assert M.design_has_extra_bases(one_per_junction)
+    assert not M.design_requires_extra_base_declash(one_per_junction)
+    assert M.design_requires_extra_base_declash(two_at_one_junction)
+
+
 def test_design_has_extra_bases_detects_forced_ligations():
-    d = NS(crossovers=[], forced_ligations=[NS(extra_bases="T")])
-    assert M.design_has_extra_bases(d)
+    one = NS(crossovers=[], forced_ligations=[NS(extra_bases="T")])
+    two = NS(crossovers=[], forced_ligations=[NS(extra_bases="TT")])
+    assert M.design_has_extra_bases(one)
+    assert not M.design_requires_extra_base_declash(one)
+    assert M.design_requires_extra_base_declash(two)
 
 
 # ── Soft integrator ───────────────────────────────────────────────────────────

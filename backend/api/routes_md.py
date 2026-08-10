@@ -176,7 +176,7 @@ class CreateJobRequest(BaseModel):
     minimize_steps: int = Field(4_800, ge=100)
     declash: bool = Field(
         False,
-        description="Force the declash protocol (auto-enabled anyway for designs with crossover extra bases, e.g. 2xT thymines)",
+        description="Force the declash protocol (auto-enabled for junctions with two or more crossover extra bases, e.g. 2xT thymines)",
     )
     force_soft: bool = Field(
         False,
@@ -1852,10 +1852,11 @@ def _production_fast_plan(job: MdJob, body: ProductionRequest) -> dict:
     # This used to silently rewrite timestep_fs to 1.0 — including when the user had
     # PINNED 4 fs in the Advanced card.  The card then displayed 4 fs while the run
     # executed at 1 fs: a 4x step-count difference the user never agreed to and had no
-    # way to see.  Measured consequence on 2hb_1xT: a "4 fs" 25 ns production ran 25M
-    # 1 fs steps.  Note the card's existing warning keys off the FAST checkbox, and
-    # `declash` auto-enables from extra bases independently of it, so that warning does
-    # not fire for this case either — the downgrade was completely invisible.
+    # way to see.  Measured consequence on 2hb_1xT before single-base junctions were
+    # exempted from automatic declash: a "4 fs" 25 ns production ran 25M 1 fs steps.
+    # Note the card's existing warning keys off the FAST checkbox, while `declash` can
+    # auto-enable independently of it, so that warning did not fire either — the
+    # downgrade was completely invisible.
     #
     # Now: an AUTO-derived 4 fs still falls back quietly (nothing was promised), but a
     # PINNED one is a hard conflict.  The caller turns it into a failed job carrying
@@ -2796,7 +2797,8 @@ async def estimate_md_disk(body: CreateJobRequest) -> dict:
     """
     from backend.core.disk_guard import forecast, namd_run_output_bytes
     from backend.core.md_protocols import (
-        design_has_extra_bases,
+        design_has_extensions,
+        design_requires_extra_base_declash,
         mgh_slow_release_segments,
     )
     from backend.core.md_vram import estimate_profile_from_design
@@ -2816,7 +2818,12 @@ async def estimate_md_disk(body: CreateJobRequest) -> dict:
         n_atoms = (
             profile["dna_atoms"] + profile["full_water"] * 3 + profile["ion_atoms"]
         )
-        soft = body.declash or body.force_soft or design_has_extra_bases(design)
+        soft = (
+            body.declash
+            or body.force_soft
+            or design_requires_extra_base_declash(design)
+            or design_has_extensions(design)
+        )
         # The ladder timestep the RUN will really use — the same tiers prepare applies,
         # with the user's explicit choice as the base.  This used to read `body.fast`
         # alone, so a job with an explicit relax_timestep_fs got a disk forecast and an
@@ -2828,7 +2835,7 @@ async def estimate_md_disk(body: CreateJobRequest) -> dict:
         )
         if body.force_soft:
             timestep_fs = min(1.0, base_fs)
-        elif soft:  # declash / extra bases → the gentle 2 fs tier
+        elif soft:  # declash / 2+xT inserts / extensions → the gentle 2 fs tier
             timestep_fs = min(2.0, base_fs)
         else:
             timestep_fs = base_fs

@@ -970,12 +970,13 @@ def protocol_conditions(
                 "kind": "forced",
                 "title": "Every stage runs the 2 fs gentle tier (declash)",
                 "detail": (
-                    "This design inserts extra bases at crossovers or carries single-stranded "
-                    "extensions, which are built clashed. A 25 ps probe measured that 2 fs with "
-                    "rigid bonds survives every such case while 4 fs + hydrogen-mass "
-                    "repartitioning blows up, so the whole ladder drops to the gentle tier. "
-                    "Seeding the design from an oxDNA relaxation removes the clash and lets it "
-                    "run the 4 fs path instead."
+                    "This design inserts two or more extra bases at one junction, carries "
+                    "single-stranded extensions, or explicitly requested declash. A 1xT "
+                    "junction alone does not select this tier. A 25 ps probe measured that 2 fs "
+                    "with rigid bonds survives the longer inserted runs while 4 fs + "
+                    "hydrogen-mass repartitioning can blow up, so the ladder uses the gentle "
+                    "tier. A validated pre-relaxed seed suppresses the extra-base automatic "
+                    "trigger."
                 ),
                 "applies_to": "all",
                 "source": "md_protocols.prepare_mgh_slow_release",

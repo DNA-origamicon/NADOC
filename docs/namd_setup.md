@@ -156,6 +156,30 @@ above.
 - `NADOC_NAMD_CORES` (e.g. `0-7`) pins NAMD to specific CPU cores via `taskset`.
   Leave unset to auto-bind to the first N cores.
 
+### Automatic declash selection for crossover extra bases
+
+NADOC chooses the declash relaxation tier from the longest insertion at any
+single crossover or forced-ligation junction. The count is **per junction**, not
+summed over the design:
+
+| Design feature | Automatic declash? |
+|---|---|
+| No crossover extra bases | No |
+| One extra base at a junction (`1xT`) | No |
+| Two or more extra bases at one junction (`2xT`, `3xT`, …) | Yes |
+| Sequence-bearing strand extension | Yes |
+| Job submitted with `declash=true` | Yes |
+
+A design may therefore contain many independent `1xT` crossovers without
+automatically entering declash. Those single-stranded residues are still omitted
+from the elastic network, so the standard ladder can relax them instead of
+pinning their initial geometry. A pre-relaxed oxDNA seed (`pre_declashed=true`)
+suppresses the extra-base automatic trigger, but does not override an explicit
+declash request or the strand-extension trigger.
+
+The automatic threshold controls protocol selection only. Seed catenation,
+ring-piercing, clash, and bond-validation gates still inspect every extra base.
+
 ---
 
 ## Building from source (only if you can't use a prebuilt binary)

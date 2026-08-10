@@ -2771,8 +2771,9 @@ def design_has_extra_bases(design: "Design") -> bool:
 
     Covers both crossover ``extra_bases`` (e.g. "TT") and forced-ligation
     ``extra_bases`` — the same sources `_build_extra_base_atoms` builds from.
-    Such designs are built with the inserted bases in steric clash, so the
-    declash protocol is enabled automatically for them.
+    This broad predicate is used for topology and ENM handling.  Automatic
+    declash selection has its own per-junction threshold in
+    :func:`design_requires_extra_base_declash`.
     """
     if any(
         getattr(xo, "extra_bases", None) for xo in getattr(design, "crossovers", [])
@@ -2781,6 +2782,25 @@ def design_has_extra_bases(design: "Design") -> bool:
     return any(
         getattr(fl, "extra_bases", None)
         for fl in getattr(design, "forced_ligations", [])
+    )
+
+
+AUTO_DECLASH_MAX_EXTRA_BASES = 1
+
+
+def design_requires_extra_base_declash(design: "Design") -> bool:
+    """True when any one junction exceeds the safe insertion threshold.
+
+    The threshold is per junction, not a sum over the design: several independent
+    1xT crossovers are still a 1xT design, while one 2xT crossover requires the
+    conservative declash ladder.
+    """
+    junctions = list(getattr(design, "crossovers", []) or []) + list(
+        getattr(design, "forced_ligations", []) or []
+    )
+    return any(
+        len(getattr(junction, "extra_bases", None) or "") > AUTO_DECLASH_MAX_EXTRA_BASES
+        for junction in junctions
     )
 
 
@@ -3257,12 +3277,11 @@ def prepare_mgh_slow_release(
       - one .conf per segment
       - manifest.json
 
-    Declash (auto-enabled when the design inserts extra bases at crossovers, or
+    Declash (auto-enabled when any junction inserts two or more extra bases, or
     forced via ``declash=True``): the minimisation runs against an ss-excluded
     ENM so the inserted bases relax out of clash, the runner re-anchors all
     references to the declashed coordinates after minimisation (see
-    ``rebuild_declashed_references``), and the ladder runs with the soft
-    integrator.
+    ``rebuild_declashed_references``), and the ladder runs with the gentle tier.
 
     Returns (package_subdir, name_stem) relative to job_dir.
     """
@@ -3487,9 +3506,10 @@ def prepare_mgh_slow_release(
     # Declash: minimise against an ss-excluded ENM so inserted single-stranded
     # bases relax out of clash.  References are rebuilt from the declashed coords
     # by the runner after minimisation (rebuild_declashed_references).  Enabled
-    # automatically whenever the design inserts extra bases at crossovers (they
-    # are built clashed) or carries strand extensions (free ssDNA tails seeded on a
-    # geometric arc); the explicit flag can force it on otherwise.
+    # automatically whenever one junction inserts more than one extra base, or the
+    # design carries strand extensions (free ssDNA tails seeded on a geometric arc);
+    # the explicit flag can force it on otherwise.  A 1xT junction uses the standard
+    # ladder because its current geometric seed no longer requires declashing.
     #
     # ``pre_declashed`` OVERRIDES the extra-base auto-enable: an oxDNA-SEEDED structure
     # (build_namd_seed) already has its extra bases at relaxed, non-clashing
@@ -3518,11 +3538,11 @@ def prepare_mgh_slow_release(
     #
     # The audit wants a real arm: one design with inserted bases relaxed with and without
     # the gentle tier, full ladder, compared on C1' pairing and RMSD-vs-design — not
-    # another short probe.  Until then the trigger stays as-is; it is conservative, and
-    # the cost is wall-clock rather than correctness.
+    # another short probe.  The measured 1xT placement work now justifies exempting
+    # single-base junctions; longer insertion runs remain conservative pending that audit.
     declash = (
         declash
-        or (design_has_extra_bases(design) and not pre_declashed)
+        or (design_requires_extra_base_declash(design) and not pre_declashed)
         or design_has_extensions(design)
     )
     declash_enm_file: Optional[str] = None

@@ -36,6 +36,7 @@ from backend.core.md_protocols import (
     _segment_conf,
     design_has_extra_bases,
     design_has_extensions,
+    design_requires_extra_base_declash,
     identify_unpaired_residues,
     mgh_slow_release_segments,
     namd_efield_vector,
@@ -130,8 +131,18 @@ def build_namd_gbis_package(
     if progress is not None:
         progress("enm", None, "Building elastic-network restraints…")
     write_restraints_pdb(pdb_path, package_dir / "restraints_dna_heavy.pdb")
+    # Extra bases remain single-stranded even when a 1xT junction does not require
+    # declash.  Keep every such residue (and extension tail) out of the ordinary ENM
+    # so the standard ladder can relax it instead of pinning its seed geometry.
+    exclude = None
+    if design_has_extra_bases(design) or design_has_extensions(design):
+        exclude = identify_unpaired_residues(package_dir / f"{name_stem}.psf", pdb_path)
     enm_report = write_aksimentiev_enm_files(
-        pdb_path, package_dir, name_stem, progress=progress
+        pdb_path,
+        package_dir,
+        name_stem,
+        exclude_residues=exclude or None,
+        progress=progress,
     )
 
     # 4. Anchors (optional) — fixedAtoms marker PDB, GBIS honours it the same way.
@@ -172,10 +183,15 @@ def build_namd_gbis_package(
             anchors,
         )
 
-    # 5. Declash (auto for designs that insert extra bases at crossovers, or carry
+    # 5. Declash (auto for junctions with 2+ inserted bases, or designs carrying
     #    strand-extension ssDNA tails): minimise against an ss-excluded ENM so the
-    #    inserted bases / tails relax out of clash.
-    declash = declash or design_has_extra_bases(design) or design_has_extensions(design)
+    #    inserted bases / tails relax out of clash.  A 1xT junction uses the standard
+    #    ladder; it remains excluded from the ordinary ENM above.
+    declash = (
+        declash
+        or design_requires_extra_base_declash(design)
+        or design_has_extensions(design)
+    )
     declash_enm_file: Optional[str] = None
     n_unpaired = 0
     if declash:

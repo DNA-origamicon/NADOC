@@ -253,25 +253,37 @@ def _design_flags() -> dict:
     try:
         design = design_state.get_or_404()
     except Exception:  # noqa: BLE001 — no design loaded is a normal wizard state
-        return {"known": False, "extra_bases": False, "extensions": False}
+        return {
+            "known": False,
+            "extra_bases": False,
+            "extra_base_declash": False,
+            "extensions": False,
+        }
     try:
         return {
             "known": True,
             "extra_bases": bool(_p.design_has_extra_bases(design)),
+            "extra_base_declash": bool(_p.design_requires_extra_base_declash(design)),
             "extensions": bool(_p.design_has_extensions(design)),
         }
     except Exception:  # noqa: BLE001 — a malformed design must not break the preview
-        return {"known": False, "extra_bases": False, "extensions": False}
+        return {
+            "known": False,
+            "extra_bases": False,
+            "extra_base_declash": False,
+            "extensions": False,
+        }
 
 
 def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> dict:
     carved = float(resolved.water_shell_nm or 0.0) > 0.0
     gbis = resolved.protocol == md_presets.IMPLICIT_PROTOCOL
     flags = _design_flags()
-    # Mirrors prepare_mgh_slow_release: declash turns itself on for designs that are BUILT
-    # clashed (extra bases at crossovers, free single-stranded tails), and that choice
-    # cascades into the integrator tier for the whole ladder.
-    declash = bool(resolved.declash or flags["extra_bases"] or flags["extensions"])
+    # Mirrors prepare_mgh_slow_release: 2+xT junctions and free single-stranded tails
+    # turn on declash automatically.  A 1xT junction stays on the standard ladder.
+    declash = bool(
+        resolved.declash or flags["extra_base_declash"] or flags["extensions"]
+    )
     force_soft = bool(resolved.force_soft)
     gentle_ladder = declash and not force_soft
     # The ladder's base timestep: explicit if chosen, else the historical fast-derived

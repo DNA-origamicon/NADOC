@@ -32,7 +32,12 @@ unrestrained-MGHH before committing a production run. **CONFIRMED 2026-07-19:** 
 ran 4 fs stably to completion (no crash/NaN) but melted at k=0 (C1' → 84 %, delocalized) — 4 fs fix ✓,
 bundle cohesion ✗. A valid 4fs build, but NOT a usable free-dynamics validation target.
 
-## ✅ 2026-07-29 — 4 fs runs STABLY on a 1xT design straight off the DECLASH relax (no Fix B, no re-prep)
+## ✅ 2026-07-29 — 4 fs runs STABLY on a 1xT design straight off the DECLASH relax (historical)
+
+> **Current policy (2026-08-09):** 1xT junctions no longer enter declash automatically.
+> The run below predates that threshold change and remains evidence that 1xT is stable,
+> not a description of the package the current builder emits. Automatic declash now begins
+> at 2+xT on any one junction; the count is not summed across separate crossovers.
 
 `2hb_1xT` (32,566 atoms solvated, ONE extra T per crossover), produced directly from the ordinary
 **declash** relaxation — no geometric+Fix-B re-prep:

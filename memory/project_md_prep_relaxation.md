@@ -20,8 +20,10 @@ cycle), `RESULTS.tsv` (cross-cycle table).
 **Proxy:** iterate on `workspace/2hb_2xT.nadoc` (same two strain sources, ~31k
 atoms, 105 ns/day, ~20 min/cycle) — it's *harsher* than 6hb (fails k=0.5 already),
 use the *shape* of the curve not absolute numbers. Harness reuses the real
-`prepare_mgh_slow_release` + `run_health_check`; declash auto-enables; soft
-integrator (1 fs).
+`prepare_mgh_slow_release` + `run_health_check`; declash auto-enables for this
+2xT design. At experiment time this selected the soft integrator (1 fs); the
+current builder uses the 2 fs rigid-bond gentle tier. The 2026-08-09 threshold
+change exempts 1xT only, so it does not change this experiment's 2xT trigger.
 
 **Root cause:** the catastrophe is the **ENM step-down (k=0.5→0.1→0.01→0)**, not
 minimisation. 6hb holds stably at k=0.5 then WC collapses on the first frame at
