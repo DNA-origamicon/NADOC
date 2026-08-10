@@ -22,15 +22,17 @@
 import * as THREE from 'three'
 import { BDNA_RISE_PER_BP } from '../constants.js'
 import {
-  bezierAt,
-  bezierTangent,
-  arcControlPoint,
-  arcSlabQuaternion,
   SLAB_LENGTH,
   SLAB_WIDTH,
   SLAB_THICK,
   SLAB_OFFSET,
 } from './crossover_connections.js'
+import {
+  quadraticPoint as bezierAt,
+  quadraticTangent as bezierTangent,
+  crossoverControlPoint as arcControlPoint,
+  crossoverSlabQuaternion as arcSlabQuaternion,
+} from './crossover_extra_placement.js'
 import { fjcChainBetween, isLoaded as fjcLookupLoaded, ensureLoaded as ensureFjcLookup, onLoaded as onFjcLookupLoaded } from './ssdna_fjc.js'
 import { store } from '../state/store.js'
 import { buildClusterColorLookup } from './helix_renderer/palette.js'

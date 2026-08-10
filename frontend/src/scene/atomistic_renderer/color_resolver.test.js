@@ -19,12 +19,23 @@ describe('resolveAtomColor — scalar overlay (oxDNA flexibility map)', () => {
     expect(resolveAtomColor(ctx, atom(), null, [], false)).toBe(ELEMENTS.C.color)
   })
 
-  it('a selection still wins over the scalar overlay', () => {
+  it('a selection leaves unselected atoms at their scalar-overlay colour', () => {
     const scalarColors = new Map([['h0:3:FORWARD', 0x123456]])
     const ctx = { colorMode: 'cpk', strandColors: new Map(), baseColors: new Map(), scalarColors }
-    // hasSelection=true routes through colorForAtom (selection highlight/dim), not the overlay.
     const sel = { type: 'strand', data: { strand_id: 'other' } }
-    expect(resolveAtomColor(ctx, atom(), sel, [], true)).not.toBe(0x123456)
+    expect(resolveAtomColor(ctx, atom(), sel, [], true)).toBe(0x123456)
+  })
+
+  it('selection never darkens unrelated atoms in CPK, strand, or base colouring', () => {
+    const sel = { type: 'strand', data: { strand_id: 'selected' } }
+    const cases = [
+      [{ colorMode: 'cpk', strandColors: new Map(), baseColors: new Map(), scalarColors: null }, ELEMENTS.C.color],
+      [{ colorMode: 'strand', strandColors: new Map([['s0', 0xabcdef]]), baseColors: new Map(), scalarColors: null }, 0xabcdef],
+      [{ colorMode: 'base', strandColors: new Map(), baseColors: new Map([['s0:3:FORWARD', 0x123456]]), scalarColors: null }, 0x123456],
+    ]
+    for (const [ctx, expected] of cases) {
+      expect(resolveAtomColor(ctx, atom(), sel, [], true)).toBe(expected)
+    }
   })
 
   it('no overlay → ordinary CPK colouring is unchanged', () => {

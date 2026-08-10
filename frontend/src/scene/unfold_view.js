@@ -23,7 +23,7 @@
 import * as THREE from 'three'
 import { store } from '../state/store.js'
 import { createGlowLayer } from './glow_layer.js'
-import { arcControlPoint } from './crossover_connections.js'
+import { crossoverControlPoint as arcControlPoint } from './crossover_extra_placement.js'
 import { buildClusterColorLookup } from './helix_renderer/palette.js'
 import { clusterAlphaForNuc, clusterAlphaKeys, clusterDisplaySignature } from './cluster_entries.js'
 

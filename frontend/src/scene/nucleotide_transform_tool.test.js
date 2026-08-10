@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import * as THREE from 'three'
+import { vi } from 'vitest'
 
-import { abstractPreviewUpdate, abstractResidueInfo, transformBodyForTarget } from './nucleotide_transform_tool.js'
+vi.mock('../api/client.js', () => ({ putNucleotideTransform: vi.fn() }))
+
+import { putNucleotideTransform } from '../api/client.js'
+import { abstractPreviewUpdate, abstractResidueInfo, initNucleotideTransformTool, transformBodyForTarget } from './nucleotide_transform_tool.js'
 
 describe('transformBodyForTarget', () => {
   const pivot = new THREE.Vector3(1, 2, 3)
@@ -72,5 +76,42 @@ describe('abstract nucleotide projection', () => {
     expect(update.nx).toBeCloseTo(0)
     expect(update.ny).toBeCloseTo(1)
     expect(update.tz).toBeCloseTo(1)
+  })
+})
+
+describe('atomistic transform commit', () => {
+  it('keeps the optimistic residue pose and lets the design subscriber own the sole rebuild', async () => {
+    document.body.innerHTML = '<div id="mode-indicator"></div>'
+    const selected = { helix_id: '__xb__', crossover_id: 'xo1', k: 0 }
+    const store = {
+      getState: () => ({ multiSelectedBaseKeys: ['__xb__:xo1:0'] }),
+    }
+    const atomisticRenderer = {
+      getMode: () => 'ballstick',
+      residueInfo: vi.fn(() => ({ centroid: new THREE.Vector3(1, 2, 3) })),
+      applyResidueMatrix: vi.fn(),
+    }
+    let finishCommit
+    putNucleotideTransform.mockReturnValueOnce(new Promise(resolve => { finishCommit = resolve }))
+    const obsoleteExplicitRefresh = vi.fn()
+    const tool = initNucleotideTransformTool({
+      store,
+      scene: new THREE.Scene(),
+      camera: new THREE.PerspectiveCamera(),
+      canvas: document.createElement('canvas'),
+      controls: { enabled: true },
+      designRenderer: {}, atomisticRenderer,
+      // Deliberately supplied as the old API did. It must no longer be consulted.
+      refreshAtomistic: obsoleteExplicitRefresh,
+    })
+
+    expect(tool.activate()).toBe(true)
+    const committing = tool.confirm()
+    // confirm() used to apply identity here, visibly snapping to the pre-move pose.
+    expect(atomisticRenderer.applyResidueMatrix).not.toHaveBeenCalled()
+    finishCommit({ design: { nucleotide_transforms: [{ target: selected }] } })
+    await committing
+    expect(atomisticRenderer.applyResidueMatrix).not.toHaveBeenCalled()
+    expect(obsoleteExplicitRefresh).not.toHaveBeenCalled()
   })
 })

@@ -485,7 +485,7 @@ def _arc_bow_dir(
     """
     Bow direction for a crossover arc: normalise(cross(chord, avg_axis)).
 
-    Matches arcControlPoint() bow direction in crossover_connections.js.
+    Matches crossoverControlPoint() in crossover_extra_placement.js.
     Points away from the Holliday junction — the direction the arc bows and
     the direction the base of each extra nucleotide faces outward.
     """
@@ -514,3 +514,39 @@ def _arc_ctrl_pt(
     dist = float(_np.linalg.norm(posB - posA))
     mid = (posA + posB) * 0.5
     return mid + bow_dir * (dist * _BOW_FRAC_3D)
+
+
+def crossover_extra_base_placements(
+    pos_a: _np.ndarray,
+    pos_b: _np.ndarray,
+    axis_a: _np.ndarray,
+    axis_b: _np.ndarray,
+    count: int,
+    *,
+    sim_reversed: bool = False,
+) -> list[dict]:
+    """Canonical, representation-neutral crossover-insert residue placements.
+
+    The Full renderer consumes the equivalent wire contract (center/tangent/bow/t)
+    in ``crossover_extra_placement.js``; the atomistic builder consumes these records
+    directly. Atom templates, CG beads, slabs, and bonds are deliberately outside this
+    abstraction so placement can be revised without rewriting either representation.
+    """
+    if count <= 0:
+        return []
+    bow = _arc_bow_dir(pos_a, pos_b, axis_a, axis_b)
+    ctrl = _arc_ctrl_pt(pos_a, pos_b, bow)
+    out: list[dict] = []
+    for geometric_index in range(count):
+        t = float(geometric_index + 1) / float(count + 1)
+        tangent = _bezier_tan(pos_a, ctrl, pos_b, t)
+        out.append({
+            "geometric_index": geometric_index,
+            "sim_k": count - 1 - geometric_index if sim_reversed else geometric_index,
+            "t": t,
+            "center": _bezier_pt(pos_a, ctrl, pos_b, t),
+            "tangent": tangent,
+            "chain_tangent": -tangent if sim_reversed else tangent.copy(),
+            "bow": bow.copy(),
+        })
+    return out

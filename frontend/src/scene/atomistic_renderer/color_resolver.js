@@ -15,8 +15,6 @@ import {
   ELEMENTS,
   DEFAULT_ELEMENT,
   C_HIGHLIGHT,
-  C_DIM_FACTOR,
-  _dimColor,
 } from './atom_palette.js'
 
 /**
@@ -33,50 +31,58 @@ import {
 export function colorForAtom(ctx, atom, sel, multiIds) {
   const el      = atom.element
   const cpk     = ELEMENTS[el]?.color ?? DEFAULT_ELEMENT.color
-  const dimCpk  = _dimColor(cpk, C_DIM_FACTOR)
+  const normal  = _normalColor(ctx, atom, cpk)
 
   // Multi-lasso selection overrides everything
   if (multiIds.length > 0) {
-    return multiIds.includes(atom.strand_id) ? C_HIGHLIGHT : dimCpk
+    return multiIds.includes(atom.strand_id) ? C_HIGHLIGHT : normal
   }
 
-  if (!sel) return cpk   // no selection — full CPK
+  if (!sel) return normal
 
   const type = sel.type
   const data = sel.data ?? {}
 
   if (type === 'strand') {
-    return atom.strand_id === data.strand_id ? C_HIGHLIGHT : dimCpk
+    return atom.strand_id === data.strand_id ? C_HIGHLIGHT : normal
   }
 
   if (type === 'domain') {
-    if (atom.strand_id !== data.strand_id) return dimCpk
+    if (atom.strand_id !== data.strand_id) return normal
     // Exact domain match: same helix + same direction within the strand
     const inDomain = atom.helix_id  === data.helix_id
                   && atom.direction === data.direction
-    return inDomain ? C_HIGHLIGHT : _dimColor(cpk, 0.40)
+    return inDomain ? C_HIGHLIGHT : normal
   }
 
   if (type === 'nucleotide') {
-    if (atom.strand_id !== data.strand_id) return dimCpk
+    if (atom.strand_id !== data.strand_id) return normal
     if (atom.bp_index  === data.bp_index
      && atom.direction === data.direction)       return C_HIGHLIGHT
     // Same strand, same domain (direction match): medium
-    if (atom.direction === data.direction)       return _dimColor(cpk, 0.55)
+    if (atom.direction === data.direction)       return normal
     // Same strand, other domain
-    return _dimColor(cpk, 0.30)
+    return normal
   }
 
   if (type === 'cone') {
     // Cones belong to a strand; highlight that strand
-    return atom.strand_id === data.strand_id ? C_HIGHLIGHT : dimCpk
+    return atom.strand_id === data.strand_id ? C_HIGHLIGHT : normal
   }
 
   if (type === 'protein') {
-    // Selected protein keeps full element colour; other proteins dim.
-    return atom.helix_id === `__protein__${sel.id}` ? cpk : dimCpk
+    return normal
   }
 
+  return _colorByMode(ctx, atom, cpk)
+}
+
+/** Normal display colour, including scalar overlays, with no selection treatment. */
+function _normalColor(ctx, atom, cpk) {
+  if (ctx.scalarColors) {
+    const c = ctx.scalarColors.get(`${atom.helix_id}:${atom.bp_index}:${atom.direction}`)
+    if (c != null) return c
+  }
   return _colorByMode(ctx, atom, cpk)
 }
 
@@ -121,9 +127,5 @@ export function resolveAtomColor(ctx, atom, sel, multiIds, hasSelection) {
   // Scalar overlay (e.g. oxDNA flexibility map): when present and nothing is
   // selected, an atom's nucleotide colour wins over CPK/strand so the heavy rep
   // shows the SAME rigid→flexible ramp as the beads.  Keyed by helix:bp:dir.
-  if (ctx.scalarColors) {
-    const c = ctx.scalarColors.get(`${atom.helix_id}:${atom.bp_index}:${atom.direction}`)
-    if (c != null) return c
-  }
-  return _colorByMode(ctx, atom, cpk)
+  return _normalColor(ctx, atom, cpk)
 }

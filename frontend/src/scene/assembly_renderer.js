@@ -62,7 +62,8 @@
 
 import * as THREE from 'three'
 import { buildHelixObjects, buildStapleColorMap, CG_LOD } from './helix_renderer.js'
-import { buildCrossoverConnections, arcControlPoint, updateExtraBaseInstances } from './crossover_connections.js'
+import { buildCrossoverConnections, updateExtraBaseInstances, setExtraBaseSlabConnectors } from './crossover_connections.js'
+import { crossoverControlPoint as arcControlPoint } from './crossover_extra_placement.js'
 import { initAtomisticRenderer } from './atomistic_renderer.js'
 import {
   computeInstanceBluntEnds as _computeInstanceBluntEnds,
@@ -308,13 +309,19 @@ function _updateInstanceExtraBaseCrossovers(entry) {
     updateExtraBaseInstances(
       xr.beadsMesh, xr.slabsMesh,
       ad.beadStartIdx, ad.beadCount,
-      posA, _xoverCtrl, posB, ad.avgAx, ad.zOffset,
+      posA, _xoverCtrl, posB, ad.avgAx,
+      ad.simReversed, ad.savedTransforms, ad.sequence,
+    )
+    setExtraBaseSlabConnectors(
+      xr.beadsMesh, xr.slabsMesh, xr.slabConnMesh,
+      ad.beadStartIdx, ad.beadCount, null,
     )
     dirty = true
   }
   if (dirty) {
     if (xr.beadsMesh) xr.beadsMesh.instanceMatrix.needsUpdate = true
     if (xr.slabsMesh) xr.slabsMesh.instanceMatrix.needsUpdate = true
+    if (xr.slabConnMesh) xr.slabConnMesh.instanceMatrix.needsUpdate = true
   }
 }
 
@@ -755,10 +762,12 @@ export function initAssemblyRenderer(scene, store, api) {
           const idx = ad.beadStartIdx + i
           xr.beadsMesh.setColorAt(idx, _tc.setHex(bc))
           xr.slabsMesh.setColorAt(idx, _tc.setHex(sc))
+          xr.slabConnMesh?.setColorAt(idx, _tc.setHex(sc))
         }
       }
       if (xr.beadsMesh.instanceColor) xr.beadsMesh.instanceColor.needsUpdate = true
       if (xr.slabsMesh.instanceColor) xr.slabsMesh.instanceColor.needsUpdate = true
+      if (xr.slabConnMesh?.instanceColor) xr.slabConnMesh.instanceColor.needsUpdate = true
     }
   }
 

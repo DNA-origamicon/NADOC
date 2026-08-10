@@ -799,6 +799,80 @@ def _insert_sugar_origins(model, design):
     return _np.array(out, dtype=float)
 
 
+@pytest.mark.parametrize("fast_bridges", [False, True])
+@pytest.mark.parametrize("measured_positioning", [False, True])
+def test_three_prime_anchor_of_extra_base_run_has_clockwise_gamma_rotation(
+    fast_bridges, measured_positioning, monkeypatch
+):
+    """Only the duplex residue immediately 3′ of an insert turns γ by −45°."""
+    import numpy as np
+
+    import backend.core.atomistic as atomistic_module
+
+    direct = _crossover_design_needing_linker_bases()
+    xo = direct.crossovers[0]
+    inserted = direct.model_copy(
+        update={"crossovers": [xo.model_copy(update={"extra_bases": "T"})]}
+    )
+
+    build_kwargs = {
+        "fast_bridges": fast_bridges,
+        "measured_positioning": measured_positioning,
+    }
+    monkeypatch.setattr(atomistic_module, "_EXTRA_BASE_3PRIME_GAMMA_CW_DEG", 0.0)
+    zero_gamma_model = build_atomistic_model(inserted, **build_kwargs)
+    monkeypatch.setattr(atomistic_module, "_EXTRA_BASE_3PRIME_GAMMA_CW_DEG", 45.0)
+    rotated_gamma_model = build_atomistic_model(inserted, **build_kwargs)
+
+    source = direct.strands[0].domains[0]
+    source_key = (source.helix_id, source.end_bp, source.direction.value)
+    destination = direct.strands[0].domains[1]
+    destination_key = (
+        destination.helix_id,
+        destination.start_bp,
+        destination.direction.value,
+    )
+
+    def _residue_sugar(model, key):
+        return {
+            atom.name: np.array([atom.x, atom.y, atom.z])
+            for atom in model.atoms
+            if (atom.helix_id, atom.bp_index, atom.direction) == key
+            and atom.extra_base_k is None
+            and atom.name in {"O5'", "C5'", "C4'", "C3'"}
+        }
+
+    def _dihedral_deg(pos):
+        p0, p1, p2, p3 = (pos[n] for n in ("O5'", "C5'", "C4'", "C3'"))
+        b0 = -(p1 - p0)
+        b1 = p2 - p1
+        b2 = p3 - p2
+        b1 /= np.linalg.norm(b1)
+        v = b0 - np.dot(b0, b1) * b1
+        w = b2 - np.dot(b2, b1) * b1
+        return float(np.degrees(np.arctan2(np.dot(np.cross(b1, v), w), np.dot(v, w))))
+
+    ordinary = _residue_sugar(zero_gamma_model, destination_key)
+    rotated = _residue_sugar(rotated_gamma_model, destination_key)
+    assert ordinary.keys() == rotated.keys() == {"O5'", "C5'", "C4'", "C3'"}
+
+    gamma_delta = (
+        _dihedral_deg(rotated) - _dihedral_deg(ordinary) + 180.0
+    ) % 360.0 - 180.0
+    assert gamma_delta == pytest.approx(-45.0, abs=1e-8)
+
+    source_before = _residue_sugar(zero_gamma_model, source_key)
+    source_after = _residue_sugar(rotated_gamma_model, source_key)
+    source_delta = (
+        _dihedral_deg(source_after) - _dihedral_deg(source_before) + 180.0
+    ) % 360.0 - 180.0
+    assert source_delta == pytest.approx(0.0, abs=1e-8)
+
+    # A pure γ change leaves the ribose-side axis and atomistic site untouched.
+    for name in ("C5'", "C4'", "C3'"):
+        assert rotated[name] == pytest.approx(ordinary[name], abs=1e-12)
+
+
 def test_extra_bases_are_placed_from_the_cg_representation():
     """Insert atoms are stamped AT the CG view's own insert positions.
 
@@ -809,30 +883,26 @@ def test_extra_bases_are_placed_from_the_cg_representation():
     """
     import numpy as np
 
-    from backend.core.atomistic_helpers import _arc_bow_dir, _arc_ctrl_pt, _bezier_pt
-    from backend.core.geometry import nucleotide_positions
+    from backend.core.design_geometry import _geometry_for_design
+    from backend.core.atomistic_helpers import crossover_extra_base_placements
     from tests.test_junction_topology import _reciprocal_design
 
     design = _reciprocal_design("TT", bp=8)
     model = build_atomistic_model(design)
 
     xo = next(x for x in design.crossovers if x.extra_bases)
-    nucs = {}
-    for h in design.helices:
-        for nuc in nucleotide_positions(h):
-            nucs[(h.id, nuc.bp_index, nuc.direction)] = nuc
-    a = nucs[(xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand)]
-    b = nucs[(xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand)]
+    geometry = _geometry_for_design(
+        design, measured_positioning=True, junction_balance=True)
+    nucs = {(n["helix_id"], n["bp_index"], n["direction"]): n for n in geometry}
+    a = nucs[(xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand.value)]
+    b = nucs[(xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand.value)]
 
-    n = len(xo.extra_bases)
-    bow = _arc_bow_dir(a.position, b.position, a.axis_tangent, b.axis_tangent)
-    on_curve = []
-    for p0, p1 in (
-        (np.array(a.position), np.array(b.position)),
-        (np.array(b.position), np.array(a.position)),
-    ):
-        ctrl = _arc_ctrl_pt(p0, p1, bow)
-        on_curve += [_bezier_pt(p0, ctrl, p1, (k + 1) / (n + 1)) for k in range(n)]
+    placements = crossover_extra_base_placements(
+        np.asarray(a["backbone_position"]), np.asarray(b["backbone_position"]),
+        np.asarray(a["axis_tangent"]), np.asarray(b["axis_tangent"]),
+        len(xo.extra_bases),
+    )
+    on_curve = [p["center"] for p in placements]
 
     # No template atom sits AT the frame origin (C4' is exactly 0.5 nm out), so
     # recover each insert's origin by rigid-body fit of the sugar template onto the
@@ -861,6 +931,33 @@ def test_extra_bases_are_placed_from_the_cg_representation():
         )
 
 
+def test_saved_extra_base_pose_maps_to_the_same_simulation_index_as_full():
+    """A Full bead's ``simK`` pose moves exactly the matching atomistic residue."""
+    import numpy as np
+
+    from backend.core.models import NucleotideTransform
+    from tests.test_junction_topology import _reciprocal_design
+
+    design = _reciprocal_design("TT", bp=8)
+    xo = next(x for x in design.crossovers if x.extra_bases)
+    native = build_atomistic_model(design)
+    delta = np.array([3.0, -2.0, 1.0])
+    posed_design = design.copy_with(nucleotide_transforms=[NucleotideTransform(
+        kind="extra_base", crossover_id=xo.id, extra_base_k=0,
+        pivot=[0.0, 0.0, 0.0], translation=delta.tolist(), rotation=[0.0, 0.0, 0.0, 1.0],
+    )])
+    posed = build_atomistic_model(posed_design)
+
+    native_by_serial = {a.serial: a for a in native.atoms}
+    for atom in posed.atoms:
+        if atom.crossover_id != xo.id or atom.extra_base_k is None:
+            continue
+        before = native_by_serial[atom.serial]
+        displacement = np.array([atom.x - before.x, atom.y - before.y, atom.z - before.z])
+        expected = delta if atom.extra_base_k == 0 else np.zeros(3)
+        assert displacement == pytest.approx(expected)
+
+
 def test_a_linked_phase_is_refused_rather_than_re_placed():
     """Nothing adjusts an insert after the CG mapping, so some phases DO link.
 
@@ -875,6 +972,7 @@ def test_a_linked_phase_is_refused_rather_than_re_placed():
     )
     from tests.test_junction_topology import _reciprocal_design
 
+    # bp 16 is linked under the fixed 45°-CW 3′-flank γ geometry.
     design = _reciprocal_design("T", bp=16)
     assert (
         catenation_report(design, model=build_atomistic_model(design))["n_catenated"]

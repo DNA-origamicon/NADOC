@@ -49,9 +49,11 @@
 import * as THREE from 'three'
 
 import {
-  arcControlPoint, buildCrossoverConnections, partitionExtraBaseUpdates, setExtraBaseConnectors,
-  setExtraBaseInstanceFromSim, simBeadIndex, updateExtraBaseInstances,
+  buildCrossoverConnections, partitionExtraBaseUpdates, setExtraBaseConnectors,
+  setExtraBaseInstanceFromSim, setExtraBaseSlabConnectors, simBeadIndex,
+  updateExtraBaseInstances,
 } from './crossover_connections.js'
+import { crossoverControlPoint as arcControlPoint } from './crossover_extra_placement.js'
 import { CG_LOD, buildHelixObjects, buildStapleColorMap } from './helix_renderer.js'
 
 /** Ghost palette, most-populated first. Rank 0 is the real model and takes none of these. */
@@ -261,10 +263,20 @@ export function initOccupancyOverlay({
       if (!a || !b) continue
       arcControlPoint(a, b, ad.nucA, ad.nucB, ctrlPt)
       updateExtraBaseInstances(xo.beadsMesh, xo.slabsMesh, ad.beadStartIdx, ad.beadCount,
-                               a, ctrlPt, b, ad.avgAx, ad.zOffset)
+                               a, ctrlPt, b, ad.avgAx,
+                               ad.simReversed, ad.savedTransforms, ad.sequence)
     }
     xo.beadsMesh.instanceMatrix.needsUpdate = true
     xo.slabsMesh.instanceMatrix.needsUpdate = true
+    if (xo.slabConnMesh) {
+      for (const ad of xo.arcData ?? []) {
+        setExtraBaseSlabConnectors(
+          xo.beadsMesh, xo.slabsMesh, xo.slabConnMesh,
+          ad.beadStartIdx, ad.beadCount, null,
+        )
+      }
+      xo.slabConnMesh.instanceMatrix.needsUpdate = true
+    }
     _threadConnectors(ctrl, xo)
   }
 
@@ -332,6 +344,7 @@ export function initOccupancyOverlay({
       if (level === CG_LOD.cylinders) {
         xo.beadsMesh.visible = xo.slabsMesh.visible = false
         if (xo.connMesh) xo.connMesh.visible = false
+        if (xo.slabConnMesh) xo.slabConnMesh.visible = false
       }
     }
 

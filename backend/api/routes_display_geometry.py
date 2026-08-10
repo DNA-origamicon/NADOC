@@ -60,7 +60,8 @@ def _flexible_display_override(design):
 
 @router.get("/design/atomistic")
 def get_atomistic(
-    seed_lattice_nm: str | None = None, measured_positioning: bool = True
+    seed_lattice_nm: str | None = None,
+    measured_positioning: bool = True,
 ) -> dict:
     """
     Return the heavy-atom all-atom model for the atomistic Three.js renderer.

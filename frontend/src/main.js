@@ -5219,7 +5219,6 @@ async function main() {
     store, scene, camera, canvas, controls, designRenderer, atomisticRenderer,
     moveRotatePanel: _moveRotatePanel,
     refreshCurrentSelection: _mrRefreshCurrentSelection,
-    refreshAtomistic: _restoreDesignHeavy,
   })
 
   const _translateRotateTool = initTranslateRotateTool({
@@ -7484,6 +7483,46 @@ async function main() {
       },
       getAtomisticRenderer: () => atomisticRenderer,
       isCGVisible: () => !!(designRenderer.getHelixCtrl()?.root?.visible),
+      /** Live rendered crossover-insert geometry for Full/atomistic registration probes.
+       * Reads InstancedMesh matrices on both sides; source placement/API coordinates are
+       * deliberately not consulted. */
+      getRenderedXoverExtraGeometry() {
+        const out = {}
+        const atomsByKey = new Map()
+        atomisticRenderer.visitAtoms((atom, pos) => {
+          if (atom.crossover_id == null || atom.extra_base_k == null) return
+          const key = `${atom.crossover_id}:${atom.extra_base_k}`
+          if (!atomsByKey.has(key)) atomsByKey.set(key, [])
+          atomsByKey.get(key).push({ name: atom.name, element: atom.element, pos: pos.toArray() })
+        })
+        for (const entry of designRenderer.getXoverBeadEntries?.() ?? []) {
+          const target = { helix_id: '__xb__', crossover_id: entry.xoId, k: entry.simK }
+          const info = designRenderer.xoverResidueInfo?.(target)
+          if (!info) continue
+          const bead = new THREE.Vector3(), slab = new THREE.Vector3()
+          const slabQ = new THREE.Quaternion(), slabScale = new THREE.Vector3()
+          const connector = new THREE.Vector3(), connectorQ = new THREE.Quaternion()
+          const connectorScale = new THREE.Vector3()
+          info.beadMatrix.decompose(bead, new THREE.Quaternion(), new THREE.Vector3())
+          info.slabMatrix.decompose(slab, slabQ, slabScale)
+          info.slabConnectorMatrix?.decompose(connector, connectorQ, connectorScale)
+          const key = `${entry.xoId}:${entry.simK}`
+          out[key] = {
+            crossoverId: entry.xoId, k: entry.simK,
+            bead: bead.toArray(), slab: slab.toArray(),
+            pointA: info.arcData?.pointA?.toArray() ?? null,
+            pointB: info.arcData?.pointB?.toArray() ?? null,
+            axisA: info.arcData?.nucA?.axis_tangent ?? null,
+            axisB: info.arcData?.nucB?.axis_tangent ?? null,
+            slabQuaternion: slabQ.toArray(), slabScale: slabScale.toArray(),
+            slabConnector: info.slabConnectorMatrix ? connector.toArray() : null,
+            slabConnectorQuaternion: info.slabConnectorMatrix ? connectorQ.toArray() : null,
+            slabConnectorScale: info.slabConnectorMatrix ? connectorScale.toArray() : null,
+            atoms: atomsByKey.get(key) ?? [],
+          }
+        }
+        return out
+      },
       /** Return cone entries (crossover connections) with screen {x, y} midpoints. */
       getConeScreenPositions() {
         const rect = canvas.getBoundingClientRect()

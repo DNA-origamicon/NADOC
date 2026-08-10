@@ -104,7 +104,9 @@ def build_atomistic_model_cached(
                 return _cache[key]
 
         model = build_atomistic_model(
-            design, fast_bridges=fast_bridges, measured_positioning=measured_positioning
+            design,
+            fast_bridges=fast_bridges,
+            measured_positioning=measured_positioning,
         )
 
         with _registry_lock:

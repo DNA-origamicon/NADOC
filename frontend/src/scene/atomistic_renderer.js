@@ -9,12 +9,12 @@
  *   'ballstick' — Ball-and-stick: small sphere (0.07 nm) + bond cylinders.
  *
  * Selection highlighting (mirrors the coarse-grained bead model):
- *   strand     — all atoms on the selected strand → white; others → dimmed CPK
+ *   strand     — all atoms on the selected strand → white; others stay unchanged
  *   domain     — atoms on matching helix+direction within the strand → white;
  *                rest of strand → 40% CPK; other strands → 15% CPK
  *   nucleotide — atoms at the selected bp → white; same domain → 55% CPK;
  *                rest of strand → 30% CPK; others → 15% CPK
- *   multi-lasso — atoms in any selected strand_id → white; others → dimmed CPK
+ *   multi-lasso — atoms in any selected strand_id → white; others stay unchanged
  *   (no selection) — all atoms at full CPK colour
  *
  * Sphere impostors (Phase C, 2026-07-30): when `impostorsEnabled()` each atom
@@ -440,6 +440,49 @@ export function initAtomisticRenderer(scene) {
         }
       }
       return null
+    },
+
+    /**
+     * Visit every currently rendered atom at its actual, live instance position.
+     * The position object is scratch storage and must not escape the callback.
+     * Selection/lasso uses this instead of the source atom coordinates because
+     * unfold, relaxation, and live transforms can move instance matrices.
+     */
+    visitAtoms(visitor) {
+      if (typeof visitor !== 'function' || _state.mode === 'off') return
+      const pos = new THREE.Vector3()
+      const mat = new THREE.Matrix4()
+      for (const [el, group] of Object.entries(_state.elementAtoms)) {
+        const mesh = _state.elementMeshes[el]
+        if (!mesh?.visible) continue
+        for (let i = 0; i < group.length; i++) {
+          mesh.getMatrixAt(i, mat)
+          pos.setFromMatrixPosition(mat)
+          visitor(_state.atoms.get(group[i]), pos)
+        }
+      }
+    },
+
+    /** Build live glow entries for all atoms belonging to the supplied nucleotides. */
+    selectionAtomEntries(nucs, { scale = 1.35 } = {}) {
+      if (_state.mode === 'off' || !nucs?.length) return []
+      const keys = new Set()
+      const xbaseKeys = new Set()
+      for (const n of nucs) {
+        if (n.helix_id === '__xb__') xbaseKeys.add(`${n.crossover_id}:${n.k}`)
+        else keys.add(`${n.helix_id}:${n.bp_index}:${n.direction}:${Number(n.copy_k ?? n.copy ?? 0)}`)
+      }
+      const out = []
+      const table = _state.atoms
+      for (const [el, group] of Object.entries(_state.elementAtoms)) {
+        for (let i = 0; i < group.length; i++) {
+          const a = table.get(group[i])
+          const key = `${a.helix_id}:${a.bp_index}:${a.direction}:${Number(a.copy_k ?? 0)}`
+          const xbKey = `${a.crossover_id}:${a.extra_base_k}`
+          if (keys.has(key) || xbaseKeys.has(xbKey)) out.push(_atomGlowEntry(el, i, scale))
+        }
+      }
+      return out
     },
 
     /** Atom rows + centroid for one base_ref target, or null when it is absent. */

@@ -411,4 +411,34 @@ describe('initAtomSurfaceDisplay', () => {
     await Promise.resolve()
     expect(global.fetch.mock.calls.length).toBeGreaterThanOrEqual(2)
   })
+
+  it('discards a pre-edit atom response that finishes after the post-edit model', async () => {
+    mountIds(DOM)
+    const pending = []
+    global.fetch = vi.fn(() => new Promise(resolve => pending.push(resolve)))
+    const store = createMockStore({ currentDesign: { revision: 1 }, currentGeometry: null })
+    const deps = makeDeps({ store })
+    const api = initAtomSurfaceDisplay(deps)
+
+    const oldApply = api.applyAtomisticMode('ballstick')
+    await vi.waitFor(() => expect(pending).toHaveLength(1))
+
+    // Committing a nucleotide pose replaces currentDesign and starts the authoritative
+    // post-edit build while the pre-edit request is still in flight.
+    deps.atomisticRenderer._setMode('ballstick')
+    store.setState({ currentDesign: { revision: 2 } })
+    await vi.waitFor(() => expect(pending).toHaveLength(2))
+
+    pending[1]({ ok: true, json: async () => ({ revision: 2, atoms: [], bonds: [] }) })
+    await vi.waitFor(() => expect(deps.atomisticRenderer.update).toHaveBeenCalledTimes(1))
+    expect(deps.atomisticRenderer.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({ revision: 2 }),
+    )
+
+    // The old build arrives last. It must not repaint or enter the cache.
+    pending[0]({ ok: true, json: async () => ({ revision: 1, atoms: [], bonds: [] }) })
+    await oldApply
+    await Promise.resolve()
+    expect(deps.atomisticRenderer.update).toHaveBeenCalledTimes(1)
+  })
 })

@@ -14,7 +14,8 @@
 import * as THREE from 'three'
 import { buildHelixObjects, buildStapleColorMap } from './helix_renderer.js'
 import { resolveRepOverrides } from './representation_overrides.js'
-import { buildCrossoverConnections, bezierAt, arcControlPoint, updateExtraBaseInstances, setExtraBaseInstanceFromSim, simBeadIndex, partitionExtraBaseUpdates, setExtraBaseConnectors, hideExtraBaseConnectors, extraBaseConnectorScalarColors } from './crossover_connections.js'
+import { buildCrossoverConnections, updateExtraBaseInstances, setExtraBaseInstanceFromSim, simBeadIndex, partitionExtraBaseUpdates, setExtraBaseConnectors, setExtraBaseSlabConnectors, hideExtraBaseConnectors, extraBaseConnectorScalarColors } from './crossover_connections.js'
+import { buildCrossoverExtraPlacements, crossoverControlPoint as arcControlPoint } from './crossover_extra_placement.js'
 import { auditRenderedBonds, inventoryRenderedElements } from './render_bond_audit.js'
 import { createGlowLayer, createMultiColorGlowLayer } from './glow_layer.js'
 import { clusterAlphaForNuc, clusterAlphaKeys, clusterDisplaySignature } from './cluster_entries.js'
@@ -45,6 +46,7 @@ export function initDesignRenderer(scene, storeRef) {
   let _xoverBeadsMesh   = null   // InstancedMesh for extra-base beads
   let _xoverSlabsMesh   = null   // InstancedMesh for extra-base slabs
   let _xoverConnMesh    = null   // InstancedMesh for extra-base backbone connector cones
+  let _xoverSlabConnMesh = null  // InstancedMesh for extra-base bead→slab rods
   let _xoverArcDataMap  = null   // Map<xoId, arcDataEntry> for O(1) lookup during animation
   let _xoverGlowLive    = []     // {pos: THREE.Vector3, arcData, localIdx} — live positions for selection glow
   // Extra-base inserts driven by a simulation frame (oxDNA/MD relaxed or trajectory):
@@ -66,7 +68,8 @@ export function initDesignRenderer(scene, storeRef) {
   // subscription ignores live-design changes; clearExternalGeometry() restores the live
   // model.  Purely a display swap — the active design in the store is never mutated.
   let _externalActive   = false
-  const _glowLayer         = createGlowLayer(scene)
+  // Selection halo: 2.1 is 25% smaller than the original 2.8× bead radius.
+  const _glowLayer         = createGlowLayer(scene, 0x3fb950, 2.1)
   // Undefined-bases highlight: red, ~2× the selection glow size
   const _undefinedGlowLayer = createGlowLayer(scene, 0xff3030, 5.6)
   // oxDNA anchor highlight: purple, distinct from the green selection glow — marks the
@@ -247,6 +250,7 @@ export function initDesignRenderer(scene, storeRef) {
         const idx = ad.beadStartIdx + i
         _xoverBeadsMesh.setColorAt(idx, _col.setHex(bc))
         _xoverSlabsMesh.setColorAt(idx, _col.setHex(sc))
+        _xoverSlabConnMesh?.setColorAt(idx, _col.setHex(sc))
       }
       if (_xoverConnMesh) {
         for (let s = 0; s < ad.beadCount + 1; s++) {
@@ -257,6 +261,7 @@ export function initDesignRenderer(scene, storeRef) {
     if (_xoverBeadsMesh.instanceColor) _xoverBeadsMesh.instanceColor.needsUpdate = true
     if (_xoverSlabsMesh.instanceColor) _xoverSlabsMesh.instanceColor.needsUpdate = true
     if (_xoverConnMesh?.instanceColor) _xoverConnMesh.instanceColor.needsUpdate = true
+    if (_xoverSlabConnMesh?.instanceColor) _xoverSlabConnMesh.instanceColor.needsUpdate = true
   }
 
   /**
@@ -281,6 +286,7 @@ export function initDesignRenderer(scene, storeRef) {
         const idx = ad.beadStartIdx + simBeadIndex(k, ad.beadCount, ad.simReversed)
         _xoverBeadsMesh.setColorAt(idx, _col.setHex(hex))
         _xoverSlabsMesh.setColorAt(idx, _col.setHex(hex))
+        _xoverSlabConnMesh?.setColorAt(idx, _col.setHex(hex))
         dirty = true
       }
       // The backbone bond cones live in their OWN InstancedMesh, so they need the
@@ -298,6 +304,7 @@ export function initDesignRenderer(scene, storeRef) {
       if (_xoverBeadsMesh.instanceColor) _xoverBeadsMesh.instanceColor.needsUpdate = true
       if (_xoverSlabsMesh.instanceColor) _xoverSlabsMesh.instanceColor.needsUpdate = true
       if (_xoverConnMesh?.instanceColor) _xoverConnMesh.instanceColor.needsUpdate = true
+      if (_xoverSlabConnMesh?.instanceColor) _xoverSlabConnMesh.instanceColor.needsUpdate = true
     }
   }
 
@@ -311,6 +318,7 @@ export function initDesignRenderer(scene, storeRef) {
         const idx = ad.beadStartIdx + k
         _xoverBeadsMesh.setColorAt(idx, _col.setHex(ad.beadBaseColor))
         _xoverSlabsMesh.setColorAt(idx, _col.setHex(ad.slabBaseColor))
+        _xoverSlabConnMesh?.setColorAt(idx, _col.setHex(ad.slabBaseColor))
       }
       // Cones too — _applyExtraBaseScalarColors recoloured them, so leaving them out
       // here would strand them in viridis after the flex map is switched off.
@@ -323,6 +331,7 @@ export function initDesignRenderer(scene, storeRef) {
     if (_xoverBeadsMesh.instanceColor) _xoverBeadsMesh.instanceColor.needsUpdate = true
     if (_xoverSlabsMesh.instanceColor) _xoverSlabsMesh.instanceColor.needsUpdate = true
     if (_xoverConnMesh?.instanceColor) _xoverConnMesh.instanceColor.needsUpdate = true
+    if (_xoverSlabConnMesh?.instanceColor) _xoverSlabConnMesh.instanceColor.needsUpdate = true
   }
 
   /** Crossover extra-base beads/slabs are children of root, NOT part of the helix
@@ -335,6 +344,7 @@ export function initDesignRenderer(scene, storeRef) {
     if (_xoverBeadsMesh) _xoverBeadsMesh.visible = show
     if (_xoverSlabsMesh) _xoverSlabsMesh.visible = show
     if (_xoverConnMesh)  _xoverConnMesh.visible  = show
+    if (_xoverSlabConnMesh) _xoverSlabConnMesh.visible = show
   }
 
   /**
@@ -356,6 +366,7 @@ export function initDesignRenderer(scene, storeRef) {
     installInstanceAlpha(_xoverBeadsMesh)
     installInstanceAlpha(_xoverSlabsMesh)
     if (_xoverConnMesh) installInstanceAlpha(_xoverConnMesh)
+    if (_xoverSlabConnMesh) installInstanceAlpha(_xoverSlabConnMesh)
     for (const ad of _xoverArcData) {
       const a = _clusterAlphaKeys.size
         ? Math.min(clusterAlphaForNuc(_clusterAlphaKeys, ad.nucA),
@@ -364,6 +375,7 @@ export function initDesignRenderer(scene, storeRef) {
       for (let i = 0; i < ad.beadCount; i++) {
         setInstanceAlpha(_xoverBeadsMesh, ad.beadStartIdx + i, a)
         setInstanceAlpha(_xoverSlabsMesh, ad.beadStartIdx + i, a)
+        if (_xoverSlabConnMesh) setInstanceAlpha(_xoverSlabConnMesh, ad.beadStartIdx + i, a)
       }
       if (_xoverConnMesh) {
         for (let s = 0; s < ad.beadCount + 1; s++) {
@@ -437,7 +449,8 @@ export function initDesignRenderer(scene, storeRef) {
         updateExtraBaseInstances(
           _xoverBeadsMesh, _xoverSlabsMesh,
           ad.beadStartIdx, ad.beadCount,
-          posA, _clusterXoverCtrl, posB, ad.avgAx, ad.zOffset,
+          posA, _clusterXoverCtrl, posB, ad.avgAx,
+          ad.simReversed, ad.savedTransforms, ad.sequence,
         )
         dirty = true
       }
@@ -479,11 +492,11 @@ export function initDesignRenderer(scene, storeRef) {
    *  Derived from the already-correct beads, so it is mode-agnostic (sim / Bezier /
    *  cluster). Hidden arcs get zero-scale cones. */
   function _syncExtraBaseConnectors() {
-    if (!_xoverConnMesh || !_xoverArcData || !_xoverBeadsMesh) return
+    if (!_xoverArcData || !_xoverBeadsMesh) return
     const design = storeRef.getState().currentDesign
     const refIds = new Set((design?.strands ?? []).filter(s => s.is_reference).map(s => s.id))
     const refHidden = storeRef.getState().showReferenceGeometry === false
-    for (const ad of _xoverArcData) {
+    if (_xoverConnMesh) for (const ad of _xoverArcData) {
       const segCount = ad.beadCount + 1
       if (_xoverArcHidden(ad, refIds, refHidden)) {
         hideExtraBaseConnectors(_xoverConnMesh, ad.connStartIdx, segCount)
@@ -500,7 +513,16 @@ export function initDesignRenderer(scene, storeRef) {
       _connPoint(ad.beadCount + 1).copy(posB)
       setExtraBaseConnectors(_xoverConnMesh, ad.connStartIdx, _connPts, segCount, null)
     }
-    _xoverConnMesh.instanceMatrix.needsUpdate = true
+    if (_xoverConnMesh) _xoverConnMesh.instanceMatrix.needsUpdate = true
+    if (_xoverSlabConnMesh && _xoverSlabsMesh) {
+      for (const ad of _xoverArcData) {
+        setExtraBaseSlabConnectors(
+          _xoverBeadsMesh, _xoverSlabsMesh, _xoverSlabConnMesh,
+          ad.beadStartIdx, ad.beadCount, null,
+        )
+      }
+      _xoverSlabConnMesh.instanceMatrix.needsUpdate = true
+    }
   }
 
   /**
@@ -585,6 +607,7 @@ export function initDesignRenderer(scene, storeRef) {
     _xoverBeadsMesh  = null
     _xoverSlabsMesh  = null
     _xoverConnMesh   = null
+    _xoverSlabConnMesh = null
     _xoverArcDataMap = null
     _xoverGlowLive   = []
     _simXbByCrossover = null   // drop stale simulation-driven insert positions
@@ -618,6 +641,7 @@ export function initDesignRenderer(scene, storeRef) {
       _xoverBeadsMesh  = xoverResult.beadsMesh
       _xoverSlabsMesh  = xoverResult.slabsMesh
       _xoverConnMesh   = xoverResult.connMesh
+      _xoverSlabConnMesh = xoverResult.slabConnMesh
       _xoverArcDataMap = new Map()
       for (const ad of _xoverArcData) _xoverArcDataMap.set(ad.xoId, ad)
       // Extra-base beads+slabs are children of root — no separate scene.add() needed.
@@ -1409,8 +1433,19 @@ export function initDesignRenderer(scene, storeRef) {
       const beadMatrix = new THREE.Matrix4(), slabMatrix = new THREE.Matrix4()
       _xoverBeadsMesh.getMatrixAt(entry.id, beadMatrix)
       _xoverSlabsMesh.getMatrixAt(entry.id, slabMatrix)
+      const slabConnectorMatrix = _xoverSlabConnMesh ? new THREE.Matrix4() : null
+      if (slabConnectorMatrix) _xoverSlabConnMesh.getMatrixAt(entry.id, slabConnectorMatrix)
+      const arcData = _xoverArcDataMap?.get(entry.xoId) ?? null
+      const beadMatrices = []
+      if (arcData) {
+        for (let i = 0; i < arcData.beadCount; i++) {
+          const m = new THREE.Matrix4()
+          _xoverBeadsMesh.getMatrixAt(arcData.beadStartIdx + i, m)
+          beadMatrices.push(m)
+        }
+      }
       return {
-        entry, beadMatrix, slabMatrix,
+        entry, beadMatrix, slabMatrix, slabConnectorMatrix, arcData, beadMatrices,
         centroid: new THREE.Vector3().setFromMatrixPosition(beadMatrix),
       }
     },
@@ -1420,6 +1455,28 @@ export function initDesignRenderer(scene, storeRef) {
       if (!info?.entry || !_xoverBeadsMesh || !_xoverSlabsMesh) return false
       _xoverBeadsMesh.setMatrixAt(info.entry.id, matrix.clone().multiply(info.beadMatrix))
       _xoverSlabsMesh.setMatrixAt(info.entry.id, matrix.clone().multiply(info.slabMatrix))
+      if (info.arcData && _xoverConnMesh) {
+        const points = [info.arcData.pointA.clone()]
+        const m = new THREE.Matrix4()
+        for (let i = 0; i < info.beadMatrices.length; i++) {
+          m.copy(info.beadMatrices[i])
+          if (i === info.entry.i) m.premultiply(matrix)
+          points.push(new THREE.Vector3().setFromMatrixPosition(m))
+        }
+        points.push(info.arcData.pointB.clone())
+        setExtraBaseConnectors(
+          _xoverConnMesh, info.arcData.connStartIdx, points,
+          info.arcData.beadCount + 1, null,
+        )
+        _xoverConnMesh.instanceMatrix.needsUpdate = true
+      }
+      if (_xoverSlabConnMesh) {
+        setExtraBaseSlabConnectors(
+          _xoverBeadsMesh, _xoverSlabsMesh, _xoverSlabConnMesh,
+          info.entry.id, 1, null,
+        )
+        _xoverSlabConnMesh.instanceMatrix.needsUpdate = true
+      }
       _xoverBeadsMesh.instanceMatrix.needsUpdate = true
       _xoverSlabsMesh.instanceMatrix.needsUpdate = true
       return true
@@ -1641,11 +1698,17 @@ export function initDesignRenderer(scene, storeRef) {
         updateExtraBaseInstances(
           _xoverBeadsMesh, _xoverSlabsMesh,
           ad.beadStartIdx, ad.beadCount,
-          posA, _clusterXoverCtrl, posB, ad.avgAx, ad.zOffset,
+          posA, _clusterXoverCtrl, posB, ad.avgAx,
+          ad.simReversed, ad.savedTransforms, ad.sequence,
         )
+        const placements = buildCrossoverExtraPlacements({
+          xoId: ad.xoId, count: ad.beadCount, pointA: posA,
+          control: _clusterXoverCtrl, pointB: posB, helixAxis: ad.avgAx,
+          sequence: ad.sequence, simReversed: ad.simReversed,
+          savedTransforms: ad.savedTransforms,
+        })
         for (const g of _xoverGlowLive) {
-          if (g.arcData !== ad) continue
-          bezierAt(posA, _clusterXoverCtrl, posB, (g.localIdx + 1) / (ad.beadCount + 1), g.pos)
+          if (g.arcData === ad) g.pos.copy(placements[g.localIdx].center)
         }
         dirty = true
       }
@@ -1656,11 +1719,24 @@ export function initDesignRenderer(scene, storeRef) {
      * Reposition extra-base beads+slabs for a single crossover arc.
      * Called per-arc per-frame by unfold_view animation loops.
      */
-    updateExtraBaseArc(crossoverId, posA, ctrl, posB) {
+    updateExtraBaseArc(crossoverId, posA, _lineControl, posB) {
       if (!_xoverArcDataMap || !_xoverBeadsMesh || !_xoverSlabsMesh) return
       if (_hiddenCrossoverIds.has(crossoverId)) return
       const ad = _xoverArcDataMap.get(crossoverId)
       if (!ad) return
+      // Arc lines are emitted in strand traversal order, which is B→A for half of
+      // crossovers. Placement identity is always geometric half_a→half_b. Normalize
+      // the two live points before they enter the residue placement core.
+      const direct = posA.distanceToSquared(ad.pointA) + posB.distanceToSquared(ad.pointB)
+      const swapped = posA.distanceToSquared(ad.pointB) + posB.distanceToSquared(ad.pointA)
+      const liveA = swapped < direct ? posB : posA
+      const liveB = swapped < direct ? posA : posB
+      ad.pointA.copy(liveA)
+      ad.pointB.copy(liveB)
+      // Regular crossover lines have their own view-animation control point (historically
+      // a global-Z bow). It is not a residue placement input. Recompute the canonical
+      // insert control from the live endpoints so no caller can re-place extra bases.
+      arcControlPoint(liveA, liveB, ad.nucA, ad.nucB, _clusterXoverCtrl)
       // Simulation overlay active: pin the extra-base beads to their REAL relaxed
       // positions, NOT this arc's (native/geometric) Bezier.  Without this, any arc-layout
       // pass that drives a native Bezier — refreshArcVisibility on a rep switch, unfold,
@@ -1683,13 +1759,17 @@ export function initDesignRenderer(scene, storeRef) {
       updateExtraBaseInstances(
         _xoverBeadsMesh, _xoverSlabsMesh,
         ad.beadStartIdx, ad.beadCount,
-        posA, ctrl, posB, ad.avgAx, ad.zOffset,
+        liveA, _clusterXoverCtrl, liveB, ad.avgAx,
+        ad.simReversed, ad.savedTransforms, ad.sequence,
       )
-      // Keep selection glow live-positions in sync with the bead positions.
-      // bezierAt uses t = i/(n+1), which is identical to updateExtraBaseInstances.
+      // Keep selection glow positions on the exact same placement records as the meshes.
+      const placements = buildCrossoverExtraPlacements({
+        xoId: ad.xoId, count: ad.beadCount, pointA: liveA, control: _clusterXoverCtrl,
+        pointB: liveB, helixAxis: ad.avgAx, simReversed: ad.simReversed,
+        sequence: ad.sequence, savedTransforms: ad.savedTransforms,
+      })
       for (const g of _xoverGlowLive) {
-        if (g.arcData !== ad) continue
-        bezierAt(posA, ctrl, posB, (g.localIdx + 1) / (ad.beadCount + 1), g.pos)
+        if (g.arcData === ad) g.pos.copy(placements[g.localIdx].center)
       }
     },
 

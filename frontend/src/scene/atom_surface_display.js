@@ -77,6 +77,14 @@ export function initAtomSurfaceDisplay({
   let _surfaceMode        = 'off'  // mirrors store.surfaceMode
   let _overlayMode        = false  // full CG + global ball-and-stick together
   let _atomDataCache  = null
+  // Atom builds are expensive and design edits can overlap them. A generation makes
+  // every response conditional on still belonging to the current design; the shared
+  // promise coalesces all consumers (global + mixed-region renderers) within one
+  // generation. Without this, an older pre-transform response could repaint after the
+  // committed post-transform model and start an apparent old/new position loop.
+  let _atomLoadGeneration = 0
+  let _atomLoadPromise = null
+  let _atomToastToken = 0
   let _regionSurfaceSig   = null
   let _regionSurfaceTimer = null
 
@@ -266,13 +274,18 @@ export function initAtomSurfaceDisplay({
     atomisticRenderer.setVdwScale(scale)
   })
 
+  function _invalidateAtomData() {
+    _atomDataCache = null
+    _atomLoadGeneration++
+    _atomLoadPromise = null
+  }
+
   async function _refetchAtomistic() {
     if (atomisticRenderer.getMode() === 'off') return
     try {
-      const resp = await fetch(_atomisticUrl(), { headers: docHeaders() })
-      if (!resp.ok) { console.error('Atomistic refetch failed:', resp.status); return }
-      _atomDataCache = await resp.json()
-      atomisticRenderer.update(_atomDataCache)
+      const data = await _ensureAtomData()
+      if (!data) return
+      atomisticRenderer.update(data)
       _refreshAtomColors()
       const { selectedObject, multiSelectedStrandIds } = store.getState()
       atomisticRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
@@ -443,7 +456,7 @@ export function initAtomSurfaceDisplay({
     const next = latticeNm ?? null
     if (next === _seedLatticeNm) return
     _seedLatticeNm = next
-    _atomDataCache = null           // different build → different atoms
+    _invalidateAtomData()           // different build → different atoms
     if (atomisticRenderer.getMode() === 'off') return
     showPersistentToast(next === null ? 'Loading atomistic model…'
                                       : 'Building MD seed coordinates…')
@@ -458,10 +471,23 @@ export function initAtomSurfaceDisplay({
   // and the per-region atomistic overlays.
   async function _ensureAtomData() {
     if (_atomDataCache) return _atomDataCache
-    const resp = await fetch(_atomisticUrl(), { headers: docHeaders() })
-    if (!resp.ok) { console.error('Atomistic fetch failed:', resp.status); return null }
-    _atomDataCache = await resp.json()
-    return _atomDataCache
+    if (_atomLoadPromise) return _atomLoadPromise
+    const generation = _atomLoadGeneration
+    let loadPromise
+    loadPromise = (async () => {
+      const resp = await fetch(_atomisticUrl(), { headers: docHeaders() })
+      if (!resp.ok) { console.error('Atomistic fetch failed:', resp.status); return null }
+      const data = await resp.json()
+      // A newer design/positioning mode invalidated this request while it was in flight.
+      // Never cache it and, crucially, never hand it to a renderer caller.
+      if (generation !== _atomLoadGeneration) return null
+      _atomDataCache = data
+      return data
+    })().finally(() => {
+      if (_atomLoadPromise === loadPromise) _atomLoadPromise = null
+    })
+    _atomLoadPromise = loadPromise
+    return loadPromise
   }
 
   async function _applyAtomisticMode(mode) {
@@ -483,6 +509,7 @@ export function initAtomSurfaceDisplay({
     if (mode !== 'off') _refreshAtomColors()
     if (_deferToOverlay) return
     if (mode !== 'off' && !_atomDataCache) {
+      const toastToken = ++_atomToastToken
       showPersistentToast('Loading atomistic model…')
       try {
         const data = await _ensureAtomData()
@@ -495,7 +522,9 @@ export function initAtomSurfaceDisplay({
       } catch (e) {
         console.error('Atomistic fetch error:', e)
       } finally {
-        dismissToast()
+        // An invalidation may have started a newer load with its own toast. The older
+        // request must not dismiss that newer owner's progress indicator.
+        if (toastToken === _atomToastToken) dismissToast()
       }
     }
   }
@@ -541,7 +570,7 @@ export function initAtomSurfaceDisplay({
     const designChanged   = newState.currentDesign   !== prevState.currentDesign
     const geometryChanged = newState.currentGeometry !== prevState.currentGeometry ||
                             newState.currentHelixAxes !== prevState.currentHelixAxes
-    if (designChanged) _atomDataCache = null
+    if (designChanged) _invalidateAtomData()
     if ((designChanged || geometryChanged) && atomisticRenderer.getMode() !== 'off') {
       // The renderer just created a fresh root with visible=true — re-hide it.
       _setCGVisible(false)
@@ -663,7 +692,7 @@ export function initAtomSurfaceDisplay({
     // sidebar's probe radius + colour mode instead of the backend defaults).
     getSurfaceParams: () => ({ probe_radius: _surfaceProbeRadius, detail: _surfaceDetail,
                                color_mode: store.getState().surfaceColorMode ?? 'strand' }),
-    invalidateAtomCache: () => { _atomDataCache = null },
+    invalidateAtomCache: _invalidateAtomData,
     invalidateSurfaceCache: () => { _surfaceDataCache = null },
   }
 }

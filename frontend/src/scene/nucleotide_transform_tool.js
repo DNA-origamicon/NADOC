@@ -50,7 +50,7 @@ export function abstractPreviewUpdate(info, matrix) {
   }
 }
 
-export function initNucleotideTransformTool({ store, scene, camera, canvas, controls, designRenderer, atomisticRenderer, moveRotatePanel, refreshCurrentSelection, refreshAtomistic }) {
+export function initNucleotideTransformTool({ store, scene, camera, canvas, controls, designRenderer, atomisticRenderer, moveRotatePanel, refreshCurrentSelection }) {
   let tc = null
   let helper = null
   let dummy = null
@@ -128,10 +128,27 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
     const body = transformBodyForTarget(target, pivot, translation, dummy.quaternion,
       previewKind === 'abstract' ? abstractInfo : null)
     const committedPreviewKind = previewKind
-    restorePreview()
+    const committedTarget = target
+    const committedAbstractInfo = abstractInfo
+    // Keep the post-drag matrices on screen while the mutation and atom build run.
+    // Restoring the preview here produced an avoidable old-position flash; moreover,
+    // the design-response subscriber already owns the one required atomistic refresh.
     detach(false)
-    await putNucleotideTransform(body)
-    if (committedPreviewKind === 'atomistic') await refreshAtomistic?.()
+    try {
+      const result = await putNucleotideTransform(body)
+      if (result) return
+    } catch (error) {
+      console.error('Nucleotide transform commit failed:', error)
+    }
+    // Persistence failed, so roll the optimistic matrices back to their source pose.
+    if (committedPreviewKind === 'atomistic') {
+      atomisticRenderer.applyResidueMatrix(committedTarget, identity())
+    } else if (committedTarget?.helix_id === '__xb__') {
+      designRenderer.applyXoverResidueMatrix?.(committedAbstractInfo, identity())
+    } else {
+      designRenderer.applyResidueTransformMatrix?.(committedAbstractInfo, identity())
+    }
+    showToast('Could not save the nucleotide move.', { severity: 'error' })
   }
 
   function cancel() {

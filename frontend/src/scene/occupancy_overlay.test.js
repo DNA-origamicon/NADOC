@@ -44,7 +44,7 @@ vi.mock('./crossover_connections.js', () => ({
       arcData: design.crossovers.map((c, i) => ({
         xoId: c.id, nucA: { helix_id: 'h0' }, nucB: { helix_id: 'h1' },
         beadStartIdx: i * 2, beadCount: 2, connStartIdx: i * 3,
-        avgAx: new THREE.Vector3(0, 1, 0), simReversed: false, zOffset: 0,
+        avgAx: new THREE.Vector3(0, 1, 0), simReversed: false,
       })),
       beadsMesh: mesh(), slabsMesh: mesh(), connMesh: mesh(),
     }
@@ -67,7 +67,6 @@ vi.mock('./crossover_connections.js', () => ({
   setExtraBaseConnectors: vi.fn(),
   updateExtraBaseInstances: vi.fn(),
   simBeadIndex: vi.fn((k) => k),
-  arcControlPoint: vi.fn(),
 }))
 
 const { CG_LOD, buildHelixObjects } = await import('./helix_renderer.js')

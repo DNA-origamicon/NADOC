@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import * as THREE from 'three'
-import { partitionExtraBaseUpdates, setExtraBaseConnectors, hideExtraBaseConnectors, extraBaseConnectorScalarColors, domainEndKeys, extraBaseOrderReversed, simBeadIndex, simSlabQuaternion, setExtraBaseInstanceFromSim, SLAB_OFFSET, SLAB_LENGTH, SLAB_WIDTH, SLAB_THICK, CONN_RADIUS } from './crossover_connections.js'
+import { buildCrossoverConnections, updateExtraBaseInstances, partitionExtraBaseUpdates, setExtraBaseConnectors, setExtraBaseSlabConnectors, hideExtraBaseConnectors, extraBaseConnectorScalarColors, domainEndKeys, extraBaseOrderReversed, simBeadIndex, simSlabQuaternion, setExtraBaseInstanceFromSim, SLAB_OFFSET, SLAB_LENGTH, SLAB_WIDTH, SLAB_THICK, CONN_RADIUS } from './crossover_connections.js'
+import { SLAB_CONNECTOR_RADIUS } from './helix_renderer.js'
 
 function mockMesh(n) {
   const mats = Array.from({ length: n }, () => new THREE.Matrix4())
@@ -19,6 +20,51 @@ function decompose(mesh, i) {
   mesh._mats[i].decompose(pos, quat, scl)
   return { pos, quat, scl }
 }
+
+describe('saved crossover-extra transforms', () => {
+  it('applies translation once to both bead and slab', () => {
+    const xo = {
+      id: 'xo1', extra_bases: 'T',
+      half_a: { helix_id: 'a', index: 0, strand: 'FORWARD' },
+      half_b: { helix_id: 'b', index: 0, strand: 'REVERSE' },
+    }
+    const design = {
+      lattice_type: 'HONEYCOMB', crossovers: [xo], forced_ligations: [],
+      strands: [{ id: 's', strand_type: 'staple', domains: [
+        { helix_id: 'a', start_bp: 0, end_bp: 0, direction: 'FORWARD' },
+        { helix_id: 'b', start_bp: 0, end_bp: 0, direction: 'REVERSE' },
+      ] }],
+      nucleotide_transforms: [{ kind: 'extra_base', crossover_id: 'xo1', extra_base_k: 0,
+        pivot: [0, 0, 0], translation: [4, 0, 0], rotation: [0, 0, 0, 1] }],
+    }
+    const geometry = [
+      { helix_id: 'a', bp_index: 0, direction: 'FORWARD', strand_id: 's', strand_type: 'staple',
+        backbone_position: [0, 0, 0], axis_tangent: [0, 0, 1], base_normal: [1, 0, 0] },
+      { helix_id: 'b', bp_index: 0, direction: 'REVERSE', strand_id: 's', strand_type: 'staple',
+        backbone_position: [2, 0, 0], axis_tangent: [0, 0, 1], base_normal: [-1, 0, 0] },
+    ]
+    const result = buildCrossoverConnections(design, geometry, new Map(), {})
+    const bm = new THREE.Matrix4(), sm = new THREE.Matrix4()
+    result.beadsMesh.getMatrixAt(0, bm); result.slabsMesh.getMatrixAt(0, sm)
+    const bead = new THREE.Vector3().setFromMatrixPosition(bm)
+    const slab = new THREE.Vector3().setFromMatrixPosition(sm)
+    expect(bead.x).toBeCloseTo(5)
+    expect(slab.x).toBeCloseTo(5.0467889) // atom-template base centroid + saved +4 once
+  })
+
+  it('keeps the saved pose through a live arc refresh', () => {
+    const beads = mockMesh(1), slabs = mockMesh(1)
+    const pose = new THREE.Matrix4().makeTranslation(4, 0, 0)
+    updateExtraBaseInstances(
+      beads, slabs, 0, 1,
+      new THREE.Vector3(0, 0, 0), new THREE.Vector3(1, 1, 0),
+      new THREE.Vector3(2, 0, 0), new THREE.Vector3(0, 0, 1),
+      false, new Map([[0, pose]]),
+    )
+    expect(decompose(beads, 0).pos.x).toBeCloseTo(5)
+    expect(decompose(slabs, 0).pos.x).toBeCloseTo(5.0467889)
+  })
+})
 
 describe('setExtraBaseConnectors', () => {
   const V = (x, y, z) => new THREE.Vector3(x, y, z)
@@ -47,6 +93,43 @@ describe('setExtraBaseConnectors', () => {
     expect(s.pos.y).toBeCloseTo(2)
     expect(s.scl.y).toBeCloseTo(4)
     expect(mesh._cols[2]).toBeNull()         // null colorHex leaves color untouched
+  })
+})
+
+describe('setExtraBaseSlabConnectors', () => {
+  it('draws the standard Full-representation rod from bead to the slab N3 corner', () => {
+    const beads = mockMesh(1), slabs = mockMesh(1), rods = mockMesh(1)
+    beads.setMatrixAt(0, new THREE.Matrix4().compose(
+      new THREE.Vector3(0, 0, 0), new THREE.Quaternion(), new THREE.Vector3(1, 1, 1),
+    ))
+    slabs.setMatrixAt(0, new THREE.Matrix4().compose(
+      new THREE.Vector3(1, 0, 0), new THREE.Quaternion(),
+      new THREE.Vector3(SLAB_LENGTH, SLAB_WIDTH, SLAB_THICK),
+    ))
+
+    setExtraBaseSlabConnectors(beads, slabs, rods, 0, 1, 0xabcdef)
+
+    // Identity slab: N3-side corner = center + (+length/2, 0, +thickness/2).
+    const corner = new THREE.Vector3(1 + SLAB_LENGTH / 2, 0, SLAB_THICK / 2)
+    const rod = decompose(rods, 0)
+    expect(rod.pos.distanceTo(corner.clone().multiplyScalar(0.5))).toBeCloseTo(0, 8)
+    expect(rod.scl.y).toBeCloseTo(corner.length(), 8)
+    expect(rod.scl.x).toBeCloseTo(SLAB_CONNECTOR_RADIUS)
+    expect(rod.scl.z).toBeCloseTo(SLAB_CONNECTOR_RADIUS)
+    expect(rods._cols[0]).toBe(0xabcdef)
+    const rodDirection = new THREE.Vector3(0, 1, 0).applyQuaternion(rod.quat)
+    expect(rodDirection.distanceTo(corner.clone().normalize())).toBeCloseTo(0, 8)
+  })
+
+  it('zero-scales the rod whenever its residue bead/slab is hidden', () => {
+    const beads = mockMesh(1), slabs = mockMesh(1), rods = mockMesh(1)
+    beads.setMatrixAt(0, new THREE.Matrix4().makeScale(0, 0, 0))
+    slabs.setMatrixAt(0, new THREE.Matrix4().compose(
+      new THREE.Vector3(1, 0, 0), new THREE.Quaternion(),
+      new THREE.Vector3(SLAB_LENGTH, SLAB_WIDTH, SLAB_THICK),
+    ))
+    setExtraBaseSlabConnectors(beads, slabs, rods, 0, 1)
+    expect(decompose(rods, 0).scl.length()).toBeCloseTo(0)
   })
 })
 

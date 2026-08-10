@@ -90,6 +90,53 @@ describe('atomistic_renderer residue transform target', () => {
   })
 })
 
+describe('atomistic selection geometry', () => {
+  it('visits atoms and builds one live glow entry at each matching atom position', () => {
+    const scene = new THREE.Scene()
+    const ar = initAtomisticRenderer(scene)
+    ar.setMode('vdw')
+    ar.update({ atoms: [
+      { serial: 0, element: 'P', helix_id: 'h0', bp_index: 4, direction: 'FORWARD', copy_k: 0, x: 1, y: 2, z: 3 },
+      { serial: 1, element: 'O', helix_id: 'h0', bp_index: 4, direction: 'FORWARD', copy_k: 0, x: 2, y: 2, z: 3 },
+      { serial: 2, element: 'C', helix_id: 'h0', bp_index: 5, direction: 'FORWARD', copy_k: 0, x: 9, y: 9, z: 9 },
+    ], bonds: [] })
+
+    const visited = []
+    ar.visitAtoms((atom, pos) => visited.push([atom.serial, ...pos.toArray()]))
+    expect(visited).toEqual([[0, 1, 2, 3], [1, 2, 2, 3], [2, 9, 9, 9]])
+
+    const entries = ar.selectionAtomEntries([
+      { helix_id: 'h0', bp_index: 4, direction: 'FORWARD', copy_k: 0 },
+    ])
+    expect(entries).toHaveLength(2)
+    expect(entries.every(e => e.scale === 1.35)).toBe(true)
+    expect(entries.map(e => e.pos.toArray()).sort((a, b) => a[0] - b[0]))
+      .toEqual([[1, 2, 3], [2, 2, 3]])
+
+    // Entries read instance matrices live rather than retaining source coordinates.
+    ar.applyPositionLerp([4, 5, 6, 7, 8, 9, 9, 9, 9], [4, 5, 6, 7, 8, 9, 9, 9, 9], 0, null, [], null)
+    expect(entries.map(e => e.pos.toArray()).sort((a, b) => a[0] - b[0]))
+      .toEqual([[4, 5, 6], [7, 8, 9]])
+    ar.dispose()
+  })
+
+  it('resolves an individually selectable crossover base to all of its atoms', () => {
+    const scene = new THREE.Scene()
+    const ar = initAtomisticRenderer(scene)
+    ar.setMode('vdw')
+    ar.update({ atoms: [
+      { serial: 0, element: 'P', helix_id: 'h0', bp_index: 4, direction: 'FORWARD',
+        crossover_id: 'xo1', extra_base_k: 2, x: 1, y: 2, z: 3 },
+      { serial: 1, element: 'O', helix_id: 'h0', bp_index: 4, direction: 'FORWARD',
+        crossover_id: 'xo1', extra_base_k: 2, x: 2, y: 2, z: 3 },
+    ], bonds: [] })
+    expect(ar.selectionAtomEntries([
+      { helix_id: '__xb__', crossover_id: 'xo1', k: 2 },
+    ])).toHaveLength(2)
+    ar.dispose()
+  })
+})
+
 // AF-ATOM P2 — renderer↔audit parity: the renderer must DRAW exactly what the
 // backend audit (atomistic_validation.audit_bonds) classifies as visible, and HIDE
 // exactly what it lists in `hidden_by_renderer` (> _MAX_BOND_NM = 1.0 nm). This ties

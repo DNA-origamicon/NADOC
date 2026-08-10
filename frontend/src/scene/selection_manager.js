@@ -40,7 +40,7 @@ import { clusterMemberFilter } from './cluster_entries.js'
 import { strandsToSegments, clustersToSegments, domainsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './representation_overrides.js'
 import { normalizeLevel, hoverPreviewTarget, lassoCaptureType, toggleClusterSelection } from './selection_level.js'
 import { buildStrandMenuItems } from '../ui/strand_menu_items.js'
-import { baseKey, xbKey, toggleBaseKey, mergeBaseKeys, pruneBaseKeys } from './base_ref.js'
+import { baseKey, xbKey, parseBaseKey, toggleBaseKey, mergeBaseKeys, pruneBaseKeys } from './base_ref.js'
 import {
   backboneCandidates, xoverCandidates, flexCandidates, ssLinkCandidates,
   nearestCandidate, candidatesInRect, makeProjector, worldPosOf,
@@ -2034,11 +2034,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (cd < bd) {
       const cone = coneEntries.find(e => e.instMesh === c0.object && e.id === c0.instanceId)
       // Cross-helix cones are invisible crossover connectors — never a hover target.
-      if (cone && !cone.isCrossHelix) return { kind: 'cone', cone }
+      if (cone && !cone.isCrossHelix &&
+          !designRenderer.isColumnAtomistic?.(cone.fromNuc?.helix_id, cone.fromNuc?.bp_index)) {
+        return { kind: 'cone', cone }
+      }
     }
     if (b0) {
       const entry = backboneEntries.find(e => e.instMesh === b0.object && e.id === b0.instanceId)
-      return entry ? { kind: 'bead', entry } : null
+      return entry && !designRenderer.isColumnAtomistic?.(entry.nuc.helix_id, entry.nuc.bp_index)
+        ? { kind: 'bead', entry } : null
     }
     return null
   }
@@ -2060,6 +2064,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     let best = null, bestD = _NEAR_HOVER_PX
     for (const e of designRenderer.getBackboneEntries()) {
       if (!(e.nuc.is_five_prime || e.nuc.is_three_prime) || !e.instMesh.visible) continue
+      if (designRenderer.isColumnAtomistic?.(e.nuc.helix_id, e.nuc.bp_index)) continue
       const isScaf = e.nuc.strand_type === 'scaffold'
       if (!(isScaf ? selectableTypes.scaffold : selectableTypes.staples)) continue
       const sp = _toScreen(_instWorld(e.instMesh, e.id, _hoverPos))
@@ -2079,6 +2084,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     let best = null, bestD = _NEAR_HOVER_PX
     for (const e of designRenderer.getBackboneEntries()) {
       if (!e.instMesh.visible) continue
+      if (designRenderer.isColumnAtomistic?.(e.nuc.helix_id, e.nuc.bp_index)) continue
       if (!e.nuc.overhang_id) {
         const isScaf = e.nuc.strand_type === 'scaffold'
         if (!(isScaf ? selectableTypes.scaffold : selectableTypes.staples)) continue
@@ -2103,6 +2109,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     let best = null, bestD = _NEAR_HOVER_PX
     for (const e of designRenderer.getBackboneEntries()) {
       if (!e.instMesh.visible || !e.nuc.overhang_id) continue
+      if (designRenderer.isColumnAtomistic?.(e.nuc.helix_id, e.nuc.bp_index)) continue
       _instWorld(e.instMesh, e.id, _hoverPos).project(cam)
       if (_hoverPos.z > 1) continue   // behind the camera
       const px = (_hoverPos.x *  0.5 + 0.5) * rect.width
@@ -2166,6 +2173,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (clientX > window.innerWidth - 300) { _clearHoverPreview(); return }
     const _r = canvas.getBoundingClientRect()
     const _sx = clientX - _r.left, _sy = clientY - _r.top
+
+    // In global atomistic mode the CG meshes are hidden as a group, although their
+    // child meshes still report visible=true. Never let their stale bead positions
+    // create a hover target that intercepts the subsequent atom raycast.
+    if (getAtomisticRenderer?.()?.getMode?.() !== 'off' &&
+        designRenderer.getHelixCtrl()?.root?.visible === false) {
+      _clearHoverPreview()
+      return
+    }
 
     // Overhang filter active: preview the nearest overhang's FULL domain bead set
     // in yellow (same form as the green overhang selection). Takes precedence over
@@ -2680,15 +2696,28 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // halo). Both come from the same entry list, so every highlight path is covered.
     const beadEntries = []
     const cylRefs = new Map()
+    const globalAtomRenderer = getAtomisticRenderer?.()
+    const globalAtomActive = globalAtomRenderer?.getMode?.() !== 'off' &&
+      designRenderer.getHelixCtrl()?.root?.visible === false
+    const atomRenderers = [globalAtomRenderer, getRegionVdwRenderer?.(), getRegionBallstickRenderer?.()]
+      .filter((r, i, all) => r?.getMode?.() !== 'off' && all.indexOf(r) === i)
+    const atomEntries = atomRenderers.flatMap(r => r.selectionAtomEntries?.(
+      entries.filter(e => e.nuc).map(e => ({ ...e.nuc, copy_k: e._copy ?? e.nuc.copy_k ?? 0 })),
+    ) ?? [])
     for (const e of entries) {
       const sid = e.nuc?.strand_id, di = e.nuc?.domain_index
       if (sid != null && di != null && designRenderer.isDomainCylinder?.(sid, di)) {
         cylRefs.set(`${sid}:${di}`, { strandId: sid, domainIndex: di })
+      } else if (globalAtomActive || (atomRenderers.length && e.nuc && (() => {
+        const r = designRenderer.columnRepAt?.(e.nuc.helix_id, e.nuc.bp_index)
+        return r === 'vdw' || r === 'ballstick'
+      })())) {
+        // The atom renderer contributes one live entry per atom for this nucleotide.
       } else {
         beadEntries.push(e)
       }
     }
-    _composeGlow(beadEntries)
+    _composeGlow([...beadEntries, ...atomEntries])
     designRenderer.glowCylinderDomains([...cylRefs.values()])
   }
 
@@ -2785,7 +2814,21 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       return
     }
     const want = new Set(_baseKeys)
-    _baseGlowEntries = _baseCandidates().filter(c => want.has(c.key)).map(_baseGlowEntry)
+    const globalAtomRenderer = getAtomisticRenderer?.()
+    const globalAtomActive = globalAtomRenderer?.getMode?.() !== 'off' &&
+      designRenderer.getHelixCtrl()?.root?.visible === false
+    const atomRenderers = [globalAtomRenderer, getRegionVdwRenderer?.(), getRegionBallstickRenderer?.()]
+      .filter((r, i, all) => r?.getMode?.() !== 'off' && all.indexOf(r) === i)
+    const targets = _baseKeys.map(parseBaseKey).filter(Boolean)
+    const atomEntries = atomRenderers.flatMap(r => r.selectionAtomEntries?.(targets) ?? [])
+    const coarseEntries = _baseCandidates().filter(c => {
+      if (!want.has(c.key)) return false
+      if (globalAtomActive) return false
+      const p = parseBaseKey(c.key)
+      return !p || p.helix_id === '__xb__' ||
+        !designRenderer.isColumnAtomistic?.(p.helix_id, p.bp_index)
+    }).map(_baseGlowEntry)
+    _baseGlowEntries = [...coarseEntries, ...atomEntries]
     _composeGlow()
   }
 
@@ -3220,6 +3263,16 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const cylMesh = designRenderer.getCylinderMesh()
     // Global LOD level, not mesh .visible — mixed-rep makes cylinders visible at full LOD.
     const inCylinderLOD = (designRenderer.getDetailLevel?.() ?? 0) === 2
+    const globalAtomRenderer = getAtomisticRenderer?.()
+    const globalAtomActive = globalAtomRenderer?.getMode?.() !== 'off' &&
+      designRenderer.getHelixCtrl()?.root?.visible === false
+    const atomRenderers = [globalAtomRenderer, getRegionVdwRenderer?.(), getRegionBallstickRenderer?.()]
+      .filter((r, i, all) => r?.getMode?.() !== 'off' && all.indexOf(r) === i)
+    const backboneByAtomKey = new Map()
+    for (const entry of designRenderer.getBackboneEntries()) {
+      const n = entry.nuc
+      backboneByAtomKey.set(`${n.helix_id}:${n.bp_index}:${n.direction}`, entry)
+    }
 
     // ── Base level: additive union over ALL five bead families ──────────────
     // Owns the lasso outright (nothing else is captured at this level), and is a no-op at
@@ -3227,6 +3280,18 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // applied inside backboneCandidates.
     if (useBase) {
       if (inCylinderLOD) return
+      if (atomRenderers.length) {
+        const atomKeys = []
+        for (const ar of atomRenderers) ar.visitAtoms?.((a, atomPos) => {
+          const sp = _toScreen(atomPos)
+          if (sp.x < cx1 || sp.x > cx2 || sp.y < cy1 || sp.y > cy2) return
+          const key = a.crossover_id != null && a.extra_base_k != null
+            ? xbKey(a.crossover_id, a.extra_base_k) : baseKey(a, a.copy_k ?? 0)
+          if (key) atomKeys.push(key)
+        })
+        if (atomKeys.length) _setBaseKeys(mergeBaseKeys(_baseKeys, atomKeys))
+        return
+      }
       const hits = candidatesInRect(
         _baseCandidates(), { x1: cx1, y1: cy1, x2: cx2, y2: cy2 }, makeProjector(_cam(), canvas),
       )
@@ -3264,6 +3329,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (!inCylinderLOD) {
     for (const entry of designRenderer.getBackboneEntries()) {
       if (!entry.nuc.strand_id) continue
+      // Atomistic columns are captured below from their visible atom matrices. Using
+      // this hidden/full-representation bead would make the lasso key to stale CG space.
+      const colRep = designRenderer.columnRepAt?.(entry.nuc.helix_id, entry.nuc.bp_index)
+      if (globalAtomActive || (atomRenderers.length && (colRep === 'vdw' || colRep === 'ballstick'))) continue
       entry.instMesh.getMatrixAt(entry.id, mat)
       pos.setFromMatrixPosition(mat)
       const sp = _toScreen(pos)
@@ -3302,6 +3371,33 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         ovhangIdSet.add(entry.nuc.overhang_id)
       }
     }
+    }
+
+    // ── Atomistic atoms ───────────────────────────────────────────────────
+    // Resolve each visible atom back to its logical nucleotide, but perform the
+    // rectangle test at the atom's actual instance position. Several atoms from the
+    // same nucleotide naturally collapse into the element-id sets below.
+    if (!inCylinderLOD && atomRenderers.length) {
+      for (const ar of atomRenderers) ar.visitAtoms?.((atom, atomPos) => {
+        const entry = backboneByAtomKey.get(`${atom.helix_id}:${atom.bp_index}:${atom.direction}`)
+        if (!entry?.nuc?.strand_id) return
+        const sp = _toScreen(atomPos)
+        if (sp.x < cx1 || sp.x > cx2 || sp.y < cy1 || sp.y > cy2) return
+
+        const nuc = entry.nuc
+        const isScaffold = nuc.strand_type === 'scaffold'
+        const typeAllowed = isScaffold ? st.scaffold : st.staples
+        const isEnd = nuc.is_five_prime || nuc.is_three_prime
+        if (typeAllowed && useEnds && (beadLevelLasso || isEnd)) endEntries.push(entry)
+        if (typeAllowed && useStrands) strandIdSet.add(nuc.strand_id)
+        if (typeAllowed && useDomains) {
+          const k = `${nuc.strand_id}:${nuc.domain_index ?? 0}`
+          if (!domainKeyMap.has(k)) domainKeyMap.set(k,
+            { strandId: nuc.strand_id, domainIndex: nuc.domain_index ?? 0 })
+        }
+        if (useCluster) clusterHitNucs.push(nuc)
+        if (useOvhg && nuc.overhang_id) ovhangIdSet.add(nuc.overhang_id)
+      })
     }
 
     // ── Cluster drill level → expand hit beads to their clusters' strands ──────
@@ -3617,11 +3713,65 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const backboneEntries = designRenderer.getBackboneEntries()
     const coneEntries     = designRenderer.getConeEntries()
 
+    // Global atomistic mode owns the click outright. Resolve the logical element from
+    // the closest rendered atom, while retaining the existing strand/domain/base
+    // selection semantics. An empty atom-space click is an empty-space click; hidden
+    // full-representation beads must never be consulted.
+    const globalAtoms = getAtomisticRenderer?.()
+    if (globalAtoms?.getMode?.() !== 'off' &&
+        designRenderer.getHelixCtrl()?.root?.visible === false) {
+      const hit = globalAtoms.raycastPick(raycaster)
+      if (!hit?.atom) { _clearAll(); return }
+      const a = hit.atom
+      const entry = backboneEntries.find(e => e.nuc.helix_id === a.helix_id &&
+        e.nuc.bp_index === a.bp_index && e.nuc.direction === a.direction)
+      if (selectableTypes.overhangs) {
+        if (entry?.nuc.overhang_id) _selectOverhangDomain(entry.nuc.overhang_id)
+        else _clearAll()
+        return
+      }
+      if (_selLevel === 'base') {
+        const key = a.crossover_id != null && a.extra_base_k != null
+          ? xbKey(a.crossover_id, a.extra_base_k) : baseKey(a, a.copy_k ?? 0)
+        if (key) _setBaseKeys([key]); else _clearBaseSelection()
+        _emitDrillLevel('base')
+        return
+      }
+      if (entry) { _handleBeadHit(entry, backboneEntries, coneEntries); return }
+      if (a.strand_id && (selectableTypes.strands || selectableTypes.domains)) {
+        _restoreStrand()
+        _mode = 'strand'; _strandId = a.strand_id
+        _highlightStrand(backboneEntries, coneEntries, a.strand_id)
+        store.setState({ selectedObject: _strandSelection(a.strand_id) })
+      } else {
+        _clearAll()
+      }
+      return
+    }
+
+    // Atomistic region overrides remain mixed with visible full-representation
+    // columns. Capture their closest atom once so the exclusive overhang/base modes
+    // do not fall back to the hidden bead at that column.
+    let overlayAtomHit = null
+    for (const ar of [getRegionVdwRenderer?.(), getRegionBallstickRenderer?.()]) {
+      if (!ar || ar.getMode?.() === 'off') continue
+      const h = ar.raycastPick?.(raycaster)
+      if (h && (!overlayAtomHit || h.distance < overlayAtomHit.distance)) overlayAtomHit = h
+    }
+    const overlayAtom = overlayAtomHit?.atom
+    const overlayEntry = overlayAtom && backboneEntries.find(e =>
+      e.nuc.helix_id === overlayAtom.helix_id && e.nuc.bp_index === overlayAtom.bp_index &&
+      e.nuc.direction === overlayAtom.direction)
+
     // Overhang filter active: a click selects the nearest overhang's DOMAIN (within
     // _NEAR_HOVER_PX) — same snap-to-nearest commit as the fixed levels, and the same
     // overhang-domain highlight the sidebar list uses. The overhang filter fully owns
     // the click: nothing nearby → deselect (never falls through to strand select).
     if (selectableTypes.overhangs) {
+      if (overlayEntry?.nuc.overhang_id) {
+        _selectOverhangDomain(overlayEntry.nuc.overhang_id)
+        return
+      }
       const _rect = canvas.getBoundingClientRect()
       const oe = _nearestOverhangBead(e.clientX - _rect.left, e.clientY - _rect.top)
       if (oe) _selectOverhangDomain(oe.nuc.overhang_id)
@@ -3635,6 +3785,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // crossover bases, flexible-arc beads and linker beads clickable at all. Nothing
     // within the radius → clear, never fall through to a strand select.
     if (_selLevel === 'base') {
+      if (overlayAtom) {
+        const key = overlayAtom.crossover_id != null && overlayAtom.extra_base_k != null
+          ? xbKey(overlayAtom.crossover_id, overlayAtom.extra_base_k)
+          : baseKey(overlayAtom, overlayAtom.copy_k ?? 0)
+        if (key) _setBaseKeys([key]); else _clearBaseSelection()
+        _emitDrillLevel('base')
+        return
+      }
       const _rect = canvas.getBoundingClientRect()
       const c = _nearestBaseCand(e.clientX - _rect.left, e.clientY - _rect.top)
       _clearHoverPreview()

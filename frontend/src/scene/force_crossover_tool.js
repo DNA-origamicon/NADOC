@@ -26,7 +26,7 @@
 // straight from the nucleotide's is_five_prime / is_three_prime flags.
 
 import * as THREE from 'three'
-import { arcControlPoint, bezierAt } from './crossover_connections.js'
+import { crossoverControlPoint as arcControlPoint, quadraticPoint as bezierAt } from './crossover_extra_placement.js'
 
 const _SNAP_PX  = 80     // screen-space hover/click snap radius (matches selection_manager)
 const _ARC_SEGS = 16     // preview-arc sample count

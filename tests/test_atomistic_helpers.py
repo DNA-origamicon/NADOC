@@ -580,6 +580,27 @@ class TestBezierTan:
         assert tan[1] == pytest.approx(0.0)
 
 
+def test_crossover_extra_base_placement_contract():
+    from backend.core.atomistic_helpers import crossover_extra_base_placements
+
+    a = np.array([0.0, 0.0, 0.0])
+    b = np.array([2.0, 0.0, 0.0])
+    axis = np.array([0.0, 0.0, 1.0])
+    placements = crossover_extra_base_placements(a, b, axis, axis, 3)
+    assert [p["geometric_index"] for p in placements] == [0, 1, 2]
+    assert [p["t"] for p in placements] == pytest.approx([0.25, 0.5, 0.75])
+    for p in placements:
+        assert float(np.linalg.norm(p["tangent"])) == pytest.approx(1.0)
+        assert p["center"].shape == (3,)
+        assert p["bow"].shape == (3,)
+
+    reversed_placements = crossover_extra_base_placements(
+        a, b, axis, axis, 3, sim_reversed=True)
+    assert [p["sim_k"] for p in reversed_placements] == [2, 1, 0]
+    for p in reversed_placements:
+        assert p["chain_tangent"] == pytest.approx(-p["tangent"])
+
+
 class TestArcBowDir:
     def test_perpendicular_chord_axis(self) -> None:
         posA = np.array([0.0, 0.0, 0.0])

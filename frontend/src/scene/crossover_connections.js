@@ -14,10 +14,17 @@
  */
 
 import * as THREE from 'three'
+import {
+  buildCrossoverExtraPlacements,
+  crossoverControlPoint,
+  crossoverExtraSlabQuaternion,
+} from './crossover_extra_placement.js'
+import {
+  slabConnectionCorner,
+  SLAB_CONNECTOR_RADIUS,
+} from './helix_renderer.js'
 
 // ── Constants ────────────────────────────────────────────────────────────────
-
-const BOW_FRAC_3D  = 0.3   // bow magnitude as fraction of chord length
 
 const BEAD_RADIUS    = 0.10  // nm — matches helix_renderer
 const HELIX_RADIUS   = 1.0   // nm — matches helix_renderer / constants.py
@@ -29,14 +36,6 @@ export const SLAB_WIDTH     = 0.06  // nm (Y scale)
 export const SLAB_THICK     = 0.70  // nm (Z scale)
 export const SLAB_OFFSET    = HELIX_RADIUS - SLAB_DISTANCE
 
-// Slab Z-offset direction lookup — cadnano2 _stapH → +Z, _stapL → −Z.
-const HC_PERIOD  = 21
-const HC_PLUS_Z  = new Set([0, 7, 14])      // _stapH
-const HC_MINUS_Z = new Set([6, 13, 20])     // _stapL
-const SQ_PERIOD  = 32
-const SQ_PLUS_Z  = new Set([0, 8, 16, 24])  // _stapH
-const SQ_MINUS_Z = new Set([7, 15, 23, 31]) // _stapL
-
 // Local geometry templates (duplicated from helix_renderer to avoid coupling).
 // `userData.shared` marks them the same way helix_renderer._markShared does: they are
 // module-level singletons handed to EVERY build, so a traverse-and-dispose over any one
@@ -46,6 +45,8 @@ function _markShared(g) { g.userData.shared = true; return g }
 const GEO_SPHERE    = _markShared(new THREE.SphereGeometry(BEAD_RADIUS, 8, 6))
 const GEO_UNIT_BOX  = _markShared(new THREE.BoxGeometry(1, 1, 1))
 const GEO_UNIT_CONE = _markShared(new THREE.ConeGeometry(1, 1, 8))  // backbone arrow, apex +Y
+// Exact geometry used by helix_renderer's standard bead→slab rods.
+const GEO_UNIT_CYL  = _markShared(new THREE.CylinderGeometry(1.125, 1.125, 1, 8))
 
 export const CONN_RADIUS = 0.075  // nm — matches helix_renderer CONE_RADIUS
 const Y_HAT = new THREE.Vector3(0, 1, 0)
@@ -56,10 +57,6 @@ const C_SCAFFOLD_SLAB     = 0x0277bd
 const C_UNASSIGNED        = 0x445566
 
 // Scratch vectors (reused every frame to avoid allocation).
-const _v0   = new THREE.Vector3()
-const _v1   = new THREE.Vector3()
-const _v2   = new THREE.Vector3()
-const _v3   = new THREE.Vector3()
 const _mat  = new THREE.Matrix4()
 const _scl  = new THREE.Vector3()
 const _col  = new THREE.Color()
@@ -67,82 +64,6 @@ const _quat = new THREE.Quaternion()
 const ID_QUAT = new THREE.Quaternion()
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Quadratic Bezier: P(t) = (1-t)^2*A + 2(1-t)t*C + t^2*B */
-export function bezierAt(A, C, B, t, out) {
-  const u = 1 - t
-  out.x = u * u * A.x + 2 * u * t * C.x + t * t * B.x
-  out.y = u * u * A.y + 2 * u * t * C.y + t * t * B.y
-  out.z = u * u * A.z + 2 * u * t * C.z + t * t * B.z
-  return out
-}
-
-/** Quadratic Bezier derivative: P'(t) = 2(1-t)(C-A) + 2t(B-C) */
-export function bezierTangent(A, C, B, t, out) {
-  const u = 1 - t
-  out.x = 2 * u * (C.x - A.x) + 2 * t * (B.x - C.x)
-  out.y = 2 * u * (C.y - A.y) + 2 * t * (B.y - C.y)
-  out.z = 2 * u * (C.z - A.z) + 2 * t * (B.z - C.z)
-  return out
-}
-
-/**
- * Compute the Bezier control point for a 3D crossover arc.
- * The arc bows perpendicular to both the chord and the average helix axis.
- *
- * @param {THREE.Vector3} outBowDir  If provided, receives the normalized bow
- *   direction (away from the Holliday junction).
- */
-export function arcControlPoint(posA, posB, nucA, nucB, out, outBowDir) {
-  // Chord direction
-  _v0.subVectors(posB, posA)
-  const dist = _v0.length()
-  if (dist < 1e-9) { out.copy(posA); outBowDir?.set(0, 0, 1); return out }
-  _v0.divideScalar(dist)  // normalized chord
-
-  // Average helix axis
-  _v1.set(nucA.axis_tangent[0], nucA.axis_tangent[1], nucA.axis_tangent[2])
-  _v2.set(nucB.axis_tangent[0], nucB.axis_tangent[1], nucB.axis_tangent[2])
-  _v1.add(_v2).normalize()
-
-  // Bow direction = chord x avgAxis
-  _v2.crossVectors(_v0, _v1)
-  const bowLen = _v2.length()
-
-  if (bowLen < 1e-6) {
-    // Degenerate: chord parallel to axis — fall back to base_normal of nucA
-    _v2.set(nucA.base_normal[0], nucA.base_normal[1], nucA.base_normal[2])
-  } else {
-    _v2.divideScalar(bowLen)
-  }
-
-  if (outBowDir) outBowDir.copy(_v2)
-
-  // Control point = midpoint + bowVec * bowMag
-  const bowMag = dist * BOW_FRAC_3D
-  out.lerpVectors(posA, posB, 0.5).addScaledVector(_v2, bowMag)
-  return out
-}
-
-/**
- * Compute slab quaternion for an extra base on a crossover arc.
- * - Face normal (thin dimension, Y) = arc tangent
- * - In-plane Z axis = helical axis direction
- * - In-plane X axis = cross(arcTangent, helixAxis)
- */
-export function arcSlabQuaternion(arcTangent, helixAxis, out) {
-  const inPlane = _v3.crossVectors(arcTangent, helixAxis)
-  const inPlaneLen = inPlane.length()
-  if (inPlaneLen < 1e-6) {
-    // Degenerate — just use identity
-    out.identity()
-    return out
-  }
-  inPlane.divideScalar(inPlaneLen)
-  const m = _mat.makeBasis(inPlane, arcTangent, helixAxis)
-  out.setFromRotationMatrix(m)
-  return out
-}
 
 /**
  * Set of every domain-END key `"helix:end_bp:direction"` in the design.
@@ -337,6 +258,17 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
   connMesh.name     = 'xoverExtraConnectors'   // DEBUG ID
   connMesh.userData = { debugType: 'xoverExtraConnectors' }
 
+  // One standard bead→base-slab rod per crossover insert. This is separate from
+  // connMesh, which threads the phosphodiester backbone between residue beads.
+  const slabConnMesh = new THREE.InstancedMesh(
+    GEO_UNIT_CYL,
+    new THREE.MeshPhongMaterial({ color: 0xffffff }),
+    Math.max(1, totalBeads),
+  )
+  slabConnMesh.frustumCulled = false
+  slabConnMesh.name = 'xoverExtraSlabConnectors'
+  slabConnMesh.userData = { debugType: 'xoverExtraSlabConnectors' }
+
   let beadIdx = 0
   let connIdx = 0
   const ctrl   = new THREE.Vector3()
@@ -362,7 +294,7 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
         .multiply(new THREE.Matrix4().makeTranslation(...tr.pivot.map(v => -v)))]))
 
     // Compute control point and bow direction (away from Holliday junction)
-    arcControlPoint(posA, posB, nucA, nucB, ctrl, bowDir)
+    crossoverControlPoint(posA, posB, nucA, nucB, ctrl, bowDir)
 
     // Average helix axis (for slab orientation)
     avgAx.set(
@@ -377,37 +309,25 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
     const beadColor = xoverNucColor(nucA, stapleColorMap, customColors)
     const slabColor = xoverSlabColor(nucA, stapleColorMap, customColors)
 
-    // Slab Z offset: cadnano2 _stapH positions → +Z, _stapL → −Z.
-    const isSQ   = design.lattice_type === 'SQUARE'
-    const period = isSQ ? SQ_PERIOD : HC_PERIOD
-    const plusZ   = isSQ ? SQ_PLUS_Z  : HC_PLUS_Z
-    const minusZ  = isSQ ? SQ_MINUS_Z : HC_MINUS_Z
-    const bpMod  = ((xo.half_a.index % period) + period) % period
-    let zSign = 0
-    if (plusZ.has(bpMod))       zSign =  1
-    else if (minusZ.has(bpMod)) zSign = -1
-    const zOffset = zSign * Math.abs(avgAx.z) * SLAB_OFFSET * 0.9
-    const posedPoints = []
+    const placements = buildCrossoverExtraPlacements({
+      xoId: xo.id, count: n, pointA: posA, control: ctrl, pointB: posB,
+      helixAxis: avgAx, sequence: xo.extra_bases, simReversed, savedTransforms,
+    })
+    const posedPoints = placements.map(p => p.center.clone())
 
-    for (let i = 1; i <= n; i++) {
-      const t = i / (n + 1)
-
-      // Bead position
-      bezierAt(posA, ctrl, posB, t, pt)
-      const pose = savedTransforms.get(simBeadIndex(i - 1, n, simReversed))
-      if (pose) pt.applyMatrix4(pose)
-      posedPoints.push(pt.clone())
-      _mat.compose(pt, ID_QUAT, _scl.set(1, 1, 1))
+    for (const placement of placements) {
+      // Bead position comes directly from the representation-neutral residue record.
+      _mat.compose(placement.center, ID_QUAT, _scl.set(1, 1, 1))
       beadsMesh.setMatrixAt(beadIdx, _mat)
       beadsMesh.setColorAt(beadIdx, _col.setHex(beadColor))
 
       // Slab — oriented with face normal along arc tangent, width along helix axis.
-      bezierTangent(posA, ctrl, posB, t, tan)
-      tan.normalize()
-      arcSlabQuaternion(tan, avgAx, _quat)
-      slabPt.set(pt.x, pt.y, pt.z + zOffset)
+      // Construct in the unposed residue frame, then apply the pose ONCE. Previously
+      // this used the already-posed bead center and premultiplied pose again.
+      crossoverExtraSlabQuaternion(placement.frameQuaternion, _quat)
+      slabPt.copy(placement.sourceBaseCenter)
       _mat.compose(slabPt, _quat, _scl.set(SLAB_LENGTH, SLAB_WIDTH, SLAB_THICK))
-      if (pose) _mat.premultiply(pose)
+      if (placement.pose) _mat.premultiply(placement.pose)
       slabsMesh.setMatrixAt(beadIdx, _mat)
       slabsMesh.setColorAt(beadIdx, _col.setHex(slabColor))
 
@@ -420,6 +340,9 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
     cpts.push(...posedPoints)
     cpts.push(posB.clone())
     setExtraBaseConnectors(connMesh, connStartIdx, cpts, n + 1, beadColor)
+    setExtraBaseSlabConnectors(
+      beadsMesh, slabsMesh, slabConnMesh, beadStartIdx, n, slabColor,
+    )
     connIdx += n + 1
 
     arcData.push({
@@ -428,11 +351,14 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
       beadStartIdx,
       beadCount: n,
       connStartIdx,
+      pointA: posA.clone(),
+      pointB: posB.clone(),
+      sequence: xo.extra_bases,
+      savedTransforms,
       avgAx: avgAx.clone(),
       // Simulated inserts arrive numbered 5′→3′ from the strand's exit half; beads are
       // laid out A→B.  True when those two disagree — see extraBaseOrderReversed.
       simReversed,
-      zOffset,
       bowDir: bowDir.clone(),
       beadBaseColor: beadColor,
       slabBaseColor: slabColor,
@@ -446,11 +372,14 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
   if (slabsMesh.instanceColor) slabsMesh.instanceColor.needsUpdate = true
   connMesh.instanceMatrix.needsUpdate = true
   if (connMesh.instanceColor) connMesh.instanceColor.needsUpdate = true
+  slabConnMesh.instanceMatrix.needsUpdate = true
+  if (slabConnMesh.instanceColor) slabConnMesh.instanceColor.needsUpdate = true
   group.add(beadsMesh)
   group.add(slabsMesh)
   group.add(connMesh)
+  group.add(slabConnMesh)
 
-  return { group, arcData, beadsMesh, slabsMesh, connMesh }
+  return { group, arcData, beadsMesh, slabsMesh, connMesh, slabConnMesh }
 }
 
 // ── Live update (called every animation frame) ──────────────────────────────
@@ -458,7 +387,6 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
 // Scratch vectors for updateExtraBaseInstances — separate from the build-time
 // scratches above so there is no aliasing risk when called from unfold_view.
 const _uPt   = new THREE.Vector3()
-const _uTan  = new THREE.Vector3()
 const _uSlab = new THREE.Vector3()
 const _uQuat = new THREE.Quaternion()
 const _uMat  = new THREE.Matrix4()
@@ -477,27 +405,28 @@ const _uScl  = new THREE.Vector3()
  * @param {THREE.Vector3} ctrl   arc control point
  * @param {THREE.Vector3} posB   arc end (P1)
  * @param {THREE.Vector3} avgAx  average helix axis (for slab orientation)
- * @param {number} zOffset       slab Z offset for this arc
  */
 export function updateExtraBaseInstances(
   beadsMesh, slabsMesh, beadStartIdx, beadCount,
-  posA, ctrl, posB, avgAx, zOffset,
+  posA, ctrl, posB, avgAx,
+  simReversed = false, savedTransforms = new Map(), sequence = '',
 ) {
-  for (let i = 1; i <= beadCount; i++) {
-    const t   = i / (beadCount + 1)
-    const idx = beadStartIdx + i - 1
+  const placements = buildCrossoverExtraPlacements({
+    xoId: null, count: beadCount, pointA: posA, control: ctrl, pointB: posB,
+    helixAxis: avgAx, sequence, simReversed, savedTransforms,
+  })
+  for (const placement of placements) {
+    const idx = beadStartIdx + placement.geometricIndex
 
     // Bead position
-    bezierAt(posA, ctrl, posB, t, _uPt)
-    _uMat.compose(_uPt, ID_QUAT, _uScl.set(1, 1, 1))
+    _uMat.compose(placement.center, ID_QUAT, _uScl.set(1, 1, 1))
     beadsMesh.setMatrixAt(idx, _uMat)
 
     // Slab — oriented with face normal along arc tangent
-    bezierTangent(posA, ctrl, posB, t, _uTan)
-    _uTan.normalize()
-    arcSlabQuaternion(_uTan, avgAx, _uQuat)
-    _uSlab.set(_uPt.x, _uPt.y, _uPt.z + zOffset)
+    crossoverExtraSlabQuaternion(placement.frameQuaternion, _uQuat)
+    _uSlab.copy(placement.sourceBaseCenter)
     _uMat.compose(_uSlab, _uQuat, _uScl.set(SLAB_LENGTH, SLAB_WIDTH, SLAB_THICK))
+    if (placement.pose) _uMat.premultiply(placement.pose)
     slabsMesh.setMatrixAt(idx, _uMat)
   }
 }
@@ -551,10 +480,8 @@ const _simBasis = new THREE.Matrix4()
  *   Y (SLAB_WIDTH   0.06) = helix axis  — the thin stacking direction
  *   Z (SLAB_THICK   0.70) = baseNormal  — the long axis, backbone → base
  *
- * NOT `arcSlabQuaternion`: that takes an ARC TANGENT in its first slot and puts the
- * long 0.70 axis on the helix axis, which is right for a Bezier arc of un-simulated
- * inserts but leaves a simulated insert's plate 90° off from the real slabs beside it
- * (and pinned to the design's static axis instead of following the trajectory).
+ * This simulation-only projection uses the trajectory's base normal directly instead
+ * of the native atom-template frame used by default crossover placements.
  */
 export function simSlabQuaternion(baseNormal, helixAxis, out) {
   _simAxis.copy(helixAxis)
@@ -605,6 +532,57 @@ const _kQuat = new THREE.Quaternion()
 const _kMat  = new THREE.Matrix4()
 const _kScl  = new THREE.Vector3()
 const _kCol  = new THREE.Color()
+
+// Scratch for the bead→slab rods. These derive from the actual live instance
+// matrices, so saved poses, animated arcs, and simulation placement cannot diverge.
+const _bsBeadMat = new THREE.Matrix4()
+const _bsSlabMat = new THREE.Matrix4()
+const _bsBeadPos = new THREE.Vector3()
+const _bsBeadQuat = new THREE.Quaternion()
+const _bsBeadScale = new THREE.Vector3()
+const _bsSlabPos = new THREE.Vector3()
+const _bsSlabQuat = new THREE.Quaternion()
+const _bsSlabScale = new THREE.Vector3()
+const _bsCorner = new THREE.Vector3()
+const _bsDir = new THREE.Vector3()
+const _bsMid = new THREE.Vector3()
+const _bsRodQuat = new THREE.Quaternion()
+const _bsScale = new THREE.Vector3()
+const _bsColor = new THREE.Color()
+
+/**
+ * Rebuild crossover inserts' bead→slab rods from the rendered bead/slab matrices.
+ * This is the same N3-corner attachment and radius used by standard Full residues.
+ */
+export function setExtraBaseSlabConnectors(
+  beadsMesh, slabsMesh, slabConnMesh, beadStartIdx, beadCount, colorHex = null,
+) {
+  if (!beadsMesh || !slabsMesh || !slabConnMesh) return
+  for (let i = 0; i < beadCount; i++) {
+    const idx = beadStartIdx + i
+    beadsMesh.getMatrixAt(idx, _bsBeadMat)
+    slabsMesh.getMatrixAt(idx, _bsSlabMat)
+    _bsBeadMat.decompose(_bsBeadPos, _bsBeadQuat, _bsBeadScale)
+    _bsSlabMat.decompose(_bsSlabPos, _bsSlabQuat, _bsSlabScale)
+
+    const rendered = _bsBeadScale.lengthSq() > 1e-18 && _bsSlabScale.lengthSq() > 1e-18
+    slabConnectionCorner(
+      _bsSlabPos, _bsSlabQuat, _bsBeadPos,
+      _bsSlabScale.x * 0.5, _bsSlabScale.z * 0.5, _bsCorner,
+    )
+    _bsDir.copy(_bsCorner).sub(_bsBeadPos)
+    const length = Math.max(0.001, _bsDir.length())
+    _bsMid.copy(_bsBeadPos).add(_bsCorner).multiplyScalar(0.5)
+    _bsRodQuat.setFromUnitVectors(Y_HAT, _bsDir.divideScalar(length))
+    _bsScale.set(
+      rendered ? SLAB_CONNECTOR_RADIUS : 0,
+      rendered ? length : 0,
+      rendered ? SLAB_CONNECTOR_RADIUS : 0,
+    )
+    slabConnMesh.setMatrixAt(idx, _bsSlabMat.compose(_bsMid, _bsRodQuat, _bsScale))
+    if (colorHex != null) slabConnMesh.setColorAt(idx, _bsColor.setHex(colorHex))
+  }
+}
 
 /**
  * Place the backbone-arrow connector cones threading one extra-base run:
