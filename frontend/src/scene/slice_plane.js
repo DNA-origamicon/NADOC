@@ -13,6 +13,7 @@
  */
 
 import * as THREE from 'three'
+import { recommendedExtrudeBp } from './extrude_scaffold_recommendation.js'
 import {
   HONEYCOMB_LATTICE_RADIUS,
   HONEYCOMB_COL_PITCH,
@@ -1720,14 +1721,13 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       ? 'Set a length (or pick a recommendation) →'
       : `${count} × ${bp < 0 ? '-' : ''}${absBp} bp = ${bp < 0 ? '-' : ''}${count * absBp} bp total`
 
-    // Scaffold length recommendation: existing helices + selected new helices,
-    // each contributing length_bp + 2×_END_MARGIN_BP to the scaffold path.
+    // Size this extrusion alone to the target scaffold. Existing structure is
+    // intentionally irrelevant: these chips describe the segment being created.
     if (_sliceScaffoldRec) {
-      const existingHelices = getDesign?.()?.helices ?? []
-      const existingBp = existingHelices.reduce((s, h) => s + h.length_bp + 2 * _END_MARGIN_BP, 0)
       const chips = _SCAFFOLD_TARGETS.map(({ name, nt }) => {
-        const remaining = nt - existingBp
-        const recBp = Math.max(1, Math.floor(remaining / count) - 2 * _END_MARGIN_BP)
+        const recBp = recommendedExtrudeBp({
+          targetNt: nt, selectedCount: count, endMarginBp: _END_MARGIN_BP,
+        })
         return `<button class="rec-chip" data-bp="${recBp}" title="Set length to ${recBp} bp">
           <span style="font-size:18px;font-weight:600;color:#c9d1d9;line-height:1.1">${nt}</span>
           <span style="font-size:var(--text-xs);color:#8b949e"> nt</span><br>
@@ -1971,6 +1971,14 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       } else {
         _hidePreview()
       }
+    },
+
+    /** Deterministic lattice selection for the browser e2e harness. */
+    selectCellForTest(row, col) {
+      _selectCell(`${row},${col}`)
+      _updateCircleColors()
+      _updateLabels()
+      _refreshExtrudeUi()
     },
 
     /** Enable/disable the ghost-cylinder extrude preview (driven by the sidebar toggle). */

@@ -7702,6 +7702,14 @@ async function main() {
         continuation: slicePlane.isContinuation(),
         deformed: slicePlane.isDeformed(),
       }),
+      /** Deterministic counterpart of Blunt end → Extrude for large-scene e2e tests.
+       *  (Software-WebGL ring raycasts are too slow/flaky to be the recommendation oracle.) */
+      openExtrudeAtEnd({ helixId, diskBp, openSide = 1, plane = 'XY' }) {
+        _extrudePanel.activate('continuation', { plane })
+        slicePlane.showAtEnd(helixId, diskBp, true, { defaultDirSign: openSide })
+        const helix = store.getState().currentDesign?.helices?.find(h => h.id === helixId)
+        if (helix?.grid_pos) slicePlane.selectCellForTest(...helix.grid_pos)
+      },
       /** Count of Alt-picked measurement beads (the measurement tool's input). */
       getCtrlBeadCount: () => selectionManager.getCtrlBeads?.().length ?? 0,
       /** Base-level pool — app-wide base keys (scene/base_ref.js). */
