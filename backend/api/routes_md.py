@@ -3720,7 +3720,12 @@ def _namd_live_progress(job: MdJob, ws) -> tuple[float | None, float | None, boo
     segs = job.segments or []
     total = len(segs)
     min_row = job.minimization
-    units = total + (1 if min_row else 0)
+    # A production child uses the minimization slot for its zero-step velocity-reseed
+    # bridge.  It is a real conf/stage, but it performs no integration work and must not
+    # count as a completed progress unit: doing so made a newly created one-segment
+    # production run start at 50 %.  Real (positive-step) minimizations remain one unit.
+    min_is_progress_unit = bool(min_row and int(min_row.steps or 0) > 0)
+    units = total + (1 if min_is_progress_unit else 0)
     if not units:
         return None, None, False
     from backend.core.namd_metrics import (  # noqa: PLC0415
@@ -3756,7 +3761,7 @@ def _namd_live_progress(job: MdJob, ws) -> tuple[float | None, float | None, boo
         return min_fraction / units, eta, estimated
 
     # Once a real segment starts, the minimisation is one completed unit.
-    if min_row:
+    if min_is_progress_unit:
         done += 1
     idx = job.current_segment_idx
     if 0 <= idx < total and segs[idx].status == "running":

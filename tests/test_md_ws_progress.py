@@ -142,6 +142,55 @@ def test_running_remote_minimization_has_live_progress_and_eta(tmp_path):
     assert estimated is False
 
 
+def test_fresh_production_child_starts_at_zero_progress(tmp_path):
+    """Its zero-step velocity reseed is plumbing, not half of the production work."""
+    from backend.api.routes_md import _namd_live_progress
+
+    job = _running_job(tmp_path)
+    job.run_kind = "production"
+    job.segments = [
+        MdSegmentStatus(
+            name="production", stage="Production", percent=100,
+            steps=1_000, status="pending",
+        )
+    ]
+    job.minimization = MdSegmentStatus(
+        name="reseed", stage="Velocity reseed", percent=100,
+        steps=0, status="pending",
+    )
+    job.current_segment_idx = 0
+
+    fraction, eta, estimated = _namd_live_progress(job, tmp_path)
+
+    assert fraction == 0.0
+    assert eta is None
+    assert estimated is False
+
+
+def test_production_progress_ignores_zero_step_reseed(tmp_path):
+    from backend.api.routes_md import _namd_live_progress
+
+    job = _running_job(tmp_path)
+    job.run_kind = "production"
+    job.segments = [
+        MdSegmentStatus(
+            name="production", stage="Production", percent=100,
+            steps=1_000, status="running",
+        )
+    ]
+    job.minimization = MdSegmentStatus(
+        name="reseed", stage="Velocity reseed", percent=100,
+        steps=0, status="pending",
+    )
+    job.current_segment_idx = 0
+    job.execution_target = "runpod"
+    job.live_metrics = {"segment": "production", "step": 250}
+
+    fraction, _, _ = _namd_live_progress(job, tmp_path)
+
+    assert fraction == 0.25
+
+
 def test_completed_partial_production_reports_actual_ns_and_done(tmp_path):
     from backend.api.routes_md import _decorate_terminal_segment_progress
 
