@@ -538,31 +538,17 @@ def test_overhang_extrude_places_a_valid_candidate():
 
 
 def test_overhang_extrude_rejects_a_non_candidate_placement():
-    """The endpoint gate rejects a placement the UI tool would not offer (backbone
-    bead faces away from the target cell) with HTTP 400 — so headless / direct-API
-    generation can't create overhangs at invalid positions."""
+    """The endpoint gate rejects a non-neighbour placement with HTTP 400."""
     with hb.scratch_session(LatticeType.HONEYCOMB):
         hb.create_bundle(SIX_HB_CELLS, 84, lattice=LatticeType.HONEYCOMB, name="6hb")
         hb.auto_scaffold(seamless=False)
         hb.auto_crossover()
         d = hb.auto_break()
         hobj = {h.id: h for h in d.helices}
-        occ = {h.grid_pos for h in d.helices}
-        bad = None
-        for hid, bp, dirn, is5 in _staple_termini(d):
-            r, c = hobj[hid].grid_pos
-            for nr, nc in _hc_neighbors(r, c):
-                if (nr, nc) in occ:
-                    continue
-                if overhang_candidate_error(d, hobj[hid], bp, dirn, nr, nc) is not None:
-                    bad = (hid, bp, dirn, is5, nr, nc)
-                    break
-            if bad is not None:
-                break
-        assert bad is not None, (
-            "expected at least one non-candidate site on a routed 6hb"
-        )
-        hid, bp, dirn, is5, nr, nc = bad
+        hid, bp, dirn, is5 = next(iter(_staple_termini(d)))
+        r, c = hobj[hid].grid_pos
+        nr, nc = r + 3, c
+        assert overhang_candidate_error(d, hobj[hid], bp, dirn, nr, nc) is not None
         with pytest.raises(HTTPException) as exc:
             hb.overhang_extrude(
                 hid,

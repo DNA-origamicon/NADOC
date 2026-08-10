@@ -37,6 +37,7 @@ from backend.core.lattice import (
     is_valid_honeycomb_cell,
     make_bundle_design,
     make_overhang_extrude,
+    overhang_candidate_error,
     square_position,
 )
 from backend.core.models import Design, Direction, Helix, LatticeType, StrandType, Vec3
@@ -45,6 +46,31 @@ from backend.core.models import Design, Direction, Helix, LatticeType, StrandTyp
 
 Z_TOL = 0.001  # nm — Z position must match within one thousandth of a nm
 DIST_MAX = HONEYCOMB_HELIX_SPACING + 0.01  # nm — 0.4% tolerance over HC spacing
+
+
+def test_flexible_overhang_is_not_rejected_by_parent_bead_azimuth():
+    """Regression for h_XY_16_26 bp 87 -> (17,26) in VoltronCore_Arm.
+
+    The reverse bead's radial dot against +Y is -0.7518.  That azimuth locates
+    the bead on the parent duplex; it is not the tangent of the new ssDNA and
+    therefore cannot invalidate an otherwise vacant adjacent target.
+    """
+    path = Path("workspace/VoltronCore_Arm.nadoc")
+    design = Design.from_dict(json.loads(path.read_text()))
+    helix = next(h for h in design.helices if h.grid_pos == (16, 26))
+    # The saved fixture later acquired material in the destination cell; isolate
+    # the phase/direction regression by making that canonical cell vacant.
+    design = design.model_copy(
+        update={"helices": [h for h in design.helices if h.grid_pos != (17, 26)]}
+    )
+
+    assert overhang_candidate_error(
+        design, helix, 87, Direction.REVERSE, 17, 26
+    ) is None
+    for other_cell in ((15, 26), (16, 25), (16, 27)):
+        assert overhang_candidate_error(
+            design, helix, 87, Direction.REVERSE, *other_cell
+        ) is not None
 
 # ── 6HB cell layout ───────────────────────────────────────────────────────────
 

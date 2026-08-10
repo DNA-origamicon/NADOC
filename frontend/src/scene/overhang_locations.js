@@ -1,9 +1,9 @@
 /**
  * Overhang Locations overlay.
  *
- * For each staple 5′/3′ end (nick), finds all honeycomb-neighboring cells
- * that are unoccupied (no helix placed there) and draws an arrow pointing
- * from the nick's backbone bead toward the vacant cell's XY centre.
+ * For each staple 5′/3′ end (nick), looks up the one canonical staple-crossover
+ * neighbor for that bp and, when it is vacant, draws an arrow from the nick's
+ * backbone bead toward that cell's XY centre.
  *
  * These arrows show the user where overhangs can be extruded without
  * clashing with the existing structure.
@@ -19,6 +19,7 @@
 
 import * as THREE from 'three'
 import { SQUARE_HELIX_SPACING, SQUARE_TWIST_PER_BP_RAD } from '../constants.js'
+import { stapleCrossoverNeighbor } from './staple_crossover_positions.js'
 
 // Module-level scratch for cluster transform updates (avoid per-frame allocation).
 const _olV = new THREE.Vector3()
@@ -158,6 +159,15 @@ export function initOverhangLocations(scene) {
   function rebuild(design, geometry, opts = {}) {
     const parentGroup = opts.parentGroup ?? null
     const instanceId  = opts.instanceId  ?? null
+    // Candidate eligibility is a lattice/topology question. `geometry` is the
+    // displayed frame and may be bent/deformed, so callers provide straight
+    // geometry for the vacancy-at-Z test while displayed positions remain the
+    // arrow origins.
+    const candidateGeometry = opts.candidateGeometry ?? geometry
+    const candidatePos = new Map()
+    for (const n of candidateGeometry ?? []) {
+      candidatePos.set(`${n.helix_id}:${n.bp_index}:${n.direction}`, n.backbone_position)
+    }
     // Re-parent _group to the correct parent (instance group in assembly mode,
     // scene in design mode). Three.js handles removing-from-old-parent in add().
     const desiredParent = parentGroup ?? scene
@@ -240,15 +250,17 @@ export function initOverhangLocations(scene) {
       if (!helix) continue
 
       const [px, py, pz] = nuc.backbone_position
+      const canonical = candidatePos.get(`${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`)
+      const usingCanonical = canonical && candidateGeometry !== geometry
 
       // For cluster-transformed helices, un-transform the backbone position back to
       // the pre-rotation local frame before all lattice-based calculations.
       // Formula: p_local = R^{-1} * (p_world − pivot − trans) + pivot
-      // This ensures the Z-range check, radial dot-product, and neighbor direction are
-      // all computed in the lattice frame, giving the correct arrow count and base direction.
+      // This ensures the Z-range check and neighbour direction are computed in
+      // the lattice frame, giving the correct arrow count and base direction.
       const xf = clusterXfMap.get(nuc.helix_id)
-      let lx = px, ly = py, lz = pz
-      if (xf) {
+      let [lx, ly, lz] = canonical ?? nuc.backbone_position
+      if (xf && !usingCanonical) {
         _olV.set(px - xf.pivot.x - xf.trans.x, py - xf.pivot.y - xf.trans.y, pz - xf.pivot.z - xf.trans.z)
               .applyQuaternion(xf.invQ)
         lx = _olV.x + xf.pivot.x
@@ -259,7 +271,18 @@ export function initOverhangLocations(scene) {
       const vacants = _vacantNeighborsAtZ(helix.row, helix.col, cellZMap, lz, sq)
       if (!vacants.length) continue
 
-      // Radial vector in local frame — compare local backbone XY against pre-rotation axis.
+      // A staple end has exactly one possible lattice destination at a canonical
+      // crossover bp. At every other bp it has none. Vacancy is checked above;
+      // this lookup supplies the topology/phase constraint without inferring it
+      // from a rendered backbone bead.
+      const crossoverCell = stapleCrossoverNeighbor(
+        sq ? 'SQUARE' : 'HONEYCOMB', helix.row, helix.col, nuc.bp_index,
+      )
+      if (!crossoverCell) continue
+
+      // Keep the radial vector as diagnostic information only.  A duplex bead's
+      // azimuth locates that bead around the duplex; it is not the outgoing
+      // tangent of a flexible ssDNA overhang and must not suppress a valid cell.
       const rx = lx - helix.x
       const ry = ly - helix.y
       const rLen = Math.hypot(rx, ry)
@@ -267,18 +290,12 @@ export function initOverhangLocations(scene) {
       const origin = new THREE.Vector3(px, py, pz)  // world-space arrow origin
 
       for (const v of vacants) {
+        if (v.row !== crossoverCell[0] || v.col !== crossoverCell[1]) continue
         // Arrow direction in local frame (from formula cell centre → vacant cell centre).
         const dx = v.x - helix.cx
         const dy = v.y - helix.cy
         const len = Math.hypot(dx, dy)
         if (len < 0.01) continue
-
-        // Dot-product test in local frame — bead must face toward the vacant cell.
-        // Threshold 0.75 ≈ cos(41°).
-        if (rLen > 0.01) {
-          const dot = (rx * dx + ry * dy) / (rLen * len)
-          if (dot < 0.75) continue
-        }
 
         const localDir = new THREE.Vector3(dx / len, dy / len, 0)  // pre-rotation direction
         const dir = localDir.clone()

@@ -397,7 +397,7 @@ def make_mini_hinge_base_design(length_bp: int = 84) -> Design:
 
 # ── Overhang placement (single validated source of truth) ────────────────────────
 # Tests historically re-implemented "find a staple end + free neighbour" several
-# times, none of them applying the backbone-facing rule the UI enforces.  These two
+# times. These two
 # helpers delegate to the validated oracle (overhang_candidate_error) so test
 # overhangs land exactly where the app's overhang tool would offer them.
 
@@ -407,7 +407,7 @@ def valid_overhang_sites(design: Design) -> list[dict]:
 
     Returns dicts ``{helix_id, bp_index, direction, is_five_prime, neighbor_row,
     neighbor_col}`` for each staple 5′/3′ end × surrounding cell that passes the
-    validated gate (adjacency + vacant-at-Z + backbone bead faces the cell).  The
+    validated gate (canonical crossover phase/direction + adjacency + vacant-at-Z). The
     oracle does the geometry, so we just enumerate candidate cells and let it filter.
     """
     from backend.core.lattice import overhang_candidate_error

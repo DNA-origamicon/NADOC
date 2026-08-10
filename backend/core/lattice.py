@@ -3160,7 +3160,6 @@ def _overhang_neighbor_xy(
 # is rejected at exactly the positions the tool would refuse to offer.
 _OVERHANG_SPACING_EPS = 0.12  # nm — neighbour centre-distance tolerance
 _OVERHANG_Z_EPS = 0.2  # nm — half a bp; Z-occupancy tolerance
-_OVERHANG_DOT_MIN = 0.75  # cos(~41°) — backbone bead must face the target cell
 _OVERHANG_NEIGHBOR_SPACING = 2.0 * HONEYCOMB_LATTICE_RADIUS  # 2.25 nm (both lattices)
 
 
@@ -3199,22 +3198,32 @@ def overhang_candidate_error(
     """Return a human-readable reason if (neighbor_row, neighbor_col) is NOT a valid
     overhang target for the staple end at (orig_helix, bp_index, direction); else None.
 
-    Mirrors the UI overhang tool's candidate predicate exactly
-    (frontend/src/scene/overhang_locations.js): the neighbour must be a vacant
-    nearest-neighbour cell at the staple end's Z, and the end's backbone bead must
-    azimuthally face it (radial dot ≥ 0.75 ≈ within 41°).  Computed on the straight
-    *geometric* layer (B-DNA helical phase from topology), never physical/deformed —
-    the layer the placement question actually lives in.  Skipped for helices without
-    lattice context (imported designs whose grid_pos is None).
+    Mirrors the UI overhang tool's candidate predicate: ``bp_index`` must be a
+    canonical staple-crossover site whose lookup addresses this exact neighbour,
+    and that cell must be vacant at the staple end's Z.  The table lookup is the
+    topological source of truth; rendered backbone azimuth is not reinterpreted.
     """
     from backend.core.geometry import nucleotide_positions
 
     if orig_helix.grid_pos is None:
         return None
 
+    from backend.core.crossover_positions import crossover_neighbor
+
     pr, pc = orig_helix.grid_pos
     px, py = _overhang_cell_xy(design.lattice_type, pr, pc)
     nx, ny = _overhang_cell_xy(design.lattice_type, neighbor_row, neighbor_col)
+
+    crossover_cell = crossover_neighbor(
+        design.lattice_type, pr, pc, bp_index, is_scaffold=False
+    )
+    if crossover_cell != (neighbor_row, neighbor_col):
+        if crossover_cell is None:
+            return f"Bp {bp_index} is not a staple crossover location on helix {orig_helix.grid_pos}."
+        return (
+            f"Bp {bp_index} on helix {orig_helix.grid_pos} crosses toward cell "
+            f"{crossover_cell}, not ({neighbor_row},{neighbor_col})."
+        )
 
     # 1) Adjacency — must be a nearest-neighbour cell.
     if (
@@ -3240,7 +3249,7 @@ def overhang_candidate_error(
             f"No nucleotide at (helix={orig_helix.id!r}, bp={bp_index}, "
             f"direction={direction.value})."
         )
-    bx, by, bz = float(nuc.position[0]), float(nuc.position[1]), float(nuc.position[2])
+    bz = float(nuc.position[2])
 
     # 3) Vacancy at the end's Z — no helix's NUCLEOTIDES may cover bz at the target
     #    cell.  Uses the nucleotide extent (not the axis span) so the empty end-cap
@@ -3252,19 +3261,6 @@ def overhang_candidate_error(
         if zlo - _OVERHANG_Z_EPS <= bz <= zhi + _OVERHANG_Z_EPS:
             return f"Cell ({neighbor_row},{neighbor_col}) is occupied at this Z."
 
-    # 4) Backbone-facing — the bead's radial direction must point at the target cell.
-    rx, ry = bx - orig_helix.axis_start.x, by - orig_helix.axis_start.y
-    dx, dy = nx - px, ny - py
-    rl, dl = math.hypot(rx, ry), math.hypot(dx, dy)
-    if rl > 0.01 and dl > 0.01:
-        dot = (rx * dx + ry * dy) / (rl * dl)
-        if dot < _OVERHANG_DOT_MIN:
-            return (
-                f"Staple {direction.value} end at bp {bp_index} on helix "
-                f"{orig_helix.grid_pos} does not face cell ({neighbor_row},{neighbor_col}): "
-                f"its backbone bead points away (facing score {dot:.2f} < "
-                f"{_OVERHANG_DOT_MIN}) — the overhang tool offers no candidate here."
-            )
     return None
 
 

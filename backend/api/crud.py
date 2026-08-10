@@ -5017,8 +5017,8 @@ def _build_overhang_extrude(
     from backend.core.lattice import make_overhang_extrude, overhang_candidate_error
 
     # Placement gate (mirrors the UI overhang tool): reject any position the tool
-    # would not offer — neighbour must be a vacant nearest-neighbour cell at the
-    # staple end's Z whose direction the backbone bead faces.  Enforced here at the
+    # would not offer — bp phase must address that exact lattice neighbour and the
+    # cell must be vacant at the staple end's Z. Enforced here at the
     # endpoint/generation layer so the UI, direct API, and headless build all get a
     # 400; the core ``make_overhang_extrude`` primitive stays ungated for geometry
     # unit tests that probe arbitrary positions.

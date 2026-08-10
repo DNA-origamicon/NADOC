@@ -1679,13 +1679,16 @@ async function main() {
       if (!rd?.design || !rd?.nucleotides || !rd?.group) { overhangLocations.clear(); return }
       overhangLocations.rebuild(rd.design, rd.nucleotides, { parentGroup: rd.group, instanceId: instId })
     } else {
-      overhangLocations.rebuild(s.currentDesign, s.currentGeometry)
+      overhangLocations.rebuild(s.currentDesign, s.currentGeometry, {
+        candidateGeometry: s.straightGeometry ?? s.currentGeometry,
+      })
     }
   }
 
   store.subscribe((newState, prevState) => {
-    if (newState.currentGeometry === prevState.currentGeometry &&
-        newState.currentDesign   === prevState.currentDesign) return
+    if (newState.currentGeometry  === prevState.currentGeometry &&
+        newState.straightGeometry === prevState.straightGeometry &&
+        newState.currentDesign    === prevState.currentDesign) return
     if (newState.assemblyActive) return   // assembly mode rebuild is driven by other subscribers below
     _rebuildOverhangLocations()
   })
