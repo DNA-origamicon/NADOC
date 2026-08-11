@@ -8,6 +8,8 @@ as its own state and that the local status-reconciler never disturbs it.
 
 from __future__ import annotations
 
+import asyncio
+
 import backend.api.routes_md as routes_md
 from backend.core.md_job import MdJob, MdStatus, new_job
 from backend.core.namd_runner import reconcile_job_status
@@ -67,6 +69,67 @@ def test_spawn_draft_job_defers_prep(tmp_path, monkeypatch):
     loaded = MdJob.load(job.job_id, tmp_path)
     assert loaded.status == MdStatus.draft
     assert loaded.package_subdir == ""
+
+
+def test_editing_a_draft_updates_the_same_record_without_preparing(tmp_path, monkeypatch):
+    """Save changes is an update, never clone-and-delete or an implicit launch."""
+    monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+    job = new_job(
+        design_name="D", protocol="old", name_stem="", package_subdir="",
+        seed_oxdna_job_id="ox1",
+    )
+    job.status = MdStatus.draft
+    job.prep_params = {"protocol": "old", "draft": True}
+    job.save(tmp_path)
+    from backend.core import md_queue
+    md_queue.enqueue(tmp_path, job.job_id)  # stale/manual entry must not survive an edit
+
+    out = asyncio.run(routes_md.update_md_job_settings(job.job_id, {
+        "protocol": "mgh_slow_release", "threads": 7, "draft": False,
+    }))
+
+    assert out["job_id"] == job.job_id
+    saved = MdJob.load(job.job_id, tmp_path)
+    assert saved.status == MdStatus.draft
+    assert saved.threads == 7
+    assert saved.protocol == "mgh_slow_release"
+    assert [j.job_id for j in MdJob.list_jobs(tmp_path)] == [job.job_id]
+    assert md_queue.load_queue(tmp_path) == []
+
+
+def test_edit_cleanup_preserves_job_identity_but_removes_every_stale_artifact(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+    job = new_job(design_name="D", protocol="p", name_stem="s", package_subdir="package/x")
+    job.status = MdStatus.queued
+    job.save(tmp_path)
+    job_dir = job.job_dir(tmp_path)
+    (job_dir / "package" / "x" / "output").mkdir(parents=True)
+    (job_dir / "package" / "x" / "output" / "old.dcd").write_text("stale")
+    (job_dir / "prep_progress.json").write_text("old")
+
+    routes_md._clear_editable_job_artifacts(job)
+
+    assert (job_dir / "job.json").exists()
+    assert [p.name for p in job_dir.iterdir()] == ["job.json"]
+    assert MdJob.load(job.job_id, tmp_path).job_id == job.job_id
+
+
+def test_edit_rejects_a_submitted_queued_job(tmp_path, monkeypatch):
+    monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+    job = new_job(design_name="D", protocol="p", name_stem="s", package_subdir="p")
+    job.status = MdStatus.queued
+    job.slurm_job_id = "123"
+    job.save(tmp_path)
+
+    from fastapi import HTTPException
+
+    try:
+        asyncio.run(routes_md.update_md_job_settings(job.job_id, {"threads": 4}))
+        assert False, "submitted job was editable"
+    except HTTPException as exc:
+        assert exc.status_code == 409
 
 
 # ── Live-Display design resolution (2026-07-16) ──────────────────────────────

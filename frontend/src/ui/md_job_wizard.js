@@ -211,11 +211,11 @@ const PRODUCTION_FIELD_DEFS = [
     group: 'run',
     help: 'How often a frame is written. Larger means a smaller file: the disk forecast scales directly with this. Lower it when the trajectory feeds fluctuation-based parameter extraction (FEM/SNUPI/mrDNA).' },
   { key: 'enm_restraints', label: 'Restraints', type: 'select', group: 'run',
-    options: [{ value: 'auto', label: 'Follow the parent’s protocol' },
-              { value: 'on', label: 'Keep an elastic network (as the published runs do)' },
-              { value: 'off', label: 'None — genuinely unrestrained' }],
-    format: v => (v == null ? 'auto' : String(v)),
-    help: 'The published “unrestrained” origami productions retain a network at k = 0.1 kcal/mol/Å² throughout. Sampling a template-built structure with none at all gives a softer ensemble — more breathing, more fraying, larger RMSD drift. The network is rebuilt from the equilibrated coordinates this run starts from, never from the pre-relaxation build.' },
+    options: [{ value: 'off', label: 'None — unrestrained (default)' },
+              { value: 'on', label: 'Keep an elastic network (restrained)' },
+              { value: 'auto', label: 'Continue parent production state' }],
+    format: v => (v == null ? 'off' : String(v)),
+    help: 'Normal explicit-solvent production is unrestrained. In the Aksimentiev tutorial, k = 0.1 is an equilibration rung followed by k = 0; the associated paper likewise removes the network for production. Enable a network only for a deliberately restrained experiment. It is rebuilt from the equilibrated starting coordinates.' },
   { key: 'orientation_restraint', label: 'Limit rotational diffusion', type: 'checkbox',
     group: 'run', check: v => !!v, parse: on => !!on,
     help: 'Holds only the origami’s best-fit overall orientation near its equilibrated production-start pose. Internal bending, twisting and breathing remain free. This permits an anisotropic box sized to a rod or plate’s fixed pose; do not enable it when rotational diffusion is an observable.' },
@@ -295,6 +295,7 @@ const PROVENANCE_TEXT = {
  * @param {object} deps.api                 { getRelaxPresets, fetchProtocolPlan, listSimJobs }
  * @param {(payload:object)=>Promise<any>} deps.launch          runs the panel's gate sequence
  * @param {(parentId:string, body:object)=>Promise<any>} deps.spawnProduction
+ * @param {(jobId:string, body:object)=>Promise<any>} deps.updateJob rebuilds an editable job in place
  * @param {()=>Array} deps.getJobs          the panel's cached job list
  * @param {()=>string|null} deps.getPartPath
  * @param {(jobId:string)=>void} [deps.onJobCreated]
@@ -304,7 +305,7 @@ const PROVENANCE_TEXT = {
  *        needs the API client and the design), but its CONTROLS belong here now that this
  *        is where settings are.
  */
-export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPath,
+export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs, getPartPath,
   onJobCreated, onOptimizeMount, onTargetChange = () => {} } = {}) {
   let modal = null
   let presets = []
@@ -332,6 +333,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
    * (see `jobSettingsState`) — the banner says so rather than the view lying quietly.
    */
   let readOnly = false
+  let editJob = null
   let viewJob = null
   let viewProvenanceKnown = true
   let viewRebuilt = false
@@ -350,6 +352,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     // Set when the wizard was opened for a SEEDED DRAFT: submitting then solvates that
     // job in place (from its source engine's coordinates) instead of creating a new one.
     draftId: null,
+    editJobId: null,
     parentJobId: null,
     // {stageIndex|'*': {directive: value}} — hand edits to individual stages. Sent with
     // the job, applied to the emitted confs, and declared in the package's own fidelity
@@ -1636,8 +1639,10 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
         })
         // Step 1's answer, spread OVER the built body: productionPayload takes camelCase
         // args, so these snake_case API fields have to land on the result, not the args.
-        const pendingJob = spawnProduction?.(state.parentJobId,
-          { ...body, ...targetStep.payloadFields() })
+        const request = { ...body, ...targetStep.payloadFields() }
+        const pendingJob = state.editJobId
+          ? updateJob?.(state.editJobId, request)
+          : spawnProduction?.(state.parentJobId, request)
         // Creation can spend a long time sizing/solvating before the request returns.
         // The panel owns progress and errors from this point, so dismiss the wizard as
         // soon as the user commits instead of leaving an apparently inert modal on top.
@@ -1656,7 +1661,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
         const touched = Object.fromEntries(
           Object.entries(state.touched).filter(([k]) =>
             !isForced(k) && fieldAppliesToTarget(FIELD_BY_KEY.get(k), state.target)))
-        const pendingJob = launch?.({
+        const request = {
           ...wizardPayload({
             presetId: state.presetId, touched, autostart,
             stageOverrides: state.stageOverrides,
@@ -1664,7 +1669,10 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
           // Step 1's answer. Spread OVER the protocol payload so the wizard's choice is
           // what actually reaches the API, not the panel's older radio state.
           ...targetStep.payloadFields(),
-        }, { draftId: state.draftId })
+        }
+        const pendingJob = state.editJobId
+          ? updateJob?.(state.editJobId, request)
+          : launch?.(request, { draftId: state.draftId })
         close()
         const job = await pendingJob
         if (job) onJobCreated?.(job.job_id)
@@ -1718,6 +1726,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
    *  EXISTING job rather than creating one, and "New NAMD job" would misdescribe it. */
   function modalTitle() {
     if (readOnly) return `Settings — ${viewJobLabel(viewJob)}`
+    if (state.editJobId) return `Edit job — ${viewJobLabel(editJob)}`
     return state.draftId ? 'Set up this seeded job' : 'New NAMD job'
   }
 
@@ -1908,10 +1917,11 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
   let parkedLiveState = null
 
   async function open(mode = null, { draftId = null, prefill = null,
-    parentJobId = null, viewJob: job = null } = {}) {
+    parentJobId = null, viewJob: job = null, editJob: editableJob = null } = {}) {
     if (!modal) build()
     const wasReadOnly = readOnly
     readOnly = !!job
+    editJob = editableJob
     if (readOnly && !wasReadOnly) parkedLiveState = snapshotState(state)
     if (!readOnly && wasReadOnly && parkedLiveState) {
       applySnapshot(state, parkedLiveState)
@@ -1922,8 +1932,9 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       targetStep?.setChoice?.({ target: state.target, partition: state.partition })
     }
     viewJob = job
-    if (readOnly) {
-      const view = jobSettingsState(job)
+    const replayJob = job || editableJob
+    if (replayJob) {
+      const view = jobSettingsState(replayJob, { forEdit: !!editableJob })
       viewProvenanceKnown = view.provenanceKnown
       viewRebuilt = view.rebuiltFromParent
       state.mode = view.mode
@@ -1938,19 +1949,20 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       slurmKey = ''
       targetStep?.showRecorded?.({
         target: view.target, partition: view.partition,
-        resources: job?.resources || null, requested: job?.requested_resources || null,
+        resources: replayJob?.resources || null, requested: replayJob?.requested_resources || null,
         // Read off the JOB, not `prep_params`: a job can be re-pointed at a different target
         // after it was created, which is why `target`/`partition` come from there too.
         runpod: {
-          gpuKey: job?.runpod_gpu_key || null,
-          budgetUsd: job?.runpod_budget_usd ?? null,
-          volumeId: job?.runpod_volume_id || null,
-          podId: job?.runpod_pod_id || null,
+          gpuKey: replayJob?.runpod_gpu_key || null,
+          budgetUsd: replayJob?.runpod_budget_usd ?? null,
+          volumeId: replayJob?.runpod_volume_id || null,
+          podId: replayJob?.runpod_pod_id || null,
         },
       })
     }
     if (mode && !readOnly) state.mode = mode
     if (!readOnly) state.draftId = draftId
+    if (!readOnly) state.editJobId = editableJob?.job_id || null
     if (!readOnly && state.target === 'runpod'
         && !Object.prototype.hasOwnProperty.call(state.touched, 'gpu_resident')) {
       state.touched.gpu_resident = 'on'
@@ -1974,7 +1986,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     paintReadOnlyBanner()
     // The remembered GPU-fallback preference is a preference for the NEXT job. Applying it
     // to a job that already ran would overwrite that run's own recorded answer.
-    if (!readOnly) restorePreferences()
+    if (!readOnly && !editableJob) restorePreferences()
     if (prefill && !readOnly) {
       // A draft's recorded settings arrive as TOUCHED, because they were chosen — so
       // they survive a protocol switch and their chips read "you set this".
@@ -2000,6 +2012,10 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
       const t = modal.header.querySelector('.modal__title')
       if (t) t.textContent = modalTitle()
     }
+    if (createBtn) {
+      const lbl = createBtn.querySelector('span') || createBtn
+      lbl.textContent = state.editJobId ? 'Save changes' : 'Create job'
+    }
     // "Cancel" implies there is something to abandon. Paging through a finished run's
     // settings and shutting the window is not cancelling anything.
     if (cancelBtn) {
@@ -2023,6 +2039,7 @@ export function initJobWizard({ api, launch, spawnProduction, getJobs, getPartPa
     /** Show an EXISTING job's settings, locked. Same three steps, same stage table, same
      *  conditions — replayed from the request the job records. */
     openReadOnly: (job) => open(null, { viewJob: job }),
+    openEditable: (job) => open(null, { editJob: job }),
     close,
     isOpen: () => !!modal?.isOpen?.(),
     currentValues,

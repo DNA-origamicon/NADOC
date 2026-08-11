@@ -530,6 +530,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   const trajToggle    = document.getElementById('oxdna-jobs-traj-toggle')
   const trajFullToggle = document.getElementById('oxdna-jobs-traj-full-toggle')
   const trajStatus    = document.getElementById('oxdna-jobs-traj-status')
+  const trajLoadProgress = document.getElementById('oxdna-jobs-traj-load-progress')
   const trajControls  = document.getElementById('oxdna-jobs-traj-controls')
   const trajPlay      = document.getElementById('oxdna-jobs-traj-play')
   const trajPrev      = document.getElementById('oxdna-jobs-traj-prev')
@@ -1099,6 +1100,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // every coarse playback frame (spinner + "building k/N"), then runs the loop smoothly.
   const trajPlayer = initOxdnaTrajectoryPlayer({
     playBtn: trajPlay, slider: trajSlider, markersEl: trajMarkers, label: trajLabel,
+    loadProgressEl: trajLoadProgress,
     prevBtn: trajPrev, nextBtn: trajNext,
     onSeek: (i) => {
       if (_lammpsMode) { lammpsDisplay?.showFrame(i); return }   // CG only — no field arrow
@@ -2204,6 +2206,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (!_selectedId || !oxdnaDisplay) return
     const full = scope === 'job'
     _trajBusy = true
+    trajPlayer.setLoading({ done: 0, total: 0 })
     _setTrajStatus(full ? 'Loading full trajectory… (no downsampling — this can take a while)'
                         : 'Loading trajectory…', _C.accent)
     // Poll the backend build for accurate frames-processed progress (the align pass
@@ -2213,6 +2216,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (!_trajBusy) return
       const p = await api.getOxdnaTrajectoryProgress(jobId).catch(() => null)
       if (_trajBusy && p?.active && p.total > 0) {
+        trajPlayer.setLoading(p)
         const pct = Math.round((100 * p.done) / p.total)
         _setTrajStatus(`Loading trajectory… ${pct}% (${p.done}/${p.total} frames)`, _C.accent)
       }
@@ -2223,6 +2227,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
         _selectedId, alignToggle ? alignToggle.checked : true, scope)
     } finally {
       clearInterval(poll)
+      trajPlayer.setLoading(null)
     }
     _trajBusy = false
     if (r.ok) {

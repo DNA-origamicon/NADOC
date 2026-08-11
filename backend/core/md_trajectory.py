@@ -19,6 +19,7 @@ order, so it needs its own mapping.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -1562,6 +1563,7 @@ def md_composite_trajectory(
     design,
     max_frames: int = 200,
     stride: int | None = None,
+    progress_path: str | None = None,
 ) -> dict:
     """Composite scrub-able NAMD trajectory for a trajectory keyframe.
 
@@ -1603,6 +1605,14 @@ def md_composite_trajectory(
         }
 
     seg_picked = _composite_indices(seg_counts, max_frames, stride)
+    picked_total = sum(len(v) for v in seg_picked)
+    progress_file = Path(progress_path) if progress_path else None
+
+    def report(done: int) -> None:
+        if progress_file:
+            progress_file.write_text(json.dumps({"done": done, "total": picked_total}))
+
+    report(0)
     out_frames: list[list[float]] = []
     out_stages: list[dict] = []
     markers: list[dict] = []
@@ -1655,6 +1665,7 @@ def md_composite_trajectory(
                 else:
                     flat.extend((0.0, 0.0, 0.0, 0.0, 0.0, 1.0))
             out_frames.append(flat)
+            report(len(out_frames))
 
     return {
         "n_frames": len(out_frames),

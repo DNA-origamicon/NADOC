@@ -53,6 +53,17 @@ describe('pure helpers', () => {
     expect(nodeNeedsPolling(oxNode({ status: 'queued', slurm_job_id: '9' }))).toBe(true)
     expect(nodeNeedsPolling(oxNode({ status: 'queued', runpod_pod_id: 'p' }))).toBe(true)
   })
+  it('keeps polling during the pre-Slurm upload and displays its durable phase', () => {
+    const node = { engine: 'namd', status: 'queued', remote_submit_progress: {
+      phase: 'upload', label: 'Uploading package file 2 of 5…', fraction: 0.42,
+      files_done: 2, files_total: 5,
+    } }
+    expect(nodeNeedsPolling(node)).toBe(true)
+    expect(masterProgressPct(node)).toBe(42)
+    expect(masterProgressColor(node)).toBe('#4a9eff')
+    expect(masterStatusText(node)).toContain('submitting to Alpine · Uploading package file 2 of 5… · 42%')
+    expect(masterProgressTooltip(node)).toContain('2/5 files')
+  })
   it('nodeNeedsPolling follows a job that is actually executing', () => {
     expect(nodeNeedsPolling(oxNode({ status: 'running' }))).toBe(true)
     expect(nodeNeedsPolling(oxNode({ status: 'preparing' }))).toBe(true)

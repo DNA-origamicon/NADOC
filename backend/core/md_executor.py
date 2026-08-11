@@ -368,6 +368,19 @@ async def submit_job(
     if not user:
         raise RuntimeError("not connected to the cluster (no user on the session)")
 
+    def submit_progress(phase: str, label: str, fraction: float, **detail) -> None:
+        """Persist the cluster hand-off while this long request is still running."""
+        job.remote_submit_progress = {
+            "phase": phase,
+            "label": label,
+            "fraction": max(0.0, min(1.0, float(fraction))),
+            "updated_at": time.time(),
+            **detail,
+        }
+        job.save(workspace_dir)
+
+    submit_progress("preflight", "Checking cluster launch requirements…", 0.03)
+
     paths = resolve_paths(profile, user, job.job_id)
     project_dir = paths["project_dir"]
     scratch_dir = paths["scratch_dir"]
@@ -420,7 +433,13 @@ async def submit_job(
         # the question we actually care about — does this module EXIST — which is what
         # caught `namd/3.0.1_gpu` (SLURM 30948986).  A private binary is an absolute
         # path, identical from either node, so `test -x` settles it outright.
-        checks = [
+        # A private NAMD executable was built under a compute allocation.  Alpine's
+        # login node has repeatedly rejected both gcc/11.2.0 and gcc/14.2.0 queries
+        # even though those modules exist and load in batch jobs.  In that case the
+        # only invariant we can establish here is that the shared-filesystem binary
+        # exists and is executable.  Do not turn a login-node Lmod policy/warning into
+        # a false "MISSING MODULE" that prevents every submission.
+        checks = [] if namd_cmd.startswith("/") else [
             f"module spider {_shq(m)} >/dev/null 2>&1 || "
             f'{{ echo "MISSING MODULE: {m}"; exit 1; }}'
             for m in mods
@@ -448,17 +467,31 @@ async def submit_job(
             )
 
     plan = stage_plan(package_dir)
+    total_bytes = sum(p.stat().st_size for p, _ in plan)
+    uploaded_bytes = 0
+    submit_progress(
+        "upload", "Uploading prepared package to Alpine…", 0.08,
+        files_done=0, files_total=len(plan), bytes_done=0, bytes_total=total_bytes,
+    )
     logger.info(
         "[%s] staging %d files → %s (gpu=%s)", job.job_id, len(plan), project_dir, gpu
     )
     await conn.mkdir_p(project_dir)
-    for local_path, rel in plan:
+    for index, (local_path, rel) in enumerate(plan, 1):
         remote = f"{project_dir}/{rel}"
         if not gpu and local_path.suffix == ".conf":
             amended = strip_gpu_resident(local_path.read_text())
             await _put_text(conn, amended, remote, workspace_dir, job)
         else:
             await conn.sftp_put(str(local_path), remote)
+        uploaded_bytes += local_path.stat().st_size
+        byte_fraction = uploaded_bytes / total_bytes if total_bytes else index / max(1, len(plan))
+        submit_progress(
+            "upload", f"Uploading package file {index} of {len(plan)}…",
+            0.08 + 0.67 * byte_fraction,
+            files_done=index, files_total=len(plan),
+            bytes_done=uploaded_bytes, bytes_total=total_bytes,
+        )
 
     # 1b) the node live-metrics collector — ALWAYS staged, independent of early-stop.
     #     Without it a remote run shows no speed/temp/pressure at all while it runs.
@@ -479,9 +512,11 @@ async def submit_job(
         )
 
     # 2) mirror project → scratch (two-filesystem model — jobs MUST run on scratch).
+    submit_progress("mirror", "Copying package to Alpine scratch storage…", 0.82)
     await conn.mirror(project_dir, scratch_dir)
 
     # 3) upload the sbatch into scratch and submit from there.
+    submit_progress("sbatch", "Sending the job to the Slurm scheduler…", 0.95)
     remote_sbatch = f"{scratch_dir}/{_SBATCH_NAME}"
     await _put_text(conn, sbatch, remote_sbatch, workspace_dir, job)
     res = await conn.run(f"cd {_shq(scratch_dir)} && sbatch {_SBATCH_NAME}")
@@ -498,6 +533,7 @@ async def submit_job(
     job.remote_project_dir = project_dir
     job.remote_scratch_dir = scratch_dir
     job.resources = resources
+    job.remote_submit_progress = None
     job.status = MdStatus.queued
     job.queued_at = time.time()
     job.slurm_started_at = None

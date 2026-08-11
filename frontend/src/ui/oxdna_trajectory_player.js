@@ -72,7 +72,7 @@ const _MARKER_COLOR ={ production: '#3fb950', equil: '#4a9eff', md_relax: '#e0a8
 
 export function initOxdnaTrajectoryPlayer({
   playBtn, slider, markersEl, label, onSeek, prevBtn = null, nextBtn = null,
-  onBeforePlay = null, onPlayStateChange = null, fps = 8,
+  loadProgressEl = null, onBeforePlay = null, onPlayStateChange = null, fps = 8,
 } = {}) {
   let _n = 0          // frame count
   let _i = 0          // current frame
@@ -81,6 +81,35 @@ export function initOxdnaTrajectoryPlayer({
   let _preparing = false   // awaiting onBeforePlay (pre-building heavy frames)
   let _prepToken = 0       // bumped to cancel an in-flight prepare (user clicked again)
   let _bgPrep = null       // {done,total} while frames are prepared in the BACKGROUND
+
+  /** Shared oxDNA/NAMD trajectory-build bar. The engines only supply counts; this
+   * component owns identical bar/readout rendering for both. */
+  function setLoading(progress) {
+    if (!loadProgressEl) return
+    if (!progress) { loadProgressEl.style.display = 'none'; loadProgressEl.innerHTML = ''; return }
+    const done = Math.max(0, progress.done | 0)
+    const total = Math.max(0, progress.total | 0)
+    const pct = total ? Math.max(0, Math.min(100, (100 * done) / total)) : 0
+    loadProgressEl.style.display = ''
+    let fill = loadProgressEl.querySelector('[data-trajectory-load-fill]')
+    let readout = loadProgressEl.querySelector('[data-trajectory-load-label]')
+    if (!fill || !readout) {
+      const track = document.createElement('div')
+      track.style.cssText = 'height:4px;background:#21262d;border-radius:3px;overflow:hidden'
+      fill = document.createElement('div')
+      fill.dataset.trajectoryLoadFill = ''
+      fill.style.cssText = 'height:100%;background:#4a9eff;transition:width .15s'
+      track.appendChild(fill)
+      readout = document.createElement('div')
+      readout.dataset.trajectoryLoadLabel = ''
+      readout.style.cssText = 'margin-top:3px;color:#8b949e;font-size:10px'
+      loadProgressEl.replaceChildren(track, readout)
+    }
+    fill.style.width = `${pct}%`
+    readout.textContent = total
+      ? `Loading frame ${Math.min(done, total).toLocaleString()} of ${total.toLocaleString()}`
+      : 'Preparing trajectory frames…'
+  }
 
   // ◂ / ▸ — step exactly one frame. Scrubbing a 200-frame slider moves several frames
   // per pixel, so these are the only way to land on a specific one.
@@ -228,7 +257,7 @@ export function initOxdnaTrajectoryPlayer({
   slider?.addEventListener('input', () => { pause(); seek(parseInt(slider.value, 10) || 0) })
 
   return {
-    setTrajectory, play, pause, toggle, seek, stop, setPreparing,
+    setTrajectory, play, pause, toggle, seek, stop, setPreparing, setLoading,
     isPlaying: () => !!_timer,
     isPreparing: () => _preparing || !!_bgPrep,
     current: () => _i,

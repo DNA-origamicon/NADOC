@@ -924,13 +924,13 @@ def test_an_untouched_production_setting_reports_where_it_really_came_from(
     assert req["production_hmr"]["provenance"] == "inherited"
     assert req["length_ns"]["provenance"] == "default"
     assert req["length_ns"]["value"] == 100.0
-    # 'auto' resolved against the parent's protocol, with the reason it decided that way.
+    # Production is unrestrained by default; k=0.1 belongs to equilibration.
     assert req["enm_restraints"] == {
-        "value": "on",
+        "value": "off",
         "provenance": "derived",
         "reason": req["enm_restraints"]["reason"],
     }
-    assert "literature" in req["enm_restraints"]["reason"]
+    assert "unrestrained" in req["enm_restraints"]["reason"]
 
 
 def test_a_touched_production_setting_reports_itself_as_the_users(client, parent_job):
@@ -1129,17 +1129,13 @@ def test_a_chained_plan_reads_its_chemistry_from_the_ROOT_relaxation(
     assert inh["parent_length_ns"] == 200.0
 
 
-def test_a_continuation_inherits_the_network_the_run_it_continues_was_using(
+def test_a_continuation_is_unrestrained_by_default(
     client, chain_parent
 ):
-    """Otherwise one trajectory is restrained for its first leg and free for its second.
-
-    `auto` used to look for a relaxation preset, find none on a production manifest, and
-    fall through to "unrestrained" — silently dropping the network halfway along a chain.
-    """
+    """Continuation is opt-in; the ordinary production default remains unrestrained."""
     req = _prod_plan(client, chain_parent)["production_request"]
-    assert req["enm_restraints"]["value"] == "on"
-    assert "continues" in req["enm_restraints"]["reason"]
+    assert req["enm_restraints"]["value"] == "off"
+    assert "default is unrestrained" in req["enm_restraints"]["reason"]
     # …and the thermostat coupling it was running under, for the same reason.
     assert req["langevin_damping"]["value"] == 2.0
 
@@ -1254,7 +1250,7 @@ def test_the_damping_split_shows_up_as_a_production_asymmetry():
 
 
 def test_a_production_run_can_keep_an_elastic_network():
-    """The published 'unrestrained' productions are not unrestrained."""
+    """A user can still request a deliberately restrained production."""
     prod = md_plan.production_stages(
         _ctx(fast=True),
         total_steps=1_000_000,
@@ -1317,16 +1313,15 @@ def test_the_early_stop_deviation_says_the_ladder_was_shortened():
     assert "19.2 ns" in d["why"]  # names what the nominal figure would have been
 
 
-def test_production_restraints_are_declared_either_way():
-    """Both answers are a deviation: none at all differs from the published runs, and
-    the network NADOC can build is sparser than theirs."""
-    assert "production restraints" in _items(production_enm=False)
+def test_only_restrained_production_is_declared_as_a_deviation():
+    """Unrestrained matches the paper; retaining an ENM is a deliberate variant."""
+    assert "production restraints" not in _items(production_enm=False)
     assert "production elastic network" in _items(production_enm=True)
     # A relaxation package has not chosen yet, so it declares neither.
     assert not ({"production restraints", "production elastic network"} & _items())
 
 
-def test_the_unrestrained_deviation_cites_the_papers():
+def test_the_restrained_deviation_explains_that_k01_is_an_equilibration_rung():
     d = next(
         x
         for x in P.protocol_fidelity(
@@ -1334,12 +1329,12 @@ def test_the_unrestrained_deviation_cites_the_papers():
             carved=False,
             padding_nm=2.0,
             charge_audit={},
-            production_enm=False,
+            production_enm=True,
         )["deviations"]
-        if x["item"] == "production restraints"
+        if x["item"] == "production elastic network"
     )
-    assert "PNAS" in d["theirs"] and "NAR" in d["theirs"]
-    assert "SOFTER" in d["why"]
+    assert "no elastic network" in d["theirs"]
+    assert "equilibration rung" in d["why"]
 
 
 def test_the_chunking_deviation_reports_the_real_split():

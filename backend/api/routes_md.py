@@ -23,6 +23,7 @@ import asyncio
 import json
 import logging
 import shutil
+import tempfile
 import time
 import uuid
 from dataclasses import asdict
@@ -106,6 +107,7 @@ router = APIRouter(tags=["md"])
 # Background preparation tasks, kept referenced so the event loop doesn't GC them
 # mid-run (asyncio only holds weak references to tasks).
 _PREP_TASKS: set[asyncio.Task] = set()
+_TRAJ_PROGRESS_PATHS: dict[str, Path] = {}
 
 #: Upper bound on a single production run's length.  These are sanity rails, not a
 #: policy on how long a run *should* be — microsecond-scale origami production is a
@@ -900,15 +902,36 @@ async def get_md_job_trajectory(
     # A small interval on a long run is a legitimately slow request the user opted into
     # (the panel confirms first), so give it a far longer ceiling — the route already
     # kills the subprocess when the client aborts the fetch.
-    result = await _run_md_analysis(
-        request,
-        job_id,
-        "trajectory",
-        "md_composite_trajectory",
-        (psf, segments, ref, design, 200, stride),
-        timeout_s=180.0 if stride is None else 900.0,
-    )
+    fd, progress_name = tempfile.mkstemp(prefix="nadoc_md_traj_", suffix=".json")
+    os.close(fd)
+    progress_path = Path(progress_name)
+    _TRAJ_PROGRESS_PATHS[job_id] = progress_path
+    try:
+        result = await _run_md_analysis(
+            request,
+            job_id,
+            "trajectory",
+            "md_composite_trajectory",
+            (psf, segments, ref, design, 200, stride, str(progress_path)),
+            timeout_s=180.0 if stride is None else 900.0,
+        )
+    finally:
+        if _TRAJ_PROGRESS_PATHS.get(job_id) == progress_path:
+            _TRAJ_PROGRESS_PATHS.pop(job_id, None)
+        progress_path.unlink(missing_ok=True)
     return {"ready": result["n_frames"] > 0, **result}
+
+
+@router.get("/md/jobs/{job_id}/trajectory-progress")
+async def get_md_job_trajectory_progress(job_id: str) -> dict:
+    """Frames processed by the active killable NAMD trajectory analysis."""
+    path = _TRAJ_PROGRESS_PATHS.get(job_id)
+    if not path:
+        return {"active": False}
+    try:
+        return {"active": True, **json.loads(path.read_text() or "{}")}
+    except (OSError, ValueError):
+        return {"active": True, "done": 0, "total": 0}
 
 
 @router.get("/md/jobs/{job_id}/trajectory-meta")
@@ -4514,15 +4537,11 @@ class ProductionRunRequest(BaseModel):
         return s
 
     enm_restraints: str = Field(
-        "auto",
-        description="Keep an elastic network through production: 'auto' (DEFAULT — on "
-        "when the parent was relaxed with a protocol that reproduces the "
-        "literature, off otherwise), 'on', or 'off'. The published "
-        "Aksimentiev-group 'unrestrained' origami productions are NOT "
-        "unrestrained: they retain a network at k=0.1 throughout, and a "
-        "template-built structure sampled with none at all is a measurably "
-        "softer ensemble. The network is rebuilt from the equilibrated "
-        "coordinates this run starts from, never from the prep-time build.",
+        "off",
+        description="Keep an elastic network through production: 'off' (DEFAULT, "
+        "matching unrestrained explicit-solvent production), 'on' for a deliberately "
+        "restrained run, or 'auto' to continue a production parent's restraint state. "
+        "A requested network is rebuilt from the equilibrated starting coordinates.",
     )
 
     orientation_restraint: bool = Field(
@@ -4542,7 +4561,7 @@ class ProductionRunRequest(BaseModel):
     @field_validator("enm_restraints")
     @classmethod
     def _sanctioned_enm(cls, v: str) -> str:
-        s = str(v or "auto").strip().lower()
+        s = str(v or "off").strip().lower()
         if s not in ("auto", "on", "off"):
             raise ValueError("enm_restraints must be 'auto', 'on', or 'off'")
         return s
@@ -4718,12 +4737,12 @@ def _production_restraint_plan(
 ) -> dict:
     """Resolve whether this production keeps an elastic network, and how hard to couple it.
 
-    ``auto`` means "carry on doing what this package already does".  Two cases:
+    ``off`` is the default: the tutorial's k=0.1 value is an equilibration rung, not a
+    production setting, and the associated paper removes all restraints for production.
+    ``auto`` is an explicit continuity option. Two cases:
 
-    * The parent is a **relaxation** — read its preset: a package built to reproduce the
-      published protocol gets the network the published protocol keeps, and everything
-      else keeps NADOC's historical truly-unrestrained behaviour so existing trajectories
-      stay comparable with new ones.
+    * The parent is a **relaxation** — there is no production state to inherit, so run
+      unrestrained.
     * The parent is a **production** — this run CONTINUES it, so read what that run
       actually ran (``production_recipe``) rather than a preset.  Its manifest has no
       preset to read, so the old lookup fell through to "unrecorded" and silently dropped
@@ -4732,8 +4751,6 @@ def _production_restraint_plan(
 
     An explicit 'on'/'off' always wins.
     """
-    from backend.core.md_presets import LITERATURE  # noqa: PLC0415
-
     manifest = _read_manifest(parent)
     chained = parent.run_kind == "production"
     recipe = manifest.get("production_recipe") or {}
@@ -4758,7 +4775,7 @@ def _production_restraint_plan(
     if requested == "on":
         enm, why = True, "requested for this run"
     elif requested == "off":
-        enm, why = False, "declined for this run"
+        enm, why = False, "the production default is unrestrained (no elastic network)"
     elif chained and "enm_restraints" in recipe:
         enm = bool(recipe["enm_restraints"])
         why = (
@@ -4769,13 +4786,10 @@ def _production_restraint_plan(
             else "the run this continues was unrestrained, and a continuation inherits it"
         )
     else:
-        enm = parent_preset == LITERATURE
+        enm = False
         why = (
-            f"the parent was relaxed with the {LITERATURE!r} protocol, which keeps the "
-            f"network the published productions keep"
-            if enm
-            else f"the parent's protocol ({parent_preset or 'unrecorded'}) does not ask for "
-            f"one, so this run is unrestrained as NADOC productions have always been"
+            "the production default is unrestrained; k=0.1 is an equilibration rung in "
+            f"the {parent_preset or 'unrecorded'} parent protocol, not a production setting"
         )
 
     # A continuation also inherits the thermostat coupling it was running under, for the
@@ -4885,6 +4899,15 @@ def _resolve_child_anchors(
 
 @router.post("/md/jobs/{parent_id}/production-run")
 async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dict:
+    return await _spawn_md_production_impl(parent_id, body)
+
+
+async def _spawn_md_production_impl(
+    parent_id: str,
+    body: ProductionRunRequest,
+    *,
+    existing_child: Optional[MdJob] = None,
+) -> dict:
     """Branch a production run off a completed relaxation (or production) as a CHILD job.
 
     The parent relaxation is left untouched and stays selectable; the child is a
@@ -4959,30 +4982,34 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
     siblings = [
         j
         for j in MdJob.list_jobs(_workspace())
-        if j.parent_job_id == parent.job_id and j.run_kind == "production"
+        if j.parent_job_id == parent.job_id
+        and j.run_kind == "production"
+        and (existing_child is None or j.job_id != existing_child.job_id)
     ]
-    index = len(siblings)
+    index = (
+        existing_child.ensemble_index
+        if existing_child is not None and existing_child.ensemble_index is not None
+        else len(siblings)
+    )
     seed = (
         body.seed
         if body.seed is not None
+        else existing_child.ensemble_seed
+        if existing_child is not None and existing_child.ensemble_seed is not None
         else md_ensemble.random_seed(
             exclude=[j.ensemble_seed for j in siblings if j.ensemble_seed is not None]
         )
     )
 
-    child = new_job(
-        design_name=parent.design_name,
-        protocol=parent.protocol,
-        name_stem=parent.name_stem,
-        package_subdir=parent.package_subdir,
-        threads=parent.threads,
-        devices=parent.devices,
-        design_source_path=parent.design_source_path,
-        parent_job_id=parent.job_id,
-        ensemble_seed=seed,
-        ensemble_index=index,
-        run_kind="production",
+    child = existing_child or new_job(
+        design_name=parent.design_name, protocol=parent.protocol,
+        name_stem=parent.name_stem, package_subdir=parent.package_subdir,
+        threads=parent.threads, devices=parent.devices,
+        design_source_path=parent.design_source_path, parent_job_id=parent.job_id,
+        ensemble_seed=seed, ensemble_index=index, run_kind="production",
     )
+    child.ensemble_seed = seed
+    child.ensemble_index = index
     # Run target comes from the request (the panel's Local/Alpine radio), NOT the
     # parent — a locally-relaxed structure can be produced on Alpine and vice-versa.
     target = (body.execution_target or parent.execution_target or "local").lower()
@@ -5037,10 +5064,17 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
         idx = job_archive.read_index(_workspace(), "md_jobs")
         idx[child.job_id] = child.archive_path
         job_archive._write_index(_workspace(), "md_jobs", idx)
-    elif target == "runpod":
+    elif target == "runpod" and existing_child is None:
         # Old/local parents may predate archive-from-birth.  The production child is the
         # trajectory-heavy part, so its RunPod fetch still belongs on Archive.
         _apply_run_dir(child, None, execution_target=target)
+
+    if existing_child is not None:
+        _clear_editable_job_artifacts(child)
+        _reset_editable_runtime_state(child)
+        child.runpod_pod_id = None
+        child.status = MdStatus.queued
+        child.save(_workspace())
 
     anchors_file, anchors_src, anchors_requested, field = _resolve_child_anchors(
         parent, child, body
@@ -5092,6 +5126,168 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
         "warning": warning,
         "autostart": bool(body.autostart),
     }
+
+
+def _job_settings_editable(job: MdJob) -> bool:
+    """True only while changing settings cannot race or rewrite a real trajectory."""
+    return (
+        job.status in (MdStatus.draft, MdStatus.queued)
+        and not is_running(job.job_id)
+        and not job.slurm_job_id
+        and not job.runpod_pod_id
+    )
+
+
+def _clear_editable_job_artifacts(job: MdJob) -> None:
+    """Remove one editable job's generated package while preserving its identity.
+
+    The job directory (and archive-index entry) stays put.  Keeping ``job.json`` means a
+    failed rebuild remains visible and retryable instead of becoming an orphan; removing
+    every other child prevents stale confs/checkpoints from the old settings being mixed
+    into the replacement package.
+    """
+    job_dir = job.job_dir(_workspace())
+    job_dir.mkdir(parents=True, exist_ok=True)
+    for child in job_dir.iterdir():
+        if child.name == "job.json":
+            continue
+        if child.is_dir() and not child.is_symlink():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
+
+
+def _reset_editable_runtime_state(job: MdJob) -> None:
+    """Drop every cached/runtime trace of the package being replaced."""
+    job.segments = []
+    job.minimization = None
+    job.current_segment_idx = 0
+    job.namd_pid = None
+    job.health_samples = []
+    job.health_probe = None
+    job.cell_shrink_events = []
+    job.cell_settle_reports = []
+    job.design_rmsd_reports = []
+    job.decision = None
+    job.live_metrics = None
+    job.live_frame = None
+    job.error = None
+    job.failure_kind = None
+    job.slurm_job_id = None
+    job.slurm_state = None
+    job.slurm_diagnostics = None
+    job.remote_project_dir = None
+    job.remote_scratch_dir = None
+    job.resources = None
+    job.queued_at = None
+    job.slurm_started_at = None
+    job.download_status = None
+    job.fetch_attempts = 0
+    job.user_stopped = False
+
+
+def _save_draft_settings(job: MdJob, body: CreateJobRequest) -> MdJob:
+    """Update an unprepared draft without accidentally starting preparation."""
+    job.protocol = body.protocol
+    job.threads = body.threads
+    job.devices = body.devices
+    job.execution_target = body.execution_target
+    job.cluster_name = body.cluster_name or (
+        "alpine" if body.execution_target == "alpine" else None
+    )
+    job.partition = body.partition
+    job.requested_resources = body.slurm_resources or None
+    job.design_source_path = body.design_source_path or job.design_source_path
+    job.early_stop_relax = body.early_stop_relax
+    job.early_stop_tier = (body.early_stop_tier or "B").upper()
+    _apply_runpod_choices(job, body)
+    job.prep_params = body.model_dump()
+    job.prep_params_set = sorted(body.model_fields_set)
+    job.error = None
+    job.failure_kind = None
+    job.save(_workspace())
+    return job
+
+
+@router.put("/md/jobs/{job_id}/settings")
+async def update_md_job_settings(job_id: str, body: dict) -> dict:
+    """Replace settings in-place for a draft/prepared job that has never started.
+
+    This is deliberately not clone-and-delete: the job id, archive location, selection,
+    and parent/child position remain stable, so saving cannot create duplicate list rows
+    or leave an unindexed package behind.
+    """
+    from pydantic import ValidationError
+    from backend.core import md_queue
+
+    job = _load_job(job_id)
+    if not _job_settings_editable(job):
+        raise HTTPException(
+            409,
+            "Only draft or prepared jobs that have not been submitted or started can be edited.",
+        )
+    md_queue.dequeue(_workspace(), job_id)
+
+    # These controls live outside the setup wizard. Editing protocol/resources must not
+    # silently erase forces already attached to the prepared job.
+    recorded = job.spawn_params if job.run_kind == "production" else job.prep_params
+    request_fields = (
+        ProductionRunRequest.model_fields
+        if job.run_kind == "production"
+        else CreateJobRequest.model_fields
+    )
+    for key in ("anchors", "anchor_atoms", "anchor_k", "field"):
+        if (
+            key in request_fields
+            and key not in body
+            and (recorded or {}).get(key) is not None
+        ):
+            body[key] = recorded[key]
+
+    try:
+        if job.run_kind == "production" or job.ensemble_index is not None:
+            request = ProductionRunRequest(**body)
+            if not job.parent_job_id:
+                raise HTTPException(400, "Production job has no parent to rebuild from.")
+            result = await _spawn_md_production_impl(
+                job.parent_job_id, request, existing_child=job
+            )
+            return result["job"]
+
+        request = CreateJobRequest(**body)
+    except ValidationError as exc:
+        raise HTTPException(422, exc.errors()) from exc
+
+    # A draft remains a draft: Save changes records choices but does not turn editing into
+    # an implicit, expensive solvation run.
+    if job.status == MdStatus.draft:
+        return _save_draft_settings(job, request).to_dict()
+
+    seeded = bool(
+        job.seed_oxdna_job_id or job.seed_mrdna_job_id or job.seed_blade_job_id
+    )
+    params = request.model_dump()
+    params.update(
+        oxdna_job_id=job.seed_oxdna_job_id,
+        mrdna_job_id=job.seed_mrdna_job_id,
+        blade_job_id=job.seed_blade_job_id,
+        draft=False,
+    )
+    request = CreateJobRequest(**params)
+    design = None if seeded else _md_snapshot_design(job)
+    if not seeded and design is None:
+        raise HTTPException(409, "This job has no frozen design snapshot to rebuild from.")
+    name = job.design_name or "design"
+    size_factor = 1.0 if seeded else design_size_factor(design)
+
+    _clear_editable_job_artifacts(job)
+    _reset_editable_runtime_state(job)
+    job.runpod_pod_id = None
+    _spawn_prep_job(
+        request, design=design, seeded=seeded, name=name,
+        size_factor=size_factor, existing_job=job,
+    )
+    return MdJob.load(job_id, _workspace()).to_dict()
 
 
 @router.post("/md/jobs/{job_id}/revert-production")
@@ -5722,6 +5918,7 @@ def _record_submit_failure(job: MdJob, msg: str) -> None:
     """
     try:
         job.slurm_job_id = None
+        job.remote_submit_progress = None
         job.error = f"Cluster submission failed: {msg}"
         job.save(_workspace())
     except Exception as exc:  # never mask the original submit error
@@ -5747,12 +5944,16 @@ async def submit_md_job_remote(job_id: str, body: SubmitRemoteRequest) -> dict:
 
     mgr = cluster_ssh.get_manager()
     if not mgr.is_connected():
-        raise HTTPException(409, "Not connected to a cluster — connect first (Duo).")
+        msg = "Not connected to a cluster — connect first (Duo)."
+        _record_submit_failure(job, msg)
+        raise HTTPException(409, msg)
 
     profiles = cluster_config.load_profiles(_workspace())
     profile = profiles.get(body.cluster_name)
     if profile is None:
-        raise HTTPException(404, f"Unknown cluster profile {body.cluster_name!r}.")
+        msg = f"Unknown cluster profile {body.cluster_name!r}."
+        _record_submit_failure(job, msg)
+        raise HTTPException(404, msg)
 
     resources = _remote_resources(job, profile, body)
     try:

@@ -4312,6 +4312,7 @@
                     <input id="oxdna-jobs-traj-full-toggle" name="oxdna-viz" type="radio" value="traj-full" disabled> View full trajectory (this job)
                   </label>
                   <div id="oxdna-jobs-traj-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                  <div id="oxdna-jobs-traj-load-progress" style="display:none;margin-top:4px"></div>
                   <div id="oxdna-jobs-traj-controls" style="display:none;margin-top:4px">
                     <div style="display:flex;align-items:center;gap:6px">
                       <button id="oxdna-jobs-traj-play" title="Play / pause"
@@ -5628,6 +5629,7 @@
                     <span id="md-jobs-traj-frames-hint" style="font-size:10px;color:#8b949e;min-height:13px"></span>
                   </div>
                   <div id="md-jobs-traj-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                  <div id="md-jobs-traj-load-progress" style="display:none;margin-top:4px"></div>
                   <div id="md-jobs-traj-controls" style="display:none;margin-top:4px">
                     <div style="display:flex;align-items:center;gap:6px">
                       <button id="md-jobs-traj-play" title="Play / pause"
@@ -5845,14 +5847,21 @@
                   <div id="md-jobs-health-body" class="ox-card__body">
                     <div id="md-jobs-metrics"
                          style="display:grid;grid-template-columns:1fr 1fr;gap:4px"></div>
-                    <!-- Error message (part of the Health card) -->
-                    <details id="md-jobs-detail-error"
-                         style="display:none;font-size:var(--text-xs);color:#f85149;background:#1a0a0a;border:1px solid #5e1a1a;border-radius:3px;padding:5px;margin-top:6px;word-break:break-word">
-                      <summary style="cursor:pointer;font-weight:600">Failure details</summary>
-                      <pre id="md-jobs-detail-error-body" style="margin:6px 0 0;white-space:pre-wrap;font:inherit;color:inherit"></pre>
-                    </details>
                   </div>
                 </div>
+
+                <!-- Persistent verbose diagnostics. Kept separate from Health so a
+                     pre-flight/submission failure is visible even before metrics exist. -->
+                <details id="md-jobs-detail-error" class="ox-card"
+                     style="display:none;font-size:var(--text-xs);color:#f85149;background:#1a0a0a;border-color:#5e1a1a;margin-bottom:6px;word-break:break-word">
+                  <summary class="ox-card__header" style="cursor:pointer;color:#f85149">
+                    <span class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span>
+                    <span class="ox-card__title">Details</span>
+                  </summary>
+                  <div class="ox-card__body">
+                    <pre id="md-jobs-detail-error-body" style="margin:0;white-space:pre-wrap;font:inherit;color:inherit;max-height:260px;overflow:auto"></pre>
+                  </div>
+                </details>
 
                 <!-- Stage timeline element — relocated to the bottom of the jobs card at
                      init (main.js); still populated here by id. -->

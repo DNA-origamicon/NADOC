@@ -461,33 +461,15 @@ def protocol_fidelity(
         )
     # Restraints in production.  ``None`` = a relaxation package, where production has
     # not been configured yet; the production CHILD records its own answer.
-    if production_enm is False:
-        deviations.append(
-            {
-                "item": "production restraints",
-                "ours": "none — genuinely unrestrained",
-                "theirs": "an elastic network at k = 0.1 kcal/mol/A^2 retained THROUGHOUT "
-                "production (Yoo & Aksimentiev PNAS 110:20099; Maffeo, Yoo & "
-                "Aksimentiev NAR 44:3013; Shi et al. ACS Nano 13:12443)",
-                "why": "their 'unrestrained' 200+ ns origami productions are not unrestrained. "
-                "A template-built structure sampled with no network is a measurably "
-                "SOFTER ensemble — more breathing, more terminal fraying, larger RMSD "
-                "drift, lower apparent bending and torsional moduli. Any global-shape "
-                "or fluctuation observable compared against those papers is affected. "
-                "Set enm_restraints='on' (or relax with the 'literature' protocol, "
-                "which turns it on) to keep one.",
-            }
-        )
-    elif production_enm is True:
+    if production_enm is True:
         deviations.append(
             {
                 "item": "production elastic network",
                 "ours": "base-ring atoms, inter-residue, 8 A cutoff, k = 0.1, rebuilt from "
                 "the equilibrated checkpoint",
-                "theirs": "ALL non-hydrogen DNA atom pairs within 5 A, PSF bonds filtered",
-                "why": "same restraint constant, sparser network, so the effective framework "
-                "stiffness is lower than the published setup. NADOC has no dense-ENM "
-                "writer yet; this reuses the tutorial's base-ring network from §3.3.",
+                "theirs": "no elastic network during explicit-solvent production",
+                "why": "k = 0.1 is an equilibration rung in the tutorial and paper. Keeping "
+                "this network is an intentional restrained-production variant.",
             }
         )
     if stage_overrides:
@@ -1239,11 +1221,10 @@ def build_production_conf(
     ``damping`` is the Langevin coupling in ps^-1 and defaults to the LITERATURE
     PRODUCTION value, not the ladder's — see :data:`PRODUCTION_LANGEVIN_DAMPING`.
 
-    ``enm_file`` attaches an elastic network for the whole production run.  The published
-    Aksimentiev-group "unrestrained" origami productions are not unrestrained: they retain
-    a dense intra-helical network at k = 0.1 kcal/mol/A^2 throughout, and a template-built
-    structure sampled with no restraints at all is a measurably softer ensemble (more
-    breathing, more fraying, larger RMSD drift).  The file MUST be built from the
+    ``enm_file`` attaches an elastic network for a deliberately restrained production.
+    Normal explicit-solvent production is unrestrained: the tutorial releases its ENM at
+    k=0, and the associated paper's 210 ns production runs without restraints. The file
+    MUST be built from the
     EQUILIBRATED coordinates this run starts from — see ``write_production_enm``; an ENM
     built at prep time encodes the pre-ladder geometry and would pull the structure back
     to it, which is worse than no restraint at all.
@@ -2675,8 +2656,8 @@ def write_hmr_psf(
 _ENM_DECLASH_MIN_REF_ANG = 2.8
 
 
-#: Restraint constant for a production elastic network, kcal/mol/A^2.  The published
-#: origami productions run k = 0.1 throughout; this is that number.
+#: Restraint constant for an explicitly requested restrained production, kcal/mol/A^2.
+#: This reuses the tutorial's k=0.1 equilibration strength; it is not the production default.
 PRODUCTION_ENM_K = 0.1
 
 
@@ -2696,15 +2677,11 @@ def write_production_enm(
     equilibrium lengths, so the structure it was measured on is the structure it pulls
     towards.  Re-using the ladder's prep-time network here would restrain a finished run
     back to the ideal, pre-relaxation build — actively worse than running unrestrained.
-    So this rebuilds from the checkpoint production actually starts from, which is what
-    the published protocol does when it transitions from restrained equilibration to its
-    ENM-retained production.
+    So this rebuilds from the checkpoint production actually starts from.
 
-    Remaining delta, and it is a real one: this is the tutorial's BASE-RING network (nine
-    ring atoms per residue, inter-residue, 8 A cutoff), not the dense all-non-hydrogen
-    5 A network the Aksimentiev-group production papers describe.  Same k, sparser
-    network, so the effective stiffness is lower.  Recorded in ``protocol_fidelity`` as a
-    deviation rather than papered over.
+    This optional network uses NADOC's base-ring topology (nine ring atoms per residue,
+    inter-residue, 8 A cutoff), not the dense all-non-hydrogen 5 A network used during the
+    paper's restrained equilibration.
     """
     ref_pdb = package_dir / f"{name_stem}_prod_ref.pdb"
     write_declashed_pdb(coor_path, package_dir / f"{name_stem}.pdb", ref_pdb)

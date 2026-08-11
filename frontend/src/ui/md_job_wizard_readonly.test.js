@@ -59,6 +59,7 @@ function setup(over = {}) {
   const onTargetChange = vi.fn()
   const launch = vi.fn(async () => ({ job_id: 'new' }))
   const spawnProduction = vi.fn(async () => ({ job_id: 'new' }))
+  const updateJob = vi.fn(async (id) => ({ job_id: id }))
   const api = {
     fetchProtocolPlan,
     getRelaxPresets: vi.fn(async () => ({
@@ -74,10 +75,10 @@ function setup(over = {}) {
     lastErrorMessage: () => '',
   }
   const wiz = initJobWizard({
-    api, launch, spawnProduction, onTargetChange,
+    api, launch, spawnProduction, updateJob, onTargetChange,
     getJobs: () => [], getPartPath: () => null, ...over,
   })
-  return { wiz, api, onTargetChange, launch, spawnProduction }
+  return { wiz, api, onTargetChange, launch, spawnProduction, updateJob }
 }
 
 const modalRoot = () => document.querySelector('.modal--wizard') || document.body
@@ -85,6 +86,11 @@ const footerButtons = () => [...document.querySelectorAll('.modal__actions butto
 const buttonLabels = () => footerButtons()
   .filter(b => b.style.display !== 'none')
   .map(b => b.textContent.trim())
+const fieldControl = label => {
+  const field = [...modalRoot().querySelectorAll('.wizard-field')]
+    .find(el => el.querySelector('.wizard-field__label')?.textContent.includes(label))
+  return field?.querySelector('.wizard-field__control input, .wizard-field__control select')
+}
 
 beforeEach(() => { document.body.innerHTML = '' })
 
@@ -238,6 +244,43 @@ describe('live wizard commit', () => {
 
     finishLaunch({ job_id: 'new' })
     await vi.waitFor(() => expect(onJobCreated).toHaveBeenCalledWith('new'))
+  })
+})
+
+describe('editable existing job', () => {
+  it('populates controls from every stored job value, including inherited defaults', async () => {
+    const { wiz } = setup()
+    await wiz.openEditable({
+      ...JOB,
+      status: 'queued',
+      prep_params: { ...JOB.prep_params, padding_nm: 3.7, minimize_steps: 9900 },
+    })
+
+    // The mocked current plan still advertises 1.2 / 4800. Edit must display the values
+    // frozen into this job, even though those keys were not explicit user choices when
+    // it was originally created and therefore are absent from prep_params_set.
+    const tabs = [...modalRoot().querySelectorAll('.wizard-tab')]
+    tabs[1].click()
+    expect(fieldControl('Water padding')?.value).toBe('3.7')
+    expect(fieldControl('Minimisation steps')?.value).toBe('9900')
+  })
+
+  it('replays settings and saves into the same job instead of creating another', async () => {
+    const { wiz, updateJob, launch, spawnProduction } = setup()
+    await wiz.openEditable({ ...JOB, status: 'queued' })
+    const controls = [...modalRoot().querySelectorAll('.wizard-field__control input, '
+      + '.wizard-field__control select')]
+    expect(controls.some(c => !c.disabled)).toBe(true)
+
+    const tabs = [...modalRoot().querySelectorAll('.wizard-tab')]
+    tabs.at(-1).click()
+    const save = footerButtons().find(b => b.textContent.includes('Save changes'))
+    await vi.waitFor(() => expect(save.disabled).toBe(false))
+    save.click()
+
+    expect(updateJob).toHaveBeenCalledWith('abc123', expect.any(Object))
+    expect(launch).not.toHaveBeenCalled()
+    expect(spawnProduction).not.toHaveBeenCalled()
   })
 })
 

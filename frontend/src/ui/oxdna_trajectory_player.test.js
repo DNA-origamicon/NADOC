@@ -42,15 +42,17 @@ describe('stageAtFrame / fieldAtFrame', () => {
 })
 
 describe('initOxdnaTrajectoryPlayer', () => {
-  let playBtn, slider, markersEl, label, seeks, player
+  let playBtn, slider, markersEl, label, loadProgressEl, seeks, player
   beforeEach(() => {
     playBtn = document.createElement('button')
     slider = document.createElement('input'); slider.type = 'range'
     markersEl = document.createElement('div')
     label = document.createElement('div')
+    loadProgressEl = document.createElement('div')
     seeks = []
     player = initOxdnaTrajectoryPlayer({
-      playBtn, slider, markersEl, label, onSeek: (i) => seeks.push(i), fps: 10,
+      playBtn, slider, markersEl, label, loadProgressEl,
+      onSeek: (i) => seeks.push(i), fps: 10,
     })
   })
   afterEach(() => { player.stop(); vi.useRealTimers() })
@@ -69,6 +71,15 @@ describe('initOxdnaTrajectoryPlayer', () => {
     expect(seeks).toContain(3)
     expect(slider.value).toBe('3')
     expect(label.textContent).toContain('4 / 10')
+  })
+
+  it('renders one shared trajectory-loading bar with frame N of total', () => {
+    player.setLoading({ done: 17, total: 80 })
+    expect(loadProgressEl.style.display).not.toBe('none')
+    expect(loadProgressEl.querySelector('[data-trajectory-load-fill]').style.width).toBe('21.25%')
+    expect(loadProgressEl.textContent).toContain('Loading frame 17 of 80')
+    player.setLoading(null)
+    expect(loadProgressEl.style.display).toBe('none')
   })
 
   describe('◂ / ▸ frame steppers', () => {

@@ -63,8 +63,10 @@ function _basename(path) {
   return path ? path.replace(/\\/g, '/').split('/').pop() : ''
 }
 
-function _emitMdDisplayEvent(detail) {
-  window.dispatchEvent(new CustomEvent('nadoc:md-display-state', { detail }))
+function _emitMdDisplayEvent(detail, jobId = null) {
+  window.dispatchEvent(new CustomEvent('nadoc:md-display-state', {
+    detail: { ...detail, jobId },
+  }))
 }
 
 function _activeSceneRepresentation() {
@@ -436,7 +438,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
   function _openWebSocketNow() {
     // Skip a redundant reopen: same config + mode and the socket is already
     // connecting/open — the existing load already covers this request.
-    const sig = `${_configPath}|${_repr}`
+    const sig = `${_configPath}|${_repr}|${_jobId ?? ''}`
     if (_wsSig === sig && _ws &&
         (_ws.readyState === WebSocket.CONNECTING || _ws.readyState === WebSocket.OPEN)) {
       return
@@ -460,16 +462,19 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
       _log('WebSocket failed: ' + e.message, 'error')
       return
     }
+    const socket = _ws
+    const socketJobId = _jobId
 
     _ws.onopen = () => {
-      _emitMdDisplayEvent({ state: 'loading', message: 'Loading MD trajectory...' })
+      if (_ws !== socket) return
+      _emitMdDisplayEvent({ state: 'loading', message: 'Loading MD trajectory...' }, socketJobId)
       _loadInFlight   = true
       _loadConfigPath = _configPath
       _ws.send(JSON.stringify({
         action:          'load',
         config_path:     _configPath,
         mode:            _repr,
-        job_id:          _jobId,
+        job_id:          socketJobId,
         // Fallback only — the backend prefers the run's own design (resolved from
         // job_id) so the trajectory maps onto the right topology even when a
         // different design is open in the editor.
@@ -480,14 +485,16 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
     }
 
     _ws.onmessage = ev => {
+      if (_ws !== socket) return
       if (ev.data instanceof ArrayBuffer) { _onSolventBlob?.(ev.data); return }
       let msg
       try { msg = JSON.parse(ev.data) } catch { return }
-      _handleMessage(msg)
+      _handleMessage(msg, socketJobId)
     }
 
     _ws.onerror = () => _log('WebSocket error.', 'error')
     _ws.onclose = () => {
+      if (_ws !== socket) return
       _loadInFlight = false
       _setPlaying(false)
       _setLive(false)
@@ -495,7 +502,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
       // Unexpected drop (a deliberate close nulls onclose first) — tell the readiness
       // indicator so its dot doesn't stay green over a dead socket until the next
       // prewarm cycle re-warms and re-emits 'ready'.
-      _emitMdDisplayEvent({ state: 'error', message: 'MD display disconnected' })
+      _emitMdDisplayEvent({ state: 'error', message: 'MD display disconnected' }, socketJobId)
     }
   }
 
@@ -530,7 +537,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
   })
 
   // ── Message handler ───────────────────────────────────────────────────────
-  function _handleMessage(msg) {
+  function _handleMessage(msg, eventJobId = _jobId) {
     if (msg.type === 'log') {
       _log(msg.message, 'info')
       return
@@ -541,7 +548,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
     // as "working (1.3M atoms)" rather than an indefinite hang.
     if (msg.type === 'loading') {
       _log(msg.message, 'info')
-      _emitMdDisplayEvent({ state: 'loading', message: msg.message })
+      _emitMdDisplayEvent({ state: 'loading', message: msg.message }, eventJobId)
       return
     }
 
@@ -580,7 +587,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
         message: `Loaded ${_nFrames} MD frames`,
         nFrames: _nFrames,
         totalNs: _totalNs,
-      })
+      }, eventJobId)
       if (msg.warnings && msg.warnings.length > 0) {
         for (const w of msg.warnings) _log(`Warning: ${w}`, 'warn')
       }
@@ -618,7 +625,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
           frameIdx: msg.frame_idx,
           nFrames: msg.n_frames ?? _nFrames,
           nPositions: msg.positions?.length ?? msg.atoms?.length ?? 0,
-        })
+        }, eventJobId)
       }
       if (_live) {
         // Frame landed: clear the "fetching" state and restart the countdown.
@@ -632,7 +639,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
       _setSwitchBusy(false, null)   // never leave the switch toast up on a dead load
       _log('Error: ' + msg.message, 'error')
       if (statusLine) statusLine.textContent = 'Error — see Output'
-      _emitMdDisplayEvent({ state: 'error', message: msg.message })
+      _emitMdDisplayEvent({ state: 'error', message: msg.message }, eventJobId)
     }
   }
 
@@ -991,7 +998,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
       if (action === 'reuse-open') {
         // Socket already warm — no load event will fire, so signal readiness
         // explicitly for the toggle's indicator dot.
-        _emitMdDisplayEvent({ state: 'ready', message: 'MD display warm' })
+        _emitMdDisplayEvent({ state: 'ready', message: 'MD display warm' }, _jobId)
         _setLive(false)
         _sendPoll()
         return

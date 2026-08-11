@@ -227,8 +227,8 @@ describe('productionComparison', () => {
   })
 
   it('shows the restraint row, which is where an elastic network appears', () => {
-    // The single most consequential row in this table: the published productions keep a
-    // network and NADOC's did not, so it has to be visible and marked changed.
+    // An explicitly requested restrained run must be visibly different from the normal
+    // unrestrained production default.
     const { rows } = productionComparison(
       { extrabondsfile: 'mgh_extrabonds.txt' },
       { extrabondsfile: ['mgh_extrabonds.txt', 'd_prod_k0.1.enm.extra'] }, [])
@@ -525,10 +525,10 @@ describe('planPayload', () => {
     expect(body).not.toHaveProperty('seed')
   })
 
-  it('never sends the auto restraint choice as an explicit one', () => {
+  it('sends the auto restraint choice when explicitly selected', () => {
     expect(planPayload({ presetId: 'x', mode: 'production', parentJobId: 'a',
                          touched: { enm_restraints: 'auto' } }))
-      .not.toHaveProperty('enm_restraints')
+      .toMatchObject({ enm_restraints: 'auto' })
   })
 
   it('passes an atom-count hint so deferred values resolve exactly', () => {
@@ -568,18 +568,17 @@ describe('productionPayload', () => {
 
   it('carries the restraint choice and the thermostat coupling', () => {
     // Both differ from the ladder, and both change what the trajectory can be compared
-    // with: the published "unrestrained" productions keep a network, and their thermostat
-    // couples an order of magnitude more weakly than an equilibration run.
+    // with: an enabled network is a deliberately restrained production, and the thermostat
+    // coupling also differs from the equilibration run.
     const body = productionPayload({
       touched: { length_ns: 10, enm_restraints: 'on', langevin_damping: 1 } })
     expect(body).toMatchObject({ enm_restraints: 'on', langevin_damping: 1 })
   })
 
-  it('leaves the restraint choice to the server when not set', () => {
-    // Absent means "follow the parent protocol" — the backend's 'auto'.
+  it('uses the server unrestrained default when not set', () => {
     expect(productionPayload({ lengthNs: 10 })).not.toHaveProperty('enm_restraints')
     expect(productionPayload({ touched: { enm_restraints: 'auto' }, lengthNs: 10 }))
-      .not.toHaveProperty('enm_restraints')
+      .toMatchObject({ enm_restraints: 'auto' })
   })
 
   it('renames the two integrator axes to the spawn request’s own field names', () => {
@@ -1185,6 +1184,15 @@ describe('jobSettingsState — a created job back into the wizard\'s own vocabul
     const v = jobSettingsState(relaxJob())
     expect(v.touched).toEqual({ fast: false, threads: 8 })
     expect(v.provenanceKnown).toBe(true)
+  })
+
+  it('restores every stored value when editing instead of recalculating current defaults', () => {
+    const v = jobSettingsState(relaxJob(), { forEdit: true })
+    expect(v.touched).toMatchObject({
+      fast: false, padding_nm: 1.2, minimize_steps: 4800,
+      threads: 8, salt_mode: 'screening', mg_conc_mM: 12.5,
+    })
+    expect(v.touched).not.toHaveProperty('relax_hmr') // null still means automatic
   })
 
   it('keeps the protocol the job actually ran', () => {

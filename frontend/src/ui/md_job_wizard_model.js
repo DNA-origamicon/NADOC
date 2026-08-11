@@ -426,7 +426,7 @@ export function planPayload(state = {}) {
     send('dcd_freq')
     send('seed')
     send('langevin_damping')
-    if (t.enm_restraints && t.enm_restraints !== 'auto') body.enm_restraints = t.enm_restraints
+    if (t.enm_restraints) body.enm_restraints = t.enm_restraints
     send('orientation_restraint')
     send('orientation_force_constant')
     body.allow_undersized_cell = !!t.allow_undersized_cell
@@ -485,7 +485,7 @@ export function productionPayload({ touched = {}, autostart = false,
   if (has('production_hmr')) body.hmr = touched.production_hmr
   // Whether the run keeps an elastic network, and how hard it is thermostatted. Both
   // differ from the ladder and both change what the trajectory can be compared with.
-  if (has('enm_restraints') && touched.enm_restraints !== 'auto') {
+  if (has('enm_restraints')) {
     body.enm_restraints = touched.enm_restraints
   }
   if (has('langevin_damping')) body.langevin_damping = touched.langevin_damping
@@ -550,7 +550,7 @@ export function productionSteps(job) {
  *   stageOverrides: object, parentJobId: string|null, target: string, partition: string|null,
  *   provenanceKnown: boolean}}
  */
-export function jobSettingsState(job) {
+export function jobSettingsState(job, { forEdit = false } = {}) {
   // A run off a finished package, either way it was made: the "Production" button
   // (`run_kind`) or an ensemble fan-out (`ensemble_index`, whose replicas leave `run_kind`
   // unset). Both inherit their chemistry, cell and ladder from the parent's package, which
@@ -564,7 +564,10 @@ export function jobSettingsState(job) {
   for (const [rawKey, value] of Object.entries(source || {})) {
     // Restrict to what the user chose when we know it; otherwise every stored value, which
     // is right about the VALUES and over-reports the provenance (flagged by the caller).
-    if (known && !explicit.includes(rawKey)) continue
+    // A read-only replay preserves provenance chips by restoring only what the user
+    // explicitly chose. Editing instead starts every control at this job's stored value,
+    // even if the protocol's default has changed since the job was created.
+    if (!forEdit && known && !explicit.includes(rawKey)) continue
     const key = (production && PRODUCTION_REQUEST_ALIASES[rawKey]) || rawKey
     if (!allowed.includes(key)) continue
     if (value == null) continue

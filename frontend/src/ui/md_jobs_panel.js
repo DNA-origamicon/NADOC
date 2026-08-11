@@ -214,6 +214,14 @@ export function newestCompletedForPart(jobs, partPath) {
   return done[0] ?? null
 }
 
+/** Preserve an explicit historical selection while another job runs in the background.
+ * Active is only the initial default; it never outranks a still-valid user choice. */
+export function preferredMdSelection(jobs, selectedId, userDeselected = false) {
+  if (!jobs?.length || userDeselected) return null
+  if (selectedId && jobs.some(j => j.job_id === selectedId)) return selectedId
+  return (jobs.find(j => ['running', 'preparing'].includes(j.status)) ?? jobs[0]).job_id
+}
+
 /** Pure: list badge for a job seeded from another engine's relaxation, else ''.
  *  oxDNA/mrDNA seed from a coarse-grained frame; BLADE seeds from an exact all-atom relax. */
 export function seededBadge(job) {
@@ -230,7 +238,8 @@ export function seededBadge(job) {
  *  treating its `queued` status as "active" made it hijack the Relax button into "■ Stop". */
 export function mdRemoteAwaitingSubmit(job) {
   const remote = job?.execution_target === 'alpine' || job?.execution_target === 'runpod'
-  return remote && !job?.slurm_job_id && !job?.runpod_pod_id && job?.status === 'queued'
+  return remote && !job?.remote_submit_progress
+    && !job?.slurm_job_id && !job?.runpod_pod_id && job?.status === 'queued'
 }
 
 /** Pure: text for the detail error box, or null to hide it.  A user-`stopped` job is
@@ -266,6 +275,7 @@ export function mdFailureDetailsText(job) {
  *  that hasn't been submitted to SLURM yet is prepared-but-idle, not running — so a
  *  failed/never-attempted Alpine submit doesn't masquerade as a live job. */
 export function mdJobIsActive(job) {
+  if (job?.remote_submit_progress) return true
   if (!['queued', 'preparing', 'running'].includes(job?.status)) return false
   if (mdRemoteAwaitingSubmit(job)) return false
   return true
@@ -636,6 +646,12 @@ export function mdRemoteReconnectPrompt(jobs, clusterState, runpodState = 'conne
  *  the standard prep+relax (POST /md/jobs/{id}/prepare) from the seed's coordinates. */
 export function mdJobIsDraft(job) {
   return job?.status === 'draft' && !job?.awaiting_sequence
+}
+
+/** Settings may change only before a process, scheduler, or pod owns the job. */
+export function mdJobEditable(job) {
+  return ['draft', 'queued'].includes(job?.status)
+    && !job?.slurm_job_id && !job?.runpod_pod_id
 }
 
 /** Resolve where a newly-created job runs.
@@ -1304,6 +1320,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // _updateVizToggles reads it during init, and a `let` declared later is a TDZ.
   let _occupancyReady = false
   const trajStatus   = document.getElementById('md-jobs-traj-status')
+  const trajLoadProgress = document.getElementById('md-jobs-traj-load-progress')
   const trajControls = document.getElementById('md-jobs-traj-controls')
   const trajPlay     = document.getElementById('md-jobs-traj-play')
   const trajPrev     = document.getElementById('md-jobs-traj-prev')
@@ -1372,14 +1389,21 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     onSubmitted: async (jobId) => { await _fetchJobs(); _selectJob(jobId) },
     onSubmitStart: ({ jobId, parentId, label }) => {
       _remoteSubmitting = { jobId: jobId || parentId, label }
+      window.dispatchEvent(new CustomEvent('nadoc:md-submit-progress', {
+        detail: { jobId: jobId || parentId, active: true, label },
+      }))
       // Indeterminate: SFTP gives no byte-level progress through this path, and a fake
       // percentage that stalls is worse than an honest spinner.
       showOpProgress(label, 'Uploading the prepared package to Alpine…', { indeterminate: true })
       _paintRemoteSubmitting()
       _paintRunControl()   // ☁ Submit → ⟳ Submitting… for the duration of the upload
     },
-    onSubmitEnd: ({ ok, message }) => {
+    onSubmitEnd: async ({ ok, message }) => {
+      const submittedJobId = _remoteSubmitting?.jobId
       _remoteSubmitting = null
+      window.dispatchEvent(new CustomEvent('nadoc:md-submit-progress', {
+        detail: { jobId: submittedJobId, active: false },
+      }))
       hideOpProgress()
       if (!ok && message && clusterStatusEl) {
         clusterStatusEl.style.display = ''
@@ -1388,6 +1412,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       }
       _paintRemoteSubmitting()
       _paintRunControl()
+      // The backend persists submit/pre-flight failures on the queued job. Refetch now;
+      // otherwise only the transient toast changes and the persistent Details card does
+      // not receive the error until the next polling interval (or can be missed entirely
+      // if this panel is not currently polling).
+      if (!ok && _selectedId) {
+        await _fetchJobs()
+        _selectJob(_selectedId)
+      }
     },
   })
 
@@ -1750,15 +1782,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       return
     }
     if (_userDeselected) return   // the user deliberately cleared the selection — respect it
-    const selected = jobs.find(j => j.job_id === _selectedId)
-    const active = jobs.find(j => ['running', 'preparing'].includes(j.status))
-    if (!_selectedId || !selected) {
-      _selectJob((active ?? jobs[0]).job_id)
-      return
-    }
-    if (active && !['running', 'preparing'].includes(selected.status)) {
-      _selectJob(active.job_id)
-    }
+    const preferred = preferredMdSelection(jobs, _selectedId)
+    if (preferred && preferred !== _selectedId) _selectJob(preferred)
   }
 
   function _onOpen() {
@@ -1809,11 +1834,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const target = (_jobs.find(j => j.job_id === jobId) ?? _selectedJob())?.execution_target
     const spec = mdReadinessIndicator(state, target)
     displayIndicator.style.display = spec.show ? 'inline-flex' : 'none'
+    displayIndicator.querySelector('.nadoc-spinner')?.remove()
     // The dot is small and its label is two words; the WHY lives in the tooltip, which is
     // the only place a "no frames yet" can explain that the data is on a rented GPU.
     displayIndicator.title = title || ''
     if (spec.show) {
-      if (displayIndicatorDot) displayIndicatorDot.style.background = _C[spec.color] ?? _C.dim
+      if (displayIndicatorDot) {
+        displayIndicatorDot.style.display = state === 'warming' ? 'none' : ''
+        displayIndicatorDot.style.background = _C[spec.color] ?? _C.dim
+      }
+      if (state === 'warming') displayIndicator.prepend(makeSpinner(_C.accent, 10))
       if (displayIndicatorLabel) displayIndicatorLabel.textContent = spec.text
     }
   }
@@ -2285,6 +2315,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       }
     } catch (err) {
       console.warn(`[${_ts()}] md-jobs: display refresh failed`, err)
+      if (!_stillSelected(job.job_id)) return
       _setDisplayStatus(`Display failed: ${err.message}`, _C.err)
     }
   }
@@ -2335,6 +2366,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       mdDisplayController.prewarmLatest(d.config_path, { forceReload, jobId: job.job_id })
     } catch (err) {
       console.warn(`[${_ts()}] md-jobs: MD display prewarm failed`, err)
+      if (!_stillSelected(job.job_id)) return
       _setDisplayIndicator('error')
     }
   }
@@ -2507,6 +2539,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // Trajectory player (play/pause + scrub slider); seeks drive the display frame.
   const trajPlayer = initOxdnaTrajectoryPlayer({
     playBtn: trajPlay, slider: trajSlider, markersEl: trajMarkers, label: trajLabel,
+    loadProgressEl: trajLoadProgress,
     prevBtn: trajPrev, nextBtn: trajNext,
     onSeek: (i) => { getMdViz?.()?.showFrame(i); solvent?.showFrame(i) },
     onBeforePlay: async () => {
@@ -2774,7 +2807,19 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (!_selectedId || !v) return
     const interval = _trajInterval()
     _setTrajStatus('Loading trajectory…', _C.accent)
-    const r = await v.loadTrajectory(_selectedId, true, 'lineage', interval)
+    const jobId = _selectedId
+    trajPlayer.setLoading({ done: 0, total: 0 })
+    const poll = setInterval(async () => {
+      const p = await api.getMdTrajectoryProgress(jobId).catch(() => null)
+      if (_selectedId === jobId && p?.active) trajPlayer.setLoading(p)
+    }, 250)
+    let r
+    try {
+      r = await v.loadTrajectory(jobId, true, 'lineage', interval)
+    } finally {
+      clearInterval(poll)
+      trajPlayer.setLoading(null)
+    }
     if (r.ok) {
       if (trajControls) trajControls.style.display = ''
       trajPlayer.setTrajectory(r.n_frames, r.markers)
@@ -2995,10 +3040,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
   window.addEventListener('nadoc:md-display-state', evt => {
     const state = evt.detail?.state
+    const eventJobId = evt.detail?.jobId
+    // Closing/replacing a socket can still drain already-queued browser events. They
+    // belong to the old job and must never flash an error over the newly selected one.
+    if (eventJobId && eventJobId !== _selectedId) return
     // Drive the readiness dot for BOTH prewarm (toggle off) and live display.
     // 'loading' → warming; 'ready'/'frame' → ready; 'error' → error.
     if (state === 'error') _setDisplayIndicator('error')
-    else if (state === 'ready' || state === 'frame') _setDisplayIndicator('ready')
+    else if (state === 'frame') _setDisplayIndicator('ready')
+    else if (state === 'ready') _setDisplayIndicator(displayToggle?.checked ? 'warming' : 'ready')
     else if (state === 'loading') _setDisplayIndicator('warming')
 
     if (!displayToggle?.checked) return
@@ -3015,7 +3065,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // 'loading' state (trajectory still being fetched/streamed) keeps it spinning.
     if (state === 'error') _setDisplayStatus(`Display failed: ${message}`, _C.err, false)
     else if (state === 'frame') _setDisplayStatus(message, _C.accent, false)
-    else if (state === 'ready') _setDisplayStatus(message, _C.muted, false)
+    else if (state === 'ready') _setDisplayStatus(`${message} — loading first frame…`, _C.muted, true)
     else _setDisplayStatus(message, _C.muted, true)   // 'loading'
   })
 
@@ -3460,6 +3510,17 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     },
     launch: (payload, opts) => _launchRelax(payload, opts),
     spawnProduction: _spawnProductionFromWizard,
+    updateJob: async (jobId, payload) => {
+      const job = await api.updateMdJobSettings(jobId, payload)
+      if (!job) {
+        showToast(api.lastErrorMessage?.() || 'Could not save job settings', 'error')
+        return null
+      }
+      await _fetchJobs()
+      _reselectJob(jobId)
+      showToast('Job settings saved', 'ok')
+      return job
+    },
     getJobs: () => _jobs,
     getPartPath: () => _currentPartPath(),
     onJobCreated: jobId => { _reselectJob(jobId) },
@@ -3778,14 +3839,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
    *
    * The wizard asks about two dozen things — protocol, ion chemistry, box padding, the
    * integrator's three axes, the whole 22-stage ladder — and once the job existed there
-   * was nowhere to read any of it back. This reopens the wizard itself on that job, locked,
-   * so what a run was set up with is inspected in the same layout it was chosen in.
+   * was nowhere to read any of it back. This reopens the wizard itself: editable before
+   * execution ownership, locked afterward, always in the layout where it was chosen.
    */
   function _openJobRowMenu(jobId, e) {
     const job = _jobs.find(j => j.job_id === jobId)
     if (!job) return
     e.preventDefault()
     const view = jobSettingsState(job)
+    const editable = mdJobEditable(job)
     createContextMenu({
       x: e.clientX, y: e.clientY,
       items: [
@@ -3793,9 +3855,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         {
           // Jobs created before their request was recorded have nothing to show, and the
           // label says why rather than the item silently doing nothing.
-          label: view.available ? 'View settings…' : 'Settings were not recorded for this run',
+          label: view.available
+            ? (editable ? 'Edit…' : 'View settings…')
+            : 'Settings were not recorded for this run',
           disabled: !view.available,
-          onClick: () => { void _wizard.openReadOnly(job) },
+          onClick: () => {
+            void (editable ? _wizard.openEditable(job) : _wizard.openReadOnly(job))
+          },
         },
       ],
     })
@@ -3957,6 +4023,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   async function _applyVisualizationJobSwitch(action, job) {
     return applyMdVisualizationJobSwitch(action, {
       off: _setTrajOff,
+      trajectory: () => _mdHasTrajectory(job) && trajToggle?.checked
+        ? _refreshTraj()
+        : _setTrajOff(),
       display: async () => {
         solvent?.setJob(_selectedId)
         weld?.setJob(_selectedId)
@@ -3970,8 +4039,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     })
   }
 
-  /** Repopulate the Anchors + E-field cards with what the selected RUNNING job carries.
-   *  Historical selections deliberately retain the current visualization state. Mirrors
+  /** Repopulate the Anchors + E-field cards with what the selected job carries.
+   *  Historical selections retarget every job-scoped card just like live selections. Mirrors
    *  the oxDNA/SNUPI panels' `_applyRunConfig` -> `applyConfig`. NAMD keeps its forces in
    *  the package manifest rather than on the job row, so this reads them over the wire.
    *
@@ -4264,7 +4333,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       errorEl.style.display = ''
       // Open on the transition into a real failure. A user may collapse it afterward;
       // routine status polls must not fight that choice by reopening it every time.
-      if (wasHidden && job?.status === 'failed') errorEl.open = true
+      if (wasHidden) errorEl.open = true
     } else {
       errorEl.style.display = 'none'
       errorEl.open = false
@@ -4763,7 +4832,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // click-the-selected-row-to-deselect here).
     deselectJob: _deselectJob,
     /**
-     * Open a job's settings, locked (the right-click "View settings…" entry).
+     * Open a job's settings. Draft/prepared jobs edit in place; started jobs are locked.
      *
      * Exposed because the list the user actually right-clicks is the UNIFIED Simulate list
      * (`simulate_jobs.js`), whose nodes are a reduced cross-engine shape that does not
@@ -4774,12 +4843,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       if (!jobId) return
       if (!_jobs.find((j) => j.job_id === jobId)) await _fetchJobs()
       const job = _jobs.find((j) => j.job_id === jobId)
-      if (job) return _wizard.openReadOnly(job)
+      if (job) return mdJobEditable(job)
+        ? _wizard.openEditable(job)
+        : _wizard.openReadOnly(job)
     },
     /** Whether that entry has anything to show — the menu offers it either way, but says
      *  why when a job predates its request being recorded. */
     hasJobSettings: (jobId) =>
       jobSettingsState(_jobs.find((j) => j.job_id === jobId)).available,
+    canEditJob: (jobId) => mdJobEditable(_jobs.find((j) => j.job_id === jobId)),
     // Consolidated Archive/Delete (the section-level #simulate-job-actions dispatches to the
     // selected node's engine panel; both operate on this panel's currently-selected job).
     deleteSelected, archiveSelected,

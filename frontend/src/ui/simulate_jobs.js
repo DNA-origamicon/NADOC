@@ -81,6 +81,7 @@ export function nodeIsActive(node) {
  *  Kept separate from `nodeIsActive` on purpose: that one drives the spinner and the
  *  master Stop button, where "queued" genuinely should read as pending. */
 export function nodeNeedsPolling(node) {
+  if (node?.remote_submit_progress) return true
   if (!nodeIsActive(node)) return false
   if (node?.status !== 'queued') return true
   return !!(node?.slurm_job_id || node?.runpod_pod_id)
@@ -119,6 +120,9 @@ function _pct1(x) {
  *  while running (the bar COLOR conveys state). */
 export function masterProgressPct(node) {
   if (!node) return 0
+  if (node.remote_submit_progress?.fraction != null) {
+    return _pct1(Number(node.remote_submit_progress.fraction))
+  }
   if (node.status === 'completed' || node.production_state === 'done') return 100
   if (node.engine === 'lammps') {
     const total = Number(node.steps) || 0
@@ -152,6 +156,7 @@ export function masterProgressPct(node) {
  *  (design changed since the run — stale/out-of-date) · grey stopped/queued · blue active. */
 export function masterProgressColor(node) {
   if (!node) return _C.accent
+  if (node.remote_submit_progress) return _C.accent
   if (node.out_of_date) return _C.warn                                   // orange — stale
   if (node.status === 'failed' || node.production_state === 'failed') return _C.err
   if (node.status === 'completed' || node.production_state === 'done') return _C.ok
@@ -163,6 +168,11 @@ export function masterProgressColor(node) {
  *  hover TOOLTIP (what used to sit inline in each engine's #*-jobs-progress). */
 export function masterProgressTooltip(node) {
   if (!node) return ''
+  if (node.remote_submit_progress) {
+    const p = node.remote_submit_progress
+    const files = p.files_total ? `\n${p.files_done || 0}/${p.files_total} files` : ''
+    return `NAMD · submitting to Alpine\n${p.label || p.phase || 'Working…'}${files}`
+  }
   const pct = masterProgressPct(node)
   const stale = node.out_of_date ? '\n⚠ design changed since this run' : ''
   if (node.engine === 'lammps') {
@@ -287,6 +297,10 @@ export function masterStepText(node) {
 export function masterStatusText(node) {
   if (!node) return 'Select a run above, or press ▶ Relax to start one.'
   const eng = engineLabel(node)
+  if (node.remote_submit_progress) {
+    const p = node.remote_submit_progress
+    return `${eng} · submitting to Alpine · ${p.label || p.phase || 'Working…'} · ${masterProgressPct(node)}%`
+  }
   if (node.engine === 'lammps') {
     return `${eng} · ${node.status} · ${masterStepText(node)}`
   }
@@ -579,7 +593,7 @@ export function initSimulateJobs({
    *
    * NAMD only for now: the Job Wizard asks about two dozen things — protocol, ion
    * chemistry, box padding, the integrator's three axes, the whole stage ladder — and once
-   * the job existed there was nowhere to read any of it back. Other engines have no
+   * the job existed there was nowhere to read or edit it back. Other engines have no
    * equivalent setup surface to reopen, so their rows get no menu and keep the browser's.
    */
   function _openRowMenu(jobId, e) {
@@ -595,7 +609,7 @@ export function initSimulateJobs({
           // label says why rather than the item silently doing nothing.
           label: mdPanel.hasJobSettings?.(jobId) === false
             ? 'Settings were not recorded for this run'
-            : 'View settings…',
+            : (mdPanel.canEditJob?.(jobId) ? 'Edit…' : 'View settings…'),
           disabled: mdPanel.hasJobSettings?.(jobId) === false,
           onClick: () => { void mdPanel.openJobSettings(jobId) },
         },
@@ -943,6 +957,23 @@ export function initSimulateJobs({
   })
   // A design edit / feature-log seek re-evaluates staleness + list membership.
   window.addEventListener('nadoc:design-changed', () => _fetch())
+  // A cluster-submit request can upload for minutes before sbatch returns. Wake the
+  // unified card immediately, then let its normal poll replace this optimistic phase
+  // with the durable phase/fraction written by the backend.
+  window.addEventListener('nadoc:md-submit-progress', (e) => {
+    const { jobId, active, label } = e.detail || {}
+    const node = _nodes.find(n => n.engine === 'namd' && n.job_id === jobId)
+    if (node && active) {
+      node.remote_submit_progress = {
+        phase: 'starting', label: label || 'Starting cluster submission…', fraction: 0,
+      }
+      _renderList()
+      _renderMaster()
+      _schedulePoll()
+    } else {
+      void _fetch()
+    }
+  })
   // A design switch re-filters the list + drops any selection/overlay (keyed to the old design).
   window.addEventListener('nadoc:workspace-path-change', () => {
     _sel = { engine: null, id: null }

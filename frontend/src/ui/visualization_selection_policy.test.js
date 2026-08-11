@@ -6,10 +6,9 @@ import {
 } from './visualization_selection_policy.js'
 
 describe('selectionUpdatesVisualization', () => {
-  it('allows only the currently running selection to update visualization state', () => {
-    expect(selectionUpdatesVisualization({ status: 'running' })).toBe(true)
-    for (const status of ['queued', 'preparing', 'completed', 'failed', 'cancelled', 'stopped']) {
-      expect(selectionUpdatesVisualization({ status })).toBe(false)
+  it('retargets visualization for every selected job, including historical parents', () => {
+    for (const status of ['queued', 'preparing', 'running', 'completed', 'failed', 'cancelled', 'stopped']) {
+      expect(selectionUpdatesVisualization({ status })).toBe(true)
     }
   })
 
@@ -20,9 +19,9 @@ describe('selectionUpdatesVisualization', () => {
 })
 
 describe('applyMdVisualizationJobSwitch', () => {
-  it.each(['off', 'display', 'flex', 'occupancy', 'none'])('runs only the %s handler', async (action) => {
+  it.each(['off', 'display', 'flex', 'occupancy', 'trajectory', 'none'])('runs only the %s handler', async (action) => {
     const handlers = Object.fromEntries(
-      ['off', 'display', 'flex', 'occupancy', 'none'].map(key => [key, vi.fn()]),
+      ['off', 'display', 'flex', 'occupancy', 'trajectory', 'none'].map(key => [key, vi.fn()]),
     )
     await applyMdVisualizationJobSwitch(action, handlers)
     expect(handlers[action]).toHaveBeenCalledOnce()
@@ -37,13 +36,13 @@ describe('mdVisualizationJobSwitchAction', () => {
     [{ display: true }, 'display'],
     [{ flex: true }, 'flex'],
     [{ occupancy: true }, 'occupancy'],
-    [{ trajectory: true }, 'off'],
+    [{ trajectory: true }, 'trajectory'],
     [{}, 'none'],
   ])('maps the active view to the job-switch action', (state, action) => {
     expect(mdVisualizationJobSwitchAction(state)).toBe(action)
   })
 
-  it('always turns trajectories off, even if malformed state reports another view', () => {
-    expect(mdVisualizationJobSwitchAction({ display: true, trajectory: true })).toBe('off')
+  it('gives active trajectory playback priority if malformed state reports another view', () => {
+    expect(mdVisualizationJobSwitchAction({ display: true, trajectory: true })).toBe('trajectory')
   })
 })

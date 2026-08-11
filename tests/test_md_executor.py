@@ -1208,6 +1208,30 @@ def test_submit_proceeds_when_modules_load_cleanly(tmp_path, alpine, resources):
     assert any("module spider" in c for c in conn.runs)  # the pre-flight really ran
 
 
+def test_submit_persists_each_long_running_handoff_phase(
+    tmp_path, alpine, resources, monkeypatch
+):
+    job = _make_prepared_job(tmp_path)
+    phases = []
+    original_save = type(job).save
+
+    def capture_save(self, workspace_dir):
+        if self.remote_submit_progress:
+            phases.append(dict(self.remote_submit_progress))
+        return original_save(self, workspace_dir)
+
+    monkeypatch.setattr(type(job), "save", capture_save)
+    conn = FakeConn(canned={"sbatch": RunResult(0, "Submitted batch job 4243", "")})
+
+    out = _run(
+        ex.submit_job(job, tmp_path, profile=alpine, resources=resources, conn=conn)
+    )
+
+    assert {p["phase"] for p in phases} >= {"preflight", "upload", "mirror", "sbatch"}
+    assert [p["fraction"] for p in phases] == sorted(p["fraction"] for p in phases)
+    assert out.remote_submit_progress is None
+
+
 def test_submit_preflight_catches_a_missing_namd_binary(tmp_path, alpine, resources):
     """A private build is an absolute path, so `test -x` settles whether it is really
     there — the same filesystem answer from the login node or a compute node."""
@@ -1231,6 +1255,28 @@ def test_submit_preflight_checks_the_private_binary_path(tmp_path, alpine, resou
     gpu_res = cr.recommend(prof, n_atoms=100_000, total_ns=2.0, partition="ah200")
     _run(ex.submit_job(job, tmp_path, profile=prof, resources=gpu_res, conn=conn))
     assert any("/projects/me/namd3" in c for c in conn.runs)
+
+
+def test_submit_preflight_does_not_probe_compute_modules_for_private_binary(
+    tmp_path, alpine, resources
+):
+    """Login-node Lmod can reject modules that load inside an Alpine batch job."""
+    from dataclasses import replace as _replace
+
+    prof = _replace(
+        alpine,
+        gpu_namd_bin="/projects/me/namd3",
+        gpu_module_loads=["gcc/11.2.0", "cuda/12.1.1"],
+    )
+    job = _make_prepared_job(tmp_path)
+    conn = FakeConn(canned={"sbatch": RunResult(0, "Submitted batch job 78", "")})
+    gpu_res = cr.recommend(prof, n_atoms=100_000, total_ns=2.0, partition="ah200")
+
+    _run(ex.submit_job(job, tmp_path, profile=prof, resources=gpu_res, conn=conn))
+
+    preflight = next(c for c in conn.runs if "PREFLIGHT_OK" in c)
+    assert "test -x '/projects/me/namd3'" in preflight
+    assert "module spider" not in preflight
 
 
 # ── live metrics retrieved from the node (SLURM 30954752 post-mortem) ─────────

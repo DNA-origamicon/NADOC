@@ -1,5 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { DEFAULT_PRODUCTION_TIMESTEP_FS, mdAnchorAtomNames, mdAnchorStiffness, mdForcesProvenance, DEFAULT_TRAJ_INTERVAL, MD_PRODUCTION_MARKER, TRAJ_FRAME_CONFIRM, effectiveProductionTimestepFs, filterJobsForPart, jobProductionTimestepFs, mdHasProductionRun, mdIsLocalTarget, mdIsRemoteJob, mdSegGlyphKind, newestCompletedForPart, normalizeWorkspacePath, productionNsFromSteps, seededBadge, stridedFrameCount } from './md_jobs_panel.js'
+import { DEFAULT_PRODUCTION_TIMESTEP_FS, mdAnchorAtomNames, mdAnchorStiffness, mdForcesProvenance, DEFAULT_TRAJ_INTERVAL, MD_PRODUCTION_MARKER, TRAJ_FRAME_CONFIRM, effectiveProductionTimestepFs, filterJobsForPart, jobProductionTimestepFs, mdHasProductionRun, mdIsLocalTarget, mdIsRemoteJob, mdJobEditable, mdSegGlyphKind, newestCompletedForPart, normalizeWorkspacePath, productionNsFromSteps, seededBadge, stridedFrameCount } from './md_jobs_panel.js'
+
+describe('mdJobEditable', () => {
+  it('allows only draft/prepared jobs that no executor owns', () => {
+    expect(mdJobEditable({ status: 'draft' })).toBe(true)
+    expect(mdJobEditable({ status: 'queued' })).toBe(true)
+    expect(mdJobEditable({ status: 'queued', slurm_job_id: '1' })).toBe(false)
+    expect(mdJobEditable({ status: 'queued', runpod_pod_id: 'p' })).toBe(false)
+    for (const status of ['preparing', 'running', 'completed', 'failed', 'stopped']) {
+      expect(mdJobEditable({ status })).toBe(false)
+    }
+  })
+})
 
 // Auto-mock the API client so the real panel constructs without touching the network
 // (only the shared-base parity block at the bottom drives the real panel; the
@@ -217,7 +229,22 @@ describe('newestCompletedForPart (cross-engine compare fallback)', () => {
   })
 })
 
-import { mdJobIsActive, mdJobIsRunning, mdJobOccupiesLocalMachine, mdRequestedRunTarget, mdRunpodGpuKeyFor, mdJobIsStartable, mdJobIsResumable, mdRunControl, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob, mdWatchdogDecision, mdRemoteReconnectPrompt, mdJobIsDraft, mdDraftRunLabel, mdJobRowSig, mdJobRowCtx, gpuFallbackFromToggle, mdQueueable, mdQueueRowLabel, mdRunpodStartable, mdRunpodPhase } from './md_jobs_panel.js'
+import { mdJobIsActive, mdJobIsRunning, mdJobOccupiesLocalMachine, mdRequestedRunTarget, mdRunpodGpuKeyFor, mdJobIsStartable, mdJobIsResumable, mdRunControl, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob, mdWatchdogDecision, mdRemoteReconnectPrompt, mdJobIsDraft, mdDraftRunLabel, mdJobRowSig, mdJobRowCtx, gpuFallbackFromToggle, mdQueueable, mdQueueRowLabel, mdRunpodStartable, mdRunpodPhase, preferredMdSelection } from './md_jobs_panel.js'
+
+describe('preferredMdSelection', () => {
+  const jobs = [
+    { job_id: 'remote-child', status: 'running' },
+    { job_id: 'local-parent', status: 'completed' },
+  ]
+
+  it('uses the active job only as the initial default', () => {
+    expect(preferredMdSelection(jobs, null)).toBe('remote-child')
+  })
+
+  it('does not steal selection back from a historical parent on a status poll', () => {
+    expect(preferredMdSelection(jobs, 'local-parent')).toBe('local-parent')
+  })
+})
 
 describe('mdJobIsDraft / mdDraftRunLabel (deferred-prep seed)', () => {
   it('mdJobIsDraft is true only for status "draft"', () => {
@@ -779,6 +806,8 @@ describe('mdRemoteAwaitingSubmit', () => {
   })
   it('is false once handed off (slurm id / pod id), for local jobs, or non-queued states', () => {
     expect(mdRemoteAwaitingSubmit({ status: 'queued', execution_target: 'alpine', slurm_job_id: '9' })).toBe(false)
+    expect(mdRemoteAwaitingSubmit({ status: 'queued', execution_target: 'alpine',
+      remote_submit_progress: { phase: 'upload', fraction: 0.4 } })).toBe(false)
     expect(mdRemoteAwaitingSubmit({ status: 'queued', execution_target: 'runpod', runpod_pod_id: 'pod123' })).toBe(false)
     expect(mdRemoteAwaitingSubmit({ status: 'queued', execution_target: 'local' })).toBe(false)
     expect(mdRemoteAwaitingSubmit({ status: 'running', execution_target: 'alpine' })).toBe(false)

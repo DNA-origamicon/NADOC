@@ -239,6 +239,28 @@ describe('live solvent side-channel', () => {
     const { ws } = connected()
     expect(ws.binaryType).toBe('arraybuffer')
   })
+
+  it('scopes display events to the job and ignores messages drained from an old socket', () => {
+    const seen = []
+    const onState = e => seen.push(e.detail)
+    window.addEventListener('nadoc:md-display-state', onState)
+    try {
+      const { c, ws: old } = connected()
+      expect(seen.at(-1)).toMatchObject({ state: 'loading', jobId: 'j1' })
+
+      c.displayLatest('/tmp/run.json', { forceReload: true, live: true, jobId: 'parent' })
+      vi.advanceTimersByTime(200)
+      const fresh = sockets.at(-1)
+      fresh.open()
+      expect(seen.at(-1)).toMatchObject({ state: 'loading', jobId: 'parent' })
+
+      const before = seen.length
+      old.onmessage?.({ data: JSON.stringify({ type: 'error', message: 'stale child error' }) })
+      expect(seen).toHaveLength(before)
+    } finally {
+      window.removeEventListener('nadoc:md-display-state', onState)
+    }
+  })
 })
 
 // ── Rep-switch progress signal ───────────────────────────────────────────────

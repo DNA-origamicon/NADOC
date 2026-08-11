@@ -2656,6 +2656,8 @@ export const getMdTrajectory     = (id, signal, opts = {}) =>
  *  Also returns `total_raw` + per-stage `n_raw` (undownsampled DCD counts). */
 export const getMdTrajectoryMeta = (id, opts = {})       =>
   _oxdnaJSON('GET',  `/md/jobs/${id}/trajectory-meta${_strideQuery(opts)}`)
+export const getMdTrajectoryProgress = (id) =>
+  _oxdnaJSON('GET', `/md/jobs/${id}/trajectory-progress`)
 /** Per-nucleotide flexibility map (RMSF) over the NAMD run — same shape as
  *  getOxdnaRmsf, so the flexibility-map display code is shared. */
 export const getMdRmsf           = (id, signal)  => _oxdnaJSON('GET',  `/md/jobs/${id}/rmsf`, undefined, { signal })
@@ -2846,6 +2848,8 @@ export const getMdRemoteRecommendation = (id, { clusterName = 'alpine', safetyFa
 }
 /** Stage + submit a prepared job to the cluster. `resources` omitted → auto-recommend. */
 export const submitMdJobRemote   = (id, body = {}) => _oxdnaJSON('POST', `/md/jobs/${id}/submit-remote`, body)
+/** Replace settings and rebuild an unstarted draft/prepared job in place. */
+export const updateMdJobSettings = (id, body = {}) => _oxdnaJSON('PUT', `/md/jobs/${id}/settings`, body)
 /** Resume a timed-out remote job from its last checkpoint (new SLURM submission). */
 export const resumeMdJobRemote   = (id, body = {}) => _oxdnaJSON('POST', `/md/jobs/${id}/resume-remote`, body)
 export const finishMdJob = (id, destRoot) =>

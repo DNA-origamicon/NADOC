@@ -80,7 +80,7 @@ class ProtocolPlanRequest(CreateJobRequest):
         "structure rotate freely.",
     )
     enm_restraints: str = Field(
-        "auto",
+        "off",
         description="Production only: keep an elastic network through the run "
         "('auto' | 'on' | 'off').",
     )
@@ -721,7 +721,7 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
     conditions.append(
         {
             "id": "production_restraints",
-            "kind": "info" if restraints["enm_restraints"] else "warning",
+            "kind": "warning" if restraints["enm_restraints"] else "info",
             "title": (
                 "An elastic network is retained through production"
                 if restraints["enm_restraints"]
@@ -732,17 +732,14 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
                     "Rebuilt from the equilibrated coordinates this run starts from — never from "
                     "the pre-relaxation build, which would pull the structure back to it. "
                     f"k = {_p.PRODUCTION_ENM_K:g} kcal/mol/A^2 on base-ring atoms within 8 A. "
-                    "Note the published productions use a DENSER network (all non-hydrogen pairs "
-                    "within 5 A), so this is the same restraint constant on a sparser network. "
+                    "This is a deliberately restrained production and does not reproduce the "
+                    "paper's unrestrained explicit-solvent production ensemble. "
                     f"Chosen because {restraints['enm_reason']}."
                 )
                 if restraints["enm_restraints"]
                 else (
-                    "The Aksimentiev-group 200+ ns origami productions a run like this would be "
-                    "compared against are NOT unrestrained — they retain a network at "
-                    f"k = {_p.PRODUCTION_ENM_K:g} throughout. Sampling a template-built structure "
-                    "with none at all gives a measurably softer ensemble: more breathing, more "
-                    "terminal fraying, larger RMSD drift. "
+                    "This matches the tutorial's final k=0 handoff and the associated paper's "
+                    "210 ns explicit-solvent production, which was run without restraints. "
                     f"Chosen because {restraints['enm_reason']}."
                 )
             ),
@@ -1090,7 +1087,7 @@ def _production_provenance(
         "enm_restraints": {
             "value": "on" if restraints["enm_restraints"] else "off",
             "provenance": "user"
-            if (body.enm_restraints or "auto") != "auto"
+            if "enm_restraints" in explicit and body.enm_restraints != "auto"
             else "derived",
             "reason": restraints["enm_reason"],
         },

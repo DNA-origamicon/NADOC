@@ -307,6 +307,10 @@ class MdJob:
     remote_project_dir: Optional[str] = None
     remote_scratch_dir: Optional[str] = None
     resources: Optional[dict] = None
+    # Durable progress for the synchronous Alpine hand-off.  Until sbatch returns there
+    # is no slurm_job_id, so without this the job looked idle throughout a potentially
+    # minutes-long upload. Shape: {phase, label, fraction, files_done, files_total}.
+    remote_submit_progress: Optional[dict] = None
     # Wall-clock (epoch s) when the job was last handed to the SLURM queue (submit or
     # resume) — i.e. when it entered PENDING.  Drives the queued icon's "waiting Nm"
     # tooltip.  None for local jobs / never-submitted.

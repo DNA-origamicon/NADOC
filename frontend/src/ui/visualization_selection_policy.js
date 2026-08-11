@@ -1,20 +1,18 @@
 /**
  * Selection policy for simulation visualization ownership.
  *
- * A visualization is live state, not job-detail state.  Selecting the job that is
- * currently producing frames may retarget/replace that state; deselection and selections
- * of queued, completed, failed, or cancelled jobs are observational and must leave it
- * untouched. Capability/readout refresh is separate, so historical results remain
- * manually viewable. Keeping this rule here prevents the engine panels from each
- * inventing subtly different selection semantics.
+ * Selection owns every job-scoped card, including visualization. A completed parent is
+ * often the only locally available trajectory while its child runs remotely; treating
+ * historical selection as "detail only" leaves the display stuck on that remote child.
+ * Deselection remains non-destructive, but every real selection retargets the cards.
  */
 export function selectionUpdatesVisualization(job) {
-  return job?.status === 'running'
+  return !!job
 }
 
 /** Snapshot the active MD view before a job switch changes radio availability. */
 export function mdVisualizationJobSwitchAction({ display, flex, occupancy, trajectory } = {}) {
-  if (trajectory) return 'off'
+  if (trajectory) return 'trajectory'
   if (display) return 'display'
   if (flex) return 'flex'
   if (occupancy) return 'occupancy'
@@ -24,6 +22,7 @@ export function mdVisualizationJobSwitchAction({ display, flex, occupancy, traje
 /** Execute a previously-snapshotted MD job-switch action. */
 export async function applyMdVisualizationJobSwitch(action, handlers = {}) {
   if (action === 'off') return handlers.off?.()
+  if (action === 'trajectory') return handlers.trajectory?.()
   if (action === 'display') return handlers.display?.()
   if (action === 'flex') return handlers.flex?.()
   if (action === 'occupancy') return handlers.occupancy?.()
