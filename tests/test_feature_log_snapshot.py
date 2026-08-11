@@ -672,6 +672,15 @@ def test_overhang_extrude_logs_snapshot():
     assert log[-1].op_kind == "overhang-extrude"
     assert log[-1].params["length_bp"] == 8
 
+    # Replacing history state must use the same local geometry footprint as the
+    # forward extrusion, rather than regenerating and shipping the whole design.
+    undo = client.post("/api/design/undo")
+    assert undo.status_code == 200, undo.text
+    payload = undo.json()
+    assert payload.get("partial_geometry") is True
+    assert payload.get("changed_helix_ids")
+    assert "path:partial_geometry" in undo.headers.get("server-timing", "")
+
 
 def test_overhang_extrude_new_helix_inherits_parent_cluster_not_lex_neighbor():
     """The cluster reconciler's lattice-neighbour inference uses Manhattan

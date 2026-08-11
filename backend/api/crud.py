@@ -900,9 +900,10 @@ def _design_replace_response(
          the frontend mutates existing entry.nuc fields in place. Skips
          the per-nuc dict construction that dominates the full-geometry
          response and the per-nuc dict parse on the frontend.
-      3. Embedded full geometry — fallback for true topology changes
-         (extrusion, helix add/delete, strand mutation). Frontend needs
-         a full scene rebuild.
+      3. Partial geometry — identity-pose topology edits whose affected helices
+         can be determined exactly (including extrusion undo/redo).
+      4. Embedded full geometry — fallback for topology changes that cannot be
+         reconciled locally. Frontend needs a full scene rebuild.
 
     When *trace* is given, the chosen path is appended as a 0-duration step
     so the frontend's API perf log shows which fast path fired.
@@ -951,6 +952,25 @@ def _design_replace_response(
             embed_straight=None,
             compact_deformed=False,
         )
+    # Undo/redo used to send every nucleotide for every topology change. For a
+    # local identity-pose edit we can derive the same affected-helix footprint
+    # used by the forward mutation and return an authoritative partial patch.
+    # Posed designs and synthetic-geometry definition changes retain the full
+    # fallback because the partial wire format cannot represent them safely.
+    if not _has_effective_display_pose(design):
+        changed = _local_changed_helices(
+            _strand_occupancy(prev_design), _strand_occupancy(design)
+        )
+        if changed is not None:
+            if trace is not None:
+                trace._steps.append(("path:partial_geometry", 0.0))
+            return _design_response_with_geometry(
+                design,
+                report,
+                changed_helix_ids=changed,
+                compact_deformed=True,
+                partial_axes=True,
+            )
     # Auto-embedding bundles straight geometry when the design has a real
     # deformation/non-identity cluster pose. Identity-only designs reuse current
     # geometry as their straight anchor and avoid a duplicate full computation.
@@ -978,7 +998,7 @@ def undo_design():
     with trace.step("undo"):
         design, report = design_state.undo()
     with trace.step("response"):
-        payload = _design_replace_response(prev, design, report)
+        payload = _design_replace_response(prev, design, report, trace)
     return trace.attach(ORJSONResponse(payload))
 
 
@@ -995,7 +1015,7 @@ def redo_design():
     with trace.step("redo"):
         design, report = design_state.redo()
     with trace.step("response"):
-        payload = _design_replace_response(prev, design, report)
+        payload = _design_replace_response(prev, design, report, trace)
     return trace.attach(ORJSONResponse(payload))
 
 

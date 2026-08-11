@@ -591,7 +591,9 @@ export async function _syncFromDesignResponse(json, { skipGeometry = false, tran
         ...json.nucleotides,
       ]
       if (Object.keys(helixAxesMap).length) {
-        updates.currentHelixAxes = { ...(store.getState().currentHelixAxes ?? {}), ...helixAxesMap }
+        const retainedAxes = { ...(store.getState().currentHelixAxes ?? {}) }
+        for (const id of changedSet) delete retainedAxes[id]
+        updates.currentHelixAxes = { ...retainedAxes, ...helixAxesMap }
       }
       // Signal design_renderer to try the in-place fast path (Fix B part 2).
       updates.lastPartialChangedHelixIds = json.changed_helix_ids
@@ -1560,14 +1562,14 @@ export async function getGeometry(helixIds = null) {
     // ── Fix B merge path ────────────────────────────────────────────────────
     const changedSet = new Set(json.changed_helix_ids)
     const existing   = store.getState().currentGeometry ?? []
+    const retainedAxes = { ...(store.getState().currentHelixAxes ?? {}) }
+    for (const id of changedSet) delete retainedAxes[id]
     const updates = {
       currentGeometry: [
         ...existing.filter(n => !changedSet.has(n.helix_id)),
         ...nucleotides,
       ],
-      currentHelixAxes: Object.keys(helixAxesMap).length
-        ? { ...(store.getState().currentHelixAxes ?? {}), ...helixAxesMap }
-        : store.getState().currentHelixAxes,
+      currentHelixAxes: { ...retainedAxes, ...helixAxesMap },
     }
     // Partial responses do not embed straight (axes unchanged on partial
     // mutations), so straightGeo/straightAxes are null here in practice —

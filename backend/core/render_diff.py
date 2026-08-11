@@ -237,7 +237,7 @@ def _local_changed_helices(before: dict, after: dict) -> list[str] | None:
         return None
     affected_ext_ids = {
         eid
-        for eid, ext in after["ext"].items()
+        for eid, ext in (before["ext"] | after["ext"]).items()
         if ext["strand_id"] in changed
     }
     helices: set[str] = set()
