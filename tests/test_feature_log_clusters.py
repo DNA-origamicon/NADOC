@@ -254,9 +254,7 @@ def test_undo_pops_one_minor_op_at_a_time():
 # ── Test 8: revert on an evicted cluster returns 410 ─────────────────────────
 
 
-def test_evicted_cluster_revert_returns_410(monkeypatch):
-    """Force a tiny budget so the first cluster is evicted; revert on it
-    returns 410 GONE (matches snapshot-evicted behavior)."""
+def test_old_cluster_revert_survives_former_tiny_budget(monkeypatch):
     monkeypatch.setattr(design_state, "MAX_SNAPSHOT_BUDGET_BYTES", 100)
 
     d0 = design_state.get_or_404()
@@ -269,10 +267,12 @@ def test_evicted_cluster_revert_returns_410(monkeypatch):
     log = design_state.get_or_404().feature_log
     cluster0 = log[0]
     assert isinstance(cluster0, RoutingClusterLogEntry)
-    assert cluster0.evicted is True
+    assert cluster0.evicted is False
+    assert cluster0.pre_state_gz_b64
 
     r = client.post("/api/design/features/0/revert")
-    assert r.status_code == 410, r.text
+    assert r.status_code == 200, r.text
+    assert design_state.get_or_404().feature_log == []
 
 
 # ── Test 9: cluster pre-state matches the design before the first child ──────

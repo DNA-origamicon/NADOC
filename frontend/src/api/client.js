@@ -25,7 +25,7 @@ import { showToast } from '../ui/toast.js'
 import { showOpProgress, hideOpProgress } from '../ui/op_progress.js'
 import { notifyRequestFailure, notifyRequestSuccess, pokeProbe } from '../shared/connection_monitor.js'
 import { docHeaders, docHeadersFor, docKey, docKeyFor } from '../shared/doc_id.js'
-import { beginOperationTiming, markOperationTiming } from '../perf/operation_timing.js'
+import { activeOperationTiming, beginOperationTiming, markOperationTiming } from '../perf/operation_timing.js'
 
 const BASE = '/api'
 
@@ -357,7 +357,7 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
     r = await fetch(`${BASE}${path}`, opts)
     tNetwork = performance.now() - t0
     markOperationTiming('response-received', {
-      serverTiming: r.headers.get('Server-Timing'), status: r.status,
+      serverTiming: r.headers?.get?.('Server-Timing') ?? null, status: r.status,
     }, operationTrace)
     notifyRequestSuccess()   // any HTTP response means the backend is reachable
     json = await r.json().catch(() => null)
@@ -424,9 +424,43 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
 let _designSyncTransient = false
 export function wasLastDesignSyncTransient() { return _designSyncTransient }
 
+/** Restore history bodies omitted from a slim mutation response.
+ *
+ * Existing entries are immutable history, so their payloads can be reused from
+ * the current store by id. The backend retains the new entry in full. This must
+ * run before currentDesign is stored/persisted so restart recovery remains
+ * complete even though the wire response omitted accumulated old blobs.
+ */
+export function _mergeFeatureLogPayloads(incoming, previous) {
+  if (!incoming?.feature_log || !previous?.feature_log) return incoming
+  const prevById = new Map(previous.feature_log.map(e => [e.id, e]))
+  const bodyKeys = ['design_snapshot_gz_b64', 'pre_state_gz_b64', 'post_state_gz_b64']
+  for (const entry of incoming.feature_log) {
+    const prev = prevById.get(entry.id)
+    if (!prev) continue
+    for (const key of bodyKeys) {
+      if (!entry[key] && prev[key]) entry[key] = prev[key]
+    }
+    if (!Array.isArray(entry.children) || !Array.isArray(prev.children)) continue
+    const prevChildren = new Map(prev.children.map((c, i) => [c.id ?? i, c]))
+    for (let i = 0; i < entry.children.length; i++) {
+      const child = entry.children[i]
+      const old = prevChildren.get(child.id ?? i)
+      if (!old) continue
+      for (const key of ['diff_added_b64', 'diff_removed_b64', 'diff_modified_b64']) {
+        if (child[key] === '1' && old[key]) child[key] = old[key]
+      }
+    }
+  }
+  return incoming
+}
+
 export async function _syncFromDesignResponse(json, { skipGeometry = false, transient = false } = {}) {
   if (!json) return null
   if (_isStaleDesignResponse(json)) return json   // superseded by a newer response → skip (rapid-edit race)
+  if (json.feature_log_payloads_partial && json.design) {
+    json.design = _mergeFeatureLogPayloads(json.design, store.getState().currentDesign)
+  }
   _designSyncTransient = transient
   const updates = {}
   if (json.design)     updates.currentDesign     = json.design
@@ -3994,8 +4028,16 @@ export async function libraryDiskUsage() {
 
 /** Currently-busy (running/preparing) MD + oxDNA jobs across the workspace, for the
  *  welcome-screen activity spinner and the concurrent-job guard. See routes_jobs.py. */
+let _activeJobsCache = null
 export async function listActiveJobs() {
-  return _request('GET', '/jobs/active')   // { jobs, count, any_running }
+  // This display-only poll repeatedly contended with the CPU-heavy geometry
+  // response during large edits. Hold the last four-second poll result while an
+  // interactive operation is in flight; launch guards refresh normally once the
+  // operation's final frame has rendered.
+  if (activeOperationTiming() && _activeJobsCache) return _activeJobsCache
+  const result = await _request('GET', '/jobs/active')   // { jobs, count, any_running }
+  if (result) _activeJobsCache = result
+  return result
 }
 
 /** Current external GPU-compute contention (a non-NADOC process holding the GPU),

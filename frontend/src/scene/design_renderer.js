@@ -565,6 +565,7 @@ export function initDesignRenderer(scene, storeRef) {
   // ── Geometric scene rebuild ───────────────────────────────────────────────
 
   function _rebuild(geometry, design, helixAxes) {
+    markOperationTiming('scene-rebuild-start', { nucleotides: geometry?.length ?? 0 })
     _rebuildSerial++
     _lastRebuildStack = new Error('design renderer rebuild').stack
     // Merge capture strands into the geometry so every CG consumer renders them.
@@ -590,6 +591,7 @@ export function initDesignRenderer(scene, storeRef) {
         _disposeRoot(oldRoot)
       }
     }
+    markOperationTiming('old-scene-disposed')
 
     _glowLayer.clear()          // stale entries after rebuild; selection_manager re-applies if needed
     _undefinedGlowLayer.clear() // caller must re-apply undefined highlight after rebuild
@@ -623,6 +625,7 @@ export function initDesignRenderer(scene, storeRef) {
     // Colour the capture strands (cyan by default) so they read as a distinct set.
     if (_extraNucs.length && _extraColor) for (const n of _extraNucs) _eff[n.strand_id] = _extraColor
     _helixCtrl = buildHelixObjects(geometry, design, scene, _eff, loopStrandIds ?? [], helixAxes)
+    markOperationTiming('helix-meshes-built')
     _helixCtrl.setMode(_currentMode)
     if (coloringMode && coloringMode !== 'strand') {
       _helixCtrl.applyColoring(coloringMode, design, _eff, new Set(loopStrandIds ?? []))
@@ -637,6 +640,7 @@ export function initDesignRenderer(scene, storeRef) {
     const colorMap    = buildStapleColorMap(geometry, design)
     const effectiveCols = _effectiveColors(strandColors, strandGroups)
     const xoverResult = buildCrossoverConnections(design, geometry, colorMap, effectiveCols)
+    markOperationTiming('crossovers-built')
     if (xoverResult) {
       _xoverArcData    = xoverResult.arcData
       _xoverBeadsMesh  = xoverResult.beadsMesh

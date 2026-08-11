@@ -252,7 +252,9 @@ def _ensure_default_cluster(design: Design) -> Design:
     return updated
 
 
-def _strip_feature_log_payloads(design_dict: dict) -> None:
+def _strip_feature_log_payloads(
+    design_dict: dict, preserve_entry_ids: set[str] | None = None
+) -> None:
     """Drop heavy feature_log payload blobs from a response dict IN PLACE, keeping
     the gating signals the feature-log panel actually reads.
 
@@ -266,7 +268,10 @@ def _strip_feature_log_payloads(design_dict: dict) -> None:
     The backend's own design keeps the real blobs — this only edits the response
     copy — so revert/seek/save (which run server-side) are unaffected.
     """
+    preserve_entry_ids = preserve_entry_ids or set()
     for e in design_dict.get("feature_log", []):
+        if e.get("id") in preserve_entry_ids:
+            continue
         for k in ("design_snapshot_gz_b64", "pre_state_gz_b64", "post_state_gz_b64"):
             if e.get(k):
                 e[k] = ""
@@ -274,6 +279,21 @@ def _strip_feature_log_payloads(design_dict: dict) -> None:
             for k in ("diff_added_b64", "diff_removed_b64", "diff_modified_b64"):
                 if c.get(k):
                     c[k] = "1"
+
+
+def _slim_mutation_history_payload(payload: dict, new_entry_id: str) -> None:
+    """Strip old history bodies while retaining the newly-created entry.
+
+    The client merges old bodies from its current store before persistence. This
+    keeps mutation responses proportional to the operation instead of the entire
+    edit history without recreating the recovery corruption caused by stripping
+    every entry indiscriminately.
+    """
+    design_dict = payload.get("design")
+    if not isinstance(design_dict, dict):
+        return
+    _strip_feature_log_payloads(design_dict, preserve_entry_ids={new_entry_id})
+    payload["feature_log_payloads_partial"] = True
 
 
 def _design_response(design: Design, report: ValidationReport) -> dict:
@@ -347,6 +367,34 @@ def _inject_joint_world_axes(design_dict: dict) -> None:
         j["axis_direction"] = world_dir
 
 
+def _has_effective_display_pose(design: Design) -> bool:
+    """Whether straight geometry differs from the currently displayed pose."""
+    if design.deformations:
+        return True
+    return any(
+        any(abs(float(v)) > 1e-9 for v in (ct.translation or []))
+        or any(
+            abs(float(v) - target) > 1e-9
+            for v, target in zip(
+                (ct.rotation or []), (0.0, 0.0, 0.0, 1.0), strict=False
+            )
+        )
+        for ct in design.cluster_transforms
+    )
+
+
+def _extrude_partial_helix_ids(before_occupancy: dict, design: Design) -> list[str] | None:
+    """Return the local geometry footprint for an extrusion when it is safe.
+
+    A posed design needs both current and straight coordinates atomically, which
+    the partial wire format does not carry yet. Identity-pose designs can merge
+    changed helices into the existing client geometry before one scene rebuild.
+    """
+    if _has_effective_display_pose(design):
+        return None
+    return _local_changed_helices(before_occupancy, _strand_occupancy(design))
+
+
 def _design_response_with_geometry(
     design: Design,
     report: ValidationReport,
@@ -412,9 +460,14 @@ def _design_response_with_geometry(
             if real_ids
             else []
         )
+        geometry_payload = (
+            {"nucleotides_compact": _compact_geometry_from_nucleotides(nucs)}
+            if compact_deformed
+            else {"nucleotides": nucs}
+        )
         resp = {
             **_design_response(design, report),
-            "nucleotides": nucs,
+            **geometry_payload,
             "partial_geometry": True,
             "changed_helix_ids": changed_helix_ids,
             # helix_axes omitted by default — see docstring (crossover/xb mutations
@@ -467,15 +520,7 @@ def _design_response_with_geometry(
         # identity pose. Its mere presence does not make straight geometry differ
         # from current geometry. Treating it as a deformation doubled geometry
         # work and payload size for essentially every large design mutation.
-        has_effective_transform = any(
-            any(abs(float(v)) > 1e-9 for v in (ct.translation or []))
-            or any(
-                abs(float(v) - target) > 1e-9
-                for v, target in zip((ct.rotation or []), (0.0, 0.0, 0.0, 1.0))
-            )
-            for ct in design.cluster_transforms
-        )
-        embed_straight = bool(design.deformations) or has_effective_transform
+        embed_straight = _has_effective_display_pose(design)
     if embed_straight:
         # Straight (un-deformed) geometry — strips deformations + cluster_transforms
         # before computing positions. Shipped in COMPACT positions_by_helix form
@@ -1012,6 +1057,7 @@ def add_bundle_segment(body: BundleSegmentRequest) -> dict:
     holder: dict = {}
 
     def _fn(d: Design) -> Design:
+        holder["before_occ"] = _strand_occupancy(d)
         try:
             updated, mreport = _build_extrude_segment(d, body)
         except ValueError as exc:
@@ -1028,7 +1074,15 @@ def add_bundle_segment(body: BundleSegmentRequest) -> dict:
             fn=_fn,
         )
     with trace.step("geometry_response"):
-        payload = _design_response_with_geometry(updated, report, compact_deformed=True)
+        changed = _extrude_partial_helix_ids(holder["before_occ"], updated)
+        payload = _design_response_with_geometry(
+            updated,
+            report,
+            changed_helix_ids=changed,
+            compact_deformed=True,
+            partial_axes=changed is not None,
+        )
+        _slim_mutation_history_payload(payload, _entry.id)
     return trace.attach(ORJSONResponse(payload, status_code=201))
 
 
@@ -1115,6 +1169,7 @@ def add_bundle_continuation(body: BundleContinuationRequest) -> dict:
     holder: dict = {}
 
     def _fn(d: Design) -> Design:
+        holder["before_occ"] = _strand_occupancy(d)
         try:
             updated, mreport = _build_extrude_continuation(d, body)
         except ValueError as exc:
@@ -1131,7 +1186,15 @@ def add_bundle_continuation(body: BundleContinuationRequest) -> dict:
             fn=_fn,
         )
     with trace.step("geometry_response"):
-        payload = _design_response_with_geometry(updated, report, compact_deformed=True)
+        changed = _extrude_partial_helix_ids(holder["before_occ"], updated)
+        payload = _design_response_with_geometry(
+            updated,
+            report,
+            changed_helix_ids=changed,
+            compact_deformed=True,
+            partial_axes=changed is not None,
+        )
+        _slim_mutation_history_payload(payload, _entry.id)
     return trace.attach(ORJSONResponse(payload, status_code=201))
 
 
@@ -1206,7 +1269,10 @@ def add_bundle_deformed_continuation(body: BundleDeformedContinuationRequest) ->
     after a refresh and replayed via the edit-feature endpoint.
     """
 
+    holder: dict = {}
+
     def _fn(d: Design) -> Design:
+        holder["before_occ"] = _strand_occupancy(d)
         try:
             updated, _mreport = _build_extrude_deformed_continuation(d, body)
         except ValueError as exc:
@@ -1222,7 +1288,15 @@ def add_bundle_deformed_continuation(body: BundleDeformedContinuationRequest) ->
             fn=_fn,
         )
     with trace.step("geometry_response"):
-        payload = _design_response_with_geometry(updated, report, compact_deformed=True)
+        changed = _extrude_partial_helix_ids(holder["before_occ"], updated)
+        payload = _design_response_with_geometry(
+            updated,
+            report,
+            changed_helix_ids=changed,
+            compact_deformed=True,
+            partial_axes=changed is not None,
+        )
+        _slim_mutation_history_payload(payload, _entry.id)
     return trace.attach(ORJSONResponse(payload, status_code=201))
 
 
@@ -5092,7 +5166,10 @@ def overhang_extrude(body: OverhangExtrudeRequest) -> dict:
     after a refresh and replayed via the edit-feature endpoint.
     """
 
+    holder: dict = {}
+
     def _fn(d: Design) -> Design:
+        holder["before_occ"] = _strand_occupancy(d)
         try:
             return _build_overhang_extrude(d, body)
         except ValueError as exc:
@@ -5113,7 +5190,15 @@ def overhang_extrude(body: OverhangExtrudeRequest) -> dict:
     # and the new helix's axis stick gets placed at its raw lattice position
     # (no cluster transform applied). See .claude/rules/rendering.md.
     with trace.step("geometry_response"):
-        payload = _design_response_with_geometry(updated, report, compact_deformed=True)
+        changed = _extrude_partial_helix_ids(holder["before_occ"], updated)
+        payload = _design_response_with_geometry(
+            updated,
+            report,
+            changed_helix_ids=changed,
+            compact_deformed=True,
+            partial_axes=changed is not None,
+        )
+        _slim_mutation_history_payload(payload, _entry.id)
     return trace.attach(ORJSONResponse(payload))
 
 

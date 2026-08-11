@@ -57,10 +57,10 @@ from backend.core.validator import ValidationReport, validate_design
 
 MAX_UNDO_STEPS = 50
 
-# Maximum compressed bytes across all SnapshotLogEntry payloads in a design's
-# feature_log. When exceeded after appending a new snapshot entry, the OLDEST
-# snapshot bodies are evicted (zeroed out, evicted=True) until under budget.
-# Entries themselves remain in the log so historical labels stay visible.
+# Retained for API/test compatibility. Feature history is intentionally no
+# longer evicted: every visible feature-log entry must remain revertable. Wire
+# responses are slimmed separately in ``backend.api.crud`` so keeping canonical
+# recovery snapshots does not put them back on the click-to-render hot path.
 MAX_SNAPSHOT_BUDGET_BYTES = 5_000_000
 
 
@@ -347,7 +347,11 @@ def encode_design_snapshot(design: Design) -> tuple[str, int]:
         }
     )
     raw = stripped.model_dump_json().encode("utf-8")
-    gz = gzip.compress(raw, compresslevel=6)
+    # Interactive edits write both pre- and post-state snapshots. Level 3 keeps
+    # nearly all of gzip's size reduction while taking roughly one third of the
+    # CPU time of level 6 on Voltron-scale designs; eviction is governed by the
+    # uncompressed byte budget, so this does not weaken history limits.
+    gz = gzip.compress(raw, compresslevel=3)
     return base64.b64encode(gz).decode("ascii"), len(raw)
 
 
@@ -396,34 +400,15 @@ def _clear_payload(entry: SnapshotLogEntry | RoutingClusterLogEntry) -> None:
 
 
 def _evict_oldest_payloads_if_over_budget(design: Design) -> None:
-    """Evict the OLDEST payload-bearing entries (snapshots + routing clusters)
-    in-place until the total compressed byte count is under
-    :data:`MAX_SNAPSHOT_BUDGET_BYTES`.
+    """Compatibility no-op: canonical feature snapshots are never discarded.
 
-    Entries remain in ``feature_log`` so historical labels (and cluster
-    children) are still shown; only the topology snapshot bytes are dropped
-    (``evicted=True``).
-
-    The MOST RECENT payload-bearing entry is never evicted — the user has just
-    run the operation and must always be able to revert it, even if its
-    payload alone exceeds the budget.
+    This hook used to clear the oldest payloads after 5 MB, leaving visible
+    feature rows whose Revert action returned HTTP 410. That violates the UI's
+    history contract. Response-size control now happens only on serialized
+    mutation responses; the server and saved ``.nadoc`` document keep every
+    recovery payload.
     """
-    payload_entries = [
-        e
-        for e in design.feature_log
-        if isinstance(e, (SnapshotLogEntry, RoutingClusterLogEntry))
-    ]
-    total = sum(_payload_total_bytes(e) for e in payload_entries if not e.evicted)
-    if total <= MAX_SNAPSHOT_BUDGET_BYTES:
-        return
-    # Iterate oldest → second-newest; never touch payload_entries[-1].
-    for entry in payload_entries[:-1]:
-        if entry.evicted:
-            continue
-        total -= _payload_total_bytes(entry)
-        _clear_payload(entry)
-        if total <= MAX_SNAPSHOT_BUDGET_BYTES:
-            return
+    return None
 
 
 # Backward-compat alias; old call site name. Prefer the new name in new code.
@@ -449,9 +434,9 @@ def mutate_with_feature_log(
     ``fn`` runs.  This is the revert target for
     ``POST /design/features/{index}/revert``.
 
-    Snapshot byte budget is enforced via
-    :func:`_evict_oldest_payloads_if_over_budget` after the new entry is
-    appended.
+    Snapshot bodies remain in canonical state so every entry stays revertable.
+    Mutation responses may omit older bodies on the wire, but the browser
+    merges its cached copies before persistence.
 
     Returns ``(design, validation_report, snapshot_entry)``.  Raises HTTP 404
     if no active design.

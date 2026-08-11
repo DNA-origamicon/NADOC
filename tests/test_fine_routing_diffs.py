@@ -308,7 +308,7 @@ def test_entangled_delete_emits_warning():
 # ── Eviction + persistence ───────────────────────────────────────────────────
 
 
-def test_eviction_clears_child_diffs(monkeypatch):
+def test_former_budget_does_not_clear_child_diffs(monkeypatch):
     monkeypatch.setattr(design_state, "MAX_SNAPSHOT_BUDGET_BYTES", 100)
     d0 = design_state.get_or_404()
     h0 = d0.helices[0].id
@@ -319,9 +319,9 @@ def test_eviction_clears_child_diffs(monkeypatch):
     log = design_state.get_or_404().feature_log
     cluster0 = log[0]
     assert isinstance(cluster0, RoutingClusterLogEntry)
-    assert cluster0.evicted is True
-    assert cluster0.diffs_evicted is True
-    assert all(not is_diff_child(c) for c in cluster0.children)
+    assert cluster0.evicted is False
+    assert cluster0.diffs_evicted is False
+    assert all(is_diff_child(c) for c in cluster0.children)
 
 
 def test_design_responses_carry_monotonic_revision():

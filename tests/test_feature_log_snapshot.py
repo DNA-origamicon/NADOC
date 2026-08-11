@@ -1,7 +1,7 @@
 """Snapshot-bearing feature log entries for auto-operations.
 
 Covers ``SnapshotLogEntry`` (models), ``mutate_with_feature_log`` /
-``encode_design_snapshot`` / ``_evict_oldest_snapshots_if_over_budget``
+``encode_design_snapshot`` / snapshot-retention policy
 (state), and the ``POST /design/features/{index}/revert`` endpoint (crud).
 """
 
@@ -88,6 +88,59 @@ def test_delete_new_extrude_tolerates_older_payloadless_history_row():
     deleted = client.delete("/api/design/features/1")
     assert deleted.status_code == 200, deleted.text
     assert len(design_state.get_or_404().feature_log) == 1
+
+
+def test_new_extrude_after_legacy_evicted_row_is_revertable():
+    """A recovered file's dead legacy row must not poison new history entries."""
+    first = client.post(
+        "/api/design/bundle-segment",
+        json={"cells": [[4, 0]], "length_bp": 10, "plane": "XY"},
+    )
+    assert first.status_code == 201
+    legacy = design_state.get_or_404().feature_log[0]
+    legacy.design_snapshot_gz_b64 = ""
+    legacy.post_state_gz_b64 = ""
+    legacy.evicted = True
+
+    second = client.post(
+        "/api/design/bundle-segment",
+        json={"cells": [[5, 0]], "length_bp": 10, "plane": "XY"},
+    )
+    assert second.status_code == 201
+    newest = design_state.get_or_404().feature_log[1]
+    assert not newest.evicted
+    assert newest.design_snapshot_gz_b64
+
+    reverted = client.post("/api/design/features/1/revert")
+    assert reverted.status_code == 200, reverted.text
+    assert len(design_state.get_or_404().feature_log) == 1
+
+
+def test_extrude_response_slims_old_history_but_retains_server_recovery_bodies():
+    """Mutation wire payload is incremental; canonical history remains complete."""
+    first = client.post(
+        "/api/design/bundle-segment",
+        json={"cells": [[7, 0]], "length_bp": 10, "plane": "XY"},
+    )
+    assert first.status_code == 201
+    second = client.post(
+        "/api/design/bundle-segment",
+        json={"cells": [[8, 0]], "length_bp": 10, "plane": "XY"},
+    )
+    assert second.status_code == 201
+    payload = second.json()
+    assert payload["feature_log_payloads_partial"] is True
+    wire_log = payload["design"]["feature_log"]
+    assert wire_log[0]["design_snapshot_gz_b64"] == ""
+    assert wire_log[0]["post_state_gz_b64"] == ""
+    assert wire_log[1]["design_snapshot_gz_b64"]
+    assert wire_log[1]["post_state_gz_b64"]
+
+    canonical = design_state.get_or_404().feature_log
+    assert canonical[0].design_snapshot_gz_b64
+    assert canonical[0].post_state_gz_b64
+    assert canonical[1].design_snapshot_gz_b64
+    assert canonical[1].post_state_gz_b64
 
 
 # ── Test 1: snapshot entry is appended ────────────────────────────────────────
@@ -404,11 +457,8 @@ def test_old_nadoc_loads_without_snapshot_entries():
 # ── Test 7: budget-driven eviction ────────────────────────────────────────────
 
 
-def test_chained_auto_ops_evict_under_budget(monkeypatch):
-    """When the cumulative compressed snapshot bytes exceed the budget, the
-    OLDEST snapshot bodies get evicted (set ``evicted=True``, payload cleared);
-    log entries themselves remain so historical labels are still visible."""
-    # Force a tiny budget so 2 sequential autobreaks trigger eviction.
+def test_chained_auto_ops_never_evict_revert_payloads(monkeypatch):
+    """Even the former tiny budget must not make visible history irreversible."""
     monkeypatch.setattr(design_state, "MAX_SNAPSHOT_BUDGET_BYTES", 100)
 
     client.post("/api/design/auto-break")
@@ -421,16 +471,13 @@ def test_chained_auto_ops_evict_under_budget(monkeypatch):
         f"expected 3 snapshot entries, got {len(snap_entries)}"
     )
 
-    # Oldest must be evicted; newest must NOT be.
-    assert snap_entries[0].evicted is True
-    assert snap_entries[0].design_snapshot_gz_b64 == ""
-    assert snap_entries[-1].evicted is False
-    assert snap_entries[-1].design_snapshot_gz_b64 != ""
+    assert all(not entry.evicted for entry in snap_entries)
+    assert all(entry.design_snapshot_gz_b64 for entry in snap_entries)
+    assert all(entry.post_state_gz_b64 for entry in snap_entries)
 
-    # Reverting an evicted entry returns 410 GONE.
-    evicted_index = log.index(snap_entries[0])
-    r = client.post(f"/api/design/features/{evicted_index}/revert")
-    assert r.status_code == 410, r.text
+    r = client.post(f"/api/design/features/{log.index(snap_entries[0])}/revert")
+    assert r.status_code == 200, r.text
+    assert design_state.get_or_404().feature_log == []
 
 
 # ── Test 8: snapshot does not recurse (no nested feature_logs) ────────────────
@@ -516,11 +563,8 @@ def test_seek_between_two_snapshots():
     )
 
 
-def test_seek_skips_evicted_snapshots(monkeypatch):
-    """If the OLDEST snapshot's payload was evicted to free space, seeking back
-    through it must fall back to the next non-evicted snapshot's pre-state.
-    Topology won't match the original F0 byte-for-byte (eviction is lossy), but
-    the seek must not crash and must produce a coherent design."""
+def test_seek_keeps_all_snapshots_under_former_budget(monkeypatch):
+    """Seeking remains exact because no historical payload is discarded."""
     monkeypatch.setattr(design_state, "MAX_SNAPSHOT_BUDGET_BYTES", 100)
 
     _post("/api/design/auto-break")  # will be evicted
@@ -528,7 +572,7 @@ def test_seek_skips_evicted_snapshots(monkeypatch):
     _post("/api/design/auto-break")  # newest — kept
 
     log = design_state.get_or_404().feature_log
-    assert log[0].evicted and log[1].evicted and not log[2].evicted
+    assert all(not entry.evicted for entry in log)
 
     # Seeking to position 0 (oldest snapshot, evicted) must not raise; falls
     # back to the next non-evicted snapshot's pre-state.
