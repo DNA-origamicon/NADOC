@@ -11,7 +11,9 @@ import * as THREE from 'three'
 export function freezeOptimisticPreview(scene, sourceMeshes, {
   name = 'optimistic-operation-pending',
   color = 0x00e5ff,
-  opacity = 0.42,
+  // Opaque enough to read as the committed operation immediately, while the
+  // cyan tint still communicates that canonical nucleotide detail is pending.
+  opacity = 0.78,
   renderOrder = 5,
 } = {}) {
   const group = new THREE.Group()

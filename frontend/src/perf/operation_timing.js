@@ -9,6 +9,7 @@ const MAX_HISTORY = 50
 let _nextId = 1
 let _active = null
 const _history = []
+const _idleWaiters = new Set()
 
 function _now() {
   return globalThis.performance?.now?.() ?? Date.now()
@@ -54,6 +55,10 @@ export function finishOperationAfterRender(trace = _active) {
     _history.push(trace)
     if (_history.length > MAX_HISTORY) _history.shift()
     if (_active === trace) _active = null
+    if (!_active) {
+      for (const resolve of _idleWaiters) resolve()
+      _idleWaiters.clear()
+    }
     if (trace.totalMs >= SLOW_MS || globalThis.__nadocOperationTraceAll) {
       const rows = trace.marks.map((mark, i) => ({
         phase: mark.name,
@@ -68,5 +73,13 @@ export function finishOperationAfterRender(trace = _active) {
 }
 
 export function activeOperationTiming() { return _active }
+
+/** Resolve after the currently active interactive operation presents its final
+ * frame. Display-only background polls use this to avoid stealing CPU/network
+ * capacity from click-to-render work. */
+export function whenOperationIdle() {
+  if (!_active) return Promise.resolve()
+  return new Promise(resolve => _idleWaiters.add(resolve))
+}
 
 _expose()

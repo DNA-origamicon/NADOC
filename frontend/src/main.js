@@ -780,7 +780,7 @@ async function main() {
     if (!_ovhgGhost) return
     _ovhgGhost.name = 'optimistic-overhang-pending'
     _ovhgGhost.material.color.setHex(0x00e5ff)
-    _ovhgGhost.material.opacity = 0.42
+    _ovhgGhost.material.opacity = 0.78
     _ovhgGhost.renderOrder = 5
   }
 

@@ -22,6 +22,22 @@ import { getStraightGeometry } from '../api/client.js'
 
 const ANIM_DURATION_MS = 500
 
+/** True only when the displayed pose can differ from straight geometry.
+ * Every design normally owns an auto-created default cluster with an identity
+ * transform; its mere presence must not trigger a multi-second straight-
+ * geometry fetch after topology changes.
+ */
+export function hasEffectiveDisplayPose(design, eps = 1e-9) {
+  if ((design?.deformations?.length ?? 0) > 0) return true
+  return (design?.cluster_transforms ?? []).some(ct => {
+    const t = ct?.translation ?? []
+    if (t.some(v => Math.abs(Number(v)) > eps)) return true
+    const q = ct?.rotation ?? []
+    const identity = [0, 0, 0, 1]
+    return q.some((v, i) => Math.abs(Number(v) - identity[i]) > eps)
+  })
+}
+
 export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarkers, getUnfoldView, getLoopSkipHighlight, getOverhangLocations, getJointRenderer) {
   // Starts active at t=1 — matches store default deformVisuActive: true.
   let _active    = true
@@ -264,8 +280,11 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
   store.subscribe(async (newState, prevState) => {
     if (newState.currentGeometry === prevState.currentGeometry) return
 
-    const hasDeformations = (newState.currentDesign?.deformations?.length       ?? 0) > 0
-    const hasTransforms   = (newState.currentDesign?.cluster_transforms?.length ?? 0) > 0
+    const hasDeformations = (newState.currentDesign?.deformations?.length ?? 0) > 0
+    const hasTransforms = hasEffectiveDisplayPose({
+      deformations: [],
+      cluster_transforms: newState.currentDesign?.cluster_transforms ?? [],
+    })
 
     if (!hasDeformations && !hasTransforms) {
       // Nothing shifts positions — straight geometry equals current geometry.

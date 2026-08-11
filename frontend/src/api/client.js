@@ -25,7 +25,7 @@ import { showToast } from '../ui/toast.js'
 import { showOpProgress, hideOpProgress } from '../ui/op_progress.js'
 import { notifyRequestFailure, notifyRequestSuccess, pokeProbe } from '../shared/connection_monitor.js'
 import { docHeaders, docHeadersFor, docKey, docKeyFor } from '../shared/doc_id.js'
-import { activeOperationTiming, beginOperationTiming, finishOperationAfterRender, markOperationTiming } from '../perf/operation_timing.js'
+import { activeOperationTiming, beginOperationTiming, finishOperationAfterRender, markOperationTiming, whenOperationIdle } from '../perf/operation_timing.js'
 
 const BASE = '/api'
 
@@ -4048,6 +4048,7 @@ export async function listActiveJobs() {
   // interactive operation is in flight; launch guards refresh normally once the
   // operation's final frame has rendered.
   if (activeOperationTiming() && _activeJobsCache) return _activeJobsCache
+  await whenOperationIdle()
   const result = await _request('GET', '/jobs/active')   // { jobs, count, any_running }
   if (result) _activeJobsCache = result
   return result
@@ -4092,6 +4093,7 @@ export async function optimizeMdHardware(devices = '0') {
  *  → {recommendation, gpu, free_cores, has_proteins, n_nucleotides, gpu_eta_seconds}.
  *  Returns null on error so callers can degrade to "GPU unknown / recommend oxDNA". */
 export async function simulateRecommendation(devices = '0') {
+  await whenOperationIdle()
   return _request('GET', `/simulate/recommendation?devices=${encodeURIComponent(devices)}`)
 }
 
@@ -4107,6 +4109,7 @@ export async function listSimJobs(designSourcePath = null, showAll = false) {
   // job). Suppress the generic 5 s "Working…" auto-popup: while a NAMD/oxDNA run
   // saturates the machine this endpoint routinely exceeds the threshold, and a
   // repeating poll would otherwise flash the modal on a loop.
+  await whenOperationIdle()
   return _request('GET', `/simulate/jobs${s ? `?${s}` : ''}`, undefined, { suppressBusy: true })
 }
 
