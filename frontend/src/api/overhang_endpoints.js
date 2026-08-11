@@ -26,7 +26,10 @@ export async function patchOverhang(overhangId, { sequence, label, rotation, def
   // flow) will re-derive once at apply — avoids redundant full re-assignments.
   if (deferReassign) body.defer_reassign = true
   const json = await _request('PATCH', `/design/overhang/${encodeURIComponent(overhangId)}`, body)
-  return _syncFromDesignResponse(json)
+  // Connection setup always caps the sequence to the live backing-domain length
+  // before setting deferReassign.  It therefore changes bases only; the atomic
+  // connection-version Apply that follows performs the one required geometry sync.
+  return _syncFromDesignResponse(json, { skipGeometry: !!deferReassign })
 }
 
 export async function patchOverhangRotationsBatch(ops) {
@@ -38,7 +41,13 @@ export async function patchOverhangRotationsBatch(ops) {
 export async function generateOverhangRandomSequence(overhangId, { deferReassign } = {}) {
   const q = deferReassign ? '?defer_reassign=true' : ''
   const json = await _request('POST', `/design/overhang/${encodeURIComponent(overhangId)}/generate-random${q}`)
-  return _syncFromDesignResponse(json)
+  // This endpoint deliberately preserves the overhang's domain length: it only
+  // fills sequence fields (and their feature-log / derived-strand metadata).
+  // No nucleotide position or helix axis can change, so keep the geometry that
+  // is already in the store.  The generic sync fallback would otherwise issue
+  // a full GET /design/geometry; on deformed designs that also recomputes the
+  // embedded straight geometry, making a sequence-only edit take several seconds.
+  return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 
 /**
@@ -91,17 +100,24 @@ export async function createConnectionVersion(payload) {
   // payload: { overhang_a_id, overhang_b_id, connection_type, overhang_a_seq?,
   //            overhang_b_seq?, bridge_length?, bridge_seq?, applied?, name? }
   const json = await _request('POST', '/design/connection-versions', payload)
+  return _syncFromDesignResponse(json, { skipGeometry: true })
+}
+
+/** First-time Connect: create the version and materialize it in one backend
+ * snapshot, so one Undo removes both topology and the sidebar version group. */
+export async function createAndApplyConnectionVersion(payload) {
+  const json = await _request('POST', '/design/connection-versions/connect', payload)
   return _syncFromDesignResponse(json)
 }
 
 export async function patchConnectionVersion(versionId, patch) {
   const json = await _request('PATCH', `/design/connection-versions/${encodeURIComponent(versionId)}`, patch)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 
 export async function deleteConnectionVersion(versionId) {
   const json = await _request('DELETE', `/design/connection-versions/${encodeURIComponent(versionId)}`)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 
 export async function relaxOverhangBinding(bindingId) {
@@ -300,12 +316,12 @@ export async function deleteDuplex(duplexId) {
   return _syncFromDesignResponse(json)
 }
 
-export async function connectDuplex(body) {
+export async function connectDuplex(body, { skipGeometry = false } = {}) {
   // body: { overhang_a_id, overhang_a_attach, overhang_b_id, overhang_b_attach, driver?, allow_n_wildcard? }
   // Producer: creates a display duplex at the attach ends (length = min, no resize).
   // Returns null on a 409 (pair already connected) so callers can ignore duplicates.
   const json = await _request('POST', '/design/duplexes/connect', body)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { skipGeometry })
 }
 
 export async function syncDuplexesFromBindings() {

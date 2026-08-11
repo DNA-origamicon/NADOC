@@ -233,6 +233,34 @@ def test_apply_connection_version_does_not_touch_unrelated_strand():
     assert _seq("oh_strand_a") == "GGGGGGGG"
 
 
+def test_connection_version_apply_undo_redo_is_atomic_for_linker():
+    design_state.close_session()
+    design_state.set_design(_seed())
+    applied = client.post(
+        "/api/design/connection-versions/connect",
+        json={
+            "overhang_a_id": "oh_a",
+            "overhang_b_id": "oh_b",
+            "connection_type": "root-to-root-dsdna-linker",
+            "overhang_a_seq": "ACGTACGT",
+            "overhang_b_seq": "ACGTACGT",
+            "bridge_length": 6,
+        },
+    )
+    assert applied.status_code == 201, applied.text
+    assert len(design_state.get_or_404().overhang_connections) == 1
+
+    assert client.post("/api/design/undo").status_code == 200
+    live = design_state.get_or_404()
+    assert live.overhang_connections == []
+    assert live.overhang_bindings == []
+    assert live.duplexes == []
+    assert live.connection_versions == []
+
+    assert client.post("/api/design/redo").status_code == 200
+    assert len(design_state.get_or_404().overhang_connections) == 1
+
+
 # ── The explicit bulk commands DO override, and undo brings it back ───────────
 
 

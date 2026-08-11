@@ -8,8 +8,11 @@ bond to ~0.67 nm. See backend/core/direct_relax.py + crud._cv_create_bound_bindi
 from __future__ import annotations
 
 import numpy as np
+from fastapi.testclient import TestClient
 
+from backend.api import state as design_state
 from backend.api.crud import _cv_create_bound_binding, _geometry_for_design
+from backend.api.main import app
 from backend.api.routes import _demo_design
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.direct_relax import (
@@ -26,6 +29,7 @@ from backend.core.models import (
     HalfCrossover,
     Helix,
     OverhangSpec,
+    SubDomain,
     Strand,
     StrandType,
     Vec3,
@@ -34,6 +38,7 @@ from backend.core.validator import validate_design
 
 _IDENTITY = [0.0, 0.0, 0.0, 1.0]
 _TARGET = 0.67
+client = TestClient(app)
 
 
 def _seed(*, same_body=False, cluster_b_translation=(5.0, 2.0, 1.0), joint=None):
@@ -168,6 +173,52 @@ def test_apply_direct_does_not_consume_and_relocates_root_to_root():
     assert tip.helix_id == "d_ha"
     # B's OverhangSpec.helix_id moved too.
     assert next(o for o in d.overhangs if o.id == "oh_b").helix_id == "d_ha"
+
+
+def test_connection_version_apply_undo_redo_is_atomic_for_binding_and_duplex():
+    """One Connect undo must clear every list entry created by the action.
+
+    The display Duplex used to be POSTed after the snapshot-backed Apply, so it
+    survived Undo even after the OverhangBinding was restored away.
+    """
+    design_state.close_session()
+    seeded = _seed()
+    seeded = seeded.model_copy(update={
+        "overhangs": [
+            o.model_copy(update={
+                "sub_domains": [
+                    SubDomain(id=f"sd_{o.id}", start_bp_offset=0, length_bp=8)
+                ]
+            })
+            for o in seeded.overhangs
+        ]
+    })
+    design_state.set_design(seeded)
+    applied = client.post("/api/design/connection-versions/connect", json={
+        "overhang_a_id": "oh_a",
+        "overhang_b_id": "oh_b",
+        "connection_type": "root-to-root",
+        "overhang_a_seq": "ACGTACGT",
+        "overhang_b_seq": "ACGTACGT",
+    })
+    assert applied.status_code == 201, applied.text
+    live = design_state.get_or_404()
+    assert len(live.overhang_bindings) == 1
+    assert len(live.duplexes) == 1
+
+    undone = client.post("/api/design/undo")
+    assert undone.status_code == 200, undone.text
+    live = design_state.get_or_404()
+    assert live.overhang_bindings == []
+    assert live.overhang_connections == []
+    assert live.duplexes == []
+    assert live.connection_versions == []
+
+    redone = client.post("/api/design/redo")
+    assert redone.status_code == 200, redone.text
+    live = design_state.get_or_404()
+    assert len(live.overhang_bindings) == 1
+    assert len(live.duplexes) == 1
 
 
 def _conn_bond(design, oh_id: str) -> float:

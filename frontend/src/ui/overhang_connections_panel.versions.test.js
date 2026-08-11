@@ -7,6 +7,7 @@ vi.mock('../api/client.js', async (importOriginal) => {
   return {
     ...actual,
     createConnectionVersion: vi.fn(async () => ({})),
+    createAndApplyConnectionVersion: vi.fn(async () => ({})),
     patchConnectionVersion: vi.fn(async () => ({})),
     deleteConnectionVersion: vi.fn(async () => ({})),
     applyConnectionVersion: vi.fn(async () => ({})),
@@ -20,7 +21,8 @@ vi.mock('../api/client.js', async (importOriginal) => {
 
 import { initOverhangConnectionsPanel } from './overhang_connections_panel.js'
 import {
-  createConnectionVersion, patchConnectionVersion, deleteConnectionVersion,
+  createConnectionVersion, createAndApplyConnectionVersion,
+  patchConnectionVersion, deleteConnectionVersion,
   applyConnectionVersion, createOverhangConnection, deleteOverhangConnection,
   createOverhangBinding,
 } from '../api/client.js'
@@ -62,7 +64,7 @@ describe('overhang connections — versions (Connect / Add version / Apply)', ()
     $('oconn-heading').dispatchEvent(new Event('click'))   // expand
   })
   beforeEach(() => {
-    for (const m of [createConnectionVersion, patchConnectionVersion, deleteConnectionVersion, applyConnectionVersion, createOverhangConnection, deleteOverhangConnection, createOverhangBinding]) m.mockClear()
+    for (const m of [createConnectionVersion, createAndApplyConnectionVersion, patchConnectionVersion, deleteConnectionVersion, applyConnectionVersion, createOverhangConnection, deleteOverhangConnection, createOverhangBinding]) m.mockClear()
   })
 
   function pickVariant(id) {
@@ -141,7 +143,7 @@ describe('overhang connections — versions (Connect / Add version / Apply)', ()
     expect(applyConnectionVersion).toHaveBeenCalledWith('vNew')   // newest auto-applied
   })
 
-  it('Connect tears down + unapplies any applied connection sharing an overhang', async () => {
+  it('Connect delegates conflicting teardown to the atomic Apply endpoint', async () => {
     store.setState({ currentDesign: {
       overhangs: OHS, strands: [],
       overhang_connections: [{
@@ -155,8 +157,10 @@ describe('overhang connections — versions (Connect / Add version / Apply)', ()
     expect($('oconn-generate').textContent).toBe('Connect')
     $('oconn-generate').dispatchEvent(new Event('click'))
     await new Promise(r => setTimeout(r, 0))
-    expect(patchConnectionVersion).toHaveBeenCalledWith('vab', { applied: false })  // shares B → unapplied
-    expect(deleteOverhangConnection).toHaveBeenCalledWith('conn_ab')                // shares B → torn down
+    expect(createAndApplyConnectionVersion).toHaveBeenCalled()
+    // Apply performs both operations server-side before computing final geometry.
+    expect(patchConnectionVersion).not.toHaveBeenCalled()
+    expect(deleteOverhangConnection).not.toHaveBeenCalled()
   })
 
   it('Connect for end-to-root creates a version then APPLIES it (binder splice) — not the old OverhangBinding', async () => {
@@ -177,13 +181,10 @@ describe('overhang connections — versions (Connect / Add version / Apply)', ()
     pickVariant('end-to-root')
     expect($('oconn-generate').textContent).toBe('Connect')      // never-paired pair
     expect($('oconn-generate').disabled).toBe(false)             // valid polarity → enabled
-    // _captureVersion finds the new version by id, then applies it.
-    createConnectionVersion.mockImplementationOnce(async () => { store.setState(st([vE2R])) })
     $('oconn-generate').dispatchEvent(new Event('click'))        // "Connect"
     await new Promise(r => setTimeout(r, 0))
-    expect(createConnectionVersion).toHaveBeenCalled()
-    expect(createConnectionVersion.mock.calls[0][0].connection_type).toBe('end-to-root')
-    expect(applyConnectionVersion).toHaveBeenCalledWith('vE2R')  // ← relocate-on-apply (non-consuming)
+    expect(createAndApplyConnectionVersion).toHaveBeenCalled()
+    expect(createAndApplyConnectionVersion.mock.calls[0][0].connection_type).toBe('end-to-root')
     expect(createOverhangBinding).not.toHaveBeenCalled()         // ← NOT the old direct-binding method
   })
 
@@ -205,12 +206,10 @@ describe('overhang connections — versions (Connect / Add version / Apply)', ()
     pickVariant('root-to-root')
     expect($('oconn-generate').textContent).toBe('Connect')      // never-paired pair
     expect($('oconn-generate').disabled).toBe(false)             // valid polarity → enabled
-    createConnectionVersion.mockImplementationOnce(async () => { store.setState(st([vR2R])) })
     $('oconn-generate').dispatchEvent(new Event('click'))        // "Connect"
     await new Promise(r => setTimeout(r, 0))
-    expect(createConnectionVersion).toHaveBeenCalled()
-    expect(createConnectionVersion.mock.calls[0][0].connection_type).toBe('root-to-root')
-    expect(applyConnectionVersion).toHaveBeenCalledWith('vR2R')  // ← backend creates the OverhangBinding
+    expect(createAndApplyConnectionVersion).toHaveBeenCalled()
+    expect(createAndApplyConnectionVersion.mock.calls[0][0].connection_type).toBe('root-to-root')
     expect(createOverhangBinding).not.toHaveBeenCalled()         // ← NOT the old direct-binding path
   })
 

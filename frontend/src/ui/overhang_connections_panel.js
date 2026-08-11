@@ -40,8 +40,9 @@ import {
   createOverhangBinding, deleteOverhangBinding, patchOverhangBinding, patchOverhang,
   generateRandomSequence, generateOverhangRandomSequence, relaxLinker,
   relaxOverhangBinding,
-  createConnectionVersion, patchConnectionVersion, deleteConnectionVersion,
-  applyConnectionVersion, connectDuplex, patchDuplex, relaxDuplex,
+  createConnectionVersion, createAndApplyConnectionVersion,
+  patchConnectionVersion, deleteConnectionVersion,
+  applyConnectionVersion, patchDuplex, relaxDuplex,
 } from '../api/client.js'
 import { showToast } from './toast.js'
 import { showConfirm } from './primitives/confirm.js'
@@ -589,18 +590,6 @@ function _mkPreviewBox() {
   return d
 }
 
-/** Producer: after a DIRECT connect/apply, create the display duplex at the CT
- *  attach ends (length = min, no resize — the longer overhang keeps its toehold).
- *  Idempotent (the backend 409s a pair that's already connected → returns null). */
-async function _ensureDuplexForPair() {
-  if (!_selA || !_selB || !ctIsDirect(_typeId)) return
-  const [attachA, attachB] = ctAttachPair(_typeId)
-  await connectDuplex({
-    overhang_a_id: _selA, overhang_a_attach: attachA,
-    overhang_b_id: _selB, overhang_b_attach: attachB,
-  })
-}
-
 /** Non-complementary warning: for a DIRECT binding, when both overhangs already
  *  have sequences that are NOT reverse-complementary, warn that Pair will
  *  overwrite B with the complement of A. */
@@ -658,22 +647,15 @@ async function _onPrimary() {
   else await _onConnect()
 }
 
-/** Connect: tear down any applied connection sharing either overhang (an
- *  overhang can be in only one applied connection), run the Pair/Generate-Linker
- *  op (materialize), then record an APPLIED ConnectionVersion. (Add version /
- *  Apply get the same protection from the backend apply endpoint.) */
+/** Connect a never-paired pair through the atomic version-Apply endpoint.
+ *  Apply tears down every conflicting materialization, installs the requested
+ *  direct binding/linker, assigns dependent sequences, and returns final geometry
+ *  in one response.  Keeping all connection types on that path avoids geometry
+ *  rebuilds for intermediate teardown/create mutations. */
 async function _onConnect() {
-  await _teardownConflicts(_selA, _selB)
-  // Direct types (root-to-root, end-to-root) materialize through the backend apply
-  // endpoint so Connect runs the SAME path as Add version: ensure complementary
-  // sequences → create a version → APPLY it. Apply does the type-appropriate thing
-  // at the appropriate connection point — end-to-root regenerates B as A's RC binder
-  // spliced into B's root staple; root-to-root creates the OverhangBinding at each
-  // side's root sub-domain. (Routing through _pair instead would create the binding
-  // record OUTSIDE the atomic apply endpoint — the old, inconsistent path.)
-  if (ctIsDirect(_typeId)) {
-    if (_genBtn) _genBtn.disabled = true
-    try {
+  if (_genBtn) _genBtn.disabled = true
+  try {
+    if (ctIsDirect(_typeId)) {
       await _ensureComplementarySequences(true)    // defer re-derive; apply does it once
       // root-to-root binds two sub-domains; without them apply can't create the
       // binding (end-to-root splices instead, so it needs none). Warn like the old
@@ -685,19 +667,13 @@ async function _onConnect() {
           return
         }
       }
-      await _captureVersion({ applied: false })    // creates + selects the new version
-      if (_selRow?.kind === 'version') await applyConnectionVersion(_selRow.id)
-      await _ensureDuplexForPair()                 // populate the display duplex live
-    } catch (err) {
-      showToast(err?.message ?? String(err))
-    } finally {
-      _render()
     }
-    return
+    await _captureVersion({ applied: true, applyNow: true })
+  } catch (err) {
+    showToast(err?.message ?? String(err))
+  } finally {
+    _render()
   }
-  await _onGenerate()                 // materializes (linker create)
-  if (_linkerForPair() || _bindingForPair()) await _captureVersion({ applied: true })
-  _render()
 }
 
 /** Unapply + tear down every materialized connection/binding (and its version)
@@ -731,14 +707,14 @@ async function _onAddVersion() {
 }
 
 /** Create a ConnectionVersion from the current form + live overhang sequences. */
-async function _captureVersion({ applied }) {
+async function _captureVersion({ applied, applyNow = false }) {
   const direct = ctIsDirect(_typeId)
   const indirect = ctIsIndirect(_typeId)
   let bridgeLength = 0
   if (!direct && !indirect) bridgeLength = parseInt(_lengthInput?.value ?? '', 10) || 0
   const conn = _linkerForPair()
   const before = new Set(_versions().map(v => v.id))
-  await createConnectionVersion({
+  const payload = {
     overhang_a_id:  _selA,
     overhang_b_id:  _selB,
     connection_type: _typeId,
@@ -747,7 +723,9 @@ async function _captureVersion({ applied }) {
     bridge_length:  bridgeLength,
     bridge_seq:     applied ? (conn?.bridge_sequence ?? null) : null,
     applied,
-  })
+  }
+  if (applyNow) await createAndApplyConnectionVersion(payload)
+  else await createConnectionVersion(payload)
   const newV = _versions().find(v => !before.has(v.id))
   if (newV) _selRow = { kind: 'version', id: newV.id }
 }
@@ -768,7 +746,6 @@ async function _onApply() {
       const beforeIds = new Set((_store.getState().currentDesign?.cluster_transforms ?? [])
         .map(c => c.id))
       await applyConnectionVersion(v.id)
-      await _ensureDuplexForPair()                 // populate the display duplex live
       // Apply auto-creates a child DUPLEX cluster (sidebar-listed, gizmo-movable) — tell
       // the user. [[overhang-duplex-cluster]].
       const made = (_store.getState().currentDesign?.cluster_transforms ?? [])

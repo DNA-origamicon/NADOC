@@ -8,6 +8,7 @@ vi.mock('../api/client.js', async (importOriginal) => {
     generateOverhangRandomSequence: vi.fn(async () => ({})),
     createOverhangBinding: vi.fn(async () => ({})),
     createConnectionVersion: vi.fn(async () => ({})),
+    createAndApplyConnectionVersion: vi.fn(async () => ({})),
     applyConnectionVersion: vi.fn(async () => ({})),
   }
 })

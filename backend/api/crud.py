@@ -119,6 +119,7 @@ from backend.core.models import (
     DesignMetadata,
     Direction,
     Domain,
+    Duplex,
     HalfCrossover,
     Helix,
     LatticeType,
@@ -8659,8 +8660,9 @@ def _cv_create_bound_binding(
     return d
 
 
-@router.post("/design/connection-versions/{version_id}/apply", status_code=200)
-def apply_connection_version(version_id: str) -> dict:
+def _apply_connection_version_impl(
+    version_id: str, *, new_version: ConnectionVersion | None = None
+) -> dict:
     """Materialize a candidate version ATOMICALLY (one undo): set both overhang
     sequences (resizing each overhang to the sequence length), tear down the
     pair's current OverhangConnection / OverhangBinding, and (re)create the
@@ -8679,7 +8681,9 @@ def apply_connection_version(version_id: str) -> dict:
     )
 
     design = design_state.get_or_404()
-    v = next((x for x in design.connection_versions if x.id == version_id), None)
+    v = new_version or next(
+        (x for x in design.connection_versions if x.id == version_id), None
+    )
     if v is None:
         raise HTTPException(404, detail=f"Connection version {version_id!r} not found.")
     a_id, b_id, vtype = v.overhang_a_id, v.overhang_b_id, v.connection_type
@@ -8691,6 +8695,16 @@ def apply_connection_version(version_id: str) -> dict:
     b_label = next((o.label for o in design.overhangs if o.id == b_id), b_id[:8])
 
     def _fn(d: Design):
+        # First-time Connect supplies a not-yet-persisted version so candidate
+        # creation and materialization share ONE undo snapshot. Add it only
+        # inside the logged mutation; Undo then restores the truly pre-Connect
+        # design instead of leaving a draft version/sidebar group behind.
+        if new_version is not None:
+            d = d.model_copy(
+                update={"connection_versions": [*d.connection_versions, new_version]},
+                deep=True,
+            )
+            _assign_connection_version_names(d)
         # 1. Sequences: patch each overhang, but preserve the live geometry
         #    length. A version can be created, then the user can drag-resize one
         #    of its overhangs before applying; the captured sequence length must
@@ -8750,6 +8764,39 @@ def apply_connection_version(version_id: str) -> dict:
             # stretched). The only per-type difference is the attach pair. (Replaces
             # the end-to-root binder splice that consumed B — removed 2026-06-30.)
             d = _cv_create_bound_binding(d, a_id, b_id, attach_a, attach_b, vtype)
+            # A display Duplex is part of the connection itself. Keep it inside
+            # this snapshot so one Undo removes both the binding and the entry
+            # shown by the Linkers/Bindings UI. The old frontend follow-up POST
+            # was outside the feature log and therefore survived undo.
+            pair = {a_id, b_id}
+            if not any(
+                {dx.left.overhang_id, dx.right.overhang_id} == pair
+                for dx in d.duplexes
+            ):
+                from backend.core.duplex import (
+                    connect_register,
+                    longest_driver,
+                    relocate_duplex,
+                    smallest_unused_duplex_name,
+                )
+
+                left, right = connect_register(d, a_id, attach_a, b_id, attach_b)
+                dx = Duplex(
+                    name=smallest_unused_duplex_name(d),
+                    left=left,
+                    right=right,
+                    driver=longest_driver(d, left, right),
+                    allow_n_wildcard=True,
+                    connection_type=vtype,
+                )
+                d = d.model_copy(update={"duplexes": [*d.duplexes, dx]}, deep=True)
+                # Different-length pairs have no legacy OverhangBinding; their
+                # driven-domain relocation belongs to this same atomic action.
+                if not any(
+                    {b.overhang_a_id, b.overhang_b_id} == pair
+                    for b in d.overhang_bindings
+                ):
+                    d = relocate_duplex(d, dx)
         else:
             conn = OverhangConnection(
                 overhang_a_id=a_id,
@@ -8818,6 +8865,35 @@ def apply_connection_version(version_id: str) -> dict:
         fn=_fn,
     )
     return _design_response_with_geometry(updated, report)
+
+
+@router.post("/design/connection-versions/{version_id}/apply", status_code=200)
+def apply_connection_version(version_id: str) -> dict:
+    return _apply_connection_version_impl(version_id)
+
+
+@router.post("/design/connection-versions/connect", status_code=201)
+def create_and_apply_connection_version(body: ConnectionVersionCreateRequest) -> dict:
+    """Create and materialize a first-time connection as one undoable action."""
+    design = design_state.get_or_404()
+    ids = {o.id for o in design.overhangs}
+    for oid in (body.overhang_a_id, body.overhang_b_id):
+        if oid not in ids:
+            raise HTTPException(404, detail=f"Overhang {oid!r} not found.")
+    if body.overhang_a_id == body.overhang_b_id:
+        raise HTTPException(400, detail="A connection needs two distinct overhangs.")
+    version = ConnectionVersion(
+        name=(body.name or "").strip(),
+        overhang_a_id=body.overhang_a_id,
+        overhang_b_id=body.overhang_b_id,
+        connection_type=body.connection_type,
+        overhang_a_seq=_cv_clean_seq(body.overhang_a_seq),
+        overhang_b_seq=_cv_clean_seq(body.overhang_b_seq),
+        bridge_length=max(0, int(body.bridge_length or 0)),
+        bridge_seq=_cv_clean_seq(body.bridge_seq),
+        applied=True,
+    )
+    return _apply_connection_version_impl(version.id, new_version=version)
 
 
 @router.post("/design/overhang-bindings/{binding_id}/relax", status_code=200)
