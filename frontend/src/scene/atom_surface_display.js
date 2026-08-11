@@ -61,6 +61,7 @@ export function initAtomSurfaceDisplay({
   // are distinct geometry and each renderer holds a single mode.
   const regionVdwRenderer       = initAtomisticRenderer(scene)
   const regionBallstickRenderer = initAtomisticRenderer(scene)
+  const regionStickRenderer     = initAtomisticRenderer(scene)
   const regionSurfaceRenderer = initSurfaceRenderer(scene)   // per-region SURFACE overlay
   // Guards the cluster-display repaint against gizmo-drag thrash (see the colour
   // subscriber below).
@@ -68,6 +69,7 @@ export function initAtomSurfaceDisplay({
   if (window.__NADOC_DBG__) {
     window.__NADOC_DBG__.regionVdwRenderer       = regionVdwRenderer
     window.__NADOC_DBG__.regionBallstickRenderer = regionBallstickRenderer
+    window.__NADOC_DBG__.regionStickRenderer     = regionStickRenderer
     window.__NADOC_DBG__.regionSurfaceRenderer   = regionSurfaceRenderer
   }
 
@@ -624,10 +626,11 @@ export function initAtomSurfaceDisplay({
   // renumbering — bonds are filtered to pairs whose both endpoints survive.
 
   async function _applyRegionAtomisticOverlays(design) {
-    const { vdw, ballstick } = repColumnsByRep(design)
-    if (!vdw.size && !ballstick.size) {
+    const { vdw, ballstick, stick = new Set() } = repColumnsByRep(design)
+    if (!vdw.size && !ballstick.size && !stick.size) {
       regionVdwRenderer.dispose()
       regionBallstickRenderer.dispose()
+      regionStickRenderer.dispose()
       return
     }
     const data = await _ensureAtomData()
@@ -637,9 +640,12 @@ export function initAtomSurfaceDisplay({
     if (vdw.size) { regionVdwRenderer.update(filterAtomData(_atomDataCache, vdw, false)); regionVdwRenderer.setMode('vdw') }
     regionBallstickRenderer.dispose()
     if (ballstick.size) { regionBallstickRenderer.update(filterAtomData(_atomDataCache, ballstick, true)); regionBallstickRenderer.setMode('ballstick') }
+    regionStickRenderer.dispose()
+    if (stick.size) { regionStickRenderer.update(filterAtomData(_atomDataCache, stick, true)); regionStickRenderer.setMode('stick') }
     const { selectedObject, multiSelectedStrandIds } = store.getState()
     regionVdwRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
     regionBallstickRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
+    regionStickRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
   }
 
   // Surface overlay — debounced + signature-cached (surface compute is slow).
@@ -687,6 +693,7 @@ export function initAtomSurfaceDisplay({
     const sel = n.selectedObject, multi = n.multiSelectedStrandIds ?? []
     if (regionVdwRenderer.getMode() !== 'off')       regionVdwRenderer.highlight(sel, multi)
     if (regionBallstickRenderer.getMode() !== 'off') regionBallstickRenderer.highlight(sel, multi)
+    if (regionStickRenderer.getMode() !== 'off')     regionStickRenderer.highlight(sel, multi)
     if (regionSurfaceRenderer.getMode() === 'on')    regionSurfaceRenderer.applyStrandColors(_getAtomStrandColors())
   })
 
@@ -711,6 +718,7 @@ export function initAtomSurfaceDisplay({
     getAtomStrandColors: _getAtomStrandColors,
     getRegionVdwRenderer:       () => regionVdwRenderer,
     getRegionBallstickRenderer: () => regionBallstickRenderer,
+    getRegionStickRenderer:     () => regionStickRenderer,
     getRegionSurfaceRenderer:   () => regionSurfaceRenderer,
     getSurfaceMode: () => _surfaceMode,
     getSurfaceProbeRadius: () => _surfaceProbeRadius,

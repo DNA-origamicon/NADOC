@@ -26,8 +26,9 @@ const _REPR_OPTIONS = [
   { value: 'hull-prism', label: 'Hull Prism' },
   { value: 'vdw',        label: 'VDW (atomistic)' },
   { value: 'ballstick',  label: 'Ball+Stick (atomistic)' },
+  { value: 'stick',      label: 'Stick (atomistic)' },
 ]
-const _ATOMISTIC_REPRS = new Set(['vdw', 'ballstick'])
+const _ATOMISTIC_REPRS = new Set(['vdw', 'ballstick', 'stick'])
 
 const _JOINT_TYPE_ICON = {
   revolute:  '↻',

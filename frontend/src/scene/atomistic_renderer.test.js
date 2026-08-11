@@ -43,6 +43,24 @@ function makeTwoAtomBond() {
   return { scene, ar }
 }
 
+describe('atomistic_renderer stick representation', () => {
+  it('renders covalent bond cylinders and no atom spheres', () => {
+    const scene = new THREE.Scene()
+    const ar = initAtomisticRenderer(scene)
+    ar.setMode('stick')
+    ar.update({
+      atoms: [
+        { serial: 0, element: 'P', helix_id: 'h0', x: 0, y: 0, z: 0 },
+        { serial: 1, element: 'O', helix_id: 'h0', x: 0.15, y: 0, z: 0 },
+      ],
+      bonds: [[0, 1]],
+    })
+    expect(scene.children.filter(o => o.name === 'atomSpheres')).toHaveLength(0)
+    expect(_bondMesh(scene)?.count).toBe(1)
+    expect(bondCylinderScaleY(scene)).toBeCloseTo(0.15, 5)
+  })
+})
+
 describe('atomistic_renderer applyPositionLerp bond cutoff', () => {
   it('draws a bond when the two atoms are a normal bond length apart', () => {
     const { scene, ar } = makeTwoAtomBond()

@@ -138,6 +138,11 @@ color. This applies equally to right-sidebar strand/base/cluster coloring and vi
 card scalar maps (RMSF flexibility, deviation, strain, and CanDo), including animated
 geometry refreshes and restoration when a map is cleared.
 
+Atomistic viewing provides VDW space-fill, Ball & Stick, and classic Stick representations.
+Stick (F8) uses the same bonds, strand/base/cluster/CPK coloring, simulation overlays,
+selection, regional overrides, assembly persistence, and Photo Mode materials/shadows as
+Ball & Stick, while omitting the atom spheres.
+
 Crossover extra bases use one representation-neutral residue placement shared by Full
 beads/slabs/connectors and the atomistic model. A one-base crossover uses the calibrated
 junction-local 1xT pose rather than the legacy Bézier midpoint; both chemical traversal

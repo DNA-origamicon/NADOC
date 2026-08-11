@@ -1653,7 +1653,7 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
  * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldAssignSequence?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onEditStrandSequence, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getAtomisticRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionSurfaceRenderer, onDrillLevel } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onEditStrandSequence, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getAtomisticRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionStickRenderer, getRegionSurfaceRenderer, onDrillLevel } = opts
   _onEditStrandSequence = onEditStrandSequence ?? null
 
   // Use the active render camera (ortho in cadnano mode, perspective otherwise).
@@ -2699,7 +2699,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const globalAtomRenderer = getAtomisticRenderer?.()
     const globalAtomActive = globalAtomRenderer?.getMode?.() !== 'off' &&
       designRenderer.getHelixCtrl()?.root?.visible === false
-    const atomRenderers = [globalAtomRenderer, getRegionVdwRenderer?.(), getRegionBallstickRenderer?.()]
+    const atomRenderers = [globalAtomRenderer, getRegionVdwRenderer?.(), getRegionBallstickRenderer?.(), getRegionStickRenderer?.()]
       .filter((r, i, all) => r?.getMode?.() !== 'off' && all.indexOf(r) === i)
     const atomEntries = atomRenderers.flatMap(r => r.selectionAtomEntries?.(
       entries.filter(e => e.nuc).map(e => ({ ...e.nuc, copy_k: e._copy ?? e.nuc.copy_k ?? 0 })),
@@ -2710,7 +2710,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         cylRefs.set(`${sid}:${di}`, { strandId: sid, domainIndex: di })
       } else if (globalAtomActive || (atomRenderers.length && e.nuc && (() => {
         const r = designRenderer.columnRepAt?.(e.nuc.helix_id, e.nuc.bp_index)
-        return r === 'vdw' || r === 'ballstick'
+        return r === 'vdw' || r === 'ballstick' || r === 'stick'
       })())) {
         // The atom renderer contributes one live entry per atom for this nucleotide.
       } else {
@@ -2817,7 +2817,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const globalAtomRenderer = getAtomisticRenderer?.()
     const globalAtomActive = globalAtomRenderer?.getMode?.() !== 'off' &&
       designRenderer.getHelixCtrl()?.root?.visible === false
-    const atomRenderers = [globalAtomRenderer, getRegionVdwRenderer?.(), getRegionBallstickRenderer?.()]
+    const atomRenderers = [globalAtomRenderer, getRegionVdwRenderer?.(), getRegionBallstickRenderer?.(), getRegionStickRenderer?.()]
       .filter((r, i, all) => r?.getMode?.() !== 'off' && all.indexOf(r) === i)
     const targets = _baseKeys.map(parseBaseKey).filter(Boolean)
     const atomEntries = atomRenderers.flatMap(r => r.selectionAtomEntries?.(targets) ?? [])
@@ -3266,7 +3266,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const globalAtomRenderer = getAtomisticRenderer?.()
     const globalAtomActive = globalAtomRenderer?.getMode?.() !== 'off' &&
       designRenderer.getHelixCtrl()?.root?.visible === false
-    const atomRenderers = [globalAtomRenderer, getRegionVdwRenderer?.(), getRegionBallstickRenderer?.()]
+    const atomRenderers = [globalAtomRenderer, getRegionVdwRenderer?.(), getRegionBallstickRenderer?.(), getRegionStickRenderer?.()]
       .filter((r, i, all) => r?.getMode?.() !== 'off' && all.indexOf(r) === i)
     const backboneByAtomKey = new Map()
     for (const entry of designRenderer.getBackboneEntries()) {
@@ -3332,7 +3332,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       // Atomistic columns are captured below from their visible atom matrices. Using
       // this hidden/full-representation bead would make the lasso key to stale CG space.
       const colRep = designRenderer.columnRepAt?.(entry.nuc.helix_id, entry.nuc.bp_index)
-      if (globalAtomActive || (atomRenderers.length && (colRep === 'vdw' || colRep === 'ballstick'))) continue
+      if (globalAtomActive || (atomRenderers.length && (colRep === 'vdw' || colRep === 'ballstick' || colRep === 'stick'))) continue
       entry.instMesh.getMatrixAt(entry.id, mat)
       pos.setFromMatrixPosition(mat)
       const sp = _toScreen(pos)
@@ -3753,7 +3753,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // columns. Capture their closest atom once so the exclusive overhang/base modes
     // do not fall back to the hidden bead at that column.
     let overlayAtomHit = null
-    for (const ar of [getRegionVdwRenderer?.(), getRegionBallstickRenderer?.()]) {
+    for (const ar of [getRegionVdwRenderer?.(), getRegionBallstickRenderer?.(), getRegionStickRenderer?.()]) {
       if (!ar || ar.getMode?.() === 'off') continue
       const h = ar.raycastPick?.(raycaster)
       if (h && (!overlayAtomHit || h.distance < overlayAtomHit.distance)) overlayAtomHit = h
@@ -3851,7 +3851,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // bead/cone hits — the atom/surface hit below should win there.
     const _isOverlayCol = (nuc) => {
       const r = nuc && designRenderer.columnRepAt?.(nuc.helix_id, nuc.bp_index)
-      return r === 'vdw' || r === 'ballstick' || r === 'surface'
+      return r === 'vdw' || r === 'ballstick' || r === 'stick' || r === 'surface'
     }
     const beadHit0 = allBeadHits.find(h => {
       const e = selBackbone.find(e => e.instMesh === h.object && e.id === h.instanceId)
@@ -3890,7 +3890,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // Atoms are the click target in atomistic regions; the surface mesh in surface
     // regions. Each wins only when it is the closest hit.
     let _atomHit = null
-    for (const rr of [getAtomisticRenderer?.(), getRegionVdwRenderer?.(), getRegionBallstickRenderer?.()]) {
+    for (const rr of [getAtomisticRenderer?.(), getRegionVdwRenderer?.(), getRegionBallstickRenderer?.(), getRegionStickRenderer?.()]) {
       if (!rr || rr.getMode() === 'off') continue
       const h = rr.raycastPick(raycaster)
       if (h && (!_atomHit || h.distance < _atomHit.distance)) _atomHit = h

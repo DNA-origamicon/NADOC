@@ -45,7 +45,7 @@ vi.mock('./design_queries.js', () => ({
   surfaceSegments: vi.fn(() => []),
 }))
 vi.mock('./representation_overrides.js', () => ({
-  repColumnsByRep: vi.fn(() => ({ vdw: new Set(), ballstick: new Set() })),
+  repColumnsByRep: vi.fn(() => ({ vdw: new Set(), ballstick: new Set(), stick: new Set() })),
 }))
 
 import { initAtomSurfaceDisplay, regionSurfaceSignature } from './atom_surface_display.js'
@@ -119,7 +119,7 @@ describe('initAtomSurfaceDisplay', () => {
       'invalidateAtomCache', 'invalidateSurfaceCache',
       'getRegionVdwRenderer', 'getRegionBallstickRenderer', 'getRegionSurfaceRenderer',
     ]) expect(typeof api[k]).toBe('function')
-    expect(_madeAtomRenderers.length).toBe(2)    // vdw + ballstick
+    expect(_madeAtomRenderers.length).toBe(3)    // vdw + ballstick + stick
     expect(_madeSurfaceRenderers.length).toBe(1) // region surface
   })
 

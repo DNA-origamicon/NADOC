@@ -164,7 +164,7 @@ class PatchGroupRequest(BaseModel):
     visible: Optional[bool] = None
     representation: Optional[
         Literal[
-            "full", "beads", "cylinders", "vdw", "ballstick", "hull-prism", "surface"
+            "full", "beads", "cylinders", "vdw", "ballstick", "stick", "hull-prism", "surface"
         ]
     ] = None
     # null/empty string is treated as "clear the override → respect member reps"

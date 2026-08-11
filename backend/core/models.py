@@ -1158,7 +1158,7 @@ class RepresentationOverride(BaseModel):
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = ""
-    representation: Literal["full", "cylinders", "surface", "vdw", "ballstick"] = "full"
+    representation: Literal["full", "cylinders", "surface", "vdw", "ballstick", "stick"] = "full"
     segments: List[RepresentationSegment] = Field(default_factory=list)
 
 
@@ -3147,7 +3147,7 @@ class PartInstance(BaseModel):
     mode: Literal["rigid", "flexible"] = "flexible"
     visible: bool = True
     representation: Literal[
-        "full", "beads", "cylinders", "vdw", "ballstick", "hull-prism", "surface"
+        "full", "beads", "cylinders", "vdw", "ballstick", "stick", "hull-prism", "surface"
     ] = "full"
     fixed: bool = False  # anchored in assembly; not moved by joint constraint solving
     allow_part_joints: bool = (
@@ -3529,7 +3529,7 @@ class PartGroup(BaseModel):
     visible: bool = True
     representation: Optional[
         Literal[
-            "full", "beads", "cylinders", "vdw", "ballstick", "hull-prism", "surface"
+            "full", "beads", "cylinders", "vdw", "ballstick", "stick", "hull-prism", "surface"
         ]
     ] = None
     expanded: bool = True
@@ -3589,6 +3589,7 @@ class Assembly(BaseModel):
         "cylinders",
         "vdw",
         "ballstick",
+        "stick",
         "hull-prism",
         "surface",
     ] = "full"

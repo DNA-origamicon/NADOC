@@ -1551,7 +1551,7 @@ export function initDesignRenderer(scene, storeRef) {
     refreshCylinderDomainGlow()      { _helixCtrl?.refreshCylinderDomainGlow() },
     isColumnCylinder(helixId, bp)    { return _helixCtrl?.isColumnCylinder(helixId, bp) ?? false },
     columnRepAt(helixId, bp)         { return _helixCtrl?.columnRepAt(helixId, bp) ?? 'full' },
-    isColumnAtomistic(helixId, bp)   { const r = _helixCtrl?.columnRepAt(helixId, bp); return r === 'vdw' || r === 'ballstick' },
+    isColumnAtomistic(helixId, bp)   { const r = _helixCtrl?.columnRepAt(helixId, bp); return r === 'vdw' || r === 'ballstick' || r === 'stick' },
     isColumnSurface(helixId, bp)     { return _helixCtrl?.columnRepAt(helixId, bp) === 'surface' },
     isDomainCylinder(strandId, di)   { return _helixCtrl?.isDomainCylinder(strandId, di) ?? false },
 

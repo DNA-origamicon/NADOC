@@ -26,9 +26,13 @@ everything above it in this file is history.
 | The shader patch itself | `frontend/src/scene/instance_alpha.js` — `instanceAlphaOnBeforeCompile` + `applyInstanceAlphaMaterial`. Extracted 2026-08-01 so photo mode can re-install it after its material swap (see item 1 below) |
 | Rebuild + no-rebuild wiring | `design_renderer.js` `_applyRepresentationOverrides:387` (calls `setDetailLevel` first — bug-A fix intact), `getDetailLevel:1167`, `columnRepAt/isColumnAtomistic/isColumnSurface:1185-1187` |
 | Right-click menu | `selection_manager.js` `_appendRepresentationMenu:411` (6 call sites) |
-| F1–F7 + global-rep master reset | `frontend/src/ui/representation_switcher.js:271` / `:307` (anchors refreshed 2026-08-01) — **no longer `main.js`** |
+| F1–F8 + global-rep master reset | `frontend/src/ui/representation_switcher.js` (F8 is Stick) — **no longer `main.js`** |
 | Region atom/surface overlays | `frontend/src/scene/atom_surface_display.js` (`initAtomSurfaceDisplay`, called `main.js:2461`); segment extraction moved to `surfaceSegments()` in `design_queries.js` |
 | Photo export | `frontend/src/scene/photo_mode.js` — **no longer `main.js ~12886`** |
+
+**Stick representation (2026-08-11):** `stick` is a first-class atomistic representation for
+global design view, per-region overrides, saved assemblies, MD/oxDNA displays, coloring, and photo
+mode. It reuses ball-and-stick bonds/materials while omitting `atomSpheres`, and is bound to F8.
 
 **The master reset is exempt from the no-op guard (2026-08-01).** Re-picking the representation
 already on screen now returns before `_setRepresentation` (`representation_switcher.js:279`),

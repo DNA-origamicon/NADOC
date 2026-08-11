@@ -247,7 +247,7 @@ export function proteinTransformMap(displayResponse) {
  * Decides whether an oxDNA display overlay needs a heavy-rep reconstruction.
  */
 export function repKind(repr) {
-  if (repr === 'vdw' || repr === 'ballstick') return 'atomistic'
+  if (repr === 'vdw' || repr === 'ballstick' || repr === 'stick') return 'atomistic'
   if (repr === 'surface') return 'surface'
   return 'cg'
 }

@@ -71,7 +71,7 @@ export const GHOST_BYTES_PER_NT = { full: 230, beads: 150, cylinders: 28 }
 export const BROWSER_HEAP_CEILING_BYTES = 1536 * 1024 * 1024
 export const FREE_RAM_SAFE_FRACTION = 0.5
 
-const _HEAVY_REPS = new Set(['vdw', 'ballstick', 'atomistic', 'surface'])
+const _HEAVY_REPS = new Set(['vdw', 'ballstick', 'stick', 'atomistic', 'surface'])
 
 /** Colour for a ghost of the given rank (rank 0 is the real model → never asked for). */
 export function clusterColors(n) {
