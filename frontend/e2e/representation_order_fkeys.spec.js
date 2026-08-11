@@ -1,5 +1,5 @@
 /**
- * View → Representation menu: compute-intensity ordering + F1…F7 hotkeys.
+ * View → Representation menu: compute-intensity ordering + F1…F8 hotkeys.
  *
  * Verifies (1) the menu lists representations least→most compute-intensive
  * with matching F-key hint labels, and (2) pressing F1…F4 switches the active
@@ -8,7 +8,7 @@
 
 import { test, expect } from '@playwright/test'
 
-// Expected order, top → bottom in the menu and F1 → F7 on the keyboard.
+// Expected order, top → bottom in the menu and F1 → F8 on the keyboard.
 const ORDER = [
   { id: 'menu-view-hull-prism',          label: 'Hull Prism',       hint: 'F1' },
   { id: 'menu-view-detail-cylinders',    label: 'Cylinders',        hint: 'F2' },
@@ -17,6 +17,7 @@ const ORDER = [
   { id: 'menu-view-surface',             label: 'Surface',          hint: 'F5' },
   { id: 'menu-view-atomistic-vdw',       label: 'VDW / Space-fill', hint: 'F6' },
   { id: 'menu-view-atomistic-ballstick', label: 'Ball & Stick',     hint: 'F7' },
+  { id: 'menu-view-atomistic-stick',     label: 'Stick',            hint: 'F8' },
 ]
 
 const API = 'http://localhost:8000/api'
@@ -52,7 +53,7 @@ test.describe('Representation menu order + F-key bindings', () => {
     const ids = await page.$$eval(
       '#menu-view-hull-prism, #menu-view-detail-cylinders, #menu-view-detail-beads, ' +
       '#menu-view-detail-full, #menu-view-surface, #menu-view-atomistic-vdw, ' +
-      '#menu-view-atomistic-ballstick',
+      '#menu-view-atomistic-ballstick, #menu-view-atomistic-stick',
       els => els
         .sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))
         .map(el => el.id),

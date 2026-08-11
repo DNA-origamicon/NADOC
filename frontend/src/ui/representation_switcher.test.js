@@ -17,12 +17,13 @@ function fkey(key) {
            target: { tagName: 'BODY' }, preventDefault: vi.fn() }
 }
 
-// Menu ids the factory reads: the seven repr radios, the mixed-state dot, and
+// Menu ids the factory reads: the eight repr radios, the mixed-state dot, and
 // the six Coloring submenu items (whose `.disabled` the availability matrix sets).
 const REPR_IDS = [
   'menu-view-hull-prism', 'menu-view-detail-cylinders', 'menu-view-detail-beads',
   'menu-view-detail-full', 'menu-view-surface', 'menu-view-atomistic-vdw',
   'menu-view-atomistic-ballstick',
+  'menu-view-atomistic-stick',
 ]
 const COLORING_IDS = [
   'menu-view-coloring-strand', 'menu-view-coloring-base', 'menu-view-coloring-cluster',
@@ -74,15 +75,17 @@ describe('initRepresentationSwitcher — construction', () => {
     expect(typeof api.syncAssemblyReprMenu).toBe('function')
   })
 
-  it('registers F1…F7 shortcuts in least→most-intensive order', () => {
+  it('registers F1…F8 shortcuts in least→most-intensive order', () => {
     mountIds(DOM)
     initRepresentationSwitcher(makeDeps())
-    const keys = getShortcuts().filter(s => /^F[1-7]$/.test(s.key)).map(s => s.key).sort()
-    expect(keys).toEqual(['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7'])
+    const keys = getShortcuts().filter(s => /^F[1-8]$/.test(s.key)).map(s => s.key).sort()
+    expect(keys).toEqual(['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8'])
     const f1 = getShortcuts().find(s => s.key === 'F1')
     expect(f1.description).toContain('Hull Prism')
     const f7 = getShortcuts().find(s => s.key === 'F7')
     expect(f7.description).toContain('Ball & Stick')
+    const f8 = getShortcuts().find(s => s.key === 'F8')
+    expect(f8.description).toContain('Stick')
   })
 
   it('seeds initial Coloring-menu availability for default repr "full" (cpk + source disabled)', () => {

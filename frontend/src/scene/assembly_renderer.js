@@ -630,7 +630,7 @@ export function initAssemblyRenderer(scene, store, api) {
     const lod = CG_LOD[repr]
 
     // Always dispose previous non-CG renderers when switching away from them.
-    if (repr !== 'vdw' && repr !== 'ballstick' && entry.atomisticRenderer) {
+    if (repr !== 'vdw' && repr !== 'ballstick' && repr !== 'stick' && entry.atomisticRenderer) {
       entry.atomisticRenderer.dispose()
       entry.atomisticRenderer = null
     }
@@ -659,7 +659,7 @@ export function initAssemblyRenderer(scene, store, api) {
       entry.hullGroups = _buildHullGroupsForDesign(entry.design, entry.helixAxes, entry.group)
 
     } else {
-      // Atomistic repr ('vdw' | 'ballstick') — fetch geometry and build renderer.
+      // Atomistic repr ('vdw' | 'ballstick' | 'stick') — fetch geometry and build renderer.
       let atomData
       try {
         atomData = await api.getInstanceAtomisticGeometry(instId)

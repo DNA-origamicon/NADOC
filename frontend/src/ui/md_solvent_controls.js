@@ -381,7 +381,7 @@ export function initMdSolventControls({
     // SNAP: solvent is drawn at the frame it belongs to and never interpolated —
     // molecule k of frame i is a different molecule from molecule k of frame i+1.
     if (ov) {
-      ov.setMode(_repMode(), getCurrentRepr?.() === 'ballstick')
+      ov.setMode(_repMode(), ['ballstick', 'stick'].includes(getCurrentRepr?.()))
       ov.setWaterVisible(!!waterToggle?.checked)
       ov.setIonsVisible(!!ionsToggle?.checked)
       ov.setFrame(f)
@@ -448,7 +448,7 @@ export function initMdSolventControls({
   window.addEventListener('nadoc:representation-change', () => {
     if (!_enabled || _lastRepMode === null) return
     const mode = _repMode()
-    const ballstick = getCurrentRepr?.() === 'ballstick'
+    const ballstick = ['ballstick', 'stick'].includes(getCurrentRepr?.())
     const modeChanged      = mode !== _lastRepMode
     const ballstickChanged = ballstick !== _lastBallstick
     _lastRepMode   = mode
@@ -500,7 +500,7 @@ export function initMdSolventControls({
       // can tell a real wire-format flip from a rep change that doesn't touch it.
       if (_enabled) {
         _lastRepMode   = mode
-        _lastBallstick = getCurrentRepr?.() === 'ballstick'
+        _lastBallstick = ['ballstick', 'stick'].includes(getCurrentRepr?.())
       }
       const ok = _enabled && mode !== 'off'
       const why = mode === 'off'

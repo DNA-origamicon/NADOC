@@ -11,6 +11,7 @@ export const COLORING_SUPPORT = {
   'cylinders':  new Set(['strand', 'cluster', 'overhang-only']),
   'vdw':        new Set(['strand', 'base', 'cluster', 'cpk']),
   'ballstick':  new Set(['strand', 'base', 'cluster', 'cpk']),
+  'stick':      new Set(['strand', 'base', 'cluster', 'cpk']),
   'surface':    new Set(['strand', 'cluster']),
   'hull-prism': new Set(),
 }
@@ -52,7 +53,7 @@ export function coloringOptionStates(repr, assemblyActive, activeMode) {
  * (per-atom cpk/strand/cluster + per-source tint; no 'base').
  */
 export function supportedColoringSet(repr, assemblyActive = false) {
-  const isAtom = repr === 'vdw' || repr === 'ballstick'
+  const isAtom = repr === 'vdw' || repr === 'ballstick' || repr === 'stick'
   if (assemblyActive) {
     if (isAtom)             return new Set(['cpk', 'strand', 'cluster', 'source'])
     if (repr === 'surface') return new Set(['strand', 'cluster', 'source'])
@@ -94,7 +95,7 @@ export function reprMenuState(instances) {
 export function coloringFallbackMode(activeRepr, currentMode, assemblyActive = false) {
   const supported = supportedColoringSet(activeRepr, assemblyActive)
   if (supported.has(currentMode)) return null
-  const isAtom = activeRepr === 'vdw' || activeRepr === 'ballstick'
+  const isAtom = activeRepr === 'vdw' || activeRepr === 'ballstick' || activeRepr === 'stick'
   if (isAtom && supported.has('cpk')) return 'cpk'
   if (supported.has('strand'))       return 'strand'
   return null

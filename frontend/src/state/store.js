@@ -280,7 +280,7 @@ const _initialState = {
   /**
    * Current atomistic display mode.  'off' = no atomistic overlay;
    * 'vdw' = space-filling Van der Waals spheres;
-   * 'ballstick' = ball-and-stick with bond cylinders.
+   * 'ballstick' = ball-and-stick with bond cylinders; 'stick' = bonds only.
    */
   atomisticMode: 'off',
 

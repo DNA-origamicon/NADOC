@@ -6,6 +6,10 @@ import {
 } from './coloring_modes.js'
 
 describe('supportedColoringSet', () => {
+  it('gives stick the same design and assembly coloring options as ball-and-stick', () => {
+    expect([...supportedColoringSet('stick', false)]).toEqual([...supportedColoringSet('ballstick', false)])
+    expect([...supportedColoringSet('stick', true)]).toEqual([...supportedColoringSet('ballstick', true)])
+  })
   it('uses the static table in design (non-assembly) mode', () => {
     expect([...supportedColoringSet('full', false)]).toEqual([...COLORING_SUPPORT.full])
     expect([...supportedColoringSet('surface', false)]).toEqual(['strand', 'cluster'])

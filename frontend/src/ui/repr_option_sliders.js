@@ -24,7 +24,7 @@ export function reprSliderRowVisibility(repr) {
     cylRadius:        repr === 'cylinders',
     hullMargin:       repr === 'hull-prism',
     hullCurve:        repr === 'hull-prism',
-    atomisticSliders: repr === 'vdw' || repr === 'ballstick',
+    atomisticSliders: repr === 'vdw' || repr === 'ballstick' || repr === 'stick',
     surfacePanel:     repr === 'surface',
   }
 }

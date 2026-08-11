@@ -78,6 +78,7 @@ function _activeSceneRepresentation() {
     'menu-view-surface': 'surface',
     'menu-view-atomistic-vdw': 'vdw',
     'menu-view-atomistic-ballstick': 'ballstick',
+    'menu-view-atomistic-stick': 'stick',
   }
   for (const [id, repr] of Object.entries(map)) {
     if (document.getElementById(id)?.classList.contains('is-checked')) return repr
@@ -661,7 +662,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
       )
     } else if (_repr === 'ballstick') {
       if (!msg.atoms) return
-      atomisticRenderer?.setMode(_sceneRepr === 'vdw' ? 'vdw' : 'ballstick')
+      atomisticRenderer?.setMode(_sceneRepr === 'vdw' ? 'vdw' : (_sceneRepr === 'stick' ? 'stick' : 'ballstick'))
       atomisticRenderer?.update({
         // Bonds come from 'ready', not the frame: connectivity is static, coordinates
         // are not. `msg.bonds` first only so a future frame-level list would win.

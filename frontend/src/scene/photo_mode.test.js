@@ -47,6 +47,19 @@ describe('swapToFlatMaterials', () => {
     expect(surf.material.roughness).toBeCloseTo(0.85)    // surface → matte
   })
 
+  it('applies atomistic photo materials to stick-only bond meshes', () => {
+    const scene = new THREE.Scene()
+    const sticks = new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(1, 1, 1, 8), new THREE.MeshPhongMaterial(), 4)
+    sticks.name = 'atomBonds'
+    scene.add(sticks)
+    swapToFlatMaterials(scene, {
+      full: 'flat', cylinders: 'flat', surface: 'flat', atomistic: 'cpk-metallic',
+    })
+    expect(sticks.material.isMeshPhysicalMaterial).toBe(true)
+    expect(sticks.material.metalness).toBe(1.0)
+  })
+
   it('does not mistake hull-prism MeshStandardMaterial for atomistic', () => {
     const scene = new THREE.Scene()
     const hull = new THREE.Mesh(box(), new THREE.MeshStandardMaterial())

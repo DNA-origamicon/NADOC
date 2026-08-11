@@ -79,13 +79,14 @@ def test_surface_and_atomistic_reps_round_trip():
             representation=rep,
             segments=[RepresentationSegment(helix_id=HELIX, bp_start=0, bp_end=5)],
         )
-        for rep in ("surface", "vdw", "ballstick")
+        for rep in ("surface", "vdw", "ballstick", "stick")
     ]
     restored = Design.from_json(d.to_json())
     assert [o.representation for o in restored.representation_overrides] == [
         "surface",
         "vdw",
         "ballstick",
+        "stick",
     ]
 
 

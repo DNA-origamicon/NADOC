@@ -17,11 +17,11 @@ export const WS = Object.freeze({ CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 
  *   everything else (full / beads / cylinders / hull / surface) → 'nadoc'
  */
 export function targetStreamMode(sceneRepr) {
-  return sceneRepr === 'vdw' || sceneRepr === 'ballstick' ? 'ballstick' : 'nadoc'
+  return sceneRepr === 'vdw' || sceneRepr === 'ballstick' || sceneRepr === 'stick' ? 'ballstick' : 'nadoc'
 }
 
 export function sceneUsesAtomistic(sceneRepr) {
-  return sceneRepr === 'vdw' || sceneRepr === 'ballstick'
+  return sceneRepr === 'vdw' || sceneRepr === 'ballstick' || sceneRepr === 'stick'
 }
 
 export function sceneUsesNativeCg(sceneRepr) {

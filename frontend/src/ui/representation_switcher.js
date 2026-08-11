@@ -1,8 +1,8 @@
 // Unified representation switcher — the core of the View → Representation menu.
 //
 // Owns the seven mutually-exclusive representations (hull-prism / cylinders /
-// beads / full / surface / vdw / ballstick), the radio menu state, the View →
-// Coloring submenu availability matrix, and the F1…F7 hotkey bindings. Exactly
+// beads / full / surface / vdw / ballstick / stick), the radio menu state, the View →
+// Coloring submenu availability matrix, and the F1…F8 hotkey bindings. Exactly
 // one representation is active at a time; switching deactivates the others.
 //
 // Extracted verbatim from main.js as the switcher-CORE lift of the
@@ -23,7 +23,7 @@ import { registerShortcut } from '../input/shortcuts.js'
 // a time; switching to any one deactivates all others.
 //
 // Ordered least → most compute-intensive.  This is also the order shown in the
-// View → Representation menu and the order the F1…F7 hotkeys bind to (the
+// View → Representation menu and the order the F1…F8 hotkeys bind to (the
 // F-key registration loop below iterates this array, so the two stay in sync).
 //
 //  'hull-prism' — per-part grey boxes, aggressive culling (F1, cheapest)
@@ -33,6 +33,7 @@ import { registerShortcut } from '../input/shortcuts.js'
 //  'surface'    — molecular surface mesh              (F5)
 //  'vdw'        — atomistic VDW space-fill            (F6)
 //  'ballstick'  — atomistic ball-and-stick            (F7, heaviest)
+//  'stick'      — atomistic bonds without atom balls   (F8)
 const _ALL_REPRS = [
   { id: 'menu-view-hull-prism',         repr: 'hull-prism' },
   { id: 'menu-view-detail-cylinders',   repr: 'cylinders' },
@@ -41,6 +42,7 @@ const _ALL_REPRS = [
   { id: 'menu-view-surface',            repr: 'surface'    },
   { id: 'menu-view-atomistic-vdw',      repr: 'vdw'       },
   { id: 'menu-view-atomistic-ballstick',repr: 'ballstick' },
+  { id: 'menu-view-atomistic-stick',    repr: 'stick'     },
 ]
 
 // Friendly labels for the F-key shortcut descriptions (command palette / help).
@@ -52,6 +54,7 @@ const _REPR_LABELS = {
   surface:      'Surface',
   vdw:          'VDW / Space-fill',
   ballstick:    'Ball & Stick',
+  stick:        'Stick',
 }
 
 // Coloring-mode labels (e.g. for the toast shown when an F-key cycles coloring
@@ -171,7 +174,7 @@ export function initRepresentationSwitcher({
     setCurrentRepr(repr)
     flexibleArcs?.setRepresentation?.(repr)
     // ── Deactivate any currently active exclusive mode ────────────────────────
-    if (repr !== 'vdw' && repr !== 'ballstick' && atomisticRenderer.getMode() !== 'off') {
+    if (!['vdw', 'ballstick', 'stick'].includes(repr) && atomisticRenderer.getMode() !== 'off') {
       atomisticRenderer.setMode('off')
       store.setState({ atomisticMode: 'off' })
     }
@@ -194,7 +197,7 @@ export function initRepresentationSwitcher({
         designRenderer.setDetailLevel(lvl)
         unfoldView?.refreshArcVisibility()
       }
-    } else if (repr === 'vdw' || repr === 'ballstick') {
+    } else if (repr === 'vdw' || repr === 'ballstick' || repr === 'stick') {
       await applyAtomisticMode(repr)
       store.setState({ atomisticMode: repr })
     } else if (repr === 'surface') {
@@ -234,7 +237,7 @@ export function initRepresentationSwitcher({
         const st = reprMenuState(instances)
         if (st.kind === 'single' && st.repr === repr) { _updateReprRadio(repr); return }
 
-        if (repr === 'vdw' || repr === 'ballstick' || repr === 'surface') {
+        if (repr === 'vdw' || repr === 'ballstick' || repr === 'stick' || repr === 'surface') {
           const ok = await showConfirm({
             title: repr === 'surface' ? 'Apply surface to assembly' : 'Apply atomistic to assembly',
             message: (repr === 'surface'
@@ -281,7 +284,7 @@ export function initRepresentationSwitcher({
     })
   }
 
-  // ── Function-key bindings: F1…F7 → representations ────────────────────────────
+  // ── Function-key bindings: F1…F8 → representations ────────────────────────────
   // Bound in the same least→most compute-intensive order as _ALL_REPRS / the
   // View → Representation menu.  First press switches to the representation;
   // pressing the SAME key again (while that representation is already active)

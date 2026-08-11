@@ -414,6 +414,7 @@ _VALID_REPRESENTATIONS = (
     "cylinders",
     "vdw",
     "ballstick",
+    "stick",
     "hull-prism",
     "surface",
 )

@@ -187,6 +187,7 @@ export function buildAnchorAtomIndex(anchors, design) {
 export function anchorAtomGlowScale(mode) {
   if (mode === 'vdw') return 2.6
   if (mode === 'ballstick') return 1.4
+  if (mode === 'stick') return 1.4
   return 3.6
 }
 

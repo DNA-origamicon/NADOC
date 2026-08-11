@@ -34,9 +34,10 @@ describe('reprSliderRowVisibility', () => {
     expect(v.hullMargin).toBe(true)
     expect(v.hullCurve).toBe(true)
   })
-  it('vdw / ballstick → atomistic sliders', () => {
+  it('vdw / ballstick / stick → atomistic sliders', () => {
     expect(reprSliderRowVisibility('vdw').atomisticSliders).toBe(true)
     expect(reprSliderRowVisibility('ballstick').atomisticSliders).toBe(true)
+    expect(reprSliderRowVisibility('stick').atomisticSliders).toBe(true)
   })
   it('surface → surface panel', () => {
     expect(reprSliderRowVisibility('surface').surfacePanel).toBe(true)

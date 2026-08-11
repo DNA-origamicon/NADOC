@@ -55,18 +55,19 @@ export function resolveRepOverrides(design) {
 /**
  * Group overridden columns by the overlay reps that need a separate renderer.
  * Last-wins per column (a column ends up in exactly one set).
- * @returns {{ vdw:Set<string>, ballstick:Set<string>, surface:Set<string> }}  ("helixId:bp")
+ * @returns {{ vdw:Set<string>, ballstick:Set<string>, stick:Set<string>, surface:Set<string> }}  ("helixId:bp")
  */
 export function repColumnsByRep(design) {
-  const vdw = new Set(), ballstick = new Set(), surface = new Set()
+  const vdw = new Set(), ballstick = new Set(), stick = new Set(), surface = new Set()
   const all = new Map()
   _forEachOverrideColumn(design, (key, rep) => all.set(key, rep))
   for (const [key, rep] of all) {
     if (rep === 'vdw') vdw.add(key)
     else if (rep === 'ballstick') ballstick.add(key)
+    else if (rep === 'stick') stick.add(key)
     else if (rep === 'surface') surface.add(key)
   }
-  return { vdw, ballstick, surface }
+  return { vdw, ballstick, stick, surface }
 }
 
 // ── Selection → segments (UI helpers) ────────────────────────────────────────
@@ -133,6 +134,7 @@ export function createRepresentationMenuItem({ apply, dismiss }) {
   _opt('Surface', 'surface')
   _opt('VDW', 'vdw')
   _opt('Ball & Stick', 'ballstick')
+  _opt('Stick', 'stick')
   _opt('Reset to global', null, '#ffcc99')
   item.appendChild(fly)
 

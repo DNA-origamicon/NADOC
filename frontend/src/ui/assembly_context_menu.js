@@ -29,8 +29,9 @@ const _REPR_OPTIONS = [
   { value: 'hull-prism', label: 'Hull Prism' },
   { value: 'vdw',        label: 'VDW (atomistic)' },
   { value: 'ballstick',  label: 'Ball+Stick (atomistic)' },
+  { value: 'stick',      label: 'Stick (atomistic)' },
 ]
-const _ATOMISTIC = new Set(['vdw', 'ballstick'])
+const _ATOMISTIC = new Set(['vdw', 'ballstick', 'stick'])
 
 function _divider() {
   const hr = document.createElement('hr')

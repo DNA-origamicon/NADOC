@@ -852,6 +852,7 @@ async function main() {
     // created below; used for atom/surface picking in atomistic/surface regions.
     getRegionVdwRenderer:       () => _atomSurface.getRegionVdwRenderer(),
     getRegionBallstickRenderer: () => _atomSurface.getRegionBallstickRenderer(),
+    getRegionStickRenderer: () => _atomSurface.getRegionStickRenderer(),
     getRegionSurfaceRenderer:   () => _atomSurface.getRegionSurfaceRenderer(),
     onDrillLevel: selectionFilter.reflectDrillLevel,
     onNick: async ({ helixId, bpIndex, direction }) => {
@@ -3590,7 +3591,7 @@ async function main() {
   //  _FNAME_KEY, and _setFileName are declared above the session-restore block.)
   let _lastDetailLevel  = 0      // LOD level last applied to designRenderer (0=full, 1=beads, 2=cylinders)
   let _lodMode          = 'full' // 'full' | 'beads' | 'cylinders'
-  // The active design-view representation (full|beads|cylinders|vdw|ballstick|surface|
+  // The active design-view representation (full|beads|cylinders|vdw|ballstick|stick|surface|
   // hull-prism). Tracked so e.g. the deform tool can drop the hull-prism solid for
   // an edit (its coarse envelope can't show the live preview and would persist
   // under the full-rep preview). Set by _setRepresentation.

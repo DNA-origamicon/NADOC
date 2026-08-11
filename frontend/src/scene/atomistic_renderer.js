@@ -7,6 +7,7 @@
  * Two display modes:
  *   'vdw'      — Space-filling: sphere radius = Van der Waals radius.  No bonds.
  *   'ballstick' — Ball-and-stick: small sphere (0.07 nm) + bond cylinders.
+ *   'stick'     — Classic stick: bond cylinders only (no atom spheres).
  *
  * Selection highlighting (mirrors the coarse-grained bead model):
  *   strand     — all atoms on the selected strand → white; others stay unchanged
@@ -233,7 +234,10 @@ export function initAtomisticRenderer(scene) {
 
     const useImpostors = impostorsEnabled()
 
-    for (const [el, rows] of Object.entries(buckets)) {
+    // Stick is deliberately the same atomistic data/color/material pipeline as
+    // ball-and-stick, with only its atom meshes omitted. Bonds remain colored
+    // from their endpoint atoms below, so CPK/strand/base/cluster modes match.
+    if (_state.mode !== 'stick') for (const [el, rows] of Object.entries(buckets)) {
       if (!rows.length) continue
       const meta = ELEMENTS[el] ?? DEFAULT_ELEMENT
       const radius = (isVdw ? meta.vdw : BALL_RADIUS) * _vdwScale
@@ -675,7 +679,7 @@ export function initAtomisticRenderer(scene) {
     clearOxdnaTransforms() { this.applyOxdnaTransforms(null) },
 
     /**
-     * Switch display mode: 'off' | 'vdw' | 'ballstick'.
+     * Switch display mode: 'off' | 'vdw' | 'ballstick' | 'stick'.
      * Re-uses cached atom data; no refetch.
      */
     setMode(mode) {
