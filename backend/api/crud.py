@@ -293,10 +293,9 @@ def _design_response(design: Design, report: ValidationReport) -> dict:
     ]
     _inject_joint_world_axes(design_dict)
     # Editor (skip-geometry) responses: drop the heavy feature_log payload blobs.
-    # The 2D editor renders from topology and never decodes snapshot/diff blobs;
-    # they were ~1.2 MB of every VoltronCore response (1.1 MB pre/post snapshots +
-    # 0.1 MB per-step diffs). The backend keeps the real blobs (for revert/seek/
-    # save), so this only shrinks the wire payload + the editor's JSON.parse.
+    # The main 3D client persists response designs for server-restart recovery,
+    # so its responses MUST retain the bodies. Stripping them globally silently
+    # turns the recovery copy into non-revertable history after a restart.
     if should_skip_geometry():
         _strip_feature_log_payloads(design_dict)
     # Monotonic per-document revision, captured ATOMICALLY at mutation time for a
@@ -464,7 +463,19 @@ def _design_response_with_geometry(
     # currentGeometry directly, so shipping straight would be wasted bytes
     # plus a redundant geometry compute.
     if embed_straight is None:
-        embed_straight = bool(design.deformations) or bool(design.cluster_transforms)
+        # Every design owns an auto-created default cluster, normally with an
+        # identity pose. Its mere presence does not make straight geometry differ
+        # from current geometry. Treating it as a deformation doubled geometry
+        # work and payload size for essentially every large design mutation.
+        has_effective_transform = any(
+            any(abs(float(v)) > 1e-9 for v in (ct.translation or []))
+            or any(
+                abs(float(v) - target) > 1e-9
+                for v, target in zip((ct.rotation or []), (0.0, 0.0, 0.0, 1.0))
+            )
+            for ct in design.cluster_transforms
+        )
+        embed_straight = bool(design.deformations) or has_effective_transform
     if embed_straight:
         # Straight (un-deformed) geometry — strips deformations + cluster_transforms
         # before computing positions. Shipped in COMPACT positions_by_helix form
@@ -886,20 +897,19 @@ def _design_replace_response(
         return _design_response_with_geometry(
             design,
             report,
-            embed_straight=True,
+            embed_straight=None,
             compact_deformed=False,
         )
-    # embed_straight=True bundles the straight (un-deformed) geometry into
-    # the same response, so deform_view doesn't have to fire a second
-    # ~5-second `/design/geometry?apply_deformations=false` round-trip
-    # on every topology-changing seek / undo / redo / delete-feature.
+    # Auto-embedding bundles straight geometry when the design has a real
+    # deformation/non-identity cluster pose. Identity-only designs reuse current
+    # geometry as their straight anchor and avoid a duplicate full computation.
     # compact_deformed=True ships the deformed geometry as parallel arrays
     # per helix per direction (instead of a list of per-nuc dicts), cutting
     # wire size and JSON.parse time roughly in half.
     return _design_response_with_geometry(
         design,
         report,
-        embed_straight=True,
+        embed_straight=None,
         compact_deformed=True,
     )
 
@@ -1009,13 +1019,17 @@ def add_bundle_segment(body: BundleSegmentRequest) -> dict:
         holder["mreport"] = mreport
         return updated
 
-    updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind="extrude-segment",
-        label=f"Extrude segment: {len(body.cells)} cells × {body.length_bp} bp",
-        params=body.model_dump(mode="json"),
-        fn=_fn,
-    )
-    return _design_response(updated, report)
+    trace = _TimingTrace()
+    with trace.step("mutation"):
+        updated, report, _entry = design_state.mutate_with_feature_log(
+            op_kind="extrude-segment",
+            label=f"Extrude segment: {len(body.cells)} cells × {body.length_bp} bp",
+            params=body.model_dump(mode="json"),
+            fn=_fn,
+        )
+    with trace.step("geometry_response"):
+        payload = _design_response_with_geometry(updated, report, compact_deformed=True)
+    return trace.attach(ORJSONResponse(payload, status_code=201))
 
 
 def _build_circle_segment(d: Design, body: "CircleSegmentRequest"):
@@ -1108,13 +1122,17 @@ def add_bundle_continuation(body: BundleContinuationRequest) -> dict:
         holder["mreport"] = mreport
         return updated
 
-    updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind="extrude-continuation",
-        label=f"Extrude continuation: {len(body.cells)} cells × {body.length_bp} bp",
-        params=body.model_dump(mode="json"),
-        fn=_fn,
-    )
-    return _design_response(updated, report)
+    trace = _TimingTrace()
+    with trace.step("mutation"):
+        updated, report, _entry = design_state.mutate_with_feature_log(
+            op_kind="extrude-continuation",
+            label=f"Extrude continuation: {len(body.cells)} cells × {body.length_bp} bp",
+            params=body.model_dump(mode="json"),
+            fn=_fn,
+        )
+    with trace.step("geometry_response"):
+        payload = _design_response_with_geometry(updated, report, compact_deformed=True)
+    return trace.attach(ORJSONResponse(payload, status_code=201))
 
 
 @router.get("/design/deformed-frame")
@@ -1195,13 +1213,17 @@ def add_bundle_deformed_continuation(body: BundleDeformedContinuationRequest) ->
             raise HTTPException(400, detail=str(exc)) from exc
         return updated
 
-    updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind="extrude-deformed-continuation",
-        label=f"Extrude (deformed): {len(body.cells)} cells × {body.length_bp} bp",
-        params=body.model_dump(mode="json"),
-        fn=_fn,
-    )
-    return _design_response(updated, report)
+    trace = _TimingTrace()
+    with trace.step("mutation"):
+        updated, report, _entry = design_state.mutate_with_feature_log(
+            op_kind="extrude-deformed-continuation",
+            label=f"Extrude (deformed): {len(body.cells)} cells × {body.length_bp} bp",
+            params=body.model_dump(mode="json"),
+            fn=_fn,
+        )
+    with trace.step("geometry_response"):
+        payload = _design_response_with_geometry(updated, report, compact_deformed=True)
+    return trace.attach(ORJSONResponse(payload, status_code=201))
 
 
 @router.post("/design/bundle", status_code=201)
@@ -1227,13 +1249,17 @@ def create_bundle(body: BundleRequest) -> dict:
     design_state.clear_history()
     design_state.set_design(empty)
 
-    new_design, report, _entry = design_state.mutate_with_feature_log(
-        op_kind="bundle-create",
-        label=f"Create bundle: {body.name}",
-        params=body.model_dump(mode="json"),
-        fn=lambda _d: _cluster_bundle_regions(_build_bundle(cells, body)),
-    )
-    return _design_response(new_design, report)
+    trace = _TimingTrace()
+    with trace.step("mutation"):
+        new_design, report, _entry = design_state.mutate_with_feature_log(
+            op_kind="bundle-create",
+            label=f"Create bundle: {body.name}",
+            params=body.model_dump(mode="json"),
+            fn=lambda _d: _cluster_bundle_regions(_build_bundle(cells, body)),
+        )
+    with trace.step("geometry_response"):
+        payload = _design_response_with_geometry(new_design, report, compact_deformed=True)
+    return trace.attach(ORJSONResponse(payload, status_code=201))
 
 
 def _build_bundle(cells, body: "BundleRequest") -> Design:
@@ -5072,19 +5098,23 @@ def overhang_extrude(body: OverhangExtrudeRequest) -> dict:
         except ValueError as exc:
             raise HTTPException(400, detail=str(exc)) from exc
 
-    updated, report, _entry = design_state.mutate_with_feature_log(
-        op_kind="overhang-extrude",
-        label=f"Overhang extrude: {body.length_bp} bp",
-        params=body.model_dump(mode="json"),
-        fn=_fn,
-    )
+    trace = _TimingTrace()
+    with trace.step("mutation"):
+        updated, report, _entry = design_state.mutate_with_feature_log(
+            op_kind="overhang-extrude",
+            label=f"Overhang extrude: {body.length_bp} bp",
+            params=body.model_dump(mode="json"),
+            fn=_fn,
+        )
     # Embed geometry inline so design + nucleotides + helix_axes arrive in
     # ONE setState on the frontend. Without this the frontend does design
     # first, then a separate getGeometry round-trip; the design_renderer
     # rebuilds with the new helix BEFORE the transformed geometry arrives,
     # and the new helix's axis stick gets placed at its raw lattice position
     # (no cluster transform applied). See .claude/rules/rendering.md.
-    return _design_response_with_geometry(updated, report)
+    with trace.step("geometry_response"):
+        payload = _design_response_with_geometry(updated, report, compact_deformed=True)
+    return trace.attach(ORJSONResponse(payload))
 
 
 class OverhangPatchRequest(BaseModel):
@@ -10231,6 +10261,10 @@ def _build_entry_info(entry, design):
         )
         added: set = set()
         modified: set = set()
+        # Missing bodies are valid for evicted snapshots (and for compact
+        # history entries whose pre-state is inherited). Dependency analysis
+        # must degrade to "unknown targets", not reference an unassigned local.
+        targets = None
         try:
             if entry.design_snapshot_gz_b64 and entry.post_state_gz_b64:
                 pre = design_state.decode_design_snapshot(entry.design_snapshot_gz_b64)
@@ -10249,6 +10283,7 @@ def _build_entry_info(entry, design):
 
     if ft == "routing-cluster":
         added, modified = set(), set()
+        targets = None
         try:
             if entry.pre_state_gz_b64 and entry.post_state_gz_b64 and not entry.evicted:
                 pre = design_state.decode_design_snapshot(entry.pre_state_gz_b64)

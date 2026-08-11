@@ -493,6 +493,35 @@ def test_add_connector_appears_in_feature_log():
     assert any(ip["label"] == "newC" for ip in inst_a["interface_points"])
 
 
+def test_delete_move_rotate_replays_independent_later_entry():
+    """Deleting a move/rotate must not delete or block an unrelated feature."""
+    _seed()
+    moved = client.patch(
+        "/api/assembly/instances/inst-A",
+        json={"transform": {"values": _translation(7, 0, 0).values}},
+    )
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["assembly"]["feature_log"][0]["op_kind"] == "assembly-transform-instance"
+
+    added = client.post(
+        "/api/assembly/instances/inst-A/connectors",
+        json={
+            "label": "independent",
+            "position": [0.0, 1.0, 0.0],
+            "normal": [1.0, 0.0, 0.0],
+        },
+    )
+    assert added.status_code == 201, added.text
+
+    deleted = client.delete("/api/assembly/features/0")
+    assert deleted.status_code == 200, deleted.text
+    assembly = deleted.json()["assembly"]
+    assert [e["op_kind"] for e in assembly["feature_log"]] == ["assembly-add-connector"]
+    inst_a = next(i for i in v1_instances(assembly) if i["id"] == "inst-A")
+    assert inst_a["transform"]["values"][3] == pytest.approx(0.0)
+    assert any(ip["label"] == "independent" for ip in inst_a["interface_points"])
+
+
 def test_add_joint_appears_in_feature_log():
     """The 'Define Mate' menu item ends up here — it must produce a log entry."""
     _seed()

@@ -74,6 +74,7 @@ import { initBluntEndMenus } from './ui/blunt_end_menus.js'
 import { createScriptRunner }  from './ui/script_runner.js'
 import { store, popGroupUndo } from './state/store.js'
 import * as api                from './api/client.js'
+import { markOperationTiming, finishOperationAfterRender } from './perf/operation_timing.js'
 import { initDeformationEditor, startTool, startToolForEdit as startDeformToolForEdit,
          isActive as isDeformActive,
          handlePointerMove as deformPointerMove,
@@ -1275,6 +1276,8 @@ async function main() {
         // the new topology).
         assemblyRenderer.invalidateInstance(entry.instanceId)
         await assemblyRenderer.rebuild(store.getState().currentAssembly)
+        markOperationTiming('assembly-scene-rebuilt')
+        finishOperationAfterRender()
         _rebuildOverhangLocations()
 
         // Tell other tabs viewing this instance to refresh.

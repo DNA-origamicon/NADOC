@@ -25,6 +25,7 @@ import { showToast } from '../ui/toast.js'
 import { showOpProgress, hideOpProgress } from '../ui/op_progress.js'
 import { notifyRequestFailure, notifyRequestSuccess, pokeProbe } from '../shared/connection_monitor.js'
 import { docHeaders, docHeadersFor, docKey, docKeyFor } from '../shared/doc_id.js'
+import { beginOperationTiming, markOperationTiming } from '../perf/operation_timing.js'
 
 const BASE = '/api'
 
@@ -302,6 +303,11 @@ export function errorDetailToMessage(detail, fallback = 'Server error') {
 }
 
 export async function _request(method, path, body, { signal, suppressBusy = false, docId, timeoutMs = _REQUEST_TIMEOUT_MS } = {}) {
+  const operationTrace = method !== 'GET' && (
+    path === '/design/bundle' || path === '/design/bundle-segment' ||
+    path === '/design/bundle-continuation' || path === '/design/bundle-deformed-continuation' ||
+    path === '/design/overhang/extrude' || /\/assembly\/instances\/[^/]+\/overhang\/extrude$/.test(path)
+  ) ? beginOperationTiming(`${method} ${path}`, { body }) : null
   // Hard timeout so a wedged-but-listening backend (event loop stuck) can't make a
   // request hang forever — without it the welcome screen waited indefinitely and
   // looked dead. On timeout the catch below flags the connection down. Generous by
@@ -350,8 +356,12 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
   try {
     r = await fetch(`${BASE}${path}`, opts)
     tNetwork = performance.now() - t0
+    markOperationTiming('response-received', {
+      serverTiming: r.headers.get('Server-Timing'), status: r.status,
+    }, operationTrace)
     notifyRequestSuccess()   // any HTTP response means the backend is reachable
     json = await r.json().catch(() => null)
+    markOperationTiming('response-parsed', undefined, operationTrace)
   } catch (err) {
     notifyRequestFailure()   // network-level failure → flag the connection as down
     throw err
@@ -591,8 +601,10 @@ export async function _syncFromDesignResponse(json, { skipGeometry = false, tran
       updates.straightHelixAxes = Object.keys(straightAxesMap).length ? straightAxesMap : null
     }
     store.setState(updates)
+    markOperationTiming('store-applied')
   } else {
     store.setState(updates)
+    markOperationTiming('design-applied')
     if (json.design) {
       const h0 = json.design.helices?.[0]
       console.debug('[NADOC import] design set: first helix axis_start =',
@@ -602,6 +614,7 @@ export async function _syncFromDesignResponse(json, { skipGeometry = false, tran
     // Re-fetch full geometry whenever the design changes (getGeometry stores it directly).
     if (json.design) {
       await getGeometry()
+      markOperationTiming('geometry-fetched')
       const axes0 = Object.values(store.getState().currentHelixAxes ?? {})[0]
       console.debug('[NADOC import] geometry applied: first helix_axes start =',
         axes0 ? `(${axes0.start[0]?.toFixed(3)}, ${axes0.start[1]?.toFixed(3)})` : 'none')

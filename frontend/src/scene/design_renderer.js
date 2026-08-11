@@ -21,6 +21,7 @@ import { createGlowLayer, createMultiColorGlowLayer } from './glow_layer.js'
 import { clusterAlphaForNuc, clusterAlphaKeys, clusterDisplaySignature } from './cluster_entries.js'
 import { buildClusterColorLookup } from './helix_renderer/palette.js'
 import { installInstanceAlpha, setInstanceAlpha } from './instance_alpha.js'
+import { markOperationTiming, finishOperationAfterRender } from '../perf/operation_timing.js'
 
 /**
  * Initialise the design renderer.
@@ -920,6 +921,8 @@ export function initDesignRenderer(scene, storeRef) {
         new Error().stack.split('\n').slice(2, 8).join('\n'))
     }
     _rebuild(newState.currentGeometry, newState.currentDesign, newState.currentHelixAxes)
+    markOperationTiming('scene-rebuilt')
+    finishOperationAfterRender()
     // Re-apply visibility after rebuild — root covers extra-base beads/slabs as children.
     if (!_designVisible) {
       if (_helixCtrl?.root) _helixCtrl.root.visible = false

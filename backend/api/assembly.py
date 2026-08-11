@@ -2106,6 +2106,7 @@ _EDITABLE_OP_KINDS: set[str] = {
 # of instances / connectors / joints don't have a useful Edit UI but they
 # CAN be replayed using their stored ids.
 _REPLAYABLE_OP_KINDS: set[str] = _EDITABLE_OP_KINDS | {
+    "assembly-transform-instance",
     "assembly-add-instance",
     "assembly-delete-instance",
     "assembly-duplicate-instance",
@@ -2141,6 +2142,20 @@ def _replay_assembly_op(assembly: Assembly, op_kind: str, params: dict) -> Assem
     Raises HTTPException with a specific message when the op kind isn't
     replayable or its params are malformed.
     """
+    if op_kind == "assembly-transform-instance":
+        instance_id = params.get("instance_id")
+        transform = params.get("transform")
+        values = transform.get("values") if isinstance(transform, dict) else None
+        if not instance_id or not values:
+            raise HTTPException(
+                400, detail="transform-instance replay: instance_id/transform missing."
+            )
+        replayed = assembly.model_copy(deep=True)
+        _propagate_fk_inplace(
+            replayed, instance_id, values, _build_inst_by_id(replayed)
+        )
+        return replayed
+
     if op_kind == "assembly-polymerize":
         # Delegate to the actual route so all the chain math + pattern-mate
         # replication stays in one place. The route reads from

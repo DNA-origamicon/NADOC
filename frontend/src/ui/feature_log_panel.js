@@ -1397,6 +1397,33 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
         const sourcePrefix = humanSource ? `(${humanSource}) ` : ''
         label.textContent = `F${i + 1}: ${sourcePrefix}move/rotate${cluster ? `  ${cluster.name}` : ''}`
 
+        const revertBtn = document.createElement('button')
+        revertBtn.textContent = '↶'
+        revertBtn.title = 'Revert to before this move/rotate (removes this and all later features)'
+        revertBtn.style.cssText = [
+          'background:#2d2410;border:1px solid #d29922;color:#d29922;cursor:pointer',
+          'border-radius:3px;font-size:var(--text-xs);line-height:1.4',
+          'padding:3px 5px;flex-shrink:0',
+        ].join(';')
+        revertBtn.addEventListener('click', async e => {
+          e.stopPropagation()
+          const ok = await showConfirm({
+            title: `Revert to before "${label.textContent}"`,
+            message:
+              'This restores the design to its state before this move/rotate, ' +
+              'and removes all feature-log entries from this point onward.\n\n' +
+              '(You can undo this with Ctrl-Z.)',
+            danger: true,
+            confirmLabel: 'Revert',
+          })
+          if (!ok) return
+          const resp = await api.revertToBeforeFeature(i)
+          if (resp == null) {
+            const err = store.getState().lastError
+            window.alert(`Revert failed: ${err?.message || 'unknown error'}`)
+          }
+        })
+
         if (!suppressed) {
           const editBtn = document.createElement('button')
           editBtn.textContent = '✎'
@@ -1410,9 +1437,9 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
             e.stopPropagation()
             onEditFeature?.(entry, i)
           })
-          row.append(icon, label, editBtn, delBtn)
+          row.append(icon, label, editBtn, revertBtn, delBtn)
         } else {
-          row.append(icon, label, delBtn)
+          row.append(icon, label, revertBtn, delBtn)
         }
       }
 

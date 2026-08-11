@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from backend.api import state as design_state
 from backend.api.main import app
+from backend.api.crud import _build_entry_info
 from backend.core.lattice import make_bundle_design
 from backend.core.models import (
     Design,
@@ -50,6 +51,43 @@ def _strands_signature(d: Design) -> list:
         ]
         out.append((s.id, s.strand_type.value, doms))
     return out
+
+
+def test_dependency_info_tolerates_snapshot_without_payload_bodies():
+    """Evicted/inherited snapshots are valid history rows and must not crash delete."""
+    entry = SnapshotLogEntry(
+        op_kind="extrude-continuation",
+        label="Evicted extrude",
+        evicted=True,
+    )
+    info = _build_entry_info(entry, design_state.get_or_404())
+    assert info.added == set()
+    assert info.modified == set()
+    assert info.targets is None
+    assert info.reconstructable is False
+
+
+def test_delete_new_extrude_tolerates_older_payloadless_history_row():
+    """A recoverable target can still be deleted when an older row lost its bodies."""
+    first = client.post(
+        "/api/design/bundle-segment",
+        json={"cells": [[4, 0]], "length_bp": 10, "plane": "XY"},
+    )
+    assert first.status_code == 201
+    second = client.post(
+        "/api/design/bundle-segment",
+        json={"cells": [[5, 0]], "length_bp": 10, "plane": "XY"},
+    )
+    assert second.status_code == 201
+
+    design = design_state.get_or_404()
+    older = design.feature_log[0]
+    older.design_snapshot_gz_b64 = ""
+    older.post_state_gz_b64 = ""
+
+    deleted = client.delete("/api/design/features/1")
+    assert deleted.status_code == 200, deleted.text
+    assert len(design_state.get_or_404().feature_log) == 1
 
 
 # ── Test 1: snapshot entry is appended ────────────────────────────────────────
