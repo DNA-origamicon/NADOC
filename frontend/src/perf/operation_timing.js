@@ -66,7 +66,11 @@ export function finishOperationAfterRender(trace = _active) {
         delta_ms: Math.round((mark.elapsedMs - (trace.marks[i - 1]?.elapsedMs ?? 0)) * 10) / 10,
         details: mark.data ? JSON.stringify(mark.data) : '',
       }))
-      console.log(`[operation phases] ${rows.map(r => `${r.phase} +${r.delta_ms}ms${r.details ? ` ${r.details}` : ''}`).join(' | ')}`)
+      // The paste-friendly one-line phase dump is intentionally opt-in; normal
+      // sessions get only the collapsed slow-operation summary below.
+      if (globalThis.__nadocOperationTraceAll) {
+        console.log(`[operation phases] ${rows.map(r => `${r.phase} +${r.delta_ms}ms${r.details ? ` ${r.details}` : ''}`).join(' | ')}`)
+      }
       console.groupCollapsed(`[operation ${Math.round(trace.totalMs)}ms] ${trace.label}`)
       console.table(rows)
       console.groupEnd()

@@ -195,7 +195,7 @@ export * from './recent_files.js'
 
 /** Slow-call threshold for the perf log; calls under this are silent to keep
  *  the console useful. Set window.__nadocApiTraceAll = true to trace everything. */
-const _API_PERF_THRESHOLD_MS = 200
+const _API_PERF_THRESHOLD_MS = 1000
 
 /** Delay before the "still working…" progress popup appears for a slow API
  *  call. Keeps fast calls (sub-5 s) from flashing the widget so the popup

@@ -87,7 +87,7 @@ export function createScriptRunner({
         }
 
         case 'autostaple': {
-          const r = await api.addAutostaple()
+          const r = await api.addFullAutostaple()
           if (!r) throw new Error(`autostaple failed: ${store.getState().lastError?.message ?? 'unknown'}`)
           break
         }

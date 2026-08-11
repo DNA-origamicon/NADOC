@@ -336,7 +336,9 @@ export function initOverhangLocations(scene) {
     }
 
     _group.visible = _visible
-    console.log(`[OverhangLocations] rebuilt: ${_entries.length} arrows`)
+    if (globalThis.__nadocOverhangDebug) {
+      console.debug(`[OverhangLocations] rebuilt: ${_entries.length} arrows`)
+    }
   }
 
   // ── Deform lerp ────────────────────────────────────────────────────────────

@@ -65,6 +65,12 @@ import { createContextMenu } from './primitives/context_menu.js'
 import { mdMinimizationRow, mdLatestStageLabel } from './md_stage_timeline.js'
 import { mdHealthTileStates, TILE_STATE } from './md_health_tiles.js'
 
+// Routine panel lifecycle, polling, and WebSocket chatter is opt-in. Failures
+// remain warnings. Enable temporarily with `window.__nadocMdDebug = true`.
+const _mdDebug = (...args) => {
+  if (globalThis.__nadocMdDebug) console.debug(...args)
+}
+
 // ── Colour palette (matches NADOC dark theme) ─────────────────────────────────
 const _C = {
   bg:     '#161b22', bg2:  '#0d1117',
@@ -1685,11 +1691,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // ── Engine availability check ─────────────────────────────────────────────
   async function _checkEngines() {
     if (!namdStatusEl) return
-    console.log(`[${_ts()}] md-jobs: checking engines`)
+    _mdDebug(`[${_ts()}] md-jobs: checking engines`)
     try {
       const d = await api.namdAvailable()
       if (!d) throw new Error(api.lastErrorMessage() ?? 'namd-available failed')
-      console.log(`[${_ts()}] md-jobs: engines response`, d)
+      _mdDebug(`[${_ts()}] md-jobs: engines response`, d)
 
       _enginesOk = d.available
 
@@ -1741,7 +1747,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       if (!jobs) throw new Error(api.lastErrorMessage() ?? 'HTTP error')
       _jobs = jobs
       _jobs.sort((a, b) => b.created_at - a.created_at)
-      console.log(`[${_ts()}] md-jobs: fetched ${_jobs.length} jobs`)
+      _mdDebug(`[${_ts()}] md-jobs: fetched ${_jobs.length} jobs`)
       if (_fetchFails > 0) { _fetchFails = 0; _setBackendStale(false); _checkEngines() }  // reconnected → restore status line
       _renderList()
       _selectBestJob()
@@ -2014,7 +2020,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     try {
       const res = await api.fetchMdLiveFrame(jobId, force)
       if (res?.ok) return true
-      console.info(`[${_ts()}] md-jobs: no live frame yet — ${res?.reason ?? 'unavailable'}`)
+      _mdDebug(`[${_ts()}] md-jobs: no live frame yet — ${res?.reason ?? 'unavailable'}`)
       return false
     } catch (err) {
       console.warn(`[${_ts()}] md-jobs: live frame fetch failed`, err)
@@ -3538,7 +3544,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
    */
   async function _launchRelax(protocolPayload, { draftId = null } = {}) {
     if (_launching) {
-      console.log(`[${_ts()}] md-jobs: Relax clicked but already launching`)
+      _mdDebug(`[${_ts()}] md-jobs: Relax clicked but already launching`)
       return
     }
     // Alpine runs on the remote cluster — it can't contend for the local GPU/disk,
@@ -3589,7 +3595,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       run_dir:        getRunDir(),   // shared run-location: write this run into the chosen folder
     }
 
-    console.log(`[${_ts()}] md-jobs: Relax clicked`, payload)
+    _mdDebug(`[${_ts()}] md-jobs: Relax clicked`, payload)
     if (detailEl) detailEl.style.display = ''
     // Show the progress popup BEFORE the disk forecast, not after.  The forecast calls
     // estimate_profile_from_design, which builds the design's whole heavy-atom model —
@@ -3653,7 +3659,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     setOpProgressLabel('Creating job…')
 
     try {
-      console.log(`[${_ts()}] md-jobs: POST /api/md/jobs`)
+      _mdDebug(`[${_ts()}] md-jobs: POST /api/md/jobs`)
       // createMdJob stamps the X-NADOC-Doc header so the backend reads the ACTIVE
       // design from THIS tab's document (without it the default/empty doc is used
       // and prep 404s with "No active design"). Returns null on any HTTP error.
@@ -3661,7 +3667,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       const job = draftId
         ? await api.prepareMdDraft(draftId, payload)
         : await api.createMdJob(payload)
-      console.log(`[${_ts()}] md-jobs: response body`, job)
+      _mdDebug(`[${_ts()}] md-jobs: response body`, job)
 
       if (!job) {
         // HTTP error (404 = no active design, 400 = engine missing, etc.)
@@ -3686,7 +3692,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         return
       }
 
-      console.log(`[${_ts()}] md-jobs: job created OK job_id=${job.job_id} status=${job.status}`)
+      _mdDebug(`[${_ts()}] md-jobs: job created OK job_id=${job.job_id} status=${job.status}`)
       if (job.awaiting_sequence) {
         showToast('Job created — assign scaffold and staple sequences before Run', 'warn')
         await _fetchJobs()
@@ -3774,7 +3780,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (earlyStopPending) earlyStopPending.style.display = ''
     try {
       const d = await api.setMdEarlyStop(_selectedId, enabled)
-      console.log(`[${_ts()}] md-jobs: early-stop toggle`, d)
+      _mdDebug(`[${_ts()}] md-jobs: early-stop toggle`, d)
       // Reflect the queued override on the cached job now so any render before the
       // next WS state push (which will carry it from the server) already reads it as
       // pending — otherwise a stale-`_jobs` render could flicker the toggle back.
@@ -3977,7 +3983,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const g = gateAMessage(adv)
     if (!g) { console.warn('md-jobs: tier must be a1 | a2 | a3'); return }
     if (g.isNotice) { showToast(g.notice, { severity: 'info' }); return }
-    openGateAModal(adv).then((v) => console.log('Gate A resolved (proceed=%s)', v))
+    openGateAModal(adv).then((v) => _mdDebug('Gate A resolved (proceed=%s)', v))
   }
   if (typeof window !== 'undefined') {
     window.__NADOC_DBG__ = window.__NADOC_DBG__ || {}
@@ -3990,7 +3996,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _userDeselected = false   // an explicit pick supersedes a previous deselection
     if (_selectedId === jobId) return
     _gateBDismissed = null   // a fresh selection may re-show a pending decision
-    console.log(`[${_ts()}] md-jobs: selecting job ${jobId}`)
+    _mdDebug(`[${_ts()}] md-jobs: selecting job ${jobId}`)
     const selectedJob = _jobs.find(j => j.job_id === jobId) || null
     const visualizationAction = mdVisualizationJobSwitchAction({
       display: displayToggle?.checked,
@@ -4134,7 +4140,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       api.getMdJob(jobId)
         .then(j => {
           if (!j) return
-          console.log(`[${_ts()}] md-jobs: REST refresh (terminal/remote)`, j.status)
+          _mdDebug(`[${_ts()}] md-jobs: REST refresh (terminal/remote)`, j.status)
           _applyJobState(j)
         })
         .catch(err => console.warn(`[${_ts()}] md-jobs: REST refresh failed`, err))
@@ -4145,12 +4151,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   function _openWs(jobId) {
     _closeWs()
     const url = `ws://${location.host}/ws/md-jobs/${jobId}`
-    console.log(`[${_ts()}] md-jobs: opening WS ${url}`)
+    _mdDebug(`[${_ts()}] md-jobs: opening WS ${url}`)
     const ws = new WebSocket(url)
     _ws = ws
     _lastWsMsgAt = Date.now()   // start the staleness window fresh so the watchdog waits for onopen
 
-    ws.onopen = () => { _lastWsMsgAt = Date.now(); console.log(`[${_ts()}] md-jobs: WS open`) }
+    ws.onopen = () => { _lastWsMsgAt = Date.now(); _mdDebug(`[${_ts()}] md-jobs: WS open`) }
 
     ws.onmessage = (evt) => {
       _lastWsMsgAt = Date.now()
@@ -4158,7 +4164,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       try { msg = JSON.parse(evt.data) } catch { return }
 
       if (msg.type === 'state' && msg.job) {
-        console.log(`[${_ts()}] md-jobs: WS state status=${msg.job.status} seg=${msg.job.current_segment_idx}/${msg.job.segments?.length ?? 0}`,
+        _mdDebug(`[${_ts()}] md-jobs: WS state status=${msg.job.status} seg=${msg.job.current_segment_idx}/${msg.job.segments?.length ?? 0}`,
                     msg.job.live_metrics ? `T=${msg.job.live_metrics.temperature_k?.toFixed(1)}K` : '')
         const idx = _jobs.findIndex(j => j.job_id === msg.job.job_id)
         if (idx >= 0) _jobs[idx] = msg.job; else _jobs.unshift(msg.job)
@@ -4179,7 +4185,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     ws.onerror = (evt) => console.error(`[${_ts()}] md-jobs: WS error`, evt)
 
     ws.onclose = (evt) => {
-      console.log(`[${_ts()}] md-jobs: WS closed code=${evt.code}`)
+      _mdDebug(`[${_ts()}] md-jobs: WS closed code=${evt.code}`)
       _ws = null
       if (_selectedId) {
         api.getMdJob(_selectedId)
@@ -4197,7 +4203,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
   function _closeWs() {
     if (_ws) {
-      console.log(`[${_ts()}] md-jobs: closing WS`)
+      _mdDebug(`[${_ts()}] md-jobs: closing WS`)
       try { _ws.close() } catch { /* ok */ }
       _ws = null
     }
@@ -4802,7 +4808,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
   // ── Init ───────────────────────────────────────────────────────────────────
   _setDisplayStatus('Off', _C.dim)
-  console.log(`[${_ts()}] md-jobs: panel initialised`)
+  _mdDebug(`[${_ts()}] md-jobs: panel initialised`)
   _base.initCollapsed(true)   // apply persisted collapse; fires _onOpen if starting open
   // Paint the primary control up front: it acts on the SELECTED job now, so with nothing
   // selected it must read "▶ Run", disabled, with the hint — not the markup's placeholder.

@@ -2494,13 +2494,16 @@ async function main() {
     // with the new probe radius / colour mode (debounced; reapplyForRepr re-runs the fetch).
     onSurfaceParamsChanged: _regenOverlaySurfaceDebounced,
   })
-  // Temporary field diagnostic for the intermittent atomistic reload loop.
+  // Opt-in field diagnostic for the intermittent atomistic reload loop.
   // It prints one paste-ready JSON line five seconds after the first loading
   // request, with direct caller stacks plus live renderer/design state. Keep it
-  // active in production builds too: the reported bug is intermittent and may
-  // only occur in the user's ordinary packaged session.
+  // Enable with ?atomistic_probe=1. Keeping this observer active in every
+  // production session added startup noise and retained diagnostic snapshots
+  // even when nobody was investigating that issue.
   window.nadocAtomisticLoadingProbe?.stop?.()
-  window.nadocAtomisticLoadingProbe = installAtomisticLoadingProbe({
+  window.nadocAtomisticLoadingProbe = null
+  if (new URLSearchParams(window.location.search).has('atomistic_probe')) {
+    window.nadocAtomisticLoadingProbe = installAtomisticLoadingProbe({
     context: () => {
       const st = store.getState()
       const transforms = st.currentDesign?.nucleotide_transforms ?? []
@@ -2530,11 +2533,12 @@ async function main() {
         renderedAtoms: { atomCount, crossoverExtraAtomCount },
       }
     },
-  })
-  console.info(
-    '[atomistic-loading-probe] armed — reproduce the bug, wait five seconds, then copy '
-    + 'the NADOC_ATOMISTIC_LOADING_DIAGNOSTIC=... console line.',
-  )
+    })
+    console.info(
+      '[atomistic-loading-probe] armed — reproduce the bug, wait five seconds, then copy '
+      + 'the NADOC_ATOMISTIC_LOADING_DIAGNOSTIC=... console line.',
+    )
+  }
   const _applySurfaceMode           = _atomSurface.applySurfaceMode
   const _applyAtomisticMode         = _atomSurface.applyAtomisticMode
   const _setCGVisible               = _atomSurface.setCGVisible
@@ -5539,7 +5543,7 @@ async function main() {
       '| assemblyActive:', store.getState().assemblyActive,
       '| persistedMode:', api.getPersistedMode())
   if (_needsWelcomeOnBoot) {
-    console.warn('[restore] showing welcome screen (restore failed or no prior session)')
+    if (DEBUG) console.debug('[restore] showing welcome screen (no prior session)')
     _showWelcome()
   }
 

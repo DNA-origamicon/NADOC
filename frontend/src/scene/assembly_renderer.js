@@ -1820,7 +1820,9 @@ export function initAssemblyRenderer(scene, store, api) {
  */
 export function createAssemblyRenderer(opts) {
   const { scene, store, api, useShared = false } = opts ?? {}
-  console.info('[assembly_renderer] useShared=', useShared)
+  if (globalThis.__nadocAssemblyDebug) {
+    console.debug('[assembly_renderer] useShared=', useShared)
+  }
   if (useShared) return _createSharedInstancingRenderer({ scene, store, api })
   return initAssemblyRenderer(scene, store, api)
 }
