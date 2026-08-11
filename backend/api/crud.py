@@ -451,9 +451,15 @@ def _design_response_with_geometry(
         real_ids = frozenset(
             hid for hid in changed_helix_ids if not hid.startswith("__")
         )
+        extension_ids = frozenset(
+            hid.removeprefix("__ext_")
+            for hid in changed_helix_ids
+            if hid.startswith("__ext_")
+        )
         nucs = (
             _geometry_for_helices(
                 design, real_ids,
+                extension_ids=extension_ids,
                 measured_positioning=measured_positioning,
                 junction_balance=True,
             )

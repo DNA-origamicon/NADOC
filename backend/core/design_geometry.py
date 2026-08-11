@@ -229,7 +229,11 @@ def _straight_helix_axes(design: Design) -> list[dict]:
     return result
 
 
-def _strand_extension_geometry(design: Design, nuc_pos_map: dict) -> list[dict]:
+def _strand_extension_geometry(
+    design: Design,
+    nuc_pos_map: dict,
+    extension_ids: frozenset[str] | None = None,
+) -> list[dict]:
     """
     Compute geometry dicts for StrandExtension entries.
 
@@ -267,6 +271,8 @@ def _strand_extension_geometry(design: Design, nuc_pos_map: dict) -> list[dict]:
     strand_by_id = {s.id: s for s in design.strands}
 
     for ext in design.extensions:
+        if extension_ids is not None and ext.id not in extension_ids:
+            continue
         strand = strand_by_id.get(ext.strand_id)
         if strand is None or not strand.domains:
             continue
@@ -382,6 +388,7 @@ def _geometry_for_helices(
     include_linker_helices: bool = False,
     compact_skips: bool = False,
     *,
+    extension_ids: frozenset[str] | None = None,
     measured_positioning: bool = False,
     junction_balance: bool = False,
 ) -> list[dict]:
@@ -391,9 +398,9 @@ def _geometry_for_helices(
     This is the partial-update fast path for Fix B: callers that know which
     helices changed pass that set to skip the other 90 % of geometry work.
 
-    Extensions are only appended in full mode (helix_ids is None) — they depend
-    on positions from arbitrary helices and must be returned together with the
-    full geometry.
+    *extension_ids* enables exact partial extension geometry. Callers must also
+    include the owning strands' terminal anchor helices in *helix_ids* so the
+    required nucleotide frames are available in ``nuc_pos_map``.
 
     *junction_balance* rolls every helix about its own axis so the two arcs of each
     i:i+1 DX junction come out equal (see :func:`full_rep_balance_roll_rad`).  DISPLAY
@@ -436,7 +443,7 @@ def _geometry_for_helices(
             nuc_info[key] = {**entry, "is_five_prime": False}
 
     _dir_enums = (Direction.FORWARD, Direction.REVERSE)  # index by int 0/1
-    needs_pos_map = full_mode and bool(design.extensions)
+    needs_pos_map = bool(design.extensions) and (full_mode or bool(extension_ids))
     result: list[dict] = []
     nuc_pos_map: dict = {}
 
@@ -599,9 +606,8 @@ def _geometry_for_helices(
     # rendering paths.
     _emit_bridge_nucs(design, nuc_info, result)
 
-    if full_mode:
-        if design.extensions:
-            result.extend(_strand_extension_geometry(design, nuc_pos_map))
+    if design.extensions and (full_mode or extension_ids):
+        result.extend(_strand_extension_geometry(design, nuc_pos_map, extension_ids))
     apply_nucleotide_transforms_to_geometry(result, design)
     return result
 

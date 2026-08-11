@@ -230,18 +230,18 @@ def _local_changed_helices(before: dict, after: dict) -> list[str] | None:
     }
     if not changed:
         return None
-    # Extensions / ds-linker bridges are synthetic — the partial path never
-    # re-emits them, so any change to them (or any changed strand that carries
-    # an extension) forces a full recompute.
+    # Changed extension/linker definitions still require a full response. Stable
+    # extensions owned by a changed strand are safe: include their synthetic IDs
+    # so the partial geometry path recomputes only those terminal arcs.
     if before["ext"] != after["ext"] or before["conns"] != after["conns"]:
         return None
-    ext_strand_ids = {e["strand_id"] for e in before["ext"].values()} | {
-        e["strand_id"] for e in after["ext"].values()
+    affected_ext_ids = {
+        eid
+        for eid, ext in after["ext"].items()
+        if ext["strand_id"] in changed
     }
-    if changed & ext_strand_ids:
-        return None
     helices: set[str] = set()
     for sid in changed:
         helices |= before["helices"].get(sid, frozenset())
         helices |= after["helices"].get(sid, frozenset())
-    return list(helices)
+    return list(helices) + [f"__ext_{eid}" for eid in affected_ext_ids]

@@ -272,7 +272,7 @@ def test_extension_change_forces_full_geometry():
     assert _local_changed_helices(before, after) is None
 
 
-def test_changed_strand_carrying_an_extension_forces_full_geometry():
+def test_changed_strand_carrying_extension_reships_its_synthetic_geometry():
     ext = StrandExtension(id="e0", strand_id="s0", end="three_prime", sequence="TTTT")
     before = _strand_occupancy(
         _occ_design([_strand("s0", [_dom("h0")])], extensions=[ext])
@@ -280,7 +280,7 @@ def test_changed_strand_carrying_an_extension_forces_full_geometry():
     after = _strand_occupancy(
         _occ_design([_strand("s0", [_dom("h0", end_bp=3)])], extensions=[ext])
     )
-    assert _local_changed_helices(before, after) is None
+    assert sorted(_local_changed_helices(before, after)) == ["__ext_e0", "h0"]
 
 
 def test_ds_linker_connection_change_forces_full_geometry():
