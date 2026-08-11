@@ -815,25 +815,51 @@ export function initDesignRenderer(scene, storeRef) {
     return signature(a) === signature(b)
   }
 
+  function _crossoverChangesAreLocal(a, b, changedHelixSet) {
+    const sig = (x) => JSON.stringify([
+      x.half_a?.helix_id, x.half_a?.index, x.half_a?.strand,
+      x.half_b?.helix_id, x.half_b?.index, x.half_b?.strand, x.extra_bases,
+    ])
+    const am = new Map((a?.crossovers ?? []).map(x => [x.id, x]))
+    const bm = new Map((b?.crossovers ?? []).map(x => [x.id, x]))
+    for (const id of new Set([...am.keys(), ...bm.keys()])) {
+      const x = am.get(id), y = bm.get(id)
+      if (x && y && sig(x) === sig(y)) continue
+      for (const xo of [x, y]) {
+        if (!xo) continue
+        if (!changedHelixSet.has(xo.half_a?.helix_id) ||
+            !changedHelixSet.has(xo.half_b?.helix_id)) return false
+      }
+    }
+    return true
+  }
+
   /** Render a small topology-changing partial response without rebuilding the
    * fixed-capacity whole-design InstancedMeshes. The old affected helices are
    * suppressed and a compact authoritative controller is layered over them.
    * A delayed idle consolidation restores the single-controller steady state.
    */
-  function _tryStructuralOverlay(changedHelixIds, newGeo, prevState, newState) {
+  function _tryStructuralOverlay(changedHelixIds, newGeo, prevState, newState, coverageChanged = false) {
     if (!_helixCtrl || _structuralOverlay || _ghostOpacity !== null) return false
     const realIds = changedHelixIds.filter(id => !id.startsWith('__'))
     if (!realIds.length || realIds.length > 12) return false
-    if (!_sameCrossoverTopology(prevState.currentDesign, newState.currentDesign)) return false
+    const realSet = new Set(realIds)
+    const sameCrossovers = _sameCrossoverTopology(prevState.currentDesign, newState.currentDesign)
+    // Full/bead representations retain the conservative original contract.
+    // In cylinder LOD, crossover cones are not visible and whole-helix cylinder
+    // instances can be suppressed safely, so local crossover/scaffold changes
+    // remain eligible for the six-helix overlay used by Voltron Connect.
+    if (_detailLevel !== 2 && (coverageChanged || !sameCrossovers)) return false
+    if (_detailLevel === 2 && !sameCrossovers && !_crossoverChangesAreLocal(
+      prevState.currentDesign, newState.currentDesign, realSet)) return false
     if ((newState.currentDesign?.deformations ?? []).length) return false
     // The overlay suppresses resident bead/slab/axis instances. Cylinder and
     // mixed-representation buffers have independent visibility channels, so
     // retain the full rebuild whenever either is currently in use.
-    if (_detailLevel !== 0) return false
+    if (_detailLevel === 1) return false
     if ((newState.currentDesign?.representation_overrides ?? []).length) return false
 
     const changedSet = new Set(changedHelixIds)
-    const realSet = new Set(realIds)
     const patchGeometry = newGeo.filter(n => changedSet.has(n.helix_id))
     if (!patchGeometry.length) return false
     const fullDesign = newState.currentDesign
@@ -1057,11 +1083,12 @@ export function initDesignRenderer(scene, storeRef) {
         }
         return
       }
-      if (!_coverageChanged && _tryStructuralOverlay(
+      if (_tryStructuralOverlay(
         newState.lastPartialChangedHelixIds,
         newState.currentGeometry,
         prevState,
         newState,
+        _coverageChanged,
       )) return
     }
 

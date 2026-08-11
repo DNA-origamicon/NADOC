@@ -8864,6 +8864,23 @@ def _apply_connection_version_impl(
         params={"version_id": version_id, "connection_type": vtype},
         fn=_fn,
     )
+    # A connection apply is local even on very large designs. Returning full
+    # geometry made VoltronCoreArm OH49↔OH50 rebuild all 67 helices in the
+    # browser: ~10 s request + ~37 s parse/store/scene work. Derive the exact
+    # occupancy footprint (including the driven helix removed by relocation)
+    # and use the established partial merge protocol so the renderer replaces
+    # only those helices. The full fallback remains for a non-local diff.
+    changed = _local_changed_helices(
+        _strand_occupancy(design), _strand_occupancy(updated)
+    )
+    if changed is not None:
+        return _design_response_with_geometry(
+            updated,
+            report,
+            changed_helix_ids=changed,
+            compact_deformed=True,
+            partial_axes=True,
+        )
     return _design_response_with_geometry(updated, report)
 
 

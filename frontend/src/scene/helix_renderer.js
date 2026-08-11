@@ -1530,6 +1530,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const _bindingCylData       = []   // {helixId, strandId, domainIndex, bp_lo, bp_hi, cylIdx}
   const _ovhgBuildXform       = new Map()  // `${helixId}|${lo}|${hi}` → {pos, quat, lenY} of the overhang half
   const _bridgeCylData        = []   // per ds-bridge cylinder instance: {bridgeHelixId, strandId}
+  let _structuralCylSaved = []
 
   const _ovhgCylMesh = (dom) => dom.fullCylinder ? iOverhangFullCylinders : iOverhangCylinders
   const _curvedOvhgCylMesh = (dom) => dom.fullCylinder ? iCurvedOverhangFullCylinders : iCurvedOverhangCylinders
@@ -5686,6 +5687,29 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      * separately and reapplies the current shaft mode. */
     setStructuralHelicesSuppressed(ids) {
       const hidden = ids instanceof Set ? ids : new Set(ids ?? [])
+      if (!hidden.size && _structuralCylSaved.length) {
+        for (const { mesh, idx, matrix } of _structuralCylSaved) mesh.setMatrixAt(idx, matrix)
+        for (const mesh of new Set(_structuralCylSaved.map(x => x.mesh))) {
+          mesh.instanceMatrix.needsUpdate = true
+        }
+        _structuralCylSaved = []
+      } else if (hidden.size && !_structuralCylSaved.length) {
+        const suppress = (data, meshOf, helixOf = d => d.helixId) => {
+          for (const d of data) {
+            if (!hidden.has(helixOf(d))) continue
+            const mesh = meshOf(d), idx = d.cylIdx
+            if (!mesh || idx == null) continue
+            const matrix = new THREE.Matrix4()
+            mesh.getMatrixAt(idx, matrix)
+            _structuralCylSaved.push({ mesh, idx, matrix })
+            mesh.setMatrixAt(idx, new THREE.Matrix4().makeScale(0, 0, 0))
+            mesh.instanceMatrix.needsUpdate = true
+          }
+        }
+        suppress(_domainCylData, () => iHelixCylinders)
+        suppress(_overhangCylData, d => _ovhgCylMesh(d))
+        suppress(_bindingCylData, () => iLinkerBindingCylinders)
+      }
       for (const arrow of axisArrows) {
         if (!hidden.has(arrow.helixId)) continue
         if (arrow.shaft) arrow.shaft.visible = false
