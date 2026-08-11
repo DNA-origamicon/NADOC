@@ -14,6 +14,7 @@
 
 import * as THREE from 'three'
 import { recommendedExtrudeBp } from './extrude_scaffold_recommendation.js'
+import { freezeOptimisticPreview } from './optimistic_preview.js'
 import {
   HONEYCOMB_LATTICE_RADIUS,
   HONEYCOMB_COL_PITCH,
@@ -212,6 +213,30 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   const _PREVIEW_UP = new THREE.Vector3(0, 1, 0)
   const _previewQuat = new THREE.Quaternion()
   let _previewHasConflict = false   // set by _updatePreview; read by _doExtrude to block
+  let _commitInFlight = false
+  let _pendingPreview = null
+
+  /**
+   * Freeze the live extrude ghost into a scene-level pending object. The slice
+   * plane and sidebar can close immediately while this remains visible, making
+   * click-to-feedback one frame instead of one backend round trip. Geometry is
+   * still authoritative on the server: this group is removed as soon as the
+   * response has updated the store, or rolled back on failure.
+   */
+  function _beginPendingPreview() {
+    _clearPendingPreview()
+    _previewGroup.updateWorldMatrix(true, true)
+    _pendingPreview = freezeOptimisticPreview(scene, _previewMeshes, {
+      name: 'optimistic-extrude-pending',
+    })
+    return _pendingPreview
+  }
+
+  function _clearPendingPreview() {
+    if (!_pendingPreview) return
+    _pendingPreview.settle()
+    _pendingPreview = null
+  }
 
   // ── Cell label sprite helpers ─────────────────────────────────────────────
 
@@ -1439,8 +1464,8 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   }
 
   /** Commit the placement at the current hover cell via onPlace (additive segment). */
-  function _commitPlacement() {
-    if (!_placementMode || !_placementSpec || !_hoverCell) return
+  async function _commitPlacement() {
+    if (_commitInFlight || !_placementMode || !_placementSpec || !_hoverCell) return
     if (_placementHasConflict) {
       showToast('Placement overlaps existing DNA — move to a clear spot.', { severity: 'error' })
       return
@@ -1455,14 +1480,25 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     const placed = translateFootprint(cells, anchorCell, _hoverCell)
     // Continuation extrudes away from the body → sign the length by the dir sign.
     const outLen = continuation ? _sliceDirSign * Math.abs(lengthBp || 0) : lengthBp
+    _commitInFlight = true
+    _beginPendingPreview()
     _hidePreview()
-    onPlace?.({
-      cells: placed, lengthBp: outLen, cellLengths, plane: _plane, offsetNm: _offset,
-      strandFilter, ligateAdjacent, latticeType,
-      continuationMode: !!continuation,
-      // Present when the face is a BENT end → deformed-frame continuation.
-      deformedFrame: _deformedFrame, refHelixId: _refHelixId, sourceBp: _deformedSourceBp,
-    })
+    try {
+      await onPlace?.({
+        cells: placed, lengthBp: outLen, cellLengths, plane: _plane, offsetNm: _offset,
+        strandFilter, ligateAdjacent, latticeType,
+        continuationMode: !!continuation,
+        // Present when the face is a BENT end → deformed-frame continuation.
+        deformedFrame: _deformedFrame, refHelixId: _refHelixId, sourceBp: _deformedSourceBp,
+      })
+    } catch (err) {
+      console.error('Primitive placement failed:', err)
+      showToast(err?.message ?? 'Primitive placement failed', { severity: 'error' })
+      _updatePlacementPreview()
+    } finally {
+      _clearPendingPreview()
+      _commitInFlight = false
+    }
   }
 
   // ── Raycasting helpers ──────────────────────────────────────────────────────
@@ -1775,6 +1811,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   if (_ctxEl) {
     async function _doExtrude() {
+      if (_commitInFlight) return
       const rawVal  = parseFloat(_ctxEl.querySelector('#slice-length').value)
       const unit    = _ctxEl.querySelector('#slice-unit').value
       const absVal  = Math.abs(rawVal)
@@ -1800,7 +1837,10 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       const filterEl = _ctxEl.querySelector('input[name="slice-strand-filter"]:checked')
       const strandFilter = filterEl?.value ?? 'both'
       const ligateAdjacent = _ctxEl.querySelector('#slice-ligate-adjacent')?.checked ?? true
-      _hidePreview()   // clear ghosts immediately; panel visibility owned by the module
+      _commitInFlight = true
+      _beginPendingPreview()
+      _hidePreview()
+      let succeeded = false
       try {
         await onExtrude?.({
           cells, lengthBp, plane: _plane, offsetNm: _offset,
@@ -1813,13 +1853,20 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
           strandFilter,
           ligateAdjacent,
         })
+        succeeded = true
       } catch (err) {
         console.error('Slice extrude failed:', err)
+      } finally {
+        _clearPendingPreview()
+        _commitInFlight = false
       }
-      // Rebuild lattice so newly-occupied cells are greyed
-      if (_latticeMode) _buildLattice()
-      _selected.clear()
-      _selectionOrder = []
+      // Only consume the selection after the authoritative operation succeeds.
+      // On failure the exact inputs remain available for correction/retry.
+      if (succeeded) {
+        if (_latticeMode) _buildLattice()
+        _selected.clear()
+        _selectionOrder = []
+      }
       _refreshExtrudeUi()
     }
 

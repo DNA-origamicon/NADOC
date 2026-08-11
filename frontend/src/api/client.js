@@ -25,7 +25,7 @@ import { showToast } from '../ui/toast.js'
 import { showOpProgress, hideOpProgress } from '../ui/op_progress.js'
 import { notifyRequestFailure, notifyRequestSuccess, pokeProbe } from '../shared/connection_monitor.js'
 import { docHeaders, docHeadersFor, docKey, docKeyFor } from '../shared/doc_id.js'
-import { activeOperationTiming, beginOperationTiming, markOperationTiming } from '../perf/operation_timing.js'
+import { activeOperationTiming, beginOperationTiming, finishOperationAfterRender, markOperationTiming } from '../perf/operation_timing.js'
 
 const BASE = '/api'
 
@@ -303,11 +303,20 @@ export function errorDetailToMessage(detail, fallback = 'Server error') {
 }
 
 export async function _request(method, path, body, { signal, suppressBusy = false, docId, timeoutMs = _REQUEST_TIMEOUT_MS } = {}) {
-  const operationTrace = method !== 'GET' && (
+  const isTimedOperation = method !== 'GET' && (
     path === '/design/bundle' || path === '/design/bundle-segment' ||
     path === '/design/bundle-continuation' || path === '/design/bundle-deformed-continuation' ||
     path === '/design/overhang/extrude' || /\/assembly\/instances\/[^/]+\/overhang\/extrude$/.test(path)
-  ) ? beginOperationTiming(`${method} ${path}`, { body }) : null
+  )
+  // An optimistic UI may start the trace immediately before calling the API so
+  // click→preview and preview→confirmation live in one measurement. Reuse that
+  // trace instead of replacing it at fetch time.
+  const activeTrace = activeOperationTiming()
+  const operationTrace = isTimedOperation
+    ? activeTrace?.details?.optimisticPreview
+      ? activeTrace
+      : beginOperationTiming(`${method} ${path}`, { body })
+    : null
   // Hard timeout so a wedged-but-listening backend (event loop stuck) can't make a
   // request hang forever — without it the welcome screen waited indefinitely and
   // looked dead. On timeout the catch below flags the connection down. Generous by
@@ -363,6 +372,8 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
     json = await r.json().catch(() => null)
     markOperationTiming('response-parsed', undefined, operationTrace)
   } catch (err) {
+    markOperationTiming('operation-failed', { message: err?.message ?? String(err) }, operationTrace)
+    finishOperationAfterRender(operationTrace)
     notifyRequestFailure()   // network-level failure → flag the connection as down
     throw err
   } finally {
@@ -396,6 +407,8 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
   }
   if (!r.ok) {
     store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
+    markOperationTiming('operation-rejected', { status: r.status }, operationTrace)
+    finishOperationAfterRender(operationTrace)
     return null
   }
   store.setState({ lastError: null })

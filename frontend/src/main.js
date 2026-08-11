@@ -74,7 +74,7 @@ import { initBluntEndMenus } from './ui/blunt_end_menus.js'
 import { createScriptRunner }  from './ui/script_runner.js'
 import { store, popGroupUndo } from './state/store.js'
 import * as api                from './api/client.js'
-import { markOperationTiming, finishOperationAfterRender } from './perf/operation_timing.js'
+import { beginOperationTiming, markOperationTiming, finishOperationAfterRender } from './perf/operation_timing.js'
 import { initDeformationEditor, startTool, startToolForEdit as startDeformToolForEdit,
          isActive as isDeformActive,
          handlePointerMove as deformPointerMove,
@@ -776,6 +776,14 @@ async function main() {
     _ovhgGhost = null
   }
 
+  function _markOverhangGhostPending() {
+    if (!_ovhgGhost) return
+    _ovhgGhost.name = 'optimistic-overhang-pending'
+    _ovhgGhost.material.color.setHex(0x00e5ff)
+    _ovhgGhost.material.opacity = 0.42
+    _ovhgGhost.renderOrder = 5
+  }
+
   /**
    * Build/refresh the overhang-extrude ghost cylinder for the pending arrow.
    * Mirrors backend make_overhang_extrude geometry: a new helix at the neighbour
@@ -1137,6 +1145,7 @@ async function main() {
 
     let _pendingEntry = null
     let _activeTab    = 'length'   // 'length' | 'seq'
+    let _commitInFlight = false
 
     const tabLength  = overlay.querySelector('#ovhg-tab-length')
     const tabSeq     = overlay.querySelector('#ovhg-tab-seq')
@@ -1187,14 +1196,14 @@ async function main() {
       _refreshGhost()
     })
 
-    function _hide() {
+    function _hide({ preserveGhost = false } = {}) {
       overlay.style.display = 'none'
       _pendingEntry = null
       seqInput.value  = ''
       nameInput.value = ''
       seqLenEl.textContent = '0 bp'
       seqLenEl.style.color = '#484f58'
-      _clearOverhangGhost()
+      if (!preserveGhost) _clearOverhangGhost()
       _refreshOverhangGhost = () => {}
     }
 
@@ -1213,6 +1222,7 @@ async function main() {
     }
 
     async function _doExtrude() {
+      if (_commitInFlight) return
       const entry = _pendingEntry
       if (!entry) return
 
@@ -1230,75 +1240,90 @@ async function main() {
       // Capture name BEFORE _hide() clears the input.
       const name = nameInput.value.trim() || null
 
-      _hide()
+      _commitInFlight = true
+      _markOverhangGhostPending()
+      _hide({ preserveGhost: true })
+      const optimisticTrace = beginOperationTiming('POST /design/overhang/extrude', {
+        optimisticPreview: true,
+        body: { helixId: entry.helixId, bpIndex: entry.bpIndex, lengthBp },
+      })
+      markOperationTiming('optimistic-preview-visible', undefined, optimisticTrace)
 
-      const params = {
-        helixId:     entry.helixId,
-        bpIndex:     entry.bpIndex,
-        direction:   entry.direction,
-        isFivePrime: entry.isFivePrime,
-        neighborRow: entry.neighborRow,
-        neighborCol: entry.neighborCol,
-        lengthBp,
-      }
+      try {
+        const params = {
+          helixId:     entry.helixId,
+          bpIndex:     entry.bpIndex,
+          direction:   entry.direction,
+          isFivePrime: entry.isFivePrime,
+          neighborRow: entry.neighborRow,
+          neighborCol: entry.neighborCol,
+          lengthBp,
+        }
 
-      if (entry.instanceId) {
-        // Assembly-mode extrude: writes to that PartInstance's design file,
-        // then re-renders the affected instance and broadcasts so part-editor
-        // and cadnano-editor tabs viewing the same instance auto-refresh.
-        let resp
-        try {
-          resp = await api.extrudeInstanceOverhang(entry.instanceId, params)
-        } catch (err) {
-          console.error('Overhang extrude (instance) failed:', err?.message ?? err)
+        if (entry.instanceId) {
+          // Assembly-mode extrude: writes to that PartInstance's design file,
+          // then re-renders the affected instance and broadcasts so part-editor
+          // and cadnano-editor tabs viewing the same instance auto-refresh.
+          let resp
+          try {
+            resp = await api.extrudeInstanceOverhang(entry.instanceId, params)
+          } catch (err) {
+            console.error('Overhang extrude (instance) failed:', err?.message ?? err)
+            return
+          }
+
+          // Patch sequence/label on the same instance if the user supplied them.
+          // Use the per-overhang assembly endpoint so the change lands in the
+          // part's feature_log (and an assembly-level metadata entry) — the
+          // wholesale patchInstanceDesign path bypasses the feature log.
+          if ((sequence || name) && resp?.design) {
+            const endTag     = entry.isFivePrime ? '5p' : '3p'
+            const overhangId = `ovhg_${entry.helixId}_${entry.bpIndex}_${endTag}`
+            const patch = {}
+            if (sequence) patch.sequence = sequence
+            if (name)     patch.label    = name
+            try {
+              await api.patchInstanceOverhang(entry.instanceId, overhangId, patch)
+            } catch (err) {
+              console.warn('Overhang label/sequence patch failed:', err?.message ?? err)
+            }
+          }
+
+          // Re-fetch and re-render this instance in the assembly scene, then
+          // refresh the overhang locations (active-instance arrows now reflect
+          // the new topology).
+          assemblyRenderer.invalidateInstance(entry.instanceId)
+          await assemblyRenderer.rebuild(store.getState().currentAssembly)
+          markOperationTiming('assembly-scene-rebuilt')
+          finishOperationAfterRender()
+          _rebuildOverhangLocations()
+
+          // Tell other tabs viewing this instance to refresh.
+          _broadcastInstanceChanged(entry.instanceId)
           return
         }
 
-        // Patch sequence/label on the same instance if the user supplied them.
-        // Use the per-overhang assembly endpoint so the change lands in the
-        // part's feature_log (and an assembly-level metadata entry) — the
-        // wholesale patchInstanceDesign path bypasses the feature log.
-        if ((sequence || name) && resp?.design) {
+        const result = await api.extrudeOverhang(params)
+        if (!result) {
+          console.error('Overhang extrude failed:', store.getState().lastError?.message)
+          return
+        }
+
+        // Assign name and/or sequence to the new OverhangSpec immediately.
+        if (sequence || name) {
           const endTag     = entry.isFivePrime ? '5p' : '3p'
           const overhangId = `ovhg_${entry.helixId}_${entry.bpIndex}_${endTag}`
           const patch = {}
           if (sequence) patch.sequence = sequence
           if (name)     patch.label    = name
-          try {
-            await api.patchInstanceOverhang(entry.instanceId, overhangId, patch)
-          } catch (err) {
-            console.warn('Overhang label/sequence patch failed:', err?.message ?? err)
-          }
+          await api.patchOverhang(overhangId, patch)
         }
-
-        // Re-fetch and re-render this instance in the assembly scene, then
-        // refresh the overhang locations (active-instance arrows now reflect
-        // the new topology).
-        assemblyRenderer.invalidateInstance(entry.instanceId)
-        await assemblyRenderer.rebuild(store.getState().currentAssembly)
-        markOperationTiming('assembly-scene-rebuilt')
-        finishOperationAfterRender()
-        _rebuildOverhangLocations()
-
-        // Tell other tabs viewing this instance to refresh.
-        _broadcastInstanceChanged(entry.instanceId)
-        return
-      }
-
-      const result = await api.extrudeOverhang(params)
-      if (!result) {
-        console.error('Overhang extrude failed:', store.getState().lastError?.message)
-        return
-      }
-
-      // Assign name and/or sequence to the new OverhangSpec immediately.
-      if (sequence || name) {
-        const endTag     = entry.isFivePrime ? '5p' : '3p'
-        const overhangId = `ovhg_${entry.helixId}_${entry.bpIndex}_${endTag}`
-        const patch = {}
-        if (sequence) patch.sequence = sequence
-        if (name)     patch.label    = name
-        await api.patchOverhang(overhangId, patch)
+      } finally {
+        // The API sync above has atomically installed canonical topology and
+        // geometry. Removing the ghost now is authoritative reconciliation;
+        // failures simply reveal the untouched confirmed scene underneath.
+        _clearOverhangGhost()
+        _commitInFlight = false
       }
     }
 
@@ -2764,6 +2789,10 @@ async function main() {
   let _clusterClipboard = null
   const slicePlane = initSlicePlane(scene, camera, canvas, controls, {
     onExtrude: async ({ cells, lengthBp, plane, offsetNm, continuationMode, newBundle, latticeType = 'HONEYCOMB', deformedFrame, refHelixId, sourceBp = null, strandFilter = 'both', ligateAdjacent = true }) => {
+      const optimisticTrace = beginOperationTiming('Extrude', {
+        optimisticPreview: true, cells: cells.length, lengthBp, continuationMode, deformed: !!deformedFrame,
+      })
+      markOperationTiming('optimistic-preview-visible', undefined, optimisticTrace)
       // A "new bundle" only RESETS the workspace when it's empty. With a part
       // already present, an empty-space extrude adds the new bundle additively (a
       // fresh, disconnected set of helices in the SAME design) via the bundle-
@@ -2803,6 +2832,7 @@ async function main() {
         _extrudePanel?.hide()
       }
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+      return result
     },
     getDesign:      () => store.getState().currentDesign,
     getHelixAxes:   () => store.getState().currentHelixAxes,
@@ -2829,6 +2859,10 @@ async function main() {
     // circle carries per-cell lengths (centred disc) → circle-segment route; a
     // uniform primitive carries one lengthBp → bundle-segment route.
     onPlace: async ({ cells, lengthBp, cellLengths, plane, offsetNm, strandFilter, ligateAdjacent, continuationMode, deformedFrame, refHelixId, sourceBp = null }) => {
+      const optimisticTrace = beginOperationTiming('Place Primitive', {
+        optimisticPreview: true, cells: cells.length, lengthBp, continuationMode, deformed: !!deformedFrame,
+      })
+      markOperationTiming('optimistic-preview-visible', undefined, optimisticTrace)
       // continuationMode → placed on an existing part's face: cells over existing
       // helix-ends extend them, fresh cells make new helices. A bent face carries a
       // deformedFrame. Otherwise it's an origin-plane placement (circle → circle-
@@ -2842,8 +2876,7 @@ async function main() {
           : await api.addBundleSegment({ cells, lengthBp, plane, offsetNm, strandFilter, ligateAdjacent })
       if (!result) {
         const err = store.getState().lastError
-        showToast(err?.message ?? 'Primitive placement failed', { severity: 'error' })
-        return
+        throw new Error(err?.message ?? 'Primitive placement failed')
       }
       const existing = store.getState().unfoldHelixOrder ?? []
       const newIds   = cells.map(([row, col]) => `h_${plane}_${row}_${col}`)
@@ -2852,6 +2885,7 @@ async function main() {
       _primitiveLibrary?.exitPlacement()
       slicePlane.hide()
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+      return result
     },
     // Lazy (bluntEnds is created later): lets placement YIELD a ring click to the
     // domain-end pick so it retargets the footprint onto that face.
