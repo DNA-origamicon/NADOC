@@ -1034,6 +1034,15 @@ async def _md_occupancy_impl(
         raise HTTPException(400, f"fit must be one of {', '.join(OCC_FIT_MODES)}")
     n_clusters = int(max(0, min(6, n_clusters)))
     max_frames = int(max(0, max_frames)) or 200
+    # POST supplies the shared Pydantic OccupancySelection, while the cache signature
+    # and subprocess core consume a plain mapping. Convert once BEFORE either use.
+    # Previously `_md_occ_cache_key` called `.get()` on the Pydantic object, so every
+    # non-empty NAMD scope failed before trajectory analysis even started.
+    selection_dict = (
+        selection.model_dump()
+        if selection is not None and hasattr(selection, "model_dump")
+        else selection
+    )
 
     inputs = _md_traj_inputs(job_id)
     if inputs is None:
@@ -1046,7 +1055,7 @@ async def _md_occupancy_impl(
     psf, ref, segments, design = inputs
 
     key = _md_occ_cache_key(
-        segments, psf, max_frames, n_clusters, basis, selection, fit
+        segments, psf, max_frames, n_clusters, basis, selection_dict, fit
     )
     if refetch:
         _MD_OCC_CACHE.pop(key, None)
@@ -1069,7 +1078,7 @@ async def _md_occupancy_impl(
             max_frames,
             n_clusters,
             basis,
-            selection.model_dump() if selection is not None else None,
+            selection_dict,
             fit,
         ),
         timeout_s=900.0,

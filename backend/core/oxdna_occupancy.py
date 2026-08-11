@@ -148,7 +148,12 @@ def occupancy_features(
                 if key_list[a] in want or key_list[b] in want
             ]
         if not sel_idx:
-            raise ValueError("the selection matched no nucleotides in this basis")
+            # An individually picked unpaired base (or synthetic insert/tail) has no
+            # base-pair midpoint column. The selection itself is valid, so preserve the
+            # user's scope and honestly fall back to nucleotide coordinates just as a
+            # design with too few duplex columns already does above.
+            basis = "nt"
+            sel_idx = [i for i, k in enumerate(key_list) if k in want]
 
     # The key per FEATURE COLUMN of the basis actually in play — nucleotide keys for "nt",
     # the forward key of each duplex column for "bp". This is what the fit plan indexes.

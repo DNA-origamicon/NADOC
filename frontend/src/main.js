@@ -196,6 +196,7 @@ import { getDocId, mintDocId, docHeaders, docHeadersFor, docKey } from './shared
 import { initMdOverlay }             from './scene/md_overlay.js'
 import { initMdSolventOverlay }      from './scene/md_solvent_overlay.js'
 import { initOccupancyOverlay }     from './scene/occupancy_overlay.js'
+import { auditRenderedObjects, compareRenderedObjects } from './scene/render_object_audit.js'
 import { initMdBoxOverlay }          from './scene/md_box_overlay.js'
 import { initMdSegmentationOverlay } from './scene/md_segmentation_overlay.js'
 import { initMdPanel }    from './ui/md_panel.js'
@@ -1966,7 +1967,14 @@ async function main() {
   // Renderer-level regression diagnostics: lets automated app tests activate the exact
   // saved job/mode, then query __nadocDR.debugRenderedAudit() without brittle sidebar clicks.
   if (import.meta.env.DEV) window.__nadocOxdnaDisplay = oxdnaDisplay
-  if (import.meta.env.DEV) { window.__nadocOccupancy = occupancyOverlay; window.__nadocScene = scene }
+  if (import.meta.env.DEV) {
+    window.__nadocOccupancy = occupancyOverlay
+    window.__nadocScene = scene
+    window.__nadocRenderAudit = {
+      capture: () => auditRenderedObjects(scene),
+      compare: compareRenderedObjects,
+    }
+  }
   // When the scene representation changes while an oxDNA overlay is active, re-apply
   // the current frame to the freshly-built atomistic/surface mesh.
   window.addEventListener('nadoc:representation-change', () => oxdnaDisplay.reapplyForRepr())
@@ -2024,6 +2032,7 @@ async function main() {
     // it a NAMD trajectory in vdw/ballstick draws the CG beads through the atoms.
     onHeavyApplied: () => _atomSurface?.setCGVisible(false),
   })
+  if (import.meta.env.DEV) window.__nadocMdViz = mdViz
   window.addEventListener('nadoc:representation-change', () => {
     if (mdViz.isActive?.()) mdViz.reapplyForRepr()
   })

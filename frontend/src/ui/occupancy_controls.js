@@ -238,6 +238,7 @@ export function initOccupancyControls({
 
   let _abort = null
   let _active = false
+  let _generation = 0   // invalidates response, display and overlay work as one transaction
   let _cache = null     // { jobId, key, resp }
   let _lastResp = null
   // Per-state user choices, indexed by rank. Kept OUTSIDE the response cache so they
@@ -268,6 +269,11 @@ export function initOccupancyControls({
       basis: basisSel?.value ?? 'nt',
       fit: fitSel?.value ?? 'selection',
     })
+    // Base-pair midpoints contain duplex pairs only. Crossover inserts and extension
+    // tails are synthetic, unpaired sites, so a scoped `bp` request cannot contain any
+    // of the things the user picked (and used to come back as a failed request). Keep
+    // the selection intact by using nucleotide coordinates for every synthetic scope.
+    if ((sel?.extra_bases?.length ?? 0) || (sel?.extensions?.length ?? 0)) p.basis = 'nt'
     if (sel === null) p.fit = 'global'
     return p
   }
@@ -316,8 +322,8 @@ export function initOccupancyControls({
     // hits the cache, and returning early would leave the parameter controls hidden and
     // the module marked inactive while the view is plainly on screen.
     _active = true
+    const generation = ++_generation
     _claimOverlay()
-    if (params) params.style.display = ''
 
     if (scopeSel?.value === 'selection' && !sel) {
       getOverlay?.()?.clear()
@@ -326,28 +332,36 @@ export function initOccupancyControls({
       return { ok: false, reason: 'empty scope' }
     }
 
-    if (!refetch && _cache?.key === key) return _apply(_cache.resp)
+    if (!refetch && _cache?.key === key) return _apply(_cache.resp, generation)
 
     _abort?.abort()
-    _abort = new AbortController()
+    const request = new AbortController()
+    _abort = request
     _setStatus('Clustering configurations…')
     if (legendEl) legendEl.style.display = 'none'
 
     let resp
     try {
-      resp = await _fetch({ jobId, params: p, selection: sel, refetch, signal: _abort.signal })
+      resp = await _fetch({ jobId, params: p, selection: sel, refetch, signal: request.signal })
     } catch (e) {
       if (e?.name === 'AbortError') return { ok: false, reason: 'aborted' }
       _setStatus(`Occupancy failed: ${e?.message ?? e}`, C.bad)
       return { ok: false, reason: 'error' }
     }
+    // The shared API client deliberately converts an aborted fetch to null. Scope edits
+    // can issue several refreshes in quick succession (especially when adding multiple
+    // picked bases), so distinguish that intentional cancellation from a real null
+    // response or the older request races in and overwrites the new status with
+    // "Occupancy request failed".
+    if (request.signal.aborted) return { ok: false, reason: 'aborted' }
     if (!resp) { _setStatus('Occupancy request failed', C.bad); return { ok: false, reason: 'error' } }
 
     _cache = { jobId, key, resp }
-    return _apply(resp)
+    return _apply(resp, generation)
   }
 
-  async function _apply(resp) {
+  async function _apply(resp, generation = _generation) {
+    if (!_active || generation !== _generation) return { ok: false, reason: 'superseded' }
     _lastResp = resp
     const s = occupancyStatusText(resp)
     _setStatus(s.text, s.color)
@@ -360,6 +374,13 @@ export function initOccupancyControls({
 
     const jobId = getSelectedJobId?.()
     const r = await getDisplay?.()?.displayOccupancy?.(jobId, resp)
+    if (!_active || generation !== _generation) {
+      // displayOccupancy may have awaited cap/surface setup before moving the real model.
+      // If off() won that race, remove anything the late completion just applied.
+      getDisplay?.()?.stopAndRestore?.()
+      getOverlay?.()?.clear()
+      return { ok: false, reason: 'superseded' }
+    }
     if (r && !r.ok) return r
 
     const overlay = getOverlay?.()
@@ -377,6 +398,11 @@ export function initOccupancyControls({
     let states = 0
     if (resp.verdict === 'switching') {
       const built = await overlay?.setClusters(resp, { colors: _colors, visible })
+      if (!_active || generation !== _generation) {
+        overlay?.clear()
+        getDisplay?.()?.stopAndRestore?.()
+        return { ok: false, reason: 'superseded' }
+      }
       states = built?.states ?? 0
     } else {
       overlay?.clear()
@@ -419,14 +445,16 @@ export function initOccupancyControls({
   }
 
   function off() {
+    _generation++
     _abort?.abort()
     _abort = null
     _active = false
     _lastResp = null
     _resetChoices()
     getOverlay?.()?.clear()
-    if (params) params.style.display = 'none'
-    if (scopeCard) scopeCard.style.display = 'none'
+    // Parameter choices remain editable while the visualization is off. In particular,
+    // keep the scope picker and fit control consistent with the visible Analyse value.
+    _syncScopeCard()
     if (legendEl) { legendEl.style.display = 'none'; legendEl.innerHTML = '' }
     _setStatus('')
   }

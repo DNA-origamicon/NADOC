@@ -277,6 +277,24 @@ describe('initOccupancyControls', () => {
     expect(ctrl.isActive()).toBe(false)
   })
 
+  it('tears down a cached display that finishes after off()', async () => {
+    let finishDisplay
+    const { ctrl, display, overlay } = await make()
+    await ctrl.refresh() // seed the response cache
+    display.displayOccupancy.mockImplementationOnce(() => new Promise(resolve => {
+      finishDisplay = () => resolve({ ok: true })
+    }))
+    display.stopAndRestore = vi.fn()
+
+    const late = ctrl.refresh()
+    ctrl.off()
+    finishDisplay()
+
+    await expect(late).resolves.toMatchObject({ ok: false, reason: 'superseded' })
+    expect(display.stopAndRestore).toHaveBeenCalled()
+    expect(overlay.clear).toHaveBeenCalled()
+  })
+
   it('does nothing without a selected job', async () => {
     const { initOccupancyControls } = await import('./occupancy_controls.js')
     const api = { getOxdnaOccupancy: vi.fn() }
@@ -520,6 +538,57 @@ describe('scope: whole structure vs specific elements', () => {
     await ctrl.refresh()
     expect(api.getOxdnaOccupancy).toHaveBeenCalled()
     expect(api.postOxdnaOccupancy).not.toHaveBeenCalled()
+  })
+
+  it('uses nucleotide coordinates when the scope contains crossover extra bases', async () => {
+    const { ctrl, api } = await mount({
+      currentDesign: { helices: [], crossovers: [{ id: 'xo1' }, { id: 'xo2' }] },
+      multiSelectedBaseKeys: ['__xb__:xo1:0', '__xb__:xo2:0'],
+    })
+    document.getElementById('oxdna-jobs-occupancy-basis').innerHTML =
+      '<option value="bp" selected>bp</option><option value="nt">nt</option>'
+    setScope('selection')
+    document.getElementById('oxdna-occupancy-scope-add').click()
+    await ctrl.refresh()
+
+    expect(api.postOxdnaOccupancy).toHaveBeenCalled()
+    expect(api.postOxdnaOccupancy.mock.calls.at(-1)[1]).toMatchObject({
+      basis: 'nt',
+      selection: { extra_bases: [['xo1', 0], ['xo2', 0]] },
+    })
+  })
+
+  it('keeps occupancy options visible when the visualization is off', async () => {
+    const { ctrl } = await mount()
+    const params = document.getElementById('oxdna-jobs-occupancy-params')
+    params.style.display = 'block'
+    ctrl.off()
+    expect(params.style.display).toBe('block')
+  })
+
+  it('keeps the selected scope options visible when the visualization is off', async () => {
+    const { ctrl } = await mount()
+    setScope('selection')
+    ctrl.off()
+    expect(document.getElementById('oxdna-occupancy-scope-card').style.display).not.toBe('none')
+  })
+
+  it('does not report an intentionally superseded scope request as failed', async () => {
+    const { ctrl, api } = await mount()
+    let finishFirst
+    api.getOxdnaOccupancy
+      .mockImplementationOnce((_id, { signal }) => new Promise((resolve) => {
+        finishFirst = () => resolve(signal.aborted ? null : SWITCHING)
+      }))
+      .mockResolvedValueOnce(SWITCHING)
+
+    const first = ctrl.refresh()
+    const second = ctrl.refresh({ refetch: true })
+    finishFirst()
+    await Promise.all([first, second])
+
+    expect(document.getElementById('oxdna-jobs-occupancy-status').textContent)
+      .not.toMatch(/request failed/i)
   })
 
   it('shows the scope card only when specific elements are chosen', async () => {

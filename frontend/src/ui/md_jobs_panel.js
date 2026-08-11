@@ -2407,6 +2407,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
   function _startMdDisplay() {
     if (!displayToggle) return
+    if (_occupancyIsActive()) _setOccupancyOff()
     _setFlexOff()                     // live display + flex/traj are mutually exclusive
     _setTrajOff()
     displayToggle.checked = true
@@ -2465,8 +2466,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // "Off" radio: turn every view off (native positions).  The browser already
   // unchecked whichever view was active; run each teardown (all idempotent) so
   // the model is restored and any in-flight analysis is cancelled.
-  vizOffRadio?.addEventListener('change', () => {
-    if (!vizOffRadio.checked) return
+  // Off is an idempotent action, not merely a radio transition. A stale already-checked
+  // Off control must still clear shared occupancy scene ownership when clicked.
+  vizOffRadio?.addEventListener('click', () => {
+    if (_occupancyReady && _occupancyIsActive()) _setOccupancyOff()
     _setFlexOff()
     _setTrajOff()
     _stopMdDisplay('Native positions restored')
@@ -2576,9 +2579,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
   function _setOccupancyOff() {
     _occupancy?.off()
-    if (getMdViz?.()?.mode?.() === 'occupancy') getMdViz().stopAndRestore()
+    // Occupancy setup is asynchronous; teardown must also invalidate the interval before
+    // the display has published mode='occupancy', or a late completion leaves states up.
+    getMdViz?.()?.stopAndRestore()
     if (occupancyToggle) occupancyToggle.checked = false
     _syncVizOffRadio()
+  }
+  function _occupancyIsActive() {
+    return !!_occupancy?.isActive() || getMdViz?.()?.mode?.() === 'occupancy'
   }
   occupancyToggle?.addEventListener('change', async () => {
     if (!occupancyToggle.checked) { _setOccupancyOff(); return }
@@ -2634,6 +2642,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         flexToggle.checked = false; _setFlexStatus('No trajectory frames yet', _C.warn); _syncVizOffRadio(); return
       }
       if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
+      if (_occupancyIsActive()) _setOccupancyOff()
       _setTrajOff()
       await _refreshFlex()
     } else {
@@ -2796,6 +2805,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       }
       if (!_confirmTrajLoad()) { trajToggle.checked = false; _syncVizOffRadio(); return }
       if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
+      if (_occupancyIsActive()) _setOccupancyOff()
       _setFlexOff()
       await _refreshTraj()
     } else {

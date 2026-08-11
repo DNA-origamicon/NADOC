@@ -881,7 +881,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
       if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff()
       if (oxdnaDisplay?.mode() === 'strain') _setStrainOff()
-      if (oxdnaDisplay?.mode() === 'occupancy') _setOccupancyOff()
+      if (_occupancyIsActive()) _setOccupancyOff()
       await _refreshDeviation()
     } else {
       _setDeviationOff()
@@ -1014,7 +1014,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
       if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff()
       if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
-      if (oxdnaDisplay?.mode() === 'occupancy') _setOccupancyOff()
+      if (_occupancyIsActive()) _setOccupancyOff()
       await _refreshStrain()
     } else {
       _setStrainOff()
@@ -1026,9 +1026,17 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // model that displayOccupancy moved to the top configuration.
   function _setOccupancyOff() {
     _occupancy?.off()
-    if (oxdnaDisplay?.mode() === 'occupancy') oxdnaDisplay.stopAndRestore()
+    // Unconditional: displayOccupancy can be between its awaited setup and setting mode.
+    // The controller generation prevents a late completion from reapplying the medoid.
+    oxdnaDisplay?.stopAndRestore()
     if (occupancyToggle) occupancyToggle.checked = false
     _syncVizOffRadio()
+  }
+  /** True from the moment occupancy claims the view, including its asynchronous setup
+   * window before oxdnaDisplay has published mode='occupancy'. Peer radios must use this
+   * instead of mode() alone or the late medoid can overwrite the newly selected view. */
+  function _occupancyIsActive() {
+    return !!_occupancy?.isActive() || oxdnaDisplay?.mode() === 'occupancy'
   }
   occupancyToggle?.addEventListener('change', async () => {
     if (_lammpsMode) return   // LAMMPS runs have no occupancy endpoint — radio stays disabled
@@ -1052,7 +1060,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff()
     if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
     if (oxdnaDisplay?.mode() === 'strain') _setStrainOff()
-    if (oxdnaDisplay?.mode() === 'occupancy') _setOccupancyOff()
+    if (_occupancyIsActive()) _setOccupancyOff()
     await _occupancy?.refresh()
   })
   // Switching metric while the map is up re-fetches it in place (backbone ⇄ WC).
@@ -2124,7 +2132,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff()
       if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
       if (oxdnaDisplay?.mode() === 'strain') _setStrainOff()
-      if (oxdnaDisplay?.mode() === 'occupancy') _setOccupancyOff()
+      if (_occupancyIsActive()) _setOccupancyOff()
       await _refreshFlex()
     } else {
       _setFlexOff()
@@ -2257,7 +2265,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
     if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
     if (oxdnaDisplay?.mode() === 'strain') _setStrainOff()
-    if (oxdnaDisplay?.mode() === 'occupancy') _setOccupancyOff()
+    if (_occupancyIsActive()) _setOccupancyOff()
     // Switching sparse↔full leaves the OTHER trajectory mode still active (both are
     // mode 'trajectory', so the teardowns above don't fire) — stop playback and clear
     // the stale frame cache before reloading at the new scope.
@@ -2408,7 +2416,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // Turn off whichever overlay is active (relaxed display / flexibility map /
   // trajectory player) — they share the one bead overlay.
   function _allDisplaysOff({ keepCache = false } = {}) {
-    if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
+    // The radio group unchecks Occupancy before this handler runs, and its display may
+    // still be in asynchronous setup with mode() === null. Ask the occupancy controller
+    // first so Off invalidates that in-flight transaction as well as an already-drawn one.
+    if (_occupancy?.isActive()) _setOccupancyOff()
+    else if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
     else if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff({ keepCache })
     else if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
     else if (oxdnaDisplay?.mode() === 'strain') _setStrainOff()
@@ -2425,6 +2437,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (trajFullToggle) trajFullToggle.checked = false
     if (autorefineDevToggle) autorefineDevToggle.checked = false
     if (strainToggle) strainToggle.checked = false
+    if (occupancyToggle) occupancyToggle.checked = false
     if (trajControls) trajControls.style.display = 'none'
   }
   displayToggle?.addEventListener('change', async () => {
@@ -2439,7 +2452,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff()
       if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
       if (oxdnaDisplay?.mode() === 'strain') _setStrainOff()
-      if (oxdnaDisplay?.mode() === 'occupancy') _setOccupancyOff()
+      if (_occupancyIsActive()) _setOccupancyOff()
       await _refreshDisplay()
     } else {
       _setDisplayOff()
@@ -2449,8 +2462,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // "Off" radio: turn off whichever overlay is active (native positions).  The
   // browser already unchecked the active view; _allDisplaysOff tears every overlay
   // down and restores the renderer (idempotent).
-  vizOffRadio?.addEventListener('change', () => {
-    if (!vizOffRadio.checked) return
+  // Use click, not change: if a superseded/failed transition has already checked Off
+  // while leaving scene ownership behind, clicking the already-checked radio emits no
+  // change event. Off is an idempotent ACTION as well as a radio value — every click must
+  // force teardown and restore native positions.
+  vizOffRadio?.addEventListener('click', () => {
     if (_lammpsMode) { _lammpsViz('off'); return }
     _allDisplaysOff()
     vizOffRadio.checked = true   // _allDisplaysOff's teardowns leave this set; keep it explicit
@@ -2577,7 +2593,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     _autorefineCleanForDesign = false
     if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
     if (oxdnaDisplay?.mode() === 'strain') _setStrainOff()
-    if (oxdnaDisplay?.mode() === 'occupancy') _setOccupancyOff()
+    if (_occupancyIsActive()) _setOccupancyOff()
     _metricsCard?.refresh()      // cached twist/curve/bp graphs no longer match the edited design
     _compareCard?.refresh()      // cached cross-engine comparison no longer matches the edited design
     // Staleness is historical UI metadata, not part of applying the selected

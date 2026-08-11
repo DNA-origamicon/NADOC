@@ -344,6 +344,29 @@ def test_bp_basis_falls_back_to_nt_and_says_so(monkeypatch):
     assert feature_keys == keys
 
 
+def test_bp_basis_scoped_to_one_unpaired_base_falls_back_to_nt(monkeypatch):
+    """An individual ssDNA pick is valid even though it has no bp-midpoint column."""
+    import backend.core.oxdna_occupancy as occ
+
+    n_bp = 12
+    keys, positions, a1s, fake_index = _duplex_fixture(n_bp)
+    monkeypatch.setattr(occ, "_strain_index", fake_index)
+    frames = [_frame(keys, positions, a1s) for _ in range(2)]
+    unpaired = keys[-1]
+
+    X, feature_keys, _kept, basis_used, _plan = occ.occupancy_features(
+        frames,
+        keys,
+        _FakeDesign(),
+        basis="bp",
+        selection={"bases": [list(unpaired)]},
+    )
+
+    assert basis_used == "nt"
+    assert feature_keys == [unpaired]
+    assert X.shape == (2, 3)
+
+
 def test_nt_basis_keeps_every_nucleotide(monkeypatch):
     import backend.core.oxdna_occupancy as occ
 

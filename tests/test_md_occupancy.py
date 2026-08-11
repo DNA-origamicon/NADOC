@@ -200,6 +200,69 @@ def test_selection_vocabulary_is_shared_with_oxdna():
     assert body.selection.helix_ids == ["h0"]
 
 
+def test_every_scoped_selection_shape_reaches_md_analysis_as_a_mapping(monkeypatch):
+    """Regression: POST handed a Pydantic model to the cache signature, which calls
+    ``.get``; therefore every non-empty NAMD scope failed before analysis. Exercise every
+    declared selector alone plus a heterogeneous union."""
+    import asyncio
+
+    from backend.api import routes_md
+    from backend.api.routes_oxdna import OccupancySelection
+
+    monkeypatch.setattr(
+        routes_md,
+        "_md_traj_inputs",
+        lambda _job: (
+            "/tmp/fake.psf",
+            "/tmp/fake.pdb",
+            _segs("5 ns production"),
+            object(),
+        ),
+    )
+    seen = []
+
+    async def fake_run(_request, _job, _kind, _fn, args, **_kwargs):
+        seen.append(args[-2])
+        return {"ready": False, "reason": "probe complete"}
+
+    monkeypatch.setattr(routes_md, "_run_md_analysis", fake_run)
+    selections = [
+        OccupancySelection(cluster_ids=["c0"]),
+        OccupancySelection(helix_ids=["h0"]),
+        OccupancySelection(strand_ids=["s0"]),
+        OccupancySelection(overhang_ids=["o0"]),
+        OccupancySelection(domains=[["s0", 0]]),
+        OccupancySelection(bases=[["h0", 4, "FORWARD"]]),
+        OccupancySelection(extra_bases=[["xo0", 0]]),
+        OccupancySelection(extensions=[["ext0", 0]]),
+        OccupancySelection(
+            cluster_ids=["c0"],
+            strand_ids=["s0"],
+            bases=[["h0", 4, "FORWARD"]],
+            extra_bases=[["xo0", 0]],
+        ),
+    ]
+
+    for selection in selections:
+        result = asyncio.run(
+            routes_md._md_occupancy_impl(
+                "job",
+                None,
+                max_frames=20,
+                n_clusters=0,
+                basis="nt",
+                refetch=False,
+                selection=selection,
+            )
+        )
+        assert result["reason"] == "probe complete"
+
+    assert len(seen) == len(selections)
+    for original, emitted in zip(selections, seen):
+        assert isinstance(emitted, dict)
+        assert emitted == original.model_dump()
+
+
 def test_md_occupancy_body_rejects_an_undeclared_field():
     import pytest
     from pydantic import ValidationError
