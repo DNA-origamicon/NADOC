@@ -76,7 +76,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     panelBody.style.display = _collapsed ? 'none' : ''
     arrow.classList.toggle('is-collapsed', _collapsed)
     setSectionCollapsed('feature-log', 'feature-log-panel', _collapsed)
-    if (!_collapsed) { _renderCurrentView(); _positionRail() }
+    if (!_collapsed) { _renderCurrentView(); _schedulePositionRail() }
   })
 
   // ── DOM structure ──────────────────────────────────────────────────────────
@@ -410,11 +410,11 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
   }
 
   // ── ResizeObserver — reposition rail when layout changes ──────────────────
-  const _ro = new ResizeObserver(() => { if (!_collapsed) _positionRail() })
+  const _ro = new ResizeObserver(() => { if (!_collapsed) _schedulePositionRail() })
   _ro.observe(wrap)
 
   // ── Debug ──────────────────────────────────────────────────────────────────
-  const DBG = true   // set false to silence
+  const DBG = false  // window.NADOC_FL_DEBUG remains available on demand
   function _log(...args) { if (DBG) console.log('[FL]', ...args) }
 
   // Expose a snapshot function for manual inspection in DevTools:
@@ -521,6 +521,15 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
   }
 
   // ── Notch positioning ──────────────────────────────────────────────────────
+  let _railPositionFrame = null
+  function _schedulePositionRail() {
+    if (_railPositionFrame != null) return
+    _railPositionFrame = requestAnimationFrame(() => {
+      _railPositionFrame = null
+      if (!_collapsed) _positionRail()
+    })
+  }
+
   /**
    * Measure the Y-centre of each row (F0 row + feature rows) relative to rail,
    * place notch ticks, and position the thumb at the current cursor.
@@ -792,7 +801,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     list.appendChild(f0Row)
 
     if (!log.length) {
-      _positionRail()
+      _schedulePositionRail()
       return
     }
 
@@ -1449,7 +1458,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
       list.appendChild(row)
     })
 
-    _positionRail()
+    _schedulePositionRail()
     _applyHighlights()
   }
 
@@ -1583,7 +1592,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     list.appendChild(f0)
 
     if (!log.length) {
-      _positionRail()
+      _schedulePositionRail()
       return
     }
 
@@ -1715,7 +1724,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
       list.appendChild(row)
     })
 
-    _positionRail()
+    _schedulePositionRail()
   }
 
   /**

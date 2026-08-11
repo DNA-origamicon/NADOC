@@ -739,13 +739,22 @@ export function initDesignRenderer(scene, storeRef) {
   }
 
   function _tryPatchInPlace(changedHelixIds, newGeo, prevGeo, newState) {
-    if (!_helixCtrl || _ghostOpacity !== null) return false   // never patch during a deform preview
+    if (!_helixCtrl || _ghostOpacity !== null) {
+      markOperationTiming('partial-patch-rejected', { reason: !_helixCtrl ? 'no-controller' : 'ghost-active' })
+      return false
+    }
     const realIds = changedHelixIds.filter(id => !id.startsWith('__'))
-    if (realIds.length === 0) return false   // only synthetic purges — nothing to patch
+    if (realIds.length === 0) {
+      markOperationTiming('partial-patch-rejected', { reason: 'synthetic-only' })
+      return false
+    }
 
     // 1. Check nucleotide counts match for every real changed helix.
     for (const hid of realIds) {
-      if (_countHelixNucs(newGeo, hid) !== _countHelixNucs(prevGeo ?? [], hid)) return false
+      if (_countHelixNucs(newGeo, hid) !== _countHelixNucs(prevGeo ?? [], hid)) {
+        markOperationTiming('partial-patch-rejected', { reason: 'nucleotide-count-changed', helixId: hid })
+        return false
+      }
     }
 
     // 2. Check that no nuc flips is_five_prime or is_three_prime.
@@ -758,8 +767,14 @@ export function initDesignRenderer(scene, storeRef) {
       if (!helixSet.has(nuc.helix_id)) continue
       const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
       const existing = _helixCtrl.lookupEntry(key)
-      if (existing && existing.nuc.is_five_prime !== !!nuc.is_five_prime) return false
-      if (existing && existing.nuc.is_three_prime !== !!nuc.is_three_prime) return false
+      if (existing && existing.nuc.is_five_prime !== !!nuc.is_five_prime) {
+        markOperationTiming('partial-patch-rejected', { reason: 'five-prime-mesh-changed', helixId: nuc.helix_id })
+        return false
+      }
+      if (existing && existing.nuc.is_three_prime !== !!nuc.is_three_prime) {
+        markOperationTiming('partial-patch-rejected', { reason: 'three-prime-mesh-changed', helixId: nuc.helix_id })
+        return false
+      }
     }
 
     // 3. Eligible for in-place patch.
@@ -902,6 +917,9 @@ export function initDesignRenderer(scene, storeRef) {
         newState.lastPartialChangedHelixIds.filter(id => !id.startsWith('__')))
       const _coverageChanged = _scaffoldCoverageChanged(
         _changedSet, prevState.currentDesign, newState.currentDesign)
+      if (_coverageChanged) {
+        markOperationTiming('partial-patch-rejected', { reason: 'scaffold-coverage-changed' })
+      }
       if (!_coverageChanged && _tryPatchInPlace(
         newState.lastPartialChangedHelixIds,
         newState.currentGeometry,

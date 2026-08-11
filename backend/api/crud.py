@@ -5199,7 +5199,11 @@ def overhang_extrude(body: OverhangExtrudeRequest) -> dict:
             partial_axes=changed is not None,
         )
         _slim_mutation_history_payload(payload, _entry.id)
-    return trace.attach(ORJSONResponse(payload))
+    # ORJSONResponse serializes eagerly in its constructor. Keep that cost in
+    # Server-Timing; previously it appeared as an unexplained server→browser gap.
+    with trace.step("serialize_response"):
+        response = ORJSONResponse(payload)
+    return trace.attach(response)
 
 
 class OverhangPatchRequest(BaseModel):

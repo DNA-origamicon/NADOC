@@ -2207,6 +2207,11 @@ async function _oxdnaJSON(method, path, body = undefined, { signal } = {}) {
   return r.json().catch(() => null)
 }
 
+async function _backgroundJobList(path) {
+  await whenOperationIdle()
+  return _oxdnaJSON('GET', path)
+}
+
 /** Binary sibling of _oxdnaJSON — returns the response as an ArrayBuffer (or null). */
 async function _oxdnaBin(method, path, body = undefined) {
   const opts = { method, headers: { ...docHeaders() } }
@@ -2291,7 +2296,7 @@ function _vizOpts(opts, fn) {
 
 /** Launch a LAMMPS oxDNA2 run on the active design ({steps, dump_every, temperature, salt_molar, ranks}). */
 export const createLammpsJob     = (body)        => _oxdnaJSON('POST', '/lammps/jobs', body)
-export const listLammpsJobs      = ()            => _oxdnaJSON('GET',  '/lammps/jobs')
+export const listLammpsJobs      = ()            => _backgroundJobList('/lammps/jobs')
 export const getLammpsJob        = (id)          => _oxdnaJSON('GET',  `/lammps/jobs/${id}`)
 export const stopLammpsJob       = (id)          => _oxdnaJSON('POST', `/lammps/jobs/${id}/stop`)
 /** Scrub-able trajectory ({ready, keys, frames, stages, markers}) — same shape as the oxDNA one. */
@@ -2319,7 +2324,7 @@ export const getLammpsDeviation = (id, opts) => {
 export const estimateOxdnaDisk   = (body)        => _oxdnaJSON('POST', '/oxdna/jobs/estimate-disk', body)
 /** Forecast free-disk-after for an oxDNA production/run stage ({steps}). */
 export const estimateOxdnaRunDisk = (id, body)   => _oxdnaJSON('POST', `/oxdna/jobs/${id}/estimate-run-disk`, body)
-export const listOxdnaJobs       = ()            => _oxdnaJSON('GET',  '/oxdna/jobs')
+export const listOxdnaJobs       = ()            => _backgroundJobList('/oxdna/jobs')
 export const getOxdnaJob         = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}`)
 export const getOxdnaErrorLog    = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/error-log`)
 export const getOxdnaProgress    = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/progress`)
@@ -2537,7 +2542,7 @@ export const stopOxdnaLive       = (id)          => _oxdnaJSON('POST', `/oxdna/l
 // transport (design-sync-free JSON).
 export const mrdnaAvailable      = ()            => _oxdnaJSON('GET',  '/mrdna/available')
 export const createMrdnaJob      = (body)        => _oxdnaJSON('POST', '/mrdna/jobs', body)
-export const listMrdnaJobs       = ()            => _oxdnaJSON('GET',  '/mrdna/jobs')
+export const listMrdnaJobs       = ()            => _backgroundJobList('/mrdna/jobs')
 export const getMrdnaJob         = (id)          => _oxdnaJSON('GET',  `/mrdna/jobs/${id}`)
 export const getMrdnaProgress    = (id)          => _oxdnaJSON('GET',  `/mrdna/jobs/${id}/progress`)
 export const getMrdnaErrorLog    = (id)          => _oxdnaJSON('GET',  `/mrdna/jobs/${id}/error-log`)
@@ -2557,7 +2562,7 @@ export const getMrdnaAnalyticCurvature = ()      => _oxdnaJSON('GET',  '/mrdna/c
 // Physical-layer / display-only; never mutates topology.  Same _oxdnaJSON transport.
 export const candoAvailable      = ()            => _oxdnaJSON('GET',  '/cando/available')
 export const createCandoJob      = (body)        => _oxdnaJSON('POST', '/cando/jobs', body)
-export const listCandoJobs       = ()            => _oxdnaJSON('GET',  '/cando/jobs')
+export const listCandoJobs       = ()            => _backgroundJobList('/cando/jobs')
 export const getCandoJob         = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}`)
 export const getCandoProgress    = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}/progress`)
 export const getCandoErrorLog    = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}/error-log`)
@@ -2587,7 +2592,7 @@ export const getMdShapeSource    = (id)          => _oxdnaJSON('GET',  `/md/jobs
 // Output is Physical-layer / display-only; never mutates topology.
 export const snupiAvailable      = ()            => _oxdnaJSON('GET',  '/snupi/available')
 export const createSnupiJob      = (body)        => _oxdnaJSON('POST', '/snupi/jobs', body)
-export const listSnupiJobs       = ()            => _oxdnaJSON('GET',  '/snupi/jobs')
+export const listSnupiJobs       = ()            => _backgroundJobList('/snupi/jobs')
 export const getSnupiJob         = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}`)
 export const getSnupiProgress    = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}/progress`)
 export const getSnupiErrorLog    = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}/error-log`)
@@ -2614,7 +2619,7 @@ export const getSnupiShapeSource = (id)          => _oxdnaJSON('GET',  `/snupi/j
 // Output is Physical-layer / display-only; never mutates topology.
 export const bladeAvailable      = ()            => _oxdnaJSON('GET',  '/blade/available')
 export const createBladeJob      = (body)        => _oxdnaJSON('POST', '/blade/jobs', body)
-export const listBladeJobs       = ()            => _oxdnaJSON('GET',  '/blade/jobs')
+export const listBladeJobs       = ()            => _backgroundJobList('/blade/jobs')
 export const getBladeJob         = (id)          => _oxdnaJSON('GET',  `/blade/jobs/${id}`)
 export const getBladeProgress    = (id)          => _oxdnaJSON('GET',  `/blade/jobs/${id}/progress`)
 export const getBladeErrorLog    = (id)          => _oxdnaJSON('GET',  `/blade/jobs/${id}/error-log`)
@@ -2664,7 +2669,7 @@ export const preflightMdVram     = (body)        => _oxdnaJSON('POST', '/md/jobs
 /** Forecast free-disk-after for a NAMD production stage (same body as appendMdProduction). */
 export const estimateMdProductionDisk = (id, body) => _oxdnaJSON('POST', `/md/jobs/${id}/estimate-production-disk`, body)
 /** List NAMD/MD jobs (for the trajectory-keyframe dropdown). */
-export const listMdJobs          = ()            => _oxdnaJSON('GET',  '/md/jobs')
+export const listMdJobs          = ()            => _backgroundJobList('/md/jobs')
 /** Start moving an MD job's folder to <destRoot>/<job_id> (background; poll status). */
 export const archiveMdJob        = (id, destRoot) => _oxdnaJSON('POST', `/md/jobs/${id}/archive`, { dest_root: destRoot })
 export const unarchiveMdJob      = (id)          => _oxdnaJSON('POST', `/md/jobs/${id}/unarchive`)
