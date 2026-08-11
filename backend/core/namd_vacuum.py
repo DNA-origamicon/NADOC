@@ -435,7 +435,6 @@ def prepare_vacuum_enrgmd_namd(
     mg_conc_mM: float = 0.0,  # noqa: ARG001
     salt_mode: str = "custom",  # noqa: ARG001
     padding_nm: float = 1.2,  # noqa: ARG001 — no box
-    water_shell_nm: float = 0.0,  # noqa: ARG001
     fast: bool = False,  # noqa: ARG001 — standard CUDA, no GPUresident
     seed: int = 42,  # noqa: ARG001 — nothing random to place
     declash: bool = False,  # noqa: ARG001 — the ladder is soft throughout

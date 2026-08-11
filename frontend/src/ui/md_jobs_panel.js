@@ -1056,7 +1056,7 @@ export function mdResumeHistoryRows(job) {
 }
 
 // The implicit-solvent (GBIS) protocol has no explicit water box, so the salt /
-// padding / water-shell / fast-mode knobs don't apply — GBIS is DNA-only, NVT,
+// Padding and explicit-solvent integrator knobs do not apply — GBIS is DNA-only, NVT,
 // standard CUDA.  Pure predicate so the UI (and a test) can gray those fields.
 export const IMPLICIT_GBIS_PROTOCOL = 'implicit_gbis_namd'
 export function isImplicitSolventProtocol(protocol) {
@@ -3604,31 +3604,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // came afterwards.  Feedback first, work second.
     showOpProgress('Relax', 'Sizing the solvated system…', { indeterminate: true })
 
-    // Gate A — pre-flight water-box SIZE check, BEFORE the build. Runs ahead of the disk
-    // forecast so a chosen shell feeds that estimate. Only when sizing is auto (shell 0)
-    // on a local GPU run; a seeded draft / CPU / manual shell skips it (the backend
-    // returns skipped for those too). Best-effort — never blocks a launch on an error.
-    //
-    // ABSENT counts as auto. The wizard sends only the fields the user touched, so an
-    // untouched water shell is not in the payload at all — a `=== 0` test skipped Gate A
-    // for exactly the launches that most need it.
-    if (isLocalRun && !draftId && runsOnGpu && (payload.water_shell_nm ?? 0) === 0) {
+    // Gate A — verify that the fully solvated system fits before starting the build.
+    // Seeded drafts are sized later because their atomistic model is not available yet.
+    if (isLocalRun && !draftId && runsOnGpu) {
       try {
         const adv = await preflightMdVram(payload)
         const gate = gateAMessage(adv)
-        // A protocol that forbids carving never gets a shell applied, whichever tier the
-        // advice came back as — it gets one warning with Cancel / Run anyway, and if the
-        // user proceeds the package is built at FULL box. Reading `adv.carve_allowed`
-        // rather than the tier is what keeps that true: the tiers describe how well a
-        // CARVE would fit, which is not a question this protocol is asking.
-        const mayCarve = adv?.carve_allowed !== false
-        if (gate?.isNotice && mayCarve) {           // A1 — auto-fit a comfortable shell
-          payload.water_shell_nm = adv.recommended_shell_nm
-          showToast(gate.notice, { severity: 'info' })
-        } else if (gate) {                          // a decision, a hard stop, or a warning
+        if (gate) {
           const proceed = await openGateAModal(adv)
           if (!proceed) { hideOpProgress(); _launching = false; runBtn.disabled = false; return }
-          if (mayCarve && adv.tier === 'a2') payload.water_shell_nm = adv.recommended_shell_nm
         }
       } catch { /* preflight is best-effort — never block a launch */ }
     }
@@ -3973,15 +3957,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _renderList()        // list ⚠ marker (rowSig now includes decision)
     _applyJobState(job)  // detail modal + Resume control
   }
-  // Dev-only: preview a Gate A size decision. __NADOC_DBG__.mdForceGateA('a1'|'a2'|'a3').
-  function _forceGateADemo(tier = 'a2') {
+  // Dev-only: preview the full-solvation size gate.
+  function _forceGateADemo(tier = 'a3') {
     const adv = {
-      a1: { skipped: false, tier: 'a1', vram_mb: 12288, recommended_shell_nm: 1.5 },
-      a2: { skipped: false, tier: 'a2', vram_mb: 12288, recommended_shell_nm: 1.1, estimated_atoms: 1_800_000 },
-      a3: { skipped: false, tier: 'a3', vram_mb: 12288, tightest_shell_nm: 0.8, tightest_atoms: 9_000_000, required_vram_mb: 34_000 },
+      a3: { skipped: false, tier: 'a3', vram_mb: 12288, current_atoms: 9_000_000, current_vram_mb: 34_000 },
     }[tier] || null
     const g = gateAMessage(adv)
-    if (!g) { console.warn('md-jobs: tier must be a1 | a2 | a3'); return }
+    if (!g) { console.warn('md-jobs: tier must be a3'); return }
     if (g.isNotice) { showToast(g.notice, { severity: 'info' }); return }
     openGateAModal(adv).then((v) => _mdDebug('Gate A resolved (proceed=%s)', v))
   }
@@ -4100,7 +4082,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const p = job?.prep_params || {}
     const out = {}
     for (const key of ['threads', 'devices', 'salt_mode', 'mg_conc_mM', 'ion_conc_mM',
-                       'padding_nm', 'water_shell_nm', 'minimize_steps', 'fast',
+                       'padding_nm', 'minimize_steps', 'fast',
                        'gpu_resident', 'early_stop_relax',
                        'box_mode']) {
       if (p[key] != null) out[key] = p[key]

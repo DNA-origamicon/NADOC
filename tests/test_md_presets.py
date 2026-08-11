@@ -65,10 +65,10 @@ def test_the_vacuum_tier_is_retired_with_a_reason():
     assert all(PRESETS[i].available for i in (STANDARD, FULL_PHYSICS))
 
 
-def test_solvated_presets_ask_for_a_full_water_box():
-    """A carve forces NVT, which rules out the free stage both presets want."""
-    for pid in (STANDARD, FULL_PHYSICS):
-        assert PRESETS[pid].defaults["water_shell_nm"] == 0.0
+def test_no_preset_exposes_the_retired_water_carving_feature():
+    for preset in PRESETS.values():
+        assert "water_shell_nm" not in preset.defaults
+        assert "allow_water_shell_carve" not in preset.defaults
 
 
 def test_full_physics_disables_early_stop_and_pads_wider():
@@ -96,43 +96,7 @@ def test_literature_trades_nothing_for_speed():
     assert "Methods Mol Biol 1811" in PRESETS[LITERATURE].reference
 
 
-def test_literature_refuses_a_water_shell_carve():
-    """A carve leaves vacuum in the cell, which forces constant volume, which removes both
-    the Note-4 fixed-DNA settle stage and the box-size trace the reference uses to judge
-    equilibration — and leaves no bulk phase for the published ionic condition to be a
-    concentration OF.  Auto-fitting one would quietly turn "the published protocol" into
-    something else.  Every other preset lets prep carve rather than fail.
-    """
-    assert PRESETS[LITERATURE].defaults["allow_water_shell_carve"] is False
-    assert all(
-        "allow_water_shell_carve" not in PRESETS[p].defaults
-        for p in PRESET_ORDER
-        if p != LITERATURE
-    )
-
-
-def test_literature_LOCKS_the_carve_rather_than_merely_defaulting_it():
-    """Not an option, not a default.
-
-    Every other setting a preset supplies is a starting point the user may overrule. This
-    one is not: a carved run is a different experiment, so allowing an override would make
-    the tier's own NAME untrue. It is the only locked field in the catalogue.
-    """
-    assert PRESETS[LITERATURE].locked == frozenset({"allow_water_shell_carve"})
-    assert all(not PRESETS[p].locked for p in PRESET_ORDER if p != LITERATURE)
-
-
-def test_a_locked_field_beats_an_explicit_request():
-    out = apply_preset(
-        LITERATURE,
-        {"allow_water_shell_carve": True},
-        explicit={"allow_water_shell_carve"},
-    )
-    assert out["allow_water_shell_carve"] is False
-
-
-def test_locking_does_not_leak_into_the_presets_other_settings():
-    """A lock is surgical — everything else stays overridable."""
+def test_literature_settings_remain_overridable():
     out = apply_preset(
         LITERATURE,
         {"padding_nm": 1.0, "early_stop_relax": True},
@@ -140,14 +104,10 @@ def test_locking_does_not_leak_into_the_presets_other_settings():
     )
     assert out["padding_nm"] == 1.0
     assert out["early_stop_relax"] is True
-    assert out["allow_water_shell_carve"] is False
 
 
-def test_the_catalogue_tells_the_ui_which_fields_are_locked():
-    """So the wizard can render the control read-only instead of offering a dead one."""
-    by_id = {p["id"]: p for p in preset_catalogue()}
-    assert by_id[LITERATURE]["locked"] == ["allow_water_shell_carve"]
-    assert by_id[STANDARD]["locked"] == []
+def test_the_catalogue_has_no_locked_retired_controls():
+    assert all(p["locked"] == [] for p in preset_catalogue())
 
 
 def test_design_speed_turns_every_measured_accelerator_on():

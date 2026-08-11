@@ -19,6 +19,9 @@ it once on their own machine.
    (license-gated — see below). This is the GPU build NADOC's launch flags expect.
 3. Extract to `~/Applications/` and NADOC auto-detects it (the folder name is
    already a recognized path). Or point `$NADOC_NAMD_BIN` at any `namd3` binary.
+4. To use NADOC's current **GBIS implicit-solvent** protocol, also install the plain
+   `Linux-x86_64-multicore` build. GBIS does not support NAMD GPU-resident mode, and
+   NADOC currently routes this protocol to the CPU build.
 
 ---
 
@@ -81,9 +84,32 @@ namd3 +p<threads> +setcpuaffinity +devices <gpu_ids> <segment>.conf
   **This is the build you want** — origami atomistic systems are large and the
   GPU is ~1–2 orders of magnitude faster than CPU.
 - The plain **`Linux-x86_64-multicore`** (CPU-only) build also works with NADOC:
-  it simply prints `WARNING: +devices ... was not parsed by the RTS` and runs on
-  CPU. Fine for tiny test systems or smoke-testing the pipeline; impractically
-  slow for real production runs.
+  it is used for explicit-solvent CPU runs and is currently required by NADOC's
+  GBIS implicit-solvent protocol. It is fine for small systems or smoke-testing,
+  but is usually impractically slow for large explicit-solvent production runs.
+
+### Solvent and memory policy
+
+Every newly prepared explicit-solvent job contains a complete periodic water box.
+NADOC does not carve the water down to a finite hydration shell to make an oversized
+job fit: doing so leaves vacuum in the cell, changes the ensemble to constant volume,
+removes bulk-solution conditions, and turns the run into a different protocol.
+
+Before a local GPU launch, NADOC estimates the fully solvated atom count and memory
+requirement. A system that exceeds the selected target is stopped before preparation.
+The supported choices are:
+
+- use a GPU with enough VRAM (or a CPU target with enough host memory);
+- reduce the construct or choose a defensible smaller periodic cell/padding setting;
+- use GBIS when an approximate continuum solvent is scientifically acceptable.
+
+GBIS eliminates the explicit water box, but it is not a route to GPU-resident NAMD.
+NAMD 3 supports implicit solvent in its classic CUDA GPU-offload path, while its
+GPU-resident path explicitly rejects GBIS and LCPO/SASA. NADOC currently uses the
+multicore CPU build for GBIS; CUDA-offloaded GBIS would require separate validation.
+See the NAMD 3.0.2 documentation for
+[GPU acceleration](https://www.ks.uiuc.edu/Research/namd/3.0.2/ug/node102.html) and
+[GBIS](https://www.ks.uiuc.edu/Research/namd/3.0.2/ug/node30.html).
 
 ---
 
@@ -108,10 +134,11 @@ ls /usr/lib/wsl/lib/libcuda.so   # the WSL CUDA stub must exist
 
 If `nvidia-smi` works in WSL, GPU access is already done — no further setup.
 
-**VRAM note:** fully-solvated origami boxes can be large. An 8 GB card (e.g. a
-GeForce RTX 2080) handles modest explicit-solvent systems but a big box can
-exceed VRAM and NAMD will fail to allocate on the GPU. Keep the solvent padding
-tight, or fall back to the CPU build for oversized systems.
+**VRAM note:** fully solvated origami boxes can be large. An 8 GB card (for example,
+a GeForce RTX 2080) handles modest explicit-solvent systems, but a large box can exceed
+VRAM. NADOC will not trim away water to make it fit; choose a larger-memory target,
+reduce the system or defensibly reduce its cell, use a sufficiently large CPU host, or
+select GBIS when its approximation is appropriate.
 
 ---
 
@@ -250,5 +277,6 @@ load` reports confident false negatives. See LESSON L14.
 | Sidebar: "NAMD 3 is missing" | Binary not on any recognized path. Set `$NADOC_NAMD_BIN` or install to `~/Applications/...`. Restart the backend after. |
 | `nvidia-smi` fails inside WSL | Windows NVIDIA driver missing/old, or a Linux driver was installed inside WSL. Fix on the Windows side; never install a Linux GPU driver in WSL. |
 | `WARNING: +devices ... not parsed by the RTS` | You're running the **CPU-only** build. It still runs (on CPU). Install the `multicore-CUDA` build for GPU. |
-| NAMD aborts allocating GPU memory | System too large for the card's VRAM. Reduce solvent padding or use the CPU build. |
+| Fully solvated system does not fit / NAMD aborts allocating GPU memory | Use a larger-memory GPU, a sufficiently large CPU host, a smaller construct or defensible cell, or GBIS if continuum solvent is acceptable. NADOC does not carve away water. |
+| GBIS is unavailable | Install the plain `Linux-x86_64-multicore` NAMD build. GBIS cannot use GPU-resident mode and NADOC currently routes it to this CPU build. |
 | Override ignored | `$NADOC_NAMD_BIN` must point at an **executable** file (or PATH-resolvable name). A bad path is silently skipped and resolution falls through. |

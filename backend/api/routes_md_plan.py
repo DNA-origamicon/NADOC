@@ -134,8 +134,14 @@ FIELD_SCOPE: dict[str, str] = {
     "allow_catenated_seed": "relaxation",
     "minimize_steps": "relaxation",
     "protocol": "relaxation",
-    # Everything else — solvation, chemistry, hardware — is shared by both, because the
-    # cell and the PSF a relaxation builds are the ones production inherits verbatim.
+    # Execution choices apply to this relaxation only. Production selects its own target
+    # and GPU mode when it is created.
+    "gpu_resident": "relaxation",
+    "gpu_fallback_policy": "relaxation",
+    "threads": "relaxation",
+    "devices": "relaxation",
+    # Everything else is system preparation: solvation, cell geometry and chemistry are
+    # fixed here because production inherits the relaxation's cell and PSF verbatim.
 }
 
 
@@ -262,7 +268,7 @@ def _design_flags() -> dict:
 
 
 def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> dict:
-    carved = float(resolved.water_shell_nm or 0.0) > 0.0
+    carved = False
     gbis = resolved.protocol == md_presets.IMPLICIT_PROTOCOL
     flags = _design_flags()
     # Mirrors prepare_mgh_slow_release: 2+xT junctions and free single-stranded tails
@@ -331,12 +337,9 @@ def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
         stages=stages,
         n_atoms=body.n_atoms_hint,
     )
-    # Will the full water box fit this machine?  A pre-flight ESTIMATE, reported and never
-    # acted on: prep no longer carves on the user's behalf (that silently turned one
-    # experiment into another), so this is the only thing standing between a too-large box
-    # and an OOM at segment 1.  `source` names the control, so the wizard renders it as a
-    # warning icon against Water shell carve rather than only in the list.
-    if not carved and body.n_atoms_hint:
+    # Will the full water box fit this machine? This fast preview is advisory; the launch
+    # pre-flight performs the more expensive geometry-based check.
+    if body.n_atoms_hint:
         try:
             from backend.core.md_optimize import probe_hardware  # noqa: PLC0415
 
@@ -351,55 +354,17 @@ def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
                         "detail": (
                             f"This system is about {body.n_atoms_hint:,} atoms and the "
                             f"pre-flight estimates room for roughly {cap:,} on the selected "
-                            f"compute target. NADOC does NOT shrink the water for you — it "
-                            f"used to, and a carve is a different experiment (vacuum corners "
-                            f"force constant volume, which deletes the settle stage and the "
-                            f"box-size equilibration criterion). Set a Water shell carve "
-                            f"yourself if you want one, reduce the padding, seed from a "
-                            f"coarse-grained relaxation, or run it anyway — the estimate is "
-                            f"not a measurement and NAMD will answer the memory question "
-                            f"itself at the first segment, before real compute is spent."
+                            f"compute target. Explicit-solvent jobs require a complete water "
+                            f"box. Reduce the padding only if scientifically acceptable, use "
+                            f"larger-memory hardware, or choose a smaller system."
                         ),
                         "applies_to": "all",
-                        "source": "CreateJobRequest.water_shell_nm",
+                        "source": "CreateJobRequest.padding_nm",
                     }
                 )
         except Exception:  # noqa: BLE001, S110
             # A forecast must never break the preview.
             pass
-
-    if not resolved.allow_water_shell_carve and not carved:
-        # A POLICY, not a verdict — deliberately not "blocking".
-        #
-        # This plan cannot know whether the design fits: that needs a solvation profile
-        # (~26 s on a small bundle), far too expensive for an endpoint re-requested on
-        # every keystroke. The fit check belongs to the pre-flight at launch, which
-        # already runs it and already asks. Marking this blocking made the wizard refuse
-        # to create ANY literature run, fitting or not — the opposite of the intent.
-        conditions.append(
-            {
-                "id": "carve_refused",
-                "kind": "forced",
-                "title": "A water-shell carve is not allowed for this protocol",
-                "detail": (
-                    "The water is never trimmed to fit the hardware under this "
-                    "protocol, and that is not overridable here. A carved cell has no "
-                    "bulk phase for the published ionic condition to be a concentration "
-                    "OF, no barostat, and therefore neither the fixed-DNA settle stage "
-                    "nor the box-size trace the reference uses to judge equilibration — "
-                    "it would be a different experiment wearing this protocol's name. "
-                    "If the full box turns out not to fit your GPU, you are WARNED at "
-                    "launch and can run it anyway (the estimate is not a measurement); "
-                    "an out-of-memory failure lands at the first segment, before real "
-                    "compute is spent. Cheaper routes: lower the water padding, seed "
-                    "from an oxDNA or mrDNA relaxation so the all-atom leg is short, run "
-                    "it on RunPod or the cluster, or pick a protocol that permits a "
-                    "carve."
-                ),
-                "applies_to": "all",
-                "source": "CreateJobRequest.allow_water_shell_carve",
-            }
-        )
 
     # Both scopes' integrator objections, stated as conditions so each one lands against
     # the control that caused it (their `source` names the request field).
@@ -710,9 +675,10 @@ def _production_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
             "detail": (
                 "The relaxation never constrains this. A ladder exists to hand over "
                 "equilibrated coordinates; once it has, production may run at any "
-                "sanctioned timestep — 4 fs (the default, hydrogen-mass repartitioned), "
-                "2 fs (rigid bonds, standard masses) or 1 fs (the conservative "
-                "reference). Anything in between is refused outright."
+                "supported timestep. The recommended combinations are 4 fs with rigid "
+                "bonds and hydrogen-mass repartitioning, 2 fs with rigid bonds and standard "
+                "masses, or 1 fs without either. Deliberate overrides are reviewed for "
+                "stability before submission."
             ),
             "applies_to": "all",
             "source": "CreateJobRequest.production_timestep_fs",
@@ -1094,12 +1060,15 @@ def _production_provenance(
         "orientation_restraint": entry(
             bool(body.orientation_restraint),
             "orientation_restraint",
-            reason="off by default; enable only when laboratory-frame rotation is not an observable",
+            reason=(
+                "off by default; most useful for small, anisotropic designs (roughly "
+                "below 500 base pairs) when it substantially reduces the solvent box"
+            ),
         ),
         "orientation_force_constant": entry(
             float(body.orientation_force_constant),
             "orientation_force_constant",
-            reason="the Colvars orientation-restraint example value",
+            reason="the default whole-body orientation-restraint strength",
         ),
         "langevin_damping": entry(
             float(restraints["damping"]),
@@ -1155,9 +1124,11 @@ def _box_fit_condition(
             "kind": "info",
             "title": "Pose-sized cell (overall rotation restrained)",
             "detail": (
-                "The rotation-sized envelope is not required because the quaternion bias "
-                "holds the origami near its production-start orientation. Keep ordinary "
-                "solvent padding for conformational fluctuations and translation."
+                "The rotation-sized envelope is not required because the orientation "
+                "restraint holds the DNA near its production-start pose. This option is "
+                "normally worthwhile only for small, elongated or plate-like designs "
+                "(roughly below 500 base pairs) when it removes substantial solvent. Keep "
+                "ordinary padding for internal fluctuations and translation."
             ),
             "ok": True,
             "override": None,

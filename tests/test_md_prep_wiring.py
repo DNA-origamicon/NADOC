@@ -25,7 +25,6 @@ def _fake_solvate(
     _tmpdir,
     progress=None,
     *,
-    water_shell_nm=None,
     box_mode=None,
 ):
     """Stand-in for gmx solvation: emit the solvate phase, return dummy waters."""

@@ -29,7 +29,7 @@ This is the single source of truth for these variables. The per-tool guides
 | `OXDNA_ANM_BIN` | ANM-oxDNA fork (`DNANM`, protein-DNA) | path to the fork's `oxDNA` binary | `~/anm-oxdna/oxDNA/build_cuda/bin/oxDNA` (CUDA) → `…/build/bin/oxDNA` (CPU) |
 | `DNANALYSIS_BIN` | `DNAnalysis` (H-bond health oracle) | path to `DNAnalysis` | sibling of the resolved oxDNA binary → `DNAnalysis` on PATH |
 | `OXDNA_DEVICE` | oxDNA CUDA device id | default GPU index | `0` |
-| `NADOC_NAMD_BIN` | NAMD 3 | path to `namd3` | `namd3` on PATH → `~/Applications/NAMD_*/namd3` (CUDA build preferred) |
+| `NADOC_NAMD_BIN` | NAMD 3 | path to `namd3` | `namd3` on PATH → `~/Applications/NAMD_*/namd3` (CUDA build preferred; CPU build used for GBIS) |
 | `NADOC_PSFGEN_BIN` | psfgen (ships inside NAMD) | path to `psfgen` | `psfgen` on PATH → `~/Applications/NAMD_*/psfgen` (CUDA build preferred) |
 | `NADOC_NAMD_CORES` | NAMD CPU affinity | `taskset` core spec, e.g. `0-7` | unset → NAMD auto-binds the first N cores |
 | `GMXLIB` | GROMACS force-field dir | force-field directory | queried from `gmx --version`, else `/usr/share/gromacs/top`, `/usr/local/share/gromacs/top` |
@@ -59,7 +59,9 @@ Put the binaries here and NADOC auto-detects them:
 
 The NAMD path is **globbed**, not version-pinned — `NAMD_3.0.2…`, `NAMD_3.0.3…`,
 etc. all match, and a CUDA/GPU build sorts ahead of a CPU-only build. Upgrading
-NAMD needs no code change.
+NAMD needs no code change. Install both variants if you want both normal GPU jobs and
+NADOC's current GBIS protocol: explicit solvent uses the CUDA build where available,
+whereas GBIS is routed to the plain multicore build because it cannot run GPU-resident.
 
 ---
 

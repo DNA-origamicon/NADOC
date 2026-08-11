@@ -3195,7 +3195,6 @@ def prepare_mgh_slow_release(
     #: Deprecated compatibility input. Cell geometry is now selected directly with
     #: ``box_mode`` instead of inferred from a future run length.
     free_ns: Optional[float] = None,
-    water_shell_nm: float = 0.0,
     minimize_steps: int = 4_800,
     gpu_resident_mode: str = "auto",
     min_scale: float = 0.5,
@@ -3315,30 +3314,6 @@ def prepare_mgh_slow_release(
     # gets what it needs.
     minimize_steps = _round_up_to_cycle(minimize_steps)
 
-    water_shell_nm = water_shell_nm or 0.0
-    carve_shell = water_shell_nm > 0
-    # Carved-cell fill fraction — a well-filled carve (tight box) can still run GPU-resident
-    # (see _segment_conf's gpu_resident gate). Uses the memoised dry profile (already built
-    # by the pre-flight sizing), so this adds no real cost. Best-effort → 1.0 on any miss.
-    resident_fill = 1.0  # non-carved: irrelevant (gate uses `not carved`)
-    if carve_shell:
-        resident_fill = 0.0  # carved default = OLD behaviour (offload) unless
-        try:  # we can positively prove the cell is well-filled
-            from backend.core.md_vram import (  # noqa: PLC0415
-                carve_fill_fraction,
-                estimate_profile_from_design,
-            )
-
-            _prof = estimate_profile_from_design(
-                design, padding_nm=padding_nm, atomistic_model=atomistic_model
-            )
-            if _prof:
-                resident_fill = carve_fill_fraction(
-                    _prof["dna_xyz_nm"], _prof["box_nm"], water_shell_nm
-                )
-        except Exception:  # noqa: BLE001 — never fail prep on a fill estimate
-            resident_fill = 0.0
-
     zip_bytes = build_namd_solvated_package(
         design,
         padding_nm=padding_nm,
@@ -3349,7 +3324,6 @@ def prepare_mgh_slow_release(
         seed=seed,
         atomistic_model=atomistic_model,
         solute_coords=solute_coords,
-        water_shell_nm=water_shell_nm if carve_shell else None,
         # Without this the box sizer's atom cap always resolved against device "0",
         # so a CPU-targeted job was sized against VRAM on any host that has a GPU.
         devices=devices,
@@ -3563,9 +3537,7 @@ def prepare_mgh_slow_release(
     # PSF by itself — so ``fast`` stays meaningful there and the later stages keep it.
     fast = fast and not force_soft
 
-    # Build segment list.  A water-shell carve leaves vacuum corners, so the
-    # whole ladder must run NVT (barostat off) — an NPT piston would collapse the
-    # cell onto the DNA's periodic image.  Fast mode halves the step count (4 fs)
+    # Build the full-solvent relaxation ladder. Fast mode halves the step count (4 fs)
     # to hold each stage at its 4.8 ns relaxation target.
     # The ladder's base timestep: explicit if the user chose one, else the historical
     # fast-derived 4/2 fs.  Per-stage tiers (soft 1 fs, gentle 2 fs) still apply on top.
@@ -3583,7 +3555,7 @@ def prepare_mgh_slow_release(
         name_stem,
         soft=force_soft,
         gentle=gentle_ladder,
-        nvt_only=carve_shell,
+        nvt_only=False,
         timestep_fs=ladder_dt,
     )
 
@@ -3609,15 +3581,12 @@ def prepare_mgh_slow_release(
     # pre-flight probe seeds from its output, so it has to run first.)
     solvated_atoms = psf_atom_count(package_dir / f"{name_stem}.psf")
     # "auto" applies the measured size crossover; an explicit user choice overrides it.
-    # "on" still cannot defeat the two HARD incompatibilities (GBIS, a sparsely-filled
-    # carved cell) — those are enforced in _segment_conf, which refuses regardless.
+    # "on" still cannot defeat hard engine incompatibilities such as GBIS.
     _resident_override = {"on": True, "off": False}.get(str(gpu_resident_mode).lower())
     resident_by_size = solvated_atoms is None or solvated_atoms >= _RESIDENT_MIN_ATOMS
     if _resident_override is not None:
         resident_by_size = _resident_override
-    resident_on = resident_by_size and (
-        not carve_shell or resident_fill >= _RESIDENT_MIN_FILL
-    )
+    resident_on = resident_by_size
 
     # Scale minimisation to the system now that the real atom count is known.
     if solvated_atoms:
@@ -3663,8 +3632,8 @@ def prepare_mgh_slow_release(
                 box,
                 mgh_extrabonds,
                 fast=fast,
-                carved=carve_shell,
-                fill_fraction=resident_fill,
+                carved=False,
+                fill_fraction=1.0,
                 structure_psf=structure_psf,
                 rigid_bonds=relax_rigid_bonds,
                 hmr=relax_hmr,
@@ -3739,9 +3708,8 @@ def prepare_mgh_slow_release(
         # production path had no way to know and hardcoded the barostat on.
         "solvation": {
             "padding_nm": float(padding_nm),
-            "water_shell_nm": float(water_shell_nm or 0.0),
-            "carved": bool(carve_shell),
-            "npt_allowed": not carve_shell,
+            "carved": False,
+            "npt_allowed": True,
             # Unrestrained ns the cell was sized for.  A production child re-uses this
             # cell verbatim, so this is the record of the decision every descendant
             # inherits — without it, a package that cannot host a long free run is
@@ -3892,14 +3860,14 @@ def prepare_mgh_slow_release(
             ],
             "ladder_piston_period_decay_fs": [1000.0, 500.0],
             "production_piston_period_decay_fs": [200.0, 100.0],
-            "settle_stage_ps": SETTLE_STAGE_PS if not carve_shell else 0.0,
+            "settle_stage_ps": SETTLE_STAGE_PS,
         },
         # Hand edits to individual stages.  Recorded verbatim: this is the one part of a
         # package that no amount of protocol knowledge can reconstruct.
         "stage_overrides": stage_overrides or {},
         "protocol_fidelity": protocol_fidelity(
             fast=fast,
-            carved=carve_shell,
+            carved=False,
             padding_nm=padding_nm,
             charge_audit=charge_audit,
             early_stop=early_stop_relax,

@@ -5,23 +5,17 @@
  * contract around it: never touch the user's inputs without showing exactly what will
  * change and what the caveats are, then require an explicit Proceed.
  *
- * The caveats are not boilerplate.  The recommendation can flip the run onto a
- * different NAMD code path (a water-shell carve disables GPU-resident mode and forces
- * NVT), and its throughput numbers are extrapolated from two benchmarks — so the popup
- * has to say so before the user commits a multi-hour run to it.
+ * Throughput numbers are extrapolated from measured benchmarks, so the popup makes the
+ * estimate and hardware dependence explicit before applying anything.
  */
 
 /** Field order + labels for the diff table.  Keys match the backend's `recommended`. */
 const FIELDS = [
   { key: 'threads',        label: 'Threads' },
   { key: 'compute',        label: 'Compute' },
-  { key: 'water_shell_a',  label: 'Water shell', unit: ' Å' },
   { key: 'padding_nm',     label: 'Padding',     unit: ' nm' },
   { key: 'minimize_steps', label: 'Min. steps' },
   { key: 'fast',           label: 'Fast (HMR 4 fs)' },
-  // The backend has always computed this (it is what the carve trade-off turns on) but
-  // the card never showed or applied it, so ⚡ silently left the user's GPU-resident
-  // choice untouched while claiming to have optimised the run path.
   { key: 'gpu_resident',   label: 'GPU-resident' },
 ]
 
@@ -74,7 +68,7 @@ export function buildCaveats(result = {}) {
     'and scaled by atom count. Real runs vary — treat them as a ranking, not a promise.',
   )
   out.push(
-    'This only changes run settings (threads, solvation box, integrator path). It does NOT ' +
+    'This only changes run settings (threads, box sizing, integrator path). It does NOT ' +
     'change the force field, the salt, or the protocol\'s stages — the science is untouched.',
   )
   out.push(
@@ -87,26 +81,13 @@ export function buildCaveats(result = {}) {
 /**
  * Which NAMD code path the current Advanced settings actually select.  PURE.
  *
- * This exists because the most consequential thing about the Advanced card is INVISIBLE:
- * a water-shell carve silently disables GPU-resident mode (NAMD aborts at step 0 on a
- * cell containing vacuum), and `fast` off does too.  Surfacing it stops the user from
- * believing they are on the fast integrator when they are not.
- *
  * @returns {{gpuResident:boolean, label:string, detail:string, tone:'ok'|'warn'|'muted'}}
  */
-export function describeRunPath({ compute = 'gpu', water_shell_a = 0, fast = true } = {}) {
-  const shell = Number(water_shell_a) || 0
+export function describeRunPath({ compute = 'gpu', fast = true } = {}) {
   if (compute === 'cpu') {
     return {
       gpuResident: false, tone: 'muted', label: 'CPU (multicore)',
       detail: 'No GPU. Required for implicit solvent; far slower for explicit water.',
-    }
-  }
-  if (shell > 0) {
-    return {
-      gpuResident: false, tone: 'warn', label: 'CUDA offload',
-      detail: `GPU-resident is OFF — the ${shell} Å water shell leaves vacuum in the cell, ` +
-              'which GPU-resident cannot handle. Nonbonded + PME still run on the GPU. NVT (no barostat).',
     }
   }
   if (!fast) {
@@ -117,7 +98,7 @@ export function describeRunPath({ compute = 'gpu', water_shell_a = 0, fast = tru
   }
   return {
     gpuResident: true, tone: 'ok', label: 'GPU-resident',
-    detail: 'Full box, no carve — integrator + bonded forces stay on the GPU (~2.6x faster per atom).',
+    detail: 'The complete solvent box uses the GPU-resident integrator and bonded-force path.',
   }
 }
 
@@ -199,12 +180,12 @@ const esc = (s) => String(s).replace(/[&<>"']/g, c => (
 // ── Progress ─────────────────────────────────────────────────────────────────
 // The stage boundaries below are REAL — each is a separate awaited backend call, not
 // a timed animation.  `sizing` is the slow one (~26 s on a 6-helix bundle: it builds
-// the design's full heavy-atom model and grid-measures its hydration volume), which
+// the design's full heavy-atom model and estimates the complete solvent box), which
 // is exactly why it is worth showing at all.
 export const OPTIMIZE_STAGES = [
   { key: 'hardware', label: 'Reading GPU, RAM and CPU' },
-  { key: 'sizing',   label: 'Building heavy-atom model, measuring hydration volume' },
-  { key: 'choose',   label: 'Scoring candidate water shells and settings' },
+  { key: 'sizing',   label: 'Building heavy-atom model, sizing the solvent box' },
+  { key: 'choose',   label: 'Scoring compatible settings' },
 ]
 
 /** Percent complete once *done* of *total* stages have finished. PURE. */

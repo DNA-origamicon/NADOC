@@ -12,7 +12,7 @@ const CATALOGUE = {
     // the host-gated one (it needs a non-CUDA NAMD build).
     { id: 'fast_shape', label: 'Fast Shape Check (Vacuum)', summary: 'No solvent.',
       available: true, unavailable_reason: '',
-      reference: 'MMB 1811 (2018) §3.2', defaults: { water_shell_nm: 0 },
+      reference: 'MMB 1811 (2018) §3.2', defaults: {},
       protocol: 'vacuum_enrgmd_namd', is_default: false },
     { id: 'implicit_gbis', label: 'Implicit Solvent (GBIS)', summary: 'Continuum solvent.',
       available: false, unavailable_reason: 'Needs a non-CUDA NAMD build.',

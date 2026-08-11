@@ -346,10 +346,10 @@ export function presetSummary(preset, plan) {
  *  risks a 400 when they disagree. */
 export const WIZARD_FIELDS = [
   'threads', 'devices', 'salt_mode', 'mg_conc_mM', 'ion_conc_mM', 'padding_nm',
-  'box_mode', 'water_shell_nm', 'minimize_steps', 'fast',
+  'box_mode', 'minimize_steps', 'fast',
   'gpu_fallback_policy', 'gpu_resident', 'early_stop_relax',
   'early_stop_tier', 'allow_catenated_seed',
-  'allow_water_shell_carve', 'force_soft', 'declash',
+  'force_soft', 'declash',
   // The three integrator axes, separated (exp51). null on any of them means "auto",
   // which the backend resolves from that run's timestep.
   'relax_timestep_fs', 'relax_rigid_bonds', 'relax_hmr',
@@ -364,11 +364,13 @@ export const DEFAULT_FIELD_SCOPES = {
   force_soft: 'relaxation', declash: 'relaxation', early_stop_relax: 'relaxation',
   early_stop_tier: 'relaxation',
   minimize_steps: 'relaxation', protocol: 'relaxation',
+  gpu_resident: 'relaxation', gpu_fallback_policy: 'relaxation',
+  threads: 'relaxation', devices: 'relaxation',
 }
 
 /** Pure: the scope of one field — the plan's declaration wins, then the local table,
- *  then 'both' (solvation, chemistry and hardware are shared by construction: the cell
- *  and PSF a relaxation builds are what production inherits). */
+ *  then 'both' (system-preparation settings are inherited by production because the cell
+ *  and PSF are built during relaxation preparation). */
 export function fieldScope(key, plan) {
   return plan?.field_scopes?.[key] || DEFAULT_FIELD_SCOPES[key] || 'both'
 }
@@ -783,7 +785,7 @@ export function isProductionParent(job) {
 /**
  * Pure: the conditions panel, split by how much the user needs to care.
  *
- * `blocking` first — a refused water-shell carve or a cell too small to rotate in should
+ * `blocking` first — a cell too small to rotate in should
  * not be three scrolls below a note about output cadence.
  */
 export function conditionBadges(plan) {

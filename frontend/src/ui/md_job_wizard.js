@@ -96,22 +96,19 @@ const FIELDS = [
   { key: 'padding_nm', label: 'Water padding', unit: 'nm', type: 'number', step: 0.1, min: 0.1,
     recommendation: 'Recommended: 2.0 nm for literature work; 1.2 nm for faster design iteration when memory is limited. More padding reduces periodic-image interactions but adds water and runtime.',
     help: 'Water added on every face of the solute. The calculated starting value comes from the selected protocol and target.' },
-  { key: 'water_shell_nm', label: 'Water shell carve', unit: 'nm', type: 'number', step: 0.1, min: 0,
-    recommendation: 'Recommended: 0 nm (a full periodic water box). If the full box cannot fit, use at least 1.5 nm; carving forces constant-volume dynamics and removes the NPT settle/box-trace check.',
-    help: '0 keeps the full water box. A positive value keeps only water close to DNA, reducing memory at the cost of different cell physics.' },
   { key: 'box_mode', label: 'Cell sizing', type: 'select',
     options: [{ value: 'rotation', label: 'Rotation-safe (cubic)' },
               { value: 'bbox', label: 'Axis-aligned bounding box' }],
-    recommendation: 'Recommended: rotation-safe for any unrestrained production. Use the smaller bounding box only for relaxation-only work or when an orientation restraint prevents global rotation. Production inherits this cell and cannot enlarge it later.',
+    recommendation: 'Recommended: rotation-safe for unrestrained production. A smaller bounding box with an orientation restraint is mainly useful for small, anisotropic designs (roughly below 500 base pairs) when it removes substantial solvent. Production inherits this cell and cannot enlarge it later.',
     help: 'Directly chooses the cell geometry. The calculated default is rotation-safe so run length no longer changes the box invisibly.' },
   { key: 'salt_mode', label: 'Ionic conditions', type: 'select',
     options: [{ value: 'screening', label: 'Screening (validated origami defaults)' },
               { value: 'custom', label: 'Custom' }],
-    help: 'Screening pins magnesium to 12.5 mM with no sodium, and the origami is neutralised by Mg(H₂O)₆ — the published condition. Custom hands the two fields below back to you.' },
+    help: 'Screening uses 12.5 mM magnesium, no added sodium, and Mg(H₂O)₆ counterions to neutralise the DNA. Choose Custom to set magnesium and NaCl concentrations directly.' },
   { key: 'mg_conc_mM', label: 'Magnesium', unit: 'mM', type: 'number', step: 0.5, min: 0 },
   { key: 'ion_conc_mM', label: 'NaCl', unit: 'mM', type: 'number', step: 5, min: 0 },
   { key: 'minimize_steps', label: 'Minimisation steps', type: 'number', step: 100, min: 100,
-    help: 'A FLOOR, not the value: minimisation scales to one step per 10 atoms after solvation. A flat count is safe on a small bundle and catastrophic on a large origami.' },
+    help: 'Minimum number of minimisation steps. The actual count increases with the solvated atom count so larger systems receive enough minimisation without requiring manual adjustment.' },
   // ── The three integrator axes, separated (exp51, 2026-08-05) ──
   // These used to be one dial: "Fast relaxation (HMR + 4 fs)" bundled a timestep with a
   // mass set, and rigidBonds was never exposed at all. exp51 measured the combinations
@@ -123,7 +120,7 @@ const FIELDS = [
               { value: '1', label: '1 fs (conservative)' }],
     parse: Number,
     fallback: plan => (plan?.request?.fast?.value ? 4 : 2),
-    help: 'The base timestep for the relaxation ladder — NOT for production, which has its own below. Per-stage tiers still apply on top: a stage that needs the soft integrator runs 1 fs and a declashed ladder runs 2 fs whatever this says, and the stage table shows exactly what each column will use.' },
+    help: 'Base timestep for the relaxation ladder. Individual stages may use a smaller timestep when needed for stability; the stage table shows the value used by each stage. Production has a separate timestep setting.' },
   { key: 'relax_rigid_bonds', label: 'Ladder rigid bonds', type: 'checkbox',
     // The box shows what the run WILL do: ticked = rigidBonds all. Untouched it follows
     // the timestep's recommendation; touching it makes the choice explicit, and any
@@ -131,44 +128,42 @@ const FIELDS = [
     fallback: (plan, valueOf) => (Number(valueOf('relax_timestep_fs')) <= 1 ? 'none' : 'all'),
     check: v => v === 'all',
     parse: on => (on ? 'all' : 'none'),
-    help: 'Hold bonds to hydrogen rigid (RATTLE). Constraining them removes the ~11 fs X–H stretch, which is what makes 2 fs possible at all. Recommended on above 1 fs; exp51 measured 1 fs + rigid to be perfectly stable too, so it is a free choice there.' },
+    help: 'Constrains bonds to hydrogen with RATTLE, allowing stable timesteps above 1 fs. Recommended for 2 fs and 4 fs; usually unnecessary at 1 fs.' },
   { key: 'relax_hmr', label: 'Ladder H-mass repartitioning (HMR)', type: 'checkbox',
     fallback: (plan, valueOf) => Number(valueOf('relax_timestep_fs')) >= 4,
     check: v => !!v,
     parse: on => !!on,
-    help: 'Move mass from each non-water hydrogen onto its bonded heavy atom (×3), slowing the X–H stretch so a 4 fs step is stable. Recommended on at 4 fs and off below: exp51 measured 4 fs on standard masses failing RATTLE after 16.8 ps, and HMR below 4 fs costing 3.5–35× in energy conservation.' },
+    help: 'Moves mass from each non-water hydrogen to its bonded heavy atom, allowing a 4 fs timestep with rigid bonds. Recommended at 4 fs and normally off at 1–2 fs.' },
   { key: 'early_stop_relax', label: 'Stop settled stages early', type: 'checkbox',
-    help: 'Skip a stage’s remaining chunks once BOTH its energy and its base pairing are flat. Turn it off for a run whose numbers are going in a paper.' },
+    help: 'Finishes a relaxation stage once its energy and base-pairing measurements have stabilised. Turn this off when every stage must run for its full scheduled length.' },
   // The seed-topology gate's override. It had no control at all, and the error it raises
   // named an environment variable nothing reads — so a design whose extra bases build
   // catenated was simply a dead end in the app. Off by default: both defects are permanent.
   { key: 'allow_catenated_seed', label: 'Build despite a linked crossover', type: 'checkbox',
-    help: 'Build even when the seed carries a permanent topological defect — a reciprocal crossover pair whose backbones are wound around each other (linking number ≠ 0), or a covalent bond threaded through a nucleotide ring. Every chain end is pinned into the network, so neither can relax away: the trajectory measures the artefact instead (a threaded ring becomes a permanently ~3 Å phosphodiester). Only designs with inserted bases can trip this, and it is recorded in the manifest either way. Leave off unless you are deliberately studying the defect.' },
+    help: 'Allows preparation despite a permanent topological defect, such as linked crossover backbones or a bond threaded through a nucleotide ring. These defects cannot relax away and can dominate the trajectory. Leave this off unless you have inspected the warning and deliberately want to simulate that topology.' },
   // Remote runs judge "settled" on the NODE, with whatever python that node has — so the
   // criterion is a genuine choice there and not one anywhere else. It had no control at
   // all, which meant every cluster run silently used the weaker tier B while the identical
   // local run used the full one: the same protocol truncating its ladder on two different
   // tests depending only on where it happened to run.
   { key: 'early_stop_tier', label: 'Remote early-stop test', type: 'select', remoteOnly: true,
-    options: [{ value: 'B', label: 'B — energy only (no extra packages)' },
-              { value: 'A', label: 'A — energy AND base pairing (matches local)' }],
-    help: 'Which test the CLUSTER uses to call a stage settled. A local run always uses both criteria; on a node it depends what is installed. B needs only the standard library. A ships the real health check and needs numpy/scipy/MDAnalysis on the node python — if they are missing it fails safe and simply never skips. Ignored entirely when the run is local, or when the setting above is off.' },
-  { key: 'allow_water_shell_carve', label: 'Allow a carve if the full box will not fit', type: 'checkbox',
-    help: 'Off means the job STOPS rather than shrinking the water, because a carve stops the run being the published protocol.' },
+    options: [{ value: 'B', label: 'Energy only' },
+              { value: 'A', label: 'Energy and base pairing' }],
+    help: 'Chooses how a remote run decides that a relaxation stage has settled. Energy-only has no additional software requirements. Energy and base pairing is more informative but requires the analysis libraries installed on the compute node. Used only when early stopping is enabled.' },
   { key: 'gpu_resident', label: 'GPU-resident mode', type: 'select',
     options: [{ value: 'auto', label: 'Auto (decide from the atom count)' },
               { value: 'on', label: 'On' }, { value: 'off', label: 'Off' }],
-    help: 'Keeps integration and bonded forces on the GPU. RunPod defaults this on: its RTX 4090 delivered ~301 ns/day versus ~175 in CUDA-offload mode on the 62.7k-atom 2hb. Hard incompatibilities still force it off safely.' },
+    help: 'Keeps integration and bonded-force calculations on the GPU. Auto selects the appropriate mode from the system size and requested features; incompatible settings use CUDA-offload mode instead.' },
   { key: 'gpu_fallback_policy', label: 'If the fastest GPU mode cannot start', type: 'select',
     options: [{ value: 'ask', label: 'Pause and ask' },
               { value: 'auto_offload', label: 'Fall back automatically' }],
-    help: 'Pausing means an unattended run stops and notifies instead of silently running about three times slower.' },
+    help: 'Choose whether the job pauses for your decision or automatically uses the compatible CUDA-offload mode when GPU-resident mode is unavailable.' },
   // Local-only. On a cluster the ALLOCATION decides both — cores come from the SLURM
   // request sized in step 1, and the GPU is whatever the scheduler hands out — so these
   // two controls are not just irrelevant there, they contradict what will run.
   { key: 'threads', label: 'CPU threads', type: 'number', step: 1, min: 1, localOnly: true },
   { key: 'devices', label: 'CUDA devices', type: 'text', localOnly: true,
-    help: '"0" for the first GPU, "0,1" for two, or "cpu" for the multicore build.' },
+    help: 'GPU device numbers to use, such as "0" for one GPU or "0,1" for two. Use "cpu" to run without CUDA.' },
 ]
 
 /** Descriptor by key, so the submit filter can ask the same question the renderer asks
@@ -206,36 +201,36 @@ export function fieldAppliesToTarget(field, target = 'local') {
 const PRODUCTION_FIELD_DEFS = [
   { key: 'length_ns', label: 'Run length', unit: 'ns', type: 'number', step: 1, min: 0.001,
     group: 'run',
-    help: 'How long the unrestrained run samples for. The cell was sized once, when the relaxation was prepared — a run longer than that cell supports is flagged as a condition on the next tab, with the override.' },
+    help: 'Amount of simulated time to produce. The solvent cell was fixed during preparation; the review step warns if an unrestrained run may rotate beyond the available cell.' },
   { key: 'dcd_freq', label: 'Trajectory interval', unit: 'steps', type: 'number', step: 100, min: 100,
     group: 'run',
-    help: 'How often a frame is written. Larger means a smaller file: the disk forecast scales directly with this. Lower it when the trajectory feeds fluctuation-based parameter extraction (FEM/SNUPI/mrDNA).' },
+    help: 'Number of integration steps between saved trajectory frames. Larger intervals reduce storage use; smaller intervals resolve faster motion and improve fluctuation estimates.' },
   { key: 'enm_restraints', label: 'Restraints', type: 'select', group: 'run',
     options: [{ value: 'off', label: 'None — unrestrained (default)' },
               { value: 'on', label: 'Keep an elastic network (restrained)' },
               { value: 'auto', label: 'Continue parent production state' }],
     format: v => (v == null ? 'off' : String(v)),
-    help: 'Normal explicit-solvent production is unrestrained. In the Aksimentiev tutorial, k = 0.1 is an equilibration rung followed by k = 0; the associated paper likewise removes the network for production. Enable a network only for a deliberately restrained experiment. It is rebuilt from the equilibrated starting coordinates.' },
+    help: 'Production normally runs without an elastic network so the structure can fluctuate freely. Keep the network only when the scientific question requires restrained motion; it is rebuilt around the equilibrated starting structure.' },
   { key: 'orientation_restraint', label: 'Limit rotational diffusion', type: 'checkbox',
     group: 'run', check: v => !!v, parse: on => !!on,
-    help: 'Holds only the origami’s best-fit overall orientation near its equilibrated production-start pose. Internal bending, twisting and breathing remain free. This permits an anisotropic box sized to a rod or plate’s fixed pose; do not enable it when rotational diffusion is an observable.' },
+    help: 'Intended mainly for small, elongated or plate-like designs—roughly below 500 base pairs—when preventing whole-body rotation permits a substantially smaller solvent box. Larger designs often pay more restraint overhead than they save in water. Internal bending, twisting and breathing remain free. Do not enable it when rotational diffusion is an observable.' },
   { key: 'orientation_force_constant', label: 'Orientation strength', unit: 'kcal/mol',
     type: 'number', step: 50, min: 0.01, group: 'run',
-    help: 'Quaternion harmonic strength; 500 is the Colvars manual example. Quaternions are dimensionless, so this is energy rather than kcal/mol/Å². It is used only when rotational diffusion is limited.' },
+    help: 'Strength of the whole-body orientation restraint. The default is a strong reference value; reduce it only when some rotational freedom is desired. Used only when rotational diffusion is limited.' },
   { key: 'langevin_damping', label: 'Langevin coupling', unit: 'ps⁻¹', type: 'number',
     step: 0.5, min: 0.01, group: 'run',
-    help: 'Blank uses the literature production value (1). The ladder runs at 5, which is an equilibration setting: at that coupling the dynamics are overdamped, so anything time-dependent — diffusion, relaxation times, breathing kinetics — is scaled by something unrelated to the system. Equilibrium averages are unaffected.' },
+    help: 'Blank uses 1 ps⁻¹, suitable for production dynamics. Stronger coupling damps motion and can distort diffusion, relaxation times and other time-dependent measurements, although equilibrium averages should remain unchanged.' },
   { key: 'seed', label: 'Random seed', type: 'number', step: 1, min: 1, group: 'run',
     help: ({ continuation }) => (continuation
       ? 'Blank draws a fresh seed when the job is created. This run inherits its velocities from the checkpoint it continues, so the seed does not choose them — it drives the Langevin thermostat from that point on. Two continuations of one checkpoint with different seeds diverge, but both carry the parent’s whole history, so they are not independent samples of it.'
-      : 'Blank draws a fresh seed when the job is created, which is what makes several productions off one relaxation independent samples. Set one only to reproduce a specific past trajectory — the seed a run used is recorded on the job and in its manifest.') },
+      : 'Blank draws a fresh seed when the job is created, allowing several production runs from one relaxation to sample independent trajectories. Set a value only when reproducing a specific past run; the chosen seed is recorded with the job.') },
   { key: 'production_timestep_fs', label: 'Timestep', unit: 'fs', type: 'select',
     group: 'integrator',
     options: [{ value: '4', label: '4 fs (faster, risks RATTLE)' },
               { value: '2', label: '2 fs (standard)' },
               { value: '1', label: '1 fs (conservative)' }],
     parse: Number,
-    help: ({ continuation }) => 'The relaxation does not constrain this — a ladder exists to hand over equilibrated coordinates, and once it has, production may run at any sanctioned timestep. Each option changes more than the number: 4 fs is rigid bonds on a repartitioned PSF, 2 fs is rigid bonds on standard masses, 1 fs is flexible. Only these three are allowed.'
+    help: ({ continuation }) => 'Production may use 1, 2 or 4 fs independently of the relaxation timestep. The recommended combinations are 4 fs with rigid bonds and HMR, 2 fs with rigid bonds and standard masses, or 1 fs without either; the controls below allow deliberate overrides and flag unsafe combinations.'
       + (continuation
         ? ' Changing it mid-chain is legal but makes a discontinuity: the two legs are then not one trajectory at one integrator, which matters for anything read off the combined run.'
         : '') },
@@ -244,26 +239,26 @@ const PRODUCTION_FIELD_DEFS = [
     fallback: (plan, valueOf) => (Number(valueOf('production_timestep_fs')) <= 1 ? 'none' : 'all'),
     check: v => v === 'all',
     parse: on => (on ? 'all' : 'none'),
-    help: 'Hold bonds to hydrogen rigid (RATTLE). Constraining them removes the ~11 fs X–H stretch, which is what makes 2 fs possible at all. Recommended on above 1 fs; exp51 measured 1 fs + rigid to be perfectly stable too, so it is a free choice there.' },
+    help: 'Constrains bonds to hydrogen with RATTLE, allowing stable timesteps above 1 fs. Recommended for 2 fs and 4 fs; usually unnecessary at 1 fs.' },
   { key: 'production_hmr', label: 'H-mass repartitioning (HMR)', type: 'checkbox',
     group: 'integrator',
     fallback: (plan, valueOf) => Number(valueOf('production_timestep_fs')) >= 4,
     check: v => !!v,
     parse: on => !!on,
-    help: 'Move mass from each non-water hydrogen onto its bonded heavy atom (×3), slowing the X–H stretch so a 4 fs step is stable. The repartitioned PSF is built on demand from the package’s own topology, so this run may use HMR even if the relaxation did not.' },
+    help: 'Moves mass from each non-water hydrogen to its bonded heavy atom, allowing a 4 fs timestep with rigid bonds. Recommended at 4 fs and normally off at 1–2 fs.' },
   { key: 'gpu_resident', label: 'GPU-resident mode', type: 'select', group: 'integrator',
     options: [{ value: 'auto', label: 'Auto (decide from the atom count)' },
               { value: 'on', label: 'On' }, { value: 'off', label: 'Off' }],
     format: v => (v == null ? 'auto' : String(v)),
-    help: 'Keeps integration and bonded forces on the GPU. RunPod defaults this on because its RTX 4090 wins even below the local machine’s generic atom-count crossover. A hard anchor still forces it off — NAMD 3 refuses fixedAtoms under GPU-resident.' },
+    help: 'Keeps integration and bonded-force calculations on the GPU. Auto selects the appropriate mode from system size and requested features. Fixed atom anchors require the compatible CUDA-offload mode.' },
 ]
 
 /** The production pane's groups, in order. */
 const PRODUCTION_GROUPS = [
   { key: 'run', title: 'This production run',
-    help: 'What this run samples, for how long, and under what restraints. None of it is inherited — each is a choice about this trajectory.' },
+    help: 'What this trajectory samples, for how long, and under what restraints. Defaults may follow the parent run, but changes here apply only to this production.' },
   { key: 'integrator', title: 'Integrator and hardware',
-    help: 'Recorded on the package when the relaxation was prepared, and overridable here for this run alone. An untouched control shows what the package’s own choice resolves to.' },
+    help: 'Initially follows the relaxation settings and can be changed for this production run. Untouched controls show the inherited choice.' },
 ]
 
 /** The settings pane's groups, in order. Every control states which run it governs —
@@ -271,11 +266,11 @@ const PRODUCTION_GROUPS = [
  *  like a relaxation setting. */
 const SCOPE_GROUPS = [
   { scope: 'relaxation', title: 'Relaxation ladder',
-    help: 'Applies to the 22-stage relaxation this job runs now — the stage table on the next tab is exactly these settings.' },
+    help: 'Applies to the multi-stage relaxation this job runs now. The stage table on the next tab shows the resolved setting for every stage.' },
   { scope: 'production', title: 'Production run',
-    help: 'Recorded now, applied when you later run production off this package. Changing these does not alter the ladder.' },
-  { scope: 'both', title: 'Both runs',
-    help: 'Solvation, chemistry and hardware. The cell and the PSF the relaxation builds are what production inherits, so these are shared by construction.' },
+    help: 'Saved for production runs started from this relaxation. These settings do not alter the relaxation ladder.' },
+  { scope: 'both', title: 'System preparation',
+    help: 'Defines the solvated molecular system built for relaxation. Subsequent production runs reuse this topology, ion composition and cell, so changing them later requires preparing a new relaxation package.' },
 ]
 
 const PROVENANCE_TEXT = {
@@ -1432,9 +1427,8 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     renderStages()
     renderConditions()
     renderSummary()
-    // ⚡ recommends SOLVATION and ladder settings — padding, water shell, minimisation
-    // steps, fast mode. A production child re-solvates nothing, so every one of those
-    // would write into a run that cannot use them.
+    // ⚡ recommends preparation and ladder settings. A production child re-solvates
+    // nothing, so those settings would write into a run that cannot use them.
     // ⚡ writes recommended settings, so it has nothing to do in a view that cannot write.
     const prod = state.mode === 'production' || readOnly
     optimizeBtn.style.display = prod ? 'none' : ''
@@ -1698,7 +1692,6 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
       threads: Number(valueOf('threads')) || undefined,
       compute: /^(cpu|none)$/i.test(devices) ? 'cpu' : 'gpu',
       // The recommender speaks Ångström for the shell; the request field is nm.
-      water_shell_a: (Number(valueOf('water_shell_nm')) || 0) * 10,
       padding_nm: Number(valueOf('padding_nm')) || undefined,
       minimize_steps: Number(valueOf('minimize_steps')) || undefined,
       fast: !!valueOf('fast'),
@@ -1712,7 +1705,6 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     record()
     if (rec.threads != null) state.touched.threads = Number(rec.threads)
     if (rec.compute != null) state.touched.devices = rec.compute === 'cpu' ? 'cpu' : '0'
-    if (rec.water_shell_a != null) state.touched.water_shell_nm = Number(rec.water_shell_a) / 10
     if (rec.padding_nm != null) state.touched.padding_nm = Number(rec.padding_nm)
     if (rec.minimize_steps != null) state.touched.minimize_steps = Number(rec.minimize_steps)
     if (rec.fast != null) state.touched.fast = !!rec.fast

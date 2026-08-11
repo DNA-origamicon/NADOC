@@ -161,7 +161,7 @@ class TestFreeRunCellGuard:
         assert condition["ok"] is True
         assert condition["override"] is None
         assert condition["source"] == "ProductionRunRequest.orientation_restraint"
-        assert "quaternion" in condition["detail"]
+        assert "below 500 base pairs" in condition["detail"]
 
     def test_a_rotation_sized_cell_passes(self, tmp_path) -> None:
         job = _package(tmp_path, _FITS_ROTATED)

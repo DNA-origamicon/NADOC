@@ -412,7 +412,6 @@ def _fake_solvate(
     _tmpdir,
     progress=None,
     *,
-    water_shell_nm=None,
     box_mode=None,
 ):
     """Stand-in for gmx solvation (mirrors test_namd_anchors): psfgen still runs for real,

@@ -682,63 +682,6 @@ def test_the_literature_preset_runs_the_papers_relaxation_integrator(client):
     assert all(s["params"]["rigidbonds"] == "all" for s in plan["stages"][1:])
 
 
-def test_the_literature_preset_declares_the_carve_refusal_up_front(client):
-    """Stated BEFORE anything is created — not discovered as a failed job later."""
-    conds = {c["id"]: c for c in _plan(client, relax_preset="literature")["conditions"]}
-    assert "settle" in conds["carve_refused"]["detail"]
-    assert "carve_refused" not in {
-        c["id"] for c in _plan(client, relax_preset="design_speed")["conditions"]
-    }
-
-
-def test_the_carve_refusal_is_a_policy_not_a_verdict(client):
-    """It must NOT block creating the run.
-
-    This plan has no idea whether the design fits — that needs a solvation profile, far
-    too expensive for an endpoint re-requested on every keystroke. Marking it `blocking`
-    made the wizard refuse to create ANY literature run, fitting or not, with no way
-    forward. The fit check belongs to the launch pre-flight, which already runs it.
-    """
-    conds = {c["id"]: c for c in _plan(client, relax_preset="literature")["conditions"]}
-    assert conds["carve_refused"]["kind"] != "blocking"
-    assert not [
-        c
-        for c in _plan(client, relax_preset="literature")["conditions"]
-        if c["kind"] == "blocking"
-    ]
-
-
-def test_the_carve_refusal_names_the_ways_forward(client):
-    """A refusal the user cannot act on is just a wall.
-
-    It must ALSO say that a run which does not fit is warned-and-attempted, not blocked —
-    whether a system fits is a property of today's hardware, and the pre-flight is an
-    estimate rather than a measurement.
-    """
-    detail = {
-        c["id"]: c for c in _plan(client, relax_preset="literature")["conditions"]
-    }["carve_refused"]["detail"]
-    assert "padding" in detail  # lower it
-    assert "oxDNA or mrDNA" in detail  # change resolution — the reference's own answer
-    assert "RunPod or the cluster" in detail  # or run it somewhere bigger
-    assert "run it anyway" in detail  # and you are never simply blocked
-
-
-def test_the_literature_preset_LOCKS_the_carve_against_an_explicit_request(client):
-    """Not an option — a carved run is a different experiment wearing this tier's name.
-
-    Reported as `forced`, which is what makes the wizard render the control read-only with
-    the reason rather than offering one that silently does nothing.
-    """
-    plan = _plan(client, relax_preset="literature", allow_water_shell_carve=True)
-    entry = plan["request"]["allow_water_shell_carve"]
-    assert entry["value"] is False
-    assert entry["provenance"] == "forced"
-    assert "owns this setting" in entry["reason"]
-    # ...and the condition still stands, because the override did not take.
-    assert "carve_refused" in {c["id"] for c in plan["conditions"]}
-
-
 def test_locking_is_surgical_the_rest_of_the_tier_stays_overridable(client):
     """A preset is a starting point; only the naming-critical field is a cage."""
     plan = _plan(client, relax_preset="literature", padding_nm=1.0)
@@ -749,13 +692,11 @@ def test_locking_is_surgical_the_rest_of_the_tier_stays_overridable(client):
     }
 
 
-def test_a_tier_that_permits_carving_reports_it_as_an_ordinary_choice(client):
-    plan = _plan(client, relax_preset="design_speed", allow_water_shell_carve=False)
-    assert plan["request"]["allow_water_shell_carve"] == {
-        "value": False,
-        "provenance": "user",
-        "reason": "",
-    }
+def test_relaxation_plan_has_no_water_carving_controls_or_conditions(client):
+    plan = _plan(client, relax_preset="design_speed")
+    assert "water_shell_nm" not in plan["request"]
+    assert "allow_water_shell_carve" not in plan["request"]
+    assert "carve_refused" not in {c["id"] for c in plan["conditions"]}
 
 
 def test_the_fast_preset_stops_settled_stages_and_the_literature_one_does_not(client):

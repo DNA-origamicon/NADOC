@@ -95,8 +95,10 @@ from backend.core.namd_runner import (
 )
 from backend.core.md_vram import (
     detect_vram_mb,
+    estimate_vram_mb,
+    max_atoms_for_vram,
     package_solvation_profile,
-    recommend_downsize,
+    required_vram_mb,
 )
 
 logger = logging.getLogger(__name__)
@@ -154,24 +156,6 @@ class CreateJobRequest(BaseModel):
     # Backward-compatible input for saved drafts and older API clients. It no longer
     # controls cell geometry; callers should send box_mode explicitly.
     production_ns_intent: Optional[float] = Field(None, gt=0.0, le=MAX_PRODUCTION_NS)
-    water_shell_nm: float = Field(
-        0.0,
-        ge=0.0,
-        description="If >0, keep only water within this distance (nm) of the DNA "
-        "and drop the rest, then run NVT. Halves the atom count for "
-        "large designs so GPU-resident NAMD fits a small card. "
-        "Use ≥0.6 nm (2·shell ≥ 12 Å cutoff); 1.5 nm recommended.",
-    )
-    allow_water_shell_carve: bool = Field(
-        True,
-        description="May prep fall back to a water-shell carve when the full box will "
-        "not fit the compute target? Default yes — a carve is how a large "
-        "origami runs at all on a small card. Set false to REFUSE instead: a "
-        "carve leaves vacuum in the cell, which forces constant volume, which "
-        "deletes the Note-4 settle stage AND the box-size equilibration "
-        "criterion — so the run is no longer the published protocol. The "
-        "'literature' preset sets this false for exactly that reason.",
-    )
     minimize_steps: int = Field(4_800, ge=100)
     declash: bool = Field(
         False,
@@ -253,8 +237,7 @@ class CreateJobRequest(BaseModel):
         "forces on the GPU and is a LARGE-system win (3.2x at 3.14M atoms), "
         "but a LOSS below ~100k (both paths hit the same per-step floor and "
         "resident's setup is pure overhead — measured 0.88-0.97x at 32.5k). "
-        "'on' is still refused for GBIS and for a sparsely-filled carved cell, "
-        "where it cannot run at all.",
+        "'on' is refused for GBIS, which NAMD cannot run in resident mode.",
     )
 
     @field_validator("gpu_resident")
@@ -1908,7 +1891,6 @@ def _production_fast_plan(job: MdJob, body: ProductionRequest) -> dict:
         requested = relax_choice.get("timestep_fs")
     if requested not in (1.0, 2.0, 4.0):
         requested = manifest.get("production_timestep_fs")
-    pinned = body.production_timestep_fs in (1.0, 2.0, 4.0)
     if requested in (1.0, 2.0, 4.0):
         timestep_fs = float(requested)
     else:
@@ -2266,9 +2248,7 @@ def _apply_relax_preset(body: CreateJobRequest) -> CreateJobRequest:
     implicit solvent, and nothing caught it.
 
     A preset's ``locked`` fields behave like ``protocol``: it owns them outright, so an
-    explicit request value does NOT win.  Reserved for settings whose override would make
-    the preset's name untrue — `literature` locks ``allow_water_shell_carve``, because a
-    carved cell has no bulk phase for the published ionic condition to be defined in.
+    explicit request value does not win.
 
     Backward compatibility for API callers, which the panel no longer exercises:
 
@@ -2950,26 +2930,16 @@ async def estimate_md_disk(body: CreateJobRequest) -> dict:
 
 @router.post("/md/jobs/preflight-vram")
 async def preflight_md_vram(body: CreateJobRequest) -> dict:
-    """Pre-flight water-box SIZE verdict for a Relax launch, before any build (Gate A).
-
-    The panel calls this before ``POST /md/jobs`` (when the water shell is on auto) so it
-    can show the size gate: A1 (auto-fit a comfortable shell), A2 (only a tight shell
-    fits — ask), A3 (too large for this GPU — stop). Returns the ``recommend_downsize``
-    advice + ``tier``. Best-effort: a seeded job (design resolved later, at prep) or any
-    error returns ``{skipped:true, tier:"ok"}`` so the launch is never blocked.
-    """
+    """Pre-flight whether the fully solvated system fits the selected local hardware."""
     from backend.core.md_vram import preflight_vram_advice
 
     if body.oxdna_job_id or body.mrdna_job_id or body.blade_job_id:
-        # Seeded job: the atomistic model is resolved later from the source job's
-        # snapshot, so pre-flight can't size it — prep's auto_water_shell still carves.
+        # Seeded job: the atomistic model is resolved later from the source snapshot, so
+        # pre-flight cannot size it. Preparation still builds only a full solvent box.
         return {"skipped": True, "tier": "ok"}
     try:
         design = design_state.get_or_404()
-        # Judge the RESOLVED request, exactly as prep will.  Without the preset merge the
-        # padding and the carve policy would both read their field defaults, so a
-        # 'literature' launch would be pre-flighted at 1.2 nm with carving allowed and
-        # then prepared at 2.0 nm with carving refused.
+        # Judge the resolved request exactly as preparation will, including preset padding.
         resolved = _apply_relax_preset(body)
         advice = await run_in_threadpool(
             preflight_vram_advice,
@@ -2977,10 +2947,6 @@ async def preflight_md_vram(body: CreateJobRequest) -> dict:
             padding_nm=resolved.padding_nm,
             devices=resolved.devices,
         )
-        # Whether prep is even ALLOWED to take the carve this advice may recommend.  The
-        # 'literature' protocol refuses it, so the gate offers "stop" rather than "we'll
-        # shrink the water for you" — see CreateJobRequest.allow_water_shell_carve.
-        advice["carve_allowed"] = bool(resolved.allow_water_shell_carve)
         return advice
     except Exception as exc:  # noqa: BLE001 — a preflight must never block a launch
         logger.warning("preflight_md_vram failed (allowing launch): %s", exc)
@@ -3253,8 +3219,6 @@ def _spawn_vacuum_prestage(body: CreateJobRequest, *, design, name: str) -> MdJo
         update={
             "protocol": VACUUM_PROTOCOL,
             "relax_preset": FAST_SHAPE,
-            # The follow-up owns solvation; this stage has no box, salt or shell.
-            "water_shell_nm": 0.0,
         }
     )
     job = _spawn_prep_job(
@@ -3485,78 +3449,6 @@ async def _prepare_job_bg(
         if _sequenced_base_count(local_design) == 0:
             raise RuntimeError(_NO_SEQUENCE_MSG)
 
-        # Pre-flight size check — REPORT ONLY.
-        #
-        # This used to APPLY a carve on the user's behalf whenever the full box looked
-        # too big for the detected GPU.  A carve is not a cheaper version of the same
-        # run: the vacuum corners force constant volume, which deletes the fixed-DNA
-        # settle stage and the box-size trace the published protocol uses to judge
-        # equilibration, and leaves no bulk phase for its ionic condition to be defined
-        # in.  Silently substituting it turned one experiment into another.  The panel
-        # happened to show a modal first, so a UI user saw it; every headless and API
-        # caller got it with no trace they would ever read.
-        #
-        # Now the recommendation is COMPUTED and RECORDED, and the run proceeds with
-        # exactly the water the user asked for.  The wizard warns before launch (the
-        # `water_box_will_not_fit` plan condition, which carries a warning icon against
-        # the Water shell carve control) and the launch gate still offers Cancel/Proceed.
-        # If the box really does not fit, NAMD answers that question itself — which is a
-        # measurement, where the pre-flight is an estimate.
-        #
-        # Implicit solvent (GBIS) has no water box → skip entirely.  For an explicit CPU
-        # run there is no VRAM limit, so auto_water_shell sizes to host RAM instead.
-        water_shell_nm = body.water_shell_nm
-        if not water_shell_nm and body.protocol != IMPLICIT_GBIS_PROTOCOL:
-            from backend.core.md_vram import auto_water_shell  # noqa: PLC0415
-
-            tracker.report(
-                "topology",
-                None,
-                "Checking CPU memory headroom…"
-                if body.devices.strip().lower() in ("cpu", "none")
-                else "Checking GPU memory headroom…",
-            )
-            auto = await run_in_threadpool(
-                auto_water_shell,
-                local_design,
-                padding_nm=body.padding_nm,
-                devices=body.devices,
-                atomistic_model=seed_model,
-            )
-            if auto["shell_nm"]:
-                # RECOMMEND the carve; never apply it.
-                #
-                # A carve is not a cheaper version of the same run: the vacuum corners
-                # force constant volume, which removes the fixed-DNA settle stage and the
-                # box-size trace the published protocol uses to JUDGE equilibration, and
-                # leaves no bulk phase for its ionic condition to be defined in.  So a
-                # protocol that promises the literature must not take one.
-                #
-                # It must not REFUSE either.  Whether a system fits is a property of
-                # today's hardware, not of the science, and the pre-flight is an estimate:
-                # the user is entitled to attempt the full box and find out.  The launch
-                # gate warns first with an explicit Cancel/Proceed (md_gate_a), and this
-                # is what happens once they proceed — full box, recorded, and NAMD gets to
-                # answer the memory question itself.
-                logger.warning(
-                    "prep %s: full box kept; a %.2f nm carve would be needed to fit. "
-                    "NOT applied — the user asked for the full box. %s",
-                    job_id,
-                    auto["shell_nm"],
-                    auto["note"],
-                )
-                job = MdJob.load(job_id, ws)
-                pp = dict(job.prep_params or {})
-                # One key, whatever the protocol says about carving: what was RECOMMENDED
-                # and not taken.  The old pair of keys (`auto_water_shell_nm` when it was
-                # applied, `declined_water_shell_nm` when the protocol forbade it) had no
-                # reader anywhere in the tree, and one of them meant "we changed your
-                # input" — which no longer happens.
-                pp["recommended_water_shell_nm"] = auto["shell_nm"]
-                pp["recommended_water_shell_note"] = auto["note"]
-                job.prep_params = pp
-                job.save(ws)
-
         # Persist the EXACT design this run is prepared from + its out-of-date
         # fingerprint, so a later design edit flags the job and "Roll & run" can
         # restore this exact state (mirrors oxDNA).
@@ -3607,7 +3499,6 @@ async def _prepare_job_bg(
             salt_mode=body.salt_mode,
             padding_nm=body.padding_nm,
             box_mode=body.box_mode,
-            water_shell_nm=water_shell_nm,
             minimize_steps=body.minimize_steps,
             atomistic_model=seed_model,
             declash=body.declash,
@@ -6033,18 +5924,17 @@ async def resume_md_job_remote(job_id: str, body: ResumeRemoteRequest) -> dict:
 class RefitRequest(BaseModel):
     """Settings to override when re-running a failed job (all optional).
 
-    The "Fix" popup sends whichever apply to the diagnosed failure: a water-shell
-    carve for a VRAM downsize, force_soft for an instability, or none to retry.
+    The "Fix" popup sends a gentler-integrator override for instability, or no override
+    for a retry. A VRAM failure requires different hardware or a smaller system.
     """
 
-    water_shell_nm: Optional[float] = Field(None, ge=0.0)
     force_soft: Optional[bool] = Field(None)
     minimize_steps: Optional[int] = Field(None, ge=100)
 
 
 # Failure kind → the remedy the "Fix" popup offers.
 _REMEDY_BY_KIND = {
-    "vram_oom": "downsize",  # refit with a water-shell carve sized to the GPU
+    "vram_oom": "none",  # full solvation is required; use larger hardware
     "host_oom": "retry",  # host pinned-RAM alloc failed — free RAM & resume
     "instability": "gentle",  # refit with the soft integrator across the ladder
     "gpu_error": "retry",  # resume — often a transient GPU/driver state
@@ -6074,9 +5964,8 @@ def _failed_log_excerpt(job: MdJob, max_lines: int = 24) -> Optional[str]:
 def _fix_advice(job: MdJob) -> dict:
     """Diagnose any failed job and describe the remedy the UI should offer.
 
-    For a VRAM OOM this includes the downsize recommendation (heavy geometry
-    compute); other kinds just carry the classification + log excerpt.  Call via
-    run_in_threadpool.
+    VRAM failures report the required capacity; other kinds carry the classification and
+    log excerpt. Call via ``run_in_threadpool``.
     """
     kind = job.failure_kind or "other"
     if kind == "vram_oom":
@@ -6089,26 +5978,14 @@ def _fix_advice(job: MdJob) -> dict:
             "error": job.error,
             "vram_mb": detect_vram_mb(job.devices),
         }
-        prof = (
-            package_solvation_profile(job.package_dir(_workspace()), job.name_stem)
-            if job.name_stem
-            else None
-        )
-        out["current_water_shell_nm"] = (prof or {}).get("current_water_shell_nm")
-
     out["failure_kind"] = kind
     out["remedy"] = _REMEDY_BY_KIND.get(kind, "none")
-    if kind == "vram_oom" and not out.get("feasible"):
-        out["remedy"] = "none"  # can't downsize enough for this GPU
     out["log_excerpt"] = _failed_log_excerpt(job)
     return out
 
 
 def _vram_advice(job: MdJob) -> dict:
-    """Build the VRAM diagnosis + downsize recommendation for a job (blocking).
-
-    Runs the geometry estimate, so call via run_in_threadpool.
-    """
+    """Build the complete-system VRAM diagnosis for a failed job."""
     vram_mb = detect_vram_mb(job.devices)
     profile = (
         package_solvation_profile(job.package_dir(_workspace()), job.name_stem)
@@ -6123,19 +6000,17 @@ def _vram_advice(job: MdJob) -> dict:
         "vram_mb": vram_mb,
         "vram_detected": vram_mb is not None,
         "profile_available": profile is not None,
-        "current_water_shell_nm": (profile or {}).get("current_water_shell_nm"),
     }
     if profile is None or vram_mb is None:
         return out
+    current_atoms = (
+        profile["dna_atoms"] + profile["full_water"] * 3 + profile["ion_atoms"]
+    )
     out.update(
-        recommend_downsize(
-            dna_xyz_nm=profile["dna_xyz_nm"],
-            box_nm=profile["box_nm"],
-            full_water=profile["full_water"],
-            dna_atoms=profile["dna_atoms"],
-            ion_atoms=profile["ion_atoms"],
-            vram_mb=vram_mb,
-        )
+        current_atoms=current_atoms,
+        current_vram_mb=estimate_vram_mb(current_atoms),
+        required_vram_mb=required_vram_mb(current_atoms),
+        max_atoms=max_atoms_for_vram(vram_mb),
     )
     return out
 
@@ -6144,8 +6019,9 @@ def _vram_advice(job: MdJob) -> dict:
 async def fix_advice(job_id: str) -> dict:
     """Diagnose a failed job and describe the remedy the "Fix" popup should offer.
 
-    Covers VRAM out-of-memory (→ downsize), first-step instability (→ gentler
-    relaxation), GPU/driver errors (→ retry), and anything else (→ show the log).
+    Covers VRAM out-of-memory (→ larger hardware or smaller design), first-step
+    instability (→ gentler relaxation), GPU/driver errors (→ retry), and anything
+    else (→ show the log).
     """
     job = _load_job(job_id)
     return await run_in_threadpool(_fix_advice, job)
@@ -6155,9 +6031,8 @@ async def fix_advice(job_id: str) -> dict:
 async def refit_md_job(job_id: str, body: RefitRequest) -> dict:
     """Create a new job from a failed one's provenance, with adjusted settings.
 
-    Reuses the original design source / oxDNA seed and prep settings, overriding
-    whichever of ``water_shell_nm`` / ``force_soft`` / ``minimize_steps`` were sent
-    (a water-shell carve also forces the ladder to NVT downstream).
+    Reuses the original design source or coarse-grained seed and preparation settings,
+    overriding the stability settings supplied by the user.
     """
     old = _load_job(job_id)
     if not (
@@ -6177,8 +6052,10 @@ async def refit_md_job(job_id: str, body: RefitRequest) -> dict:
 
     # Reconstruct the original request, apply the sent overrides, backfill provenance.
     params = dict(old.prep_params or {})
-    if body.water_shell_nm is not None:
-        params["water_shell_nm"] = body.water_shell_nm
+    # Saved legacy jobs may contain the retired carve fields. They are intentionally
+    # discarded so every newly prepared job is fully solvated.
+    params.pop("water_shell_nm", None)
+    params.pop("allow_water_shell_carve", None)
     if body.force_soft is not None:
         params["force_soft"] = body.force_soft
     if body.minimize_steps is not None:
@@ -6246,18 +6123,11 @@ async def refit_md_job(job_id: str, body: RefitRequest) -> dict:
         size_factor=size_factor,
         parent_job_id=job_id,
     )
-    logger.info(
-        "refit %s → new job %s (water_shell_nm=%.2f force_soft=%s)",
-        job_id,
-        job.job_id,
-        new_body.water_shell_nm,
-        new_body.force_soft,
-    )
+    logger.info("refit %s → new job %s (force_soft=%s)", job_id, job.job_id, new_body.force_soft)
     return {
         "ok": True,
         "job_id": job.job_id,
         "refit_from": job_id,
-        "water_shell_nm": new_body.water_shell_nm,
         "force_soft": new_body.force_soft,
     }
 

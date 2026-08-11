@@ -44,12 +44,11 @@ test('optimize proposes a plan, cancels cleanly, and applies on proceed', async 
   const advBody = page.locator('#md-jobs-adv-body')
   await expect(advBody).toBeVisible()
 
-  // The derived run-path readout is present and starts on GPU-resident (shell 0).
+  // The derived run-path readout starts on GPU-resident.
   await expect(page.locator('#md-jobs-path')).toContainText('GPU-resident')
 
   // Seed a known-wrong thread count so we can prove the apply actually lands.
   await page.fill('#md-jobs-threads', '16')
-  await page.fill('#md-jobs-watershell', '0')
 
   // ⚡ lives INSIDE the drawer header — clicking it must not collapse the drawer.
   await page.click('#md-jobs-optimize')
@@ -76,7 +75,7 @@ test('optimize proposes a plan, cancels cleanly, and applies on proceed', async 
   const modal = page.locator('#md-optimize-modal')
   await expect(modal).toBeVisible({ timeout: 120_000 })
 
-  // The gate shows the caveats, including the carve → no-GPU-resident consequence.
+  // The gate shows the estimate and hardware caveats.
   await expect(modal).toContainText('Read before proceeding')
   await expect(modal).toContainText(/GPU-resident/)
   await expect(modal).toContainText(/ESTIMATES/)
@@ -85,9 +84,8 @@ test('optimize proposes a plan, cancels cleanly, and applies on proceed', async 
   await page.click('#md-optimize-cancel')
   await expect(modal).toHaveCount(0)
   await expect(page.locator('#md-jobs-threads')).toHaveValue('16')
-  await expect(page.locator('#md-jobs-watershell')).toHaveValue('0')
 
-  // Proceed applies: 6 threads + the 12 A carve, and the path readout flips to offload.
+  // Proceed applies the compatible settings without changing the solvent model.
   await page.click('#md-jobs-optimize')
   await page.click('#md-optimize-pf-go')
   await expect(page.locator('#md-optimize-modal')).toBeVisible({ timeout: 120_000 })
@@ -95,6 +93,5 @@ test('optimize proposes a plan, cancels cleanly, and applies on proceed', async 
   await expect(page.locator('#md-optimize-modal')).toHaveCount(0)
 
   await expect(page.locator('#md-jobs-threads')).toHaveValue('6')
-  await expect(page.locator('#md-jobs-watershell')).toHaveValue('12')
-  await expect(page.locator('#md-jobs-path')).toContainText('CUDA offload')
+  await expect(page.locator('#md-jobs-path')).toContainText(/GPU-resident|CUDA offload/)
 })

@@ -483,8 +483,8 @@ describe('wizardPayload', () => {
   })
 
   it('passes a falsy touched value through rather than dropping it', () => {
-    const body = wizardPayload({ presetId: 'x', touched: { fast: false, water_shell_nm: 0 } })
-    expect(body).toMatchObject({ fast: false, water_shell_nm: 0 })
+    const body = wizardPayload({ presetId: 'x', touched: { fast: false, early_stop_relax: false } })
+    expect(body).toMatchObject({ fast: false, early_stop_relax: false })
   })
 
   it('carries autostart so Create and Create-and-run are one code path', () => {
@@ -1111,10 +1111,16 @@ describe('field scope', () => {
   })
 
   it('defaults an unknown field to both, not to one run', () => {
-    // Solvation and hardware are shared by construction — the cell and PSF a relaxation
-    // builds are what production inherits.
+    // Solvation is inherited by construction: production reuses the cell and PSF built
+    // for relaxation. Unknown future preparation fields stay with that group.
     expect(fieldScope('padding_nm', null)).toBe('both')
     expect(fieldScope('who_knows', null)).toBe('both')
+  })
+
+  it('keeps relaxation execution hardware out of inherited system preparation', () => {
+    expect(fieldScope('gpu_resident', null)).toBe('relaxation')
+    expect(fieldScope('threads', null)).toBe('relaxation')
+    expect(fieldScope('devices', null)).toBe('relaxation')
   })
 
   it('keeps the relaxation timestep in the relaxation scope', () => {

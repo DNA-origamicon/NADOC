@@ -19,17 +19,14 @@ Four tiers, from the protocol survey in
 Two more tiers exist for the Job Wizard, which asks the question that actually decides a
 run: *are you reproducing the literature, or getting an answer about your design?*
 
-* ``literature``   — the published protocol with nothing traded away for speed.  No
-  early stopping, no hydrogen-mass repartitioning, no water-shell carve, and the paper's
-  own 2 fs production integrator.
+* ``literature``   — the published protocol with nothing traded away for speed. No early
+  stopping, no hydrogen-mass repartitioning, and the paper's own 2 fs integrator.
 * ``design_speed`` — every measured accelerator on.  The right choice while iterating on
   a design; not the one whose numbers go in a paper.
 
 The preset supplies DEFAULTS: anything the user sets explicitly wins, so a preset is a
-starting point rather than a cage.  The two exceptions are ``protocol``, which a preset
-owns by definition, and a preset's ``locked`` fields — settings where an override would
-make the preset's NAME a lie rather than merely tune it.  Today that is exactly one field
-(`literature` locks ``allow_water_shell_carve``); see ``RelaxPreset.locked``.
+starting point rather than a cage. ``protocol`` is the exception because a preset owns
+its engine choice by definition.
 """
 
 from __future__ import annotations
@@ -70,13 +67,8 @@ class RelaxPreset:
     summary: str
     #: Request-field defaults this preset applies when the user has not set them.
     defaults: dict = field(default_factory=dict)
-    #: Fields this preset OWNS ABSOLUTELY — applied even when the caller set them
-    #: explicitly, exactly as ``protocol`` already is.  Reserved for settings where an
-    #: override would make the preset's NAME a lie rather than merely tuning it: the
-    #: `literature` tier locks ``allow_water_shell_carve`` because carving away the bulk
-    #: water leaves no phase for the published ionic condition to be defined in, so a
-    #: carved run is not the published protocol under any reading.  Everything else stays
-    #: a default the user can overrule — a preset is a starting point, not a cage.
+    #: Fields this preset owns absolutely, applied even when explicitly set. Reserved for
+    #: choices whose override would make the preset name false.
     locked: frozenset = frozenset()
     #: False when the pipeline it needs does not exist yet — the UI shows it disabled
     #: with ``unavailable_reason`` rather than pretending it will run.
@@ -99,7 +91,7 @@ PRESETS: dict[str, RelaxPreset] = {
             "network plus inter-helical repulsion. Retired: NADOC designs already carry "
             "derived, physical geometry, so there is no lattice here to unfold."
         ),
-        defaults={"protocol": VACUUM_PROTOCOL, "water_shell_nm": 0.0},
+        defaults={"protocol": VACUUM_PROTOCOL},
         available=False,
         unavailable_reason=(
             "Not needed, and measurably harmful on dense lattices. The tutorial's §3.2 "
@@ -119,11 +111,9 @@ PRESETS: dict[str, RelaxPreset] = {
         id=IMPLICIT_GBIS,
         label="Implicit Solvent (GBIS)",
         summary=(
-            "No explicit water — the solvent is a continuum. Fits a small GPU and needs "
-            "no box sizing at all. Note it cannot run GPU-resident, so on this hardware "
-            "it is slower per step than the explicit path despite the far smaller system "
-            "— but it is the only no-explicit-water option, now that the vacuum tier "
-            "is retired."
+            "No explicit water — the solvent is an approximate dielectric continuum, so "
+            "there is no solvent box to size. NAMD does not support GBIS in GPU-resident "
+            "mode; NADOC currently runs this protocol with the multicore CPU build."
         ),
         defaults={"protocol": IMPLICIT_PROTOCOL},
         reference="NAMD GBIS implicit solvent",
@@ -142,11 +132,9 @@ PRESETS: dict[str, RelaxPreset] = {
         defaults={
             "protocol": EXPLICIT_PROTOCOL,
             "box_mode": "rotation",
-            "water_shell_nm": 0.0,  # full box; the carve is a memory fallback only
             # The tutorial's own recipe is the DNA bbox ± 20 Å.  NADOC shipped 1.2 nm,
             # 40 % tighter.  namd_solvate.resolve_padding_nm trims this back down when
-            # the resulting cell would not fit the hardware — a carve would cost the
-            # barostat, and with it the settle stage and the box-trace criterion.
+            # the resulting complete cell would not fit the selected hardware.
             "padding_nm": 2.0,
             "early_stop_relax": True,
         },
@@ -164,7 +152,6 @@ PRESETS: dict[str, RelaxPreset] = {
         defaults={
             "protocol": EXPLICIT_PROTOCOL,
             "box_mode": "rotation",
-            "water_shell_nm": 0.0,
             # Wider than Standard's (now-faithful) 2.0 nm: this is the tier whose
             # numbers go in a paper, so give the solute more room to tumble than the
             # reference strictly needs.
@@ -190,10 +177,6 @@ PRESETS: dict[str, RelaxPreset] = {
         defaults={
             "protocol": EXPLICIT_PROTOCOL,
             "box_mode": "bbox",
-            # 0 = auto: Gate A fits a water-shell carve if this design will not otherwise
-            # fit the card.  Losing the barostat costs the settle stage and the box trace,
-            # which matters far less when the point is turnaround time.
-            "water_shell_nm": 0.0,
             "padding_nm": 1.2,
             "salt_mode": "screening",
             "early_stop_relax": True,
@@ -209,18 +192,14 @@ PRESETS: dict[str, RelaxPreset] = {
         id=LITERATURE,
         label="Match the literature (Aksimentiev)",
         summary=(
-            "The published protocol with nothing traded for speed. Full water box (a "
-            "carve is REFUSED rather than auto-fitted, because it would take the barostat "
-            "and with it the settle stage and the box-size equilibration criterion), every "
-            "stage run to its full length, standard hydrogen masses, and the paper's "
+            "The published protocol with nothing traded for speed. Full periodic water "
+            "box, every stage run to its full length, standard hydrogen masses, and the paper's "
             "2 fs relaxation integrator rather than NADOC's 4 fs fast path. Slower, and "
             "reproducible against the reference."
         ),
         defaults={
             "protocol": EXPLICIT_PROTOCOL,
             "box_mode": "rotation",
-            "water_shell_nm": 0.0,
-            "allow_water_shell_carve": False,
             # The tutorial's own recipe is the DNA bounding box +/- 20 A.
             "padding_nm": 2.0,
             # Mg(H2O)6 neutralises, no sodium — the published ionic condition.
@@ -232,14 +211,6 @@ PRESETS: dict[str, RelaxPreset] = {
             "early_stop_relax": False,
             "fast": False,
         },
-        # NOT overridable, unlike every other default here.  A carved cell has no bulk
-        # phase, so the published 12.5 mM Mg(2+) condition is not a concentration OF
-        # anything; the far field is vacuum (eps ~ 1) rather than water; and the
-        # water/vacuum interface pulls the shell onto the solute.  A carved run is a
-        # different experiment, so this tier does not offer it at any price.  If the
-        # system will not fit, the run is ATTEMPTED at full box with a warning — see
-        # md_gate_a.gateAMessage — rather than quietly becoming something else.
-        locked=frozenset({"allow_water_shell_carve"}),
         reference=(
             "Yoo, Li, Slone, Maffeo & Aksimentiev, Methods Mol Biol 1811 (2018) "
             "§3.3 — explicit MgCl2, Mg(H2O)6 + CUFIX, ENM ladder "
@@ -294,10 +265,8 @@ def preset_availability(preset: RelaxPreset) -> tuple[bool, str]:
     """Is this preset runnable *on this machine* right now?
 
     Static unavailability (a pipeline NADOC does not have) is joined here with RUNTIME
-    unavailability (a toolchain this host does not have).  GBIS is the second kind: it
-    is unsupported on the NAMD 3 CUDA nonbonded kernel, so it needs a multicore build,
-    and a host with only the CUDA build cannot run it at all.  Discovering that after
-    solvation — which is what happened — wastes a prep and reads like a bug.
+    unavailability (a toolchain this host does not have). GBIS currently uses NADOC's
+    multicore path, so a host with only a CUDA build cannot run that preset.
     """
     if not preset.available:
         return False, preset.unavailable_reason

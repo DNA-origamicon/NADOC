@@ -6,7 +6,7 @@
  * the failure and — for foreseeable, fixable cases — offers a one-click re-run with
  * adjusted settings:
  *
- *   - vram_oom    → downsize: a water-shell carve sized to the detected GPU VRAM
+ *   - vram_oom    → explain the full-box memory requirement; no automatic remedy
  *   - instability → gentle:   re-run the whole ladder with the soft integrator
  *   - gpu_error   → retry:    resume (often a transient GPU/driver state)
  *   - other       → show the log tail; no automatic remedy
@@ -27,9 +27,8 @@ function _commas(n) { return Math.round(Number(n)).toLocaleString('en-US') }
 
 /**
  * Pure: turn a /fix-advice response into popup content.
- * Returns { title, lines, logExcerpt, canApply, applyLabel, action, shellAng }.
+ * Returns { title, lines, logExcerpt, canApply, applyLabel, action }.
  *   action describes what Apply does: {type:'refit', body:{…}} or {type:'retry'}.
- *   shellAng (downsize only) seeds an editable "Water shell (Å)" input.
  */
 export function fixMessage(advice) {
   const kind = advice?.failure_kind || 'other'
@@ -48,7 +47,7 @@ export function fixMessage(advice) {
         'This is usually transient (WSL2 memory pressure, other apps, or a large '
         + 'elastic-network restraint set). Free up host RAM — close other apps, or '
         + 'raise the WSL memory cap in .wslconfig — then resume from the last '
-        + 'checkpoint. A water-shell carve would NOT help here.',
+        + 'checkpoint. Changing the explicit-solvent system is not the remedy.',
       ],
       logExcerpt,
       canApply: true,
@@ -129,17 +128,17 @@ function _vramMessage(advice, remedy, logExcerpt) {
     return {
       title: 'Could not read GPU memory',
       lines: [
-        'nvidia-smi did not report this device’s VRAM, so a downsize target can’t '
-        + 'be computed automatically.',
-        'You can still re-run manually with a smaller "Water shell (Å)" value.',
+        'nvidia-smi did not report this device’s VRAM, so the required capacity '
+        + 'cannot be compared with this card.',
+        'Retry on a GPU with known, sufficient memory.',
       ],
       logExcerpt, canApply: false,
     }
   }
   if (advice?.profile_available === false) {
     return {
-      title: 'Not enough package data to recommend a fix',
-      lines: ['The solvated package is missing its size profile, so a downsize can’t be estimated.'],
+      title: 'Not enough package data to size the run',
+      lines: ['The solvated package is missing its atom-count profile.'],
       logExcerpt, canApply: false,
     }
   }
@@ -150,25 +149,9 @@ function _vramMessage(advice, remedy, logExcerpt) {
     `System size: ${_commas(advice.current_atoms)} atoms `
     + `(about ${_commas(advice.max_atoms)} fit on this card).`,
   ]
-  if (remedy === 'downsize' && advice.feasible) {
-    const ang = Math.round(advice.recommended_shell_nm * 10)
-    lines.push(
-      `Keeping only water within ${ang} Å of the DNA (and running NVT) drops it to `
-      + `about ${_commas(advice.estimated_atoms)} atoms (~${_gb(advice.estimated_vram_mb)} GB) — which fits.`,
-    )
-    return {
-      title: 'Ran out of GPU memory',
-      lines, logExcerpt,
-      canApply: true,
-      applyLabel: `Re-run with ${ang} Å water shell`,
-      action: { type: 'refit', body: {} },   // water_shell_nm filled from the input
-      shellAng: ang,
-    }
-  }
-  const tight = Math.round((advice.tightest_shell_nm ?? 0) * 10)
   lines.push(
-    `Even the tightest ${tight} Å shell is about ${_commas(advice.tightest_atoms)} atoms `
-    + `(needs ~${_gb(advice.required_vram_mb)} GB). This system is too large for this GPU.`,
+    'This explicit-solvent system must retain its complete periodic water box. Re-run it '
+    + 'on a GPU with more memory or reduce the system size.',
   )
   return { title: 'Ran out of GPU memory', lines, logExcerpt, canApply: false }
 }
@@ -205,27 +188,6 @@ export function openVramFixModal({ advice, onApply, onClose } = {}) {
     p.style.cssText = 'margin:0 0 8px;line-height:1.45;color:#c9d1d9'
     box.appendChild(p)
   })
-
-  let shellInput = null
-  if (msg.canApply && msg.shellAng != null) {
-    const row = document.createElement('label')
-    row.style.cssText = 'display:flex;align-items:center;gap:8px;margin:12px 0 4px;color:#8b949e'
-    row.appendChild(document.createTextNode('Water shell (Å)'))
-    shellInput = document.createElement('input')
-    shellInput.type = 'number'
-    shellInput.min = '6'
-    shellInput.step = '1'
-    shellInput.value = String(msg.shellAng)
-    shellInput.style.cssText =
-      'width:80px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;'
-      + 'border-radius:3px;padding:3px 6px;font-size:13px'
-    row.appendChild(shellInput)
-    box.appendChild(row)
-    const hint = document.createElement('div')
-    hint.textContent = 'Smaller = fewer atoms (more headroom); ≥6 Å keeps the simulation valid.'
-    hint.style.cssText = 'font-size:11px;color:#6e7681;margin-bottom:6px'
-    box.appendChild(hint)
-  }
 
   if (msg.logExcerpt) {
     const det = document.createElement('details')
@@ -272,10 +234,6 @@ export function openVramFixModal({ advice, onApply, onClose } = {}) {
       + 'padding:5px 12px;cursor:pointer;font-size:12px;font-weight:600'
     apply.addEventListener('click', async () => {
       const action = JSON.parse(JSON.stringify(msg.action))
-      if (shellInput) {
-        const ang = parseFloat(shellInput.value || String(msg.shellAng))
-        action.body.water_shell_nm = (Number.isFinite(ang) ? ang : msg.shellAng) / 10
-      }
       apply.disabled = true
       apply.textContent = 'Starting…'
       try {

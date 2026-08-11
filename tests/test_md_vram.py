@@ -153,7 +153,7 @@ def test_describe_failure_file(tmp_path: Path):
 def test_classify_vram_fit_tiers():
     # full box fits -> no gate
     assert V.classify_vram_fit({"current_atoms": 100, "max_atoms": 200}) == "ok"
-    # a comfortable (>=15 A) shell fits -> A1
+    # A hypothetical reduced-solvent fit no longer changes the verdict.
     assert (
         V.classify_vram_fit(
             {
@@ -163,9 +163,8 @@ def test_classify_vram_fit_tiers():
                 "recommended_shell_nm": 1.5,
             }
         )
-        == "a1"
+        == "a3"
     )
-    # only a tight (<15 A) shell fits -> A2
     assert (
         V.classify_vram_fit(
             {
@@ -175,7 +174,7 @@ def test_classify_vram_fit_tiers():
                 "recommended_shell_nm": 1.0,
             }
         )
-        == "a2"
+        == "a3"
     )
     # nothing fits -> A3 hard stop
     assert (
@@ -193,22 +192,6 @@ def test_classify_vram_fit_missing_data_never_gates():
         V.classify_vram_fit({"current_atoms": 9, "max_atoms": 0}) == "ok"
     )  # unknown cap
 
-
-def test_carve_fill_fraction_tight_vs_big_box():
-    # A compact ~4 nm DNA blob; a shell carve fills a TIGHT box but leaves a BIG box
-    # mostly vacuum. This is exactly the resident-capable-vs-not distinction.
-    dna = [
-        (x / 10, y / 10, z / 10)
-        for x in range(0, 40, 4)
-        for y in range(0, 40, 4)
-        for z in range(0, 40, 4)
-    ]
-    assert V.carve_fill_fraction(dna, (5.0, 5.0, 5.0), 0.0) == 1.0  # no carve = full
-    tight = V.carve_fill_fraction(dna, (5.5, 5.5, 5.5), 1.5)  # blob fills the box
-    big = V.carve_fill_fraction(dna, (20.0, 20.0, 20.0), 1.5)  # blob lost in vacuum
-    assert tight > 0.8  # well-filled → would attempt resident
-    assert big < 0.3  # sparse → stays offload
-    assert tight > big
 
 
 def test_preflight_vram_advice_skips_when_gpu_unreadable(monkeypatch):
@@ -289,67 +272,6 @@ def test_first_device_id():
     assert V._first_device_id("") == 0
 
 
-# ── Downsize recommendation ───────────────────────────────────────────────────
-
-
-def _dna_line(n=60, spacing=0.34):
-    """A thin DNA filament along x — most of a big box is empty bulk water."""
-    return [(i * spacing, 0.0, 0.0) for i in range(n)]
-
-
-_BOX = (20.0, 20.0, 20.0)
-_FULL_WATER = int(20 * 20 * 20 * 33.0)
-
-
-def _est(shell):
-    return V.estimate_total_atoms(
-        dna_xyz_nm=_dna_line(),
-        box_nm=_BOX,
-        full_water=_FULL_WATER,
-        dna_atoms=60,
-        ion_atoms=0,
-        shell_nm=shell,
-    )
-
-
-def test_estimate_shrinks_with_shell():
-    assert _est(2.0) > _est(1.5) > _est(1.0) > _est(0.8)
-
-
-def _recommend(vram_mb):
-    return V.recommend_downsize(
-        dna_xyz_nm=_dna_line(),
-        box_nm=_BOX,
-        full_water=_FULL_WATER,
-        dna_atoms=60,
-        ion_atoms=0,
-        vram_mb=vram_mb,
-    )
-
-
-def test_recommend_picks_largest_fitting_shell():
-    # VRAM that fits the biggest shell → recommend the largest (least restrictive).
-    vram = V.required_vram_mb(_est(2.0)) + 500
-    r = _recommend(vram)
-    assert r["feasible"] and r["recommended_shell_nm"] == 2.0
-    assert r["estimated_atoms"] <= r["max_atoms"]
-
-
-def test_recommend_steps_down_when_largest_does_not_fit():
-    # Budget between the 1.5 nm and 2.0 nm estimates → recommend 1.5 nm.
-    max_atoms = (_est(1.5) + _est(2.0)) // 2
-    vram = int(max_atoms * 3300 / 0.85 / 1e6) + 1
-    r = _recommend(vram)
-    assert r["feasible"] and r["recommended_shell_nm"] == 1.5
-
-
-def test_recommend_infeasible_for_tiny_card():
-    r = _recommend(8)  # 8 MB — nothing fits
-    assert not r["feasible"]
-    assert r["tightest_shell_nm"] == min(V.CANDIDATE_SHELLS_NM)
-    assert r["required_vram_mb"] > 8
-
-
 # ── Package profile loader ────────────────────────────────────────────────────
 
 
@@ -365,7 +287,6 @@ def test_package_solvation_profile(tmp_path: Path):
                     "n_cl": 14,
                     "mg_hexahydrate": True,
                     "box_nm": [10.0, 10.0, 10.0],
-                    "water_shell_nm": None,
                 }
             }
         )
@@ -397,14 +318,12 @@ def test_mdjob_failure_kind_and_prep_params_roundtrip(tmp_path: Path):
     job.failure_kind = "vram_oom"
     job.prep_params = {
         "padding_nm": 1.2,
-        "water_shell_nm": 0.0,
         "salt_mode": "screening",
     }
     job.save(tmp_path)
 
     loaded = MdJob.load(job.job_id, tmp_path)
     assert loaded.failure_kind == "vram_oom"
-    assert loaded.prep_params["water_shell_nm"] == 0.0
 
 
 def test_mdjob_load_defaults_missing_fix_fields(tmp_path: Path):
@@ -444,51 +363,9 @@ def test_estimate_profile_from_design():
     assert len(prof["dna_xyz_nm"]) == prof["dna_atoms"]
 
 
-def test_auto_water_shell_skips_when_full_box_fits(monkeypatch):
-    from tests.conftest import make_6hb_design
-
-    monkeypatch.setattr(V, "detect_vram_mb", lambda devices="0": 1_000_000)  # huge card
-    out = V.auto_water_shell(make_6hb_design(42))
-    assert out["shell_nm"] == 0.0 and out["note"] is None and out["fits"] is True
 
 
-def test_auto_water_shell_carves_when_too_small(monkeypatch):
-    from tests.conftest import make_6hb_design
 
-    monkeypatch.setattr(V, "detect_vram_mb", lambda devices="0": 40)  # tiny card
-    out = V.auto_water_shell(make_6hb_design(42))
-    assert out["shell_nm"] > 0.0  # a carve (or tightest) was chosen
-    assert out["note"]  # with a human explanation
-
-
-def test_auto_water_shell_no_vram_reading(monkeypatch):
-    from tests.conftest import make_6hb_design
-
-    monkeypatch.setattr(V, "detect_vram_mb", lambda devices="0": None)
-    out = V.auto_water_shell(make_6hb_design(42))
-    assert out["shell_nm"] == 0.0 and out["note"] is None  # leave user's choice alone
-
-
-def test_auto_water_shell_cpu_sizes_to_host_ram_not_vram(monkeypatch):
-    """Compute=CPU ('cpu') ignores VRAM entirely and sizes the carve to host RAM."""
-    from tests.conftest import make_6hb_design
-
-    # A GPU reading, if consulted, would be huge (no carve).  A tiny host RAM must
-    # still force a carve → proves the CPU path uses host RAM, not VRAM.
-    monkeypatch.setattr(V, "detect_vram_mb", lambda devices="0": 1_000_000)
-    monkeypatch.setattr(V, "detect_host_ram_mb", lambda: 500)  # tiny host
-    out = V.auto_water_shell(make_6hb_design(42), devices="cpu")
-    assert out["vram_mb"] is None  # VRAM never consulted
-    assert out["shell_nm"] > 0.0 and out["note"]  # carved to fit host RAM
-    assert "host RAM" in out["note"]
-
-
-def test_auto_water_shell_cpu_no_host_reading(monkeypatch):
-    from tests.conftest import make_6hb_design
-
-    monkeypatch.setattr(V, "detect_host_ram_mb", lambda: None)
-    out = V.auto_water_shell(make_6hb_design(42), devices="cpu")
-    assert out["shell_nm"] == 0.0 and out["note"] is None  # can't size → full box
 
 
 def test_detect_host_ram_mb_reads_or_degrades():
@@ -502,40 +379,6 @@ def test_max_atoms_for_host_ram_monotonic():
     assert V.max_atoms_for_host_ram(0) == 0
 
 
-def test_recommend_downsize_honours_max_atoms_override():
-    import numpy as np
-
-    xyz = np.random.RandomState(0).rand(200, 3) * 8.0  # ~8 nm cube of DNA points
-    common = dict(
-        dna_xyz_nm=xyz,
-        box_nm=(12.0, 12.0, 12.0),
-        full_water=400_000,
-        dna_atoms=6_000,
-        ion_atoms=200,
-        vram_mb=12288,
-    )
-    loose = V.recommend_downsize(**common)  # GPU budget only
-    tight = V.recommend_downsize(**common, max_atoms=50_000)  # host-tightened
-    assert tight["max_atoms"] == 50_000
-    assert loose["max_atoms"] == V.max_atoms_for_vram(12288)
-    # A tighter atom budget can never recommend a *larger* (less restrictive) shell.
-    ls = loose.get("recommended_shell_nm") or loose.get("tightest_shell_nm")
-    ts = tight.get("recommended_shell_nm") or tight.get("tightest_shell_nm")
-    assert ts <= ls
-
-
-def test_auto_water_shell_carves_when_host_ram_tight(monkeypatch):
-    from tests.conftest import make_6hb_design
-
-    # Huge GPU, but only a sliver of host RAM available → host is the binding cap.
-    monkeypatch.setattr(V, "detect_vram_mb", lambda devices="0": 1_000_000)
-    monkeypatch.setattr(V, "detect_host_ram_mb", lambda: 30)  # ~30 MB free
-    out = V.auto_water_shell(make_6hb_design(42))
-    assert out["shell_nm"] > 0.0
-    assert out["note"] and "host RAM" in out["note"]  # names the real constraint
-
-
-# ── External GPU-contention detection (pre-launch warning) ────────────────────
 
 
 def _activity(procs, used=4000, total=12288, util=40):

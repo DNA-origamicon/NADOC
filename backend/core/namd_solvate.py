@@ -370,56 +370,6 @@ def _dna_atom_positions_nm(
     return pts
 
 
-def _carve_water_shell(
-    waters: list[_Water],
-    dna_pdb_text: str,
-    shell_nm: float,
-    progress: Optional[ProgressCb] = None,
-) -> list[_Water]:
-    """Drop water molecules whose oxygen is farther than *shell_nm* from any DNA atom.
-
-    GROMACS fills the whole rectangular box, but for a non-globular structure
-    (e.g. a plate- or cross-shaped origami) most of that box is bulk water sitting
-    far from the DNA in the empty corners.  Removing it keeps a hydration shell of
-    thickness ``shell_nm`` around the solute and roughly halves the atom count for
-    large designs — enough to fit GPU-resident NAMD on a 12 GB card.
-
-    The box dimensions are unchanged, so the periodic cell (and PME grid) stay the
-    same; only particle count drops.  The carved cell has vacuum in its corners, so
-    downstream stages must run NVT (barostat off) — an NPT piston would collapse
-    the cell.  Minimum-image validity needs ``2 * shell_nm`` ≥ the nonbonded cutoff.
-    """
-    import numpy as np  # noqa: PLC0415
-    from scipy.spatial import cKDTree  # noqa: PLC0415
-
-    if not waters:
-        return waters
-
-    dna = _dna_atom_positions_nm(dna_pdb_text)
-    if not dna:
-        return waters  # no DNA reference → cannot carve safely; keep all water
-
-    _emit(
-        progress,
-        "assemble",
-        0.45,
-        f"Carving {shell_nm * 10:.0f} Å hydration shell (removing bulk water)…",
-    )
-
-    tree = cKDTree(np.asarray(dna, dtype=float))
-    w_o = np.empty((len(waters), 3), dtype=float)
-    for i, w in enumerate(waters):
-        w_o[i, 0] = w.ox
-        w_o[i, 1] = w.oy
-        w_o[i, 2] = w.oz
-
-    # Nearest-DNA distance for every water oxygen (parallel over all cores).
-    dist, _ = tree.query(w_o, k=1, workers=-1)
-    keep_mask = dist <= shell_nm
-    kept = [w for w, k in zip(waters, keep_mask) if k]
-    return kept
-
-
 # Default cell-sizing rule.  "rotation" sizes the cell so the padding survives ANY
 # reorientation of the solute (cubic, 2*r_max + 2*pad) rather than only the pose it was
 # built in.  An unrestrained solute rotates: the 2hb built as 20.2 x 42.6 x 88.1 A reached
@@ -699,7 +649,6 @@ def _gmx_solvate(
     tmpdir: Path,
     progress: Optional[ProgressCb] = None,
     *,
-    water_shell_nm: Optional[float] = None,
     box_mode: str = DEFAULT_BOX_MODE,
 ) -> tuple[list[_Water], tuple[float, float, float], str]:
     """Place TIP3P water around the DNA using GROMACS.
@@ -708,15 +657,7 @@ def _gmx_solvate(
     is the DNA translated into the SAME ``[0, L]`` frame as the water (see
     :func:`_recenter_pdb_in_padded_box`); callers MUST write *this* text (not the
     original ``pdb_text``) so DNA and water co-register and every atom sits inside
-    the periodic cell.
-
-    If ``water_shell_nm`` is set, GROMACS places ONLY a hydration layer of that
-    thickness around the DNA (``gmx solvate -shell``) instead of filling the whole
-    box.  For a large sparse origami (e.g. a 121 nm plate) filling the box then
-    trimming generated ~6 M waters just to keep the shell — a multi-GB peak in gmx
-    AND again when Python parses the full ``.gro`` (the parse hit 22 GB and OOM-crashed
-    WSL on GT_corner_v2).  ``-shell`` writes only the shell waters, so the box stays
-    the same size (unchanged PME/cellOrigin) but the intermediate never materialises.
+    the periodic cell. The complete cell is filled; reduced-water shells are not built.
     """
     gmx = _find_gmx()
     hard_timeout = _gmx_hard_timeout_s(pdb_text)
@@ -751,16 +692,8 @@ def _gmx_solvate(
         hard_timeout_s=hard_timeout,
     )
 
-    # solvate.  With a shell request, pass -shell so gmx places ONLY a hydration
-    # layer around the DNA (no full-box fill → no multi-GB memory spike); otherwise
-    # fill the box (small designs that fit).  TIP3P geometry comes from spc216.gro.
-    shell_native = bool(water_shell_nm and water_shell_nm > 0)
-    msg = (
-        f"Adding TIP3P hydration shell ({water_shell_nm:.2f} nm, gmx solvate -shell)…"
-        if shell_native
-        else "Adding TIP3P water (gmx solvate)…"
-    )
-    _emit(progress, "solvate", None, msg)
+    # Fill the complete periodic box. TIP3P geometry comes from spc216.gro.
+    _emit(progress, "solvate", None, "Adding TIP3P water (gmx solvate)…")
     solvate_cmd = [
         gmx,
         "solvate",
@@ -772,14 +705,10 @@ def _gmx_solvate(
         "solvated.gro",
         "-nobackup",
     ]
-    if shell_native:
-        solvate_cmd += ["-shell", f"{water_shell_nm:.4f}"]
     _run_watched(solvate_cmd, cwd=tmpdir, hard_timeout_s=hard_timeout)
 
     gro_text = (tmpdir / "solvated.gro").read_text()
     waters, _box_from_gro = _parse_gro(gro_text, progress=progress)
-    # gmx -shell already restricted the water to the hydration shell — no Python carve
-    # (a KD-tree over every water) needed.  The non-shell path keeps the full box.
     # Use OUR explicit box (matches the centred DNA + cellOrigin=box/2), not gmx's.
     return waters, box_nm, pdb_text
 
@@ -2706,7 +2635,6 @@ def build_namd_solvated_package(
     seed: int = 42,
     atomistic_model: "AtomisticModel | None" = None,
     solute_coords: "np.ndarray | None" = None,
-    water_shell_nm: Optional[float] = None,
     # Compute target, used ONLY to size the box against the right memory ceiling
     # (see _box_mode_atom_cap).  "cpu"/"none" sizes to host RAM instead of VRAM.
     devices: str = "0",
@@ -2742,13 +2670,6 @@ def build_namd_solvated_package(
     mg_hexahydrate:
         If true, place Mg as idealized MGH Mg(H2O)6 residues and write Mg-O
         extraBonds. If false, place bare MG ions.
-    water_shell_nm:
-        If set, keep only water within this distance (nm) of any DNA atom and drop
-        the rest (see :func:`_carve_water_shell`).  Box dimensions are unchanged;
-        atom count drops ~2× for large non-globular designs so GPU-resident NAMD
-        fits a memory-limited card.  The carved cell has vacuum corners, so the
-        downstream stages must run NVT (barostat off).  Need 2·shell ≥ cutoff for
-        a valid minimum image (cutoff is 12 Å, so ≥0.6 nm; 1.5 nm recommended).
     seed:
         Random seed for reproducible ion placement.
 
@@ -2801,8 +2722,7 @@ def build_namd_solvated_package(
         # historical bbox rule when that would not fit the hardware — a cell too big to
         # run is not safer than one too small.  The downgrade is recorded, not silent.
         _atom_cap = _box_mode_atom_cap(devices)
-        # Prefer the tutorial's bbox ± 20 Å, but only where it does not force a carve
-        # (which would cost the barostat, and with it the settle stage + box trace).
+        # Prefer the tutorial's bbox ± 20 Å when it fits the selected hardware.
         padding_nm, padding_note = resolve_padding_nm(
             dna_pdb, padding_nm, max_atoms=_atom_cap
         )
@@ -2820,14 +2740,12 @@ def build_namd_solvated_package(
             padding_nm,
             tmpdir,
             progress=progress,
-            water_shell_nm=water_shell_nm,
             box_mode=box_mode,
         )
 
     # 3. Count DNA net charge (1 phosphate = -1 charge) and calculate ion counts.
     #    Under the Aksimentiev recipe the counterion is Mg(H₂O)₆²⁺, not Na⁺ — see
-    #    :func:`ion_counts`.  The bulk terms are charged over the SOLVENT volume, so a
-    #    carved (or rotation-sized, mostly-empty) cell is not over-salted.
+    #    :func:`ion_counts`. Bulk terms are based on the solvent actually placed.
     _emit(progress, "assemble", 0.5, "Placing neutralising ions…")
     dna_charge = _count_dna_charge(dna_pdb)
     ions = ion_counts(
@@ -2842,15 +2760,15 @@ def build_namd_solvated_package(
     ion_volume_nm3 = ions.volume_nm3
 
     # A cell too tight to hold the hydration waters each Mg(H₂O)₆ needs cannot be
-    # built.  Report the shortfall in the units the caller can act on (padding /
-    # shell), not as a bare arithmetic failure deep inside placement.
+    # built. Report the shortfall as an actionable padding error rather than a bare
+    # arithmetic failure deep inside placement.
     needed = waters_needed_for_ions(ions, mg_hexahydrate=mg_hexahydrate)
     if needed > len(waters):
         raise RuntimeError(
             f"Cell holds {len(waters):,} waters but the ion recipe needs {needed:,} "
             f"({n_mg:,} Mg(H₂O)₆ × {MGH_WATERS_CONSUMED} + {n_na:,} Na⁺ + {n_cl:,} Cl⁻). "
             f"Neutralising {ions.dna_neg_charge:,} backbone charges with magnesium "
-            f"costs ~3 waters per phosphate. Increase padding_nm or the water shell."
+            f"costs ~3 waters per phosphate. Increase padding_nm."
         )
 
     # 4. Place ions (replace water molecules)
@@ -2945,7 +2863,7 @@ def build_namd_solvated_package(
         mgcl2_mM=mg_conc_mM,
         mg_hexahydrate=mg_hexahydrate and bool(mgh_clusters),
         n_hmr=n_hmr,
-        nvt_only=bool(water_shell_nm and water_shell_nm > 0),
+        nvt_only=False,
     )
 
     readme = _README.format(name=name)
@@ -2984,7 +2902,6 @@ def build_namd_solvated_package(
             "mg_hexahydrate": mg_hexahydrate and bool(mgh_clusters),
             "n_waters": len(waters),
             "box_nm": list(box_nm),
-            "water_shell_nm": water_shell_nm,
             "ion_volume_nm3": ion_volume_nm3,
         },
         # Which sizing rules produced this cell.  Both were previously logger-only, so a
@@ -3043,7 +2960,6 @@ def get_solvation_stats(
     ion_conc_mM: float = 150.0,
     mg_conc_mM: float = 0.0,
     mg_hexahydrate: bool = False,
-    water_shell_nm: Optional[float] = None,
 ) -> dict:
     """Return a dict with estimated system size without building the package.
 
@@ -3051,8 +2967,6 @@ def get_solvation_stats(
     atom counts and box dimensions.  Fast (~10 s) compared to the full
     PSF/PDB build (~60-120 s for large designs).
 
-    ``water_shell_nm`` mirrors :func:`build_namd_solvated_package`: when set, the
-    reported counts reflect the carved hydration shell.
     """
     dna_pdb = export_pdb(design, box_margin_nm=padding_nm)
     dna_psf = complete_psf(design)
@@ -3061,9 +2975,7 @@ def get_solvation_stats(
 
     with tempfile.TemporaryDirectory(prefix="nadoc_solvate_stats_") as _tmp:
         tmpdir = Path(_tmp)
-        waters, box_nm, _ = _gmx_solvate(
-            dna_pdb, padding_nm, tmpdir, water_shell_nm=water_shell_nm
-        )
+        waters, box_nm, _ = _gmx_solvate(dna_pdb, padding_nm, tmpdir)
 
     # Same recipe as the real build — ion_counts is the single implementation, so a
     # pre-flight estimate cannot drift from what the package actually gets.
@@ -3096,7 +3008,6 @@ def get_solvation_stats(
         "total_atoms": n_total,
         "box_nm": box_nm,
         "box_volume_nm3": bx * by * bz,
-        "water_shell_nm": water_shell_nm,
         "dna_charge": dna_charge,
     }
 

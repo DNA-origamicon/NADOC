@@ -113,8 +113,14 @@ twisting bundles by inserting/deleting base pairs. Enforces physical limits
 (6–15 bp/turn twist density, min bend radius).
 
 ### Atomistic & NAMD export
-All-atom template with PDB/PSF export. One-click NAMD simulation package (ZIP)
-with GBIS implicit solvent config. PDB export can use either native NADOC
+All-atom template with PDB/PSF export and in-app NAMD relaxation/production jobs.
+Explicit-solvent jobs use a complete periodic water box; NADOC does not replace an
+oversized system with a finite hydration shell. If the full system does not fit the
+selected hardware, choose a larger-memory target, a smaller construct, or the optional
+GBIS continuum-solvent protocol. GBIS removes explicit water but cannot use NAMD's
+GPU-resident mode and currently runs through NADOC's multicore CPU path.
+
+PDB export can use either native NADOC
 coordinates or the currently displayed simulation/FEM coordinates. Scalar maps
 (RMSF and deviation) can be embedded as per-atom B-factors using the current
 legend bounds and colormap; the export dialog enables this by default, and the

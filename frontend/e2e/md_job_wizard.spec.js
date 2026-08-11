@@ -181,31 +181,15 @@ test('switching protocol changes the plan and the provenance chips', async ({ pa
 
   await modal.locator('.wizard-tab', { hasText: 'Protocol' }).click()
   await modal.locator('.wizard-preset', { hasText: 'Match the literature' }).click()
-  // The literature tier refuses a water-shell carve and SAYS so up front — but as a
-  // policy, not a verdict: this plan cannot know whether the design fits (that needs a
-  // solvation profile), so it must never stop the run being created. The fit check
-  // belongs to the launch pre-flight.
   await openPlanTab(modal)
-  const carve = modal.locator('.wizard-cond', { hasText: 'water-shell carve is not allowed' })
-  await expect(carve).toHaveCount(1)
   await expect(modal.locator('.wizard-cond--blocking')).toHaveCount(0)
   await expect(modal.locator('button', { hasText: 'Create job' })).toBeEnabled()
   // Its settings come from the protocol, so the chips say so.
   await modal.locator('.wizard-tab', { hasText: 'Protocol' }).click()
   await expect(modal.locator('.wizard-chip--preset').first()).toBeVisible()
 
-  // "Not an option" means LOCKED, not merely defaulted: a carved run is a different
-  // experiment, so an override would make this tier's own name untrue.
-  const allow = modal.locator('.wizard-field', { hasText: 'Allow a carve' })
-  await expect(allow.locator('input[type=checkbox]')).toBeDisabled()
-  await expect(allow.locator('input[type=checkbox]')).not.toBeChecked()
-  await expect(allow.locator('.wizard-chip')).toHaveText('forced by the server')
-
   await modal.locator('.wizard-preset', { hasText: 'Optimised for the design' }).click()
-  await expect(carve).toHaveCount(0)
   await expect(modal.locator('.wizard-tab', { hasText: 'Protocol' })).toHaveClass(/is-selected/)
-  // ...and it goes back to being an ordinary editable choice on a tier that permits it.
-  await expect(allow.locator('input[type=checkbox]')).toBeEnabled()
 })
 
 test('every stage parameter is editable, and edits highlight as protocol deviations',

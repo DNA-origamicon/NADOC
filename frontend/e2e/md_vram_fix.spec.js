@@ -6,7 +6,7 @@ import { test, expect } from '@playwright/test'
 const API = `${process.env.NADOC_E2E_API_BASE || 'http://127.0.0.1:8000'}/api`
 const DESIGN_PATH = '/home/jojo/Work/NADOC/workspace/6hb_84bp.nadoc'
 
-test('VRAM-failed job shows a Fix button that opens the downsize popup', async ({ page, request }) => {
+test('VRAM-failed job explains the full-box hardware requirement', async ({ page, request }) => {
   test.setTimeout(60_000)
 
   // A GPU-OOM job must exist to test against (VoltronCore full-box run).
@@ -47,10 +47,10 @@ test('VRAM-failed job shows a Fix button that opens the downsize popup', async (
   const modal = page.locator('[data-testid="vram-fix-modal"]')
   await expect(modal).toBeVisible()
   await expect(modal).toContainText('Ran out of GPU memory')
-  // Feasible recommendation → an Apply button offering a water-shell re-run.
-  await expect(modal.locator('button', { hasText: /Re-run with/ })).toBeVisible()
+  await expect(modal).toContainText(/complete periodic water box/i)
+  await expect(modal.locator('button', { hasText: /Re-run with/ })).toHaveCount(0)
 
   // Close without applying (don't spawn a real multi-hour job from the test).
-  await modal.locator('button', { hasText: 'Cancel' }).click()
+  await modal.locator('button', { hasText: 'Close' }).click()
   await expect(modal).toBeHidden()
 })

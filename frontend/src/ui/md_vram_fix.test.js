@@ -2,11 +2,10 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { shouldShowFixButton, fixMessage, openVramFixModal } from './md_vram_fix.js'
 
 const VRAM_OK = {
-  failure_kind: 'vram_oom', remedy: 'downsize',
+  failure_kind: 'vram_oom', remedy: 'none',
   is_vram_failure: true, vram_detected: true, profile_available: true,
   vram_mb: 12288, current_atoms: 8_859_879, current_vram_mb: 29200,
-  max_atoms: 3_160_000, feasible: true, recommended_shell_nm: 1.5,
-  estimated_atoms: 1_310_000, estimated_vram_mb: 4300,
+  max_atoms: 3_160_000,
   log_excerpt: 'FATAL ERROR: ... out of memory',
 }
 const INSTABILITY = {
@@ -71,22 +70,12 @@ describe('shouldShowFixButton', () => {
 })
 
 describe('fixMessage', () => {
-  it('vram_oom feasible → downsize refit with the recommended shell', () => {
+  it('vram_oom explains that the complete solvent box needs larger hardware', () => {
     const m = fixMessage(VRAM_OK)
-    expect(m.canApply).toBe(true)
-    expect(m.shellAng).toBe(15)
-    expect(m.action).toEqual({ type: 'refit', body: {} })
-    expect(m.applyLabel).toContain('15 Å')
-    expect(m.lines.join(' ')).toMatch(/8,859,879 atoms/)
-  })
-
-  it('vram_oom infeasible → no apply', () => {
-    const m = fixMessage({
-      ...VRAM_OK, remedy: 'none', feasible: false, recommended_shell_nm: null,
-      tightest_shell_nm: 0.8, tightest_atoms: 5_000_000, required_vram_mb: 19400,
-    })
     expect(m.canApply).toBe(false)
-    expect(m.lines.join(' ')).toMatch(/too large for this GPU/)
+    expect(m.action).toBeUndefined()
+    expect(m.lines.join(' ')).toMatch(/8,859,879 atoms/)
+    expect(m.lines.join(' ')).toMatch(/complete periodic water box/i)
   })
 
   it('instability → gentle refit (force_soft)', () => {
@@ -109,7 +98,7 @@ describe('fixMessage', () => {
     expect(m.canApply).toBe(true)
     expect(m.action).toEqual({ type: 'retry' })
     expect(m.title).toMatch(/host|CPU/i)
-    // Must not offer a water-shell / shell input (wrong remedy for a host OOM).
+    // Host pressure is unrelated to device memory.
     expect(m.shellAng).toBeUndefined()
     expect(m.lines.join(' ')).toMatch(/host|CPU RAM|pinned/i)
   })
@@ -134,17 +123,11 @@ describe('openVramFixModal (DOM)', () => {
     return [...modal.querySelectorAll('button')].find(b => re.test(b.textContent))
   }
 
-  it('downsize: edits shell and refits with water_shell_nm in nm', async () => {
-    let action = null
-    openVramFixModal({ advice: VRAM_OK, onApply: async (a) => { action = a } })
+  it('VRAM failure has no reduced-solvent input or re-run action', () => {
+    openVramFixModal({ advice: VRAM_OK })
     const modal = document.querySelector('[data-testid="vram-fix-modal"]')
-    const input = modal.querySelector('input[type="number"]')
-    expect(input.value).toBe('15')
-    input.value = '12'
-    applyBtn(modal, /Re-run/).click()
-    await new Promise(r => setTimeout(r, 0))
-    expect(action).toEqual({ type: 'refit', body: { water_shell_nm: 1.2 } })
-    expect(document.querySelector('[data-testid="vram-fix-modal"]')).toBeFalsy()
+    expect(modal.querySelector('input[type="number"]')).toBeFalsy()
+    expect(applyBtn(modal, /Re-run/)).toBeFalsy()
   })
 
   it('instability: applies force_soft refit, no shell input', async () => {

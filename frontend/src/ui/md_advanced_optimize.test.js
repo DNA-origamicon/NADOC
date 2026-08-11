@@ -81,21 +81,21 @@ describe('gpuResidentWarning — forcing a mode against the system size', () => 
 describe('buildPlan', () => {
   it('diffs recommended against current and flags what changes', () => {
     const plan = buildPlan(
-      { threads: 6, compute: 'gpu', water_shell_a: 12, fast: true },
-      { threads: 16, compute: 'gpu', water_shell_a: 0, fast: true },
+      { threads: 6, compute: 'gpu', padding_nm: 2, fast: true },
+      { threads: 16, compute: 'gpu', padding_nm: 1.2, fast: true },
     )
     const by = Object.fromEntries(plan.map(r => [r.key, r]))
     expect(by.threads.changed).toBe(true)
     expect(by.threads.from).toBe('16')
     expect(by.threads.to).toBe('6')
-    expect(by.water_shell_a.changed).toBe(true)
+    expect(by.padding_nm.changed).toBe(true)
     expect(by.compute.changed).toBe(false)   // same value → not a change
     expect(by.fast.changed).toBe(false)
   })
 
   it('omits fields the backend has no opinion about (null/undefined)', () => {
-    const plan = buildPlan({ threads: 6, water_shell_a: null }, { threads: 4, water_shell_a: 8 })
-    expect(plan.map(r => r.key)).toEqual(['threads'])   // water_shell_a must be left alone
+    const plan = buildPlan({ threads: 6, padding_nm: null }, { threads: 4, padding_nm: 1.2 })
+    expect(plan.map(r => r.key)).toEqual(['threads'])
   })
 
   it('renders booleans as on/off rather than true/false', () => {
@@ -106,8 +106,8 @@ describe('buildPlan', () => {
   })
 
   it('appends units so the table reads as physical quantities', () => {
-    const [row] = buildPlan({ water_shell_a: 12 }, { water_shell_a: 0 })
-    expect(row.to).toBe('12 Å')
+    const [row] = buildPlan({ padding_nm: 2 }, { padding_nm: 1.2 })
+    expect(row.to).toBe('2 nm')
   })
 
   it('carries the raw value through for apply()', () => {
@@ -127,8 +127,8 @@ describe('planHasChanges', () => {
 
 describe('buildCaveats', () => {
   it('keeps the backend warnings AND always adds the estimate/scope/machine caveats', () => {
-    const caveats = buildCaveats({ warnings: ['carve disables GPU-resident'] })
-    expect(caveats[0]).toMatch(/GPU-resident/)
+    const caveats = buildCaveats({ warnings: ['full box needs more memory'] })
+    expect(caveats[0]).toMatch(/full box/)
     expect(caveats.join(' ')).toMatch(/ESTIMATES/)
     expect(caveats.join(' ')).toMatch(/does NOT.*force field/i)
     expect(caveats.join(' ')).toMatch(/another\s+computer/i)
@@ -139,35 +139,24 @@ describe('buildCaveats', () => {
   })
 })
 
-describe('describeRunPath — the rule that a carve kills GPU-resident', () => {
+describe('describeRunPath', () => {
   it('full box + fast on GPU is GPU-resident', () => {
-    const p = describeRunPath({ compute: 'gpu', water_shell_a: 0, fast: true })
+    const p = describeRunPath({ compute: 'gpu', fast: true })
     expect(p.gpuResident).toBe(true)
     expect(p.label).toBe('GPU-resident')
     expect(p.tone).toBe('ok')
   })
 
-  it('ANY water-shell carve disables GPU-resident', () => {
-    const p = describeRunPath({ compute: 'gpu', water_shell_a: 12, fast: true })
-    expect(p.gpuResident).toBe(false)
-    expect(p.label).toBe('CUDA offload')
-    expect(p.tone).toBe('warn')
-    expect(p.detail).toMatch(/vacuum/)
-  })
-
   it('fast off disables GPU-resident even on a full box', () => {
-    expect(describeRunPath({ compute: 'gpu', water_shell_a: 0, fast: false }).gpuResident).toBe(false)
+    expect(describeRunPath({ compute: 'gpu', fast: false }).gpuResident).toBe(false)
   })
 
   it('CPU compute is never GPU-resident', () => {
-    const p = describeRunPath({ compute: 'cpu', water_shell_a: 0, fast: true })
+    const p = describeRunPath({ compute: 'cpu', fast: true })
     expect(p.gpuResident).toBe(false)
     expect(p.label).toMatch(/CPU/)
   })
 
-  it('treats a string shell value from the DOM as a number', () => {
-    expect(describeRunPath({ compute: 'gpu', water_shell_a: '12', fast: true }).gpuResident).toBe(false)
-  })
 })
 
 describe('productionTimestepWarning — dt vs the fast relaxation ladder', () => {
@@ -201,9 +190,9 @@ describe('productionTimestepWarning — dt vs the fast relaxation ladder', () =>
 describe('renderRunPath', () => {
   it('paints the label and detail into the element', () => {
     const el = document.createElement('div')
-    renderRunPath(el, { compute: 'gpu', water_shell_a: 12, fast: true })
-    expect(el.innerHTML).toMatch(/CUDA offload/)
-    expect(el.title).toMatch(/vacuum/)
+    renderRunPath(el, { compute: 'gpu', fast: true })
+    expect(el.innerHTML).toMatch(/GPU-resident/)
+    expect(el.title).toMatch(/complete solvent box/)
   })
   it('is a no-op on a missing element', () => {
     expect(() => renderRunPath(null, {})).not.toThrow()
@@ -290,9 +279,9 @@ describe('initAdvancedOptimize', () => {
   let button, apply, notify, fetchRecommendation, fetchHardware, preflight
 
   const RESULT = {
-    recommended: { threads: 6, water_shell_a: 12 },
+    recommended: { threads: 6, padding_nm: 2 },
     rationale: ['because'],
-    warnings: ['carve disables GPU-resident'],
+    warnings: ['full box needs more memory'],
     facts: { est_ns_per_day: 18.8, chosen_atoms: 196606, gpu_resident: false },
   }
 
@@ -349,18 +338,18 @@ describe('initAdvancedOptimize', () => {
     const modal = vi.fn(async () => true)
     initAdvancedOptimize({
       button, fetchHardware, fetchRecommendation, apply, notify, modal, preflight,
-      getCurrent: () => ({ threads: 16, water_shell_a: 0 }),
+      getCurrent: () => ({ threads: 16, padding_nm: 1.2 }),
     })
     button.click()
     await vi.waitFor(() => expect(apply).toHaveBeenCalled())
-    expect(apply).toHaveBeenCalledWith({ threads: 6, water_shell_a: 12 })
+    expect(apply).toHaveBeenCalledWith({ threads: 6, padding_nm: 2 })
   })
 
   it('changes NOTHING when the user cancels — the whole point of the gate', async () => {
     const modal = vi.fn(async () => false)
     initAdvancedOptimize({
       button, fetchHardware, fetchRecommendation, apply, notify, modal, preflight,
-      getCurrent: () => ({ threads: 16, water_shell_a: 0 }),
+      getCurrent: () => ({ threads: 16, padding_nm: 1.2 }),
     })
     button.click()
     await vi.waitFor(() => expect(notify).toHaveBeenCalled())
@@ -377,7 +366,7 @@ describe('initAdvancedOptimize', () => {
     await vi.waitFor(() => expect(modal).toHaveBeenCalled())
     const arg = modal.mock.calls[0][0]
     expect(arg.caveats.length).toBeGreaterThan(1)
-    expect(arg.caveats[0]).toMatch(/GPU-resident/)
+    expect(arg.caveats[0]).toMatch(/full box/)
     expect(arg.plan.length).toBeGreaterThan(0)
   })
 

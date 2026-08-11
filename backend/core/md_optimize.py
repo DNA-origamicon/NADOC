@@ -1,32 +1,6 @@
-"""Recommend NAMD "Advanced" settings for the current design + this machine.
-
-Backs the Advanced card's ⚡ Optimize button.  Pure policy: it reads the design's
-solvation profile and the host's GPU/CPU, then picks the settings that should give
-the highest throughput WITHOUT changing the science (force field, salt, protocol
-shape and stage lengths are never touched).
-
-The one genuinely non-obvious rule it encodes — measured 2026-07-12 on an RTX 2080
-Super, NAMD 3.0.2, HMR + rigidBonds all + 4 fs (see [[water-shell-carve]]):
-
-  * A **water-shell carve and NAMD's GPU-resident mode are mutually exclusive.**  A
-    carve leaves vacuum in the periodic cell and NAMD's GPU-resident tile-list build
-    then under-counts exclusions and aborts at step 0 ("Low global CUDA exclusion
-    count!").  Carved packages therefore run the standard CUDA-offload path
-    (nonbonded + PME still on the GPU, integrator + bonded on the CPU).
-  * So a carve is a **trade**, not a free win: it buys fewer atoms but costs the
-    GPU-resident integrator.  Throughput goes roughly as 1/N_atoms on each path, and
-    GPU-resident is ~2.6x faster PER ATOM, so a carve only pays for itself when it
-    removes more than ~2.6x the atoms.  For a concave design (a bent bundle, a plate
-    with a hole) it easily does; for a straight bundle — whose DNA already fills its
-    own bounding box — a carve removes almost nothing and is a pure loss.
-
-That is exactly the decision this module automates, because getting it wrong costs
-either ~35 % of throughput or a crash 40 minutes into a run.
-"""
+"""Recommend NAMD execution settings without changing the physical system."""
 
 from __future__ import annotations
-
-from typing import Optional
 
 from backend.core.md_protocols import (
     AKSIMENTIEV_STEPS_PER_CYCLE,
@@ -34,11 +8,9 @@ from backend.core.md_protocols import (
     _round_up_to_cycle,
 )
 from backend.core.md_vram import (
-    CANDIDATE_SHELLS_NM,
     detect_host_ram_mb,
     detect_vram_mb,
     estimate_profile_from_design,
-    estimate_total_atoms,
     max_atoms_for_host_ram,
     max_atoms_for_vram,
 )
@@ -52,28 +24,10 @@ from backend.core.md_vram import (
 #   GPU-resident, full solvation : 12.8 ns/day @ 747,262 atoms
 #   CUDA-offload, 12 A carve     : 18.8 ns/day @ 196,606 atoms
 #
-# K is machine-specific (a 3080 is ~3x these), but the RATIO — which is all the
-# carve/no-carve decision depends on — is a property of NAMD, not of the card.
+# K is machine-specific (a 3080 is ~3x these); these anchors only rank execution paths.
 K_GPU_RESIDENT = 12.8 * 747_262  # ~9.6e6 atom·ns/day
 K_OFFLOAD = 18.8 * 196_606  # ~3.7e6 atom·ns/day
 K_CPU = K_OFFLOAD / 12.0  # crude: the CPU build is ~an order slower
-
-#: A carve must remove more than this factor of atoms to beat GPU-resident (~2.6x).
-CARVE_BREAKEVEN = K_GPU_RESIDENT / K_OFFLOAD
-# When the full box would run OFFLOAD anyway (a system below the resident crossover), a
-# carve costs no code path — but it still forces NVT and leaves vacuum in the cell, so it
-# has to buy a REAL atom reduction rather than a rounding error.
-CARVE_MIN_PAYOFF_NO_RESIDENT = 1.5
-
-# Shell thickness is a PHYSICS choice, not a speed knob.  Throughput rises
-# monotonically as the shell thins, so an optimiser told to maximise ns/day will
-# happily shave the hydration layer down to nothing.  It must not: the shell has to
-# be thick enough to (a) hydrate the duplex properly and (b) keep the minimum-image
-# convention valid (2 x shell >= cutoff).  So we FIX the shell at a validated
-# thickness and only ever go thinner when memory forces it — never for speed.
-DEFAULT_SHELL_NM = 1.2  # 12 A — the thickness validated on 6hbx100_90deg
-MIN_SHELL_NM = 0.8  # hard floor; below this the hydration layer is not credible
-
 
 # GPU-resident's advantage is NOT scale-free — the 2.6x-per-atom ratio above only holds
 # for large systems.  Below ~100k atoms both paths hit the same fixed per-step
@@ -192,108 +146,6 @@ def probe_hardware(devices: str = "0") -> dict:
     }
 
 
-def choose_water_shell(
-    *,
-    full_atoms: int,
-    shell_atoms: dict[float, int],
-    atom_cap: Optional[int],
-    gpu: bool,
-) -> tuple[float, bool, str]:
-    """Pick the water shell (nm; 0 = full box) that maximises predicted throughput.
-
-    ``shell_atoms`` maps a candidate shell (nm) → estimated total atom count.
-    ``atom_cap`` is the hard VRAM/host-RAM ceiling (None = unknown, don't bind).
-
-    Returns ``(shell_nm, gpu_resident, reason)``.  A carve always implies
-    ``gpu_resident=False`` — that incompatibility is the whole point of this module.
-
-    The shell is NEVER thinned for throughput (see DEFAULT_SHELL_NM): the only choice
-    made on speed grounds is the binary carve-vs-full-box one.
-    """
-
-    def fits(n: int) -> bool:
-        return atom_cap is None or n <= atom_cap
-
-    # The carve candidate: the validated thickness, thinned ONLY if memory forces it.
-    carve_shell = 0.0
-    for s in sorted((s for s in shell_atoms if s >= MIN_SHELL_NM), reverse=True):
-        if s > DEFAULT_SHELL_NM:
-            continue  # never thicker than the default — no benefit
-        carve_shell = s  # the thickest shell <= default...
-        if fits(shell_atoms[s]):
-            break  # ...that also fits memory
-    carve_atoms = (
-        shell_atoms.get(carve_shell, full_atoms) if carve_shell else full_atoms
-    )
-
-    full_ok = fits(full_atoms)
-    # Predict the full box on the path it would ACTUALLY take: resident only where that
-    # pays (below the crossover it is slower than offload, see predict_ns_per_day).
-    full_resident = gpu and gpu_resident_pays(full_atoms)
-    full_rate = (
-        predict_ns_per_day(full_atoms, gpu_resident=full_resident, gpu=gpu)
-        if full_ok
-        else -1.0
-    )
-    carve_rate = (
-        predict_ns_per_day(carve_atoms, gpu_resident=False, gpu=gpu)
-        if carve_shell
-        else -1.0
-    )
-    # How much a carve must buy to be worth taking.  This used to be implicit in the rate
-    # comparison: with the full box on resident, `carve_rate <= full_rate` is exactly
-    # `payoff <= K_GPU_RESIDENT/K_OFFLOAD`.  That equivalence BREAKS once a small full box
-    # is (correctly) predicted on offload — the threshold silently collapses to 1.0x and
-    # any carve, however tiny, "wins".  So state it explicitly for both regimes.
-    carve_payoff = full_atoms / max(1, carve_atoms) if carve_shell else 0.0
-    payoff_needed = CARVE_BREAKEVEN if full_resident else CARVE_MIN_PAYOFF_NO_RESIDENT
-
-    if not full_ok and not fits(carve_atoms):
-        return (
-            carve_shell,
-            False,
-            f"nothing fits this machine's ~{atom_cap:,}-atom ceiling; using the "
-            f"thinnest credible shell ({round(carve_shell * 10)} Å)",
-        )
-
-    if not full_ok:
-        return (
-            carve_shell,
-            False,
-            f"the full box (~{full_atoms:,} atoms) exceeds this machine's memory, so a "
-            f"{round(carve_shell * 10)} Å shell (~{carve_atoms:,} atoms) is required",
-        )
-
-    if carve_payoff < payoff_needed or carve_rate <= full_rate:
-        # Full box wins — but that does NOT automatically mean run it GPU-resident.
-        if gpu and not full_resident:
-            return (
-                0.0,
-                False,
-                f"the full box fits and a {round(carve_shell * 10)} Å carve would only "
-                f"remove {carve_payoff:.1f}x the atoms (needs >{payoff_needed:.1f}x to be "
-                f"worth forcing NVT); at ~{full_atoms:,} atoms GPU-resident is SLOWER than "
-                f"CUDA offload — below ~{_RESIDENT_MIN_ATOMS:,} both paths hit the same "
-                f"per-step floor and resident's setup is pure overhead — so the run stays "
-                f"on offload",
-            )
-        return (
-            0.0,
-            full_resident,
-            f"a {round(carve_shell * 10)} Å carve would only remove {carve_payoff:.1f}x the "
-            f"atoms, which does not pay for losing GPU-resident mode "
-            f"(needs >{payoff_needed:.1f}x) — this design largely fills its own bounding box",
-        )
-
-    return (
-        carve_shell,
-        False,
-        f"a {round(carve_shell * 10)} Å shell cuts {full_atoms:,} → {carve_atoms:,} atoms "
-        f"({carve_payoff:.1f}x), which beats the full box "
-        f"(needs >{payoff_needed:.1f}x)",
-    )
-
-
 def recommend_advanced(
     design,
     *,
@@ -346,9 +198,7 @@ def recommend_advanced(
             design, padding_nm=padding_nm, atomistic_model=atomistic_model
         )
     except Exception as exc:  # noqa: BLE001
-        warnings.append(
-            f"Could not size the solvated system ({exc}) — left the water shell alone."
-        )
+        warnings.append(f"Could not size the fully solvated system ({exc}).")
 
     rec: dict = {
         "threads": threads,
@@ -367,7 +217,6 @@ def recommend_advanced(
     }
 
     if profile is None:
-        rec["water_shell_a"] = None  # leave the user's value alone
         rec["gpu_resident"] = None
         return {
             "recommended": rec,
@@ -377,46 +226,16 @@ def recommend_advanced(
         }
 
     full_atoms = profile["dna_atoms"] + profile["full_water"] * 3 + profile["ion_atoms"]
-    shell_atoms = {
-        s: estimate_total_atoms(
-            dna_xyz_nm=profile["dna_xyz_nm"],
-            box_nm=profile["box_nm"],
-            full_water=profile["full_water"],
-            dna_atoms=profile["dna_atoms"],
-            ion_atoms=profile["ion_atoms"],
-            shell_nm=s,
-        )
-        for s in CANDIDATE_SHELLS_NM
-    }
-
-    shell_nm, gpu_resident, why = choose_water_shell(
-        full_atoms=full_atoms, shell_atoms=shell_atoms, atom_cap=atom_cap, gpu=gpu
-    )
-
-    chosen_atoms = (
-        full_atoms if shell_nm == 0 else shell_atoms.get(shell_nm, full_atoms)
-    )
-    rec["water_shell_a"] = round(shell_nm * 10, 1)
+    chosen_atoms = full_atoms
+    gpu_resident = bool(gpu and gpu_resident_pays(full_atoms))
     rec["gpu_resident"] = bool(gpu_resident)
-
-    if shell_nm == 0:
-        rationale.append(f"Water shell → 0 (full box): {why}.")
-    else:
-        rationale.append(f"Water shell → {round(shell_nm * 10)} Å: {why}.")
-        warnings.append(
-            f"A {round(shell_nm * 10)} Å water shell DISABLES NAMD's GPU-resident mode — a carved "
-            "cell has vacuum in it, which NAMD's GPU-resident tile-list build cannot handle "
-            "(it aborts at step 0). The run stays fully CUDA-accelerated on the offload path "
-            "(nonbonded + PME on the GPU) and is still the faster option here, but the barostat "
-            "is off (NVT) because a piston would collapse the vacuum."
-        )
+    rationale.append("The complete periodic water box is retained.")
 
     est = predict_ns_per_day(chosen_atoms, gpu_resident=gpu_resident, gpu=gpu)
     facts.update(
         {
             "full_atoms": full_atoms,
             "chosen_atoms": chosen_atoms,
-            "shell_atoms": {str(k): v for k, v in shell_atoms.items()},
             "est_ns_per_day": round(est, 1),
             "gpu_resident": bool(gpu_resident),
         }

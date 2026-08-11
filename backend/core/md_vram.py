@@ -1,13 +1,11 @@
-"""GPU-VRAM failure detection and downsize recommendation for NAMD jobs.
+"""GPU-VRAM failure detection and full-system sizing for NAMD jobs.
 
 A large explicit-solvent origami can exceed the GPU's memory and abort with a
 CUDA ``out of memory`` error at startup.  This module:
 
   1. recognises that failure in a NAMD log (:func:`log_indicates_oom`),
   2. reads the GPU's total VRAM (:func:`detect_vram_mb`),
-  3. estimates whether a *more restrictive* run (a tighter water-shell carve, see
-     ``namd_solvate._carve_water_shell``) would fit, and which shell to use
-     (:func:`recommend_downsize`).
+  3. estimates whether the complete explicitly solvated system fits.
 
 The VRAM model is empirical: NAMD standard-CUDA peaked at ~4.0 GB for a 1.31 M
 atom system on a 12 GB RTX 3080 Ti, and an 8.86 M atom system OOM'd on the same
@@ -37,11 +35,6 @@ _WATER_NUMBER_DENSITY_NM3 = 33.4
 # (VoltronCore: 2.79 M waters in 90 k nm³ ≈ 31; ideal build ≈ 30).  Used only for
 # the pre-flight size estimate, where no gmx run is available yet.
 _FULL_BOX_WATER_DENSITY_NM3 = 30.0
-
-# Candidate hydration-shell thicknesses (nm), largest (least restrictive) first.
-# 2·shell must clear the 12 Å nonbonded cutoff for a valid minimum image, so the
-# smallest candidate is 0.8 nm (16 Å gap).
-CANDIDATE_SHELLS_NM = (2.0, 1.8, 1.5, 1.2, 1.0, 0.8)
 
 _OOM_PAT = re.compile(r"out of memory", re.IGNORECASE)
 # A CUDA out-of-memory that is really a *host* (pinned CPU RAM) allocation failure,
@@ -439,12 +432,8 @@ def max_atoms_for_vram(vram_mb: float) -> int:
 # A NAMD explicit-solvent run also needs host (CPU) RAM: the full topology + patch
 # metadata, and — the part that actually bit us — page-locked "pinned" staging
 # buffers the GPU bonded kernel allocates via cudaHostAlloc (see FAILURE_HOST_OOM).
-# This is a COARSE guard, deliberately conservative in the direction of NOT carving:
-# it should only shrink a run on a genuinely small-RAM machine, never second-guess a
-# box that has room (carving swaps the full periodic box for an NVT shell, a real
-# accuracy cost). ~2.5 GB per million atoms is a safety-margined figure for the
-# multicore-CUDA build under a dense elastic network; refine if a small-RAM machine
-# is seen to OOM below this or to over-carve above it.
+# This is a coarse, safety-margined figure for the multicore-CUDA build under a dense
+# elastic network. It is used only to decide whether the complete system fits.
 _HOST_MB_PER_MATOM = 2500.0
 # Fraction of *currently-available* host RAM a run may claim — leaves generous room
 # for the OS, the NADOC server, and a browser/live-viewer sharing the machine.
@@ -484,152 +473,7 @@ def required_vram_mb(n_atoms: int) -> int:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# §3  DOWNSIZE ESTIMATE
-# ══════════════════════════════════════════════════════════════════════════════
-
-
-def _grid_nearest_dna_dist(dna_xyz_nm, shell_max_nm: float, grid_nm: float = 0.6):
-    """Return (distances, cell_volume_nm3) for a regular grid over the DNA + shell.
-
-    Each grid point's nearest-DNA distance lets us count the hydration volume for
-    any shell ≤ ``shell_max_nm`` by simple thresholding (computed once, reused).
-    """
-    import numpy as np  # noqa: PLC0415
-    from scipy.spatial import cKDTree  # noqa: PLC0415
-
-    P = np.asarray(dna_xyz_nm, dtype=float)
-    lo = P.min(0) - shell_max_nm
-    hi = P.max(0) + shell_max_nm
-    axes = [np.arange(lo[i], hi[i] + grid_nm, grid_nm) for i in range(3)]
-    gx, gy, gz = np.meshgrid(*axes, indexing="ij")
-    grid = np.column_stack([gx.ravel(), gy.ravel(), gz.ravel()])
-    dist, _ = cKDTree(P).query(grid, k=1, workers=-1)
-    return dist, grid_nm**3
-
-
-def estimate_total_atoms(
-    *,
-    dna_xyz_nm,
-    box_nm: tuple[float, float, float],
-    full_water: int,
-    dna_atoms: int,
-    ion_atoms: int,
-    shell_nm: float,
-    _grid_cache: Optional[tuple] = None,
-) -> int:
-    """Estimate the solvated atom count if water is carved to *shell_nm*.
-
-    Water fills the box uniformly, so the carved water count scales with the
-    fraction of the box volume that lies within ``shell_nm`` of the DNA:
-
-        carved_water ≈ full_water · shell_volume / box_volume
-
-    ``shell_volume`` is measured on a coarse grid.  Ions are held fixed (≈1 % of
-    atoms — negligible for a fit decision).
-    """
-    bx, by, bz = box_nm
-    box_vol = bx * by * bz
-    dist, cell_vol = (
-        _grid_cache
-        if _grid_cache is not None
-        else _grid_nearest_dna_dist(dna_xyz_nm, max(CANDIDATE_SHELLS_NM))
-    )
-    shell_vol = float((dist <= shell_nm).sum()) * cell_vol
-    frac = min(1.0, shell_vol / box_vol) if box_vol > 0 else 1.0
-    carved_water = int(round(full_water * frac))
-    return dna_atoms + carved_water * 3 + ion_atoms
-
-
-def carve_fill_fraction(
-    dna_xyz_nm, box_nm: tuple[float, float, float], shell_nm: float
-) -> float:
-    """Fraction of the periodic cell volume filled by a ``shell_nm`` water carve around
-    the DNA (0..1). GPU-resident needs a well-filled cell — a *tight* box the structure
-    fills runs resident, a *big* box with a concave water-shell carve leaves vacuum
-    corners and dies at step 0 ("Low global CUDA exclusion count!"). This lets the
-    conf builder tell those apart instead of blanket-disabling resident on any carve.
-    A shell of 0 (no carve / full box) is fully filled → 1.0.
-    """
-    if not shell_nm or shell_nm <= 0:
-        return 1.0
-    bx, by, bz = box_nm
-    box_vol = bx * by * bz
-    if box_vol <= 0:
-        return 1.0
-    dist, cell_vol = _grid_nearest_dna_dist(dna_xyz_nm, shell_nm)
-    shell_vol = float((dist <= shell_nm).sum()) * cell_vol
-    return min(1.0, shell_vol / box_vol)
-
-
-def recommend_downsize(
-    *,
-    dna_xyz_nm,
-    box_nm: tuple[float, float, float],
-    full_water: int,
-    dna_atoms: int,
-    ion_atoms: int,
-    vram_mb: float,
-    max_atoms: Optional[int] = None,
-) -> dict:
-    """Recommend a water-shell thickness that fits the atom budget, or report infeasible.
-
-    Picks the **largest** (least restrictive, most accurate) candidate shell whose
-    estimated atom count fits; if none fit, reports the tightest shell's size and
-    the VRAM a card would need.
-
-    ``max_atoms`` overrides the VRAM-derived budget — pass the tighter of the GPU and
-    host-RAM caps so the recommendation also respects host memory. ``vram_mb`` is
-    still reported for the message either way.
-    """
-    if max_atoms is None:
-        max_atoms = max_atoms_for_vram(vram_mb)
-    current_atoms = dna_atoms + full_water * 3 + ion_atoms
-    grid = _grid_nearest_dna_dist(dna_xyz_nm, max(CANDIDATE_SHELLS_NM))
-
-    estimates = []
-    for shell in CANDIDATE_SHELLS_NM:
-        est = estimate_total_atoms(
-            dna_xyz_nm=dna_xyz_nm,
-            box_nm=box_nm,
-            full_water=full_water,
-            dna_atoms=dna_atoms,
-            ion_atoms=ion_atoms,
-            shell_nm=shell,
-            _grid_cache=grid,
-        )
-        estimates.append((shell, est))
-
-    base = {
-        "current_atoms": current_atoms,
-        "current_vram_mb": estimate_vram_mb(current_atoms),
-        "max_atoms": max_atoms,
-        "vram_mb": int(vram_mb),
-        "candidates": [{"shell_nm": s, "atoms": a} for s, a in estimates],
-    }
-
-    for shell, est in estimates:  # largest shell first
-        if est <= max_atoms:
-            return {
-                **base,
-                "feasible": True,
-                "recommended_shell_nm": shell,
-                "estimated_atoms": est,
-                "estimated_vram_mb": estimate_vram_mb(est),
-            }
-
-    tight_shell, tight_atoms = estimates[-1]  # smallest shell
-    return {
-        **base,
-        "feasible": False,
-        "recommended_shell_nm": None,
-        "tightest_shell_nm": tight_shell,
-        "tightest_atoms": tight_atoms,
-        "required_vram_mb": required_vram_mb(tight_atoms),
-    }
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# §4  PACKAGE PROFILE
+# §3  PACKAGE PROFILE
 # ══════════════════════════════════════════════════════════════════════════════
 
 
@@ -659,10 +503,7 @@ def _read_dna_atoms_from_pdb(pdb_path: Path) -> "list[tuple[float, float, float]
 
 
 def package_solvation_profile(package_dir: Path, name_stem: str) -> Optional[dict]:
-    """Extract the inputs :func:`recommend_downsize` needs from a built package.
-
-    Returns None if the package lacks the charge audit or PDB needed to estimate.
-    """
+    """Extract the atom-count inputs from a built explicit-solvent package."""
     import json  # noqa: PLC0415
 
     audit_path = package_dir / "charge_audit.json"
@@ -696,12 +537,11 @@ def package_solvation_profile(package_dir: Path, name_stem: str) -> Optional[dic
         "box_nm": tuple(box),
         "full_water": n_waters,
         "ion_atoms": ion_atoms,
-        "current_water_shell_nm": ion.get("water_shell_nm"),
     }
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# §5  PRE-FLIGHT AUTO-SIZING  (proactive: pick settings before the run)
+# §4  PRE-FLIGHT FULL-SYSTEM SIZING
 # ══════════════════════════════════════════════════════════════════════════════
 
 # One Relax click used to build the design's whole heavy-atom model THREE times — once
@@ -744,7 +584,7 @@ def estimate_profile_from_design(
 
     Builds the heavy-atom PDB, takes the bounding box + padding as the solvation
     box, and estimates the full-box water count from the effective bulk density.
-    Good enough to decide, before any solvation, whether the system needs a carve.
+    Good enough to decide, before solvation, whether the complete system fits.
 
     ``nacl_mM`` / ``mgcl2_mM`` default to the screening recipe the panel sends.  They
     matter because the ion census is no longer one atom per phosphate: under the
@@ -823,7 +663,6 @@ def estimate_profile_from_design(
         "ion_atoms": ion_atoms,
         "n_phosphates": n_p,
         "counterion": ions.counterion,
-        "current_water_shell_nm": None,
     }
     if key is not None:
         if len(_PROFILE_CACHE) >= _PROFILE_CACHE_MAX:
@@ -832,112 +671,28 @@ def estimate_profile_from_design(
     return profile
 
 
-def auto_water_shell(
-    design, *, padding_nm: float = 1.2, devices: str = "0", atomistic_model=None
-) -> dict:
-    """Pre-flight: pick a water-shell (nm) that fits the GPU, or 0 for full box.
-
-    Returns ``{shell_nm, note, fits, vram_mb}``.  ``shell_nm == 0`` means either no
-    carve is needed (full box fits) or sizing was unavailable (no GPU read / no
-    profile) — in both cases the caller keeps the user's setting.  A non-zero
-    ``shell_nm`` comes with a human ``note`` explaining the automatic choice.
-    """
-    none = {"shell_nm": 0.0, "note": None, "fits": None, "vram_mb": None}
-    host_mb = detect_host_ram_mb()
-    cpu = (devices or "").strip().lower() in ("cpu", "none")
-    if cpu:
-        # CPU (multicore) build has no VRAM ceiling — size the carve to host RAM
-        # only.  The carve still helps: fewer atoms = faster CPU minimisation.
-        if not host_mb:
-            return none
-        vram_mb = None
-        effective_cap = max_atoms_for_host_ram(host_mb)
-        bound = "host RAM"
-    else:
-        vram_mb = detect_vram_mb(devices)
-        if vram_mb is None:
-            return none
-        # The run must fit BOTH the GPU and host RAM; size to the tighter cap.
-        vram_cap = max_atoms_for_vram(vram_mb)
-        host_cap = max_atoms_for_host_ram(host_mb) if host_mb else None
-        effective_cap = min(vram_cap, host_cap) if host_cap is not None else vram_cap
-        bound = "host RAM" if host_cap is not None and host_cap < vram_cap else "GPU"
-    # Best-effort: a preflight estimate must never fail the job — on any error,
-    # fall back to the full box (the prior behaviour).
-    try:
-        profile = estimate_profile_from_design(
-            design, padding_nm=padding_nm, atomistic_model=atomistic_model
-        )
-        if profile is None:
-            return {**none, "vram_mb": vram_mb}
-        rec = recommend_downsize(
-            dna_xyz_nm=profile["dna_xyz_nm"],
-            box_nm=profile["box_nm"],
-            full_water=profile["full_water"],
-            dna_atoms=profile["dna_atoms"],
-            ion_atoms=profile["ion_atoms"],
-            # No VRAM bound on CPU — pass a huge sentinel so only max_atoms (host) binds.
-            vram_mb=vram_mb if vram_mb is not None else 10**9,
-            max_atoms=effective_cap,
-        )
-    except Exception:
-        return {**none, "vram_mb": vram_mb}
-    limit = (
-        f"{round(host_mb / 1024)} GB free host RAM"
-        if bound == "host RAM"
-        else f"{round(vram_mb / 1024)} GB GPU"
-    )
-    if rec["current_atoms"] <= rec["max_atoms"]:
-        return {"shell_nm": 0.0, "note": None, "fits": True, "vram_mb": vram_mb}
-    if rec.get("feasible"):
-        s = rec["recommended_shell_nm"]
-        note = (
-            f"Auto-sized for {limit}: full system ≈{rec['current_atoms']:,} "
-            f"atoms won’t fit, so enabled a {round(s * 10)} Å water shell "
-            f"(≈{rec['estimated_atoms']:,} atoms, NVT)."
-        )
-        return {"shell_nm": s, "note": note, "fits": True, "vram_mb": vram_mb}
-    s = rec["tightest_shell_nm"]
-    note = (
-        f"Warning: even a {round(s * 10)} Å shell (≈{rec['tightest_atoms']:,} atoms) "
-        f"may exceed this {limit} — running anyway; consider a larger GPU or more RAM."
-    )
-    return {"shell_nm": s, "note": note, "fits": False, "vram_mb": vram_mb}
-
-
-# ── Pre-flight size gate (Gate A: A1 auto-notice / A2 tight-shell / A3 too-large) ──
-
-_SAFE_SHELL_NM = (
-    1.5  # a ≥15 Å water shell is "comfortable" (A1); tighter is a trade-off (A2)
-)
+# ── Pre-flight size gate ──
 
 
 def classify_vram_fit(rec: Optional[dict]) -> str:
-    """Pre-flight size-gate tier from a :func:`recommend_downsize` advice:
-    ``"ok"`` full box fits (or data missing — never gate on the unknown);
-    ``"a1"`` a comfortable thinner shell (≥15 Å) fits → auto-apply + a friendly notice;
-    ``"a2"`` only a TIGHT shell (<15 Å) fits → an accuracy trade-off, so ask;
-    ``"a3"`` won't fit even at the tightest shell → hard stop.
-    """
+    """Return ``ok`` when the full solvent box fits, otherwise a hard-stop tier."""
     if not rec:
         return "ok"
     max_atoms = rec.get("max_atoms") or 0
     if max_atoms <= 0 or rec.get("current_atoms", 0) <= max_atoms:
         return "ok"
-    if not rec.get("feasible"):
-        return "a3"
-    return "a1" if (rec.get("recommended_shell_nm") or 0) >= _SAFE_SHELL_NM else "a2"
+    return "a3"
 
 
 def preflight_vram_advice(
     design, *, padding_nm: float = 1.2, devices: str = "0", atomistic_model=None
 ) -> dict:
-    """Pre-flight size verdict for the Relax launch gate — computed from the DRY design
-    (no build). Returns the :func:`recommend_downsize` advice enriched with ``tier``
-    (ok/a1/a2/a3), ``bound`` ("GPU"/"host RAM") and ``host_mb``; or ``{"skipped": True,
+    """Pre-flight full-solvent size verdict computed from the dry design.
+
+    Returns sizing advice enriched with ``tier`` (``ok`` or ``a3``), ``bound``
+    ("GPU"/"host RAM") and ``host_mb``; or ``{"skipped": True,
     "tier": "ok"}`` whenever sizing can't run (no GPU read / no profile / any error) so
-    the launch proceeds unchanged. Shares auto_water_shell's detect chain but surfaces
-    the full advice for the UI instead of only the chosen shell.
+    the launch proceeds unchanged.
     """
     skipped = {"skipped": True, "tier": "ok"}
     host_mb = detect_host_ram_mb()
@@ -964,75 +719,23 @@ def preflight_vram_advice(
         )
         if profile is None:
             return skipped
-        rec = recommend_downsize(
-            dna_xyz_nm=profile["dna_xyz_nm"],
-            box_nm=profile["box_nm"],
-            full_water=profile["full_water"],
-            dna_atoms=profile["dna_atoms"],
-            ion_atoms=profile["ion_atoms"],
-            vram_mb=vram_mb if vram_mb is not None else 10**9,
-            max_atoms=effective_cap,
+        current_atoms = (
+            profile["dna_atoms"] + profile["full_water"] * 3 + profile["ion_atoms"]
         )
+        rec = {
+            "current_atoms": current_atoms,
+            "current_vram_mb": estimate_vram_mb(current_atoms),
+            "required_vram_mb": required_vram_mb(current_atoms),
+            "max_atoms": effective_cap,
+            "vram_mb": int(vram_mb) if vram_mb is not None else None,
+        }
     except Exception:  # noqa: BLE001 — a preflight must never block a launch
         return skipped
-    water_floor = _water_floor_check(profile, rec)
     tier = classify_vram_fit(rec)
-    if water_floor and not water_floor["ok"]:
-        tier = "a3"  # a cell that cannot hold its own ions will not build
     return {
         **rec,
         "skipped": False,
         "tier": tier,
-        "water_floor": water_floor,
         "bound": bound,
         "host_mb": host_mb,
     }
-
-
-def _water_floor_check(profile: dict, rec: dict) -> Optional[dict]:
-    """Will the recommended cell still hold the waters the ion recipe consumes?
-
-    Neutralising with Mg(H₂O)₆ costs ~3 waters per phosphate, so a tight hydration
-    shell can run out.  Discovering that inside placement means the failure lands an
-    hour into solvation as a bare "Preparation failed"; here it is a pre-flight verdict
-    the user can act on (more padding, a thicker shell).
-    """
-    try:
-        from backend.core.namd_solvate import (  # noqa: PLC0415
-            ion_counts,
-            waters_needed_for_ions,
-        )
-
-        n_p = profile.get("n_phosphates") or 0
-        if n_p <= 0:
-            return None
-        # Water actually present in the cell the recommendation would build.
-        if rec.get("feasible") and rec.get("recommended_shell_nm"):
-            atoms = rec["estimated_atoms"]
-        elif rec.get("tightest_atoms"):
-            atoms = rec["tightest_atoms"]
-        else:
-            atoms = rec.get("current_atoms", 0)
-        have = max(0, (atoms - profile["dna_atoms"] - profile["ion_atoms"]) // 3)
-        ions = ion_counts(
-            have,
-            -float(n_p),
-            nacl_mM=0.0,
-            mgcl2_mM=12.5,
-            box_nm=profile["box_nm"],
-            mg_hexahydrate=True,
-        )
-        need = waters_needed_for_ions(ions)
-        return {
-            "ok": need <= have,
-            "waters_available": int(have),
-            "waters_needed": int(need),
-            "reason": None
-            if need <= have
-            else (
-                f"the cell holds ~{have:,} waters but neutralising "
-                f"{n_p:,} phosphates with Mg(H2O)6 consumes ~{need:,}"
-            ),
-        }
-    except Exception:  # noqa: BLE001 — advisory only
-        return None
