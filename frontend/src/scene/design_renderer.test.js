@@ -63,6 +63,33 @@ describe('design_renderer glow layers', () => {
   })
 })
 
+describe('structural partial reconciliation', () => {
+  it('bounds the overlay fast path and preserves a full-rebuild fallback', () => {
+    const body = functionBody(SRC, '_tryStructuralOverlay')
+    expect(body).not.toBeNull()
+    expect(body).toContain('realIds.length > 12')
+    expect(body).toContain('_sameCrossoverTopology')
+    expect(body).toContain('currentDesign?.deformations')
+    expect(body).toContain('_detailLevel !== 0')
+    expect(body).toContain('representation_overrides')
+    expect(body).toContain('return false')
+  })
+
+  it('renders only the changed geometry and schedules authoritative consolidation', () => {
+    const body = functionBody(SRC, '_tryStructuralOverlay')
+    expect(body).toContain('changedSet.has(n.helix_id)')
+    expect(body).toContain('buildHelixObjects')
+    expect(body).toContain("markOperationTiming('structural-partial-render'")
+    expect(body).toContain('requestIdleCallback')
+    expect(body).toContain('_rebuild(newGeo, fullDesign')
+  })
+
+  it('disposes an overlay before every global scene rebuild', () => {
+    const body = functionBody(SRC, '_rebuild')
+    expect(body).toContain('_clearStructuralOverlay()')
+  })
+})
+
 // ── Cluster display (colour + opacity) ────────────────────────────────────────
 // Same class of problem as the glow layers above: two things that must agree but
 // live far apart in one closure. Cluster COLOUR has to be painted onto two

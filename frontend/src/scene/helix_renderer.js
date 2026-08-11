@@ -5678,6 +5678,26 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       _refreshSlabConnectors()
     },
 
+    /** Temporarily suppress complete helices while an authoritative structural
+     * partial patch is rendered by a small overlay controller. Nucleotide
+     * instances use the existing hidden-key machinery; axis meshes need an
+     * explicit visibility gate because they are ordinary Mesh objects.
+     * Passing an empty set restores the caller's normal hidden-nucleotide set
+     * separately and reapplies the current shaft mode. */
+    setStructuralHelicesSuppressed(ids) {
+      const hidden = ids instanceof Set ? ids : new Set(ids ?? [])
+      for (const arrow of axisArrows) {
+        if (!hidden.has(arrow.helixId)) continue
+        if (arrow.shaft) arrow.shaft.visible = false
+        if (arrow.straightShaft) arrow.straightShaft.visible = false
+        for (const seg of arrow.segments ?? []) {
+          if (seg.mesh) seg.mesh.visible = false
+          if (seg.tubeMesh) seg.tubeMesh.visible = false
+        }
+      }
+      if (!hidden.size) _applyShaftModeVisibility(_currentShaftMode)
+    },
+
     /**
      * Show or hide all extension beads and fluorophores.
      * Used by the extensionLocations toolFilter toggle.

@@ -552,6 +552,23 @@ export function initDesignRenderer(scene, storeRef) {
   let _captureHighlight = false // "Highlight strands" toggle → additive glow (not visibility)
   let _rebuildSerial = 0
   let _lastRebuildStack = null
+  let _structuralOverlay = null
+  let _structuralConsolidateTimer = null
+
+  function _clearStructuralOverlay({ restoreBase = false } = {}) {
+    if (_structuralConsolidateTimer !== null) {
+      clearTimeout(_structuralConsolidateTimer)
+      _structuralConsolidateTimer = null
+    }
+    if (!_structuralOverlay) return
+    scene.remove(_structuralOverlay.ctrl.root)
+    _disposeRoot(_structuralOverlay.ctrl.root)
+    if (restoreBase && _helixCtrl) {
+      _helixCtrl.setHiddenNucs(_hiddenNucKeys)
+      _helixCtrl.setStructuralHelicesSuppressed?.(new Set())
+    }
+    _structuralOverlay = null
+  }
 
   // Re-apply the capture-strand highlight glow after a rebuild (glow layers are cleared on
   // every rebuild).  Glows the injected cap<i> backbone beads; a no-op when off/absent.
@@ -565,6 +582,7 @@ export function initDesignRenderer(scene, storeRef) {
   // ── Geometric scene rebuild ───────────────────────────────────────────────
 
   function _rebuild(geometry, design, helixAxes) {
+    _clearStructuralOverlay()
     markOperationTiming('scene-rebuild-start', { nucleotides: geometry?.length ?? 0 })
     _rebuildSerial++
     _lastRebuildStack = new Error('design renderer rebuild').stack
@@ -789,6 +807,109 @@ export function initDesignRenderer(scene, storeRef) {
     return true
   }
 
+  function _sameCrossoverTopology(a, b) {
+    const signature = (design) => JSON.stringify((design?.crossovers ?? []).map(x => [
+      x.id, x.half_a?.helix_id, x.half_a?.index, x.half_a?.strand,
+      x.half_b?.helix_id, x.half_b?.index, x.half_b?.strand, x.extra_bases,
+    ]))
+    return signature(a) === signature(b)
+  }
+
+  /** Render a small topology-changing partial response without rebuilding the
+   * fixed-capacity whole-design InstancedMeshes. The old affected helices are
+   * suppressed and a compact authoritative controller is layered over them.
+   * A delayed idle consolidation restores the single-controller steady state.
+   */
+  function _tryStructuralOverlay(changedHelixIds, newGeo, prevState, newState) {
+    if (!_helixCtrl || _structuralOverlay || _ghostOpacity !== null) return false
+    const realIds = changedHelixIds.filter(id => !id.startsWith('__'))
+    if (!realIds.length || realIds.length > 12) return false
+    if (!_sameCrossoverTopology(prevState.currentDesign, newState.currentDesign)) return false
+    if ((newState.currentDesign?.deformations ?? []).length) return false
+    // The overlay suppresses resident bead/slab/axis instances. Cylinder and
+    // mixed-representation buffers have independent visibility channels, so
+    // retain the full rebuild whenever either is currently in use.
+    if (_detailLevel !== 0) return false
+    if ((newState.currentDesign?.representation_overrides ?? []).length) return false
+
+    const changedSet = new Set(changedHelixIds)
+    const realSet = new Set(realIds)
+    const patchGeometry = newGeo.filter(n => changedSet.has(n.helix_id))
+    if (!patchGeometry.length) return false
+    const fullDesign = newState.currentDesign
+    const patchDesign = {
+      ...fullDesign,
+      helices: (fullDesign.helices ?? []).filter(h => realSet.has(h.id)),
+      strands: (fullDesign.strands ?? []).map(s => ({
+        ...s, domains: (s.domains ?? []).filter(d => realSet.has(d.helix_id)),
+      })).filter(s => s.domains.length),
+      cluster_transforms: (fullDesign.cluster_transforms ?? []).map(c => ({
+        ...c, helix_ids: (c.helix_ids ?? []).filter(id => realSet.has(id)),
+      })).filter(c => c.helix_ids.length),
+    }
+    const patchAxes = {}
+    for (const id of realIds) {
+      const axis = newState.currentHelixAxes?.[id]
+      if (axis) patchAxes[id] = axis
+    }
+    const customColors = _effectiveColors(newState.strandColors, newState.strandGroups)
+
+    // Hide resident instances before adding the authoritative replacement.
+    _helixCtrl.setHiddenNucs(new Set([
+      ..._hiddenNucKeys, ...changedHelixIds.map(id => `h:${id}`),
+    ]))
+    _helixCtrl.setStructuralHelicesSuppressed?.(realSet)
+    const ctrl = buildHelixObjects(
+      patchGeometry, patchDesign, scene, customColors,
+      newState.loopStrandIds ?? [], patchAxes,
+    )
+    ctrl.setMode(_currentMode)
+    ctrl.setDetailLevel(_detailLevel)
+    if (_slabThickness !== 0.06) ctrl.setSlabThickness(_slabThickness)
+    if (newState.staplesHidden) ctrl.setStapleVisibility(false)
+    if (newState.isolatedStrandId) ctrl.setIsolatedStrand(newState.isolatedStrandId)
+    if (_hiddenNucKeys.size) ctrl.setHiddenNucs(_hiddenNucKeys)
+    if (_clusterAlphaKeys.size) ctrl.setClusterAlphas(_clusterAlphaKeys)
+    const referenceIds = new Set(
+      (fullDesign.strands ?? []).filter(s => s.is_reference).map(s => s.id))
+    if (referenceIds.size) {
+      ctrl.setReferenceStrands(referenceIds)
+      ctrl.setReferenceHidden(newState.showReferenceGeometry === false)
+    }
+    const { columnRep } = resolveRepOverrides(fullDesign)
+    ctrl.applyRepOverrides(columnRep)
+    if (newState.coloringMode && newState.coloringMode !== 'strand') {
+      ctrl.applyColoring(
+        newState.coloringMode, fullDesign, customColors,
+        new Set(newState.loopStrandIds ?? []),
+      )
+    }
+    if (!_designVisible) ctrl.root.visible = false
+    _structuralOverlay = { ctrl, geometry: newGeo, design: fullDesign }
+    markOperationTiming('structural-partial-render', {
+      helices: realIds.length, nucleotides: patchGeometry.length,
+    })
+
+    // Consolidate only after the immediate interaction and its paint have had
+    // time to finish. A newer store update cancels this through _rebuild.
+    _structuralConsolidateTimer = setTimeout(() => {
+      _structuralConsolidateTimer = null
+      if (!_structuralOverlay) return
+      const st = storeRef.getState()
+      if (st.currentGeometry !== newGeo || st.currentDesign !== fullDesign) return
+      const run = () => {
+        if (!_structuralOverlay) return
+        const latest = storeRef.getState()
+        if (latest.currentGeometry === newGeo && latest.currentDesign === fullDesign) {
+          _rebuild(newGeo, fullDesign, latest.currentHelixAxes)
+        }
+      }
+      const idle = globalThis.requestIdleCallback
+      if (idle) idle(run, { timeout: 2500 }); else setTimeout(run, 0)
+    }, 750)
+    return true
+  }
+
   // ── Domain Designer modal — defer rebuilds while open ──────────────────────
   // While the DD modal is active, the user is making lots of small edits
   // (rename / Tm / sequence override / sub-domain split). We don't want each
@@ -936,6 +1057,12 @@ export function initDesignRenderer(scene, storeRef) {
         }
         return
       }
+      if (!_coverageChanged && _tryStructuralOverlay(
+        newState.lastPartialChangedHelixIds,
+        newState.currentGeometry,
+        prevState,
+        newState,
+      )) return
     }
 
     if (window._cnDebug && storeRef.getState().cadnanoActive) {
@@ -1189,6 +1316,7 @@ export function initDesignRenderer(scene, storeRef) {
     setDesignVisible(visible) {
       _designVisible = visible
       if (_helixCtrl?.root) _helixCtrl.root.visible = visible
+      if (_structuralOverlay?.ctrl.root) _structuralOverlay.ctrl.root.visible = visible
     },
 
     /**
