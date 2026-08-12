@@ -19,6 +19,7 @@ const GREEN = {
   checks: [
     check('api_key', true, 'RunPod API key', 'connected'),
     check('volume', true, 'Network volume', '77pnhye88p'),
+    check('s3_transfer', true, 'S3 volume transfer', 'validated; downloads need no pod'),
     check('ssh_key', true, 'SSH key', '~/.ssh/id_ed25519 found'),
     check('namd_arch', true, 'NAMD build matches GPUs', 'binary is sm_89'),
     check('gpu_stock', true, 'GPU availability', 'RTX 4090 (Low)'),

@@ -130,6 +130,7 @@ def build_resume_conf(conf_text, segment_name, restart_step, total_steps):
             "resume step %d is at/past the segment total %d"
             % (restart_step, total_steps)
         )
+    adaptive_min = "# NADOC_ADAPTIVE_MIN_BEGIN" in conf_text
     drop = _RESUME_DROP | _RESUME_RECOMPUTE
     kept = [
         line
@@ -140,9 +141,8 @@ def build_resume_conf(conf_text, segment_name, restart_step, total_steps):
         key: _resume_frequency(conf_text, key, remaining)
         for key in _RESUME_RECOMPUTE
     }
-    kept += [
+    tail = [
         "binCoordinates     output/%s.restart.coor" % segment_name,
-        "binVelocities      output/%s.restart.vel" % segment_name,
         # THE fix: the shrunken cell. Supersedes any cellBasisVector still in the conf.
         "extendedSystem     output/%s.restart.xsc" % segment_name,
         "dcdFile            output/%s.dcd" % segment_name,
@@ -155,11 +155,37 @@ def build_resume_conf(conf_text, segment_name, restart_step, total_steps):
         "xstFreq            %d" % frequencies["xstFreq"],
         "restartfreq        %d" % frequencies["restartfreq"],
         "firsttimestep      %d" % int(restart_step),
+    ]
+    if adaptive_min:
+        # Continue minimising from the checkpoint. The controller's counters are local
+        # to this invocation, so reduce both its hard ceiling and its not-before gate by
+        # the already-paid work. Missing energy callbacks still fail safe to the reduced
+        # ceiling exactly as in the original config.
+        rewritten = []
+        for line in kept:
+            if line.startswith("set nadoc_min_max "):
+                line = "set nadoc_min_max %d" % remaining
+            elif line.startswith("set nadoc_min_min "):
+                original_min = int(line.split()[-1])
+                line = "set nadoc_min_min %d" % max(0, original_min - int(restart_step))
+            rewritten.append(line)
+        kept = rewritten
+        # NAMD insists on an initialization source even though minimisation does not
+        # integrate velocities. The original min config uses temperature 0; preserve
+        # that semantic instead of loading the meaningless minimizer restart velocities.
+        tail.insert(1, "temperature        0")
+        # The adaptive block contains executable ``minimize`` commands. All startup
+        # directives must precede it; appending them at EOF makes NAMD start before it
+        # has coordinates/temperature and fail during config parsing.
+        marker = kept.index("# NADOC_ADAPTIVE_MIN_BEGIN")
+        kept[marker:marker] = tail
+    else:
+        tail.insert(1, "binVelocities      output/%s.restart.vel" % segment_name)
         # NAMD 3's Tcl `run` has no `upto`; firsttimestep already advanced the label, so
         # run only what is left. restart_step is a multiple of restartfreq (itself a
         # multiple of stepspercycle), so the remainder stays cycle-aligned.
-        "run                %d" % remaining,
-    ]
+        tail.append("run                %d" % remaining)
+        kept += tail
     return "\n".join(kept) + "\n"
 
 

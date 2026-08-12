@@ -346,7 +346,7 @@ export function presetSummary(preset, plan) {
  *  risks a 400 when they disagree. */
 export const WIZARD_FIELDS = [
   'threads', 'devices', 'salt_mode', 'mg_conc_mM', 'ion_conc_mM', 'padding_nm',
-  'box_mode', 'minimize_steps', 'fast',
+  'box_mode', 'minimize_steps', 'adaptive_minimization', 'fast',
   'gpu_fallback_policy', 'gpu_resident', 'early_stop_relax',
   'early_stop_tier', 'allow_ring_pierced_seed',
   'force_soft', 'declash',
@@ -363,7 +363,7 @@ export const DEFAULT_FIELD_SCOPES = {
   relax_rigid_bonds: 'relaxation', relax_hmr: 'relaxation', fast: 'relaxation',
   force_soft: 'relaxation', declash: 'relaxation', early_stop_relax: 'relaxation',
   early_stop_tier: 'relaxation',
-  minimize_steps: 'relaxation', protocol: 'relaxation',
+  minimize_steps: 'relaxation', adaptive_minimization: 'relaxation', protocol: 'relaxation',
   gpu_resident: 'relaxation', gpu_fallback_policy: 'relaxation',
   threads: 'relaxation', devices: 'relaxation',
 }

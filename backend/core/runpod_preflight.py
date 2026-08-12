@@ -151,6 +151,8 @@ def evaluate(
     stock: Optional[dict[str, dict]],
     n_atoms: Optional[int] = None,
     allowed: tuple[GpuType, ...] = GPU_TYPES,
+    s3_transfer_ok: bool = True,
+    s3_transfer_detail: str = "configured",
 ) -> Preflight:
     """Pure. Turn the raw facts into pass/fail rows. No I/O, fully unit-tested."""
     checks: list[Check] = []
@@ -170,6 +172,14 @@ def evaluate(
             "Network volume",
             network_volume_id
             or "none set — the pod would have no NAMD and no packages",
+        )
+    )
+    checks.append(
+        Check(
+            "s3_transfer",
+            s3_transfer_ok,
+            "S3 volume transfer",
+            s3_transfer_detail,
         )
     )
     checks.append(

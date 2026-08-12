@@ -106,7 +106,8 @@ def chain_steps_for(job: MdJob, min_name: str) -> list[ChainStep]:
     ``total - restart_step``, and the pod cannot know the total from the conf alone once
     the conf has been rewritten.
     """
-    steps = [ChainStep(min_name, is_minimization=True)]
+    min_steps = int(getattr(getattr(job, "minimization", None), "steps", 0) or 0)
+    steps = [ChainStep(min_name, is_minimization=True, steps=min_steps)]
     steps += [ChainStep(seg.name, steps=int(seg.steps or 0)) for seg in job.segments]
     return steps
 
@@ -245,6 +246,24 @@ async def submit_job(
     """
     remote = remote_dir_for(job)
     pkg = job.package_dir(workspace_dir)
+
+    # Prepared packages can predate adaptive minimisation. Upgrade the tiny config
+    # before stage_plan computes file sizes, so a stopped job (including the current
+    # expensive 3.24M-atom run) gets the controller on its next submission and only
+    # this changed file is re-uploaded to the persistent volume.
+    from backend.core.md_protocols import upgrade_minimization_conf_adaptive
+
+    manifest_path = pkg / "manifest.json"
+    prepared_manifest = json.loads(manifest_path.read_text())
+    prepared_min = prepared_manifest.get("minimization") or {}
+    prepared_min_name = str(prepared_min.get("name") or min_name)
+    if prepared_min.get("adaptive", True):
+        upgrade_minimization_conf_adaptive(
+            pkg / f"{prepared_min_name}.conf",
+            min_name=prepared_min_name,
+            n_atoms=n_atoms,
+            max_steps=int(prepared_min.get("steps") or 0),
+        )
 
     last_progress_save = 0.0
     last_progress_fraction = -1.0
@@ -676,6 +695,15 @@ async def run_job_on_pod(
     import asyncio
 
     sleep = sleep or asyncio.sleep
+    from backend.core import runpod_s3
+
+    s3_credentials = runpod_s3.resolve_credentials()
+    s3_data_center = None
+    if s3_credentials:
+        with contextlib.suppress(Exception):
+            volumes = await client.list_network_volumes()
+            selected = next((v for v in volumes if v.get("id") == network_volume_id), None)
+            s3_data_center = selected and selected.get("data_center_id")
     payloads = pod_payloads_for(
         job,
         n_atoms,
@@ -760,6 +788,7 @@ async def run_job_on_pod(
                     pod_id=pod.id,
                     poll_s=poll_s,
                     sleep=sleep,
+                    fetch=not bool(s3_credentials and s3_data_center),
                 )
             finally:
                 await conn.close()
@@ -790,6 +819,25 @@ async def run_job_on_pod(
         )
         finish_runpod_billing(job, job.runpod_pod_id)
 
+    # The expensive GPU is now destroyed and its meter is closed. Download from the
+    # persistent volume directly; this can take hours without adding compute charges.
+    if (
+        s3_credentials and s3_data_center
+        and job.status in (MdStatus.completed, MdStatus.failed)
+        and not job.user_stopped
+    ):
+        try:
+            s3_conn = runpod_s3.RunpodS3Connection(
+                s3_credentials, volume_id=network_volume_id,
+                data_center_id=s3_data_center, remote_root=remote_dir_for(job),
+            )
+            await fetch_results(job, workspace_dir, conn=s3_conn)
+        except Exception as exc:  # noqa: BLE001 — results remain safe on the volume
+            job.status = MdStatus.paused
+            job.resumable = True
+            job.error = f"Podless result download failed: {exc}"
+            job.save(workspace_dir)
+
     job.runpod_pid = None
     # Returning from supervision means this attempt's pod is terminal or was explicitly
     # destroyed. Close the meter for completed, failed, stopped, and reclaimed attempts.
@@ -805,6 +853,7 @@ async def _supervise_run(
     pod_id: str,
     poll_s: float = 30.0,
     sleep=None,
+    fetch: bool = True,
 ) -> MdStatus:
     """Watch an ALREADY-LAUNCHED chain to a terminal state, then fetch what exists.
 
@@ -881,6 +930,9 @@ async def _supervise_run(
     # Always fetch what exists — even a failed/paused run has useful output.
     # BOUNDED: a hung fetch must not keep the pod billing.  On timeout, abandon the
     # fetch and fall through to teardown — the outputs remain on the volume.
+    if not fetch:
+        job.save(workspace_dir)
+        return job.status
     try:
         await asyncio.wait_for(
             fetch_results(job, workspace_dir, conn=conn),
@@ -935,6 +987,17 @@ async def reattach_job_on_pod(
     if not job.runpod_pod_id:
         raise RunpodError(f"job {job.job_id} has no pod to adopt")
 
+    from backend.core import runpod_s3
+
+    s3_credentials = runpod_s3.resolve_credentials()
+    s3_data_center = None
+    volume_id = job.runpod_volume_id
+    if s3_credentials and volume_id:
+        with contextlib.suppress(Exception):
+            volumes = await client.list_network_volumes()
+            selected = next((v for v in volumes if v.get("id") == volume_id), None)
+            s3_data_center = selected and selected.get("data_center_id")
+
     async with client.adopt(
         job.runpod_pod_id,
         terminate_on_exit=not bool(job.runpod_terminate_after),
@@ -963,7 +1026,8 @@ async def reattach_job_on_pod(
                 job.error = None
                 job.save(workspace_dir)
             await _supervise_run(
-                job, workspace_dir, conn=conn, pod_id=pod.id, poll_s=poll_s, sleep=sleep
+                job, workspace_dir, conn=conn, pod_id=pod.id, poll_s=poll_s, sleep=sleep,
+                fetch=not bool(s3_credentials and s3_data_center),
             )
         finally:
             await conn.close()
@@ -978,6 +1042,24 @@ async def reattach_job_on_pod(
             reason=("user_stop" if job.user_stopped else f"job_{job.status.value}"),
             job_id=job.job_id,
         )
+
+    if (
+        s3_credentials and s3_data_center and volume_id
+        and job.status in (MdStatus.completed, MdStatus.failed)
+        and not job.user_stopped
+    ):
+        try:
+            await fetch_results(
+                job, workspace_dir,
+                conn=runpod_s3.RunpodS3Connection(
+                    s3_credentials, volume_id=volume_id,
+                    data_center_id=s3_data_center, remote_root=remote_dir_for(job),
+                ),
+            )
+        except Exception as exc:  # noqa: BLE001
+            job.status = MdStatus.paused
+            job.resumable = True
+            job.error = f"Podless result download failed: {exc}"
 
     job.runpod_pid = None
     job.save(workspace_dir)

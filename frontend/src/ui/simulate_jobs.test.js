@@ -104,6 +104,28 @@ describe('pure helpers', () => {
     expect(masterProgressPct(lmNode({ status: 'completed' }))).toBe(100)   // completed → full
     expect(masterProgressPct(null)).toBe(0)
   })
+
+  it('an unsubmitted remote NAMD job shows no fictional progress or completed steps', () => {
+    const node = {
+      engine: 'namd', execution_target: 'runpod', status: 'queued',
+      progress_fraction: 0.045,
+      minimization: { status: 'pending', steps: 324380 },
+      segments: [{ status: 'done' }, { status: 'pending' }],
+    }
+    expect(masterProgressPct(node)).toBe(0)
+    expect(masterStepText(node)).toBe('')
+    expect(masterStatusText(node)).toBe('NAMD - queued - waiting for submission')
+    expect(masterProgressTooltip(node)).toBe('NAMD - queued - waiting for submission')
+  })
+
+  it('submitted queued NAMD jobs retain scheduler progress semantics', () => {
+    const node = {
+      engine: 'namd', execution_target: 'runpod', status: 'queued', runpod_pod_id: 'p1',
+      progress_fraction: 0.045, segments: [{ status: 'pending' }],
+    }
+    expect(masterProgressPct(node)).toBe(4.5)
+    expect(masterStatusText(node)).not.toContain('waiting for submission')
+  })
   it('masterProgressPct: a running oxDNA job uses the backend live fraction (single-stage run)', () => {
     // A single-stage e-field/surface run: stage-count alone reads 0 (0 of 1 done) — the
     // backend-stamped progress_fraction must win so the bar advances.

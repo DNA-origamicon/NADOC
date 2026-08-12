@@ -263,10 +263,14 @@ persists byte/file totals and overrides synthetic NAMD steps in the unified prog
 It clears when the chain launches or staging aborts. Files already complete on the
 persistent network volume count toward progress and are skipped on retry.
 
-RunPod's S3-compatible network-volume API can upload without renting compute, including
-multipart transfer for large files. NADOC does not yet configure the separate S3 access
-credentials, so current submission still rents the GPU before SFTP staging. Moving upload
-into preparation through that API is the remaining cold-start/cost improvement.
+RunPod's S3-compatible network-volume API can transfer without renting compute, including
+multipart transfer for large files. The RunPod setup wizard collects and validates its
+separate `user_…` access key + one-time `rps_…` secret against the selected volume, then
+stores them owner-only at `~/.config/nadoc/runpod_s3.json` (environment alternative:
+`RUNPOD_S3_ACCESS_KEY` + `RUNPOD_S3_SECRET_KEY`). Finished runs terminate the GPU and close
+its billing session before downloading results through S3. Uploading the prepared input
+package still uses SFTP after GPU creation; moving that direction into preparation is the
+remaining cold-start improvement.
 
 ## Progress on a rented run (fixed 2026-08-07)
 

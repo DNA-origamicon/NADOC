@@ -59,6 +59,7 @@ from backend.core.runpod_select import (
     load_rate_registry,
     plan_options,
 )
+from backend.core import runpod_s3
 from backend.core.runpod_storage import storage_estimate
 
 logger = logging.getLogger(__name__)
@@ -414,6 +415,56 @@ async def set_volume(body: VolumeRequest):
     return _status_payload()
 
 
+class S3CredentialsRequest(BaseModel):
+    access_key: str = Field(..., min_length=5)
+    secret_key: str = Field(..., min_length=8)
+
+
+@router.get("/runpod/s3/status")
+def s3_status():
+    credentials = runpod_s3.resolve_credentials()
+    return {
+        "configured": credentials is not None,
+        "source": credentials.source if credentials else "none",
+        "access_key_hint": (
+            f"{credentials.access_key[:8]}…" if credentials else None
+        ),
+    }
+
+
+@router.post("/runpod/s3/configure")
+async def configure_s3(body: S3CredentialsRequest):
+    """Validate against the chosen volume, then persist with owner-only permissions."""
+    client = _SESSION.require()
+    volume_id = _SESSION.network_volume_id
+    if not volume_id:
+        raise HTTPException(400, "Select a RunPod network volume first.")
+    volumes = await client.list_network_volumes()
+    volume = next((v for v in volumes if v.get("id") == volume_id), None)
+    if not volume or not volume.get("data_center_id"):
+        raise HTTPException(400, "Could not determine the selected volume's datacenter.")
+    credentials = runpod_s3.S3Credentials(
+        body.access_key.strip(), body.secret_key.strip(), "manual"
+    )
+    try:
+        await run_in_threadpool(
+            partial(
+                runpod_s3.validate_credentials,
+                credentials,
+                volume_id=volume_id,
+                data_center_id=volume["data_center_id"],
+            )
+        )
+    except Exception as exc:  # noqa: BLE001 — SDK auth/endpoint errors vary
+        logger.warning("runpod S3 credential validation failed: %s", exc)
+        raise HTTPException(
+            400, "RunPod rejected the S3 credentials for the selected volume. "
+            "Check the user_ access key, rps_ secret, and volume datacenter."
+        ) from exc
+    runpod_s3.save_credentials(credentials.access_key, credentials.secret_key)
+    return {"configured": True, "source": "file", "validated_volume_id": volume_id}
+
+
 @router.get("/runpod/ssh-public-key")
 def ssh_public_key():
     """The local SSH public key, for the user to paste into RunPod Settings → SSH Keys.
@@ -503,6 +554,32 @@ class PreflightRequest(BaseModel):
     n_atoms: Optional[int] = Field(None, gt=0, description="Size the job too, if known")
 
 
+async def _s3_preflight() -> tuple[bool, str]:
+    credentials = runpod_s3.resolve_credentials()
+    if not credentials:
+        return False, "not configured — GPU would remain rented during result download"
+    if not _SESSION.network_volume_id or not _SESSION.is_connected():
+        return False, "select a network volume before validating S3 access"
+    try:
+        volumes = await _SESSION.require().list_network_volumes()
+        volume = next(
+            (v for v in volumes if v.get("id") == _SESSION.network_volume_id), None
+        )
+        data_center = volume and volume.get("data_center_id")
+        if not data_center:
+            return False, "selected volume datacenter is unavailable"
+        await run_in_threadpool(
+            partial(
+                runpod_s3.validate_credentials, credentials,
+                volume_id=_SESSION.network_volume_id, data_center_id=data_center,
+            )
+        )
+        return True, f"validated for {_SESSION.network_volume_id} ({data_center}); downloads need no pod"
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("runpod preflight: S3 validation failed: %s", exc)
+        return False, "credentials could not access the selected volume — open Set up RunPod"
+
+
 @router.post("/runpod/preflight")
 async def preflight(body: PreflightRequest | None = None):
     """Can a job actually run on RunPod right now? Answer BEFORE renting anything.
@@ -517,12 +594,15 @@ async def preflight(body: PreflightRequest | None = None):
         except Exception:  # noqa: BLE001 — a stock lookup failure is a FAILED check, not a 500
             logger.warning("runpod: GPU stock lookup failed", exc_info=True)
 
+    s3_ok, s3_detail = await _s3_preflight()
     pre = runpod_preflight.evaluate(
         connected=_SESSION.is_connected(),
         network_volume_id=_SESSION.network_volume_id,
         ssh_key_present=_ssh_key_present(),
         stock=stock,
         n_atoms=(body.n_atoms if body else None),
+        s3_transfer_ok=s3_ok,
+        s3_transfer_detail=s3_detail,
     )
     return pre.to_dict()
 
@@ -715,12 +795,15 @@ async def job_preview(body: JobPreviewRequest | None = None):
         except Exception:  # noqa: BLE001 — a leak check that 500s is worse than one that is blank
             logger.warning("runpod job-preview: pod list failed", exc_info=True)
 
+    s3_ok, s3_detail = await _s3_preflight()
     pre = runpod_preflight.evaluate(
         connected=_SESSION.is_connected(),
         network_volume_id=_SESSION.network_volume_id,
         ssh_key_present=_ssh_key_present(),
         stock=stock,
         n_atoms=int(n_atoms),
+        s3_transfer_ok=s3_ok,
+        s3_transfer_detail=s3_detail,
     )
 
     estimated = (top or {}).get("total_cost")

@@ -40,6 +40,7 @@ from backend.core.md_protocols import (
     identify_unpaired_residues,
     mgh_slow_release_segments,
     namd_efield_vector,
+    psf_atom_count,
     write_aksimentiev_enm_files,
     write_anchor_restraints_pdb,
     write_restraints_pdb,
@@ -61,6 +62,7 @@ def build_namd_gbis_package(
     job_dir: Path,
     *,
     minimize_steps: int = 4_800,
+    adaptive_minimization: bool = True,
     min_scale: float = 0.5,
     seed: int = 42,  # noqa: ARG001 — kept for signature parity with the solvate prep
     atomistic_model=None,
@@ -240,6 +242,8 @@ def build_namd_gbis_package(
             anchors_file=anchors_file,
             field=field,
             gbis=True,
+            n_atoms=psf_atom_count(package_dir / f"{name_stem}.psf"),
+            adaptive_minimization=adaptive_minimization,
         )
     )
     # _common_header carries the ionConcentration; patch it per requested salt.
@@ -407,6 +411,7 @@ def prepare_implicit_gbis_namd(
     # Recorded by the explicit path for its protocol_fidelity block; GBIS has no
     # published protocol to be faithful to, so it accepts-and-ignores.
     early_stop_relax: bool = False,  # noqa: ARG001
+    adaptive_minimization: bool = True,
     # Per-stage hand edits.  Accepted-and-ignored for now: the GBIS ladder writes its
     # confs through its own emitter, so honouring them here would need the same
     # apply_conf_overrides pass the explicit path got.  Left undone deliberately rather
@@ -426,6 +431,7 @@ def prepare_implicit_gbis_namd(
         design,
         job_dir,
         minimize_steps=minimize_steps,
+        adaptive_minimization=adaptive_minimization,
         atomistic_model=atomistic_model,
         progress=progress,
         declash=declash,

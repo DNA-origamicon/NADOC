@@ -67,7 +67,7 @@ describe('setupStepState', () => {
   it('is all-pending before anything happens', () => {
     const s = setupStepState({})
     expect(s).toEqual({
-      credit: 'pending', apikey: 'pending', ssh: 'pending', volume: 'pending', verify: 'pending',
+      credit: 'pending', apikey: 'pending', ssh: 'pending', volume: 'pending', s3: 'pending', verify: 'pending',
     })
   })
 
@@ -139,12 +139,57 @@ describe('initRunpodSetup factory', () => {
     w.dispose()
   })
 
+  it('hydrates partial backend setup and asks only for the missing S3 key', async () => {
+    const fetchImpl = fakeFetch({
+      '/api/runpod/status': () => ({ json: {
+        connected: true, key_source: 'file', network_volume_id: 'v1',
+      } }),
+      '/api/runpod/s3/status': () => ({ json: { configured: false, source: 'none' } }),
+      '/api/runpod/balance': () => ({ json: { available: true, balance: 25 } }),
+      '/api/runpod/volumes': () => ({ json: { volumes: [
+        { id: 'v1', name: 'namd', size_gb: 60, data_center_id: 'EU-RO-1' },
+      ] } }),
+      '/api/runpod/ssh-public-key': () => ({ json: { present: true, public_key: 'ssh-ed25519 AAA' } }),
+    })
+    const w = initRunpodSetup({ mount: document.createElement('div'), fetchImpl })
+    w.open()
+    await vi.waitFor(() => expect(document.querySelector('.modal__body').textContent)
+      .toContain('API access is already configured'))
+    const body = document.querySelector('.modal__body')
+    expect(body.querySelector('#rp-setup-key')).toBeNull()
+    expect(body.querySelector('#rp-setup-s3-access')).toBeTruthy()
+    expect(body.textContent).toContain('S3 API Keys')
+    expect(body.textContent).toContain('additional to')
+    expect(body.querySelector('#rp-setup-volume').value).toBe('v1')
+    w.dispose()
+  })
+
+  it('hides both credential inputs when both are already configured', async () => {
+    const fetchImpl = fakeFetch({
+      '/api/runpod/status': () => ({ json: { connected: true, key_source: 'env', network_volume_id: 'v1' } }),
+      '/api/runpod/s3/status': () => ({ json: { configured: true, source: 'file', access_key_hint: 'user_abc…' } }),
+      '/api/runpod/balance': () => ({ json: { available: true, balance: 25 } }),
+      '/api/runpod/volumes': () => ({ json: { volumes: [{ id: 'v1' }] } }),
+      '/api/runpod/ssh-public-key': () => ({ json: { present: true, public_key: 'ssh-ed25519 AAA' } }),
+    })
+    const w = initRunpodSetup({ mount: document.createElement('div'), fetchImpl })
+    w.open()
+    await vi.waitFor(() => expect(document.querySelector('.modal__body').textContent)
+      .toContain('Podless volume transfer is configured'))
+    const body = document.querySelector('.modal__body')
+    expect(body.querySelector('#rp-setup-key')).toBeNull()
+    expect(body.querySelector('#rp-setup-s3-access')).toBeNull()
+    expect(body.querySelector('#rp-setup-s3-change')).toBeTruthy()
+    w.dispose()
+  })
+
   it('verifying a key connects, then loads balance / volumes / ssh key', async () => {
     const fetchImpl = fakeFetch({
       'POST /api/runpod/connect': () => ({ json: { connected: true, network_volume_id: null } }),
       '/api/runpod/balance': () => ({ json: { available: true, balance: 207 } }),
       '/api/runpod/volumes': () => ({ json: { volumes: [{ id: 'v1', name: 'namd', size_gb: 60 }] } }),
       '/api/runpod/ssh-public-key': () => ({ json: { present: true, public_key: 'ssh-ed25519 AAA' } }),
+      '/api/runpod/s3/status': () => ({ json: { configured: false, source: 'none' } }),
     })
     const w = initRunpodSetup({ mount: document.createElement('div'), fetchImpl })
     w.open()
@@ -155,7 +200,7 @@ describe('initRunpodSetup factory', () => {
     await vi.waitFor(() => expect(document.querySelector('.modal__body').textContent).toContain('$207.00'))
 
     const after = document.querySelector('.modal__body')
-    expect(after.textContent).toContain('Connected')
+    expect(after.textContent).toContain('API access is already configured')
     expect(after.querySelector('#rp-setup-pubkey').value).toContain('ssh-ed25519')
     expect(after.querySelector('#rp-setup-volume')).toBeTruthy()
     w.dispose()
@@ -184,6 +229,7 @@ describe('initRunpodSetup factory', () => {
       '/api/runpod/balance': () => ({ json: { available: true, balance: 207 } }),
       '/api/runpod/volumes': () => ({ json: { volumes: [{ id: 'v1', name: 'namd', size_gb: 60 }] } }),
       '/api/runpod/ssh-public-key': () => ({ json: { present: true, public_key: 'ssh-ed25519 AAA' } }),
+      '/api/runpod/s3/status': () => ({ json: { configured: true, source: 'file' } }),
       'POST /api/runpod/preflight': () => ({ json: GREEN_PREFLIGHT }),
     })
     const w = initRunpodSetup({ mount: document.createElement('div'), fetchImpl, onConnected })
@@ -206,6 +252,37 @@ describe('initRunpodSetup factory', () => {
     document.querySelector('#rp-setup-preflight').click()
     await vi.waitFor(() => expect(onConnected).toHaveBeenCalled())
     expect(document.querySelector('.modal__body').textContent).toContain("You're ready")
+    w.dispose()
+  })
+
+  it('collects and validates both S3 values against the selected volume', async () => {
+    const fetchImpl = fakeFetch({
+      'POST /api/runpod/connect': () => ({ json: { connected: true } }),
+      '/api/runpod/balance': () => ({ json: { available: true, balance: 50 } }),
+      '/api/runpod/volumes': () => ({ json: { volumes: [{ id: 'v1', data_center_id: 'EU-RO-1' }] } }),
+      '/api/runpod/ssh-public-key': () => ({ json: { present: true, public_key: 'ssh-ed25519 AAA' } }),
+      '/api/runpod/s3/status': () => ({ json: { configured: false, source: 'none' } }),
+      'POST /api/runpod/s3/configure': () => ({ json: { configured: true, source: 'file' } }),
+    })
+    const w = initRunpodSetup({ mount: document.createElement('div'), fetchImpl })
+    w.open()
+    let body = document.querySelector('.modal__body')
+    body.querySelector('#rp-setup-key').value = 'rp_abcdefgh'
+    body.querySelector('#rp-setup-key').dispatchEvent(new Event('input'))
+    body.querySelector('#rp-setup-verify').click()
+    await vi.waitFor(() => expect(document.querySelector('#rp-setup-volume')).toBeTruthy())
+    body = document.querySelector('.modal__body')
+    body.querySelector('#rp-setup-volume').value = 'v1'
+    body.querySelector('#rp-setup-volume').dispatchEvent(new Event('change'))
+    await vi.waitFor(() => expect(document.querySelector('#rp-setup-s3-access')).toBeTruthy())
+    document.querySelector('#rp-setup-s3-access').value = 'user_abc'
+    document.querySelector('#rp-setup-s3-access').dispatchEvent(new Event('input'))
+    document.querySelector('#rp-setup-s3-secret').value = 'rps_secret'
+    document.querySelector('#rp-setup-s3-secret').dispatchEvent(new Event('input'))
+    document.querySelector('#rp-setup-s3-verify').click()
+    await vi.waitFor(() => expect(document.querySelector('.modal__body').textContent).toContain('Podless volume transfer is configured'))
+    const call = fetchImpl.mock.calls.find(([path]) => path === '/api/runpod/s3/configure')
+    expect(JSON.parse(call[1].body)).toEqual({ access_key: 'user_abc', secret_key: 'rps_secret' })
     w.dispose()
   })
 })

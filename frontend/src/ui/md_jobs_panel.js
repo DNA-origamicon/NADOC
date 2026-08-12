@@ -4365,6 +4365,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // ── Stage timeline ─────────────────────────────────────────────────────────
   function _renderTimeline(job) {
     if (!timelineEl) return
+    if (mdRemoteAwaitingSubmit(job)) {
+      timelineEl.textContent = 'NAMD - queued - waiting for submission'
+      return
+    }
     timelineEl.innerHTML = ''
 
     const segments = job.segments ?? []

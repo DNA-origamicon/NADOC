@@ -6,7 +6,8 @@
  * and dies at step 0; a missing SSH key on a pod that refuses every connection; no
  * network volume, so the pod has neither NAMD nor any packages. The job of this panel is
  * to turn each of those into a red row BEFORE anything is rented, and to keep the Run
- * button disabled until they are all green.
+ * button disabled until they are all green. The S3 row is a second credential: the API
+ * key manages compute; S3 access transfers files after the paid pod is destroyed.
  *
  * Pure core (chip state, row rendering, gating) is separated from the factory so the
  * decisions are unit-tested without a DOM or a network.

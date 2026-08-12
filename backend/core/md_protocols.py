@@ -1959,6 +1959,8 @@ def _min_conf(
     vacuum: bool = False,
     push_bonds_file: Optional[str] = None,
     overrides: Optional[dict] = None,
+    n_atoms: Optional[int] = None,
+    adaptive_minimization: bool = True,
 ) -> str:
     # enm_file overrides the default {name_stem}_k{scale}.enm.extra — used by the
     # declash protocol to minimise against an ss-excluded network.  Minimisation
@@ -1997,8 +1999,112 @@ def _min_conf(
         lines.append(f"extraBondsFile     {push_bonds_file}\n")
     lines.append("constraints        off\n")
     lines.append(external_forces_block(anchors_file, field))
-    lines.append(f"minimize           {minimize_steps}\n")
+    if adaptive_minimization and n_atoms and minimize_steps > MIN_STEPS_FLOOR:
+        adaptive = adaptive_minimization_parameters(n_atoms, minimize_steps)
+        lines.append(
+            f"""\
+# NADOC_ADAPTIVE_MIN_BEGIN
+# Chunked minimisation: the original {minimize_steps}-step heuristic remains the hard
+# ceiling. Missing callback data deliberately prevents early stopping.
+set nadoc_min_max {minimize_steps}
+set nadoc_min_min {int(adaptive['minimum_steps'])}
+set nadoc_min_chunk {int(adaptive['chunk_steps'])}
+set nadoc_min_required {int(adaptive['stable_chunks'])}
+set nadoc_min_delta {float(adaptive['energy_delta']):.9g}
+set nadoc_min_energy ""
+proc nadoc_min_callback {{labels values}} {{
+    global nadoc_min_energy
+    set idx [lsearch -exact $labels TOTAL]
+    if {{$idx >= 0}} {{ set nadoc_min_energy [lindex $values $idx] }}
+}}
+callback nadoc_min_callback
+set nadoc_min_done 0
+set nadoc_min_stable 0
+set nadoc_min_previous ""
+set nadoc_min_reason maximum
+while {{$nadoc_min_done < $nadoc_min_max}} {{
+    set nadoc_min_left [expr {{$nadoc_min_max - $nadoc_min_done}}]
+    set nadoc_min_this [expr {{$nadoc_min_left < $nadoc_min_chunk ? $nadoc_min_left : $nadoc_min_chunk}}]
+    minimize $nadoc_min_this
+    incr nadoc_min_done $nadoc_min_this
+    set nadoc_min_improvement ""
+    if {{[string is double -strict $nadoc_min_previous] && [string is double -strict $nadoc_min_energy]}} {{
+        set nadoc_min_improvement [expr {{$nadoc_min_previous - $nadoc_min_energy}}]
+        if {{$nadoc_min_done >= $nadoc_min_min && $nadoc_min_improvement >= 0.0 && $nadoc_min_improvement <= $nadoc_min_delta}} {{
+            incr nadoc_min_stable
+        }} else {{
+            set nadoc_min_stable 0
+        }}
+    }} else {{
+        set nadoc_min_stable 0
+    }}
+    print "NADOC_ADAPTIVE_MIN step=$nadoc_min_done energy=$nadoc_min_energy improvement=$nadoc_min_improvement stable=$nadoc_min_stable/$nadoc_min_required"
+    set nadoc_min_previous $nadoc_min_energy
+    if {{$nadoc_min_done >= $nadoc_min_min && $nadoc_min_stable >= $nadoc_min_required}} {{
+        set nadoc_min_reason plateau
+        break
+    }}
+}}
+print "NADOC_ADAPTIVE_MIN_STOP reason=$nadoc_min_reason steps=$nadoc_min_done max=$nadoc_min_max"
+set nadoc_min_report [open "output/{min_name}.adaptive_min.txt" w]
+puts $nadoc_min_report "reason=$nadoc_min_reason steps=$nadoc_min_done max=$nadoc_min_max energy=$nadoc_min_energy"
+close $nadoc_min_report
+# NADOC_ADAPTIVE_MIN_END
+"""
+        )
+    else:
+        lines.append(f"minimize           {minimize_steps}\n")
     return apply_conf_overrides("".join(lines), overrides)
+
+
+def upgrade_minimization_conf_adaptive(
+    conf_path: Path, *, min_name: str, n_atoms: int, max_steps: int
+) -> bool:
+    """Upgrade a prepared legacy minimisation config in place.
+
+    Existing stopped/paused jobs must benefit when they are relaunched; rebuilding a
+    multi-GB solvated package just to replace one command would be wasteful.  Returns
+    ``True`` only when the file changed.
+    """
+    if not conf_path.exists() or n_atoms <= 0 or max_steps <= MIN_STEPS_FLOOR:
+        return False
+    text = conf_path.read_text()
+    if "# NADOC_ADAPTIVE_MIN_BEGIN" in text:
+        # Upgrade the first field-tested controller syntax in already-prepared jobs.
+        old = "set nadoc_min_this [expr {min($nadoc_min_chunk, $nadoc_min_max - $nadoc_min_done)}]"
+        if old not in text:
+            return False
+        new = (
+            "set nadoc_min_left [expr {$nadoc_min_max - $nadoc_min_done}]\n"
+            "    set nadoc_min_this [expr {$nadoc_min_left < $nadoc_min_chunk ? "
+            "$nadoc_min_left : $nadoc_min_chunk}]"
+        )
+        conf_path.write_text(text.replace(old, new))
+        return True
+    command = re.search(
+        rf"^\s*minimize\s+{int(max_steps)}\s*(?:;[^\n]*)?$", text, re.MULTILINE
+    )
+    if not command:
+        return False
+    template = _min_conf(
+        min_name,
+        "nadoc_adaptive_template",
+        (100.0, 100.0, 100.0),
+        False,
+        max_steps,
+        0.5,
+        no_enm=True,
+        n_atoms=n_atoms,
+    )
+    block = re.search(
+        r"^# NADOC_ADAPTIVE_MIN_BEGIN$.*?^# NADOC_ADAPTIVE_MIN_END$",
+        template,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not block:  # defensive: never damage a runnable legacy config
+        return False
+    conf_path.write_text(text[: command.start()] + block.group(0) + text[command.end() :])
+    return True
 
 
 # ── Restraints PDB ────────────────────────────────────────────────────────────
@@ -2945,6 +3051,17 @@ MIN_STEPS_FLOOR = 4_800
 #: ~130k steps into dynamics.  One step per 10 atoms clears them.
 MIN_STEPS_PER_ATOMS = 10
 
+# Adaptive minimisation keeps the existing one-step-per-10-atoms value as a HARD
+# ceiling, but no longer assumes every system needs all of it.  We do not even ask the
+# plateau question until one step per 50 atoms has run, and then require three
+# consecutive chunks with less than 2e-4 kcal/mol/atom improvement.  TOTAL energy is
+# supplied by NAMD's documented Tcl callback after each ``minimize`` command.  Any
+# missing/non-numeric callback value fails safe: the loop runs to the hard ceiling.
+ADAPTIVE_MIN_MIN_STEPS_PER_ATOMS = 50
+ADAPTIVE_MIN_CHUNKS = 32
+ADAPTIVE_MIN_STABLE_CHUNKS = 3
+ADAPTIVE_MIN_KCAL_PER_MOL_PER_ATOM = 2.0e-4
+
 
 def minimize_steps_for_atoms(n_atoms: int, floor: int = MIN_STEPS_FLOOR) -> int:
     """Minimisation steps that scale with system size (pure).
@@ -2953,6 +3070,25 @@ def minimize_steps_for_atoms(n_atoms: int, floor: int = MIN_STEPS_FLOOR) -> int:
     see :data:`MIN_STEPS_PER_ATOMS`.
     """
     return _round_up_to_cycle(max(int(floor), int(n_atoms) // MIN_STEPS_PER_ATOMS))
+
+
+def adaptive_minimization_parameters(n_atoms: int, max_steps: int) -> dict[str, float | int]:
+    """Return conservative, cycle-aligned controls for adaptive minimisation."""
+    maximum = _round_up_to_cycle(max_steps)
+    minimum = min(
+        maximum,
+        _round_up_to_cycle(
+            max(MIN_STEPS_FLOOR, int(n_atoms) // ADAPTIVE_MIN_MIN_STEPS_PER_ATOMS)
+        ),
+    )
+    chunk = _round_up_to_cycle(max(MIN_STEPS_FLOOR, maximum // ADAPTIVE_MIN_CHUNKS))
+    chunk = min(chunk, maximum)
+    return {
+        "minimum_steps": minimum,
+        "chunk_steps": chunk,
+        "stable_chunks": ADAPTIVE_MIN_STABLE_CHUNKS,
+        "energy_delta": ADAPTIVE_MIN_KCAL_PER_MOL_PER_ATOM * max(1, int(n_atoms)),
+    }
 
 
 def mgh_slow_release_segments(
@@ -3196,6 +3332,7 @@ def prepare_mgh_slow_release(
     #: ``box_mode`` instead of inferred from a future run length.
     free_ns: Optional[float] = None,
     minimize_steps: int = 4_800,
+    adaptive_minimization: bool = True,
     gpu_resident_mode: str = "auto",
     min_scale: float = 0.5,
     require_full_topology: bool = False,
@@ -3610,6 +3747,8 @@ def prepare_mgh_slow_release(
             no_enm=rebuild_enm_from_min,
             anchors_file=anchors_file,
             field=field,
+            n_atoms=solvated_atoms,
+            adaptive_minimization=adaptive_minimization,
             # Stage 0 is the minimisation; the ladder segments are 1..N.
             overrides=overrides_for_stage(stage_overrides, 0),
         )
@@ -3797,6 +3936,7 @@ def prepare_mgh_slow_release(
         "minimization": {
             "name": min_name,
             "steps": minimize_steps,
+            "adaptive": bool(adaptive_minimization),
             "scale": min_scale,
             # Display label for the job timeline.  Named per-manifest rather than assumed
             # by the UI because the slot is not always a minimisation — an ensemble

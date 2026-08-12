@@ -401,6 +401,10 @@ def _client_recording(deleted):
 
 class TestRunJobOnPodAlwaysTerminates:
     def _patch_conn(self, monkeypatch, responses):
+        async def fake_fetch(*_args, **_kwargs):
+            return None
+
+        monkeypatch.setattr(rx, "fetch_results", fake_fetch)
         async def fake_connect(self, **kw):
             self._conn = FakeSSH(responses)
 
@@ -1003,6 +1007,10 @@ class TestAdoptAlsoAlwaysTerminates:
     """
 
     def _patch_conn(self, monkeypatch, responses):
+        async def fake_fetch(*_args, **_kwargs):
+            return None
+
+        monkeypatch.setattr(rx, "fetch_results", fake_fetch)
         async def fake_connect(self, **kw):
             self._conn = FakeSSH(responses)
 
@@ -1173,3 +1181,10 @@ class TestOpenPodConnection:
         )
         with pytest.raises(RunpodError, match="no longer exists"):
             _run(rx.open_pod_connection(job, client=client))
+
+@pytest.fixture(autouse=True)
+def _isolate_saved_runpod_s3_credentials(monkeypatch):
+    """Unit fakes must not change behavior because the developer has real S3 keys."""
+    from backend.core import runpod_s3
+
+    monkeypatch.setattr(runpod_s3, "resolve_credentials", lambda: None)

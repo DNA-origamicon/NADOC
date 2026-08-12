@@ -248,6 +248,9 @@ class MdJob:
     # remaining p50/p100 chunks once its first chunk shows an energy+WC plateau
     # (backend/core/md_cutoff.py).  Default OFF — never changes existing runs.
     early_stop_relax: bool = True
+    # Chunk minimization and stop only after sustained energy convergence. The
+    # atom-scaled fixed count remains the hard ceiling. Enabled for new jobs.
+    adaptive_minimization: bool = True
     # Early-stop criterion tier for a REMOTE (Alpine) relaxation.  "B" (default) =
     # energy(+volume) plateau only, stdlib evaluator, restricted to well-restrained
     # stages.  "A" = energy AND WC base-pairing (full local parity), which needs an
@@ -453,6 +456,7 @@ class MdJob:
         data.setdefault(
             "early_stop_relax", False
         )  # pre-existing jobs keep their setting
+        data.setdefault("adaptive_minimization", True)
         data.setdefault("early_stop_tier", "B")
         data.setdefault("failure_kind", None)
         data.setdefault("decision", None)

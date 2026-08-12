@@ -114,12 +114,24 @@ function _pct1(x) {
   return Math.max(0, Math.min(100, Math.round(x * 1000) / 10))
 }
 
+/** A prepared remote NAMD package which has not been submitted yet. Its persisted
+ * minimisation/segment plan describes future work, not completed work. */
+export function namdAwaitingSubmission(node) {
+  const remote = node?.execution_target === 'alpine' || node?.execution_target === 'runpod'
+  return node?.engine === 'namd' && remote && node?.status === 'queued'
+    && !node?.slurm_job_id && !node?.runpod_pod_id && !node?.remote_submit_progress
+}
+
 /** Progress % (one decimal) for the ONE master bar (no extra fetch): completed → 100;
  *  LAMMPS from current_step/steps; NAMD from the backend live fraction (else segments
  *  done/total); oxDNA likewise from stages; mrDNA/CanDo have no granular signal → 0
  *  while running (the bar COLOR conveys state). */
 export function masterProgressPct(node) {
   if (!node) return 0
+  // A prepared plan can carry an old/default progress_fraction (4.5% was observed on a
+  // fresh VoltronCoreArm package). Until submission there is no executed work: showing
+  // that fraction looks like NAMD is already running and hides the required Submit click.
+  if (namdAwaitingSubmission(node)) return 0
   if (node.remote_submit_progress?.fraction != null) {
     return _pct1(Number(node.remote_submit_progress.fraction))
   }
@@ -168,6 +180,7 @@ export function masterProgressColor(node) {
  *  hover TOOLTIP (what used to sit inline in each engine's #*-jobs-progress). */
 export function masterProgressTooltip(node) {
   if (!node) return ''
+  if (namdAwaitingSubmission(node)) return 'NAMD - queued - waiting for submission'
   if (node.remote_submit_progress) {
     const p = node.remote_submit_progress
     const destination = p.target === 'runpod' || node.execution_target === 'runpod'
@@ -272,6 +285,7 @@ function _estPrefix(node) {
 /** Engine-symmetric numeric progress appended beneath the unified Jobs bar. */
 export function masterStepText(node) {
   if (!node) return ''
+  if (namdAwaitingSubmission(node)) return ''
   const pct = masterProgressPct(node)
   if (node.prep_progress) {
     const p = node.prep_progress
@@ -318,6 +332,7 @@ export function masterStepText(node) {
 /** One-line master status text for the selected node (engine-symmetric). */
 export function masterStatusText(node) {
   if (!node) return 'Select a run above, or press ▶ Relax to start one.'
+  if (namdAwaitingSubmission(node)) return 'NAMD - queued - waiting for submission'
   const eng = engineLabel(node)
   if (node.remote_submit_progress) {
     const p = node.remote_submit_progress

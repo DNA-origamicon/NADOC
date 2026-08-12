@@ -78,6 +78,7 @@ class TestHappyPath:
         assert [c.key for c in pre.checks] == [
             "api_key",
             "volume",
+            "s3_transfer",
             "ssh_key",
             "namd_arch",
             "gpu_stock",

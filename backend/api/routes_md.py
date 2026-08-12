@@ -158,6 +158,12 @@ class CreateJobRequest(BaseModel):
     # controls cell geometry; callers should send box_mode explicitly.
     production_ns_intent: Optional[float] = Field(None, gt=0.0, le=MAX_PRODUCTION_NS)
     minimize_steps: int = Field(4_800, ge=100)
+    adaptive_minimization: bool = Field(
+        True,
+        description="Stop minimization after sustained energy convergence instead of "
+        "always running the atom-scaled maximum. The configured minimization steps "
+        "remain a hard ceiling; missing convergence data fails safe to the ceiling.",
+    )
     declash: bool = Field(
         False,
         description="Force the declash protocol (auto-enabled for junctions with two or more crossover extra bases, e.g. 2xT thymines)",
@@ -3192,6 +3198,7 @@ def _spawn_draft_job(body: CreateJobRequest, *, name: str) -> MdJob:
     job.requested_resources = body.slurm_resources or None
     _apply_runpod_choices(job, body)
     job.early_stop_relax = body.early_stop_relax
+    job.adaptive_minimization = body.adaptive_minimization
     job.early_stop_tier = (body.early_stop_tier or "B").upper()
     job.prep_params = body.model_dump()
     job.prep_params_set = sorted(body.model_fields_set)
@@ -3352,6 +3359,7 @@ def _spawn_prep_job(
     job.requested_resources = body.slurm_resources or None
     _apply_runpod_choices(job, body)
     job.early_stop_relax = body.early_stop_relax
+    job.adaptive_minimization = body.adaptive_minimization
     job.early_stop_tier = (body.early_stop_tier or "B").upper()
     # Capture the request so a later refit can rebuild the job with one knob moved.
     # The explicit-key set rides along so the read-only settings viewer can replay this
@@ -3541,6 +3549,7 @@ async def _prepare_job_bg(
             padding_nm=body.padding_nm,
             box_mode=body.box_mode,
             minimize_steps=body.minimize_steps,
+            adaptive_minimization=body.adaptive_minimization,
             atomistic_model=seed_model,
             declash=body.declash,
             force_soft=body.force_soft,
@@ -5165,6 +5174,7 @@ def _save_draft_settings(job: MdJob, body: CreateJobRequest) -> MdJob:
     job.requested_resources = body.slurm_resources or None
     job.design_source_path = body.design_source_path or job.design_source_path
     job.early_stop_relax = body.early_stop_relax
+    job.adaptive_minimization = body.adaptive_minimization
     job.early_stop_tier = (body.early_stop_tier or "B").upper()
     _apply_runpod_choices(job, body)
     job.prep_params = body.model_dump()

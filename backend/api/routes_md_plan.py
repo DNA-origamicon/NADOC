@@ -133,6 +133,7 @@ FIELD_SCOPE: dict[str, str] = {
     "early_stop_tier": "relaxation",
     "allow_ring_pierced_seed": "relaxation",
     "minimize_steps": "relaxation",
+    "adaptive_minimization": "relaxation",
     "protocol": "relaxation",
     # Execution choices apply to this relaxation only. Production selects its own target
     # and GPU mode when it is created.

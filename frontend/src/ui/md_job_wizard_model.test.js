@@ -483,8 +483,12 @@ describe('wizardPayload', () => {
   })
 
   it('passes a falsy touched value through rather than dropping it', () => {
-    const body = wizardPayload({ presetId: 'x', touched: { fast: false, early_stop_relax: false } })
-    expect(body).toMatchObject({ fast: false, early_stop_relax: false })
+    const body = wizardPayload({ presetId: 'x', touched: {
+      fast: false, early_stop_relax: false, adaptive_minimization: false,
+    } })
+    expect(body).toMatchObject({
+      fast: false, early_stop_relax: false, adaptive_minimization: false,
+    })
   })
 
   it('carries autostart so Create and Create-and-run are one code path', () => {

@@ -108,7 +108,10 @@ const FIELDS = [
   { key: 'mg_conc_mM', label: 'Magnesium', unit: 'mM', type: 'number', step: 0.5, min: 0 },
   { key: 'ion_conc_mM', label: 'NaCl', unit: 'mM', type: 'number', step: 5, min: 0 },
   { key: 'minimize_steps', label: 'Minimisation steps', type: 'number', step: 100, min: 100,
-    help: 'Minimum number of minimisation steps. The actual count increases with the solvated atom count so larger systems receive enough minimisation without requiring manual adjustment.' },
+    help: 'Minimum and hard-ceiling input for minimisation. The maximum increases with the solvated atom count so larger systems remain protected.' },
+  { key: 'adaptive_minimization', label: 'Stop minimisation when converged', type: 'checkbox',
+    fallback: () => true,
+    help: 'Enabled by default. Runs minimisation in chunks and stops only after three consecutive low-improvement windows. The atom-scaled step count remains a hard maximum, and missing energy data runs to that maximum. Turn this off to force every scheduled minimisation step.' },
   // ── The three integrator axes, separated (exp51, 2026-08-05) ──
   // These used to be one dial: "Fast relaxation (HMR + 4 fs)" bundled a timestep with a
   // mass set, and rigidBonds was never exposed at all. exp51 measured the combinations

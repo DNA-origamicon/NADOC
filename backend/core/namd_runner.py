@@ -1101,6 +1101,15 @@ def _write_probe_conf(min_conf: Path, probe_conf: Path, out_stem: str) -> None:
     text = min_conf.read_text()
     m = re.search(r"^\s*stepspercycle\s+(\d+)", text, re.IGNORECASE | re.MULTILINE)
     cycle = int(m.group(1)) if m else 20
+    # Adaptive configs contain a Tcl loop rather than a literal ``minimize N``.  The
+    # tile-list probe must never execute that real loop: replace it wholesale with the
+    # same one-cycle probe used for legacy configs.
+    text = re.sub(
+        r"^# NADOC_ADAPTIVE_MIN_BEGIN$.*?^# NADOC_ADAPTIVE_MIN_END$",
+        f"minimize           {cycle}",
+        text,
+        flags=re.MULTILINE | re.DOTALL,
+    )
     text = re.sub(
         r"^(\s*minimize\s+)\d+",
         rf"\g<1>{cycle}",
