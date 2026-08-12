@@ -287,6 +287,46 @@ def test_zero_length_is_allowed_for_indirect():
     assert r.status_code == 400
 
 
+def test_zero_length_indirect_has_no_bridge_base_or_helix():
+    """0 nt means adjacent complement domains, not a clamped 1-bp bridge."""
+    seeded = _seed_with_real_oh_domains()
+    b_strand = next(s for s in seeded.strands if s.id == "oh_strand_b")
+    b_domain = b_strand.domains[0].model_copy(update={"overhang_id": "oh_b_3p"})
+    b_strand = b_strand.model_copy(update={"domains": [b_domain]})
+    strands = [b_strand if s.id == b_strand.id else s for s in seeded.strands]
+    overhangs = [
+        o.model_copy(update={"id": "oh_b_3p"}) if o.id == "oh_b_5p" else o
+        for o in seeded.overhangs
+    ]
+    design_state.set_design(seeded.model_copy(update={"strands": strands, "overhangs": overhangs}))
+    r = client.post(
+        "/api/design/overhang-connections",
+        json={
+            "overhang_a_id": "oh_a_5p",
+            "overhang_a_attach": "root",
+            "overhang_b_id": "oh_b_3p",
+            "overhang_b_attach": "root",
+            "linker_type": "ss",
+            "length_value": 0,
+            "length_unit": "bp",
+        },
+    )
+    assert r.status_code == 201, r.text
+    design = r.json()["design"]
+    cid = design["overhang_connections"][0]["id"]
+    strand = next(s for s in design["strands"] if s["id"] == f"__lnk__{cid}__s")
+    # B (3p) must precede A (5p): B's complement 3' end and A's complement
+    # 5' start are their selected roots. A→B would create the stray free-end
+    # connection previously visible as a thin red line.
+    assert [d["helix_id"] for d in strand["domains"]] == [
+        "oh_helix_b",
+        "oh_helix_a",
+    ]
+    assert strand["domains"][0]["end_bp"] == 0   # B root
+    assert strand["domains"][1]["start_bp"] == 7  # A root
+    assert not any(h["id"] == f"__lnk__{cid}" for h in design["helices"])
+
+
 def test_invalid_attach_value_is_422():
     r = _post_conn(overhang_a_attach="middle")  # not a Literal value
     assert r.status_code == 422

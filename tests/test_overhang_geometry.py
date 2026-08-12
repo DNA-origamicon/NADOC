@@ -72,6 +72,20 @@ def test_flexible_overhang_is_not_rejected_by_parent_bead_azimuth():
             design, helix, 87, Direction.REVERSE, *other_cell
         ) is not None
 
+
+def test_sparse_overhang_helix_does_not_fill_its_empty_middle():
+    """VoltronCoreArm's shared h_XY_18_27 axis has domains only at 72–83
+    and 168–179; it must not block the valid h_sc_48 nick at 103/104.
+    """
+    path = Path("workspace/VoltronCoreArm.nadoc")
+    design = Design.from_dict(json.loads(path.read_text()))
+    helix = design.find_helix("h_sc_48")
+    assert helix is not None
+    for bp in (103, 104):
+        assert overhang_candidate_error(
+            design, helix, bp, Direction.REVERSE, 18, 27
+        ) is None
+
 # ── 6HB cell layout ───────────────────────────────────────────────────────────
 
 CELLS_6HB = [(0, 1), (0, 2), (0, 3), (1, 1), (1, 2), (1, 3)]

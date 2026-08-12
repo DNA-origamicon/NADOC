@@ -31,6 +31,7 @@ from backend.core.lattice import (
     _is_comp_first,
     _length_value_to_bp,
     _opposite_direction,
+    _zero_bridge_side_order,
 )
 from backend.core.linker_relax import bridge_axis_geometry
 from backend.core.models import (
@@ -327,10 +328,10 @@ def generate_assembly_linker_topology(
 
     A zero-length linker (``length_value == 0`` — the 'indirect' variants in
     the frontend) has ZERO bridge bases: a single ss strand binds both
-    overhangs back-to-back (``[comp_a, comp_b]``, sequence
-    ``RC(OH_A) + RC(OH_B)``). Each overhang gets its complement binding
-    domain and the ``comp_a → comp_b`` backbone jump renders as the connector
-    arc. No ``__lnk__`` bridge helix is emitted — the geometry pass
+    overhangs back-to-back. The complement whose selected attach point is its
+    3' end comes first, followed by the complement whose attach point is its
+    5' end; this makes the implicit domain junction land on the requested
+    ends rather than the two free ends. No ``__lnk__`` bridge helix is emitted — the geometry pass
     synthesises world-space alias helices for the two namespaced complement
     domains. (Mirrors the length>0 ss strand below, minus its bridge domain.)
     """
@@ -347,13 +348,16 @@ def generate_assembly_linker_topology(
             if oh_b_dom is not None
             else None
         )
-        domains = [d for d in (comp_a, comp_b) if d is not None]
+        comps = {"a": comp_a, "b": comp_b}
+        side_order = _zero_bridge_side_order(conn)
+        domains = [comps[side] for side in side_order if comps[side] is not None]
         if not domains:
             return [], []
         oh_a_seq = _oh_sequence_for_domain(design_a, conn.overhang_a_id, oh_a_dom)
         oh_b_seq = _oh_sequence_for_domain(design_b, conn.overhang_b_id, oh_b_dom)
-        seq = _compose_ss_strand_sequence(
-            oh_a_seq=oh_a_seq, oh_b_seq=oh_b_seq, bridge_seq=""
+        seqs = {"a": oh_a_seq, "b": oh_b_seq}
+        seq = "".join(
+            reverse_complement(seqs[side], len(seqs[side])) for side in side_order
         )
         strand = Strand(
             id=f"{_LINKER_HELIX_PREFIX}{conn.id}__s",
@@ -573,11 +577,18 @@ def recompose_strand_sequences_for_connection(
                 bridge_seq=bridge_seq,
             )
         elif s.id.endswith("__s"):
-            seq = _compose_ss_strand_sequence(
-                oh_a_seq=oh_a_seq,
-                oh_b_seq=oh_b_seq,
-                bridge_seq=bridge_seq,
-            )
+            if conn.length_value == 0:
+                seqs = {"a": oh_a_seq, "b": oh_b_seq}
+                seq = "".join(
+                    reverse_complement(seqs[side], len(seqs[side]))
+                    for side in _zero_bridge_side_order(conn)
+                )
+            else:
+                seq = _compose_ss_strand_sequence(
+                    oh_a_seq=oh_a_seq,
+                    oh_b_seq=oh_b_seq,
+                    bridge_seq=bridge_seq,
+                )
         else:
             updated.append(s)
             continue

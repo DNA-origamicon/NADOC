@@ -721,8 +721,7 @@ def test_post_overhang_connection_generates_ss_linker_topology():
 def test_post_indirect_zero_length_generates_binding_strand_no_bridge():
     _seed_real_two_part_assembly()
     # Indirect linker = zero-length ss: a single strand binds both overhangs
-    # back-to-back ([comp_a, comp_b]) with NO bridge helix/domain. The
-    # comp_a→comp_b backbone jump renders as the connector arc.
+    # back-to-back in attachment-aware 5'→3' order with NO bridge helix/domain.
     r = client.post(
         "/api/assembly/overhang-connections",
         json=_conn_payload_real(

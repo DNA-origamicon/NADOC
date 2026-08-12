@@ -7,7 +7,7 @@ describe('overhang ss linker helpers', () => {
   it('converts persisted linker length to rendered base count', () => {
     expect(linkerLengthToBases({ length_value: 12, length_unit: 'bp' })).toBe(12)
     expect(linkerLengthToBases({ length_value: 4.0, length_unit: 'nm' })).toBe(12)
-    expect(linkerLengthToBases({ length_value: 0, length_unit: 'bp' })).toBe(1)
+    expect(linkerLengthToBases({ length_value: 0, length_unit: 'bp' })).toBe(0)
   })
 
   it('anchors to the linker complement nucleotide when geometry contains it', () => {

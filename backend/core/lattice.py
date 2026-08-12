@@ -3187,6 +3187,30 @@ def _helix_nucleotide_z_band(h: Helix) -> Tuple[float, float]:
     return (min(z0, z1), max(z0, z1))
 
 
+def _helix_occupied_z_bands(design: Design, h: Helix) -> list[Tuple[float, float]]:
+    """Z bands containing actual strand domains on ``h``.
+
+    A single helix object may host disconnected overhang domains with a large
+    empty interval between them.  Treating its full axis as nucleotide-filled
+    hides valid extrusion sites in that interval.  Keep separate bands for
+    every domain; retain the full-helix fallback for legacy/topology-free
+    helices.
+    """
+    domains = [d for s in design.strands for d in s.domains if d.helix_id == h.id]
+    if not domains or not h.length_bp:
+        return [_helix_nucleotide_z_band(h)]
+
+    dz = h.axis_end.z - h.axis_start.z
+
+    def bp_z(bp: int) -> float:
+        return h.axis_start.z + dz * (bp - h.bp_start) / h.length_bp
+
+    return [
+        (min(bp_z(d.start_bp), bp_z(d.end_bp)), max(bp_z(d.start_bp), bp_z(d.end_bp)))
+        for d in domains
+    ]
+
+
 def overhang_candidate_error(
     design: Design,
     orig_helix: Helix,
@@ -3257,9 +3281,9 @@ def overhang_candidate_error(
     for h in design.helices:
         if h.grid_pos != (neighbor_row, neighbor_col):
             continue
-        zlo, zhi = _helix_nucleotide_z_band(h)
-        if zlo - _OVERHANG_Z_EPS <= bz <= zhi + _OVERHANG_Z_EPS:
-            return f"Cell ({neighbor_row},{neighbor_col}) is occupied at this Z."
+        for zlo, zhi in _helix_occupied_z_bands(design, h):
+            if zlo - _OVERHANG_Z_EPS <= bz <= zhi + _OVERHANG_Z_EPS:
+                return f"Cell ({neighbor_row},{neighbor_col}) is occupied at this Z."
 
     return None
 
@@ -4947,6 +4971,21 @@ def _is_comp_first(ovhg_id: str, attach: str) -> bool:
     return True
 
 
+def _zero_bridge_side_order(conn) -> tuple[str, str]:
+    """5'→3' side order for a zero-nucleotide connector.
+
+    The first complement must meet the connector at its 3' end
+    (``comp_first``), and the second at its 5' end.  Ordering every indirect
+    strand as A→B connects the opposite, free ends whenever A happens to be
+    the 5p side of a root-to-root pair.
+    """
+    a_first = _is_comp_first(conn.overhang_a_id, conn.overhang_a_attach)
+    b_first = _is_comp_first(conn.overhang_b_id, conn.overhang_b_attach)
+    if b_first and not a_first:
+        return ("b", "a")
+    return ("a", "b")
+
+
 def generate_linker_topology(design: Design, conn) -> Design:  # OverhangConnection
     """Add the virtual helix and strand(s) implementing *conn*.
 
@@ -4975,7 +5014,6 @@ def generate_linker_topology(design: Design, conn) -> Design:  # OverhangConnect
     Strand ids: ``__lnk__<conn_id>__a`` (paired with overhang_a) and
                 ``__lnk__<conn_id>__b`` (paired with overhang_b).
     """
-    linker_bp = _length_value_to_bp(conn.length_value, conn.length_unit)
     bridge_helix_id = f"{_LINKER_HELIX_PREFIX}{conn.id}"
 
     new_helices = list(design.helices)
@@ -4983,6 +5021,38 @@ def generate_linker_topology(design: Design, conn) -> Design:  # OverhangConnect
 
     oh_a_dom = _find_overhang_domain(design, conn.overhang_a_id)
     oh_b_dom = _find_overhang_domain(design, conn.overhang_b_id)
+
+    # An indirect linker is a continuous binding strand with the two
+    # overhang-complement domains adjacent in its 5'→3' walk.  There is no
+    # intervening nucleotide, so do not pass zero through
+    # `_length_value_to_bp` (which deliberately clamps real helices to one bp)
+    # and do not emit a virtual bridge helix/domain.
+    if conn.length_value == 0:
+        complements_by_side = {
+            "a": _make_complement_domain(oh_a_dom, conn.overhang_a_id)
+            if oh_a_dom is not None
+            else None,
+            "b": _make_complement_domain(oh_b_dom, conn.overhang_b_id)
+            if oh_b_dom is not None
+            else None,
+        }
+        complements = [
+            complements_by_side[side]
+            for side in _zero_bridge_side_order(conn)
+            if complements_by_side[side] is not None
+        ]
+        if complements:
+            new_strands.append(
+                Strand(
+                    id=f"{bridge_helix_id}__s",
+                    domains=complements,
+                    strand_type=StrandType.LINKER,
+                    color=_LINKER_DEFAULT_COLOR,
+                )
+            )
+        return design.copy_with(helices=new_helices, strands=new_strands)
+
+    linker_bp = _length_value_to_bp(conn.length_value, conn.length_unit)
 
     # Both ds and ss linkers need a virtual helix to host the bridge
     # domain(s). For ds the bridge is a duplex (two strands' bridge halves

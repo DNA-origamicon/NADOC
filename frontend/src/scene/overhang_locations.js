@@ -187,6 +187,13 @@ export function initOverhangLocations(scene) {
     const cellXY   = sq ? _sqCellXY : _hcCellXY
     const helixMap  = new Map()   // id → { row, col, x, y, length_bp }
     const cellZMap  = new Map()   // "row,col" → [{zMin, zMax}]
+    const domainsByHelix = new Map()
+    for (const strand of (design.strands ?? [])) {
+      for (const domain of (strand.domains ?? [])) {
+        if (!domainsByHelix.has(domain.helix_id)) domainsByHelix.set(domain.helix_id, [])
+        domainsByHelix.get(domain.helix_id).push(domain)
+      }
+    }
     const _ID_RE = /^h_\w+_(-?\d+)_(-?\d+)$/
 
     function _rowColForHelix(h) {
@@ -229,16 +236,25 @@ export function initOverhangLocations(scene) {
       const [cx, cy] = cellXY(row, col)
       helixMap.set(h.id, { row, col, x, y, cx, cy, length_bp: h.length_bp })
       const key  = `${row},${col}`
-      // Nucleotide extent, NOT the axis span: a helix axis runs one base-rise past
-      // its last nucleotide (the end-cap).  Counting that empty cap as occupied
-      // wrongly suppressed a candidate exactly one bp beyond a short overhang (the
-      // nick-pair sibling) — see overhang_candidate_error / _helix_nucleotide_z_band.
-      let z0 = h.axis_start.z, z1 = h.axis_end.z
-      if (h.length_bp > 0) z1 = z0 + (z1 - z0) * (h.length_bp - 1) / h.length_bp
-      const zMin = Math.min(z0, z1)
-      const zMax = Math.max(z0, z1)
       if (!cellZMap.has(key)) cellZMap.set(key, [])
-      cellZMap.get(key).push({ zMin, zMax })
+      const domains = domainsByHelix.get(h.id) ?? []
+      if (domains.length && h.length_bp > 0) {
+        // A helix may host disconnected domains (for example two extruded
+        // overhangs at opposite ends).  Preserve their empty middle instead of
+        // marking the entire shared axis occupied.
+        const bpZ = bp => h.axis_start.z
+          + (h.axis_end.z - h.axis_start.z) * (bp - (h.bp_start ?? 0)) / h.length_bp
+        for (const d of domains) {
+          const z0 = bpZ(d.start_bp), z1 = bpZ(d.end_bp)
+          cellZMap.get(key).push({ zMin: Math.min(z0, z1), zMax: Math.max(z0, z1) })
+        }
+      } else {
+        // Legacy/topology-free helix fallback. The final axis rise is an empty
+        // end-cap and is not nucleotide occupancy.
+        let z0 = h.axis_start.z, z1 = h.axis_end.z
+        if (h.length_bp > 0) z1 = z0 + (z1 - z0) * (h.length_bp - 1) / h.length_bp
+        cellZMap.get(key).push({ zMin: Math.min(z0, z1), zMax: Math.max(z0, z1) })
+      }
     }
 
     // Iterate over all staple 5′/3′ nuc positions

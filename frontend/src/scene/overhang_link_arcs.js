@@ -519,7 +519,8 @@ function _quadraticCtrlBetween(a, b, axisDir) {
 
 export function linkerLengthToBases(conn) {
   const value = Number(conn?.length_value)
-  if (!Number.isFinite(value) || value <= 0) return 1
+  if (!Number.isFinite(value)) return 1
+  if (value <= 0) return 0
   if (conn?.length_unit === 'nm') return Math.max(1, Math.round(value / BDNA_RISE_PER_BP))
   return Math.max(1, Math.round(value))
 }
@@ -680,7 +681,9 @@ function _makeSsLinkerMeshes(conn, anchorA, anchorB, color = ARC_COLOR, useFjcSh
   // Pre-relax: smooth Bezier chord. Post-relax: pre-baked FJC shape from
   // the chosen bin. The lookup is fetched lazily; Bezier fallback runs
   // until it lands.
-  const fjcPositions = useFjcShape ? fjcChainBetween(baseCount, posA, posB, binIndex) : null
+  const fjcPositions = (useFjcShape && baseCount > 0)
+    ? fjcChainBetween(baseCount, posA, posB, binIndex)
+    : null
 
   let backboneCurve
   if (fjcPositions && fjcPositions.length === baseCount) {
