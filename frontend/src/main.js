@@ -4637,6 +4637,11 @@ async function main() {
     visibilityController?.unhideAll()
     clusterPanel?.resetVisibility?.()
     spreadsheet?.refresh?.()
+    // "Unhide All" must make the restored structure observable. In particular,
+    // recover tabs whose camera/target was poisoned before finite-safe framing
+    // shipped, and include elements that were outside a view framed around only
+    // the previously visible subset.
+    _fitToView()
   })
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────────
@@ -5353,6 +5358,12 @@ async function main() {
   // so it is injected lazily. Alias-consts keep every external call site verbatim.
   const _nucleotideTransformTool = initNucleotideTransformTool({
     store, scene, camera, canvas, controls, designRenderer, atomisticRenderer,
+    getAtomisticRenderers: () => [
+      atomisticRenderer,
+      _atomSurface.getRegionVdwRenderer?.(),
+      _atomSurface.getRegionBallstickRenderer?.(),
+      _atomSurface.getRegionStickRenderer?.(),
+    ],
     moveRotatePanel: _moveRotatePanel,
     refreshCurrentSelection: _mrRefreshCurrentSelection,
   })

@@ -56,6 +56,8 @@ def test_flexible_overhang_is_not_rejected_by_parent_bead_azimuth():
     therefore cannot invalidate an otherwise vacant adjacent target.
     """
     path = Path("workspace/VoltronCore_Arm.nadoc")
+    if not path.exists():
+        pytest.skip("requires local workspace fixture VoltronCore_Arm.nadoc")
     design = Design.from_dict(json.loads(path.read_text()))
     helix = next(h for h in design.helices if h.grid_pos == (16, 26))
     # The saved fixture later acquired material in the destination cell; isolate

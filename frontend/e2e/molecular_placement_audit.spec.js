@@ -22,7 +22,7 @@ test('2hb_1xT molecular-placement audit renders four inspectable A/B panels', as
   const modal = page.locator('#molecular-placement-audit')
   await expect(modal).toHaveClass(/visible/)
   await expect(modal.locator('.mpa-panel')).toHaveCount(4, { timeout: 90_000 })
-  await expect(modal).toHaveAttribute('data-provider', 'geometric-baseline-v1')
+  await expect(modal).toHaveAttribute('data-provider', 'crossover-insert-default-v2')
   await expect.poll(async () => Number(await modal.getAttribute('data-affected-atoms')))
     .toBeGreaterThan(0)
 

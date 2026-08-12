@@ -42,6 +42,13 @@ _OCC_MIN_BP_COLUMNS = 10  # below this, "bp" basis is meaningless → fall back 
 # RMSF_PRELIM_FRAMES encodes for the flexibility map.
 OCCUPANCY_PRELIM_NEFF = 25.0
 
+# Density grids are deliberately compact enough to travel as JSON and render interactively.
+# At 40^3, four inserted bases cost ~1 MB as float32 before JSON encoding, while 0.05 nm
+# voxels still resolve a base-sized occupancy lobe.
+OCC_DENSITY_GRID_SIZE = 40
+OCC_DENSITY_SIGMA_NM = 0.12
+OCC_DENSITY_LEVELS = (0.50, 0.80, 0.95)
+
 _OCCUPANCY_CACHE = None
 _OCCUPANCY_CACHE_MAX = 6
 
@@ -468,6 +475,65 @@ def apply_fit_plan(P, plan) -> np.ndarray:
             continue
         _refit(P, list(fit_pos), list(out_pos), Q, list(slots))
     return Q.reshape(P.shape[0], -1)
+
+
+def occupancy_density_grids(
+    X, feature_keys, *, grid_size: int = OCC_DENSITY_GRID_SIZE,
+    sigma_nm: float = OCC_DENSITY_SIGMA_NM,
+):
+    """Gaussian-smoothed 3-D occupancy grids for selected crossover extra bases.
+
+    ``X`` is the already registered feature matrix returned by :func:`apply_fit_plan`.
+    Each synthetic ``__xb__`` site gets its own normalized probability grid.  Isovalues
+    are reported as *enclosed probability* surfaces (50/80/95%), which is meaningful
+    across trajectories and avoids an arbitrary density slider being mistaken for a
+    population.
+    """
+    from scipy.ndimage import gaussian_filter  # noqa: PLC0415 (optional heavy dependency)
+
+    X = np.asarray(X, dtype=float)
+    if X.ndim != 2 or X.shape[0] < 2 or X.shape[1] != 3 * len(feature_keys):
+        return []
+    P = X.reshape(X.shape[0], len(feature_keys), 3)
+    xb = [i for i, k in enumerate(feature_keys) if len(k) >= 3 and k[0] == _XB_SENTINEL]
+    if not xb:
+        return []
+
+    # One shared box preserves spatial relationships among selected inserts. Padding is
+    # at least three kernels, preventing gaussian_filter's boundary from clipping lobes.
+    pts = P[:, xb, :].reshape(-1, 3)
+    pad = max(3.0 * sigma_nm, 0.25)
+    lo = pts.min(axis=0) - pad
+    hi = pts.max(axis=0) + pad
+    span = np.maximum(hi - lo, 0.2)
+    voxel = span / float(grid_size)
+
+    out = []
+    for i in xb:
+        H, _ = np.histogramdd(P[:, i, :], bins=grid_size, range=list(zip(lo, hi)))
+        H = gaussian_filter(H.astype(np.float32), sigma=sigma_nm / voxel, mode="constant")
+        total = float(H.sum())
+        if total <= 0:
+            continue
+        H /= total
+        flat = H.transpose(2, 1, 0).ravel()  # MarchingCubes indexes x fastest
+        order = np.sort(flat)[::-1]
+        csum = np.cumsum(order)
+        iso = {}
+        for level in OCC_DENSITY_LEVELS:
+            j = min(int(np.searchsorted(csum, level)), len(order) - 1)
+            iso[str(int(level * 100))] = float(order[j])
+        out.append({
+            "key": list(feature_keys[i]),
+            "shape": [grid_size, grid_size, grid_size],
+            "origin_nm": lo.round(5).tolist(),
+            "spacing_nm": voxel.round(6).tolist(),
+            "values": flat.round(9).tolist(),
+            "isovalues": iso,
+            "n_frames": int(X.shape[0]),
+            "sigma_nm": float(sigma_nm),
+        })
+    return out
 
 
 # ── Feature vectors ───────────────────────────────────────────────────────────────

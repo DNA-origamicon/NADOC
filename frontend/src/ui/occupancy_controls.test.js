@@ -72,6 +72,15 @@ describe('normalizeOccupancyParams', () => {
   })
 })
 
+describe('occupancy sampling and density parameters', () => {
+  it('defaults to fast/no-density and accepts full density mode', () => {
+    expect(normalizeOccupancyParams()).toMatchObject({ sampling: 'fast', density: false })
+    expect(normalizeOccupancyParams({ sampling: 'full', density: true }))
+      .toMatchObject({ sampling: 'full', density: true })
+    expect(normalizeOccupancyParams({ sampling: 'unknown' }).sampling).toBe('fast')
+  })
+})
+
 describe('occupancyStatusText', () => {
   it('reports switching with how often the states recur', () => {
     const s = occupancyStatusText(SWITCHING)

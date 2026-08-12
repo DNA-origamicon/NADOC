@@ -104,6 +104,39 @@ _ONE_BASE_DEFAULT_LOCAL_POSES: dict[bool, tuple[tuple[float, ...], tuple[float, 
     ),
 }
 
+# Direction-local defaults for reciprocal two-base inserts, authorized 2026-08-12
+# after Molecular Placement Audit review on honeycomb 6hb_2xT and square
+# 2x3SQx32_2xT. Each parity supplies one rigid pose per inserted residue (sim_k 0/1).
+# The direction frame is right-handed (bow, axial, chemical 3'->5'); unlike the 1xT
+# calibration, chemical traversal does not select the table — half-a frame polarity
+# does, and is shared by both members of a reciprocal pair.
+_TWO_BASE_DEFAULT_DIRECTIONAL_POSES = {
+    False: (
+        (
+            (0.099431289, 0.2200269994, -0.0652178505),
+            (-1.9885408832597084e-08, 9.416051314509263e-10,
+             3.0415329275729114e-07, 0.9999999999999536),
+        ),
+        (
+            (0.0, 0.2362539827, 0.06756434),
+            (0.04769451606807194, 0.13981183548880918,
+             1.0741443259540754e-08, 0.9890287578196513),
+        ),
+    ),
+    True: (
+        (
+            (0.0713301514, 0.006262659, 0.0159744305),
+            (0.008238387452678757, 0.009836047781206239,
+             -0.20798629439884447, 0.9780475870214407),
+        ),
+        (
+            (0.1192582438, 0.02016267, 0.0228294007),
+            (-0.13377231400015516, 0.034369401048122,
+             -0.210310255310524, 0.9678291733512994),
+        ),
+    ),
+}
+
 
 # ── Pure-math primitives ──────────────────────────────────────────────────────
 
@@ -580,6 +613,22 @@ def crossover_extra_base_default_local_pose(
     )
 
 
+def crossover_two_base_default_directional_pose(
+    extra_base_k: int, *, local_frame_reversed: bool = False
+) -> tuple[_np.ndarray, _np.ndarray, _np.ndarray]:
+    """Return the promoted v6 2xT delta in the crossover direction frame."""
+    if extra_base_k not in (0, 1):
+        raise ValueError("two-base default requires extra_base_k 0 or 1")
+    translation, quaternion = _TWO_BASE_DEFAULT_DIRECTIONAL_POSES[
+        bool(local_frame_reversed)
+    ][extra_base_k]
+    return (
+        _np.asarray(translation, dtype=float),
+        _quat_matrix_xyzw(quaternion),
+        _np.asarray(quaternion, dtype=float),
+    )
+
+
 def crossover_extra_base_frame(
     origin: _np.ndarray,
     line_dir: _np.ndarray,
@@ -619,6 +668,7 @@ def crossover_extra_base_placements(
     *,
     sim_reversed: bool = False,
     local_frame_reversed: bool = False,
+    apply_two_base_default: bool = True,
 ) -> list[dict]:
     """Canonical, representation-neutral crossover-insert residue placements.
 
@@ -627,9 +677,9 @@ def crossover_extra_base_placements(
     directly. Atom templates, CG beads, slabs, and bonds are deliberately outside this
     abstraction so placement can be revised without rewriting either representation.
 
-    For a one-base run, ``center`` and ``frame_rotation`` include the measured default
-    junction-local pose. ``local_frame_reversed`` canonicalises the independent
-    half-a strand polarity that was absent from the original two-pose calibration.
+    For one- and two-base runs, ``center`` and ``frame_rotation`` include their
+    calibrated defaults. ``local_frame_reversed`` selects the independent half-a
+    frame polarity; for 2xT that polarity chooses one shared k=0/k=1 pose pair.
     ``geometric_center`` and ``geometric_tangent`` retain the raw Bezier construction
     for diagnostics and animated endpoint updates.
     """
@@ -640,6 +690,19 @@ def crossover_extra_base_placements(
     local_t, local_r, local_q = crossover_extra_base_default_local_pose(
         count, sim_reversed=sim_reversed
     )
+    two_direction_rotation = None
+    if count == 2 and apply_two_base_default:
+        chain = _np.mean([
+            -_bezier_tan(pos_a, ctrl, pos_b, float(i + 1) / 3.0)
+            if sim_reversed
+            else _bezier_tan(pos_a, ctrl, pos_b, float(i + 1) / 3.0)
+            for i in range(2)
+        ], axis=0)
+        chain = _normalise(chain)
+        direction_bow = bow - float(_np.dot(bow, chain)) * chain
+        direction_bow = _normalise(direction_bow)
+        axial = _normalise(_np.cross(chain, direction_bow))
+        two_direction_rotation = _np.column_stack([direction_bow, axial, chain])
     out: list[dict] = []
     for geometric_index in range(count):
         t = float(geometric_index + 1) / float(count + 1)
@@ -658,10 +721,21 @@ def crossover_extra_base_placements(
         _, source_rotation = crossover_extra_base_frame(
             geometric_center, source_chain_tangent, frame_bow
         )
-        center = geometric_center + source_rotation @ local_t
-        frame_rotation = source_rotation @ local_r
-        # Rotate the geometric tangent by the local pose expressed in world space.
-        world_delta = source_rotation @ local_r @ source_rotation.T
+        if count == 2 and apply_two_base_default:
+            sim_k = count - 1 - geometric_index if sim_reversed else geometric_index
+            pose_t, pose_r, pose_q = crossover_two_base_default_directional_pose(
+                sim_k, local_frame_reversed=local_frame_reversed
+            )
+            center = geometric_center + two_direction_rotation @ pose_t
+            world_delta = two_direction_rotation @ pose_r @ two_direction_rotation.T
+            frame_rotation = world_delta @ source_rotation
+            used_t, used_r, used_q = pose_t, pose_r, pose_q
+        else:
+            center = geometric_center + source_rotation @ local_t
+            frame_rotation = source_rotation @ local_r
+            # Rotate the geometric tangent by the local pose expressed in world space.
+            world_delta = source_rotation @ local_r @ source_rotation.T
+            used_t, used_r, used_q = local_t, local_r, local_q
         tangent = world_delta @ geometric_tangent
         chain_tangent = world_delta @ source_chain_tangent
         out.append(
@@ -673,9 +747,9 @@ def crossover_extra_base_placements(
                 "geometric_tangent": geometric_tangent,
                 "source_chain_tangent": source_chain_tangent,
                 "source_frame_rotation": source_rotation,
-                "default_local_translation": local_t.copy(),
-                "default_local_rotation": local_r.copy(),
-                "default_local_quaternion": local_q.copy(),
+                "default_local_translation": used_t.copy(),
+                "default_local_rotation": used_r.copy(),
+                "default_local_quaternion": used_q.copy(),
                 "center": center,
                 "tangent": tangent,
                 "chain_tangent": chain_tangent,

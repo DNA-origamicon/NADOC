@@ -47,6 +47,7 @@
  * Layer 3 (display-only). Nothing here touches topology.
  */
 import * as THREE from 'three'
+import { MarchingCubes } from 'three/examples/jsm/objects/MarchingCubes.js'
 
 import {
   buildCrossoverConnections, partitionExtraBaseUpdates, setExtraBaseConnectors,
@@ -193,6 +194,7 @@ export function initOccupancyOverlay({
   let _token = 0
   let _lastResp = null
   let _owningScene = false
+  let _densityGroup = null
   // Why the last setClusters() produced no states. A silent no-op here is
   // indistinguishable from "the ensemble has one state", so the reason is recorded.
   let _lastSkip = null
@@ -205,6 +207,11 @@ export function initOccupancyOverlay({
   function _clear() {
     for (const st of _states) _disposeState(st)
     _states = []
+    if (_densityGroup) {
+      scene.remove(_densityGroup)
+      _disposeGhost(_densityGroup)
+      _densityGroup = null
+    }
     _releaseScene()
   }
 
@@ -364,6 +371,50 @@ export function initOccupancyOverlay({
   }
 
   const api = {
+    /** Registered probability fields as nested 50/80/95% isosurfaces. */
+    setDensity(grids) {
+      if (_densityGroup) {
+        scene.remove(_densityGroup)
+        _disposeGhost(_densityGroup)
+        _densityGroup = null
+      }
+      if (!Array.isArray(grids) || !grids.length) return { volumes: 0 }
+      const root = new THREE.Group()
+      root.name = 'occupancyDensityVolumes'
+      const palette = [0x58a6ff, 0xf0883e, 0xa371f7, 0x3fb950]
+      const levels = [['95', 0.10], ['80', 0.18], ['50', 0.34]]
+      let count = 0
+      grids.forEach((g, gi) => {
+        const size = Number(g?.shape?.[0])
+        if (!Number.isInteger(size) || size < 4 || g.values?.length !== size ** 3) return
+        const span = g.spacing_nm.map((x) => x * size)
+        const centre = g.origin_nm.map((x, i) => x + span[i] / 2)
+        for (const [level, alpha] of levels) {
+          const iso = Number(g.isovalues?.[level])
+          if (!(iso > 0)) continue
+          const material = new THREE.MeshPhongMaterial({
+            color: palette[gi % palette.length], transparent: true, opacity: alpha,
+            depthWrite: false, side: THREE.DoubleSide, shininess: 20,
+          })
+          const volume = new MarchingCubes(size, material, false, false, 100000)
+          volume.field.set(g.values)
+          volume.isolation = iso
+          volume.update()
+          volume.scale.set(span[0] / 2, span[1] / 2, span[2] / 2)
+          volume.position.set(centre[0], centre[1], centre[2])
+          volume.name = `occupancyDensity_${gi}_${level}`
+          volume.renderOrder = 30 + count++
+          root.add(volume)
+        }
+      })
+      if (!root.children.length) {
+        _disposeGhost(root)
+        return { volumes: 0 }
+      }
+      scene.add(root)
+      _densityGroup = root
+      return { volumes: root.children.length }
+    },
     /**
      * Draw EVERY state as its own flat-coloured copy. Yields between copies —
      * `buildHelixObjects` runs ~0.5-1 s on a large design, so building several back to

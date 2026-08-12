@@ -5583,6 +5583,19 @@
                       </select>
                     </label>
                     <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:3px"
+                           title="Fast reads 200 evenly spaced frames. Full reads every production frame; use it for final density maps and expect a much longer analysis.">
+                      Sampling:
+                      <select id="md-jobs-occupancy-sampling"
+                              style="flex:1;min-width:0;font-size:var(--text-xs);background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
+                        <option value="fast" selected>Fast (200 frames)</option>
+                        <option value="full">Full (all frames)</option>
+                      </select>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;margin-top:5px"
+                           title="For selected crossover extra bases, accumulate a Gaussian-smoothed 3-D probability grid after registration and draw nested 50%, 80%, and 95% probability isosurfaces.">
+                      <input type="checkbox" id="md-jobs-occupancy-density"> Volumetric base-density map
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:3px"
                            title="Which part of the structure the clustering may look at.">
                       Analyse:
                       <select id="md-jobs-occupancy-scope"

@@ -312,10 +312,23 @@ def _bond_row(a, b, cls, length_nm, reason) -> dict:
 
 def _find_clashes(pos, finite, bonds, clash_nm, max_report) -> list[dict]:
     """Non-bonded heavy-atom pairs closer than ``clash_nm`` — overlapping spheres.
-    Uniform spatial-hash so it scales to large structures."""
-    bonded = set()
+
+    Directly bonded (1–2) and bond-angle (1–3) pairs are excluded. Both are covalent
+    force-field exclusions, so reporting a short C4′…O3′ distance across their shared
+    C3′ atom as a non-bonded clash conflates bond-angle quality with sterics. A uniform
+    spatial hash keeps the remaining all-pairs check scalable.
+    """
+    adjacent: dict[int, set[int]] = {}
+    excluded = set()
     for i, j in bonds:
-        bonded.add((i, j) if i < j else (j, i))
+        excluded.add((i, j) if i < j else (j, i))
+        adjacent.setdefault(i, set()).add(j)
+        adjacent.setdefault(j, set()).add(i)
+    for neighbours in adjacent.values():
+        ordered = sorted(neighbours)
+        for offset, i in enumerate(ordered):
+            for j in ordered[offset + 1:]:
+                excluded.add((i, j))
     cell = clash_nm
     grid: dict[tuple, list[int]] = {}
     idx = np.where(finite)[0]
@@ -335,7 +348,7 @@ def _find_clashes(pos, finite, bonds, clash_nm, max_report) -> list[dict]:
                 if b <= a:
                     continue
                 key = (a, b)
-                if key in seen or key in bonded:
+                if key in seen or key in excluded:
                     continue
                 seen.add(key)
                 d = float(np.linalg.norm(pos[a] - pos[b]))

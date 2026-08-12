@@ -5,7 +5,43 @@ import { vi } from 'vitest'
 vi.mock('../api/client.js', () => ({ putNucleotideTransform: vi.fn() }))
 
 import { putNucleotideTransform } from '../api/client.js'
-import { abstractPreviewUpdate, abstractResidueInfo, initNucleotideTransformTool, transformBodyForTarget } from './nucleotide_transform_tool.js'
+import { abstractPreviewUpdate, abstractResidueInfo, initNucleotideTransformTool, transformBodyForTarget, transformTargetsForSelection } from './nucleotide_transform_tool.js'
+
+describe('transformTargetsForSelection', () => {
+  const geometry = [
+    { helix_id: 'h1', bp_index: 1, direction: 'FORWARD', strand_id: 's1', domain_index: 0 },
+    { helix_id: 'h1', bp_index: 2, direction: 'FORWARD', strand_id: 's1', domain_index: 1 },
+    { helix_id: 'h2', bp_index: 1, direction: 'REVERSE', strand_id: 's2', domain_index: 0 },
+  ]
+
+  it('expands multi-strands and multi-domains into deduplicated residues', () => {
+    const targets = transformTargetsForSelection({
+      currentGeometry: geometry,
+      multiSelectedStrandIds: ['s1'],
+      multiSelectedDomainIds: [{ strandId: 's1', domainIndex: 1 }, { strandId: 's2', domainIndex: 0 }],
+    })
+    expect(targets.map(t => `${t.helix_id}:${t.bp_index}:${t.direction}`))
+      .toEqual(['h1:1:FORWARD', 'h1:2:FORWARD', 'h2:1:REVERSE'])
+  })
+
+  it('keeps explicit individual bases exact and leaves cluster groups to the cluster gizmo', () => {
+    expect(transformTargetsForSelection({ multiSelectedBaseKeys: ['h1:1:FORWARD', 'h2:1:REVERSE'] }))
+      .toHaveLength(2)
+    expect(transformTargetsForSelection({
+      currentGeometry: geometry, multiSelectedClusterIds: ['c1'], multiSelectedStrandIds: ['s1'],
+    })).toEqual([])
+  })
+
+  it('unions individual bases with coexisting broader selection pools', () => {
+    const targets = transformTargetsForSelection({
+      currentGeometry: geometry,
+      multiSelectedBaseKeys: ['h2:1:REVERSE'],
+      multiSelectedStrandIds: ['s1'],
+    })
+    expect(targets.map(t => `${t.helix_id}:${t.bp_index}:${t.direction}`))
+      .toEqual(['h2:1:REVERSE', 'h1:1:FORWARD', 'h1:2:FORWARD'])
+  })
+})
 
 describe('transformBodyForTarget', () => {
   const pivot = new THREE.Vector3(1, 2, 3)
@@ -80,6 +116,23 @@ describe('abstract nucleotide projection', () => {
 })
 
 describe('atomistic transform commit', () => {
+  it('places a group gizmo at the mean centroid of all selected residues', () => {
+    document.body.innerHTML = '<div id="mode-indicator"></div>'
+    const store = { getState: () => ({ multiSelectedBaseKeys: ['h1:1:FORWARD', 'h2:2:REVERSE'] }) }
+    const atomisticRenderer = {
+      residueInfo: vi.fn(t => ({ centroid: new THREE.Vector3(t.helix_id === 'h1' ? 0 : 4, 2, 0) })),
+      applyResidueMatrix: vi.fn(),
+    }
+    const tool = initNucleotideTransformTool({
+      store, scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(),
+      canvas: document.createElement('canvas'), controls: { enabled: true },
+      designRenderer: {}, atomisticRenderer,
+    })
+    expect(tool.activate()).toBe(true)
+    expect(tool.debugState().pivot).toEqual([2, 2, 0])
+    tool.cancel()
+  })
+
   it('keeps the optimistic residue pose and lets the design subscriber own the sole rebuild', async () => {
     document.body.innerHTML = '<div id="mode-indicator"></div>'
     const selected = { helix_id: '__xb__', crossover_id: 'xo1', k: 0 }

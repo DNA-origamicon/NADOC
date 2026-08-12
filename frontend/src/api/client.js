@@ -2735,10 +2735,11 @@ export const getMdRmsfSurface    = (id, params = {}) =>
  *  overlay draws it. Only PRODUCTION (unrestrained) dynamics is clustered — frames from
  *  the restrained relaxation ladder describe the ramp, not the structure. */
 export const getMdOccupancy = (id, signal, opts = {}) => {
-  const { nClusters = 0, maxFrames = 200, basis = 'nt', refetch = false } = opts
+  const { nClusters = 0, maxFrames = 200, basis = 'nt', refetch = false,
+          sampling = 'fast', density = false } = opts
   return _oxdnaJSON('GET',
     `/md/jobs/${id}/occupancy?max_frames=${maxFrames}&n_clusters=${nClusters}`
-    + `&basis=${basis}&refetch=${refetch}`,
+    + `&basis=${basis}&refetch=${refetch}&sampling=${sampling}&density=${density}`,
     undefined, { signal })
 }
 /** Occupancy clouds restricted to picked clusters / strands / bases / crossover extra
@@ -2747,9 +2748,10 @@ export const getMdOccupancy = (id, signal, opts = {}) => {
  *  oxDNA twin, because both engines run the one shared `occupancy_fit_plan`. */
 export const postMdOccupancy = (id, signal, opts = {}) => {
   const { nClusters = 0, maxFrames = 200, basis = 'nt', refetch = false,
-          selection = null, fit = 'selection' } = opts
+          selection = null, fit = 'selection', sampling = 'fast', density = false } = opts
   return _oxdnaJSON('POST', `/md/jobs/${id}/occupancy`, {
     max_frames: maxFrames, n_clusters: nClusters, basis, refetch, selection, fit,
+    sampling, density,
   }, { signal })
 }
 /** Kill the in-flight trajectory/RMSF/surface analysis for a job (view toggled

@@ -32,6 +32,36 @@ const ONE_BASE_DEFAULT_LOCAL_POSES = Object.freeze({
   }),
 })
 
+// Promoted v6 two-base defaults. Keep numerically identical to
+// backend/core/atomistic_helpers.py. These are expressed in the right-handed
+// (bow, axial, chemical 3'->5') direction frame and keyed by half-a frame polarity.
+const TWO_BASE_DEFAULT_DIRECTIONAL_POSES = Object.freeze({
+  direct: Object.freeze([
+    Object.freeze({
+      translation: Object.freeze([0.099431289, 0.2200269994, -0.0652178505]),
+      rotation: Object.freeze([-1.9885408832597084e-8, 9.416051314509263e-10,
+        3.0415329275729114e-7, 0.9999999999999536]),
+    }),
+    Object.freeze({
+      translation: Object.freeze([0, 0.2362539827, 0.06756434]),
+      rotation: Object.freeze([0.04769451606807194, 0.13981183548880918,
+        1.0741443259540754e-8, 0.9890287578196513]),
+    }),
+  ]),
+  reversed: Object.freeze([
+    Object.freeze({
+      translation: Object.freeze([0.0713301514, 0.006262659, 0.0159744305]),
+      rotation: Object.freeze([0.008238387452678757, 0.009836047781206239,
+        -0.20798629439884447, 0.9780475870214407]),
+    }),
+    Object.freeze({
+      translation: Object.freeze([0.1192582438, 0.02016267, 0.0228294007]),
+      rotation: Object.freeze([-0.13377231400015516, 0.034369401048122,
+        -0.210310255310524, 0.9678291733512994]),
+    }),
+  ]),
+})
+
 // Heavy-atom base-ring centroids in the FORWARD 1ZEW templates stamped for crossover
 // inserts by backend/core/atomistic.py. These are projection sites, not additional
 // placement rules: the canonical residue frame below maps both atom templates and Full
@@ -119,6 +149,13 @@ export function crossoverExtraBaseDefaultLocalPose(count, simReversed = false) {
   return ONE_BASE_DEFAULT_LOCAL_POSES[simReversed ? 'reversed' : 'direct']
 }
 
+export function crossoverTwoBaseDefaultDirectionalPose(extraBaseK, localFrameReversed = false) {
+  if (extraBaseK !== 0 && extraBaseK !== 1) {
+    throw new Error('two-base default requires extraBaseK 0 or 1')
+  }
+  return TWO_BASE_DEFAULT_DIRECTIONAL_POSES[localFrameReversed ? 'reversed' : 'direct'][extraBaseK]
+}
+
 /** Build one canonical placement per insert, in geometric A→B order. */
 export function buildCrossoverExtraPlacements({ xoId, count, pointA, control, pointB,
   helixAxis, sequence = '', simReversed = false, localFrameReversed = false,
@@ -133,6 +170,21 @@ export function buildCrossoverExtraPlacements({ xoId, count, pointA, control, po
   // polarity.  The opposite polarity is a half-turn about the crossover chord,
   // independent of chemical traversal (simReversed).
   if (count === 1 && localFrameReversed) runBow.negate()
+  let twoDirectionQuaternion = null
+  if (count === 2) {
+    const chain = new THREE.Vector3()
+    for (let i = 0; i < 2; i++) {
+      const tangent = quadraticTangent(pointA, control, pointB, (i + 1) / 3,
+        new THREE.Vector3())
+      chain.add(simReversed ? tangent.negate() : tangent)
+    }
+    chain.normalize()
+    const directionBow = runBow.clone().addScaledVector(chain, -runBow.dot(chain)).normalize()
+    const axial = new THREE.Vector3().crossVectors(chain, directionBow).normalize()
+    twoDirectionQuaternion = new THREE.Quaternion().setFromRotationMatrix(
+      new THREE.Matrix4().makeBasis(directionBow, axial, chain),
+    )
+  }
   for (let geometricIndex = 0; geometricIndex < count; geometricIndex++) {
     const t = (geometricIndex + 1) / (count + 1)
     const simK = simReversed ? count - 1 - geometricIndex : geometricIndex
@@ -143,17 +195,21 @@ export function buildCrossoverExtraPlacements({ xoId, count, pointA, control, po
     const sourceFrameQuaternion = crossoverExtraFrameQuaternion(
       geometricChainTangent, runBow,
     ).clone()
-    const defaultPose = crossoverExtraBaseDefaultLocalPose(count, simReversed)
+    const defaultPose = count === 2
+      ? crossoverTwoBaseDefaultDirectionalPose(simK, localFrameReversed)
+      : crossoverExtraBaseDefaultLocalPose(count, simReversed)
+    const defaultFrameQuaternion = count === 2
+      ? twoDirectionQuaternion : sourceFrameQuaternion
     const defaultLocalTranslation = defaultPose
       ? new THREE.Vector3(...defaultPose.translation) : new THREE.Vector3()
     const defaultLocalQuaternion = defaultPose
       ? new THREE.Quaternion(...defaultPose.rotation) : new THREE.Quaternion()
-    const sourceCenter = defaultLocalTranslation.applyQuaternion(sourceFrameQuaternion)
+    const sourceCenter = defaultLocalTranslation.applyQuaternion(defaultFrameQuaternion)
       .add(geometricCenter)
-    const frameQuaternion = sourceFrameQuaternion.clone().multiply(defaultLocalQuaternion)
-    const defaultWorldQuaternion = sourceFrameQuaternion.clone()
+    const defaultWorldQuaternion = defaultFrameQuaternion.clone()
       .multiply(defaultLocalQuaternion)
-      .multiply(sourceFrameQuaternion.clone().invert())
+      .multiply(defaultFrameQuaternion.clone().invert())
+    const frameQuaternion = sourceFrameQuaternion.clone().premultiply(defaultWorldQuaternion)
     const sourceTangent = geometricTangent.clone().applyQuaternion(defaultWorldQuaternion)
     const chainTangent = geometricChainTangent.clone().applyQuaternion(defaultWorldQuaternion)
     const baseLetter = (sequence[simK] ?? 'T').toUpperCase()

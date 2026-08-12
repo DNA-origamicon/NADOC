@@ -414,6 +414,15 @@ class TestRunJobOnPodAlwaysTerminates:
         monkeypatch.setattr(RunpodConnection, "connect", fake_connect)
         monkeypatch.setattr(RunpodConnection, "close", fake_close)
 
+        # These tests own the provision/run/DESTROY orchestration contract, not
+        # result-transfer completeness. fetch_results now correctly pauses a job when
+        # its strict manifest download is incomplete; isolate teardown here with a
+        # successful fetch so FakeSSH does not need to emulate an entire output tree.
+        async def fake_fetch_results(*args, **kwargs):
+            return True
+
+        monkeypatch.setattr(rx, "fetch_results", fake_fetch_results)
+
     def test_terminates_the_pod_after_a_successful_run(self, tmp_path, monkeypatch):
         self._patch_conn(
             monkeypatch,
@@ -1019,6 +1028,11 @@ class TestAdoptAlsoAlwaysTerminates:
 
         monkeypatch.setattr(RunpodConnection, "connect", fake_connect)
         monkeypatch.setattr(RunpodConnection, "close", fake_close)
+
+        async def fake_fetch_results(*args, **kwargs):
+            return True
+
+        monkeypatch.setattr(rx, "fetch_results", fake_fetch_results)
 
     def _job_on_pod(self, tmp_path, pid=9):
         job = _job(tmp_path)

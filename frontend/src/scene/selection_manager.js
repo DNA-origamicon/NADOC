@@ -3302,13 +3302,45 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const sx = e.clientX - rect.left, sy = e.clientY - rect.top
     const st = store.getState().selectableTypes
 
+    // Modifier picks must use the representation the user can actually see. Plain
+    // clicks already raycast atomistic/surface overlays below, but this path used to
+    // search only the CG bead candidates. In a global atomistic view those candidates
+    // are hidden; in a mixed view they can also sit behind a visible atom and select the
+    // wrong nucleotide. Capture the nearest heavy-representation hit once and route it
+    // through the same level-specific toggles as a coarse bead.
+    _setNdc(e.clientX, e.clientY)
+    raycaster.setFromCamera(_ndc, _cam())
+    let atomHit = null
+    const atomRenderers = [
+      getAtomisticRenderer?.(), getRegionVdwRenderer?.(),
+      getRegionBallstickRenderer?.(), getRegionStickRenderer?.(),
+    ].filter((r, i, all) => r?.getMode?.() !== 'off' && all.indexOf(r) === i)
+    for (const renderer of atomRenderers) {
+      const hit = renderer.raycastPick?.(raycaster)
+      if (hit && (!atomHit || hit.distance < atomHit.distance)) atomHit = hit
+    }
+    const surfaceRenderer = getRegionSurfaceRenderer?.()
+    const surfaceMesh = surfaceRenderer?.getMesh?.()
+    const surfaceHit = surfaceMesh?.visible
+      ? raycaster.intersectObject(surfaceMesh, false)[0] ?? null : null
+    const heavyIsAtom = atomHit && atomHit.distance <= (surfaceHit?.distance ?? Infinity)
+    const atom = heavyIsAtom ? atomHit.atom : null
+    const atomEntry = atom && designRenderer.getBackboneEntries().find(entry =>
+      entry.nuc.helix_id === atom.helix_id && entry.nuc.bp_index === atom.bp_index &&
+      entry.nuc.direction === atom.direction)
+    const heavyNuc = atomEntry?.nuc ?? atom
+    const surfaceStrandId = !heavyIsAtom && surfaceHit
+      ? surfaceRenderer.strandIdAt?.(surfaceHit.face) : null
+
     // Overhang filter active → toggle the nearest overhang (precedence, like plain click).
     if (st.overhangs) {
+      if (heavyNuc?.overhang_id) { _toggleOverhang(heavyNuc.overhang_id); return }
       const oe = _nearestOverhangBead(sx, sy)
       if (oe?.nuc?.overhang_id) _toggleOverhang(oe.nuc.overhang_id)
       return
     }
     if (st.extensions) {
+      if (heavyNuc?.extension_id) { _toggleExtension(heavyNuc.extension_id); return }
       const ee = _nearestExtensionBead(sx, sy)
       if (ee?.nuc?.extension_id) _toggleExtension(ee.nuc.extension_id)
       return
@@ -3320,6 +3352,13 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // flag which is INDEPENDENT of the engaged level, so with the xover gate on it would
     // otherwise hijack every base-level Ctrl+click.
     if (_selLevel === 'base') {
+      if (atom) {
+        const key = atom.crossover_id != null && atom.extra_base_k != null
+          ? xbKey(atom.crossover_id, atom.extra_base_k)
+          : baseKey(atom, atom.copy_k ?? 0)
+        if (key) _toggleBase(key)
+        return
+      }
       const c = _nearestBaseCand(sx, sy)
       if (c) _toggleBase(c.key)
       return
@@ -3334,9 +3373,27 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     // End level → toggle the nearest 5′/3′ terminus (gold ctrl-bead set, same as lasso).
     if (_selLevel === 'end') {
+      if (atomEntry && (atomEntry.nuc.is_five_prime || atomEntry.nuc.is_three_prime)) {
+        _toggleEndBead(atomEntry)
+        return
+      }
       const ee = _nearestEndEntry(sx, sy)
       if (ee) _toggleEndBead(ee)
       return
+    }
+
+    // Molecular surfaces expose strand identity (not individual residue identity), so
+    // they can participate in strand/default multiselect without pretending to support
+    // a finer grain than the mesh carries.
+    if (surfaceStrandId && (_selLevel === 'strand' || _selLevel === 'default')) {
+      _toggleStrand(surfaceStrandId)
+      return
+    }
+
+    if (heavyNuc) {
+      if (_selLevel === 'domain')  { _toggleDomain(heavyNuc);  return }
+      if (_selLevel === 'cluster') { _toggleCluster(heavyNuc); return }
+      if (heavyNuc.strand_id) { _toggleStrand(heavyNuc.strand_id); return }
     }
 
     // Strand / domain / cluster → resolve the nearest bead, toggle at that grain.

@@ -799,30 +799,29 @@ _SLOW_TESTS = {
     # cluster tests (6hb / no-op paths) stay fast.
     "test_autodetect_produces_scaffold_and_geometry_clusters",
     # ---------------------------------------------------------------------------
-    # 2026-07-31 — test_ring_piercing.py. These two build a real atomistic model at the
+    # 2026-07-31 — test_ring_piercing.py. This builds a real atomistic model at the
     # exact phases that USED to ship a threaded ring, so by construction they are
     # the cases where the extra-base repair ladder climbs the MOST rungs: an
     # ordered search re-solving L-BFGS-B for every insert at every rung, now also
     # counting ring piercings per rung.  Measured SERIALLY on an idle box with
     # OPENBLAS/OMP pinned to 1 thread (the fast recipes' own operating condition):
-    # 6.83 s and 4.74 s — i.e. over/at the 5 s budget with no contention at all,
-    # 10.1 s and 6.5 s in the `-n auto` fast suite.  That is real numeric-solve
-    # weight, not a first-test-pays-the-cache artifact (the file already pays the
+    # 6.83 s — i.e. over the 5 s budget with no contention at all. That is real
+    # numeric-solve weight, not a first-test-pays-the-cache artifact (the file pays the
     # template load + L-BFGS-B warm-up in a module-scoped autouse fixture), and
     # the design is already the 2-helix / 28-bp minimum, so there is nothing to
     # shrink.  Area "atomistic".
     #
     # Coverage is not lost: the exhaustive `test_phase_sweep_gate_matches_detector`
     # sweep in the same file is already @pytest.mark.slow and covers both insert
-    # counts across all 11 phases, so both relegated cases keep running in a
+    # counts across all 11 phases, so the historical phase coverage keeps running in a
     # test-dedicated session.  The fast suite keeps ALL the cheap pins in that
     # file: the segment/ring intersection primitives, ring identification, the
     # fake-model detector, the two `_synthesise_bonds` scope regressions, the
     # re-derive-on-move regression, `assert_not_pierced` + override, and the
     # ring primitives and synthetic gate controls.
     #
-    # Both params ([T-14] and [TT-8]) are over budget, so the whole test moves —
-    # _SLOW_PARAMS would leave nothing fast behind.  Both names are unique in the
+    # The remaining positive-control parameter is over budget, so the whole test moves —
+    # _SLOW_PARAMS would leave nothing fast behind. The name is unique in the
     # suite, so the bare-name match cannot over-reach into another file.
     "test_known_pierced_phases_are_refused",
     # Same file, same cost driver: a real inserted atomistic build plus the detector.

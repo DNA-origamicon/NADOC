@@ -11,6 +11,8 @@ here. What IS MD-specific, and what these pin:
 All fast: no PSF, no DCD, no MDAnalysis.
 """
 
+import pytest
+
 from backend.core.md_trajectory import _MD_PRODUCTION_MARKER, md_production_segments
 
 
@@ -325,3 +327,25 @@ def test_there_is_no_opt_in_for_restrained_stages():
     assert "all_stages" not in inspect.signature(md_trajectory.md_occupancy).parameters
     assert "all_stages" not in routes_md.MdOccupancyBody.model_fields
     assert "all_stages" not in inspect.signature(routes_md.get_md_occupancy).parameters
+
+
+def test_density_grid_is_normalized_and_reports_probability_isosurfaces():
+    import numpy as np
+
+    from backend.core.occupancy_core import occupancy_density_grids
+
+    rng = np.random.default_rng(7)
+    # One real duplex point plus two selected synthetic crossover bases.
+    X = np.zeros((500, 9), dtype=float)
+    X[:, 3:6] = rng.normal([1.0, 0.0, 0.0], 0.08, (500, 3))
+    X[:, 6:9] = rng.normal([-1.0, 0.0, 0.0], 0.12, (500, 3))
+    keys = [("h0", 1, "FORWARD"), ("__xb__", "xo", 0), ("__xb__", "xo", 1)]
+    grids = occupancy_density_grids(X, keys, grid_size=20, sigma_nm=0.10)
+
+    assert len(grids) == 2
+    for g in grids:
+        assert g["shape"] == [20, 20, 20]
+        assert len(g["values"]) == 20**3
+        assert sum(g["values"]) == pytest.approx(1.0, abs=2e-6)
+        assert g["isovalues"]["50"] >= g["isovalues"]["80"] >= g["isovalues"]["95"]
+        assert g["n_frames"] == 500

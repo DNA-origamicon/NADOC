@@ -20,6 +20,9 @@ the display state without adding a feature-log entry or rebuilding geometry.
 Hide, show, visibility undo/redo, and Unhide All are serialized through this
 endpoint so rapid actions cannot arrive out of order. Explicit saves and Close
 Session wait for pending visibility writes before writing the `.nadoc` file.
+Unhide All also fits the restored full structure using the finite-safe camera
+path, so an older poisoned/off-structure camera cannot leave restored elements
+apparently missing.
 
 On load, the controller hydrates metadata before geometry is available and
 reapplies it after renderer meshes are rebuilt. Initial hydration deliberately

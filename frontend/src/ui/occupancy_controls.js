@@ -40,6 +40,8 @@ export function occupancyIds(prefix = 'oxdna') {
     scopeCard: `${prefix}-occupancy-scope-card`,
     fit: `${prefix}-jobs-occupancy-fit`,
     fitRow: `${prefix}-occupancy-fit-row`,
+    sampling: `${prefix}-jobs-occupancy-sampling`,
+    density: `${prefix}-jobs-occupancy-density`,
     scope: {
       add: `${prefix}-occupancy-scope-add`, clear: `${prefix}-occupancy-scope-clear`,
       list: `${prefix}-occupancy-scope-list`, status: `${prefix}-occupancy-scope-status`,
@@ -56,7 +58,7 @@ export const OCC_FIT_MODES = ['selection', 'local', 'global']
 
 /** Clamp the UI parameters to what the route accepts. Pure. */
 export function normalizeOccupancyParams({ nClusters = 0, basis = 'nt', maxFrames = 200,
-                                           fit = 'selection' } = {}) {
+                                           fit = 'selection', sampling = 'fast', density = false } = {}) {
   const n = Number.parseInt(nClusters, 10)
   return {
     nClusters: Number.isFinite(n) ? Math.min(6, Math.max(0, n)) : 0,
@@ -64,6 +66,8 @@ export function normalizeOccupancyParams({ nClusters = 0, basis = 'nt', maxFrame
     maxFrames: Number.isFinite(+maxFrames) && +maxFrames > 0 ? Math.floor(+maxFrames) : 200,
     method: 'pca',
     fit: OCC_FIT_MODES.includes(fit) ? fit : 'selection',
+    sampling: sampling === 'full' ? 'full' : 'fast',
+    density: !!density,
   }
 }
 
@@ -225,6 +229,8 @@ export function initOccupancyControls({
   const scopeCard = $(id.scopeCard)
   const fitSel = $(id.fit)
   const fitRow = $(id.fitRow)
+  const samplingSel = $(id.sampling)
+  const densityToggle = $(id.density)
   const statusEl = $(id.status)
   const legendEl = $(id.legend)
 
@@ -257,6 +263,7 @@ export function initOccupancyControls({
     // different clusterings and must never share a cached result. So is the fit frame:
     // the same region re-superposed differently is a different question.
     return `${jobId}|${p.nClusters}|${p.basis}|${p.maxFrames}|${p.method}|${p.fit}`
+      + `|${p.sampling}|${p.density}`
       + `|${JSON.stringify(sel)}`
   }
 
@@ -268,6 +275,8 @@ export function initOccupancyControls({
       nClusters: nSel?.value ?? 0,
       basis: basisSel?.value ?? 'nt',
       fit: fitSel?.value ?? 'selection',
+      sampling: samplingSel?.value ?? 'fast',
+      density: !!densityToggle?.checked,
     })
     // Base-pair midpoints contain duplex pairs only. Crossover inserts and extension
     // tails are synthetic, unpaired sites, so a scoped `bp` request cannot contain any
@@ -408,6 +417,10 @@ export function initOccupancyControls({
       overlay?.clear()
     }
 
+    // Density is meaningful even when clustering says unimodal or drift: it is a
+    // registered positional probability field, not a claim about equilibrium states.
+    if (resp.density_grids?.length) overlay?.setDensity?.(resp.density_grids)
+
     _renderList(resp, states ? _colors : null, visible)
     return { ok: true, verdict: resp.verdict, states, ghosts: states }
   }
@@ -497,6 +510,8 @@ export function initOccupancyControls({
   // A different fit frame is a different clustering, so the per-state colours/visibility
   // are dropped with it — "state 2" fitted locally is not "state 2" fitted globally.
   fitSel?.addEventListener('change', () => { _resetChoices(); if (_active) refresh() })
+  samplingSel?.addEventListener('change', () => { _resetChoices(); if (_active) refresh() })
+  densityToggle?.addEventListener('change', () => { if (_active) refresh() })
   rerunBtn?.addEventListener('click', () => { if (_active) refresh({ refetch: true }) })
 
   return {

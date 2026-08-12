@@ -2,21 +2,31 @@
 
 ## Purpose
 
-The Molecular Placement Audit is a read-only A/B view for reviewing proposed crossover-insert
-placement changes before any production geometry is changed. Open it from **Help → Molecular
-Placement Audit**.
+The Molecular Placement Audit is a read-only A/B view for reviewing crossover-insert placement
+changes. Open it from **Help → Molecular Placement Audit**. It remains a pre-production review
+surface for new candidates; for the authorized 2xT v7 placement it also shows the active
+production geometry and whether another proposal is pending.
 
-The active design remains the Current model. Candidate geometry exists only in the audit response
-and private audit scenes: it cannot be saved, exported, submitted to simulation, or made active.
+Opening the audit never changes the active design. For 1xT, Current is production and Candidate is
+the diagnostic geometric baseline. For 2xT, both panels are labeled **Production v7** because the
+reviewed flexible-linker clearance is now the implemented default and no placement proposal is
+pending. Ordinary rendering, persistence, export, and simulation all use Production v7.
 
 ## Four-panel review
 
 | Panel | Default | Contents |
 |---|---|---|
 | Current | Full | Production geometry |
-| Candidate | Full | The named diagnostic provider's output |
+| Candidate | Full | The named read-only diagnostic provider's output |
 | Difference | Ball and Stick | Entire Current structure in cyan, affected Candidate atoms in magenta, and displacement vectors |
-| Piercings / clashes | Ball and Stick | Exact detector atoms: pierced rings/intersecting bonds and non-bonded heavy-atom clash pairs |
+| Constraint planes / defects | Ball and Stick | Orange midpoint-bp planes plus exact pierced rings/intersecting bonds and non-bonded heavy-atom clash pairs |
+
+Every panel can show one translucent orange disk per reciprocal crossover pair. Its center is
+halfway between the centers of the two adjacent crossover records and its normal is their
+normalized mean helical axis. A **Midpoint plane** checkbox independently toggles the annotation
+in each panel. Unpaired crossover records do not create a plane. The disk itself is an annotation;
+the audit also classifies atom-level signed-side violations, and the promoted 2xT default is locked
+to zero crossings on the reviewed fixtures.
 
 Every panel can independently switch between **Full** and **Ball and Stick**. All four panels share
 one exact camera state: orbiting, panning, or zooming any quadrant copies its position, target,
@@ -74,12 +84,60 @@ extra-base placement.
 On `24hb_1xT.nadoc`, this moves 110 flexible linker atoms by at most 0.61 Å and changes the Current
 heavy-atom clash count from 11 to 0 while retaining 0 ring piercings.
 
-## Initial candidate provider
+## Candidate provider
 
-`geometric-baseline-v1` is the already-existing raw geometric/Bezier placement. It removes the
-calibrated local pose for one-residue crossover inserts. Longer insert runs already use this
-baseline and consequently report zero displacement. This provider is diagnostic evidence, not an
-approved replacement.
+`crossover-insert-default-v2` remains the raw geometric/Bezier comparison for one-residue inserts.
+For two-residue inserts, the audit shows the authorized production v7 default in both panels until
+a new candidate exists. Runs longer than two remain unchanged.
+
+The reviewed v6 rigid-residue arrangement remains part of production v7. Each
+inserted residue remains rigid. Base `k=0` and
+base `k=1` receive separate local poses selected by the crossover's two possible frame polarities;
+the same two poses are mapped through both reciprocal strands' right-handed
+`(bow, axial, chemical 3′→5′)` frames. Thus the strands remain directionally symmetric without
+using a world-coordinate reflection. Exact MPA acceptance requires zero
+atom-level midpoint-plane crossings, external heavy-atom clashes, ring piercings, and
+insert-associated overstretched bonds after a complete candidate rebuild. Isolated end inserts
+without a midpoint-plane mate are preserved unless their own exact diagnostics require a small
+local repair. Same-crossover canonical bridge contacts are excluded from the nonbonded clash count.
+
+Its promotion evidence was `300 → 0` plane-crossing atoms, `44 → 0` target clashes,
+`15 → 0` target ring piercings, and `8 → 0` target overstretched bonds for
+`workspace/6hb_2xT.nadoc`; and `120 → 0`, `29 → 0`, `4 → 0`, and `8 → 0`, respectively, for
+`workspace/2x3SQx32_2xT.nadoc`. Production authorization was granted by the owner on 2026-08-12
+and is pinned by the crossover-placement fingerprint test.
+
+The 2xT provider is `reciprocal-phosphate-clearance-production-v7`. Production v7 moves only the
+five flexible atoms associated with each colliding terminal
+phosphate bridge: `P/OP1/OP2` receive the full equal-and-opposite clearance displacement, while
+incoming `O3′` and outgoing `O5′` receive a sine-tapered fraction. Rigid ribose/base atoms and the
+authorized 2xT placement frames do not move. The non-bonded detector excludes direct and
+bond-angle (1–3) covalent pairs, matching force-field exclusions instead of misclassifying a local
+bond angle as steric overlap.
+
+The promoted clearance changes whole-structure clashes from `4 → 0` on `workspace/6hb_2xT.nadoc` and
+`3 → 0` on `workspace/2x3SQx32_2xT.nadoc`, with zero ring piercings and midpoint-plane crossings.
+It moves 40 and 30 flexible linker atoms, respectively, by at most 0.0324 nm and 0.0216 nm. It is
+owner-authorized for production as of 2026-08-12. The first two panels default to Ball and Stick,
+while every panel retains its representation toggle.
+
+### Production v7 NAMD preflight
+
+Production v7 was also validated through the ordinary NAMD package path, rather than only through
+the placement diagnostics. Fresh full CHARMM/psfgen systems were solvated with TIP3P water and
+150 mM NaCl; both charge audits reported `production_ready: true` and neutral final systems. Local
+NAMD Git-2025-12-04 (`b856a9378ca44bcf5aa708d4b681af4ceb86d8ca`) on an RTX 3080 Ti produced:
+
+| Design | Solvated atoms | Minimization | Minimized potential | 4 fs HMR startup |
+|---|---:|---:|---:|---:|
+| `6hb_2xT` | 180,601 | 2,000 steps in 14.02 s | −844,991.685 kcal/mol | 1,000 steps, 103.3 ns/day |
+| `2x3SQx32_2xT` | 76,866 | 2,000 steps in 5.64 s | −380,796.248 kcal/mol | 1,000 steps, 219.6 ns/day |
+
+The startup checks used the generated HMR PSFs, `rigidBonds all`, a `1e-8` constraint tolerance,
+GPU-resident mode, and the minimized coordinates. Both reached step 1,000 and NAMD's normal
+`End of program`, with no RATTLE failures, fatal errors, constraint failures, or NaNs. These were
+short preflight cells sized with `free_ns=0`; long unrestrained production must be re-solvated for
+its intended duration so the rotation-safe cell rule is applied.
 
 On the `2hb_1xT` quick-assessment fixture, the audit currently reports 40 displaced atoms and a
 maximum displacement of about 0.773 nm. The visual/metric result is useful precisely because the
@@ -89,15 +147,12 @@ the candidate.
 
 ## Isolation boundary
 
-`GET /api/design/molecular-placement-audit` snapshots the active `Design`, builds Current, and
-creates Candidate by adding transient `NucleotideTransform` records to an in-memory clone. The
-response contains both atomistic feeds and the ordinary Full render feed. The frontend does not put
-either candidate design or candidate atoms into the application store.
-
-Production atomistic output is unchanged. The audit obtains native placement frames through an
-optional observation sink on `build_atomistic_model`; the sink copies measurements but cannot
-change placement. PDB-imported models return 409 because this candidate is defined only for authored
-crossover inserts.
+`GET /api/design/molecular-placement-audit` snapshots the active `Design`. For 2xT it builds
+ordinary Production v7 once and deep-copies the same model into the no-pending-proposal panel. For
+1xT it retains the transform-only geometric comparison. The response
+contains both atomistic feeds and the ordinary Full render feed. Neither feed enters the application store.
+PDB-imported models return 409 because this comparison is defined only for authored crossover
+inserts.
 
 The current placement is fingerprint-locked by
 `tests/test_crossover_placement_authorization.py`. That lock has no regeneration command. Changing
@@ -105,9 +160,9 @@ its fingerprint without explicit authorization is a test failure, not a routine 
 
 ## Validation
 
-- `tests/test_molecular_placement_audit.py` proves the candidate is isolated, production atom and
-  bond output is unchanged, only insert residues move, longer inserts remain unchanged, piercing and
-  clash focus serials come directly from their detectors, and the API cannot mutate active state.
+- `tests/test_molecular_placement_audit.py` proves the comparison is isolated, only insert residues
+  differ, longer inserts remain unchanged, piercing and clash focus serials come directly from their
+  detectors, and the API cannot mutate active state.
 - `frontend/src/ui/molecular_placement_audit.test.js` pins the four-panel layout, both representations
   and strand-color resolution in every panel, exact four-way camera copying, defect identification,
   metrics, safe error rendering, and cleanup.
@@ -120,7 +175,8 @@ its fingerprint without explicit authorization is a test failure, not a routine 
   changing placement.
 - `tests/test_holliday_bridge_bow.py` pins the display-only scaffold clearance and proves the exact
   MD bridge path is not given a bow.
-- `tests/test_crossover_placement_authorization.py` fingerprint-locks calibrated `1xT` placement.
+- `tests/test_crossover_placement_authorization.py` fingerprint-locks calibrated `1xT` and promoted
+  `2xT` placement.
 
-Promotion of any candidate still requires a separate, explicitly authorized production-geometry
-change after its visual and numeric evidence has been reviewed.
+Future placement candidates still require separate explicit production authorization after visual
+and numeric review.

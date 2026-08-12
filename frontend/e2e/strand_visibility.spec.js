@@ -136,11 +136,22 @@ test('hide, close session, and library-reopen keeps 3D and orbit usable', async 
 
   // A post-reload visibility edit proves the controller and backend session are
   // still live rather than merely rendering a frozen saved frame.
-  await page.evaluate(async () => {
-    window.__nadocTest.visibility.unhideAll()
-    await window.__nadocTest.visibility.flush()
-  })
+  // Poison it again immediately before the real sidebar action: Unhide All
+  // itself must recover the view, not rely on a prior file-open fit.
+  await page.evaluate(() => window.__nadocTest.poisonCameraForTest())
+  await page.click('#unhide-all-btn')
   await expect.poll(() => page.evaluate(id =>
     window.__nadocTest.visibility.strandRenderStats(id).visibleBeads, strandId))
     .toBeGreaterThan(0)
+  await page.evaluate(() => window.__nadocTest.visibility.flush())
+  const afterUnhide = await page.evaluate(() => window.__nadocTest.viewerDiagnostic())
+  expect([...afterUnhide.camera.position, ...afterUnhide.camera.target].every(Number.isFinite)).toBe(true)
+  expect(afterUnhide.hiddenBaseKeys).toEqual([])
+  for (const id of await page.evaluate(() =>
+    window.__nadocTest.store.getState().currentDesign.strands.map(s => s.id))) {
+    const stats = await page.evaluate(strandId =>
+      window.__nadocTest.visibility.strandRenderStats(strandId), id)
+    expect(stats.visibleBeads).toBe(stats.beads)
+    expect(stats.visibleSlabs).toBe(stats.slabs)
+  }
 })

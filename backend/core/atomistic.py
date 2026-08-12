@@ -53,6 +53,7 @@ from backend.core.atomistic_helpers import (
     _make_spin_rotation,
     crossover_extra_base_frame,
     crossover_extra_base_placements,
+    crossover_two_base_default_directional_pose,
     _normalise,
 )
 from backend.core.atomistic_minimisers import (
@@ -1775,6 +1776,118 @@ def _scaffold_holliday_bridge_bows(design: Design, position_for) -> dict:
     return bows
 
 
+def _apply_reciprocal_phosphate_clearance(model: AtomisticModel) -> dict:
+    """Apply the owner-authorized v7 clearance to colliding reciprocal phosphates.
+
+    Production v6 clears the rigid 2xT insert residues themselves. The remaining
+    whole-structure contacts are OP1/OP1 collisions between terminal phosphate groups
+    of reciprocal bridges. Move both groups equally and oppositely along their measured
+    separation vector. Incoming O3′ and outgoing O5′ receive the same quarter-sine
+    taper as the Holliday bridge bow, distributing the correction across the linker
+    while leaving its fixed C3′/C5′ anchors and every rigid ribose/base atom untouched.
+
+    The function mutates ``model`` and returns an exact provenance record. It is kept
+    separate from insert residue placement so trajectory/position overrides remain
+    authoritative and the Molecular Placement Audit can report the move independently.
+    """
+    from backend.core.atomistic_validation import (  # noqa: PLC0415
+        CLASH_NM,
+        _find_clashes,
+    )
+
+    bonded_to: dict[int, set[int]] = {}
+    for i, j in model.bonds:
+        bonded_to.setdefault(i, set()).add(j)
+        bonded_to.setdefault(j, set()).add(i)
+
+    by_residue: dict[tuple[str, int], dict[str, int]] = {}
+    for atom in model.atoms:
+        by_residue.setdefault((atom.chain_id, atom.seq_num), {})[atom.name] = atom.serial
+
+    moved: dict[int, _np.ndarray] = {}
+    target_clearance_nm = 0.09
+    taper = _math.sin(_math.pi * 0.25)
+
+    def external_clashes() -> list[dict]:
+        positions = _np.asarray([[a.x, a.y, a.z] for a in model.atoms], dtype=float)
+        raw = _find_clashes(
+            positions,
+            _np.isfinite(positions).all(axis=1),
+            model.bonds,
+            CLASH_NM,
+            200,
+        )
+        return [
+            hit for hit in raw
+            if not (
+                model.atoms[hit["serials"][0]].crossover_id is not None
+                and model.atoms[hit["serials"][0]].crossover_id
+                == model.atoms[hit["serials"][1]].crossover_id
+            )
+        ]
+
+    def translate(serial: int | None, delta: _np.ndarray) -> None:
+        if serial is None:
+            return
+        atom = model.atoms[serial]
+        atom.x += float(delta[0])
+        atom.y += float(delta[1])
+        atom.z += float(delta[2])
+        moved[serial] = moved.get(serial, _np.zeros(3)) + delta
+
+    for _ in range(8):
+        contacts = [
+            hit for hit in external_clashes()
+            if all(model.atoms[serial].name == "OP1" for serial in hit["serials"])
+        ]
+        if not contacts:
+            break
+        changed = False
+        for hit in contacts:
+            serial_a, serial_b = hit["serials"]
+            point_a = _atom_pos(model.atoms, serial_a)
+            point_b = _atom_pos(model.atoms, serial_b)
+            separation = point_a - point_b
+            distance = float(_np.linalg.norm(separation))
+            if distance >= target_clearance_nm:
+                continue
+            if distance < 1e-9:
+                separation = _np.array([1.0, 0.0, 0.0])
+                distance = 1.0
+            direction = separation / distance
+            magnitude = 0.5 * (target_clearance_nm - distance)
+            for op1_serial, sign in ((serial_a, 1.0), (serial_b, -1.0)):
+                op1_atom = model.atoms[op1_serial]
+                residue = by_residue[(op1_atom.chain_id, op1_atom.seq_num)]
+                p_serial = residue.get("P")
+                incoming_o3 = next(
+                    (
+                        other for other in bonded_to.get(p_serial, ())
+                        if model.atoms[other].name == "O3'"
+                    ),
+                    None,
+                )
+                delta = sign * magnitude * direction
+                for name in ("P", "OP1", "OP2"):
+                    translate(residue.get(name), delta)
+                translate(residue.get("O5'"), taper * delta)
+                translate(incoming_o3, taper * delta)
+            changed = True
+        if not changed:
+            break
+
+    return {
+        "method": "equal-opposite sine-tapered reciprocal phosphate bow",
+        "clearance_nm": target_clearance_nm,
+        "moved_atom_serials": sorted(moved),
+        "n_moved_atoms": len(moved),
+        "max_displacement_nm": round(
+            max((float(_np.linalg.norm(delta)) for delta in moved.values()), default=0.0),
+            6,
+        ),
+    }
+
+
 def build_atomistic_model(
     design: Design,
     exclude_helix_ids: set[str] | None = None,
@@ -1792,6 +1905,8 @@ def build_atomistic_model(
     fast_bridges: bool = False,
     measured_positioning: bool = True,
     _extra_base_placement_sink: "list[dict] | None" = None,
+    _two_base_default: bool = True,
+    _two_base_phosphate_clearance: bool = True,
 ) -> AtomisticModel:
     """
     Build the heavy-atom model for the entire design.
@@ -1834,6 +1949,12 @@ def build_atomistic_model(
     ``_extra_base_placement_sink`` is diagnostic instrumentation for the read-only
     Molecular Placement Audit. When supplied, native placement records are copied into
     it before any authored residue transform is applied. It cannot alter the build.
+
+    ``_two_base_phosphate_clearance`` is an internal regression switch. The production
+    default is True (v7): native 2x-extra-base structures receive the symmetric,
+    sine-tapered reciprocal-phosphate clearance after whole-design deformation. It is
+    deliberately skipped for trajectory/frame overrides, whose coordinates are the
+    authoritative result of a simulation or reconstruction.
 
     """
     measured_tmpl = None
@@ -2503,6 +2624,7 @@ def build_atomistic_model(
         bridge_fn=_bridge_fn,
         fast_bridges=fast_bridges,
         placement_sink=_extra_base_placement_sink,
+        apply_two_base_default=_two_base_default,
     )
 
     # Linker closure above re-seats P/O5′ on the downstream duplex residue.
@@ -2566,6 +2688,19 @@ def build_atomistic_model(
         from backend.core.deformation import apply_deformations_to_atoms
 
         apply_deformations_to_atoms(atoms, design)
+        if (
+            _two_base_phosphate_clearance
+            and any(len(xo.extra_bases or ()) == 2 for xo in design.crossovers)
+            and nuc_pos_override is None
+            and nuc_frame_override is None
+            and axis_override is None
+            and frame_override is None
+            and xb_pos_override is None
+            and ext_pos_override is None
+        ):
+            _apply_reciprocal_phosphate_clearance(
+                AtomisticModel(atoms=atoms, bonds=bonds)
+            )
         # Saved residue poses are part of the authored design geometry too. A relaxed
         # CG frame already contains the final physical pose, so applying these deltas
         # after a simulation override would move the rendered/seeded residue away from
@@ -3632,14 +3767,16 @@ def _build_extra_base_atoms(
     bridge_fn=_minimize_backbone_bridge,
     fast_bridges: bool = False,
     placement_sink: "list[dict] | None" = None,
+    apply_two_base_default: bool = True,
 ) -> int:
     """
     Place atomistic atoms for all extra crossover bases in the design.
 
     Each extra base gets a full ribose ring (rigid transform of the default
     sugar template) placed from the representation-neutral crossover placement
-    record. One-base runs use its calibrated junction-local residue pose; longer
-    runs retain the geometric arc frame. Backbone
+    record. One-base runs use a calibrated junction-local pose; native two-base
+    runs use the promoted direction-local symmetric pose; longer runs retain the
+    geometric arc frame. Backbone
     linker atoms (O3′/P/O5′) between each consecutive nucleotide pair are
     placed by a scipy L-BFGS-B minimisation of bond-length and bond-angle
     deviations from canonical B-DNA values.
@@ -3754,9 +3891,18 @@ def _build_extra_base_atoms(
                 len(xo.extra_bases),
                 sim_reversed=sim_reversed,
                 local_frame_reversed=ha.strand.value == "REVERSE",
+                apply_two_base_default=False,
             )
         }
         if placement_sink is not None:
+            midpoint_plane_origin = 0.5 * (_np.asarray(posA) + _np.asarray(posB))
+            midpoint_plane_normal = _np.asarray(nucA.axis_tangent) + _np.asarray(nucB.axis_tangent)
+            if float(_np.linalg.norm(midpoint_plane_normal)) < 1e-9:
+                midpoint_plane_normal = _np.asarray(nucA.axis_tangent)
+            midpoint_plane_normal = _normalise(midpoint_plane_normal)
+            midpoint_plane_radius = max(
+                0.65, 0.72 * float(_np.linalg.norm(_np.asarray(posB) - _np.asarray(posA)))
+            )
             for k, placement in sorted(placements_by_k.items()):
                 placement_sink.append(
                     {
@@ -3769,6 +3915,21 @@ def _build_extra_base_atoms(
                         "source_frame_rotation": placement[
                             "source_frame_rotation"
                         ].copy(),
+                        "source_chain_tangent": placement[
+                            "source_chain_tangent"
+                        ].copy(),
+                        "bow": placement["bow"].copy(),
+                        "midpoint_plane_origin": midpoint_plane_origin.copy(),
+                        "midpoint_plane_normal": midpoint_plane_normal.copy(),
+                        "midpoint_plane_radius_nm": midpoint_plane_radius,
+                        "half_a": {
+                            "helix_id": ha.helix_id,
+                            "bp_index": ha.index,
+                        },
+                        "half_b": {
+                            "helix_id": hb.helix_id,
+                            "bp_index": hb.index,
+                        },
                     }
                 )
 
@@ -4015,10 +4176,47 @@ def _build_extra_base_atoms(
         elif _xb_overridden:
             pass  # legacy position-only override remains strictly authoritative
         else:
-            # Close the phosphodiester linker; the inserts are left where the CG
-            # mapping above placed them.
+            # Native 2xT uses the proportional closure validated with the promoted
+            # v6 rigid pose. The unconstrained exact minimizer can select a threaded
+            # local basin and undo the reviewed arrangement; all other insert counts
+            # retain the requested exact/fast bridge policy.
+            native_bridge_fn = (
+                _interpolate_backbone_bridge if n == 2 else bridge_fn
+            )
             for prev_s_item, next_s_item in zip(all_s, all_s[1:]):
-                bridge_fn(atoms, prev_s_item, next_s_item)
+                native_bridge_fn(atoms, prev_s_item, next_s_item)
+
+        # Promoted v6 native 2xT placement is applied AFTER linker closure, exactly
+        # as reviewed in the Molecular Placement Audit. Applying the residue pose
+        # before bridge_fn lets the linker minimiser undo P/O3'/O5' parts of the rigid
+        # transform and reintroduces plane crossings. Simulated positions remain
+        # authoritative and therefore bypass this native default.
+        if (
+            n == 2
+            and apply_two_base_default
+            and not simulated_insert_sites
+        ):
+            chain = _normalise(_np.mean([
+                placements_by_k[k]["source_chain_tangent"] for k in (0, 1)
+            ], axis=0))
+            bow = _np.mean([placements_by_k[k]["bow"] for k in (0, 1)], axis=0)
+            bow = _normalise(bow - float(_np.dot(bow, chain)) * chain)
+            axial = _normalise(_np.cross(chain, bow))
+            direction_frame = _np.column_stack([bow, axial, chain])
+            for k, serials_by_name in enumerate(eb_sugar_serials):
+                local_t, local_r, _ = crossover_two_base_default_directional_pose(
+                    k, local_frame_reversed=ha.strand.value == "REVERSE"
+                )
+                rotation = direction_frame @ local_r @ direction_frame.T
+                pivot = placements_by_k[k]["center"]
+                translation = direction_frame @ local_t
+                for atom_serial in set(serials_by_name.values()):
+                    pos = _atom_pos(atoms, atom_serial)
+                    _set_atom_pos(
+                        atoms,
+                        atom_serial,
+                        pivot + rotation @ (pos - pivot) + translation,
+                    )
 
     return serial
 

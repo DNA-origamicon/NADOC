@@ -5,6 +5,8 @@ import {
   auditDefectRows,
   auditMetricRows,
   auditStrandColorMap,
+  addMidpointConstraintPlanes,
+  addPlaneViolationMarkers,
   copyAuditCameraState,
   filterAuditAtomData,
   initMolecularPlacementAudit,
@@ -24,7 +26,16 @@ function auditBundle() {
     { serial: 2, name: 'N1', element: 'N', chain_id: 'B', seq_num: 12, x: 2, y: 0, z: 0, crossover_id: 'xo-2' },
   ]
   return {
-    provider: { id: 'geometric-baseline-v1', label: 'Raw geometric baseline' },
+    provider: {
+      id: 'reciprocal-phosphate-clearance-production-v7',
+      label: 'Production v7 reciprocal phosphate clearance',
+      panel_labels: { current: 'Production v7', candidate: 'Production v7' },
+      panel_notes: {
+        current: 'Active production geometry',
+        candidate: 'No pending placement proposal',
+      },
+      panel_representations: { current: 'ballstick', candidate: 'ballstick' },
+    },
     current_design: { helices: [], crossovers: [] },
     candidate_design: { helices: [], crossovers: [] },
     current: { atoms, bonds: [[0, 1], [1, 2]], diagnostics: DIAGNOSTICS },
@@ -39,6 +50,14 @@ function auditBundle() {
     },
     affected_atom_serials: [1, 2],
     defect_atom_serials: { current: [], candidate: [0, 2] },
+    midpoint_constraint_planes: [{
+      crossover_ids: ['xo-1', 'xo-2'], origin: [1, 0, 0], normal: [0, 0, 1], radius_nm: 0.8,
+      helix_ids: ['h1', 'h2'], bp_indices: [13, 14],
+    }],
+    midpoint_plane_violations: {
+      current: [{ serial: 0, crossover_id: 'xo-1', atom_name: 'P', signed_distance_nm: -0.1 }],
+      candidate: [],
+    },
     displacement: {
       n_displaced: 1,
       max_nm: 0.2,
@@ -55,6 +74,25 @@ beforeEach(() => {
 })
 
 describe('molecular placement audit data helpers', () => {
+  it('draws the reviewed midpoint plane at the supplied origin and normal', () => {
+    const root = new THREE.Group()
+    addMidpointConstraintPlanes(root, auditBundle().midpoint_constraint_planes)
+    expect(root.children).toHaveLength(2)
+    const disk = root.children[0]
+    expect(disk.position.toArray()).toEqual([1, 0, 0])
+    expect(new THREE.Vector3(0, 0, 1).applyQuaternion(disk.quaternion).toArray())
+      .toEqual([0, 0, 1])
+    expect(disk.userData.midpointConstraintPlane.crossover_ids).toEqual(['xo-1', 'xo-2'])
+  })
+
+  it('marks the exact atoms reported across the midpoint plane', () => {
+    const root = new THREE.Group()
+    const bundle = auditBundle()
+    addPlaneViolationMarkers(root, bundle.current, bundle.midpoint_plane_violations.current)
+    expect(root.children).toHaveLength(1)
+    expect(root.children[0].position.toArray()).toEqual([0, 0, 0])
+    expect(root.children[0].userData.midpointPlaneViolation.serial).toBe(0)
+  })
   it('isolates affected atoms and preserves only bonds fully inside that subset', () => {
     const filtered = filterAuditAtomData(auditBundle().current, [0, 2])
     expect(filtered.atoms.map(atom => atom.name)).toEqual(['P', 'N1'])
@@ -157,6 +195,7 @@ describe('Molecular Placement Audit modal', () => {
           update: vi.fn(),
         },
         setRepresentation: vi.fn(),
+        setConstraintPlanesVisible: vi.fn(),
         fit: vi.fn(),
         dispose: vi.fn(),
       }
@@ -176,15 +215,25 @@ describe('Molecular Placement Audit modal', () => {
     expect([...audit.element.querySelectorAll('.mpa-panel')].map(p => p.dataset.panel))
       .toEqual(['current', 'candidate', 'difference', 'defects'])
     expect(audit.element.querySelector('[data-panel="defects"] .mpa-panel-title').textContent)
-      .toBe('Piercings / clashes')
+      .toBe('Constraint planes / defects')
     for (const select of audit.element.querySelectorAll('.mpa-representation')) {
       expect([...select.options].map(option => [option.value, option.textContent]))
         .toEqual([['full', 'Full'], ['ballstick', 'Ball and Stick']])
     }
-    expect(audit.element.dataset.provider).toBe('geometric-baseline-v1')
+    expect(audit.element.dataset.provider).toBe('reciprocal-phosphate-clearance-production-v7')
     expect(audit.element.dataset.affectedAtoms).toBe('2')
     expect(instances.map(viewer => viewer.initialRepresentation))
-      .toEqual(['full', 'full', 'ballstick', 'ballstick'])
+      .toEqual(['ballstick', 'ballstick', 'ballstick', 'ballstick'])
+    expect(audit.element.querySelector('[data-panel="current"] .mpa-panel-title').textContent)
+      .toBe('Production v7')
+    expect(audit.element.querySelector('[data-panel="candidate"] .mpa-panel-title').textContent)
+      .toBe('Production v7')
+    expect(audit.element.querySelectorAll('.mpa-plane-toggle input')).toHaveLength(4)
+
+    const candidatePlaneToggle = audit.element.querySelector('[data-panel="candidate"] .mpa-plane-toggle input')
+    candidatePlaneToggle.checked = false
+    candidatePlaneToggle.dispatchEvent(new Event('change', { bubbles: true }))
+    expect(instances[1].setConstraintPlanesVisible).toHaveBeenCalledWith(false)
 
     expect(audit.element.querySelector('.mpa-defect-status').textContent)
       .toContain('Candidate CLASH · A9:P ↔ B12:N1 · 0.041 nm')

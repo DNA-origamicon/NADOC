@@ -17,6 +17,7 @@ from backend.core.atomistic_validation import (
     audit_oxdna_job,
     latest_job_for_design,
     _bond_class,
+    _find_clashes,
 )
 
 
@@ -110,6 +111,27 @@ def test_overlapping_nucleotides_clash(design, tmp_path):
     r = audit_bonds(design, frame)
     assert len(r["clashes"]) > 0
     assert not r["ok"]
+
+
+def test_clash_detector_excludes_covalent_one_three_pairs():
+    positions = np.asarray([
+        [0.0, 0.0, 0.0],
+        [0.04, 0.0, 0.0],
+        [0.01, 0.0, 0.0],
+        [0.02, 0.0, 0.0],
+    ])
+    # 0 and 1 are spatially coincident by clash standards but share bonded atom 2.
+    # Atom 3 has no covalent relationship and must still be reported.
+    hits = _find_clashes(
+        positions,
+        np.ones(4, dtype=bool),
+        [(0, 2), (2, 1)],
+        0.08,
+        20,
+    )
+    pairs = {tuple(hit["serials"]) for hit in hits}
+    assert (0, 1) not in pairs
+    assert any(3 in pair for pair in pairs)
 
 
 def test_non_finite_atom_flagged(design, tmp_path):

@@ -88,8 +88,10 @@ class ProtocolPlanRequest(CreateJobRequest):
         False, description="Production only: restrain overall DNA orientation."
     )
     orientation_force_constant: float = Field(
-        500.0, gt=0.0, le=100000.0,
-        description="Quaternion harmonic force constant in kcal/mol."
+        500.0,
+        gt=0.0,
+        le=100000.0,
+        description="Quaternion harmonic force constant in kcal/mol.",
     )
     langevin_damping: Optional[float] = Field(
         None, gt=0.0, description="Production only: Langevin coupling, ps^-1."
@@ -1017,7 +1019,11 @@ def _production_provenance(
                 "provenance": "inherited",
                 "reason": "legacy default recorded when the relaxation was prepared",
             }
-        return {"value": value, "provenance": "default", "reason": "compatibility default"}
+        return {
+            "value": value,
+            "provenance": "default",
+            "reason": "compatibility default",
+        }
 
     return {
         "length_ns": entry(

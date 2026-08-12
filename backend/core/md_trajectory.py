@@ -1723,6 +1723,7 @@ def md_occupancy(
     max_frames: int = 200,
     n_clusters: int = 0,
     basis: str = "nt",
+    density: bool = False,
     selection=None,
     fit: str = "selection",
 ) -> dict:
@@ -1800,7 +1801,8 @@ def md_occupancy(
     if not pool:
         return {"ready": False, "reason": "no free-sampling frames in this run"}
 
-    picked = pool if len(pool) <= max_frames else _stride_pick(pool, max_frames)
+    picked = pool if max_frames <= 0 or len(pool) <= max_frames else _stride_pick(pool, max_frames)
+    render_rows = set(np.linspace(0, len(picked) - 1, min(200, len(picked)), dtype=int))
 
     scoped = resolve_selection_keys(design, key_list, selection)
     if selection and not scoped:
@@ -1820,7 +1822,7 @@ def md_occupancy(
     rows: list[np.ndarray] = []
     kept: list[int] = []
     frames_out: dict[int, list[float]] = {}
-    for gidx in picked:
+    for picked_row, gidx in enumerate(picked):
         p_nm, normals, tpos, tnorm = _extract_md_nadoc_frame(
             ctx, gidx, with_termini=True
         )
@@ -1848,11 +1850,12 @@ def md_occupancy(
         kept.append(gidx)
         # Same 6-float stride as md_composite_trajectory / _flatten_cg_frame, so the
         # frontend consumes an MD medoid with the oxDNA code path unchanged.
-        flat: list[float] = []
-        for i in range(len(key_list)):
-            flat.extend((float(pos[i, 0]), float(pos[i, 1]), float(pos[i, 2])))
-            flat.extend((float(nrm[i, 0]), float(nrm[i, 1]), float(nrm[i, 2])))
-        frames_out[gidx] = flat
+        if picked_row in render_rows:
+            flat: list[float] = []
+            for i in range(len(key_list)):
+                flat.extend((float(pos[i, 0]), float(pos[i, 1]), float(pos[i, 2])))
+                flat.extend((float(nrm[i, 0]), float(nrm[i, 1]), float(nrm[i, 2])))
+            frames_out[gidx] = flat
 
     if len(rows) < 20:
         return {
@@ -1861,11 +1864,23 @@ def md_occupancy(
             "n_frames": len(rows),
         }
 
-    res = occupancy_clusters(
-        apply_fit_plan(np.array(rows, dtype=float), plan), n_clusters=n_clusters
-    )
+    fitted = apply_fit_plan(np.array(rows, dtype=float), plan)
+    # Pairwise silhouette is O(F²). Full mode may carry 50k frames for the density, but
+    # clustering that many would allocate tens of GB. Keep its deterministic 200-frame
+    # synopsis while the density below consumes every registered frame.
+    cluster_pick = np.linspace(0, len(fitted) - 1, min(200, len(fitted)), dtype=int)
+    res = occupancy_clusters(fitted[cluster_pick], n_clusters=n_clusters)
     if not res.get("ready"):
         return res
+
+    if density:
+        from backend.core.occupancy_core import occupancy_density_grids
+        feature_keys = [key_list[i] for i in (sel_idx if sel_idx is not None else range(len(key_list)))]
+        res["density_grids"] = occupancy_density_grids(fitted, feature_keys)
+        res["density_registered"] = bool(res["density_grids"])
+        res["density_n_frames"] = int(len(fitted))
+    res["sampling"] = "full" if max_frames <= 0 else "fast"
+    res["n_frames_total_used"] = int(len(fitted))
 
     res["method"] = "pca"
     res["basis"] = "nt"  # MD has one site per nucleotide; no bp-midpoint basis yet
@@ -1882,8 +1897,9 @@ def md_occupancy(
     res["sampling_stages"] = [str(segments[i][1]) for i in free_idx]
     res["keys"] = [list(k) for k in key_list]
     for cl in res["clusters"]:
-        gidx = kept[cl["medoid_index"]]
+        medoid_row = int(cluster_pick[cl["medoid_index"]])
+        gidx = kept[medoid_row]
         cl["medoid_frame"] = int(gidx)
-        cl["frames"] = [int(kept[r]) for r in cl["frames"]]
+        cl["frames"] = [int(kept[int(cluster_pick[r])]) for r in cl["frames"]]
         cl["frame"] = frames_out[gidx]
     return res

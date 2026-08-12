@@ -671,15 +671,14 @@ def test_one_base_local_frame_tracks_independent_half_a_polarity(sim_reversed):
     assert reverse["geometric_center"] == pytest.approx(forward["geometric_center"])
     assert reverse["bow"] == pytest.approx(-forward["bow"])
     assert reverse["center"] != pytest.approx(forward["center"])
-    # This parity belongs only to the measured 1xT calibration; legacy arcs retain
-    # their established placement for longer insert runs.
+    # The promoted v6 2xT default has its own pair of polarity-specific poses.
     ordinary_two = crossover_extra_base_placements(a, b, axis, axis, 2)
     reversed_two = crossover_extra_base_placements(
         a, b, axis, axis, 2, local_frame_reversed=True
     )
     for ordinary, reversed_frame in zip(ordinary_two, reversed_two):
-        assert reversed_frame["center"] == pytest.approx(ordinary["center"])
-        assert reversed_frame["frame_rotation"] == pytest.approx(
+        assert reversed_frame["center"] != pytest.approx(ordinary["center"])
+        assert reversed_frame["frame_rotation"] != pytest.approx(
             ordinary["frame_rotation"]
         )
 

@@ -3,7 +3,7 @@
 import * as THREE from 'three'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 
-import { parseBaseKey } from './base_ref.js'
+import { baseKey, parseBaseKey } from './base_ref.js'
 import { putNucleotideTransform } from '../api/client.js'
 import { showToast } from '../ui/toast.js'
 
@@ -50,16 +50,54 @@ export function abstractPreviewUpdate(info, matrix) {
   }
 }
 
-export function initNucleotideTransformTool({ store, scene, camera, canvas, controls, designRenderer, atomisticRenderer, moveRotatePanel, refreshCurrentSelection }) {
+/** Resolve every non-cluster design selection to residue targets. This deliberately
+ * uses logical geometry identities, so the same selection works in CG, atomistic,
+ * surface, and mixed representations. */
+export function transformTargetsForSelection(state) {
+  const explicit = state.multiSelectedBaseKeys ?? []
+  const geometry = state.currentGeometry ?? []
+  const strands = new Set(state.multiSelectedStrandIds ?? [])
+  const domains = new Set((state.multiSelectedDomainIds ?? [])
+    .map(d => `${d.strandId}:${d.domainIndex}`))
+  const overhangs = new Set(state.multiSelectedOverhangIds ?? [])
+  const extensions = new Set(state.multiSelectedExtensionIds ?? [])
+  const hasNonClusterGrain = explicit.length || domains.size || overhangs.size || extensions.size
+  // Cluster selection mirrors its member strands into the strand pool for highlighting.
+  // With no independently-selected finer grain, retain the purpose-built cluster gizmo
+  // (and its cluster-transform persistence) instead of exploding it into residues.
+  if ((state.multiSelectedClusterIds ?? []).length && !hasNonClusterGrain) return []
+  const selected = state.selectedObject
+  if (!strands.size && !domains.size && !overhangs.size && !extensions.size && selected) {
+    if (selected.type === 'nucleotide') {
+      const key = baseKey(selected.data, selected.data?.copy ?? selected.data?.copy_k ?? 0)
+      return key ? [parseBaseKey(key)] : []
+    }
+    if (selected.type === 'strand') strands.add(selected.data?.strand_id ?? selected.id)
+    if (selected.type === 'domain') {
+      domains.add(`${selected.data?.strand_id}:${selected.data?.domain_index ?? 0}`)
+    }
+  }
+  const keys = [...explicit]
+  for (const nuc of geometry) {
+    if (strands.has(nuc.strand_id) ||
+        domains.has(`${nuc.strand_id}:${nuc.domain_index ?? 0}`) ||
+        overhangs.has(nuc.overhang_id) || extensions.has(nuc.extension_id)) {
+      const key = baseKey(nuc, nuc.copy ?? nuc.copy_k ?? 0)
+      if (key) keys.push(key)
+    }
+  }
+  return [...new Set(keys)].map(parseBaseKey).filter(Boolean)
+}
+
+export function initNucleotideTransformTool({ store, scene, camera, canvas, controls, designRenderer, atomisticRenderer, getAtomisticRenderers, moveRotatePanel, refreshCurrentSelection }) {
   let tc = null
   let helper = null
   let dummy = null
-  let target = null
+  let targets = []
   let pivot = null
   let dragging = false
   let mode = 'translate'
-  let previewKind = null
-  let abstractInfo = null
+  let targetInfos = []
 
   const identity = () => new THREE.Matrix4()
   function liveMatrix() {
@@ -68,36 +106,40 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
       .multiply(new THREE.Matrix4().makeTranslation(-pivot.x, -pivot.y, -pivot.z))
   }
 
-  function selectedTarget() {
-    const keys = store.getState().multiSelectedBaseKeys ?? []
-    return keys.length === 1 ? parseBaseKey(keys[0]) : null
+  const selectedTargets = () => transformTargetsForSelection(store.getState())
+
+  function renderers() {
+    const supplied = getAtomisticRenderers?.() ?? [atomisticRenderer]
+    return supplied.filter((r, i, all) => r && all.indexOf(r) === i)
+  }
+
+  function infoFor(target) {
+    for (const renderer of renderers()) {
+      const info = renderer.residueInfo?.(target)
+      if (info) return { target, info, kind: 'atomistic', renderer }
+    }
+    const info = target.helix_id === '__xb__'
+      ? designRenderer.xoverResidueInfo?.(target)
+      : designRenderer.residueTransformInfo?.(target)
+    return info ? { target, info, kind: 'abstract', renderer: designRenderer } : null
   }
 
   function canActivate() {
-    const selected = selectedTarget()
-    if (!selected) return false
-    if (atomisticRenderer.getMode?.() !== 'off') return !!atomisticRenderer.residueInfo(selected)
-    return selected.helix_id === '__xb__'
-      ? !!designRenderer.xoverResidueInfo?.(selected)
-      : !!designRenderer.residueTransformInfo?.(selected)
+    const selected = selectedTargets()
+    return selected.length > 0 && selected.every(t => !!infoFor(t))
   }
 
   function activate() {
     if (!canActivate()) return false
-    target = selectedTarget()
-    previewKind = atomisticRenderer.getMode?.() !== 'off' ? 'atomistic' : 'abstract'
-    abstractInfo = previewKind === 'abstract'
-      ? (target.helix_id === '__xb__'
-          ? designRenderer.xoverResidueInfo?.(target)
-          : designRenderer.residueTransformInfo?.(target))
-      : null
-    const info = previewKind === 'atomistic' ? atomisticRenderer.residueInfo(target) : abstractInfo
-    if (!info) {
-      showToast('The selected nucleotide is not present in the atomistic model.', { severity: 'error' })
-      target = null
+    targets = selectedTargets()
+    targetInfos = targets.map(infoFor)
+    if (!targetInfos.length || targetInfos.some(x => !x)) {
+      showToast('Some selected elements are not present in the current representation.', { severity: 'error' })
+      targets = []; targetInfos = []
       return false
     }
-    pivot = info.centroid.clone()
+    pivot = targetInfos.reduce((sum, x) => sum.add(x.info.centroid), new THREE.Vector3())
+      .multiplyScalar(1 / targetInfos.length)
     dummy = new THREE.Object3D()
     dummy.position.copy(pivot)
     scene.add(dummy)
@@ -107,9 +149,7 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
     tc.addEventListener('dragging-changed', e => { dragging = e.value; controls.enabled = !e.value })
     tc.addEventListener('change', () => {
       if (!dragging) return
-      if (previewKind === 'atomistic') atomisticRenderer.applyResidueMatrix(target, liveMatrix())
-      else if (target.helix_id === '__xb__') designRenderer.applyXoverResidueMatrix?.(abstractInfo, liveMatrix())
-      else designRenderer.applyResidueTransformMatrix?.(abstractInfo, liveMatrix())
+      for (const x of targetInfos) applyPreview(x, liveMatrix())
     })
     document.getElementById('mode-indicator').textContent =
       'NUCLEOTIDE MOVE/ROTATE — Tab: move/rotate · M: apply · Esc: cancel'
@@ -125,30 +165,23 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
   async function confirm() {
     if (!tc) return
     const translation = dummy.position.clone().sub(pivot)
-    const body = transformBodyForTarget(target, pivot, translation, dummy.quaternion,
-      previewKind === 'abstract' ? abstractInfo : null)
-    const committedPreviewKind = previewKind
-    const committedTarget = target
-    const committedAbstractInfo = abstractInfo
+    const committed = targetInfos
+    const bodies = committed.map(x => transformBodyForTarget(
+      x.target, pivot, translation, dummy.quaternion, x.kind === 'abstract' ? x.info : null))
     // Keep the post-drag matrices on screen while the mutation and atom build run.
     // Restoring the preview here produced an avoidable old-position flash; moreover,
     // the design-response subscriber already owns the one required atomistic refresh.
     detach(false)
     try {
-      const result = await putNucleotideTransform(body)
+      let result = null
+      for (const body of bodies) result = await putNucleotideTransform(body)
       if (result) return
     } catch (error) {
       console.error('Nucleotide transform commit failed:', error)
     }
     // Persistence failed, so roll the optimistic matrices back to their source pose.
-    if (committedPreviewKind === 'atomistic') {
-      atomisticRenderer.applyResidueMatrix(committedTarget, identity())
-    } else if (committedTarget?.helix_id === '__xb__') {
-      designRenderer.applyXoverResidueMatrix?.(committedAbstractInfo, identity())
-    } else {
-      designRenderer.applyResidueTransformMatrix?.(committedAbstractInfo, identity())
-    }
-    showToast('Could not save the nucleotide move.', { severity: 'error' })
+    for (const x of committed) applyPreview(x, identity())
+    showToast('Could not save the selected elements move.', { severity: 'error' })
   }
 
   function cancel() {
@@ -166,24 +199,25 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
   }
 
   function restorePreview() {
-    if (previewKind === 'atomistic' && target) atomisticRenderer.applyResidueMatrix(target, identity())
-    else if (previewKind === 'abstract' && target?.helix_id === '__xb__') {
-      designRenderer.applyXoverResidueMatrix?.(abstractInfo, identity())
-    } else if (previewKind === 'abstract') {
-      designRenderer.applyResidueTransformMatrix?.(abstractInfo, identity())
-    }
+    for (const x of targetInfos) applyPreview(x, identity())
+  }
+
+  function applyPreview(x, matrix) {
+    if (x.kind === 'atomistic') x.renderer.applyResidueMatrix?.(x.target, matrix)
+    else if (x.target.helix_id === '__xb__') designRenderer.applyXoverResidueMatrix?.(x.info, matrix)
+    else designRenderer.applyResidueTransformMatrix?.(x.info, matrix)
   }
 
   function detach(restore = true) {
-    if (restore && target) restorePreview()
+    if (restore && targets.length) restorePreview()
     if (tc) { tc.detach(); scene.remove(helper); tc.dispose?.() }
     dummy?.parent?.remove(dummy)
     document.removeEventListener('keydown', onKey)
     controls.enabled = true
     if (moveRotatePanel?.panel) moveRotatePanel.panel.style.display = 'none'
-    tc = helper = dummy = target = pivot = abstractInfo = null
+    tc = helper = dummy = pivot = null
+    targets = []; targetInfos = []
     dragging = false
-    previewKind = null
     document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
   }
 

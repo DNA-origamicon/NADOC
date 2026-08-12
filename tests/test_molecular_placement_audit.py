@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 from fastapi.testclient import TestClient
 
 from backend.api import state as design_state
 from backend.api.main import app
 from backend.core.atomistic import build_atomistic_model
+from backend.core.models import NucleotideTransform
 from backend.core.molecular_placement_audit import (
     _defect_serials,
     build_molecular_placement_audit,
@@ -42,9 +44,49 @@ def test_audit_candidate_is_isolated_and_moves_only_insert_residues():
     assert all(current_atoms[i]["extra_base_k"] is not None for i in displaced)
 
 
-def test_longer_runs_report_that_the_geometric_baseline_is_already_native():
+def test_two_base_runs_show_promoted_production_v7_in_both_panels():
     bundle = build_molecular_placement_audit(reciprocal_design("TT", bp=12))
+    assert bundle["provider"]["id"] == "reciprocal-phosphate-clearance-production-v7"
+    assert bundle["provider"]["panel_labels"] == {
+        "current": "Production v7",
+        "candidate": "Production v7",
+    }
+    assert bundle["provider"]["not_authorized_for_production"] is False
+    assert bundle["provider"]["promoted_to_production"] is True
     assert bundle["displacement"]["n_displaced"] == 0
+    assert bundle["current_design"] == bundle["candidate_design"]
+    planes = bundle["midpoint_constraint_planes"]
+    assert len(planes) == 1
+    for plane in planes:
+        assert np.linalg.norm(plane["normal"]) == pytest.approx(1.0)
+        assert plane["radius_nm"] >= 0.65
+        assert len(plane["crossover_ids"]) == 2
+        assert plane["bp_indices"][1] - plane["bp_indices"][0] == pytest.approx(1.0)
+
+
+def test_runs_longer_than_two_remain_at_the_geometric_baseline():
+    bundle = build_molecular_placement_audit(reciprocal_design("TTT", bp=12))
+    assert bundle["displacement"]["n_displaced"] == 0
+    assert bundle["displacement"]["max_nm"] == 0.0
+
+
+def test_authored_two_base_pair_still_uses_production_v7():
+    design = reciprocal_design("TT", bp=12)
+    target = design.crossovers[0].id
+    design = design.copy_with(nucleotide_transforms=[
+        NucleotideTransform(
+            kind="extra_base", crossover_id=target, extra_base_k=k,
+            pivot=[0.0, 0.0, 0.0],
+        )
+        for k in range(2)
+    ])
+    bundle = build_molecular_placement_audit(design)
+    assert bundle["provider"]["id"] == "reciprocal-phosphate-clearance-production-v7"
+    assert bundle["provider"]["promoted_to_production"] is True
+    assert bundle["provider"]["not_authorized_for_production"] is False
+    assert target in bundle["provider"]["target_crossover_ids"]
+    assert len(bundle["provider"]["target_crossover_ids"]) == 2
+    assert bundle["proposal_validation"] is not None
     assert bundle["displacement"]["max_nm"] == 0.0
 
 

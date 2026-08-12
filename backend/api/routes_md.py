@@ -989,6 +989,8 @@ class MdOccupancyBody(BaseModel):
     #: Reference frame for a SCOPED run — "selection" | "local" | "global". Same vocabulary
     #: and same shared implementation as the oxDNA twin (``occupancy_fit_plan``).
     fit: str = "selection"
+    sampling: str = "fast"
+    density: bool = False
 
 
 #: Result-level LRU. There is no MD equivalent of oxDNA's shared ``_ALIGNED_CACHE``: every
@@ -1001,7 +1003,14 @@ _MD_OCC_CACHE_MAX = 6
 
 
 def _md_occ_cache_key(
-    segments, psf, max_frames, n_clusters, basis, selection, fit="selection"
+    segments,
+    psf,
+    max_frames,
+    n_clusters,
+    basis,
+    selection,
+    fit="selection",
+    density=False,
 ):
     """size+mtime per DCD, so a GROWING trajectory self-invalidates — the property
     oxDNA's ``_aligned_cache_key`` relies on."""
@@ -1022,6 +1031,7 @@ def _md_occ_cache_key(
         str(basis),
         _selection_sig(selection),
         str(fit),
+        bool(density),
     )
 
 
@@ -1035,6 +1045,8 @@ async def _md_occupancy_impl(
     refetch: bool,
     selection=None,
     fit: str = "selection",
+    sampling: str = "fast",
+    density: bool = False,
 ) -> dict:
     """Shared body for the GET (whole structure) and POST (scoped) MD occupancy routes."""
     from backend.core.occupancy_core import OCC_FIT_MODES
@@ -1043,8 +1055,10 @@ async def _md_occupancy_impl(
         raise HTTPException(400, "basis must be 'nt' or 'bp'")
     if fit not in OCC_FIT_MODES:
         raise HTTPException(400, f"fit must be one of {', '.join(OCC_FIT_MODES)}")
+    if sampling not in ("fast", "full"):
+        raise HTTPException(400, "sampling must be 'fast' or 'full'")
     n_clusters = int(max(0, min(6, n_clusters)))
-    max_frames = int(max(0, max_frames)) or 200
+    max_frames = 0 if sampling == "full" else (int(max(0, max_frames)) or 200)
     # POST supplies the shared Pydantic OccupancySelection, while the cache signature
     # and subprocess core consume a plain mapping. Convert once BEFORE either use.
     # Previously `_md_occ_cache_key` called `.get()` on the Pydantic object, so every
@@ -1066,7 +1080,7 @@ async def _md_occupancy_impl(
     psf, ref, segments, design = inputs
 
     key = _md_occ_cache_key(
-        segments, psf, max_frames, n_clusters, basis, selection_dict, fit
+        segments, psf, max_frames, n_clusters, basis, selection_dict, fit, density
     )
     if refetch:
         _MD_OCC_CACHE.pop(key, None)
@@ -1089,6 +1103,7 @@ async def _md_occupancy_impl(
             max_frames,
             n_clusters,
             basis,
+            bool(density),
             selection_dict,
             fit,
         ),
@@ -1110,6 +1125,8 @@ async def get_md_occupancy(
     n_clusters: int = 0,
     basis: str = "nt",
     refetch: bool = False,
+    sampling: str = "fast",
+    density: bool = False,
 ) -> dict:
     """The top-N most likely CONFIGURATIONS of this NAMD run's free-sampling ensemble.
 
@@ -1136,6 +1153,8 @@ async def get_md_occupancy(
         n_clusters=n_clusters,
         basis=basis,
         refetch=refetch,
+        sampling=sampling,
+        density=density,
     )
 
 
@@ -1159,6 +1178,8 @@ async def post_md_occupancy(
         refetch=body.refetch,
         selection=body.selection,
         fit=body.fit,
+        sampling=body.sampling,
+        density=body.density,
     )
 
 
@@ -3990,7 +4011,9 @@ async def list_md_jobs() -> list[dict]:
         # than remaining frozen at the staged-input size until the final download.
         live = j.live_metrics or {}
         remote_is_authoritative = j.status in {
-            MdStatus.preparing, MdStatus.queued, MdStatus.running
+            MdStatus.preparing,
+            MdStatus.queued,
+            MdStatus.running,
         }
         if j.execution_target in {"alpine", "runpod"} and remote_is_authoritative:
             remote_total = live.get("total_size_bytes")
@@ -4006,7 +4029,8 @@ async def list_md_jobs() -> list[dict]:
             # plus the staged inputs and is the correct job-card disk footprint.
             verified_dcd = j.download_status.get("dcd_bytes")
             d["dcd_size_bytes"] = (
-                verified_dcd if isinstance(verified_dcd, int) and verified_dcd >= 0
+                verified_dcd
+                if isinstance(verified_dcd, int) and verified_dcd >= 0
                 else _local_dcd_bytes(j.package_dir(ws))
             )
         d["early_stop_pending"] = pending_early_stop(j.job_id)
@@ -4204,11 +4228,16 @@ async def finish_and_download_md_job(job_id: str, body: ArchiveRequest) -> dict:
 
     job = _load_job(job_id)
     if job.execution_target != "alpine":
-        raise HTTPException(400, "End run and download currently applies to Alpine runs.")
+        raise HTTPException(
+            400, "End run and download currently applies to Alpine runs."
+        )
     # A stop requested while Duo was disconnected is locally terminal but the allocation
     # may still be running and its output is still remote. Put it through the ordinary
     # stop path too; that drains the deferred scancel and fetches scratch before archival.
-    if job.status in {MdStatus.queued, MdStatus.running, MdStatus.preparing} or job.pending_scancel:
+    if (
+        job.status in {MdStatus.queued, MdStatus.running, MdStatus.preparing}
+        or job.pending_scancel
+    ):
         result = await stop_md_job(job_id)
         if result.get("pending_scancel"):
             raise HTTPException(
@@ -4222,7 +4251,9 @@ async def finish_and_download_md_job(job_id: str, body: ArchiveRequest) -> dict:
 
     mgr = cluster_ssh.get_manager()
     if not mgr.is_connected():
-        raise HTTPException(409, "Connect to Alpine to download and verify the run output.")
+        raise HTTPException(
+            409, "Connect to Alpine to download and verify the run output."
+        )
     job = _load_job(job_id)
     try:
         fetched = await md_executor.fetch_outputs(job, _workspace(), conn=mgr)
@@ -4247,7 +4278,9 @@ async def finish_and_download_md_job(job_id: str, body: ArchiveRequest) -> dict:
     # straight there, so starting another archive move would fail with "already archived"
     # even though the requested operation succeeded.
     requested_path = (Path(body.dest_root).expanduser() / job.job_id).resolve()
-    current_path = Path(job.archive_path).resolve() if job.archived and job.archive_path else None
+    current_path = (
+        Path(job.archive_path).resolve() if job.archived and job.archive_path else None
+    )
     if current_path == requested_path:
         return {
             "ok": True,
@@ -4263,8 +4296,12 @@ async def finish_and_download_md_job(job_id: str, body: ArchiveRequest) -> dict:
     except (ValueError, FileExistsError, FileNotFoundError) as exc:
         raise HTTPException(400, str(exc)) from exc
     return {
-        "ok": True, "job_id": job_id, "status": "completed", "action": "archive",
-        "verified": True, "download_status": job.download_status,
+        "ok": True,
+        "job_id": job_id,
+        "status": "completed",
+        "action": "archive",
+        "verified": True,
+        "download_status": job.download_status,
     }
 
 
@@ -4273,14 +4310,19 @@ async def md_download_status(job_id: str) -> dict:
     """Persisted, server-owned result-transfer truth; safe across browser reloads."""
     job = _load_job(job_id)
     if (job.download_status or {}).get("state") not in {
-        "verified", "downloading", "processing"
+        "verified",
+        "downloading",
+        "processing",
     }:
         from backend.core.md_executor import verify_local_download
 
         verify_local_download(job, _workspace())
     return job.download_status or {
-        "state": "not_verified", "total_bytes": None, "verified_bytes": 0,
-        "files_total": None, "files_verified": 0,
+        "state": "not_verified",
+        "total_bytes": None,
+        "verified_bytes": 0,
+        "files_total": None,
+        "files_verified": 0,
     }
 
 
@@ -4967,11 +5009,17 @@ async def _spawn_md_production_impl(
     )
 
     child = existing_child or new_job(
-        design_name=parent.design_name, protocol=parent.protocol,
-        name_stem=parent.name_stem, package_subdir=parent.package_subdir,
-        threads=parent.threads, devices=parent.devices,
-        design_source_path=parent.design_source_path, parent_job_id=parent.job_id,
-        ensemble_seed=seed, ensemble_index=index, run_kind="production",
+        design_name=parent.design_name,
+        protocol=parent.protocol,
+        name_stem=parent.name_stem,
+        package_subdir=parent.package_subdir,
+        threads=parent.threads,
+        devices=parent.devices,
+        design_source_path=parent.design_source_path,
+        parent_job_id=parent.job_id,
+        ensemble_seed=seed,
+        ensemble_index=index,
+        run_kind="production",
     )
     child.ensemble_seed = seed
     child.ensemble_index = index
@@ -5224,7 +5272,9 @@ async def update_md_job_settings(job_id: str, body: dict) -> dict:
         if job.run_kind == "production" or job.ensemble_index is not None:
             request = ProductionRunRequest(**body)
             if not job.parent_job_id:
-                raise HTTPException(400, "Production job has no parent to rebuild from.")
+                raise HTTPException(
+                    400, "Production job has no parent to rebuild from."
+                )
             result = await _spawn_md_production_impl(
                 job.parent_job_id, request, existing_child=job
             )
@@ -5252,7 +5302,9 @@ async def update_md_job_settings(job_id: str, body: dict) -> dict:
     request = CreateJobRequest(**params)
     design = None if seeded else _md_snapshot_design(job)
     if not seeded and design is None:
-        raise HTTPException(409, "This job has no frozen design snapshot to rebuild from.")
+        raise HTTPException(
+            409, "This job has no frozen design snapshot to rebuild from."
+        )
     name = job.design_name or "design"
     size_factor = 1.0 if seeded else design_size_factor(design)
 
@@ -5260,8 +5312,12 @@ async def update_md_job_settings(job_id: str, body: dict) -> dict:
     _reset_editable_runtime_state(job)
     job.runpod_pod_id = None
     _spawn_prep_job(
-        request, design=design, seeded=seeded, name=name,
-        size_factor=size_factor, existing_job=job,
+        request,
+        design=design,
+        seeded=seeded,
+        name=name,
+        size_factor=size_factor,
+        existing_job=job,
     )
     return MdJob.load(job_id, _workspace()).to_dict()
 
@@ -6208,7 +6264,9 @@ async def refit_md_job(job_id: str, body: RefitRequest) -> dict:
         size_factor=size_factor,
         parent_job_id=job_id,
     )
-    logger.info("refit %s → new job %s (force_soft=%s)", job_id, job.job_id, new_body.force_soft)
+    logger.info(
+        "refit %s → new job %s (force_soft=%s)", job_id, job.job_id, new_body.force_soft
+    )
     return {
         "ok": True,
         "job_id": job.job_id,

@@ -249,5 +249,8 @@ class TestChildInheritsTheVerdict:
 
         from backend.api import routes_md
 
-        for fn in (routes_md.spawn_md_production, routes_md.append_md_production):
+        # spawn_md_production is intentionally a thin FastAPI wrapper; the cohesive
+        # implementation moved into _spawn_md_production_impl. Inspect the behavior
+        # owner rather than requiring the composition wrapper to duplicate the guard.
+        for fn in (routes_md._spawn_md_production_impl, routes_md.append_md_production):
             assert "_assert_cell_fits_a_free_run" in inspect.getsource(fn), fn.__name__

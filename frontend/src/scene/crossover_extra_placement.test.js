@@ -57,8 +57,8 @@ describe('crossover extra-base placement abstraction', () => {
     const twoForward = buildCrossoverExtraPlacements(twoArgs)
     const twoReverse = buildCrossoverExtraPlacements({ ...twoArgs, localFrameReversed: true })
     twoForward.forEach((placement, i) => {
-      expect(twoReverse[i].sourceCenter.distanceTo(placement.sourceCenter)).toBeLessThan(1e-14)
-      expect(twoReverse[i].frameQuaternion.angleTo(placement.frameQuaternion)).toBeLessThan(1e-14)
+      expect(twoReverse[i].sourceCenter.distanceTo(placement.sourceCenter)).toBeGreaterThan(0.05)
+      expect(twoReverse[i].frameQuaternion.angleTo(placement.frameQuaternion)).toBeGreaterThan(0.1)
     })
   })
 })

@@ -19,7 +19,10 @@ import numpy as np
 from backend.core.atomistic_helpers import crossover_extra_base_placements
 
 
-_AUTHORIZED_PRODUCTION_FINGERPRINT = "4e3ffde2ff3f487652a3622a436c107a"
+# Owner-authorized 2026-08-12 after v7 Molecular Placement Audit review on
+# 2hb_2xT, 6hb_2xT, and 2x3SQx32_2xT. The v6 rigid-residue pose fingerprint is
+# unchanged; v7 adds only the final symmetric flexible-phosphate clearance.
+_AUTHORIZED_PRODUCTION_FINGERPRINT = "da9995a2db1889e6d08ced945ebf6832"
 
 
 def _placement_fingerprint() -> str:
@@ -34,6 +37,8 @@ def _placement_fingerprint() -> str:
         (1, True, True),
         (2, False, False),
         (2, True, False),
+        (2, False, True),
+        (2, True, True),
         (3, False, False),
         (3, True, False),
     ]

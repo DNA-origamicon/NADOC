@@ -1,8 +1,9 @@
 /**
  * Help ▸ Molecular Placement Audit — isolated four-panel A/B geometry review.
  *
- * The candidate design comes from a read-only backend route and is rendered only in
- * private mini-scenes. It never enters the app store, persistence, export, or simulation.
+ * The comparison comes from a read-only backend route and is rendered only in private
+ * mini-scenes. For a 2xT audit, both panels show Production v7 until another isolated
+ * placement proposal exists; opening the audit never mutates app state.
  */
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
@@ -19,7 +20,7 @@ const PANEL_DEFS = [
   { id: 'current', title: 'Current', note: 'Production geometry', representation: 'full' },
   { id: 'candidate', title: 'Candidate', note: 'Diagnostic baseline — not authorized', representation: 'full' },
   { id: 'difference', title: 'Difference', note: 'Current cyan · affected candidate magenta', representation: 'ballstick' },
-  { id: 'defects', title: 'Piercings / clashes', note: 'Exact detector atoms · synchronized camera', representation: 'ballstick' },
+  { id: 'defects', title: 'Constraint planes / defects', note: 'Orange: proposed midpoint-bp planes', representation: 'ballstick' },
 ]
 
 export function filterAuditAtomData(data, serials) {
@@ -42,7 +43,7 @@ export function auditMetricRows(bundle) {
   const cur = bundle.current.diagnostics
   const cand = bundle.candidate.diagnostics
   const arrow = (a, b) => `${a} → ${b}`
-  return [
+  const rows = [
     ['Provider', bundle.provider.label, ''],
     ['Displaced atoms', bundle.displacement.n_displaced, bundle.displacement.n_displaced ? '' : 'good'],
     ['Max displacement', `${bundle.displacement.max_nm.toFixed(3)} nm`, ''],
@@ -50,6 +51,33 @@ export function auditMetricRows(bundle) {
     ['Clashes', arrow(cur.n_clashes, cand.n_clashes), cand.n_clashes ? 'bad' : 'good'],
     ['Max bond', arrow(cur.bonds.max_length_nm.toFixed(3), `${cand.bonds.max_length_nm.toFixed(3)} nm`), cand.bonds.n_overstretched ? 'bad' : 'good'],
   ]
+  const targetClashes = bundle.proposal_validation?.target_external_clashes
+  if (targetClashes) rows.splice(5, 0, [
+    'Target clashes', arrow(targetClashes.current, targetClashes.candidate),
+    targetClashes.candidate ? 'bad' : 'good',
+  ])
+  const targetPiercings = bundle.proposal_validation?.target_ring_piercings
+  if (targetPiercings) rows.splice(5, 0, [
+    'Target ring piercings', arrow(targetPiercings.current, targetPiercings.candidate),
+    targetPiercings.candidate ? 'bad' : 'good',
+  ])
+  const targetStretches = bundle.proposal_validation?.target_overstretched_bonds
+  if (targetStretches) rows.splice(5, 0, [
+    'Target overstretched bonds', arrow(targetStretches.current, targetStretches.candidate),
+    targetStretches.candidate ? 'bad' : 'good',
+  ])
+  const planeViolations = bundle.midpoint_plane_violations
+  if (planeViolations) rows.splice(5, 0, [
+    'Plane-crossing atoms', arrow(planeViolations.current.length, planeViolations.candidate.length),
+    planeViolations.candidate.length ? 'bad' : 'good',
+  ])
+  const junctionBonds = bundle.proposal_validation?.junction_bonds
+  if (junctionBonds) rows.push([
+    'Worst insert junction bond',
+    arrow(junctionBonds.current.max_length_nm.toFixed(3), `${junctionBonds.candidate.max_length_nm.toFixed(3)} nm`),
+    junctionBonds.candidate.max_length_nm > 0.3 ? 'bad' : 'good',
+  ])
+  return rows
 }
 
 export function auditDefectRows(bundle) {
@@ -231,6 +259,58 @@ function _addDisplacements(root, vectors) {
   root.add(lines)
 }
 
+export function addPlaneViolationMarkers(root, data, violations = [], color = 0xff3355) {
+  const geometry = new THREE.SphereGeometry(0.075, 14, 10)
+  const material = new THREE.MeshBasicMaterial({
+    color, wireframe: true, transparent: true, opacity: 1, depthTest: false,
+  })
+  for (const violation of violations) {
+    const atom = data?.atoms?.[violation.serial]
+    if (!atom) continue
+    const marker = new THREE.Mesh(geometry, material.clone())
+    marker.position.set(atom.x, atom.y, atom.z)
+    marker.renderOrder = 35
+    marker.userData.midpointPlaneViolation = violation
+    root.add(marker)
+  }
+}
+
+export function addMidpointConstraintPlanes(root, planes = []) {
+  const fillMaterial = new THREE.MeshBasicMaterial({
+    color: 0xff9f1c, transparent: true, opacity: 0.2, side: THREE.DoubleSide,
+    depthWrite: false, depthTest: false,
+  })
+  const edgeMaterial = new THREE.LineBasicMaterial({
+    color: 0xffb347, transparent: true, opacity: 0.95, depthTest: false,
+  })
+  for (const plane of planes) {
+    const radius = Math.max(Number(plane.radius_nm) || 0, 0.1)
+    const normal = new THREE.Vector3(...plane.normal).normalize()
+    const quaternion = new THREE.Quaternion().setFromUnitVectors(
+      new THREE.Vector3(0, 0, 1), normal,
+    )
+    const disk = new THREE.Mesh(new THREE.CircleGeometry(radius, 48), fillMaterial.clone())
+    disk.position.set(...plane.origin)
+    disk.quaternion.copy(quaternion)
+    disk.renderOrder = 30
+    disk.userData.midpointConstraintPlane = plane
+    root.add(disk)
+
+    const ringPoints = Array.from({ length: 64 }, (_, i) => {
+      const angle = 2 * Math.PI * i / 64
+      return new THREE.Vector3(radius * Math.cos(angle), radius * Math.sin(angle), 0)
+    })
+    const ring = new THREE.LineLoop(
+      new THREE.BufferGeometry().setFromPoints(ringPoints), edgeMaterial.clone(),
+    )
+    ring.position.copy(disk.position)
+    ring.quaternion.copy(quaternion)
+    ring.renderOrder = 31
+    ring.userData.midpointConstraintPlaneEdge = plane
+    root.add(ring)
+  }
+}
+
 export function copyAuditCameraState(source, target) {
   target.camera.position.copy(source.camera.position)
   target.camera.quaternion.copy(source.camera.quaternion)
@@ -294,6 +374,7 @@ export function createAuditPanelViewer(host, panelId, bundle, initialRepresentat
 
   let representation = initialRepresentation
   let layers = []
+  let constraintPlanesVisible = true
   let alive = true
   let raf = null
   const markerRoot = new THREE.Group()
@@ -341,14 +422,35 @@ export function createAuditPanelViewer(host, panelId, bundle, initialRepresentat
       _addClashMarkers(markerRoot, bundle.candidate, bundle.candidate.diagnostics, 0xff3355)
       _addDisplacements(markerRoot, bundle.displacement.vectors)
     } else {
-      const currentSerials = bundle.defect_atom_serials.current
-      const candidateSerials = bundle.defect_atom_serials.candidate
+      // The plane is being reviewed as a future placement constraint, so always show
+      // every moved insert on both sides of it. Detector atoms are added to that focus,
+      // rather than being the only geometry visible in a clean junction.
+      const currentSerials = [...new Set([
+        ...(bundle.defect_atom_serials.current ?? []),
+        ...(bundle.affected_atom_serials ?? []),
+      ])]
+      const candidateSerials = [...new Set([
+        ...(bundle.defect_atom_serials.candidate ?? []),
+        ...(bundle.affected_atom_serials ?? []),
+      ])]
       if (currentSerials.length) addLayer('current', { serials: currentSerials })
       if (candidateSerials.length) addLayer('candidate', { serials: candidateSerials })
       _addPiercingMarkers(markerRoot, bundle.current, bundle.current.diagnostics, 0x2f81f7)
       _addPiercingMarkers(markerRoot, bundle.candidate, bundle.candidate.diagnostics, 0xff3355)
       _addClashMarkers(markerRoot, bundle.current, bundle.current.diagnostics, 0x2f81f7)
       _addClashMarkers(markerRoot, bundle.candidate, bundle.candidate.diagnostics, 0xff3355)
+      addPlaneViolationMarkers(
+        markerRoot, bundle.current, bundle.midpoint_plane_violations?.current, 0xffd33d,
+      )
+      addPlaneViolationMarkers(
+        markerRoot, bundle.candidate, bundle.midpoint_plane_violations?.candidate, 0xff3355,
+      )
+    }
+    addMidpointConstraintPlanes(markerRoot, bundle.midpoint_constraint_planes)
+    for (const child of markerRoot.children) {
+      if (child.userData.midpointConstraintPlane || child.userData.midpointConstraintPlaneEdge) {
+        child.visible = constraintPlanesVisible
+      }
     }
   }
 
@@ -377,6 +479,14 @@ export function createAuditPanelViewer(host, panelId, bundle, initialRepresentat
     camera,
     controls,
     setRepresentation: rebuild,
+    setConstraintPlanesVisible(visible) {
+      constraintPlanesVisible = !!visible
+      for (const child of markerRoot.children) {
+        if (child.userData.midpointConstraintPlane || child.userData.midpointConstraintPlaneEdge) {
+          child.visible = constraintPlanesVisible
+        }
+      }
+    },
     fit() {
       _fitCamera(camera, controls, _panelBounds(bundle, panelId))
     },
@@ -473,19 +583,28 @@ export function initMolecularPlacementAudit({
       bundle.strand_colors = auditStrandColorMap(bundle, getColorState())
       grid.innerHTML = ''
       for (const def of PANEL_DEFS) {
+        const promotedLabels = bundle.provider?.panel_labels ?? {}
+        const title = promotedLabels[def.id] ?? def.title
+        const providerNotes = bundle.provider?.panel_notes ?? {}
+        const note = providerNotes[def.id]
+          ?? (bundle.provider?.promoted_to_production && def.id === 'candidate'
+            ? 'Active production default' : def.note)
+        const initialRepresentation = bundle.provider?.panel_representations?.[def.id]
+          ?? def.representation
         const panel = document.createElement('section')
         panel.className = 'mpa-panel'
         panel.dataset.panel = def.id
         panel.innerHTML = `<div class="mpa-panel-head">
-          <span class="mpa-panel-title">${def.title}</span>
-          <span class="mpa-panel-note">${def.note}</span>
-          <select class="mpa-representation" aria-label="${def.title} representation">
-            <option value="full" ${def.representation === 'full' ? 'selected' : ''}>Full</option>
-            <option value="ballstick" ${def.representation === 'ballstick' ? 'selected' : ''}>Ball and Stick</option>
+          <span class="mpa-panel-title">${title}</span>
+          <span class="mpa-panel-note">${note}</span>
+          <label class="mpa-plane-toggle"><input type="checkbox" checked> Midpoint plane</label>
+          <select class="mpa-representation" aria-label="${title} representation">
+            <option value="full" ${initialRepresentation === 'full' ? 'selected' : ''}>Full</option>
+            <option value="ballstick" ${initialRepresentation === 'ballstick' ? 'selected' : ''}>Ball and Stick</option>
           </select></div><div class="mpa-canvas-host"></div>`
         grid.appendChild(panel)
         const viewer = viewerFactory(
-          panel.querySelector('.mpa-canvas-host'), def.id, bundle, def.representation,
+          panel.querySelector('.mpa-canvas-host'), def.id, bundle, initialRepresentation,
         )
         if (def.id === 'defects') {
           const status = document.createElement('div')
@@ -493,8 +612,14 @@ export function initMolecularPlacementAudit({
           const rows = auditDefectRows(bundle)
           if (!rows.length) {
             status.classList.add('clean')
-            status.textContent = 'No ring piercing or heavy-atom clash detected in either model.'
+            const pv = bundle.midpoint_plane_violations
+            status.textContent = `${bundle.midpoint_constraint_planes?.length ?? 0} orange midpoint-bp plane(s) · crossing atoms ${pv?.current?.length ?? 0} → ${pv?.candidate?.length ?? 0}. No ring piercing or heavy-atom clash detected.`
           } else {
+            const planeLine = document.createElement('div')
+            planeLine.className = 'mpa-constraint-row'
+            const pv = bundle.midpoint_plane_violations
+            planeLine.textContent = `${bundle.midpoint_constraint_planes?.length ?? 0} orange midpoint-bp plane(s) · crossing atoms ${pv?.current?.length ?? 0} → ${pv?.candidate?.length ?? 0} · yellow/red wire spheres mark violations.`
+            status.appendChild(planeLine)
             for (const row of rows.slice(0, 4)) {
               const line = document.createElement('div')
               line.className = `mpa-defect-row ${row.kind}`
@@ -511,6 +636,9 @@ export function initMolecularPlacementAudit({
         }
         panel.querySelector('.mpa-representation').addEventListener('change', event => {
           viewer.setRepresentation(event.target.value)
+        })
+        panel.querySelector('.mpa-plane-toggle input').addEventListener('change', event => {
+          viewer.setConstraintPlanesVisible?.(event.target.checked)
         })
         viewers.push(viewer)
       }
