@@ -234,10 +234,12 @@ export function initAtomisticRenderer(scene) {
 
     const useImpostors = impostorsEnabled()
 
-    // Stick is deliberately the same atomistic data/color/material pipeline as
-    // ball-and-stick, with only its atom meshes omitted. Bonds remain colored
-    // from their endpoint atoms below, so CPK/strand/base/cluster modes match.
-    if (_state.mode !== 'stick') for (const [el, rows] of Object.entries(buckets)) {
+    // Stick uses the same atom instances as ball-and-stick for picking, lasso,
+    // live selection glow, and animated positions.  Its instances are deliberately
+    // NOT attached to the scene, so they never render, cast shadows, or enter photo
+    // mode; they are CPU-side pick proxies only. Keeping them here is what gives Stick
+    // the complete atomistic selection surface without putting the balls back on screen.
+    for (const [el, rows] of Object.entries(buckets)) {
       if (!rows.length) continue
       const meta = ELEMENTS[el] ?? DEFAULT_ELEMENT
       const radius = (isVdw ? meta.vdw : BALL_RADIUS) * _vdwScale
@@ -267,7 +269,7 @@ export function initAtomisticRenderer(scene) {
       // InstancedMesh.raycast would test the un-billboarded quad. Swap in a
       // ray-vs-sphere test against the instance centres.
       if (useImpostors) installSphereImpostorRaycast(mesh, radius)
-      _state.scene.add(mesh)
+      if (_state.mode !== 'stick') _state.scene.add(mesh)
       _state.elementMeshes[el] = mesh
       _state.elementAtoms[el]  = group
       _state.elementScale[el]  = scale

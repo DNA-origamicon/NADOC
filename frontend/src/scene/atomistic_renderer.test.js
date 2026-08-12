@@ -59,6 +59,69 @@ describe('atomistic_renderer stick representation', () => {
     expect(_bondMesh(scene)?.count).toBe(1)
     expect(bondCylinderScaleY(scene)).toBeCloseTo(0.15, 5)
   })
+
+  it('keeps the ball-and-stick atom selection surface without rendering balls', () => {
+    const scene = new THREE.Scene()
+    const ar = initAtomisticRenderer(scene)
+    ar.setMode('stick')
+    ar.update({
+      atoms: [
+        { serial: 0, element: 'P', strand_id: 's0', helix_id: 'h0', bp_index: 3,
+          direction: 'FORWARD', copy_k: 0, x: 0, y: 0, z: 0 },
+        { serial: 1, element: 'O', strand_id: 's0', helix_id: 'h0', bp_index: 3,
+          direction: 'FORWARD', copy_k: 0, x: 0.15, y: 0, z: 0 },
+      ],
+      bonds: [[0, 1]],
+    })
+
+    // The atom instances exist privately for every interaction that ball-and-stick
+    // supports, but are absent from the rendered scene.
+    expect(scene.children.filter(o => o.name === 'atomSpheres')).toHaveLength(0)
+    const visited = []
+    ar.visitAtoms((atom, pos) => visited.push([atom.serial, ...pos.toArray()]))
+    expect(visited).toHaveLength(2)
+    expect(visited[0]).toEqual([0, 0, 0, 0])
+    expect(visited[1][0]).toBe(1)
+    expect(visited[1][1]).toBeCloseTo(0.15, 6)
+    expect(visited[1].slice(2)).toEqual([0, 0])
+    expect(ar.selectionAtomEntries([
+      { helix_id: 'h0', bp_index: 3, direction: 'FORWARD', copy_k: 0 },
+    ])).toHaveLength(2)
+
+    // Click picking uses the same BALL_RADIUS hit target as ball-and-stick.
+    const raycaster = new THREE.Raycaster(
+      new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, -1),
+    )
+    expect(ar.raycastPick(raycaster)?.atom.serial).toBe(0)
+    ar.dispose()
+  })
+
+  it('highlights selected sticks through the shared atomistic color resolver', () => {
+    const scene = new THREE.Scene()
+    const ar = initAtomisticRenderer(scene)
+    ar.setMode('stick')
+    ar.update({
+      atoms: [
+        { serial: 0, element: 'P', strand_id: 'selected', helix_id: 'h0', bp_index: 0,
+          direction: 'FORWARD', x: 0, y: 0, z: 0 },
+        { serial: 1, element: 'O', strand_id: 'selected', helix_id: 'h0', bp_index: 0,
+          direction: 'FORWARD', x: 0.15, y: 0, z: 0 },
+        { serial: 2, element: 'P', strand_id: 'other', helix_id: 'h1', bp_index: 0,
+          direction: 'FORWARD', x: 1, y: 0, z: 0 },
+        { serial: 3, element: 'O', strand_id: 'other', helix_id: 'h1', bp_index: 0,
+          direction: 'FORWARD', x: 1.15, y: 0, z: 0 },
+      ],
+      bonds: [[0, 1], [2, 3]],
+    })
+    ar.highlight({ type: 'strand', data: { strand_id: 'selected' } })
+    const selected = new THREE.Color()
+    const other = new THREE.Color()
+    _bondMesh(scene).getColorAt(0, selected)
+    _bondMesh(scene).getColorAt(1, other)
+    expect(selected.getHex()).toBe(0xffffff)
+    expect(other.getHex()).not.toBe(0xffffff)
+    ar.dispose()
+  })
 })
 
 describe('atomistic_renderer applyPositionLerp bond cutoff', () => {

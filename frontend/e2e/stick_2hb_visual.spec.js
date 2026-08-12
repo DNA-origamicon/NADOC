@@ -42,6 +42,32 @@ test('F8 renders the 2HB as sticks without atom balls', async ({ page }) => {
   })
   expect(counts.spheres).toBe(0)
   expect(counts.bonds).toBeGreaterThan(100)
+
+  // Selection is driven through the same store subscription as a real atom click.
+  // The selected strand's sticks must turn white while the private atom pick proxies
+  // remain absent from the rendered scene.
+  const highlight = await page.evaluate(() => {
+    const ar = window.__nadocTest.getAtomisticRenderer()
+    let strandId = null
+    ar.visitAtoms(atom => { strandId ??= atom.strand_id })
+    window.__nadocTest.store.setState({
+      selectedObject: { type: 'strand', id: strandId, data: { strand_id: strandId } },
+    })
+    let whiteBonds = 0; let spheres = 0
+    window.__nadocTest.scene.traverse(o => {
+      if (o.name === 'atomSpheres') spheres += o.count ?? 0
+      if (o.name !== 'atomBonds') return
+      const color = o.material.color.clone()
+      for (let i = 0; i < o.count; i++) {
+        o.getColorAt(i, color)
+        if (color.getHex() === 0xffffff) whiteBonds++
+      }
+    })
+    return { strandId, whiteBonds, spheres }
+  })
+  expect(highlight.strandId).toBeTruthy()
+  expect(highlight.whiteBonds).toBeGreaterThan(0)
+  expect(highlight.spheres).toBe(0)
   expect(consoleErrors).toEqual([])
-  await page.screenshot({ path: 'playwright-report/stick_2hb.png', fullPage: true })
+  await page.screenshot({ path: 'playwright-report/stick_2hb_selected.png', fullPage: true })
 })
