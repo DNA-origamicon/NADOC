@@ -21,11 +21,34 @@ import pytest
 
 from backend.core import md_executor
 from backend.core import runpod_executor as rx
-from backend.core.md_job import MdJob, MdSegmentStatus, MdStatus, new_job
+from backend.core.md_job import (
+    MdJob,
+    MdSegmentStatus,
+    MdStatus,
+    finish_runpod_billing,
+    new_job,
+    start_runpod_billing,
+)
 from backend.core.runpod_api import RunpodClient, RunpodError
 from backend.core.runpod_conn import RunpodConnection
 
 VOLUME = "77pnhye88p"
+
+
+def test_runpod_billing_sessions_accumulate_and_freeze_final_cost(tmp_path):
+    job = _job(tmp_path, 0)
+    start_runpod_billing(job, "pod-a", 0.72, now=1_000)
+    start_runpod_billing(job, "pod-a", 0.74, now=1_100)  # idempotent; refreshes rate
+    assert len(job.runpod_billing_sessions) == 1
+    assert finish_runpod_billing(job, "pod-a", now=4_600) == pytest.approx(0.74)
+
+    start_runpod_billing(job, "pod-b", 1.0, now=5_000)
+    job.status = MdStatus.completed
+    assert finish_runpod_billing(job, "pod-b", now=6_800) == pytest.approx(1.24)
+    assert job.runpod_final_cost_usd == pytest.approx(1.24)
+    job.save(tmp_path)
+    loaded = MdJob.load(job.job_id, tmp_path)
+    assert loaded.runpod_final_cost_usd == pytest.approx(1.24)
 
 
 def _run(coro):
@@ -110,6 +133,17 @@ def _conn(responses=None) -> RunpodConnection:
     c = RunpodConnection(host="h", port=1, pod_id="p1")
     c._conn = FakeSSH(responses)  # noqa: SLF001
     return c
+
+
+def test_sftp_put_reports_transferred_bytes(tmp_path):
+    source = tmp_path / "payload.bin"
+    source.write_bytes(b"x" * (300 * 1024))
+    updates = []
+
+    _run(_conn().sftp_put(str(source), "/workspace/payload.bin", on_progress=lambda done, total: updates.append((done, total))))
+
+    assert updates[-1] == (300 * 1024, 300 * 1024)
+    assert len(updates) == 2
 
 
 # ── Sizing ───────────────────────────────────────────────────────────────────

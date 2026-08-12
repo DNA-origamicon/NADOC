@@ -43,7 +43,10 @@ from pydantic import BaseModel, Field
 from backend.api.assembly import _WORKSPACE_DIR
 from backend.api import state as design_state
 from backend.core import runpod_api, runpod_preflight
-from backend.core.md_vram import estimate_profile_from_design
+from backend.core.md_vram import (
+    estimate_atoms_from_design_geometry,
+    estimate_profile_from_design,
+)
 from backend.core.runpod_api import RunpodClient, RunpodError
 from backend.core.runpod_script import (
     DEFAULT_BUDGET_USD,
@@ -540,7 +543,7 @@ async def gpu_options(body: GpuOptionsRequest | None = None):
     n_atoms = body.n_atoms if body else None
     if not n_atoms:
         try:
-            design = design_state.get_or_404()
+            design = design_state.get_or_404().without_reference_geometry()
             profile = await run_in_threadpool(estimate_profile_from_design, design)
             if profile:
                 n_atoms = (
@@ -643,17 +646,11 @@ async def job_preview(body: JobPreviewRequest | None = None):
     if not n_atoms:
         source = "estimated"
         try:
-            design = design_state.get_or_404()
+            design = design_state.get_or_404().without_reference_geometry()
             kwargs = {"padding_nm": body.padding_nm} if body.padding_nm else {}
-            profile = await run_in_threadpool(
-                partial(estimate_profile_from_design, design, **kwargs)
+            n_atoms = await run_in_threadpool(
+                partial(estimate_atoms_from_design_geometry, design, **kwargs)
             )
-            if profile:
-                n_atoms = (
-                    profile["dna_atoms"]
-                    + profile["full_water"] * 3
-                    + profile["ion_atoms"]
-                )
         except Exception:  # noqa: BLE001 — includes get_or_404's HTTPException, deliberately
             # The wizard re-asks this on EVERY debounced plan refresh, including before a
             # design is open. Letting `get_or_404` propagate would turn "you haven't loaded a
@@ -688,6 +685,7 @@ async def job_preview(body: JobPreviewRequest | None = None):
             production_timestep_fs=body.production_timestep_fs,
             stock=stock,
             registry=load_rate_registry(),
+            show_ineligible=True,
         )
     except ValueError as exc:  # unknown build
         raise HTTPException(400, str(exc)) from exc

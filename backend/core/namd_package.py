@@ -77,6 +77,7 @@ def build_namd_package(
     ``allow_ring_pierced_seed`` builds even when a covalent bond pierces a nucleotide
     ring. Off by default — see :func:`backend.core.ring_piercing.gate_seed_piercing`.
     """
+    design = design.without_reference_geometry()
     _check_ff_files()
 
     name = (design.metadata.name or "design").replace(" ", "_")

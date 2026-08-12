@@ -17,6 +17,7 @@ from backend.api.main import app
 from backend.core.models import ClusterRigidTransform, DeformationLogEntry
 from backend.core.oxdna_job import OxdnaStatus, new_oxdna_job
 from backend.core.oxdna_staleness import (
+    current_active_design_fingerprint,
     effective_feature_log_position,
     job_out_of_date,
     oxdna_design_fingerprint,
@@ -70,6 +71,29 @@ def test_fingerprint_ignores_display_only_fields():
     assert oxdna_design_fingerprint(moved_cluster) == fp
     cursor_moved = d.copy_with(feature_log_cursor=3)
     assert oxdna_design_fingerprint(cursor_moved) == fp
+
+
+def test_current_fingerprint_cached_until_design_revision_changes(monkeypatch):
+    """Frequent job-card polls hash a large unchanged design only once."""
+    from backend.core import oxdna_staleness
+
+    calls = 0
+    real = oxdna_staleness.design_build_fingerprint
+
+    def counted(design):
+        nonlocal calls
+        calls += 1
+        return real(design)
+
+    monkeypatch.setattr(oxdna_staleness, "design_build_fingerprint", counted)
+    design_state.set_design(make_6hb_design())
+    first = current_active_design_fingerprint()
+    assert current_active_design_fingerprint() == first
+    assert calls == 1
+
+    design_state.set_design(make_6hb_design().copy_with(strands=[]))
+    assert current_active_design_fingerprint() != first
+    assert calls == 2
 
 
 # ── Feature-log roll position ─────────────────────────────────────────────────

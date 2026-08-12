@@ -128,6 +128,26 @@ class TestStopDestroysThePod:
 
 
 class TestOrphanReaper:
+    def test_ignores_a_nadoc_pod_owned_by_another_computer(self, monkeypatch):
+        monkeypatch.setenv("NADOC_INSTANCE_ID", "this-computer")
+        from backend.core.runpod_identity import installation_id
+        installation_id.cache_clear()
+
+        class C(FakeClient):
+            async def list_pods(self):
+                from backend.core.runpod_api import parse_pod
+                return [parse_pod({
+                    "id": "foreign", "desiredStatus": "RUNNING",
+                    "name": "nadoc-i-othercomputer-design-job",
+                })]
+
+        c = C()
+        killed, adopted = _run(sup.reap_orphan_pods(c))
+        assert killed == []
+        assert adopted == []
+        assert c.terminated == []
+        installation_id.cache_clear()
+
     def test_reaps_a_nadoc_pod_nobody_is_tracking(self):
         """A dev-server reload or a crash orphans the pod: it keeps running, keeps
         billing, and nothing is watching it."""
@@ -141,7 +161,7 @@ class TestOrphanReaper:
                         {
                             "id": "ghost",
                             "desiredStatus": "RUNNING",
-                            "name": "nadoc-6hb-abc",
+                            "name": f"nadoc-i-{__import__('backend.core.runpod_identity', fromlist=['installation_id']).installation_id()}-6hb-abc",
                         }
                     )
                 ]
@@ -183,7 +203,7 @@ class TestOrphanReaper:
                         {
                             "id": "zombie",
                             "desiredStatus": "EXITED",
-                            "name": "nadoc-6hb-abc",
+                            "name": f"nadoc-i-{__import__('backend.core.runpod_identity', fromlist=['installation_id']).installation_id()}-6hb-abc",
                         }
                     )
                 ]
@@ -204,7 +224,7 @@ class TestOrphanReaper:
                         {
                             "id": "gone",
                             "desiredStatus": "TERMINATED",
-                            "name": "nadoc-6hb-abc",
+                            "name": f"nadoc-i-{__import__('backend.core.runpod_identity', fromlist=['installation_id']).installation_id()}-6hb-abc",
                         }
                     )
                 ]
@@ -483,7 +503,12 @@ class TestTheWizardsChoicesSurvive:
         job.save(tmp_path)
         path = job.job_dir(tmp_path) / "job.json"
         raw = json.loads(path.read_text())
-        for k in ("runpod_gpu_key", "runpod_budget_usd", "runpod_volume_id"):
+        for k in (
+            "runpod_gpu_key", "runpod_budget_usd", "runpod_volume_id",
+            "runpod_estimated_cost_usd", "runpod_quoted_rate_usd_per_hour",
+            "runpod_current_rate_usd_per_hour", "runpod_billing_sessions",
+            "runpod_final_cost_usd",
+        ):
             raw.pop(k, None)
         path.write_text(json.dumps(raw))
 
@@ -491,6 +516,7 @@ class TestTheWizardsChoicesSurvive:
         assert back.runpod_gpu_key is None
         assert back.runpod_budget_usd is None
         assert back.runpod_volume_id is None
+        assert back.runpod_billing_sessions == []
 
     def test_the_choices_round_trip(self, tmp_path):
         from backend.core.md_job import MdJob
@@ -499,12 +525,16 @@ class TestTheWizardsChoicesSurvive:
         job.runpod_gpu_key = "NVIDIA RTX 6000 Ada Generation"
         job.runpod_budget_usd = 7.5
         job.runpod_volume_id = "77pnhye88p"
+        job.runpod_estimated_cost_usd = 8.75
+        job.runpod_quoted_rate_usd_per_hour = 0.69
         job.save(tmp_path)
 
         back = MdJob.load(job.job_id, tmp_path)
         assert back.runpod_gpu_key == "NVIDIA RTX 6000 Ada Generation"
         assert back.runpod_budget_usd == 7.5
         assert back.runpod_volume_id == "77pnhye88p"
+        assert back.runpod_estimated_cost_usd == 8.75
+        assert back.runpod_quoted_rate_usd_per_hour == 0.69
 
 
 class TestRunpodGpuResidentDefault:
@@ -552,9 +582,11 @@ class TestAClaimedPodIsNotAnOrphan:
     pod exists.
     """
 
-    def _pod(self, pid="pod-live", name="nadoc-2hb-abc"):
+    def _pod(self, pid="pod-live", name=None):
         from backend.core.runpod_api import parse_pod
+        from backend.core.runpod_identity import installation_id
 
+        name = name or f"nadoc-i-{installation_id()}-2hb-abc"
         return parse_pod({"id": pid, "desiredStatus": "RUNNING", "name": name})
 
     def _client(self, pods):

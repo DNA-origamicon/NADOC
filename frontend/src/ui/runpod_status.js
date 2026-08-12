@@ -126,6 +126,58 @@ export function renderPodRows(pods) {
     .join('')
 }
 
+const _num = value => value == null || value === '' ? NaN : Number(value)
+const _money = value => Number.isFinite(_num(value)) ? `$${_num(value).toFixed(2)}` : '—'
+
+/** Selected-job billing view. Empty for a deselection or a non-RunPod job. */
+export function runpodJobCostView(job, { balance = null, pods = [], nowMs = Date.now() } = {}) {
+  if (!job || job.execution_target !== 'runpod') return null
+  const sessions = Array.isArray(job.runpod_billing_sessions) ? job.runpod_billing_sessions : []
+  let spent = 0
+  for (const s of sessions) {
+    const fixed = _num(s?.cost_usd)
+    if (Number.isFinite(fixed)) { spent += fixed; continue }
+    const rate = _num(s?.usd_per_hour)
+    const start = _num(s?.started_at)
+    const end = _num(s?.ended_at) || nowMs / 1000
+    if (Number.isFinite(rate) && Number.isFinite(start) && end >= start) {
+      spent += rate * (end - start) / 3600
+    }
+  }
+  const finalCost = _num(job.runpod_final_cost_usd)
+  if (job.status === 'completed') {
+    return {
+      completed: true,
+      rows: [['Actual final cost', _money(Number.isFinite(finalCost) ? finalCost : spent)]],
+    }
+  }
+  const pod = (pods || []).find(p => p?.id && p.id === job.runpod_pod_id)
+  const currentRate = _num(pod?.cost_per_hr ?? job.runpod_current_rate_usd_per_hour)
+  const bal = balance?.available === true ? _num(balance.balance) : NaN
+  return {
+    completed: false,
+    rows: [
+      ['Current balance', _money(bal)],
+      ['Estimated total cost', _money(job.runpod_estimated_cost_usd)],
+      ['Rented GPU rate', Number.isFinite(currentRate) ? `${_money(currentRate)}/hr` : 'Not rented'],
+      ['Spent on this job', _money(spent)],
+    ],
+  }
+}
+
+export function renderRunpodJobCost(job, state) {
+  const view = runpodJobCostView(job, state)
+  if (!view) return ''
+  return `<div data-runpod-job-cost style="margin-top:6px;border:1px solid #30363d;`+
+    `border-radius:4px;padding:6px;background:#090c10">`+
+    `<div style="font-size:10px;color:#c9d1d9;font-weight:600;margin-bottom:4px">`+
+    `${view.completed ? 'RunPod cost' : 'Selected job cost'}</div>`+
+    view.rows.map(([label, value]) => `<div style="display:flex;justify-content:space-between;`+
+      `gap:12px;font-size:10px;line-height:1.55"><span style="color:#8b949e">${label}</span>`+
+      `<span style="color:#c9d1d9;font-family:var(--font-mono)">${value}</span></div>`).join('')+
+    `</div>`
+}
+
 /**
  * Factory. Owns the pre-flight state and the DOM inside the Clusters card.
  *
@@ -141,6 +193,8 @@ export function initRunpodStatus({
 } = {}) {
   let _preflight = null
   let _pods = []
+  let _balance = null
+  let _job = null
   let _busy = false
   let _killing = null
 
@@ -179,6 +233,7 @@ export function initRunpodStatus({
              </div>`
           : ''
       }
+      ${renderRunpodJobCost(_job, { balance: _balance, pods: _pods })}
     `
     mount.querySelector('#runpod-refresh-btn')?.addEventListener('click', () => refresh())
     for (const btn of mount.querySelectorAll('[data-terminate]')) {
@@ -207,6 +262,14 @@ export function initRunpodStatus({
     }
   }
 
+  async function _refreshBalance() {
+    if (!runpodConnected(_preflight)) { _balance = null; return }
+    try {
+      const res = await fetchImpl('/api/runpod/balance')
+      _balance = res.ok ? await res.json() : null
+    } catch { _balance = null }
+  }
+
   /** Destroy one pod. Confirmed first — this is irreversible and ends a paid run.  It does
    *  NOT lose work: every completed step's .coor is on the network volume, which outlives
    *  the pod, so the job resumes from there (runpod_supervisor's auto-resume relies on the
@@ -231,6 +294,7 @@ export function initRunpodStatus({
     } finally {
       _killing = null
       await _refreshPods()
+      await _refreshBalance()
       _render()
     }
   }
@@ -260,6 +324,7 @@ export function initRunpodStatus({
       // ever created by a launch from this app, so re-checking when the user asks about
       // RunPod is often enough — and it costs one request, not a standing timer.
       await _refreshPods()
+      await _refreshBalance()
       _render()
       onChange(_preflight)
     }
@@ -270,6 +335,8 @@ export function initRunpodStatus({
 
   return {
     refresh,
+    setJob(job) { _job = job || null; _render() },
+    async refreshBilling() { await Promise.all([_refreshPods(), _refreshBalance()]); _render() },
     get preflight() {
       return _preflight
     },

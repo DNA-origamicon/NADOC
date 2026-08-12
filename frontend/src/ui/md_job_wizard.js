@@ -1444,6 +1444,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
   let prevBtn = null
   let cancelBtn = null
   let targetStep = null
+  let submitting = false
 
   // ── Tabs ────────────────────────────────────────────────────────────────────
   const tabBtns = {}
@@ -1588,9 +1589,15 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     const disabled = busy || !plan || blocked
     if (createBtn) {
       createBtn.disabled = disabled
+      const label = createBtn.querySelector('span') || createBtn
+      label.textContent = submitting
+        ? (state.editJobId ? 'Saving…' : 'Creating job…')
+        : (state.editJobId ? 'Save changes' : 'Create job')
       createBtn.title = blocked
         ? 'Resolve the blocking condition on the next tab first.'
-        : 'Prepare the job and leave it ready to run.'
+        : submitting
+          ? 'Creating the job record. Preparation progress will appear in the jobs panel.'
+          : 'Prepare the job and leave it ready to run.'
     }
     // The first step must be ANSWERED before the rest of the wizard means anything:
     // an Alpine run with no node picked would be sized against nothing. A locked view has
@@ -1618,6 +1625,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
   async function submit({ autostart }) {
     if (busy) return
     busy = true
+    submitting = true
     paintActions()
     try {
       if (state.mode === 'production') {
@@ -1635,12 +1643,11 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
         const pendingJob = state.editJobId
           ? updateJob?.(state.editJobId, request)
           : spawnProduction?.(state.parentJobId, request)
-        // Creation can spend a long time sizing/solvating before the request returns.
-        // The panel owns progress and errors from this point, so dismiss the wizard as
-        // soon as the user commits instead of leaving an apparently inert modal on top.
-        close()
         const job = await pendingJob
-        if (job) onJobCreated?.(job.job_id)
+        if (job) {
+          close()
+          onJobCreated?.(job.job_id)
+        }
       } else {
         // Drop anything the server would force anyway. Sending it changes nothing, but it
         // would sit in `model_fields_set` as an explicit choice the user did not make
@@ -1665,11 +1672,14 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
         const pendingJob = state.editJobId
           ? updateJob?.(state.editJobId, request)
           : launch?.(request, { draftId: state.draftId })
-        close()
         const job = await pendingJob
-        if (job) onJobCreated?.(job.job_id)
+        if (job) {
+          close()
+          onJobCreated?.(job.job_id)
+        }
       }
     } finally {
+      submitting = false
       busy = false
       paintActions()
     }

@@ -363,6 +363,20 @@ def test_estimate_profile_from_design():
     assert len(prof["dna_xyz_nm"]) == prof["dna_atoms"]
 
 
+def test_estimate_atoms_from_design_geometry_is_fast_and_conservative():
+    from tests.conftest import make_6hb_design
+
+    design = make_6hb_design(42)
+    quick = V.estimate_atoms_from_design_geometry(design, padding_nm=1.2)
+    exact = V.estimate_profile_from_design(design, padding_nm=1.2)
+    exact_total = exact["dna_atoms"] + exact["full_water"] * 3 + exact["ion_atoms"]
+
+    assert quick is not None
+    # The axis envelope deliberately includes the full DNA radius, so a quote cannot become
+    # reassuringly smaller than the exact all-atom bounding box it replaces in the wizard.
+    assert quick >= exact_total
+
+
 
 
 

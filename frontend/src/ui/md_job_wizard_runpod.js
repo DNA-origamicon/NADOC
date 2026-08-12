@@ -110,7 +110,9 @@ export function initWizardRunpod({
   /** Preselect the backend's best-value card — but never overwrite a choice already made. */
   function _adoptDefaults() {
     const rows = _preview?.gpus || []
-    if (!_gpuKey || !rows.some(r => r.key === _gpuKey)) _gpuKey = rows[0]?.key || null
+    if (!_gpuKey || !rows.some(r => r.key === _gpuKey && r.eligible !== false)) {
+      _gpuKey = rows.find(r => r.eligible !== false)?.key || null
+    }
     if (!_volumeId) _volumeId = _preview?.volume?.id || null
   }
 
@@ -307,6 +309,7 @@ export function initWizardRunpod({
 
     mount.querySelectorAll('.runpod-gpu-row').forEach(node => {
       const pick = () => {
+        if (node.dataset.eligible === 'false') return
         // Picking a card re-costs from rows we already have — never a new round trip.
         _gpuKey = node.dataset.key
         paint()
@@ -366,6 +369,14 @@ export function initWizardRunpod({
     /** Called when the RunPod card is first opened — the fetches must not run before that. */
     activate() { void refresh(); void _loadVolumes() },
     gpuKey: () => _gpuKey,
+    estimatedCostUsd: () => {
+      const row = (_preview?.gpus || []).find(g => g.key === _gpuKey)
+      return row?.total_cost ?? _preview?.budget?.estimated_usd ?? null
+    },
+    quotedRateUsdPerHour: () => {
+      const row = (_preview?.gpus || []).find(g => g.key === _gpuKey)
+      return row?.usd_per_hour ?? null
+    },
     budgetUsd: () => _budget,
     volumeId: () => _volumeId,
     preview: () => _preview,

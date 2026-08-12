@@ -139,6 +139,16 @@ describe('renderJobOptionRows', () => {
   it('renders nothing for an empty list', () => {
     expect(renderJobOptionRows([], null)).toBe('')
   })
+
+  it('keeps an insufficient GPU visible, red, and explains why it cannot be selected', () => {
+    const bad = { ...JOB_ROW, eligible: false,
+      insufficient_reason: 'needs about 40.0 GB VRAM; only 20.4 GB is usable' }
+    const html = renderJobOptionRows([bad], null)
+    expect(html).toContain('data-eligible="false"')
+    expect(html).toContain('rgba(248,81,73')
+    expect(html).toContain('⚠ needs about 40.0 GB VRAM')
+    expect(html).toContain('tabindex="-1"')
+  })
 })
 
 describe('the Clusters card is untouched', () => {

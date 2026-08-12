@@ -21,6 +21,7 @@ import backend.api.assembly as assembly
 import backend.core.namd_runner as namd_runner
 from backend.api.main import app
 from backend.core.md_job import MdJob, MdSegmentStatus, MdStatus, new_job
+from backend.core.md_prep_progress import write_prep_progress
 
 
 def _running_job(ws: Path) -> MdJob:
@@ -96,6 +97,47 @@ def test_ws_state_push_omits_progress_fraction_for_non_running(tmp_path, monkeyp
 
     assert msg["job"]["status"] == "queued"
     assert "progress_fraction" not in msg["job"]
+
+
+def test_ws_state_push_flattens_preparation_progress_for_job_card(tmp_path, monkeypatch):
+    monkeypatch.setattr(assembly, "_WORKSPACE_DIR", tmp_path)
+    monkeypatch.setattr(namd_runner, "reconcile_job_status", lambda job, ws: job)
+    job = new_job("VoltronCore", "equilibrium_aware_namd", "VoltronCore", "package/run")
+    job.status = MdStatus.preparing
+    job.save(tmp_path)
+    write_prep_progress(job.job_dir(tmp_path), {
+        "phase": "enm", "message": "Adding restraints", "fraction": 0.375,
+        "eta_seconds": 95.0, "measured": True,
+    })
+
+    client = TestClient(app)
+    with client.websocket_connect(f"/ws/md-jobs/{job.job_id}") as ws:
+        body = ws.receive_json()["job"]
+
+    assert body["prep_progress"]["phase"] == "enm"
+    assert body["progress_fraction"] == 0.375
+    assert body["eta_seconds"] == 95.0
+    assert body["progress_label"] == "Adding restraints"
+
+
+def test_rest_preparation_decorator_overrides_pending_segment_fallback(tmp_path):
+    from backend.api.routes_md import _decorate_preparation_progress
+
+    job = new_job("VoltronCore", "equilibrium_aware_namd", "VoltronCore", "package/run")
+    job.status = MdStatus.preparing
+    job.save(tmp_path)
+    write_prep_progress(job.job_dir(tmp_path), {
+        "phase": "solvate", "label": "Adding explicit water", "fraction": 0.42,
+        "eta_seconds": 30, "measured": False,
+    })
+    payload = job.to_dict()
+    payload["progress_fraction"] = 0.0  # pending-segment fallback applied first
+
+    _decorate_preparation_progress(job, payload, tmp_path)
+
+    assert payload["progress_fraction"] == 0.42
+    assert payload["eta_seconds"] == 30
+    assert payload["progress_estimated"] is True
 
 
 def test_paused_remote_job_keeps_exact_last_observed_progress(tmp_path):

@@ -78,6 +78,7 @@ from backend.core.md_prep_progress import (
     build_prep_phases,
     clear_prep_progress,
     design_size_factor,
+    read_prep_progress,
     write_prep_progress,
 )
 from backend.core.namd_runner import (
@@ -364,6 +365,8 @@ class CreateJobRequest(BaseModel):
         "and every checkpoint, and pins the datacenter. None → the connected "
         "session's volume.",
     )
+    runpod_estimated_cost_usd: Optional[float] = Field(None, ge=0)
+    runpod_quoted_rate_usd_per_hour: Optional[float] = Field(None, ge=0)
     run_dir: Optional[str] = Field(
         None,
         description="Directory to write this run into (archive-from-birth). A NAMD run "
@@ -3055,6 +3058,12 @@ def _apply_runpod_choices(job: MdJob, body) -> None:
     job.runpod_volume_id = (
         getattr(body, "runpod_volume_id", None) if is_runpod else None
     )
+    job.runpod_estimated_cost_usd = (
+        getattr(body, "runpod_estimated_cost_usd", None) if is_runpod else None
+    )
+    job.runpod_quoted_rate_usd_per_hour = (
+        getattr(body, "runpod_quoted_rate_usd_per_hour", None) if is_runpod else None
+    )
 
 
 def _apply_runpod_gpu_resident_default(body):
@@ -3076,9 +3085,48 @@ def _apply_runpod_gpu_resident_default(body):
     return body
 
 
-_DEFAULT_RUNPOD_RUN_DIR = Path(
-    os.environ.get("NADOC_RUNPOD_RUN_DIR", "/media/jojo/Archive/nadoc_jobs")
-)
+def _default_namd_run_dir() -> Path:
+    """NADOC-owned, host-portable location for NAMD jobs and RunPod downloads."""
+    return _workspace() / "md_jobs"
+
+
+@router.get("/md/run-dir-status")
+def md_run_dir_status(path: Optional[str] = None) -> dict:
+    """Validate the run directory shown by the wizard.
+
+    The default is created by NADOC. An explicit browser preference is never created here:
+    it may name an unmounted external drive, and manufacturing that path on the wrong disk
+    would hide the error the user needs to see.
+    """
+    is_default = not bool(path)
+    target = _default_namd_run_dir() if is_default else Path(path).expanduser()
+    if is_default:
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            return {
+                "ok": False, "path": str(target), "default": True,
+                "detail": f"Could not create NADOC's NAMD jobs folder: {exc}",
+            }
+    exists = target.exists()
+    is_dir = target.is_dir() if exists else False
+    writable = bool(is_dir and os.access(target, os.W_OK))
+    detail = ""
+    if not exists:
+        detail = "Folder does not exist on this computer. Choose another folder or reset to default."
+    elif not is_dir:
+        detail = "The selected path is not a folder."
+    elif not writable:
+        detail = "The selected folder is not writable."
+    return {
+        "ok": bool(exists and is_dir and writable),
+        "path": str(target.resolve()) if exists else str(target),
+        "default": is_default,
+        "exists": exists,
+        "is_dir": is_dir,
+        "writable": writable,
+        "detail": detail,
+    }
 
 
 def _apply_run_dir(
@@ -3093,14 +3141,11 @@ def _apply_run_dir(
     the archive index (same mechanism as the post-hoc archive flow, just applied up front).
     No-op when ``run_dir`` is falsy.  Raises HTTPException(400) on a bad/unwritable target.
     """
-    # RunPod outputs are fetched onto this machine after the paid pod finishes.  A missing
-    # browser preference must never turn that multi-GB download into a write to the small
-    # system disk.  Keep the default at the backend boundary so API/script callers receive
-    # the same protection as the wizard.  The environment override makes this portable to
-    # hosts whose archive is mounted elsewhere.
-    if not run_dir and (execution_target or "").lower() == "runpod":
-        run_dir = str(_DEFAULT_RUNPOD_RUN_DIR)
     if not run_dir:
+        # The ordinary job path is already <workspace>/md_jobs/<job_id>. Ensure its parent
+        # exists even when this route is exercised without the application lifespan (tests,
+        # scripts, or an embedded API caller).
+        _default_namd_run_dir().mkdir(parents=True, exist_ok=True)
         return
     base = Path(run_dir).expanduser()
     if not base.is_dir():
@@ -3819,6 +3864,26 @@ def _decorate_terminal_segment_progress(job: MdJob, payload: dict, ws: Path) -> 
 _SIZE_WARM_TASKS: set = set()
 
 
+def _decorate_preparation_progress(job: MdJob, payload: dict, ws: Path) -> None:
+    """Expose the preparation sidecar through the common job-card contract."""
+    if job.status != MdStatus.preparing:
+        return
+    prep = read_prep_progress(job.job_dir(ws))
+    if prep is None:
+        return
+    payload["prep_progress"] = prep
+    fraction = prep.get("fraction")
+    if isinstance(fraction, (int, float)):
+        payload["progress_fraction"] = max(0.0, min(1.0, float(fraction)))
+    eta = prep.get("eta_seconds")
+    if isinstance(eta, (int, float)):
+        payload["eta_seconds"] = max(0.0, float(eta))
+    payload["progress_phase"] = prep.get("phase")
+    payload["progress_label"] = prep.get("message") or prep.get("label")
+    if prep.get("measured") is False:
+        payload["progress_estimated"] = True
+
+
 @router.get("/md/jobs")
 async def list_md_jobs() -> list[dict]:
     from backend.core.oxdna_staleness import current_active_design_fingerprint
@@ -3952,6 +4017,9 @@ async def list_md_jobs() -> list[dict]:
                 or j.live_metrics.get("collected_at")
                 or j.runpod_heartbeat
             )
+        # Preparation is its own weighted workflow. Apply it after the NAMD segment
+        # fallback so pending simulation segments cannot overwrite the live prep bar.
+        _decorate_preparation_progress(j, d, ws)
         if j.execution_target == "runpod":
             # Account connectivity and pod connectivity are separate. A valid API session
             # with no pod means we KNOW the run is disconnected; no API session means we
@@ -3989,6 +4057,7 @@ async def get_md_job(job_id: str) -> dict:
     d = job.to_dict()
     d["failure_details"] = _failure_diagnostics(job)
     _decorate_terminal_segment_progress(job, d, _workspace())
+    _decorate_preparation_progress(job, d, _workspace())
     # Every job that predates MdJob.minimization has None here.  Read it back off the
     # package manifest — ONE file per opened job, so the timeline shows the minimisation
     # for existing runs too.  Deliberately not persisted: a GET should not write job.json.
@@ -4503,6 +4572,8 @@ class ProductionRunRequest(BaseModel):
     runpod_volume_id: Optional[str] = Field(
         None, description="Network volume for a runpod child. None → the parent's."
     )
+    runpod_estimated_cost_usd: Optional[float] = Field(None, ge=0)
+    runpod_quoted_rate_usd_per_hour: Optional[float] = Field(None, ge=0)
     partition: Optional[str] = Field(
         None,
         description="Preferred SLURM partition for an alpine child, chosen in the Job "
@@ -4925,6 +4996,16 @@ async def _spawn_md_production_impl(
         )
         child.runpod_volume_id = (
             getattr(body, "runpod_volume_id", None) or parent.runpod_volume_id
+        )
+        child.runpod_estimated_cost_usd = (
+            getattr(body, "runpod_estimated_cost_usd", None)
+            if getattr(body, "runpod_estimated_cost_usd", None) is not None
+            else parent.runpod_estimated_cost_usd
+        )
+        child.runpod_quoted_rate_usd_per_hour = (
+            getattr(body, "runpod_quoted_rate_usd_per_hour", None)
+            if getattr(body, "runpod_quoted_rate_usd_per_hour", None) is not None
+            else parent.runpod_quoted_rate_usd_per_hour
         )
     # Capture the spawn request so the read-only settings viewer can replay this child's
     # own plan.  Kept apart from `prep_params` (a CreateJobRequest dump) on purpose — see

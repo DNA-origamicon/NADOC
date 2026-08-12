@@ -344,10 +344,9 @@ export function mdJobIsStartable(job) {
  *  plain local path", and `mdQueueable` leans on it to keep remote jobs out of the local run
  *  queue — widening it would silently park a rented-GPU run behind a desktop one.
  *
- *  Renting is a real start, not a submit: `POST /md/jobs/{id}/start` dispatches straight to
- *  `_start_runpod_job`, which pre-flights and then provisions. Alpine needs its review card
- *  because an sbatch spends a shared allocation; a pod is rented, run and destroyed by NADOC
- *  in one act, and the wizard already collected the card, the cap and the volume. */
+ *  The prepared job mirrors Alpine's queued-before-submit workflow. The submission endpoint is
+ *  still POST /start internally because NADOC owns the pod lifecycle, but the user-facing act
+ *  is explicitly Submit to RunPod: nothing is rented before that click. */
 export function mdRunpodStartable(job) {
   return job?.execution_target === 'runpod' && mdRemoteAwaitingSubmit(job)
 }
@@ -530,12 +529,12 @@ export function mdRunControl(selectedJob, {
     }
     if (mdRunpodStartable(selectedJob)) {
       return {
-        action: RUN_ACTION.RUN, label: '▶ Rent & Run',
+        action: RUN_ACTION.SUBMIT, label: '☁ Submit to RunPod',
         disabled: busy || !runpodReady,
         title: runpodReady
           ? 'Rent the GPU you chose, upload this package, run the whole ladder, fetch the '
             + 'results, then destroy the pod.'
-          : `Cannot run on RunPod yet:\n${runpodBlocked || 'pre-flight has not passed.'}`,
+          : `Cannot submit to RunPod yet:\n${runpodBlocked || 'pre-flight has not passed.'}`,
       }
     }
   }
@@ -1202,6 +1201,13 @@ export function mdShouldShowInheritedSeed(job, displayMeta) {
   return !!job?.seed_oxdna_job_id && !displayMeta?.ready
 }
 
+/** Repeated selection notifications for the same job are normal during creation
+ * (`fetchJobs` auto-select + launch completion + wizard completion).  Reuse a socket
+ * that is already connecting/open instead of aborting its handshake. */
+export function mdCanReuseStatusSocket(socketJobId, requestedJobId, readyState) {
+  return socketJobId === requestedJobId && (readyState === 0 || readyState === 1)
+}
+
 
 /** Pure: resolve the live early-stop toggle's display state from a job dict + the
  *  "a POST is in flight" flag.  A running job stashes a mid-run override the runner
@@ -1346,6 +1352,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // until something explicit happens (a row click, a launch, an empty list, a design switch).
   let _userDeselected = false
   let _ws           = null   // active WebSocket
+  let _wsJobId      = null   // owner id; makes repeated same-job selection idempotent
   let _wsWatchdog   = null   // safety-net interval: reconnect a dropped detail WS / unwedge a silent one
   let _lastWsMsgAt  = 0      // ms timestamp of the last WS push (staleness detector)
   let _wsProbing    = false  // a watchdog REST probe is in flight (avoid overlap)
@@ -2426,6 +2433,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // own — re-apply it explicitly.
     const sel = _jobs.find(j => j.job_id === _selectedId)
     if (sel && mdIsRemoteJob(sel)) _applyJobState(sel)
+    if (sel?.execution_target === 'runpod' && _currentRunTarget() === 'runpod') {
+      void _runpod.refreshBilling()
+    }
     // The primary control reads the phase off runpod_pod_id / runpod_pid, which only move
     // on this poll — without a repaint it would stay on "Renting a GPU…" through the whole
     // upload and on into the run.
@@ -3116,11 +3126,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // Gates ☁ Submit to Alpine — an upload with no Duo session behind it only 409s.
       clusterState: getClusterState?.() ?? 'disconnected',
       submitting: !!_remoteSubmitting && _remoteSubmitting.jobId === sel?.job_id,
-      // Gates ▶ Rent & Run the way clusterState gates ☁ Submit: renting a pod that cannot
-      // run the job still bills. Until a pre-flight has come back we do NOT block — the
-      // backend runs the same check and answers with the same reason, and a button that is
-      // dead on arrival because a probe has not finished is worse than one 400.
-      runpodReady: !_runpod.preflight || runpodCanLaunch(_runpod.preflight),
+      // This is the RunPod gate: it deliberately lives AFTER Create job, beside ▶ Rent &
+      // Run. At this point preparation has resolved the real package; the backend repeats the
+      // check with its exact PSF atom count immediately before it creates any billing pod.
+      // Unknown is blocked too, so the paid action cannot race the pre-flight request.
+      runpodReady: runpodCanLaunch(_runpod.preflight),
       runpodBlocked: runpodBlockReason(_runpod.preflight),
     })
   }
@@ -3360,6 +3370,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // The cluster hand-off: same review card the ☁ button in the Cluster card used to
     // open, now reached from the one control that answers "how do I run this?".
     if (act === RUN_ACTION.SUBMIT) {
+      if (sel.execution_target === 'runpod') return _startSelected(runBtn)
       if (_remoteSubmitting) return       // a package is already uploading
       return _submitReview.open(sel.job_id)
     }
@@ -4066,6 +4077,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _displayMeta = null
     _gateBDismissed = null
     _closeWs()
+    _runpod.setJob(null)
     if (detailEl) detailEl.style.display = 'none'
     if (liveControlsCard) liveControlsCard.style.display = 'none'
     _renderList()
@@ -4131,11 +4143,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
   // ── WebSocket management ───────────────────────────────────────────────────
   function _openWs(jobId) {
+    if (_ws && mdCanReuseStatusSocket(_wsJobId, jobId, _ws.readyState)) {
+      _mdDebug(`[${_ts()}] md-jobs: reusing ${_ws.readyState === 0 ? 'connecting' : 'open'} WS for ${jobId}`)
+      return
+    }
     _closeWs()
     const url = `ws://${location.host}/ws/md-jobs/${jobId}`
     _mdDebug(`[${_ts()}] md-jobs: opening WS ${url}`)
     const ws = new WebSocket(url)
     _ws = ws
+    _wsJobId = jobId
     _lastWsMsgAt = Date.now()   // start the staleness window fresh so the watchdog waits for onopen
 
     ws.onopen = () => { _lastWsMsgAt = Date.now(); _mdDebug(`[${_ts()}] md-jobs: WS open`) }
@@ -4168,7 +4185,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
     ws.onclose = (evt) => {
       _mdDebug(`[${_ts()}] md-jobs: WS closed code=${evt.code}`)
+      // A superseded socket can finish closing after its replacement was assigned.
+      // It must not null out the new live socket or trigger a stale REST refresh.
+      if (_ws !== ws) return
       _ws = null
+      _wsJobId = null
       if (_selectedId) {
         api.getMdJob(_selectedId)
           .then(job => {
@@ -4188,6 +4209,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       _mdDebug(`[${_ts()}] md-jobs: closing WS`)
       try { _ws.close() } catch { /* ok */ }
       _ws = null
+      _wsJobId = null
     }
   }
 
@@ -4244,6 +4266,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // ── Job detail rendering ──────────────────────────────────────────────────
   function _applyJobState(job, liveMetrics) {
     if (!job) return
+    _runpod.setJob(job)
 
     const awaitingSubmit = mdRemoteAwaitingSubmit(job)
     // Alpine-specific status only; the generic run status lives in the master job card.

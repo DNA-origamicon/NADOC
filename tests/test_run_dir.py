@@ -47,18 +47,32 @@ def test_apply_run_dir_none_is_noop(tmp_path, monkeypatch):
     assert job.archived is False and job.archive_path is None
 
 
-def test_runpod_without_picker_defaults_to_archive(tmp_path, monkeypatch):
-    archive = tmp_path / "Archive" / "nadoc_jobs"
-    archive.mkdir(parents=True)
-    monkeypatch.setattr(rm, "_DEFAULT_RUNPOD_RUN_DIR", archive)
-    monkeypatch.setattr(rm, "_workspace", lambda: tmp_path / "workspace")
-    (tmp_path / "workspace" / "md_jobs").mkdir(parents=True)
+def test_runpod_without_picker_uses_and_creates_workspace_jobs(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    monkeypatch.setattr(rm, "_workspace", lambda: workspace)
 
     job = _job()
     rm._apply_run_dir(job, None, execution_target="runpod")
 
-    assert job.archived is True
-    assert job.archive_path == str(archive / job.job_id)
+    assert job.archived is False
+    assert job.archive_path is None
+    assert (workspace / "md_jobs").is_dir()
+
+
+def test_run_dir_status_creates_default_but_not_missing_preference(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    monkeypatch.setattr(rm, "_workspace", lambda: workspace)
+
+    default = rm.md_run_dir_status()
+    assert default["ok"] is True
+    assert default["default"] is True
+    assert default["path"] == str((workspace / "md_jobs").resolve())
+
+    missing = tmp_path / "other-computer" / "nadoc_jobs"
+    chosen = rm.md_run_dir_status(str(missing))
+    assert chosen["ok"] is False
+    assert chosen["exists"] is False
+    assert not missing.exists()
 
 
 def test_apply_run_dir_rejects_missing_or_unwritable(tmp_path, monkeypatch):

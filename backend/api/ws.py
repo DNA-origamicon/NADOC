@@ -1940,7 +1940,6 @@ async def md_job_status_ws(websocket: WebSocket, job_id: str) -> None:
     """
     from backend.api.assembly import _WORKSPACE_DIR
     from backend.core.md_job import MdJob, MdStatus
-    from backend.core.md_prep_progress import read_prep_progress
     from backend.core.namd_metrics import parse_namd_log
     from backend.core.namd_runner import pending_early_stop, reconcile_job_status
 
@@ -1966,12 +1965,11 @@ async def md_job_status_ws(websocket: WebSocket, job_id: str) -> None:
             # to the (still-stale) persisted flag on every 3 s state push.
             payload["early_stop_pending"] = pending_early_stop(job_id)
 
-            # While preparing, attach the live solvation/ENM progress snapshot
-            # (phase, fraction, ETA, stall warning) the background worker writes.
+            # Use the same card-facing preparation contract as GET /md/jobs.
             if job.status == MdStatus.preparing:
-                prep = read_prep_progress(job.job_dir(_WORKSPACE_DIR))
-                if prep is not None:
-                    payload["prep_progress"] = prep
+                from backend.api.routes_md import _decorate_preparation_progress
+
+                _decorate_preparation_progress(job, payload, _WORKSPACE_DIR)
 
             # Attach live NAMD log metrics for the current segment when running
             if job.status == MdStatus.running and 0 <= job.current_segment_idx < len(

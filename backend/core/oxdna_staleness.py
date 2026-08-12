@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 
 from backend.core.models import Design
 
@@ -41,6 +42,14 @@ _FINGERPRINT_FIELDS = {
 }
 
 _FINGERPRINT_VERSION = "v2"
+
+# Job cards ask for the current fingerprint on every status refresh.  Serialising a
+# multi-thousand-strand design can take seconds (and holds the GIL), so doing the same
+# work on every websocket/REST poll can make unrelated lightweight endpoints appear
+# hung while a large MD package is being prepared.  A design session already exposes a
+# monotonic revision; cache exactly one hash per (document, revision).
+_CURRENT_FP_CACHE: dict[tuple[str, int, int], str | None] = {}
+_CURRENT_FP_CACHE_LOCK = threading.Lock()
 
 
 def oxdna_design_fingerprint(design: Design) -> str:
@@ -153,8 +162,30 @@ def current_active_design_fingerprint() -> str | None:
     (no active design, or a design that won't serialize) degrades to None rather
     than 500-ing the job list."""
     from backend.api import state as design_state
+    from backend.api.doc_context import get_current_doc
 
     try:
-        return design_build_fingerprint(design_state.get_or_404())
+        design, revision = design_state.get_design_with_revision()
+        if design is None:
+            return None
+        key = (get_current_doc(), id(design), revision)
+        with _CURRENT_FP_CACHE_LOCK:
+            if key in _CURRENT_FP_CACHE:
+                return _CURRENT_FP_CACHE[key]
+        fingerprint = design_build_fingerprint(design)
+        # A mutation may have landed while the expensive serialization ran.  Never
+        # publish that result under a stale revision; the next poll computes the new one.
+        current, current_revision = design_state.get_design_with_revision()
+        if current is not design or current_revision != revision:
+            return current_active_design_fingerprint()
+        with _CURRENT_FP_CACHE_LOCK:
+            # Retain only the newest revision for this document.  This keeps the cache
+            # bounded during long editing sessions without coupling state.py to this
+            # advisory staleness helper.
+            stale = [cached for cached in _CURRENT_FP_CACHE if cached[0] == key[0]]
+            for cached in stale:
+                _CURRENT_FP_CACHE.pop(cached, None)
+            _CURRENT_FP_CACHE[key] = fingerprint
+        return fingerprint
     except Exception:  # noqa: BLE001
         return None

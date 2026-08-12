@@ -73,6 +73,8 @@ export function jobOptionView(row, { budgetUsd = null } = {}) {
     totalCost: formatCost(total),
     nsdayRelax: row.ns_day_relax != null ? `${row.ns_day_relax} ns/day relaxing` : '',
     overBudget: budgetUsd != null && total != null && total > budgetUsd,
+    eligible: row.eligible !== false,
+    insufficientReason: row.insufficient_reason || '',
   }
 }
 
@@ -100,21 +102,30 @@ export function renderJobOptionRows(gpus, selectedKey = null, { budgetUsd = null
     .map((row, i) => {
       const v = jobOptionView(row, { budgetUsd })
       const sel = row.key === selectedKey
+      const eligible = v.eligible
       const costColor = v.overBudget ? '#d29922' : '#3fb950'
-      const title = v.overBudget
+      const title = !eligible
+        ? `Insufficient for this job: ${v.insufficientReason}`
+        : v.overBudget
         ? `Estimated ${v.totalCost} — over your cap. Raise the cap or shorten the run.`
         : 'est. total cost for this whole plan'
       return (
-        `<div class="runpod-gpu-row" data-key="${_esc(row.key)}" role="button" tabindex="0" ` +
+        `<div class="runpod-gpu-row" data-key="${_esc(row.key)}" ` +
+        `data-eligible="${eligible}" role="${eligible ? 'button' : 'note'}" ` +
+        `tabindex="${eligible ? '0' : '-1'}" title="${_esc(title)}" ` +
         `style="display:grid;grid-template-columns:1.6fr auto auto auto auto;gap:8px;` +
-        `align-items:baseline;padding:5px 7px;border-radius:4px;cursor:pointer;` +
-        `background:${sel ? 'rgba(31,111,235,.18)' : 'transparent'};` +
-        `border:1px solid ${sel ? '#1f6feb' : 'transparent'}">` +
-        `<span><span style="color:#c9d1d9;font-weight:${sel ? 600 : 400}">${_esc(v.label)}</span> ` +
+        `align-items:baseline;padding:5px 7px;border-radius:4px;cursor:${eligible ? 'pointer' : 'not-allowed'};` +
+        `background:${!eligible ? 'rgba(248,81,73,.09)' : sel ? 'rgba(31,111,235,.18)' : 'transparent'};` +
+        `border:1px solid ${!eligible ? 'rgba(248,81,73,.65)' : sel ? '#1f6feb' : 'transparent'};` +
+        `opacity:${eligible ? 1 : .82}">` +
+        `<span><span style="color:${eligible ? '#c9d1d9' : '#f85149'};font-weight:${sel ? 600 : 400}">${_esc(v.label)}</span> ` +
         `<span style="color:#6e7681;font-size:9px">${v.vram}</span> ` +
         `<span style="color:${v.stock.color};font-size:9px">● ${v.stock.text}</span>` +
-        (i === 0
+        (i === 0 && eligible
           ? ' <span style="color:#58a6ff;font-size:9px">best value</span>'
+          : '') +
+        (!eligible
+          ? `<br><span style="color:#f85149;font-size:9px">⚠ ${_esc(v.insufficientReason)}</span>`
           : '') +
         `<br><span style="color:#6e7681;font-size:9px">${v.nsday}` +
         `${v.nsdayRelax ? ` · ${v.nsdayRelax}` : ''}</span></span>` +

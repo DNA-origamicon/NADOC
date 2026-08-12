@@ -22,6 +22,11 @@ import { drawSparkline } from './sparkline.js'
 const MAX_POINTS = 90          // rolling window of samples kept per line
 const POLL_MS = 1500           // ~0.7 Hz — smooth enough, cheap on nvidia-smi
 
+// Panels can be re-initialised after a document/panel rebuild while their DOM nodes
+// survive.  Keep one owner per id namespace so an abandoned timer cannot continue
+// issuing invisible requests (or stack another click listener on the same toggle).
+const ACTIVE_MONITORS = new Map()
+
 // One line per resource: buffer key, DOM token, sparkline colour.
 const LINES = [
   { key: 'cpu', tok: 'cpu', color: '#58a6ff', pct: s => s?.cpu_pct },
@@ -30,6 +35,7 @@ const LINES = [
 ]
 
 export function initResourceMonitor({ idPrefix, poll = null } = {}) {
+  ACTIVE_MONITORS.get(idPrefix)?.stop()
   const toggle = document.getElementById(`${idPrefix}-resources-toggle`)
   const body = document.getElementById(`${idPrefix}-resources-body`)
   if (!toggle || !body) return { stop() {} }
@@ -97,24 +103,30 @@ export function initResourceMonitor({ idPrefix, poll = null } = {}) {
     drawSparkline(c, line.buf, { color: line.color, min: 0, max: 100 })
   }
 
-  toggle.addEventListener('click', () => {
+  const _onToggle = () => {
     _open = !_open
     body.style.display = _open ? '' : 'none'
     if (arrow) arrow.style.transform = _open ? 'rotate(90deg)' : ''
     _syncPolling()
-  })
+  }
+  toggle.addEventListener('click', _onToggle)
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', _syncPolling)
   }
 
   function stop() {
     _stopTimer()
+    _open = false
+    toggle.removeEventListener('click', _onToggle)
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', _syncPolling)
     }
+    if (ACTIVE_MONITORS.get(idPrefix)?.stop === stop) ACTIVE_MONITORS.delete(idPrefix)
   }
 
-  return { stop, _apply, _tick, _lines: lines }   // last three exposed for tests
+  const monitor = { stop, _apply, _tick, _lines: lines }
+  ACTIVE_MONITORS.set(idPrefix, monitor)
+  return monitor                                  // last three exposed for tests
 }
 
 /** Human label for a line: "52%" for CPU, "100% · 6.3/12.0 GB" for GPU/RAM, "n/a"

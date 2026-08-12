@@ -4,10 +4,12 @@ import {
   podBillingSummary,
   renderPodRows,
   renderPreflightRows,
+  renderRunpodJobCost,
   runpodBlockReason,
   runpodCanLaunch,
   runpodChipState,
   runpodGpuSummary,
+  runpodJobCostView,
 } from './runpod_status.js'
 
 const check = (key, ok, label, detail = '') => ({ key, ok, label, detail })
@@ -162,6 +164,45 @@ describe('renderPodRows', () => {
   it('empty for no pods', () => {
     expect(renderPodRows([])).toBe('')
     expect(renderPodRows(null)).toBe('')
+  })
+})
+
+describe('selected RunPod job cost', () => {
+  const running = {
+    job_id: 'j1', execution_target: 'runpod', status: 'running', runpod_pod_id: 'pod1',
+    runpod_estimated_cost_usd: 8.75,
+    runpod_billing_sessions: [{ pod_id: 'pod1', started_at: 1000, usd_per_hour: 0.72 }],
+  }
+
+  it('shows balance, estimate, actual rented rate and accrued spend while active', () => {
+    const view = runpodJobCostView(running, {
+      balance: { available: true, balance: 42.5 },
+      pods: [{ id: 'pod1', cost_per_hr: 0.74 }], nowMs: 4_601_000,
+    })
+    expect(view.rows).toEqual([
+      ['Current balance', '$42.50'],
+      ['Estimated total cost', '$8.75'],
+      ['Rented GPU rate', '$0.74/hr'],
+      ['Spent on this job', '$0.72'],
+    ])
+  })
+
+  it('clears for deselection/non-RunPod and reduces completed jobs to final cost', () => {
+    expect(runpodJobCostView(null)).toBeNull()
+    expect(runpodJobCostView({ execution_target: 'local' })).toBeNull()
+    const done = runpodJobCostView({
+      ...running, status: 'completed', runpod_final_cost_usd: 6.21,
+    })
+    expect(done).toEqual({ completed: true, rows: [['Actual final cost', '$6.21']] })
+    const html = renderRunpodJobCost({ ...running, status: 'completed', runpod_final_cost_usd: 6.21 })
+    expect(html).toContain('Actual final cost')
+    expect(html).not.toContain('Current balance')
+  })
+
+  it('does not misreport missing money fields as zero', () => {
+    const view = runpodJobCostView({ execution_target: 'runpod', status: 'queued' })
+    expect(view.rows).toContainEqual(['Estimated total cost', '—'])
+    expect(view.rows).toContainEqual(['Rented GPU rate', 'Not rented'])
   })
 })
 

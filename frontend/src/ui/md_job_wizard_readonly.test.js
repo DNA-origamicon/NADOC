@@ -224,12 +224,14 @@ describe('read-only wizard', () => {
 })
 
 describe('live wizard commit', () => {
-  it('closes immediately after Create job while preparation continues in the panel', async () => {
+  it('shows Creating job for RunPod and stays open until the panel has a job id', async () => {
     let finishLaunch
     const launch = vi.fn(() => new Promise(resolve => { finishLaunch = resolve }))
     const onJobCreated = vi.fn()
     const { wiz } = setup({ launch, onJobCreated })
     await wiz.open('relaxation')
+
+    modalRoot().querySelector('[data-target="runpod"] > div').click()
 
     // Creation is offered on the final plan step.
     const tabs = [...modalRoot().querySelectorAll('.wizard-tab')]
@@ -239,11 +241,30 @@ describe('live wizard commit', () => {
 
     create.click()
     expect(launch).toHaveBeenCalledOnce()
-    expect(wiz.isOpen()).toBe(false)
+    expect(launch.mock.calls[0][0].execution_target).toBe('runpod')
+    expect(wiz.isOpen()).toBe(true)
+    expect(create.disabled).toBe(true)
+    expect(create.textContent).toContain('Creating job…')
     expect(onJobCreated).not.toHaveBeenCalled()
 
     finishLaunch({ job_id: 'new' })
     await vi.waitFor(() => expect(onJobCreated).toHaveBeenCalledWith('new'))
+    expect(wiz.isOpen()).toBe(false)
+  })
+
+  it('keeps the wizard open and restores Create job when creation fails', async () => {
+    const launch = vi.fn(async () => null)
+    const { wiz } = setup({ launch })
+    await wiz.open('relaxation')
+    ;[...modalRoot().querySelectorAll('.wizard-tab')].at(-1).click()
+    const create = footerButtons().find(b => b.textContent.includes('Create job'))
+    await vi.waitFor(() => expect(create.disabled).toBe(false))
+
+    create.click()
+    await vi.waitFor(() => expect(launch).toHaveBeenCalledOnce())
+    await vi.waitFor(() => expect(create.textContent).toContain('Create job'))
+    expect(wiz.isOpen()).toBe(true)
+    expect(create.disabled).toBe(false)
   })
 })
 

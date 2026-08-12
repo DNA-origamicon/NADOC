@@ -23,6 +23,7 @@ but preserves a submitted chain across supervisor or SSH loss for later adoption
 from __future__ import annotations
 
 import contextlib
+import inspect
 import json
 import logging
 import time
@@ -30,7 +31,9 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from backend.core import md_executor
-from backend.core.md_job import MdJob, MdStatus
+from backend.core.md_job import (
+    MdJob, MdStatus, finish_runpod_billing, start_runpod_billing,
+)
 from backend.core.runpod_api import (
     RunpodClient,
     RunpodError,
@@ -39,6 +42,7 @@ from backend.core.runpod_api import (
     termination_deadline,
 )
 from backend.core.runpod_conn import RunpodConnection, RunpodSSHError
+from backend.core.runpod_identity import installation_id, pod_name
 from backend.core.slurm_script import LIVE_METRICS_NAME
 from backend.core.runpod_script import (
     DEFAULT_BUDGET_USD,
@@ -242,6 +246,36 @@ async def submit_job(
     remote = remote_dir_for(job)
     pkg = job.package_dir(workspace_dir)
 
+    last_progress_save = 0.0
+    last_progress_fraction = -1.0
+
+    def submit_progress(
+        label: str,
+        fraction: float,
+        *,
+        force: bool = False,
+        **detail,
+    ) -> None:
+        """Expose byte-accurate RunPod staging instead of simulated NAMD steps."""
+        nonlocal last_progress_save, last_progress_fraction
+        now = time.time()
+        fraction = max(0.0, min(1.0, float(fraction)))
+        # A multi-GB package produces thousands of SFTP chunks. Keep the UI fluid while
+        # avoiding thousands of atomic job.json replacements per minute.
+        if not force and now - last_progress_save < 0.5 and fraction - last_progress_fraction < 0.002:
+            return
+        job.remote_submit_progress = {
+            "target": "runpod",
+            "phase": "upload",
+            "label": label,
+            "fraction": fraction,
+            "updated_at": now,
+            **detail,
+        }
+        job.save(workspace_dir)
+        last_progress_save = now
+        last_progress_fraction = fraction
+
     await conn.mkdir_p(remote)
 
     # REUSED from the Alpine executor — this is the whole point of the conn duck-type.
@@ -268,13 +302,62 @@ async def submit_job(
         await _seed_from_parent(conn, job, remote, plan)
 
     remote_sizes = await _remote_file_sizes(conn, remote)
-    skipped = sent = 0
-    for local_path, rel in plan:
-        if remote_sizes.get(rel) == local_path.stat().st_size:
-            skipped += 1
+    file_sizes = [local_path.stat().st_size for local_path, _ in plan]
+    bytes_total = sum(file_sizes)
+    bytes_done = sum(
+        size
+        for (local_path, rel), size in zip(plan, file_sizes)
+        if remote_sizes.get(rel) == size
+    )
+    skipped = sum(
+        remote_sizes.get(rel) == size for (_, rel), size in zip(plan, file_sizes)
+    )
+    sent = 0
+    submit_progress(
+        "Checking files already on the RunPod volume…",
+        bytes_done / bytes_total if bytes_total else 1.0,
+        force=True,
+        bytes_done=bytes_done,
+        bytes_total=bytes_total,
+        files_done=skipped,
+        files_total=len(plan),
+    )
+    files_done = skipped
+    supports_progress = "on_progress" in inspect.signature(conn.sftp_put).parameters
+    for (local_path, rel), file_size in zip(plan, file_sizes):
+        if remote_sizes.get(rel) == file_size:
             continue
-        await conn.sftp_put(str(local_path), f"{remote}/{rel}")
+        base_bytes = bytes_done
+
+        def on_file_progress(current: int, _total: int) -> None:
+            current_done = min(file_size, max(0, current))
+            submit_progress(
+                f"Uploading {local_path.name} to the RunPod volume…",
+                (base_bytes + current_done) / bytes_total if bytes_total else 1.0,
+                bytes_done=base_bytes + current_done,
+                bytes_total=bytes_total,
+                files_done=files_done,
+                files_total=len(plan),
+            )
+
+        if supports_progress:
+            await conn.sftp_put(
+                str(local_path), f"{remote}/{rel}", on_progress=on_file_progress
+            )
+        else:  # Preserve the executor's duck-type contract for test/custom connections.
+            await conn.sftp_put(str(local_path), f"{remote}/{rel}")
         sent += 1
+        files_done += 1
+        bytes_done += file_size
+        submit_progress(
+            f"Uploaded {files_done} of {len(plan)} package files",
+            bytes_done / bytes_total if bytes_total else 1.0,
+            force=True,
+            bytes_done=bytes_done,
+            bytes_total=bytes_total,
+            files_done=files_done,
+            files_total=len(plan),
+        )
     log.info(
         "runpod: staged %d file(s), reused %d already on the volume", sent, skipped
     )
@@ -373,6 +456,7 @@ async def submit_job(
 
     pid = await conn.launch_detached(f"{remote}/{CHAIN_SCRIPT}", remote)
     job.runpod_pid = pid
+    job.remote_submit_progress = None
     job.remote_scratch_dir = remote
     job.remote_project_dir = remote  # one filesystem: no project/scratch split
     job.status = MdStatus.running
@@ -506,7 +590,10 @@ def pod_payloads_for(
     plan = plan_execution(n_atoms)
     if plan["gpu"] is None:
         raise RunpodError(plan["reason"])
-    name = f"nadoc-{job.design_name}-{job.job_id}"[:191]
+    # Launch is an explicit local action, so a copied job record changes ownership to
+    # this installation for the new pod rather than inheriting another machine's claim.
+    job.runpod_owner_id = installation_id()
+    name = pod_name(job.design_name, job.job_id)
     # gpuTypeIds is a PRIORITY LIST — hand RunPod every card that fits, cheapest first,
     # and let it pick whatever is actually free in the volume's datacenter.
     gpu_ids = [g.key for g in plan["gpus"]]
@@ -605,6 +692,7 @@ async def run_job_on_pod(
         # A host too old for the image's CUDA boots, never starts sshd, and bills for the
         # whole timeout. Registering only at the yield made that spend invisible.
         job.runpod_pod_id = info.id
+        start_runpod_billing(job, info.id, info.cost_per_hr)
         job.save(workspace_dir)
         client.record_lifecycle(
             "pod_claimed",
@@ -680,12 +768,16 @@ async def run_job_on_pod(
         # Once submitted, however, SSH/NADOC loss must not kill healthy computation;
         # RunPod's terminateAfter remains the hard bill boundary.
         if job.runpod_pod_id and not submitted:
+            job.remote_submit_progress = None
             with contextlib.suppress(Exception):
                 await client.terminate_pod(
                     job.runpod_pod_id,
                     reason="failure_before_chain_submission",
                     job_id=job.job_id,
                 )
+            finish_runpod_billing(job, job.runpod_pod_id)
+            with contextlib.suppress(Exception):
+                job.save(workspace_dir)
         raise
 
     if job.runpod_pod_id and (
@@ -696,8 +788,12 @@ async def run_job_on_pod(
             reason=("user_stop" if job.user_stopped else f"job_{job.status.value}"),
             job_id=job.job_id,
         )
+        finish_runpod_billing(job, job.runpod_pod_id)
 
     job.runpod_pid = None
+    # Returning from supervision means this attempt's pod is terminal or was explicitly
+    # destroyed. Close the meter for completed, failed, stopped, and reclaimed attempts.
+    finish_runpod_billing(job, job.runpod_pod_id)
     return job.status
 
 

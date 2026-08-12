@@ -92,4 +92,17 @@ describe('initResourceMonitor', () => {
     expect(poll).toHaveBeenCalledTimes(1)           // no ticks while closed
     mon.stop()
   })
+
+  it('re-initialising the same card replaces the old poller and click listener', async () => {
+    const oldPoll = vi.fn().mockResolvedValue(sampleWithGpu)
+    const newPoll = vi.fn().mockResolvedValue(sampleWithGpu)
+    initResourceMonitor({ idPrefix: 'oxdna-metrics', poll: oldPoll })
+    const mon = initResourceMonitor({ idPrefix: 'oxdna-metrics', poll: newPoll })
+
+    document.getElementById('oxdna-metrics-resources-toggle').click()
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(oldPoll).not.toHaveBeenCalled()
+    expect(newPoll).toHaveBeenCalledTimes(3)
+    mon.stop()
+  })
 })

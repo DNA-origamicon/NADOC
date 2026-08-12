@@ -24,7 +24,7 @@ import asyncio
 import logging
 import shlex
 from pathlib import Path, PurePosixPath
-from typing import Optional
+from typing import Callable, Optional
 
 import asyncssh
 
@@ -179,15 +179,26 @@ class RunpodConnection:
     async def mkdir_p(self, remote_dir: str) -> None:
         await self.run(f"mkdir -p {shlex.quote(remote_dir)}")
 
-    async def sftp_put(self, local_path: str, remote_path: str) -> None:
+    async def sftp_put(
+        self,
+        local_path: str,
+        remote_path: str,
+        *,
+        on_progress: Optional[Callable[[int, int], None]] = None,
+    ) -> None:
         conn = self._require()
         await self.mkdir_p(str(PurePosixPath(remote_path).parent))
+        total = Path(local_path).stat().st_size
+        transferred = 0
         try:
             async with conn.start_sftp_client() as sftp:
                 async with sftp.open(remote_path, "wb") as dst:
                     with Path(local_path).open("rb") as src:
                         while chunk := src.read(_CHUNK):
                             await dst.write(chunk)
+                            transferred += len(chunk)
+                            if on_progress is not None:
+                                on_progress(transferred, total)
         except Exception as exc:  # noqa: BLE001
             raise RunpodSSHError(f"upload failed ({local_path}): {exc}") from exc
 

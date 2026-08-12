@@ -155,7 +155,16 @@ def _collect_active() -> list[dict]:
             # supervisor is running it OR a live pod carries its id — else it is orphaned →
             # mark terminal so the detector stops claiming a phantom job.  (Alpine untouched.)
             if getattr(j, "execution_target", "local") == "runpod":
-                pod_names = _live_remote_pod_names()
+                # A prepared RunPod job is intentionally queued with no pod until the user
+                # clicks Submit to RunPod. Likewise, local package preparation precedes pod
+                # creation. Absence of a pod is only an interruption signal AFTER launch.
+                from backend.core.md_job import MdStatus
+
+                pod_names = (
+                    None
+                    if j.status in {MdStatus.preparing, MdStatus.queued}
+                    else _live_remote_pod_names()
+                )
                 if pod_names is not None:  # None => can't verify → keep
                     try:
                         from backend.core.runpod_supervisor import (

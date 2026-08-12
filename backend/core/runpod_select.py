@@ -29,7 +29,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from backend.core.runpod_script import GPU_TYPES, GpuType, fits_on
+from backend.core.runpod_script import (
+    GPU_TYPES,
+    VRAM_SAFETY_FRACTION,
+    GpuType,
+    fits_on,
+    required_vram_mb,
+)
 
 # NAMD build -> the CUDA compute-caps its binary actually carries. A card whose sm is not in the
 # set dies at step 0. Keep in lockstep with the packaged binaries.
@@ -360,6 +366,7 @@ def plan_options(
     registry: Optional[dict] = None,
     prefer: str = "balanced",
     cards: tuple[GpuType, ...] = CARDS,
+    show_ineligible: bool = False,
 ) -> list[dict]:
     """Ranked, JSON-ready GPU rows for a WHOLE plan — relaxation and production costed
     separately, at their own timesteps, plus a total.
@@ -386,8 +393,51 @@ def plan_options(
         registry=registry,
         cards=cards,
     )
+    if show_ineligible:
+        # The launch selector remains strict, but the wizard is a decision surface: hiding a
+        # card makes it impossible to understand why a familiar GPU cannot run this job.
+        # Show every card, preserving the recommended eligible card first, and attach a
+        # concrete reason to anything the paid launch path would reject.
+        eligible_all = select_cards(
+            n_atoms, build=build, resident=resident,
+            timestep_fs=production_timestep_fs, stock=None, prefer="value",
+            registry=registry, cards=cards,
+        )
+        ordered = list(ranked)
+        ordered.extend(c for c in eligible_all if c.key not in {x.key for x in ordered})
+        archs = BUILD_ARCHS[build]
+        for g in cards:
+            if g.key in {x.key for x in ordered}:
+                continue
+            live = (stock or {}).get(g.key) or {}
+            price = live.get("on_demand") or g.usd_per_hour
+            est = estimate_rate(
+                g.sm, n_atoms, price, timestep_fs=production_timestep_fs,
+                resident=resident, registry=registry,
+            )
+            ordered.append(Candidate(
+                key=g.key, label=g.label, sm=g.sm, vram_mb=g.vram_mb,
+                usd_per_hour=float(price), live_price=bool(live.get("on_demand")),
+                available=(None if stock is None else bool(live) and str(
+                    live.get("stock") or "").strip().lower() not in ("", "none", "null")),
+                ns_day_est=(est or {}).get("ns_day", 0.0),
+                usd_per_ns_est=(est or {}).get("usd_per_ns", float("inf")),
+            ))
+        ranked = ordered
     rows: list[dict] = []
     for c in ranked:
+        reasons: list[str] = []
+        if c.sm not in BUILD_ARCHS[build]:
+            reasons.append(f"the {build} NAMD build does not include CUDA {c.sm}")
+        needed = required_vram_mb(n_atoms, gpu_resident=resident)
+        usable = c.vram_mb * VRAM_SAFETY_FRACTION
+        if needed > usable:
+            reasons.append(
+                f"needs about {needed / 1024:.1f} GB VRAM; "
+                f"only {usable / 1024:.1f} GB is usable with safety headroom"
+            )
+        if stock is not None and c.available is False:
+            reasons.append("currently out of stock")
         relax_h, relax_cost, relax_nsday = _phase(
             c.sm,
             n_atoms,
@@ -417,6 +467,8 @@ def plan_options(
                 "usd_per_hour": round(c.usd_per_hour, 2),
                 "live_price": c.live_price,
                 "available": c.available,  # True / False / None (stock unknown)
+                "eligible": not reasons,
+                "insufficient_reason": "; ".join(reasons),
                 # ns/day is quoted at the PRODUCTION timestep — the number a user compares cards
                 # on — with the relax rate alongside it because the ladder runs slower per ns.
                 "ns_day": round(prod_nsday, 1) if prod_nsday else None,

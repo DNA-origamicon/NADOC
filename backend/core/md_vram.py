@@ -572,6 +572,58 @@ def clear_profile_cache() -> None:
     _PROFILE_CACHE.clear()
 
 
+def estimate_atoms_from_design_geometry(design, *, padding_nm: float = 1.2) -> Optional[int]:
+    """Fast, conservative solvated-atom estimate for interactive previews.
+
+    Unlike :func:`estimate_profile_from_design`, this does not build the all-atom PDB.  That
+    build is appropriate for the launch gate, where its coordinates are reused, but can take
+    minutes for a large routed design and used to leave the Job Wizard saying ``checking…``
+    for that entire time.  A preview only needs the atom-count scale used for price and VRAM
+    ranking, so nucleotide count plus the helix-axis envelope is the honest cheap answer.
+
+    The 1.2 nm radial allowance encloses the DNA atoms around each helix axis.  Terminal
+    phosphates are omitted one per strand, matching the topology convention used by the exact
+    estimator.  ``estimate_box_atoms`` then applies the same water-density, DNA-displacement,
+    and hydrated-magnesium accounting as the production box sizer.
+    """
+    design = design.without_reference_geometry()
+    import numpy as np  # noqa: PLC0415
+
+    from backend.core.namd_solvate import estimate_box_atoms  # noqa: PLC0415
+    from backend.core.sequences import strand_nucleotide_count  # noqa: PLC0415
+
+    helices = list(getattr(design, "helices", None) or [])
+    strands = list(getattr(design, "strands", None) or [])
+    if not helices or not strands:
+        return None
+
+    try:
+        n_nt = sum(strand_nucleotide_count(s, design) for s in strands)
+        if n_nt <= 0:
+            return None
+        endpoints = np.asarray(
+            [
+                p.to_array()
+                for helix in helices
+                for p in (helix.axis_start, helix.axis_end)
+            ],
+            dtype=float,
+        )
+        if endpoints.ndim != 2 or endpoints.shape[1] != 3 or not np.isfinite(endpoints).all():
+            return None
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+    # DNA residues average about 32 atoms including hydrogens. Rounding upward keeps the
+    # preview on the safe side across base composition and 5'/3' terminal variants.
+    n_dna_atoms = int(n_nt * 32)
+    n_phosphates = max(0, n_nt - len(strands))
+    dna_radius_nm = 1.2
+    extent = endpoints.max(axis=0) - endpoints.min(axis=0)
+    box_nm = tuple(float(x) + 2.0 * (dna_radius_nm + padding_nm) for x in extent)
+    return estimate_box_atoms(box_nm, n_dna_atoms, n_phosphates)
+
+
 def estimate_profile_from_design(
     design,
     *,
@@ -602,6 +654,7 @@ def estimate_profile_from_design(
     treated as read-only by every caller (they only read its keys), so the cached dict
     is handed back directly.
     """
+    design = design.without_reference_geometry()
     import numpy as np  # noqa: PLC0415
     from backend.core.pdb_export import export_pdb  # noqa: PLC0415
 

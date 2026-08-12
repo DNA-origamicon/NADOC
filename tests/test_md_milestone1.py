@@ -1893,6 +1893,29 @@ class TestReconcilePreparing:
         out = runner.reconcile_job_status(job, tmp_path)
         assert out.status == MdStatus.preparing  # live heartbeat → untouched
 
+    def test_stale_runpod_preparation_is_not_exempt_from_reconciliation(
+        self, tmp_path, monkeypatch
+    ):
+        """RunPod packaging is still a local background task before submission."""
+        import os
+        import time as _time
+        from backend.core.md_job import MdStatus
+        from backend.core.md_prep_progress import PREP_PROGRESS_FILENAME, write_prep_progress
+        import backend.core.namd_runner as runner
+
+        job = self._preparing_job(tmp_path)
+        job.execution_target = "runpod"
+        job.save(tmp_path)
+        write_prep_progress(job.job_dir(tmp_path), {"phase": "topology", "fraction": 0.112})
+        sidecar = job.job_dir(tmp_path) / PREP_PROGRESS_FILENAME
+        old = _time.time() - runner._PREP_STALE_S - 1
+        os.utime(sidecar, (old, old))
+
+        out = runner.reconcile_job_status(job, tmp_path)
+
+        assert out.status == MdStatus.failed
+        assert "interrupted" in (out.error or "").lower()
+
 
 class TestMdChain:
     """P2 chain executor wired end-to-end through the real NAMD spawn/status adapter

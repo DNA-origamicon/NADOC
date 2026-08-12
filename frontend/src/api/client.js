@@ -2665,6 +2665,10 @@ export const getRelaxPresets     = ()            => _oxdnaJSON('GET',  '/md/rela
  *  no disk, so it is safe to re-request behind a short debounce as the user edits. */
 export const fetchProtocolPlan   = (body)        => _oxdnaJSON('POST', '/md/protocol-plan', body)
 export const createMdJob         = (body)        => _oxdnaJSON('POST', '/md/jobs', body)
+/** Validate the selected NAMD run/download directory. With no path, the backend creates and
+ * returns NADOC's portable <workspace>/md_jobs default. */
+export const getMdRunDirStatus   = (path = null) =>
+  _oxdnaJSON('GET', `/md/run-dir-status${path ? `?path=${encodeURIComponent(path)}` : ''}`)
 /** Prepare (solvate) + start a DRAFT NAMD job with the given advanced settings
  *  (same body shape as createMdJob). Seeds from the draft's recorded oxDNA/mrDNA
  *  source; backs the "Relax from oxDNA" button. */

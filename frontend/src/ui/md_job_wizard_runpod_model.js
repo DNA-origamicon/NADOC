@@ -118,7 +118,8 @@ export function runpodEstimateKey(shape, { connected = false } = {}) {
 /** The row the user picked, else the best-value one the backend ranked first. */
 export function selectedRow(preview, gpuKey) {
   const rows = preview?.gpus || []
-  return rows.find(r => r.key === gpuKey) || rows[0] || null
+  return rows.find(r => r.key === gpuKey && r.eligible !== false)
+    || rows.find(r => r.eligible !== false) || null
 }
 
 /**

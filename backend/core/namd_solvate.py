@@ -2678,6 +2678,7 @@ def build_namd_solvated_package(
     bytes
         ZIP file contents ready to write to disk or serve as a download.
     """
+    design = design.without_reference_geometry()
     _check_ff_files()
 
     name = (design.metadata.name or "design").replace(" ", "_")

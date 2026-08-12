@@ -84,13 +84,13 @@ describe('the gate', () => {
     step.dispose()
   })
 
-  it('runpod is blocked until its own block reports ready', () => {
-    // No preview has come back yet (nothing is stubbed here), so the RunPod gate is still
-    // waiting on the pre-flight — but it is a REAL gate now, not an "unwired" stub.
+  it('runpod preview is advisory and does not block the first tab', () => {
+    // No preview has come back yet. The final protocol and solvated package do not exist at
+    // this point, so the paid-resource gate belongs to the prepared job's Rent & Run action.
     const { mount, step } = setup()
     clickTarget(mount, 'runpod')
-    expect(step.isReady()).toBe(false)
-    expect(step.readiness().reason).not.toMatch(/Clusters card/)
+    expect(step.isReady()).toBe(true)
+    expect(step.readiness().reason).toBe('')
     step.dispose()
   })
 

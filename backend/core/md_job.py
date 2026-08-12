@@ -360,6 +360,9 @@ class MdJob:
     # ONLY reliable liveness handle, because NAMD renames its process to
     # "NAMD masterPe" and `pgrep namd3` therefore matches nothing.
     runpod_pod_id: Optional[str] = None
+    # Random, stable id of the NADOC installation which created the pod. Two computers
+    # may share one RunPod account; only the creator is allowed to auto-adopt/reap it.
+    runpod_owner_id: Optional[str] = None
     # Retained when the live handle is cleared so incident reports can still join the
     # job to provider billing and the durable lifecycle ledger.
     runpod_last_pod_id: Optional[str] = None
@@ -381,10 +384,19 @@ class MdJob:
     # ``runpod_budget_usd`` is a BUDGET, not a duration: ``lifetime_for_budget`` derives the
     # pod's kill-switch wall-clock from the rate of the card actually obtained, because the
     # same $15 buys 44 h at $0.34/hr and 6 h at $2.39/hr.  ⚠️ It caps ONE pod and has no
-    # memory — N resumes can cost N x the cap. Cumulative spend is still unbuilt.
+    # memory — N resumes can cost N x the cap. Billing sessions below make that
+    # cumulative spend visible even though each resume remains separately authorised.
     runpod_gpu_key: Optional[str] = None
     runpod_budget_usd: Optional[float] = None
     runpod_volume_id: Optional[str] = None
+    # Price snapshot shown in the Job Wizard, followed by provider-rate billing
+    # intervals.  A session opens when RunPod returns a pod id (billing begins) and
+    # closes when NADOC confirms teardown. Multiple rows cover spot resumes.
+    runpod_estimated_cost_usd: Optional[float] = None
+    runpod_quoted_rate_usd_per_hour: Optional[float] = None
+    runpod_current_rate_usd_per_hour: Optional[float] = None
+    runpod_billing_sessions: list = field(default_factory=list)
+    runpod_final_cost_usd: Optional[float] = None
     # RunPod-owned absolute expiration installed at pod creation. Unlike the on-pod
     # watchdog, this destroys the rented resource even when NADOC and SSH are gone.
     runpod_terminate_after: Optional[str] = None
@@ -480,9 +492,13 @@ class MdJob:
         data.setdefault("runpod_gpu_key", None)
         data.setdefault("runpod_budget_usd", None)
         data.setdefault("runpod_volume_id", None)
+        data.setdefault("runpod_estimated_cost_usd", None)
+        data.setdefault("runpod_quoted_rate_usd_per_hour", None)
+        data.setdefault("runpod_current_rate_usd_per_hour", None)
+        data.setdefault("runpod_billing_sessions", [])
+        data.setdefault("runpod_final_cost_usd", None)
         data.setdefault("runpod_terminate_after", None)
         return cls(**data)
-
     @classmethod
     def list_jobs(cls, workspace_dir: Path) -> list["MdJob"]:
         from backend.core.job_archive import archived_job_ids
@@ -512,6 +528,57 @@ class MdJob:
         data = asdict(self)
         data["status"] = self.status.value
         return data
+
+
+def start_runpod_billing(
+    job: MdJob, pod_id: str, usd_per_hour, *, now: float | None = None
+) -> None:
+    """Open one durable provider billing interval, idempotently."""
+    rate = float(usd_per_hour) if usd_per_hour is not None else None
+    if (
+        job.runpod_billing_sessions
+        and job.runpod_billing_sessions[-1].get("ended_at") is None
+    ):
+        active = job.runpod_billing_sessions[-1]
+        if active.get("pod_id") == pod_id:
+            if rate is not None:
+                active["usd_per_hour"] = rate
+            job.runpod_current_rate_usd_per_hour = rate
+            return
+    job.runpod_billing_sessions.append(
+        {
+            "pod_id": pod_id,
+            "started_at": time.time() if now is None else float(now),
+            "ended_at": None,
+            "usd_per_hour": rate,
+            "cost_usd": None,
+        }
+    )
+    job.runpod_current_rate_usd_per_hour = rate
+
+
+def finish_runpod_billing(
+    job: MdJob, pod_id: str | None = None, *, now: float | None = None
+) -> float:
+    """Close the active interval and return cumulative provider-time cost."""
+    ended = time.time() if now is None else float(now)
+    for session in reversed(job.runpod_billing_sessions):
+        if session.get("ended_at") is not None:
+            continue
+        if pod_id and session.get("pod_id") != pod_id:
+            continue
+        started = float(session.get("started_at") or ended)
+        rate = float(session.get("usd_per_hour") or 0)
+        session["ended_at"] = ended
+        session["cost_usd"] = round(max(0.0, ended - started) * rate / 3600, 6)
+        break
+    total = round(
+        sum(float(s.get("cost_usd") or 0) for s in job.runpod_billing_sessions), 6
+    )
+    job.runpod_current_rate_usd_per_hour = None
+    if job.status == MdStatus.completed:
+        job.runpod_final_cost_usd = total
+    return total
 
 
 def new_job(

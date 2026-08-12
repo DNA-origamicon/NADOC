@@ -768,12 +768,15 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
       states are picked up and relaunched by ``resume_interrupted_jobs`` (startup
       + periodic supervisor); ``run_job`` then resumes mid-segment if needed.
     """
+    # Package preparation is local for every target, including Alpine and RunPod.
+    # Reconcile its heartbeat before handing launched remote jobs to their remote
+    # supervisors; otherwise a server reload leaves remote drafts preparing forever.
+    if job.status == MdStatus.preparing:
+        return _reconcile_preparing(job, workspace_dir)
     if getattr(job, "execution_target", "local") != "local":
         # Remote job — its status is driven by the SlurmExecutor / RunPod supervisor
         # poll pass, not the local /proc reconciliation.  Leave it untouched, EXCEPT
         return job
-    if job.status == MdStatus.preparing:
-        return _reconcile_preparing(job, workspace_dir)
     # workspace_dir lets the check also see a running MINIMISATION (it owns no segment
     # name).  Without it, a restart during minimisation failed the job under a live NAMD.
     if (

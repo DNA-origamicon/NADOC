@@ -116,6 +116,19 @@ def test_simulation_projection_removes_reference_strands_and_reference_only_heli
     assert len(_strand_nucleotide_order(simulation)) == 10
 
 
+def test_namd_fast_size_estimate_cannot_count_reference_geometry():
+    """Estimator-level defense protects every preview caller, even if it passes editor state."""
+    from backend.core.md_vram import estimate_atoms_from_design_geometry
+
+    design = _bundle()
+    design.strands[0].is_reference = True
+    projected = design.without_reference_geometry()
+
+    assert estimate_atoms_from_design_geometry(design) == estimate_atoms_from_design_geometry(
+        projected
+    )
+
+
 def test_simulation_preparer_snapshot_cannot_reintroduce_reference_geometry(tmp_path):
     """Engine-level defense applies even when a caller passes the editor design."""
     from backend.core.cando_runner import prepare_cando_job

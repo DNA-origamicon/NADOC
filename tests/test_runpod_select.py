@@ -81,6 +81,17 @@ def test_vram_floor_excludes_small_cards_on_huge_box():
     assert "RTX 3090" not in _labels(huge), "24 GB cannot hold the 11.3M box resident"
 
 
+def test_wizard_plan_keeps_insufficient_cards_with_reason():
+    rows = plan_options(
+        HUGE, build="release", resident=True, show_ineligible=True, stock=None
+    )
+    small = next(r for r in rows if r["label"] == "RTX 4090")
+    assert small["eligible"] is False
+    assert "needs about" in small["insufficient_reason"]
+    assert "usable with safety headroom" in small["insufficient_reason"]
+    assert any(r["eligible"] for r in rows)
+
+
 # ── live stock + price ───────────────────────────────────────────────────────────
 def test_out_of_stock_excluded_when_stock_given():
     # 4090 out (stock None), 6000 Ada in

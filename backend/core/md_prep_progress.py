@@ -285,6 +285,10 @@ class PrepTracker:
                 "eta_seconds": None if eta is None else round(eta, 1),
                 "elapsed_seconds": round(elapsed, 1),
                 "message": self._message,
+                # True when the active operation reported a real work fraction.
+                # False means the fraction is the tracker's time-based estimate for
+                # an otherwise opaque subprocess/kernel.
+                "measured": self._reported,
                 "warning": warning,
                 "done": self._done,
                 "failed": self._failed,

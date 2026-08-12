@@ -1,5 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { DEFAULT_PRODUCTION_TIMESTEP_FS, mdAnchorAtomNames, mdAnchorStiffness, mdForcesProvenance, DEFAULT_TRAJ_INTERVAL, MD_PRODUCTION_MARKER, TRAJ_FRAME_CONFIRM, effectiveProductionTimestepFs, filterJobsForPart, jobProductionTimestepFs, mdHasProductionRun, mdIsLocalTarget, mdIsRemoteJob, mdJobEditable, mdSegGlyphKind, newestCompletedForPart, normalizeWorkspacePath, productionNsFromSteps, seededBadge, stridedFrameCount } from './md_jobs_panel.js'
+import { DEFAULT_PRODUCTION_TIMESTEP_FS, mdAnchorAtomNames, mdAnchorStiffness, mdCanReuseStatusSocket, mdForcesProvenance, DEFAULT_TRAJ_INTERVAL, MD_PRODUCTION_MARKER, TRAJ_FRAME_CONFIRM, effectiveProductionTimestepFs, filterJobsForPart, jobProductionTimestepFs, mdHasProductionRun, mdIsLocalTarget, mdIsRemoteJob, mdJobEditable, mdSegGlyphKind, newestCompletedForPart, normalizeWorkspacePath, productionNsFromSteps, seededBadge, stridedFrameCount } from './md_jobs_panel.js'
+
+describe('mdCanReuseStatusSocket', () => {
+  it('reuses a same-job socket while connecting or open', () => {
+    expect(mdCanReuseStatusSocket('j1', 'j1', 0)).toBe(true)
+    expect(mdCanReuseStatusSocket('j1', 'j1', 1)).toBe(true)
+  })
+
+  it('replaces a different-job, closing, or closed socket', () => {
+    expect(mdCanReuseStatusSocket('j1', 'j2', 0)).toBe(false)
+    expect(mdCanReuseStatusSocket('j1', 'j1', 2)).toBe(false)
+    expect(mdCanReuseStatusSocket('j1', 'j1', 3)).toBe(false)
+  })
+})
 
 describe('mdJobEditable', () => {
   it('allows only draft/prepared jobs that no executor owns', () => {
@@ -410,18 +423,18 @@ describe('mdRunControl (ONE control for the selected job: Run / Stop / Resume)',
     )
     expect(rc).toMatchObject({ action: 'resume', label: '↻ Continue', disabled: false })
   })
-  it('a prepared RunPod job → ▶ Rent & Run, and it is the button that starts it', () => {
+  it('a prepared RunPod job → ☁ Submit to RunPod', () => {
     // It used to be DISABLED with "submit it from the review card" — a card the Job Wizard
     // replaced, so the top button did nothing at all for a RunPod job.
     const job = { status: 'queued', execution_target: 'runpod' }
     const rc = mdRunControl(job, { runTarget: 'runpod', runpodReady: true })
-    expect(rc.label).toBe('▶ Rent & Run')
+    expect(rc.label).toBe('☁ Submit to RunPod')
     expect(rc.disabled).toBe(false)
-    expect(rc.action).toBe('run')
+    expect(rc.action).toBe('submit')
     expect(mdRunpodStartable(job)).toBe(true)
   })
 
-  it('▶ Rent & Run is blocked while the pre-flight fails, and says why', () => {
+  it('☁ Submit to RunPod is blocked while the pre-flight fails, and says why', () => {
     const rc = mdRunControl({ status: 'queued', execution_target: 'runpod' },
       { runpodReady: false, runpodBlocked: 'Network volume: none set' })
     expect(rc.disabled).toBe(true)

@@ -88,8 +88,10 @@ export async function recommendArchive(forecast) {
  *  label stays in sync with the shared preference (across the app) via the change event. */
 export function mountDirectoryButton(container, { api } = {}) {
   if (!container) return null
+  let checkSeq = 0
+  let status = null
   const btn = createButton({
-    label: `📁 ${runDirLabel(getRunDir())}`,
+    label: `📁 ${runDirLabel(getRunDir())} · checking…`,
     variant: 'ghost',
     title: 'Folder that new runs (any engine) write into — point large trajectories at a roomy '
          + 'drive to keep them off a full system disk. Right-click to reset to the default.',
@@ -101,9 +103,40 @@ export function mountDirectoryButton(container, { api } = {}) {
   })
   btn.style.width = '100%'
   btn.addEventListener('contextmenu', (e) => { e.preventDefault(); setRunDir(null) })
-  const sync = () => { btn.textContent = `📁 ${runDirLabel(getRunDir())}` }
+  const render = ({ checking = false } = {}) => {
+    const chosen = getRunDir()
+    const shownPath = chosen || status?.path || null
+    const label = runDirLabel(shownPath)
+    btn.textContent = `📁 ${label}${checking ? ' · checking…' : status?.ok === false ? ' ⚠' : ''}`
+    btn.dataset.runDirState = checking ? 'checking' : status?.ok === false ? 'error' : 'ok'
+    btn.style.borderColor = status?.ok === false ? '#f85149' : ''
+    btn.style.color = status?.ok === false ? '#f85149' : ''
+    btn.title = status?.ok === false
+      ? `${status.detail || 'This folder is unavailable.'}\n${status.path || chosen || ''}`
+      : `Folder that new runs write into: ${shownPath || 'NADOC workspace default'}. `
+        + 'Right-click to reset to the default.'
+  }
+  const sync = async () => {
+    const seq = ++checkSeq
+    status = null
+    render({ checking: !!api?.getMdRunDirStatus })
+    if (!api?.getMdRunDirStatus) { render(); return }
+    try {
+      const next = await api.getMdRunDirStatus(getRunDir())
+      if (seq !== checkSeq) return
+      status = next || {
+        ok: false, path: getRunDir(), detail: 'Could not check this folder.' }
+    } catch (err) {
+      if (seq !== checkSeq) return
+      status = {
+        ok: false, path: getRunDir(),
+        detail: `Could not check this folder: ${err?.message || err}`,
+      }
+    }
+    render()
+  }
   try { window.addEventListener(_EVT, sync) } catch { /* no window (tests) */ }
   container.appendChild(btn)
-  sync()
+  void sync()
   return btn
 }

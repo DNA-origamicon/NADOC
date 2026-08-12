@@ -190,6 +190,18 @@ def get_design() -> Design | None:
         return _session().design
 
 
+def get_design_with_revision() -> tuple[Design | None, int]:
+    """Current design reference and revision captured under the same lock.
+
+    Read-only caches may do expensive derived work outside the state lock, then compare
+    this pair again before publishing it.  The object identity distinguishes a newly
+    opened session whose revision counter happens to match the previous session's.
+    """
+    with _lock:
+        s = _session()
+        return s.design, s.revision
+
+
 def has_design_unlocked() -> bool:
     """Whether the current doc holds a design, WITHOUT taking ``_lock``.
 

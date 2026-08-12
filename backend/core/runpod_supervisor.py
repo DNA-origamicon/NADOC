@@ -28,6 +28,7 @@ from backend.core.runpod_api import RunpodClient
 from backend.core.runpod_api import RunpodError
 from backend.core.runpod_conn import RunpodSSHError
 from backend.core.runpod_executor import reattach_job_on_pod, run_job_on_pod
+from backend.core.runpod_identity import installation_id, is_foreign_pod, pod_owner
 from backend.core.runpod_script import DEFAULT_BUDGET_USD
 
 log = logging.getLogger(__name__)
@@ -141,7 +142,8 @@ def start_job(
     ``budget_usd`` (and ``job.runpod_budget_usd``, which wins) is the spend cap the user set
     in the Job Wizard. It was previously a module constant no one could see or change.
     ⚠️ It caps ONE pod: the auto-resume loop below relaunches with a FRESH budget on every
-    reclaim, so N resumes can cost up to N x the cap. Cumulative spend is not tracked.
+    reclaim, so N resumes can cost up to N x the cap. The job's billing-session ledger
+    reports the cumulative amount across those attempts.
     """
     if is_running(job.job_id):
         return
@@ -244,6 +246,9 @@ def start_job(
             from backend.core import runpod_api
 
             if not runpod_api._handing_off():  # noqa: SLF001 — shared lifecycle flag
+                from backend.core.md_job import finish_runpod_billing
+
+                finish_runpod_billing(job, job.runpod_pod_id)
                 job.status = MdStatus.stopped
                 job.user_stopped = True
                 job.error = None
@@ -324,6 +329,7 @@ async def stop_job(job_id: str, *, client: Optional[RunpodClient] = None) -> boo
             )
         log.info("runpod: stop_job terminated pod %s for job %s", pod_id, job_id)
 
+
     _RUNNING.pop(job_id, None)
     _PODS.pop(job_id, None)
     return task is not None or pod_id is not None
@@ -376,6 +382,12 @@ async def reap_orphan_pods(
         name = str(pod.raw.get("name") or "")
         if not name.startswith("nadoc-"):
             continue
+        # An account may be shared by several computers. A signed pod from another
+        # installation is neither adoptable nor an orphan from this machine's point of
+        # view; its creator remains responsible for supervision and teardown.
+        if is_foreign_pod(name):
+            log.info("runpod: leaving foreign NADOC pod %s (%s) alone", pod.id, name)
+            continue
         # is_DESTROYED, not is_terminated: an EXITED pod is a stopped container that is
         # still on the account and still billing for its disk. Skipping those is what
         # orphaned pod 2tnfzwx9j3mvhm — it sat EXITED and every reap walked past it.
@@ -383,6 +395,13 @@ async def reap_orphan_pods(
             continue
         job = claimed.get(pod.id)
         if job is not None:
+            if job.runpod_owner_id and job.runpod_owner_id != installation_id():
+                log.warning(
+                    "runpod: local job %s references pod %s owned by another NADOC install; ignoring",
+                    job.job_id,
+                    pod.id,
+                )
+                continue
             adoptable.append(job)
             log.info(
                 "runpod: pod %s (%s) is claimed by job %s (%s) — adopting, not reaping",
@@ -391,6 +410,13 @@ async def reap_orphan_pods(
                 job.job_id,
                 job.status.value,
             )
+            continue
+        # Pods created before installation signatures existed are ambiguous on a shared
+        # account. Never destroy an unclaimed legacy pod automatically; its provider
+        # terminateAfter remains the safety net. A locally claimed legacy pod above can
+        # still be adopted after a same-computer server reload.
+        if pod_owner(name) is None:
+            log.warning("runpod: leaving unsigned legacy pod %s (%s) alone", pod.id, name)
             continue
         with contextlib.suppress(Exception):
             await client.terminate_pod(pod.id, reason="unclaimed_nadoc_orphan")

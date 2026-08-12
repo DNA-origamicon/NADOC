@@ -170,11 +170,24 @@ export function masterProgressTooltip(node) {
   if (!node) return ''
   if (node.remote_submit_progress) {
     const p = node.remote_submit_progress
+    const destination = p.target === 'runpod' || node.execution_target === 'runpod'
+      ? 'transferring to RunPod volume' : 'submitting to Alpine'
     const files = p.files_total ? `\n${p.files_done || 0}/${p.files_total} files` : ''
-    return `NAMD · submitting to Alpine\n${p.label || p.phase || 'Working…'}${files}`
+    const bytes = Number(p.bytes_total) > 0
+      ? `\n${formatBytes(p.bytes_done || 0)} / ${formatBytes(p.bytes_total)}` : ''
+    return `NAMD · ${destination}\n${p.label || p.phase || 'Working…'}${files}${bytes}`
   }
   const pct = masterProgressPct(node)
   const stale = node.out_of_date ? '\n⚠ design changed since this run' : ''
+  if (node.prep_progress) {
+    const p = node.prep_progress
+    const phase = Number.isInteger(p.phase_index) && Number(p.n_phases) > 0
+      ? `Phase ${p.phase_index + 1}/${p.n_phases}` : 'Preparation'
+    const mode = p.measured === false ? 'estimated' : 'measured'
+    const lines = [`NAMD · preparing · ${pct}% (${mode})`, `${phase}: ${p.message || p.label || p.phase || 'Working…'}`]
+    if (p.warning) lines.push(`⚠ ${p.warning}`)
+    return lines.join('\n') + stale
+  }
   if (node.engine === 'lammps') {
     return `LAMMPS (CPU) · ${node.status}${node.status === 'running' ? ` · ${pct}%` : ''}${stale}`
   }
@@ -260,6 +273,15 @@ function _estPrefix(node) {
 export function masterStepText(node) {
   if (!node) return ''
   const pct = masterProgressPct(node)
+  if (node.prep_progress) {
+    const p = node.prep_progress
+    const phase = Number.isInteger(p.phase_index) && Number(p.n_phases) > 0
+      ? `phase ${p.phase_index + 1}/${p.n_phases}` : ''
+    const estimated = p.measured === false ? '~' : ''
+    const elapsed = p.measured === false && Number(p.elapsed_seconds) >= 0
+      ? `estimating · ${formatEta(p.elapsed_seconds)} elapsed` : ''
+    return [`${estimated}${pct}%`, phase, elapsed].filter(Boolean).join(' · ') + _etaSuffix(node)
+  }
   const min = node?.engine === 'namd' ? mdMinimizationRow(node) : null
   const liveMinStep = Number(node?.live_metrics?.segment === min?.name ? node.live_metrics?.step : NaN)
   // While minimising, show that phase's exact counter. The backend's progress_fraction
@@ -299,7 +321,13 @@ export function masterStatusText(node) {
   const eng = engineLabel(node)
   if (node.remote_submit_progress) {
     const p = node.remote_submit_progress
-    return `${eng} · submitting to Alpine · ${p.label || p.phase || 'Working…'} · ${masterProgressPct(node)}%`
+    const destination = p.target === 'runpod' || node.execution_target === 'runpod'
+      ? 'transferring to RunPod volume' : 'submitting to Alpine'
+    return `${eng} · ${destination} · ${p.label || p.phase || 'Working…'} · ${masterProgressPct(node)}%`
+  }
+  if (node.engine === 'namd' && node.status === 'preparing' && node.prep_progress) {
+    const p = node.prep_progress
+    return `${eng} · preparing · ${p.message || p.label || p.phase || 'Working…'} · ${masterStepText(node)}`
   }
   if (node.engine === 'lammps') {
     return `${eng} · ${node.status} · ${masterStepText(node)}`
@@ -659,14 +687,20 @@ export function initSimulateJobs({
     // ONE progress bar (below the list): width from the node, colour by status, and the
     // detailed stage/segment text as a hover tooltip.
     if (progressBar) {
+      const opaquePrep = !transfer && node?.status === 'preparing'
+        && node?.prep_progress?.measured === false
       progressBar.style.width = transfer
         ? `${transfer.phase === 'downloading' && !transfer.total ? 100 : ['done', 'processing'].includes(transfer.phase) ? 100 : transfer.pct || 0}%`
         : `${node ? masterProgressPct(node) : 0}%`
-      progressBar.style.background = transfer?.phase === 'done' ? _C.ok
+      progressBar.style.background = opaquePrep
+        ? 'repeating-linear-gradient(135deg,#4a9eff 0,#4a9eff 8px,#245f9c 8px,#245f9c 16px)'
+        : transfer?.phase === 'done' ? _C.ok
         : ['unverified', 'interrupted'].includes(transfer?.phase) ? _C.warn
         : transfer ? 'repeating-linear-gradient(135deg,#4a9eff 0,#4a9eff 8px,#2f6fae 8px,#2f6fae 16px)'
           : node ? masterProgressColor(node) : _C.accent
       progressBar.style.opacity = ['downloading', 'processing'].includes(transfer?.phase) ? '0.65' : '1'
+      progressBar.style.backgroundSize = opaquePrep ? '32px 32px' : ''
+      progressBar.style.animation = opaquePrep ? 'prep-progress-stripes 0.8s linear infinite' : ''
     }
     if (progressWrap) progressWrap.title = transferText || (node ? masterProgressTooltip(node) : '')
     if (detailEl) {

@@ -109,17 +109,16 @@ export function atomCapLabel(hw) {
  * whole protocol is configured and the package built.
  */
 export function targetReadiness(target, {
-  clusterState = 'disconnected', partition = null, runpod = null,
+  clusterState = 'disconnected', partition = null,
 } = {}) {
   if (!TARGET_IDS.includes(target)) return { ready: false, reason: 'Choose where this job runs.' }
   if (UNWIRED_TARGETS[target]) return { ready: false, reason: UNWIRED_TARGETS[target] }
   if (target === 'local') return { ready: true, reason: '' }
-  // RunPod owns its own gate — connected, a volume, a card, and an estimate inside budget.
-  // The RunPod block computes it (purely) and hands the verdict here, because "not ready" for
-  // a rented GPU has five distinct causes and a generic message helps with none of them.
-  if (target === 'runpod') {
-    return runpod || { ready: false, reason: 'Setting up RunPod…' }
-  }
+  // RunPod is advisory while the job is being designed. The first tab cannot know the final
+  // protocol, solvated atom count, or package size yet, so a preview failure must not prevent
+  // the user reaching those choices. The authoritative gate belongs to ▶ Rent & Run after
+  // job creation, when the prepared PSF and manifest make all of those values concrete.
+  if (target === 'runpod') return { ready: true, reason: '' }
   if (clusterState !== 'connected') {
     return { ready: false, reason: 'Sign in to Alpine to see availability and pick a node.' }
   }
@@ -137,6 +136,7 @@ export function targetReadiness(target, {
  */
 export function targetPayloadFields(target, {
   partition = null, runpodGpuKey = null, runpodBudgetUsd = null, runpodVolumeId = null,
+  runpodEstimatedCostUsd = null, runpodQuotedRateUsdPerHour = null,
   resources = null,
 } = {}) {
   const edits = target === 'alpine' && resources && Object.keys(resources).length
@@ -151,6 +151,10 @@ export function targetPayloadFields(target, {
     // Cleared for every other target for the same reason `partition` is: a leftover card or
     // spend cap on a job the user re-pointed at the local GPU would resurface at launch.
     runpod_gpu_key: isRunpod ? (runpodGpuKey || null) : null,
+    runpod_estimated_cost_usd: isRunpod && runpodEstimatedCostUsd != null
+      ? Number(runpodEstimatedCostUsd) : null,
+    runpod_quoted_rate_usd_per_hour: isRunpod && runpodQuotedRateUsdPerHour != null
+      ? Number(runpodQuotedRateUsdPerHour) : null,
     runpod_budget_usd: isRunpod && runpodBudgetUsd != null ? Number(runpodBudgetUsd) : null,
     runpod_volume_id: isRunpod ? (runpodVolumeId || null) : null,
   }

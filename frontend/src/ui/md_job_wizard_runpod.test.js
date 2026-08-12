@@ -19,6 +19,10 @@ const SLOW_BUT_CHEAP = {
   relax_hours: 40.0, relax_cost: 15.6, production_hours: 46.0, production_cost: 17.9,
   total_hours: 86.0, total_cost: 33.5,
 }
+const TOO_SMALL = {
+  ...ROW, key: 'small', label: 'RTX 3090', vram_gb: 24, eligible: false,
+  insufficient_reason: 'needs about 40.0 GB VRAM; only 20.4 GB is usable',
+}
 
 const PREVIEW = {
   sized: true, connected: true, n_atoms: 1_310_154, n_atoms_source: 'estimated',
@@ -151,6 +155,15 @@ describe('picking a card', () => {
     expect(block.gpuKey()).toBe(SLOW_BUT_CHEAP.key)
     expect(onChange).toHaveBeenCalled()
     expect(getJobPreview).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows an insufficient card but cannot select it', async () => {
+    const { mount, block } = setup({ preview: { ...PREVIEW, gpus: [ROW, TOO_SMALL] } })
+    await block.refresh()
+    const bad = rows(mount)[1]
+    expect(bad.textContent).toMatch(/needs about 40.0 GB VRAM/)
+    bad.click()
+    expect(block.gpuKey()).toBe(ROW.key)
   })
 
   it('shows both value axes for every card', async () => {

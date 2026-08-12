@@ -4,7 +4,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('./folder_picker.js', () => ({ pickSystemFolder: vi.fn() }))
 vi.mock('./primitives/choice.js', () => ({ showChoice: vi.fn() }))
 vi.mock('./primitives/button.js', () => ({
-  createButton: (opts) => ({ textContent: opts.label, style: {}, onClick: opts.onClick, addEventListener: () => {} }),
+  createButton: (opts) => {
+    const btn = document.createElement('button')
+    btn.textContent = opts.label
+    btn.onClick = opts.onClick
+    return btn
+  },
 }))
 
 import {
@@ -74,5 +79,33 @@ describe('mountDirectoryButton', () => {
     expect(container.appendChild).toHaveBeenCalledWith(btn)
     await btn.onClick()     // opens the folder browser → stores the pick in the shared preference
     expect(getRunDir()).toBe('/mnt/big')
+  })
+
+  it('checks and displays NADOC\'s workspace default on mount', async () => {
+    const container = document.createElement('div')
+    const api = { getMdRunDirStatus: vi.fn(async () => ({
+      ok: true, default: true, path: '/repo/workspace/md_jobs', detail: '',
+    })) }
+    const btn = mountDirectoryButton(container, { api })
+
+    expect(btn.textContent).toMatch(/checking/)
+    await vi.waitFor(() => expect(btn.dataset.runDirState).toBe('ok'))
+    expect(api.getMdRunDirStatus).toHaveBeenCalledWith(null)
+    expect(btn.textContent).toContain('md_jobs')
+    expect(btn.textContent).not.toContain('⚠')
+  })
+
+  it('shows an error icon when a remembered folder belongs to another computer', async () => {
+    setRunDir('/media/other-machine/nadoc_jobs')
+    const container = document.createElement('div')
+    const api = { getMdRunDirStatus: vi.fn(async path => ({
+      ok: false, path, detail: 'Folder does not exist on this computer.',
+    })) }
+    const btn = mountDirectoryButton(container, { api })
+
+    await vi.waitFor(() => expect(btn.dataset.runDirState).toBe('error'))
+    expect(api.getMdRunDirStatus).toHaveBeenCalledWith('/media/other-machine/nadoc_jobs')
+    expect(btn.textContent).toContain('⚠')
+    expect(btn.title).toMatch(/does not exist/)
   })
 })

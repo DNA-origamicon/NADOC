@@ -264,6 +264,9 @@ def _begin_runpod_reload_handoff() -> bool:
 async def lifespan(app: FastAPI):
     """Server startup/shutdown hook."""
     _WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
+    # NAMD's portable default lives with every other NADOC job.  Create it eagerly so a
+    # fresh checkout has a real download target before the Job Wizard first inspects it.
+    (_WORKSPACE_DIR / "md_jobs").mkdir(parents=True, exist_ok=True)
     library_events.start(_WORKSPACE_DIR)
     # Restore any cached in-progress document, then start the autosave thread.
     session_cache.start(_WORKSPACE_DIR)

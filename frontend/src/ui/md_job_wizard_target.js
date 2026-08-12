@@ -86,11 +86,8 @@ export function initWizardTargetStep({
 
   /** The one-line "why you cannot go on yet" under the cards.
    *
-   *  Painted from `_emit` as well as `_paintCards`, because readiness changes without the
-   *  cards changing: the RunPod block resolves its pre-flight ~26 s after the card is
-   *  picked, and the hint used to keep saying "Checking whether RunPod can run this job…"
-   *  under an already-live `Next →` — a progress message that reads as transient but was
-   *  in fact terminal until the user clicked something else. */
+   *  Painted from `_emit` as well as `_paintCards`, because Alpine readiness changes when
+   *  its session or partition changes without necessarily repainting the whole wizard. */
   function _paintHint() {
     const hint = mount?.querySelector('#wiz-target-hint')
     if (!hint) return
@@ -112,7 +109,6 @@ export function initWizardTargetStep({
     : targetReadiness(_target, {
       clusterState: _clusterState,
       partition: _partition,
-      runpod: _runpod?.readiness?.() || null,
     }))
 
   // ── local ────────────────────────────────────────────────────────────────
@@ -416,7 +412,7 @@ export function initWizardTargetStep({
               + 'Final download location</div><div id="wiz-runpod-rundir"></div>'
               + '<div style="font-size:10px;color:#6e7681;margin-top:6px;line-height:1.5">'
               + 'Finished trajectories and checkpoints download here. If unchanged, RunPod '
-              + 'jobs default to <code>/media/jojo/Archive/nadoc_jobs</code>.</div>',
+              + 'jobs use NADOC’s <code>workspace/md_jobs</code> folder.</div>',
           }))
           const dirMount = body.querySelector('#wiz-runpod-rundir')
           const btn = mountDirectoryButton(dirMount, { api: fsApi })
@@ -487,6 +483,8 @@ export function initWizardTargetStep({
       partition: _partition,
       resources: _resources?.overrides?.() || null,
       runpodGpuKey: _runpod?.gpuKey?.() || null,
+      runpodEstimatedCostUsd: _runpod?.estimatedCostUsd?.() ?? null,
+      runpodQuotedRateUsdPerHour: _runpod?.quotedRateUsdPerHour?.() ?? null,
       runpodBudgetUsd: _runpod?.budgetUsd?.() ?? null,
       runpodVolumeId: _runpod?.volumeId?.() || null,
     }),

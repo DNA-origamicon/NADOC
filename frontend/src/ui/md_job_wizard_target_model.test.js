@@ -99,17 +99,14 @@ describe('targetReadiness', () => {
     expect(UNWIRED_TARGETS).toEqual({})
   })
 
-  it('defers the RunPod verdict to the RunPod block', () => {
-    // "Not ready" for a rented GPU has five distinct causes (no key, no volume, failing
-    // pre-flight, no card, over budget). A generic message helps with none of them.
+  it('keeps RunPod advisory until the prepared job is submitted', () => {
+    // The first tab does not know the final protocol or solvated atom count. Those become
+    // authoritative only after Create job, where ▶ Rent & Run owns the paid-resource gate.
     expect(targetReadiness('runpod', { runpod: { ready: true, reason: '' } }).ready).toBe(true)
-    const blocked = targetReadiness('runpod',
+    const advisoryFailure = targetReadiness('runpod',
       { runpod: { ready: false, reason: 'Pick a GPU.' } })
-    expect(blocked).toEqual({ ready: false, reason: 'Pick a GPU.' })
-  })
-
-  it('blocks RunPod until its block has reported', () => {
-    expect(targetReadiness('runpod').ready).toBe(false)
+    expect(advisoryFailure).toEqual({ ready: true, reason: '' })
+    expect(targetReadiness('runpod')).toEqual({ ready: true, reason: '' })
   })
 
   it('blocks an unknown target', () => {
@@ -122,6 +119,7 @@ describe('targetPayloadFields', () => {
     expect(targetPayloadFields('local')).toEqual({
       execution_target: 'local', cluster_name: null, partition: null,
       slurm_resources: null, runpod_gpu_key: null, runpod_budget_usd: null,
+      runpod_estimated_cost_usd: null, runpod_quoted_rate_usd_per_hour: null,
       runpod_volume_id: null,
     })
   })
@@ -130,6 +128,7 @@ describe('targetPayloadFields', () => {
     expect(targetPayloadFields('alpine', { partition: 'ah200' })).toEqual({
       execution_target: 'alpine', cluster_name: 'alpine', partition: 'ah200',
       slurm_resources: null, runpod_gpu_key: null, runpod_budget_usd: null,
+      runpod_estimated_cost_usd: null, runpod_quoted_rate_usd_per_hour: null,
       runpod_volume_id: null,
     })
   })
@@ -139,9 +138,11 @@ describe('targetPayloadFields', () => {
     // launch — which can be a later session.
     expect(targetPayloadFields('runpod', {
       runpodGpuKey: 'NVIDIA GeForce RTX 4090', runpodBudgetUsd: 25, runpodVolumeId: 'vol1',
+      runpodEstimatedCostUsd: 8.75, runpodQuotedRateUsdPerHour: 0.69,
     })).toEqual({
       execution_target: 'runpod', cluster_name: null, partition: null, slurm_resources: null,
       runpod_gpu_key: 'NVIDIA GeForce RTX 4090', runpod_budget_usd: 25,
+      runpod_estimated_cost_usd: 8.75, runpod_quoted_rate_usd_per_hour: 0.69,
       runpod_volume_id: 'vol1',
     })
   })

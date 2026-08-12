@@ -73,6 +73,27 @@ def test_missing_runpod_job_is_dropped_and_marked_resumable(tmp_path, monkeypatc
     assert recovered.runpod_pod_id is None
 
 
+def test_preparing_runpod_job_is_not_mistaken_for_a_lost_pod(tmp_path, monkeypatch):
+    """Local package preparation happens before any explicit RunPod submission."""
+    ws = tmp_path
+    monkeypatch.setattr(routes_jobs, "_WORKSPACE_DIR", ws)
+    monkeypatch.setattr(routes_jobs, "_md_eta_seconds", lambda *a, **k: None)
+    import backend.core.namd_runner as namd_runner
+
+    monkeypatch.setattr(namd_runner, "reconcile_job_status", lambda j, w: j)
+    monkeypatch.setattr(
+        routes_jobs, "_live_remote_pod_names",
+        lambda: (_ for _ in ()).throw(AssertionError("queued job must not query pod liveness")),
+    )
+    job = _make_md_job(ws, execution_target="runpod", status=MdStatus.preparing)
+
+    active = routes_jobs._collect_active()
+    assert any(row["job_id"] == job.job_id for row in active)
+    from backend.core.md_job import MdJob
+
+    assert MdJob.load(job.job_id, ws).status == MdStatus.preparing
+
+
 def test_runpod_liveness_uses_persisted_pod_id_not_only_display_name(
     tmp_path, monkeypatch
 ):

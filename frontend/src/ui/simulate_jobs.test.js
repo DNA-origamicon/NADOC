@@ -64,6 +64,18 @@ describe('pure helpers', () => {
     expect(masterStatusText(node)).toContain('submitting to Alpine · Uploading package file 2 of 5… · 42%')
     expect(masterProgressTooltip(node)).toContain('2/5 files')
   })
+  it('shows byte-accurate RunPod volume transfer instead of NAMD step progress', () => {
+    const node = { engine: 'namd', status: 'running', execution_target: 'runpod',
+      progress_fraction: 0.045, remote_submit_progress: {
+        target: 'runpod', phase: 'upload', label: 'Uploading model.psf to the RunPod volume…',
+        fraction: 0.625, bytes_done: 5 * 1024 ** 2, bytes_total: 8 * 1024 ** 2,
+        files_done: 3, files_total: 7,
+      } }
+    expect(masterProgressPct(node)).toBe(62.5)
+    expect(masterStatusText(node)).toContain('transferring to RunPod volume')
+    expect(masterStatusText(node)).toContain('62.5%')
+    expect(masterProgressTooltip(node)).toContain('5 MB / 8 MB')
+  })
   it('nodeNeedsPolling follows a job that is actually executing', () => {
     expect(nodeNeedsPolling(oxNode({ status: 'running' }))).toBe(true)
     expect(nodeNeedsPolling(oxNode({ status: 'preparing' }))).toBe(true)
@@ -140,6 +152,32 @@ describe('pure helpers', () => {
     expect(masterProgressPct({ engine: 'namd', status: 'running', progress_fraction: 0.42, segments: [{ status: 'running' }] })).toBe(42)
     // Falls back to done/total segment count when no fraction was stamped.
     expect(masterProgressPct({ engine: 'namd', status: 'running', segments: [{ status: 'done' }, { status: 'running' }] })).toBe(50)
+  })
+
+  it('shows NAMD preparation progress and its current phase on the master card', () => {
+    const node = {
+      engine: 'namd', status: 'preparing', progress_fraction: 0.375,
+      eta_seconds: 95,
+      prep_progress: {
+        phase: 'enm', label: 'Building elastic-network restraints',
+        message: 'Adding restraint 375 / 1,000', phase_index: 3, n_phases: 5,
+        fraction: 0.375, measured: true,
+      },
+      segments: [{ status: 'pending', steps: 1000000 }],
+    }
+    expect(masterProgressPct(node)).toBe(37.5)
+    expect(masterStepText(node)).toBe('37.5% · phase 4/5 · ~1m 35s remaining')
+    expect(masterStatusText(node)).toContain('NAMD · preparing · Adding restraint 375 / 1,000 · 37.5%')
+    expect(masterProgressTooltip(node)).toContain('Phase 4/5: Adding restraint 375 / 1,000')
+  })
+
+  it('marks time-filled preparation progress as estimated', () => {
+    const node = {
+      engine: 'namd', status: 'preparing', progress_fraction: 0.12,
+      prep_progress: { phase: 'solvate', label: 'Adding water', fraction: 0.12, measured: false, elapsed_seconds: 95 },
+    }
+    expect(masterStepText(node)).toBe('~12% · estimating · 1m 35s elapsed')
+    expect(masterProgressTooltip(node)).toContain('12% (estimated)')
   })
   it('masterProgressPct: reports ONE decimal, so a long production leaves 0 % early', () => {
     // A 500 ns / 125M-step production is a fraction of a percent for its first hour.

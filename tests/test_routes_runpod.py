@@ -616,11 +616,13 @@ class TestJobPreview:
         assert d["budget"]["over_budget"] is False
 
     def test_git_build_drops_sm120(self, client):
-        """A card outside the build's arch set rents fine and dies at step 0."""
+        """A wrong-arch card stays visible but is explicitly ineligible."""
         d = client.post(
             "/api/runpod/job-preview", json={**self.BODY, "build": "git"}
         ).json()
-        assert d["gpus"] and all(g["sm"] != "sm_120" for g in d["gpus"])
+        wrong = [g for g in d["gpus"] if g["sm"] == "sm_120"]
+        assert wrong and all(g["eligible"] is False for g in wrong)
+        assert all("does not include CUDA sm_120" in g["insufficient_reason"] for g in wrong)
 
     def test_unknown_build_is_a_400_not_a_500(self, client):
         r = client.post("/api/runpod/job-preview", json={**self.BODY, "build": "nope"})

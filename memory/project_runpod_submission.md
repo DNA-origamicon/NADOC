@@ -44,7 +44,8 @@ model block), [[md-job-system]] (the local job system), [[project_water_shell_ca
 
    ⚠️ **The guard is per-POD, not per-JOB.** It stops a runaway ladder; it does NOT cap
    cumulative spend. Every spot reclaim relaunches with a FRESH budget, so N resumes can
-   cost N × $15. Cumulative accounting is not built — see Open items.
+   cost N × $15. The per-pod billing ledger and final-cost snapshot make that cumulative
+   spend visible in the Clusters tab, but a deliberate resume remains a new authorization.
 
    ⚠️ **The guard cannot stop the billing.** It runs ON the pod (`sleep N; pkill -9`) and
    has no API key, so it can only kill NAMD. Pod DESTRUCTION lives in the backend's
@@ -233,6 +234,39 @@ returns `(killed, adoptable)` and `/runpod/connect` re-attaches the adoptable on
 `runpod_supervisor.reattach_job` → `runpod_executor.reattach_job_on_pod`, which adopts the
 pod (same terminate-in-finally guarantee via `client.adopt`) and **never relaunches a live
 chain** — two NAMDs on one GPU would corrupt each other's restart files.
+
+## Shared RunPod accounts: installation ownership (fixed 2026-08-12)
+
+An API key identifies a RunPod **account**, not a NADOC controller. Two computers using
+the same account previously treated every `nadoc-*` pod as local. Depending on which job
+records existed on the second computer, it could attempt to adopt the first computer's run
+or, worse, terminate it as an unclaimed orphan.
+
+Each installation now creates a random, non-secret id in
+`~/.config/nadoc/instance_id` (override with `NADOC_INSTANCE_ID`). New pod names use
+`nadoc-i-<installation-id>-<design>-<job>` and the job persists `runpod_owner_id`.
+Reconnect/adoption/reaping only manages pods carrying the local id. Foreign signed pods
+remain visible in the account but are ignored. Unsigned legacy `nadoc-*` pods are also
+left alone when no active local job explicitly claims them; their provider-owned
+`terminateAfter` is the safety net.
+
+Pulling this code onto another computer protects all **new signed pods** as soon as both
+backends restart. It cannot retroactively sign an already-running legacy pod. Do not ask
+the second computer to adopt that pod; let its creating computer supervise it, or terminate
+it manually in RunPod if ownership is uncertain.
+
+## Package transfer progress and pre-staging (fixed 2026-08-12)
+
+Before `runpod_pid` exists, idle CPU/GPU telemetry means NADOC is staging the package, not
+running NAMD. The SFTP writer now reports transferred bytes; `remote_submit_progress`
+persists byte/file totals and overrides synthetic NAMD steps in the unified progress bar.
+It clears when the chain launches or staging aborts. Files already complete on the
+persistent network volume count toward progress and are skipped on retry.
+
+RunPod's S3-compatible network-volume API can upload without renting compute, including
+multipart transfer for large files. NADOC does not yet configure the separate S3 access
+credentials, so current submission still rents the GPU before SFTP staging. Moving upload
+into preparation through that API is the remaining cold-start/cost improvement.
 
 ## Progress on a rented run (fixed 2026-08-07)
 
