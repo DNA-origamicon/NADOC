@@ -82,7 +82,7 @@ test('audit fixes are live in the app', async ({ page }) => {
   R.local = {
     // sanity: are we looking at the RELAXATION settings pane at all?
     onRelaxationPane: has(localLabels, 'Stop settled stages early'),
-    catenated: has(localLabels, 'Build despite a linked crossover'),
+    ringPiercing: has(localLabels, 'Build despite a ring piercing'),
     earlyStopTier: has(localLabels, 'Remote early-stop test'),
   }
   R.paneText = (localLabels[0] || '').slice(0, 600)
@@ -120,7 +120,7 @@ test('audit fixes are live in the app', async ({ page }) => {
 
   expect(R.queue.busy, 'a remote run must not report this machine busy').toBe(false)
   expect(R.anyQueueLabel, 'no local job should be offered ＋ Queue while only remote runs are up').toBe(false)
-  expect(R.local.catenated, 'catenation override on step 2').toBe(true)
+  expect(R.local.ringPiercing, 'ring-piercing override on step 2').toBe(true)
   expect(R.local.earlyStopTier, 'remote-only tier hidden for a local run').toBe(false)
   expect(R.console, 'zero console errors').toEqual([])
 })

@@ -454,16 +454,12 @@ class CreateJobRequest(BaseModel):
         "modified — a scaled copy feeds the seed. Recorded in manifest.json "
         "as seed_lattice_nm.",
     )
-    allow_catenated_seed: bool = Field(
+    allow_ring_pierced_seed: bool = Field(
         False,
-        description="Build even when the seed carries a permanent topological defect: a "
-        "reciprocal crossover pair whose two backbones are LINKED (Gauss "
-        "Lk != 0), or a covalent bond threaded through a nucleotide ring. "
-        "Off by default: every chain end is covalently pinned into the "
-        "network, so neither defect survives being relaxed away — the "
-        "trajectory just measures an artefact (a threaded ring turns into a "
-        "permanently 3 A phosphodiester bond). Recorded in manifest.json "
-        "either way.",
+        description="Build even when a covalent bond in the seed is threaded through "
+        "a nucleotide ring. Off by default because this permanent defect cannot "
+        "relax away and can turn into a severely stretched phosphodiester bond. "
+        "Recorded in manifest.json either way.",
     )
 
 
@@ -3483,10 +3479,10 @@ async def _prepare_job_bg(
             seed_kwargs["solute_coords"] = seed_solute_coords
             if body.protocol != EQUILIBRIUM_AWARE_PROTOCOL:
                 seed_kwargs["require_full_topology"] = True
-        # The catenated-seed override is an md_protocols concept; the GBIS prep has its
+        # The ring-piercing override is an md_protocols concept; the GBIS prep has its
         # own signature and never sees it.
         if body.protocol != IMPLICIT_GBIS_PROTOCOL:
-            seed_kwargs["allow_catenated_seed"] = body.allow_catenated_seed
+            seed_kwargs["allow_ring_pierced_seed"] = body.allow_ring_pierced_seed
             # Same reason as above: the GBIS prep has its own signature and never
             # takes an md_protocols kwarg.
             seed_kwargs["seed_lattice_nm"] = body.seed_lattice_nm
@@ -3536,7 +3532,7 @@ async def _prepare_job_bg(
         job = MdJob.load(job_id, ws)
         job.status = MdStatus.failed
         msg = str(exc)
-        if "threaded through a nucleotide ring" in msg or "catenated" in msg.lower():
+        if "threaded through a nucleotide ring" in msg:
             job.failure_kind = "seed_topology"
         job.error = f"Preparation failed: {exc}"
         job.save(ws)
@@ -3629,9 +3625,7 @@ def _failure_diagnostics(job: MdJob) -> Optional[dict]:
 
     error = job.error or "Unknown error"
     kind = job.failure_kind or "other"
-    if kind == "other" and (
-        "threaded through a nucleotide ring" in error or "catenated" in error.lower()
-    ):
+    if kind == "other" and "threaded through a nucleotide ring" in error:
         kind = "seed_topology"
     match = re.search(r"\brc=(-?\d+)\b", error)
     seg = None

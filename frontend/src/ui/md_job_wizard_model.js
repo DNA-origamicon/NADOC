@@ -348,7 +348,7 @@ export const WIZARD_FIELDS = [
   'threads', 'devices', 'salt_mode', 'mg_conc_mM', 'ion_conc_mM', 'padding_nm',
   'box_mode', 'minimize_steps', 'fast',
   'gpu_fallback_policy', 'gpu_resident', 'early_stop_relax',
-  'early_stop_tier', 'allow_catenated_seed',
+  'early_stop_tier', 'allow_ring_pierced_seed',
   'force_soft', 'declash',
   // The three integrator axes, separated (exp51). null on any of them means "auto",
   // which the backend resolves from that run's timestep.

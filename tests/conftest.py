@@ -799,8 +799,7 @@ _SLOW_TESTS = {
     # cluster tests (6hb / no-op paths) stay fast.
     "test_autodetect_produces_scaffold_and_geometry_clusters",
     # ---------------------------------------------------------------------------
-    # 2026-07-31 — test_ring_piercing.py (the ring-threading gate from the
-    # crossover-catenation work).  These two build a real atomistic model at the
+    # 2026-07-31 — test_ring_piercing.py. These two build a real atomistic model at the
     # exact phases that USED to ship a threaded ring, so by construction they are
     # the cases where the extra-base repair ladder climbs the MOST rungs: an
     # ordered search re-solving L-BFGS-B for every insert at every rung, now also
@@ -813,26 +812,22 @@ _SLOW_TESTS = {
     # the design is already the 2-helix / 28-bp minimum, so there is nothing to
     # shrink.  Area "atomistic".
     #
-    # Coverage is not lost: the exhaustive `test_no_phase_pierces[T|TT-8..18]`
-    # sweep in the same file is already @pytest.mark.slow and covers T-14 / TT-8
-    # among its 22 cases, so both relegated cases keep running in a
+    # Coverage is not lost: the exhaustive `test_phase_sweep_gate_matches_detector`
+    # sweep in the same file is already @pytest.mark.slow and covers both insert
+    # counts across all 11 phases, so both relegated cases keep running in a
     # test-dedicated session.  The fast suite keeps ALL the cheap pins in that
     # file: the segment/ring intersection primitives, ring identification, the
     # fake-model detector, the two `_synthesise_bonds` scope regressions, the
     # re-derive-on-move regression, `assert_not_pierced` + override, and the
-    # real-build gate negatives (`test_gate_refuses_a_pierced_seed` 3.3 s serial,
-    # `test_designs_without_inserts_skip_the_gate_entirely`).
+    # ring primitives and synthetic gate controls.
     #
     # Both params ([T-14] and [TT-8]) are over budget, so the whole test moves —
     # _SLOW_PARAMS would leave nothing fast behind.  Both names are unique in the
     # suite, so the bare-name match cannot over-reach into another file.
-    "test_known_piercing_phases_are_clean",
-    # Same file, same cost driver: `gate_seed_topology` on the TT-8 (2-insert)
-    # design does its OWN full repaired build (4.74 s serial / 6.5 s in-suite).
-    # It cannot share a model with `test_gate_refuses_a_pierced_seed` — that one
-    # deliberately builds under `_piercing_check_disabled()`, i.e. a different
-    # (pre-fix) structure — so no fixture can cache the second build away.
-    "test_gate_reports_both_defects",
+    "test_known_pierced_phases_are_refused",
+    # Same file, same cost driver: a real inserted atomistic build plus the detector.
+    "test_gate_reports_a_clean_seed",
+    "test_gate_refuses_a_pierced_seed",
 }
 
 # Individual heavy PARAMETRISATIONS of an otherwise-fast test.  Matched against the
@@ -840,91 +835,7 @@ _SLOW_TESTS = {
 # in the fast suite and keep guarding the invariant.  Use this instead of _SLOW_TESTS
 # whenever only one param of a parametrized test is heavy — relegating the whole test
 # would throw away a fast gate that costs almost nothing.
-_SLOW_PARAMS = {
-    # test_junction_topology.py — the catenation-repair pair, TT (2-insert) param only.
-    # Each of these builds the atomistic model TWICE from a deliberately cold
-    # ``_XB_CACHE`` (the assertion IS the delta between the two builds, so no fixture
-    # can cache the cost away), and each build runs the repair ladder: an ordered search
-    # that re-solves L-BFGS-B for BOTH extra-base records at every rung until one comes
-    # out unlinked, sound and clash-neutral (backend/core/extra_base_repair.py).
-    # The 2-insert minimiser is ~3x the 1-insert one, so a single repaired TT build is
-    # ~2 s and the two-build tests floor out at ~3.9-4.2 s measured ALONE on an idle box
-    # — i.e. no headroom at all under the 5 s per-test budget, and reliably 5.2-5.8 s in
-    # the fast suite's own `-n auto` operating condition.  That is real numeric-solve
-    # weight, not a stall, so it belongs in the heavy suite (area "atomistic").
-    # The [T] params of the SAME two tests stay fast (~1.3 s each) and guard the same
-    # two invariants — repair determinism, and repair-does-not-degrade-geometry — on the
-    # 1-insert path.  TT's "repaired build is clean" is additionally covered in the heavy
-    # suite by the exhaustive test_no_phase_catenates[TT-*] sweep.
-    "test_repaired_build_is_deterministic[TT]",
-    "test_repair_does_not_degrade_geometry[TT]",
-    # 2026-07-31 — the same file's FAST catenation gate, TT (2-insert) param only.
-    # `_KNOWN_CATENATING = [("T", 12), ("TT", 12)]`; the TT case is one repaired
-    # 2-insert build through the same L-BFGS-B repair ladder and measures 3.57 s
-    # SERIALLY on an idle box with BLAS pinned to 1 thread, 5.12 s in the `-n auto`
-    # fast suite — the identical profile (and the identical remedy) as the two
-    # entries above, which were triaged one day earlier.  [T-12] stays fast at
-    # 1.33 s and keeps the gate in the per-change loop on the 1-insert path; TT-12
-    # is additionally covered in the heavy suite by the exhaustive
-    # `test_no_phase_catenates[TT-*]` sweep.  Area "atomistic".
-    "test_known_catenating_phases_are_repaired[TT-12]",
-}
-
-# ⚠️ DO NOT relegate the tests in test_junction_topology.py / test_junction_winding.py.
-# They were added here on 2026-07-28 and REMOVED the same day — the timings that justified
-# it were an artifact, twice over:
-#   * measured while a +p16 NAMD production job owned all 16 cores (pytest is niced below
-#     it), and
-#   * `atomistic_minimisers._XB_CACHE` is a MODULE-LEVEL in-memory cache of the extra-base
-#     minimisation.  Under `-n auto` every xdist worker starts cold, so whichever junction
-#     test lands first on a worker is charged the entire one-time warm-up and every sibling
-#     after it is nearly free.  That is why the "violator" moved to a DIFFERENT test on
-#     every run (T-12 → TT → repaired_build_is_deterministic → repair_does_not_degrade…).
-# Measured serially on an idle machine, the slowest test in EITHER file is 2.32 s and the
-# two files together are ~10 s — comfortably inside the budget.  A first-test-pays-the-cache
-# cost is not test weight, and relegating for it is exactly the ratchet that quietly moves
-# healthy coverage out of the fast suite.
-#
-# 2026-07-30 — the note stands, and the THIRD (dominant) artifact behind it is now FIXED at
-# the source.  numpy/scipy here are built against scipy-openblas with MAX_THREADS=64, so every
-# L-BFGS-B / lstsq / eigh call fanned out across the whole box; under `-n auto` each xdist
-# worker had its own pool and the machine was oversubscribed ~10x.  These files' solves are
-# 29-DOF — far too small for threading to pay for itself — so it was pure thrash.
-# `scripts/test_guard.sh` now pins OMP/OPENBLAS/MKL threads to 1 on the fast-only recipes
-# (NADOC_TEST_BLAS_THREADS=0 opts out).  Whole-suite effect: total test-seconds 532.8 -> 261.3,
-# guard wall-clock 130 s -> 59 s, per-test violators 8 -> 2, this file 91.9 s -> 23.6 s,
-# test_junction_winding.py 20.6 s -> off the top-15 entirely.  Verified numerically neutral:
-# tests/test_atomistic_geometry_lock.py produces byte-identical hashes at 1 thread and at N.
-#
-# 2026-07-31 — that last sentence is true but was read as more than it says.  Thread COUNT is
-# neutral; BLAS KERNEL DISPATCH is not.  Same commit, same lockfile, same box: AVX-512 kernels
-# vs `OPENBLAS_CORETYPE=Haswell` move the L-BFGS-B-placed crossover/skip bridge atoms by up to
-# 1.3 A, leaving every other atom bit-identical.  That is why 4 of the 5 goldens in
-# test_atomistic_geometry_lock.py were machine-specific and got "regenerated" and reverted
-# across five commits — each dev box read the other's values as a regression.  That file now
-# hashes only the stamped atoms and pins the bridges on tolerance; do NOT "fix" a failure
-# there by regenerating hashes until you have ruled out the other machine's dispatch.
-#
-# 2026-07-30 (later, superseding the last paragraph of the above): after the BLAS fix the 2
-# residual violators were test_repair_{does_not_degrade_geometry,ed_build_is_deterministic}[TT]
-# — 5.17-5.75 s in the fast suite, 4.16 s / 3.93 s re-measured SERIALLY on an idle box (numbers
-# reproduced; the earlier reading of 4.14/3.91 was right).  The first call was "contention, not
-# weight — do not relegate", but that left the guard demanding triage on EVERY `just test-smart`
-# run, which is not a terminal state, and 4.2 s against a 5 s budget is zero headroom.  Re-triaged
-# to the minimum action: only the **[TT] params** of those two tests move to the heavy suite
-# (see `_SLOW_PARAMS` above) — real L-BFGS-B repair-ladder weight, not a stall.  The [T] params
-# stay fast at ~1.3 s and still guard both invariants; every other test in
-# test_junction_topology.py / test_junction_winding.py stays fast, and the blanket "do not
-# relegate these files wholesale" rule above still stands.
-#
-# 2026-07-31 — one more param joined them on exactly the same evidence:
-# `test_known_catenating_phases_are_repaired[TT-12]` (3.57 s serial / 1 BLAS thread on an
-# idle box, 5.12 s in the fast suite).  Still no wholesale relegation of either file — the
-# T params and all 28 other tests in test_junction_topology.py stay fast.  The rule of
-# thumb this file has now converged on: a 2-INSERT repaired build costs ~2 s of L-BFGS-B
-# repair ladder, so any test that does two of them, or one plus a second detector pass,
-# has no headroom under the 5 s budget and is a heavy test — while the 1-insert twin of
-# the same invariant stays comfortably fast and is what belongs in the per-change loop.
+_SLOW_PARAMS = {}
 
 
 # ---------------------------------------------------------------------------
@@ -958,17 +869,7 @@ def _slow_area_for(module: str) -> str:
         return "mrdna"
     # pdb_export builds a full atomistic model then writes the PDB — same heavy
     # reconstruction stack as the atomistic tests, so its slow tests belong there.
-    # junction_topology measures the built model's strand topology (crossover
-    # catenation), so an atomistic-placement change is what should re-run it.
-    # junction_winding is the same stack (it builds a model per phase sample to find the
-    # wound/clean boundary), so it shares the group.
-    if (
-        "atomistic" in module
-        or "pdb_export" in module
-        or "junction_topology" in module
-        or "junction_winding" in module
-        or "ring_piercing" in module
-    ):
+    if "atomistic" in module or "pdb_export" in module or "ring_piercing" in module:
         return "atomistic"
     if module.startswith("test_md") or "openmm" in module or "benchmark" in module:
         return "md"

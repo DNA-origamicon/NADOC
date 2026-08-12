@@ -14,7 +14,8 @@ Atom-mutation primitives (read/write/translate by serial):
   • _translate_atom
 
 Bridge interpolators (place O3'(src), P(dst), O5'(dst) between two riboses):
-  • _interpolate_backbone_bridge — linear lerp at 1/4, 2/4, 3/4
+  • _interpolate_backbone_bridge — chord interpolation at 1/4, 2/4, 3/4,
+                                   with an optional tapered Holliday bow
   • _minimize_backbone_bridge    — scipy L-BFGS-B against canonical bond
                                    lengths and angles (used for crossovers
                                    and skip-site bridges)
@@ -73,18 +74,38 @@ def _translate_atom(atoms: list["Atom"], serial: int, delta: _np.ndarray) -> Non
     a.z += float(delta[2])
 
 
-# ── Backbone bridge interpolation (linear) ────────────────────────────────────
+# ── Backbone bridge interpolation ─────────────────────────────────────────────
+
+
+def _backbone_bridge_points(
+    c3_src: _np.ndarray,
+    c5_dst: _np.ndarray,
+    bow: _np.ndarray | None = None,
+) -> tuple[_np.ndarray, _np.ndarray, _np.ndarray]:
+    """Return O3′/P/O5′ positions along a straight or gently bowed bridge.
+
+    ``bow`` is the displacement at the phosphate midpoint. A sine envelope makes the
+    displacement taper to zero at the fixed C3′/C5′ anchors while preserving the old
+    quarter/half/three-quarter construction when no bow is supplied.
+    """
+    offset = _np.zeros(3) if bow is None else _np.asarray(bow, dtype=float)
+    return tuple(
+        _lerp(c3_src, c5_dst, t) + offset * _math.sin(_math.pi * t)
+        for t in (0.25, 0.5, 0.75)
+    )
 
 
 def _interpolate_backbone_bridge(
     atoms: list["Atom"],
     src_s: dict[str, int],
     dst_s: dict[str, int],
+    bow: _np.ndarray | None = None,
 ) -> None:
     """
-    Linearly interpolate the phosphodiester linker atoms between C3′(src) and
-    C5′(dst), leaving both ribose rings — and their canonical C4′ positions —
-    completely undisturbed.
+    Interpolate the phosphodiester linker atoms between C3′(src) and C5′(dst),
+    leaving both ribose rings — and their canonical C4′ positions — completely
+    undisturbed. ``bow=None`` is the historical straight interpolation; a bow is
+    used only for paired scaffold crossovers that would otherwise contact.
 
     C3′(src) is the ring carbon at the 3′ exit of the src ribose; C5′(dst) is
     the exocyclic carbon at the 5′ entry of the dst ribose.  Neither is moved.
@@ -102,18 +123,18 @@ def _interpolate_backbone_bridge(
     c3_src = _atom_pos(atoms, src_s["C3'"])
     c5_dst = _atom_pos(atoms, dst_s["C5'"])
 
+    o3_pos, new_P_pos, o5_pos = _backbone_bridge_points(c3_src, c5_dst, bow)
     orig_P = _atom_pos(atoms, dst_s["P"])
-    new_P_pos = _lerp(c3_src, c5_dst, 2.0 / 4.0)
     delta_P = new_P_pos - orig_P
 
-    for serials_dict, aname, t in (
-        (src_s, "O3'", 1.0 / 4.0),
-        (dst_s, "P", 2.0 / 4.0),
-        (dst_s, "O5'", 3.0 / 4.0),
+    for serials_dict, aname, pos in (
+        (src_s, "O3'", o3_pos),
+        (dst_s, "P", new_P_pos),
+        (dst_s, "O5'", o5_pos),
     ):
         s = serials_dict.get(aname)
         if s is not None:
-            _set_atom_pos(atoms, s, _lerp(c3_src, c5_dst, t))
+            _set_atom_pos(atoms, s, pos)
 
     for op in ("OP1", "OP2"):
         s = dst_s.get(op)

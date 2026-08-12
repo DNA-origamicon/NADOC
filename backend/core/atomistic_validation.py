@@ -206,14 +206,6 @@ def audit_bonds(
     hel_dir = {h.id: h.direction.value for h in design.helices}
     base_geom = _base_geometry(model, wc_collapse_nm=wc_collapse_nm, helix_dir=hel_dir)
 
-    # Strand topology at the crossover junctions.  Deliberately NOT folded into ``ok``:
-    # ``ok`` is the display/reconstruction verdict that gates /validate-atomistic, and
-    # catenation is a property of the SEED, not of the rendering — a display audit must
-    # not fail for something the display did not cause.  Callers that want both read
-    # ``ok_including_topology``.
-    from backend.core.junction_topology import catenation_report  # noqa: PLC0415
-
-    catenation = catenation_report(design, model=model, max_report=max_report)
     ok = (
         not invalid
         and not clashes
@@ -224,8 +216,6 @@ def audit_bonds(
 
     return {
         "ok": ok,
-        "ok_including_topology": bool(ok and catenation["ok"]),
-        "catenation": catenation,
         "n_atoms": n_atoms,
         "n_bonds": len(model.bonds),
         "by_class": {k: _stats(v) for k, v in by_class.items()},

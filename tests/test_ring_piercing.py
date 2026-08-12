@@ -2,25 +2,19 @@
 
 The 2026-07-31 ``2hb_2xT`` relaxation (job ``c8c4a87e2033``) shipped a seed whose
 inter-insert phosphodiester bond ran through the ribose ring of the *partner*
-crossover's insert.  Like a catenated pair, that is permanent: the 10 000-step
-minimisation could only relieve it by stretching the bond 1.60 A -> 3.08 A, and it
-stayed at ~2.98 A — the longest heavy-atom bond in the structure — through every
-ladder stage of the run.
+crossover's insert. The 10 000-step minimisation could only relieve it by stretching
+the bond 1.60 A -> 3.08 A, and it stayed at ~2.98 A — the longest heavy-atom bond in
+the structure — through every ladder stage of the run.
 
-The catenation detector cannot see it (its connector polyline takes the C4'->C3' step,
-so the sugar ring is off-curve) and neither can the clash counters (a bond through the
-ring centre keeps every ring atom 2.2-2.6 A away).  The defect was *introduced* by the
-catenation repair ladder itself: on the shipped design the raw build is catenated and
-unpierced, and the rung that unlinked it was pierced.
+Clash counters cannot see it: a bond through the ring centre keeps every ring atom
+2.2-2.6 A away. The defect therefore needs a direct geometric test.
 
-As in ``test_junction_topology``, the load-bearing tests are the POSITIVE CONTROLS —
-``_piercing_check_disabled`` reproduces the pre-fix ranking, so the detector is still
-observed going red and the ranking term is pinned as what prevents the defect.
+The load-bearing positive control disables the piercing check and observes the
+detector going red, pinning the check as what prevents the defect.
 """
 
 from __future__ import annotations
 
-import contextlib
 from dataclasses import dataclass
 
 import numpy as np
@@ -29,49 +23,30 @@ from unittest import mock
 import pytest
 
 from backend.core.atomistic import build_atomistic_model
-from backend.core.junction_topology import gate_seed_topology
 from backend.core.ring_piercing import (
     PYRIMIDINE_RING,
     SUGAR_RING,
     PierceScope,
     RingPiercedError,
     assert_not_pierced,
+    gate_seed_piercing,
     model_piercings,
     piercing_report,
     ring_names_for,
     segment_pierces_ring,
 )
-from tests.test_junction_topology import _reciprocal_design
+from tests.reciprocal_design import reciprocal_design
 
-# Phases at which the pre-fix ranking shipped a threaded ring, found by sweeping a full
-# helical turn with the piercing term disabled.  TT (two inserts) is hit at 6 of 11
-# phases, T at 1 — which is why this surfaced on a 2xT run.
-_KNOWN_PIERCING = [("T", 14), ("TT", 8)]
+# Representative native placements that the retained gate must refuse. These are
+# detector controls, not proposals to move the inserted bases.
+_KNOWN_PIERCED = [("T", 8), ("TT", 8)]
 _PHASE_SWEEP = range(8, 19)
-
-
-@contextlib.contextmanager
-def _piercing_check_disabled():
-    """Build as the pre-fix code did — repair ladder ranked on clashes alone.
-
-    Zeroing ``PierceScope.count`` reproduces the old behaviour exactly: the pair is then
-    only "defective" when its linking number says so, the rung score collapses to the
-    old ``(penalty, clashes, n_try)`` ordering, and the early exit no longer waits for an
-    unthreaded rung.
-    """
-
-    original = PierceScope.count
-    PierceScope.count = lambda self, atoms: 0
-    try:
-        yield
-    finally:
-        PierceScope.count = original
 
 
 @pytest.fixture(scope="module", autouse=True)
 def _warm_atomistic_build():
     """Pay the one-off template load + L-BFGS-B warm-up in SETUP, not in a test."""
-    build_atomistic_model(_reciprocal_design(None, bp=12))
+    build_atomistic_model(reciprocal_design(None, bp=12))
 
 
 # ── The intersection primitive: pure geometry ─────────────────────────────────
@@ -272,77 +247,67 @@ def test_assert_not_pierced_raises_and_the_override_lets_it_through():
 # ── Positive controls on real builds ──────────────────────────────────────────
 
 
-@pytest.mark.parametrize("extra,bp", _KNOWN_PIERCING)
-def test_known_piercing_phases_are_clean(extra, bp):
-    """FAST GATE — every phase that used to ship a threaded ring must now come out
-    clean.  ``TT`` at bp 8 is the synthetic analogue of the 2hb_2xT run."""
-    report = piercing_report(_reciprocal_design(extra, bp=bp))
-    assert report["n_pierced"] == 0, [h["bond"] for h in report["pierced"]]
-
-
-@pytest.mark.slow
-def test_detector_fires_when_the_piercing_check_is_disabled():
-    """POSITIVE CONTROL — the detector is worthless if it is never seen going red.
-
-    Also pins the causal claim: the pre-fix ladder is what threaded the ring, so the
-    ranking term (not some incidental geometry change) is what prevents it.
-    """
-    design = _reciprocal_design("TT", bp=8)
-    with _piercing_check_disabled():
-        before = piercing_report(design, model=build_atomistic_model(design))
-    assert before["n_pierced"] > 0
-
-    after = piercing_report(design, model=build_atomistic_model(design))
-    assert after["n_pierced"] == 0
+@pytest.mark.parametrize("extra,bp", _KNOWN_PIERCED)
+def test_known_pierced_phases_are_refused(extra, bp):
+    """A real pierced placement is detected, refused, and explicitly overridable."""
+    design = reciprocal_design(extra, bp=bp)
+    model = build_atomistic_model(design)
+    report = piercing_report(design, model=model)
+    assert report["n_pierced"] > 0
+    with pytest.raises(RingPiercedError):
+        gate_seed_piercing(design, model=model)
+    overridden = gate_seed_piercing(design, model=model, allow=True)
+    assert overridden["gate"] == "overridden"
+    assert overridden["n_pierced"] == report["n_pierced"]
 
 
 @pytest.mark.slow
 @pytest.mark.parametrize("extra", ["T", "TT"])
 @pytest.mark.parametrize("bp", list(_PHASE_SWEEP))
-def test_no_phase_pierces(extra, bp):
-    """EXHAUSTIVE GATE — no helical phase may thread a ring, for any insert count.
-
-    Whether a junction pierces is phase-dependent exactly as catenation is, so a
-    fixture pinned to one bp proves nothing; the full-turn sweep is the criterion.
-    """
-    report = piercing_report(_reciprocal_design(extra, bp=bp))
-    assert report["n_pierced"] == 0, [h["bond"] for h in report["pierced"]]
+def test_phase_sweep_gate_matches_detector(extra, bp):
+    """Every phase is passed or refused exactly according to its measured piercings."""
+    design = reciprocal_design(extra, bp=bp)
+    model = build_atomistic_model(design)
+    report = piercing_report(design, model=model)
+    if report["ok"]:
+        verdict = gate_seed_piercing(design, model=model)
+        assert verdict["gate"] == "passed"
+        assert verdict["n_pierced"] == 0
+    else:
+        with pytest.raises(RingPiercedError):
+            gate_seed_piercing(design, model=model)
+        verdict = gate_seed_piercing(design, model=model, allow=True)
+        assert verdict["gate"] == "overridden"
+        assert verdict["n_pierced"] == report["n_pierced"]
 
 
 # ── The build gate ────────────────────────────────────────────────────────────
 
 
-def test_gate_reports_both_defects():
-    design = _reciprocal_design("TT", bp=8)
-    report = gate_seed_topology(design)
+def test_gate_reports_a_clean_seed():
+    design = reciprocal_design("T", bp=10)
+    report = gate_seed_piercing(design)
     assert report["gate"] == "passed"
-    assert report["n_catenated"] == 0
-    assert report["n_ring_pierced"] == 0
+    assert report["n_pierced"] == 0
 
 
 def test_gate_refuses_a_pierced_seed():
-    """The gate must refuse a threaded ring even when nothing is catenated.
-
-    Driven from a synthetic model rather than a build: the per-insert joint solve
-    was the only thing that ever manufactured a threaded ring, and it no longer
-    exists — extra bases are placed straight from the CG representation. The gate
-    still has to refuse one if it ever appears.
-    """
-    design = _reciprocal_design("TT", bp=8)
+    """The gate must refuse a threaded ring and allow an explicit override."""
+    design = reciprocal_design("TT", bp=8)
     model = build_atomistic_model(design)
     hits = [{"bond": "C1'-N1", "bond_serials": [0, 1], "ring_serials": [2, 3, 4]}]
     with mock.patch("backend.core.ring_piercing.model_piercings", return_value=hits):
         with pytest.raises(RingPiercedError):
-            gate_seed_topology(design, model=model)
-        overridden = gate_seed_topology(design, model=model, allow=True)
+            gate_seed_piercing(design, model=model)
+        overridden = gate_seed_piercing(design, model=model, allow=True)
     assert overridden["gate"] == "overridden"
-    assert overridden["n_ring_pierced"] > 0
+    assert overridden["n_pierced"] > 0
 
 
-def test_designs_without_inserts_skip_the_gate_entirely():
-    report = gate_seed_topology(_reciprocal_design(None, bp=12))
-    assert report["gate"] == "skipped_no_extra_bases"
-    assert report["n_ring_pierced"] == 0
+def test_designs_without_inserts_pass_the_gate():
+    report = gate_seed_piercing(reciprocal_design(None, bp=12))
+    assert report["gate"] == "passed"
+    assert report["n_pierced"] == 0
 
 
 # ── The ladder's scoped check agrees with the model-level one ─────────────────

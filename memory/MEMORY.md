@@ -65,7 +65,7 @@ and shared across both computers (see `CLAUDE.md` → Memory layout).
 Files are `feedback_<name>.md`. Match the name against what you're editing; each is short.
 
 **General:** **[refer_to_jobs_by_part_and_time](feedback_refer_to_jobs_by_part_and_time.md)** (name a sim job by its part + creation time — the UI shows no job ids) · **[runpod_downloads_to_archive](feedback_runpod_downloads_to_archive.md)** (big downloads → `/media/jojo/Archive`, not the full system disk) ·
-**[concurrent_sessions](feedback_concurrent_sessions.md)** (shared worktree — never `git stash`/`reset`/`restore`; forbid git in subagent prompts) ·
+**[concurrent_sessions](feedback_concurrent_sessions.md)** (shared worktree — never `git stash`/`reset`/`restore`; forbid git in subagent prompts) · **[geometry_change_authorization](feedback_geometry_change_authorization.md)** (show inspectable current/candidate atoms, defects, and deltas before any molecular-placement authorization or golden update) ·
 **[no_live_server_mutation_for_verify](feedback_no_live_server_mutation_for_verify.md)** · **[use_completion_triggers](feedback_use_completion_triggers.md)** (never foreground sleep/poll) ·
 **[runpod_babysitter_must_act](feedback_runpod_babysitter_must_act.md)** (must KILL the pod on failure, not just log) · [aksel_abandoned](feedback_aksel_abandoned.md) · [crossover_no_reasoning](feedback_crossover_no_reasoning.md) · [phase_constants_locked](feedback_phase_constants_locked.md) · [native_files_preserve_positions](feedback_native_files_preserve_positions.md) ·
 **[staples_are_user_intent](feedback_staples_are_user_intent.md)** (unstapled scaffold = intentional ssDNA loop) · [design_renderer_visibility_rule](feedback_design_renderer_visibility_rule.md) · [overhang_definition](feedback_overhang_definition.md) · [interrupt_before_doubting_user](feedback_interrupt_before_doubting_user.md) · [busy_popup_threshold](feedback_busy_popup_threshold.md) ·
@@ -89,7 +89,7 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 
 **Sequences:** **[strand_sequence_edit](project_strand_sequence_edit.md)** (hand-edit a strand's bases; targeted vs design-wide re-derive)
 
-**Crossover topology:** **[crossover_catenation](project_crossover_catenation.md)** (extra bases were built CATENATED, Lk=±1; detector + build gate + repair — read before touching extra-base placement or the joint solve) ·
+**Crossover geometry:** Catenation was retired as a metric on 2026-08-11; historical measurements remain archived but must not gate placement or simulation. Ring piercing and exact heavy-atom clashes are the active diagnostics. ·
 **[extra_base_spacing](project_extra_base_spacing.md)** (MD-measured interhelical spacing per extra base + the View toggle; the 2.25 nm lattice is ~2 Å tighter than equilibrium even with NO inserts — read before any clash/declash conclusion) ·
 **[measured_atomistic](project_measured_atomistic.md)** (SHIPPED — all-atom templates re-extracted from free NAMD, both strands measured separately in one bp frame; read before touching atomistic placement or the New Positioning toggle) ·
 **[atomistic_source_of_truth](project_atomistic_source_of_truth.md)** (P0 — the stamp no longer reads the display bead; carries the RE-VERIFIED audit table of every CG coupling. Head + `_archive`. READ BEFORE any geometry, atomistic or sim-seed work) ·

@@ -877,9 +877,9 @@ def test_extra_bases_are_placed_from_the_shared_residue_abstraction():
 
     from backend.core.design_geometry import _geometry_for_design
     from backend.core.atomistic_helpers import crossover_extra_base_placements
-    from tests.test_junction_topology import _reciprocal_design
+    from tests.reciprocal_design import reciprocal_design
 
-    design = _reciprocal_design("T", bp=8)
+    design = reciprocal_design("T", bp=8)
     model = build_atomistic_model(design)
 
     xo = next(x for x in design.crossovers if x.extra_bases)
@@ -901,8 +901,10 @@ def test_extra_bases_are_placed_from_the_shared_residue_abstraction():
     ) not in domain_end_keys
 
     placements = crossover_extra_base_placements(
-        np.asarray(a["backbone_position"]), np.asarray(b["backbone_position"]),
-        np.asarray(a["axis_tangent"]), np.asarray(b["axis_tangent"]),
+        np.asarray(a["backbone_position"]),
+        np.asarray(b["backbone_position"]),
+        np.asarray(a["axis_tangent"]),
+        np.asarray(b["axis_tangent"]),
         len(xo.extra_bases),
         sim_reversed=sim_reversed,
         local_frame_reversed=xo.half_a.strand is Direction.REVERSE,
@@ -964,7 +966,8 @@ def test_reverse_polarity_2hb_frames_do_not_clash_in_6hbx32():
         if not xo.extra_bases or interface not in bad_interfaces:
             continue
         insert_rows = {
-            i for i, atom in enumerate(atoms)
+            i
+            for i, atom in enumerate(atoms)
             if atom.crossover_id == xo.id and atom.extra_base_k is not None
         }
         for i in insert_rows:
@@ -975,10 +978,7 @@ def test_reverse_polarity_2hb_frames_do_not_clash_in_6hbx32():
                 # The calibrated residue is covalently joined to the two same-bp
                 # flanks; those close linker contacts are intentional.  The bug was
                 # collision with the adjacent duplex residues.
-                if (
-                    other.bp_index == xo.half_a.index
-                    and other.helix_id in interface
-                ):
+                if other.bp_index == xo.half_a.index and other.helix_id in interface:
                     continue
                 contacts[interface] += 1
 
@@ -993,16 +993,24 @@ def test_saved_extra_base_pose_maps_to_the_same_simulation_index_as_full():
     import numpy as np
 
     from backend.core.models import NucleotideTransform
-    from tests.test_junction_topology import _reciprocal_design
+    from tests.reciprocal_design import reciprocal_design
 
-    design = _reciprocal_design("TT", bp=8)
+    design = reciprocal_design("TT", bp=8)
     xo = next(x for x in design.crossovers if x.extra_bases)
     native = build_atomistic_model(design)
     delta = np.array([3.0, -2.0, 1.0])
-    posed_design = design.copy_with(nucleotide_transforms=[NucleotideTransform(
-        kind="extra_base", crossover_id=xo.id, extra_base_k=0,
-        pivot=[0.0, 0.0, 0.0], translation=delta.tolist(), rotation=[0.0, 0.0, 0.0, 1.0],
-    )])
+    posed_design = design.copy_with(
+        nucleotide_transforms=[
+            NucleotideTransform(
+                kind="extra_base",
+                crossover_id=xo.id,
+                extra_base_k=0,
+                pivot=[0.0, 0.0, 0.0],
+                translation=delta.tolist(),
+                rotation=[0.0, 0.0, 0.0, 1.0],
+            )
+        ]
+    )
     posed = build_atomistic_model(posed_design)
 
     native_by_serial = {a.serial: a for a in native.atoms}
@@ -1010,42 +1018,8 @@ def test_saved_extra_base_pose_maps_to_the_same_simulation_index_as_full():
         if atom.crossover_id != xo.id or atom.extra_base_k is None:
             continue
         before = native_by_serial[atom.serial]
-        displacement = np.array([atom.x - before.x, atom.y - before.y, atom.z - before.z])
+        displacement = np.array(
+            [atom.x - before.x, atom.y - before.y, atom.z - before.z]
+        )
         expected = delta if atom.extra_base_k == 0 else np.zeros(3)
         assert displacement == pytest.approx(expected)
-
-
-def test_a_linked_phase_is_refused_rather_than_re_placed():
-    """Nothing adjusts an insert after native placement, so some longer runs link.
-
-    The protection is the gate, not a repair: a linked build must raise rather than
-    reach a seed. Pinned because the previous contract was the opposite — "the
-    repair guarantees Lk = 0" — and that promise no longer exists.
-    """
-    from backend.core.junction_topology import (
-        CatenatedJunctionError,
-        catenation_report,
-        gate_seed_topology,
-    )
-    from tests.test_junction_topology import _reciprocal_design
-
-    # The calibrated 1xT default is clean; bp 16 with two inserts remains a linked
-    # positive control for the topology gate.
-    design = _reciprocal_design("TT", bp=16)
-    assert (
-        catenation_report(design, model=build_atomistic_model(design))["n_catenated"]
-        > 0
-    )
-    with pytest.raises(CatenatedJunctionError):
-        gate_seed_topology(design)
-
-
-def test_display_path_skips_the_repair():
-    """fast_bridges is the viewer path: it must not pay for the Lk measurement."""
-    from tests.test_junction_topology import _reciprocal_design
-
-    design = _reciprocal_design("TT", bp=8)
-    # Builds without raising and without the repair machinery engaging; the
-    # assertion that matters is that it produces a model at all on the cheap path.
-    model = build_atomistic_model(design, fast_bridges=True)
-    assert _insert_sugar_origins(model, design).shape[0] > 0

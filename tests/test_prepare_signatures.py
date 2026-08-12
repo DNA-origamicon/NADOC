@@ -101,8 +101,8 @@ def test_gbis_accepts_the_two_kwargs_that_actually_broke_it():
 
 
 def test_the_seed_kwargs_branch_stays_protocol_aware():
-    """``allow_catenated_seed`` and ``require_full_topology`` are added conditionally
+    """The piercing override and ``require_full_topology`` are added conditionally
     because GBIS has neither; if that guard is dropped, GBIS breaks the same way."""
     src = ROUTES.read_text()
     assert "if body.protocol != IMPLICIT_GBIS_PROTOCOL:" in src
-    assert 'seed_kwargs["allow_catenated_seed"]' in src
+    assert 'seed_kwargs["allow_ring_pierced_seed"]' in src

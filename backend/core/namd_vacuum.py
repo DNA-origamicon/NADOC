@@ -427,7 +427,7 @@ def prepare_vacuum_enrgmd_namd(
     progress=None,
     force_soft: bool = False,
     require_full_topology: bool = True,
-    allow_catenated_seed: bool = False,
+    allow_ring_pierced_seed: bool = False,
     # Accept-and-ignore the explicit-solvent kwargs so the shared prep call site
     # (routes_md) can pass ONE uniform kwarg set regardless of protocol.  See
     # tests/test_prepare_signatures.py, which pins this against the real call site.
@@ -447,19 +447,18 @@ def prepare_vacuum_enrgmd_namd(
 ) -> tuple[str, str, list[SegmentSpec]]:
     """Protocol entry point: prepare an in-vacuo ENRG-MD shape relaxation.
 
-    The same two gates the solvated builder applies run here, deliberately: this stage's
-    output SEEDS the solvated run, so a poly-T or topologically catenated structure
-    relaxed in vacuum would poison everything downstream rather than just wasting one
-    experiment.
+    The same sequence and ring-piercing gates as the solvated builder run here:
+    this stage's output seeds the solvated run, so an invalid structure relaxed in
+    vacuum would poison everything downstream.
     """
     if require_full_topology:
         from backend.core.md_sequence_guard import require_sequenced_scaffold  # noqa: PLC0415
 
         require_sequenced_scaffold(design)
 
-    from backend.core.junction_topology import gate_seed_topology  # noqa: PLC0415
+    from backend.core.ring_piercing import gate_seed_piercing  # noqa: PLC0415
 
-    gate_seed_topology(design, model=atomistic_model, allow=allow_catenated_seed)
+    gate_seed_piercing(design, model=atomistic_model, allow=allow_ring_pierced_seed)
 
     return build_namd_vacuum_package(
         design,

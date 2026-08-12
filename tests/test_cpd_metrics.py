@@ -23,7 +23,7 @@ import numpy as np
 import pytest
 
 from backend.core import cpd_metrics as cm
-from tests.test_junction_topology import _reciprocal_design
+from tests.reciprocal_design import reciprocal_design
 
 _REF = json.loads(
     (Path(__file__).parent / "fixtures" / "cpd_reference_cases.json").read_text()
@@ -101,7 +101,7 @@ def test_d_mid_is_the_bond_midpoint_distance_not_the_c5_c5_distance():
 
 
 def test_one_extra_base_per_crossover_gives_exactly_one_weld_pair():
-    pairs = cm.designed_weld_pairs(_reciprocal_design("T"))
+    pairs = cm.designed_weld_pairs(reciprocal_design("T"))
     assert len(pairs) == 1
     p = pairs[0]
     assert p["extra_base_k_a"] == 0 and p["extra_base_k_b"] == 0
@@ -109,7 +109,7 @@ def test_one_extra_base_per_crossover_gives_exactly_one_weld_pair():
 
 
 def test_two_extra_bases_per_crossover_give_four_combinations():
-    pairs = cm.designed_weld_pairs(_reciprocal_design("TT"))
+    pairs = cm.designed_weld_pairs(reciprocal_design("TT"))
     assert len(pairs) == 4
     assert {(p["extra_base_k_a"], p["extra_base_k_b"]) for p in pairs} == {
         (0, 0),
@@ -121,8 +121,8 @@ def test_two_extra_bases_per_crossover_give_four_combinations():
 
 
 def test_no_extra_bases_means_no_weld_pairs():
-    assert cm.designed_weld_pairs(_reciprocal_design(None)) == []
-    assert cm.designed_weld_pairs(_reciprocal_design("")) == []
+    assert cm.designed_weld_pairs(reciprocal_design(None)) == []
+    assert cm.designed_weld_pairs(reciprocal_design("")) == []
 
 
 def test_extra_bases_on_non_reciprocal_crossovers_are_not_a_weld():
@@ -141,7 +141,7 @@ def test_extra_bases_on_non_reciprocal_crossovers_are_not_a_weld():
 
 
 def test_insert_residue_numbering_uses_the_builder_segid_convention():
-    pairs = cm.designed_weld_pairs(_reciprocal_design("T"))
+    pairs = cm.designed_weld_pairs(reciprocal_design("T"))
     p = pairs[0]
     for seg in (p["segid_a"], p["segid_b"]):
         assert seg.startswith("D") and seg[1:].isdigit() and len(seg) == 4
@@ -160,7 +160,7 @@ class _FakeUniverse:
 
 
 def test_unresolvable_serials_degrade_instead_of_raising():
-    pairs = cm.designed_weld_pairs(_reciprocal_design("T"))
+    pairs = cm.designed_weld_pairs(reciprocal_design("T"))
     out = cm.resolve_weld_serials(pairs, _FakeUniverse())
     assert len(out) == 1
     assert out[0]["serials_resolved"] is False
@@ -169,7 +169,7 @@ def test_unresolvable_serials_degrade_instead_of_raising():
 
 
 def test_resolve_weld_serials_does_not_mutate_its_input():
-    pairs = cm.designed_weld_pairs(_reciprocal_design("T"))
+    pairs = cm.designed_weld_pairs(reciprocal_design("T"))
     before = json.dumps(pairs, sort_keys=True)
     cm.resolve_weld_serials(pairs, _FakeUniverse())
     assert json.dumps(pairs, sort_keys=True) == before
@@ -245,7 +245,7 @@ def test_make_whole_dna_leaves_an_already_whole_assembly_untouched():
 
 def test_weld_trace_reports_no_pairs_as_a_ready_result_not_an_error():
     """Most designs have no weld pair; that is information, not a failure."""
-    out = cm.weld_trace("unused.psf", [], _reciprocal_design(None))
+    out = cm.weld_trace("unused.psf", [], reciprocal_design(None))
     assert out["ready"] is True
     assert out["pairs"] == []
     assert "reciprocal" in out["reason"]

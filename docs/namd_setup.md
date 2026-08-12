@@ -230,8 +230,16 @@ pinning their initial geometry. A pre-relaxed oxDNA seed (`pre_declashed=true`)
 suppresses the extra-base automatic trigger, but does not override an explicit
 declash request or the strand-extension trigger.
 
-The automatic threshold controls protocol selection only. Seed catenation,
-ring-piercing, clash, and bond-validation gates still inspect every extra base.
+The automatic threshold controls protocol selection only. Ring-piercing, clash,
+and bond-validation gates still inspect every extra base. Catenation/winding is no
+longer computed or used as a seed metric. A covalent bond intersecting a nucleotide
+ring remains a permanent defect and is refused by default; the Job Wizard's **Build
+despite a ring piercing** option (`allow_ring_pierced_seed`) is the explicit override,
+recorded as `ring_piercing_check` in the package manifest.
+
+The outward bow used to separate reciprocal scaffold crossover linkers is limited to
+the fast atomistic display and surface paths. NAMD seeds retain the exact minimized
+bridge construction and the calibrated `1xT` extra-base placement.
 
 ---
 

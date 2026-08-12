@@ -17,6 +17,16 @@ Any uncertainty about strand polarity, helix orientation, domain traversal, or s
 
 Helical phase constants (`_PHASE_FORWARD`, `_PHASE_REVERSE`, `_SQ_PHASE_FORWARD`, `_SQ_PHASE_REVERSE`) are locked. Never change them without explicit approval.
 
+### Molecular-geometry authorization gate
+
+Do not ask the user to choose between molecular placements from prose or aggregate metrics.
+Before requesting authorization, provide a concrete A/B review artifact showing the current and
+candidate atoms in the same frame, the atoms/bonds/rings responsible for each validation verdict,
+and per-junction numeric deltas. Candidate geometry must remain isolated from normal display,
+export, and simulation paths until the user explicitly authorizes that demonstrated candidate.
+Never regenerate a geometry lock or visual golden as part of proposing a candidate. Read
+[geometry change authorization](memory/feedback_geometry_change_authorization.md).
+
 ## Commands
 
 ```bash

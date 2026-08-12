@@ -2,10 +2,9 @@
 
 ## Why this exists
 
-A bond that passes through the *interior* of a sugar or base ring is a topological
-defect of the same family as a catenated crossover pair (see
-:mod:`backend.core.junction_topology`) and just as permanent: the bond cannot leave
-the ring without one of them breaking, so no minimisation and no MD undoes it.
+A bond that passes through the *interior* of a sugar or base ring is a permanent
+topological defect: the bond cannot leave the ring without one of them breaking, so
+no minimisation and no MD can undo it.
 
 Observed on the 2026-07-31 ``2hb_2xT`` relaxation (job ``c8c4a87e2033``): the
 phosphodiester bond joining the two inserts of one crossover
@@ -15,16 +14,6 @@ instead relieved the overlap the only way left — by stretching that covalent b
 from 1.60 A to 3.08 A — and it stayed at ~2.98 A (the longest heavy-atom bond in
 the structure, ~250 kcal/mol of permanent strain) through every ladder stage to the
 end of the run.
-
-## Why the catenation detector cannot see it
-
-``junction_topology`` walks each connector along
-``_BACKBONE_ORDER = P, O5', C5', C4', C3', O3'`` — the direct C4'->C3' step.  The
-sugar ring closes through the *other* path (C4'-O4'-C1'-C2'-C3'), so it is entirely
-off-curve, and threading it changes no linking number between two backbone curves.
-The two detectors are complementary, not redundant: on ``2hb_2xT`` the raw build is
-catenated and unpierced, and the repaired build is unpierced-of-catenation and
-pierced.
 
 ## Why the clash counters cannot see it either
 
@@ -84,8 +73,8 @@ class RingPiercedError(RuntimeError):
             f"(e.g. {first.get('bond', '?')} through {first.get('ring', '?')}). "
             "This is a permanent topological defect — relaxation cannot undo it, it "
             'only trades it for a stretched bond. Rebuild, or tick "Build despite a '
-            'linked crossover" in the Job Wizard (request field allow_catenated_seed) '
-            "to override deliberately — the same switch opens both seed-topology gates."
+            'ring piercing" in the Job Wizard (request field allow_ring_pierced_seed) '
+            "to override deliberately."
         )
 
 
@@ -295,6 +284,14 @@ def assert_not_pierced(
     report["override_used"] = bool(allow and not report["ok"])
     if not report["ok"] and not allow:
         raise RingPiercedError(report)
+    return report
+
+
+def gate_seed_piercing(design, *, model=None, allow: bool = False) -> dict:
+    """Refuse an atomistic seed containing a ring piercing unless overridden."""
+    report = assert_not_pierced(design, model=model, allow=allow)
+    report["gate"] = "overridden" if report.get("override_used") else "passed"
+    report["override_requested"] = bool(allow)
     return report
 
 

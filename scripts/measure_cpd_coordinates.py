@@ -22,7 +22,7 @@ The extra bases are located two independent ways and must agree:
   (1) the design's own 5'->3' insert walk (authoritative for which residue is an insert)
   (2) unpaired-thymine detection by Watson-Crick geometry in frame 0
 Everything runs in MDAnalysis PSF/DCD index space, which avoids the heavy-atom-vs-PDB
-row-order trap documented on `junction_topology.package_connector_rows`.
+The design-side pair enumeration is kept separate from trajectory atom-row lookup.
 
     uv run python scripts/measure_cpd_coordinates.py workspace/2hb_1xT.nadoc \
         PKG/2hb_1xT.psf PKG/output/run.dcd [more.dcd ...] --stride 10
@@ -32,6 +32,7 @@ row-order trap documented on `junction_topology.package_connector_rows`.
 
 Exit status is 1 if the two identifications disagree, so it can gate a script.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -49,8 +50,16 @@ K1, K2, D0, N0 = 2.017017017017017, 0.03003003003003003, 0.157177, 16.7436518847
 
 _PUR = {"ADE", "GUA", "DA", "DG"}
 _THY = {"THY", "DT", "T"}
-_COMP = {("ADE", "THY"), ("THY", "ADE"), ("GUA", "CYT"), ("CYT", "GUA"),
-         ("DA", "DT"), ("DT", "DA"), ("DG", "DC"), ("DC", "DG")}
+_COMP = {
+    ("ADE", "THY"),
+    ("THY", "ADE"),
+    ("GUA", "CYT"),
+    ("CYT", "GUA"),
+    ("DA", "DT"),
+    ("DT", "DA"),
+    ("DG", "DC"),
+    ("DC", "DG"),
+}
 
 
 def kimmdy_rate(d_nm, eta_deg):
@@ -77,7 +86,7 @@ def designed_pairs(design):
 
     connectors = jt.crossover_connectors(design)
     junctions = jt._junction_index(design)
-    segnames = [f"D{ i :03d}".replace(" ", "") for i in range(len(design.strands))]
+    segnames = [f"D{i:03d}".replace(" ", "") for i in range(len(design.strands))]
 
     # crossover_id -> [(segid, resid), ...] for its inserts
     inserts: dict[str, list[tuple[str, int]]] = {}
@@ -103,8 +112,14 @@ def designed_pairs(design):
         ib = inserts.get(connectors[j].crossover_id, [])
         for ka, a in enumerate(ia):
             for kb, b in enumerate(ib):
-                out.append((f"{connectors[i].crossover_id[:8]}[k={ka}]"
-                            f"~{connectors[j].crossover_id[:8]}[k={kb}]", a, b))
+                out.append(
+                    (
+                        f"{connectors[i].crossover_id[:8]}[k={ka}]"
+                        f"~{connectors[j].crossover_id[:8]}[k={kb}]",
+                        a,
+                        b,
+                    )
+                )
     return out, connectors
 
 
@@ -124,8 +139,9 @@ def unpaired_thymines(dna):
     out = []
     for i, (r, base, _) in enumerate(sites):
         j = int(np.argmin(D[i]))
-        bonded = (D[i, j] < 3.3 and (base, sites[j][1]) in _COMP
-                  and int(np.argmin(D[j])) == i)
+        bonded = (
+            D[i, j] < 3.3 and (base, sites[j][1]) in _COMP and int(np.argmin(D[j])) == i
+        )
         if not bonded and base in _THY:
             out.append((r.segid, int(r.resid)))
     return out
@@ -154,21 +170,26 @@ def seed_geometry(design, pairs):
         return None
     a, b = xb[keys[0]], xb[keys[1]]
     bond = np.linalg.norm(a["C5"] - a["C6"])
-    scale = 1.0 if bond < 0.5 else 0.1        # model may be nm or Angstrom
+    scale = 1.0 if bond < 0.5 else 0.1  # model may be nm or Angstrom
     ma, mb = 0.5 * (a["C5"] + a["C6"]), 0.5 * (b["C5"] + b["C6"])
     return float(np.linalg.norm(mb - ma)) * scale, float(
-        dihedral(a["C5"], a["C6"], b["C6"], b["C5"]))
+        dihedral(a["C5"], a["C6"], b["C6"], b["C5"])
+    )
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("design", type=Path, help=".nadoc design (defines the pairs)")
     ap.add_argument("topology", type=Path, nargs="?", help="package PSF (needs bonds)")
     ap.add_argument("trajectories", nargs="*", type=Path, help="DCD(s)")
     ap.add_argument("--stride", type=int, default=1)
-    ap.add_argument("--seed-only", action="store_true",
-                    help="report the geometric build only, no trajectory")
+    ap.add_argument(
+        "--seed-only",
+        action="store_true",
+        help="report the geometric build only, no trajectory",
+    )
     ap.add_argument("--npz", type=Path, default=None, help="write raw series here")
     args = ap.parse_args(argv)
 
@@ -188,22 +209,29 @@ def main(argv=None) -> int:
     seed = seed_geometry(design, pairs)
     if seed:
         d, e = seed
-        print(f"\n  as-built seed: d_mid = {d*10:.2f} A   eta = {e:+.1f} deg   "
-              f"k = {kimmdy_rate(np.array(d), np.array(e)):.4f}")
-        print("  (seed eta is NOT meaningful -- the insert spin DOF is free in the "
-              "joint solve; only MD-relaxed eta counts)")
+        print(
+            f"\n  as-built seed: d_mid = {d * 10:.2f} A   eta = {e:+.1f} deg   "
+            f"k = {kimmdy_rate(np.array(d), np.array(e)):.4f}"
+        )
+        print(
+            "  (seed eta is NOT meaningful -- the insert spin DOF is free in the "
+            "joint solve; only MD-relaxed eta counts)"
+        )
     if args.seed_only or not args.trajectories:
         return 0
 
     import MDAnalysis as mda
 
     u = mda.Universe(str(args.topology), [str(t) for t in args.trajectories])
-    dna = u.select_atoms("nucleic or resname DA DT DG DC ADE THY GUA CYT "
-                         "DA5 DT5 DG5 DC5 DA3 DT3 DG3 DC3")
+    dna = u.select_atoms(
+        "nucleic or resname DA DT DG DC ADE THY GUA CYT DA5 DT5 DG5 DC5 DA3 DT3 DG3 DC3"
+    )
     frags = list(dna.fragments)
     n = len(u.trajectory)
-    print(f"\ntrajectory  {n} frames, stride {args.stride}, "
-          f"{dna.n_atoms} DNA atoms in {len(frags)} strands")
+    print(
+        f"\ntrajectory  {n} frames, stride {args.stride}, "
+        f"{dna.n_atoms} DNA atoms in {len(frags)} strands"
+    )
 
     u.trajectory[0]
     make_whole(dna, frags, u.dimensions[:3])
@@ -212,7 +240,7 @@ def main(argv=None) -> int:
     walk = sorted({p for _l, a, b in pairs for p in (a, b)})
     geom = sorted(unpaired_thymines(dna))
     if not set(walk) <= set(geom):
-        print(f"\n  *** identification mismatch -- refusing to measure ***")
+        print("\n  *** identification mismatch -- refusing to measure ***")
         print(f"      design insert walk : {walk}")
         print(f"      unpaired thymines  : {geom}")
         return 1
@@ -221,12 +249,14 @@ def main(argv=None) -> int:
     idx = {}
     for seg, resid in walk:
         r = u.select_atoms(f"segid {seg} and resid {resid}")
-        idx[(seg, resid)] = (r.select_atoms("name C5")[0].index,
-                             r.select_atoms("name C6")[0].index)
+        idx[(seg, resid)] = (
+            r.select_atoms("name C5")[0].index,
+            r.select_atoms("name C6")[0].index,
+        )
 
     series = {label: {"d": [], "eta": []} for label, _a, _b in pairs}
     times = []
-    for i, ts in enumerate(u.trajectory[::args.stride]):
+    for i, ts in enumerate(u.trajectory[:: args.stride]):
         make_whole(dna, frags, u.dimensions[:3])
         Q = u.atoms.positions
         for label, a, b in pairs:
@@ -239,17 +269,21 @@ def main(argv=None) -> int:
     times = np.array(times)
     span = (times[-1] - times[0]) / 1000.0 if len(times) > 1 else 0.0
     print(f"\n  measured {len(times)} frames spanning {span:.1f} ns\n")
-    print(f"  {'pair':<28} {'d mean':>8} {'d min':>7} {'eta sd':>7} "
-          f"{'<k>':>8} {'d<4.5A':>8} {'reactive':>9}")
+    print(
+        f"  {'pair':<28} {'d mean':>8} {'d min':>7} {'eta sd':>7} "
+        f"{'<k>':>8} {'d<4.5A':>8} {'reactive':>9}"
+    )
     for label, _a, _b in pairs:
         d = np.array(series[label]["d"])
         e = np.array(series[label]["eta"])
         k = kimmdy_rate(d, e)
         dth = np.minimum(np.abs(e - N0), 360 - np.abs(e - N0))
         react = (d < 0.45) & (dth < 45)
-        print(f"  {label:<28} {d.mean()*10:>6.2f} A {d.min()*10:>6.2f} "
-              f"{e.std():>7.1f} {k.mean():>8.4f} "
-              f"{100*(d<0.45).mean():>7.2f}% {100*react.mean():>8.3f}%")
+        print(
+            f"  {label:<28} {d.mean() * 10:>6.2f} A {d.min() * 10:>6.2f} "
+            f"{e.std():>7.1f} {k.mean():>8.4f} "
+            f"{100 * (d < 0.45).mean():>7.2f}% {100 * react.mean():>8.3f}%"
+        )
 
     print("\n  reactive corner = d < 4.5 A AND |eta - eta0| < 45 deg")
     print("  a classical force field cannot reach d0 = 1.57 A (a covalent bond);")
@@ -257,9 +291,12 @@ def main(argv=None) -> int:
 
     if args.npz:
         args.npz.parent.mkdir(parents=True, exist_ok=True)
-        np.savez(args.npz, times=times,
-                 **{f"d__{l}": np.array(s["d"]) for l, s in series.items()},
-                 **{f"eta__{l}": np.array(s["eta"]) for l, s in series.items()})
+        np.savez(
+            args.npz,
+            times=times,
+            **{f"d__{l}": np.array(s["d"]) for l, s in series.items()},
+            **{f"eta__{l}": np.array(s["eta"]) for l, s in series.items()},
+        )
         print(f"\n  wrote {args.npz}")
     return 0
 

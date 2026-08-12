@@ -7,7 +7,7 @@
  },
  "local": {
   "onRelaxationPane": true,
-  "catenated": true,
+  "ringPiercing": true,
   "earlyStopTier": false
  },
  "paneText": "Relaxation ladderApplies to the 22-stage relaxation this job runs now — the stage table on the next tab is exactly these settings.Minimisation stepsdefaultA FLOOR, not the value: minimisation scales to one step per 10 atoms after solvation. A flat count is safe on a small bundle and catastrophic on a large origami.Ladder timestep (fs)4 fs (faster, risks RATTLE)2 fs (standard)1 fs (conservative)defaultThe base timestep for the relaxation ladder — NOT for production, which has its own below. Per-stage tiers still apply on top: a stage that needs the soft integrator runs 1 fs and a declashed ladd",

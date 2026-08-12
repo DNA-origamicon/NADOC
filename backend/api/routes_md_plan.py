@@ -131,7 +131,7 @@ FIELD_SCOPE: dict[str, str] = {
     "declash": "relaxation",
     "early_stop_relax": "relaxation",
     "early_stop_tier": "relaxation",
-    "allow_catenated_seed": "relaxation",
+    "allow_ring_pierced_seed": "relaxation",
     "minimize_steps": "relaxation",
     "protocol": "relaxation",
     # Execution choices apply to this relaxation only. Production selects its own target

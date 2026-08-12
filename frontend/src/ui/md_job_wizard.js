@@ -136,11 +136,9 @@ const FIELDS = [
     help: 'Moves mass from each non-water hydrogen to its bonded heavy atom, allowing a 4 fs timestep with rigid bonds. Recommended at 4 fs and normally off at 1–2 fs.' },
   { key: 'early_stop_relax', label: 'Stop settled stages early', type: 'checkbox',
     help: 'Finishes a relaxation stage once its energy and base-pairing measurements have stabilised. Turn this off when every stage must run for its full scheduled length.' },
-  // The seed-topology gate's override. It had no control at all, and the error it raises
-  // named an environment variable nothing reads — so a design whose extra bases build
-  // catenated was simply a dead end in the app. Off by default: both defects are permanent.
-  { key: 'allow_catenated_seed', label: 'Build despite a linked crossover', type: 'checkbox',
-    help: 'Allows preparation despite a permanent topological defect, such as linked crossover backbones or a bond threaded through a nucleotide ring. These defects cannot relax away and can dominate the trajectory. Leave this off unless you have inspected the warning and deliberately want to simulate that topology.' },
+  // Explicit override for the permanent ring-piercing seed gate. Off by default.
+  { key: 'allow_ring_pierced_seed', label: 'Build despite a ring piercing', type: 'checkbox',
+    help: 'Allows preparation when a covalent bond is threaded through a nucleotide ring. This defect cannot relax away and can dominate the trajectory. Leave this off unless you have inspected the warning and deliberately want to simulate it.' },
   // Remote runs judge "settled" on the NODE, with whatever python that node has — so the
   // criterion is a genuine choice there and not one anywhere else. It had no control at
   // all, which meant every cluster run silently used the weaker tier B while the identical

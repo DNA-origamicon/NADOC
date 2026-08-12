@@ -175,6 +175,28 @@ class TestInterpolateBackboneBridge:
             _atom_pos(atoms, dst["OP2"]), op2_before + delta_p, atol=1e-9
         )
 
+    def test_optional_bow_tapers_to_fixed_anchors(self):
+        atoms, src = _build_ribose(np.zeros(3))
+        atoms2, dst = _build_ribose(np.array([1.0, 0.0, 0.0]))
+        offset = len(atoms)
+        atoms.extend(atoms2)
+        dst = {key: value + offset for key, value in dst.items()}
+        c3_before = _atom_pos(atoms, src["C3'"])
+        c5_before = _atom_pos(atoms, dst["C5'"])
+        bow = np.array([0.0, 0.06, 0.0])
+
+        _interpolate_backbone_bridge(atoms, src, dst, bow=bow)
+
+        np.testing.assert_allclose(_atom_pos(atoms, src["C3'"]), c3_before)
+        np.testing.assert_allclose(_atom_pos(atoms, dst["C5'"]), c5_before)
+        for name, serials, t in (
+            ("O3'", src, 0.25),
+            ("P", dst, 0.5),
+            ("O5'", dst, 0.75),
+        ):
+            expected = c3_before + t * (c5_before - c3_before) + bow * np.sin(np.pi * t)
+            np.testing.assert_allclose(_atom_pos(atoms, serials[name]), expected)
+
     def test_missing_keys_returns_silently(self):
         atoms = []
         # No C3'/C5'/P → should not raise

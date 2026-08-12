@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from typing import List
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.api import state as design_state
@@ -158,6 +158,44 @@ def get_atomistic(
             measured_positioning=measured_positioning,
         )
     )
+
+
+@router.get("/design/molecular-placement-audit")
+def get_molecular_placement_audit(measured_positioning: bool = True) -> dict:
+    """Return a read-only current/candidate molecular-placement comparison.
+
+    The candidate is an in-memory clone and cannot be saved, exported, or submitted to a
+    simulation. The response includes the ordinary Full render feed so both audit panel
+    representations share the exact same design snapshot.
+    """
+    if design_state.get_pdb_atomistic() is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Molecular Placement Audit is unavailable for a PDB-imported model: "
+                "the diagnostic candidate is defined only for designed crossover inserts."
+            ),
+        )
+
+    from backend.core.deformation import deformed_helix_axes
+    from backend.core.design_geometry import _geometry_for_design
+    from backend.core.molecular_placement_audit import (
+        build_molecular_placement_audit,
+    )
+
+    design = design_state.get_or_404()
+    bundle = build_molecular_placement_audit(
+        design,
+        nuc_frame_override=_flexible_display_override(design),
+        measured_positioning=measured_positioning,
+    )
+    bundle["nucleotides"] = _geometry_for_design(
+        design,
+        measured_positioning=measured_positioning,
+        junction_balance=True,
+    )
+    bundle["helix_axes"] = deformed_helix_axes(design)
+    return bundle
 
 
 @router.get("/design/clashes")

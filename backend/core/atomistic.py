@@ -57,6 +57,7 @@ from backend.core.atomistic_helpers import (
 )
 from backend.core.atomistic_minimisers import (
     _atom_pos,
+    _backbone_bridge_points,
     _interpolate_backbone_bridge,
     _minimize_backbone_bridge,
     _set_atom_pos,
@@ -1678,6 +1679,102 @@ def _append_protein_atoms(model: AtomisticModel, design: Design) -> AtomisticMod
     return model
 
 
+_HOLLIDAY_CONTACT_NM = 0.08
+_HOLLIDAY_CLEARANCE_NM = 0.09
+
+
+def _scaffold_holliday_bridge_bows(design: Design, position_for) -> dict:
+    """Return the minimum paired bow needed to clear scaffold phosphate contacts.
+
+    The fast display bridge normally puts each phosphate on the straight C3′→C5′
+    chord. At an antiparallel reciprocal crossover, the two destination phosphate
+    branches can then point into the same Holliday-junction center even though their
+    two chords are distinct. Only reciprocal scaffold pairs whose predicted P/OP1/OP2
+    groups actually come within the 0.08 nm clash threshold receive a bow.
+
+    Each bridge moves away from the pair's common center. The magnitude is solved per
+    pair as the smallest displacement that leaves every opposing phosphate atom pair
+    at least 0.09 nm apart. It is therefore deterministic and sub-angstrom, rather
+    than a global aesthetic curve applied to unaffected crossovers.
+    """
+    from backend.core.junction_topology import (  # noqa: PLC0415
+        crossover_connectors,
+        reciprocal_pairs,
+    )
+
+    scaffold_ids = {
+        strand.id
+        for strand in design.strands
+        if strand.strand_type == StrandType.SCAFFOLD
+    }
+    connectors = crossover_connectors(design)
+    records: dict[int, dict] = {}
+    for index, connector in enumerate(connectors):
+        if connector.n_inserts or connector.strand_id not in scaffold_ids:
+            continue
+        src_key = (connector.from_helix, connector.from_bp, connector.from_dir)
+        dst_key = (connector.to_helix, connector.to_bp, connector.to_dir)
+        names = {
+            "c3": position_for(src_key, "C3'"),
+            "c5": position_for(dst_key, "C5'"),
+            "p": position_for(dst_key, "P"),
+            "op1": position_for(dst_key, "OP1"),
+            "op2": position_for(dst_key, "OP2"),
+        }
+        if any(value is None for value in names.values()):
+            continue
+        names = {
+            key: _np.asarray(value, dtype=float).copy() for key, value in names.items()
+        }
+        midpoint = (names["c3"] + names["c5"]) * 0.5
+        phosphate_delta = midpoint - names["p"]
+        records[index] = {
+            "key": (connector.strand_id, src_key, dst_key),
+            "midpoint": midpoint,
+            "branches": [
+                names["p"] + phosphate_delta,
+                names["op1"] + phosphate_delta,
+                names["op2"] + phosphate_delta,
+            ],
+        }
+
+    bows: dict = {}
+    for index_a, index_b in reciprocal_pairs(connectors):
+        record_a = records.get(index_a)
+        record_b = records.get(index_b)
+        if record_a is None or record_b is None:
+            continue
+        outward = record_a["midpoint"] - record_b["midpoint"]
+        norm = float(_np.linalg.norm(outward))
+        if norm < 1e-9:
+            continue
+        outward /= norm
+        deltas = [a - b for a in record_a["branches"] for b in record_b["branches"]]
+        if (
+            min(float(_np.linalg.norm(delta)) for delta in deltas)
+            >= _HOLLIDAY_CONTACT_NM
+        ):
+            continue
+
+        # For d = atom_a - atom_b, equal/opposite bows produce d + 2*b*outward.
+        # Solve the upper root of |d + 2*b*u| = clearance for every phosphate pair;
+        # the largest root is the first magnitude safely outside every contact interval.
+        magnitude = 0.0
+        for delta in deltas:
+            along = float(_np.dot(delta, outward))
+            perpendicular_sq = max(0.0, float(_np.dot(delta, delta)) - along * along)
+            discriminant = _HOLLIDAY_CLEARANCE_NM**2 - perpendicular_sq
+            if discriminant <= 0.0:
+                continue
+            upper = (-along + _math.sqrt(discriminant)) * 0.5
+            magnitude = max(magnitude, upper)
+        if magnitude <= 0.0:
+            continue
+        bows[record_a["key"]] = outward * magnitude
+        bows[record_b["key"]] = -outward * magnitude
+    return bows
+
+
 def build_atomistic_model(
     design: Design,
     exclude_helix_ids: set[str] | None = None,
@@ -1694,6 +1791,7 @@ def build_atomistic_model(
     frame_sink: "dict[tuple, tuple[_np.ndarray, _np.ndarray]] | None" = None,
     fast_bridges: bool = False,
     measured_positioning: bool = True,
+    _extra_base_placement_sink: "list[dict] | None" = None,
 ) -> AtomisticModel:
     """
     Build the heavy-atom model for the entire design.
@@ -1732,6 +1830,10 @@ def build_atomistic_model(
     3.2 A limit.  Making them native means re-deriving both placers, which is separable
     from the duplex and not done here.  Their POSITIONS still follow the CG layer, and
     the junction linkers are minimised afterwards, so they join measured duplex.
+
+    ``_extra_base_placement_sink`` is diagnostic instrumentation for the read-only
+    Molecular Placement Audit. When supplied, native placement records are copied into
+    it before any authored residue transform is applied. It cannot alter the build.
 
     """
     measured_tmpl = None
@@ -1839,10 +1941,12 @@ def build_atomistic_model(
     # DISPLAY speed: the crossover/skip/insert phosphate bridges are placed by an
     # L-BFGS-B minimiser for MD-SEED-quality bond angles — that dominates the build on
     # a large crossover-dense structure (≈42 s of a 58 s VoltronCore build) and is
-    # pointless for a viewer.  `fast_bridges` swaps it for the cheap linear
-    # interpolation that is ALREADY the minimiser's initial guess: 6× faster, only the
-    # ~1.5% phosphate-linker atoms move (≤2.4 Å at junctions).  Default False keeps the
-    # exact geometry for MD seeds / PDB export / NAMD / periodic-cell.
+    # pointless for a viewer. `fast_bridges` swaps it for the cheap chord interpolation
+    # that is ALREADY the minimiser's initial guess; only reciprocal scaffold phosphate
+    # groups that would contact receive the sub-angstrom Holliday bow computed below.
+    # This is 6× faster, and only the ~1.5% phosphate-linker atoms move (≤2.4 Å at
+    # junctions). Default False keeps the exact geometry for MD seeds / PDB export /
+    # NAMD / periodic-cell.
     _bridge_fn = (
         _interpolate_backbone_bridge if fast_bridges else _minimize_backbone_bridge
     )
@@ -2212,6 +2316,17 @@ def build_atomistic_model(
                     prev_o3_serial = o3_serial
                     prev_nuc_key = (h_id, bp, dir_str)
 
+    def _bridge_atom_position(key, name):
+        serials = bp_to_sugar_serials.get(key)
+        serial = serials.get(name) if serials else None
+        return _atom_pos(atoms, serial) if serial is not None else None
+
+    holliday_bows = (
+        _scaffold_holliday_bridge_bows(design, _bridge_atom_position)
+        if fast_bridges
+        else {}
+    )
+
     # ── Crossover phosphate bridge relaxation ────────────────────────────────
     # At each crossover (consecutive domains on different helices sharing the
     # same bp position), place O3′(src), P(dst), and O5′(dst) by minimising
@@ -2240,7 +2355,16 @@ def build_atomistic_model(
                 src_s = bp_to_sugar_serials.get(src_key)
                 dst_s = bp_to_sugar_serials.get(dst_key)
                 if src_s and dst_s:
-                    _bridge_fn(atoms, src_s, dst_s)
+                    if fast_bridges:
+                        bow_key = (strand.id, src_key, dst_key)
+                        _interpolate_backbone_bridge(
+                            atoms,
+                            src_s,
+                            dst_s,
+                            bow=holliday_bows.get(bow_key),
+                        )
+                    else:
+                        _minimize_backbone_bridge(atoms, src_s, dst_s)
 
             prev_domain = domain
 
@@ -2378,6 +2502,7 @@ def build_atomistic_model(
         xb_pos_override=xb_pos_override,
         bridge_fn=_bridge_fn,
         fast_bridges=fast_bridges,
+        placement_sink=_extra_base_placement_sink,
     )
 
     # Linker closure above re-seats P/O5′ on the downstream duplex residue.
@@ -2757,10 +2882,13 @@ _SUGAR_IDX = {name: i for i, (name, *_rest) in enumerate(_SUGAR)}
 
 
 def _apply_cloud_bridges(design, helix_map, P, key3_to_off) -> None:
-    """Apply the fast_bridges (linear) phosphodiester-linker interpolation at every crossover
-    and skip gap to the surface point cloud ``P`` — the array analogue of
+    """Apply fast phosphodiester-linker interpolation at every crossover and skip gap.
+
+    This is the surface point-cloud analogue of
     ``_interpolate_backbone_bridge`` + the crossover/skip passes in ``build_atomistic_model``.
-    O3'(src)→¼, P(dst)→½, O5'(dst)→¾ along C3'(src)→C5'(dst); OP1/OP2(dst) ride P's delta."""
+    O3'(src)→¼, P(dst)→½, O5'(dst)→¾ along C3'(src)→C5'(dst); OP1/OP2(dst) ride P's
+    delta. Reciprocal scaffold contacts receive the same adaptive Holliday bow as the
+    full atomistic display path."""
     iC3, iO3, iC5, iP, iO5, iOP1, iOP2 = (
         _SUGAR_IDX["C3'"],
         _SUGAR_IDX["O3'"],
@@ -2771,14 +2899,20 @@ def _apply_cloud_bridges(design, helix_map, P, key3_to_off) -> None:
         _SUGAR_IDX["OP2"],
     )
 
-    def _bridge(src_off, dst_off):
+    def _cloud_position(key, name):
+        off = key3_to_off.get(key)
+        return None if off is None else P[off + _SUGAR_IDX[name]]
+
+    holliday_bows = _scaffold_holliday_bridge_bows(design, _cloud_position)
+
+    def _bridge(src_off, dst_off, bow=None):
         c3 = P[src_off + iC3]
         c5 = P[dst_off + iC5]
-        new_p = c3 + (c5 - c3) * 0.5
+        o3, new_p, o5 = _backbone_bridge_points(c3, c5, bow)
         delta = new_p - P[dst_off + iP]
-        P[src_off + iO3] = c3 + (c5 - c3) * 0.25
+        P[src_off + iO3] = o3
         P[dst_off + iP] = new_p
-        P[dst_off + iO5] = c3 + (c5 - c3) * 0.75
+        P[dst_off + iO5] = o5
         P[dst_off + iOP1] += delta
         P[dst_off + iOP2] += delta
 
@@ -2809,7 +2943,12 @@ def _apply_cloud_bridges(design, helix_map, P, key3_to_off) -> None:
                 if is_eb:
                     eb_src.add(sk)
                 elif sk in key3_to_off and dk in key3_to_off:
-                    _bridge(key3_to_off[sk], key3_to_off[dk])
+                    bow_key = (_s.id, sk, dk)
+                    _bridge(
+                        key3_to_off[sk],
+                        key3_to_off[dk],
+                        holliday_bows.get(bow_key),
+                    )
             prev = dom
 
     # Skip sites: a gap of >1 bp on the same helix/direction (deleted positions).
@@ -3492,6 +3631,7 @@ def _build_extra_base_atoms(
     xb_pos_override: "dict[tuple[str, int], _np.ndarray] | None" = None,
     bridge_fn=_minimize_backbone_bridge,
     fast_bridges: bool = False,
+    placement_sink: "list[dict] | None" = None,
 ) -> int:
     """
     Place atomistic atoms for all extra crossover bases in the design.
@@ -3616,6 +3756,21 @@ def _build_extra_base_atoms(
                 local_frame_reversed=ha.strand.value == "REVERSE",
             )
         }
+        if placement_sink is not None:
+            for k, placement in sorted(placements_by_k.items()):
+                placement_sink.append(
+                    {
+                        "crossover_id": xo.id,
+                        "extra_base_k": k,
+                        "count": len(xo.extra_bases),
+                        "center": placement["center"].copy(),
+                        "frame_rotation": placement["frame_rotation"].copy(),
+                        "geometric_center": placement["geometric_center"].copy(),
+                        "source_frame_rotation": placement[
+                            "source_frame_rotation"
+                        ].copy(),
+                    }
+                )
 
         # Chain-direction endpoints for a SIMULATED insert stay the real C3'/C5'
         # ATOMS.  That path orients a nucleotide from measured a1 against the

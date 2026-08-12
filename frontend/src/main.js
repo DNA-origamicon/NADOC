@@ -65,6 +65,7 @@ import { initDomainEnds }            from './scene/domain_ends.js'
 import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
 import { initCommandPalette }  from './ui/command_palette.js'
 import { initStrandLengthHistogram } from './ui/strand_length_histogram.js'
+import { initMolecularPlacementAudit } from './ui/molecular_placement_audit.js'
 import { initOverhangSequencesPanel } from './ui/overhang_sequences_panel.js'
 import { initStrandGroupsPanel } from './ui/strand_groups_panel.js'
 import { initSelectionFilter } from './ui/selection_filter.js'
@@ -7290,6 +7291,12 @@ async function main() {
   document.getElementById('menu-help-md-engines')?.addEventListener('click', () => mdEngines.showStatusModal())
 
   initCreateSeam({ store, api })
+
+  // Read-only, isolated current/candidate molecular geometry comparison.
+  initMolecularPlacementAudit({
+    setMenuToggle: _setMenuToggle,
+    getColorState: () => store.getState(),
+  })
 
   // ── Help > Overlay Mode ────────────────────────────────────────────────────
   // A display-only composite: Full remains visible underneath the global

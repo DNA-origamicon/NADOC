@@ -3,11 +3,12 @@
 
 Reports the insert C1' in the HOP-REFERENCED chord frame (t, bow, ax) for:
   arc            pure Bezier pose (fast_bridges: joint solve skipped)
-  built          today's full build (joint solve + catenation repair)
+  built          today's full build
   arc-hop        pure Bezier pose with the bow referenced to the chemical hop
   built-hop      full build with the hop-referenced bow
 and prints the MD target next to them.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -18,9 +19,33 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from hop_bow_experiment import hop_orient  # noqa: E402
 from xb_map import build_package_map, load_design  # noqa: E402
 from xb_observables import JunctionProbe, ModelSource  # noqa: E402
+
+
+def hop_orient(design, half_a_role: str = "dst"):
+    """Return a copy whose inserted crossover records share a hop-relative order."""
+    ends = {
+        (domain.helix_id, domain.end_bp, domain.direction.value)
+        for strand in design.strands
+        for domain in strand.domains
+    }
+    new = design.model_copy(deep=True)
+    n_swapped = 0
+    for crossover in new.crossovers:
+        if not crossover.extra_bases:
+            continue
+        half_a_key = (
+            crossover.half_a.helix_id,
+            crossover.half_a.index,
+            crossover.half_a.strand.value,
+        )
+        a_is_source = half_a_key in ends
+        if a_is_source == (half_a_role == "src"):
+            continue
+        crossover.half_a, crossover.half_b = crossover.half_b, crossover.half_a
+        n_swapped += 1
+    return new, n_swapped
 
 
 def hop_sign_map(design):
@@ -53,10 +78,12 @@ def main(argv=None):
     flipped, n_sw = hop_orient(design)
     print(f"{stem}: {n_sw} extra-base crossover(s) re-referenced to the hop\n")
 
-    variants = [("arc", design, {"fast_bridges": True}),
-                ("built", design, {}),
-                ("arc-hop", flipped, {"fast_bridges": True}),
-                ("built-hop", flipped, {})]
+    variants = [
+        ("arc", design, {"fast_bridges": True}),
+        ("built", design, {}),
+        ("arc-hop", flipped, {"fast_bridges": True}),
+        ("built-hop", flipped, {}),
+    ]
 
     rows = {}
     for tag, dsg, kw in variants:
@@ -69,25 +96,35 @@ def main(argv=None):
             m = pr.measure(s)
             k = sg[ins.crossover_id]
             rows.setdefault(ins.crossover_id, {})[tag] = (
-                m["t_c1"], k * m["bow_c1"], k * m["ax_c1"], m["L"])
+                m["t_c1"],
+                k * m["bow_c1"],
+                k * m["ax_c1"],
+                m["L"],
+            )
 
     md = {}
     if args.dump:
         d = json.loads(args.dump.read_text())
         sg0 = hop_sign_map(design)
         for ins in d["inserts"]:
-            s = ins["samples"][args.burn:]
+            s = ins["samples"][args.burn :]
             k = sg0[ins["crossover_id"]]
             md[ins["crossover_id"]] = (
-                np.mean([q["t_c1"] for q in s]), np.std([q["t_c1"] for q in s]),
-                k * np.mean([q["bow_c1"] for q in s]), np.std([q["bow_c1"] for q in s]),
-                k * np.mean([q["ax_c1"] for q in s]), np.std([q["ax_c1"] for q in s]),
-                np.mean([q["L"] for q in s]))
+                np.mean([q["t_c1"] for q in s]),
+                np.std([q["t_c1"] for q in s]),
+                k * np.mean([q["bow_c1"] for q in s]),
+                np.std([q["bow_c1"] for q in s]),
+                k * np.mean([q["ax_c1"] for q in s]),
+                np.std([q["ax_c1"] for q in s]),
+                np.mean([q["L"] for q in s]),
+            )
 
     for xid, per in rows.items():
         print(f"── crossover {xid[:8]}")
-        print(f"   {'variant':<12s} {'t':>8s} {'bow':>8s} {'ax':>8s} {'L':>7s}"
-              f"   {'|d| to MD (A)':>14s}")
+        print(
+            f"   {'variant':<12s} {'t':>8s} {'bow':>8s} {'ax':>8s} {'L':>7s}"
+            f"   {'|d| to MD (A)':>14s}"
+        )
         tgt = md.get(xid)
         for tag, (t, b, a, L) in per.items():
             extra = ""
@@ -96,10 +133,14 @@ def main(argv=None):
                 extra = f"{np.linalg.norm(dv):>14.2f}"
             print(f"   {tag:<12s} {t:+8.3f} {b:+8.3f} {a:+8.3f} {L:7.2f}   {extra}")
         if tgt:
-            print(f"   {'MD 180 ns':<12s} {tgt[0]:+8.3f} {tgt[2]:+8.3f} {tgt[4]:+8.3f} "
-                  f"{tgt[6]:7.2f}   (sd {tgt[1]:.3f} / {tgt[3]:.3f} / {tgt[5]:.3f})")
-            print(f"   {'':<12s} thermal spread of the MD ensemble itself: "
-                  f"{np.linalg.norm(np.array([tgt[1],tgt[3],tgt[5]])*tgt[6]):.2f} A")
+            print(
+                f"   {'MD 180 ns':<12s} {tgt[0]:+8.3f} {tgt[2]:+8.3f} {tgt[4]:+8.3f} "
+                f"{tgt[6]:7.2f}   (sd {tgt[1]:.3f} / {tgt[3]:.3f} / {tgt[5]:.3f})"
+            )
+            print(
+                f"   {'':<12s} thermal spread of the MD ensemble itself: "
+                f"{np.linalg.norm(np.array([tgt[1], tgt[3], tgt[5]]) * tgt[6]):.2f} A"
+            )
         print()
     return 0
 

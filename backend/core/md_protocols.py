@@ -3229,7 +3229,7 @@ def prepare_mgh_slow_release(
     anchor_atoms: Optional[list] = None,
     field: Optional[dict] = None,
     capture_vel_force: bool = False,
-    allow_catenated_seed: bool = False,
+    allow_ring_pierced_seed: bool = False,
     devices: str = "0",
     early_stop_relax: bool = False,
     stage_overrides: Optional[dict] = None,
@@ -3293,17 +3293,13 @@ def prepare_mgh_slow_release(
             )
             atomistic_model = None
 
-    # Refuse to build a package whose reciprocal crossover connectors are topologically
-    # LINKED (Gauss Lk != 0).  The seed builder can swing the two inserted bases of an
-    # antiparallel pair through one another; because both chain ends are covalently
-    # pinned into the network, that entanglement survives every relaxation stage, so the
-    # trajectory measures an artefact.  Base-pairing health checks do not see it (a
-    # catenated 2hb run reported c1_paired_fraction = 1.0), which is why it needs its own
-    # gate.  Shared choke point for local + RunPod + every experiment script.
-    from backend.core.junction_topology import gate_seed_topology  # noqa: PLC0415
+    # Refuse a seed with a covalent bond threaded through a nucleotide ring.  This
+    # permanent defect cannot relax away.  Shared choke point for local + RunPod +
+    # every experiment script.
+    from backend.core.ring_piercing import gate_seed_piercing  # noqa: PLC0415
 
-    topology_check = gate_seed_topology(
-        design, model=atomistic_model, allow=allow_catenated_seed
+    ring_piercing_check = gate_seed_piercing(
+        design, model=atomistic_model, allow=allow_ring_pierced_seed
     )
 
     # Minimisation must scale with the structure.  Tutorial Note 2 attributes RATTLE
@@ -3768,11 +3764,9 @@ def prepare_mgh_slow_release(
             f"output/{min_name}.coor" if (declash or rebuild_enm_from_min) else None
         ),
         "n_unpaired_excluded": n_unpaired if declash else 0,
-        # Seed strand topology at the reciprocal crossover junctions: "passed",
-        # "overridden" (built anyway via allow_catenated_seed) or
-        # "skipped_no_extra_bases".  Recorded on EVERY build so a trajectory can always
-        # be traced back to whether its seed was entangled.
-        "topology_check": topology_check,
+        # Ring-piercing seed gate: "passed" or "overridden" (built anyway via
+        # allow_ring_pierced_seed). Recorded on every build for provenance.
+        "ring_piercing_check": ring_piercing_check,
         # Seeded extra-base path: minimise ran WITHOUT the ENM (no_enm) to open the seed
         # backmap's duplex clashes; the runner rebuilds the ENM from the declashed coords
         # so k0.1 no longer releases stored clash energy.  Decoupled from ``declash``
