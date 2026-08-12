@@ -52,6 +52,7 @@ from backend.core.models import (
     Helix,
     LatticeType,
     LoopSkip,
+    OverhangSpec,
     Strand,
     StrandType,
     TwistParams,
@@ -1108,3 +1109,92 @@ def test_add_loops_skips_tool_places_no_mark_on_crossover_or_end():
         ]
         assert n_marks > 0, "the tool produced marks"
         assert on_forbidden == [], f"marks on crossovers/ends: {on_forbidden[:8]}"
+
+
+def test_add_loops_skips_tool_ignores_reference_overhang_and_linker_geometry():
+    """Non-bundle helices are neither realized nor cleared by the tool."""
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+    from backend.api.crud import apply_loop_skips_from_deformations
+
+    cells = [(0, 0), (0, 1)]
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        hb.create_bundle(cells, 126, lattice=LatticeType.HONEYCOMB, name="2hb")
+        hb.auto_scaffold(seamless=False)
+        hb.auto_crossover()
+        hb.auto_break()
+        hb.add_bend(0, 126, curvature_deg_per_bp=90.0 / 126)
+
+        design = design_state.get_or_404()
+        excluded_helices = [
+            _make_helix(
+                "reference-only",
+                x=20.0,
+                loop_skips=[LoopSkip(bp_index=35, delta=1)],
+            ),
+            _make_helix(
+                "overhang-only",
+                x=25.0,
+                loop_skips=[LoopSkip(bp_index=42, delta=-1)],
+            ),
+            _make_helix(
+                "__lnk__test",
+                x=30.0,
+                loop_skips=[LoopSkip(bp_index=49, delta=1)],
+            ),
+        ]
+        excluded_strands = []
+        for helix in excluded_helices:
+            is_reference = helix.id == "reference-only"
+            for direction in (Direction.FORWARD, Direction.REVERSE):
+                excluded_strands.append(
+                    Strand(
+                        id=f"excluded-{helix.id}-{direction.value}",
+                        strand_type=StrandType.STAPLE,
+                        is_reference=is_reference,
+                        domains=[
+                            Domain(
+                                helix_id=helix.id,
+                                direction=direction,
+                                start_bp=(
+                                    0 if direction == Direction.FORWARD else 125
+                                ),
+                                end_bp=(
+                                    125 if direction == Direction.FORWARD else 0
+                                ),
+                            )
+                        ],
+                    )
+                )
+        excluded_ids = {h.id for h in excluded_helices}
+        deformations = [
+            op.model_copy(
+                update={
+                    "affected_helix_ids": [*op.affected_helix_ids, *excluded_ids]
+                }
+            )
+            for op in design.deformations
+        ]
+        design_state.set_design(
+            design.copy_with(
+                helices=[*design.helices, *excluded_helices],
+                strands=[*design.strands, *excluded_strands],
+                deformations=deformations,
+                overhangs=[
+                    OverhangSpec(
+                        id="test-overhang",
+                        helix_id="overhang-only",
+                        strand_id="excluded-overhang-only-forward",
+                    )
+                ],
+            )
+        )
+
+        response = apply_loop_skips_from_deformations()
+        updated = design_state.get_or_404()
+
+        assert excluded_ids.isdisjoint(response["loop_skips"])
+        for before in excluded_helices:
+            after = updated.find_helix(before.id)
+            assert after is not None
+            assert after.loop_skips == before.loop_skips

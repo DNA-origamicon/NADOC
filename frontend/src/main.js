@@ -2456,10 +2456,16 @@ async function main() {
       return job
     },
   })
-  const _refreshSimPolicy = () => simulateLaunch?.refresh?.()
+  const _refreshSimPolicy = () => {
+    if (store.getState().simulationTabActive) simulateLaunch?.refresh?.()
+  }
   window.addEventListener('nadoc:workspace-path-change', _refreshSimPolicy)
   window.addEventListener('nadoc:design-changed', _refreshSimPolicy)
-  _refreshSimPolicy()
+  window.addEventListener('nadoc:left-tab-change', (e) => {
+    if (e.detail?.activeTab === 'dynamics' && !e.detail?.collapsed) {
+      simulateLaunch?.refresh?.()
+    }
+  })
 
   // The Simulate section collapses as one (its header owns the collapse; each engine
   // header is a static label). Reuse the shared jobs-panel base for persist + arrow.
@@ -6541,6 +6547,10 @@ async function main() {
         // session still look like it had the sidebar open.
         const locked = leftPanel.classList.contains('locked-hidden')
         const shut   = collapsed || locked
+        const simulationTabActive = !shut && activeTab === 'dynamics'
+        if (store.getState().simulationTabActive !== simulationTabActive) {
+          store.setState({ simulationTabActive })
+        }
         for (const id of TABS) {
           if (btns[id])  btns[id].classList.toggle('active', id === activeTab && !shut)
           if (panes[id]) panes[id].hidden = (id !== activeTab)
@@ -6699,6 +6709,9 @@ async function main() {
 
       // Apply initial state without firing persistence.
       _render()
+      window.dispatchEvent(new CustomEvent('nadoc:left-tab-change', {
+        detail: { activeTab, collapsed },
+      }))
 
       // Expose the controller for assembly-mode entry/exit handlers and tests.
       _leftSidebar = {

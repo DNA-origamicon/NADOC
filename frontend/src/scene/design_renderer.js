@@ -396,7 +396,8 @@ export function initDesignRenderer(scene, storeRef) {
     const zero = new THREE.Vector3(0, 0, 0)
     const design = storeRef.getState().currentDesign
     const refIds = new Set((design?.strands ?? []).filter(s => s.is_reference).map(s => s.id))
-    const refHidden = storeRef.getState().showReferenceGeometry === false
+    const state = storeRef.getState()
+    const refHidden = state.showReferenceGeometry === false || state.simulationTabActive === true
     let dirty = false
     for (const ad of _xoverArcData) {
       const hide = _hiddenCrossoverIds.has(ad.xoId) ||
@@ -440,7 +441,8 @@ export function initDesignRenderer(scene, storeRef) {
     const design = storeRef.getState().currentDesign
     const refIds = new Set((design?.strands ?? []).filter(s => s.is_reference).map(s => s.id))
     if (!refIds.size) return
-    const hidden = storeRef.getState().showReferenceGeometry === false
+    const state = storeRef.getState()
+    const hidden = state.showReferenceGeometry === false || state.simulationTabActive === true
     const m4 = new THREE.Matrix4()
     const pos = new THREE.Vector3()
     const qid = new THREE.Quaternion()
@@ -512,7 +514,8 @@ export function initDesignRenderer(scene, storeRef) {
     if (!_xoverArcData || !_xoverBeadsMesh) return
     const design = storeRef.getState().currentDesign
     const refIds = new Set((design?.strands ?? []).filter(s => s.is_reference).map(s => s.id))
-    const refHidden = storeRef.getState().showReferenceGeometry === false
+    const state = storeRef.getState()
+    const refHidden = state.showReferenceGeometry === false || state.simulationTabActive === true
     if (_xoverConnMesh) for (const ad of _xoverArcData) {
       const segCount = ad.beadCount + 1
       if (_xoverArcHidden(ad, refIds, refHidden)) {
@@ -706,7 +709,9 @@ export function initDesignRenderer(scene, storeRef) {
     const _refIds = new Set((design?.strands ?? []).filter(s => s.is_reference).map(s => s.id))
     if (_refIds.size) {
       _helixCtrl.setReferenceStrands(_refIds)
-      _helixCtrl.setReferenceHidden(storeRef.getState().showReferenceGeometry === false)
+      const state = storeRef.getState()
+      _helixCtrl.setReferenceHidden(
+        state.showReferenceGeometry === false || state.simulationTabActive === true)
     }
     // Mixed representation: pin per-region reps (must run after reference alpha,
     // since override visibility multiplies over reference alpha).
@@ -916,7 +921,8 @@ export function initDesignRenderer(scene, storeRef) {
       (fullDesign.strands ?? []).filter(s => s.is_reference).map(s => s.id))
     if (referenceIds.size) {
       ctrl.setReferenceStrands(referenceIds)
-      ctrl.setReferenceHidden(newState.showReferenceGeometry === false)
+      ctrl.setReferenceHidden(
+        newState.showReferenceGeometry === false || newState.simulationTabActive === true)
     }
     const { columnRep } = resolveRepOverrides(fullDesign)
     ctrl.applyRepOverrides(columnRep)
@@ -1005,9 +1011,30 @@ export function initDesignRenderer(scene, storeRef) {
     // BEFORE the no-geo-change early-return below. Hides strand beads/cones/slabs/
     // fluoros/extensions + helical axis (helix_renderer) and crossover extra-bases.
     // Arc lines live in unfold_view and react to the same store key there.
-    if (newState.showReferenceGeometry !== prevState.showReferenceGeometry && _helixCtrl) {
-      _helixCtrl.setReferenceHidden(newState.showReferenceGeometry === false)
+    if ((newState.showReferenceGeometry !== prevState.showReferenceGeometry ||
+         newState.simulationTabActive !== prevState.simulationTabActive) && _helixCtrl) {
+      _helixCtrl.setReferenceHidden(
+        newState.showReferenceGeometry === false || newState.simulationTabActive === true)
       _applyReferenceXoverVisibility()
+    }
+
+    // Reference marking is a material/classification change, not topology. The
+    // partial geometry fast path keeps the existing controller, so explicitly
+    // refresh its reference ID set; a full rebuild used to be the only place
+    // this happened, which made new reference strands stay opaque until reload.
+    if (designChanged && _helixCtrl) {
+      const prevRefs = new Set(
+        (prevState.currentDesign?.strands ?? []).filter(s => s.is_reference).map(s => s.id))
+      const nextRefs = new Set(
+        (newState.currentDesign?.strands ?? []).filter(s => s.is_reference).map(s => s.id))
+      const refsChanged = prevRefs.size !== nextRefs.size ||
+        [...prevRefs].some(id => !nextRefs.has(id))
+      if (refsChanged) {
+        _helixCtrl.setReferenceStrands(nextRefs, newState.currentDesign)
+        _helixCtrl.setReferenceHidden(
+          newState.showReferenceGeometry === false || newState.simulationTabActive === true)
+        _applyReferenceXoverVisibility()
+      }
     }
 
     // Mixed-representation overrides are a visual-only design field: editing them
@@ -1097,6 +1124,8 @@ export function initDesignRenderer(scene, storeRef) {
         if (newState.isolatedStrandId !== prevState.isolatedStrandId) {
           _helixCtrl?.setIsolatedStrand(newState.isolatedStrandId)
         }
+        markOperationTiming('scene-partial-patched')
+        finishOperationAfterRender()
         return
       }
       if (_tryStructuralOverlay(
@@ -1105,7 +1134,10 @@ export function initDesignRenderer(scene, storeRef) {
         prevState,
         newState,
         _coverageChanged,
-      )) return
+      )) {
+        finishOperationAfterRender()
+        return
+      }
     }
 
     if (window._cnDebug && storeRef.getState().cadnanoActive) {

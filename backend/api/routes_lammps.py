@@ -103,7 +103,7 @@ async def create_lammps_job(body: CreateLammpsJobRequest) -> dict:
             f"(and hyperthreads don't speed up MD) — reduce ranks to {max_ranks} or fewer.",
         )
 
-    design = design_state.get_or_404()
+    design = design_state.get_or_404().without_reference_geometry()
     name = None
     if body.design_source_path:
         name = Path(body.design_source_path).stem or None
@@ -231,7 +231,7 @@ def _traj_inputs(job_id: str):
     except Exception as e:  # noqa: BLE001
         raise HTTPException(404, f"No LAMMPS job {job_id!r}") from e
 
-    design = design_state.get_or_404()
+    design = design_state.get_or_404().without_reference_geometry()
     n_now = len(topology_rows(design)[0])
     if job.n_atoms and n_now != job.n_atoms:
         return None, {

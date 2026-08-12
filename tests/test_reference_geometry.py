@@ -17,7 +17,7 @@ from backend.api.main import app
 from backend.core.deformation import deformed_nucleotide_arrays
 from backend.core.geometry import nucleotide_positions_arrays
 from backend.core.lattice import make_bundle_design
-from backend.core.models import Design, Strand, Domain, Direction, StrandType
+from backend.core.models import Design, Strand, Domain, Direction, Helix, StrandType, Vec3
 from backend.core.sequences import assign_scaffold_sequence, assign_staple_sequences
 from backend.core.validator import validate_design
 
@@ -62,6 +62,85 @@ def test_active_and_reference_helpers():
     assert d.reference_strands() == [d.strands[0]]
     assert d.strands[0] not in d.active_strands()
     assert len(d.active_strands()) == len(d.strands) - 1
+
+
+def test_simulation_projection_removes_reference_strands_and_reference_only_helices():
+    helices = [
+        Helix(
+            id=hid,
+            axis_start=Vec3(x=x, y=0, z=0),
+            axis_end=Vec3(x=x, y=0, z=3.4),
+            length_bp=10,
+        )
+        for hid, x in (("active", 0.0), ("reference", 3.0))
+    ]
+    active = Strand(
+        id="active-strand",
+        domains=[
+            Domain(
+                helix_id="active", start_bp=0, end_bp=9, direction=Direction.FORWARD
+            )
+        ],
+    )
+    mixed_ref = Strand(
+        id="mixed-reference-strand",
+        is_reference=True,
+        domains=[
+            Domain(
+                helix_id="active", start_bp=9, end_bp=0, direction=Direction.REVERSE
+            )
+        ],
+    )
+    reference_only = Strand(
+        id="reference-only-strand",
+        is_reference=True,
+        domains=[
+            Domain(
+                helix_id="reference",
+                start_bp=0,
+                end_bp=9,
+                direction=Direction.FORWARD,
+            )
+        ],
+    )
+    design = Design(helices=helices, strands=[active, mixed_ref, reference_only])
+
+    simulation = design.without_reference_geometry()
+
+    assert [s.id for s in simulation.strands] == [active.id]
+    assert [h.id for h in simulation.helices] == ["active"]
+    assert len(design.strands) == 3  # projection never mutates editor state
+
+    from backend.physics.oxdna_interface import _strand_nucleotide_order
+
+    assert len(_strand_nucleotide_order(simulation)) == 10
+
+
+def test_simulation_preparer_snapshot_cannot_reintroduce_reference_geometry(tmp_path):
+    """Engine-level defense applies even when a caller passes the editor design."""
+    from backend.core.cando_runner import prepare_cando_job
+
+    design = _bundle()
+    reference = design.strands[0]
+    design = design.copy_with(
+        strands=[
+            s.model_copy(update={"is_reference": True})
+            if s.id == reference.id
+            else s
+            for s in design.strands
+        ]
+    )
+
+    class _Job:
+        @staticmethod
+        def job_dir(_workspace):
+            return tmp_path / "job"
+
+    prepare_cando_job(design, _Job(), tmp_path)
+    snapshot = Design.model_validate_json((tmp_path / "job" / "design.json").read_text())
+
+    assert all(not strand.is_reference for strand in snapshot.strands)
+    assert reference.id not in {strand.id for strand in snapshot.strands}
 
 
 # ── Sequence assignment skips reference strands ──────────────────────────────────
@@ -197,8 +276,12 @@ def test_patch_strands_reference_route_round_trips_with_geometry():
     body = r.json()
     out_strand = next(s for s in body["design"]["strands"] if s["id"] == staple.id)
     assert out_strand["is_reference"] is True
-    # Route returns geometry (the freeze can move positions) — not a metadata-only response.
-    assert body.get("nucleotides"), "reference route must return geometry"
+    # Route returns only affected-helix geometry (the freeze can move positions),
+    # avoiding a full-design Voltron-scale recompute and JSON payload.
+    assert body["partial_geometry"] is True
+    assert body["changed_helix_ids"]
+    assert body.get("nucleotides_compact"), "reference route must return geometry"
+    assert body["feature_log_payloads_partial"] is True
     # Clearing it works too.
     r2 = client.patch(
         "/api/design/strands/reference",

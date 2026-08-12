@@ -101,10 +101,45 @@ too costly to check per call):
 
 ## Route + payload
 `PATCH /design/strands/reference {strand_ids, is_reference}` → returns
-`_design_response_with_geometry` (NOT metadata-only — the freeze moves nucleotides).
+partial compact geometry for only the toggled strands' real helices (NOT metadata-only —
+the freeze can move those nucleotides). Synthetic `__lnk__` bridge helices need no
+geometry response. The route also slims old feature-log bodies, so large designs do not
+re-ship their entire recovery history. On `VoltronCoreArm.nadoc` this reduced the measured
+request from ~3.28 s + 394 ms browser JSON parse to ~0.22 s and ~0.74 MB. The frontend
+patches the retained renderer in place, refreshes its reference ID/alpha state immediately,
+and completes operation timing after the next paint (no reload or fallback-timeout wait).
 `op_subtype='strands-reference'` had to be ADDED to the `MinorMutationLogEntry`
 Literal in models.py (~line 1098) — forgetting it 500s the route. Per-nucleotide
 `is_reference` added to `_strand_nucleotide_info` payload.
+
+Same-path workspace autosaves now return acknowledgment metadata only. The frontend already
+discarded the returned design for `identity_disposition='confirmed'`; omitting that multi-MB
+body avoids a second unnecessary parse. Simulation recommendation/job-list refreshes are
+likewise gated to the open, expanded Simulations tab rather than running after every edit.
+
+## Simulation exclusion (2026-08-11)
+Reference geometry is editor-only and never enters a simulation. The canonical
+`Design.without_reference_geometry()` projection removes reference strands and
+reference-only helices while retaining mixed helices needed by active strands. All job-create
+paths (oxDNA, LAMMPS, mrDNA, CanDo, SNUPI, BLADE, and NAMD) use this projection before
+counts, geometry, topology, sizing, and setup. Engine preparers apply it again before writing
+their frozen `design.json`/engine inputs, providing a defense against internal callers that
+bypass an API route. While the expanded Simulations tab is active, reference geometry is
+temporarily hidden in the 3D and unfold renderers without changing the user's persistent View
+toggle; leaving the tab restores the normal preference.
+
+## Loop/skip and linker handling (2026-08-11)
+The bulk **Add Loops/Skips** tool ignores reference-only, overhang, and virtual linker
+helices. It neither generates nor clears marks on them, and ignores their transitions for the
+required-crossover gate. Existing marks remain intact; mixed active/reference helices remain
+active.
+
+Zero-length ss linkers have one authoritative connector: the thick curved, strand-colored
+tube owned by `overhang_link_arcs.js`. The generic crossover-record arc is suppressed for
+the same linker-owned endpoint pair, removing the duplicate thin line. The retained tube
+multiplies its base opacity by cluster and reference opacity (reference alpha 0.4), and is
+fully hidden with depth writes disabled when reference geometry is hidden or the Simulations
+tab is active.
 
 ## Frontend
 - 3D true alpha: `helix_renderer._installInstanceAlpha(mesh)` clones the shared GEO_*

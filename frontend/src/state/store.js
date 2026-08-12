@@ -15,6 +15,10 @@ const _initialState = {
   /** The full Design object from the API, or null if not loaded. */
   currentDesign: null,
 
+  /** True only while the expanded Simulations tab is active. Reference backdrop
+   * geometry is forcibly hidden for this view without changing the user's View toggle. */
+  simulationTabActive: false,
+
   /**
    * True when the active design was imported from a caDNAno file and has not yet
    * had automerge applied.  Used to show a routing-change warning

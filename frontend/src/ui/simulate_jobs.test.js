@@ -354,6 +354,26 @@ const mdNode = (o = {}) => ({ engine: 'namd', job_id: 'md1', parent_job_id: null
 beforeEach(() => { document.body.innerHTML = ''; vi.clearAllMocks() })
 
 describe('unified list + master card', () => {
+  it('does not refresh the job list for design edits while Simulations is closed', async () => {
+    mount()
+    const { api } = make([oxNode()])
+
+    window.dispatchEvent(new CustomEvent('nadoc:design-changed'))
+    for (let i = 0; i < 5; i++) await Promise.resolve()
+    expect(api.listSimJobs).not.toHaveBeenCalled()
+
+    window.dispatchEvent(new CustomEvent('nadoc:left-tab-change', {
+      detail: { activeTab: 'dynamics', collapsed: false },
+    }))
+    for (let i = 0; i < 5; i++) await Promise.resolve()
+    const afterOpen = api.listSimJobs.mock.calls.length
+    expect(afterOpen).toBeGreaterThan(0)
+
+    window.dispatchEvent(new CustomEvent('nadoc:design-changed'))
+    for (let i = 0; i < 5; i++) await Promise.resolve()
+    expect(api.listSimJobs.mock.calls.length).toBeGreaterThan(afterOpen)
+  })
+
   it('renders both engines in one list, LAMMPS carrying an [L] badge', async () => {
     mount()
     const { sim } = make([oxNode(), lmNode()])

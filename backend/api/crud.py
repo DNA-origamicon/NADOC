@@ -6409,7 +6409,34 @@ def patch_strands_reference(body: BulkReferenceRequest) -> dict:
         params=body.model_dump(mode="json"),
         fn=lambda _d: updated,
     )
-    return _design_response_with_geometry(updated, report)
+    # Reference classification can only move nucleotides on helices occupied by
+    # the toggled strands (their deformation freeze changes).  Returning the full
+    # Voltron-scale geometry here used to block both server work and JSON.parse for
+    # seconds. Virtual linker axes are never deformed, so their classification is
+    # visual-only and needs no geometry payload.
+    changed_helix_ids = sorted(
+        {
+            domain.helix_id
+            for strand in new_strands
+            if strand.id in id_set
+            for domain in strand.domains
+            if not domain.helix_id.startswith("__lnk__")
+            and "::__lnk__" not in domain.helix_id
+        }
+    )
+    if changed_helix_ids:
+        payload = _design_response_with_geometry(
+            updated,
+            report,
+            changed_helix_ids=changed_helix_ids,
+            compact_deformed=True,
+            partial_axes=True,
+        )
+    else:
+        payload = _design_response(updated, report)
+        payload["geometry_unchanged"] = True
+    _slim_mutation_history_payload(payload, _entry.id)
+    return ORJSONResponse(payload)
 
 
 # ── Autostaple: autobreak + auto-merge ────────────────────────────────────────
@@ -12581,7 +12608,7 @@ def apply_loop_skips_from_deformations() -> dict:
     from backend.core.loop_skip_calculator import (
         apply_loop_skips,
         bend_loop_skips,
-        clear_all_loop_skips,
+        clear_loop_skips,
         sq_lattice_periodic_skips,
         twist_loop_skips,
         _bend_params_to_radius_nm,
@@ -12591,11 +12618,24 @@ def apply_loop_skips_from_deformations() -> dict:
     from backend.core.models import LatticeType
 
     design = design_state.get_or_404()
+    reference_helix_ids = design.reference_helix_ids()
+    overhang_helix_ids = {o.helix_id for o in design.overhangs}
+    linker_helix_ids = {
+        h.id
+        for h in design.helices
+        if h.id.startswith("__lnk__") or "::__lnk__" in h.id
+    }
+    ignored_helix_ids = (
+        reference_helix_ids | overhang_helix_ids | linker_helix_ids
+    )
+
     # Check for cross-helix domain transitions (design.crossovers is always [] —
     # actual crossover topology lives in strand domain sequences).
     has_crossovers = any(
         d0.helix_id != d1.helix_id
-        for strand in design.strands
+        and d0.helix_id not in ignored_helix_ids
+        and d1.helix_id not in ignored_helix_ids
+        for strand in design.active_strands()
         for d0, d1 in zip(strand.domains, strand.domains[1:])
     )
     if not has_crossovers:
@@ -12606,9 +12646,21 @@ def apply_loop_skips_from_deformations() -> dict:
     if not design.deformations and design.lattice_type != LatticeType.SQUARE:
         raise HTTPException(400, detail="No deformation ops on the current design.")
 
-    # Wipe all existing loop/skips so recomputed mods start from a clean slate.
-    # This also removes any orphaned marks at positions no longer covered by strands.
-    design = clear_all_loop_skips(design)
+    # Reference-only, overhang, and virtual linker helices are outside this
+    # bundle-level tool: neither generate marks for them nor erase existing marks.
+    # A mixed reference/active helix remains active by reference_helix_ids semantics.
+    active_helix_ids = [
+        h.id for h in design.helices if h.id not in ignored_helix_ids
+    ]
+
+    # Wipe existing marks only on active bundle geometry so recomputed mods start clean.
+    # This also removes orphaned active marks no longer covered by strands.
+    design = clear_loop_skips(
+        design,
+        active_helix_ids,
+        min((h.bp_start for h in design.helices), default=0),
+        max((h.bp_start + h.length_bp for h in design.helices), default=0),
+    )
 
     helix_map = {h.id: h for h in design.helices}
 
@@ -12618,10 +12670,16 @@ def apply_loop_skips_from_deformations() -> dict:
 
     if design.lattice_type == LatticeType.SQUARE:
         for hid, ls_list in sq_lattice_periodic_skips(design).items():
+            if hid in ignored_helix_ids:
+                continue
             all_mods.setdefault(hid, []).extend(ls_list)
 
     for op in design.deformations:
-        affected = [helix_map[hid] for hid in op.affected_helix_ids if hid in helix_map]
+        affected = [
+            helix_map[hid]
+            for hid in op.affected_helix_ids
+            if hid in helix_map and hid not in ignored_helix_ids
+        ]
         if not affected:
             continue
 

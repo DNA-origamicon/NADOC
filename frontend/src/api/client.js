@@ -2041,7 +2041,7 @@ export async function patchStrandsColor(strandIds, color) {
 export async function patchStrandsReference(strandIds, isReference) {
   const json = await _request('PATCH', '/design/strands/reference',
     { strand_ids: strandIds, is_reference: isReference })
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { skipGeometry: json?.geometry_unchanged === true })
 }
 
 /**

@@ -62,6 +62,7 @@ def is_running(job_id: str) -> bool:
 def prepare_cando_job(design: Design, job: CandoJob, workspace_dir: Path) -> None:
     """Write a self-contained ``design.json`` snapshot into the job dir, so the
     solve (and every display read) is decoupled from live editor state."""
+    design = design.without_reference_geometry()
     jd = job.job_dir(workspace_dir)
     jd.mkdir(parents=True, exist_ok=True)
     (jd / "design.json").write_text(design.model_dump_json())

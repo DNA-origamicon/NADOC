@@ -157,7 +157,7 @@ async def create_mrdna_job(body: CreateMrdnaJobRequest) -> dict:
             "(one-click) and ARBD (needs a CUDA GPU) before running a mrDNA relaxation.",
         )
 
-    design = design_state.get_or_404()
+    design = design_state.get_or_404().without_reference_geometry()
     if not design.helices:
         raise HTTPException(400, "Design has no helices to relax.")
 

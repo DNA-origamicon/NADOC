@@ -140,7 +140,7 @@ class CreateCandoJobRequest(BaseModel):
 @router.post("/cando/jobs")
 async def create_cando_job(body: CreateCandoJobRequest) -> dict:
     """Prepare + run a new CanDo FEM shape-prediction job from the active design."""
-    design = design_state.get_or_404()
+    design = design_state.get_or_404().without_reference_geometry()
     if not design.helices:
         raise HTTPException(400, "Design has no helices to predict a shape for.")
 

@@ -2964,6 +2964,24 @@ class Design(BaseModel):
                 target.add(d.helix_id)
         return ref - active
 
+    def without_reference_geometry(self) -> "Design":
+        """Return the design projection permitted to enter a simulation.
+
+        Reference strands are editor-only backdrop geometry.  Removing the
+        strands keeps mixed active/reference helices usable; removing helices
+        used exclusively by reference strands prevents geometry seeders and
+        job snapshots from carrying empty reference axes into an engine.
+        """
+        if not any(s.is_reference for s in self.strands):
+            return self
+        reference_only = self.reference_helix_ids()
+        return self.model_copy(
+            update={
+                "strands": self.active_strands(),
+                "helices": [h for h in self.helices if h.id not in reference_only],
+            }
+        )
+
     def find_helix(self, helix_id: str) -> Optional[Helix]:
         for h in self.helices:
             if h.id == helix_id:

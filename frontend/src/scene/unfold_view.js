@@ -312,7 +312,8 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
    *  toggle (a crossover with BOTH endpoints on reference strands hides when the
    *  reference View toggle is off — matching the strand/extra-base hide). */
   function _reapplyArcHidden() {
-    const hideRef = store.getState().showReferenceGeometry === false
+    const state = store.getState()
+    const hideRef = state.showReferenceGeometry === false || state.simulationTabActive === true
     // Long end-to-end (periodic-boundary) connectors are hidden unless the
     // View toggle is on — they otherwise span the whole part. Default off.
     const hidePeriodic = store.getState().showPeriodicSeamArcs !== true
@@ -1101,7 +1102,8 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
 
   // Reference View toggle: hide/show arc lines of reference-only crossovers.
   store.subscribe((newState, prevState) => {
-    if (newState.showReferenceGeometry === prevState.showReferenceGeometry) return
+    if (newState.showReferenceGeometry === prevState.showReferenceGeometry &&
+        newState.simulationTabActive === prevState.simulationTabActive) return
     if (!_arcMeta.length) return
     _reapplyArcHidden()
     const offsets = _buildOffsets(store.getState().unfoldSpacing)

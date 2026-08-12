@@ -464,6 +464,7 @@ def prepare_oxdna_job(
     equil_forces.txt (the equil stage drops the mutual traps but keeps these).
     Returns the forces info dict (``n_anchored`` etc.) or an empty dict.
     """
+    design = design.without_reference_geometry()
     from backend.physics.oxdna_protein import (
         anm_par_text,
         build_protein_blocks,

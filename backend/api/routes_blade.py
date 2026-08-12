@@ -167,7 +167,7 @@ class CreateBladeJobRequest(BaseModel):
 @router.post("/blade/jobs")
 async def create_blade_job(body: CreateBladeJobRequest) -> dict:
     """Prepare + run a new BLADE implicit-solvent relax from the active design."""
-    design = design_state.get_or_404()
+    design = design_state.get_or_404().without_reference_geometry()
     if not design.helices:
         raise HTTPException(400, "Design has no helices to relax.")
 

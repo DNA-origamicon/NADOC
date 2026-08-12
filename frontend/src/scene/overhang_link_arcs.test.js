@@ -93,7 +93,7 @@ describe('overhang link arcs — per-cluster display', () => {
     { overhang_id: 'oh_b', helix_id: 'h_b', bp_index: 3, backbone_position: [4, 0, 0], is_five_prime: true },
   ]
   const design = (clusters = []) => ({
-    strands: [],
+    strands: [{ id: '__lnk__conn1__s', is_reference: false, domains: [] }],
     overhang_connections: [{
       id: 'conn1', linker_type: 'ss',
       overhang_a_id: 'oh_a', overhang_a_attach: 'free_end',
@@ -120,7 +120,39 @@ describe('overhang link arcs — per-cluster display', () => {
     return out
   }
 
-  afterEach(() => { store.setState({ coloringMode: 'strand' }) })
+  afterEach(() => {
+    store.setState({
+      coloringMode: 'strand', currentDesign: null,
+      showReferenceGeometry: true, simulationTabActive: false,
+    })
+  })
+
+  it('fades a reference linker and hides it while Simulations is active', () => {
+    const d = design(CLUSTERS())
+    store.setState({ currentDesign: d, showReferenceGeometry: true, simulationTabActive: false })
+    const arcs = build(d)
+    const base = mats(arcs)[0].opacity
+    const reference = {
+      ...d,
+      strands: d.strands.map(s => ({ ...s, is_reference: true })),
+    }
+
+    store.setState({ currentDesign: reference })
+    for (const m of mats(arcs)) {
+      expect(m.opacity).toBeCloseTo((m.userData.baseOpacity ?? base) * 0.4, 5)
+      expect(m.visible).toBe(true)
+    }
+
+    store.setState({ simulationTabActive: true })
+    for (const m of mats(arcs)) {
+      expect(m.opacity).toBe(0)
+      expect(m.visible).toBe(false)
+      expect(m.depthWrite).toBe(false)
+    }
+
+    store.setState({ simulationTabActive: false })
+    for (const m of mats(arcs)) expect(m.visible).toBe(true)
+  })
 
   it('renders the connection at full opacity when nothing is faded', () => {
     const arcs = build(design(CLUSTERS()))

@@ -47,6 +47,7 @@ const DEBUG = true   // logs to console when rebuild runs; toggle off when stabl
 const SS_BEAD_RADIUS   = 0.10   // nm — matches crossover extra-base beads
 const SS_ARC_RADIUS    = 0.055  // nm — thin backbone through ssDNA linker beads
 const DS_ARC_RADIUS    = 0.065  // nm — connector from OH binding domain to ds segment
+const REFERENCE_ALPHA  = 0.4    // matches helix_renderer reference-strand opacity
 const GEO_SS_BEAD      = new THREE.SphereGeometry(SS_BEAD_RADIUS, 8, 6)
 const GEO_SS_SLAB      = new THREE.BoxGeometry(1, 1, 1)
 const Y_HAT            = new THREE.Vector3(0, 1, 0)
@@ -214,16 +215,27 @@ export function initOverhangLinkArcs(scene) {
    * them to fully opaque.
    */
   function _applyClusterAlpha() {
+    const state = store.getState()
+    const referenceIds = new Set(
+      (state.currentDesign?.strands ?? []).filter(s => s.is_reference).map(s => s.id))
+    const hideReference = state.showReferenceGeometry === false || state.simulationTabActive === true
     for (const e of _ssEntries) {
       const a = _entryAlpha(e)
       e.group?.traverse?.((obj) => {
         const mat = obj.material
         if (!mat || Array.isArray(mat)) return
+        const ownSid = obj.userData?.strandId
+        const isReference = ownSid
+          ? referenceIds.has(ownSid)
+          : e.strandIds.some(id => referenceIds.has(id))
         mat.userData = mat.userData || {}
         if (mat.userData.baseOpacity === undefined) mat.userData.baseOpacity = mat.opacity ?? 1
-        const o = mat.userData.baseOpacity * a
+        const referenceAlpha = isReference ? (hideReference ? 0 : REFERENCE_ALPHA) : 1
+        const o = mat.userData.baseOpacity * a * referenceAlpha
         mat.opacity = o
         mat.transparent = o < 1
+        mat.visible = !(isReference && hideReference)
+        mat.depthWrite = o > 0
         // Structural geometry, not an overlay: keep writing depth so it still
         // occludes and still casts/receives the photo-mode key shadow.
         mat.userData.photoForceDepthWrite = true
@@ -406,7 +418,14 @@ export function initOverhangLinkArcs(scene) {
   // (A cluster's own colour/opacity edit DOES change the design, and that path
   // already runs a full rebuild.)
   store.subscribe((newState, prevState) => {
-    if (newState.coloringMode === prevState.coloringMode) return
+    const referenceChanged = newState.currentDesign !== prevState.currentDesign &&
+      (newState.currentDesign?.strands ?? []).some((s, i) =>
+        s.is_reference !== prevState.currentDesign?.strands?.[i]?.is_reference)
+    const visibilityChanged =
+      newState.showReferenceGeometry !== prevState.showReferenceGeometry ||
+      newState.simulationTabActive !== prevState.simulationTabActive
+    if (newState.coloringMode === prevState.coloringMode &&
+        !referenceChanged && !visibilityChanged) return
     if (!_ssEntries.length) return
     refreshClusterDisplay(newState.currentDesign)
   })

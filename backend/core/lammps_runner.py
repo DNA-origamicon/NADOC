@@ -155,6 +155,7 @@ def prepare_lammps_job(
     written paths + atom/bond counts (plus ``forces`` meta when any were applied).
     Raises ``ValueError`` (from the transcoder) if the design is not fully sequenced.
     """
+    design = design.without_reference_geometry()
     job = Path(job_dir)
     job.mkdir(parents=True, exist_ok=True)
     params = params or L.LammpsInputParams()

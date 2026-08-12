@@ -2403,7 +2403,7 @@ async def create_md_job(body: CreateJobRequest) -> dict:
     else:
         # The active design is request-scoped (doc session contextvar), so it must
         # be captured here on the request thread, not in the background worker.
-        design = design_state.get_or_404()
+        design = design_state.get_or_404().without_reference_geometry()
         name = (design.metadata.name or "design").replace(" ", "_")
         size_factor = design_size_factor(design)
 
@@ -2880,7 +2880,7 @@ async def estimate_md_disk(body: CreateJobRequest) -> dict:
         # live design — so we can't forecast here; never block the launch on it.
         return {**forecast(target, 0), "skipped": True}
     try:
-        design = design_state.get_or_404()
+        design = design_state.get_or_404().without_reference_geometry()
         profile = await run_in_threadpool(
             estimate_profile_from_design, design, padding_nm=body.padding_nm
         )
@@ -2934,7 +2934,7 @@ async def preflight_md_vram(body: CreateJobRequest) -> dict:
         # pre-flight cannot size it. Preparation still builds only a full solvent box.
         return {"skipped": True, "tier": "ok"}
     try:
-        design = design_state.get_or_404()
+        design = design_state.get_or_404().without_reference_geometry()
         # Judge the resolved request exactly as preparation will, including preset padding.
         resolved = _apply_relax_preset(body)
         advice = await run_in_threadpool(
@@ -5478,7 +5478,7 @@ async def start_md_job(job_id: str) -> dict:
 
 def _prepare_sequence_deferred_job(job: MdJob, *, autostart: bool) -> MdJob:
     """Prepare an awaiting-sequence job from the current design, in place."""
-    design = design_state.get_or_404()
+    design = design_state.get_or_404().without_reference_geometry()
     problem = _sequence_problem(design)
     if problem:
         raise HTTPException(400, problem)
@@ -6134,12 +6134,12 @@ def _load_design_for_refit(source_path: Optional[str]):
         p = _workspace() / source_path
         if p.exists():
             try:
-                return Design.from_json(p.read_text())
+                return Design.from_json(p.read_text()).without_reference_geometry()
             except (OSError, ValueError):
                 pass
     # Fall back to the active design session, if any.
     try:
-        return design_state.get_or_404()
+        return design_state.get_or_404().without_reference_geometry()
     except HTTPException:
         return None
 
@@ -6501,7 +6501,7 @@ async def optimize_advanced(
     """
     from backend.core.md_optimize import recommend_advanced  # noqa: PLC0415
 
-    design = design_state.get_or_404()
+    design = design_state.get_or_404().without_reference_geometry()
     return await run_in_threadpool(
         recommend_advanced,
         design,

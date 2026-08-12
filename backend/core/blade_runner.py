@@ -181,6 +181,7 @@ def _kill_pid(pid: int) -> None:
 def prepare_blade_job(design: Design, job: BladeJob, workspace_dir: Path) -> None:
     """Write a self-contained ``design.json`` snapshot into the job dir, so the run
     (and every display read) is decoupled from live editor state."""
+    design = design.without_reference_geometry()
     jd = job.job_dir(workspace_dir)
     jd.mkdir(parents=True, exist_ok=True)
     (jd / "design.json").write_text(design.model_dump_json())

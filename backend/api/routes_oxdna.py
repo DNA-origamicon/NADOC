@@ -591,7 +591,7 @@ async def estimate_oxdna_disk(body: CreateOxdnaJobRequest) -> dict:
     from backend.core.oxdna_protocol import print_conf_interval
 
     try:
-        design = design_state.get_or_404()
+        design = design_state.get_or_404().without_reference_geometry()
         n_nt = len(_strand_nucleotide_order(design))
         specs = build_relaxation_stages(
             mc_steps=body.mc_steps,
@@ -632,7 +632,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
             "oxDNA binary not found. Set $OXDNA_BIN or install to ~/oxDNA/build/bin/oxDNA.",
         )
 
-    design = design_state.get_or_404()
+    design = design_state.get_or_404().without_reference_geometry()
     # Prefer the loaded file's name over design.metadata.name — a "save as" can
     # leave stale metadata (e.g. 6hb_OxDNA_test.nadoc still carries name
     # "6hb_primitive"), and the jobs list should show what the user opened.

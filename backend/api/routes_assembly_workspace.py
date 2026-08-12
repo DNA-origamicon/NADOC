@@ -730,6 +730,16 @@ def save_design_to_workspace(body: SaveDesignWorkspaceRequest) -> dict:
     dest.write_text(saved.to_json(), encoding="utf-8")
     if saved != design:
         design_state.set_design_silent(saved)
+    # Same-path autosave is an acknowledgement, not a state sync: the frontend
+    # deliberately keeps its current Design object to avoid an autosave loop.
+    # Returning the full multi-megabyte design here made it JSON.parse data it
+    # immediately discarded (notably ~142 ms for VoltronCoreArm).
+    if disposition == "confirmed":
+        return {
+            "path": body.path,
+            "identity_disposition": disposition,
+            "previous_path": previous,
+        }
     response = _design_response(saved, validate_design(saved))
     response.update(
         {

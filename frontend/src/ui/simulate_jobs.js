@@ -466,7 +466,10 @@ export function initSimulateJobs({
   let _sel = { engine: null, id: null }
   let _listSig = null
   let _busy = false
-  let _dynamicsActive = true
+  // The tab controller sends the authoritative initial + subsequent state.
+  // Defaulting true made every ordinary design edit fetch the full job list
+  // before the user had ever opened Simulations.
+  let _dynamicsActive = false
   let _pollTimer = null
   let _activeEngine = engineSelector?.getSelected?.() || 'oxdna'
   let _showAllTypes = false
@@ -951,12 +954,14 @@ export function initSimulateJobs({
 
   // ── lifecycle ─────────────────────────────────────────────────────────────
   window.addEventListener('nadoc:left-tab-change', (e) => {
-    _dynamicsActive = e.detail?.activeTab === 'dynamics'
+    _dynamicsActive = e.detail?.activeTab === 'dynamics' && !e.detail?.collapsed
     if (_dynamicsActive) _fetch()
     else if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null }
   })
   // A design edit / feature-log seek re-evaluates staleness + list membership.
-  window.addEventListener('nadoc:design-changed', () => _fetch())
+  window.addEventListener('nadoc:design-changed', () => {
+    if (_dynamicsActive) _fetch()
+  })
   // A cluster-submit request can upload for minutes before sbatch returns. Wake the
   // unified card immediately, then let its normal poll replace this optimistic phase
   // with the durable phase/fraction written by the backend.
@@ -1037,8 +1042,8 @@ export function initSimulateJobs({
   function refresh() { return _fetch() }
   function selectJob(jobId) { return _select(jobId) }
 
-  // Initial populate deferred a tick so late-declared main.js deps (workspace path) exist.
-  queueMicrotask(_fetch)
+  // Initial population is driven by the tab controller's authoritative initial
+  // nadoc:left-tab-change event. Closed Simulations tabs do no disk/job scan.
 
   return { refresh, selectJob, setActiveEngine, getSelected: () => ({ ..._sel }) }
 }

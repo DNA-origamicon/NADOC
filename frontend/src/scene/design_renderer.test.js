@@ -64,6 +64,13 @@ describe('design_renderer glow layers', () => {
 })
 
 describe('structural partial reconciliation', () => {
+  it('refreshes reference materials and completes operation timing on fast paths', () => {
+    expect(SRC).toContain('_helixCtrl.setReferenceStrands(nextRefs, newState.currentDesign)')
+    expect(SRC).toContain("markOperationTiming('scene-partial-patched')")
+    const finishCalls = SRC.match(/finishOperationAfterRender\(\)/g) ?? []
+    expect(finishCalls.length).toBeGreaterThanOrEqual(3)
+  })
+
   it('bounds the overlay fast path and preserves a full-rebuild fallback', () => {
     const body = functionBody(SRC, '_tryStructuralOverlay')
     expect(body).not.toBeNull()

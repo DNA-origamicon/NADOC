@@ -2689,10 +2689,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // (re)applied by design_renderer after each rebuild and on the View toggle.
   let _refIdSet  = new Set()
   let _refHidden = false
-  const _hasReference = (design?.strands ?? []).some(s => s.is_reference)
+  let _hasReference = (design?.strands ?? []).some(s => s.is_reference)
   // Helices carrying ONLY reference strands — their helical-axis arrows hide with
   // the rest of the reference geometry (a mixed helix keeps its axis for the active part).
-  const _refOnlyHelixIds = (() => {
+  let _refOnlyHelixIds = (() => {
     const ref = new Set(), active = new Set()
     for (const s of (design?.strands ?? [])) {
       const t = s.is_reference ? ref : active
@@ -2996,8 +2996,27 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     setConeXZScale: _setConeXZScale,
 
     /** Mark which strand IDs are reference geometry (rendered translucent). */
-    setReferenceStrands(idSet) {
+    setReferenceStrands(idSet, currentDesign = design) {
       _refIdSet = idSet instanceof Set ? idSet : new Set(idSet)
+      _hasReference = _refIdSet.size > 0
+      // A controller built before the first strand became reference has opaque
+      // instanced materials. Install the alpha channel lazily so reference
+      // marking can take effect without forcing a whole-scene rebuild.
+      if (_hasReference) {
+        _installInstanceAlpha(iSpheres)
+        _installInstanceAlpha(iCubes)
+        _installInstanceAlpha(iFluoros)
+        _installInstanceAlpha(iCones)
+        _installInstanceAlpha(iSlabs)
+        _installInstanceAlpha(iSlabConnectors)
+      }
+      const ref = new Set(), active = new Set()
+      for (const s of (currentDesign?.strands ?? [])) {
+        const target = s.is_reference ? ref : active
+        for (const d of (s.domains ?? [])) target.add(d.helix_id)
+      }
+      for (const hid of active) ref.delete(hid)
+      _refOnlyHelixIds = ref
       _applyAlphaChannel()
     },
     /** Hide (alpha→0, fragment-discarded) or show reference geometry. */
@@ -4830,6 +4849,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       // Track cross-helix cone site keys so we can skip crossover records
       // that already have a strand-topology cone (e.g. scaffold routing imports).
       const coneSiteKeys = new Set()
+      const linkerOwnedSiteKeys = new Set()
 
       // Linker strand domain transitions (real OH helix ↔ virtual `__lnk__`
       // helix) are owned by overhang_link_arcs.js, which draws its own
@@ -4853,7 +4873,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         // them sneaks through `_isLinkerHelix` and unfold_view draws it as a
         // straight chord between the two anchors. The whole linker visualization
         // is owned by overhang_link_arcs.js; no crossover arc should be added.
-        if (typeof cone.strandId === 'string' && cone.strandId.startsWith('__lnk__')) continue
+        if (typeof cone.strandId === 'string' && cone.strandId.startsWith('__lnk__')) {
+          const fk = `${fn.helix_id}:${fn.bp_index}:${fn.direction}`
+          const tk = `${tn.helix_id}:${tn.bp_index}:${tn.direction}`
+          linkerOwnedSiteKeys.add(`${fk}|${tk}`)
+          linkerOwnedSiteKeys.add(`${tk}|${fk}`)
+          continue
+        }
         // Use backbone_position (the deformed geometry position) rather than
         // fe.pos (the current rendered position, which may be at straight
         // coordinates if deform view is off at the time this is called).
@@ -4883,7 +4909,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       for (const xo of (design.crossovers ?? [])) {
         const ak = `${xo.half_a.helix_id}:${xo.half_a.index}:${xo.half_a.strand}`
         const bk = `${xo.half_b.helix_id}:${xo.half_b.index}:${xo.half_b.strand}`
-        if (coneSiteKeys.has(`${ak}|${bk}`)) continue
+        if (coneSiteKeys.has(`${ak}|${bk}`) || linkerOwnedSiteKeys.has(`${ak}|${bk}`)) continue
         if (_isLinkerHelix(xo.half_a.helix_id) || _isLinkerHelix(xo.half_b.helix_id)) continue
         const entryA = _keyToEntry.get(`${xo.half_a.helix_id}:${xo.half_a.index}:${xo.half_a.strand}`)
         const entryB = _keyToEntry.get(`${xo.half_b.helix_id}:${xo.half_b.index}:${xo.half_b.strand}`)
