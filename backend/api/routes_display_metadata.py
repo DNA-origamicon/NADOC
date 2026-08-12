@@ -1,7 +1,7 @@
 """
 API layer — display-only metadata route handlers (extracted from crud.py).
 
-This module hosts the two small, sibling clusters that persist *display-only
+This module hosts small sibling clusters that persist *display-only
 metadata* blobs onto the active ``Design`` — they touch no topology or geometry,
 so each one simply validates that its referenced ids exist, assigns a single
 ``Design`` field via ``mutate_and_validate``, and returns a design response
@@ -12,6 +12,8 @@ so each one simply validates that its referenced ids exist, assigns a single
   - **Per-region representation overrides** (``/design/representation-overrides``)
     — pin a render rep onto selected strands/clusters so a focal region can show
     full detail against a coarser background (topic: mixed_representation).
+  - **Element visibility** (``/design/visibility``) — hidden base keys, explicit
+    shown exceptions, and hidden cluster ids used by the unified hide system.
 
 One reason to change: *how a display-only metadata blob is validated and persisted
 on Design.* Both clusters share that exact parse → validate-ids → assign-field →
@@ -44,6 +46,7 @@ from backend.core.models import (
     PlateLayout,
     RepresentationOverride,
     TubeAssignment,
+    VisibilityState,
     WellAssignment,
 )
 
@@ -150,6 +153,22 @@ def clear_representation_overrides() -> dict:
 
     def _apply(d: Design) -> None:
         d.representation_overrides = []
+
+    design, report = design_state.mutate_and_validate(_apply)
+    return _design_response(design, report)
+
+
+@router.put("/design/visibility", status_code=200)
+def save_visibility_state(body: VisibilityState) -> dict:
+    """Persist visibility metadata without adding a topology feature-log entry."""
+    design_state.get_or_404()
+
+    def _apply(d: Design) -> None:
+        d.visibility_state = VisibilityState(
+            hidden_base_keys=list(dict.fromkeys(body.hidden_base_keys)),
+            shown_base_keys=list(dict.fromkeys(body.shown_base_keys)),
+            hidden_cluster_ids=list(dict.fromkeys(body.hidden_cluster_ids)),
+        )
 
     design, report = design_state.mutate_and_validate(_apply)
     return _design_response(design, report)

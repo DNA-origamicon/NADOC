@@ -2608,6 +2608,19 @@ class AtomisticReference(BaseModel):
     bonds: List[Tuple[int, int]] = Field(default_factory=list)
 
 
+class VisibilityState(BaseModel):
+    """Persisted display-only visibility overrides.
+
+    Base keys are the renderer's stable nucleotide addresses. ``shown_base_keys``
+    records explicit exceptions to a hidden cluster, so the exact composite
+    visibility state survives a save/load round trip.
+    """
+
+    hidden_base_keys: List[str] = Field(default_factory=list)
+    shown_base_keys: List[str] = Field(default_factory=list)
+    hidden_cluster_ids: List[str] = Field(default_factory=list)
+
+
 class Design(BaseModel):
     """
     Top-level design object.  This is the ground truth for a DNA origami
@@ -2646,6 +2659,7 @@ class Design(BaseModel):
     # selected strands or clusters so a focal region can show full detail against a
     # coarser background. Display-only; never affects topology or geometry.
     representation_overrides: List[RepresentationOverride] = Field(default_factory=list)
+    visibility_state: VisibilityState = Field(default_factory=VisibilityState)
     photoproduct_junctions: List[PhotoproductJunction] = Field(default_factory=list)
     crossovers: List[Crossover] = Field(default_factory=list)
     forced_ligations: List[ForcedLigation] = Field(default_factory=list)

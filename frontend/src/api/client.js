@@ -884,6 +884,12 @@ export async function clearRepresentationOverrides() {
   return _syncFromDesignResponse(json)
 }
 
+/** Persist display-only nucleotide/cluster visibility in the .nadoc file. */
+export async function saveVisibilityState(visibilityState) {
+  const json = await _request('PUT', '/design/visibility', visibilityState)
+  return _syncFromDesignResponse(json, { skipGeometry: true })
+}
+
 /** Optional handler invoked after store sync for cluster_only / positions_only
  * responses. Set by main.js at init to push the diff through the renderer
  * (helixCtrl + bluntEnds + joint/overhang renderers). Centralising this here

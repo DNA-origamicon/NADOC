@@ -2,27 +2,55 @@ import { baseKey } from './base_ref.js'
 import { clusterNucKeysFor } from './cluster_entries.js'
 
 /**
- * One transient, base-addressed visibility model for the editor. Higher-level
- * objects are expanded to base keys at hide time; visibility is deliberately
- * not part of the design/undo log.
+ * One persisted, base-addressed visibility model for the editor. Higher-level
+ * objects are expanded to base keys at hide time. It has its own undo stack and
+ * is deliberately not part of the topology feature log.
  */
-export function initVisibilityController({ store, designRenderer, unfoldView, onChange } = {}) {
+export function initVisibilityController({ store, designRenderer, unfoldView, onChange, onPersist } = {}) {
   const hidden = new Set()
   const shown = new Set()
   let hiddenClusters = new Set()
   const undoStack = []
   const redoStack = []
+  let persistChain = Promise.resolve()
+  let pendingPersists = 0
+  let currentDesignRef = null
+  let currentGeometryRef = null
 
   const geometry = () => store.getState().currentGeometry ?? []
   const design = () => store.getState().currentDesign
 
-  function _apply() {
+  const _persistedState = () => ({
+    hidden_base_keys: [...hidden].sort(),
+    shown_base_keys: [...shown].sort(),
+    hidden_cluster_ids: [...hiddenClusters].sort(),
+  })
+
+  function _apply({ persist = true, notify = true } = {}) {
     const all = new Set(hidden)
     for (const key of _keysFor({ clusterIds: [...hiddenClusters] })) all.add(key)
     for (const key of shown) all.delete(key)
     designRenderer.setHiddenNucs(all)
     designRenderer.setHiddenCrossovers(unfoldView?.setHiddenNucs?.(all) ?? new Set())
-    onChange?.(all, new Set(hiddenClusters))
+    if (notify) onChange?.(all, new Set(hiddenClusters))
+    if (persist && onPersist) {
+      const state = _persistedState()
+      pendingPersists++
+      const task = persistChain.then(() => onPersist(state))
+      persistChain = task.catch((error) => console.error('Failed to persist visibility state', error))
+        .finally(() => { pendingPersists-- })
+      return task
+    }
+    return Promise.resolve()
+  }
+
+  function _hydrate(state = {}, { notify = true } = {}) {
+    hidden.clear(); shown.clear()
+    for (const key of state.hidden_base_keys ?? []) hidden.add(key)
+    for (const key of state.shown_base_keys ?? []) shown.add(key)
+    hiddenClusters = new Set(state.hidden_cluster_ids ?? [])
+    undoStack.length = 0; redoStack.length = 0
+    _apply({ persist: false, notify })
   }
 
   function _keysFor({ baseKeys = [], strandIds = [], domainRefs = [], clusterIds = [] } = {}) {
@@ -92,5 +120,32 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
     return keys.length === 0 || keys.some(k => !all.has(k))
   }
 
-  return { hide, show, setHiddenClusters, unhideAll, undo, redo, isStrandShown, getHiddenBaseKeys: () => new Set(hidden) }
+  currentDesignRef = design()
+  currentGeometryRef = geometry()
+  // Render immediately, but main.js's sidebar/atom-surface consumers are
+  // declared later in startup and must not be notified while in their TDZ.
+  _hydrate(currentDesignRef?.visibility_state, { notify: false })
+  const unsubscribe = store.subscribe?.((next) => {
+    const designChanged = next.currentDesign !== currentDesignRef
+    const geometryChanged = next.currentGeometry !== currentGeometryRef
+    currentDesignRef = next.currentDesign
+    currentGeometryRef = next.currentGeometry
+    if (designChanged && pendingPersists === 0) _hydrate(currentDesignRef?.visibility_state)
+    else if (geometryChanged) {
+      _apply({ persist: false })
+      // Store listeners run in registration order. The design renderer rebuilds
+      // its instance meshes from this same geometry notification, so re-apply
+      // once after that synchronous rebuild has completed.
+      queueMicrotask(() => {
+        if (geometry() === currentGeometryRef) _apply({ persist: false })
+      })
+    }
+  })
+
+  return {
+    hide, show, setHiddenClusters, unhideAll, undo, redo, isStrandShown,
+    getHiddenBaseKeys: () => new Set(hidden),
+    flushPersistence: () => persistChain,
+    destroy: () => unsubscribe?.(),
+  }
 }

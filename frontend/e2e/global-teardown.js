@@ -21,7 +21,8 @@ export default async function globalTeardown() {
   let files
   try { files = await readdir(WORKSPACE) } catch { return } // no workspace → nothing to clean
   const victims = files.filter(f =>
-    f.startsWith(E2E_PREFIX) && (f.endsWith('.nadoc') || f.endsWith('.nass')))
+    (f.startsWith(E2E_PREFIX) || f.startsWith('e2e__')) &&
+    (f.endsWith('.nadoc') || f.endsWith('.nass')))
   await Promise.all(victims.map(f => rm(path.join(WORKSPACE, f)).catch(() => {})))
   if (victims.length) console.log(`[e2e teardown] removed ${victims.length} __e2e__ artifact(s) from workspace/`)
 }

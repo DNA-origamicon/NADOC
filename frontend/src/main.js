@@ -43,7 +43,8 @@ import { hexFromInt } from './scene/color_util.js'
 import { initFretChecker } from './scene/fret_checker.js'
 import { initUndefinedHighlight } from './scene/undefined_highlight.js'
 import { assemblyDuplicateOffset } from './scene/assembly_layout.js'
-import { selectionBBox } from './scene/selection_bbox.js'
+import { nucleotideLocalBox, selectionBBox } from './scene/selection_bbox.js'
+import { fitViewPose } from './scene/fit_view_math.js'
 import { initAssemblyMultiBox } from './scene/assembly_multi_box.js'
 import { initAssemblyConfigAnimator } from './scene/assembly_config_animator.js'
 import { clientToNdc } from './scene/ndc.js'
@@ -1595,6 +1596,7 @@ async function main() {
   const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds, () => loopSkipHighlight, () => sequenceOverlay, () => overhangLocations, null)
   visibilityController = initVisibilityController({
     store, designRenderer, unfoldView,
+    onPersist: (visibilityState) => api.saveVisibilityState(visibilityState),
     onChange: (_hiddenBases, hiddenClusterIds) => {
       _atomSurface?.setHiddenNucs?.(_hiddenBases)
       spreadsheet?.refresh?.()
@@ -3385,6 +3387,13 @@ async function main() {
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
       return
     }
+    // A context-menu hide persists asynchronously. Closing immediately after
+    // the click used to clear the scene first; the late visibility response
+    // could then reinstall a design into the torn-down store, leaving the next
+    // library open with empty meshes and disabled orbit controls. Drain that
+    // mutation and commit the resulting display metadata before teardown.
+    await visibilityController?.flushPersistence?.()
+    if (_workspacePath) await api.saveDesignToWorkspace(_workspacePath)
     _resetForNewDesign()
     _fileHandle = null
     _setFileName(null)
@@ -3671,6 +3680,7 @@ async function main() {
     camera.position.set(6, 3, 18)
     controls.target.set(6, 3, 0)
     camera.up.set(0, 1, 0)
+    controls.enabled = true
     controls.update()
     store.setState({
       currentDesign: null, currentGeometry: null, currentHelixAxes: null,
@@ -3838,21 +3848,15 @@ async function main() {
   }
 
   function _fitToView() {
-    const { assemblyActive } = store.getState()
+    const { assemblyActive, currentGeometry } = store.getState()
     const box = assemblyActive
       ? assemblyRenderer.getBoundingBox()
-      : (() => {
-          const root = designRenderer.getHelixCtrl()?.root
-          return root ? new THREE.Box3().expandByObject(root) : new THREE.Box3()
-        })()
-    if (box.isEmpty()) return
-    const center = box.getCenter(new THREE.Vector3())
-    const size   = box.getSize(new THREE.Vector3())
-    const radius = Math.max(size.x, size.y, size.z) * 0.5
-    const dist = (radius / Math.sin((camera.fov * 0.5) * Math.PI / 180)) * 1.15
-    const dir = camera.position.clone().sub(controls.target).normalize()
-    controls.target.copy(center)
-    camera.position.copy(center).addScaledVector(dir, dist)
+      : nucleotideLocalBox(currentGeometry)
+    const pose = fitViewPose(box, camera.position, controls.target, camera.fov)
+    if (!pose) return
+    controls.target.copy(pose.target)
+    camera.position.copy(pose.position)
+    controls.enabled = true
     controls.update()
   }
 
@@ -7608,7 +7612,7 @@ async function main() {
     window.__nadocTest = {
       scene,
       store,
-      /** Automation API for transient visibility operations. These drive the
+      /** Automation API for persisted visibility operations. These drive the
        * exact controller used by context menus and the spreadsheet. */
       visibility: {
         hideStrands: (strandIds) => visibilityController.hide({ strandIds }),
@@ -7617,6 +7621,7 @@ async function main() {
         undo: () => visibilityController.undo(),
         redo: () => visibilityController.redo(),
         hiddenBaseKeys: () => [...visibilityController.getHiddenBaseKeys()],
+        flush: () => visibilityController.flushPersistence(),
         strandRenderStats(strandId) {
           const scale = new THREE.Vector3(), pos = new THREE.Vector3(), quat = new THREE.Quaternion()
           const stats = { beads: 0, visibleBeads: 0, cones: 0, visibleCones: 0, slabs: 0, visibleSlabs: 0 }
@@ -7642,6 +7647,45 @@ async function main() {
         },
       },
       setRepresentation: (repr) => _setRepresentation(repr),
+      controlsEnabled: () => controls.enabled,
+      poisonCameraForTest() {
+        camera.position.set(NaN, NaN, NaN)
+        controls.target.set(NaN, NaN, NaN)
+      },
+      viewerDiagnostic() {
+        const canvasRect = canvas.getBoundingClientRect()
+        const hit = document.elementFromPoint(
+          canvasRect.left + canvasRect.width / 2,
+          canvasRect.top + canvasRect.height / 2,
+        )
+        const helixCtrl = designRenderer.getHelixCtrl()
+        return {
+          url: location.href,
+          designId: store.getState().currentDesign?.id ?? null,
+          geometryCount: store.getState().currentGeometry?.length ?? 0,
+          backboneEntries: designRenderer.getBackboneEntries?.().length ?? 0,
+          slabEntries: designRenderer.getSlabEntries?.().length ?? 0,
+          hiddenBaseKeys: [...visibilityController.getHiddenBaseKeys()],
+          cgRootExists: Boolean(helixCtrl?.root),
+          cgRootVisible: Boolean(helixCtrl?.root?.visible),
+          controlsEnabled: controls.enabled,
+          camera: {
+            position: camera.position.toArray(), target: controls.target.toArray(),
+            near: camera.near, far: camera.far, fov: camera.fov,
+          },
+          canvas: {
+            width: canvas.width, height: canvas.height,
+            cssWidth: canvasRect.width, cssHeight: canvasRect.height,
+          },
+          webglContextLost: renderer.getContext().isContextLost(),
+          centerHit: hit ? {
+            tag: hit.tagName, id: hit.id, classes: hit.className,
+            pointerEvents: getComputedStyle(hit).pointerEvents,
+          } : null,
+          welcomeHidden: document.getElementById('welcome-screen')?.classList.contains('hidden'),
+          lastError: store.getState().lastError,
+        }
+      },
       /** Anchors: the oxDNA card + the purple-halo sprite count, so a console/e2e check can
        *  assert "added an anchor → it glows" without a field or a launched job. */
       anchors: {
