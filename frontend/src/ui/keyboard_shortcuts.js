@@ -54,7 +54,7 @@ export function initKeyboardShortcuts(deps) {
     toggleUnfold, toggleCadnano, toggleHelicalAxisLines,
     savePartToAssembly, saveAssemblyAsGuarded, setAssemblyWorkspacePath,
     showWelcome, ooClose, cancelTranslateRotateTool,
-    watchDeformState, deformEscape, popGroupUndo,
+    watchDeformState, deformEscape, popGroupUndo, popVisibilityUndo, popVisibilityRedo,
     isTranslateRotateActive, getPartEditContext, getAssemblyWorkspacePath, getOoActiveIds,
     flashSelectionLevel,
   } = deps
@@ -157,6 +157,7 @@ export function initKeyboardShortcuts(deps) {
         }
         return
       }
+      if (popVisibilityUndo?.()) return
       if (popGroupUndo()) return
       const result = await api.undo()
       if (!result) {
@@ -204,6 +205,7 @@ export function initKeyboardShortcuts(deps) {
         }
         return
       }
+      if (popVisibilityRedo?.()) return
       const result = await api.redo()
       if (!result) {
         const err = store.getState().lastError
@@ -238,6 +240,7 @@ export function initKeyboardShortcuts(deps) {
         }
         return
       }
+      if (popVisibilityRedo?.()) return
       const result = await api.redo()
       if (!result) {
         const err = store.getState().lastError

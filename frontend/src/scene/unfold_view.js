@@ -26,6 +26,7 @@ import { createGlowLayer } from './glow_layer.js'
 import { crossoverControlPoint as arcControlPoint } from './crossover_extra_placement.js'
 import { buildClusterColorLookup } from './helix_renderer/palette.js'
 import { clusterAlphaForNuc, clusterAlphaKeys, clusterDisplaySignature } from './cluster_entries.js'
+import { baseKey } from './base_ref.js'
 
 const ANIM_DURATION_MS = 500   // linear lerp duration
 const ARC_SEGS         = 20    // bezier sample count per arc line
@@ -56,7 +57,8 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
   let _hiddenNucKeys = new Set()
   const _isNucHidden = nuc =>
     _hiddenNucKeys.has('h:' + nuc?.helix_id) ||
-    (nuc?.domain_index != null && _hiddenNucKeys.has('d:' + nuc?.strand_id + ':' + nuc?.domain_index))
+    (nuc?.domain_index != null && _hiddenNucKeys.has('d:' + nuc?.strand_id + ':' + nuc?.domain_index)) ||
+    _hiddenNucKeys.has(baseKey(nuc, nuc?.copy_k ?? 0))
 
   // Straight geometry maps — base positions for unfold (deform must be off before entering unfold).
   let _straightPosMap  = null   // Map<"hid:bp:dir", THREE.Vector3>

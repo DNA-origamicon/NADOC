@@ -24,6 +24,7 @@ import { STAPLE_PALETTE, buildStapleColorMap } from '../scene/helix_renderer/pal
 const COLUMNS = [
   { key: 'start',    label: 'Start',       toggleable: false, editable: false },
   { key: 'end',      label: 'End',         toggleable: false, editable: false },
+  { key: 'show',     label: 'Show',        toggleable: false, editable: false },
   { key: 'ovhg_5p',  label: "5' Overhang", toggleable: true,  editable: true,  resizable: true },
   { key: 'sequence',  label: 'Sequence',    toggleable: true,  editable: false, resizable: true },
   { key: 'ovhg_3p',  label: "3' Overhang", toggleable: true,  editable: true,  resizable: true },
@@ -431,7 +432,7 @@ function _showRowContextMenu(e, strand, goToStrand) {
  * @param {function} [opts.onEditSequence] — onEditSequence(strandId): open the hand-edit
  *   sequence dialog. Omitted → the Sequence cell's "Edit sequence…" item is hidden.
  */
-export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer = null, selectionManager = null, onEditSequence = null } = {}) {
+export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer = null, selectionManager = null, visibilityController = null, onEditSequence = null } = {}) {
   const panel       = document.getElementById('spreadsheet-panel')
   const body        = document.getElementById('spreadsheet-body')
   const theadRow    = document.getElementById('spreadsheet-thead-row')
@@ -744,6 +745,20 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
         if (col.resizable) _applyCellWidth(td, col.key)
 
         switch (col.key) {
+          case 'show': {
+            const cb = document.createElement('input')
+            cb.type = 'checkbox'
+            cb.checked = visibilityController?.isStrandShown(strand.id) ?? true
+            cb.title = cb.checked ? 'At least part of this strand is shown' : 'This entire strand is hidden'
+            cb.addEventListener('click', e => e.stopPropagation())
+            cb.addEventListener('change', () => {
+              if (cb.checked) visibilityController?.show({ strandIds: [strand.id] })
+              else visibilityController?.hide({ strandIds: [strand.id] })
+              _rebuildTable(store.getState())
+            })
+            td.appendChild(cb)
+            break
+          }
           case 'start': {
             td.className = 'sheet-col-endpoint'
             td.textContent = strandEndpoint(strand, '5p', helixIndex)
@@ -1372,5 +1387,6 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
 
   return {
     toggle() { setOpen(!isOpen) },
+    refresh() { _rebuildTable(store.getState()) },
   }
 }

@@ -684,6 +684,7 @@ function _openExtensionDialog(x, y, strandIds, existingsByStrand) {
 // Set once by initSelectionManager. Held module-level rather than threaded as a
 // 10th positional through _showColorMenu's six call sites.
 let _onEditStrandSequence = null
+let _onHideSelection = null
 
 function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], overhangOpts = null, ovhgMultiIds = null, onOpenOverhangsManager = null, domainRef = null) {
   _dismissMenu()
@@ -748,6 +749,11 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], ove
   const design = store.getState().currentDesign
   const _stype = design?.strands?.find(s => s.id === strandId)?.strand_type
   const isScaffold = _stype === 'scaffold'
+  const hideRefs = domainRef
+    ? { domainRefs: [domainRef] }
+    : { strandIds: multiStrandIds.length ? [...new Set([...multiStrandIds, strandId])] : [strandId] }
+  menu.appendChild(_menuItem('Hide selected', () => _onHideSelection?.(hideRefs)))
+  menu.appendChild(_menuSep())
 
   // Items shared with the cadnano editor's strand menu — Make Reference/Active,
   // the scaffold ⇄ OH-binder conversions, and Edit sequence… — come from ONE
@@ -1053,6 +1059,8 @@ function _showMultiMenu(x, y, strandIds, designRenderer) {
   hdr.style.cssText = 'padding:3px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
                       'border-bottom:1px solid #3a4a5a;margin-bottom:4px'
   menu.appendChild(hdr)
+  menu.appendChild(_menuItem('Hide selected', () => _onHideSelection?.({ strandIds })))
+  menu.appendChild(_menuSep())
 
   // Make Reference / Make Active for the whole selection.
   {
@@ -1475,6 +1483,7 @@ function _showScaffoldMenu(x, y, ctx, cbs) {
   hdr.style.cssText = 'padding:3px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
     'text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'
   menu.appendChild(hdr)
+  menu.appendChild(_menuItem('Hide selected', () => _onHideSelection?.({ strandIds: [strandId] })))
 
   // 1 — Nick at the clicked position (splits the scaffold at the 3′ side).
   menu.appendChild(_menuItem('Nick here', () => onNick?.({
@@ -1556,6 +1565,7 @@ function _showClusterMenu(x, y, clusterId, onClusterMoveRotate) {
   menu.appendChild(hdr)
 
   menu.appendChild(_menuItem('Move / Rotate', () => onClusterMoveRotate?.(clusterId)))
+  menu.appendChild(_menuItem('Hide selected', () => _onHideSelection?.({ clusterIds: [clusterId] })))
 
   // Representation override for this cluster's region.
   _appendRepresentationMenu(menu, { clusterIds: [clusterId] })
@@ -1653,8 +1663,9 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
  * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldAssignSequence?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onEditStrandSequence, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getAtomisticRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionStickRenderer, getRegionSurfaceRenderer, onDrillLevel } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onEditStrandSequence, onHideSelection, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getAtomisticRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionStickRenderer, getRegionSurfaceRenderer, onDrillLevel } = opts
   _onEditStrandSequence = onEditStrandSequence ?? null
+  _onHideSelection = onHideSelection ?? null
 
   // Use the active render camera (ortho in cadnano mode, perspective otherwise).
   const _cam = () => getCamera?.() ?? camera
@@ -2736,6 +2747,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     hdr.style.cssText = 'padding:3px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
                         'border-bottom:1px solid #3a4a5a;margin-bottom:4px'
     menu.appendChild(hdr)
+    menu.appendChild(_menuItem('Hide selected', () => _onHideSelection?.({ domainRefs })))
+    menu.appendChild(_menuSep())
     _appendRepresentationMenu(menu, { domainRefs })
     document.body.appendChild(menu)
     _menuEl = menu
@@ -4279,6 +4292,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       const hitId = hitExtension.nuc.extension_id
       const ids = extensionContextIds(hitId, _multiExtensionIds)
       _showExtensionMenu(e.clientX, e.clientY, ids)
+      return
+    }
+    if (_baseKeys.length > 0) {
+      _dismissMenu()
+      const menu = _menuBase(e.clientX, e.clientY)
+      menu.appendChild(_menuItem('Hide selected', () => _onHideSelection?.({ baseKeys: [..._baseKeys] })))
+      document.body.appendChild(menu)
+      _menuEl = menu
+      _menuOutsideListeners(menu)
       return
     }
     // Multi-overhang divert — when an overhang multi-selection is active, a

@@ -129,6 +129,7 @@ import { initAtomSurfaceDisplay }  from './scene/atom_surface_display.js'
 import { installAtomisticLoadingProbe } from './scene/debug/atomistic_loading_probe.js'
 import { overhangsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './scene/representation_overrides.js'
 import { initSpreadsheet } from './ui/spreadsheet.js'
+import { initVisibilityController } from './scene/visibility_controller.js'
 import { initExportMenu }          from './ui/export_menu.js'
 import { initImportMenu }          from './ui/import_menu.js'
 import { initAssemblyPanel }        from './ui/assembly_panel.js'
@@ -152,7 +153,7 @@ import { initDocSpawn } from './app/doc_spawn.js'
 import { initBeltPathRenderer }      from './scene/belt_path_renderer.js'
 import { computeFixedDepths } from './scene/assembly_constraint_graph.js'
 import { initClusterPanel } from './ui/cluster_panel.js'
-import { clusterNucKeysFor, withClusterDisplay } from './scene/cluster_entries.js'
+import { withClusterDisplay } from './scene/cluster_entries.js'
 import { initPlateView }                           from './ui/plate_view.js'
 import { STAPLE_PALETTE as PLATE_STAPLE_PALETTE } from './scene/helix_renderer/palette.js'
 import { initJointsPanel }                          from './ui/joints_panel.js'
@@ -846,7 +847,16 @@ async function main() {
   // animation player onEvent/onFetchSurfaceBatch, periodic-MD) only fire post-boot,
   // so this resolves by then (boot-capture pattern, #81).
   let _atomSurface = null
+  let visibilityController = null
   const selectionManager = initSelectionManager(canvas, camera, designRenderer, {
+    onHideSelection: refs => {
+      // A selected strand has a separate additive glow-bead layer. Clear the
+      // selection BEFORE applying visibility: selection teardown restores the
+      // selected bead/cone scales, so doing it afterward would immediately
+      // resurrect every just-hidden backbone bead and connector.
+      selectionManager?.clearSelection()
+      visibilityController?.hide(refs)
+    },
     getProteinRenderer: () => proteinRenderer,
     getAtomisticRenderer: () => atomisticRenderer,
     // Per-region overlay renderers (mixed rep) — lazy getters resolve after they're
@@ -1583,6 +1593,14 @@ async function main() {
   // ── 2D Unfold view ──────────────────────────────────────────────────────────
   // bluntEnds is initialized below; use a getter so unfoldView can call it lazily.
   const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds, () => loopSkipHighlight, () => sequenceOverlay, () => overhangLocations, null)
+  visibilityController = initVisibilityController({
+    store, designRenderer, unfoldView,
+    onChange: (_hiddenBases, hiddenClusterIds) => {
+      _atomSurface?.setHiddenNucs?.(_hiddenBases)
+      spreadsheet?.refresh?.()
+      clusterPanel?.syncVisibility?.(hiddenClusterIds)
+    },
+  })
   // Crossover arcs (owned by unfold_view) follow applyFemPositions (mrDNA/oxDNA display).
   designRenderer.setFemArcUpdater?.((updates) => unfoldView.applyFemArcs(updates))
   // …and follow the RMSF scalar recolour (oxDNA flexibility map).
@@ -3990,6 +4008,7 @@ async function main() {
 
   document.getElementById('menu-edit-undo')?.addEventListener('click', async () => {
     if (isDeformActive()) return
+    if (visibilityController?.undo()) return
     if (popGroupUndo()) return
     const result = await api.undo()
     if (!result) {
@@ -4022,6 +4041,7 @@ async function main() {
 
   document.getElementById('menu-edit-redo')?.addEventListener('click', async () => {
     if (isDeformActive()) return
+    if (visibilityController?.redo()) return
     const result = await api.redo()
     if (!result) {
       const err = store.getState().lastError
@@ -4603,6 +4623,12 @@ async function main() {
     controls.update()
   })
 
+  document.getElementById('unhide-all-btn')?.addEventListener('click', () => {
+    visibilityController?.unhideAll()
+    clusterPanel?.resetVisibility?.()
+    spreadsheet?.refresh?.()
+  })
+
   // ── Keyboard shortcuts ────────────────────────────────────────────────────────
   // All design-editor keyboard shortcuts are registered by
   // ui/keyboard_shortcuts.js (file/edit, view/tool toggles, number hotkeys,
@@ -4634,6 +4660,8 @@ async function main() {
     watchDeformState:         _watchDeformState,
     deformEscape,
     popGroupUndo,
+    popVisibilityUndo: () => visibilityController?.undo() ?? false,
+    popVisibilityRedo: () => visibilityController?.redo() ?? false,
     isTranslateRotateActive:  () => _translateRotateActive,
     getPartEditContext:       () => _partEditContext,
     getAssemblyWorkspacePath: () => _assemblyWorkspacePath,
@@ -4688,6 +4716,7 @@ async function main() {
   const spreadsheet = initSpreadsheet(store, {
     designRenderer,
     selectionManager,
+    visibilityController,
     onEditSequence: (strandId) => _strandSequenceDialog.open(strandId),
     goToStrand(strandId) {
       const geom = store.getState().currentGeometry
@@ -6371,9 +6400,7 @@ async function main() {
     },
     api,
     onVisibilityChange: (hiddenClusterIds) => {
-      const nucKeys = clusterNucKeysFor(store.getState().currentDesign, hiddenClusterIds)
-      designRenderer.setHiddenNucs(nucKeys)
-      designRenderer.setHiddenCrossovers(unfoldView.setHiddenNucs(nucKeys))
+      visibilityController?.setHiddenClusters(hiddenClusterIds)
     },
     // Live preview while the style popover's colour/opacity controls are dragged —
     // a locally-patched design, so nothing hits the network until pointer-up. Both
@@ -7568,6 +7595,40 @@ async function main() {
     window.__nadocTest = {
       scene,
       store,
+      /** Automation API for transient visibility operations. These drive the
+       * exact controller used by context menus and the spreadsheet. */
+      visibility: {
+        hideStrands: (strandIds) => visibilityController.hide({ strandIds }),
+        showStrands: (strandIds) => visibilityController.show({ strandIds }),
+        unhideAll: () => visibilityController.unhideAll(),
+        undo: () => visibilityController.undo(),
+        redo: () => visibilityController.redo(),
+        hiddenBaseKeys: () => [...visibilityController.getHiddenBaseKeys()],
+        strandRenderStats(strandId) {
+          const scale = new THREE.Vector3(), pos = new THREE.Vector3(), quat = new THREE.Quaternion()
+          const stats = { beads: 0, visibleBeads: 0, cones: 0, visibleCones: 0, slabs: 0, visibleSlabs: 0 }
+          for (const e of designRenderer.getBackboneEntries()) {
+            if (e.nuc?.strand_id !== strandId) continue
+            stats.beads++
+            const m = new THREE.Matrix4(); e.instMesh.getMatrixAt(e.id, m); m.decompose(pos, quat, scale)
+            if (scale.lengthSq() > 1e-10) stats.visibleBeads++
+          }
+          for (const e of designRenderer.getConeEntries()) {
+            if (e.strandId !== strandId) continue
+            stats.cones++
+            const m = new THREE.Matrix4(); e.instMesh.getMatrixAt(e.id, m); m.decompose(pos, quat, scale)
+            if (Math.abs(scale.x) > 1e-5 || Math.abs(scale.z) > 1e-5) stats.visibleCones++
+          }
+          for (const e of designRenderer.getSlabEntries()) {
+            if (e.nuc?.strand_id !== strandId) continue
+            stats.slabs++
+            const m = new THREE.Matrix4(); e.instMesh.getMatrixAt(e.id, m); m.decompose(pos, quat, scale)
+            if (scale.lengthSq() > 1e-10) stats.visibleSlabs++
+          }
+          return stats
+        },
+      },
+      setRepresentation: (repr) => _setRepresentation(repr),
       /** Anchors: the oxDNA card + the purple-halo sprite count, so a console/e2e check can
        *  assert "added an anchor → it glows" without a field or a launched job. */
       anchors: {

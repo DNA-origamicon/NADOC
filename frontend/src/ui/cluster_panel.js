@@ -531,6 +531,21 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
 
   return {
     setAssemblyMode, clearAssemblyMode, syncInstanceDesign, expandInstance, selectAssemblyCluster,
+    syncVisibility(ids) {
+      _hiddenClusterIds.clear()
+      for (const id of ids ?? []) _hiddenClusterIds.add(id)
+      if (!_collapsed && !_assemblyMode) {
+        const { currentDesign, activeClusterId } = store.getState()
+        _rebuildFlat(currentDesign?.cluster_transforms ?? [], activeClusterId)
+      }
+    },
+    resetVisibility() {
+      _hiddenClusterIds.clear()
+      if (!_collapsed && !_assemblyMode) {
+        const { currentDesign, activeClusterId } = store.getState()
+        _rebuildFlat(currentDesign?.cluster_transforms ?? [], activeClusterId)
+      }
+    },
     /** Tear down the style popover's document-level listeners (smoke-test gate). */
     destroy: _stylePopover.destroy,
   }

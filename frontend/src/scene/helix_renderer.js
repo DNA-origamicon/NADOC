@@ -21,6 +21,7 @@
  */
 
 import * as THREE from 'three'
+import { baseKey } from './base_ref.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import {
   impostorsEnabled,
@@ -1557,9 +1558,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   //   'h:<helix_id>'                   — hide the whole helix (helix-level cluster)
   //   'd:<strand_id>:<domain_index>'   — hide specific domain (domain-level cluster)
   let _hiddenNucKeys = new Set()
-  const _isNucHidden = nuc =>
+  const _isNucHidden = (nuc, copy = nuc?.copy_k ?? 0) =>
     _hiddenNucKeys.has('h:' + nuc.helix_id) ||
-    (nuc.domain_index != null && _hiddenNucKeys.has('d:' + nuc.strand_id + ':' + nuc.domain_index))
+    (nuc.domain_index != null && _hiddenNucKeys.has('d:' + nuc.strand_id + ':' + nuc.domain_index)) ||
+    _hiddenNucKeys.has(baseKey(nuc, copy))
   let _cylRadiusScale = 1.0  // XZ scale applied to domain cylinders (1 = geometry default 1.125 nm)
 
   // ── Curved-tube builder ────────────────────────────────────────────────────
@@ -2722,6 +2724,14 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // A cylinder spans one domain, so it has its own {helixId, strandId, domainIndex}.
   const _clusterAlphaForCyl = (dom) => _clusterAlphaFor(
     dom && { helix_id: dom.helixId, strand_id: dom.strandId, domain_index: dom.domainIndex })
+  const _hiddenAlphaFor = (nuc, copy = nuc?.copy_k ?? 0) => _isNucHidden(nuc, copy) ? 0 : 1
+  function _hiddenAlphaForCyl(dom) {
+    // Read source geometry, not backboneEntries: cheap cylinder-only builds
+    // intentionally allocate no bead instances, but visibility must still work.
+    const nucs = assignedGeometry.filter(n => n.strand_id === dom.strandId &&
+      n.domain_index === dom.domainIndex)
+    return nucs.length && nucs.every(n => _isNucHidden(n, n.copy_k ?? 0)) ? 0 : 1
+  }
 
   // ── The composite alpha channel ─────────────────────────────────────────────
   // THREE independent factors multiply into ONE instanceAlpha attribute:
@@ -2730,19 +2740,19 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // other (the second hand-multiplied the first's factor back in). This is the
   // single writer for the no-override case; _applyRepOverrides is the single writer
   // when overrides are active. A future fourth factor is a new term, not a new sweep.
-  const _anyAlpha = () => _hasReference || _repActive || _clusterAlphaKeys.size > 0
+  const _anyAlpha = () => _hasReference || _repActive || _clusterAlphaKeys.size > 0 || _hiddenNucKeys.size > 0
   function _applyAlphaChannel() {
     if (!_anyAlpha() && !_repAlphaReady) return
-    for (const e of backboneEntries) _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * _clusterAlphaFor(e.nuc))
-    for (const e of slabEntries)     _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * _clusterAlphaFor(e.nuc))
-    for (const e of fluoroEntries)   _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * _clusterAlphaFor(e.nuc))
-    for (const e of coneEntries)     _setEntryAlpha(e, _refAlphaFor(e.strandId) * _clusterAlphaFor(e.fromNuc))
+    for (const e of backboneEntries) _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * _clusterAlphaFor(e.nuc) * _hiddenAlphaFor(e.nuc, e._copy ?? 0))
+    for (const e of slabEntries)     _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * _clusterAlphaFor(e.nuc) * _hiddenAlphaFor(e.nuc, e._copy ?? 0))
+    for (const e of fluoroEntries)   _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * _clusterAlphaFor(e.nuc) * _hiddenAlphaFor(e.nuc, e._copy ?? 0))
+    for (const e of coneEntries)     _setEntryAlpha(e, _refAlphaFor(e.strandId) * _clusterAlphaFor(e.fromNuc) * _hiddenAlphaFor(e.fromNuc))
     // Cylinders only once the buffers exist. Reference ghosting never drove them, so
     // this stays a no-op until per-cluster opacity (or a rep override) installs them
     // — and once installed it keeps maintaining them, so clearing a fade restores 1.
     if (_repAlphaReady) {
-      for (const dom of _domainCylData)   _setCylAlpha(iHelixCylinders, dom.cylIdx, _refAlphaFor(dom.strandId) * _clusterAlphaForCyl(dom))
-      for (const dom of _overhangCylData) _setCylAlpha(_ovhgCylMesh(dom), dom.cylIdx, _refAlphaFor(dom.strandId) * _clusterAlphaForCyl(dom))
+      for (const dom of _domainCylData)   _setCylAlpha(iHelixCylinders, dom.cylIdx, _refAlphaFor(dom.strandId) * _clusterAlphaForCyl(dom) * _hiddenAlphaForCyl(dom))
+      for (const dom of _overhangCylData) _setCylAlpha(_ovhgCylMesh(dom), dom.cylIdx, _refAlphaFor(dom.strandId) * _clusterAlphaForCyl(dom) * _hiddenAlphaForCyl(dom))
       // Bridge cylinders live on synthetic '__lnk__' helices that no cluster lists,
       // so they never carry a cluster fade — restored to opaque, as before.
       for (const br of _bridgeCylData)    _setCylAlpha(iLinkerBridgeCylinders, br.cylIdx, 1)
@@ -2845,7 +2855,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   }
   /** The full alpha for one cylinder instance: ghosting x override x cluster. */
   function _cylFactor(dom) {
-    return _refAlphaFor(dom.strandId) * _cylRepVis(dom) * _clusterAlphaForCyl(dom)
+    return _refAlphaFor(dom.strandId) * _cylRepVis(dom) * _clusterAlphaForCyl(dom) * _hiddenAlphaForCyl(dom)
   }
 
   // ── Curved (deformed) tube compositor ───────────────────────────────────────
@@ -2861,7 +2871,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // in the shader. Only the non-instanced tube meshes need this.
   function _curvedTubeFactor(ud) {
     return _refAlphaFor(ud.strandId) * _cylRepVis(ud) *
-      _clusterAlphaFor({ helix_id: ud.helixId, strand_id: ud.strandId, domain_index: ud.domainIndex })
+      _clusterAlphaFor({ helix_id: ud.helixId, strand_id: ud.strandId, domain_index: ud.domainIndex }) *
+      _hiddenAlphaForCyl(ud)
   }
   /** Set a curved TUBE's cross-fade base and re-apply base x per-domain factor. */
   function _fadeCurvedTube(mesh, base) {
@@ -2899,12 +2910,12 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     _ensureAlphaInstalled()
     // A bead (either strand) shows only where its column resolves to 'full'.
     const beadVis = (nuc) => (nuc && _effCol(nuc.helix_id, nuc.bp_index) === 'full' ? 1 : 0)
-    for (const e of backboneEntries) _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc) * _clusterAlphaFor(e.nuc))
-    for (const e of slabEntries)     _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc) * _clusterAlphaFor(e.nuc))
-    for (const e of fluoroEntries)   _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc) * _clusterAlphaFor(e.nuc))
+    for (const e of backboneEntries) _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc) * _clusterAlphaFor(e.nuc) * _hiddenAlphaFor(e.nuc, e._copy ?? 0))
+    for (const e of slabEntries)     _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc) * _clusterAlphaFor(e.nuc) * _hiddenAlphaFor(e.nuc, e._copy ?? 0))
+    for (const e of fluoroEntries)   _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc) * _clusterAlphaFor(e.nuc) * _hiddenAlphaFor(e.nuc, e._copy ?? 0))
     for (const e of coneEntries) {
       const vis = e.isCrossHelix ? 1 : beadVis(e.fromNuc)
-      _setEntryAlpha(e, _refAlphaFor(e.strandId) * vis * _clusterAlphaFor(e.fromNuc))
+      _setEntryAlpha(e, _refAlphaFor(e.strandId) * vis * _clusterAlphaFor(e.fromNuc) * _hiddenAlphaFor(e.fromNuc))
     }
     for (const dom of _domainCylData)   _setCylAlpha(iHelixCylinders, dom.cylIdx, _cylFactor(dom))
     for (const dom of _overhangCylData) _setCylAlpha(_ovhgCylMesh(dom), dom.cylIdx, _cylFactor(dom))
@@ -5656,17 +5667,17 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       _hiddenNucKeys = keys instanceof Set ? keys : new Set(keys)
 
       for (const entry of backboneEntries) {
-        _setBeadScale(entry, _isNucHidden(entry.nuc) ? 0 : _beadScale)
+        _setBeadScale(entry, _isNucHidden(entry.nuc, entry._copy ?? 0) ? 0 : _beadScale)
       }
       for (const entry of fluoroEntries) {
-        _setBeadScale(entry, _isNucHidden(entry.nuc) ? 0 : _beadScale)
+        _setBeadScale(entry, _isNucHidden(entry.nuc, entry._copy ?? 0) ? 0 : _beadScale)
       }
       for (const entry of coneEntries) {
         if (entry.isCrossHelix) continue
         _setConeXZScale(entry, _isNucHidden(entry.fromNuc) ? 0 : CONE_RADIUS)
       }
       for (const entry of slabEntries) {
-        const hidden = _isNucHidden(entry.nuc)
+        const hidden = _isNucHidden(entry.nuc, entry._copy ?? 0)
         _tMatrix.compose(
           entry.center, entry.quat,
           hidden
@@ -5677,6 +5688,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       }
       if (slabEntries.length) iSlabs.instanceMatrix.needsUpdate = true
       _refreshSlabConnectors()
+      _ensureAlphaInstalled()
+      if (_repActive) _applyRepOverrides(); else _applyAlphaChannel()
     },
 
     /** Temporarily suppress complete helices while an authoritative structural

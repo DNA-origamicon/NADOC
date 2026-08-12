@@ -26,6 +26,7 @@ import {
   computeAtomNucColors,
 } from './color_util.js'
 import { clusterDisplaySignature } from './cluster_entries.js'
+import { baseKey } from './base_ref.js'
 import { showPersistentToast, dismissToast, showToast } from '../ui/toast.js'
 import { docHeaders } from '../shared/doc_id.js'
 import { geometryQuerySuffix } from '../ui/new_positioning.js'
@@ -54,6 +55,10 @@ export function initAtomSurfaceDisplay({
   // design-surface path doesn't apply).  Reads the live params via getSurfaceParams().
   onSurfaceParamsChanged = () => {},
 }) {
+  let _hiddenNucKeys = new Set()
+  const _hidden = (n) => _hiddenNucKeys.has(baseKey(n, n?.copy_k ?? 0)) ||
+    _hiddenNucKeys.has(`h:${n?.helix_id}`) ||
+    (n?.domain_index != null && _hiddenNucKeys.has(`d:${n?.strand_id}:${n?.domain_index}`))
   // ── Per-region overlay renderers (mixed representation) ─────────────────────
   // A focal domain/strand/cluster can be pinned to surface / vdw / ballstick; the
   // helix renderer auto-hides the CG beads/cylinders at those columns and these
@@ -357,6 +362,15 @@ export function initAtomSurfaceDisplay({
       strandAlphas: computeAtomStrandAlphas(d),
       strandColors: state.coloringMode === 'cluster' ? computeAtomStrandColors(state, null) : null,
     }
+    const geometry = state.currentGeometry ?? []
+    for (const n of geometry) {
+      if (!_hidden(n)) continue
+      nucAlphas.set(`${n.helix_id}:${n.bp_index}:${n.direction}`, 0)
+    }
+    for (const strand of d?.strands ?? []) {
+      const members = geometry.filter(n => n.strand_id === strand.id)
+      if (members.length && members.every(_hidden)) surfaceMaps.strandAlphas.set(strand.id, 0)
+    }
     atomisticRenderer.setClusterDisplay(nucAlphas, nucColors)
     surfaceRenderer.applyClusterDisplay(surfaceMaps)
     // The mixed-representation region overlays are separate renderer instances and
@@ -364,6 +378,7 @@ export function initAtomSurfaceDisplay({
     // vdw/surface would stay opaque inside a faded cluster.
     regionVdwRenderer.setClusterDisplay(nucAlphas, nucColors)
     regionBallstickRenderer.setClusterDisplay(nucAlphas, nucColors)
+    regionStickRenderer.setClusterDisplay(nucAlphas, nucColors)
     regionSurfaceRenderer.applyClusterDisplay(surfaceMaps)
   }
 
@@ -715,6 +730,10 @@ export function initAtomSurfaceDisplay({
      *  drives the committed path; this is the entry point for the sidebar swatch's
      *  live preview, which patches a design locally and never touches the store. */
     refreshClusterDisplay,
+    setHiddenNucs(keys) {
+      _hiddenNucKeys = keys instanceof Set ? new Set(keys) : new Set(keys ?? [])
+      refreshClusterDisplay()
+    },
     getAtomStrandColors: _getAtomStrandColors,
     getRegionVdwRenderer:       () => regionVdwRenderer,
     getRegionBallstickRenderer: () => regionBallstickRenderer,

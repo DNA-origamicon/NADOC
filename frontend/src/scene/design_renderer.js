@@ -390,24 +390,40 @@ export function initDesignRenderer(scene, storeRef) {
    *  ID is in _hiddenCrossoverIds.  Called after rebuild and after setHiddenCrossovers. */
   function _applyXoverVisibility() {
     if (!_xoverArcData || !_xoverBeadsMesh || !_xoverSlabsMesh) return
-    if (!_hiddenCrossoverIds.size) return
     const m4   = new THREE.Matrix4()
     const pos  = new THREE.Vector3()
     const qid  = new THREE.Quaternion()
     const zero = new THREE.Vector3(0, 0, 0)
+    const design = storeRef.getState().currentDesign
+    const refIds = new Set((design?.strands ?? []).filter(s => s.is_reference).map(s => s.id))
+    const refHidden = storeRef.getState().showReferenceGeometry === false
     let dirty = false
     for (const ad of _xoverArcData) {
-      if (!_hiddenCrossoverIds.has(ad.xoId)) continue
-      for (let i = 0; i < ad.beadCount; i++) {
-        const bi = ad.beadStartIdx + i
-        _xoverBeadsMesh.getMatrixAt(bi, m4)
-        pos.setFromMatrixPosition(m4)
-        _xoverBeadsMesh.setMatrixAt(bi, m4.compose(pos, qid, zero))
-        _xoverSlabsMesh.getMatrixAt(bi, m4)
-        pos.setFromMatrixPosition(m4)
-        _xoverSlabsMesh.setMatrixAt(bi, m4.compose(pos, qid, zero))
-        dirty = true
+      const hide = _hiddenCrossoverIds.has(ad.xoId) ||
+        (refHidden && refIds.has(ad.nucA?.strand_id) && refIds.has(ad.nucB?.strand_id))
+      if (hide) {
+        for (let i = 0; i < ad.beadCount; i++) {
+          const bi = ad.beadStartIdx + i
+          _xoverBeadsMesh.getMatrixAt(bi, m4)
+          pos.setFromMatrixPosition(m4)
+          _xoverBeadsMesh.setMatrixAt(bi, m4.compose(pos, qid, zero))
+          _xoverSlabsMesh.getMatrixAt(bi, m4)
+          pos.setFromMatrixPosition(m4)
+          _xoverSlabsMesh.setMatrixAt(bi, m4.compose(pos, qid, zero))
+        }
+      } else {
+        const posA = _liveXoverPos(ad.nucA, _clusterXoverPosA)
+        const posB = _liveXoverPos(ad.nucB, _clusterXoverPosB)
+        if (!posA || !posB) continue
+        arcControlPoint(posA, posB, ad.nucA, ad.nucB, _clusterXoverCtrl)
+        updateExtraBaseInstances(
+          _xoverBeadsMesh, _xoverSlabsMesh,
+          ad.beadStartIdx, ad.beadCount,
+          posA, _clusterXoverCtrl, posB, ad.avgAx,
+          ad.simReversed, ad.localFrameReversed, ad.savedTransforms, ad.sequence,
+        )
       }
+      dirty = true
     }
     if (dirty) {
       _xoverBeadsMesh.instanceMatrix.needsUpdate = true
