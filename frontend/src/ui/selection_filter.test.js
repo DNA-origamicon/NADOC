@@ -6,7 +6,7 @@ import { clearDom } from '../test-helpers/factory_dom.js'
 // All dataKeys the module touches (SEL_KEY_MAP + LEVEL_BTN). LEVEL_BTN's keys are
 // clust/strand/line/ends/xover/base; SEL_KEY_MAP adds scaf/stap/loop/skip/ovhangs.
 // `base` is level-only — it has no selectableTypes key, so it lives in LEVEL_ONLY_BTNS.
-const DATA_KEYS = ['scaf', 'stap', 'clust', 'strand', 'line', 'ends', 'xover', 'base', 'loop', 'skip', 'ovhangs']
+const DATA_KEYS = ['scaf', 'stap', 'clust', 'strand', 'line', 'ends', 'xover', 'base', 'loop', 'skip', 'ext', 'ovhangs']
 
 /**
  * Build the collapsed picker: #select-filter > trigger + #select-filter-menu, with a
@@ -44,7 +44,7 @@ const FULL_SELECTABLE = {
   scaffold: true, staples: true, clusters: false, strands: true, domains: false,
   ends: false, crossoverArcs: false, loops: false, skips: false, extensions: false, overhangs: false,
 }
-const ALL_KEYS = ['scaffold', 'staples', 'clusters', 'strands', 'domains', 'ends', 'crossoverArcs', 'loops', 'skips', 'overhangs']
+const ALL_KEYS = ['scaffold', 'staples', 'clusters', 'strands', 'domains', 'ends', 'crossoverArcs', 'loops', 'skips', 'extensions', 'overhangs']
 
 describe('computeFilterToggle (pure)', () => {
   it('plain key toggles off→on', () => {
@@ -69,9 +69,17 @@ describe('computeFilterToggle (pure)', () => {
     expect(out.preLoopSkip).toEqual(FULL_SELECTABLE)
   })
 
-  it('cleared selectableTypes only contains allKeys (drops keys like extensions)', () => {
+  it('extensions are an exclusive pick mode and restore the prior filters when disabled', () => {
+    const on = computeFilterToggle({ selectableTypes: FULL_SELECTABLE, storeKey: 'extensions', allKeys: ALL_KEYS, preLoopSkip: null })
+    expect(on.selectableTypes.extensions).toBe(true)
+    for (const k of ALL_KEYS) if (k !== 'extensions') expect(on.selectableTypes[k]).toBe(false)
+    const off = computeFilterToggle({ selectableTypes: on.selectableTypes, storeKey: 'extensions', allKeys: ALL_KEYS, preLoopSkip: on.preLoopSkip })
+    expect(off.selectableTypes).toEqual(FULL_SELECTABLE)
+  })
+
+  it('cleared selectableTypes contains the extension filter key', () => {
     const out = computeFilterToggle({ selectableTypes: FULL_SELECTABLE, storeKey: 'skips', allKeys: ALL_KEYS, preLoopSkip: null })
-    expect('extensions' in out.selectableTypes).toBe(false)
+    expect(out.selectableTypes.extensions).toBe(false)
     expect(out.selectableTypes.skips).toBe(true)
   })
 
@@ -217,6 +225,16 @@ describe('initSelectionFilter — selectionLevel + visibility gates', () => {
     expect(sm.setSelectionLevel).not.toHaveBeenCalled()
   })
 
+  it('the extension button arms exclusive extension selection', () => {
+    const f = makeV2(); f.attachFilterButtons()
+    document.querySelector('.sf-btn[data-key="ext"]').click()
+    const st = store.getState().selectableTypes
+    expect(st.extensions).toBe(true)
+    expect(st.strands).toBe(false)
+    expect(st.scaffold).toBe(false)
+    expect(sm.setSelectionLevel).not.toHaveBeenCalled()
+  })
+
   afterEach(() => clearDom())
 })
 
@@ -243,6 +261,8 @@ describe('collapsedSelectable (pure)', () => {
       .toEqual({ key: 'ovhangs', label: 'ovhg', note: '' })
     expect(collapsedSelectable({ selectionLevel: 'domain', selectableTypes: T({ loops: true }) }).label).toBe('loop')
     expect(collapsedSelectable({ selectionLevel: 'base', selectableTypes: T({ skips: true }) }).label).toBe('skip')
+    expect(collapsedSelectable({ selectionLevel: 'strand', selectableTypes: T({ extensions: true }) }))
+      .toEqual({ key: 'ext', label: 'ext', note: '' })
   })
 
   it('a scaffold/staple restriction shows as a note', () => {

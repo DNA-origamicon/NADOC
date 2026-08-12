@@ -90,21 +90,27 @@ export function toggleLevel(cur, level) {
  * that measurement_tool.js expects to hold exactly 2. `base` is the base level's own
  * flag and drains into the key-based base pool. Leave `beadLevel` alone.
  *
- * EXCEPTION — the overhang filter (`overhangFilter`, i.e. `selectableTypes.overhangs`):
- * when it is on, the lasso captures OVERHANGS ONLY, taking precedence over the engaged
+ * EXCEPTIONS — the overhang and extension filters: when one is on, the lasso captures
+ * only that filtered type, taking precedence over the engaged
  * level — the same precedence a plain click and a Ctrl+click already give the overhang
  * filter (2026-06-07). loops/skips remain non-lasso-capturable visibility gates. The
  * scaffold/staple gates are applied separately in the lasso loop, NOT here.
  *
- * @param {{selLevel:string, overhangFilter?:boolean}} o
+ * @param {{selLevel:string, overhangFilter?:boolean, extensionFilter?:boolean}} o
  */
-export function lassoCaptureType({ selLevel, overhangFilter = false }) {
+export function lassoCaptureType({ selLevel, overhangFilter = false, extensionFilter = false }) {
   // Overhang filter active → overhangs only (exclusive mode, not a level), matching
   // the plain-click / Ctrl+click precedence.
   if (overhangFilter) {
     return {
       strands: false, domains: false, ends: false, beadLevel: false,
-      cluster: false, xover: false, base: false, overhangs: true, loops: false, skips: false,
+      cluster: false, xover: false, base: false, overhangs: true, extensions: false, loops: false, skips: false,
+    }
+  }
+  if (extensionFilter) {
+    return {
+      strands: false, domains: false, ends: false, beadLevel: false,
+      cluster: false, xover: false, base: false, overhangs: false, extensions: true, loops: false, skips: false,
     }
   }
   const lv = normalizeLevel(selLevel)
@@ -116,10 +122,22 @@ export function lassoCaptureType({ selLevel, overhangFilter = false }) {
     cluster:   lv === 'cluster',
     xover:     lv === 'xover',
     base:      lv === 'base',    // individual beads, into the key-based base pool
-    overhangs: false,            // gate, not a level — capturable only via overhangFilter
+    overhangs: false, extensions: false, // gates, not levels
     loops:     false,
     skips:     false,
   }
+}
+
+/** Return only tail entries owned by the selected extension IDs. */
+export function extensionSelectionEntries(entries = [], extensionIds = []) {
+  const ids = new Set(extensionIds)
+  return entries.filter(entry => ids.has(entry?.nuc?.extension_id))
+}
+
+/** Right-click acts on the selected extension set only when the hit belongs to it. */
+export function extensionContextIds(hitExtensionId, selectedExtensionIds = []) {
+  if (!hitExtensionId) return []
+  return selectedExtensionIds.includes(hitExtensionId) ? [...selectedExtensionIds] : [hitExtensionId]
 }
 
 /**

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   LEVELS, TAB_CYCLE, BTN_LEVEL, LEVEL_BTN,
   normalizeLevel, nextTabLevel, toggleLevel, hoverPreviewTarget,
-  lassoCaptureType, toggleClusterSelection,
+  lassoCaptureType, toggleClusterSelection, extensionSelectionEntries, extensionContextIds,
 } from './selection_level.js'
 
 describe('selection_level — constants & maps', () => {
@@ -112,6 +112,12 @@ describe('hoverPreviewTarget — red-glow leaf preview gate', () => {
 })
 
 describe('lassoCaptureType — the engaged selLevel is the single source of truth', () => {
+  it('extension filter takes precedence and captures extension tails only', () => {
+    const r = lassoCaptureType({ selLevel: 'strand', extensionFilter: true })
+    expect(r.extensions).toBe(true)
+    expect(r.strands).toBe(false)
+    expect(r.overhangs).toBe(false)
+  })
   // The motivating bug: Tab to a level, the lasso should capture THAT level's
   // element type (ISSUE-4 filter-audit). selectableTypes is no longer consulted —
   // scaffold/staple gating is applied separately in the lasso loop.
@@ -252,5 +258,25 @@ describe('selection_level — toggleClusterSelection', () => {
     expect(r.clusterIds).toEqual(['c1'])
     expect(r.strandIds).toEqual(['s1'])
     expect(r.clusterIds).not.toBe(clusterIds)
+  })
+})
+
+describe('extensionSelectionEntries', () => {
+  it('returns only selected extension-tail beads, excluding their parent strand', () => {
+    const parent = { nuc: { strand_id: 's1' } }
+    const ext1a = { nuc: { strand_id: 's1', extension_id: 'e1' } }
+    const ext1b = { nuc: { strand_id: 's1', extension_id: 'e1' } }
+    const ext2 = { nuc: { strand_id: 's2', extension_id: 'e2' } }
+    expect(extensionSelectionEntries([parent, ext1a, ext1b, ext2], ['e1']))
+      .toEqual([ext1a, ext1b])
+  })
+})
+
+describe('extensionContextIds', () => {
+  it('uses the multi-selection when the right-clicked extension belongs to it', () => {
+    expect(extensionContextIds('e2', ['e1', 'e2'])).toEqual(['e1', 'e2'])
+  })
+  it('targets only an unselected right-clicked extension', () => {
+    expect(extensionContextIds('e3', ['e1', 'e2'])).toEqual(['e3'])
   })
 })

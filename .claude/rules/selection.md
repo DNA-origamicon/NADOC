@@ -63,10 +63,10 @@ level persists across an empty-space click.
 
 ## The collapsed picker (2026-08-08)
 
-The 11 buttons no longer sit inline in the strip. They are **static markup** inside the
+The 13 buttons no longer sit inline in the strip. They are **static markup** inside the
 `#select-filter-menu` drop-down — no JS builds them — and the strip shows only
 `#select-filter-trigger`. Menu DOM order is
-`strand, line, ends, xover, base, default, clust | scaf, stap, skip, loop, ovhangs`:
+`strand, line, ends, xover, base, default, clust | scaf, stap, skip, loop, ext, ovhangs`:
 the level group leads in **TAB_CYCLE order** (so the Tab flash reads top-to-bottom), with
 out-of-cycle `clust` after it. Every button still needs its own `.sf-btn.active[data-key="…"]`
 CSS rule or it is **invisible when lit**, and every query is still
@@ -76,7 +76,7 @@ CSS rule or it is **invisible when lit**, and every query is still
   *absence* of an engaged level, so its click calls `setSelectionLevel('default')` directly).
   It is in `LEVEL_ONLY_BTNS` with a `null` storeKey, like `base`.
 - **Trigger label** = `collapsedSelectable({selectionLevel, selectableTypes})` (pure, tested). An
-  engaged `skips`/`loops`/`overhangs` gate **outranks the level**, because those already take
+  engaged `skips`/`loops`/`extensions`/`overhangs` gate **outranks the level**, because those already take
   precedence for clicks + lasso. A scaffold/staple restriction shows as a `scaf only` / `stap only`
   / `none` note, suppressed while an exclusive gate is up (it clears scaf+stap by design). The
   trigger's icon is **cloned from the reported row's `<svg>`** — each icon exists once in the markup.
@@ -124,6 +124,7 @@ Returned API (19 methods, `:4037–4178`): `selectStrand`, `selectNucleotide`, `
 | `multiSelectedStrandIds` | `:100` | `string[]` |
 | `multiSelectedDomainIds` | `:108` | `{strandId, domainIndex}[]` |
 | `multiSelectedOverhangIds` | `:113` | `string[]` |
+| `multiSelectedExtensionIds` | — | `string[]` — extension-only click/Ctrl/lasso pool |
 | `multiSelectedClusterIds` | `:123` | `string[]` |
 | `multiSelectedBaseKeys` | — | `string[]` — base-level pool; **the only multi-pool with no `selectedObject` counterpart** |
 | `toolFilters` | `:136` | `{bluntEnds, overhangLocations, extensionLocations}` — overlay **visibility only** |
@@ -138,7 +139,9 @@ domain `:1796`, nucleotide `:1815`, cone `:1829`, strand `:2276`, protein `:3523
 `selectableTypes` (11 flags, `store.js:148–161`):
 - **Global gates:** `scaffold`, `staples` (both default `true`)
 - **Category:** `clusters`, `strands`, `domains`, `ends`, `crossoverArcs`
-- **Independent:** `loops`, `skips`, `extensions`, `overhangs`
+- **Exclusive pick modes:** `loops`, `skips`, `extensions`, `overhangs`. Extension mode
+  resolves tail beads by `extension_id`; click/Ctrl+click/lasso select and highlight only
+  extension tails (never their parent strands), using the same live matrices in 3D and cadnano view.
 
 `_ctrlBeads` (`:2621`) is **closure-scoped inside `initSelectionManager`**, not in the store and
 not file-module scope. Companion `_ctrlBeadsChangeCbs` `:2622`. Read it via `getCtrlBeads()`.
@@ -159,9 +162,9 @@ right-click  → context menu (color / nick / loop-skip / isolate / representati
                selection_manager keeps ONE contextmenu listener (:3700) + 2
                deferrableContextMenu uses; the rest moved out (see File map).
 
-Ctrl+drag    → lasso rectangle. Capture type from lassoCaptureType({selLevel, overhangFilter})
-               (selection_level.js:91). overhangFilter (= selectableTypes.overhangs) takes
-               PRECEDENCE over the level → overhangs only. Cluster level is ADDITIVE (promotes a
+Ctrl+drag    → lasso rectangle. Capture type from lassoCaptureType({selLevel, overhangFilter,
+               extensionFilter}) (selection_level.js:91). The exclusive filters take PRECEDENCE
+               over the level → only that type. Cluster level is ADDITIVE (promotes a
                prior plain-click cluster first) and fills multiSelectedClusterIds plus the member
                strands; at cylinder LOD it resolves clusters from getCylinderDomainData()
                (helix_renderer.js:2961 → design_renderer.js:1172), not beads.

@@ -38,7 +38,7 @@ import { deferrableContextMenu } from './right_click_menu.js'
 import { showConfirm } from '../ui/primitives/confirm.js'
 import { clusterMemberFilter } from './cluster_entries.js'
 import { strandsToSegments, clustersToSegments, domainsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './representation_overrides.js'
-import { normalizeLevel, hoverPreviewTarget, lassoCaptureType, toggleClusterSelection } from './selection_level.js'
+import { normalizeLevel, hoverPreviewTarget, lassoCaptureType, toggleClusterSelection, extensionSelectionEntries, extensionContextIds } from './selection_level.js'
 import { buildStrandMenuItems } from '../ui/strand_menu_items.js'
 import { baseKey, xbKey, parseBaseKey, toggleBaseKey, mergeBaseKeys, pruneBaseKeys } from './base_ref.js'
 import {
@@ -2120,6 +2120,26 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     return best
   }
 
+  function _nearestExtensionBead(sx, sy) {
+    const rect = canvas.getBoundingClientRect()
+    const cam  = _cam()
+    let best = null, bestD = _NEAR_HOVER_PX
+    for (const e of _extensionEntries()) {
+      if (!e.instMesh.visible || !e.nuc.extension_id) continue
+      _instWorld(e.instMesh, e.id, _hoverPos).project(cam)
+      if (_hoverPos.z > 1) continue
+      const px = (_hoverPos.x * 0.5 + 0.5) * rect.width
+      const py = (_hoverPos.y * -0.5 + 0.5) * rect.height
+      const d = Math.hypot(px - sx, py - sy)
+      if (d < bestD) { bestD = d; best = e }
+    }
+    return best
+  }
+
+  const _extensionEntries = () => extensionSelectionEntries([
+    ...designRenderer.getBackboneEntries(), ...(designRenderer.getFluoroEntries?.() ?? []),
+  ], store.getState().currentDesign?.extensions?.map(ext => ext.id) ?? [])
+
   // Nearest crossover ARC within _NEAR_HOVER_PX of (sx,sy). At xover level a crossover
   // is ALWAYS represented by its arc → the tube highlight (yellow preview / green select),
   // never the cone (whose selection highlights the whole strand and renders a sphere).
@@ -2197,6 +2217,21 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         _hoverKey = key; _hoverBead = oe; _hoverCone = null; _hoverArc = null
         designRenderer.clearPreviewArc?.()
         const beads = designRenderer.getBackboneEntries().filter(b => b.nuc.overhang_id === ovhgId)
+        designRenderer.setPreviewGlow(beads.map(b => ({ pos: _instWorld(b.instMesh, b.id, new THREE.Vector3()) })))
+      }
+      return
+    }
+
+    if (store.getState().selectableTypes.extensions) {
+      const ee = _nearestExtensionBead(_sx, _sy)
+      if (!ee) { _clearHoverPreview(); return }
+      const sid = ee.nuc.strand_id
+      if (_multiStrandIds.includes(sid)) { _clearHoverPreview(); return }
+      const key = `extension:${ee.nuc.extension_id}`
+      if (key !== _hoverKey) {
+        _hoverKey = key; _hoverBead = ee; _hoverCone = null; _hoverArc = null
+        designRenderer.clearPreviewArc?.()
+        const beads = _extensionEntries().filter(b => b.nuc.extension_id === ee.nuc.extension_id)
         designRenderer.setPreviewGlow(beads.map(b => ({ pos: _instWorld(b.instMesh, b.id, new THREE.Vector3()) })))
       }
       return
@@ -2441,6 +2476,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _clearMultiDomainSelection()
     _clearMultiCrossoverArcs()
     _clearMultiOverhangSelection()
+    _clearMultiExtensionSelection()
     _clearBaseSelection()
   }
 
@@ -2584,6 +2620,79 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _multiOverhangEntries = []
     _multiOverhangIds     = []
     store.setState({ multiSelectedOverhangIds: [] })
+  }
+
+  // Extension selection is keyed by extension_id and highlights only tail beads;
+  // the parent strand remains at its normal colour/scale.
+  let _multiExtensionIds     = []
+  let _multiExtensionEntries = []
+
+  function _applyMultiExtensionHighlight(extensionIds) {
+    for (const e of _multiExtensionEntries) {
+      designRenderer.setEntryColor(e, e.defaultColor)
+      designRenderer.setBeadScale(e, 1.0)
+    }
+    _multiExtensionEntries = extensionSelectionEntries(_extensionEntries(), extensionIds)
+    _multiExtensionIds = [...extensionIds]
+    for (const e of _multiExtensionEntries) {
+      designRenderer.setEntryColor(e, C_SELECT_STRAND)
+      designRenderer.setBeadScale(e, 1.3)
+    }
+    _setSelectionGlow(_multiExtensionEntries)
+  }
+
+  function _clearMultiExtensionSelection() {
+    for (const e of _multiExtensionEntries) {
+      designRenderer.setEntryColor(e, e.defaultColor)
+      designRenderer.setBeadScale(e, 1.0)
+    }
+    _clearSelectionGlow()
+    _multiExtensionEntries = []
+    _multiExtensionIds = []
+    store.setState({ multiSelectedExtensionIds: [] })
+  }
+
+  function _selectExtension(extensionId) {
+    if (!extensionId) return
+    _clearAll()
+    _applyMultiExtensionHighlight([extensionId])
+    store.setState({
+      multiSelectedExtensionIds: [extensionId],
+      selectedObject: { type: 'extension', id: extensionId,
+        data: store.getState().currentDesign?.extensions?.find(ext => ext.id === extensionId) ?? { id: extensionId } },
+    })
+  }
+
+  function _showExtensionMenu(x, y, extensionIds) {
+    const design = store.getState().currentDesign
+    const selected = (design?.extensions ?? []).filter(ext => extensionIds.includes(ext.id))
+    if (!selected.length) return
+    _dismissMenu()
+    const menu = _menuBase(x, y)
+    const header = document.createElement('div')
+    header.textContent = selected.length === 1 ? 'Extension' : `${selected.length} extensions`
+    header.style.cssText = 'padding:3px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
+      'border-bottom:1px solid #3a4a5a;margin-bottom:4px'
+    menu.appendChild(header)
+
+    menu.appendChild(_menuItem(selected.length === 1 ? 'Edit extension…' : 'Edit extensions…', () => {
+      const strandIds = [...new Set(selected.map(ext => ext.strand_id).filter(Boolean))]
+      const byStrand = new Map(strandIds.map(sid => [sid, { five_prime: null, three_prime: null }]))
+      for (const ext of selected) {
+        const pair = byStrand.get(ext.strand_id)
+        if (pair && (ext.end === 'five_prime' || ext.end === 'three_prime')) pair[ext.end] = ext
+      }
+      _openExtensionDialog(x, y, strandIds, byStrand)
+    }))
+
+    const del = _menuItem(selected.length === 1 ? 'Delete extension' : `Delete ${selected.length} extensions`, async () => {
+      await api.deleteStrandExtensionsBatch(selected.map(ext => ext.id))
+    })
+    del.style.color = '#ff6b6b'
+    menu.appendChild(del)
+    document.body.appendChild(menu)
+    _menuEl = menu
+    _menuOutsideListeners(menu)
   }
 
   // Select just the OVERHANG DOMAIN — highlight only the beads carrying this
@@ -3009,6 +3118,18 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     else { _applyMultiOverhangHighlight(next); store.setState({ multiSelectedOverhangIds: next }) }
   }
 
+  function _toggleExtension(extensionId) {
+    if (!extensionId) return
+    const next = _multiExtensionIds.includes(extensionId)
+      ? _multiExtensionIds.filter(id => id !== extensionId)
+      : [..._multiExtensionIds, extensionId]
+    if (next.length === 0) _clearMultiExtensionSelection()
+    else {
+      _applyMultiExtensionHighlight(next)
+      store.setState({ selectedObject: null, multiSelectedExtensionIds: next })
+    }
+  }
+
   function _toggleCrossover(arc) {
     if (!arc?.crossover_id) return
     const idx  = _multiCrossoverArcs.findIndex(a => a.crossover_id === arc.crossover_id)
@@ -3174,6 +3295,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if (oe?.nuc?.overhang_id) _toggleOverhang(oe.nuc.overhang_id)
       return
     }
+    if (st.extensions) {
+      const ee = _nearestExtensionBead(sx, sy)
+      if (ee?.nuc?.extension_id) _toggleExtension(ee.nuc.extension_id)
+      return
+    }
 
     // Base level → toggle the nearest bead of any family.
     //
@@ -3237,6 +3363,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const strandIdSet   = new Set()
     const domainKeyMap  = new Map()   // 'strandId:domainIndex' → { strandId, domainIndex }
     const ovhangIdSet   = new Set()   // overhang_id strings
+    const extensionIdSet = new Set()  // extension_id strings
     const endEntries    = []   // beads captured into _ctrlBeads (ends, or all at bead drill level)
     const clusterHitNucs = []  // nucs of in-rect beads, when drilling at cluster level
     const clusterIdSet  = new Set()   // clusters those nucs resolve to
@@ -3246,12 +3373,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // selection_level.js): the engaged `_selLevel` decides — the lasso captures the
     // SAME element a click at that level would (ISSUE-4 filter-audit fix for "Tab to
     // ends, lasso grabs a cluster"). scaffold/staple gates are applied in the loop below.
-    const cap = lassoCaptureType({ selLevel: _selLevel, overhangFilter: st.overhangs })
+    const cap = lassoCaptureType({
+      selLevel: _selLevel, overhangFilter: st.overhangs, extensionFilter: st.extensions,
+    })
     const beadLevelLasso = cap.beadLevel
     const useStrands  = cap.strands
     const useDomains  = cap.domains
     const useEnds     = cap.ends
     const useOvhg     = cap.overhangs
+    const useExt      = cap.extensions
     const useLoops    = cap.loops
     const useSkips    = cap.skips
     const useXover    = cap.xover
@@ -3370,6 +3500,18 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if (useOvhg && entry.nuc.overhang_id) {
         ovhangIdSet.add(entry.nuc.overhang_id)
       }
+      if (useExt && entry.nuc.extension_id) extensionIdSet.add(entry.nuc.extension_id)
+    }
+    if (useExt) {
+      for (const entry of (designRenderer.getFluoroEntries?.() ?? [])) {
+        if (!entry.nuc.extension_id || !entry.instMesh.visible) continue
+        entry.instMesh.getMatrixAt(entry.id, mat)
+        pos.setFromMatrixPosition(mat)
+        const sp = _toScreen(pos)
+        if (sp.x >= cx1 && sp.x <= cx2 && sp.y >= cy1 && sp.y <= cy2) {
+          extensionIdSet.add(entry.nuc.extension_id)
+        }
+      }
     }
     }
 
@@ -3397,6 +3539,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         }
         if (useCluster) clusterHitNucs.push(nuc)
         if (useOvhg && nuc.overhang_id) ovhangIdSet.add(nuc.overhang_id)
+        if (useExt && nuc.extension_id) extensionIdSet.add(nuc.extension_id)
       })
     }
 
@@ -3470,6 +3613,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       const allOvhg = [...new Set([..._multiOverhangIds, ...ovhangIdSet])]
       _applyMultiOverhangHighlight(allOvhg)
       store.setState({ multiSelectedOverhangIds: allOvhg })
+    }
+
+    if (extensionIdSet.size) {
+      const allExtensions = [...new Set([..._multiExtensionIds, ...extensionIdSet])]
+      _applyMultiExtensionHighlight(allExtensions)
+      store.setState({ selectedObject: null, multiSelectedExtensionIds: allExtensions })
     }
 
     // ── Strand multi-select result (additive) ─────────────────────────────
@@ -3696,6 +3845,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (_multiStrandIds.length > 0)   _clearMultiSelection()
     if (_multiDomainIds.length > 0)   _clearMultiDomainSelection()
     if (_multiOverhangIds.length > 0) _clearMultiOverhangSelection()
+    if (_multiExtensionIds.length > 0) _clearMultiExtensionSelection()
     if (_multiCrossoverArcs.length > 0) _clearMultiCrossoverArcs()
 
     // Regular (non-ctrl) click clears the ctrl-click nucleotide selection
@@ -3728,6 +3878,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if (selectableTypes.overhangs) {
         if (entry?.nuc.overhang_id) _selectOverhangDomain(entry.nuc.overhang_id)
         else _clearAll()
+        return
+      }
+      if (selectableTypes.extensions) {
+        if (entry?.nuc?.extension_id) {
+          _selectExtension(entry.nuc.extension_id)
+        } else {
+          _clearAll()
+        }
         return
       }
       if (_selLevel === 'base') {
@@ -3776,6 +3934,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       const oe = _nearestOverhangBead(e.clientX - _rect.left, e.clientY - _rect.top)
       if (oe) _selectOverhangDomain(oe.nuc.overhang_id)
       else    _clearAll()
+      return
+    }
+
+    if (selectableTypes.extensions) {
+      const _rect = canvas.getBoundingClientRect()
+      const ee = _nearestExtensionBead(e.clientX - _rect.left, e.clientY - _rect.top)
+      if (ee) _selectExtension(ee.nuc.extension_id)
+      else _clearAll()
       return
     }
 
@@ -4090,12 +4256,29 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       ? (backboneEntries.find(b => b.instMesh === beadHits[0].object && b.id === beadHits[0].instanceId) ?? null)
       : null
 
+    // Extensions include ordinary tail beads plus optional fluorophore/modification tips.
+    const extensionEntries = _extensionEntries()
+    const extensionMeshes = [...new Set(extensionEntries.map(entry => entry.instMesh))].filter(mesh => mesh.visible)
+    const extensionHits = extensionMeshes.length ? raycaster.intersectObjects(extensionMeshes) : []
+    const extensionFrontmost = extensionHits.length && extensionHits[0].distance <= Math.min(
+      beadHits[0]?.distance ?? Infinity, coneHits[0]?.distance ?? Infinity,
+    ) + 1e-6
+    const hitExtension = extensionFrontmost
+      ? (extensionEntries.find(entry => entry.instMesh === extensionHits[0].object && entry.id === extensionHits[0].instanceId) ?? null)
+      : null
+
     // Whether the frontmost hit is a bead (vs a terminal cone sitting behind it).
     const _beadFrontmost = hitBead && (!coneHits.length || beadHits[0].distance <= coneHits[0].distance)
 
     // Multi-selection right-click — dispatch to the appropriate menu.
     if (_multiLoopSkipEntries.length > 0) {
       _showMultiLoopSkipMenu(e.clientX, e.clientY)
+      return
+    }
+    if (hitExtension?.nuc?.extension_id) {
+      const hitId = hitExtension.nuc.extension_id
+      const ids = extensionContextIds(hitId, _multiExtensionIds)
+      _showExtensionMenu(e.clientX, e.clientY, ids)
       return
     }
     // Multi-overhang divert — when an overhang multi-selection is active, a
@@ -4336,13 +4519,19 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _multiConeEntries   = []
     _multiDomainEntries = []
     _multiOverhangEntries = []
+    _multiExtensionEntries = []
     if (_multiOverhangIds.length > 0) {
       const validOverhangIds = new Set((newState.currentDesign?.overhangs ?? []).map(o => o.id))
       _multiOverhangIds = _multiOverhangIds.filter(id => validOverhangIds.has(id))
     }
+    if (_multiExtensionIds.length > 0) {
+      const validExtensionIds = new Set((newState.currentDesign?.extensions ?? []).map(ext => ext.id))
+      _multiExtensionIds = _multiExtensionIds.filter(id => validExtensionIds.has(id))
+    }
     if (_multiStrandIds.length > 0)   _applyMultiHighlight(_multiStrandIds)
     if (_multiDomainIds.length > 0)   _applyMultiDomainHighlight(_multiDomainIds)
     if (_multiOverhangIds.length > 0) _applyMultiOverhangHighlight(_multiOverhangIds)
+    if (_multiExtensionIds.length > 0) _applyMultiExtensionHighlight(_multiExtensionIds)
     // Ctrl-selected beads become stale after a rebuild — clear them
     if (_ctrlBeads.length > 0) { _ctrlBeads = []; _notifyCtrlBeadsChange() }
     // The base pool SURVIVES a rebuild — that is the point of keying it by string rather

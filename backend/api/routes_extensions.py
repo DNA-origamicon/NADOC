@@ -35,7 +35,7 @@ from backend.api import state as design_state
 # _design_response is a response helper shared with the rest of crud.py's
 # route handlers. It stays in crud.py (used by 100+ routes there) and is
 # imported here. Same convention as routes_animations.py / routes_camera_poses.py.
-from backend.api.crud import _design_response
+from backend.api.crud import _design_response, _design_response_with_geometry
 from backend.core.models import Design, StrandExtension, VALID_MODIFICATIONS
 
 router = APIRouter()
@@ -149,8 +149,11 @@ def delete_strand_extensions_batch(body: StrandExtensionBatchDeleteRequest) -> d
     def _apply(d: Design) -> None:
         d.extensions = [e for e in d.extensions if e.id not in id_set]
 
-    design, report = design_state.mutate_with_reconcile(_apply)
-    return _design_response(design, report)
+    # Extensions are terminal annotations/synthetic geometry; removing one cannot
+    # change strand domains, cluster membership, or pending ligations. Running the
+    # full cluster reconciler here made a one-item delete scale with the entire design.
+    design, report = design_state.mutate_and_validate(_apply)
+    return _design_response_with_geometry(design, report)
 
 
 @router.post("/design/extensions", status_code=201)
@@ -261,7 +264,8 @@ def delete_strand_extension(ext_id: str) -> dict:
     if not any(x.id == ext_id for x in design.extensions):
         raise HTTPException(404, detail=f"StrandExtension {ext_id!r} not found.")
 
-    design, report = design_state.mutate_with_reconcile(
+    # Same fast path as batch delete: extension removal is not a topology mutation.
+    design, report = design_state.mutate_and_validate(
         lambda d: setattr(d, "extensions", [x for x in d.extensions if x.id != ext_id])
     )
-    return _design_response(design, report)
+    return _design_response_with_geometry(design, report)

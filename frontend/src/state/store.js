@@ -113,6 +113,9 @@ const _initialState = {
    */
   multiSelectedOverhangIds: [],
 
+  /** Extension IDs selected by click/Ctrl+click/lasso in extension filter mode. */
+  multiSelectedExtensionIds: [],
+
   /**
    * Cluster IDs multi-selected at the 'cluster' selection level (Ctrl/Shift+click).
    * Kept ALONGSIDE multiSelectedStrandIds, which holds those clusters' member strands
@@ -409,7 +412,7 @@ const _SLICES = {
 
   /** Selection, multi-select, active tools, crossover placement */
   selection: new Set(['selectedObject', 'multiSelectedStrandIds', 'multiSelectedDomainIds',
-                      'multiSelectedOverhangIds', 'multiSelectedClusterIds',
+                      'multiSelectedOverhangIds', 'multiSelectedExtensionIds', 'multiSelectedClusterIds',
                       'multiSelectedBaseKeys',
                       'selectableTypes', 'crossoverPlacement', 'deformToolActive',
                       'activeClusterId', 'translateRotateActive', 'debugOverlayActive',

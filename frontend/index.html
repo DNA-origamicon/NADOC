@@ -1445,6 +1445,7 @@
     .sf-btn.active[data-key="loop"]   { color: #4488dd; border-color: #2266aa; background: rgba(68,136,221,0.08); }
     .sf-btn.active[data-key="skip"]     { color: #dd4444; border-color: #aa2222; background: rgba(221,68,68,0.08); }
     .sf-btn.active[data-key="ovhangs"]  { color: #aa88ff; border-color: #664488; background: rgba(170,136,255,0.08); }
+    .sf-btn.active[data-key="ext"]      { color: #58d6a8; border-color: #247a5c; background: rgba(88,214,168,0.08); }
     .sf-btn.active[data-key="blunt"]  { color: #ffaa00; border-color: #996600; background: rgba(255,170,0,0.08); }
     .sf-btn.active[data-key="fxover"] { color: #3fd2c0; border-color: #1f7a70; background: rgba(63,210,192,0.08); }
     .sf-btn.active[data-key="ovhg"]   { color: #aa88ff; border-color: #664488; background: rgba(170,136,255,0.08); }
@@ -1460,6 +1461,7 @@
     .sf-trigger[data-key="skip"]    { color: #dd4444; }
     .sf-trigger[data-key="loop"]    { color: #4488dd; }
     .sf-trigger[data-key="ovhangs"] { color: #aa88ff; }
+    .sf-trigger[data-key="ext"] { color: #58d6a8; }
 
     /* ── Physics controls ─────────────────────────────────────────── */
     .force-toggle {
@@ -6525,7 +6527,7 @@
         <div id="filter-view-strip">
           <!-- Collapsed selectable picker. The 11 buttons that used to sit inline
                live in #select-filter-menu below; the trigger shows whichever one is
-               currently in force (an engaged skip/loop/ovhg gate outranks the level,
+               currently in force (an engaged skip/loop/ext/ovhg gate outranks the level,
                because those already take precedence for clicks + lasso). Row order in
                the level group is TAB_CYCLE order, so the Tab flash reads top-to-bottom.
                Buttons keep their data-key + .sf-btn markup — selection_filter.js still
@@ -6586,6 +6588,10 @@
               <button class="sf-btn" data-key="loop" title="Loop markers (+1 extra base)">
                 <svg width="16" height="12" viewBox="0 0 16 12" fill="none"><circle cx="8" cy="6" r="4" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>
                 <span class="sf-label-text">loop</span>
+              </button>
+              <button class="sf-btn" data-key="ext" title="Extensions — select extension tails only">
+                <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><circle cx="3" cy="5" r="2" fill="currentColor"/><path d="M5,5 C8,5 8,2 11,2 S13,5 15,5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/><circle cx="15" cy="5" r="1" fill="currentColor"/></svg>
+                <span class="sf-label-text">ext</span>
               </button>
               <button class="sf-btn" data-key="ovhangs" title="Overhangs — lasso/click overhang helices to edit orientation">
                 <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="2" y1="5" x2="9" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9,5 L14,2 M9,5 L14,8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="9" cy="5" r="1.8" fill="currentColor"/></svg>

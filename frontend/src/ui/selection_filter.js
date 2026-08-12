@@ -40,6 +40,7 @@ const SEL_KEY_MAP = [
   ['crossoverArcs', 'xover'  ],
   ['loops',         'loop'   ],
   ['skips',         'skip'   ],
+  ['extensions',    'ext'    ],
   ['overhangs',     'ovhangs'],
 ]
 
@@ -60,13 +61,13 @@ const LEVEL_ONLY_BTNS = [
 const KEY_LABEL = {
   strand: 'strand', line: 'dom', ends: 'ends', xover: 'xover', base: 'base',
   clust: 'clust', default: 'default', scaf: 'scaf', stap: 'stap',
-  skip: 'skip', loop: 'loop', ovhangs: 'ovhg',
+  skip: 'skip', loop: 'loop', ext: 'ext', ovhangs: 'ovhg',
 }
 
 // The exclusive gate group, in the order it outranks the level on the trigger.
 // Only one can be on at a time (computeFilterToggle clears the rest), so the order
 // only matters for a hand-set store.
-const EXCLUSIVE_GATES = [['overhangs', 'ovhangs'], ['loops', 'loop'], ['skips', 'skip']]
+const EXCLUSIVE_GATES = [['overhangs', 'ovhangs'], ['extensions', 'ext'], ['loops', 'loop'], ['skips', 'skip']]
 
 /**
  * Pure: what the collapsed "Selectable: …" trigger should say.
@@ -109,10 +110,11 @@ export function collapsedSelectable({ selectionLevel = 'default', selectableType
  */
 export function computeFilterToggle({ selectableTypes, storeKey, allKeys, preLoopSkip }) {
   const st = selectableTypes
-  const isLoopSkipGroup = storeKey === 'loops' || storeKey === 'skips' || storeKey === 'overhangs'
+  const isLoopSkipGroup = storeKey === 'loops' || storeKey === 'skips' ||
+    storeKey === 'extensions' || storeKey === 'overhangs'
   if (isLoopSkipGroup) {
     if (!st[storeKey]) {
-      const nextPre = (!st.loops && !st.skips && !st.overhangs) ? { ...st } : preLoopSkip
+      const nextPre = (!st.loops && !st.skips && !st.extensions && !st.overhangs) ? { ...st } : preLoopSkip
       const cleared = {}
       for (const k of allKeys) cleared[k] = false
       return { selectableTypes: { ...cleared, [storeKey]: true }, preLoopSkip: nextPre }
