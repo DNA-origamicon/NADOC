@@ -54,6 +54,9 @@ export function gpuOptionView(row) {
 const _esc = s => String(s).replace(/[&<>"]/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
 
+// Header and rows are separate grids, so content-sized `auto` tracks cannot align them.
+const JOB_OPTION_COLUMNS = 'minmax(170px,1.6fr) 64px 72px 78px 72px'
+
 /**
  * One row's display fields for the Job Wizard's WHOLE-PLAN table (pure).
  *
@@ -81,7 +84,7 @@ export function jobOptionView(row, { budgetUsd = null } = {}) {
 /** Column header for the wizard's six-column table. */
 export function jobOptionsHeader() {
   return (
-    `<div style="display:grid;grid-template-columns:1.6fr auto auto auto auto;gap:8px;` +
+    `<div class="runpod-job-grid" style="display:grid;grid-template-columns:${JOB_OPTION_COLUMNS};gap:8px;` +
     `padding:2px 7px;font-size:9px;color:#6e7681;text-transform:uppercase;letter-spacing:.04em">` +
     `<span>GPU</span><span>$/hr</span><span>relax</span><span>production</span>` +
     `<span>total</span></div>`
@@ -113,7 +116,7 @@ export function renderJobOptionRows(gpus, selectedKey = null, { budgetUsd = null
         `<div class="runpod-gpu-row" data-key="${_esc(row.key)}" ` +
         `data-eligible="${eligible}" role="${eligible ? 'button' : 'note'}" ` +
         `tabindex="${eligible ? '0' : '-1'}" title="${_esc(title)}" ` +
-        `style="display:grid;grid-template-columns:1.6fr auto auto auto auto;gap:8px;` +
+        `style="display:grid;grid-template-columns:${JOB_OPTION_COLUMNS};gap:8px;` +
         `align-items:baseline;padding:5px 7px;border-radius:4px;cursor:${eligible ? 'pointer' : 'not-allowed'};` +
         `background:${!eligible ? 'rgba(248,81,73,.09)' : sel ? 'rgba(31,111,235,.18)' : 'transparent'};` +
         `border:1px solid ${!eligible ? 'rgba(248,81,73,.65)' : sel ? '#1f6feb' : 'transparent'};` +

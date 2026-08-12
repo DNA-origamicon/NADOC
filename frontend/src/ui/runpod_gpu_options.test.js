@@ -5,6 +5,7 @@ import {
   gpuOptionView,
   gpuOptionsHeader,
   gpuOptionsMessage,
+  jobOptionsHeader,
   jobOptionView,
   renderGpuOptionRows,
   renderJobOptionRows,
@@ -117,6 +118,15 @@ describe('jobOptionView', () => {
 })
 
 describe('renderJobOptionRows', () => {
+  it('uses exactly the same fixed grid tracks as its header', () => {
+    const header = jobOptionsHeader()
+    const row = renderJobOptionRows([JOB_ROW], null)
+    const columns = /grid-template-columns:([^;]+)/.exec(header)?.[1]
+    expect(columns).toBeTruthy()
+    expect(/grid-template-columns:([^;]+)/.exec(row)?.[1]).toBe(columns)
+    expect(columns).not.toContain('auto')
+  })
+
   it('keeps the selectable-row contract the click wiring depends on', () => {
     const html = renderJobOptionRows([JOB_ROW], null)
     expect(html).toContain('class="runpod-gpu-row"')

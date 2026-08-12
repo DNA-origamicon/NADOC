@@ -51,6 +51,61 @@ def test_runpod_billing_sessions_accumulate_and_freeze_final_cost(tmp_path):
     assert loaded.runpod_final_cost_usd == pytest.approx(1.24)
 
 
+def test_s3_prestage_compresses_missing_files_before_pod_creation(tmp_path, monkeypatch):
+    import tarfile
+    from backend.core import runpod_s3
+
+    job = _job(tmp_path)
+    seen = {}
+
+    class FakeS3:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def file_sizes(self):
+            return {}
+
+        async def sftp_put(self, local, remote, *, on_progress=None):
+            with tarfile.open(local, "r:gz") as tf:
+                seen["members"] = sorted(tf.getnames())
+            seen["remote"] = remote
+            size = __import__("pathlib").Path(local).stat().st_size
+            on_progress(size, size)
+
+    monkeypatch.setattr(runpod_s3, "RunpodS3Connection", FakeS3)
+    remote = _run(rx._prestage_package_s3(
+        job, tmp_path,
+        credentials=runpod_s3.S3Credentials("a", "s", "test"),
+        volume_id=VOLUME, data_center_id="EU-RO-1",
+    ))
+    assert remote == f"{rx.remote_dir_for(job)}/{rx.S3_STAGE_ARCHIVE}"
+    assert "d.psf" in seen["members"]
+    assert "d.pdb" in seen["members"]
+    assert "manifest.json" in seen["members"]
+    assert job.remote_submit_progress["fraction"] == 1.0
+
+
+def test_s3_prestage_skips_when_volume_already_matches(tmp_path, monkeypatch):
+    from backend.core import runpod_s3
+
+    job = _job(tmp_path)
+    pkg = job.package_dir(tmp_path)
+
+    class FakeS3:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def file_sizes(self):
+            return {p.name: p.stat().st_size for p in pkg.iterdir() if p.is_file()}
+
+    monkeypatch.setattr(runpod_s3, "RunpodS3Connection", FakeS3)
+    assert _run(rx._prestage_package_s3(
+        job, tmp_path,
+        credentials=runpod_s3.S3Credentials("a", "s", "test"),
+        volume_id=VOLUME, data_center_id="EU-RO-1",
+    )) is None
+
+
 def _run(coro):
     return asyncio.run(coro)
 

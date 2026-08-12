@@ -90,6 +90,60 @@ class RunpodS3Connection:
             config=Config(connect_timeout=20, read_timeout=7200, retries={"max_attempts": 10}),
         )
 
+    @staticmethod
+    def _key(path: str) -> str:
+        key = path.lstrip("/")
+        return key[len("workspace/"):] if key.startswith("workspace/") else key
+
+    async def file_sizes(self) -> dict[str, int]:
+        """All objects below ``remote_root``, keyed relative to it."""
+        import asyncio
+
+        def listing() -> dict[str, int]:
+            prefix = self.remote_root.rstrip("/") + "/"
+            out: dict[str, int] = {}
+            paginator = self._client.get_paginator("list_objects_v2")
+            for page in paginator.paginate(Bucket=self.volume_id, Prefix=prefix):
+                for obj in page.get("Contents", []):
+                    out[str(obj["Key"])[len(prefix):]] = int(obj["Size"])
+            return out
+
+        return await asyncio.to_thread(listing)
+
+    async def sftp_put(
+        self, local_path: str, remote_path: str, *,
+        on_progress: Callable[[int, int], None] | None = None,
+    ) -> None:
+        """Multipart, parallel upload directly to the volume—no pod required."""
+        import asyncio
+        from boto3.s3.transfer import TransferConfig
+
+        source = Path(local_path)
+        total = source.stat().st_size
+        key = self._key(remote_path)
+        loop = asyncio.get_running_loop()
+
+        def upload() -> None:
+            transferred = 0
+
+            def callback(amount: int) -> None:
+                nonlocal transferred
+                transferred += int(amount)
+                if on_progress:
+                    loop.call_soon_threadsafe(on_progress, min(transferred, total), total)
+
+            self._client.upload_file(
+                str(source), self.volume_id, key, Callback=callback,
+                Config=TransferConfig(
+                    multipart_threshold=8 * 1024 * 1024,
+                    multipart_chunksize=16 * 1024 * 1024,
+                    max_concurrency=10,
+                    use_threads=True,
+                ),
+            )
+
+        await asyncio.to_thread(upload)
+
     async def mirror(self, _src: str, _dst: str) -> RunResult:
         return RunResult(rc=0, stdout="", stderr="")
 
@@ -117,10 +171,7 @@ class RunpodS3Connection:
     ) -> None:
         import asyncio
 
-        key = remote_path.lstrip("/")
-        # Pod path /workspace/foo maps to S3 key foo.
-        if key.startswith("workspace/"):
-            key = key[len("workspace/"):]
+        key = self._key(remote_path)
         target = Path(local_path)
         target.parent.mkdir(parents=True, exist_ok=True)
 

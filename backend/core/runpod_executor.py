@@ -26,6 +26,8 @@ import contextlib
 import inspect
 import json
 import logging
+import tarfile
+import tempfile
 import time
 from pathlib import Path
 from typing import Callable, Optional
@@ -79,6 +81,7 @@ FETCH_TIMEOUT_S = 900.0
 # reconnects+retries per-call, this is the belt-and-suspenders so a longer wobble pauses
 # (resumable) rather than crashes the whole run. Reset to 0 on any successful poll.
 MAX_POLL_SSH_FAILURES = 5
+S3_STAGE_ARCHIVE = ".nadoc_stage/package.tar.gz"
 
 # The patched NAMD lives on the NETWORK VOLUME, built once per GPU architecture.
 # Pods are disposable; the toolchain is not.
@@ -137,6 +140,102 @@ async def _remote_file_sizes(conn: RunpodConnection, remote: str) -> dict[str, i
         if rel and size.isdigit():
             sizes[rel] = int(size)
     return sizes
+
+
+async def _prestage_package_s3(
+    job: MdJob,
+    workspace_dir: Path,
+    *,
+    credentials,
+    volume_id: str,
+    data_center_id: str,
+) -> Optional[str]:
+    """Compress and upload missing package inputs before any billing pod exists.
+
+    Returns the pod-visible archive path to extract, or ``None`` when every file is
+    already present with the expected size.
+    """
+    import asyncio
+    from backend.core import runpod_s3
+
+    pkg = job.package_dir(workspace_dir)
+    plan = list(md_executor.stage_plan(pkg))
+    remote = remote_dir_for(job)
+    conn = runpod_s3.RunpodS3Connection(
+        credentials, volume_id=volume_id, data_center_id=data_center_id,
+        remote_root=remote,
+    )
+    remote_sizes = await conn.file_sizes()
+    missing = [
+        (path, rel) for path, rel in plan
+        if remote_sizes.get(rel) != path.stat().st_size
+    ]
+    total_raw = sum(path.stat().st_size for path, _ in missing)
+    if not missing:
+        job.remote_submit_progress = None
+        job.save(workspace_dir)
+        return None
+
+    job.remote_submit_progress = {
+        "target": "runpod", "phase": "compress",
+        "label": f"Compressing {len(missing)} files before upload (no pod rented)…",
+        "fraction": 0.0, "bytes_done": 0, "bytes_total": total_raw,
+        "files_done": len(plan) - len(missing), "files_total": len(plan),
+        "updated_at": time.time(),
+    }
+    job.save(workspace_dir)
+
+    # A level-1 gzip archive is a major win for PSF/PDB/ENM text while keeping local CPU
+    # time small. It also turns 47 latency-sensitive SFTP streams into one multipart S3
+    # object. NamedTemporaryFile supplies an explicit narrow target and is always cleaned.
+    fd, archive_name = tempfile.mkstemp(prefix=f"nadoc-{job.job_id}-", suffix=".tar.gz")
+    import os
+    os.close(fd)
+    archive = Path(archive_name)
+    try:
+        def build_archive() -> None:
+            with tarfile.open(archive, "w:gz", compresslevel=1) as tf:
+                for path, rel in missing:
+                    tf.add(path, arcname=rel, recursive=False)
+
+        await asyncio.to_thread(build_archive)
+        compressed = archive.stat().st_size
+        last_save = 0.0
+
+        def progress(done: int, _total: int) -> None:
+            nonlocal last_save
+            now = time.time()
+            job.remote_submit_progress = {
+                "target": "runpod", "phase": "upload",
+                "label": "Uploading compressed package directly to the RunPod volume (no pod rented)…",
+                "fraction": done / compressed if compressed else 1.0,
+                "bytes_done": done, "bytes_total": compressed,
+                "raw_bytes_total": total_raw,
+                "files_done": len(plan) - len(missing), "files_total": len(plan),
+                "updated_at": now,
+            }
+            if now - last_save >= 0.5 or done >= compressed:
+                job.save(workspace_dir)
+                last_save = now
+
+        remote_archive = f"{remote}/{S3_STAGE_ARCHIVE}"
+        await conn.sftp_put(str(archive), remote_archive, on_progress=progress)
+        return remote_archive
+    finally:
+        archive.unlink(missing_ok=True)
+
+
+async def _extract_s3_stage(conn: RunpodConnection, remote: str, archive_path: str) -> None:
+    """Expand the pre-uploaded package on the mounted volume, then remove its archive."""
+    import shlex
+
+    result = await conn.run(
+        f"mkdir -p {shlex.quote(remote)} && "
+        f"tar -xzf {shlex.quote(archive_path)} -C {shlex.quote(remote)} && "
+        f"rm -f {shlex.quote(archive_path)}"
+    )
+    if result.rc != 0:
+        raise RunpodError(f"Could not unpack the S3-staged package: {result.stderr.strip()}")
 
 
 async def _seed_from_parent(conn, job: MdJob, remote: str, plan: list) -> None:
@@ -699,11 +798,20 @@ async def run_job_on_pod(
 
     s3_credentials = runpod_s3.resolve_credentials()
     s3_data_center = None
+    s3_stage_archive = None
     if s3_credentials:
         with contextlib.suppress(Exception):
             volumes = await client.list_network_volumes()
             selected = next((v for v in volumes if v.get("id") == network_volume_id), None)
             s3_data_center = selected and selected.get("data_center_id")
+    # Transfer BEFORE provisioning. The previous SFTP path rented a $0.74/hr GPU and
+    # then left it idle for ~40 minutes while a 1.9 GiB package crossed Colorado→Romania.
+    # S3 is podless; compression + multipart parallelism make it faster and cost $0 GPU.
+    if s3_credentials and s3_data_center:
+        s3_stage_archive = await _prestage_package_s3(
+            job, workspace_dir, credentials=s3_credentials,
+            volume_id=network_volume_id, data_center_id=s3_data_center,
+        )
     payloads = pod_payloads_for(
         job,
         n_atoms,
@@ -758,6 +866,10 @@ async def run_job_on_pod(
             )
             await conn.connect()
             try:
+                if s3_stage_archive:
+                    await _extract_s3_stage(
+                        conn, remote_dir_for(job), s3_stage_archive
+                    )
                 vcpus = await _remote_vcpus(conn)
                 # Derive the kill-switch from the rate of the pod we ACTUALLY got — not a
                 # hardcoded duration. The fallback list means we may be on the $0.34 card or

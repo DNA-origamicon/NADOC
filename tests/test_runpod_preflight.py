@@ -7,6 +7,7 @@ whole point is that they become a red row in the UI instead of a charge on the c
 from __future__ import annotations
 
 import asyncio
+import json
 
 import httpx
 import pytest
@@ -207,6 +208,20 @@ class TestStockFetch:
         )
         assert "api_key=SECRET" in seen["url"]
         assert "Mozilla" in seen["ua"]
+
+    def test_requests_the_secure_cloud_rate_that_nadoc_actually_rents(self):
+        """An unfiltered lowestPrice can be Community pricing while launches are SECURE."""
+        seen = {}
+
+        def handler(req):
+            seen["query"] = json.loads(req.content)["query"]
+            return httpx.Response(200, json={"data": {"gpuTypes": []}})
+
+        asyncio.run(
+            pf.fetch_gpu_stock("k", transport=httpx.MockTransport(handler))
+        )
+        compact = "".join(seen["query"].split())
+        assert "lowestPrice(input:{gpuCount:1,secureCloud:true})" in compact
 
     @pytest.mark.parametrize("status", [None, "", "None"])
     def test_absent_stock_means_unavailable(self, status):

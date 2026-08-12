@@ -309,8 +309,9 @@ export function initWizardTargetStep({
    *
    * The re-price, though, runs on EVERY selection. `refreshSizing` only touches the currently
    * selected target, so a user who picks RunPod, switches to Local, changes the run length and
-   * comes back would otherwise be looking at a price for the old run. Its own cache key makes
-   * this free when nothing actually moved.
+   * comes back would otherwise be looking at a price for the old run. Force the request even
+   * when the plan did not move: provider rates and stock can change while another target is
+   * selected.
    */
   function _activateRunpod() {
     if (_ro() || !_runpod) return
@@ -319,7 +320,7 @@ export function initWizardTargetStep({
       _runpod.activate()
       return
     }
-    void _runpod.refresh()
+    void _runpod.refresh({ force: true })
   }
 
   function render() {

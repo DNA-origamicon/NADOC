@@ -39,7 +39,8 @@ _UA = "Mozilla/5.0 (X11; Linux x86_64) NADOC/1.0"
 
 _STOCK_QUERY = (
     "query { gpuTypes { id displayName memoryInGb "
-    "lowestPrice(input:{gpuCount:1}) { uninterruptablePrice minimumBidPrice stockStatus } } }"
+    "lowestPrice(input:{gpuCount:1,secureCloud:true}) { "
+    "uninterruptablePrice minimumBidPrice stockStatus } } }"
 )
 
 # RunPod reports stock as None / "Low" / "Medium" / "High".
@@ -73,7 +74,13 @@ class Preflight:
 async def fetch_gpu_stock(
     api_key: str, *, transport: Optional[httpx.AsyncBaseTransport] = None
 ) -> dict[str, dict]:
-    """{gpu_id: {stock, on_demand, spot, vram_gb}} from RunPod's GraphQL API."""
+    """Live Secure Cloud prices/stock from RunPod's GraphQL API.
+
+    NADOC launches ``cloudType=SECURE`` pods, so an unfiltered ``lowestPrice`` is not an
+    honest quote: it can return a cheaper Community Cloud rate that the launch path can never
+    pay. Keep this query uncached and scoped to ``secureCloud:true`` so every caller gets the
+    current price for the same market it will actually rent from.
+    """
     async with httpx.AsyncClient(transport=transport, timeout=20.0) as client:
         resp = await client.post(
             f"{GRAPHQL_URL}?api_key={api_key}",

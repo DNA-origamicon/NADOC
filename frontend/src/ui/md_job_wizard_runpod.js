@@ -197,10 +197,10 @@ export function initWizardRunpod({
     }
     return _sectionTitle('Available GPUs')
       + '<div style="border:1px solid #30363d;border-radius:5px;overflow:hidden">'
+      + '<div style="max-height:220px;overflow:auto"><div style="min-width:510px">'
       + jobOptionsHeader()
-      + '<div style="max-height:190px;overflow-y:auto;display:flex;flex-direction:column;'
-      + `gap:1px;font-size:10px;padding:2px">${
-        renderJobOptionRows(_preview.gpus, _gpuKey, { budgetUsd: budget.cap })}</div></div>`
+      + `<div style="display:flex;flex-direction:column;gap:1px;font-size:10px;padding:2px 0">${
+        renderJobOptionRows(_preview.gpus, _gpuKey, { budgetUsd: budget.cap })}</div></div></div></div>`
       + (_preview.note
         ? `<div style="font-size:9px;color:#6e7681;margin-top:5px">${_esc(_preview.note)}</div>`
         : '')

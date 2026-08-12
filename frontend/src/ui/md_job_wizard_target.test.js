@@ -231,7 +231,7 @@ describe('the RunPod block follows the run being designed', () => {
     step.dispose()
   })
 
-  it('does not re-price when nothing about the run moved', async () => {
+  it('re-fetches live RunPod rates when the card is re-opened', async () => {
     const plan = { value: { relax_steps: 100, production_steps: 0, stages: [] } }
     const { step, mount, getJobPreview } = runpodSetup(plan)
 
@@ -239,8 +239,7 @@ describe('the RunPod block follows the run being designed', () => {
     await vi.waitFor(() => expect(getJobPreview).toHaveBeenCalledTimes(1))
     clickTarget(mount, 'local')
     clickTarget(mount, 'runpod')
-    await new Promise(r => setTimeout(r, 20))
-    expect(getJobPreview).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(getJobPreview).toHaveBeenCalledTimes(2))
     step.dispose()
   })
 

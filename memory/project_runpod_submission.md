@@ -430,12 +430,14 @@ orphaned pod) · `watch.py --oneline` · `reap.py --kill` (**the panic button**)
   mocked stock and a loaded design; that a job created in the wizard actually rents the chosen
   card and honours the chosen cap needs `frontend/e2e/runpod_submit.spec.js`
   (`NADOC_E2E_RUNPOD=1`, ~$0.50, a real pod) in a deliberate budgeted session.
-- **Staging is billable.** The 1.9M-atom package is 1.21 GB and uploads over SFTP at
-  domestic upstream speed — ~15 min of pod time (~$0.20) before NAMD runs a single step.
-  It lands on the NETWORK VOLUME (`REMOTE_ROOT=/workspace/nadoc_jobs`, `volumeMountPath=
-  /workspace`), so **staged inputs AND outputs survive the pod dying** — a second pod for
-  the same job_id re-uses them and the chain script skips completed steps. Worth exploiting:
-  a pre-staging step on a cheap pod, or simply not re-staging for the production child.
+- **Staging no longer rents a pod when S3 is configured (2026-08-12).** The observed
+  VoltronCoreArm package was 1.91 GiB and sequential 256 KiB SFTP writes from Colorado to
+  EU-RO-1 managed ~0.9 MB/s: a projected 37–40 minutes on an idle $0.74/hr pod. NADOC now
+  inventories the persistent volume first, gzip-compresses only missing/changed inputs,
+  uploads one archive through the podless S3 endpoint using 10-way multipart transfer
+  (16 MiB parts), and rents only after that completes. The pod expands the archive on the
+  mounted volume and removes it before the existing size-based stager verifies/reuses the
+  files. No S3 credentials/datacenter → the old SFTP path remains the compatibility fallback.
 - **The prep pipeline can emit a degenerate package and nobody notices.** Job `f702f4a3282f`
   shipped a VoltronCore package with **279 coincident atoms (0.000 Å)** and 634k real
   clashes; NAMD died with an uninterpretable NaN. A rebuild from the SAME design is clean
