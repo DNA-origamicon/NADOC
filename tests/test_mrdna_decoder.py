@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from backend.core.mrdna_decoder import (
     _add_nucleotide_frames,
     _mrdna_seed_particle_frames,
+    _mrdna_orientation_to_backbone_frame,
     _mrdna_seed_reference_by_key,
     mrdna_backbone_strain_profile,
     measure_mrdna_native_roundtrip,
@@ -333,3 +334,15 @@ def test_decoder_particle_frame_uses_authoritative_seed_not_restart_pdb(monkeypa
         "backend.core.mrdna_bridge._build_nt_arrays", lambda *_a, **_k: arrays
     )
     assert _mrdna_seed_particle_frames(manifest, object())[4] == pytest.approx(frame)
+
+
+def test_mrdna_orientation_x_maps_to_documented_backbone_y_axis():
+    frame = _mrdna_orientation_to_backbone_frame(
+        np.array([0.0, 0.0, 1.0]), np.array([1.0, 0.0, 0.0])
+    )
+    assert frame is not None
+    # mrDNA's DefaultOrientation Rz(+90°) maps nucleotide-backbone x onto
+    # segment-frame +y. Expressed as an active reconstruction rotation, the
+    # NADOC radial x axis therefore lands on +y when O points along +x.
+    assert frame[:, 0] == pytest.approx([0.0, 1.0, 0.0])
+    assert frame[:, 2] == pytest.approx([0.0, 0.0, 1.0])

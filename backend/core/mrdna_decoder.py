@@ -54,6 +54,27 @@ def _mrdna_seed_particle_frames(
     return seed_frames
 
 
+def _mrdna_orientation_to_backbone_frame(
+    tangent: np.ndarray, orientation_x: np.ndarray
+) -> np.ndarray | None:
+    """Convert mrDNA's O/x axis to its documented nucleotide-backbone frame."""
+    tangent = np.asarray(tangent, dtype=float)
+    tangent_norm = float(np.linalg.norm(tangent))
+    if tangent_norm <= 1e-9:
+        return None
+    tangent /= tangent_norm
+    orientation_x = np.asarray(orientation_x, dtype=float)
+    orientation_x -= tangent * float(np.dot(orientation_x, tangent))
+    orientation_norm = float(np.linalg.norm(orientation_x))
+    if orientation_norm <= 1e-9:
+        return None
+    orientation_x /= orientation_norm
+    backbone_x = np.cross(tangent, orientation_x)
+    backbone_x /= np.linalg.norm(backbone_x)
+    backbone_y = -orientation_x
+    return np.column_stack((backbone_x, backbone_y, tangent))
+
+
 def _kabsch(mobile: np.ndarray, target: np.ndarray) -> np.ndarray:
     cm, ct = mobile.mean(0), target.mean(0)
     covariance = (mobile - cm).T @ (target - ct)
@@ -254,15 +275,15 @@ def _dna_particle_frame_rotations(
         ):
             return None
         tangent /= tangent_norm
-        radial = array[orientation_index] - array[index]
-        radial -= tangent * float(np.dot(radial, tangent))
-        radial_norm = float(np.linalg.norm(radial))
-        if radial_norm <= 1e-9:
-            return None
-        radial /= radial_norm
-        lateral = np.cross(tangent, radial)
-        lateral /= np.linalg.norm(lateral)
-        return np.column_stack((radial, lateral, tangent))
+        # mrDNA's O bead is its local frame x-axis, but its own nucleotide
+        # backmapping places strand backbones on local ±y (see
+        # Segment._generate_oxdna_nucleotide: DefaultOrientation = Rz(90°)).
+        # Calibrate the particle frame to that backbone frame before applying it
+        # to NADOC's authoritative radial offsets. Omitting this x→y transform
+        # preserves local twist but puts almost every crossover on the far side.
+        return _mrdna_orientation_to_backbone_frame(
+            tangent, array[orientation_index] - array[index]
+        )
 
     rotations = {}
     for (helix_id, bp_index), index in sites.items():
