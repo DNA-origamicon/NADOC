@@ -48,7 +48,26 @@ from design order and do not change when the spreadsheet is sorted:
 Properties uses the same ID as the spreadsheet. Stable internal IDs remain unchanged in
 the saved design and selection state.
 
-Selected bases are grouped by type and helix, for example:
+All user-facing helix references use the helix's display label, including Properties,
+strand endpoints, crossover endpoints, blunt-end tools, and simulation status text.
+Internal lattice IDs such as `h_XY_0_1` remain implementation details and are not shown.
+An explicit helix label is preferred; otherwise NADOC uses the helix's zero-based design
+index.
+
+A single selected base has a detailed Properties readout:
+
+```text
+base: A
+location: Staple - 1[34]
+position: 4 in staple S2
+```
+
+The position is the base's 1-based location along the complete strand. When the strand
+spreadsheet is expanded, selecting one or more bases automatically scrolls to the owning
+strand, highlights its row, and marks the selected letters in the Sequence column. A
+collapsed spreadsheet remains closed and does not scroll.
+
+Multiple selected bases are grouped by type and helix, for example:
 
 ```text
 Staple - 1[34,35]
@@ -56,8 +75,7 @@ Scaffold - 1[34,35]
 Linker - 44[10-22]
 ```
 
-An explicit helix label is preferred; otherwise NADOC uses the helix's zero-based design
-index. Runs of three or more consecutive bases are compressed. Extension and crossover
+Runs of three or more consecutive bases are compressed. Extension and crossover
 insert bases have synthetic internal coordinates, so their labels retain the parent
 helix and add an anchor-relative ordinal, such as `Extension - 1[43›2]` or
 `Extra base - 1[43+1]`.

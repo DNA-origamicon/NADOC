@@ -41,6 +41,11 @@ export function helixDisplayLabel(design, helixId) {
   return explicit == null || explicit === '' ? String(index) : String(explicit)
 }
 
+/** Human-facing labels for a list of internal helix ids, preserving input order. */
+export function helixDisplayLabels(design, helixIds = []) {
+  return (helixIds ?? []).map(helixId => helixDisplayLabel(design, helixId))
+}
+
 function compressNumbers(values) {
   const sorted = [...new Set(values.filter(Number.isFinite))].sort((a, b) => a - b)
   const tokens = []

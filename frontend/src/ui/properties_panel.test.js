@@ -157,6 +157,25 @@ describe('properties panel — protein branch', () => {
     expect(content.textContent).not.toContain('s1')
   })
 
+  it('uses helix labels everywhere in strand properties, never internal helix ids', () => {
+    const d = {
+      ...DESIGN,
+      helices: [
+        { id: 'h_XY_0_0', label: 3, length_bp: 20 },
+        { id: 'h_XY_0_1', label: 4, length_bp: 20 },
+      ],
+      strands: [{ id: 's1', strand_type: 'staple', domains: [
+        { helix_id: 'h_XY_0_0', start_bp: 0, end_bp: 5, direction: 'FORWARD' },
+        { helix_id: 'h_XY_0_1', start_bp: 5, end_bp: 10, direction: 'REVERSE' },
+      ] }],
+    }
+    store.setState({ currentDesign: d })
+    initPropertiesPanel()
+    store._emit({ selection: { items: [{ kind: 'strand', id: 's1' }] } })
+    expect(content.textContent).toContain('helices\n        3, 4')
+    expect(content.textContent).not.toContain('h_XY_')
+  })
+
   it('clusters canonical base labels by type and helix instead of showing raw keys', () => {
     store.setState({
       currentDesign: DESIGN,
@@ -175,5 +194,26 @@ describe('properties panel — protein branch', () => {
     expect(content.textContent).toContain('Staple - 1[34,35]')
     expect(content.textContent).toContain('Scaffold - 1[36]')
     expect(content.textContent).not.toContain('h1:34:REVERSE')
+  })
+
+  it('shows a single base, labeled location, and ordinal within its strand', () => {
+    store.setState({
+      currentDesign: DESIGN,
+      currentGeometry: [{
+        helix_id: 'h1', bp_index: 4, direction: 'REVERSE', strand_id: 's1',
+        strand_type: 'staple', nucleobase: 'A',
+      }],
+    })
+    initPropertiesPanel()
+    store._emit({ selection: { items: [{ kind: 'base', key: 'h1:4:REVERSE' }] } })
+    const rows = [...content.querySelectorAll('.prop-row')].map(row => [
+      row.querySelector('.prop-label')?.textContent,
+      row.querySelector('.prop-val')?.textContent,
+    ])
+    expect(rows).toEqual([
+      ['base', 'A'],
+      ['location', 'Staple - 1[4]'],
+      ['position', '3 in staple S1'],
+    ])
   })
 })

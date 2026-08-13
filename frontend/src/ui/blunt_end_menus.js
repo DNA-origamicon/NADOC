@@ -4,6 +4,7 @@
 // captured domain-end info object. Extracted verbatim from main.js (#88).
 import { startToolAtBp } from '../scene/deformation_editor.js'
 import { showToast } from './toast.js'
+import { helixDisplayLabel } from './design_display_labels.js'
 
 // deps: { store, api, slicePlane, expandedSpacing, deformView, clusterDeformGuard, extrudePanel }
 // `clusterDeformGuard` is main.js's hoisted `_clusterDeformGuard` (aliased here
@@ -20,7 +21,13 @@ export function initBluntEndMenus({ store, api, slicePlane, expandedSpacing, def
   function _showBluntPanel(info) {
     _domainEndInfo = info
     if (_bluntPanelEmpty)  _bluntPanelEmpty.style.display  = 'none'
-    if (_bluntPanelInfo)   _bluntPanelInfo.textContent = `helix ${info.helixId}  bp ${info.bp}`
+    if (_bluntPanelInfo) {
+      const resolved = helixDisplayLabel(store.getState().currentDesign, info.helixId)
+      // Legacy callers may already supply a numeric display label rather than an id.
+      const label = resolved === '?' && typeof info.helixId === 'number'
+        ? String(info.helixId) : resolved
+      _bluntPanelInfo.textContent = `helix ${label}  bp ${info.bp}`
+    }
     if (_bluntPanel)       _bluntPanel.style.display = 'block'
   }
   function _hideBluntPanel() {

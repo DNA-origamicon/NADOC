@@ -65,6 +65,14 @@ describe('blunt-end sidebar panel', () => {
     expect(document.getElementById('blunt-panel-info').textContent).toBe('helix 3  bp 7')
   })
 
+  it('shows the design helix label instead of its internal id', () => {
+    const menus = initBluntEndMenus(makeDeps({
+      currentDesign: { helices: [{ id: 'h_XY_0_0', label: 6 }] },
+    }))
+    menus.showPanel({ helixId: 'h_XY_0_0', bp: 7 })
+    expect(document.getElementById('blunt-panel-info').textContent).toBe('helix 6  bp 7')
+  })
+
   it('hidePanel hides the panel and restores the empty placeholder', () => {
     const menus = initBluntEndMenus(makeDeps())
     menus.showPanel({ helixId: 3, bp: 7 })

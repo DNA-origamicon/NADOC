@@ -39,6 +39,7 @@ import { renderJobList } from './jobs_panel_render.js'
 import { formatJobTime } from '../scene/trajectory_range.js'
 import { formatBytes } from './format_bytes.js'
 import { initJobArchive } from './job_archive_action.js'
+import { helixDisplayLabel } from './design_display_labels.js'
 import { confirmNoConcurrentJob, confirmGpuLaunch, confirmDiskSpaceOk } from './job_activity.js'
 import { shouldTearDownDisplays, shouldResumeDisplays } from './display_tab_policy.js'
 import * as api from '../api/client.js'
@@ -453,7 +454,7 @@ export function runChildTitle(job) {
   return parts.length ? `Production run · ${parts.join(' · ')}` : 'Production run'
 }
 
-export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, getOccupancyOverlay = null, getAnchorSelection = null, getWorkspacePath = null, flexScale = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null, getCandoJob = null, getMrdnaJob = null, getMdJob = null, simGuard = null } = {}) {
+export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, getOccupancyOverlay = null, getAnchorSelection = null, getWorkspacePath = null, flexScale = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null, getCurrentDesign = null, getCandoJob = null, getMrdnaJob = null, getMdJob = null, simGuard = null } = {}) {
   const panel   = document.getElementById('oxdna-jobs-panel')
   const heading = document.getElementById('oxdna-jobs-heading')
   const arrow   = document.getElementById('oxdna-jobs-arrow')
@@ -628,6 +629,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   }
   const _fmtTwist = v => (v == null ? '—' : `${Number(v).toFixed(1)}°`)
   const _fmtNm    = v => (v == null ? '—' : `${Number(v).toFixed(2)} nm`)
+  const _fmtHelix = id => helixDisplayLabel(getCurrentDesign?.(), id)
   const _SUBSTAGE = { mc: 'relaxing', md_relax: 'relaxing', equil: 'equilibrating',
                       production: 'producing' }
   function _iterRow(it) {
@@ -643,7 +645,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (!ft) return ''
     const kept = ft.edits_kept || []
     const rows = kept.map(e =>
-      `<div style="color:#c9d1d9">• ${e.op} h${e.helix_id} bp${e.bp_index} → dev ${_fmtNm(e.dev_max)}, twist ${_fmtTwist(e.twist)}</div>`).join('')
+      `<div style="color:#c9d1d9">• ${e.op} helix ${_fmtHelix(e.helix_id)} bp${e.bp_index} → dev ${_fmtNm(e.dev_max)}, twist ${_fmtTwist(e.twist)}</div>`).join('')
     const b = ft.before || {}, a = ft.after || {}
     return `<div style="margin-top:4px;border-top:1px solid #21262d;padding-top:3px">`
       + `<div style="color:#6e7681;margin-bottom:2px">Fine-tune — ${kept.length} of ${ft.n_candidates ?? 0} `
@@ -729,7 +731,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
           let t = 'Fine-tuning'
           if (ev.ft_phase === 'candidates') t += ` · ${ev.n ?? 0} hotspot${ev.n === 1 ? '' : 's'} found`
           else if (ev.ft_phase === 'edit')
-            t += ` · edit ${(ev.i ?? 0) + 1}: ${ev.op} h${ev.helix_id} bp${ev.bp_index}`
+            t += ` · edit ${(ev.i ?? 0) + 1}: ${ev.op} helix ${_fmtHelix(ev.helix_id)} bp${ev.bp_index}`
               + ` — ${ev.accepted ? '✓ kept' : '✗ reverted'} (dev ${_fmtNm(ev.dev_max)})`
           else t += ' · measuring'
           _setAutorefineStatus(`${t} · ${sub}…`, '#e3b341', true)

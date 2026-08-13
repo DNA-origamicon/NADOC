@@ -18,7 +18,8 @@ import * as api from '../api/client.js'
 import { pushGroupUndo } from '../state/store.js'
 import { showToast } from './toast.js'
 import { STAPLE_PALETTE, buildStapleColorMap } from '../scene/helix_renderer/palette.js'
-import { selectedStrandIds } from '../scene/selection_model.js'
+import { canonicalSelection, selectedStrandIds } from '../scene/selection_model.js'
+import { parseBaseKey } from '../scene/base_ref.js'
 import { buildStrandDisplayIdMap } from './design_display_labels.js'
 
 // ── Column definitions ────────────────────────────────────────────────────
@@ -100,7 +101,7 @@ function strandEndpoint(strand, end, helixIndex) {
   if (!strand.domains?.length) return '—'
   const dom = end === '5p' ? strand.domains[0] : strand.domains[strand.domains.length - 1]
   const bp = end === '5p' ? dom.start_bp : dom.end_bp
-  const label = helixIndex?.[dom.helix_id] ?? dom.helix_id
+  const label = helixIndex?.[dom.helix_id] ?? '?'
   return `${label}[${bp}]`
 }
 
@@ -289,6 +290,70 @@ function _strandDisplaySequence(strand, design) {
   }
 
   return result || null
+}
+
+/** Selected ordinary bases grouped by owning strand and 0-based strand position. */
+function _selectedBasePositions(state) {
+  const out = new Map()
+  const design = state?.currentDesign
+  const geometry = state?.currentGeometry ?? []
+  if (!design) return out
+  const helixById = new Map((design.helices ?? []).map(h => [h.id, h]))
+  for (const ref of canonicalSelection(state).items) {
+    if (ref.kind !== 'base') continue
+    const p = parseBaseKey(ref.key)
+    if (!p || p.helix_id.startsWith('__')) continue
+    const nuc = geometry.find(n => n.helix_id === p.helix_id && n.bp_index === p.bp_index
+      && String(n.direction).toUpperCase() === String(p.direction).toUpperCase()
+      && Number(n.copy_k ?? n.copy ?? 0) === Number(p.copy ?? 0))
+    const strand = design.strands?.find(s => s.id === nuc?.strand_id)
+    if (!strand) continue
+    const di = strand.domains.findIndex(d => d.helix_id === p.helix_id
+      && String(d.direction).toUpperCase() === String(p.direction).toUpperCase()
+      && p.bp_index >= Math.min(d.start_bp, d.end_bp) && p.bp_index <= Math.max(d.start_bp, d.end_bp))
+    if (di < 0) continue
+    let pos = 0
+    for (let i = 0; i < di; i++) {
+      const d = strand.domains[i], lo = Math.min(d.start_bp, d.end_bp), hi = Math.max(d.start_bp, d.end_bp)
+      const delta = helixById.get(d.helix_id)?.loop_skips
+        ?.filter(ls => ls.bp_index >= lo && ls.bp_index <= hi).reduce((s, ls) => s + ls.delta, 0) ?? 0
+      pos += domainLength(d) + delta
+    }
+    pos += Math.abs(p.bp_index - strand.domains[di].start_bp) + Number(p.copy ?? 0)
+    if (!out.has(strand.id)) out.set(strand.id, new Set())
+    out.get(strand.id).add(pos)
+  }
+  return out
+}
+
+function _renderHighlightedSequence(container, displaySeq, strand, design, selectedPositions) {
+  const domains = strand.domains ?? []
+  const trim5 = domains[0]?.overhang_id != null ? domainLength(domains[0]) : 0
+  const ext5 = (design.extensions ?? []).find(e => e.strand_id === strand.id && e.end === 'five_prime')
+  const extPrefix = ext5
+    ? `[${(ext5.sequence ?? '').toUpperCase()}${ext5.modification ? `/${String(ext5.modification).toUpperCase()}` : ''}]`.length
+    : 0
+  const displayIndices = new Set()
+  for (const pos of selectedPositions ?? []) {
+    if (pos < trim5) continue // terminal overhang lives in its dedicated column
+    let index = extPrefix + pos - trim5
+    let consumed = 0
+    for (let i = 0; i < domains.length - 1; i++) {
+      const d = domains[i]
+      if (d.overhang_id == null) consumed += domainLength(d)
+      const xo = (design.crossovers ?? []).find(x => x.extra_bases && (
+        (x.half_a.helix_id === d.helix_id && x.half_a.index === d.end_bp && x.half_a.strand === d.direction)
+        || (x.half_b.helix_id === d.helix_id && x.half_b.index === d.end_bp && x.half_b.strand === d.direction)))
+      if (xo && pos - trim5 >= consumed) index += xo.extra_bases.length + 2
+    }
+    if (index >= 0 && index < displaySeq.length) displayIndices.add(index)
+  }
+  for (let i = 0; i < displaySeq.length; i++) {
+    const char = document.createElement(displayIndices.has(i) ? 'mark' : 'span')
+    if (displayIndices.has(i)) char.className = 'sheet-seq-selected-base'
+    char.textContent = displaySeq[i]
+    container.appendChild(char)
+  }
 }
 
 function sortedStrands(design, strandColors, strandGroups, sortOrder = DEFAULT_SORT_ORDER, pins = null) {
@@ -698,6 +763,8 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     const strandColors = state.strandColors ?? {}
     const strandGroups = state.strandGroups ?? []
     const highlightedIds = new Set(selectedStrandIds(state))
+    const selectedBases = _selectedBasePositions(state)
+    for (const strandId of selectedBases.keys()) highlightedIds.add(strandId)
 
     _updateDatalist(strandGroups)
     tbody.innerHTML = ''
@@ -709,8 +776,8 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     const pins    = stapleColorPins(state)
     const strands = sortedStrands(design, strandColors, strandGroups, sortOrder, pins)
     const displayIds = buildStrandDisplayIdMap(design.strands)
-    // Map helix_id → display index (matches cadnano pathview gutter labels)
-    const helixIndex = Object.fromEntries((design.helices ?? []).map((h, i) => [h.id, i]))
+    // Map internal ids to the same human label used by the viewport/pathview.
+    const helixIndex = Object.fromEntries((design.helices ?? []).map((h, i) => [h.id, h.label ?? i]))
 
     strands.forEach((strand, idx) => {
       const isScaffold = strand.strand_type === 'scaffold'
@@ -720,6 +787,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
 
       const isOhBinder = strand.strand_type === 'oh_binder'
       const tr = document.createElement('tr')
+      tr.dataset.strandId = strand.id
       if (isScaffold)                       tr.classList.add('sheet-scaffold')
       if (isOhBinder)                       tr.classList.add('sheet-oh-binder')
       if (highlightedIds.has(strand.id))    tr.classList.add('sheet-selected')
@@ -795,7 +863,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
             if (displaySeq) {
               const span = document.createElement('span')
               span.className = 'sheet-seq'
-              span.textContent = displaySeq
+              _renderHighlightedSequence(span, displaySeq, strand, design, selectedBases.get(strand.id))
               span.title = displaySeq
               td.appendChild(span)
             } else {
@@ -1340,6 +1408,8 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     const design = store.getState().currentDesign
     if (!design) return
     const state = store.getState()
+    const selectedBases = _selectedBasePositions(state)
+    for (const strandId of selectedBases.keys()) selectedIds.add(strandId)
     // Must pass the same pins as the render pass — colour is a sort key, so a
     // different palette assignment here would reorder rows and misalign highlights.
     const strands = sortedStrands(design, state.strandColors ?? {}, state.strandGroups, sortOrder, stapleColorPins(state))
@@ -1375,7 +1445,17 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
       return
     }
 
-    if (selChanged) _applyHighlights(new Set(selectedStrandIds(newState)))
+    // Base highlighting changes sequence-cell DOM, while strand selection only needs
+    // the cheaper row-class update.
+    const hasSelectedBases = canonicalSelection(newState).items.some(ref => ref.kind === 'base')
+    const hadSelectedBases = canonicalSelection(prevState).items.some(ref => ref.kind === 'base')
+    if (selChanged && (hasSelectedBases || hadSelectedBases)) {
+      _rebuildTable(newState)
+      if (hasSelectedBases) {
+        const row = tbody.querySelector('tr.sheet-selected')
+        row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      }
+    } else if (selChanged) _applyHighlights(new Set(selectedStrandIds(newState)))
   })
 
   return {

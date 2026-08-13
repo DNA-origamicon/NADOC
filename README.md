@@ -109,8 +109,11 @@ selection levels, Default drill-down, sidebars, the strand spreadsheet, keyboard
 commands, and automation. The right sidebar groups Properties, Visualization,
 Clustering, and Overhang tools behind vertical tabs with a shared collapsible, resizable
 layout. Spreadsheet strands and Properties share compact `S#` / `L#` / `X#` display
-IDs, while selected bases are grouped into helix-aware labels such as
-`Staple - 1[34,35]`. See [Selection and right sidebar](docs/selection_and_sidebar.md)
+IDs, and every visible helix reference uses its display label rather than its internal
+lattice ID. Single-base Properties show the base letter, labeled location, and ordinal
+within the strand; with the spreadsheet expanded, base selection scrolls to the owning
+strand and marks the selected sequence letters. Multiple bases are grouped into
+helix-aware labels such as `Staple - 1[34,35]`. See [Selection and right sidebar](docs/selection_and_sidebar.md)
 for interaction rules and the developer contract.
 
 ### Cluster system & animation

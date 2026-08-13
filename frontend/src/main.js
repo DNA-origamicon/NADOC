@@ -2112,6 +2112,7 @@ async function main() {
     flexScale,
     getRunElements: _oxdnaRunElements,
     getDesignLattice: () => store.getState().currentDesign?.lattice_type ?? null,
+    getCurrentDesign: () => store.getState().currentDesign,
     // Lazy: the CanDo panel is created below, so the compare card's getSources reads its
     // selected job at generate time (C5 — the CanDo column of the cross-engine card).
     getCandoJob: () => candoPanel?.getSelectedJob?.(),

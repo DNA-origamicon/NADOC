@@ -42,7 +42,7 @@ function strandEndpoint(strand, end, helixIndex) {
   if (!strand.domains?.length) return '—'
   const dom = end === '5p' ? strand.domains[0] : strand.domains[strand.domains.length - 1]
   const bp = end === '5p' ? dom.start_bp : dom.end_bp
-  const label = helixIndex?.[dom.helix_id] ?? dom.helix_id
+  const label = helixIndex?.[dom.helix_id] ?? '?'
   return `${label}[${bp}]`
 }
 
@@ -338,7 +338,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
 
     const strands = sortedStrands(design)
     const displayIds = buildStrandDisplayIdMap(design.strands)
-    const helixIndex = Object.fromEntries((design.helices ?? []).map((h, i) => [h.id, i]))
+    const helixIndex = Object.fromEntries((design.helices ?? []).map((h, i) => [h.id, h.label ?? i]))
 
     strands.forEach((strand) => {
       const isScaffold = strand.strand_type === 'scaffold'

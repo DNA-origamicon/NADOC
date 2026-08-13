@@ -93,6 +93,43 @@ function sequenceCellOf(rowIndex) {
   return rows[rowIndex]?.querySelector('td[data-col="sequence"]')
 }
 
+describe('Base-selection synchronization', () => {
+  it('scrolls to the owning strand and highlights selected letters while open', () => {
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    openSheet()
+    store.setState({
+      currentGeometry: [
+        { helix_id: 'h0', bp_index: 6, direction: 'REVERSE', strand_id: 'stap' },
+        { helix_id: 'h0', bp_index: 4, direction: 'REVERSE', strand_id: 'stap' },
+      ],
+      selection: { items: [
+        { kind: 'base', key: 'h0:6:REVERSE' },
+        { kind: 'base', key: 'h0:4:REVERSE' },
+      ] },
+    })
+    const row = document.querySelector('tr[data-strand-id="stap"]')
+    expect(row.classList.contains('sheet-selected')).toBe(true)
+    expect([...row.querySelectorAll('.sheet-seq-selected-base')].map(el => el.textContent)).toEqual(['G', 'G'])
+    expect(scrollIntoView).toHaveBeenCalled()
+
+    store.setState({ selection: { items: [] } })
+    expect(document.querySelector('.sheet-seq-selected-base')).toBeNull()
+  })
+
+  it('does not render or scroll for base selection while collapsed', () => {
+    mount()
+    initSpreadsheet(store)
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    store.setState({ currentDesign: DESIGN, currentGeometry: [
+      { helix_id: 'h0', bp_index: 6, direction: 'REVERSE', strand_id: 'stap' },
+    ], selection: { items: [{ kind: 'base', key: 'h0:6:REVERSE' }] } })
+    expect(document.querySelector('.sheet-seq-selected-base')).toBeNull()
+    expect(scrollIntoView).not.toHaveBeenCalled()
+  })
+})
+
 describe('Sequence-cell context menu', () => {
   it('renders an "Edit sequence…" item when a handler is supplied', () => {
     openSheet({ onEditSequence: vi.fn() })

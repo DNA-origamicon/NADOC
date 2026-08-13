@@ -21,7 +21,8 @@ import {
   canonicalSelection, overhangSelectionTarget, extensionSelectionTarget,
 } from '../scene/selection_model.js'
 import {
-  buildStrandDisplayIdMap, selectedBaseDisplayRows, strandDisplayId,
+  buildStrandDisplayIdMap, helixDisplayLabel, helixDisplayLabels,
+  selectedBaseDisplayRows, strandDisplayId,
 } from './design_display_labels.js'
 
 export function initPropertiesPanel({ clearSelection } = {}) {
@@ -95,15 +96,8 @@ export function initPropertiesPanel({ clearSelection } = {}) {
     const lengthNt    = logicalStrands.reduce((sum, s) => sum + _strandLength(s, design), 0) + bridgeNt
     const domainCount = logicalStrands.reduce((sum, s) => sum + s.domains.length, 0)
     const helixIds    = [...new Set(logicalStrands.flatMap(s => s.domains.map(d => d.helix_id)))]
+    const helixLabels = helixDisplayLabels(design, helixIds)
     const segmentCount = 1
-
-    // Canonical range indicator
-    const rangeClass = lengthNt < 18 ? 'tag-warn' : lengthNt > 50 ? 'tag-warn' : 'tag-ok'
-    const rangeLabel = lengthNt < 18
-      ? `<span class="tag ${rangeClass}">short (${lengthNt} nt)</span>`
-      : lengthNt > 50
-        ? `<span class="tag ${rangeClass}">long (${lengthNt} nt)</span>`
-        : `<span class="tag ${rangeClass}">${lengthNt} nt</span>`
 
     const typeTag = _strandTypeTag(strand.strand_type)
     const linkerNote = conn
@@ -121,7 +115,7 @@ export function initPropertiesPanel({ clearSelection } = {}) {
       const len = Math.abs(d.end_bp - d.start_bp) + 1
       return `<div class="prop-row" style="padding-left:8px">
         <span class="prop-label" style="min-width:18px">${i}</span>
-        <span class="prop-val mono">${displayIds.get(s.id) ?? '—'} · ${d.helix_id} · ${d.start_bp}→${d.end_bp} (${len} bp) ${d.direction}</span>
+        <span class="prop-val mono">${displayIds.get(s.id) ?? '—'} · ${helixDisplayLabel(design, d.helix_id)} · ${d.start_bp}→${d.end_bp} (${len} bp) ${d.direction}</span>
       </div>`
     })).join('')
 
@@ -132,7 +126,7 @@ export function initPropertiesPanel({ clearSelection } = {}) {
       </div>
       <div class="prop-row">
         <span class="prop-label">type</span>
-        ${typeTag} ${rangeLabel}
+        ${typeTag}
       </div>
       ${linkerNote}
       <div class="prop-row">
@@ -146,7 +140,7 @@ export function initPropertiesPanel({ clearSelection } = {}) {
       </div>
       <div class="prop-row">
         <span class="prop-label">helices</span>
-        <span class="prop-val">${helixIds.join(', ')}</span>
+        <span class="prop-val">${helixLabels.join(', ')}</span>
       </div>
       <details style="margin-top:6px; border-top:1px solid #21262d; padding-top:4px">
         <summary style="cursor:pointer; margin-bottom:3px">
@@ -173,7 +167,7 @@ export function initPropertiesPanel({ clearSelection } = {}) {
     content.innerHTML = `
       <div class="prop-row">
         <span class="prop-label">helix</span>
-        <span class="prop-val">${nuc.helix_id}</span>
+        <span class="prop-val">${helixDisplayLabel(design, nuc.helix_id)}</span>
       </div>
       <div class="prop-row">
         <span class="prop-label">bp</span>
@@ -242,7 +236,7 @@ export function initPropertiesPanel({ clearSelection } = {}) {
       </div>
       <div class="prop-row">
         <span class="prop-label">helix</span>
-        <span class="prop-val">${helix_id}</span>
+        <span class="prop-val">${helixDisplayLabel(design, helix_id)}</span>
       </div>
       <div class="prop-row">
         <span class="prop-label">range</span>
@@ -325,6 +319,7 @@ export function initPropertiesPanel({ clearSelection } = {}) {
   function _renderCrossover(displayObject) {
     const xo = displayObject.data
     if (!xo) { content.innerHTML = '<span class="dim">Crossover selected.</span>'; return }
+    const design = store.getState().currentDesign
     const extraLabel = xo.extra_bases
       ? `"${xo.extra_bases}" (${xo.extra_bases.length} nt)`
       : 'none'
@@ -336,11 +331,11 @@ export function initPropertiesPanel({ clearSelection } = {}) {
         </div>
         <div class="prop-row">
           <span class="prop-label">3′ end</span>
-          <span class="prop-val mono">${String(xo.three_prime_helix_id).slice(0,8)}… bp ${xo.three_prime_bp} ${xo.three_prime_direction}</span>
+          <span class="prop-val mono">${helixDisplayLabel(design, xo.three_prime_helix_id)} · bp ${xo.three_prime_bp} ${xo.three_prime_direction}</span>
         </div>
         <div class="prop-row">
           <span class="prop-label">5′ end</span>
-          <span class="prop-val mono">${String(xo.five_prime_helix_id).slice(0,8)}… bp ${xo.five_prime_bp} ${xo.five_prime_direction}</span>
+          <span class="prop-val mono">${helixDisplayLabel(design, xo.five_prime_helix_id)} · bp ${xo.five_prime_bp} ${xo.five_prime_direction}</span>
         </div>
         <div class="prop-row">
           <span class="prop-label">extra bases</span>
@@ -356,11 +351,11 @@ export function initPropertiesPanel({ clearSelection } = {}) {
       </div>
       <div class="prop-row">
         <span class="prop-label">half A</span>
-        <span class="prop-val mono">${xo.half_a.helix_id.slice(0,8)}\u2026 bp ${xo.half_a.index} ${xo.half_a.strand}</span>
+        <span class="prop-val mono">${helixDisplayLabel(design, xo.half_a.helix_id)} · bp ${xo.half_a.index} ${xo.half_a.strand}</span>
       </div>
       <div class="prop-row">
         <span class="prop-label">half B</span>
-        <span class="prop-val mono">${xo.half_b.helix_id.slice(0,8)}\u2026 bp ${xo.half_b.index} ${xo.half_b.strand}</span>
+        <span class="prop-val mono">${helixDisplayLabel(design, xo.half_b.helix_id)} · bp ${xo.half_b.index} ${xo.half_b.strand}</span>
       </div>
       <div class="prop-row">
         <span class="prop-label">extra bases</span>
@@ -468,6 +463,51 @@ export function initPropertiesPanel({ clearSelection } = {}) {
   function _renderBaseKeys(keys) {
     const state = store.getState()
     const rows = selectedBaseDisplayRows(keys, state.currentDesign, state.currentGeometry)
+    if (keys.length === 1) {
+      const parsed = parseBaseKey(keys[0])
+      const geometry = state.currentGeometry ?? []
+      const nuc = geometry.find(n => n.helix_id === parsed?.helix_id
+        && n.bp_index === parsed?.bp_index
+        && String(n.direction).toUpperCase() === String(parsed?.direction).toUpperCase()
+        && Number(n.copy_k ?? n.copy ?? 0) === Number(parsed?.copy ?? 0))
+      const strand = state.currentDesign?.strands?.find(s => s.id === nuc?.strand_id)
+      const domainIndex = strand?.domains?.findIndex(d => d.helix_id === parsed?.helix_id
+        && String(d.direction).toUpperCase() === String(parsed?.direction).toUpperCase()
+        && parsed.bp_index >= Math.min(d.start_bp, d.end_bp)
+        && parsed.bp_index <= Math.max(d.start_bp, d.end_bp)) ?? -1
+      let position = null
+      if (strand && domainIndex >= 0) {
+        const helixById = new Map((state.currentDesign?.helices ?? []).map(h => [h.id, h]))
+        position = 1
+        for (let i = 0; i < domainIndex; i++) {
+          const d = strand.domains[i]
+          const lo = Math.min(d.start_bp, d.end_bp), hi = Math.max(d.start_bp, d.end_bp)
+          const delta = helixById.get(d.helix_id)?.loop_skips
+            ?.filter(ls => ls.bp_index >= lo && ls.bp_index <= hi)
+            .reduce((sum, ls) => sum + ls.delta, 0) ?? 0
+          position += Math.abs(d.end_bp - d.start_bp) + 1 + delta
+        }
+        const d = strand.domains[domainIndex]
+        const step = d.end_bp >= d.start_bp ? 1 : -1
+        position += Math.abs(parsed.bp_index - d.start_bp)
+        const beforeDelta = helixById.get(d.helix_id)?.loop_skips
+          ?.filter(ls => (ls.bp_index - d.start_bp) * step >= 0
+            && (ls.bp_index - parsed.bp_index) * step < 0)
+          .reduce((sum, ls) => sum + ls.delta, 0) ?? 0
+        position += beforeDelta + Number(parsed.copy ?? 0)
+      }
+      const sequenceBase = position && strand?.sequence?.[position - 1]
+      const base = String(nuc?.nucleobase ?? sequenceBase ?? 'N').toUpperCase()
+      const location = rows[0]?.label ?? 'Base - ?[?]'
+      const strandType = rows[0]?.type?.toLowerCase() ?? 'strand'
+      const strandId = strandDisplayId(strand?.id, state.currentDesign)
+      content.innerHTML = `
+        <div class="prop-row"><span class="prop-label">base</span><span class="prop-val">${base}</span></div>
+        <div class="prop-row"><span class="prop-label">location</span><span class="prop-val">${location}</span></div>
+        <div class="prop-row"><span class="prop-label">position</span><span class="prop-val">${position ?? '—'} in ${strandType} ${strandId}</span></div>
+      `
+      return
+    }
     content.innerHTML = `
       <div class="prop-row">
         <span class="prop-label">bases</span>
