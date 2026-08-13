@@ -8,6 +8,7 @@ import json
 import math
 from pathlib import Path
 import sys
+from collections import defaultdict
 
 import numpy as np
 
@@ -24,7 +25,8 @@ from backend.core.mrdna_bridge import (
 def _keyed(rows) -> dict[tuple, np.ndarray]:
     return {
         (
-            row["helix_id"], row["bp_index"],
+            row["helix_id"],
+            row["bp_index"],
             getattr(row["direction"], "value", row["direction"]),
             int(row.get("copy", 0)),
         ): np.asarray(row["backbone_position"], dtype=float)
@@ -33,16 +35,30 @@ def _keyed(rows) -> dict[tuple, np.ndarray]:
 
 
 def _angle_deg(a: np.ndarray, b: np.ndarray) -> float:
-    return math.degrees(math.acos(np.clip(
-        float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))), -1.0, 1.0
-    )))
+    return math.degrees(
+        math.acos(
+            np.clip(
+                float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))), -1.0, 1.0
+            )
+        )
+    )
 
 
 def _frame_angle_deg(a: np.ndarray, b: np.ndarray) -> float:
     relative = a.T @ b
-    return math.degrees(math.acos(np.clip(
-        0.5 * (float(np.trace(relative)) - 1.0), -1.0, 1.0
-    )))
+    return math.degrees(
+        math.acos(np.clip(0.5 * (float(np.trace(relative)) - 1.0), -1.0, 1.0))
+    )
+
+
+def _signed_angle_deg(a: np.ndarray, b: np.ndarray, axis: np.ndarray) -> float:
+    axis = axis / np.linalg.norm(axis)
+    a = a - axis * float(np.dot(a, axis))
+    b = b - axis * float(np.dot(b, axis))
+    a, b = a / np.linalg.norm(a), b / np.linalg.norm(b)
+    return math.degrees(
+        math.atan2(float(np.dot(axis, np.cross(a, b))), float(np.dot(a, b)))
+    )
 
 
 def _summary(values: list[float]) -> dict:
@@ -84,6 +100,33 @@ def _crossover_geometry(design: Design, positions: dict) -> dict:
     }
 
 
+def _helical_phase_steps(positions: dict) -> dict:
+    by_helix: dict[str, list[int]] = defaultdict(list)
+    for helix_id, bp_index, direction, copy in positions:
+        if isinstance(bp_index, int) and direction == "FORWARD" and copy == 0:
+            by_helix[helix_id].append(bp_index)
+    steps = []
+    for helix_id, bps in by_helix.items():
+        ordered = sorted(set(bps))
+        for first, second in zip(ordered, ordered[1:]):
+            keys = [
+                (helix_id, bp, direction, 0)
+                for bp in (first, second)
+                for direction in ("FORWARD", "REVERSE")
+            ]
+            if second != first + 1 or any(key not in positions for key in keys):
+                continue
+            f1, r1, f2, r2 = (positions[key] for key in keys)
+            c1, c2 = 0.5 * (f1 + r1), 0.5 * (f2 + r2)
+            steps.append(_signed_angle_deg(f1 - c1, f2 - c2, c2 - c1))
+    return {
+        "n_steps": len(steps),
+        "step_deg": _summary(steps),
+        "slow_steps_abs_lt_10_deg": sum(abs(value) < 10.0 for value in steps),
+        "jumps_abs_gt_90_deg": sum(abs(value) > 90.0 for value in steps),
+    }
+
+
 def audit(job_dir: Path) -> dict:
     design = Design.model_validate_json((job_dir / "design.json").read_text())
     display = json.loads((job_dir / "display.json").read_text())["positions"]
@@ -105,6 +148,8 @@ def audit(job_dir: Path) -> dict:
         "mrdna_reader_pair_frame_error_deg": _summary(frame_errors),
         "native_crossovers": _crossover_geometry(design, native),
         "rendered_crossovers": _crossover_geometry(design, _keyed(display)),
+        "native_helical_phase": _helical_phase_steps(native),
+        "rendered_helical_phase": _helical_phase_steps(_keyed(display)),
     }
 
 
@@ -114,7 +159,11 @@ def main() -> None:
     parser.add_argument("--workspace", default="workspace")
     args = parser.parse_args()
     candidate = Path(args.job)
-    job_dir = candidate if candidate.is_dir() else Path(args.workspace) / "mrdna_jobs" / args.job
+    job_dir = (
+        candidate
+        if candidate.is_dir()
+        else Path(args.workspace) / "mrdna_jobs" / args.job
+    )
     print(json.dumps(audit(job_dir), indent=2))
 
 

@@ -291,7 +291,7 @@ def _reconstruction_badness(design: Design, override: dict) -> int:
 # v8 = strand-extension tails (5′/3′ ssDNA) are real beads in the model, and their
 #      relaxed positions are emitted under the shared ``__ext_<id>`` geometry key.
 # v9 = unwrap bonded ARBD coordinates across periodic faces before reconstruction.
-_DISPLAY_VERSION = 17
+_DISPLAY_VERSION = 18
 
 
 def _add_missing_overhang_records(

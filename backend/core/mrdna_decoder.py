@@ -23,6 +23,37 @@ def _mrdna_seed_reference_by_key(design) -> dict[tuple, dict]:
     }
 
 
+def _mrdna_seed_particle_frames(
+    manifest: MrdnaNucleotideManifest, design
+) -> dict[int, np.ndarray]:
+    """Exact base-pair frames supplied to mrDNA, keyed by Fine DNA particle."""
+    from backend.core.mrdna_bridge import (
+        _MRDNA_REVERSE_PAIR_FRAME,
+        _build_nt_arrays,
+    )
+
+    orientations = _build_nt_arrays(design, return_nt_key=True, return_identity=True)[4]
+    seed_frames: dict[int, np.ndarray] = {}
+    for record in manifest.records:
+        if len(record.particle_bindings) != 1:
+            continue
+        binding = record.particle_bindings[0]
+        if binding.particle_kind != "DNA":
+            continue
+        orientation = np.asarray(
+            orientations[record.model_nucleotide_index], dtype=float
+        )
+        if record.render.direction == "REVERSE" and record.pair is not None:
+            orientation = orientation @ _MRDNA_REVERSE_PAIR_FRAME
+        existing = seed_frames.get(binding.particle_index)
+        if existing is not None and not np.allclose(existing, orientation, atol=1e-6):
+            raise RuntimeError(
+                "mrDNA paired nucleotides disagree on their seed particle frame"
+            )
+        seed_frames[binding.particle_index] = orientation
+    return seed_frames
+
+
 def _kabsch(mobile: np.ndarray, target: np.ndarray) -> np.ndarray:
     cm, ct = mobile.mean(0), target.mean(0)
     covariance = (mobile - cm).T @ (target - ct)
@@ -70,7 +101,7 @@ def decode_mrdna_frame(
         reference_by_key = _mrdna_seed_reference_by_key(design)
 
     particle_frames = _dna_particle_frame_rotations(
-        manifest, initial_u, initial_nm, aligned_nm
+        manifest, initial_u, initial_nm, aligned_nm, design=design
     )
 
     positions: list[dict] = []
@@ -166,9 +197,22 @@ def decode_mrdna_frame(
 
 
 def _dna_particle_frame_rotations(
-    manifest: MrdnaNucleotideManifest, universe, initial: np.ndarray, final: np.ndarray
+    manifest: MrdnaNucleotideManifest,
+    universe,
+    initial: np.ndarray,
+    final: np.ndarray,
+    *,
+    design=None,
 ) -> dict[int, np.ndarray]:
-    """Initial→final local-frame rotation for directly resolved Fine DNA sites."""
+    """Authoritative seed→final frame rotation for resolved Fine DNA sites.
+
+    The numbered Fine-stage PDB is an intermediate-stage restart, not the NADOC
+    seed frame. Its O beads can contain segment-boundary phase discontinuities.
+    Comparing the final O frame to that PDB therefore turns smooth twist into a
+    sawtooth on read-back. When the snapshot design is available, use the exact
+    analytic frames supplied to mrDNA instead; retain the PDB only as a legacy
+    fallback for callers without a design.
+    """
     names = [atom.name for atom in universe.atoms]
     sites: dict[tuple, int] = {}
     for record in manifest.records:
@@ -182,6 +226,10 @@ def _dna_particle_frame_rotations(
     for helix_id, bp_index in sites:
         if isinstance(bp_index, int):
             by_helix.setdefault(helix_id, []).append(bp_index)
+
+    seed_frames: dict[int, np.ndarray] = {}
+    if design is not None:
+        seed_frames = _mrdna_seed_particle_frames(manifest, design)
 
     def frame(array: np.ndarray, helix_id: str, bp_index: int, index: int):
         bps = sorted(set(by_helix[helix_id]))
@@ -220,7 +268,9 @@ def _dna_particle_frame_rotations(
     for (helix_id, bp_index), index in sites.items():
         if not isinstance(bp_index, int):
             continue
-        before = frame(initial, helix_id, bp_index, index)
+        before = seed_frames.get(index)
+        if before is None:
+            before = frame(initial, helix_id, bp_index, index)
         after = frame(final, helix_id, bp_index, index)
         if before is not None and after is not None:
             rotations[index] = after @ before.T
@@ -258,7 +308,9 @@ def _add_nucleotide_frames(
             norm = float(np.linalg.norm(normal))
             if norm > 1e-9:
                 normal /= norm
-                entry.update(nx=float(normal[0]), ny=float(normal[1]), nz=float(normal[2]))
+                entry.update(
+                    nx=float(normal[0]), ny=float(normal[1]), nz=float(normal[2])
+                )
                 from backend.core.constants import BASE_DISPLACEMENT
 
                 base_position = here + BASE_DISPLACEMENT * normal
@@ -274,9 +326,13 @@ def _add_nucleotide_frames(
             continue
         at = bps.index(center_key[1])
         if at == 0:
-            tangent = centers[(center_key[0], bps[1], center_key[2])] - centers[center_key]
+            tangent = (
+                centers[(center_key[0], bps[1], center_key[2])] - centers[center_key]
+            )
         elif at == len(bps) - 1:
-            tangent = centers[center_key] - centers[(center_key[0], bps[-2], center_key[2])]
+            tangent = (
+                centers[center_key] - centers[(center_key[0], bps[-2], center_key[2])]
+            )
         else:
             tangent = (
                 centers[(center_key[0], bps[at + 1], center_key[2])]
@@ -285,7 +341,9 @@ def _add_nucleotide_frames(
         norm = float(np.linalg.norm(tangent))
         if norm > 1e-9:
             tangent /= norm
-            entry.update(tx=float(tangent[0]), ty=float(tangent[1]), tz=float(tangent[2]))
+            entry.update(
+                tx=float(tangent[0]), ty=float(tangent[1]), tz=float(tangent[2])
+            )
 
 
 def validate_decoded_frame(
@@ -294,9 +352,7 @@ def validate_decoded_frame(
     """Validate coverage and covalent continuity for one complete frame."""
     bonds: list[dict] = []
     missing: list[str] = []
-    records_by_identity = {
-        record.identity.key(): record for record in manifest.records
-    }
+    records_by_identity = {record.identity.key(): record for record in manifest.records}
     for record in manifest.records:
         ident = record.identity.key()
         if ident not in by_identity:
@@ -321,13 +377,7 @@ def validate_decoded_frame(
         # put an axis-derived internal display bond just above 2 nm in early saved
         # frames; that is diagnostic, but must not erase the whole RMSF ensemble.
         # Only genuinely design-spanning (>5 nm) bonds make a frame unusable.
-        severity = (
-            "error"
-            if length > 5.0
-            else "warning"
-            if length > 1.2
-            else "ok"
-        )
+        severity = "error" if length > 5.0 else "warning" if length > 1.2 else "ok"
         bonds.append(
             {
                 "from": ident,
@@ -343,7 +393,11 @@ def validate_decoded_frame(
     seen_pairs: set[tuple[str, str]] = set()
     for record in manifest.records:
         ident = record.identity.key()
-        if record.pair is None or ident not in by_identity or record.pair not in by_identity:
+        if (
+            record.pair is None
+            or ident not in by_identity
+            or record.pair not in by_identity
+        ):
             continue
         token = tuple(sorted((ident, record.pair)))
         if token in seen_pairs:
@@ -355,33 +409,52 @@ def validate_decoded_frame(
         distance = float(np.linalg.norm(delta))
         toward_a = toward_b = opposition = None
         if distance > 1e-9 and all(k in a for k in ("nx", "ny", "nz")):
-            toward_a = float(np.dot(np.asarray([a["nx"], a["ny"], a["nz"]]), delta / distance))
+            toward_a = float(
+                np.dot(np.asarray([a["nx"], a["ny"], a["nz"]]), delta / distance)
+            )
         if distance > 1e-9 and all(k in b for k in ("nx", "ny", "nz")):
-            toward_b = float(np.dot(np.asarray([b["nx"], b["ny"], b["nz"]]), -delta / distance))
+            toward_b = float(
+                np.dot(np.asarray([b["nx"], b["ny"], b["nz"]]), -delta / distance)
+            )
         if toward_a is not None and toward_b is not None:
-            opposition = float(np.dot(
-                np.asarray([a["nx"], a["ny"], a["nz"]]),
-                np.asarray([b["nx"], b["ny"], b["nz"]]),
-            ))
-        pair_checks.append({
-            "a": ident, "b": record.pair, "distance_nm": distance,
-            "a_faces_mate": toward_a, "b_faces_mate": toward_b,
-            "normal_dot": opposition,
-            "base_faces_mate": (
-                float(np.dot(
-                    np.asarray(a["base_position"]) - np.asarray(a["backbone_position"]),
-                    delta / distance,
-                ))
-                if distance > 1e-9 and "base_position" in a else None
-            ),
-        })
+            opposition = float(
+                np.dot(
+                    np.asarray([a["nx"], a["ny"], a["nz"]]),
+                    np.asarray([b["nx"], b["ny"], b["nz"]]),
+                )
+            )
+        pair_checks.append(
+            {
+                "a": ident,
+                "b": record.pair,
+                "distance_nm": distance,
+                "a_faces_mate": toward_a,
+                "b_faces_mate": toward_b,
+                "normal_dot": opposition,
+                "base_faces_mate": (
+                    float(
+                        np.dot(
+                            np.asarray(a["base_position"])
+                            - np.asarray(a["backbone_position"]),
+                            delta / distance,
+                        )
+                    )
+                    if distance > 1e-9 and "base_position" in a
+                    else None
+                ),
+            }
+        )
     pair_errors = [
-        pair for pair in pair_checks
+        pair
+        for pair in pair_checks
         if pair["distance_nm"] > 3.0
-        or pair["a_faces_mate"] is None or pair["b_faces_mate"] is None
-        or pair["a_faces_mate"] < 0.8 or pair["b_faces_mate"] < 0.8
+        or pair["a_faces_mate"] is None
+        or pair["b_faces_mate"] is None
+        or pair["a_faces_mate"] < 0.8
+        or pair["b_faces_mate"] < 0.8
         or pair["normal_dot"] > -0.8
-        or pair["base_faces_mate"] is None or pair["base_faces_mate"] <= 0.0
+        or pair["base_faces_mate"] is None
+        or pair["base_faces_mate"] <= 0.0
     ]
     return {
         "complete": not missing,
@@ -425,8 +498,10 @@ def mrdna_backbone_strain_profile(
     current_by_identity = {p.get("identity"): p for p in positions}
     reference_by_render = {
         (
-            p["helix_id"], p["bp_index"],
-            getattr(p["direction"], "value", p["direction"]), int(p.get("copy", 0)),
+            p["helix_id"],
+            p["bp_index"],
+            getattr(p["direction"], "value", p["direction"]),
+            int(p.get("copy", 0)),
         ): np.asarray(p["backbone_position"], dtype=float)
         for p in reference_positions
     }
@@ -435,24 +510,40 @@ def mrdna_backbone_strain_profile(
     n_edges = 0
     for identity, record in record_by_identity.items():
         successor = record.successor
-        if successor is None or identity not in current_by_identity or successor not in current_by_identity:
+        if (
+            successor is None
+            or identity not in current_by_identity
+            or successor not in current_by_identity
+        ):
             continue
         other = record_by_identity[successor]
-        ref_a = reference_by_render.get((
-            record.render.helix_id, record.render.bp_index, record.render.direction,
-            record.render.copy,
-        ))
-        ref_b = reference_by_render.get((
-            other.render.helix_id, other.render.bp_index, other.render.direction,
-            other.render.copy,
-        ))
+        ref_a = reference_by_render.get(
+            (
+                record.render.helix_id,
+                record.render.bp_index,
+                record.render.direction,
+                record.render.copy,
+            )
+        )
+        ref_b = reference_by_render.get(
+            (
+                other.render.helix_id,
+                other.render.bp_index,
+                other.render.direction,
+                other.render.copy,
+            )
+        )
         if ref_a is None or ref_b is None:
             continue
         rest = float(np.linalg.norm(ref_b - ref_a))
         if rest <= 1e-9:
             continue
-        cur_a = np.asarray(current_by_identity[identity]["backbone_position"], dtype=float)
-        cur_b = np.asarray(current_by_identity[successor]["backbone_position"], dtype=float)
+        cur_a = np.asarray(
+            current_by_identity[identity]["backbone_position"], dtype=float
+        )
+        cur_b = np.asarray(
+            current_by_identity[successor]["backbone_position"], dtype=float
+        )
         value = float(np.linalg.norm(cur_b - cur_a) / rest - 1.0)
         incident[identity].append(value)
         incident[successor].append(value)
@@ -489,8 +580,10 @@ def measure_mrdna_native_roundtrip(
     """Measure a decoded frame against the unified native geometry contract."""
     reference = {
         (
-            p["helix_id"], p["bp_index"],
-            getattr(p["direction"], "value", p["direction"]), int(p.get("copy", 0)),
+            p["helix_id"],
+            p["bp_index"],
+            getattr(p["direction"], "value", p["direction"]),
+            int(p.get("copy", 0)),
         ): p
         for p in reference_positions
     }
@@ -507,24 +600,42 @@ def measure_mrdna_native_roundtrip(
 
     for position in positions:
         key = (
-            position["helix_id"], position["bp_index"], position["direction"],
+            position["helix_id"],
+            position["bp_index"],
+            position["direction"],
             int(position.get("copy", 0)),
         )
         native = reference.get(key)
         if native is None:
             continue
-        position_errors.append(float(np.linalg.norm(
-            np.asarray(position["backbone_position"], dtype=float)
-            - np.asarray(native["backbone_position"], dtype=float)
-        )))
-        if all(k in position for k in ("nx", "ny", "nz")) and native.get("base_normal") is not None:
-            normal_errors.append(angle_degrees(
-                [position["nx"], position["ny"], position["nz"]], native["base_normal"]
-            ))
-        if all(k in position for k in ("tx", "ty", "tz")) and native.get("axis_tangent") is not None:
-            tangent_errors.append(angle_degrees(
-                [position["tx"], position["ty"], position["tz"]], native["axis_tangent"]
-            ))
+        position_errors.append(
+            float(
+                np.linalg.norm(
+                    np.asarray(position["backbone_position"], dtype=float)
+                    - np.asarray(native["backbone_position"], dtype=float)
+                )
+            )
+        )
+        if (
+            all(k in position for k in ("nx", "ny", "nz"))
+            and native.get("base_normal") is not None
+        ):
+            normal_errors.append(
+                angle_degrees(
+                    [position["nx"], position["ny"], position["nz"]],
+                    native["base_normal"],
+                )
+            )
+        if (
+            all(k in position for k in ("tx", "ty", "tz"))
+            and native.get("axis_tangent") is not None
+        ):
+            tangent_errors.append(
+                angle_degrees(
+                    [position["tx"], position["ty"], position["tz"]],
+                    native["axis_tangent"],
+                )
+            )
 
     def summary(values) -> dict:
         array = np.asarray(values, dtype=float)
