@@ -50,16 +50,19 @@ opos = DNA_bead_pos + orientation @ [r0, 0, 0]
 where `r0 = Segment.orientation_bond.r0 = 1.5 Å`.
 
 The orientation matrix at contour `s` has:
-- **Column 0 (x)**: radial direction — from axis toward backbone
-- **Column 1 (y)**: azimuthal tangent
+- **Column 0 (x)**: mrDNA orientation reference, recorded by the O bead
+- **Column 1 (y)**: nucleotide-backbone projection axis
 - **Column 2 (z)**: helix axis tangent (5′→3′)
 
-So the O bead sits **1.5 Å along the radial direction** from the DNA
-bead — i.e. on the same radial ray as the backbone, further from the axis.
+The O bead therefore records frame x; it is **not itself a phosphate or a
+backbone site**. mrDNA's own backmapping applies `DefaultOrientation = Rz(90°)`
+before placing nucleotides, so the strand backbone is projected on local ±y.
+Treating DNA→O as the backbone radial produces a smooth but approximately
+quarter-turn-out-of-phase duplex and places most crossovers on the far side.
 
 ```
-O bead position = DNA bead pos + 1.5 Å × radial_hat
-                = fwd-rev centroid + 1.5 Å × radial_hat
+O bead position = DNA bead pos + 1.5 Å × frame_x
+backbone axis   = frame_y = cross(frame_z, frame_x)
 ```
 
 The DNA→O bond is a rigid-body orientation constraint enforced during ARBD
@@ -73,7 +76,7 @@ twist phase of that bp.
 | Atom name | Particle type name | Physical meaning |
 |-----------|--------------------|-----------------|
 | `DNA` | `D` | Base-pair centroid (fwd-rev average at 1 bp resolution) |
-| `O` | `O` | Orientation indicator, 1.5 Å radially from DNA bead |
+| `O` | `O` | Orientation-frame x indicator, 1.5 Å from DNA bead |
 
 The PSF has two entries per bp: `DNA` first, then `O`.  Bonds, angles, and
 dihedrals in the PSF reference these indices.
@@ -101,13 +104,17 @@ Non-bonded: same Debye-Hückel + excluded volume as coarse.
 After fine-stage simulation, NADOC reads the fine PSF/PDB/DCD via
 `nuc_pos_override_from_mrdna` or `nuc_pos_override_from_arbd_strands`.
 
-Key mapping:
+Current identity-preserving mapping:
 - Each `DNA` bead represents one **base pair** (one FORWARD and one REVERSE
   nucleotide).
-- The FORWARD backbone position is extracted from the DNA bead's radial
-  direction relative to the ideal helix axis.
-- The REVERSE backbone position is reconstructed by rotating the forward
-  radial by the minor-groove angle (150°).
+- `nucleotide_map.json` binds every NADOC nucleotide identity to its exact
+  DNA/NAS particle ownership; helix/bp labels are render addresses only.
+- The final DNA→O vector and relaxed helix tangent form mrDNA's local frame.
+- NADOC converts frame x to backbone y with the same +90° convention used by
+  mrDNA's `_generate_oxdna_nucleotide`, then rotates the authoritative native
+  strand offsets from the analytic seed frame into the relaxed frame.
+- Paired nucleotides share the DNA axis particle but retain separate identities
+  and opposite, mate-facing slab/base sites.
 - The all-atom template is placed at the corrected P position with the
   −32° phase offset applied by `_atom_frame`.
 
@@ -125,8 +132,10 @@ The bridge functions handle this transformation explicitly.
 
 ## Fine-Stage PSF/PDB Used by NADOC
 
-`nuc_pos_override_from_mrdna` reads the **initial fine PDB**
-(`{name}-2.pdb` or similar) to assign beads to helices by perpendicular
-distance to the known helix axis lines.  The DCD then provides the
-simulation trajectory.  The initial PDB is in the NADOC coordinate frame
-(no transformation applied during dry_run).
+The managed-job decoder does **not** infer identity by nearest-axis assignment.
+It reads particle indices from `nucleotide_map.json` and uses the DCD for final
+DNA/O frames. The numbered initial Fine PDB is used for particle coordinates and
+trajectory unwrapping, but not as the phase reference: intermediate mrDNA restart
+PDBs can contain frame discontinuities that create a false slow-wind/large-jump
+pattern. The phase reference is the exact analytic frame originally supplied by
+`_build_nt_arrays`.

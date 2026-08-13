@@ -16,6 +16,11 @@ from raw nucleotide arrays through coarse-grained relaxation to atomistic output
 | [07_atomistic_output.md](07_atomistic_output.md) | Stage 6 — atomistic model generation from fine beads |
 | [08_nadoc_integration.md](08_nadoc_integration.md) | NADOC-specific bridge: coordinate mapping, override path |
 
+For managed NADOC jobs, `08_nadoc_integration.md` is authoritative for the
+identity manifest, Fine DNA/O frame calibration, crossover audits, and rerun
+policy. Earlier stage documents also describe legacy coarse/atomistic bridge
+functions that remain useful outside the managed visualization path.
+
 ## Pipeline at a Glance
 
 ```

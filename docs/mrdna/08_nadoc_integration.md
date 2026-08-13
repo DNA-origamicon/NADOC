@@ -1,8 +1,7 @@
 # NADOC ↔ MrDNA Integration
 
-This document describes exactly how NADOC builds mrdna models, where
-coordinates are converted, and the known error sources in the coarse
-round-trip path.
+This document describes how NADOC builds mrDNA models, preserves nucleotide
+identity, and reconstructs coarse and Fine trajectories for display.
 
 ---
 
@@ -29,7 +28,9 @@ where:
 - `groove = ±BDNA_MINOR_GROOVE_ANGLE_RAD = ±150°` (sign depends on `h.direction`)
 - `x_hat, y_hat` = right-hand perpendicular frame from `_xy_frame(axis_hat)`
 
-The orientation matrix is `[rad, azimuthal, axis_hat]`.
+For paired bases, the two nucleotide inputs encode one mrDNA base-pair frame.
+mrDNA transforms the reverse frame by a local-x 180° rotation before averaging;
+NADOC supplies the inverse representation so the transformed frames agree.
 
 ---
 
@@ -59,6 +60,64 @@ positions.  These are excluded from the override dict so that
 `_minimize_backbone_bridge` can place them using ideal B-DNA geometry
 instead of mrdna bead positions (which would place them at two separate
 helix radii, breaking backbone continuity).
+
+This describes the older coarse/atomistic override. Managed simulation
+visualizations instead retain every real nucleotide and covalent edge through
+`nucleotide_map.json`; crossover endpoints are not dropped or independently
+rediscovered.
+
+---
+
+## Managed Fine Reconstruction Contract
+
+Fine jobs use an identity-preserving round trip:
+
+1. The job snapshot removes reference geometry before model construction.
+2. `_build_nt_arrays` enumerates topology and writes the authoritative analytic
+   positions and paired orientation frames used to seed mrDNA.
+3. `nucleotide_map.json` records stable nucleotide identity, predecessor,
+   successor, pair, render address, and exact DNA/NAS particle bindings.
+4. The decoder reads final DNA and O particles by manifest index. It never
+   assigns identities using spatial proximity.
+5. DNA→O is mrDNA frame x. The nucleotide backbone projection is frame y,
+   obtained using mrDNA's documented +90° `DefaultOrientation` convention.
+6. The decoder rotates each nucleotide's authoritative native radial offset from
+   the analytic seed frame into the relaxed frame. Pair normals, explicit base
+   positions, slab tangents, scalar maps, and covalent bonds all use that same
+   reconstructed identity record.
+
+The analytic seed frame is essential. Numbered Fine PDBs are intermediate
+resolution-stage restarts; using their O frames as the phase baseline can create
+artificial stretches of slow twist followed by rotations approaching 180°.
+
+### Crossover interpretation
+
+mrDNA restrains coarse helix-axis particles, not individual phosphate atoms.
+Its crossover bond targets are approximately 1.2–1.25 nm between coarse
+particles. NADOC backmaps those frames to strand backbone sites, so displayed
+covalent crossover lengths should be much shorter than the raw DNA-particle
+separation but need not equal native geometry after relaxation.
+
+Use the exact manifest successor edges for validation. Design crossover markers
+alone may include non-covalent or under-resolved cases. Useful audits are:
+
+```bash
+uv run python scripts/audit_mrdna_slabs.py JOB_ID
+uv run python scripts/audit_mrdna_crossover_phase.py JOB_ID
+```
+
+Expected invariants include complete identity coverage, mate-facing paired slabs,
+no large per-bp phase resets, and a crossover distribution without design-spanning
+bonds. Local long bonds remain confidence warnings because a coarse model can
+resolve a strained junction without atomistic phosphate detail.
+
+### Rerun policy
+
+- Decoder/display/backmapping changes only: regenerate the display cache; the
+  simulation does not need rerunning.
+- Input topology, paired seed-frame, particle binding, or force/potential changes:
+  rerun the job because the saved trajectory encodes the old physical model.
+- Jobs without `nucleotide_map.json` are unsupported legacy runs.
 
 ---
 
