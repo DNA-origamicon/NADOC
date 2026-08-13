@@ -310,6 +310,42 @@ def validate_decoded_frame(
         )
     errors = [bond for bond in bonds if bond["severity"] == "error"]
     warnings = [bond for bond in bonds if bond["severity"] == "warning"]
+    pair_checks: list[dict] = []
+    seen_pairs: set[tuple[str, str]] = set()
+    for record in manifest.records:
+        ident = record.identity.key()
+        if record.pair is None or ident not in by_identity or record.pair not in by_identity:
+            continue
+        token = tuple(sorted((ident, record.pair)))
+        if token in seen_pairs:
+            continue
+        seen_pairs.add(token)
+        a = by_identity[ident]
+        b = by_identity[record.pair]
+        delta = np.asarray(b["backbone_position"]) - np.asarray(a["backbone_position"])
+        distance = float(np.linalg.norm(delta))
+        toward_a = toward_b = opposition = None
+        if distance > 1e-9 and all(k in a for k in ("nx", "ny", "nz")):
+            toward_a = float(np.dot(np.asarray([a["nx"], a["ny"], a["nz"]]), delta / distance))
+        if distance > 1e-9 and all(k in b for k in ("nx", "ny", "nz")):
+            toward_b = float(np.dot(np.asarray([b["nx"], b["ny"], b["nz"]]), -delta / distance))
+        if toward_a is not None and toward_b is not None:
+            opposition = float(np.dot(
+                np.asarray([a["nx"], a["ny"], a["nz"]]),
+                np.asarray([b["nx"], b["ny"], b["nz"]]),
+            ))
+        pair_checks.append({
+            "a": ident, "b": record.pair, "distance_nm": distance,
+            "a_faces_mate": toward_a, "b_faces_mate": toward_b,
+            "normal_dot": opposition,
+        })
+    pair_errors = [
+        pair for pair in pair_checks
+        if pair["distance_nm"] > 3.0
+        or pair["a_faces_mate"] is None or pair["b_faces_mate"] is None
+        or pair["a_faces_mate"] < 0.8 or pair["b_faces_mate"] < 0.8
+        or pair["normal_dot"] > -0.8
+    ]
     return {
         "complete": not missing,
         "n_positions": len(by_identity),
@@ -319,7 +355,20 @@ def validate_decoded_frame(
         "max_bond_nm": max((bond["length_nm"] for bond in bonds), default=0.0),
         "bond_errors": errors,
         "bond_warnings": warnings,
-        "usable": not missing and not errors,
+        "n_pairs": len(pair_checks),
+        "pair_errors": pair_errors,
+        "max_pair_distance_nm": max(
+            (pair["distance_nm"] for pair in pair_checks), default=0.0
+        ),
+        "min_pair_facing_dot": min(
+            (
+                min(pair["a_faces_mate"], pair["b_faces_mate"])
+                for pair in pair_checks
+                if pair["a_faces_mate"] is not None and pair["b_faces_mate"] is not None
+            ),
+            default=1.0,
+        ),
+        "usable": not missing and not errors and not pair_errors,
     }
 
 

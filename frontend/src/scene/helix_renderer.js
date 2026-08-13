@@ -1226,6 +1226,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   /** Canonical paired slab center for build, animation, restore, and overrides. */
   function _slabCenterAt(
     slab, tangent, baseMap = null, beadMap = null, out = new THREE.Vector3(),
+    baseNormal = null,
   ) {
     const n = slab.nuc
     const key = `${n.helix_id}:${n.bp_index}:${n.direction}`
@@ -1245,7 +1246,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       _slabMateBaseS.copy(baseMap?.get(mateKey) ?? _tPos.set(...mate.base_position))
       mateBase = _slabMateBaseS
     }
-    return pairedSlabCenter(_slabCenterL, _slabBaseS, mateBase, tangent, slab.bnDir, out)
+    return pairedSlabCenter(
+      _slabCenterL, _slabBaseS, mateBase, tangent, baseNormal ?? slab.bnDir, out,
+    )
   }
 
   // ── Domain cylinders (LOD level 2 — one per domain, strand-colored) ─────────
@@ -3934,13 +3937,20 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
             // Prefer the WOUND axis-tangent (CanDo FEM display supplies tx/ty/tz so the slab
             // frame follows the wound backbone); fall back to the design tangent (mrDNA/oxDNA
             // overlays send only nx/ny/nz).
-            if (upd.tx !== undefined) _slabAxisDir.set(upd.tx, upd.ty, upd.tz)
-            else _slabAxisDir.set(...slab.nuc.axis_tangent)
+            if (upd.tx !== undefined) _slabAxisDir.set(upd.tx, upd.ty, upd.tz).normalize()
+            else _slabAxisDir.set(...slab.nuc.axis_tangent).normalize()
+            // Match slabQuaternion(): simulation frames are not guaranteed to
+            // provide perfectly perpendicular vectors after interpolation. A raw
+            // non-orthogonal makeBasis is a sheared matrix, which a quaternion can
+            // misread as a slab facing away from its paired helix center.
+            _slabBnS.addScaledVector(
+              _slabAxisDir, -_slabBnS.dot(_slabAxisDir),
+            ).normalize()
             _slabTanS.crossVectors(_slabAxisDir, _slabBnS).normalize()  // tangential
             _slabBasis.makeBasis(_slabTanS, _slabAxisDir, _slabBnS)
             _slabQuatS.setFromRotationMatrix(_slabBasis)
             const center = _slabCenterAt(
-              slab, _slabAxisDir.normalize(), liveBaseMap, null, _slabCenterD,
+              slab, _slabAxisDir, liveBaseMap, null, _slabCenterD, _slabBnS,
             )
             _tMatrix.compose(center, _slabQuatS, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
           } else {
