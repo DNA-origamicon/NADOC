@@ -1,16 +1,29 @@
 import { test, expect } from '@playwright/test'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 // Small enough for a deterministic UI gate while still containing real reference
 // strands on reference-only and shared helix axes.
-const DESIGN = '/home/joshua/NADOC/workspace/Ultimate Polymer Hinge.nadoc'
+const HERE = path.dirname(fileURLToPath(import.meta.url))
+const DESIGN = path.resolve(HERE, '../../tests/smoke/smoke_design.nadoc')
 
-test('Simulation tab camera navigation ignores hidden reference geometry', async ({ page }) => {
+test('Simulation tab ignores hidden references without moving the camera', async ({ page }) => {
   test.setTimeout(180_000)
   await page.goto('/')
   await page.evaluate(async (path) => {
     const api = await import('/src/api/client.js')
     await api.loadDesign(path)
     await api.getGeometry()
+    const dbg = window.__NADOC_DBG__
+    const design = dbg.store.getState().currentDesign
+    dbg.store.setState({
+      currentDesign: {
+        ...design,
+        strands: design.strands.map((strand, index) => (
+          index === 0 ? { ...strand, is_reference: true } : strand
+        )),
+      },
+    })
     document.getElementById('welcome-screen')?.classList.add('hidden')
     document.getElementById('left-panel')?.classList.remove('locked-hidden', 'hidden')
     document.querySelectorAll('#left-tab-strip .left-tab-btn')
@@ -24,15 +37,7 @@ test('Simulation tab camera navigation ignores hidden reference geometry', async
     const dbg = window.__NADOC_DBG__
     const state = { ...dbg.store.getState(), simulationTabActive: true }
     const geometry = navigationGeometry(state)
-    const lo = [Infinity, Infinity, Infinity]
-    const hi = [-Infinity, -Infinity, -Infinity]
-    for (const n of geometry) for (let i = 0; i < 3; i++) {
-      lo[i] = Math.min(lo[i], n.backbone_position[i])
-      hi[i] = Math.max(hi[i], n.backbone_position[i])
-    }
-    const center = lo.map((v, i) => (v + hi[i]) * 0.5)
     return {
-      center,
       geometryCount: geometry.length,
       totalGeometryCount: state.currentGeometry.length,
       navHelixCount: navigationDesign(state).helices.length,
@@ -41,15 +46,28 @@ test('Simulation tab camera navigation ignores hidden reference geometry', async
   expect(expected.geometryCount).toBeGreaterThan(0)
   expect(expected.geometryCount).toBeLessThan(expected.totalGeometryCount)
 
+  const before = await page.evaluate(() => ({
+    position: window.__NADOC_DBG__.camera.position.toArray(),
+    target: window.__NADOC_DBG__.controls.target.toArray(),
+    up: window.__NADOC_DBG__.camera.up.toArray(),
+    quaternion: window.__NADOC_DBG__.camera.quaternion.toArray(),
+  }))
+
   await page.locator('#left-tab-strip [data-tab="dynamics"]').click()
   await expect(page.locator('#tab-content-dynamics')).toBeVisible()
 
   const actual = await page.evaluate(() => ({
     simulationTabActive: window.__NADOC_DBG__.store.getState().simulationTabActive,
+    position: window.__NADOC_DBG__.camera.position.toArray(),
     target: window.__NADOC_DBG__.controls.target.toArray(),
+    up: window.__NADOC_DBG__.camera.up.toArray(),
+    quaternion: window.__NADOC_DBG__.camera.quaternion.toArray(),
     navHelixCount: window.__NADOC_DBG__.msNav.probe()?.helices,
   }))
   expect(actual.simulationTabActive).toBe(true)
   expect(actual.navHelixCount).toBe(expected.navHelixCount)
-  for (let i = 0; i < 3; i++) expect(actual.target[i]).toBeCloseTo(expected.center[i], 5)
+  expect(actual.position).toEqual(before.position)
+  expect(actual.target).toEqual(before.target)
+  expect(actual.up).toEqual(before.up)
+  expect(actual.quaternion).toEqual(before.quaternion)
 })

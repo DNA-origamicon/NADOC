@@ -44,7 +44,7 @@ import { initFretChecker } from './scene/fret_checker.js'
 import { initUndefinedHighlight } from './scene/undefined_highlight.js'
 import { assemblyDuplicateOffset } from './scene/assembly_layout.js'
 import { nucleotideLocalBox, selectionBBox } from './scene/selection_bbox.js'
-import { navigationDesign, navigationGeometry, referenceGeometryHidden } from './scene/reference_navigation.js'
+import { navigationDesign, navigationGeometry } from './scene/reference_navigation.js'
 import { fitViewPose } from './scene/fit_view_math.js'
 import { initAssemblyMultiBox } from './scene/assembly_multi_box.js'
 import { initAssemblyConfigAnimator } from './scene/assembly_config_animator.js'
@@ -3888,23 +3888,6 @@ async function main() {
       baseKeys: new Set(refs.filter(ref => ref.kind === 'base').map(ref => ref.key)),
     })
   }
-
-  // Transparent reference instances still exist in the Three.js scene. When
-  // their visibility flips, move the camera and its pivot together to the
-  // visible design's center. Preserving the camera offset avoids a view-angle
-  // jump while making Orbit, Trackball, and Multiscale rotate as if the hidden
-  // helper geometry did not exist.
-  store.subscribe((newState, prevState) => {
-    if (newState.assemblyActive ||
-        !referenceGeometryHidden(newState) || referenceGeometryHidden(prevState)) return
-    const box = nucleotideLocalBox(navigationGeometry(newState))
-    if (!box) return
-    const center = box.getCenter(new THREE.Vector3())
-    const delta = center.sub(controls.target)
-    controls.target.add(delta)
-    camera.position.add(delta)
-    controls.update()
-  })
 
   // F-key handler: frame the selection if there is one, otherwise fit the whole
   // design. Matches the standard CAD convention (Blender F, Fusion F, etc.).
