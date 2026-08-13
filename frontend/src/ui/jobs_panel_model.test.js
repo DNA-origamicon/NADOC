@@ -104,10 +104,11 @@ function oldOxdnaJobRow(job, { isChild = false, index = 0, depth = 0, listIndex 
     row.append(box)
   }
   if (jobOutOfDate(job) && !autorefineRunning) {
-    const warn = Object.assign(doc.createElement('span'), { textContent: '⚠' })
+    const warn = Object.assign(doc.createElement('button'), { textContent: '⚠' })
     warn.className = 'oxdna-job-stale-warn'
-    warn.style.cssText = `flex-shrink:0;color:${_C.warn};font-size:11px`
     warn.title = 'Design changed since this job was relaxed — run a new Relax, or roll the feature log back, before live/production.'
+    warn.type = 'button'
+    warn.setAttribute('aria-label', warn.title)
     row.append(warn)
   }
   row.append(sym)
@@ -184,6 +185,23 @@ describe('U3 parity pin — canonical row matches old oxDNA _jobRow byte-for-byt
     const unsel = renderJobRow(buildJobRowModel(OX_JOBS[0], oxdnaCtx(S()), { depth: 0, listIndex: 1 }))
     expect(sel.style.background).toBeTruthy()
     expect(unsel.style.background).toBeFalsy()
+  })
+
+  it('makes a warning independently clickable and keyboard accessible when requested', () => {
+    const onClick = vi.fn()
+    const onWarning = vi.fn()
+    const model = buildJobRowModel(OX_JOBS.find(j => j.out_of_date), oxdnaCtx(S()), { depth: 0, listIndex: 1 })
+    const row = renderJobRow(model, { doc: document, onClick, onWarning })
+    const warn = row.querySelector('button[type="button"]')
+    expect(warn).toBeTruthy()
+    warn.click()
+    expect(onWarning).toHaveBeenCalledWith(model.jobId)
+    expect(onClick).not.toHaveBeenCalled()
+    // Native buttons synthesize click for Enter/Space; the click handler is the one
+    // boundary that must stop the enclosing row from selecting/deselecting.
+    warn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    expect(onWarning).toHaveBeenCalledTimes(2)
+    expect(onClick).not.toHaveBeenCalled()
   })
 
   describe('right-click is opt-in per panel', () => {

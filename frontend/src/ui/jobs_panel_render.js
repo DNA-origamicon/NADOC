@@ -15,7 +15,7 @@ import { statusBadge, makeSpinner, makeStatusLegend } from './job_status_symbol.
  * Render one canonical row model → a `<div>` row element. `onClick(jobId)` is
  * wired to a click on the row.
  */
-export function renderJobRow(m, { doc = document, onClick, onAction, onChevron,
+export function renderJobRow(m, { doc = document, onClick, onAction, onWarning, onChevron,
   onContextMenu } = {}) {
   const row = doc.createElement('div')
   row.dataset.jobId = m.jobId
@@ -117,10 +117,23 @@ export function renderJobRow(m, { doc = document, onClick, onAction, onChevron,
   const warningCol = m.compactColumns ? doc.createElement('span') : row
   if (m.compactColumns) warningCol.style.cssText = 'flex:0 0 12px;width:12px;text-align:center'
   if (m.stale) {
-    const warn = Object.assign(doc.createElement('span'), { textContent: '⚠' })
+    const warn = Object.assign(doc.createElement('button'), { textContent: '⚠' })
     if (m.staleClass) warn.className = m.staleClass
-    warn.style.cssText = `flex-shrink:0;color:${m.colors.warn};font-size:11px`
+    warn.style.cssText = `display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;padding:0;`
+      + `border:0;background:transparent;color:${m.colors.warn};font-size:11px;line-height:1;cursor:pointer`
     warn.title = m.staleTitle
+    warn.type = 'button'
+    warn.setAttribute('aria-label', m.staleTitle || 'Job warning')
+    // A warning is an independent control in every simulation list. Even a panel with
+    // no warning action must never let this click fall through and toggle its job row.
+    warn.addEventListener('pointerdown', (e) => e.stopPropagation())
+    warn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      onWarning?.(m.jobId)
+    })
+    if (onWarning) {
+      warn.dataset.actionable = 'true'
+    }
     warningCol.append(warn)
   }
   if (m.compactColumns) row.append(warningCol)
@@ -182,7 +195,7 @@ export function renderJobRow(m, { doc = document, onClick, onAction, onChevron,
  * built once and not re-created every render.
  */
 export function renderJobList(listEl, model, {
-  doc = document, onClick, onAction, onChevron, onContextMenu, emptyText = 'No jobs yet.',
+  doc = document, onClick, onAction, onWarning, onChevron, onContextMenu, emptyText = 'No jobs yet.',
   dimColor = '#8a8a8a', legendState = null,
 } = {}) {
   if (!listEl) return
@@ -192,7 +205,7 @@ export function renderJobList(listEl, model, {
   }
   listEl.innerHTML = ''
   for (const rm of model.rows) {
-    listEl.appendChild(renderJobRow(rm, { doc, onClick, onAction, onChevron, onContextMenu }))
+    listEl.appendChild(renderJobRow(rm, { doc, onClick, onAction, onWarning, onChevron, onContextMenu }))
   }
   if (legendState && !legendState.el) {
     legendState.el = makeStatusLegend(doc)

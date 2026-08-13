@@ -7,7 +7,7 @@ vi.mock('../api/client.js', () => ({ selectLoadout: vi.fn(), lastErrorMessage: (
 import { showConfirm } from './primitives/confirm.js'
 import { showPersistentToast } from './toast.js'
 import * as api from '../api/client.js'
-import { jobOutOfDate, ensureJobCurrent } from './job_staleness.js'
+import { jobOutOfDate, ensureJobCurrent, restoreSubmittedDesign } from './job_staleness.js'
 
 describe('jobOutOfDate', () => {
   it('reflects the backend flag', () => {
@@ -75,5 +75,39 @@ describe('ensureJobCurrent', () => {
     rollFn.mockResolvedValue(null)
     const ok = await ensureJobCurrent({ job: { job_id: 'j', out_of_date: true }, rollFn, refetch, isStale: () => false })
     expect(ok).toBe(false)
+  })
+})
+
+describe('restoreSubmittedDesign', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useFakeTimers()
+  })
+
+  it('offers Apply/Cancel, restores the frozen snapshot, and keeps a return action', async () => {
+    showConfirm.mockResolvedValue(true)
+    const rollFn = vi.fn().mockResolvedValue({ matches_job: true, return_loadout_id: 'latest' })
+    const refetch = vi.fn().mockResolvedValue()
+    const ok = await restoreSubmittedDesign({
+      job: { job_id: 'remote-1', out_of_date: true, execution_target: 'alpine', status: 'running' },
+      rollFn, refetch,
+    })
+    expect(ok).toBe(true)
+    expect(showConfirm).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Restore to submitted design?', confirmLabel: 'Apply', cancelLabel: 'Cancel',
+    }))
+    expect(showConfirm.mock.calls[0][0].message).toMatch(/will not be stopped or modified/i)
+    expect(rollFn).toHaveBeenCalledWith('remote-1')
+    expect(showPersistentToast.mock.calls[0][1].action.label).toContain('Return to latest')
+    await vi.runAllTimersAsync()
+    expect(refetch).toHaveBeenCalledOnce()
+  })
+
+  it('does nothing when cancelled or when the warning is not a design mismatch', async () => {
+    const rollFn = vi.fn()
+    expect(await restoreSubmittedDesign({ job: { job_id: 'gpu', out_of_date: false }, rollFn })).toBe(false)
+    showConfirm.mockResolvedValue(false)
+    expect(await restoreSubmittedDesign({ job: { job_id: 'stale', out_of_date: true }, rollFn })).toBe(false)
+    expect(rollFn).not.toHaveBeenCalled()
   })
 })

@@ -19,7 +19,7 @@ import { initJobsPanelBase } from './jobs_panel_base.js'
 import { resetControlsToDefaults } from './form_defaults.js'
 import { showToast } from './toast.js'
 import { selectionUpdatesVisualization } from './visualization_selection_policy.js'
-import { jobOutOfDate, ensureJobCurrent } from './job_staleness.js'
+import { jobOutOfDate, ensureJobCurrent, restoreSubmittedDesign } from './job_staleness.js'
 import { filterJobsForPart, newestCompletedForPart } from './md_jobs_panel.js'
 import { isUndefinedSequenceError, showSequenceWarningModal } from './sequence_warning_modal.js'
 import { initOxdnaTrajectoryPlayer, fieldAtFrame } from './oxdna_trajectory_player.js'
@@ -1460,6 +1460,10 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
         if (jobId === _selectedId && !_lammpsMode) _deselectJob()
         else _selectJob(jobId, { confirmTrajUnload: true })
       },
+      onWarning: (jobId) => {
+        const job = _jobs.find(j => j.job_id === jobId)
+        if (job) void restoreSubmittedDesign({ job, rollFn: api.rollOxdnaJobDesign, refetch: _fetchJobs })
+      },
       emptyText: 'No oxDNA jobs for this design yet.',
       dimColor: _C.dim,
       legendState: _legend,
@@ -2689,6 +2693,10 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
 
   return {
     refresh: _fetchJobs, getSelectedJob: _selectedJob, ensureJobCurrent: _ensureJobCurrent,
+    restoreSubmittedDesign: async (jobId) => {
+      const job = _jobs.find(j => j.job_id === jobId)
+      return job ? restoreSubmittedDesign({ job, rollFn: api.rollOxdnaJobDesign, refetch: _fetchJobs }) : false
+    },
     // Start a new oxDNA relaxation (the front-door "Relax" action) — used by the unified
     // Simulate master card's context Run button when nothing / an oxDNA job is selected,
     // so the GPU-busy dialog + disk forecast + sequence guard all stay in one place.

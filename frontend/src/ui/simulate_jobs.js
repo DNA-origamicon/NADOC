@@ -625,6 +625,13 @@ export function initSimulateJobs({
     _listSig = sig
     renderJobList(listEl, buildJobListModel(nodes, ctx), {
       onClick: (jobId) => (jobId === _sel.id ? _deselect() : _select(jobId)),
+      onWarning: (jobId) => {
+        const node = _nodes.find(n => n.job_id === jobId)
+        const panel = _panelFor(node)
+        if (node?.out_of_date && panel?.restoreSubmittedDesign) {
+          void panel.restoreSubmittedDesign(jobId)
+        }
+      },
       onContextMenu: (jobId, e) => _openRowMenu(jobId, e),
       emptyText: _showAllTypes
         ? 'No simulation runs for this design yet — press ▶ Relax to start one.'

@@ -20,6 +20,36 @@ export function jobOutOfDate(job) {
   return !!job?.out_of_date
 }
 
+/** Restore from an explicit click on a job-row warning. Unlike ensureJobCurrent this
+ * is not coupled to starting another run: local, Alpine, and RunPod jobs all own (or
+ * inherit) the same frozen design snapshot, and restoring it never changes execution. */
+export async function restoreSubmittedDesign({ job, rollFn, refetch }) {
+  if (!jobOutOfDate(job)) return false
+  const ok = await showConfirm({
+    title: 'Restore to submitted design?',
+    message: 'This design has changed since the job was submitted. Restore the exact design snapshot used to prepare this job?\n\nThe job will not be stopped or modified, whether it is running locally, on Alpine, or on RunPod. Your current design will be saved as a loadout so you can return to it later.',
+    confirmLabel: 'Apply',
+    cancelLabel: 'Cancel',
+  })
+  if (!ok) return false
+  const r = await rollFn(job.job_id)
+  if (!r) {
+    showToast(api.lastErrorMessage?.() || 'Could not restore the submitted design (see console)', 'warn')
+    return false
+  }
+  if (r.matches_job === false) {
+    showToast('The snapshot was restored, but it still does not match this job.', 'warn')
+    return false
+  }
+  if (refetch) setTimeout(() => { Promise.resolve(refetch()).catch(() => {}) }, 0)
+  if (r.return_loadout_id) {
+    showPersistentToast(
+      'Submitted design restored. The job was not modified; your later edits are saved as a “Latest” loadout.',
+      { severity: 'info', action: { label: '↩ Return to latest', onClick: () => api.selectLoadout(r.return_loadout_id, { saveCurrent: false }) } })
+  }
+  return true
+}
+
 /**
  * Guard a run action on a possibly-stale job. Returns true to proceed, false to abort.
  * @param {object}   opts

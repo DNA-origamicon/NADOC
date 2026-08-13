@@ -20,7 +20,7 @@ import {
   mdVisualizationJobSwitchAction,
   selectionUpdatesVisualization,
 } from './visualization_selection_policy.js'
-import { jobOutOfDate, ensureJobCurrent } from './job_staleness.js'
+import { jobOutOfDate, ensureJobCurrent, restoreSubmittedDesign } from './job_staleness.js'
 import { rollMdJobDesign, estimateMdDisk, estimateMdProductionDisk, preflightMdVram } from '../api/client.js'
 import { getRunDir, recommendArchive, archiveRecommendation } from './run_location.js'
 import { docKey } from '../shared/doc_id.js'
@@ -3826,6 +3826,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     }
     renderJobList(listEl, buildJobListModel(jobs, ctx), {
       onClick: (jobId) => (jobId === _selectedId ? _deselectJob() : _selectJob(jobId)),
+      onWarning: (jobId) => { void _handleJobWarning(jobId) },
       onChevron: (jobId) => _toggleCollapse(jobId),
       onAction: (jobId) => _openVramFix(jobId),   // the "Fix" VRAM-OOM row action
       onContextMenu: (jobId, e) => _openJobRowMenu(jobId, e),
@@ -3833,6 +3834,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       dimColor: _C.dim,
       legendState: _legend,
     })
+  }
+
+  async function _handleJobWarning(jobId) {
+    const job = _jobs.find(j => j.job_id === jobId)
+    if (!job) return
+    if (!jobOutOfDate(job)) {
+      if (jobId !== _selectedId) _selectJob(jobId)
+      return
+    }
+    await restoreSubmittedDesign({ job, rollFn: rollMdJobDesign, refetch: _fetchJobs })
   }
 
   /**
@@ -4836,6 +4847,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // than this panel). A single fetch populates the list AND re-arms the poll once the
     // new job reads active.
     refresh: _fetchJobs,
+    restoreSubmittedDesign: async (jobId) => {
+      const job = _jobs.find(j => j.job_id === jobId)
+      return job ? restoreSubmittedDesign({ job, rollFn: rollMdJobDesign, refetch: _fetchJobs }) : false
+    },
     // Select a job in this panel's list (highlight + populate cards) as a row click does.
     // Refetches first if the job isn't listed yet (a just-spawned job).
     selectJob: async (jobId) => {

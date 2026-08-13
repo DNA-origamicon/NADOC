@@ -1264,7 +1264,7 @@ describe('U3 slice 2b — NAMD canonical convergence (payload parity)', () => {
       emptyText: 'none', dimColor: '#8b949e',
     })
     const boomRow = [...el.querySelectorAll('[data-job-id]')].find(r => r.dataset.jobId === 'boom')
-    const fixBtn = boomRow.querySelector('button')
+    const fixBtn = [...boomRow.querySelectorAll('button')].find(b => b.textContent === 'Fix')
     expect(fixBtn.textContent).toBe('Fix')
     fixBtn.click()
     expect(actions).toEqual(['boom'])   // Fix action fired — guards the onAction wiring
