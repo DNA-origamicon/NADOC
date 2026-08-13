@@ -1,38 +1,27 @@
 import * as THREE from 'three'
 import { posEulerFromMatrix, eulerDegToQuat, stepEulerDeg } from './rotation_math.js'
 import { showToast } from '../ui/toast.js'
+import { canonicalSelection } from './selection_model.js'
 
 export function moveRotateSelectionLabels(state) {
   const design = state.currentDesign
-  const labels = []
-  for (const key of state.multiSelectedBaseKeys ?? []) labels.push(`Base · ${key}`)
-  for (const id of state.multiSelectedClusterIds ?? []) {
-    const name = design?.cluster_transforms?.find(c => c.id === id)?.name ?? id
-    labels.push(`Cluster · ${name}`)
-  }
-  for (const id of state.multiSelectedStrandIds ?? []) labels.push(`Strand · ${id}`)
-  if (labels.length) return [...new Set(labels)]
+  const labels = canonicalSelection(state).items.map(ref => {
+    if (ref.kind === 'base' || ref.kind === 'end') return `${ref.kind === 'base' ? 'Base' : 'End'} · ${ref.key}`
+    if (ref.kind === 'cluster') {
+      const name = design?.cluster_transforms?.find(c => c.id === ref.id)?.name ?? ref.id
+      return `Cluster · ${name}`
+    }
+    if (ref.kind === 'strand') return `Strand · ${ref.id}`
+    if (ref.kind === 'domain') return `Domain · ${ref.strandId} [${ref.domainIndex}]`
+    return `${ref.kind} · ${ref.id ?? ref.key}`
+  })
+  if (labels.length) return labels
 
   if (state.assemblyActive && state.activeInstanceId) {
     const name = state.currentAssembly?.instances?.find(i => i.id === state.activeInstanceId)?.name
     return [`Part · ${name ?? state.activeInstanceId}`]
   }
-  const selected = state.selectedObject
-  if (!selected) return []
-  if (selected.type === 'cluster') {
-    const id = selected.data?.cluster_id ?? selected.id
-    const name = design?.cluster_transforms?.find(c => c.id === id)?.name ?? id
-    return [`Cluster · ${name}`]
-  }
-  if (selected.type === 'strand') return [`Strand · ${selected.data?.strand_id ?? selected.id}`]
-  if (selected.type === 'domain') {
-    return [`Domain · ${selected.data?.strand_id ?? '?'} [${selected.data?.domain_index ?? '?'}]`]
-  }
-  if (selected.type === 'nucleotide') {
-    const d = selected.data ?? {}
-    return [`Base · ${d.helix_id ?? '?'}:${d.bp_index ?? '?'}:${d.direction ?? '?'}`]
-  }
-  return [`${selected.type} · ${selected.id ?? 'selected'}`]
+  return []
 }
 
 /**

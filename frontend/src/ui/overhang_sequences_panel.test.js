@@ -131,27 +131,39 @@ describe('selectedStrandIds', () => {
     expect([...selectedStrandIds({})]).toEqual([])
   })
 
-  it('includes the single selectedObject strand', () => {
-    const ids = selectedStrandIds({ selectedObject: { data: { strand_id: 'sX' } } })
+  it('includes a canonical selected strand', () => {
+    const ids = selectedStrandIds({ selection: { items: [{ kind: 'strand', id: 'sX' }] } })
     expect([...ids]).toEqual(['sX'])
   })
 
   it('includes multi-selected strand ids', () => {
-    const ids = selectedStrandIds({ multiSelectedStrandIds: ['a', 'b'] })
+    const ids = selectedStrandIds({ selection: { items: [
+      { kind: 'strand', id: 'a' }, { kind: 'strand', id: 'b' },
+    ] } })
     expect([...ids].sort()).toEqual(['a', 'b'])
   })
 
   it('includes the strandId of each multi-selected domain', () => {
-    const ids = selectedStrandIds({ multiSelectedDomainIds: [{ strandId: 'd1' }, { strandId: 'd2' }] })
+    const ids = selectedStrandIds({ selection: { items: [
+      { kind: 'domain', strandId: 'd1', domainIndex: 0 },
+      { kind: 'domain', strandId: 'd2', domainIndex: 1 },
+    ] } })
     expect([...ids].sort()).toEqual(['d1', 'd2'])
   })
 
-  it('unions all three sources and dedupes', () => {
+  it('derives the parent strand of a canonical overhang ref', () => {
     const ids = selectedStrandIds({
-      selectedObject: { data: { strand_id: 'shared' } },
-      multiSelectedStrandIds: ['shared', 'm'],
-      multiSelectedDomainIds: [{ strandId: 'd' }],
+      selection: { items: [{ kind: 'overhang', id: 'oh1' }] },
+      currentDesign: { overhangs: [{ id: 'oh1', strand_id: 's1' }] },
     })
+    expect([...ids]).toEqual(['s1'])
+  })
+
+  it('unions all three sources and dedupes', () => {
+    const ids = selectedStrandIds({ selection: { items: [
+      { kind: 'strand', id: 'shared' }, { kind: 'strand', id: 'm' },
+      { kind: 'domain', strandId: 'd', domainIndex: 0 },
+    ] } })
     expect([...ids].sort()).toEqual(['d', 'm', 'shared'])
   })
 })
@@ -172,10 +184,7 @@ const mountDom = () => mountIds({
 function makeDeps(design) {
   const store = createMockStore({
     currentDesign: design,
-    selectedObject: null,
-    multiSelectedStrandIds: [],
-    multiSelectedDomainIds: [],
-    multiSelectedOverhangIds: [],
+    selection: { items: [] },
   })
   const selectionManager = { selectStrand: vi.fn(), selectOverhang: vi.fn() }
   const api = {
@@ -372,7 +381,7 @@ describe('initOverhangSequencesPanel', () => {
     const deps = makeDeps(DESIGN)
     initOverhangSequencesPanel(deps)
     document.getElementById('overhang-panel-heading').click()
-    deps.store._emit({ multiSelectedStrandIds: ['s1'] })
+    deps.store._emit({ selection: { items: [{ kind: 'strand', id: 's1' }] } })
     const rows = [...document.getElementById('overhang-list').children].filter(c => c.dataset.strandId)
     const r1 = rows.find(r => r.dataset.strandId === 's1')
     const r2 = rows.find(r => r.dataset.strandId === 's2')

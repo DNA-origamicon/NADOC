@@ -244,7 +244,6 @@ export function initForceCrossoverTool({
     selectionManager.clearSelection?.()
     store.setState({
       forceXoverActive: true,
-      selectedObject: null,
       selectableTypes: {
         scaffold: false, staples: false, strands: false, domains: false,
         ends: false, crossoverArcs: false, loops: false, skips: false, overhangs: false,

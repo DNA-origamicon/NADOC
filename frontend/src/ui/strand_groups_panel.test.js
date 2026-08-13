@@ -196,7 +196,9 @@ describe('initStrandGroupsPanel', () => {
 
   it('New button appends a group seeded from the current multi-selection', () => {
     mountDom()
-    const deps = makeDeps({ multiSelectedStrandIds: ['s5', 's6'] })
+    const deps = makeDeps({ selection: { items: [
+      { kind: 'strand', id: 's5' }, { kind: 'strand', id: 's6' },
+    ] } })
     initStrandGroupsPanel(deps)
     document.getElementById('groups-new-btn').click()
     const gs = deps.store.getState().strandGroups
@@ -209,7 +211,7 @@ describe('initStrandGroupsPanel', () => {
     mountDom()
     const deps = makeDeps({
       strandGroups: [{ id: 'old', name: 'Old', color: '#fff', strandIds: ['s5', 's7'] }],
-      multiSelectedStrandIds: ['s5'],
+      selection: { items: [{ kind: 'strand', id: 's5' }] },
     })
     initStrandGroupsPanel(deps)
     document.getElementById('groups-new-btn').click()

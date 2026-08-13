@@ -34,6 +34,10 @@ async function loadFramedPart(page, opts) {
 
 /** Click the real #select-filter base button and confirm the level engaged. */
 async function engageBaseLevel(page) {
+  // Selection levels live in the collapsed picker; exercise the real trigger before
+  // clicking the row (the old helper pre-dated the collapsed menu and clicked a hidden
+  // button, timing out without ever testing selection).
+  await page.locator('#select-filter-trigger').click()
   await page.locator('#select-filter .sf-btn[data-key="base"]').click()
   await page.waitForTimeout(80)
   expect(await page.evaluate(() => window.__nadocTest.getSelectionLevel())).toBe('base')
@@ -103,6 +107,38 @@ test.describe('Base-level selection', () => {
     const two = await poolOf(page)
     expect(two.length, 'Ctrl-click is additive').toBe(2)
     expect(two[0]).toBe(one[0])   // the plain-click pick survived
+  })
+
+  test('default strand→base drill and explicit Base level reach the same endpoint', async ({ page }) => {
+    await loadFramedPart(page, { doc: 'e2e-base-parity', name: 'base-parity' })
+    const [bead] = await spreadBeads(page)
+    expect(bead, 'expected an on-canvas bead').toBeTruthy()
+
+    // Default drill: first click selects the strand; the next click selects the base.
+    await page.mouse.click(bead.x, bead.y)
+    await page.waitForTimeout(100)
+    expect((await page.evaluate(() => window.__nadocTest.getCanonicalSelection())).primary?.kind).toBe('strand')
+    await page.mouse.click(bead.x, bead.y)
+    await page.waitForTimeout(120)
+    const drilled = await poolOf(page)
+    expect(drilled).toHaveLength(1)
+    expect((await page.evaluate(() => window.__nadocTest.getCanonicalSelection())).primary?.kind).toBe('base')
+
+    // Clear, enter explicit Base, and pick the identical screen target.
+    await page.keyboard.press('Escape')
+    await page.locator('#canvas').click({ position: { x: 4, y: 4 } })
+    await engageBaseLevel(page)
+    await page.mouse.click(bead.x, bead.y)
+    await page.waitForTimeout(120)
+    const explicit = await poolOf(page)
+
+    expect(explicit).toEqual(drilled)
+    expect((await page.evaluate(() => window.__nadocTest.getCanonicalSelection())).primary?.kind).toBe('base')
+    expect(await page.evaluate(() => window.__nadocTest.getCanonicalSelection())).toEqual({
+      context: 'design', level: 'base',
+      items: [{ kind: 'base', key: explicit[0] }],
+      primary: { kind: 'base', key: explicit[0] },
+    })
   })
 
   test('Ctrl-click on an already-picked base removes it (toggle)', async ({ page }) => {

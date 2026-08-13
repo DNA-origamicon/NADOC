@@ -5,9 +5,8 @@
  * helix axis.  The arrows are draggable: grabbing and moving one arrow extends
  * or shortens ALL visible end arrows by the same bp delta simultaneously.
  *
- * Two selection sources are unified:
- *   1. _ctrlBeads (ctrl-click or lasso with ends filter on) — via onCtrlBeadsChange
- *   2. store.selectedObject.type === 'nucleotide' (regular 3-click bead selection)
+ * End arrows derive only from canonical base/end refs. Alt-picked measurement
+ * anchors are intentionally separate tool state and never create resize arrows.
  *
  * Drag behaviour:
  *   - Cursor is projected onto the dragged arrow's helix axis.
@@ -23,6 +22,8 @@ import * as THREE from 'three'
 import { store }           from '../state/store.js'
 import { resizeStrandEnds } from '../api/client.js'
 import { adjacentBpFree, oneNtResizableEnd } from '../shared/strand_end_resize.js'
+import { parseBaseKey } from './base_ref.js'
+import { canonicalSelection } from './selection_model.js'
 
 // ── Arrow dimensions (nm) ─────────────────────────────────────────────────────
 
@@ -89,7 +90,7 @@ export { adjacentBpFree, oneNtResizableEnd }
  * @param {THREE.Scene}         scene
  * @param {THREE.Camera}        camera
  * @param {HTMLCanvasElement}   canvas
- * @param {object}              selectionManager  — exposes onCtrlBeadsChange / getCtrlBeads
+ * @param {object}              selectionManager  — selection gesture owner
  * @param {object}              designRenderer    — exposes getBackboneEntries()
  * @param {object|null}         controls          — OrbitControls / TrackballControls instance
  */
@@ -164,7 +165,6 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
   // ── State ─────────────────────────────────────────────────────────────────
 
   let _arrowGroups = []
-  let _ctrlBeads   = []   // latest snapshot from onCtrlBeadsChange
 
   // Drag state
   let _dragging       = false
@@ -176,31 +176,31 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
 
   // ── Entry lookup ──────────────────────────────────────────────────────────
 
-  function _entryForNuc(nuc) {
-    const entries = designRenderer.getBackboneEntries()
-    const e = entries.find(
-      be => be.nuc.helix_id  === nuc.helix_id  &&
-            be.nuc.bp_index  === nuc.bp_index  &&
-            be.nuc.direction === nuc.direction,
-    )
-    return e ? { entry: e, nuc } : null
+  function _entryForSelectionRef(ref) {
+    if (ref?.kind !== 'base' && ref?.kind !== 'end') return null
+    const target = parseBaseKey(ref.key)
+    if (!target || target.helix_id === '__xb__') return null
+    const entry = designRenderer.getBackboneEntries().find(be =>
+      be.nuc.helix_id === target.helix_id &&
+      be.nuc.bp_index === target.bp_index &&
+      be.nuc.direction === target.direction &&
+      (be._copy ?? 0) === (target.copy ?? 0))
+    return entry ? { entry, nuc: entry.nuc } : null
   }
 
   // ── Collect all end-bead sources ──────────────────────────────────────────
 
   function _collectBeads() {
-    const beads = [..._ctrlBeads]
-    const { selectedObject } = store.getState()
-    if (selectedObject?.type === 'nucleotide') {
-      const nuc = selectedObject.data
-      if (nuc && (nuc.is_five_prime || nuc.is_three_prime)) {
+    const beads = []
+    for (const ref of canonicalSelection(store.getState()).items) {
+      const bead = _entryForSelectionRef(ref)
+      const nuc = bead?.nuc
+      if (bead && (nuc.is_five_prime || nuc.is_three_prime)) {
         const alreadyPresent = beads.some(
-          b => b.nuc.helix_id === nuc.helix_id && b.nuc.bp_index === nuc.bp_index,
+          b => b.nuc.helix_id === nuc.helix_id && b.nuc.bp_index === nuc.bp_index &&
+            b.nuc.direction === nuc.direction,
         )
-        if (!alreadyPresent) {
-          const bead = _entryForNuc(nuc)
-          if (bead) beads.push(bead)
-        }
+        if (!alreadyPresent) beads.push(bead)
       }
     }
     return beads
@@ -297,8 +297,7 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
     const endBeads = beads.filter(b => b.nuc.is_five_prime || b.nuc.is_three_prime)
 
     console.debug(
-      `[EndExtrudeArrows] rebuild — ctrl: ${_ctrlBeads.length}, ` +
-      `total: ${beads.length}, ends: ${endBeads.length}`,
+      `[EndExtrudeArrows] rebuild — selected: ${beads.length}, ends: ${endBeads.length}`,
     )
 
     if (!endBeads.length) return
@@ -494,14 +493,17 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
     // been updated (including cadnano reapply).  If the selection was on one of
     // the resized end beads, re-select it at its new bp position so the bead
     // highlight and arrow both move to where the strand now ends.
-    const { currentGeometry, selectedObject } = store.getState()
-    if (!currentGeometry || selectedObject?.type !== 'nucleotide') return
-    const oldNuc = selectedObject.data
+    const state = store.getState()
+    const { currentGeometry } = state
+    const primary = canonicalSelection(state).primary
+    const oldTarget = (primary?.kind === 'base' || primary?.kind === 'end')
+      ? parseBaseKey(primary.key) : null
+    if (!currentGeometry || !oldTarget || oldTarget.helix_id === '__xb__') return
     const _isFiveEnd = (meta) => (meta.endRole ?? (meta.bead.nuc.is_five_prime ? '5p' : '3p')) === '5p'
     const movedMeta = dragBeads.find(meta =>
-      meta.bead.nuc.strand_id === oldNuc?.strand_id &&
-      meta.bead.nuc.helix_id  === oldNuc?.helix_id  &&
-      (_isFiveEnd(meta) ? oldNuc.is_five_prime : oldNuc.is_three_prime),
+      meta.bead.nuc.helix_id  === oldTarget.helix_id &&
+      meta.bead.nuc.bp_index  === oldTarget.bp_index &&
+      meta.bead.nuc.direction === oldTarget.direction,
     )
     if (!movedMeta) return
     const newNuc = currentGeometry.find(n =>
@@ -596,16 +598,10 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
 
   // ── Reactivity ────────────────────────────────────────────────────────────
 
-  selectionManager.onCtrlBeadsChange(beads => {
-    console.debug(`[EndExtrudeArrows] onCtrlBeadsChange — ${beads.length} bead(s)`)
-    _ctrlBeads = beads
-    _rebuild()
-  })
-
   store.subscribe((next, prev) => {
     if (next.currentDesign    !== prev.currentDesign ||
         next.currentHelixAxes !== prev.currentHelixAxes ||
-        next.selectedObject   !== prev.selectedObject) {
+        next.selection        !== prev.selection) {
       _rebuild()
     }
   })

@@ -26,7 +26,9 @@ import {
   computeAtomNucColors,
 } from './color_util.js'
 import { clusterDisplaySignature } from './cluster_entries.js'
-import { baseKey } from './base_ref.js'
+import { baseKey, parseBaseKey } from './base_ref.js'
+import { canonicalSelection, overhangSelectionTarget } from './selection_model.js'
+import { selectionHighlightDescriptor } from './selection_highlight_model.js'
 import { showPersistentToast, dismissToast, showToast } from '../ui/toast.js'
 import { docHeaders } from '../shared/doc_id.js'
 import { geometryQuerySuffix } from '../ui/new_positioning.js'
@@ -37,6 +39,44 @@ import { parseSurfaceBin } from './surface_bin.js'
 export function regionSurfaceSignature(design) {
   return surfaceSegments(design)
     .map(s => `${s.helix_id}:${s.bp_start}-${s.bp_end}`).sort().join('|')
+}
+
+/** Compile canonical refs to the small renderer-neutral predicate descriptor used by
+ * every atomistic representation. Rich domain ranges are derived from live design. */
+export function atomSelectionForState(state) {
+  const refs = canonicalSelection(state).items
+  const highlight = selectionHighlightDescriptor(state)
+  const strands = highlight.strandIds
+  const selectedClusters = highlight.clusterIds.flatMap(id => {
+    const cluster = state?.currentDesign?.cluster_transforms?.find(item => item.id === id)
+    return cluster ? [cluster] : []
+  })
+  const clusterDomainRefs = selectedClusters.flatMap(cluster => (cluster.domain_ids ?? []).map(domain => ({
+    kind: 'domain', strandId: domain.strand_id, domainIndex: domain.domain_index,
+  })))
+  const domainRefs = [...highlight.domains.map(domain => ({ kind: 'domain', ...domain })), ...clusterDomainRefs]
+  const overhangDomainRefs = refs.filter(ref => ref.kind === 'overhang').flatMap(ref => {
+    const target = overhangSelectionTarget(state, ref)
+    return target?.domain && target.strandId != null && target.domainIndex != null
+      ? [{ kind: 'domain', strandId: target.strandId, domainIndex: target.domainIndex }]
+      : []
+  })
+  const domains = [...domainRefs, ...overhangDomainRefs].flatMap(ref => {
+    const domain = state?.currentDesign?.strands?.find(s => s.id === ref.strandId)?.domains?.[ref.domainIndex]
+    return domain ? [{
+      strandId: ref.strandId, helixId: domain.helix_id, direction: domain.direction,
+      lo: Math.min(domain.start_bp, domain.end_bp), hi: Math.max(domain.start_bp, domain.end_bp),
+    }] : []
+  })
+  const bases = [...highlight.baseKeys, ...highlight.endKeys]
+    .map(parseBaseKey).filter(ref => ref && ref.helix_id !== '__xb__')
+  const extensionIds = highlight.extensionIds
+  // A domain-scoped cluster must not widen to its whole helix. Helix membership is
+  // used only by ordinary clusters with no exact domain_ids.
+  const helixIds = [...new Set(selectedClusters
+    .filter(cluster => !(cluster.domain_ids ?? []).length)
+    .flatMap(cluster => cluster.helix_ids ?? []))]
+  return { strandIds: strands, domains, bases, extensionIds, helixIds }
 }
 
 export function initAtomSurfaceDisplay({
@@ -294,8 +334,7 @@ export function initAtomSurfaceDisplay({
       if (!data) return
       atomisticRenderer.update(data)
       _refreshAtomColors()
-      const { selectedObject, multiSelectedStrandIds } = store.getState()
-      atomisticRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
+      atomisticRenderer.highlight(atomSelectionForState(store.getState()))
     } catch (e) {
       console.error('Atomistic refetch error:', e)
     }
@@ -550,8 +589,7 @@ export function initAtomSurfaceDisplay({
         if (data) {
           atomisticRenderer.update(data)
           _refreshAtomColors()
-          const { selectedObject, multiSelectedStrandIds } = store.getState()
-          atomisticRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
+          atomisticRenderer.highlight(atomSelectionForState(store.getState()))
         }
       } catch (e) {
         console.error('Atomistic fetch error:', e)
@@ -623,13 +661,10 @@ export function initAtomSurfaceDisplay({
 
   // Keep highlight in sync with selection changes.
   store.subscribe((newState, prevState) => {
-    if (newState.selectedObject         === prevState.selectedObject &&
-        newState.multiSelectedStrandIds === prevState.multiSelectedStrandIds) return
+    if (newState.selection === prevState.selection &&
+        newState.currentDesign === prevState.currentDesign) return
     if (atomisticRenderer.getMode() === 'off') return
-    atomisticRenderer.highlight(
-      newState.selectedObject,
-      newState.multiSelectedStrandIds ?? [],
-    )
+    atomisticRenderer.highlight(atomSelectionForState(newState))
   })
 
   // ── Per-region overlay coordinators (mixed representation) ──────────────────
@@ -657,10 +692,10 @@ export function initAtomSurfaceDisplay({
     if (ballstick.size) { regionBallstickRenderer.update(filterAtomData(_atomDataCache, ballstick, true)); regionBallstickRenderer.setMode('ballstick') }
     regionStickRenderer.dispose()
     if (stick.size) { regionStickRenderer.update(filterAtomData(_atomDataCache, stick, true)); regionStickRenderer.setMode('stick') }
-    const { selectedObject, multiSelectedStrandIds } = store.getState()
-    regionVdwRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
-    regionBallstickRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
-    regionStickRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
+    const selection = atomSelectionForState(store.getState())
+    regionVdwRenderer.highlight(selection)
+    regionBallstickRenderer.highlight(selection)
+    regionStickRenderer.highlight(selection)
   }
 
   // Surface overlay — debounced + signature-cached (surface compute is slow).
@@ -703,12 +738,11 @@ export function initAtomSurfaceDisplay({
 
   // Selection change → atomistic highlight + surface strand recolor (no recompute).
   store.subscribe((n, p) => {
-    if (n.selectedObject === p.selectedObject &&
-        n.multiSelectedStrandIds === p.multiSelectedStrandIds) return
-    const sel = n.selectedObject, multi = n.multiSelectedStrandIds ?? []
-    if (regionVdwRenderer.getMode() !== 'off')       regionVdwRenderer.highlight(sel, multi)
-    if (regionBallstickRenderer.getMode() !== 'off') regionBallstickRenderer.highlight(sel, multi)
-    if (regionStickRenderer.getMode() !== 'off')     regionStickRenderer.highlight(sel, multi)
+    if (n.selection === p.selection && n.currentDesign === p.currentDesign) return
+    const selection = atomSelectionForState(n)
+    if (regionVdwRenderer.getMode() !== 'off')       regionVdwRenderer.highlight(selection)
+    if (regionBallstickRenderer.getMode() !== 'off') regionBallstickRenderer.highlight(selection)
+    if (regionStickRenderer.getMode() !== 'off')     regionStickRenderer.highlight(selection)
     if (regionSurfaceRenderer.getMode() === 'on')    regionSurfaceRenderer.applyStrandColors(_getAtomStrandColors())
   })
 

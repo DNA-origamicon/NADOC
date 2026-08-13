@@ -12,6 +12,7 @@
  */
 
 import * as api from '../api/client.js'
+import { selectedOverhangIds } from '../scene/selection_model.js'
 import {
   patchSubDomain,
   recomputeSubDomainAnnotations,
@@ -1702,8 +1703,7 @@ function _ctMixedDsdnaLinkerSvg(leftIsRoot, rightIsRoot, L = null, R = null,
 /**
  * Open the manager. If `preselect` is given, it's an array of up to 2
  * overhang ids to drop into sides A and B (in order). When omitted, the
- * popup pulls the current overhang selection from the store
- * (`multiSelectedOverhangIds`, then any single selectedObject overhang).
+ * popup pulls the current canonical overhang selection from the store.
  */
 export function open(preselect) {
   if (!_modal) return
@@ -1737,12 +1737,7 @@ function _resolvePreselect(state, explicit) {
   if (Array.isArray(explicit) && explicit.length > 0) {
     return explicit.filter(valid).slice(0, 2)
   }
-  // Multi-overhang selection (lasso / ctrl+click) — first 2.
-  const multi = (state.multiSelectedOverhangIds ?? []).filter(valid).slice(0, 2)
-  if (multi.length > 0) return multi
-  // Single-selected overhang via domain-mode click.
-  const single = state.selectedObject?.data?.overhang_id
-  return valid(single) ? [single] : []
+  return selectedOverhangIds(state).filter(valid).slice(0, 2)
 }
 
 export function close() {

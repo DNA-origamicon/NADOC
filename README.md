@@ -102,6 +102,17 @@ Multiple 2D editor tabs stay in sync automatically — backend is ground truth.
 
 ## Additional Features
 
+### Workspace selection and right sidebar
+
+The 3D workspace uses one canonical selection model across pointer gestures, fixed
+selection levels, Default drill-down, sidebars, the strand spreadsheet, keyboard
+commands, and automation. The right sidebar groups Properties, Visualization,
+Clustering, and Overhang tools behind vertical tabs with a shared collapsible, resizable
+layout. Spreadsheet strands and Properties share compact `S#` / `L#` / `X#` display
+IDs, while selected bases are grouped into helix-aware labels such as
+`Staple - 1[34,35]`. See [Selection and right sidebar](docs/selection_and_sidebar.md)
+for interaction rules and the developer contract.
+
 ### Cluster system & animation
 Helices grouped into named clusters; per-cluster deformation ops; feature log
 timeline with draggable playhead; pre-baked animation at 60 fps (one geometry

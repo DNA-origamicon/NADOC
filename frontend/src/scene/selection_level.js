@@ -81,14 +81,14 @@ export function toggleLevel(cur, level) {
  *
  * The engaged `selLevel` is the single source of truth — the lasso captures the
  * SAME element type a click at that level would select (default/strand→strand,
- * cluster→cluster, domain→domain, end→bead, xover→crossover, base→one bead). This is
+ * cluster→cluster, domain→domain, end→End ref, xover→crossover, base→one bead). This is
  * the fix for the "Tab to ends, lasso grabs a cluster" bug (ISSUE-4 Phase 3-filter-audit).
  *
  * `beadLevel` vs `base` — NOT the same flag, don't merge them. `beadLevel` ("capture
  * every bead in the rect, not just 5'/3' termini") is a hard-coded `false` recording a
- * user decision about the END level; it drains into `_ctrlBeads`, the MEASUREMENT pool
- * that measurement_tool.js expects to hold exactly 2. `base` is the base level's own
- * flag and drains into the key-based base pool. Leave `beadLevel` alone.
+ * user decision about the END level. End lasso results become canonical End refs;
+ * Alt-picked measurement anchors remain a separate tool pool. `base` drains into the
+ * key-based Base pool. Leave `beadLevel` alone.
  *
  * EXCEPTIONS — the overhang and extension filters: when one is on, the lasso captures
  * only that filtered type, taking precedence over the engaged

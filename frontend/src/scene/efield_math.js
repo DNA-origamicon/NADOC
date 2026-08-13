@@ -18,6 +18,7 @@
 // base_ref is the only import, and is itself pure (no THREE / DOM / store), so the
 // "every export is unit-testable in isolation" property above still holds.
 import { parseBaseKey, XB_HELIX } from './base_ref.js'
+import { canonicalSelection } from './selection_model.js'
 
 // ── Physical constants ──────────────────────────────────────────────────────
 export const OXDNA_FORCE_PN = 48.63           // 1 oxDNA force unit in pN
@@ -578,28 +579,16 @@ export function highlightedAnchors(anchors, { glowAll = true, focusKey = null } 
  * state isn't enough for two of the ways you can multi-select:
  *  • END BEADS (Ctrl/Alt-picked termini) are owned by selection_manager, not the store —
  *    the caller passes their nuc records in as `ctrlBeadNucs`.
- *  • CLUSTERS mirror their member strands into `multiSelectedStrandIds` for the highlight.
- *    Left in, each cluster would yield one cluster anchor PLUS a redundant strand anchor
- *    per member — the same nucleotides trapped twice, i.e. double the trap stiffness. So
- *    subtract the mirrored members. Independently multi-selected strands aren't members
- *    of a selected cluster, so they survive.
- * Pure: `clusterMemberStrandIds` is injected because membership resolves through the live
- * renderer (bead entries / cylinder records), which this module must not reach into.
+ * Canonical cluster refs do not duplicate member strands, so the snapshot only needs to
+ * attach the private measurement/end-bead tool inputs supplied by the manager.
  */
 export function anchorSelectionState({ state, ctrlBeadNucs = [], clusterMemberStrandIds = null } = {}) {
   const s = state || {}
-  const clusterIds = s.multiSelectedClusterIds ?? []
-  if (!clusterIds.length) return { ...s, ctrlBeadNucs }
-  const members = new Set(clusterIds.flatMap(id => clusterMemberStrandIds?.(id) || []))
-  return {
-    ...s,
-    multiSelectedStrandIds: (s.multiSelectedStrandIds ?? []).filter(id => !members.has(id)),
-    ctrlBeadNucs,
-  }
+  return { ...s, ctrlBeadNucs }
 }
 
 /**
- * Turn the base-level pool (`multiSelectedBaseKeys`) into anchor descriptors.
+ * Turn canonical Base-ref keys into anchor descriptors.
  *
  * The five bead families the `base` selection level can pick need three different
  * descriptor kinds, because the backend addresses them three different ways:
@@ -664,31 +653,29 @@ function _liveIds(state) {
  */
 export function unsupportedBaseKeys(state) {
   const s = state || {}
-  return partitionBaseKeys(s.multiSelectedBaseKeys ?? [], _liveIds(s)).unsupported
+  const keys = canonicalSelection(s).items.filter(ref => ref.kind === 'base').map(ref => ref.key)
+  return partitionBaseKeys(keys, _liveIds(s)).unsupported
 }
 
 /**
- * Collect anchor descriptors from a store state snapshot.  Reads the multi-select
- * arrays (lasso) + the single `selectedObject`, restricted to the anchorable
- * scopes: overhang / domain / cluster / whole strand (e.g. an overhang-binding
- * oligo) / individual base.  Pure: takes the state object, returns descriptors;
+ * Collect anchor descriptors from a canonical selection snapshot, restricted to the
+ * anchorable scopes: overhang / domain / cluster / whole strand (e.g. an
+ * overhang-binding oligo) / individual base. Pure: takes the state object and returns descriptors;
  * the UI passes anchorSelectionState(...) (store.getState() + the bits it can't see).
  */
 export function resolveSelectionAnchors(state) {
   const s = state || {}
   const out = []
-  for (const id of s.multiSelectedOverhangIds || []) out.push({ kind: 'overhang', id })
-  // Cluster-level multi-select mirrors each cluster's member strands into
-  // multiSelectedStrandIds too; the caller strips those so a cluster yields ONE cluster
-  // anchor rather than a redundant per-member-strand trap over the same nucleotides.
-  for (const id of s.multiSelectedClusterIds || []) {
-    if (id != null) out.push({ kind: 'cluster', id })
-  }
-  for (const id of s.multiSelectedStrandIds || []) {
-    if (id != null) out.push({ kind: 'strand', id })
-  }
-  for (const d of s.multiSelectedDomainIds || []) {
-    if (d) out.push({ kind: 'domain', strandId: d.strandId, domainIndex: d.domainIndex })
+  const baseKeys = []
+  for (const ref of canonicalSelection(s).items) {
+    if (ref.kind === 'base') baseKeys.push(ref.key)
+    else if (ref.kind === 'overhang' || ref.kind === 'cluster' || ref.kind === 'strand') {
+      out.push({ kind: ref.kind, id: ref.id })
+    } else if (ref.kind === 'domain') {
+      out.push({ kind: 'domain', strandId: ref.strandId, domainIndex: ref.domainIndex })
+    } else if (ref.kind === 'end') {
+      baseKeys.push(ref.key)
+    }
   }
   // Ctrl/Alt-picked end beads are owned by selection_manager, not the store — the caller
   // passes their nuc records through so multi-picked bases resolve like any other anchor.
@@ -699,19 +686,7 @@ export function resolveSelectionAnchors(state) {
   // five bead renderers, so partitionBaseKeys picks the right descriptor kind per family
   // (base / extra_base / extension) and drops stale ones. `unsupportedBaseKeys` reports
   // what it dropped.
-  out.push(...partitionBaseKeys(s.multiSelectedBaseKeys ?? [], _liveIds(s)).anchors)
-  const sel = s.selectedObject
-  if (sel) {
-    if (sel.type === 'overhang') out.push({ kind: 'overhang', id: sel.id })
-    else if (sel.type === 'cluster') out.push({ kind: 'cluster', id: sel.id })
-    else if (sel.type === 'strand') out.push({ kind: 'strand', id: sel.id ?? sel.data?.strand_id })
-    else if (sel.type === 'domain' && sel.data) {
-      out.push({ kind: 'domain', strandId: sel.data.strand_id, domainIndex: sel.data.domain_index })
-    } else if (sel.type === 'nucleotide' && sel.data) {
-      out.push({ kind: 'base', helixId: sel.data.helix_id,
-                bp: sel.data.bp_index, direction: sel.data.direction })
-    }
-  }
+  out.push(...partitionBaseKeys(baseKeys, _liveIds(s)).anchors)
   return dedupeAnchors(out)
 }
 

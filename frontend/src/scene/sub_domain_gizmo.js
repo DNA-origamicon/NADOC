@@ -12,8 +12,8 @@
  *
  * Selection model:
  *   The gizmo subscribes to ``store.domainDesigner.selectedSubDomainId`` and
- *   attaches / detaches itself based on that value. It NEVER mutates
- *   ``store.selectedObject`` (Phase 3 popup-only selection rule).
+ *   attaches / detaches itself based on that value. It never mutates canonical
+ *   main-scene selection (Phase 3 popup-only selection rule).
  *
  * Drag model:
  *   * pointerdown raycasts against either torus (radial tolerance r*0.6).

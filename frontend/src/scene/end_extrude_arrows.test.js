@@ -4,7 +4,7 @@
  * Uses actual THREE.js math/geometry classes (pure JS, no WebGL) and mocks only:
  *   - the store module (no real state needed)
  *   - the scene object (a plain { add, remove } stub)
- *   - the selectionManager (captures the registered callback)
+ *   - the selectionManager (gesture owner; measurement state is intentionally ignored)
  *   - the designRenderer (returns backbone entries on demand)
  */
 
@@ -42,7 +42,7 @@ function makeHelix(id = 'h_XY_0_0', { axisStart = [0, 0, 0], axisEnd = [0, 0, 14
 }
 
 /**
- * Minimal bead entry matching the shape that selection_manager puts in _ctrlBeads.
+ * Minimal bead entry matching the canonical End-ref renderer adapter.
  */
 function makeBead({ helixId = 'h_XY_0_0', bp = 0, isFivePrime = true, pos = [0.1, 0.2, 0] } = {}) {
   const nuc = {
@@ -64,14 +64,17 @@ function makeBead({ helixId = 'h_XY_0_0', bp = 0, isFivePrime = true, pos = [0.1
   }
 }
 
+const selectionFor = (key, kind = 'base') => ({
+  context: 'design', level: kind === 'end' ? 'end' : 'base',
+  items: key ? [{ kind, key }] : [], primary: key ? { kind, key } : null,
+})
+
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-let scene, camera, canvas, selectionManager, designRenderer, ctrlBeadsCb, currentBeads
+let scene, camera, canvas, selectionManager, designRenderer, selectionStoreSub
 
 beforeEach(() => {
   vi.clearAllMocks()
-
-  currentBeads = []
 
   scene = { add: vi.fn(), remove: vi.fn() }
 
@@ -84,10 +87,7 @@ beforeEach(() => {
     style: {},
   }
 
-  selectionManager = {
-    onCtrlBeadsChange: vi.fn(cb => { ctrlBeadsCb = cb }),
-    getCtrlBeads:      vi.fn(() => [...currentBeads]),
-  }
+  selectionManager = {}
 
   designRenderer = {
     getBackboneEntries: vi.fn(() => []),
@@ -96,6 +96,7 @@ beforeEach(() => {
   store.getState.mockReturnValue({
     currentDesign:    { helices: [makeHelix()], strands: [] },
     currentHelixAxes: null,
+    selection:        selectionFor(null),
     selectedObject:   null,
     selectableTypes:  { ends: false },
   })
@@ -107,7 +108,25 @@ function setup() {
   initEndExtrudeArrows(scene, camera, canvas, selectionManager, designRenderer, null)
   const rootGroup    = scene.add.mock.calls[0][0]
   const storeSub     = store.subscribe.mock.calls[0][0]
+  selectionStoreSub = storeSub
   return { rootGroup, storeSub }
+}
+
+function selectEndBeads(beads) {
+  const entries = beads.map(bead => {
+    bead.entry.nuc = bead.nuc
+    return bead.entry
+  })
+  designRenderer.getBackboneEntries.mockReturnValue(entries)
+  const prev = store.getState()
+  const items = beads.map(bead => ({
+    kind: 'end', key: `${bead.nuc.helix_id}:${bead.nuc.bp_index}:${bead.nuc.direction}`,
+  }))
+  const next = { ...prev, selection: {
+    context: 'design', level: 'end', items, primary: items.at(-1) ?? null,
+  } }
+  store.getState.mockReturnValue(next)
+  selectionStoreSub(next, prev)
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
@@ -118,10 +137,9 @@ describe('setup', () => {
     expect(rootGroup).toBeInstanceOf(THREE.Group)
   })
 
-  it('registers onCtrlBeadsChange callback', () => {
+  it('does not subscribe to measurement-anchor callbacks', () => {
     setup()
-    expect(selectionManager.onCtrlBeadsChange).toHaveBeenCalledOnce()
-    expect(ctrlBeadsCb).toBeTypeOf('function')
+    expect(selectionManager.onCtrlBeadsChange).toBeUndefined()
   })
 
   it('subscribes to the store', () => {
@@ -130,27 +148,27 @@ describe('setup', () => {
   })
 })
 
-// ── Arrow creation via ctrl-click / lasso (_ctrlBeads) ────────────────────────
+// ── Arrow creation via canonical End refs ────────────────────────────────────
 
-describe('ctrl-bead path', () => {
-  it('adds one arrow for a 5-prime ctrl bead', () => {
+describe('canonical End path', () => {
+  it('adds one arrow for a 5-prime End ref', () => {
     const { rootGroup } = setup()
-    ctrlBeadsCb([makeBead({ isFivePrime: true })])
+    selectEndBeads([makeBead({ isFivePrime: true })])
     expect(rootGroup.children).toHaveLength(1)
   })
 
-  it('adds one arrow for a 3-prime ctrl bead', () => {
+  it('adds one arrow for a 3-prime End ref', () => {
     const { rootGroup } = setup()
-    ctrlBeadsCb([makeBead({ isFivePrime: false })])
+    selectEndBeads([makeBead({ isFivePrime: false })])
     expect(rootGroup.children).toHaveLength(1)
   })
 
-  it('skips non-end ctrl beads', () => {
+  it('skips non-end entries even if given an End-shaped ref', () => {
     const { rootGroup } = setup()
     const bead = makeBead()
     bead.nuc.is_five_prime  = false
     bead.nuc.is_three_prime = false
-    ctrlBeadsCb([bead])
+    selectEndBeads([bead])
     expect(rootGroup.children).toHaveLength(0)
   })
 
@@ -162,7 +180,7 @@ describe('ctrl-bead path', () => {
       selectableTypes:  { ends: true },
     })
     const { rootGroup } = setup()
-    ctrlBeadsCb([
+    selectEndBeads([
       makeBead({ helixId: 'h_XY_0_0', isFivePrime: true  }),
       makeBead({ helixId: 'h_XY_1_0', isFivePrime: false }),
     ])
@@ -171,7 +189,7 @@ describe('ctrl-bead path', () => {
 
   it('each arrow group has shaft and head meshes', () => {
     const { rootGroup } = setup()
-    ctrlBeadsCb([makeBead()])
+    selectEndBeads([makeBead()])
     const ag = rootGroup.children[0]
     expect(ag.children).toHaveLength(2)
     expect(ag.children[0]).toBeInstanceOf(THREE.Mesh)
@@ -180,7 +198,7 @@ describe('ctrl-bead path', () => {
 
   it('positions arrow at bead world position', () => {
     const { rootGroup } = setup()
-    ctrlBeadsCb([makeBead({ pos: [1.5, 2.3, 0.7] })])
+    selectEndBeads([makeBead({ pos: [1.5, 2.3, 0.7] })])
     const ag = rootGroup.children[0]
     expect(ag.position.x).toBeCloseTo(1.5)
     expect(ag.position.y).toBeCloseTo(2.3)
@@ -188,10 +206,10 @@ describe('ctrl-bead path', () => {
   })
 })
 
-// ── Arrow creation via regular 3-click bead selection (selectedObject) ─────────
+// ── Arrow creation via canonical base selection ───────────────────────────────
 
-describe('selectedObject path', () => {
-  it('adds an arrow when selectedObject is a 5-prime nucleotide', () => {
+describe('canonical base path', () => {
+  it('adds an arrow when a 5-prime base ref is selected', () => {
     const bead = makeBead({ isFivePrime: true, pos: [0, 0, 0.1] })
     designRenderer.getBackboneEntries.mockReturnValue([bead.entry])
     // Make entry accessible by nuc fields
@@ -200,35 +218,35 @@ describe('selectedObject path', () => {
     store.getState.mockReturnValue({
       currentDesign:    { helices: [makeHelix()], strands: [] },
       currentHelixAxes: null,
-      selectedObject:   { type: 'nucleotide', id: 'h_XY_0_0:0:FORWARD', data: bead.nuc },
+      selection:        selectionFor('h_XY_0_0:0:FORWARD'),
       selectableTypes:  { ends: false },
     })
 
     const { rootGroup, storeSub } = setup()
-    storeSub(store.getState(), { currentDesign: null, currentHelixAxes: null, selectedObject: null })
+    storeSub(store.getState(), { currentDesign: null, currentHelixAxes: null, selection: selectionFor(null) })
 
     expect(rootGroup.children).toHaveLength(1)
   })
 
-  it('adds an arrow when selectedObject is a 3-prime nucleotide', () => {
-    const bead = makeBead({ isFivePrime: false, pos: [0, 0, 13.9] })
+  it('adds an arrow when a 3-prime base ref is selected', () => {
+    const bead = makeBead({ bp: 41, isFivePrime: false, pos: [0, 0, 13.9] })
     designRenderer.getBackboneEntries.mockReturnValue([bead.entry])
     bead.entry.nuc = bead.nuc
 
     store.getState.mockReturnValue({
       currentDesign:    { helices: [makeHelix()], strands: [] },
       currentHelixAxes: null,
-      selectedObject:   { type: 'nucleotide', id: 'h_XY_0_0:41:FORWARD', data: bead.nuc },
+      selection:        selectionFor('h_XY_0_0:41:FORWARD'),
       selectableTypes:  { ends: false },
     })
 
     const { rootGroup, storeSub } = setup()
-    storeSub(store.getState(), { currentDesign: null, currentHelixAxes: null, selectedObject: null })
+    storeSub(store.getState(), { currentDesign: null, currentHelixAxes: null, selection: selectionFor(null) })
 
     expect(rootGroup.children).toHaveLength(1)
   })
 
-  it('does not add an arrow for a non-end nucleotide selectedObject', () => {
+  it('does not add an arrow for a selected non-end base', () => {
     const bead = makeBead({ isFivePrime: false, pos: [0, 0, 5] })
     bead.nuc.is_three_prime = false
     designRenderer.getBackboneEntries.mockReturnValue([bead.entry])
@@ -237,17 +255,17 @@ describe('selectedObject path', () => {
     store.getState.mockReturnValue({
       currentDesign:    { helices: [makeHelix()], strands: [] },
       currentHelixAxes: null,
-      selectedObject:   { type: 'nucleotide', id: 'h_XY_0_0:20:FORWARD', data: bead.nuc },
+      selection:        selectionFor('h_XY_0_0:20:FORWARD'),
       selectableTypes:  { ends: false },
     })
 
     const { rootGroup, storeSub } = setup()
-    storeSub(store.getState(), { currentDesign: null, currentHelixAxes: null, selectedObject: null })
+    storeSub(store.getState(), { currentDesign: null, currentHelixAxes: null, selection: selectionFor(null) })
 
     expect(rootGroup.children).toHaveLength(0)
   })
 
-  it('does not duplicate an arrow when the same bead is in both _ctrlBeads and selectedObject', () => {
+  it('does not duplicate an arrow for a canonical End ref', () => {
     const bead = makeBead({ isFivePrime: true })
     designRenderer.getBackboneEntries.mockReturnValue([bead.entry])
     bead.entry.nuc = bead.nuc
@@ -255,12 +273,12 @@ describe('selectedObject path', () => {
     store.getState.mockReturnValue({
       currentDesign:    { helices: [makeHelix()], strands: [] },
       currentHelixAxes: null,
-      selectedObject:   { type: 'nucleotide', id: 'h_XY_0_0:0:FORWARD', data: bead.nuc },
+      selection:        selectionFor('h_XY_0_0:0:FORWARD', 'end'),
       selectableTypes:  { ends: true },
     })
 
     const { rootGroup } = setup()
-    ctrlBeadsCb([bead])   // adds bead via _ctrlBeads
+    selectEndBeads([bead])
 
     expect(rootGroup.children).toHaveLength(1)  // not 2
   })
@@ -272,7 +290,7 @@ describe('arrow direction', () => {
   it('points outward at the near end (−axisDir)', () => {
     // Axis along +Z; bead at z=0.1 is near axis_start → outward = −Z
     const { rootGroup } = setup()
-    ctrlBeadsCb([makeBead({ pos: [0, 0, 0.1] })])
+    selectEndBeads([makeBead({ pos: [0, 0, 0.1] })])
     const q = rootGroup.children[0].quaternion
     // Y=(0,1,0) → (0,0,-1): axis=(-1,0,0), angle=90° → q=(-√2/2, 0, 0, √2/2)
     expect(q.x).toBeCloseTo(-Math.SQRT2 / 2, 4)
@@ -283,7 +301,7 @@ describe('arrow direction', () => {
 
   it('points outward at the far end (+axisDir)', () => {
     const { rootGroup } = setup()
-    ctrlBeadsCb([makeBead({ isFivePrime: false, pos: [0, 0, 13.9] })])
+    selectEndBeads([makeBead({ isFivePrime: false, pos: [0, 0, 13.9] })])
     const q = rootGroup.children[0].quaternion
     // Y=(0,1,0) → (0,0,+1): axis=(+1,0,0), angle=90° → q=(+√2/2, 0, 0, √2/2)
     expect(q.x).toBeCloseTo( Math.SQRT2 / 2, 4)
@@ -298,9 +316,9 @@ describe('arrow direction', () => {
 describe('reactivity', () => {
   it('clears arrows when bead list becomes empty', () => {
     const { rootGroup } = setup()
-    ctrlBeadsCb([makeBead()])
+    selectEndBeads([makeBead()])
     expect(rootGroup.children).toHaveLength(1)
-    ctrlBeadsCb([])
+    selectEndBeads([])
     expect(rootGroup.children).toHaveLength(0)
   })
 
@@ -312,16 +330,16 @@ describe('reactivity', () => {
       selectableTypes:  { ends: true },
     })
     const { rootGroup } = setup()
-    ctrlBeadsCb([makeBead({ helixId: 'h_XY_0_0' })])
+    selectEndBeads([makeBead({ helixId: 'h_XY_0_0' })])
     expect(rootGroup.children).toHaveLength(1)
-    ctrlBeadsCb([
+    selectEndBeads([
       makeBead({ helixId: 'h_XY_0_0' }),
       makeBead({ helixId: 'h_XY_1_0' }),
     ])
     expect(rootGroup.children).toHaveLength(2)
   })
 
-  it('rebuilds when store selectedObject changes', () => {
+  it('rebuilds when canonical selection changes', () => {
     const bead = makeBead({ isFivePrime: true })
     designRenderer.getBackboneEntries.mockReturnValue([bead.entry])
     bead.entry.nuc = bead.nuc
@@ -332,12 +350,12 @@ describe('reactivity', () => {
     store.getState.mockReturnValue({
       currentDesign:    { helices: [makeHelix()], strands: [] },
       currentHelixAxes: null,
-      selectedObject:   { type: 'nucleotide', data: bead.nuc },
+      selection:        selectionFor('h_XY_0_0:0:FORWARD'),
       selectableTypes:  { ends: false },
     })
     storeSub(
-      { currentDesign: {}, currentHelixAxes: null, selectedObject: { type: 'nucleotide' } },
-      { currentDesign: {}, currentHelixAxes: null, selectedObject: null },
+      { currentDesign: {}, currentHelixAxes: null, selection: selectionFor('h_XY_0_0:0:FORWARD') },
+      { currentDesign: {}, currentHelixAxes: null, selection: selectionFor(null) },
     )
 
     expect(rootGroup.children).toHaveLength(1)
@@ -424,7 +442,7 @@ describe('deformed axes', () => {
     })
 
     const { rootGroup } = setup()
-    ctrlBeadsCb([makeBead({ pos: [0.1, 0, 0] })])
+    selectEndBeads([makeBead({ pos: [0.1, 0, 0] })])
 
     // outward = samples[0]-samples[1] = (-1,0,0)
     // Y=(0,1,0) → (-1,0,0): axis=(0,0,+1), angle=90° → q=(0,0,+√2/2,+√2/2)

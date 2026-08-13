@@ -27,6 +27,7 @@ import { crossoverControlPoint as arcControlPoint } from './crossover_extra_plac
 import { buildClusterColorLookup } from './helix_renderer/palette.js'
 import { clusterAlphaForNuc, clusterAlphaKeys, clusterDisplaySignature } from './cluster_entries.js'
 import { baseKey } from './base_ref.js'
+import { selectedStrandIds } from './selection_model.js'
 
 const ANIM_DURATION_MS = 500   // linear lerp duration
 const ARC_SEGS         = 20    // bezier sample count per arc line
@@ -1061,10 +1062,10 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
 
     // Re-apply selection highlight — selection_manager fires before this
     // subscription (it subscribes earlier) so arc colors need reapplying here.
-    const sel = newState.selectedObject
-    if (sel?.type === 'strand' && sel.data?.strand_id) {
+    const selected = new Set(selectedStrandIds(newState))
+    if (selected.size) {
       for (const e of _arcMeta) {
-        if (e.strandId === sel.data.strand_id) _setArcColor(e, 0xffffff)
+        if (selected.has(e.strandId)) _setArcColor(e, 0xffffff)
       }
     }
   })

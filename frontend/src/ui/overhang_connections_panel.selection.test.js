@@ -12,7 +12,7 @@ const OH1 = { id: 'ovhg_h1_5_5p', label: 'OH1' }
 const OH2 = { id: 'ovhg_h2_9_3p', label: 'OH2' }
 const OH3 = { id: 'ovhg_h3_3_5p', label: 'OH3' }
 const OH4 = { id: 'ovhg_h4_7_3p', label: 'OH4' }
-// strand whose domain 0 is OH1's overhang domain — exercises the domain filter.
+// Strand whose domain 0 backs OH1. Domain selection remains a distinct identity.
 const STRAND = { id: 's1', domains: [{ overhang_id: 'ovhg_h1_5_5p' }] }
 
 const A = () => document.getElementById('oconn-select-a').value
@@ -38,7 +38,8 @@ describe('overhang connections — auto-populate dropdowns (2-slot LRU)', () => 
   })
 
   // simulate a single overhang-filter click (replaces the selection with one id)
-  const pick = (id) => store.setState({ multiSelectedOverhangIds: [id] })
+  const select = (ids) => store.setState({ selection: { items: ids.map(id => ({ kind: 'overhang', id })) } })
+  const pick = (id) => select([id])
 
   it('the spec example: OH1, OH2, OH3, OH4 sequential', () => {
     pick('ovhg_h1_5_5p')                       // empty,empty → A
@@ -53,10 +54,10 @@ describe('overhang connections — auto-populate dropdowns (2-slot LRU)', () => 
 
   it('ctrl/shift add evicts the older-shown slot', () => {
     // establish a clean A=OH1, B=OH2 first
-    store.setState({ multiSelectedOverhangIds: ['ovhg_h1_5_5p', 'ovhg_h2_9_3p'] })
+    select(['ovhg_h1_5_5p', 'ovhg_h2_9_3p'])
     expect([A(), B()]).toEqual(['ovhg_h1_5_5p', 'ovhg_h2_9_3p'])
     // ctrl-add OH3 (one new id) → evicts the older slot (A)
-    store.setState({ multiSelectedOverhangIds: ['ovhg_h1_5_5p', 'ovhg_h2_9_3p', 'ovhg_h3_3_5p'] })
+    select(['ovhg_h1_5_5p', 'ovhg_h2_9_3p', 'ovhg_h3_3_5p'])
     expect([A(), B()]).toEqual(['ovhg_h3_3_5p', 'ovhg_h2_9_3p'])
   })
 
@@ -66,14 +67,10 @@ describe('overhang connections — auto-populate dropdowns (2-slot LRU)', () => 
     expect([A(), B()]).toEqual(['ovhg_h3_3_5p', 'ovhg_h2_9_3p'])
   })
 
-  it('domain-filter selection (multiSelectedDomainIds → overhang_id) feeds a slot', () => {
-    // current: A=OH3, B=OH2. Select OH1 via a domain ref → evicts the older slot.
-    store.setState({
-      multiSelectedOverhangIds: [],
-      multiSelectedDomainIds: [{ strandId: 's1', domainIndex: 0 }],
-      selectedObject: null,
-    })
-    expect([A(), B()]).toContain('ovhg_h1_5_5p')
+  it('a domain ref does not masquerade as an overhang selection', () => {
+    const before = [A(), B()]
+    store.setState({ selection: { items: [{ kind: 'domain', strandId: 's1', domainIndex: 0 }] } })
+    expect([A(), B()]).toEqual(before)
   })
 
   it('does NOT touch the dropdowns while collapsed, then snaps on open', () => {
@@ -81,10 +78,7 @@ describe('overhang connections — auto-populate dropdowns (2-slot LRU)', () => 
     expect(document.getElementById('oconn-body').style.display).toBe('none')
     document.getElementById('oconn-select-a').value = ''
     document.getElementById('oconn-select-b').value = ''
-    store.setState({
-      multiSelectedOverhangIds: ['ovhg_h2_9_3p', 'ovhg_h4_7_3p'],
-      multiSelectedDomainIds: [], selectedObject: null,
-    })
+    select(['ovhg_h2_9_3p', 'ovhg_h4_7_3p'])
     expect([A(), B()]).toEqual(['', ''])                 // unchanged while collapsed
     document.getElementById('oconn-heading').dispatchEvent(new Event('click'))   // expand
     expect(A()).not.toBe('')                             // snapped to current selection

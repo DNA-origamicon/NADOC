@@ -163,7 +163,10 @@ export async function altPickBeads(page, n = 2) {
  * Returns { count, five, three } — the identities selected (for assertion).
  */
 export async function selectEndsForLigation(page) {
-  await page.click('#select-filter .sf-btn[data-key="ends"]')
+  await page.evaluate(() => {
+    document.getElementById('select-filter-trigger')?.click()
+    document.querySelector('#select-filter .sf-btn[data-key="ends"]')?.click()
+  })
   await page.waitForFunction(() => window.__nadocTest.getSelectionLevel() === 'end', null, { timeout: 4000 })
 
   const iw = await page.evaluate(() => window.innerWidth)
@@ -185,38 +188,46 @@ export async function selectEndsForLigation(page) {
   }
   pairs.sort((a, b) => a.d - b.d)
 
-  const count = () => page.evaluate(() => window.__nadocTest.getCtrlBeadCount())
+  const count = () => page.evaluate(() => window.__nadocTest.getSelectedEndCount())
 
   for (const pair of pairs) {
-    // A padded box around just this pair; skip if any OTHER end sits inside it
-    // (the lasso would grab a third, breaking the exactly-two-ends requirement).
-    const pad = 12
-    const x1 = Math.min(pair.five.x, pair.three.x) - pad, x2 = Math.max(pair.five.x, pair.three.x) + pad
-    const y1 = Math.min(pair.five.y, pair.three.y) - pad, y2 = Math.max(pair.five.y, pair.three.y) + pad
-    const contaminated = ends.some(e => e !== pair.five && e !== pair.three && e.x >= x1 && e.x <= x2 && e.y >= y1 && e.y <= y2)
-    if (contaminated) continue
-
-    // Ctrl-drag a lasso across the box (down at one corner → move past the 4px
-    // threshold → up at the far corner). The end filter is engaged, so the lasso
-    // captures the enclosed 5′/3′ ends into the end-bead set (_finalizeLasso).
-    await page.keyboard.down('Control')
-    await page.mouse.move(x1, y1)
-    await page.mouse.down()
-    await page.mouse.move((x1 + x2) / 2, (y1 + y2) / 2, { steps: 3 })
-    await page.mouse.move(x2, y2, { steps: 3 })
-    await page.mouse.up()
-    await page.keyboard.up('Control')
+    // Two small additive lassos are more robust than one long diagonal box: with a
+    // straight helix, unrelated ends can sit between the desired pair on screen.
+    const pad = 3
+    const boxes = [pair.five, pair.three].map(target => ({
+      target, x1: target.x - pad, y1: target.y - pad, x2: target.x + pad, y2: target.y + pad,
+    }))
+    if (boxes.some(box => covered({ x: box.x1, y: box.y1 }) || covered({ x: box.x2, y: box.y2 }) ||
+      ends.some(e => e !== box.target && e.x >= box.x1 && e.x <= box.x2 && e.y >= box.y1 && e.y <= box.y2))) continue
+    for (const box of boxes) {
+      await page.keyboard.down('Control')
+      await page.mouse.move(box.x1, box.y1)
+      await page.mouse.down()
+      await page.mouse.move(box.x2, box.y2, { steps: 4 })
+      await page.mouse.up()
+      await page.keyboard.up('Control')
+      await page.waitForTimeout(80)
+    }
     await page.waitForTimeout(200)
 
     if ((await count()) === 2) return { count: 2, five: pair.five, three: pair.three }
     // Reset before the next candidate (Escape clears a non-empty end-bead set).
     if ((await count()) > 0) { await page.keyboard.press('Escape'); await page.waitForTimeout(100) }
     if ((await page.evaluate(() => window.__nadocTest.getSelectionLevel())) !== 'end') {
-      await page.click('#select-filter .sf-btn[data-key="ends"]')
+      await page.evaluate(() => {
+        document.getElementById('select-filter-trigger')?.click()
+        document.querySelector('#select-filter .sf-btn[data-key="ends"]')?.click()
+      })
       await page.waitForFunction(() => window.__nadocTest.getSelectionLevel() === 'end', null, { timeout: 4000 })
     }
   }
-  return { count: await count() }
+  return {
+    count: await count(),
+    diagnostics: {
+      ends: ends.length, fives: fives.length, threes: threes.length, pairs: pairs.length,
+      selection: await page.evaluate(() => window.__nadocTest.getCanonicalSelection()),
+    },
+  }
 }
 
 /** Nearest integer pixel to a target end whose front-most bead (real raycast) IS
@@ -241,10 +252,13 @@ async function _verifiedEndPixel(page, target) {
  * the plain-clicked end into the end-bead set too, so BOTH count (getCtrlBeadCount
  * === 2). Picks the farthest valid pair (>80px apart) so each click resolves its
  * own end. Returns { count, five, three, afterPlain } (afterPlain = the single
- * selection recorded by the plain click, for assertion).
+ * canonical selection recorded by the plain click, for assertion).
  */
 export async function selectEndsPlainThenCtrl(page) {
-  await page.click('#select-filter .sf-btn[data-key="ends"]')
+  await page.evaluate(() => {
+    document.getElementById('select-filter-trigger')?.click()
+    document.querySelector('#select-filter .sf-btn[data-key="ends"]')?.click()
+  })
   await page.waitForFunction(() => window.__nadocTest.getSelectionLevel() === 'end', null, { timeout: 4000 })
 
   const iw = await page.evaluate(() => window.innerWidth)
@@ -264,7 +278,7 @@ export async function selectEndsPlainThenCtrl(page) {
   }
   pairs.sort((a, b) => b.d - a.d)   // farthest first → distinct clicks
 
-  const count = () => page.evaluate(() => window.__nadocTest.getCtrlBeadCount())
+  const count = () => page.evaluate(() => window.__nadocTest.getSelectedEndCount())
 
   for (const pair of pairs) {
     if (pair.d < 12) continue   // essentially the same bead on screen — skip
@@ -272,10 +286,10 @@ export async function selectEndsPlainThenCtrl(page) {
     const p3 = await _verifiedEndPixel(page, pair.three)
     if (!p5 || !p3 || (p5.x === p3.x && p5.y === p3.y)) continue
 
-    // PLAIN click the 5′ end → single selection (selectedObject), no ctrl-beads yet.
+    // PLAIN click the 5′ end → one canonical End ref.
     await page.mouse.click(p5.x, p5.y)
     await page.waitForTimeout(120)
-    const afterPlain = await page.evaluate(() => window.__nadocTest.getSelectedObject())
+    const afterPlain = await page.evaluate(() => window.__nadocTest.getCanonicalSelection())
 
     // CTRL-click the 3′ end → must fold the plain end in AND add this one → 2.
     await page.keyboard.down('Control')
@@ -287,7 +301,10 @@ export async function selectEndsPlainThenCtrl(page) {
     // Reset and try another pair.
     if ((await count()) > 0) { await page.keyboard.press('Escape'); await page.waitForTimeout(100) }
     if ((await page.evaluate(() => window.__nadocTest.getSelectionLevel())) !== 'end') {
-      await page.click('#select-filter .sf-btn[data-key="ends"]')
+      await page.evaluate(() => {
+        document.getElementById('select-filter-trigger')?.click()
+        document.querySelector('#select-filter .sf-btn[data-key="ends"]')?.click()
+      })
       await page.waitForFunction(() => window.__nadocTest.getSelectionLevel() === 'end', null, { timeout: 4000 })
     }
   }

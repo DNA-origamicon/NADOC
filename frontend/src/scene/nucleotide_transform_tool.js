@@ -6,6 +6,7 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { baseKey, parseBaseKey } from './base_ref.js'
 import { putNucleotideTransform } from '../api/client.js'
 import { showToast } from '../ui/toast.js'
+import { canonicalSelection } from './selection_model.js'
 
 export function transformBodyForTarget(target, pivot, translation, quaternion, residueInfo = null) {
   const pose = {
@@ -54,29 +55,18 @@ export function abstractPreviewUpdate(info, matrix) {
  * uses logical geometry identities, so the same selection works in CG, atomistic,
  * surface, and mixed representations. */
 export function transformTargetsForSelection(state) {
-  const explicit = state.multiSelectedBaseKeys ?? []
+  const refs = canonicalSelection(state).items
+  const explicit = refs.filter(ref => ref.kind === 'base').map(ref => ref.key)
   const geometry = state.currentGeometry ?? []
-  const strands = new Set(state.multiSelectedStrandIds ?? [])
-  const domains = new Set((state.multiSelectedDomainIds ?? [])
-    .map(d => `${d.strandId}:${d.domainIndex}`))
-  const overhangs = new Set(state.multiSelectedOverhangIds ?? [])
-  const extensions = new Set(state.multiSelectedExtensionIds ?? [])
+  const strands = new Set(refs.filter(ref => ref.kind === 'strand').map(ref => ref.id))
+  const domains = new Set(refs.filter(ref => ref.kind === 'domain')
+    .map(ref => `${ref.strandId}:${ref.domainIndex}`))
+  const overhangs = new Set(refs.filter(ref => ref.kind === 'overhang').map(ref => ref.id))
+  const extensions = new Set(refs.filter(ref => ref.kind === 'extension').map(ref => ref.id))
   const hasNonClusterGrain = explicit.length || domains.size || overhangs.size || extensions.size
-  // Cluster selection mirrors its member strands into the strand pool for highlighting.
-  // With no independently-selected finer grain, retain the purpose-built cluster gizmo
+  // Cluster refs retain the purpose-built cluster gizmo
   // (and its cluster-transform persistence) instead of exploding it into residues.
-  if ((state.multiSelectedClusterIds ?? []).length && !hasNonClusterGrain) return []
-  const selected = state.selectedObject
-  if (!strands.size && !domains.size && !overhangs.size && !extensions.size && selected) {
-    if (selected.type === 'nucleotide') {
-      const key = baseKey(selected.data, selected.data?.copy ?? selected.data?.copy_k ?? 0)
-      return key ? [parseBaseKey(key)] : []
-    }
-    if (selected.type === 'strand') strands.add(selected.data?.strand_id ?? selected.id)
-    if (selected.type === 'domain') {
-      domains.add(`${selected.data?.strand_id}:${selected.data?.domain_index ?? 0}`)
-    }
-  }
+  if (refs.some(ref => ref.kind === 'cluster') && !hasNonClusterGrain) return []
   const keys = [...explicit]
   for (const nuc of geometry) {
     if (strands.has(nuc.strand_id) ||

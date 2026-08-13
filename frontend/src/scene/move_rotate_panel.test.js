@@ -403,14 +403,14 @@ describe('initMoveRotatePanel — dropdown handlers', () => {
 
 describe('moveRotateSelectionLabels', () => {
   it('describes base selections without substituting their containing cluster', () => {
-    expect(moveRotateSelectionLabels({ multiSelectedBaseKeys: ['__xb__:xo1:0'] }))
+    expect(moveRotateSelectionLabels({ selection: { items: [{ kind: 'base', key: '__xb__:xo1:0' }] } }))
       .toEqual(['Base · __xb__:xo1:0'])
   })
 
   it('uses the selected cluster name only when the cluster itself is selected', () => {
     expect(moveRotateSelectionLabels({
       currentDesign: { cluster_transforms: [{ id: 'c1', name: 'Arm' }] },
-      selectedObject: { type: 'cluster', data: { cluster_id: 'c1' } },
+      selection: { items: [{ kind: 'cluster', id: 'c1' }] },
     })).toEqual(['Cluster · Arm'])
   })
 })

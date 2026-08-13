@@ -7,9 +7,11 @@
  * Usage:
  *   import { store } from './store.js'
  *   store.subscribe((newState, prevState) => { ... })
- *   store.setState({ selectedObject: { type: 'helix', id: 'h1' } })
+ *   selectionController.replace([{ kind: 'strand', id: 's1' }])
  *   const { currentDesign } = store.getState()
  */
+
+import { createSelectionState } from '../scene/selection_model.js'
 
 const _initialState = {
   /** The full Design object from the API, or null if not loaded. */
@@ -69,11 +71,8 @@ const _initialState = {
    */
   loopStrandIds: [],
 
-  /**
-   * Currently selected object in the 3D scene, or null.
-   * Shape: { type: 'nucleotide' | 'helix' | 'strand', id: string, data: any }
-   */
-  selectedObject: null,
+  /** Canonical mature design-selection state; only selection_controller may write it. */
+  selection: createSelectionState(),
 
   /** Last API error, or null.  Shape: { status: number, message: string } */
   lastError: null,
@@ -96,53 +95,6 @@ const _initialState = {
    * strandGroups before a change.  Max 50 entries.
    */
   strandGroupsHistory: [],
-
-  /**
-   * Strand IDs selected by the Ctrl+drag rectangle lasso tool.
-   * Empty array when no multi-selection is active.
-   */
-  multiSelectedStrandIds: [],
-
-  /**
-   * Domains selected by the Ctrl+drag rectangle lasso tool (when the
-   * 'domains' selection filter is active).
-   * Each entry: { strandId: string, domainIndex: number }.
-   * Empty array when no domain multi-selection is active.
-   */
-  multiSelectedDomainIds: [],
-
-  /**
-   * Overhang IDs selected by the lasso tool (when the 'overhangs' selection
-   * filter is active).  Empty array when no overhang multi-selection is active.
-   */
-  multiSelectedOverhangIds: [],
-
-  /** Extension IDs selected by click/Ctrl+click/lasso in extension filter mode. */
-  multiSelectedExtensionIds: [],
-
-  /**
-   * Cluster IDs multi-selected at the 'cluster' selection level (Ctrl/Shift+click).
-   * Kept ALONGSIDE multiSelectedStrandIds, which holds those clusters' member strands
-   * for highlighting — that union loses which strand came from which cluster, and
-   * cluster copy/paste needs the cluster granularity.
-   * Empty array when no cluster multi-selection is active.
-   */
-  multiSelectedClusterIds: [],
-
-  /**
-   * Individually-picked BASES (the `base` selectionLevel) as app-wide base keys —
-   * `helix:bp:dir[:copy]`, or `__xb__:<crossoverId>:<k>` for an extra crossover base.
-   * See scene/base_ref.js for the format and scene/base_pick.js for how a click resolves
-   * to one.
-   *
-   * Spans all five bead families (backbone, 5′ cubes, extension tails, fluorophore tips,
-   * extra crossover bases, flexible-ssDNA arc beads, ss-linker bridge beads). Strings, not
-   * objects, so the pool is trivially serialisable and Set-dedupable.
-   *
-   * Base level deliberately leaves `selectedObject` null — this is a selection primitive,
-   * and consumers opt in by reading this pool. Empty array when nothing is picked.
-   */
-  multiSelectedBaseKeys: [],
 
   /**
    * The lattice plane used for the most recent extrude.  Set by main.js after
@@ -319,8 +271,8 @@ const _initialState = {
   /**
    * Domain Designer — popup-local selection state.
    *
-   * Selection here is intentionally NOT mirrored to the main-scene
-   * `selectedObject` / `multiSelectedOverhangIds`; clicks inside the popup must
+   * Selection here is intentionally NOT mirrored to canonical main-scene selection;
+   * clicks inside the popup must
    * not move the 3D scene cursor, and main-scene selection does not react to
    * popup state while the modal is open. See plan §D.
    *
@@ -415,9 +367,7 @@ const _SLICES = {
                       'showPeriodicSeamArcs']),
 
   /** Selection, multi-select, active tools, crossover placement */
-  selection: new Set(['selectedObject', 'multiSelectedStrandIds', 'multiSelectedDomainIds',
-                      'multiSelectedOverhangIds', 'multiSelectedExtensionIds', 'multiSelectedClusterIds',
-                      'multiSelectedBaseKeys',
+  selection: new Set(['selection',
                       'selectableTypes', 'crossoverPlacement', 'deformToolActive',
                       'activeClusterId', 'translateRotateActive', 'debugOverlayActive',
                       'domainDesigner']),

@@ -4,18 +4,20 @@
  * 1:1 port of frontend/src/ui/spreadsheet.js for the cadnano-editor page.
  * Same columns, same toggles, same cell builders, same sort order.
  *
- * Columns (all toggle-able except Start/End):
- *   Start | End | 5' Overhang | Sequence | 3' Overhang | Group | Color | Length | Notes
+ * Columns (all toggle-able except ID/Start/End):
+ *   ID | Start | End | 5' Overhang | Sequence | 3' Overhang | Group | Color | Length | Notes
  */
 
 import { patchStrand, patchOverhang, generateOverhangRandomSequence } from './api.js'
 import { showToast } from '../ui/toast.js'
 import { createContextMenu } from '../ui/primitives/context_menu.js'
 import { ensureStapleColors, stapleColorOf } from './pathview/palette.js'
+import { buildStrandDisplayIdMap } from '../ui/design_display_labels.js'
 
 // ── Column definitions ────────────────────────────────────────────────────
 
 const COLUMNS = [
+  { key: 'id',       label: 'ID',          toggleable: false, editable: false },
   { key: 'start',    label: 'Start',       toggleable: false, editable: false },
   { key: 'end',      label: 'End',         toggleable: false, editable: false },
   { key: 'ovhg_5p',  label: "5' Overhang", toggleable: true,  editable: true  },
@@ -319,6 +321,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
       if (col.toggleable && hiddenCols.has(col.key)) continue
       const th = document.createElement('th')
       th.textContent = col.label
+      if (col.key === 'id') th.className = 'sheet-col-id'
       if (col.key === 'start' || col.key === 'end') th.className = 'sheet-col-endpoint'
       theadRow.appendChild(th)
     }
@@ -334,6 +337,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
     if (!design?.strands?.length) return
 
     const strands = sortedStrands(design)
+    const displayIds = buildStrandDisplayIdMap(design.strands)
     const helixIndex = Object.fromEntries((design.helices ?? []).map((h, i) => [h.id, i]))
 
     strands.forEach((strand) => {
@@ -359,6 +363,12 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
         const td = document.createElement('td')
 
         switch (col.key) {
+          case 'id': {
+            td.className = 'sheet-col-id'
+            td.textContent = displayIds.get(strand.id) ?? '—'
+            td.title = strand.id
+            break
+          }
           case 'start': {
             td.className = 'sheet-col-endpoint'
             td.textContent = strandEndpoint(strand, '5p', helixIndex)

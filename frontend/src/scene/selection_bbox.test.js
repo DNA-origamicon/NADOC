@@ -25,6 +25,14 @@ describe('selectionBBox', () => {
     const box = selectionBBox(g, { domainIds: new Set(['d2']) })
     expect(box.min.toArray()).toEqual([3, 3, 3])
   })
+  it('matches canonical domain refs and base keys', () => {
+    const g = [
+      { strand_id: 's1', domain_index: 0, helix_id: 'h1', bp_index: 4, direction: 'FORWARD', backbone_position: [1, 1, 1] },
+      { strand_id: 's1', domain_index: 1, helix_id: 'h1', bp_index: 5, direction: 'FORWARD', backbone_position: [3, 3, 3] },
+    ]
+    expect(selectionBBox(g, { domainRefs: new Set(['s1:1']) }).min.toArray()).toEqual([3, 3, 3])
+    expect(selectionBBox(g, { baseKeys: new Set(['h1:4:FORWARD']) }).max.toArray()).toEqual([1, 1, 1])
+  })
   it('returns null with no selection or no geometry', () => {
     expect(selectionBBox(geom, {})).toBeNull()
     expect(selectionBBox([], { strandIds: new Set(['s1']) })).toBeNull()

@@ -16,6 +16,8 @@ import {
   EFIELD_ANCHOR_SAFE_PN, EFIELD_ANCHOR_DISRUPT_PN, EFIELD_REF_NT,
 } from './efield_math.js'
 
+const selected = (items, state = {}) => ({ ...state, selection: { items } })
+
 describe('force-unit conversions', () => {
   it('pN ⇄ oxDNA force units round-trips through 48.63', () => {
     expect(pnToOxdna(OXDNA_FORCE_PN)).toBeCloseTo(1, 9)
@@ -190,14 +192,14 @@ describe('partitionBaseKeys — one descriptor kind per bead family', () => {
   })
 
   it('unsupportedBaseKeys reads the pool straight off a state snapshot', () => {
-    expect(unsupportedBaseKeys({
-      currentDesign: design,
-      multiSelectedBaseKeys: ['h1:1:FORWARD', '__xb__:xo1:0', '__ext_e1:0:FORWARD'],
-    })).toEqual([])
-    expect(unsupportedBaseKeys({
-      currentDesign: design,
-      multiSelectedBaseKeys: ['gone:1:FORWARD', '__xb__:xoGone:0', '__ext_eGone:0:FORWARD'],
-    })).toEqual(['gone:1:FORWARD', '__xb__:xoGone:0', '__ext_eGone:0:FORWARD'])
+    expect(unsupportedBaseKeys(selected([
+      { kind: 'base', key: 'h1:1:FORWARD' }, { kind: 'base', key: '__xb__:xo1:0' },
+      { kind: 'base', key: '__ext_e1:0:FORWARD' },
+    ], { currentDesign: design }))).toEqual([])
+    expect(unsupportedBaseKeys(selected([
+      { kind: 'base', key: 'gone:1:FORWARD' }, { kind: 'base', key: '__xb__:xoGone:0' },
+      { kind: 'base', key: '__ext_eGone:0:FORWARD' },
+    ], { currentDesign: design }))).toEqual(['gone:1:FORWARD', '__xb__:xoGone:0', '__ext_eGone:0:FORWARD'])
   })
 })
 
@@ -209,10 +211,9 @@ describe('resolveSelectionAnchors — base-level pool', () => {
   }
 
   it('turns multiSelectedBaseKeys into base anchors', () => {
-    const out = resolveSelectionAnchors({
-      currentDesign: design,
-      multiSelectedBaseKeys: ['h1:12:FORWARD', 'h2:3:REVERSE'],
-    })
+    const out = resolveSelectionAnchors(selected([
+      { kind: 'base', key: 'h1:12:FORWARD' }, { kind: 'base', key: 'h2:3:REVERSE' },
+    ], { currentDesign: design }))
     expect(out).toEqual([
       { kind: 'base', helixId: 'h1', bp: 12, direction: 'FORWARD' },
       { kind: 'base', helixId: 'h2', bp: 3,  direction: 'REVERSE' },
@@ -220,10 +221,10 @@ describe('resolveSelectionAnchors — base-level pool', () => {
   })
 
   it('emits the right kind for each family, all three from one pool', () => {
-    const out = resolveSelectionAnchors({
-      currentDesign: design,
-      multiSelectedBaseKeys: ['h1:1:FORWARD', '__xb__:xo1:0', '__ext_e1:2:FORWARD'],
-    })
+    const out = resolveSelectionAnchors(selected([
+      { kind: 'base', key: 'h1:1:FORWARD' }, { kind: 'base', key: '__xb__:xo1:0' },
+      { kind: 'base', key: '__ext_e1:2:FORWARD' },
+    ], { currentDesign: design }))
     expect(out).toEqual([
       { kind: 'base', helixId: 'h1', bp: 1, direction: 'FORWARD' },
       { kind: 'extra_base', crossoverId: 'xo1', k: 0 },
@@ -232,84 +233,75 @@ describe('resolveSelectionAnchors — base-level pool', () => {
   })
 
   it('still drops a base whose helix was deleted', () => {
-    expect(resolveSelectionAnchors({
-      currentDesign: design, multiSelectedBaseKeys: ['gone:1:FORWARD'],
-    })).toEqual([])
+    expect(resolveSelectionAnchors(selected([{ kind: 'base', key: 'gone:1:FORWARD' }],
+      { currentDesign: design }))).toEqual([])
   })
 
   it('synthetic descriptors reach the occupancy wire format too', () => {
-    const sel = anchorsToSelection(resolveSelectionAnchors({
-      currentDesign: design,
-      multiSelectedBaseKeys: ['__xb__:xo1:0', '__ext_e1:2:FORWARD'],
-    }))
+    const sel = anchorsToSelection(resolveSelectionAnchors(selected([
+      { kind: 'base', key: '__xb__:xo1:0' }, { kind: 'base', key: '__ext_e1:2:FORWARD' },
+    ], { currentDesign: design })))
     expect(sel.extra_bases).toEqual([['xo1', 0]])
     expect(sel.extensions).toEqual([['e1', 2]])
   })
 
   it('dedupes a base already contributed by ctrlBeadNucs', () => {
-    const out = resolveSelectionAnchors({
+    const out = resolveSelectionAnchors(selected([{ kind: 'base', key: 'h1:12:FORWARD' }], {
       currentDesign: design,
       ctrlBeadNucs: [{ helix_id: 'h1', bp_index: 12, direction: 'FORWARD' }],
-      multiSelectedBaseKeys: ['h1:12:FORWARD'],
-    })
+    }))
     expect(out).toHaveLength(1)
   })
 
   it('coexists with the other scopes', () => {
-    const out = resolveSelectionAnchors({
-      currentDesign: design,
-      multiSelectedOverhangIds: ['o1'],
-      multiSelectedBaseKeys: ['h1:5:FORWARD'],
-    })
+    const out = resolveSelectionAnchors(selected([
+      { kind: 'overhang', id: 'o1' }, { kind: 'base', key: 'h1:5:FORWARD' },
+    ], { currentDesign: design }))
     expect(out.map(anchorKey).sort()).toEqual(['base:h1:5:FORWARD', 'overhang:o1'].sort())
   })
 
   // The occupancy scope picker feeds the SAME descriptors through anchorsToSelection,
   // so wiring the pool once lights up both features.
   it('flows through anchorsToSelection into the occupancy `bases` wire format', () => {
-    const sel = anchorsToSelection(resolveSelectionAnchors({
-      currentDesign: design,
-      multiSelectedBaseKeys: ['h1:12:FORWARD'],
-    }))
+    const sel = anchorsToSelection(resolveSelectionAnchors(selected(
+      [{ kind: 'base', key: 'h1:12:FORWARD' }], { currentDesign: design })))
     expect(sel.bases).toEqual([['h1', 12, 'FORWARD']])
   })
 })
 
 describe('resolveSelectionAnchors', () => {
-  it('pulls overhangs + domains from multi-select and cluster from selectedObject', () => {
-    const out = resolveSelectionAnchors({
-      multiSelectedOverhangIds: ['o1', 'o2'],
-      multiSelectedDomainIds: [{ strandId: 's1', domainIndex: 3 }],
-      selectedObject: { type: 'cluster', id: 'c1' },
-    })
+  it('pulls all anchorable canonical refs', () => {
+    const out = resolveSelectionAnchors(selected([
+      { kind: 'overhang', id: 'o1' }, { kind: 'overhang', id: 'o2' },
+      { kind: 'domain', strandId: 's1', domainIndex: 3 }, { kind: 'cluster', id: 'c1' },
+    ]))
     expect(out.map(anchorKey).sort()).toEqual(
       ['cluster:c1', 'domain:s1:3', 'overhang:o1', 'overhang:o2'].sort(),
     )
   })
   it('reads a single selected overhang / domain', () => {
-    expect(resolveSelectionAnchors({ selectedObject: { type: 'overhang', id: 'o9' } }))
+    expect(resolveSelectionAnchors(selected([{ kind: 'overhang', id: 'o9' }])))
       .toEqual([{ kind: 'overhang', id: 'o9' }])
-    expect(resolveSelectionAnchors({ selectedObject: { type: 'domain', data: { strand_id: 's5', domain_index: 2 } } }))
+    expect(resolveSelectionAnchors(selected([{ kind: 'domain', strandId: 's5', domainIndex: 2 }])))
       .toEqual([{ kind: 'domain', strandId: 's5', domainIndex: 2 }])
   })
-  it('reads whole strands (binding oligos) from multi-select and selectedObject', () => {
-    expect(resolveSelectionAnchors({ multiSelectedStrandIds: ['s3', 's4'] }))
+  it('reads whole strands (binding oligos)', () => {
+    expect(resolveSelectionAnchors(selected([{ kind: 'strand', id: 's3' }, { kind: 'strand', id: 's4' }])))
       .toEqual([{ kind: 'strand', id: 's3' }, { kind: 'strand', id: 's4' }])
-    expect(resolveSelectionAnchors({ selectedObject: { type: 'strand', id: 's8', data: { strand_id: 's8' } } }))
+    expect(resolveSelectionAnchors(selected([{ kind: 'strand', id: 's8' }])))
       .toEqual([{ kind: 'strand', id: 's8' }])
   })
-  it('reads an individual selected base (nucleotide)', () => {
-    expect(resolveSelectionAnchors({
-      selectedObject: { type: 'nucleotide', id: 'h1:5:forward',
-                        data: { helix_id: 'h1', bp_index: 5, direction: 'forward' } },
-    })).toEqual([{ kind: 'base', helixId: 'h1', bp: 5, direction: 'forward' }])
+  it('reads an individual selected base', () => {
+    expect(resolveSelectionAnchors(selected([{ kind: 'base', key: 'h1:5:forward' }],
+      { currentDesign: { helices: [{ id: 'h1' }] } })))
+      .toEqual([{ kind: 'base', helixId: 'h1', bp: 5, direction: 'forward' }])
   })
   it('ignores a data-less nucleotide selection and empty state', () => {
-    expect(resolveSelectionAnchors({ selectedObject: { type: 'nucleotide', id: 'n1' } })).toEqual([])
+    expect(resolveSelectionAnchors({ selection: { items: [{ kind: 'base', key: 'bad' }] } })).toEqual([])
     expect(resolveSelectionAnchors(null)).toEqual([])
   })
   it('reads multi-selected clusters (not just a single selectedObject cluster)', () => {
-    expect(resolveSelectionAnchors({ multiSelectedClusterIds: ['c1', 'c2'] }))
+    expect(resolveSelectionAnchors(selected([{ kind: 'cluster', id: 'c1' }, { kind: 'cluster', id: 'c2' }])))
       .toEqual([{ kind: 'cluster', id: 'c1' }, { kind: 'cluster', id: 'c2' }])
   })
   it('reads ctrl-picked end beads as individual base anchors', () => {
@@ -324,19 +316,17 @@ describe('resolveSelectionAnchors', () => {
     ])
   })
   it('a ctrl-picked bead that is also the single selection dedupes to one anchor', () => {
-    expect(resolveSelectionAnchors({
+    expect(resolveSelectionAnchors(selected([{ kind: 'base', key: 'h1:5:forward' }], {
       ctrlBeadNucs: [{ helix_id: 'h1', bp_index: 5, direction: 'forward' }],
-      selectedObject: { type: 'nucleotide', data: { helix_id: 'h1', bp_index: 5, direction: 'forward' } },
-    })).toEqual([{ kind: 'base', helixId: 'h1', bp: 5, direction: 'forward' }])
+    }))).toEqual([{ kind: 'base', helixId: 'h1', bp: 5, direction: 'forward' }])
   })
   it('combines every multi-select pool in one Add', () => {
-    const out = resolveSelectionAnchors({
-      multiSelectedOverhangIds: ['o1'],
-      multiSelectedClusterIds: ['c1'],
-      multiSelectedStrandIds: ['s1'],
-      multiSelectedDomainIds: [{ strandId: 's2', domainIndex: 0 }],
+    const out = resolveSelectionAnchors(selected([
+      { kind: 'overhang', id: 'o1' }, { kind: 'cluster', id: 'c1' },
+      { kind: 'strand', id: 's1' }, { kind: 'domain', strandId: 's2', domainIndex: 0 },
+    ], {
       ctrlBeadNucs: [{ helix_id: 'h3', bp_index: 1, direction: 'forward' }],
-    })
+    }))
     expect(out.map(anchorKey).sort()).toEqual(
       ['base:h3:1:forward', 'cluster:c1', 'domain:s2:0', 'overhang:o1', 'strand:s1'].sort(),
     )
@@ -391,36 +381,32 @@ describe('highlightedAnchors', () => {
 describe('anchorSelectionState', () => {
   it('passes the store state through and attaches ctrl-picked beads', () => {
     const out = anchorSelectionState({
-      state: { multiSelectedStrandIds: ['s1'], selectedObject: null },
+      state: selected([{ kind: 'strand', id: 's1' }]),
       ctrlBeadNucs: [{ helix_id: 'h1', bp_index: 2, direction: 'forward' }],
     })
-    expect(out.multiSelectedStrandIds).toEqual(['s1'])
+    expect(out.selection.items).toEqual([{ kind: 'strand', id: 's1' }])
     expect(out.ctrlBeadNucs).toHaveLength(1)
   })
 
-  it('subtracts a selected cluster\'s mirrored member strands (no double trap)', () => {
-    // Cluster multi-select mirrors members into multiSelectedStrandIds for the highlight.
-    // Keeping them would anchor the same nucleotides twice — once via the cluster, once
-    // per member strand — doubling the trap stiffness.
+  it('needs no member-strand subtraction for a canonical cluster ref', () => {
     const out = anchorSelectionState({
-      state: { multiSelectedClusterIds: ['c1'], multiSelectedStrandIds: ['m1', 'm2'] },
+      state: selected([{ kind: 'cluster', id: 'c1' }]),
       clusterMemberStrandIds: id => (id === 'c1' ? ['m1', 'm2'] : []),
     })
-    expect(out.multiSelectedStrandIds).toEqual([])
     expect(resolveSelectionAnchors(out).map(anchorKey)).toEqual(['cluster:c1'])
   })
 
   it('keeps independently multi-selected strands that are not cluster members', () => {
     const out = anchorSelectionState({
-      state: { multiSelectedClusterIds: ['c1'], multiSelectedStrandIds: ['m1', 'loner'] },
+      state: selected([{ kind: 'cluster', id: 'c1' }, { kind: 'strand', id: 'loner' }]),
       clusterMemberStrandIds: () => ['m1'],
     })
-    expect(out.multiSelectedStrandIds).toEqual(['loner'])
     expect(resolveSelectionAnchors(out).map(anchorKey).sort()).toEqual(['cluster:c1', 'strand:loner'])
   })
 
   it('tolerates a missing resolver / empty state', () => {
-    expect(anchorSelectionState({ state: { multiSelectedClusterIds: ['c1'] } }).multiSelectedStrandIds).toEqual([])
+    expect(anchorSelectionState({ state: selected([{ kind: 'cluster', id: 'c1' }]) }).selection.items)
+      .toEqual([{ kind: 'cluster', id: 'c1' }])
     expect(anchorSelectionState({}).ctrlBeadNucs).toEqual([])
     expect(anchorSelectionState().ctrlBeadNucs).toEqual([])
   })

@@ -192,7 +192,10 @@ describe('mrDNA launch payload — card → body PARITY', () => {
       'mrdna-anchors-add': 'button', 'mrdna-anchors-clear': 'button',
       'mrdna-anchors-list': 'div', 'mrdna-anchors-status': 'div',
     })
-    const store = createMockStore({ multiSelectedOverhangIds: ['o1', 'o2'], multiSelectedDomainIds: [], selectedObject: null })
+    const store = createMockStore({ selection: { items: [
+      { kind: 'overhang', id: 'o1' },
+      { kind: 'overhang', id: 'o2' },
+    ] } })
     const anchorsCard = initOxdnaAnchorsSetup({
       getSelection: () => store.getState(),
       ids: {

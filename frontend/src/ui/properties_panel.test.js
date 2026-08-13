@@ -11,7 +11,7 @@ import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 
 vi.mock('../state/store.js', async () => {
   const { createMockStore } = await import('../test-helpers/mock_store.js')
-  return { store: createMockStore({ currentDesign: null, selectedObject: null }) }
+  return { store: createMockStore({ currentDesign: null, selection: { items: [] } }) }
 })
 vi.mock('../api/client.js', () => ({ deleteHelix: vi.fn() }))
 
@@ -19,6 +19,18 @@ import { store } from '../state/store.js'
 import { initPropertiesPanel } from './properties_panel.js'
 
 const DESIGN = {
+  helices: [{ id: 'h1', label: '1', length_bp: 120 }],
+  strands: [
+    { id: 'long-scaffold-id', strand_type: 'scaffold',
+      domains: [{ helix_id: 'h1', start_bp: 0, end_bp: 119, direction: 'FORWARD' }] },
+    { id: 's1', strand_type: 'staple',
+      domains: [{ helix_id: 'h1', start_bp: 2, end_bp: 7, direction: 'REVERSE', overhang_id: 'oh1' }] },
+  ],
+  overhangs: [{ id: 'oh1', strand_id: 's1', label: 'Probe', sequence: 'ACGT' }],
+  extensions: [{
+    id: 'ext1', strand_id: 's1', end: 'five_prime', sequence: 'TT', modification: 'cy3', label: 'Dye tail',
+  }],
+  cluster_transforms: [{ id: 'c1', name: 'Hinge', helix_ids: ['h1', 'h2'], is_default: false }],
   protein_assets: [{
     id: 'asset1',
     name: 'GFP',
@@ -37,26 +49,29 @@ const DESIGN = {
   }],
 }
 
-const PROTEIN_SEL = { type: 'protein', id: 'att1', data: { attachment_id: 'att1' } }
+const PROTEIN_SELECTION = {
+  items: [{ kind: 'protein', id: 'att1' }],
+  primary: { kind: 'protein', id: 'att1' },
+}
 
 describe('properties panel — protein branch', () => {
   let content
   beforeEach(() => {
     ;({ 'properties-content': content } = mountIds(['properties-content']))
-    store.setState({ currentDesign: null, selectedObject: null })
+    store.setState({ currentDesign: null, selection: { items: [] } })
   })
 
   it('renders an imported protein without throwing (regression: used to hit _renderNucleotide)', () => {
     store.setState({ currentDesign: DESIGN })
     initPropertiesPanel()
-    expect(() => store._emit({ selectedObject: PROTEIN_SEL })).not.toThrow()
+    expect(() => store._emit({ selection: PROTEIN_SELECTION })).not.toThrow()
     expect(content.innerHTML).toContain('GFP')
   })
 
   it('shows asset name, source, atom/residue/chain counts, and free anchor', () => {
     store.setState({ currentDesign: DESIGN })
     initPropertiesPanel()
-    store._emit({ selectedObject: PROTEIN_SEL })
+    store._emit({ selection: PROTEIN_SELECTION })
     const html = content.innerHTML
     expect(html).toContain('GFP')
     expect(html).toContain('gfp.pdb')
@@ -77,7 +92,7 @@ describe('properties panel — protein branch', () => {
     }
     store.setState({ currentDesign: d })
     initPropertiesPanel()
-    store._emit({ selectedObject: PROTEIN_SEL })
+    store._emit({ selection: PROTEIN_SELECTION })
     const html = content.innerHTML
     expect(html).toContain('overhang')
     expect(html).toContain('ovhg-7')
@@ -87,7 +102,7 @@ describe('properties panel — protein branch', () => {
   it('falls back gracefully when the attachment is not in the design', () => {
     store.setState({ currentDesign: { protein_assets: [], protein_attachments: [] } })
     initPropertiesPanel()
-    expect(() => store._emit({ selectedObject: PROTEIN_SEL })).not.toThrow()
+    expect(() => store._emit({ selection: PROTEIN_SELECTION })).not.toThrow()
     expect(content.innerHTML).toContain('Protein selected')
   })
 
@@ -98,7 +113,67 @@ describe('properties panel — protein branch', () => {
     }
     store.setState({ currentDesign: d })
     initPropertiesPanel()
-    store._emit({ selectedObject: PROTEIN_SEL })
+    store._emit({ selection: PROTEIN_SELECTION })
     expect(content.innerHTML).toContain('hidden')
+  })
+
+  it('renders a canonical overhang ref with its related domain and strand', () => {
+    store.setState({ currentDesign: DESIGN })
+    initPropertiesPanel()
+    store._emit({ selection: { items: [{ kind: 'overhang', id: 'oh1' }] } })
+    const html = content.innerHTML
+    expect(html).toContain('Probe')
+    expect(html).toContain('ACGT')
+    expect(html).toContain('#0')
+    expect(html).toContain('S1')
+  })
+
+  it('renders a canonical extension ref without selectedObject compatibility data', () => {
+    store.setState({ currentDesign: DESIGN })
+    initPropertiesPanel()
+    store._emit({ selection: { items: [{ kind: 'extension', id: 'ext1' }] } })
+    const html = content.innerHTML
+    expect(html).toContain('Dye tail')
+    expect(html).toContain('TT')
+    expect(html).toContain('cy3')
+    expect(html).toContain('5′')
+  })
+
+  it('renders canonical cluster data without selectedObject compatibility state', () => {
+    store.setState({ currentDesign: DESIGN })
+    initPropertiesPanel()
+    store._emit({ selection: { items: [{ kind: 'cluster', id: 'c1' }] } })
+    expect(content.innerHTML).toContain('2')
+    expect(content.innerHTML).toContain('sub-cluster')
+  })
+
+  it('renders the short spreadsheet ID instead of a strand internal id', () => {
+    store.setState({ currentDesign: DESIGN })
+    initPropertiesPanel()
+    store._emit({ selection: { items: [{ kind: 'strand', id: 's1' }] } })
+    const firstRow = content.querySelector('.prop-row')
+    expect(firstRow.querySelector('.prop-label').textContent).toBe('strand')
+    expect(firstRow.querySelector('.prop-val').textContent).toBe('S1')
+    expect(content.textContent).not.toContain('s1')
+  })
+
+  it('clusters canonical base labels by type and helix instead of showing raw keys', () => {
+    store.setState({
+      currentDesign: DESIGN,
+      currentGeometry: [
+        { helix_id: 'h1', bp_index: 34, direction: 'REVERSE', strand_id: 's1', strand_type: 'staple' },
+        { helix_id: 'h1', bp_index: 35, direction: 'REVERSE', strand_id: 's1', strand_type: 'staple' },
+        { helix_id: 'h1', bp_index: 36, direction: 'FORWARD', strand_id: 'long-scaffold-id', strand_type: 'scaffold' },
+      ],
+    })
+    initPropertiesPanel()
+    store._emit({ selection: { items: [
+      { kind: 'base', key: 'h1:34:REVERSE' },
+      { kind: 'base', key: 'h1:35:REVERSE' },
+      { kind: 'base', key: 'h1:36:FORWARD' },
+    ] } })
+    expect(content.textContent).toContain('Staple - 1[34,35]')
+    expect(content.textContent).toContain('Scaffold - 1[36]')
+    expect(content.textContent).not.toContain('h1:34:REVERSE')
   })
 })

@@ -20,10 +20,8 @@
 // (`__lnk__<connId>` helix) fit the 4-part form unchanged — they already carry synthetic
 // helix ids in the geometry payload.
 //
-// WHY strings and not objects: the store key becomes `string[]`, the same shape as
-// `multiSelectedStrandIds`/`multiSelectedOverhangIds` — trivially serialisable, cheap to
-// Set-dedupe, and immediately parseable by the eight-plus sites that already read these
-// formats.
+// WHY strings and not objects: refs remain trivially serialisable, cheap to Set-dedupe,
+// and immediately parseable by every consumer of these formats.
 //
 // Everything here is pure (no THREE / DOM / store) so it unit-tests directly.
 
@@ -53,6 +51,22 @@ export function baseKey(nuc, copy = 0) {
 export function xbKey(crossoverId, k) {
   if (!crossoverId && crossoverId !== 0) return null
   return `${XB_HELIX}:${crossoverId}:${k}`
+}
+
+/** Canonical base key for an atomistic record, including presentation-only fields
+ * used to distinguish crossover inserts and extension-tail residues from anchors. */
+export function atomBaseKey(atom) {
+  if (atom?.crossover_id != null && atom?.extra_base_k != null) {
+    return xbKey(atom.crossover_id, atom.extra_base_k)
+  }
+  if (atom?.extension_id != null && atom?.ext_k != null) {
+    return baseKey({
+      helix_id: `__ext_${atom.extension_id}`,
+      bp_index: atom.ext_k,
+      direction: atom.direction,
+    })
+  }
+  return baseKey(atom, atom?.copy_k ?? 0)
 }
 
 /**

@@ -51,6 +51,7 @@ import {
   assembleOverhangSequence, overhangDomainLength, pairingSegments,
   overhangHasDuplex, overhangDuplexSegments, capSequenceToLength, overhangRcOfPartner,
 } from '../scene/design_queries.js'
+import { selectedOverhangIds } from '../scene/selection_model.js'
 
 const _STORAGE = 'nadoc.overhangConnections.connectionType'
 
@@ -226,14 +227,10 @@ export function initOverhangConnectionsPanel({
     else if (s.currentGeometry !== p.currentGeometry) _updateGlow()   // beads moved/rebuilt
   })
 
-  // React to 3D scene selection: when the section is open, the last two selected
-  // overhangs auto-populate the A / B dropdowns. Covers overhang-filter selection
-  // (multiSelectedOverhangIds), domain-filter selection (multiSelectedDomainIds +
-  // single selectedObject.overhang_id), via lasso / ctrl-shift / sequential click.
+  // React to canonical overhang selection: when the section is open, the last two
+  // selected overhang refs auto-populate the A / B dropdowns.
   _store.subscribe((s, p) => {
-    if (s.multiSelectedOverhangIds !== p.multiSelectedOverhangIds ||
-        s.multiSelectedDomainIds   !== p.multiSelectedDomainIds   ||
-        s.selectedObject           !== p.selectedObject) {
+    if (s.selection !== p.selection) {
       _onSelectionChange(s)
     }
   })
@@ -1571,25 +1568,10 @@ function _applyCollapse() {
 
 // ── Auto-populate from 3D scene selection ─────────────────────────────────────
 
-/** Resolve a {strandId, domainIndex} domain ref to its overhang_id (if any). */
-function _overhangIdOfDomain(design, ref) {
-  if (!design || !ref) return null
-  const strand = (design.strands ?? []).find(s => s.id === ref.strandId)
-  return strand?.domains?.[ref.domainIndex]?.overhang_id ?? null
-}
-
-/** Ordered, deduped, valid list of overhang ids the current selection points at,
- *  merging overhang-filter + domain-filter + single-selection store fields. */
+/** Ordered, valid list of overhang ids from canonical selection. */
 function _selectedOverhangIds(state) {
-  const out = []
-  const seen = new Set()
-  const push = (id) => { if (id && !seen.has(id)) { seen.add(id); out.push(id) } }
-  for (const id of state.multiSelectedOverhangIds ?? []) push(id)
-  const design = state.currentDesign
-  for (const ref of state.multiSelectedDomainIds ?? []) push(_overhangIdOfDomain(design, ref))
-  push(state.selectedObject?.data?.overhang_id)
   const valid = new Set(_overhangs().map(o => o.id))
-  return out.filter(id => valid.has(id))
+  return selectedOverhangIds(state).filter(id => valid.has(id))
 }
 
 /** Translate a scene-selection change into newly-picked overhang ids and feed

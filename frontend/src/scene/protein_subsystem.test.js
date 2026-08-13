@@ -46,7 +46,10 @@ import { initProteinSubsystem } from './protein_subsystem.js'
 function makeDeps(initialState = {}) {
   return {
     scene: {},
-    store: createMockStore({ selectedObject: null, currentDesign: null, ...initialState }),
+    store: createMockStore({
+      selection: { context: 'design', level: 'default', items: [], primary: null },
+      selectedObject: null, currentDesign: null, ...initialState,
+    }),
     controls: {},
     camera: {},
     canvas: {},
@@ -114,17 +117,23 @@ describe('initProteinSubsystem', () => {
   it('attaches the gizmo at the centroid when a protein is selected', () => {
     const deps = makeDeps()
     initProteinSubsystem(deps)
-    deps.store._emit({ selectedObject: { type: 'protein', id: 'p1' } })
+    deps.store._emit({ selection: {
+      context: 'design', level: 'default',
+      items: [{ kind: 'protein', id: 'p1' }], primary: { kind: 'protein', id: 'p1' },
+    } })
     expect(_lastRenderer.centroidOf).toHaveBeenCalled()
     expect(_lastGizmo.attach).toHaveBeenCalledWith('p1', deps.scene, deps.camera, deps.canvas, [1, 2, 3])
-    expect(_lastRenderer.highlight).toHaveBeenCalledWith({ type: 'protein', id: 'p1' })
+    expect(_lastRenderer.highlight).toHaveBeenCalledWith({ type: 'protein', id: 'p1', data: { attachment_id: 'p1' } })
   })
 
   it('detaches the gizmo + clears highlight when selection leaves a protein', () => {
     const deps = makeDeps()
     initProteinSubsystem(deps)
-    deps.store._emit({ selectedObject: { type: 'protein', id: 'p1' } })  // attach
-    deps.store._emit({ selectedObject: null })                            // deselect
+    deps.store._emit({ selection: {
+      context: 'design', level: 'default',
+      items: [{ kind: 'protein', id: 'p1' }], primary: { kind: 'protein', id: 'p1' },
+    } })
+    deps.store._emit({ selection: { context: 'design', level: 'default', items: [], primary: null } })
     expect(_lastGizmo.detach).toHaveBeenCalled()
     expect(_lastRenderer.highlight).toHaveBeenLastCalledWith(null)
   })

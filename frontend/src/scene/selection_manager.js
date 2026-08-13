@@ -1,5 +1,5 @@
 /**
- * Selection manager — raycaster-based click-to-select with three-click model.
+ * Selection manager — raycaster-based gestures backed by canonical selection refs.
  *
  * Click model (beads and cones both participate):
  *   First click on a bead/cone  → select the entire strand.
@@ -13,21 +13,16 @@
  *   Ctrl+left-drag             → rectangle lasso multi-select.
  *   Ctrl+left-click (no drag)  → no-op (was bead/arc toggle pre-remap).
  *   Alt+left-click             → toggle backbone bead in _ctrlBeads (distance measurement).
- *   Shift+left-click           → toggle hit strand in multiSelectedStrandIds
- *                                (or hit crossover arc in multi-arc set when
- *                                 selectableTypes.crossoverArcs is on).
+ *   Shift+left-click           → toggle the hit element at the active level.
  *
  * Right-click behaviour:
  *   On a cone (any mode) → "Nick here" context menu.
  *   On a bead (strand or domain selected) → colour-picker menu.
  *   On a bead (bead mode) → loop/skip menu.
  *
- * Selection state is stored in the store as selectedObject:
- *   { type: 'strand',     id, data: { strand_id } }
- *   { type: 'domain',     id, data: { strand_id, domain_index, helix_id, direction, overhang_id } }
- *   { type: 'nucleotide', id, data: nuc }
- *   { type: 'cone',       id, data: { fromNuc, toNuc, strand_id } }
- *   null — nothing selected
+ * Persistent selection state is written only through selectionController. Renderer
+ * entry caches below are projections, while Alt-click measurement anchors are a
+ * separate transient interaction state.
  */
 
 import * as THREE from 'three'
@@ -38,14 +33,17 @@ import { deferrableContextMenu } from './right_click_menu.js'
 import { showConfirm } from '../ui/primitives/confirm.js'
 import { clusterMemberFilter } from './cluster_entries.js'
 import { strandsToSegments, clustersToSegments, domainsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './representation_overrides.js'
-import { normalizeLevel, hoverPreviewTarget, lassoCaptureType, toggleClusterSelection, extensionSelectionEntries, extensionContextIds } from './selection_level.js'
+import { normalizeLevel, hoverPreviewTarget, lassoCaptureType, extensionSelectionEntries, extensionContextIds } from './selection_level.js'
 import { buildStrandMenuItems } from '../ui/strand_menu_items.js'
-import { baseKey, xbKey, parseBaseKey, toggleBaseKey, mergeBaseKeys, pruneBaseKeys } from './base_ref.js'
+import { baseKey, xbKey, atomBaseKey, parseBaseKey, toggleBaseKey, mergeBaseKeys } from './base_ref.js'
 import {
   backboneCandidates, xoverCandidates, flexCandidates, ssLinkCandidates,
   nearestCandidate, candidatesInRect, makeProjector, worldPosOf,
 } from './base_pick.js'
 import { flexAnchorKey } from './flexible_arcs.js'
+import { selectedCrossoverRefs, selectedEndRefs } from './selection_model.js'
+import { bondRefForCone, coneForBondRef, crossoverRefForArc, endRefForEntry } from './selection_hit_resolver.js'
+import { selectionHighlightDescriptor } from './selection_highlight_model.js'
 
 // Kick off the FJC lookup fetch at module load so the linker-config modal
 // opens instantly with the per-bin histograms already cached.
@@ -1663,7 +1661,8 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
  * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldAssignSequence?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onEditStrandSequence, onHideSelection, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getAtomisticRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionStickRenderer, getRegionSurfaceRenderer, onDrillLevel } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onEditStrandSequence, onHideSelection, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getAtomisticRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionStickRenderer, getRegionSurfaceRenderer, onDrillLevel, selectionController } = opts
+  if (!selectionController) throw new TypeError('selection manager requires the canonical selection controller')
   _onEditStrandSequence = onEditStrandSequence ?? null
   _onHideSelection = onHideSelection ?? null
 
@@ -1772,25 +1771,24 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   function _selectStrandV2(hitStrandId, hitEntry, backboneEntries, coneEntries) {
     _mode = 'strand'; _strandId = hitStrandId; _coneEntry = null
-    _highlightStrand(backboneEntries, coneEntries, hitStrandId)
-    store.setState({
-      selectedObject: _strandSelection(hitStrandId, hitEntry ? { helix_id: hitEntry.nuc.helix_id } : {}),
-    })
+    const selected = _selLevel === 'strand'
+      ? selectionController.select({ kind: 'strand', id: hitStrandId })
+      : selectionController.replace([{ kind: 'strand', id: hitStrandId }])
+    if (!selected.items.length) _finishCanonicalDeselect()
   }
 
   // Shared cluster-selection commit — used by the 3D cluster-filter click
   // (_selectClusterV2) AND the sidebar "Movable clusters" row (exported
   // selectCluster), so both produce the identical green-glow + 1.3× bead-scale +
-  // cluster `selectedObject` state. Re-selecting the active cluster toggles it off.
+  // canonical cluster ref. Re-selecting the active cluster toggles it off.
   function _applyClusterSelection(cid, { toggle = false } = {}) {
-    if (toggle && _mode === 'cluster' && _drillClusterId === cid) { _clearAll(); return true }
     // A plain (non-additive) cluster pick replaces any multi-cluster selection. The 3D
     // click path already cleared it; the sidebar row calls straight in here.
-    if (_multiStrandIds.length > 0) _clearMultiSelection()
-    const backboneEntries = designRenderer.getBackboneEntries()
     _mode = 'cluster'; _strandId = null
-    _highlightCluster(cid, backboneEntries)   // restores prior selection, green glow + _drillClusterId
-    store.setState({ selectedObject: _clusterSelection(cid) })
+    const selected = toggle
+      ? selectionController.select({ kind: 'cluster', id: cid })
+      : selectionController.replace([{ kind: 'cluster', id: cid }])
+    if (!selected.items.length) _finishCanonicalDeselect()
     return true
   }
 
@@ -1802,52 +1800,25 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   }
 
   function _selectDomainV2(hitEntry, hitStrandId, backboneEntries, coneEntries) {
-    const design = store.getState().currentDesign
     const domainIdx = hitEntry.nuc.domain_index ?? 0
     _mode = 'domain'; _strandId = hitStrandId
-    _highlightStrand(backboneEntries, coneEntries, hitStrandId)
-    _highlightDomain(domainIdx)
-    const domainObj = design?.strands?.find(s => s.id === hitStrandId)?.domains?.[domainIdx]
-    store.setState({
-      selectedObject: {
-        type: 'domain',
-        id:   `${hitStrandId}:${domainIdx}`,
-        data: {
-          strand_id:    hitStrandId,
-          domain_index: domainIdx,
-          helix_id:     domainObj?.helix_id    ?? hitEntry.nuc.helix_id,
-          direction:    domainObj?.direction   ?? hitEntry.nuc.direction,
-          overhang_id:  domainObj?.overhang_id ?? null,
-        },
-      },
-    })
+    const selected = _selLevel === 'domain'
+      ? selectionController.select({ kind: 'domain', strandId: hitStrandId, domainIndex: domainIdx })
+      : selectionController.replace([{ kind: 'domain', strandId: hitStrandId, domainIndex: domainIdx }])
+    if (!selected.items.length) _finishCanonicalDeselect()
   }
 
-  function _selectBeadV2(hitEntry, hitStrandId, backboneEntries, coneEntries) {
-    _mode = 'bead'; _strandId = hitStrandId
-    _highlightStrand(backboneEntries, coneEntries, hitStrandId)
-    _highlightBead(hitEntry)
-    store.setState({
-      selectedObject: {
-        type: 'nucleotide',
-        id:   `${hitEntry.nuc.helix_id}:${hitEntry.nuc.bp_index}:${hitEntry.nuc.direction}`,
-        data: hitEntry.nuc,
-      },
-    })
+  function _selectEndV2(hitEntry) {
+    const ref = endRefForEntry(hitEntry)
+    if (!ref) return
+    _mode = 'none'; _strandId = null
+    selectionController.select(ref)
   }
 
   function _selectConeV2(hitCone, hitStrandId, backboneEntries, coneEntries) {
-    _highlightStrand(backboneEntries, coneEntries, hitStrandId)
     _mode = 'cone'; _strandId = hitStrandId
-    _highlightCone(hitCone)
-    const { fromNuc, toNuc } = hitCone
-    store.setState({
-      selectedObject: {
-        type: 'cone',
-        id:   `${fromNuc.helix_id}:${fromNuc.bp_index}:${fromNuc.direction}→${toNuc.helix_id}:${toNuc.bp_index}:${toNuc.direction}`,
-        data: { fromNuc, toNuc, strand_id: hitStrandId },
-      },
-    })
+    const ref = bondRefForCone(hitCone, hitStrandId)
+    selectionController.select(ref)
   }
 
   // Drill-v2 bead-hit dispatch — fixed-level select, or strand→leaf-under-cursor
@@ -1873,7 +1844,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (_selLevel === 'end') {
       // Fixed level: select ONLY a 5′/3′ terminus bead; a mid-strand bead is a no-op.
       if (hitEntry.nuc.is_five_prime || hitEntry.nuc.is_three_prime) {
-        _selectBeadV2(hitEntry, hitStrandId, backboneEntries, coneEntries)
+        _selectEndV2(hitEntry)
       }
       _emitDrillLevel('end'); return
     }
@@ -1888,8 +1859,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       _selectBaseKey(baseKey(hitEntry.nuc, hitEntry._copy))
       _emitDrillLevel('base'); return
     }
-    // default: strand-first, then the leaf under the cursor. A repeat click on the
-    // already-selected leaf KEEPS it selected (no toggle-clear) — user feedback 2026-06-06.
+    // default: strand-first, then the leaf under the cursor. A bead leaf commits
+    // through the SAME base-key pool as the explicit Base selection level, so the
+    // two gestures have identical state, glow, properties, and transform behavior.
     const onSameStrand = (_mode === 'strand' || _mode === 'bead') && _strandId === hitStrandId
     if (!onSameStrand) {
       _selectStrandV2(hitStrandId, hitEntry, backboneEntries, coneEntries)
@@ -1898,7 +1870,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if (rep === 'cylinders' || rep === 'surface') {
         _selectDomainV2(hitEntry, hitStrandId, backboneEntries, coneEntries)   // rep caveat: no bead
       } else {
-        _selectBeadV2(hitEntry, hitStrandId, backboneEntries, coneEntries)
+        _selectBaseKey(baseKey(hitEntry.nuc, hitEntry._copy))
       }
     }
     _emitDrillLevel('default')
@@ -1949,15 +1921,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const fl = xo ? null : design?.forced_ligations?.find(f => f.id === arcHit.crossover_id)
     const target = xo ?? fl
     if (!target) return false
-    if (_mode === 'crossover' && _crossoverId === target.id) { _clearAll(); return true }  // toggle off
-    _restoreStrand()
+    const ref = { kind: 'crossover', id: target.id, subtype: xo ? 'crossover' : 'forced_ligation' }
     _mode = 'crossover'; _crossoverId = target.id; _strandId = arcHit.strandId
-    // Green glow TUBE along the arc — unified with the yellow preview tube (user
-    // feedback 2026-06-06), replacing the old endpoint-sphere glow.
-    designRenderer.setSelectionArc(arcHit.getPositions?.() ?? [])
-    store.setState({
-      selectedObject: { type: xo ? 'crossover' : 'forced_ligation', id: target.id, data: target },
-    })
+    const selected = selectionController.select(ref)
+    if (!selected.items.length) { _finishCanonicalDeselect(); return true }
     return true
   }
 
@@ -2252,7 +2219,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // radius. Same form as the end-level preview, but the candidate set spans all five
     // bead renderers rather than just backboneEntries.
     if (_selLevel === 'base') {
-      const c = _nearestBaseCand(_sx, _sy)
+      const c = _baseCandidateAt(clientX, clientY)
       if (!c) { _clearHoverPreview(); return }
       if (_baseKeys.includes(c.key)) { _clearHoverPreview(); return }  // already selected → stays green
       if (c.key !== _hoverKey) {
@@ -2362,18 +2329,6 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   // ── Highlight helpers ────────────────────────────────────────────────────
 
-  function _strandSelection(strandId, extra = {}) {
-    // Each ds linker half is a distinct strand for selection purposes — only
-    // the clicked one is selected/highlighted. Color/right-click ops still
-    // operate on the whole linker via `linkerComponentIds()` inside
-    // `_showColorMenu`.
-    return {
-      type: 'strand',
-      id: strandId,
-      data: { strand_id: strandId, strand_ids: [strandId], ...extra },
-    }
-  }
-
   function _restoreStrand() {
     _clearCylinderSelection()
     for (const e of _strandEntries) {
@@ -2470,25 +2425,16 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
   }
 
-  function _clearAll() {
-    _restoreStrand()
-    _clearCylinderSelection()
-    _mode        = 'none'
-    _strandId    = null
-    _crossoverId = null
-    _drillClusterId = null
-    // Deselecting (empty-space / toggle-off click) KEEPS the engaged level — the
-    // filter button stays lit until Tab cycles away or it is re-clicked (user
-    // feedback 2026-06-06). `_selLevel` is not reset here; emit it (not null) so the
-    // row paint persists.
+  function _finishCanonicalDeselect() {
+    _mode = 'none'; _strandId = null; _domainIndex = null
+    _crossoverId = null; _drillClusterId = null
     _emitDrillLevel(_selLevel)
-    store.setState({ selectedObject: null })
+  }
+
+  function _clearAll() {
+    selectionController.clear()
+    _finishCanonicalDeselect()
     _clearMultiLoopSkips()
-    _clearMultiDomainSelection()
-    _clearMultiCrossoverArcs()
-    _clearMultiOverhangSelection()
-    _clearMultiExtensionSelection()
-    _clearBaseSelection()
   }
 
   // ── Multi-selection (Ctrl+drag rectangle lasso) ──────────────────────────
@@ -2549,7 +2495,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
   }
 
-  function _clearMultiSelection() {
+  function _clearMultiSelection({ commit = true } = {}) {
     for (const e of _multiEntries)     { designRenderer.setEntryColor(e, e.defaultColor); designRenderer.setBeadScale(e, 1.0) }
     for (const e of _multiConeEntries) { designRenderer.setEntryColor(e, e.defaultColor) }
     if (_multiStrandIds.length > 0) designRenderer.setXoverBeadScale(_multiStrandIds, 1.0)
@@ -2559,7 +2505,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _multiEntries      = []
     _multiConeEntries  = []
     _multiStrandIds    = []
-    store.setState({ multiSelectedStrandIds: [], multiSelectedClusterIds: [] })
+    if (commit) {
+      selectionController.clear()
+    }
     _clearMultiLoopSkips()
   }
 
@@ -2591,7 +2539,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _setSelectionGlow(_multiDomainEntries)
   }
 
-  function _clearMultiDomainSelection() {
+  function _clearMultiDomainSelection({ commit = true } = {}) {
     for (const e of _multiDomainEntries) {
       designRenderer.setEntryColor(e, e.defaultColor)
       designRenderer.setBeadScale(e, 1.0)
@@ -2599,7 +2547,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _clearSelectionGlow()
     _multiDomainEntries = []
     _multiDomainIds     = []
-    store.setState({ multiSelectedDomainIds: [] })
+    if (commit) {
+      selectionController.clear()
+    }
   }
 
   // ── Multi-overhang selection ────────────────────────────────────────────
@@ -2622,7 +2572,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _setSelectionGlow(_multiOverhangEntries)
   }
 
-  function _clearMultiOverhangSelection() {
+  function _clearMultiOverhangSelection({ commit = true } = {}) {
     for (const e of _multiOverhangEntries) {
       designRenderer.setEntryColor(e, e.defaultColor)
       designRenderer.setBeadScale(e, 1.0)
@@ -2630,7 +2580,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _clearSelectionGlow()
     _multiOverhangEntries = []
     _multiOverhangIds     = []
-    store.setState({ multiSelectedOverhangIds: [] })
+    if (commit) {
+      selectionController.clear()
+    }
   }
 
   // Extension selection is keyed by extension_id and highlights only tail beads;
@@ -2652,7 +2604,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _setSelectionGlow(_multiExtensionEntries)
   }
 
-  function _clearMultiExtensionSelection() {
+  function _clearMultiExtensionSelection({ commit = true } = {}) {
     for (const e of _multiExtensionEntries) {
       designRenderer.setEntryColor(e, e.defaultColor)
       designRenderer.setBeadScale(e, 1.0)
@@ -2660,18 +2612,16 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _clearSelectionGlow()
     _multiExtensionEntries = []
     _multiExtensionIds = []
-    store.setState({ multiSelectedExtensionIds: [] })
+    if (commit) {
+      selectionController.clear()
+    }
   }
 
-  function _selectExtension(extensionId) {
+  function _selectExtension(extensionId, { toggleSole = false } = {}) {
     if (!extensionId) return
-    _clearAll()
-    _applyMultiExtensionHighlight([extensionId])
-    store.setState({
-      multiSelectedExtensionIds: [extensionId],
-      selectedObject: { type: 'extension', id: extensionId,
-        data: store.getState().currentDesign?.extensions?.find(ext => ext.id === extensionId) ?? { id: extensionId } },
-    })
+    toggleSole
+      ? selectionController.select({ kind: 'extension', id: extensionId })
+      : selectionController.replace([{ kind: 'extension', id: extensionId }])
   }
 
   function _showExtensionMenu(x, y, extensionIds) {
@@ -2708,33 +2658,13 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   // Select just the OVERHANG DOMAIN — highlight only the beads carrying this
   // overhang_id (color + 1.3× + glow), leaving the rest of the parent strand
-  // untouched (same visual as clicking the overhang directly in 3D). selectedObject
-  // is set to the matching domain so the sidebar row + properties panel reflect it.
+  // untouched (same visual as clicking the overhang directly in 3D). Related domain
+  // and parent-strand data are derived from the canonical overhang ref by consumers.
   // Shared by the public selectOverhang() API and the overhang-filter click path.
-  function _selectOverhangDomain(overhangId) {
-    _clearAll()
-    _applyMultiOverhangHighlight([overhangId])
-    store.setState({ multiSelectedOverhangIds: [overhangId] })
-    const design    = store.getState().currentDesign
-    const ovhg      = design?.overhangs?.find(o => o.id === overhangId)
-    const strand    = design?.strands?.find(s => s.id === ovhg?.strand_id)
-    const domainIdx = strand?.domains?.findIndex(d => d.overhang_id === overhangId) ?? -1
-    if (strand && domainIdx >= 0) {
-      const domainObj = strand.domains[domainIdx]
-      store.setState({
-        selectedObject: {
-          type: 'domain',
-          id:   `${strand.id}:${domainIdx}`,
-          data: {
-            strand_id:    strand.id,
-            domain_index: domainIdx,
-            helix_id:     domainObj?.helix_id  ?? null,
-            direction:    domainObj?.direction ?? null,
-            overhang_id:  overhangId,
-          },
-        },
-      })
-    }
+  function _selectOverhangDomain(overhangId, { toggleSole = false } = {}) {
+    toggleSole
+      ? selectionController.select({ kind: 'overhang', id: overhangId })
+      : selectionController.replace([{ kind: 'overhang', id: overhangId }])
   }
 
   // ── Multi-domain right-click menu (representation override) ──────────────
@@ -2792,6 +2722,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   let _ctrlBeads             = []   // [{entry, nuc}, ...] individually ctrl-picked beads
   let _ctrlBeadsChangeCbs    = []   // array — multiple subscribers allowed
+  let _endBeads              = []   // live visual projection of canonical End refs
   let _selectionGlowEntries = []   // current glow from regular strand/bead selection
   let _baseGlowEntries      = []   // base-level pool glow (see _repaintBaseGlow)
 
@@ -2806,6 +2737,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     designRenderer.setGlowEntries([
       ...beadEntries,
       ..._ctrlBeads.map(b => b.entry),
+      ..._endBeads.map(b => b.entry),
       ..._baseGlowEntries,
     ])
   }
@@ -2846,7 +2778,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   function _clearSelectionGlow() {
     _selectionGlowEntries = []
     designRenderer.clearCylinderDomainGlow?.()
-    if (_ctrlBeads.length || _baseGlowEntries.length) _composeGlow([])
+    if (_ctrlBeads.length || _endBeads.length || _baseGlowEntries.length) _composeGlow([])
     else                                              designRenderer.clearGlow()
   }
 
@@ -2871,6 +2803,31 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _notifyCtrlBeadsChange()
   }
 
+  function _entryForEndRef(ref) {
+    const target = ref?.kind === 'end' ? parseBaseKey(ref.key) : null
+    if (!target || target.helix_id === '__xb__') return null
+    const entry = designRenderer.getBackboneEntries().find(be =>
+      be.nuc.helix_id === target.helix_id && be.nuc.bp_index === target.bp_index &&
+      be.nuc.direction === target.direction && (be._copy ?? 0) === (target.copy ?? 0))
+    return entry && (entry.nuc.is_five_prime || entry.nuc.is_three_prime)
+      ? { entry, nuc: entry.nuc } : null
+  }
+
+  function _applyEndSelection(refs) {
+    for (const bead of _endBeads) {
+      designRenderer.setEntryColor(bead.entry, bead.entry.defaultColor)
+      designRenderer.setBeadScale(bead.entry, 1.0)
+    }
+    _endBeads = refs.map(_entryForEndRef).filter(Boolean)
+    for (const bead of _endBeads) {
+      designRenderer.setEntryColor(bead.entry, C_CTRL_BEAD)
+      designRenderer.setBeadScale(bead.entry, 1.6)
+      if (bead.entry.instMesh.instanceColor) bead.entry.instMesh.instanceColor.needsUpdate = true
+      if (bead.entry.instMesh.instanceMatrix) bead.entry.instMesh.instanceMatrix.needsUpdate = true
+    }
+    _refreshCtrlGlow()
+  }
+
   // ── Base-level selection (the `base` selectionLevel) ─────────────────────
   //
   // ONE pool, keyed by the app-wide base key string (see base_ref.js). It spans all five
@@ -2889,9 +2846,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // bead-radius slider's value. The glow layer needs only `{pos}`, so it works uniformly
   // across all five families and touches instanceAlpha zero times.
   //
-  // `selectedObject` is deliberately NOT written here. This is a selection primitive, and
-  // ~85 sites read that slot (delete key, per-bead context menu, extrude arrows) — future
-  // consumers opt in by reading the pool instead.
+  // Base refs are committed through the controller and projected back to these keys.
 
   let _baseKeys      = []   // string[] — the pool, in pick order
   let _baseChangeCbs = []
@@ -2959,9 +2914,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     for (const cb of _baseChangeCbs) cb(snapshot)
   }
 
-  function _setBaseKeys(keys) {
+  function _setBaseKeys(keys, { commit = true } = {}) {
+    if (commit) {
+      selectionController.replace(keys.map(key => ({ kind: 'base', key })))
+      return
+    }
     _baseKeys = keys
-    store.setState({ multiSelectedBaseKeys: [..._baseKeys] })
     _repaintBaseGlow()
     _notifyBaseChange()
   }
@@ -2969,6 +2927,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   /** Plain click: replace the pool with this one base; re-clicking the sole pick clears. */
   function _selectBaseKey(key) {
     if (!key) return
+    // Base selection has one canonical endpoint regardless of whether it came
+    // from the explicit Base level or the default strand→base drill.
+    _mode = 'none'
+    _strandId = null
+    _crossoverId = null
+    _drillClusterId = null
     if (_baseKeys.length === 1 && _baseKeys[0] === key) { _setBaseKeys([]); return }
     _setBaseKeys([key])
   }
@@ -2979,15 +2943,34 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _setBaseKeys(toggleBaseKey(_baseKeys, key))
   }
 
-  function _clearBaseSelection() {
+  function _clearBaseSelection({ commit = true } = {}) {
     if (!_baseKeys.length && !_baseGlowEntries.length) return
-    _setBaseKeys([])
+    _setBaseKeys([], { commit })
   }
 
   /** The hover magnet, across all five families. (sx, sy) are canvas-relative. */
   function _nearestBaseCand(sx, sy) {
     return nearestCandidate(
       _baseCandidates(), sx, sy, _NEAR_HOVER_PX, makeProjector(_cam(), canvas),
+    )
+  }
+
+  /** Resolve a coarse-view base target consistently for preview/plain/modifier picks.
+   *  Prefer the frontmost raycast bead (occlusion-correct), then fall back to the
+   *  screen-space magnet so exotic families without a backbone raycast remain easy to
+   *  pick. This prevents projected beads hidden behind the clicked bead from winning. */
+  function _baseCandidateAt(clientX, clientY) {
+    const candidates = _baseCandidates()
+    const hit = _pickNearestBeadCone(clientX, clientY)
+    if (hit?.kind === 'bead') {
+      const key = baseKey(hit.entry.nuc, hit.entry._copy)
+      const exact = candidates.find(c => c.key === key && c.instMesh === hit.entry.instMesh && c.id === hit.entry.id)
+      if (exact) return exact
+    }
+    const rect = canvas.getBoundingClientRect()
+    return nearestCandidate(
+      candidates, clientX - rect.left, clientY - rect.top,
+      _NEAR_HOVER_PX, makeProjector(_cam(), canvas),
     )
   }
 
@@ -3004,9 +2987,101 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     designRenderer.setSelectionArcs?.(_multiCrossoverArcs.map(a => a.getPositions?.() ?? []))
   }
 
+  function _crossoverRefForArc(arc, design = store.getState().currentDesign) {
+    return crossoverRefForArc(arc, design)
+  }
+
+  function _arcsForCrossoverRefs(refs = selectedCrossoverRefs(store.getState())) {
+    const keys = new Set(refs.map(ref => `${ref.subtype}:${ref.id}`))
+    const design = store.getState().currentDesign
+    return (getUnfoldView?.()?.getArcEntries() ?? []).filter(arc => {
+      const ref = _crossoverRefForArc(arc, design)
+      return ref && keys.has(`${ref.subtype}:${ref.id}`)
+    })
+  }
+
   function _clearMultiCrossoverArcs() {
     _multiCrossoverArcs = []
     designRenderer.clearSelectionArcs?.()
+  }
+
+  const _sameKeys = (a, b) => a.length === b.length && a.every((key, i) => key === b[i])
+
+  function _coneForBond(ref) {
+    return coneForBondRef(designRenderer.getConeEntries(), ref)
+  }
+
+  /**
+   * Discard committed renderer state and project the canonical descriptor onto the
+   * current live geometry. Gesture handlers never choose a painter in production.
+   * Gesture handlers only commit controller intents; this subscriber-owned adapter
+   * is the single painter for every migrated design-selection kind.
+   */
+  function _syncCanonicalHighlights(state, { geometryChanged = false } = {}) {
+    const highlight = selectionHighlightDescriptor(state)
+
+    // Geometry rebuilds invalidate cached entry adapters. They are painter output,
+    // never identity; dropping them cannot affect the canonical selected set.
+    if (geometryChanged) {
+      _strandEntries = []; _strandConeEntries = []; _strandArcEntries = []
+      _multiEntries = []; _multiConeEntries = []; _multiDomainEntries = []
+      _multiOverhangEntries = []; _multiExtensionEntries = []; _endBeads = []
+    }
+    _restoreStrand()
+    _clearMultiSelection({ commit: false })
+    _clearMultiDomainSelection({ commit: false })
+    _clearMultiOverhangSelection({ commit: false })
+    _clearMultiExtensionSelection({ commit: false })
+    _clearMultiCrossoverArcs()
+    _mode = 'none'; _strandId = null; _domainIndex = null; _drillClusterId = null
+
+    if (highlight.overhangIds.length) _applyMultiOverhangHighlight(highlight.overhangIds)
+    if (highlight.extensionIds.length) _applyMultiExtensionHighlight(highlight.extensionIds)
+
+    const backboneEntries = designRenderer.getBackboneEntries()
+    const coneEntries = designRenderer.getConeEntries()
+    if (highlight.strandIds.length === 1) {
+      _mode = 'strand'; _strandId = highlight.strandIds[0]
+      _highlightStrand(backboneEntries, coneEntries, _strandId)
+    } else if (highlight.strandIds.length > 1) {
+      _applyMultiHighlight(highlight.strandIds)
+    } else if (highlight.domains.length === 1) {
+      const domain = highlight.domains[0]
+      _mode = 'domain'; _strandId = domain.strandId
+      _highlightStrand(backboneEntries, coneEntries, domain.strandId)
+      _highlightDomain(domain.domainIndex)
+    } else if (highlight.domains.length > 1) {
+      _applyMultiDomainHighlight(highlight.domains)
+    }
+
+    if (highlight.clusterIds.length === 1) {
+      _mode = 'cluster'; _strandId = null
+      _highlightCluster(highlight.clusterIds[0], backboneEntries)
+    } else if (highlight.clusterIds.length > 1) {
+      const design = store.getState().currentDesign
+      const members = [...new Set(highlight.clusterIds.flatMap(id => _clusterMemberStrandIds(id, design)))]
+      _mode = 'none'; _strandId = null; _drillClusterId = null
+      _applyMultiHighlight(members)
+    }
+
+    const bondRef = highlight.primary?.kind === 'bond'
+      ? highlight.primary
+      : (highlight.bonds.length ? { kind: 'bond', ...highlight.bonds.at(-1) } : null)
+    const cone = _coneForBond(bondRef)
+    if (cone) {
+      const strandId = bondRef.strandId ?? cone.strandId
+      _highlightStrand(backboneEntries, coneEntries, strandId)
+      _mode = 'cone'; _strandId = strandId
+      _highlightCone(cone)
+    }
+
+    _applyMultiCrossoverHighlight(_arcsForCrossoverRefs(highlight.crossovers))
+
+    _applyEndSelection(highlight.endKeys.map(key => ({ kind: 'end', key })))
+    const baseChanged = !_sameKeys(_baseKeys, highlight.baseKeys)
+    _baseKeys = [...highlight.baseKeys]
+    _repaintBaseGlow()
+    if (baseChanged) _notifyBaseChange()
   }
 
   function _handleCtrlClickNuc(e) {
@@ -3031,8 +3106,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
           const next = _multiOverhangIds.includes(ovhgId)
             ? _multiOverhangIds.filter(id => id !== ovhgId)
             : [..._multiOverhangIds, ovhgId].slice(-2)   // cap at 2; oldest drops
-          _applyMultiOverhangHighlight(next)
-          store.setState({ multiSelectedOverhangIds: next })
+          selectionController.replace(next.map(id => ({ kind: 'overhang', id })))
           return
         }
       }
@@ -3102,192 +3176,48 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   function _toggleStrand(strandId) {
     if (!strandId) return
-    const next = _multiStrandIds.includes(strandId)
-      ? _multiStrandIds.filter(id => id !== strandId)
-      : [..._multiStrandIds, strandId]
-    if (next.length === 0) _clearMultiSelection()
-    else { _applyMultiHighlight(next); store.setState({ multiSelectedStrandIds: next }) }
+    selectionController.toggle({ kind: 'strand', id: strandId })
   }
 
   function _toggleDomain(nuc) {
     const strandId = nuc.strand_id
     if (!strandId) return
     const domainIndex = nuc.domain_index ?? 0
-    const key = `${strandId}:${domainIndex}`
-    const present = _multiDomainIds.some(d => `${d.strandId}:${d.domainIndex}` === key)
-    const next = present
-      ? _multiDomainIds.filter(d => `${d.strandId}:${d.domainIndex}` !== key)
-      : [..._multiDomainIds, { strandId, domainIndex }]
-    if (next.length === 0) _clearMultiDomainSelection()
-    else { _applyMultiDomainHighlight(next); store.setState({ multiSelectedDomainIds: next }) }
+    selectionController.toggle({ kind: 'domain', strandId, domainIndex })
   }
 
   function _toggleOverhang(ovhgId) {
     if (!ovhgId) return
-    const next = _multiOverhangIds.includes(ovhgId)
-      ? _multiOverhangIds.filter(id => id !== ovhgId)
-      : [..._multiOverhangIds, ovhgId]
-    if (next.length === 0) _clearMultiOverhangSelection()
-    else { _applyMultiOverhangHighlight(next); store.setState({ multiSelectedOverhangIds: next }) }
+    selectionController.toggle({ kind: 'overhang', id: ovhgId })
   }
 
   function _toggleExtension(extensionId) {
     if (!extensionId) return
-    const next = _multiExtensionIds.includes(extensionId)
-      ? _multiExtensionIds.filter(id => id !== extensionId)
-      : [..._multiExtensionIds, extensionId]
-    if (next.length === 0) _clearMultiExtensionSelection()
-    else {
-      _applyMultiExtensionHighlight(next)
-      store.setState({ selectedObject: null, multiSelectedExtensionIds: next })
-    }
+    selectionController.toggle({ kind: 'extension', id: extensionId })
   }
 
   function _toggleCrossover(arc) {
-    if (!arc?.crossover_id) return
-    const idx  = _multiCrossoverArcs.findIndex(a => a.crossover_id === arc.crossover_id)
-    const next = idx >= 0
-      ? _multiCrossoverArcs.filter((_, i) => i !== idx)   // deselect
-      : [..._multiCrossoverArcs, arc]                     // select
-    _applyMultiCrossoverHighlight(next)                   // green tubes, matching single-click
+    const ref = _crossoverRefForArc(arc)
+    if (!ref) return
+    selectionController.toggle(ref)
   }
 
   function _toggleEndBead(entry) {
-    const idx = _ctrlBeads.findIndex(b =>
-      b.nuc.helix_id  === entry.nuc.helix_id &&
-      b.nuc.bp_index  === entry.nuc.bp_index &&
-      b.nuc.direction === entry.nuc.direction)
-    if (idx >= 0) {
-      const e = _ctrlBeads[idx].entry
-      designRenderer.setEntryColor(e, e.defaultColor)
-      designRenderer.setBeadScale(e, 1.0)
-      if (e.instMesh.instanceColor)  e.instMesh.instanceColor.needsUpdate  = true
-      if (e.instMesh.instanceMatrix) e.instMesh.instanceMatrix.needsUpdate = true
-      _ctrlBeads.splice(idx, 1)
-    } else {
-      designRenderer.setEntryColor(entry, C_CTRL_BEAD)
-      designRenderer.setBeadScale(entry, 1.6)
-      if (entry.instMesh.instanceColor)  entry.instMesh.instanceColor.needsUpdate  = true
-      if (entry.instMesh.instanceMatrix) entry.instMesh.instanceMatrix.needsUpdate = true
-      _ctrlBeads.push({ entry, nuc: entry.nuc })
-    }
-    _refreshCtrlGlow()
-    _notifyCtrlBeadsChange()
+    const ref = endRefForEntry(entry)
+    if (ref) selectionController.toggle(ref)
   }
 
-  // Cluster toggle: a cluster's multi-selection is its member strands (mirrors the
-  // lasso-at-cluster-level expansion) PLUS its id in `multiSelectedClusterIds` — the
-  // strand union drives the highlight but can't say which cluster a strand came from,
-  // and cluster copy/paste needs exactly that.
-  function _toggleClusterById(cid, { promote = true } = {}) {
+  // Cluster refs remain canonical; member strands are only a live visual projection.
+  function _toggleClusterById(cid) {
     if (!cid) return
-    if (promote) _promoteSelectionToMulti()
     const design  = store.getState().currentDesign
     const members = _clusterMemberStrandIds(cid, design)
     if (!members.length) return
-    const next = toggleClusterSelection({
-      clusterIds:      store.getState().multiSelectedClusterIds ?? [],
-      strandIds:       _multiStrandIds,
-      clusterId:       cid,
-      memberStrandIds: members,
-    })
-    if (next.strandIds.length === 0) _clearMultiSelection()
-    else {
-      _applyMultiHighlight(next.strandIds)
-      store.setState({ multiSelectedStrandIds: next.strandIds, multiSelectedClusterIds: next.clusterIds })
-    }
+    selectionController.toggle({ kind: 'cluster', id: cid })
   }
 
   function _toggleCluster(nuc) {
     _toggleClusterById(_resolveClusterId(nuc, store.getState().currentDesign))
-  }
-
-  // When a Ctrl/Shift+click EXTENDS a selection, first fold the current SINGLE
-  // selection (from a prior plain click) into the matching multi-pool — so
-  // "plain-click A, then Ctrl-click B" ends with BOTH A and B selected, not just B.
-  // The single-selection state and the multi-select pools are separate; without
-  // this the plain-click selection is dropped and only the Ctrl-clicked element
-  // survives. No-op once already multi-selecting (a plain click leaves the pools
-  // empty and seeds `selectedObject`; entering multi mode nulls `selectedObject`).
-  function _promoteSelectionToMulti() {
-    // Base level has ONE pool and never writes `selectedObject`, so there is no single
-    // selection to fold in — plain click and Ctrl+click both land in `_baseKeys`.
-    if (_selLevel === 'base') return
-    const sel = store.getState().selectedObject
-    if (!sel) return
-    const st = store.getState().selectableTypes
-
-    // CLUSTER → seed the cluster pool with the plain-clicked cluster (3D click or
-    // sidebar row; both surface as a `selectedObject` of type 'cluster').
-    if (sel.type === 'cluster') {
-      if ((store.getState().multiSelectedClusterIds ?? []).length) return
-      const cid = sel.id
-      const members = _clusterMemberStrandIds(cid, store.getState().currentDesign)
-      if (!members.length) return
-      _restoreStrand()
-      _mode = 'none'; _strandId = null; _drillClusterId = null
-      _applyMultiHighlight(members)
-      // Null the single selection AND seed the cluster pool in ONE setState so no
-      // subscriber ever sees "selectedObject null + empty pool" — the Move/Rotate tool
-      // bridge reads that transient as a deselection and would tear the gizmo down.
-      store.setState({ selectedObject: null, multiSelectedStrandIds: members, multiSelectedClusterIds: [cid] })
-      return
-    }
-
-    // END → seed the gold end-bead set with the selected 5′/3′ terminus.
-    if (_selLevel === 'end') {
-      if (_ctrlBeads.length) return
-      if (sel.type !== 'nucleotide' || !(sel.data?.is_five_prime || sel.data?.is_three_prime)) return
-      const d = sel.data
-      const entry = designRenderer.getBackboneEntries().find(en =>
-        en.nuc.helix_id === d.helix_id && en.nuc.bp_index === d.bp_index && en.nuc.direction === d.direction)
-      if (!entry) return
-      _restoreStrand()
-      store.setState({ selectedObject: null })
-      designRenderer.setEntryColor(entry, C_CTRL_BEAD)
-      designRenderer.setBeadScale(entry, 1.6)
-      if (entry.instMesh.instanceColor)  entry.instMesh.instanceColor.needsUpdate  = true
-      if (entry.instMesh.instanceMatrix) entry.instMesh.instanceMatrix.needsUpdate = true
-      _ctrlBeads.push({ entry, nuc: entry.nuc })
-      _refreshCtrlGlow()
-      _notifyCtrlBeadsChange()
-      return
-    }
-
-    // XOVER → seed the multi-crossover set with the selected crossover's arc.
-    if (_selLevel === 'xover' || st.crossoverArcs) {
-      if (_multiCrossoverArcs.length || _mode !== 'crossover' || !_crossoverId) return
-      const arc = (getUnfoldView?.()?.getArcEntries() ?? []).find(a => a.crossover_id === _crossoverId)
-      if (!arc) return
-      _restoreStrand()
-      store.setState({ selectedObject: null })
-      _applyMultiCrossoverHighlight([arc])
-      return
-    }
-
-    // DOMAIN → seed the domain multi-pool with the selected domain.
-    if (_selLevel === 'domain') {
-      if (_multiDomainIds.length || sel.type !== 'domain') return
-      const strandId = sel.data?.strand_id
-      if (!strandId) return
-      const domainIndex = sel.data?.domain_index ?? 0
-      _restoreStrand()
-      store.setState({ selectedObject: null })
-      _applyMultiDomainHighlight([{ strandId, domainIndex }])
-      store.setState({ multiSelectedDomainIds: [{ strandId, domainIndex }] })
-      return
-    }
-
-    // STRAND / DEFAULT → seed the strand multi-pool with the selected strand
-    // (default-level Ctrl-click multi-selects whole strands).
-    if ((_selLevel === 'strand' || _selLevel === 'default') && _strandId) {
-      if (_multiStrandIds.length) return
-      const sid = _strandId
-      _restoreStrand()
-      store.setState({ selectedObject: null })
-      _applyMultiHighlight([sid])
-      store.setState({ multiSelectedStrandIds: [sid] })
-    }
   }
 
   // Dispatch a Ctrl/Shift+click to the right toggle for the active selection level —
@@ -3295,8 +3225,6 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // like a plain click). Snap-to-nearest within _NEAR_HOVER_PX so it matches the
   // hover preview the user sees.
   function _toggleAtLevel(e) {
-    // Fold any prior plain-click selection into the multi-pool first (additive).
-    _promoteSelectionToMulti()
     if (e.clientX > window.innerWidth - 300) return
     const rect = canvas.getBoundingClientRect()
     const sx = e.clientX - rect.left, sy = e.clientY - rect.top
@@ -3340,6 +3268,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       return
     }
     if (st.extensions) {
+      if (atom?.extension_id) { _toggleExtension(atom.extension_id); return }
       if (heavyNuc?.extension_id) { _toggleExtension(heavyNuc.extension_id); return }
       const ee = _nearestExtensionBead(sx, sy)
       if (ee?.nuc?.extension_id) _toggleExtension(ee.nuc.extension_id)
@@ -3353,13 +3282,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // otherwise hijack every base-level Ctrl+click.
     if (_selLevel === 'base') {
       if (atom) {
-        const key = atom.crossover_id != null && atom.extra_base_k != null
-          ? xbKey(atom.crossover_id, atom.extra_base_k)
-          : baseKey(atom, atom.copy_k ?? 0)
+        const key = atomBaseKey(atom)
         if (key) _toggleBase(key)
         return
       }
-      const c = _nearestBaseCand(sx, sy)
+      const c = _baseCandidateAt(e.clientX, e.clientY)
       if (c) _toggleBase(c.key)
       return
     }
@@ -3434,7 +3361,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const domainKeyMap  = new Map()   // 'strandId:domainIndex' → { strandId, domainIndex }
     const ovhangIdSet   = new Set()   // overhang_id strings
     const extensionIdSet = new Set()  // extension_id strings
-    const endEntries    = []   // beads captured into _ctrlBeads (ends, or all at bead drill level)
+    const endEntries    = []   // termini captured as canonical End refs
     const clusterHitNucs = []  // nucs of in-rect beads, when drilling at cluster level
     const clusterIdSet  = new Set()   // clusters those nucs resolve to
 
@@ -3457,9 +3384,6 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const useXover    = cap.xover
     const useCluster  = cap.cluster
     const useBase     = cap.base
-    // A lasso is additive: fold a prior plain-click cluster into the pool first, so
-    // "click cluster A, Ctrl+drag over B" ends with both selected.
-    if (useCluster) _promoteSelectionToMulti()
     const cylMesh = designRenderer.getCylinderMesh()
     // Global LOD level, not mesh .visible — mixed-rep makes cylinders visible at full LOD.
     const inCylinderLOD = (designRenderer.getDetailLevel?.() ?? 0) === 2
@@ -3485,8 +3409,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         for (const ar of atomRenderers) ar.visitAtoms?.((a, atomPos) => {
           const sp = _toScreen(atomPos)
           if (sp.x < cx1 || sp.x > cx2 || sp.y < cy1 || sp.y > cy2) return
-          const key = a.crossover_id != null && a.extra_base_k != null
-            ? xbKey(a.crossover_id, a.extra_base_k) : baseKey(a, a.copy_k ?? 0)
+          const key = atomBaseKey(a)
           if (key) atomKeys.push(key)
         })
         if (atomKeys.length) _setBaseKeys(mergeBaseKeys(_baseKeys, atomKeys))
@@ -3513,7 +3436,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         if (stype === 'scaffold' && !st.scaffold) continue
         if (stype !== 'scaffold' && !st.staples)  continue
         cylMesh.getMatrixAt(dom.cylIdx, mat)
-        pos.setFromMatrixPosition(mat)
+        pos.setFromMatrixPosition(mat).applyMatrix4(cylMesh.matrixWorld)
         const sp = _toScreen(pos)
         if (sp.x < cx1 || sp.x > cx2 || sp.y < cy1 || sp.y > cy2) continue
         // Cluster level resolves the whole cluster below; strand level takes the strand.
@@ -3534,7 +3457,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       const colRep = designRenderer.columnRepAt?.(entry.nuc.helix_id, entry.nuc.bp_index)
       if (globalAtomActive || (atomRenderers.length && (colRep === 'vdw' || colRep === 'ballstick' || colRep === 'stick'))) continue
       entry.instMesh.getMatrixAt(entry.id, mat)
-      pos.setFromMatrixPosition(mat)
+      pos.setFromMatrixPosition(mat).applyMatrix4(entry.instMesh.matrixWorld)
       const sp = _toScreen(pos)
       if (sp.x < cx1 || sp.x > cx2 || sp.y < cy1 || sp.y > cy2) continue
 
@@ -3544,8 +3467,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
       const typeAllowed = isScaffold ? st.scaffold : st.staples
 
-      // Captures individual beads into _ctrlBeads. Manual: ends only. Bead drill
-      // level: every bead in the rect.
+      // Captures termini as canonical End refs. Measurement anchors are Alt-click
+      // tool state and do not participate in lasso selection.
       if (typeAllowed && useEnds && (beadLevelLasso || isEnd)) {
         endEntries.push(entry)
       }
@@ -3576,7 +3499,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       for (const entry of (designRenderer.getFluoroEntries?.() ?? [])) {
         if (!entry.nuc.extension_id || !entry.instMesh.visible) continue
         entry.instMesh.getMatrixAt(entry.id, mat)
-        pos.setFromMatrixPosition(mat)
+        pos.setFromMatrixPosition(mat).applyMatrix4(entry.instMesh.matrixWorld)
         const sp = _toScreen(pos)
         if (sp.x >= cx1 && sp.x <= cx2 && sp.y >= cy1 && sp.y <= cy2) {
           extensionIdSet.add(entry.nuc.extension_id)
@@ -3609,7 +3532,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         }
         if (useCluster) clusterHitNucs.push(nuc)
         if (useOvhg && nuc.overhang_id) ovhangIdSet.add(nuc.overhang_id)
-        if (useExt && nuc.extension_id) extensionIdSet.add(nuc.extension_id)
+        if (useExt && (atom.extension_id || nuc.extension_id)) {
+          extensionIdSet.add(atom.extension_id || nuc.extension_id)
+        }
       })
     }
 
@@ -3619,9 +3544,6 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       for (const nuc of clusterHitNucs) {
         const cid = _resolveClusterId(nuc, design)
         if (cid) clusterIdSet.add(cid)
-      }
-      for (const cid of clusterIdSet) {
-        for (const sid of _clusterMemberStrandIds(cid, design)) strandIdSet.add(sid)
       }
     }
 
@@ -3662,60 +3584,45 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         }
       }
       if (newArcs.length) {
-        _applyMultiCrossoverHighlight([..._multiCrossoverArcs, ...newArcs])
+        const refs = newArcs.map(arc => _crossoverRefForArc(arc)).filter(Boolean)
+        selectionController.extend(refs)
       }
     }
 
     // ── Domain multi-select result (additive) ────────────────────────────
     if (domainKeyMap.size) {
       const newDomains    = [...domainKeyMap.values()]
-      const existingKeys  = new Set(_multiDomainIds.map(d => `${d.strandId}:${d.domainIndex}`))
-      const allDomains    = [..._multiDomainIds]
-      for (const d of newDomains) {
-        if (!existingKeys.has(`${d.strandId}:${d.domainIndex}`)) allDomains.push(d)
-      }
-      _applyMultiDomainHighlight(allDomains)
-      store.setState({ multiSelectedDomainIds: allDomains })
+      selectionController.extend(newDomains.map(d => ({ kind: 'domain', strandId: d.strandId, domainIndex: d.domainIndex })))
     }
 
     // ── Overhang multi-select result (additive) ───────────────────────────
     if (ovhangIdSet.size) {
-      const allOvhg = [...new Set([..._multiOverhangIds, ...ovhangIdSet])]
-      _applyMultiOverhangHighlight(allOvhg)
-      store.setState({ multiSelectedOverhangIds: allOvhg })
+      const newIds = [...ovhangIdSet]
+      selectionController.extend(newIds.map(id => ({ kind: 'overhang', id })))
     }
 
     if (extensionIdSet.size) {
-      const allExtensions = [...new Set([..._multiExtensionIds, ...extensionIdSet])]
-      _applyMultiExtensionHighlight(allExtensions)
-      store.setState({ selectedObject: null, multiSelectedExtensionIds: allExtensions })
+      const newIds = [...extensionIdSet]
+      selectionController.extend(newIds.map(id => ({ kind: 'extension', id })))
+    }
+
+    if (clusterIdSet.size) {
+      const ids = [...clusterIdSet]
+      selectionController.extend(ids.map(id => ({ kind: 'cluster', id })))
     }
 
     // ── Strand multi-select result (additive) ─────────────────────────────
     const strandIds = [...strandIdSet]
     if (strandIds.length) {
-      const allStrands = [...new Set([..._multiStrandIds, ...strandIds])]
-      _applyMultiHighlight(allStrands)
-      const patch = { multiSelectedStrandIds: allStrands }
-      if (clusterIdSet.size) {
-        patch.multiSelectedClusterIds =
-          [...new Set([...(store.getState().multiSelectedClusterIds ?? []), ...clusterIdSet])]
+      if (!clusterIdSet.size) {
+        selectionController.extend(strandIds.map(id => ({ kind: 'strand', id })))
       }
-      store.setState(patch)
     }
 
-    // ── End bead ctrl-selection (applied after strand highlight so gold wins) ─
+    // ── Canonical End refs (measurement anchors remain in the separate Alt pool) ─
     if (endEntries.length) {
-      _clearCtrlBeads()
-      for (const entry of endEntries) {
-        designRenderer.setEntryColor(entry, C_CTRL_BEAD)
-        designRenderer.setBeadScale(entry, 1.6)
-        if (entry.instMesh.instanceColor)  entry.instMesh.instanceColor.needsUpdate  = true
-        if (entry.instMesh.instanceMatrix) entry.instMesh.instanceMatrix.needsUpdate = true
-        _ctrlBeads.push({ entry, nuc: entry.nuc })
-      }
-      _refreshCtrlGlow()
-      _notifyCtrlBeadsChange()
+      const refs = endEntries.map(endRefForEntry).filter(Boolean)
+      selectionController.extend(refs)
     }
   }
 
@@ -3854,12 +3761,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         _lassoOverlay = _createLassoOverlay()
         _updateLassoOverlay(_lassoStart.x, _lassoStart.y, e.clientX, e.clientY)
         canvas.style.cursor = 'crosshair'
-        // Clear single-object state but preserve multi-selection for additive lasso.
+        // Preserve committed selection; lasso intents are additive.
         _restoreStrand()
         _clearCylinderSelection()
         _mode     = 'none'
         _strandId = null
-        store.setState({ selectedObject: null })
         _clearMultiLoopSkips()
       }
       return
@@ -3911,20 +3817,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     _dismissMenu()
 
-    // Regular left click — clear any active multi-selection
-    if (_multiStrandIds.length > 0)   _clearMultiSelection()
-    if (_multiDomainIds.length > 0)   _clearMultiDomainSelection()
-    if (_multiOverhangIds.length > 0) _clearMultiOverhangSelection()
-    if (_multiExtensionIds.length > 0) _clearMultiExtensionSelection()
-    if (_multiCrossoverArcs.length > 0) _clearMultiCrossoverArcs()
-
     // Regular (non-ctrl) click clears the ctrl-click nucleotide selection
     if (_ctrlBeads.length > 0) _clearCtrlBeads()
 
     // ...and the base pool — but NOT while base level is engaged, where a plain click
     // REPLACES the pick (clearing here would wipe it before the branch below sets it).
-    if (_selLevel !== 'base' && _baseKeys.length > 0) _clearBaseSelection()
-
     _setNdc(e.clientX, e.clientY)
     raycaster.setFromCamera(_ndc, _cam())
 
@@ -3946,31 +3843,29 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       const entry = backboneEntries.find(e => e.nuc.helix_id === a.helix_id &&
         e.nuc.bp_index === a.bp_index && e.nuc.direction === a.direction)
       if (selectableTypes.overhangs) {
-        if (entry?.nuc.overhang_id) _selectOverhangDomain(entry.nuc.overhang_id)
+        if (entry?.nuc.overhang_id) _selectOverhangDomain(entry.nuc.overhang_id, { toggleSole: true })
         else _clearAll()
         return
       }
       if (selectableTypes.extensions) {
-        if (entry?.nuc?.extension_id) {
-          _selectExtension(entry.nuc.extension_id)
+        const extensionId = a.extension_id ?? entry?.nuc?.extension_id
+        if (extensionId) {
+          _selectExtension(extensionId, { toggleSole: true })
         } else {
           _clearAll()
         }
         return
       }
       if (_selLevel === 'base') {
-        const key = a.crossover_id != null && a.extra_base_k != null
-          ? xbKey(a.crossover_id, a.extra_base_k) : baseKey(a, a.copy_k ?? 0)
-        if (key) _setBaseKeys([key]); else _clearBaseSelection()
+        const key = atomBaseKey(a)
+        if (key) _selectBaseKey(key); else _clearBaseSelection()
         _emitDrillLevel('base')
         return
       }
       if (entry) { _handleBeadHit(entry, backboneEntries, coneEntries); return }
       if (a.strand_id && (selectableTypes.strands || selectableTypes.domains)) {
-        _restoreStrand()
         _mode = 'strand'; _strandId = a.strand_id
-        _highlightStrand(backboneEntries, coneEntries, a.strand_id)
-        store.setState({ selectedObject: _strandSelection(a.strand_id) })
+        selectionController.replace([{ kind: 'strand', id: a.strand_id }])
       } else {
         _clearAll()
       }
@@ -3997,20 +3892,24 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // the click: nothing nearby → deselect (never falls through to strand select).
     if (selectableTypes.overhangs) {
       if (overlayEntry?.nuc.overhang_id) {
-        _selectOverhangDomain(overlayEntry.nuc.overhang_id)
+        _selectOverhangDomain(overlayEntry.nuc.overhang_id, { toggleSole: true })
         return
       }
       const _rect = canvas.getBoundingClientRect()
       const oe = _nearestOverhangBead(e.clientX - _rect.left, e.clientY - _rect.top)
-      if (oe) _selectOverhangDomain(oe.nuc.overhang_id)
+      if (oe) _selectOverhangDomain(oe.nuc.overhang_id, { toggleSole: true })
       else    _clearAll()
       return
     }
 
     if (selectableTypes.extensions) {
+      if (overlayAtom?.extension_id) {
+        _selectExtension(overlayAtom.extension_id, { toggleSole: true })
+        return
+      }
       const _rect = canvas.getBoundingClientRect()
       const ee = _nearestExtensionBead(e.clientX - _rect.left, e.clientY - _rect.top)
-      if (ee) _selectExtension(ee.nuc.extension_id)
+      if (ee) _selectExtension(ee.nuc.extension_id, { toggleSole: true })
       else _clearAll()
       return
     }
@@ -4022,15 +3921,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // within the radius → clear, never fall through to a strand select.
     if (_selLevel === 'base') {
       if (overlayAtom) {
-        const key = overlayAtom.crossover_id != null && overlayAtom.extra_base_k != null
-          ? xbKey(overlayAtom.crossover_id, overlayAtom.extra_base_k)
-          : baseKey(overlayAtom, overlayAtom.copy_k ?? 0)
-        if (key) _setBaseKeys([key]); else _clearBaseSelection()
+        const key = atomBaseKey(overlayAtom)
+        if (key) _selectBaseKey(key); else _clearBaseSelection()
         _emitDrillLevel('base')
         return
       }
-      const _rect = canvas.getBoundingClientRect()
-      const c = _nearestBaseCand(e.clientX - _rect.left, e.clientY - _rect.top)
+      const c = _baseCandidateAt(e.clientX, e.clientY)
       _clearHoverPreview()
       if (c) _selectBaseKey(c.key)
       else   _clearBaseSelection()
@@ -4116,7 +4012,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
           _clearCylinderSelection()
           _mode = 'none'
           _strandId = null
-          store.setState({ selectedObject: { type: 'protein', id: attachmentId, data: { attachment_id: attachmentId } } })
+          selectionController.select({ kind: 'protein', id: attachmentId })
           return
         }
       }
@@ -4142,19 +4038,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       // backbone entry (extra-base / aux, or arc-rendered flexible/ss-linker nucs).
       const a = _atomHit.atom
       if (_selLevel === 'base') {
-        const key = a.crossover_id != null && a.extra_base_k != null
-          ? xbKey(a.crossover_id, a.extra_base_k)
-          : baseKey(a, a.copy_k ?? 0)
+        const key = atomBaseKey(a)
         if (key) { _setBaseKeys([key]); return }
       }
       const hitEntry = backboneEntries.find(e =>
         e.nuc.helix_id === a.helix_id && e.nuc.bp_index === a.bp_index && e.nuc.direction === a.direction)
       if (hitEntry) { _handleBeadHit(hitEntry, backboneEntries, coneEntries); return }
       if (a.strand_id) {
-        _restoreStrand()
         _mode = 'strand'; _strandId = a.strand_id
-        _highlightStrand(backboneEntries, coneEntries, a.strand_id)
-        store.setState({ selectedObject: _strandSelection(a.strand_id) })
+        selectionController.replace([{ kind: 'strand', id: a.strand_id }])
         return
       }
     }
@@ -4167,10 +4059,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if (strandId) {
         const rep = _repEntryFor(backboneEntries, strandId, { rep: 'surface' })
         if (rep) { _handleBeadHit(rep, backboneEntries, coneEntries); return }
-        _restoreStrand()   // arc-rendered region (no beads) → strand select
         _mode = 'strand'; _strandId = strandId
-        _highlightStrand(backboneEntries, coneEntries, strandId)
-        store.setState({ selectedObject: _strandSelection(strandId) })
+        selectionController.replace([{ kind: 'strand', id: strandId }])
         return
       }
     }
@@ -4197,10 +4087,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
                 e.nuc.strand_id === br.strandId && e.nuc.helix_id === br.bridgeHelixId)
                 ?? _repEntryFor(backboneEntries, br.strandId)
               if (rep) { _handleBeadHit(rep, backboneEntries, coneEntries); return }
-              _restoreStrand()
               _mode = 'strand'; _strandId = br.strandId
-              _highlightStrand(backboneEntries, coneEntries, br.strandId)
-              store.setState({ selectedObject: _strandSelection(br.strandId) })
+              selectionController.replace([{ kind: 'strand', id: br.strandId }])
               return
             }
           }
@@ -4236,8 +4124,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         if (_mode === 'none' || hitStrandId !== _strandId) {
           _mode     = 'strand'
           _strandId = hitStrandId
-          _highlightStrand(backboneEntries, coneEntries, hitStrandId)
-          store.setState({ selectedObject: _strandSelection(hitStrandId) })
+          selectionController.replace([{ kind: 'strand', id: hitStrandId }])
         }
         return
       }
@@ -4253,8 +4140,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         if (_mode === 'none' || hitStrandId !== _strandId) {
           _mode     = 'strand'
           _strandId = hitStrandId
-          _highlightStrand(backboneEntries, coneEntries, hitStrandId)
-          store.setState({ selectedObject: _strandSelection(hitStrandId, { linker_connection_id: ssLinkHit.connId }) })
+          selectionController.replace([{ kind: 'strand', id: hitStrandId }])
         } else {
           _clearAll()
         }
@@ -4593,96 +4479,22 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _strandArcEntries  = []
     _beadEntry         = null
     _coneEntry         = null
-    // Re-apply multi-selection highlights after rebuild (entry references are stale)
+    // Entry references are stale. The canonical projector re-resolves every ref.
     _multiEntries       = []
     _multiConeEntries   = []
     _multiDomainEntries = []
     _multiOverhangEntries = []
     _multiExtensionEntries = []
-    if (_multiOverhangIds.length > 0) {
-      const validOverhangIds = new Set((newState.currentDesign?.overhangs ?? []).map(o => o.id))
-      _multiOverhangIds = _multiOverhangIds.filter(id => validOverhangIds.has(id))
-    }
-    if (_multiExtensionIds.length > 0) {
-      const validExtensionIds = new Set((newState.currentDesign?.extensions ?? []).map(ext => ext.id))
-      _multiExtensionIds = _multiExtensionIds.filter(id => validExtensionIds.has(id))
-    }
-    if (_multiStrandIds.length > 0)   _applyMultiHighlight(_multiStrandIds)
-    if (_multiDomainIds.length > 0)   _applyMultiDomainHighlight(_multiDomainIds)
-    if (_multiOverhangIds.length > 0) _applyMultiOverhangHighlight(_multiOverhangIds)
-    if (_multiExtensionIds.length > 0) _applyMultiExtensionHighlight(_multiExtensionIds)
-    // Ctrl-selected beads become stale after a rebuild — clear them
+    _syncCanonicalHighlights(newState, { geometryChanged: true })
+    // Measurement anchors hold live entries and therefore reset after a rebuild.
     if (_ctrlBeads.length > 0) { _ctrlBeads = []; _notifyCtrlBeadsChange() }
-    // The base pool SURVIVES a rebuild — that is the point of keying it by string rather
-    // than by mesh+instance. Only the glow entries went stale, so re-resolve them against
-    // the new meshes. But a rebuild can also follow a real DELETION, and a key whose helix /
-    // crossover / extension / linker is gone can never resolve again — prune those so they
-    // don't sit in the pool as phantoms (the properties panel and the anchor cards read it).
-    // Conservative by construction: pruneBaseKeys drops a key only when its owner is
-    // positively absent, so a key merely hidden by the current representation survives.
-    if (_baseKeys.length > 0) {
-      const d = newState.currentDesign
-      const pruned = pruneBaseKeys(_baseKeys, {
-        helixIds:      new Set((d?.helices ?? []).map(h => h.id)),
-        crossoverIds:  new Set((d?.crossovers ?? []).map(x => x.id)),
-        extensionIds:  new Set((d?.extensions ?? []).map(e => e.id)),
-        connectionIds: new Set((d?.overhang_connections ?? []).map(c => c.id)),
-      })
-      if (pruned.length !== _baseKeys.length) _setBaseKeys(pruned)
-      else                                    _repaintBaseGlow()
-    }
+  })
 
-    const backboneEntries = designRenderer.getBackboneEntries()
-    const coneEntries     = designRenderer.getConeEntries()
-
-    if (_mode === 'strand' && _strandId) {
-      _highlightStrand(backboneEntries, coneEntries, _strandId)
-
-    } else if (_mode === 'bead' && _strandId) {
-      _highlightStrand(backboneEntries, coneEntries, _strandId)
-      const sel = newState.selectedObject?.data
-      if (sel) {
-        const found = backboneEntries.find(e =>
-          e.nuc.helix_id  === sel.helix_id  &&
-          e.nuc.bp_index  === sel.bp_index  &&
-          e.nuc.direction === sel.direction
-        )
-        if (found) _highlightBead(found)
-        else {
-          _mode = 'strand'
-          store.setState({ selectedObject: _strandSelection(_strandId) })
-        }
-      }
-
-    } else if (_mode === 'cone' && _strandId) {
-      _highlightStrand(backboneEntries, coneEntries, _strandId)
-      const sel = newState.selectedObject?.data
-      if (sel?.fromNuc) {
-        const found = coneEntries.find(e =>
-          e.fromNuc.helix_id  === sel.fromNuc.helix_id  &&
-          e.fromNuc.bp_index  === sel.fromNuc.bp_index  &&
-          e.fromNuc.direction === sel.fromNuc.direction
-        )
-        if (found) _highlightCone(found)
-        else {
-          _mode = 'strand'
-          store.setState({ selectedObject: _strandSelection(_strandId) })
-        }
-      }
-
-    } else if (_mode === 'domain' && _strandId) {
-      // Re-apply domain highlight (incl. cylinder glow) — e.g. after converting
-      // this domain to/from a cylinder, which rebuilds the scene.
-      _highlightStrand(backboneEntries, coneEntries, _strandId)
-      const di = newState.selectedObject?.data?.domain_index
-      if (di != null) _highlightDomain(di)
-
-    } else if (_mode === 'cluster' && _drillClusterId) {
-      _highlightCluster(_drillClusterId, backboneEntries)
-
-    } else {
-      _mode = 'none'
-      store.setState({ selectedObject: null })
+  // Canonical refs are the source of truth. Keep renderer adapters synchronized for
+  // programmatic/controller mutations as well as pointer gestures.
+  store.subscribe((newState, prevState) => {
+    if (newState.selection !== prevState.selection) {
+      _syncCanonicalHighlights(newState)
     }
   })
 
@@ -4690,48 +4502,32 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     /** Programmatically select a strand by ID, applying the same 3D highlight
      *  as a manual bead click (white beads at 1.3× scale). */
     selectStrand(strandId) {
-      const backboneEntries = designRenderer.getBackboneEntries()
-      const coneEntries     = designRenderer.getConeEntries()
       _mode     = 'strand'
       _strandId = strandId
       _coneEntry = null
-      _highlightStrand(backboneEntries, coneEntries, strandId)
-      store.setState({ selectedObject: _strandSelection(strandId) })
+      selectionController.replace([{ kind: 'strand', id: strandId }])
     },
 
-    /** Programmatically select an individual nucleotide (as if double-clicked in bead mode).
-     *  Looks up the current backbone entry for the nuc, highlights the strand + bead,
-     *  and updates selectedObject.  No-op if no matching entry exists. */
+    /** Programmatically select an individual nucleotide through the canonical Base
+     *  endpoint used by fixed Base mode and the default strand→base drill. */
     selectNucleotide(nuc) {
       const backboneEntries = designRenderer.getBackboneEntries()
-      const coneEntries     = designRenderer.getConeEntries()
       const entry = backboneEntries.find(e =>
         e.nuc.helix_id  === nuc.helix_id &&
         e.nuc.bp_index  === nuc.bp_index &&
         e.nuc.direction === nuc.direction,
       )
       if (!entry) return
-      _restoreStrand()
-      _mode     = 'bead'
-      _strandId = nuc.strand_id
-      _highlightStrand(backboneEntries, coneEntries, nuc.strand_id)
-      _highlightBead(entry)
-      store.setState({
-        selectedObject: {
-          type: 'nucleotide',
-          id:   `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`,
-          data: nuc,
-        },
-      })
+      const key = baseKey(entry.nuc, entry._copy ?? nuc.copy_k ?? 0)
+      if (!key) return
+      _setBaseKeys([key])
     },
 
     /** Programmatically select just the OVERHANG DOMAIN — highlights only the
      *  beads carrying this overhang_id (color + 1.3× scale + glow), leaving the
      *  rest of the parent strand untouched. Same visual as clicking the overhang
      *  directly in 3D. Used by the sidebar overhang list so picking an overhang
-     *  scopes the highlight to the overhang, not the whole strand.
-     *  selectedObject is set to the matching domain so the sidebar row + the
-     *  properties panel reflect it. */
+     *  scopes the highlight to the overhang, not the whole strand. */
     selectOverhang(overhangId) { _selectOverhangDomain(overhangId) },
 
     /** Open the Add/Edit-extensions dialog for the given strand id(s) — the SAME
@@ -4752,7 +4548,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     },
 
     /** Programmatically select a cluster by ID — same green-glow + 1.3× bead-scale
-     *  + cluster `selectedObject` as clicking it in 3D at cluster filter level. Used
+     *  + canonical cluster ref as clicking it in 3D at cluster filter level. Used
      *  by the sidebar "Movable clusters" list so the two paths share one selected
      *  state. Re-selecting the active cluster toggles it off. */
     selectCluster(clusterId) { _applyClusterSelection(clusterId, { toggle: true }) },
@@ -4766,15 +4562,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     /** The active selectionLevel ('default'|'cluster'|'strand'|'domain'|'end'|'xover'). */
     getSelectionLevel() { return _selLevel },
 
-    /** Clear the current 3D selection, including the private highlight mode.
-     *  Use this when another tool owns the gesture; setting selectedObject=null
-     *  alone does not reset the cached _mode/_strandId used after scene rebuilds. */
+    /** Clear committed selection and its projected renderer state. */
     clearSelection() { _clearAll() },
 
     /** Set the active selectionLevel; emits it so the filter row reflects.
      *  Returning to 'default' drops any hover preview. */
     setSelectionLevel(level) {
       _selLevel = normalizeLevel(level)
+      selectionController.setLevel(_selLevel)
       if (_selLevel !== 'default') _clearHoverPreview()
       _emitDrillLevel(_selLevel)
       return _selLevel
@@ -4783,11 +4578,19 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     /** Returns a copy of the current ctrl-click nucleotide selection. */
     getCtrlBeads() { return [..._ctrlBeads] },
 
+    /** Live bead adapters derived from canonical End refs (never measurement anchors). */
+    getSelectedEndBeads() { return selectedEndRefs(store.getState()).map(_entryForEndRef).filter(Boolean) },
+
     /** Strand ids belonging to a cluster. Read-only; resolves through the live bead
      *  entries (or the cylinder records at cylinder LOD), so it needs the renderer —
      *  which is why callers that only hold the store (e.g. the anchor cards) ask here. */
     clusterMemberStrandIds(clusterId) {
       return _clusterMemberStrandIds(clusterId, store.getState().currentDesign)
+    },
+
+    /** Resolve a live nucleotide to the cluster a cluster-level click would select. */
+    clusterIdForNucleotide(nuc) {
+      return _resolveClusterId(nuc, store.getState().currentDesign)
     },
 
     /** Returns the world-space THREE.Vector3 for the nth ctrl-selected bead (0-indexed). */
@@ -4798,6 +4601,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     /** Programmatically clear all ctrl-selected beads. */
     clearCtrlBeads() { _clearCtrlBeads() },
+
+    clearEndSelection() {
+      selectionController.clear()
+    },
 
     /** Copy of the base-level pool — app-wide base keys (see scene/base_ref.js). */
     getSelectedBaseKeys() { return [..._baseKeys] },
@@ -4833,24 +4640,20 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     /** Programmatically apply multi-strand highlight from a cross-window broadcast.
      *  Replaces any existing multi-selection. Pass [] to clear. */
     setMultiHighlight(strandIds) {
-      if (strandIds.length === 0) {
-        _clearMultiSelection()
-      } else {
-        _applyMultiHighlight(strandIds)
-        store.setState({ multiSelectedStrandIds: strandIds })
-      }
+      selectionController.replace(strandIds.map(id => ({ kind: 'strand', id })))
     },
 
-    /** Returns the current multi-selected crossover arc entries. */
-    getMultiCrossoverArcs() { return [..._multiCrossoverArcs] },
+    /** Compatibility visual adapter: live arcs derived from canonical crossover refs. */
+    getMultiCrossoverArcs() { return _arcsForCrossoverRefs() },
 
     /** The arc entry for the SINGLE plain-clicked crossover/forced-ligation
      *  (null when none is single-selected). Carries `fromNuc` (helix/bp/dir) so
      *  Delete can nick a crossover or resolve a forced ligation — the same arc
      *  the multi-select Delete path consumes, just for the one-at-a-time case. */
     getSelectedCrossoverArc() {
-      if (_mode !== 'crossover' || !_crossoverId) return null
-      return (getUnfoldView?.()?.getArcEntries() ?? []).find(a => a.crossover_id === _crossoverId) ?? null
+      const primary = selectionController.getState().primary
+      const id = primary?.kind === 'crossover' ? primary.id : _crossoverId
+      return id ? (getUnfoldView?.()?.getArcEntries() ?? []).find(a => a.crossover_id === id) ?? null : null
     },
 
     /** Clear multi-crossover arc selection, restoring default arc colors. */
@@ -4858,5 +4661,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     /** Clear selected overhang highlights. */
     clearMultiOverhangSelection() { _clearMultiOverhangSelection() },
+
+    /** Clear selected extension highlights. */
+    clearMultiExtensionSelection() { _clearMultiExtensionSelection() },
   }
 }

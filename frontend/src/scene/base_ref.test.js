@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  XB_HELIX, baseKey, xbKey, parseBaseKey, baseFamily,
+  XB_HELIX, baseKey, xbKey, atomBaseKey, parseBaseKey, baseFamily,
   toggleBaseKey, dedupeBaseKeys, mergeBaseKeys, pruneBaseKeys,
 } from './base_ref.js'
 
@@ -31,6 +31,21 @@ describe('xbKey', () => {
   it('returns null without a crossover id', () => {
     expect(xbKey(null, 0)).toBeNull()
     expect(xbKey(undefined, 1)).toBeNull()
+  })
+})
+
+describe('atomBaseKey', () => {
+  it('does not collapse an extension-tail atom onto its anchor nucleotide', () => {
+    expect(atomBaseKey({
+      helix_id: 'anchor', bp_index: 9, direction: 'REVERSE',
+      extension_id: 'tail7', ext_k: 2,
+    })).toBe('__ext_tail7:2:REVERSE')
+  })
+
+  it('preserves crossover-insert and loop-copy identity', () => {
+    expect(atomBaseKey({ crossover_id: 'xo1', extra_base_k: 3 })).toBe('__xb__:xo1:3')
+    expect(atomBaseKey({ helix_id: 'h1', bp_index: 4, direction: 'FORWARD', copy_k: 1 }))
+      .toBe('h1:4:FORWARD:1')
   })
 })
 

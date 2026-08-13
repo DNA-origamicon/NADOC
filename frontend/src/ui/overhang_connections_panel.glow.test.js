@@ -50,7 +50,10 @@ describe('overhang connections — cyan/magenta overhang highlight', () => {
   })
 
   it('glows over each dropdown overhang while open', () => {
-    store.setState({ multiSelectedOverhangIds: ['ovhg_h1_5_5p', 'ovhg_h2_9_3p'] })
+    store.setState({ selection: { items: [
+      { kind: 'overhang', id: 'ovhg_h1_5_5p' },
+      { kind: 'overhang', id: 'ovhg_h2_9_3p' },
+    ] } })
     expect(glows[0].lastEntries).toHaveLength(2)   // A = OH1 → 2 beads
     expect(glows[1].lastEntries).toHaveLength(3)   // B = OH2 → 3 beads
   })

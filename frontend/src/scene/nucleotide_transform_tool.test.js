@@ -17,26 +17,32 @@ describe('transformTargetsForSelection', () => {
   it('expands multi-strands and multi-domains into deduplicated residues', () => {
     const targets = transformTargetsForSelection({
       currentGeometry: geometry,
-      multiSelectedStrandIds: ['s1'],
-      multiSelectedDomainIds: [{ strandId: 's1', domainIndex: 1 }, { strandId: 's2', domainIndex: 0 }],
+      selection: { items: [
+        { kind: 'strand', id: 's1' },
+        { kind: 'domain', strandId: 's1', domainIndex: 1 },
+        { kind: 'domain', strandId: 's2', domainIndex: 0 },
+      ] },
     })
     expect(targets.map(t => `${t.helix_id}:${t.bp_index}:${t.direction}`))
       .toEqual(['h1:1:FORWARD', 'h1:2:FORWARD', 'h2:1:REVERSE'])
   })
 
   it('keeps explicit individual bases exact and leaves cluster groups to the cluster gizmo', () => {
-    expect(transformTargetsForSelection({ multiSelectedBaseKeys: ['h1:1:FORWARD', 'h2:1:REVERSE'] }))
+    expect(transformTargetsForSelection({ selection: { items: [
+      { kind: 'base', key: 'h1:1:FORWARD' }, { kind: 'base', key: 'h2:1:REVERSE' },
+    ] } }))
       .toHaveLength(2)
     expect(transformTargetsForSelection({
-      currentGeometry: geometry, multiSelectedClusterIds: ['c1'], multiSelectedStrandIds: ['s1'],
+      currentGeometry: geometry, selection: { items: [{ kind: 'cluster', id: 'c1' }] },
     })).toEqual([])
   })
 
   it('unions individual bases with coexisting broader selection pools', () => {
     const targets = transformTargetsForSelection({
       currentGeometry: geometry,
-      multiSelectedBaseKeys: ['h2:1:REVERSE'],
-      multiSelectedStrandIds: ['s1'],
+      selection: { items: [
+        { kind: 'base', key: 'h2:1:REVERSE' }, { kind: 'strand', id: 's1' },
+      ] },
     })
     expect(targets.map(t => `${t.helix_id}:${t.bp_index}:${t.direction}`))
       .toEqual(['h2:1:REVERSE', 'h1:1:FORWARD', 'h1:2:FORWARD'])
@@ -118,7 +124,9 @@ describe('abstract nucleotide projection', () => {
 describe('atomistic transform commit', () => {
   it('places a group gizmo at the mean centroid of all selected residues', () => {
     document.body.innerHTML = '<div id="mode-indicator"></div>'
-    const store = { getState: () => ({ multiSelectedBaseKeys: ['h1:1:FORWARD', 'h2:2:REVERSE'] }) }
+    const store = { getState: () => ({ selection: { items: [
+      { kind: 'base', key: 'h1:1:FORWARD' }, { kind: 'base', key: 'h2:2:REVERSE' },
+    ] } }) }
     const atomisticRenderer = {
       residueInfo: vi.fn(t => ({ centroid: new THREE.Vector3(t.helix_id === 'h1' ? 0 : 4, 2, 0) })),
       applyResidueMatrix: vi.fn(),
@@ -137,7 +145,7 @@ describe('atomistic transform commit', () => {
     document.body.innerHTML = '<div id="mode-indicator"></div>'
     const selected = { helix_id: '__xb__', crossover_id: 'xo1', k: 0 }
     const store = {
-      getState: () => ({ multiSelectedBaseKeys: ['__xb__:xo1:0'] }),
+      getState: () => ({ selection: { items: [{ kind: 'base', key: '__xb__:xo1:0' }] } }),
     }
     const atomisticRenderer = {
       getMode: () => 'ballstick',

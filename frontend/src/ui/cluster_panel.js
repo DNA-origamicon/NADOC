@@ -4,7 +4,7 @@
  * Displays all design.cluster_transforms. Click a cluster row to activate
  * the 3D gizmo (or deactivate if already active). Delete button removes the
  * cluster from the design. "New Cluster from Selection" creates a cluster
- * from the current multiSelectedStrandIds.
+ * from canonical strand/domain refs.
  *
  * Joint placement and move/rotate transform controls now live in their own
  * dedicated panels (joints_panel.js and the right-sidebar move-rotate-panel).
@@ -20,6 +20,7 @@
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { initClusterStylePopover } from './cluster_style_popover.js'
 import { STAPLE_PALETTE } from '../scene/helix_renderer/palette.js'
+import { canonicalSelection, selectedClusterIds } from '../scene/selection_model.js'
 
 /** The auto palette slot a cluster gets when it has no explicit colour — the same
  *  index-mod-12 rule the 3D cluster coloring uses, so the swatch agrees with it. */
@@ -69,31 +70,33 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
 
   // ── Enable / disable new-cluster button ──────────────────────────────────────
   function _syncNewBtn(state) {
+    const refs = canonicalSelection(state).items
     newBtn.disabled = _assemblyMode ||
-      (!state.multiSelectedStrandIds?.length && !state.multiSelectedDomainIds?.length)
+      !refs.some(ref => ref.kind === 'strand' || ref.kind === 'domain')
   }
 
   store.subscribe((n, p) => {
-    if (n.multiSelectedStrandIds !== p.multiSelectedStrandIds ||
-        n.multiSelectedDomainIds  !== p.multiSelectedDomainIds) {
-      _syncNewBtn(n)
-    }
+    if (n.selection !== p.selection) _syncNewBtn(n)
   })
 
   // ── New cluster from selection ────────────────────────────────────────────────
   newBtn.addEventListener('click', async () => {
-    const { multiSelectedStrandIds, multiSelectedDomainIds, currentDesign } = store.getState()
+    const state = store.getState()
+    const { currentDesign } = state
+    const refs = canonicalSelection(state).items
+    const strandIds = refs.filter(ref => ref.kind === 'strand').map(ref => ref.id)
+    const domainRefs = refs.filter(ref => ref.kind === 'domain')
     if (!currentDesign) return
     const n = (currentDesign.cluster_transforms?.length ?? 0) + 1
 
-    if (multiSelectedDomainIds?.length) {
+    if (domainRefs.length) {
       // Domain-level cluster: transform only the selected domains
-      const domainIds = multiSelectedDomainIds.map(d => ({ strand_id: d.strandId, domain_index: d.domainIndex }))
+      const domainIds = domainRefs.map(ref => ({ strand_id: ref.strandId, domain_index: ref.domainIndex }))
       const helixIds  = _helixIdsFromDomainIds(domainIds, currentDesign)
       if (!helixIds.length) return
       await api.createCluster({ name: `Cluster ${n}`, helix_ids: helixIds, domain_ids: domainIds })
-    } else if (multiSelectedStrandIds?.length) {
-      const helixIds = _helixIdsFromStrandIds(multiSelectedStrandIds, currentDesign)
+    } else if (strandIds.length) {
+      const helixIds = _helixIdsFromStrandIds(strandIds, currentDesign)
       if (!helixIds.length) return
       await api.createCluster({ name: `Cluster ${n}`, helix_ids: helixIds })
     }
@@ -102,7 +105,7 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
   // ── Rebuild list when design or active cluster changes ───────────────────────
   store.subscribe((n, p) => {
     if (n.currentDesign === p.currentDesign && n.activeClusterId === p.activeClusterId &&
-        n.multiSelectedClusterIds === p.multiSelectedClusterIds) return
+        n.selection === p.selection) return
     if (_assemblyMode) return
     if (!_collapsed) _rebuild(n.currentDesign?.cluster_transforms ?? [], n.activeClusterId)
   })
@@ -128,7 +131,7 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
   function _isSelected(clusterId) {
     const s = store.getState()
     return clusterId === s.activeClusterId ||
-      (s.multiSelectedClusterIds ?? []).includes(clusterId)
+      selectedClusterIds(s).includes(clusterId)
   }
 
   function _rebuildFlat(clusters, activeId) {
@@ -146,6 +149,8 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
       const isActive = _isSelected(cluster.id)
 
       const row = document.createElement('div')
+      row.dataset.clusterId = cluster.id
+      row.setAttribute('aria-selected', String(isActive))
       row.style.cssText = [
         'display:flex;align-items:center;gap:6px;padding:5px 6px',
         'border-radius:4px;cursor:pointer',

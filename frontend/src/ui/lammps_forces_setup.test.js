@@ -74,7 +74,7 @@ describe('initLammpsForcesSetup — separate cards', () => {
   })
 
   it('adds anchors from the scene selection and reports fieldNeedsAnchor', () => {
-    const state = { selectedObject: { type: 'strand', id: 's1' } }
+    const state = { selection: { items: [{ kind: 'strand', id: 's1' }] } }
     const s = initLammpsForcesSetup({ gizmo: fakeGizmo(), getSelection: () => state })
     $('lammps-field-enable').checked = true
     $('lammps-field-enable').dispatchEvent(new Event('change'))
@@ -127,7 +127,7 @@ describe('initLammpsForcesSetup — separate cards', () => {
 
   it('exposes getAnchors and fires onChange on anchor changes (not during construction)', () => {
     const onChange = vi.fn()
-    const state = { selectedObject: { type: 'strand', id: 's1' } }
+    const state = { selection: { items: [{ kind: 'strand', id: 's1' }] } }
     const s = initLammpsForcesSetup({ gizmo: fakeGizmo(), getSelection: () => state, onChange })
     expect(onChange).not.toHaveBeenCalled()          // silent during construction
     expect(s.getAnchors()).toEqual([])

@@ -175,6 +175,11 @@ import { initInstanceGizmo }       from './scene/instance_gizmo.js'
 import { initMoveRotatePanel, moveRotateSelectionLabels } from './scene/move_rotate_panel.js'
 import { initTranslateRotateTool }  from './scene/translate_rotate_tool.js'
 import { parseBaseKey }             from './scene/base_ref.js'
+import { createSelectionController } from './scene/selection_controller.js'
+import {
+  selectedStrandIds as canonicalSelectedStrandIds, selectedCrossoverRefs, primaryRefOfKind,
+} from './scene/selection_model.js'
+import { isSelectionRefLive } from './scene/selection_ref.js'
 import { initForceCrossoverTool }   from './scene/force_crossover_tool.js'
 import { initOverhangOrientationPanel } from './ui/overhang_orientation_panel.js'
 import { showToast, showPersistentToast, dismissToast } from './ui/toast.js'
@@ -247,6 +252,7 @@ import { initOxdnaAnchorsSetup } from './ui/oxdna_anchors_setup.js'
 import { initPhotoMode }      from './scene/photo_mode.js'
 import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
 import { getSectionCollapsed, setSectionCollapsed } from './ui/section_collapse_state.js'
+import { initRightSidebarTabs } from './ui/right_sidebar_tabs.js'
 
 // Inflate any [data-icon] markup in static HTML and watch for new ones in
 // dynamically-added DOM (modals, context menus, panel rebuilds).
@@ -263,6 +269,7 @@ if (document.readyState === 'loading') {
 const DEBUG = new URLSearchParams(window.location.search).has('debug')
 
 async function main() {
+  initRightSidebarTabs({ document })
   const canvas = document.getElementById('canvas')
   const {
     scene, camera, renderer, controls,
@@ -849,7 +856,10 @@ async function main() {
   // so this resolves by then (boot-capture pattern, #81).
   let _atomSurface = null
   let visibilityController = null
-  const selectionManager = initSelectionManager(canvas, camera, designRenderer, {
+  let selectionManager = null
+  const selectionController = createSelectionController({ store })
+  selectionManager = initSelectionManager(canvas, camera, designRenderer, {
+    selectionController,
     onHideSelection: refs => {
       // A selected strand has a separate additive glow-bead layer. Clear the
       // selection BEFORE applying visibility: selection teardown restores the
@@ -904,9 +914,9 @@ async function main() {
       // If the right-clicked crossover is part of a multi-selection, apply to ALL
       // selected crossovers (forced ligations are single-only, like the cadnano editor).
       const design = store.getState().currentDesign
-      const multiIds = isForcedLigation ? [] : (selectionManager.getMultiCrossoverArcs?.() ?? [])
-        .map(a => a.crossover_id)
-        .filter(id => id && design?.crossovers?.some(x => x.id === id))
+      const multiIds = isForcedLigation ? [] : selectedCrossoverRefs(store.getState())
+        .filter(ref => ref.subtype === 'crossover' && design?.crossovers?.some(x => x.id === ref.id))
+        .map(ref => ref.id)
       const applyToAll = multiIds.length > 1 && multiIds.includes(xo.id)
       const applySeq = async (seq) => {
         if (applyToAll) {
@@ -1023,6 +1033,10 @@ async function main() {
     getCamera:     () => sceneCtx.getRenderCamera(),
     isDisabled:    () => slicePlane?.isContinuation() || store.getState().forceXoverActive,
   })
+  store.subscribe((newState, prevState) => {
+    if (newState.currentDesign === prevState.currentDesign || !newState.currentDesign) return
+    selectionController.reconcile(ref => isSelectionRefLive(ref, newState.currentDesign))
+  })
 
   // ── End extrusion arrows ──────────────────────────────────────────────────────
   // Thick arrows pointing outward along the helix axis at each selected 5'/3' end.
@@ -1065,25 +1079,25 @@ async function main() {
     if (!_selHudEl) return
     const st = store.getState()
     const parts = []
-    const ns = st.multiSelectedStrandIds?.length ?? 0
-    const nd = st.multiSelectedDomainIds?.length ?? 0
+    const refs = st.selection?.items ?? []
+    const ns = refs.filter(ref => ref.kind === 'strand').length
+    const nd = refs.filter(ref => ref.kind === 'domain').length
     const no = (selectionManager.getMultiOverhangs?.() ?? []).length
-    const nx = (selectionManager.getMultiCrossoverArcs?.() ?? []).length
+    const nx = selectedCrossoverRefs(st).length
+    const ne = refs.filter(ref => ref.kind === 'end').length
     const nb = selectionManager.getCtrlBeads?.().length ?? 0
     if (ns) parts.push(`${ns} strand${ns === 1 ? '' : 's'}`)
     if (nd) parts.push(`${nd} domain${nd === 1 ? '' : 's'}`)
     if (no) parts.push(`${no} overhang${no === 1 ? '' : 's'}`)
     if (nx) parts.push(`${nx} crossover${nx === 1 ? '' : 's'}`)
+    if (ne) parts.push(`${ne} end${ne === 1 ? '' : 's'}`)
     if (nb) parts.push(`${nb} bead${nb === 1 ? '' : 's'}`)
     if (!parts.length) { _selHudEl.style.display = 'none'; return }
     _selHudEl.textContent = parts.join(' · ') + ' selected'
     _selHudEl.style.display = 'flex'
   }
   store.subscribe((ns, ps) => {
-    if (ns.multiSelectedStrandIds !== ps.multiSelectedStrandIds ||
-        ns.multiSelectedDomainIds !== ps.multiSelectedDomainIds) {
-      _updateSelectionHud()
-    }
+    if (ns.selection !== ps.selection) _updateSelectionHud()
   })
 
   // ── Overhang dialog ──────────────────────────────────────────────────────────
@@ -2551,11 +2565,9 @@ async function main() {
           nucleotideTransformCount: transforms.length,
           crossoverExtraTransforms: transforms.filter(t => t.kind === 'extra_base'),
         } : null,
-        selectedObject: st.selectedObject ? {
-          type: st.selectedObject.type,
-          id: st.selectedObject.id,
-        } : null,
-        selectedBaseKeys: st.multiSelectedBaseKeys ?? [],
+        selection: structuredClone(st.selection),
+        selectedBaseKeys: (st.selection?.items ?? [])
+          .filter(ref => ref.kind === 'base').map(ref => ref.key),
         translateRotateActive: !!st.translateRotateActive,
         atomLoad: _atomSurface.debugAtomLoadState(),
         renderedAtoms: { atomCount, crossoverExtraAtomCount },
@@ -3227,6 +3239,7 @@ async function main() {
   // (h2 still visible) and pointer-events are blocked via .locked-inactive.
   function _setRightPanelEnabled(enabled) {
     document.getElementById('right-panel')?.classList.toggle('locked-inactive', !enabled)
+    document.getElementById('right-tab-strip')?.classList.toggle('locked-inactive', !enabled)
   }
 
   // Top filter/view/mode strip above the canvas. Welcome screen disables it
@@ -3633,6 +3646,7 @@ async function main() {
 
   /** Clear per-file state (slice plane, store) and return to workspace. */
   function _resetForNewDesign() {
+    selectionController.reload('design')
     // Leave photo mode before tearing the scene down. Otherwise the photo
     // render override stays installed and the next loaded design comes up
     // "in photo mode" (no-op if not active). Runs first so deactivate() can
@@ -3687,9 +3701,6 @@ async function main() {
       validationReport: null, currentPlane: null, strandColors: {},
       unfoldHelixOrder: null, unfoldActive: false, cadnanoActive: false,
       straightGeometry: null, straightHelixAxes: null,
-      selectedObject: null,
-      multiSelectedStrandIds: [],
-      multiSelectedDomainIds: [],
       isolatedStrandId: null,
       strandGroups: [],
       strandGroupsHistory: [],
@@ -3721,7 +3732,7 @@ async function main() {
   const _DESIGN_PANEL_IDS = [
     'sel-row-bluntEnds',
     'selection-filter-section', 'properties-section',
-    'blunt-panel', 'deform-panel', 'strand-hist-section',
+    'deform-panel', 'strand-hist-section',
     'groups-panel', 'overhang-panel',
     'oxdna-jobs-panel', 'mrdna-jobs-panel', 'cando-jobs-panel', 'snupi-jobs-panel',
     'blade-jobs-panel', 'md-panel',
@@ -3748,6 +3759,7 @@ async function main() {
   let _hiddenStripEls = []
 
   function _enterAssemblyMode() {
+    selectionController.reload('assembly')
     if (window.nadocDebug?.verbose)
       console.log('[restore] _enterAssemblyMode() — assemblyActive →', true)
     // A photo-mode session belongs to the design/assembly it was opened in;
@@ -3797,6 +3809,7 @@ async function main() {
   }
 
   function _exitAssemblyMode() {
+    selectionController.reload('design')
     _setDesignGeometryVisible(true)
     _assemblyFileHandle = null
     _assemblyName       = null
@@ -3860,14 +3873,15 @@ async function main() {
     controls.update()
   }
 
-  // Build a bbox over the currently selected nucleotides (multi-select strands +
-  // domains + single selectedObject). Returns null if nothing is selected.
+  // Build a bbox over all currently selected canonical refs.
   function _selectionBBox() {
     const st = store.getState()
+    const refs = st.selection?.items ?? []
     return selectionBBox(st.currentGeometry, {
-      strandIds:   new Set(st.multiSelectedStrandIds ?? []),
-      domainIds:   new Set(st.multiSelectedDomainIds ?? []),
-      selStrandId: st.selectedObject?.data?.strand_id ?? null,
+      strandIds: new Set(refs.filter(ref => ref.kind === 'strand').map(ref => ref.id)),
+      domainRefs: new Set(refs.filter(ref => ref.kind === 'domain')
+        .map(ref => `${ref.strandId}:${ref.domainIndex}`)),
+      baseKeys: new Set(refs.filter(ref => ref.kind === 'base').map(ref => ref.key)),
     })
   }
 
@@ -4270,10 +4284,11 @@ async function main() {
   // Conjugate Manager — resolve which protein to show: the selected protein's
   // asset, else the first imported library asset, else nudge the user to import.
   document.getElementById('menu-tools-conjugate-manager')?.addEventListener('click', async () => {
-    const sel = store.getState().selectedObject
+    const state = store.getState()
+    const sel = primaryRefOfKind(state, 'protein')
     let assetId = null
-    if (sel?.type === 'protein') {
-      assetId = store.getState().currentDesign?.protein_attachments?.find(a => a.id === sel.id)?.asset_id
+    if (sel) {
+      assetId = state.currentDesign?.protein_attachments?.find(a => a.id === sel.id)?.asset_id
     }
     if (!assetId) {
       const lib = await api.listProteinLibrary().catch(() => null)
@@ -4690,17 +4705,15 @@ async function main() {
     },
 
     onDeleteSelected: async () => {
-      const { selectedObject } = store.getState()
-      if (!selectedObject) return
-      const nuc = selectedObject.data
-      if (nuc?.strand_id) {
+      const strandId = canonicalSelectedStrandIds(store.getState())[0]
+      if (strandId) {
         const confirmed = await showConfirm({
           title: 'Delete strand',
-          message: `Delete strand "${nuc.strand_id}"?`,
+          message: `Delete strand "${strandId}"?`,
           danger: true,
           confirmLabel: 'Delete',
         })
-        if (confirmed) await api.deleteStrand(nuc.strand_id)
+        if (confirmed) await api.deleteStrand(strandId)
       }
     },
   })
@@ -4715,7 +4728,7 @@ async function main() {
     return !!assemblyRenderer.getInstanceDesign?.(inst?.id)?.forced_ligations?.some(fl => fl.is_periodic_seam)
   }
 
-  initPropertiesPanel()
+  initPropertiesPanel({ clearSelection: () => selectionManager.clearSelection() })
   // Periodic parts surface inside the Polymerize Origami panel's Mate dropdown
   // as "<part> — via periodic boundary" (unified with regular polymerize).
   // Assigned ~1000 ln below at its original definition site; these arrows run at
@@ -6768,10 +6781,9 @@ async function main() {
         enableGroupMode: true,
         onSaveLayout: (layout) => { api.savePlateLayout(layout) },
         onStrandClick: (sid) => {
-          // Select the strand: glows it in the 3D scene AND sets selectedObject,
-          // which the spreadsheet highlights + autoscrolls to. Empty well clears.
+          // Select the canonical strand ref; all linked views follow it. Empty well clears.
           if (sid) selectionManager.selectStrand(sid)
-          else store.setState({ selectedObject: null })
+          else selectionManager.clearSelection()
         },
       })
 
@@ -7000,10 +7012,7 @@ async function main() {
 
   store.subscribe((newState, prevState) => {
     if (!newState.translateRotateActive) return
-    if (newState.selectedObject === prevState.selectedObject &&
-        newState.multiSelectedBaseKeys === prevState.multiSelectedBaseKeys &&
-        newState.multiSelectedClusterIds === prevState.multiSelectedClusterIds &&
-        newState.multiSelectedStrandIds === prevState.multiSelectedStrandIds &&
+    if (newState.selection === prevState.selection &&
         newState.activeInstanceId === prevState.activeInstanceId) return
     _mrRefreshCurrentSelection()
   })
@@ -7012,8 +7021,8 @@ async function main() {
   // pressed with no selection. Hand ownership to the residue gizmo at that moment.
   store.subscribe(async (newState, prevState) => {
     if (!newState.translateRotateActive) return
-    if (newState.multiSelectedBaseKeys === prevState.multiSelectedBaseKeys) return
-    if ((newState.multiSelectedBaseKeys ?? []).length !== 1) return
+    if (newState.selection === prevState.selection) return
+    if ((newState.selection?.items ?? []).filter(ref => ref.kind === 'base').length !== 1) return
     if (!_nucleotideTransformTool.canActivate()) return
     await _translateRotateTool.cancel()
     _nucleotideTransformTool.activate()
@@ -7543,8 +7552,15 @@ async function main() {
     debugPanel.innerHTML = '<div class="row">Click a backbone bead for details.</div>'
 
     store.subscribe((newState, prevState) => {
-      if (newState.selectedObject !== prevState.selectedObject && newState.selectedObject) {
-        const nuc = newState.selectedObject.data
+      if (newState.selection !== prevState.selection) {
+        const ref = newState.selection?.primary
+        const target = (ref?.kind === 'base' || ref?.kind === 'end') ? parseBaseKey(ref.key) : null
+        const nuc = target && target.helix_id !== '__xb__'
+          ? newState.currentGeometry?.find(n => n.helix_id === target.helix_id &&
+            n.bp_index === target.bp_index && n.direction === target.direction &&
+            (n.copy ?? n.copy_k ?? 0) === (target.copy ?? 0))
+          : null
+        if (!nuc) return
         const fmt = arr => arr.map(v => Number(v).toFixed(4)).join(', ')
         debugPanel.innerHTML = `
           <div class="row">bp <span class="val">${nuc.bp_index}</span> · <span class="val">${nuc.direction}</span></div>
@@ -7799,9 +7815,51 @@ async function main() {
         }
         return out
       },
+      /** Visible overhang bead centres with canonical overhang identity. */
+      getOverhangBeadScreenPositions() {
+        const rect = canvas.getBoundingClientRect()
+        const out = []
+        const v = new THREE.Vector3(), m = new THREE.Matrix4()
+        for (const e of designRenderer.getBackboneEntries?.() ?? []) {
+          const overhangId = e.nuc?.overhang_id
+          if (!overhangId || !e.instMesh?.visible) continue
+          e.instMesh.getMatrixAt(e.id, m)
+          v.setFromMatrixPosition(m).applyMatrix4(e.instMesh.matrixWorld)
+          const ndc = v.clone().project(camera)
+          if (ndc.z > 1 || Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) continue
+          out.push({
+            id: overhangId,
+            x: rect.left + (ndc.x * 0.5 + 0.5) * rect.width,
+            y: rect.top + (-ndc.y * 0.5 + 0.5) * rect.height,
+          })
+        }
+        return out
+      },
+      /** Visible cluster-level click candidates, resolved by selection_manager policy. */
+      getClusterBeadScreenPositions() {
+        const rect = canvas.getBoundingClientRect()
+        const out = []
+        const v = new THREE.Vector3(), m = new THREE.Matrix4()
+        for (const e of designRenderer.getBackboneEntries?.() ?? []) {
+          if (!e.instMesh?.visible) continue
+          const id = selectionManager.clusterIdForNucleotide?.(e.nuc)
+          if (!id) continue
+          e.instMesh.getMatrixAt(e.id, m)
+          v.setFromMatrixPosition(m).applyMatrix4(e.instMesh.matrixWorld)
+          const ndc = v.clone().project(camera)
+          if (ndc.z > 1 || Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) continue
+          out.push({
+            id,
+            x: rect.left + (ndc.x * 0.5 + 0.5) * rect.width,
+            y: rect.top + (-ndc.y * 0.5 + 0.5) * rect.height,
+          })
+        }
+        return out
+      },
       /** Live matrix probe for the selected standard nucleotide's bead/slab pair. */
       getSelectedResidueArrangement() {
-        const keys = store.getState().multiSelectedBaseKeys ?? []
+        const keys = (store.getState().selection?.items ?? [])
+          .filter(ref => ref.kind === 'base').map(ref => ref.key)
         if (keys.length !== 1) return null
         const target = parseBaseKey(keys[0])
         const info = designRenderer.residueTransformInfo?.(target)
@@ -7902,16 +7960,20 @@ async function main() {
       },
       /** Count of Alt-picked measurement beads (the measurement tool's input). */
       getCtrlBeadCount: () => selectionManager.getCtrlBeads?.().length ?? 0,
+      /** Count of committed canonical End refs (never measurement anchors). */
+      getSelectedEndCount: () => (store.getState().selection?.items ?? []).filter(ref => ref.kind === 'end').length,
       /** Base-level pool — app-wide base keys (scene/base_ref.js). */
       getSelectedBaseKeys: () => selectionManager.getSelectedBaseKeys?.() ?? [],
       /** Every base-level pick candidate as {key, family} — proves a bead family is reachable. */
       getBaseCandidates: () => selectionManager.getBaseCandidates?.() ?? [],
-      /** Current single-selection ({type,id,...}) or null. */
-      getSelectedObject: () => store.getState().selectedObject ?? null,
+      /** Canonical mature selection snapshot (renderer-independent, JSON-safe). */
+      getCanonicalSelection: () => structuredClone(store.getState().selection),
       /** Multi-selection pools (cluster multi-select gesture e2e). */
       getMultiSelection: () => ({
-        clusterIds: store.getState().multiSelectedClusterIds ?? [],
-        strandIds:  store.getState().multiSelectedStrandIds ?? [],
+        clusterIds: (store.getState().selection?.items ?? [])
+          .filter(ref => ref.kind === 'cluster').map(ref => ref.id),
+        strandIds:  (store.getState().selection?.items ?? [])
+          .filter(ref => ref.kind === 'strand').map(ref => ref.id),
       }),
       /** Drill-v2 engaged selection level ('default'|'cluster'|'strand'|'domain'|'end'|'xover'|'base'). */
       getSelectionLevel: () => selectionManager.getSelectionLevel?.() ?? 'default',
@@ -7942,6 +8004,21 @@ async function main() {
           strand_id: entry.nuc?.strand_id, helix_id: entry.nuc?.helix_id,
           bp_index: entry.nuc?.bp_index, direction: entry.nuc?.direction,
         }
+      },
+      /** Cluster identity under a client point using the same front-most bead raycast. */
+      pickClusterAt(clientX, clientY) {
+        const rect = canvas.getBoundingClientRect()
+        const ray = new THREE.Raycaster()
+        ray.setFromCamera(new THREE.Vector2(
+          ((clientX - rect.left) / rect.width) * 2 - 1,
+          -((clientY - rect.top) / rect.height) * 2 + 1,
+        ), camera)
+        const entries = designRenderer.getBackboneEntries?.() ?? []
+        const meshes = [...new Set(entries.map(e => e.instMesh))].filter(mesh => mesh?.visible)
+        const hit = ray.intersectObjects(meshes)[0]
+        if (!hit) return null
+        const entry = entries.find(e => e.instMesh === hit.object && e.id === hit.instanceId)
+        return entry?.nuc ? selectionManager.clusterIdForNucleotide?.(entry.nuc) ?? null : null
       },
 
       // ── Assembly gesture harness (mirrors the design-view hooks above) ─────
@@ -8103,30 +8180,21 @@ async function main() {
   // successful API call; the 3D view responds by pulling the latest design and
   // geometry so nicks and crossover connections appear automatically.
 
-  // Flag to suppress re-broadcasting when multiSelectedStrandIds is set from an
+  // Flag to suppress re-broadcasting when canonical selection is set from an
   // incoming 'selection-changed' message (prevents A→B→A infinite loops).
   let _syncingFromBroadcast = false
 
-  // Emit 'selection-changed' whenever the 3D view's multi-selection changes
-  // (e.g. from user Ctrl+drag lasso in the 3D viewport).
+  // Cross-window design selection publishes ordered strand owners represented by
+  // canonical strand/domain refs. The controller rejects these intents while assembly
+  // owns interaction. Empty selection remains local.
   store.subscribe((newState, prevState) => {
-    if (newState.multiSelectedStrandIds === prevState.multiSelectedStrandIds) return
+    if (newState.selection === prevState.selection) return
     if (_syncingFromBroadcast) return
-    const ids = newState.multiSelectedStrandIds ?? []
+    const ids = canonicalSelectedStrandIds(newState)
     // Don't broadcast deselection — each window manages its own deselect state.
     // Only positive selections sync cross-window.
     if (ids.length === 0) return
     nadocBroadcast.emit('selection-changed', { strandIds: ids })
-  })
-
-  // Emit 'selection-changed' for single-strand clicks (selectedObject).
-  store.subscribe((newState, prevState) => {
-    if (newState.selectedObject === prevState.selectedObject) return
-    if (_syncingFromBroadcast) return
-    const sel = newState.selectedObject
-    if (!sel) return
-    const ids = sel.data?.strand_ids ?? (sel.data?.strand_id ? [sel.data.strand_id] : [])
-    if (ids.length) nadocBroadcast.emit('selection-changed', { strandIds: ids })
   })
 
   nadocBroadcast.onMessage(async (data) => {

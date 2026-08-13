@@ -4,6 +4,7 @@
  * selection_bbox.test.js.
  */
 import * as THREE from 'three'
+import { baseKey } from './base_ref.js'
 
 /**
  * THREE.Box3 around the backbone of the current selection, or null if nothing is
@@ -11,14 +12,19 @@ import * as THREE from 'three'
  * @param {Array} geom  nucleotide geometry ({strand_id, domain_id, backbone_position:[x,y,z]})
  * @param {object} sel  { strandIds:Set, domainIds:Set, selStrandId:string|null }
  */
-export function selectionBBox(geom, { strandIds = new Set(), domainIds = new Set(), selStrandId = null } = {}) {
+export function selectionBBox(geom, {
+  strandIds = new Set(), domainIds = new Set(), domainRefs = new Set(),
+  baseKeys = new Set(), selStrandId = null,
+} = {}) {
   if (!geom?.length) return null
-  if (!strandIds.size && !domainIds.size && !selStrandId) return null
+  if (!strandIds.size && !domainIds.size && !domainRefs.size && !baseKeys.size && !selStrandId) return null
   const box = new THREE.Box3()
   let count = 0
   for (const n of geom) {
     const hit = (strandIds.size && strandIds.has(n.strand_id))
       || (domainIds.size && domainIds.has(n.domain_id))
+      || (domainRefs.size && domainRefs.has(`${n.strand_id}:${n.domain_index}`))
+      || (baseKeys.size && baseKeys.has(baseKey(n, n.copy_k ?? 0)))
       || (selStrandId && n.strand_id === selStrandId)
     if (!hit) continue
     const [x, y, z] = n.backbone_position

@@ -9,12 +9,16 @@ const IDS = {
   'oxdna-anchors-list': 'div', 'oxdna-anchors-status': 'div', 'oxdna-anchors-glow': 'input',
 }
 
+const overhangSelection = (ids = []) => ({
+  selection: { items: ids.map(id => ({ kind: 'overhang', id })) },
+})
+
 describe('initOxdnaAnchorsSetup', () => {
   let els, store, api
 
   beforeEach(() => {
     els = mountIds(IDS)
-    store = createMockStore({ multiSelectedOverhangIds: [], multiSelectedDomainIds: [], selectedObject: null })
+    store = createMockStore(overhangSelection())
     api = initOxdnaAnchorsSetup({ getSelection: () => store.getState() })
   })
   afterEach(() => clearDom())
@@ -26,7 +30,7 @@ describe('initOxdnaAnchorsSetup', () => {
   })
 
   it('Add reads the current selection into the anchor set', () => {
-    store.setState({ multiSelectedOverhangIds: ['o1', 'o2'] })
+    store.setState(overhangSelection(['o1', 'o2']))
     const added = api.addSelectedAnchors()
     expect(added).toBe(2)
     expect(api.getAnchors().map(a => a.id).sort()).toEqual(['o1', 'o2'])
@@ -40,7 +44,7 @@ describe('initOxdnaAnchorsSetup', () => {
   })
 
   it('a chip remove ✕ drops that anchor', () => {
-    store.setState({ multiSelectedOverhangIds: ['o1', 'o2'] })
+    store.setState(overhangSelection(['o1', 'o2']))
     api.addSelectedAnchors()
     const x = els['oxdna-anchors-list'].querySelector('[data-key="overhang:o1"] span:last-child')
     x.click()
@@ -48,14 +52,14 @@ describe('initOxdnaAnchorsSetup', () => {
   })
 
   it('Clear removes all anchors', () => {
-    store.setState({ multiSelectedOverhangIds: ['o1'] })
+    store.setState(overhangSelection(['o1']))
     api.addSelectedAnchors()
     els['oxdna-anchors-clear'].click()
     expect(api.getAnchors()).toHaveLength(0)
   })
 
   it('the Add button click path also works (not just the api method)', () => {
-    store.setState({ multiSelectedOverhangIds: ['oX'] })
+    store.setState(overhangSelection(['oX']))
     els['oxdna-anchors-add'].click()
     expect(api.getAnchors().map(a => a.id)).toEqual(['oX'])
   })
@@ -69,7 +73,7 @@ describe('initOxdnaAnchorsSetup', () => {
       'cando-anchors-list': 'div', 'cando-anchors-status': 'div',
     }
     const cels = mountIds(CANDO)
-    const cstore = createMockStore({ multiSelectedOverhangIds: ['cq'] })
+    const cstore = createMockStore(overhangSelection(['cq']))
     const capi = initOxdnaAnchorsSetup({
       getSelection: () => cstore.getState(),
       ids: {
@@ -132,7 +136,7 @@ describe('initOxdnaAnchorsSetup', () => {
     it('the toggle is display-only — it must NOT fire onChange (would recompose a live run)', () => {
       const onChange = vi.fn()
       const a = initOxdnaAnchorsSetup({ getSelection: () => store.getState(), onChange })
-      store.setState({ multiSelectedOverhangIds: ['o1'] })
+      store.setState(overhangSelection(['o1']))
       a.addSelectedAnchors()
       expect(onChange).toHaveBeenCalledTimes(1)      // the Add did fire it
 
@@ -142,7 +146,7 @@ describe('initOxdnaAnchorsSetup', () => {
     })
 
     it('the anchor set survives toggling the halo off', () => {
-      store.setState({ multiSelectedOverhangIds: ['o1'] })
+      store.setState(overhangSelection(['o1']))
       api.addSelectedAnchors()
       els['oxdna-anchors-glow'].checked = false
       els['oxdna-anchors-glow'].dispatchEvent(new Event('change'))
@@ -155,7 +159,7 @@ describe('initOxdnaAnchorsSetup', () => {
     const lit = () => [...els['oxdna-anchors-list'].querySelectorAll('[data-hl="1"]')].map(e => e.dataset.key)
 
     beforeEach(() => {
-      store.setState({ multiSelectedOverhangIds: ['o1', 'o2', 'o3'] })
+      store.setState(overhangSelection(['o1', 'o2', 'o3']))
       api.addSelectedAnchors()
     })
 
@@ -255,7 +259,7 @@ describe('initOxdnaAnchorsSetup', () => {
     afterEach(() => window.removeEventListener('nadoc:anchors-change', listen))
 
     it('fires on Add, tagged with the engine, carrying the new anchor set', () => {
-      store.setState({ multiSelectedOverhangIds: ['o1'] })
+      store.setState(overhangSelection(['o1']))
       api.addSelectedAnchors()
       expect(seen).toHaveLength(1)
       expect(seen[0].engine).toBe('oxdna')                       // default tag
@@ -269,7 +273,7 @@ describe('initOxdnaAnchorsSetup', () => {
         'cando-anchors-add': 'button', 'cando-anchors-clear': 'button',
         'cando-anchors-list': 'div', 'cando-anchors-status': 'div',
       })
-      const cstore = createMockStore({ multiSelectedOverhangIds: ['cq'] })
+      const cstore = createMockStore(overhangSelection(['cq']))
       initOxdnaAnchorsSetup({
         engine: 'cando',
         getSelection: () => cstore.getState(),
@@ -284,7 +288,7 @@ describe('initOxdnaAnchorsSetup', () => {
     })
 
     it('fires on chip-remove, Clear and applyConfig too, so the halo tracks every edit', () => {
-      store.setState({ multiSelectedOverhangIds: ['o1', 'o2'] })
+      store.setState(overhangSelection(['o1', 'o2']))
       api.addSelectedAnchors()
       els['oxdna-anchors-list'].querySelector('[data-key="overhang:o1"] span:last-child').click()
       expect(seen.at(-1).anchors).toEqual([{ kind: 'overhang', id: 'o2' }])
@@ -337,7 +341,7 @@ describe('the Hold-atoms column', () => {
   beforeEach(() => {
     els = mountIds(MD_IDS)
     atomsEl = mountAtomsSelect()
-    store = createMockStore({ multiSelectedOverhangIds: [], multiSelectedDomainIds: [], selectedObject: null })
+    store = createMockStore(overhangSelection())
     onChange = vi.fn()
     api = initOxdnaAnchorsSetup({
       getSelection: () => store.getState(),
@@ -349,7 +353,7 @@ describe('the Hold-atoms column', () => {
         status: 'md-anchors-status', glow: 'md-anchors-glow', atoms: 'md-anchors-atoms',
       },
     })
-    store.setState({ multiSelectedOverhangIds: ['o1', 'o2'] })
+    store.setState(overhangSelection(['o1', 'o2']))
     api.addSelectedAnchors()
   })
   afterEach(() => clearDom())
@@ -368,7 +372,7 @@ describe('the Hold-atoms column', () => {
       'oxdna-anchors-add': 'button', 'oxdna-anchors-clear': 'button',
       'oxdna-anchors-list': 'div', 'oxdna-anchors-status': 'div', 'oxdna-anchors-glow': 'input',
     })
-    const s = createMockStore({ multiSelectedOverhangIds: ['o1'], multiSelectedDomainIds: [], selectedObject: null })
+    const s = createMockStore(overhangSelection(['o1']))
     initOxdnaAnchorsSetup({ getSelection: () => s.getState() }).addSelectedAnchors()
     expect(plain['oxdna-anchors-list'].querySelector('select')).toBeNull()
     expect(s.getState()).toBeTruthy()
@@ -437,7 +441,7 @@ describe('the Hold-atoms column', () => {
   it('newly added anchors inherit whatever the group select shows', () => {
     atomsEl.value = "C1'"
     atomsEl.dispatchEvent(new Event('change'))
-    store.setState({ multiSelectedOverhangIds: ['o1', 'o2', 'o3'] })
+    store.setState(overhangSelection(['o1', 'o2', 'o3']))
     api.addSelectedAnchors()
     expect(api.getAnchors().find(a => a.id === 'o3').atoms).toEqual(["C1'"])
     expect(atomsEl.value).toBe("C1'")     // still uniform

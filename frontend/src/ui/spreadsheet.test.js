@@ -156,6 +156,18 @@ describe('Sequence-cell context menu', () => {
   })
 })
 
+describe('Strand display IDs', () => {
+  it('adds a fixed ID column using short type-specific ordinals', () => {
+    openSheet()
+    const headers = [...document.querySelectorAll('#spreadsheet-thead-row th')]
+      .map(cell => cell.textContent)
+    expect(headers[0]).toBe('ID')
+    const ids = [...document.querySelectorAll('#spreadsheet-tbody td[data-col="id"]')]
+      .map(cell => cell.textContent)
+    expect(ids).toEqual(['X1', 'S1'])
+  })
+})
+
 /**
  * This file used to declare its OWN `STAPLE_PALETTE` with entirely different colours
  * (an editor syntax theme) under a comment claiming it mirrored helix_renderer. Because

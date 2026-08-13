@@ -11,6 +11,7 @@
 import { createParamState } from '../strand-anim/params.js'
 import { createPhiTicker } from '../strand-anim/ticker.js'
 import { initOverhangStrandAnim, findBinderStrand } from '../scene/overhang_strand_anim.js'
+import { primaryOverhangId } from '../scene/selection_model.js'
 
 export function initStrandAnimPanel(store, { getHelixCtrl, getGeometry, getDesign, getScene, api, getAnimContext }) {
   const heading = document.getElementById('strand-anim-heading')
@@ -278,8 +279,8 @@ export function initStrandAnimPanel(store, { getHelixCtrl, getGeometry, getDesig
     if (s.currentDesign !== prev.currentDesign) _rebuildOptions()
     if (_collapsed) return
     // Autofill from a NEW selection — but sticky: only set, never clear.
-    if (s.multiSelectedOverhangIds !== prev.multiSelectedOverhangIds || s.selectedObject !== prev.selectedObject) {
-      const sel = s.multiSelectedOverhangIds?.[0] ?? s.selectedObject?.data?.overhang_id ?? null
+    if (s.selection !== prev.selection) {
+      const sel = primaryOverhangId(s)
       if (sel && sel !== _activeId && findBinderStrand(s.currentDesign, sel)) { _bind(sel); return }
     }
     // Re-bind to the persisted overhang when the design/geometry changes.

@@ -10,6 +10,7 @@
 import { initAtomisticRenderer } from './atomistic_renderer.js'
 import { initProteinGizmo } from './protein_gizmo.js'
 import { docHeaders } from '../shared/doc_id.js'
+import { primaryRefOfKind } from './selection_model.js'
 
 export function initProteinSubsystem({ scene, store, controls, camera, canvas }) {
   // Protein renderer (imported proteins; independent of the DNA atomistic
@@ -32,11 +33,11 @@ export function initProteinSubsystem({ scene, store, controls, camera, canvas })
   // is selected. Called after every render so the gizmo follows moves and
   // drops away when the protein is deleted/undone.
   function _syncProteinSelectionVisual() {
-    const sel = store.getState().selectedObject
-    const protId = sel?.type === 'protein' ? sel.id : null
+    const ref = primaryRefOfKind(store.getState(), 'protein')
+    const protId = ref?.id ?? null
     const c = protId ? _proteinCentroid(protId) : null
     if (protId && c) {
-      proteinRenderer.highlight(sel)
+      proteinRenderer.highlight({ type: 'protein', id: protId, data: { attachment_id: protId } })
       proteinGizmo.attach(protId, scene, camera, canvas, c)
     } else {
       if (proteinGizmo.isAttached()) proteinGizmo.detach()
@@ -83,7 +84,7 @@ export function initProteinSubsystem({ scene, store, controls, camera, canvas })
 
   // Selection change → update the gizmo/highlight (without a server round-trip).
   store.subscribe((newState, prevState) => {
-    if (newState.selectedObject !== prevState.selectedObject) _syncProteinSelectionVisual()
+    if (newState.selection !== prevState.selection) _syncProteinSelectionVisual()
   })
 
   if (window.__NADOC_DBG__) {

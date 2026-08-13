@@ -6,9 +6,8 @@
  * ladder through the REAL raycast on a real scaffolded part:
  *
  *   1st click on a bead          → STRAND          (decision B: strand-first)
- *   2nd click on the same bead   → that nucleotide (the leaf under the cursor)
- *   3rd click on the same bead   → STAYS the nucleotide (repeat click keeps the
- *                                  leaf selected — no toggle-clear, user feedback 2026-06-06)
+ *   2nd click on the same bead   → that base (the leaf under the cursor)
+ *   3rd click on the same bead   → strand (the hierarchical drill restarts)
  *
  * Same robust pattern as bead_select.spec.js: pick a real bead via pickBeadAt,
  * click it, assert on exposed state, retry candidates on a miss.
@@ -16,9 +15,20 @@
 import { test, expect } from '@playwright/test'
 import { loadScaffoldedPart, beadCandidates } from './helpers/scene_harness.js'
 
+async function loadFramedPart(page, opts) {
+  await loadScaffoldedPart(page, opts)
+  await page.locator('#canvas').click({ position: { x: 5, y: 5 } })
+  await page.keyboard.press('f')
+  await page.waitForTimeout(300)
+  const box = await page.locator('#canvas').boundingBox()
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  for (let i = 0; i < 10; i++) { await page.mouse.wheel(0, -180); await page.waitForTimeout(30) }
+  await page.waitForTimeout(250)
+}
+
 test.describe('Drill v2 — default-level click ladder', () => {
-  test('1st click → strand, 2nd → nucleotide, 3rd → keeps the nucleotide', async ({ page }) => {
-    await loadScaffoldedPart(page, { doc: 'e2e-drillv2', name: 'drillv2' })
+  test('1st click → strand, 2nd → base, 3rd → restarts at strand', async ({ page }) => {
+    await loadFramedPart(page, { doc: 'e2e-drillv2', name: 'drillv2' })
 
     // Find a bead the real raycast resolves, then drive the ladder on that point.
     const cands = await beadCandidates(page)
@@ -28,22 +38,22 @@ test.describe('Drill v2 — default-level click ladder', () => {
       if (!hit) continue
       await page.mouse.click(p.x, p.y)
       await page.waitForTimeout(120)
-      const sel = await page.evaluate(() => window.__nadocTest.getSelectedObject())
-      if (sel?.type === 'strand') { landed = p; break }   // 1st click → STRAND
+      const sel = await page.evaluate(() => window.__nadocTest.getCanonicalSelection())
+      if (sel.primary?.kind === 'strand') { landed = p; break }   // 1st click → STRAND
     }
     expect(landed, 'a 1st click resolved to a STRAND (decision B)').not.toBeNull()
 
-    // 2nd click on the same bead → the nucleotide leaf under the cursor.
+    // 2nd click on the same bead → the canonical Base leaf under the cursor.
     await page.mouse.click(landed.x, landed.y)
     await page.waitForTimeout(120)
-    const sel2 = await page.evaluate(() => window.__nadocTest.getSelectedObject())
-    expect(sel2?.type, '2nd click → leaf nucleotide').toBe('nucleotide')
+    const sel2 = await page.evaluate(() => window.__nadocTest.getCanonicalSelection())
+    expect(sel2.primary?.kind, '2nd click → Base leaf').toBe('base')
 
-    // 3rd click on the same leaf → KEEPS the nucleotide selected (no toggle-clear).
+    // Base is a leaf endpoint, so the next default click restarts the hierarchy.
     await page.mouse.click(landed.x, landed.y)
     await page.waitForTimeout(120)
-    const sel3 = await page.evaluate(() => window.__nadocTest.getSelectedObject())
-    expect(sel3?.type, '3rd click on the same leaf keeps the nucleotide selected').toBe('nucleotide')
+    const sel3 = await page.evaluate(() => window.__nadocTest.getCanonicalSelection())
+    expect(sel3.primary?.kind, '3rd click restarts at strand').toBe('strand')
   })
 
   // An engaged level must PERSIST across an empty-space (deselect) click — the
@@ -51,10 +61,11 @@ test.describe('Drill v2 — default-level click ladder', () => {
   // feedback 2026-06-06). Before the fix, _clearAll emitted null → the button
   // un-highlighted on every empty click.
   test('an engaged level survives an empty-space click (button stays lit)', async ({ page }) => {
-    await loadScaffoldedPart(page, { doc: 'e2e-drillv2lvl', name: 'drillv2lvl' })
+    await loadFramedPart(page, { doc: 'e2e-drillv2lvl', name: 'drillv2lvl' })
 
     // Engage the cluster level via its filter button.
     const clustBtn = '#select-filter .sf-btn[data-key="clust"]'
+    await page.click('#select-filter-trigger')
     await page.click(clustBtn)
     expect(await page.evaluate(() => window.__nadocTest.getSelectionLevel()), 'cluster engaged').toBe('cluster')
     expect(await page.locator(clustBtn).evaluate(b => b.classList.contains('active')), 'button lit').toBe(true)
@@ -91,7 +102,7 @@ test.describe('Drill v2 — default-level click ladder', () => {
   // Discriminator vs the Phase-2 scale-pop: the named 'previewGlow' layer is empty
   // (count 0) under the old behaviour and non-empty once a candidate is hovered.
   test('hover over a selected strand pops the red preview glow', async ({ page }) => {
-    await loadScaffoldedPart(page, { doc: 'e2e-drillv2hov', name: 'drillv2hov' })
+    await loadFramedPart(page, { doc: 'e2e-drillv2hov', name: 'drillv2hov' })
 
     const previewCount = () => page.evaluate(() => {
       let n = 0
@@ -110,8 +121,8 @@ test.describe('Drill v2 — default-level click ladder', () => {
       if (!hit) continue
       await page.mouse.click(p.x, p.y)
       await page.waitForTimeout(120)
-      const sel = await page.evaluate(() => window.__nadocTest.getSelectedObject())
-      if (sel?.type === 'strand') { landed = p; break }
+      const sel = await page.evaluate(() => window.__nadocTest.getCanonicalSelection())
+      if (sel.primary?.kind === 'strand') { landed = p; break }
     }
     expect(landed, 'a 1st click resolved to a STRAND').not.toBeNull()
 

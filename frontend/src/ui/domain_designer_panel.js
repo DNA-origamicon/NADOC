@@ -12,8 +12,8 @@
  *     initDomainDesignerPanel(rootEl, { store, api, pathview })
  *       → { open(preselect?), close(), refresh() }
  *
- * Selection rule (LOCKED): clicks here update only `store.domainDesigner.*`.
- * They do NOT touch `selectedObject` or `multiSelectedOverhangIds`.
+ * Selection rule (LOCKED): clicks here update only `store.domainDesigner.*` and
+ * do not touch canonical main-scene selection.
  *
  * Three-Layer Law: every sub-domain mutation goes through the injected
  * `api.patchSubDomain` / `api.recomputeSubDomainAnnotations` /

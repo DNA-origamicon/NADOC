@@ -128,7 +128,7 @@ describe('initTranslateRotateTool — API + init side effects', () => {
 
   it('registers the "m" keyboard shortcut whose handler routes activate↔confirm', async () => {
     const ctx = makeDeps({ state: {
-      selectedObject: { type: 'cluster', data: { cluster_id: 'C1' } },
+      selection: { items: [{ kind: 'cluster', id: 'C1' }] },
       currentDesign: { cluster_transforms: [
       { id: 'C1', translation: [0, 0, 0], rotation: [0, 0, 0, 1], helix_ids: [2] },
     ], cluster_joints: [] } } })
@@ -448,7 +448,7 @@ describe('initTranslateRotateTool — rotateJoint + misc', () => {
 
 describe('decideSelectionAction (selection→tool bridge)', () => {
   const PARTS = { assemblyActive: false, cadnanoActive: false, unfoldActive: false }
-  const cluster = id => ({ type: 'cluster', data: { cluster_id: id } })
+  const cluster = id => ({ kind: 'cluster', id })
 
   it('does not open the tool when a cluster is selected', () => {
     expect(decideSelectionAction({
@@ -470,7 +470,7 @@ describe('decideSelectionAction (selection→tool bridge)', () => {
 
   it('does nothing when the selection is not a cluster', () => {
     expect(decideSelectionAction({
-      newSel: { type: 'strand', data: { strand_id: 's1' } },
+      newSel: { kind: 'strand', id: 's1' },
       toolActive: false, autoOpened: false, activeClusterId: null, mode: PARTS,
     })).toEqual({ action: 'none', clusterId: null })
     expect(decideSelectionAction({
@@ -485,8 +485,8 @@ describe('decideSelectionAction (selection→tool bridge)', () => {
   })
 
   it('does NOT close on a bare deselection that is really a promote-to-group', () => {
-    // selectedObject nulled but >=1 cluster is multi-selected → the group subscriber owns
-    // the gizmo; closing here would tear it down mid-promote.
+    // Multi-selection is owned by the unified selection subscriber; a null primary
+    // passed to this pure seam never closes the explicitly active tool.
     expect(decideSelectionAction({
       newSel: null, toolActive: true, autoOpened: true, activeClusterId: 'c1', mode: PARTS,
       multiSelectedCount: 1,
@@ -518,9 +518,9 @@ describe('decideSelectionAction (selection→tool bridge)', () => {
     })).toEqual({ action: 'retarget', clusterId: 'c2' })
   })
 
-  it('falls back to newSel.id when data.cluster_id is absent', () => {
+  it('accepts a minimal canonical cluster ref', () => {
     expect(decideSelectionAction({
-      newSel: { type: 'cluster', id: 'c9' }, toolActive: false, autoOpened: false, activeClusterId: null, mode: PARTS,
+      newSel: { kind: 'cluster', id: 'c9' }, toolActive: false, autoOpened: false, activeClusterId: null, mode: PARTS,
     })).toEqual({ action: 'none', clusterId: null })
   })
 })
@@ -535,21 +535,20 @@ describe('resolveSelectionClusterId', () => {
   }
 
   it('resolves a cluster directly', () => {
-    expect(resolveSelectionClusterId({ type: 'cluster', id: 'whole' }, design)).toBe('whole')
+    expect(resolveSelectionClusterId({ kind: 'cluster', id: 'whole' }, design)).toBe('whole')
   })
 
   it('prefers exact domain scope for a selected domain or base bead', () => {
-    expect(resolveSelectionClusterId({ type: 'domain', data: { strand_id: 's1', domain_index: 1 } }, design)).toBe('domain')
-    expect(resolveSelectionClusterId({ type: 'nucleotide', data: { strand_id: 's1', domain_index: 1, helix_id: 'h2' } }, design)).toBe('domain')
+    expect(resolveSelectionClusterId({ kind: 'domain', strandId: 's1', domainIndex: 1 }, design)).toBe('domain')
   })
 
   it('falls back from a base or strand to its helix-level transform scope', () => {
-    expect(resolveSelectionClusterId({ type: 'nucleotide', data: { helix_id: 'h1' } }, design)).toBe('whole')
-    expect(resolveSelectionClusterId({ type: 'strand', id: 's1', data: { strand_id: 's1' } }, design)).toBe('whole')
+    expect(resolveSelectionClusterId({ kind: 'base', key: 'h1:4:FORWARD' }, design)).toBe('whole')
+    expect(resolveSelectionClusterId({ kind: 'strand', id: 's1' }, design)).toBe('whole')
   })
 
   it('returns null for stale or unsupported selections', () => {
-    expect(resolveSelectionClusterId({ type: 'cluster', id: 'missing' }, design)).toBeNull()
-    expect(resolveSelectionClusterId({ type: 'protein', id: 'p1' }, design)).toBeNull()
+    expect(resolveSelectionClusterId({ kind: 'cluster', id: 'missing' }, design)).toBeNull()
+    expect(resolveSelectionClusterId({ kind: 'protein', id: 'p1' }, design)).toBeNull()
   })
 })

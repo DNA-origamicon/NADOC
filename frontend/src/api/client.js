@@ -3174,48 +3174,14 @@ export async function revertToBeforeFeature(index, subIndex = null) {
   return result
 }
 
-/** Drop selection slots whose IDs no longer exist in the active design.
- *  Called after non-incremental design changes (e.g. feature-log revert)
- *  where the previously-selected strand/helix may have been removed. */
+/** Drop non-selection UI scope whose owner no longer exists.
+ * Canonical selection reconciliation is owned by main's selection controller
+ * subscriber and runs synchronously when currentDesign changes. */
 function _clearStaleSelections() {
   const state = store.getState()
   const design = state.currentDesign
   const strandIds = new Set((design?.strands ?? []).map(s => s.id))
-  const helixIds  = new Set((design?.helices ?? []).map(h => h.id))
-  const overhangIds = new Set((design?.overhangs ?? []).map(o => o.id))
   const updates = {}
-
-  const sel = state.selectedObject
-  if (sel) {
-    let stale = false
-    if (sel.type === 'strand' && !strandIds.has(sel.id)) stale = true
-    if (sel.type === 'helix'  && !helixIds.has(sel.id))  stale = true
-    const sStrand = sel.data?.strand_id
-    const sHelix  = sel.data?.helix_id
-    const sOverhang = sel.data?.overhang_id
-    if (sStrand && !strandIds.has(sStrand)) stale = true
-    if (sHelix  && !helixIds.has(sHelix))   stale = true
-    if (sOverhang && !overhangIds.has(sOverhang)) stale = true
-    if (stale) updates.selectedObject = null
-  }
-
-  const multi = state.multiSelectedStrandIds ?? []
-  const filteredMulti = multi.filter(id => strandIds.has(id))
-  if (filteredMulti.length !== multi.length) updates.multiSelectedStrandIds = filteredMulti
-
-  const multiDom = state.multiSelectedDomainIds ?? []
-  const filteredDom = multiDom.filter(d => strandIds.has(d.strandId))
-  if (filteredDom.length !== multiDom.length) updates.multiSelectedDomainIds = filteredDom
-
-  const multiOverhangs = state.multiSelectedOverhangIds ?? []
-  const filteredOverhangs = multiOverhangs.filter(id => overhangIds.has(id))
-  if (filteredOverhangs.length !== multiOverhangs.length) {
-    updates.multiSelectedOverhangIds = filteredOverhangs
-  }
-
-  // NOTE the base-level pool (multiSelectedBaseKeys) is pruned by selection_manager's own
-  // rebuild subscriber, not here — it owns the `_baseKeys` closure that drives the glow, and
-  // two writers to one pool would race.
 
   if (state.isolatedStrandId && !strandIds.has(state.isolatedStrandId)) {
     updates.isolatedStrandId = null

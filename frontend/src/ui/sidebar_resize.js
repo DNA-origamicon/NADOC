@@ -5,8 +5,8 @@
  *
  * Handle DOM lives in index.html as `.panel-resize-handle[data-resize="left|right"]`.
  * The left handle sits on the tab strip's outer edge (the border with the 3D
- * viewport) so it's easy to find; the right handle sits on the right panel's
- * inner edge. CSS positions each with `cursor: ew-resize`.
+ * viewport) so they're easy to find. CSS positions each with
+ * `cursor: ew-resize`.
  *
  * Width clamps: MIN..MAX (px). Below MIN the panel hides itself via the
  * existing `.hidden` class so it can still be re-opened from the tab strip.
@@ -48,8 +48,8 @@ function _applyWidth(panel, w) {
 function _wireHandle(side, { getWorkspacePath = () => null } = {}) {
   const panel = document.getElementById(side === 'left' ? 'left-panel' : 'right-panel')
   if (!panel) return
-  // The left handle lives in the tab strip (outer edge), the right handle in
-  // its panel — locate document-wide so either placement works.
+  // Both handles live in their tab strips — locate document-wide so this
+  // remains tolerant of legacy markup and focused tests.
   const handle = document.querySelector(`.panel-resize-handle[data-resize="${side}"]`)
   if (!handle) return
   const storageKey = () => side === 'left'

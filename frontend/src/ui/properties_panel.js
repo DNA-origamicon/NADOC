@@ -1,9 +1,9 @@
 /**
  * Properties panel — shows selected object details in the right panel.
  *
- * Subscribes to store.selectedObject and renders into #properties-content.
+ * Subscribes to canonical selection and resolves rich display data from the design.
  *
- * Display modes (by selectedObject.type):
+ * Display modes (by displayObject.type):
  *   strand     — per-strand summary (length nt, domains, helix coverage)
  *   domain     — per-domain detail (helix, range, direction, overhang flag)
  *   nucleotide — per-bead detail (helix, bp, backbone/base positions)
@@ -16,8 +16,15 @@
 import { store } from '../state/store.js'
 import * as api from '../api/client.js'
 import { BDNA_RISE_PER_BP } from '../constants.js'
+import { parseBaseKey } from '../scene/base_ref.js'
+import {
+  canonicalSelection, overhangSelectionTarget, extensionSelectionTarget,
+} from '../scene/selection_model.js'
+import {
+  buildStrandDisplayIdMap, selectedBaseDisplayRows, strandDisplayId,
+} from './design_display_labels.js'
 
-export function initPropertiesPanel() {
+export function initPropertiesPanel({ clearSelection } = {}) {
   const content = document.getElementById('properties-content')
   if (!content) return
 
@@ -61,9 +68,9 @@ export function initPropertiesPanel() {
       : Math.max(1, Math.round(value))
   }
 
-  function _renderStrand(selectedObject) {
+  function _renderStrand(displayObject) {
     const design = store.getState().currentDesign
-    const strandId = selectedObject.data?.strand_id
+    const strandId = displayObject.data?.strand_id
     if (!design || !strandId) {
       content.innerHTML = `<span class="dim">Strand selected.</span>`
       return
@@ -77,6 +84,8 @@ export function initPropertiesPanel() {
     }
 
     const conn = _linkerConnectionForStrand(strandId, design)
+    const displayIds = buildStrandDisplayIdMap(design.strands)
+    const displayId = displayIds.get(strandId) ?? '—'
     const logicalStrands = conn?.linker_type === 'ss'
       ? [`__lnk__${conn.id}__a`, `__lnk__${conn.id}__b`]
           .map(id => design.strands.find(s => s.id === id))
@@ -112,14 +121,14 @@ export function initPropertiesPanel() {
       const len = Math.abs(d.end_bp - d.start_bp) + 1
       return `<div class="prop-row" style="padding-left:8px">
         <span class="prop-label" style="min-width:18px">${i}</span>
-        <span class="prop-val mono">${s.id} · ${d.helix_id} · ${d.start_bp}→${d.end_bp} (${len} bp) ${d.direction}</span>
+        <span class="prop-val mono">${displayIds.get(s.id) ?? '—'} · ${d.helix_id} · ${d.start_bp}→${d.end_bp} (${len} bp) ${d.direction}</span>
       </div>`
     })).join('')
 
     content.innerHTML = `
       <div class="prop-row">
         <span class="prop-label">strand</span>
-        <span class="prop-val">${strandId}</span>
+        <span class="prop-val">${displayId}</span>
       </div>
       <div class="prop-row">
         <span class="prop-label">type</span>
@@ -148,8 +157,8 @@ export function initPropertiesPanel() {
     `
   }
 
-  function _renderNucleotide(selectedObject) {
-    const nuc = selectedObject.data
+  function _renderNucleotide(displayObject) {
+    const nuc = displayObject.data
     const design = store.getState().currentDesign
     const helix  = design?.helices?.find(h => h.id === nuc.helix_id)
 
@@ -202,15 +211,15 @@ export function initPropertiesPanel() {
           const err = store.getState().lastError
           alert(`Cannot delete helix: ${err?.message}`)
         } else {
-          store.setState({ selectedObject: null })
+          clearSelection?.()
         }
       })
     }
   }
 
-  function _renderDomain(selectedObject) {
+  function _renderDomain(displayObject) {
     const design = store.getState().currentDesign
-    const { strand_id, domain_index, helix_id, direction, overhang_id } = selectedObject.data ?? {}
+    const { strand_id, domain_index, helix_id, direction, overhang_id } = displayObject.data ?? {}
     const strand = design?.strands?.find(s => s.id === strand_id)
     const domain = strand?.domains?.[domain_index]
 
@@ -250,17 +259,96 @@ export function initPropertiesPanel() {
       </div>` : ''}
       <div class="prop-row" style="margin-top:4px">
         <span class="prop-label">strand</span>
-        <span class="prop-val mono" style="font-size:var(--text-xs)">${strand_id}</span>
+        <span class="prop-val">${strandDisplayId(strand_id, design)}</span>
       </div>
     `
   }
 
-  function _renderCrossover(selectedObject) {
-    const xo = selectedObject.data
+  function _renderOverhang(displayObject) {
+    const d = displayObject.data ?? {}
+    const sequence = d.sequence || '—'
+    const domainRange = d.domain
+      ? `${d.domain.start_bp} → ${d.domain.end_bp}`
+      : '—'
+    content.innerHTML = `
+      <div class="prop-row">
+        <span class="prop-label">overhang</span>
+        <span class="prop-val">${d.label || displayObject.id}</span>
+        <span class="tag" style="background:#f5a623;color:#000">overhang</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">sequence</span>
+        <span class="prop-val mono">${sequence}</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">domain</span>
+        <span class="prop-val">${d.domainIndex == null ? '—' : `#${d.domainIndex} (${domainRange})`}</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">strand</span>
+        <span class="prop-val">${strandDisplayId(d.strandId, store.getState().currentDesign)}</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">id</span>
+        <span class="prop-val mono" style="font-size:var(--text-xs)">${displayObject.id}</span>
+      </div>
+    `
+  }
+
+  function _renderExtension(displayObject) {
+    const d = displayObject.data ?? {}
+    const end = d.end === 'five_prime' ? '5′' : d.end === 'three_prime' ? '3′' : '—'
+    content.innerHTML = `
+      <div class="prop-row">
+        <span class="prop-label">extension</span>
+        <span class="prop-val">${d.label || displayObject.id}</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">end</span>
+        <span class="prop-val">${end}</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">sequence</span>
+        <span class="prop-val mono">${d.sequence || '—'}</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">modification</span>
+        <span class="prop-val">${d.modification || '—'}</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">strand</span>
+        <span class="prop-val">${strandDisplayId(d.strandId, store.getState().currentDesign)}</span>
+      </div>
+    `
+  }
+
+  function _renderCrossover(displayObject) {
+    const xo = displayObject.data
     if (!xo) { content.innerHTML = '<span class="dim">Crossover selected.</span>'; return }
     const extraLabel = xo.extra_bases
       ? `"${xo.extra_bases}" (${xo.extra_bases.length} nt)`
       : 'none'
+    if (displayObject.type === 'forced_ligation') {
+      content.innerHTML = `
+        <div class="prop-row">
+          <span class="prop-label">forced ligation</span>
+          <span class="prop-val mono" style="font-size:var(--text-xs)">${xo.id}</span>
+        </div>
+        <div class="prop-row">
+          <span class="prop-label">3′ end</span>
+          <span class="prop-val mono">${String(xo.three_prime_helix_id).slice(0,8)}… bp ${xo.three_prime_bp} ${xo.three_prime_direction}</span>
+        </div>
+        <div class="prop-row">
+          <span class="prop-label">5′ end</span>
+          <span class="prop-val mono">${String(xo.five_prime_helix_id).slice(0,8)}… bp ${xo.five_prime_bp} ${xo.five_prime_direction}</span>
+        </div>
+        <div class="prop-row">
+          <span class="prop-label">extra bases</span>
+          <span class="prop-val">${extraLabel}</span>
+        </div>
+      `
+      return
+    }
     content.innerHTML = `
       <div class="prop-row">
         <span class="prop-label">crossover</span>
@@ -281,13 +369,21 @@ export function initPropertiesPanel() {
     `
   }
 
-  function _renderCluster(selectedObject) {
-    const d = selectedObject.data ?? {}
+  function _renderBond(displayObject) {
+    content.innerHTML = `
+      <div class="prop-row"><span class="prop-label">bond</span><span class="prop-val">backbone</span></div>
+      <div class="prop-row"><span class="prop-label">from</span><span class="prop-val mono">${displayObject.data.fromKey}</span></div>
+      <div class="prop-row"><span class="prop-label">to</span><span class="prop-val mono">${displayObject.data.toKey}</span></div>
+    `
+  }
+
+  function _renderCluster(displayObject) {
+    const d = displayObject.data ?? {}
     const helixCount = d.helix_ids?.length ?? 0
     content.innerHTML = `
       <div class="prop-row">
         <span class="prop-label">cluster</span>
-        <span class="prop-val mono" style="font-size:var(--text-xs)">${(selectedObject.id ?? '').slice(0, 8)}…</span>
+        <span class="prop-val mono" style="font-size:var(--text-xs)">${(displayObject.id ?? '').slice(0, 8)}…</span>
       </div>
       <div class="prop-row">
         <span class="prop-label">helices</span>
@@ -300,9 +396,9 @@ export function initPropertiesPanel() {
     `
   }
 
-  function _renderProtein(selectedObject) {
+  function _renderProtein(displayObject) {
     const design = store.getState().currentDesign
-    const attId  = selectedObject.id ?? selectedObject.data?.attachment_id
+    const attId  = displayObject.id ?? displayObject.data?.attachment_id
     const att    = design?.protein_attachments?.find(a => a.id === attId)
     if (!att) {
       content.innerHTML = `<span class="dim">Protein selected.</span>`
@@ -368,72 +464,121 @@ export function initPropertiesPanel() {
     `
   }
 
-  /**
-   * Base-level pool readout (the `base` selectionLevel).
-   *
-   * That level deliberately leaves `selectedObject` null — it is a selection primitive, so
-   * consumers read `multiSelectedBaseKeys` instead. This is the only such consumer today.
-   * Keys are app-wide base keys; see scene/base_ref.js for the format.
-   */
+  /** Canonical Base-ref readout. Keys are app-wide identities from base_ref.js. */
   function _renderBaseKeys(keys) {
-    const shown = keys.slice(0, 12)
-    const rows = shown.map(k => `
-      <div class="prop-row">
-        <span class="prop-val mono" style="font-size:var(--text-xs)">${k}</span>
-      </div>`).join('')
-    const more = keys.length > shown.length
-      ? `<div class="prop-row"><span class="dim">…and ${keys.length - shown.length} more</span></div>`
-      : ''
+    const state = store.getState()
+    const rows = selectedBaseDisplayRows(keys, state.currentDesign, state.currentGeometry)
     content.innerHTML = `
       <div class="prop-row">
         <span class="prop-label">bases</span>
         <span class="prop-val">${keys.length}</span>
       </div>
-      ${rows}${more}
     `
+    for (const row of rows) {
+      const el = document.createElement('div')
+      el.className = 'prop-row'
+      const value = document.createElement('span')
+      value.className = 'prop-val'
+      value.textContent = row.label
+      el.appendChild(value)
+      content.appendChild(el)
+    }
   }
 
-  function _render(selectedObject) {
-    if (!selectedObject) {
-      const baseKeys = store.getState().multiSelectedBaseKeys ?? []
-      if (baseKeys.length) { _renderBaseKeys(baseKeys); return }
+  function _render(displayObject) {
+    if (!displayObject) {
       content.innerHTML = '<span class="dim">Click a backbone bead to select.</span>'
       return
     }
 
-    if (selectedObject.type === 'strand') {
-      _renderStrand(selectedObject)
-    } else if (selectedObject.type === 'domain') {
-      _renderDomain(selectedObject)
-    } else if (selectedObject.type === 'nucleotide') {
-      _renderNucleotide(selectedObject)
-    } else if (selectedObject.type === 'cone') {
-      // Cone selected — show strand info for the strand it belongs to
-      _renderStrand({
-        type: 'strand',
-        data: { strand_id: selectedObject.data?.strand_id },
-      })
-    } else if (selectedObject.type === 'crossover') {
-      _renderCrossover(selectedObject)
-    } else if (selectedObject.type === 'cluster') {
-      _renderCluster(selectedObject)
-    } else if (selectedObject.type === 'protein') {
-      _renderProtein(selectedObject)
+    if (displayObject.type === 'strand') {
+      _renderStrand(displayObject)
+    } else if (displayObject.type === 'domain') {
+      _renderDomain(displayObject)
+    } else if (displayObject.type === 'overhang') {
+      _renderOverhang(displayObject)
+    } else if (displayObject.type === 'extension') {
+      _renderExtension(displayObject)
+    } else if (displayObject.type === 'nucleotide') {
+      _renderNucleotide(displayObject)
+    } else if (displayObject.type === 'bond') {
+      _renderBond(displayObject)
+    } else if (displayObject.type === 'crossover' || displayObject.type === 'forced_ligation') {
+      _renderCrossover(displayObject)
+    } else if (displayObject.type === 'cluster') {
+      _renderCluster(displayObject)
+    } else if (displayObject.type === 'protein') {
+      _renderProtein(displayObject)
     } else {
-      _renderNucleotide(selectedObject)
+      _renderNucleotide(displayObject)
     }
   }
 
+  function _canonicalDisplay(state) {
+    const selection = canonicalSelection(state)
+    const baseKeys = selection.items.filter(ref => ref.kind === 'base').map(ref => ref.key)
+    if (baseKeys.length) return { baseKeys, displayObject: null }
+    const ref = selection.primary
+    if (ref?.kind === 'strand') {
+      return { baseKeys: [], displayObject: { type: 'strand', id: ref.id, data: { strand_id: ref.id } } }
+    }
+    if (ref?.kind === 'domain') {
+      const domain = state.currentDesign?.strands?.find(s => s.id === ref.strandId)?.domains?.[ref.domainIndex]
+      return { baseKeys: [], displayObject: { type: 'domain', id: `${ref.strandId}:${ref.domainIndex}`, data: {
+        strand_id: ref.strandId, domain_index: ref.domainIndex,
+        helix_id: domain?.helix_id ?? null, direction: domain?.direction ?? null,
+        overhang_id: domain?.overhang_id ?? null,
+      } } }
+    }
+    if (ref?.kind === 'overhang') {
+      const target = overhangSelectionTarget(state, ref)
+      return { baseKeys: [], displayObject: { type: 'overhang', id: ref.id, data: {
+        ...(target?.overhang ?? {}), strandId: target?.strandId ?? null,
+        domain: target?.domain ?? null, domainIndex: target?.domainIndex ?? null,
+      } } }
+    }
+    if (ref?.kind === 'extension') {
+      const target = extensionSelectionTarget(state, ref)
+      return { baseKeys: [], displayObject: { type: 'extension', id: ref.id, data: {
+        ...(target?.extension ?? {}), strandId: target?.strandId ?? null,
+      } } }
+    }
+    if (ref?.kind === 'cluster') {
+      const cluster = state.currentDesign?.cluster_transforms?.find(item => item.id === ref.id)
+      return { baseKeys: [], displayObject: { type: 'cluster', id: ref.id, data: cluster ?? { cluster_id: ref.id } } }
+    }
+    if (ref?.kind === 'bond') {
+      return { baseKeys: [], displayObject: { type: 'bond', data: {
+        fromKey: ref.fromKey, toKey: ref.toKey,
+        strandId: ref.strandId ?? null,
+        from: parseBaseKey(ref.fromKey), to: parseBaseKey(ref.toKey),
+      } } }
+    }
+    if (ref?.kind === 'crossover') {
+      const collection = ref.subtype === 'forced_ligation'
+        ? state.currentDesign?.forced_ligations : state.currentDesign?.crossovers
+      const entity = collection?.find(item => item.id === ref.id) ?? { id: ref.id }
+      return { baseKeys: [], displayObject: { type: ref.subtype, id: ref.id, data: entity } }
+    }
+    if (ref?.kind === 'protein') {
+      return { baseKeys: [], displayObject: { type: 'protein', id: ref.id, data: { attachment_id: ref.id } } }
+    }
+    return { baseKeys: [], displayObject: null }
+  }
+
+  function _renderState(state) {
+    const display = _canonicalDisplay(state)
+    if (display.baseKeys.length) _renderBaseKeys(display.baseKeys)
+    else _render(display.displayObject)
+  }
+
   // Initial render
-  _render(store.getState().selectedObject)
+  _renderState(store.getState())
 
   // Subscribe to both selection and design changes (design change updates strand lengths)
   store.subscribe((newState, prevState) => {
-    const selChanged = newState.selectedObject !== prevState.selectedObject
+    const selChanged = newState.selection !== prevState.selection
     const designChanged = newState.currentDesign !== prevState.currentDesign
-    const baseChanged = newState.multiSelectedBaseKeys !== prevState.multiSelectedBaseKeys
-    if (selChanged || baseChanged || (designChanged && newState.selectedObject)) {
-      _render(newState.selectedObject)
-    }
+    if (selChanged || designChanged) _renderState(newState)
   })
 }

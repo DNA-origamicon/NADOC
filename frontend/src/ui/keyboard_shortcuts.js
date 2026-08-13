@@ -40,6 +40,8 @@ import { showToast } from './toast.js'
 import { nextTabLevel } from '../scene/selection_level.js'
 import { nearestWorkspaceAxis, signedAlong } from '../scene/axis_snap.js'
 import { isValidPair, ligationArgs } from '../scene/force_crossover_tool.js'
+import { canonicalSelection } from '../scene/selection_model.js'
+import { parseBaseKey } from '../scene/base_ref.js'
 
 export function initKeyboardShortcuts(deps) {
   const {
@@ -117,9 +119,7 @@ export function initKeyboardShortcuts(deps) {
     blockedWhen: () => store.getState().assemblyActive || isDeformActive(),
     handler(e) {
       // Don't steal a real text copy — only claim the key when a cluster is selected.
-      const st = store.getState()
-      const hasCluster = st.selectedObject?.type === 'cluster'
-        || (st.multiSelectedClusterIds?.length ?? 0) > 0
+      const hasCluster = canonicalSelection(store.getState()).items.some(ref => ref.kind === 'cluster')
       if (!hasCluster) return
       e.preventDefault()
       clusterClipboard.copy()
@@ -481,10 +481,8 @@ export function initKeyboardShortcuts(deps) {
   // 'x' — forced ligation. Multi-select a 5′ end and a 3′ end at the End
   // selection level (the End filter button / Tab-to-ends), using the NORMAL
   // selection gestures — lasso the two ends, or Ctrl-click / Shift-click each —
-  // then press x to merge the two strands into one. All three of those gestures
-  // land the picked ends in the same gold end-bead set that `getCtrlBeads()`
-  // returns (see `_toggleEndBead` / the end branch of the lasso in
-  // selection_manager.js), so this reads straight from there. Reuses the
+  // then press x to merge the two strands into one. Those gestures create canonical
+  // End refs; Alt-picked measurement anchors are a separate tool pool. Reuses the
   // force-crossover tool's pure validators (one 5′ + one 3′, on different
   // strands) and the /design/forced-ligation backend. Any 3′↔5′ pair is allowed
   // regardless of helix adjacency, matching the toolbar fxover tool + the
@@ -495,16 +493,16 @@ export function initKeyboardShortcuts(deps) {
     blockedInInput: true,
     async handler(e) {
       if (store.getState().assemblyActive) return   // design-mode only
-      const ctrlBeads = selectionManager.getCtrlBeads()
-      if (ctrlBeads.length !== 2) return
+      const endBeads = selectionManager.getSelectedEndBeads?.() ?? []
+      if (endBeads.length !== 2) return
       e.preventDefault()
-      const [a, b] = ctrlBeads
+      const [a, b] = endBeads
       if (!isValidPair(a.nuc, b.nuc)) {
         showToast('Forced ligation needs one 5′ and one 3′ end on different strands')
         return
       }
       const { three_prime_strand_id, five_prime_strand_id } = ligationArgs(a.nuc, b.nuc)
-      selectionManager.clearCtrlBeads()
+      selectionManager.clearEndSelection?.()
       const ok = await api.forcedLigation(three_prime_strand_id, five_prime_strand_id)
       if (!ok) {
         const err = store.getState().lastError
@@ -543,125 +541,66 @@ export function initKeyboardShortcuts(deps) {
     blockedInInput: true,
     async handler(e) {
       e.preventDefault()
-      const { selectedObject, multiSelectedStrandIds, multiSelectedOverhangIds } = store.getState()
+      const state = store.getState()
+      const refs = canonicalSelection(state).items
 
-      if (multiSelectedOverhangIds?.length > 0) {
-        const ids = [...multiSelectedOverhangIds]
+      const overhangIds = refs.filter(ref => ref.kind === 'overhang').map(ref => ref.id)
+      if (overhangIds.length > 0) {
+        const ids = [...overhangIds]
         selectionManager.clearMultiOverhangSelection?.()
         ooClose()
         await api.deleteOverhangs(ids)
         return
       }
 
-      if (multiSelectedStrandIds?.length > 0) {
-        const ids = [...multiSelectedStrandIds]
+      const extensionIds = refs.filter(ref => ref.kind === 'extension').map(ref => ref.id)
+      if (extensionIds.length > 0) {
+        selectionManager.clearMultiExtensionSelection?.()
+        await api.deleteStrandExtensionsBatch(extensionIds)
+        return
+      }
+
+      const strandIds = [...new Set(refs.filter(ref => ref.kind === 'strand').map(ref => ref.id))]
+      if (strandIds.length > 0) {
+        const ids = strandIds
         if (ids.length === 1) await api.deleteStrand(ids[0])
         else await api.deleteStrandsBatch(ids)
         return
       }
 
-      const { multiSelectedDomainIds } = store.getState()
-      if (multiSelectedDomainIds?.length > 0) {
-        const ids = [...new Set(multiSelectedDomainIds.map(d => d.strandId))]
+      const domainStrandIds = [...new Set(refs.filter(ref => ref.kind === 'domain').map(ref => ref.strandId))]
+      if (domainStrandIds.length > 0) {
+        const ids = domainStrandIds
         if (ids.length === 1) await api.deleteStrand(ids[0])
         else await api.deleteStrandsBatch(ids)
         return
       }
 
-      const multiArcs = selectionManager.getMultiCrossoverArcs()
-      if (multiArcs.length > 0) {
-        selectionManager.clearMultiCrossoverArcs()
-        const design = store.getState().currentDesign
-        const flIds = new Set((design?.forced_ligations ?? []).map(fl => fl.id))
-
-        // Split arcs three ways:
-        //  • forced ligations       → deleteForcedLigation (splits strand + drops FL record)
-        //  • record-backed crossovers → deleteCrossover     (desplices strand + drops record)
-        //  • record-less crossovers  → addNick              (pure strand-topology, no record)
-        // Nicking a record-backed crossover only splits the strand; the record
-        // survives and the arc is redrawn from it, so those MUST go through the
-        // record-delete route instead.
-        const flArcIds = []
-        const xoRecIds = []
-        const nicks = []
-        for (const a of multiArcs) {
-          if (flIds.has(a.crossover_id)) {
-            flArcIds.push(a.crossover_id)
-          } else if (a.crossover_id) {
-            xoRecIds.push(a.crossover_id)
-          } else if (a.fromNuc) {
-            nicks.push({
-              helixId:   a.fromNuc.helix_id,
-              bpIndex:   a.fromNuc.bp_index,
-              direction: a.fromNuc.direction,
-            })
-          }
-        }
-
-        // Delete forced ligations (splits strands + removes FL records)
-        if (flArcIds.length === 1) await api.deleteForcedLigation(flArcIds[0])
-        else if (flArcIds.length > 1) await api.batchDeleteForcedLigations(flArcIds)
-
-        // Delete record-backed crossovers (desplices + removes record)
-        if (xoRecIds.length === 1) await api.deleteCrossover(xoRecIds[0])
-        else if (xoRecIds.length > 1) await api.batchDeleteCrossovers(xoRecIds)
-
-        // Nick record-less crossovers
-        if (nicks.length === 1) await api.addNick(nicks[0])
-        else if (nicks.length > 1) await api.addNickBatch(nicks)
-        return
-      }
-
-      if (!selectedObject) return
-
-      // Single plain-clicked forced ligation → split the strands + drop the FL
-      // record (same backend call as the multi path, one id).
-      if (selectedObject.type === 'forced_ligation') {
+      const crossoverRefs = refs.filter(ref => ref.kind === 'crossover')
+      if (crossoverRefs.length > 0) {
         selectionManager.clearSelection?.()
-        await api.deleteForcedLigation(selectedObject.id)
+        const flIds = crossoverRefs.filter(ref => ref.subtype === 'forced_ligation').map(ref => ref.id)
+        const xoIds = crossoverRefs.filter(ref => ref.subtype === 'crossover').map(ref => ref.id)
+        if (flIds.length === 1) await api.deleteForcedLigation(flIds[0])
+        else if (flIds.length > 1) await api.batchDeleteForcedLigations(flIds)
+        if (xoIds.length === 1) await api.deleteCrossover(xoIds[0])
+        else if (xoIds.length > 1) await api.batchDeleteCrossovers(xoIds)
         return
       }
 
-      // Single plain-clicked crossover → remove it.  A record-backed crossover
-      // must go through deleteCrossover (desplices the strand AND drops the
-      // record); nicking alone leaves the record, which is redrawn as the arc.
-      // Only record-less crossovers (pure strand topology, e.g. imported
-      // scaffold routing) fall back to a nick at the arc origin.
-      if (selectedObject.type === 'crossover') {
-        const arc = selectionManager.getSelectedCrossoverArc?.()
-        selectionManager.clearSelection?.()
-        if (arc?.crossover_id) {
-          await api.deleteCrossover(arc.crossover_id)
-        } else if (arc?.fromNuc) {
-          await api.addNick({
-            helixId:   arc.fromNuc.helix_id,
-            bpIndex:   arc.fromNuc.bp_index,
-            direction: arc.fromNuc.direction,
-          })
-        }
-        return
-      }
-
-      if (selectedObject.type === 'strand' || selectedObject.type === 'bead' || selectedObject.type === 'nucleotide') {
-        const strandId = selectedObject.data?.strand_id
-        if (strandId) await api.deleteStrand(strandId)
-      } else if (selectedObject.type === 'domain') {
-        const strandId = selectedObject.data?.strand_id
-        if (/^__lnk__.+__(a|b)$/.test(strandId ?? '')) await api.deleteStrand(strandId)
-      } else if (selectedObject.type === 'cone') {
-        const strandId = selectedObject.data?.strand_id
-        if (/^__lnk__.+__(a|b)$/.test(strandId ?? '')) {
-          await api.deleteStrand(strandId)
+      const bondRef = refs.find(ref => ref.kind === 'bond')
+      if (bondRef) {
+        if (/^__lnk__.+__(a|b)$/.test(bondRef.strandId ?? '')) {
+          selectionManager.clearSelection?.()
+          await api.deleteStrand(bondRef.strandId)
           return
         }
-        const fromNuc = selectedObject.data?.fromNuc
-        if (fromNuc) {
-          await api.addNick({
-            helixId:   fromNuc.helix_id,
-            bpIndex:   fromNuc.bp_index,
-            direction: fromNuc.direction,
-          })
-        }
+        const from = parseBaseKey(bondRef.fromKey)
+        selectionManager.clearSelection?.()
+        if (from) await api.addNick({
+          helixId: from.helix_id, bpIndex: from.bp_index, direction: from.direction,
+        })
+        return
       }
     },
   })

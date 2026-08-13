@@ -25,56 +25,25 @@ import {
  *
  * @param {object}  ctx       { colorMode, strandColors:Map, baseColors:Map, clusterColors:Map }
  * @param {object}  atom      atom record
- * @param {object|null} sel   current selection
- * @param {string[]}    multiIds  multi-lasso strand ids
+ * @param {object} selection canonical atom-selection descriptor
  */
-export function colorForAtom(ctx, atom, sel, multiIds) {
+export function colorForAtom(ctx, atom, selection) {
   const el      = atom.element
   const cpk     = ELEMENTS[el]?.color ?? DEFAULT_ELEMENT.color
   const normal  = _normalColor(ctx, atom, cpk)
 
-  // Multi-lasso selection overrides everything
-  if (multiIds.length > 0) {
-    return multiIds.includes(atom.strand_id) ? C_HIGHLIGHT : normal
+  if (selection?.extensionIds?.includes(atom.extension_id)) return C_HIGHLIGHT
+  if (selection?.helixIds?.includes(atom.helix_id)) return C_HIGHLIGHT
+  if (selection?.strandIds?.includes(atom.strand_id)) return C_HIGHLIGHT
+  if (selection?.domains?.some(domain =>
+    atom.strand_id === domain.strandId && atom.helix_id === domain.helixId &&
+    atom.direction === domain.direction && atom.bp_index >= domain.lo && atom.bp_index <= domain.hi)) {
+    return C_HIGHLIGHT
   }
-
-  if (!sel) return normal
-
-  const type = sel.type
-  const data = sel.data ?? {}
-
-  if (type === 'strand') {
-    return atom.strand_id === data.strand_id ? C_HIGHLIGHT : normal
-  }
-
-  if (type === 'domain') {
-    if (atom.strand_id !== data.strand_id) return normal
-    // Exact domain match: same helix + same direction within the strand
-    const inDomain = atom.helix_id  === data.helix_id
-                  && atom.direction === data.direction
-    return inDomain ? C_HIGHLIGHT : normal
-  }
-
-  if (type === 'nucleotide') {
-    if (atom.strand_id !== data.strand_id) return normal
-    if (atom.bp_index  === data.bp_index
-     && atom.direction === data.direction)       return C_HIGHLIGHT
-    // Same strand, same domain (direction match): medium
-    if (atom.direction === data.direction)       return normal
-    // Same strand, other domain
-    return normal
-  }
-
-  if (type === 'cone') {
-    // Cones belong to a strand; highlight that strand
-    return atom.strand_id === data.strand_id ? C_HIGHLIGHT : normal
-  }
-
-  if (type === 'protein') {
-    return normal
-  }
-
-  return _colorByMode(ctx, atom, cpk)
+  if (selection?.bases?.some(base =>
+    atom.helix_id === base.helix_id && atom.bp_index === base.bp_index &&
+    atom.direction === base.direction)) return C_HIGHLIGHT
+  return normal
 }
 
 /** Normal display colour, including scalar overlays, with no selection treatment. */
@@ -123,10 +92,10 @@ function _colorByMode(ctx, atom, cpk) {
 }
 
 /** Resolve the final colour for one atom under the current mode + selection. */
-export function resolveAtomColor(ctx, atom, sel, multiIds, hasSelection) {
+export function resolveAtomColor(ctx, atom, selection, hasSelection) {
   const el  = atom.element
   const cpk = ELEMENTS[el]?.color ?? DEFAULT_ELEMENT.color
-  if (hasSelection) return colorForAtom(ctx, atom, sel, multiIds)
+  if (hasSelection) return colorForAtom(ctx, atom, selection)
   // Scalar overlay (e.g. oxDNA flexibility map): when present and nothing is
   // selected, an atom's nucleotide colour wins over CPK/strand so the heavy rep
   // shows the SAME rigid→flexible ramp as the beads.  Keyed by helix:bp:dir.

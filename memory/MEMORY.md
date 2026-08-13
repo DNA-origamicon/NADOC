@@ -85,6 +85,8 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 
 **Workspace / UX:** **[ux_overhaul](project_ux_overhaul.md)** (P2 — sole owner of file-browser/library/sidebar/modal/toast ground; read before any UI-chrome work. `drag_scrub.js` + `overhang_binding_lines.js` are gone despite the archive)
 
+**Selection:** **[mature_selection_model](project_selection_model.md)** (SHIPPED architecture contract — normalized refs, intent-driven sole-writer controller, derived highlighting, explicit assembly boundary, and regression gates. Read before changing selection state or consumers.)
+
 **Display / representation:** [ssdna_ball_joints](project_ssdna_ball_joints.md) · [photo_mode](project_photo_mode.md) · [hull_prism](project_hull_prism.md) · **[mixed_representation](project_mixed_representation.md)** (SHIPPED; P1 — deformed cylinders + impostors uncovered, suspected photo-export bead bug) · [strand_animations](project_strand_animations.md) · [reference_geometry](project_reference_geometry.md) · [protein_attachment](project_protein_attachment.md) (SHIPPED incl. conjugation picker; P2 — only Phase 3 assembly-scope left) · [headless_build](project_headless_build.md) · [sphere_impostors](project_sphere_impostors.md)
 
 **Sequences:** **[strand_sequence_edit](project_strand_sequence_edit.md)** (hand-edit a strand's bases; targeted vs design-wide re-derive)

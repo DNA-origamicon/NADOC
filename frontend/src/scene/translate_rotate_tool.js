@@ -2,6 +2,8 @@ import { quatToEulerDeg } from './rotation_math.js'
 import { showToast } from '../ui/toast.js'
 import { showOpProgress, hideOpProgress } from '../ui/op_progress.js'
 import { registerShortcut } from '../input/shortcuts.js'
+import { canonicalSelection, selectedClusterIds } from './selection_model.js'
+import { parseBaseKey } from './base_ref.js'
 
 /**
  * Translate/Rotate tool — the design-mode cluster gizmo + assembly-mode instance
@@ -26,7 +28,7 @@ import { registerShortcut } from '../input/shortcuts.js'
  */
 export function decideSelectionAction({ newSel, toolActive, activeClusterId, mode }) {
   const partsEditor = !!mode && !mode.assemblyActive && !mode.cadnanoActive && !mode.unfoldActive
-  const newCid = newSel?.type === 'cluster' ? (newSel.data?.cluster_id ?? newSel.id ?? null) : null
+  const newCid = newSel?.kind === 'cluster' ? newSel.id ?? null : null
   // Selection never arms or closes the tool. Once explicitly armed, a cluster click
   // may still retarget the live gizmo; this keeps selection and tool activation as
   // separate user actions while preserving the useful in-tool switching gesture.
@@ -43,18 +45,18 @@ export function decideSelectionAction({ newSel, toolActive, activeClusterId, mod
  * by the design model. It intentionally does not invent a persistent cluster:
  * ClusterRigidTransform currently bottoms out at domains, not individual beads.
  */
-export function resolveSelectionClusterId(selectedObject, design) {
+export function resolveSelectionClusterId(ref, design) {
   const clusters = design?.cluster_transforms ?? []
-  if (!selectedObject || !clusters.length) return null
-  if (selectedObject.type === 'cluster') {
-    const id = selectedObject.data?.cluster_id ?? selectedObject.id ?? null
+  if (!ref || !clusters.length) return null
+  if (ref.kind === 'cluster') {
+    const id = ref.id ?? null
     return clusters.some(c => c.id === id) ? id : null
   }
 
-  const data = selectedObject.data ?? {}
-  const strandId = data.strand_id ?? selectedObject.strand_id ?? null
-  const domainIndex = Number.isInteger(data.domain_index) ? data.domain_index : null
-  let helixId = data.helix_id ?? null
+  const strandId = ref.kind === 'strand' ? ref.id : ref.kind === 'domain' ? ref.strandId : null
+  const domainIndex = ref.kind === 'domain' ? ref.domainIndex : null
+  const base = (ref.kind === 'base' || ref.kind === 'end') ? parseBaseKey(ref.key) : null
+  let helixId = base?.helix_id !== '__xb__' ? base?.helix_id ?? null : null
   if (strandId && domainIndex != null) {
     const exact = clusters.find(c => (c.domain_ids ?? []).some(
       d => d.strand_id === strandId && d.domain_index === domainIndex))
@@ -216,10 +218,10 @@ export function initTranslateRotateTool(deps) {
 
     // ── Multi-selected clusters → drive them all as one rigid body ──────────────
     // Only when the caller did NOT pre-target a specific cluster (Rotate button,
-    // joint rotate, strand-click retarget all pass one). The selection lives in
-    // store.multiSelectedClusterIds; keep only ids that are real movable clusters.
+    // joint rotate, strand-click retarget all pass one). Keep only canonical ids
+    // that are real movable clusters.
     if (!targetClusterId) {
-      const groupIds = (store.getState().multiSelectedClusterIds ?? [])
+      const groupIds = selectedClusterIds(store.getState())
         .filter(id => clusters.some(c => c.id === id))
       if (groupIds.length > 1) {
         await _showClusterGroup(groupIds, clusters)
@@ -577,12 +579,13 @@ export function initTranslateRotateTool(deps) {
 
   // Selection→tool bridge: opening/re-targeting/closing the tool in response to cluster
   // selection (3D cluster-filter click OR Movable Clusters sidebar row — both surface as a
-  // `selectedObject` of type 'cluster'). Registered from main.js beside the other tool
+  // canonical cluster ref). Registered from main.js beside the other tool
   // subscribers so subscription order is explicit.
   async function _handleSelectionChange(newState, prevState) {
-    if (newState.selectedObject === prevState.selectedObject) return
+    if (newState.selection === prevState.selection) return
+    if (selectedClusterIds(newState).length !== 1) return
     const { action, clusterId } = decideSelectionAction({
-      newSel:          newState.selectedObject,
+      newSel:          canonicalSelection(newState).primary,
       toolActive:      getActive(),
       activeClusterId: newState.activeClusterId,
       mode: {
@@ -599,16 +602,16 @@ export function initTranslateRotateTool(deps) {
     }
   }
 
-  // Live multi-select bridge: while the design-mode tool is active, follow changes to
-  // store.multiSelectedClusterIds so the gizmo stays up and re-centers as clusters are
+  // Live multi-select bridge: while the design-mode tool is active, follow canonical
+  // cluster refs so the gizmo stays up and re-centers as clusters are
   // ctrl/shift-clicked or lassoed in/out. >=2 → group; exactly 1 → single (only when
   // leaving a group or landing on a different cluster); 0 → leave it to _handleSelectionChange.
   async function _handleMultiClusterSelectionChange(newState, prevState) {
-    if (newState.multiSelectedClusterIds === prevState.multiSelectedClusterIds) return
+    if (newState.selection === prevState.selection) return
     if (!getActive()) return
     if (newState.assemblyActive || newState.cadnanoActive || newState.unfoldActive) return
     const clusters = newState.currentDesign?.cluster_transforms ?? []
-    const groupIds = (newState.multiSelectedClusterIds ?? []).filter(id => clusters.some(c => c.id === id))
+    const groupIds = selectedClusterIds(newState).filter(id => clusters.some(c => c.id === id))
     if (groupIds.length >= 2) {
       await _showClusterGroup(groupIds, clusters)
     } else if (groupIds.length === 1) {
@@ -690,7 +693,7 @@ export function initTranslateRotateTool(deps) {
     const st = store.getState()
     const target = st.assemblyActive
       ? null
-      : resolveSelectionClusterId(st.selectedObject, st.currentDesign)
+      : resolveSelectionClusterId(canonicalSelection(st).primary, st.currentDesign)
     return _activateTranslateRotateTool(target)
   }
 

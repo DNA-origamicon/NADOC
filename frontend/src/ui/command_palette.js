@@ -9,6 +9,7 @@
 import * as api from '../api/client.js'
 import { store } from '../state/store.js'
 import { BDNA_RISE_PER_BP } from '../constants.js'
+import { selectedStrandIds } from '../scene/selection_model.js'
 
 // ── Action registry ───────────────────────────────────────────────────────────
 
@@ -236,10 +237,9 @@ function _openNewDesignForm() {
 }
 
 async function _setSelectedAsScaffold() {
-  const { selectedObject, currentDesign } = store.getState()
-  if (!selectedObject) { close(); return }
-
-  const strandId = selectedObject.data?.strand_id
+  const state = store.getState()
+  const { currentDesign } = state
+  const strandId = selectedStrandIds(state)[0]
   if (!strandId) { close(); return }
 
   const strand = currentDesign?.strands?.find(s => s.id === strandId)

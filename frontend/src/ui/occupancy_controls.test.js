@@ -552,7 +552,10 @@ describe('scope: whole structure vs specific elements', () => {
   it('uses nucleotide coordinates when the scope contains crossover extra bases', async () => {
     const { ctrl, api } = await mount({
       currentDesign: { helices: [], crossovers: [{ id: 'xo1' }, { id: 'xo2' }] },
-      multiSelectedBaseKeys: ['__xb__:xo1:0', '__xb__:xo2:0'],
+      selection: { items: [
+        { kind: 'base', key: '__xb__:xo1:0' },
+        { kind: 'base', key: '__xb__:xo2:0' },
+      ] },
     })
     document.getElementById('oxdna-jobs-occupancy-basis').innerHTML =
       '<option value="bp" selected>bp</option><option value="nt">nt</option>'
@@ -627,9 +630,8 @@ describe('scope: whole structure vs specific elements', () => {
 
   it('POSTs the resolved selection once elements are picked', async () => {
     const { ctrl, api } = await mount({
-      selectedObject: { type: 'cluster', id: 'c1' },
-      multiSelectedClusterIds: [], multiSelectedStrandIds: [],
-      multiSelectedDomainIds: [], multiSelectedOverhangIds: [], ctrlBeadNucs: [],
+      selection: { items: [{ kind: 'cluster', id: 'c1' }] },
+      ctrlBeadNucs: [],
     })
     setScope('selection')
     document.getElementById('oxdna-occupancy-scope-add').click()
@@ -642,9 +644,8 @@ describe('scope: whole structure vs specific elements', () => {
 
   it('a different scope is a different analysis — it must not reuse the cache', async () => {
     const { ctrl, api } = await mount({
-      selectedObject: { type: 'cluster', id: 'c1' },
-      multiSelectedClusterIds: [], multiSelectedStrandIds: [],
-      multiSelectedDomainIds: [], multiSelectedOverhangIds: [], ctrlBeadNucs: [],
+      selection: { items: [{ kind: 'cluster', id: 'c1' }] },
+      ctrlBeadNucs: [],
     })
     await ctrl.refresh()                       // whole structure → GET
     setScope('selection')

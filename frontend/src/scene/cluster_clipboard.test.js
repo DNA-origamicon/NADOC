@@ -26,8 +26,7 @@ function setup(stateOverrides = {}) {
   const store = createMockStore({
     currentDesign: DESIGN,
     currentHelixAxes: AXES,
-    selectedObject: null,
-    multiSelectedClusterIds: [],
+    selection: { items: [] },
     ...stateOverrides,
   })
   const scene = new THREE.Scene()
@@ -41,7 +40,7 @@ function setup(stateOverrides = {}) {
   return { clipboard, store, scene, slicePlane, api, showToast }
 }
 
-const selectCluster = (id) => ({ selectedObject: { type: 'cluster', id } })
+const selectCluster = (id) => ({ selection: { items: [{ kind: 'cluster', id }] } })
 
 describe('copy', () => {
   it('refuses when nothing is selected', () => {
@@ -63,7 +62,7 @@ describe('copy', () => {
   })
 
   it('reads the multi-select cluster pool', () => {
-    const { clipboard, showToast } = setup({ multiSelectedClusterIds: ['cB'] })
+    const { clipboard, showToast } = setup(selectCluster('cB'))
     expect(clipboard.copy()).toBe(true)
     expect(showToast).toHaveBeenCalledWith('Copied 1 cluster (1 helices)')
   })

@@ -22,6 +22,7 @@ import { showToast } from './toast.js'
 import { pushGroupUndo } from '../state/store.js'
 import { buildStapleColorMap } from '../scene/helix_renderer.js'
 import { hexFromInt } from '../scene/color_util.js'
+import { selectedStrandIds } from '../scene/selection_model.js'
 
 /**
  * Pure: base per-strand colors merged with group color overrides.
@@ -254,11 +255,12 @@ export function initStrandGroupsPanel({ store, selectionManager }) {
 
   newBtn.addEventListener('click', () => {
     pushGroupUndo()
-    const { strandGroups, multiSelectedStrandIds } = store.getState()
+    const state = store.getState()
+    const { strandGroups } = state
     const n = strandGroups.length + 1
     const colors = ['#74b9ff', '#6bcb77', '#ff6b6b', '#ffd93d', '#a29bfe', '#55efc4']
     const color = colors[(n - 1) % colors.length]
-    const initialIds = multiSelectedStrandIds?.length > 0 ? [...multiSelectedStrandIds] : []
+    const initialIds = selectedStrandIds(state)
     // Remove selected strands from any existing group before adding to the new one.
     const trimmed = trimGroupsRemovingStrands(strandGroups, initialIds)
     store.setState({

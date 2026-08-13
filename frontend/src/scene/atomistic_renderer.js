@@ -29,7 +29,7 @@
  *   const ar = initAtomisticRenderer(scene)
  *   ar.update(atomData)                        // atomData = GET /api/design/atomistic
  *   ar.setMode('vdw')                          // 'vdw' | 'ballstick' | 'off'
- *   ar.highlight(selectedObject, multiIds)     // call on store change
+ *   ar.highlight(selectionDescriptor)          // call on canonical selection change
  *   ar.dispose()
  */
 
@@ -110,7 +110,6 @@ export function initAtomisticRenderer(scene) {
     lastData:       null,
     // Last highlight params — re-applied after rebuild so mode-switch preserves colour.
     lastSel:        null,
-    lastMulti:      [],
     geom:           createGeometryState(),
   }
 
@@ -318,7 +317,7 @@ export function initAtomisticRenderer(scene) {
     }
 
     // Re-apply last known highlight state after geometry rebuild
-    _applyColors(_state.lastSel, _state.lastMulti)
+    _applyColors(_state.lastSel)
     _notifyAtoms()
   }
 
@@ -334,8 +333,10 @@ export function initAtomisticRenderer(scene) {
              scalarColors: _scalarColors, clusterColors: _state.clusterColors }
   }
 
-  function _applyColors(sel, multiIds) {
-    const hasSelection = sel != null || multiIds.length > 0
+  function _applyColors(selection) {
+    const hasSelection = !!(selection && (
+      selection.strandIds?.length || selection.domains?.length || selection.bases?.length ||
+      selection.extensionIds?.length || selection.helixIds?.length))
     const tColor = _state.geom.tColor
     const ctx    = _colorCtx()
     const table  = _state.atoms
@@ -345,7 +346,7 @@ export function initAtomisticRenderer(scene) {
       for (let i = 0; i < group.length; i++) {
         // table.get() may be a shared flyweight — resolveAtomColor reads it and returns
         // a number, so it never outlives this call. See atom_table.js.
-        const hex = resolveAtomColor(ctx, table.get(group[i]), sel, multiIds, hasSelection)
+        const hex = resolveAtomColor(ctx, table.get(group[i]), selection, hasSelection)
         tColor.setHex(hex)
         mesh.setColorAt(i, tColor)
         dirty = true
@@ -365,7 +366,7 @@ export function initAtomisticRenderer(scene) {
     const bidx = _state.bondAtomIdx
     if (_state.bondMesh && bidx?.length) {
       for (let i = 0; i < bidx.length / 2; i++) {
-        const hex = resolveAtomColor(ctx, table.get(bidx[i * 2]), sel, multiIds, hasSelection)
+        const hex = resolveAtomColor(ctx, table.get(bidx[i * 2]), selection, hasSelection)
         tColor.setHex(hex)
         _state.bondMesh.setColorAt(i, tColor)
       }
@@ -694,15 +695,11 @@ export function initAtomisticRenderer(scene) {
 
     /**
      * Apply selection highlight.
-     * Call whenever store.selectedObject or store.multiSelectedStrandIds changes.
-     *
-     * @param {object|null} selectedObject  — store.selectedObject
-     * @param {string[]}    multiIds        — store.multiSelectedStrandIds (default [])
+     * Call whenever canonical selection changes.
      */
-    highlight(selectedObject, multiIds = []) {
-      _state.lastSel   = selectedObject
-      _state.lastMulti = multiIds
-      _applyColors(selectedObject, multiIds)
+    highlight(selection) {
+      _state.lastSel = selection
+      _applyColors(selection)
     },
 
     /** Remove all scene objects and free GPU memory. */
@@ -737,7 +734,7 @@ export function initAtomisticRenderer(scene) {
       _colorMode    = mode
       _strandColors = strandColors instanceof Map ? strandColors : new Map()
       if (baseColors instanceof Map) _baseColors = baseColors
-      _applyColors(_state.lastSel, _state.lastMulti)
+      _applyColors(_state.lastSel)
     },
 
     /**
@@ -759,7 +756,7 @@ export function initAtomisticRenderer(scene) {
       _state.clusterColors = nextColors
       if (!next.size && !_state.nucAlphas.size) {
         // No fade either way — but a colour change still needs a repaint.
-        if (hadColors || nextColors.size) _applyColors(_state.lastSel, _state.lastMulti)
+        if (hadColors || nextColors.size) _applyColors(_state.lastSel)
         return
       }
       const clearing = !next.size
@@ -775,7 +772,7 @@ export function initAtomisticRenderer(scene) {
           for (let i = 0; i < bidx.length / 2; i++) setInstanceAlpha(_state.bondMesh, i, 1)
         }
       }
-      _applyColors(_state.lastSel, _state.lastMulti)
+      _applyColors(_state.lastSel)
     },
 
     /**
@@ -787,14 +784,14 @@ export function initAtomisticRenderer(scene) {
     applyScalarColors(map) {
       _scalarColors = map instanceof Map ? map
         : (map && typeof map === 'object' ? new Map(Object.entries(map)) : null)
-      _applyColors(_state.lastSel, _state.lastMulti)
+      _applyColors(_state.lastSel)
     },
 
     /** Drop the scalar overlay → atoms return to CPK/strand/base colouring. */
     clearScalarColors() {
       if (!_scalarColors) return
       _scalarColors = null
-      _applyColors(_state.lastSel, _state.lastMulti)
+      _applyColors(_state.lastSel)
     },
 
     /**

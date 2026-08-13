@@ -26,6 +26,7 @@ import { showToast } from './toast.js'
 import { assembleOverhangSequence, overhangHasSequenceOverride, overhangDomainLength, overhangHasDuplex, overhangDuplexSegments, overhangRcOfPartner } from '../scene/design_queries.js'
 import { openConnectionForPair } from './overhang_connections_panel.js'
 import { runOverhangGen } from './overhang_gen.js'
+import { relatedStrandIds as canonicalRelatedStrandIds } from '../scene/selection_model.js'
 
 // Inline chain-link glyph for the per-row "open this overhang's connection" icon.
 const _LINK_SVG =
@@ -88,11 +89,7 @@ export function sortOverhangsForDisplay(overhangs) {
  * @returns {Set<string>}
  */
 export function selectedStrandIds(state) {
-  const ids = new Set()
-  if (state?.selectedObject?.data?.strand_id) ids.add(state.selectedObject.data.strand_id)
-  for (const id of state?.multiSelectedStrandIds ?? []) ids.add(id)
-  for (const d of state?.multiSelectedDomainIds ?? []) ids.add(d.strandId)
-  return ids
+  return new Set(canonicalRelatedStrandIds(state))
 }
 
 // Duplex coverage colors for the sidebar preview line.
@@ -201,6 +198,7 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
                           'margin-bottom:4px;align-items:center;padding:2px 4px;' +
                           'border-radius:3px;border-left:2px solid transparent;transition:background 0.1s'
       row.dataset.strandId = ovhg.strand_id
+      row.dataset.overhangId = ovhg.id
       row.style.cursor = 'pointer'
 
       // Row click selects this overhang (so the Strand Animation section can
@@ -360,11 +358,7 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
   store.subscribe((newState, prevState) => {
     if (newState.currentDesign !== prevState.currentDesign) {
       _rebuildPanel(newState.currentDesign)
-    } else if (
-      newState.selectedObject         !== prevState.selectedObject         ||
-      newState.multiSelectedStrandIds !== prevState.multiSelectedStrandIds ||
-      newState.multiSelectedDomainIds !== prevState.multiSelectedDomainIds
-    ) {
+    } else if (newState.selection !== prevState.selection) {
       _updateHighlight()
     }
   })

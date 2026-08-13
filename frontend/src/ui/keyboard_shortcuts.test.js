@@ -42,7 +42,8 @@ function makeDeps(overrides = {}) {
       undoAssembly: vi.fn(async () => ({})), redoAssembly: vi.fn(async () => ({})),
       saveAssemblyAs: vi.fn(async () => ({})), saveAssemblyToWorkspace: vi.fn(async () => ({})),
       deleteStrand: vi.fn(async () => ({})), deleteStrandsBatch: vi.fn(async () => ({})),
-      deleteOverhangs: vi.fn(async () => ({})), addNick: vi.fn(async () => ({})),
+      deleteOverhangs: vi.fn(async () => ({})), deleteStrandExtensionsBatch: vi.fn(async () => ({})),
+      addNick: vi.fn(async () => ({})),
       addNickBatch: vi.fn(async () => ({})),
       deleteForcedLigation: vi.fn(async () => ({})), batchDeleteForcedLigations: vi.fn(async () => ({})),
       deleteCrossover: vi.fn(async () => ({})), batchDeleteCrossovers: vi.fn(async () => ({})),
@@ -59,9 +60,12 @@ function makeDeps(overrides = {}) {
       getSelectionLevel: vi.fn(() => 'default'),
       setSelectionLevel: vi.fn(),
       getCtrlBeads: vi.fn(() => []),
+      getSelectedEndBeads: vi.fn(() => []),
       getCtrlBeadPos: vi.fn(() => [0, 0, 0]),
       clearCtrlBeads: vi.fn(),
+      clearEndSelection: vi.fn(),
       clearMultiOverhangSelection: vi.fn(),
+      clearMultiExtensionSelection: vi.fn(),
       getMultiCrossoverArcs: vi.fn(() => []),
       clearMultiCrossoverArcs: vi.fn(),
       getSelectedCrossoverArc: vi.fn(() => null),
@@ -250,39 +254,39 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
     const d = makeDeps()
     // The two ends the user multi-selected at End level (lasso / Ctrl / Shift-click
     // all land in the same end-bead set): a 5′ on strand A + a 3′ on strand B.
-    d.selectionManager.getCtrlBeads.mockReturnValue([
+    d.selectionManager.getSelectedEndBeads.mockReturnValue([
       { nuc: { strand_id: 'A', is_five_prime: true } },
       { nuc: { strand_id: 'B', is_three_prime: true } },
     ])
     initKeyboardShortcuts(d)
     await press('x')
     expect(d.api.forcedLigation).toHaveBeenCalledWith('B', 'A')   // 3′=B, 5′=A
-    expect(d.selectionManager.clearCtrlBeads).toHaveBeenCalled()
+    expect(d.selectionManager.clearEndSelection).toHaveBeenCalled()
   })
 
   it("'x' rejects an invalid pair (same polarity / same strand) without calling the api", async () => {
     const d = makeDeps()
     // Two 5′ ends → not a 3′/5′ pair.
-    d.selectionManager.getCtrlBeads.mockReturnValue([
+    d.selectionManager.getSelectedEndBeads.mockReturnValue([
       { nuc: { strand_id: 'A', is_five_prime: true } },
       { nuc: { strand_id: 'B', is_five_prime: true } },
     ])
     initKeyboardShortcuts(d)
     await press('x')
     expect(d.api.forcedLigation).not.toHaveBeenCalled()
-    expect(d.selectionManager.clearCtrlBeads).not.toHaveBeenCalled()
+    expect(d.selectionManager.clearEndSelection).not.toHaveBeenCalled()
   })
 
   it("'x' is a no-op unless exactly 2 ends are selected, and never in assembly mode", async () => {
     const d = makeDeps()
-    d.selectionManager.getCtrlBeads.mockReturnValue([{ nuc: { strand_id: 'A', is_five_prime: true } }])
+    d.selectionManager.getSelectedEndBeads.mockReturnValue([{ nuc: { strand_id: 'A', is_five_prime: true } }])
     initKeyboardShortcuts(d)
     await press('x')
     expect(d.api.forcedLigation).not.toHaveBeenCalled()
 
     // Even a valid pair is ignored while an assembly is active.
     d.store.setState({ assemblyActive: true })
-    d.selectionManager.getCtrlBeads.mockReturnValue([
+    d.selectionManager.getSelectedEndBeads.mockReturnValue([
       { nuc: { strand_id: 'A', is_five_prime: true } },
       { nuc: { strand_id: 'B', is_three_prime: true } },
     ])
@@ -327,7 +331,7 @@ describe('initKeyboardShortcuts — Group 2 file/edit + Delete/Escape', () => {
 
   it('Ctrl+C copies when a cluster is selected', async () => {
     const d = makeDeps()
-    d.store.setState({ selectedObject: { type: 'cluster', id: 'cA' } })
+    d.store.setState({ selection: { items: [{ kind: 'cluster', id: 'cA' }] } })
     initKeyboardShortcuts(d)
     const e = await press('c', { ctrl: true })
     expect(d.clusterClipboard.copy).toHaveBeenCalledTimes(1)
@@ -336,7 +340,9 @@ describe('initKeyboardShortcuts — Group 2 file/edit + Delete/Escape', () => {
 
   it('Ctrl+C copies from the cluster multi-select pool', async () => {
     const d = makeDeps()
-    d.store.setState({ multiSelectedClusterIds: ['cA', 'cB'] })
+    d.store.setState({ selection: { items: [
+      { kind: 'cluster', id: 'cA' }, { kind: 'cluster', id: 'cB' },
+    ] } })
     initKeyboardShortcuts(d)
     await press('c', { ctrl: true })
     expect(d.clusterClipboard.copy).toHaveBeenCalledTimes(1)
@@ -352,7 +358,7 @@ describe('initKeyboardShortcuts — Group 2 file/edit + Delete/Escape', () => {
 
   it('Ctrl+C and Ctrl+V are blocked in assembly mode', async () => {
     const d = makeDeps()
-    d.store.setState({ assemblyActive: true, selectedObject: { type: 'cluster', id: 'cA' } })
+    d.store.setState({ assemblyActive: true, selection: { items: [{ kind: 'cluster', id: 'cA' }] } })
     initKeyboardShortcuts(d)
     await press('c', { ctrl: true })
     await press('v', { ctrl: true })
@@ -484,7 +490,10 @@ describe('initKeyboardShortcuts — Group 2 file/edit + Delete/Escape', () => {
 
   it('Delete: multi-overhang → deleteOverhangs + ooClose; single selected strand → deleteStrand', async () => {
     let d = makeDeps()
-    d.store.setState({ multiSelectedOverhangIds: ['oh1', 'oh2'] })
+    d.store.setState({ selection: { items: [
+      { kind: 'overhang', id: 'oh1' },
+      { kind: 'overhang', id: 'oh2' },
+    ] } })
     initKeyboardShortcuts(d)
     await press('Delete')
     expect(d.selectionManager.clearMultiOverhangSelection).toHaveBeenCalled()
@@ -493,15 +502,42 @@ describe('initKeyboardShortcuts — Group 2 file/edit + Delete/Escape', () => {
 
     clearShortcuts()
     d = makeDeps()
-    d.store.setState({ selectedObject: { type: 'strand', data: { strand_id: 's7' } } })
+    d.store.setState({ selection: { items: [{ kind: 'strand', id: 's7' }] } })
     initKeyboardShortcuts(d)
     await press('Delete')
     expect(d.api.deleteStrand).toHaveBeenCalledWith('s7')
   })
 
+  it('Delete: canonical extension refs delete the extensions as one batch', async () => {
+    const d = makeDeps()
+    d.store.setState({ selection: { items: [
+      { kind: 'extension', id: 'e1' },
+      { kind: 'extension', id: 'e2' },
+    ] } })
+    initKeyboardShortcuts(d)
+    await press('Delete')
+    expect(d.selectionManager.clearMultiExtensionSelection).toHaveBeenCalled()
+    expect(d.api.deleteStrandExtensionsBatch).toHaveBeenCalledWith(['e1', 'e2'])
+  })
+
+  it('Delete: canonical backbone bond nicks at its from-base identity', async () => {
+    const d = makeDeps()
+    d.store.setState({ selection: { items: [{
+      kind: 'bond', fromKey: 'h2:14:FORWARD', toKey: 'h2:15:FORWARD', strandId: 's1',
+    }] } })
+    initKeyboardShortcuts(d)
+    await press('Delete')
+    expect(d.api.addNick).toHaveBeenCalledWith({ helixId: 'h2', bpIndex: 14, direction: 'FORWARD' })
+    expect(d.selectionManager.clearSelection).toHaveBeenCalled()
+  })
+
   it('Delete: single selected forced ligation → deleteForcedLigation(id) + clears selection', async () => {
     const d = makeDeps()
-    d.store.setState({ selectedObject: { type: 'forced_ligation', id: 'fl9', data: {} } })
+    d.store.setState({ selection: {
+      context: 'design', level: 'xover',
+      items: [{ kind: 'crossover', id: 'fl9', subtype: 'forced_ligation' }],
+      primary: { kind: 'crossover', id: 'fl9', subtype: 'forced_ligation' },
+    } })
     initKeyboardShortcuts(d)
     await press('Delete')
     expect(d.api.deleteForcedLigation).toHaveBeenCalledWith('fl9')
@@ -511,11 +547,11 @@ describe('initKeyboardShortcuts — Group 2 file/edit + Delete/Escape', () => {
 
   it('Delete: record-backed crossover → deleteCrossover(id) (removes record, not just a nick)', async () => {
     const d = makeDeps()
-    d.store.setState({ selectedObject: { type: 'crossover', id: 'xo3', data: {} } })
-    d.selectionManager.getSelectedCrossoverArc.mockReturnValue({
-      crossover_id: 'xo3',
-      fromNuc: { helix_id: 'h2', bp_index: 14, direction: 'FORWARD' },
-    })
+    d.store.setState({ selection: {
+      context: 'design', level: 'xover',
+      items: [{ kind: 'crossover', id: 'xo3', subtype: 'crossover' }],
+      primary: { kind: 'crossover', id: 'xo3', subtype: 'crossover' },
+    } })
     initKeyboardShortcuts(d)
     await press('Delete')
     expect(d.api.deleteCrossover).toHaveBeenCalledWith('xo3')
@@ -523,36 +559,38 @@ describe('initKeyboardShortcuts — Group 2 file/edit + Delete/Escape', () => {
     expect(d.selectionManager.clearSelection).toHaveBeenCalled()
   })
 
-  it('Delete: record-less crossover (no crossover_id) → falls back to a nick at the arc origin', async () => {
+  it('Delete: forced-ligation ref → deleteForcedLigation(id)', async () => {
     const d = makeDeps()
-    d.store.setState({ selectedObject: { type: 'crossover', id: 'xo3', data: {} } })
-    d.selectionManager.getSelectedCrossoverArc.mockReturnValue({
-      crossover_id: null,
-      fromNuc: { helix_id: 'h2', bp_index: 14, direction: 'FORWARD' },
-    })
+    d.store.setState({ selection: {
+      context: 'design', level: 'xover',
+      items: [{ kind: 'crossover', id: 'fl1', subtype: 'forced_ligation' }],
+      primary: { kind: 'crossover', id: 'fl1', subtype: 'forced_ligation' },
+    } })
     initKeyboardShortcuts(d)
     await press('Delete')
-    expect(d.api.addNick).toHaveBeenCalledWith({ helixId: 'h2', bpIndex: 14, direction: 'FORWARD' })
+    expect(d.api.deleteForcedLigation).toHaveBeenCalledWith('fl1')
     expect(d.api.deleteCrossover).not.toHaveBeenCalled()
   })
 
-  it('Delete: multi-arc splits into FL-delete, record-delete, and nick by arc kind', async () => {
+  it('Delete: canonical crossover refs split into forced-ligation and crossover batches', async () => {
     const d = makeDeps()
     d.store.setState({
-      currentDesign: { forced_ligations: [{ id: 'fl1' }] },
+      selection: {
+        context: 'design', level: 'xover',
+        items: [
+          { kind: 'crossover', id: 'fl1', subtype: 'forced_ligation' },
+          { kind: 'crossover', id: 'xoA', subtype: 'crossover' },
+          { kind: 'crossover', id: 'xoB', subtype: 'crossover' },
+        ],
+        primary: { kind: 'crossover', id: 'xoB', subtype: 'crossover' },
+      },
     })
-    d.selectionManager.getMultiCrossoverArcs.mockReturnValue([
-      { crossover_id: 'fl1', fromNuc: { helix_id: 'h1', bp_index: 5, direction: 'FORWARD' } },
-      { crossover_id: 'xoA', fromNuc: { helix_id: 'h2', bp_index: 6, direction: 'REVERSE' } },
-      { crossover_id: 'xoB', fromNuc: { helix_id: 'h3', bp_index: 7, direction: 'FORWARD' } },
-      { crossover_id: null,  fromNuc: { helix_id: 'h4', bp_index: 8, direction: 'REVERSE' } },
-    ])
     initKeyboardShortcuts(d)
     await press('Delete')
     expect(d.api.deleteForcedLigation).toHaveBeenCalledWith('fl1')
     expect(d.api.batchDeleteCrossovers).toHaveBeenCalledWith(['xoA', 'xoB'])
-    expect(d.api.addNick).toHaveBeenCalledWith({ helixId: 'h4', bpIndex: 8, direction: 'REVERSE' })
-    expect(d.selectionManager.clearMultiCrossoverArcs).toHaveBeenCalled()
+    expect(d.api.addNick).not.toHaveBeenCalled()
+    expect(d.selectionManager.clearSelection).toHaveBeenCalled()
   })
 
   it('Delete with no selection is a no-op (no api calls)', async () => {

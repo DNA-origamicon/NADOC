@@ -6,8 +6,8 @@
  * the corresponding strand in the 3D view, and editing Notes or Overhang
  * cells writes back to the backend immediately.
  *
- * Columns (all toggle-able except Start/End):
- *   Start | End | 5' Overhang | Sequence | 3' Overhang | Group | Color | Length | Notes
+ * Columns (all toggle-able except ID/Start/End):
+ *   ID | Start | End | 5' Overhang | Sequence | 3' Overhang | Group | Color | Length | Notes
  *
  * TODO: evaluate redundancy with the #overhang-panel sidebar once users have
  *   had a chance to use both. The sidebar's label-size slider is unique; the
@@ -18,10 +18,13 @@ import * as api from '../api/client.js'
 import { pushGroupUndo } from '../state/store.js'
 import { showToast } from './toast.js'
 import { STAPLE_PALETTE, buildStapleColorMap } from '../scene/helix_renderer/palette.js'
+import { selectedStrandIds } from '../scene/selection_model.js'
+import { buildStrandDisplayIdMap } from './design_display_labels.js'
 
 // ── Column definitions ────────────────────────────────────────────────────
 
 const COLUMNS = [
+  { key: 'id',       label: 'ID',          toggleable: false, editable: false },
   { key: 'start',    label: 'Start',       toggleable: false, editable: false },
   { key: 'end',      label: 'End',         toggleable: false, editable: false },
   { key: 'show',     label: 'Show',        toggleable: false, editable: false },
@@ -642,6 +645,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
       const th = document.createElement('th')
       th.textContent = col.label
       th.dataset.col = col.key
+      if (col.key === 'id') th.className = 'sheet-col-id'
       if (col.key === 'start' || col.key === 'end') th.className = 'sheet-col-endpoint'
       if (col.resizable) {
         _applyCellWidth(th, col.key)
@@ -693,15 +697,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     const design       = state.currentDesign
     const strandColors = state.strandColors ?? {}
     const strandGroups = state.strandGroups ?? []
-    // Build highlighted set from multi-selection or single selection
-    const multiIds = state.multiSelectedStrandIds ?? []
-    const _strandIdFrom = sel => {
-      if (!sel) return null
-      if (sel.type === 'strand') return sel.id
-      return sel.data?.strand_id ?? null
-    }
-    const singleId = _strandIdFrom(state.selectedObject)
-    const highlightedIds = new Set(multiIds.length > 0 ? multiIds : (singleId ? [singleId] : []))
+    const highlightedIds = new Set(selectedStrandIds(state))
 
     _updateDatalist(strandGroups)
     tbody.innerHTML = ''
@@ -712,6 +708,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
 
     const pins    = stapleColorPins(state)
     const strands = sortedStrands(design, strandColors, strandGroups, sortOrder, pins)
+    const displayIds = buildStrandDisplayIdMap(design.strands)
     // Map helix_id → display index (matches cadnano pathview gutter labels)
     const helixIndex = Object.fromEntries((design.helices ?? []).map((h, i) => [h.id, i]))
 
@@ -745,6 +742,12 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
         if (col.resizable) _applyCellWidth(td, col.key)
 
         switch (col.key) {
+          case 'id': {
+            td.className = 'sheet-col-id'
+            td.textContent = displayIds.get(strand.id) ?? '—'
+            td.title = strand.id
+            break
+          }
           case 'show': {
             const cb = document.createElement('input')
             cb.type = 'checkbox'
@@ -916,6 +919,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
         td.dataset.col = col.key
         if (col.resizable) _applyCellWidth(td, col.key)
         switch (col.key) {
+          case 'id': break
           case 'start': td.className = 'sheet-col-endpoint'; td.textContent = _label(v.overhang_a_id); break
           case 'end':   td.className = 'sheet-col-endpoint'; td.textContent = _label(v.overhang_b_id); break
           case 'sequence': {
@@ -951,6 +955,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     if (!assembly) return
     const linkers = (assembly.assembly_strands ?? []).filter(s => s.strand_type === 'linker')
     if (!linkers.length) return
+    const displayIds = buildStrandDisplayIdMap(linkers)
 
     const connsById = Object.fromEntries((assembly.overhang_connections ?? []).map(c => [c.id, c]))
     const instanceById = Object.fromEntries((assembly.instances ?? []).map(i => [i.id, i]))
@@ -1007,6 +1012,12 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
         if (col.resizable) _applyCellWidth(td, col.key)
 
         switch (col.key) {
+          case 'id': {
+            td.className = 'sheet-col-id'
+            td.textContent = displayIds.get(strand.id) ?? '—'
+            td.title = strand.id
+            break
+          }
           case 'start': {
             td.className = 'sheet-col-endpoint'
             td.textContent = startText
@@ -1352,8 +1363,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     const strandsChanged = newState.currentDesign?.strands !== prevState.currentDesign?.strands
     const groupsChanged  = newState.strandGroups   !== prevState.strandGroups
     const colorsChanged  = newState.strandColors   !== prevState.strandColors
-    const selChanged     = newState.selectedObject !== prevState.selectedObject
-    const multiChanged   = newState.multiSelectedStrandIds !== prevState.multiSelectedStrandIds
+    const selChanged     = newState.selection !== prevState.selection
     const assemblyChanged       = newState.currentAssembly !== prevState.currentAssembly
     const assemblyActiveChanged = newState.assemblyActive  !== prevState.assemblyActive
     const assemblyStrandsChanged = newState.currentAssembly?.assembly_strands
@@ -1365,24 +1375,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
       return
     }
 
-    // Multi-selection takes precedence (lasso, cross-window broadcast),
-    // but only when it's a positive selection — an empty multi-clear
-    // should fall through so the single selectedObject still applies.
-    const multiIds = newState.multiSelectedStrandIds ?? []
-    if (multiChanged && multiIds.length > 0) {
-      _applyHighlights(new Set(multiIds))
-      return
-    }
-
-    if (selChanged || multiChanged) {
-      const _strandIdFrom = sel => {
-        if (!sel) return null
-        if (sel.type === 'strand') return sel.id
-        return sel.data?.strand_id ?? null
-      }
-      const newId  = _strandIdFrom(newState.selectedObject)
-      _applyHighlights(new Set(newId ? [newId] : []))
-    }
+    if (selChanged) _applyHighlights(new Set(selectedStrandIds(newState)))
   })
 
   return {

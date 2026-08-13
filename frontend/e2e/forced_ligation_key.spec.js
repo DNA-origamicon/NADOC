@@ -4,8 +4,8 @@
  *
  * What the vitest unit tests + smoke gate CANNOT cover: the REAL user gestures —
  * engage the End selection level, multi-select a 5′ end and a 3′ end (via a
- * ctrl-drag LASSO, or a plain-click then Ctrl-click — all feed the same end-bead
- * set), press 'x' → the two strands merge into ONE via /design/forced-ligation,
+ * ctrl-drag LASSO, or a plain-click then Ctrl-click — all feed canonical End refs),
+ * press 'x' → the two strands merge into ONE via /design/forced-ligation,
  * driven end-to-end through selection_manager + the main.js shortcut wiring.
  *
  * Fixture: a 200-bp auto-scaffolded helix, nicked at two visible interior
@@ -23,6 +23,9 @@ async function setupNickedScaffold(page, tag) {
   const doc = `e2e-forcedlig-${tag}-${Date.now()}`
   const H = { 'Content-Type': 'application/json', 'X-NADOC-Doc': doc }
   await loadScaffoldedPart(page, { doc, name: `forcedlig-${tag}` })
+  await page.locator('#canvas').click({ position: { x: 5, y: 5 } })
+  await page.keyboard.press('f')
+  await page.waitForTimeout(400)
 
   // On-screen bp window (real raycast identity at each visible bead).
   const visible = await page.evaluate(() => {
@@ -80,7 +83,7 @@ test.describe('Forced ligation — end multi-select + x', () => {
     const flBefore = (before.forced_ligations ?? []).length
 
     const sel = await selectEndsForLigation(page)
-    expect(sel.count, 'two opposite-polarity ends selected via lasso').toBe(2)
+    expect(sel.count, `two opposite-polarity ends selected via lasso: ${JSON.stringify(sel.diagnostics)}`).toBe(2)
     await page.keyboard.press('x')
     await page.waitForTimeout(800)
 
@@ -94,9 +97,9 @@ test.describe('Forced ligation — end multi-select + x', () => {
     const flBefore = (before.forced_ligations ?? []).length
 
     // The reported bug: plain-click end A, ctrl-click end B used to leave only ONE
-    // selected. The plain-clicked end must now fold into the end-bead set too.
+    // selected. The plain-clicked end must remain in the canonical selected set.
     const sel = await selectEndsPlainThenCtrl(page)
-    expect(sel.afterPlain?.type, 'plain click selected a single end nucleotide').toBe('nucleotide')
+    expect(sel.afterPlain?.items?.[0]?.kind, 'plain click selected one canonical End ref').toBe('end')
     expect(sel.count, 'plain-click + ctrl-click counts BOTH ends (was 1)').toBe(2)
     await page.keyboard.press('x')
     await page.waitForTimeout(800)

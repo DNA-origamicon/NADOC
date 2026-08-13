@@ -113,7 +113,7 @@ describe('atomistic_renderer stick representation', () => {
       ],
       bonds: [[0, 1], [2, 3]],
     })
-    ar.highlight({ type: 'strand', data: { strand_id: 'selected' } })
+    ar.highlight({ strandIds: ['selected'], domains: [], bases: [] })
     const selected = new THREE.Color()
     const other = new THREE.Color()
     _bondMesh(scene).getColorAt(0, selected)

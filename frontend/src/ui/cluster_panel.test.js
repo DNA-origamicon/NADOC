@@ -51,7 +51,7 @@ describe('cluster panel — style round trip', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     mountDom()
-    store = createMockStore({ currentDesign: design(), multiSelectedClusterIds: [] })
+    store = createMockStore({ currentDesign: design(), selection: { items: [] } })
     onStylePreview = vi.fn()
     api = {
       patchCluster: vi.fn(async (id, body) => {
@@ -76,6 +76,12 @@ describe('cluster panel — style round trip', () => {
   it('renders a swatch per cluster', () => {
     expect(rows()).toHaveLength(2)
     expect(swatchOf(rows()[0])).toBeTruthy()
+  })
+
+  it('marks rows from canonical cluster selection', () => {
+    store.setState({ selection: { items: [{ kind: 'cluster', id: 'cB' }] } })
+    expect(document.querySelector('[data-cluster-id="cA"]').getAttribute('aria-selected')).toBe('false')
+    expect(document.querySelector('[data-cluster-id="cB"]').getAttribute('aria-selected')).toBe('true')
   })
 
   it('an unstyled cluster shows its auto palette slot', () => {

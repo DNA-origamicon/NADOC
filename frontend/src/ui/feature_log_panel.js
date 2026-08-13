@@ -20,6 +20,7 @@ import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_sta
 import { showConfirm } from './primitives/confirm.js'
 import { showDependentsDecision } from './primitives/dependents_dialog.js'
 import { editFeature, isEditable as _isOpEditable } from './edit_feature_popover.js'
+import { canonicalSelection } from '../scene/selection_model.js'
 
 // Fine Routing sub-steps with no captured diff (legacy clusters) can still be
 // individually reverted/deleted IF their op type is replayable on the backend.
@@ -1759,42 +1760,23 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     const ids = new Set()
     if (state.activeClusterId) ids.add(state.activeClusterId)
 
-    const sel = state.selectedObject
-    if (sel) {
-      if (sel.type === 'strand') {
-        ids.add(sel.id)
-        const strand = design?.strands?.find(s => s.id === sel.id)
+    for (const ref of canonicalSelection(state).items) {
+      if (ref.kind === 'strand') {
+        ids.add(ref.id)
+        const strand = design?.strands?.find(s => s.id === ref.id)
         for (const d of strand?.domains ?? []) {
           if (d.overhang_id) ids.add(d.overhang_id)
           if (d.helix_id)    ids.add(d.helix_id)
         }
-      } else if (sel.type === 'domain') {
-        const sid = sel.data?.strand_id
+      } else if (ref.kind === 'domain') {
+        const sid = ref.strandId
         if (sid) ids.add(sid)
-        if (sel.data?.overhang_id) ids.add(sel.data.overhang_id)
-        if (sel.data?.helix_id)    ids.add(sel.data.helix_id)
-      } else if (sel.type === 'helix') {
-        ids.add(sel.id)
+        const d = design?.strands?.find(s => s.id === sid)?.domains?.[ref.domainIndex]
+        if (d?.overhang_id) ids.add(d.overhang_id)
+        if (d?.helix_id)    ids.add(d.helix_id)
+      } else if (ref.id) {
+        ids.add(ref.id)
       }
-    }
-
-    for (const sid of state.multiSelectedStrandIds ?? []) {
-      ids.add(sid)
-      const strand = design?.strands?.find(s => s.id === sid)
-      for (const d of strand?.domains ?? []) {
-        if (d.overhang_id) ids.add(d.overhang_id)
-        if (d.helix_id)    ids.add(d.helix_id)
-      }
-    }
-    for (const dom of state.multiSelectedDomainIds ?? []) {
-      ids.add(dom.strandId)
-      const strand = design?.strands?.find(s => s.id === dom.strandId)
-      const d = strand?.domains?.[dom.domainIndex]
-      if (d?.overhang_id) ids.add(d.overhang_id)
-      if (d?.helix_id)    ids.add(d.helix_id)
-    }
-    for (const oid of state.multiSelectedOverhangIds ?? []) {
-      ids.add(oid)
     }
     return ids
   }

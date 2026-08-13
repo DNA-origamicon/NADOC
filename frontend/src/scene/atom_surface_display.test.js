@@ -48,7 +48,7 @@ vi.mock('./representation_overrides.js', () => ({
   repColumnsByRep: vi.fn(() => ({ vdw: new Set(), ballstick: new Set(), stick: new Set() })),
 }))
 
-import { initAtomSurfaceDisplay, regionSurfaceSignature } from './atom_surface_display.js'
+import { initAtomSurfaceDisplay, regionSurfaceSignature, atomSelectionForState } from './atom_surface_display.js'
 import { surfaceSegments } from './design_queries.js'
 
 const DOM = [
@@ -59,6 +59,70 @@ const DOM = [
   'sl-atom-vdw-scale', 'sv-atom-vdw-scale',
   'repr-atom-radius-row',
 ]
+
+describe('atomSelectionForState', () => {
+  it('compiles strand, exact domain range, and base refs from canonical state', () => {
+    const state = {
+      currentDesign: { strands: [{ id: 's2', domains: [
+        { helix_id: 'h2', direction: 'REVERSE', start_bp: 9, end_bp: 4 },
+      ] }] },
+      selection: { items: [
+        { kind: 'strand', id: 's1' },
+        { kind: 'domain', strandId: 's2', domainIndex: 0 },
+        { kind: 'base', key: 'h3:7:FORWARD' },
+      ] },
+    }
+    expect(atomSelectionForState(state)).toEqual({
+      strandIds: ['s1'],
+      domains: [{ strandId: 's2', helixId: 'h2', direction: 'REVERSE', lo: 4, hi: 9 }],
+      bases: [{ helix_id: 'h3', bp_index: 7, direction: 'FORWARD', copy: 0 }],
+      extensionIds: [],
+      helixIds: [],
+    })
+  })
+
+  it('derives an overhang domain and preserves extension identity for atom highlighting', () => {
+    const state = {
+      currentDesign: {
+        overhangs: [{ id: 'oh1', strand_id: 's1' }],
+        strands: [{ id: 's1', domains: [
+          { helix_id: 'h1', direction: 'FORWARD', start_bp: 3, end_bp: 8, overhang_id: 'oh1' },
+        ] }],
+      },
+      selection: { items: [
+        { kind: 'overhang', id: 'oh1' }, { kind: 'extension', id: 'ext1' },
+      ] },
+    }
+    expect(atomSelectionForState(state)).toEqual({
+      strandIds: [],
+      domains: [{ strandId: 's1', helixId: 'h1', direction: 'FORWARD', lo: 3, hi: 8 }],
+      bases: [],
+      extensionIds: ['ext1'],
+      helixIds: [],
+    })
+  })
+
+  it('compiles whole-helix and exact-domain cluster membership without widening', () => {
+    const state = {
+      currentDesign: {
+        strands: [{ id: 's1', domains: [{
+          helix_id: 'h2', direction: 'REVERSE', start_bp: 2, end_bp: 5,
+        }] }],
+        cluster_transforms: [
+          { id: 'whole', helix_ids: ['h1'] },
+          { id: 'narrow', helix_ids: ['h2'], domain_ids: [{ strand_id: 's1', domain_index: 0 }] },
+        ],
+      },
+      selection: { items: [
+        { kind: 'cluster', id: 'whole' }, { kind: 'cluster', id: 'narrow' },
+      ] },
+    }
+    expect(atomSelectionForState(state)).toEqual({
+      strandIds: [], helixIds: ['h1'], bases: [], extensionIds: [],
+      domains: [{ strandId: 's1', helixId: 'h2', direction: 'REVERSE', lo: 2, hi: 5 }],
+    })
+  })
+})
 
 function makeDeps(overrides = {}) {
   const root = { visible: true }

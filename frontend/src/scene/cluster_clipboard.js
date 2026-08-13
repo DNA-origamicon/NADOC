@@ -17,6 +17,7 @@
  */
 
 import * as THREE from 'three'
+import { selectedClusterIds } from './selection_model.js'
 
 import {
   clusterClosure,
@@ -56,14 +57,9 @@ export function initClusterClipboard({ store, api, scene, slicePlane, showToast 
 
   // ── Selection ───────────────────────────────────────────────────────────────
 
-  /** Cluster ids currently selected — the single selection and/or the multi pool. */
+  /** Ordered canonical cluster ids currently selected. */
   function _selectedClusterIds() {
-    const st = store.getState()
-    const ids = new Set(st.multiSelectedClusterIds ?? [])
-    if (st.selectedObject?.type === 'cluster' && st.selectedObject.id) {
-      ids.add(st.selectedObject.id)
-    }
-    return [...ids]
+    return selectedClusterIds(store.getState())
   }
 
   // ── Ghost ───────────────────────────────────────────────────────────────────

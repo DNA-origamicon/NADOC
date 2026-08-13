@@ -23,6 +23,8 @@
  */
 
 import { store } from '../state/store.js'
+import { canonicalSelection } from './selection_model.js'
+import { parseBaseKey } from './base_ref.js'
 
 // World-space helix radius (nm).  Honeycomb lattice radius = 1.125 nm, so
 // circles at adjacent helices will nearly touch.
@@ -151,30 +153,25 @@ export function initCrossSectionMinimap(viewportContainer) {
   // ── Highlight computation ─────────────────────────────────────────────────
 
   /**
-   * Given the current selectedObject and design, return a Set of helix IDs
-   * that belong to the selected strand (all its domains' helices).
+   * Return helix IDs represented by the current canonical selection.
    */
-  function _computeHighlights(sel, design) {
-    if (!sel || !design) return new Set()
-
-    let strandId = null
-    if (sel.type === 'strand' || sel.type === 'cone') {
-      strandId = sel.data?.strand_id ?? null
-    } else if (sel.type === 'nucleotide') {
-      strandId = sel.data?.strand_id ?? null
-    }
-
-    if (!strandId) {
-      // Nucleotide selection may not carry strand_id — fall back to single helix
-      if (sel.type === 'nucleotide' && sel.data?.helix_id) {
-        return new Set([sel.data.helix_id])
+  function _computeHighlights(state) {
+    const design = state?.currentDesign
+    if (!design) return new Set()
+    const ids = new Set()
+    for (const ref of canonicalSelection(state).items) {
+      if (ref.kind === 'strand') {
+        const strand = design.strands?.find(s => s.id === ref.id)
+        for (const domain of strand?.domains ?? []) ids.add(domain.helix_id)
+      } else if (ref.kind === 'domain') {
+        const domain = design.strands?.find(s => s.id === ref.strandId)?.domains?.[ref.domainIndex]
+        if (domain?.helix_id) ids.add(domain.helix_id)
+      } else if (ref.kind === 'base' || ref.kind === 'end') {
+        const base = parseBaseKey(ref.key)
+        if (base?.helix_id && base.helix_id !== '__xb__') ids.add(base.helix_id)
       }
-      return new Set()
     }
-
-    const strand = design.strands?.find(s => s.id === strandId)
-    if (!strand) return new Set()
-    return new Set(strand.domains.map(d => d.helix_id))
+    return ids
   }
 
   // ── Slice data ────────────────────────────────────────────────────────────
@@ -616,7 +613,7 @@ export function initCrossSectionMinimap(viewportContainer) {
   const _unsub = store.subscribe((newState, prevState) => {
     const activeChanged  = newState.unfoldActive    !== prevState.unfoldActive
     const designChanged  = newState.currentDesign   !== prevState.currentDesign
-    const selChanged     = newState.selectedObject  !== prevState.selectedObject
+    const selChanged     = newState.selection !== prevState.selection
 
     if (designChanged) {
       _design = newState.currentDesign
@@ -624,7 +621,7 @@ export function initCrossSectionMinimap(viewportContainer) {
     }
 
     if (selChanged || designChanged) {
-      _highlightedIds = _computeHighlights(newState.selectedObject, newState.currentDesign)
+      _highlightedIds = _computeHighlights(newState)
     }
 
     if (activeChanged) {
@@ -634,7 +631,7 @@ export function initCrossSectionMinimap(viewportContainer) {
           _resetFit(_design?.helices)
         }
         if (!selChanged && !designChanged) {
-          _highlightedIds = _computeHighlights(newState.selectedObject, newState.currentDesign)
+          _highlightedIds = _computeHighlights(newState)
         }
         wrapper.style.display = 'block'
         _draw()
@@ -654,7 +651,7 @@ export function initCrossSectionMinimap(viewportContainer) {
     show() {
       _design = store.getState().currentDesign
       _resetFit(_design?.helices)
-      _highlightedIds = _computeHighlights(store.getState().selectedObject, _design)
+      _highlightedIds = _computeHighlights(store.getState())
       wrapper.style.display = 'block'
       _draw()
     },
