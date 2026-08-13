@@ -644,6 +644,75 @@
       z-index: 10;
       overflow-y: auto;
       position: relative;   /* so absolutely-positioned resize handle anchors here */
+      color: #fff;
+    }
+
+    /* Right-sidebar cards sit on several closely-related gray surfaces.  The
+       old neutral ramp (#484f58 / #6e7681 / #8b949e) lost too much contrast
+       there, especially at the sidebar's small type sizes.  Keep semantic
+       status/accent colours intact, but promote neutral copy to white (primary)
+       or a cool near-white (supporting text).  The attribute selectors cover
+       legacy inline styles until those panels can be moved to shared classes. */
+    #right-panel,
+    #right-tab-strip {
+      --right-sidebar-text: #fff;
+      --right-sidebar-text-secondary: #e6edf3;
+      --right-sidebar-text-disabled: #b6c2cf;
+      --right-sidebar-button-border: #6e7681;
+      --right-sidebar-button-border-disabled: #3f464f;
+    }
+    #right-panel :where(.right-tab-content, .panel-section, h2, h3, label) {
+      color: var(--right-sidebar-text);
+    }
+    #right-panel :where(.dim, .prop-label, .unit, .mr-section-label,
+                        .primitive-card-badge, .primitive-card-desc,
+                        .primitive-card-meta, .asm-oconn-row-sub) {
+      color: var(--right-sidebar-text-secondary);
+    }
+    #right-panel :where(input, select, textarea, button) {
+      color: var(--right-sidebar-text);
+    }
+    #right-panel :where(input, textarea)::placeholder {
+      color: var(--right-sidebar-text-disabled);
+      opacity: 1;
+    }
+    #right-panel :where(button, input, select, textarea):disabled {
+      color: var(--right-sidebar-text-disabled);
+    }
+    #right-panel [style*="color:#8b949e"],
+    #right-panel [style*="color: #8b949e"],
+    #right-panel [style*="color:#6e7681"],
+    #right-panel [style*="color: #6e7681"],
+    #right-panel [style*="color:#484f58"],
+    #right-panel [style*="color: #484f58"],
+    #right-panel [style*="color:var(--color-text-muted)"],
+    #right-panel [style*="color: var(--color-text-muted)"],
+    #right-panel [style*="color:var(--color-text-dim)"],
+    #right-panel [style*="color: var(--color-text-dim)"] {
+      color: var(--right-sidebar-text-secondary) !important;
+    }
+    #right-panel :where(button, input, select, textarea):disabled,
+    #right-panel :where(button, input, select, textarea)[aria-disabled="true"] {
+      color: var(--right-sidebar-text-disabled) !important;
+    }
+    :is(#right-panel, #right-tab-strip) button {
+      border-color: var(--right-sidebar-button-border) !important;
+      transition: border-color .12s, box-shadow .12s, background .12s, color .12s;
+    }
+    :is(#right-panel, #right-tab-strip) button:hover:not(:disabled),
+    :is(#right-panel, #right-tab-strip) button:focus-visible {
+      border-color: #b6c2cf !important;
+      box-shadow: 0 0 0 1px rgba(230, 237, 243, .16),
+                  0 0 6px rgba(230, 237, 243, .1);
+    }
+    :is(#right-panel, #right-tab-strip) button:focus-visible {
+      outline: 1px solid #fff;
+      outline-offset: 2px;
+    }
+    :is(#right-panel, #right-tab-strip) button:disabled,
+    :is(#right-panel, #right-tab-strip) button[aria-disabled="true"] {
+      border-color: var(--right-sidebar-button-border-disabled) !important;
+      box-shadow: none;
     }
     #right-panel.hidden { width:0 !important; min-width:0; overflow:hidden; border-left:none; }
     #right-tab-strip {
@@ -664,7 +733,7 @@
       position:absolute; top:8px; left:50%; transform:translateX(-50%);
       width:22px; height:22px; display:flex; align-items:center; justify-content:center;
       background:#1c2128; border:1px solid #30363d; border-radius:50%;
-      color:#8b949e; font-size:10px; line-height:1; cursor:pointer; padding:0;
+      color:#fff; font-size:10px; line-height:1; cursor:pointer; padding:0;
       transition:background .12s,color .12s,border-color .12s;
     }
     #right-tab-toggle:hover { background:#30363d; color:#c9d1d9; border-color:#484f58; }
@@ -675,7 +744,7 @@
       background: #161b22;
       border: 1px solid #30363d;
       border-radius: 6px;
-      color: #c9d1d9;
+      color: #fff;
       font-size: var(--text-xs);
       font-weight: 600;
       letter-spacing: 0.08em;
