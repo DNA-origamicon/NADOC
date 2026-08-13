@@ -252,6 +252,10 @@ def _add_nucleotide_frames(
             if norm > 1e-9:
                 normal /= norm
                 entry.update(nx=float(normal[0]), ny=float(normal[1]), nz=float(normal[2]))
+                from backend.core.constants import BASE_DISPLACEMENT
+
+                base_position = here + BASE_DISPLACEMENT * normal
+                entry["base_position"] = base_position.tolist()
         # Direct Fine DNA sites already carry the calibrated particle-frame
         # tangent. Preserve it; pair-center differencing is only the fallback for
         # under-resolved/interpolated sites.
@@ -356,6 +360,13 @@ def validate_decoded_frame(
             "a": ident, "b": record.pair, "distance_nm": distance,
             "a_faces_mate": toward_a, "b_faces_mate": toward_b,
             "normal_dot": opposition,
+            "base_faces_mate": (
+                float(np.dot(
+                    np.asarray(a["base_position"]) - np.asarray(a["backbone_position"]),
+                    delta / distance,
+                ))
+                if distance > 1e-9 and "base_position" in a else None
+            ),
         })
     pair_errors = [
         pair for pair in pair_checks
@@ -363,6 +374,7 @@ def validate_decoded_frame(
         or pair["a_faces_mate"] is None or pair["b_faces_mate"] is None
         or pair["a_faces_mate"] < 0.8 or pair["b_faces_mate"] < 0.8
         or pair["normal_dot"] > -0.8
+        or pair["base_faces_mate"] is None or pair["base_faces_mate"] <= 0.0
     ]
     return {
         "complete": not missing,

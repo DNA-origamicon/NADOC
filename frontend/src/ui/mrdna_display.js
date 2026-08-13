@@ -34,6 +34,7 @@ export function toFemUpdates(displayResponse) {
       helix_id: p.helix_id, bp_index: p.bp_index, direction: p.direction,
       backbone_position: p.backbone_position,
     }
+    if (p.base_position !== undefined) out.base_position = p.base_position
     if (p.copy !== undefined) out.copy = p.copy
     for (const k of ['nx', 'ny', 'nz', 'tx', 'ty', 'tz']) {
       if (p[k] !== undefined) out[k] = p[k]

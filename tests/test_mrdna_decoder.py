@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+import numpy as np
 
 from backend.core.mrdna_decoder import (
     _add_nucleotide_frames,
@@ -163,6 +164,13 @@ def test_slab_tangent_follows_pair_centers_not_helical_backbone():
     _add_nucleotide_frames(manifest, points)
     assert all(
         [point["tx"], point["ty"], point["tz"]] == pytest.approx([0, 0, 1])
+        for point in points.values()
+    )
+    assert all(
+        np.dot(
+            np.asarray(point["base_position"]) - np.asarray(point["backbone_position"]),
+            np.asarray([point["nx"], point["ny"], point["nz"]]),
+        ) == pytest.approx(0.3)
         for point in points.values()
     )
 

@@ -5,11 +5,13 @@ describe('toFemUpdates', () => {
   it('preserves relaxed slab frames and loop-copy addressing', () => {
     const resp = { ready: true, positions: [{
       helix_id: 'h0', bp_index: 3, direction: 'FORWARD', copy: 1,
-      backbone_position: [1, 2, 3], nx: 0, ny: 1, nz: 0, tx: 0, ty: 0, tz: 1,
+      backbone_position: [1, 2, 3], base_position: [1, 2.3, 3],
+      nx: 0, ny: 1, nz: 0, tx: 0, ty: 0, tz: 1,
     }] }
     expect(toFemUpdates(resp)).toEqual([{
       helix_id: 'h0', bp_index: 3, direction: 'FORWARD', copy: 1,
-      backbone_position: [1, 2, 3], nx: 0, ny: 1, nz: 0, tx: 0, ty: 0, tz: 1,
+      backbone_position: [1, 2, 3], base_position: [1, 2.3, 3],
+      nx: 0, ny: 1, nz: 0, tx: 0, ty: 0, tz: 1,
     }])
   })
 
