@@ -9,6 +9,20 @@ import numpy as np
 from backend.core.mrdna_manifest import MrdnaNucleotideManifest
 
 
+def _mrdna_seed_reference_by_key(design) -> dict[tuple, dict]:
+    """Geometry used to seed mrDNA, keyed for identity-preserving read-back."""
+    from backend.core.design_geometry import _geometry_for_helices
+
+    return {
+        (p["helix_id"], p["bp_index"], p["direction"], p.get("copy", 0)): p
+        # This must be the exact geometry convention used by
+        # mrdna_bridge._build_nt_arrays. Junction balancing is a renderer-only
+        # displacement of crossover phosphates; applying it here after mrDNA
+        # simulated the unbalanced sites changes their helical phase by ~0.23 nm.
+        for p in _geometry_for_helices(design, None, junction_balance=False)
+    }
+
+
 def _kabsch(mobile: np.ndarray, target: np.ndarray) -> np.ndarray:
     cm, ct = mobile.mean(0), target.mean(0)
     covariance = (mobile - cm).T @ (target - ct)
@@ -53,14 +67,7 @@ def decode_mrdna_frame(
 
     reference_by_key = {}
     if design is not None:
-        from backend.core.design_geometry import _geometry_for_helices
-
-        reference_by_key = {
-            (
-                p["helix_id"], p["bp_index"], p["direction"], p.get("copy", 0)
-            ): p
-            for p in _geometry_for_helices(design, None, junction_balance=True)
-        }
+        reference_by_key = _mrdna_seed_reference_by_key(design)
 
     particle_frames = _dna_particle_frame_rotations(
         manifest, initial_u, initial_nm, aligned_nm

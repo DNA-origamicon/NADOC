@@ -1477,6 +1477,25 @@ def _orientation_matrix(radial: np.ndarray, axis_hat: np.ndarray) -> np.ndarray:
     return np.column_stack([radial, azimuthal, axis_hat])
 
 
+_MRDNA_REVERSE_PAIR_FRAME = np.diag([1.0, -1.0, -1.0])
+
+
+def _mrdna_nucleotide_orientation(nuc, paired_forward=None) -> np.ndarray:
+    """Return the nucleotide frame expected by mrDNA's list reader.
+
+    That reader converts the reverse nucleotide frame by a local-x 180°
+    rotation before averaging it with the forward frame. Paired inputs must
+    therefore be inverse representations of one base-pair frame, rather than
+    two independent backbone radial frames separated by the groove angle.
+    """
+    if paired_forward is None:
+        return _orientation_matrix(nuc.radial_hat, nuc.axis_tangent)
+    forward = _orientation_matrix(
+        paired_forward.radial_hat, paired_forward.axis_tangent
+    )
+    return forward @ _MRDNA_REVERSE_PAIR_FRAME
+
+
 def _extension_bead_positions(
     ext,
     anchor_pos: np.ndarray,
@@ -1704,7 +1723,12 @@ def _build_nt_arrays(
 
                     rad = nuc.radial_hat
                     backbone_ang = nuc.position * _NM_TO_ANGSTROM
-                    orient = _orientation_matrix(rad, nuc.axis_tangent)
+                    paired_forward = (
+                        site.get((h_id, bp_idx, "FORWARD", k))
+                        if direction == "REVERSE"
+                        else None
+                    )
+                    orient = _mrdna_nucleotide_orientation(nuc, paired_forward)
 
                     char = "N"
                     if strand.sequence is not None and seq_offset < len(

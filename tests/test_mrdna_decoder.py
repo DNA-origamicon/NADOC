@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import pytest
 import numpy as np
+from types import SimpleNamespace
 
 from backend.core.mrdna_decoder import (
     _add_nucleotide_frames,
+    _mrdna_seed_reference_by_key,
     mrdna_backbone_strain_profile,
     measure_mrdna_native_roundtrip,
     validate_decoded_frame,
@@ -14,6 +16,10 @@ from backend.core.mrdna_manifest import (
     MrdnaNucleotideManifest,
     MrdnaNucleotideRecord,
     MrdnaRenderAddress,
+)
+from backend.core.mrdna_bridge import (
+    _MRDNA_REVERSE_PAIR_FRAME,
+    _mrdna_nucleotide_orientation,
 )
 
 
@@ -191,3 +197,38 @@ def test_native_roundtrip_report_measures_full_pose_contract():
     assert report["position_error_nm"]["max"] == pytest.approx(0)
     assert report["normal_error_deg"]["max"] == pytest.approx(0)
     assert report["tangent_error_deg"]["max"] == pytest.approx(0)
+
+
+def test_decoder_uses_same_unbalanced_geometry_as_mrdna_seed(monkeypatch):
+    """Crossover balancing must never be introduced only on read-back."""
+    calls = []
+
+    def fake_geometry(_design, _selection, *, junction_balance):
+        calls.append(junction_balance)
+        return [{
+            "helix_id": "h", "bp_index": 2, "direction": "FORWARD",
+            "copy": 0, "backbone_position": [1, 2, 3],
+        }]
+
+    monkeypatch.setattr(
+        "backend.core.design_geometry._geometry_for_helices", fake_geometry
+    )
+    result = _mrdna_seed_reference_by_key(object())
+    assert calls == [False]
+    assert result[("h", 2, "FORWARD", 0)]["backbone_position"] == [1, 2, 3]
+
+
+def test_paired_orientation_frames_obey_mrdna_reader_contract():
+    forward = SimpleNamespace(
+        radial_hat=np.array([1.0, 0.0, 0.0]),
+        axis_tangent=np.array([0.0, 0.0, 1.0]),
+    )
+    reverse = SimpleNamespace(
+        radial_hat=np.array([-0.5, 0.5 * np.sqrt(3.0), 0.0]),
+        axis_tangent=np.array([0.0, 0.0, 1.0]),
+    )
+    forward_frame = _mrdna_nucleotide_orientation(forward)
+    reverse_frame = _mrdna_nucleotide_orientation(reverse, forward)
+    # This is exactly the transform applied by
+    # mrdna.readers.segmentmodel_from_lists.set_splines before its quaternion average.
+    assert reverse_frame @ _MRDNA_REVERSE_PAIR_FRAME == pytest.approx(forward_frame)
