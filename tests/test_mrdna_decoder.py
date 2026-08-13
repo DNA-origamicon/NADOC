@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from backend.core.mrdna_decoder import (
+    _add_nucleotide_frames,
     mrdna_backbone_strain_profile,
     validate_decoded_frame,
 )
@@ -122,3 +123,44 @@ def test_backbone_strain_uses_manifest_edges_and_keeps_complete_frame():
     assert result["n_edges"] == 2
     assert all(p["strain"] == pytest.approx(0.5) for p in result["positions"])
     assert result["metric"] == "backbone_geometric"
+
+
+def test_slab_tangent_follows_pair_centers_not_helical_backbone():
+    """The slab long axis is the relaxed helix axis, not the winding strand path."""
+    identities = {
+        (strand, bp): MrdnaNucleotideIdentity(
+            strand_id=strand, segment_kind="domain", segment_id="0",
+            nucleotide_ordinal=bp,
+        )
+        for strand in ("f", "r") for bp in (0, 1)
+    }
+    records = []
+    for strand, direction in (("f", "FORWARD"), ("r", "REVERSE")):
+        for bp in (0, 1):
+            identity = identities[(strand, bp)]
+            records.append(MrdnaNucleotideRecord(
+                identity=identity,
+                render=MrdnaRenderAddress(helix_id="h", bp_index=bp, direction=direction),
+                strand_type="staple", classification="duplex",
+                simulation_mode="interpolated", model_nucleotide_index=len(records),
+                predecessor=identities[(strand, 0)].key() if bp == 1 else None,
+                successor=identities[(strand, 1)].key() if bp == 0 else None,
+                pair=identities[("r" if strand == "f" else "f", bp)].key(),
+            ))
+    manifest = MrdnaNucleotideManifest(design_fingerprint="x", records=records)
+    points = {}
+    for record in records:
+        sign = 1.0 if record.render.direction == "FORWARD" else -1.0
+        # Rotate radial position by 90 degrees between bp: the strand path is
+        # diagonal, while pair centers remain exactly on +Z.
+        radial = [sign, 0, 0] if record.render.bp_index == 0 else [0, sign, 0]
+        points[record.identity.key()] = {
+            "identity": record.identity.key(), "helix_id": "h",
+            "bp_index": record.render.bp_index, "direction": record.render.direction,
+            "copy": 0, "backbone_position": [*radial[:2], float(record.render.bp_index)],
+        }
+    _add_nucleotide_frames(manifest, points)
+    assert all(
+        [point["tx"], point["ty"], point["tz"]] == pytest.approx([0, 0, 1])
+        for point in points.values()
+    )

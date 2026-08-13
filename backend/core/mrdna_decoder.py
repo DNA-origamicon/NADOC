@@ -49,6 +49,7 @@ def decode_mrdna_frame(
     if len(initial) != len(simulated):
         raise RuntimeError("mrDNA PSF/PDB/DCD particle counts disagree")
     aligned_nm = _kabsch(simulated, initial) / 10.0
+    initial_nm = initial / 10.0
 
     reference_by_key = {}
     if design is not None:
@@ -60,6 +61,10 @@ def decode_mrdna_frame(
             ): p
             for p in _geometry_for_helices(design, None, junction_balance=True)
         }
+
+    particle_frames = _dna_particle_frame_rotations(
+        manifest, initial_u, initial_nm, aligned_nm
+    )
 
     positions: list[dict] = []
     by_identity: dict[str, dict] = {}
@@ -103,7 +108,14 @@ def decode_mrdna_frame(
                     np.asarray(reference["backbone_position"])
                     + np.asarray(mate["backbone_position"])
                 )
-                point = point + (np.asarray(reference["backbone_position"]) - axis)
+                radial = np.asarray(reference["backbone_position"]) - axis
+                if len(record.particle_bindings) == 1:
+                    rotation = particle_frames.get(
+                        record.particle_bindings[0].particle_index
+                    )
+                    if rotation is not None:
+                        radial = rotation @ radial
+                point = point + radial
         entry = {
             "identity": record.identity.key(),
             "helix_id": record.render.helix_id,
@@ -133,10 +145,88 @@ def decode_mrdna_frame(
     }
 
 
+def _dna_particle_frame_rotations(
+    manifest: MrdnaNucleotideManifest, universe, initial: np.ndarray, final: np.ndarray
+) -> dict[int, np.ndarray]:
+    """Initial→final local-frame rotation for directly resolved Fine DNA sites."""
+    names = [atom.name for atom in universe.atoms]
+    sites: dict[tuple, int] = {}
+    for record in manifest.records:
+        if len(record.particle_bindings) != 1:
+            continue
+        binding = record.particle_bindings[0]
+        if binding.particle_kind != "DNA":
+            continue
+        sites[(record.render.helix_id, record.render.bp_index)] = binding.particle_index
+    by_helix: dict[str, list] = {}
+    for helix_id, bp_index in sites:
+        if isinstance(bp_index, int):
+            by_helix.setdefault(helix_id, []).append(bp_index)
+
+    def frame(array: np.ndarray, helix_id: str, bp_index: int, index: int):
+        bps = sorted(set(by_helix[helix_id]))
+        at = bps.index(bp_index)
+        if len(bps) < 2:
+            return None
+        if at == 0:
+            tangent = array[sites[(helix_id, bps[1])]] - array[index]
+        elif at == len(bps) - 1:
+            tangent = array[index] - array[sites[(helix_id, bps[-2])]]
+        else:
+            tangent = (
+                array[sites[(helix_id, bps[at + 1])]]
+                - array[sites[(helix_id, bps[at - 1])]]
+            )
+        tangent_norm = float(np.linalg.norm(tangent))
+        orientation_index = index + 1
+        if (
+            tangent_norm <= 1e-9
+            or orientation_index >= len(array)
+            or names[orientation_index] != "O"
+        ):
+            return None
+        tangent /= tangent_norm
+        radial = array[orientation_index] - array[index]
+        radial -= tangent * float(np.dot(radial, tangent))
+        radial_norm = float(np.linalg.norm(radial))
+        if radial_norm <= 1e-9:
+            return None
+        radial /= radial_norm
+        lateral = np.cross(tangent, radial)
+        lateral /= np.linalg.norm(lateral)
+        return np.column_stack((radial, lateral, tangent))
+
+    rotations = {}
+    for (helix_id, bp_index), index in sites.items():
+        if not isinstance(bp_index, int):
+            continue
+        before = frame(initial, helix_id, bp_index, index)
+        after = frame(final, helix_id, bp_index, index)
+        if before is not None and after is not None:
+            rotations[index] = after @ before.T
+    return rotations
+
+
 def _add_nucleotide_frames(
     manifest: MrdnaNucleotideManifest, by_identity: dict[str, dict]
 ) -> None:
     """Derive paired normals and local strand tangents from one decoded frame."""
+    centers: dict[tuple, np.ndarray] = {}
+    for record in manifest.records:
+        ident = record.identity.key()
+        if record.pair not in by_identity or ident not in by_identity:
+            continue
+        entry = by_identity[ident]
+        mate = by_identity[record.pair]
+        centers[(entry["helix_id"], entry["bp_index"], entry.get("copy", 0))] = 0.5 * (
+            np.asarray(entry["backbone_position"])
+            + np.asarray(mate["backbone_position"])
+        )
+    center_bps: dict[tuple, list] = {}
+    for helix_id, bp_index, copy in centers:
+        if isinstance(bp_index, int):
+            center_bps.setdefault((helix_id, copy), []).append(bp_index)
+
     for record in manifest.records:
         ident = record.identity.key()
         entry = by_identity.get(ident)
@@ -149,20 +239,20 @@ def _add_nucleotide_frames(
             if norm > 1e-9:
                 normal /= norm
                 entry.update(nx=float(normal[0]), ny=float(normal[1]), nz=float(normal[2]))
-        neighbors = [
-            by_identity[target]
-            for target in (record.predecessor, record.successor)
-            if target in by_identity
-            and by_identity[target]["helix_id"] == entry["helix_id"]
-        ]
-        if len(neighbors) == 2:
-            tangent = np.asarray(neighbors[1]["backbone_position"]) - np.asarray(
-                neighbors[0]["backbone_position"]
-            )
-        elif neighbors:
-            tangent = np.asarray(neighbors[0]["backbone_position"]) - here
-        else:
+        center_key = (entry["helix_id"], entry["bp_index"], entry.get("copy", 0))
+        bps = sorted(set(center_bps.get((center_key[0], center_key[2]), [])))
+        if center_key not in centers or center_key[1] not in bps or len(bps) < 2:
             continue
+        at = bps.index(center_key[1])
+        if at == 0:
+            tangent = centers[(center_key[0], bps[1], center_key[2])] - centers[center_key]
+        elif at == len(bps) - 1:
+            tangent = centers[center_key] - centers[(center_key[0], bps[-2], center_key[2])]
+        else:
+            tangent = (
+                centers[(center_key[0], bps[at + 1], center_key[2])]
+                - centers[(center_key[0], bps[at - 1], center_key[2])]
+            )
         norm = float(np.linalg.norm(tangent))
         if norm > 1e-9:
             tangent /= norm
