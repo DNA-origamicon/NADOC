@@ -85,6 +85,7 @@ def decode_mrdna_frame(
             record.render.copy,
         )
         reference = reference_by_key.get(render_tuple)
+        resolved_tangent = None
         # DNA particles are helix-axis sites. Restore the nucleotide's radial
         # offset from the authoritative snapshot geometry; identity and particle
         # ownership still come solely from the manifest. NAS particles already
@@ -115,6 +116,9 @@ def decode_mrdna_frame(
                     )
                     if rotation is not None:
                         radial = rotation @ radial
+                        native_tangent = reference.get("axis_tangent")
+                        if native_tangent is not None:
+                            resolved_tangent = rotation @ np.asarray(native_tangent)
                 point = point + radial
         entry = {
             "identity": record.identity.key(),
@@ -127,6 +131,15 @@ def decode_mrdna_frame(
             "classification": record.classification,
         }
         positions.append(entry)
+        if resolved_tangent is not None:
+            tangent_norm = float(np.linalg.norm(resolved_tangent))
+            if tangent_norm > 1e-9:
+                resolved_tangent /= tangent_norm
+                entry.update(
+                    tx=float(resolved_tangent[0]),
+                    ty=float(resolved_tangent[1]),
+                    tz=float(resolved_tangent[2]),
+                )
         by_identity[entry["identity"]] = entry
 
     _add_nucleotide_frames(manifest, by_identity)
@@ -239,6 +252,11 @@ def _add_nucleotide_frames(
             if norm > 1e-9:
                 normal /= norm
                 entry.update(nx=float(normal[0]), ny=float(normal[1]), nz=float(normal[2]))
+        # Direct Fine DNA sites already carry the calibrated particle-frame
+        # tangent. Preserve it; pair-center differencing is only the fallback for
+        # under-resolved/interpolated sites.
+        if all(component in entry for component in ("tx", "ty", "tz")):
+            continue
         center_key = (entry["helix_id"], entry["bp_index"], entry.get("copy", 0))
         bps = sorted(set(center_bps.get((center_key[0], center_key[2]), [])))
         if center_key not in centers or center_key[1] not in bps or len(bps) < 2:
@@ -443,4 +461,63 @@ def mrdna_backbone_strain_profile(
         "max_strain": max(measured, default=0.0),
         "abs_max_strain": max((abs(v) for v in measured), default=0.0),
         "display_abs_strain": robust,
+    }
+
+
+def measure_mrdna_native_roundtrip(
+    positions: list[dict], reference_positions: list[dict]
+) -> dict:
+    """Measure a decoded frame against the unified native geometry contract."""
+    reference = {
+        (
+            p["helix_id"], p["bp_index"],
+            getattr(p["direction"], "value", p["direction"]), int(p.get("copy", 0)),
+        ): p
+        for p in reference_positions
+    }
+    position_errors = []
+    normal_errors = []
+    tangent_errors = []
+
+    def angle_degrees(a, b) -> float:
+        av = np.asarray(a, dtype=float)
+        bv = np.asarray(b, dtype=float)
+        av /= np.linalg.norm(av)
+        bv /= np.linalg.norm(bv)
+        return float(np.degrees(np.arccos(np.clip(np.dot(av, bv), -1.0, 1.0))))
+
+    for position in positions:
+        key = (
+            position["helix_id"], position["bp_index"], position["direction"],
+            int(position.get("copy", 0)),
+        )
+        native = reference.get(key)
+        if native is None:
+            continue
+        position_errors.append(float(np.linalg.norm(
+            np.asarray(position["backbone_position"], dtype=float)
+            - np.asarray(native["backbone_position"], dtype=float)
+        )))
+        if all(k in position for k in ("nx", "ny", "nz")) and native.get("base_normal") is not None:
+            normal_errors.append(angle_degrees(
+                [position["nx"], position["ny"], position["nz"]], native["base_normal"]
+            ))
+        if all(k in position for k in ("tx", "ty", "tz")) and native.get("axis_tangent") is not None:
+            tangent_errors.append(angle_degrees(
+                [position["tx"], position["ty"], position["tz"]], native["axis_tangent"]
+            ))
+
+    def summary(values) -> dict:
+        array = np.asarray(values, dtype=float)
+        return {
+            "n": len(array),
+            "mean": float(array.mean()) if len(array) else None,
+            "max": float(array.max()) if len(array) else None,
+        }
+
+    return {
+        "n_matched": len(position_errors),
+        "position_error_nm": summary(position_errors),
+        "normal_error_deg": summary(normal_errors),
+        "tangent_error_deg": summary(tangent_errors),
     }

@@ -5,6 +5,7 @@ import pytest
 from backend.core.mrdna_decoder import (
     _add_nucleotide_frames,
     mrdna_backbone_strain_profile,
+    measure_mrdna_native_roundtrip,
     validate_decoded_frame,
 )
 from backend.core.mrdna_manifest import (
@@ -164,3 +165,21 @@ def test_slab_tangent_follows_pair_centers_not_helical_backbone():
         [point["tx"], point["ty"], point["tz"]] == pytest.approx([0, 0, 1])
         for point in points.values()
     )
+
+
+def test_native_roundtrip_report_measures_full_pose_contract():
+    reference = [{
+        "helix_id": "h", "bp_index": 0, "direction": "FORWARD", "copy": 0,
+        "backbone_position": [1, 2, 3], "base_normal": [1, 0, 0],
+        "axis_tangent": [0, 0, 1],
+    }]
+    decoded = [{
+        "helix_id": "h", "bp_index": 0, "direction": "FORWARD", "copy": 0,
+        "backbone_position": [1, 2, 3], "nx": 1, "ny": 0, "nz": 0,
+        "tx": 0, "ty": 0, "tz": 1,
+    }]
+    report = measure_mrdna_native_roundtrip(decoded, reference)
+    assert report["n_matched"] == 1
+    assert report["position_error_nm"]["max"] == pytest.approx(0)
+    assert report["normal_error_deg"]["max"] == pytest.approx(0)
+    assert report["tangent_error_deg"]["max"] == pytest.approx(0)
