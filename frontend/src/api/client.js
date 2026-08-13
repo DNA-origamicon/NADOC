@@ -2559,6 +2559,10 @@ export const stopMrdnaJob        = (id)          => _oxdnaJSON('POST', `/mrdna/j
 export const deleteMrdnaJob      = (id)          => _oxdnaJSON('DELETE', `/mrdna/jobs/${id}`)
 export const getMrdnaDisplay     = (id, signal)  => _oxdnaJSON('GET',  `/mrdna/jobs/${id}/display`, undefined, { signal })
 export const getMrdnaBeads       = (id, signal)  => _oxdnaJSON('GET',  `/mrdna/jobs/${id}/beads`, undefined, { signal })
+export const getMrdnaSnapshotGeometry = (id, signal) => _oxdnaJSON('GET', `/mrdna/jobs/${id}/snapshot-geometry`, undefined, { signal })
+export const getMrdnaRmsf        = (id, signal)  => _oxdnaJSON('GET',  `/mrdna/jobs/${id}/rmsf`, undefined, { signal })
+export const getMrdnaDeviation   = (id, signal)  => _oxdnaJSON('GET',  `/mrdna/jobs/${id}/deviation`, undefined, { signal })
+export const getMrdnaStrain      = (id, signal)  => _oxdnaJSON('GET',  `/mrdna/jobs/${id}/strain`, undefined, { signal })
 /** Designed (analytic Dietz) vs simulated (mrDNA) curvature for a completed job. */
 export const getMrdnaCurvature   = (id)          => _oxdnaJSON('GET',  `/mrdna/jobs/${id}/curvature`)
 /** Analytic curvature of the ACTIVE design's loop/skip pattern (instant, no run). */

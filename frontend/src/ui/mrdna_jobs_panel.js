@@ -120,12 +120,13 @@ export function detailStatusText(job, progress) {
   if (!job) return ''
   switch (job.status) {
     case 'queued':    return 'Queued — preparing to run.'
-    case 'preparing': return 'Writing the design snapshot…'
+    case 'preparing': return 'Building the mrDNA model and ARBD inputs…'
     case 'running': {
       const pct = formatProgress(job, progress)
       const eta = progress?.eta_seconds
       const etaStr = (typeof eta === 'number' && eta > 0) ? ` · ~${Math.ceil(eta)}s left` : ''
-      return `Relaxing (coarse ARBD) ${pct}${etaStr}`
+      const stage = progress?.stage_name ? ` — ${progress.stage_name}` : ''
+      return `Relaxing${stage} ${pct}${etaStr}`
     }
     case 'completed': {
       const s = job.sim_seconds ? ` in ${job.sim_seconds}s` : ''
@@ -145,9 +146,17 @@ export function seedReady(job) {
   return job?.status === 'completed' && (job?.fine_steps || 0) > 0
 }
 
-export function coarseStageChip(job) {
+export function coarseStageChip(job, progress = null) {
   const glyph = (st) => st === 'done' ? '●' : st === 'failed' ? '✗' : st === 'running' ? '◐' : '○'
-  const stages = job?.stages?.length ? job.stages : [{ name: 'coarse', status: undefined }]
+  const stages = job?.stages?.length
+    ? job.stages.map(s => ({ ...s }))
+    : [{ name: 'coarse', status: undefined }]
+  if (job?.status === 'running' && progress?.stage_name?.startsWith('fine')) {
+    const coarse = stages.find(s => s.name === 'coarse')
+    const fine = stages.find(s => s.name === 'fine')
+    if (coarse) coarse.status = 'done'
+    if (fine) fine.status = 'running'
+  }
   return stages.map((s) => `${glyph(s.status)} ${s.name}`).join('  ')
 }
 
@@ -220,8 +229,13 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
   const seedStatus = $('mrdna-jobs-seed-status')
   let _seeding = false
   const displayToggle = $('mrdna-jobs-display-toggle')
-  const beadsToggle = $('mrdna-jobs-beads-toggle')
+  const displayBody = $('mrdna-jobs-display-body')
+  const displayArrow = $('mrdna-jobs-display-arrow')
   const displayStatus = $('mrdna-jobs-display-status')
+  const displayConfidence = $('mrdna-jobs-display-confidence')
+  const modeRadios = () => [...document.querySelectorAll('input[name="mrdna-display-mode"]')]
+  const checkedMode = () => modeRadios().find(r => r.checked)?.value || 'off'
+  const setMode = (mode) => modeRadios().forEach(r => { r.checked = r.value === mode })
 
   let _jobs = []
   let _selectedId = null
@@ -357,7 +371,8 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
       // Live-follow: refresh the deformed display when a running job completes.
       if (job && job.status === 'completed' && mrdnaDisplay?.deformActive?.()
           && mrdnaDisplay.deformJobId?.() === _selectedId) {
-        await mrdnaDisplay.showDeform(_selectedId)
+        const fn = { deform: 'showDeform', flex: 'showFlex', deviation: 'showDeviation' }[mrdnaDisplay.mode?.()]
+        if (fn) await mrdnaDisplay[fn](_selectedId)
       }
       _renderDetail()
     }
@@ -421,11 +436,13 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
 
   function _renderDetail() {
     const job = _selectedJob()
+    _syncDisplayModes()
+    _syncDisplayStatus()
     if (!detail) return
     if (!job) { detail.style.display = 'none'; return }
     detail.style.display = ''
     if (detailStatus) detailStatus.textContent = detailStatusText(job, _progress)
-    if (timeline) timeline.textContent = coarseStageChip(job)
+    if (timeline) timeline.textContent = coarseStageChip(job, _progress)
     if (progressEl) {
       const pct = _progress?.overall != null ? Math.round(_progress.overall * 100) : 0
       progressEl.style.display = job.status === 'running' ? '' : 'none'
@@ -436,9 +453,6 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
       detailError.textContent = job.status === 'failed' ? (job.error || 'Run failed.') : ''
     }
     if (stopBtn) stopBtn.style.display = job.status === 'running' ? '' : 'none'
-    const ready = job.status === 'completed'
-    if (displayToggle) displayToggle.disabled = !ready
-    if (beadsToggle) beadsToggle.disabled = !ready
     if (seedBtn && !_seeding) {
       const ok = seedReady(job)
       seedBtn.disabled = !ok
@@ -462,10 +476,33 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
 
   function _syncDisplayStatus() {
     if (!displayStatus) return
-    const bits = []
-    if (mrdnaDisplay?.deformActive?.()) bits.push('model deformed')
-    if (mrdnaDisplay?.beadsActive?.()) bits.push('CG beads')
-    displayStatus.textContent = bits.length ? `Showing: ${bits.join(' + ')}` : ''
+    const mode = mrdnaDisplay?.mode?.()
+    const s = mrdnaDisplay?.lastStats?.()
+    if (mode === 'flex' && s) {
+      displayStatus.textContent = `Flexibility ${s.min.toFixed(2)}–${s.max.toFixed(2)} nm · ${s.nFrames ?? '—'} frames`
+    } else if (mode === 'deviation' && s) {
+      displayStatus.textContent = `Deviation RMSD ${s.rmsd.toFixed(2)} nm · max ${s.max.toFixed(2)} nm`
+    } else if (mode === 'strain' && s) {
+      displayStatus.textContent = `Geometric backbone strain ${(100 * s.min).toFixed(1)}% to ${(100 * s.max).toFixed(1)}%`
+    } else if (mode === 'beads') displayStatus.textContent = `Showing ${s?.n ?? ''} coarse beads`
+    else if (mode === 'deform') displayStatus.textContent = 'Showing relaxed mrDNA shape'
+    else displayStatus.textContent = ''
+    if (displayConfidence) {
+      const confidence = s?.confidence
+      displayConfidence.style.display = confidence?.lowerConfidence ? '' : 'none'
+      displayConfidence.title = confidence?.lowerConfidence
+        ? `${confidence.interpolated} nucleotide positions are interpolated from coarse mrDNA particles and have lower spatial confidence; ${confidence.direct} are directly resolved.`
+        : ''
+    }
+  }
+
+  function _syncDisplayModes() {
+    const ready = _selectedJob()?.status === 'completed'
+    const overlayUp = !!mrdnaDisplay?.mode?.()
+    modeRadios().forEach(r => {
+      if (r.value === 'off') { r.disabled = !mrdnaDisplay || (!ready && !overlayUp); return }
+      r.disabled = !ready || !mrdnaDisplay
+    })
   }
 
   // ── Control buttons ───────────────────────────────────────────────────────────
@@ -525,36 +562,33 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
     return false
   }
 
-  // ── Display toggles ───────────────────────────────────────────────────────────
-  if (displayToggle) {
-    displayToggle.addEventListener('change', async () => {
-      if (!mrdnaDisplay) return
-      // Turning the overlay OFF must work with nothing selected — a deselected row leaves
-      // the previous job's deformed model on screen, and this is how it comes down.
-      if (!displayToggle.checked) { mrdnaDisplay.stopDeform(); _syncDisplayStatus(); return }
-      if (!_selectedId) { displayToggle.checked = false; return }
-      const r = await mrdnaDisplay.showDeform(_selectedId)
-      if (!r?.ok) { displayToggle.checked = false; showToast('Relaxed positions not ready', { severity: 'warn' }) }
-      _syncDisplayStatus()
-    })
+  // ── Visualization card + mutually-exclusive display modes ────────────────────
+  displayToggle?.addEventListener('click', () => {
+    const open = displayBody?.style.display !== 'none'
+    if (displayBody) displayBody.style.display = open ? 'none' : ''
+    displayArrow?.classList.toggle('is-collapsed', open)
+  })
+  const modeFns = { deform: 'showDeform', beads: 'showBeads', flex: 'showFlex', deviation: 'showDeviation', strain: 'showStrain' }
+  async function _onModeChange() {
+    const mode = checkedMode()
+    if (!mrdnaDisplay) { setMode('off'); return }
+    if (mode === 'off') { mrdnaDisplay.stopAndRestore(); _syncDisplayStatus(); return }
+    if (!_selectedId || !modeFns[mode]) { setMode('off'); return }
+    const r = await mrdnaDisplay[modeFns[mode]](_selectedId)
+    if (!r?.ok) {
+      mrdnaDisplay.stopAndRestore(); setMode('off')
+      showToast(mode === 'flex' ? 'mrDNA trajectory needs at least two saved frames for RMSF'
+        : `${mode === 'deviation' ? 'Deviation' : 'Visualization'} data not ready`, { severity: 'warn' })
+    }
+    _syncDisplayStatus()
   }
-  if (beadsToggle) {
-    beadsToggle.addEventListener('change', async () => {
-      if (!mrdnaDisplay) return
-      if (!beadsToggle.checked) { mrdnaDisplay.hideBeads(); _syncDisplayStatus(); return }
-      if (!_selectedId) { beadsToggle.checked = false; return }
-      const r = await mrdnaDisplay.showBeads(_selectedId)
-      if (!r?.ok) { beadsToggle.checked = false; showToast('CG beads not ready', { severity: 'warn' }) }
-      _syncDisplayStatus()
-    })
-  }
+  modeRadios().forEach(r => r.addEventListener('change', _onModeChange))
   if (showAll) showAll.addEventListener('change', _fetchJobs)
 
   // ── Cross-panel coordination ──────────────────────────────────────────────────
   function _stopDisplays() {
     mrdnaDisplay?.stopAndRestore?.()
-    if (displayToggle) displayToggle.checked = false
-    if (beadsToggle) beadsToggle.checked = false
+    setMode('off')
     _syncDisplayStatus()
   }
   // NOTE: `e.detail` is `{ activeTab, collapsed }` (main.js setActiveTab) — it has no

@@ -63,6 +63,20 @@ def _xb_entry(xo_id, k):
     }
 
 
+def test_shared_rmsf_keeps_manifest_addressed_crossover_inserts():
+    """Synthetic render addresses are valid scalar-map identities, not parse errors."""
+    from backend.core.shape_metrics import rmsf_from_ensemble
+
+    first = [_xb_entry("xo-1", 0), _xb_entry("xo-1", 1)]
+    second = [
+        {**first[0], "backbone_position": [0.1, 0.0, 0.0]},
+        {**first[1], "backbone_position": [1.0, 0.1, 0.0]},
+    ]
+    result = rmsf_from_ensemble([first, second], align=False)
+    assert result["n"] == 2
+    assert {p["bp_index"] for p in result["positions"]} == {"xo-1"}
+
+
 # ── FAST: engine tag + descriptor self-consistency ────────────────────────────
 
 
@@ -197,13 +211,15 @@ def test_trajectory_rmsf_subsamples_guards_and_feeds_ensemble(monkeypatch, tmp_p
     a stubbed per-frame reconstruction + fake trajectory length: it caps the frame count,
     keys each frame the way ``_dev_key`` expects (int bp, string direction), and returns a
     finite per-nucleotide RMSF — and short/absent trajectories yield None."""
-    from backend.core import mrdna_bridge, mrdna_runner
+    from backend.core import mrdna_bridge, mrdna_decoder, mrdna_runner
+    from backend.core.mrdna_manifest import MrdnaNucleotideManifest
 
     psf, dcd = tmp_path / "s.psf", tmp_path / "s.dcd"
     psf.write_text("")
     dcd.write_text("")
     monkeypatch.setattr(mrdna_runner, "_sim_paths", lambda jd: (psf, dcd))
     monkeypatch.setattr(mrdna_bridge, "_ensure_mrdna", lambda: None)
+    MrdnaNucleotideManifest(design_fingerprint="test", records=[]).write(tmp_path)
 
     n_frames_box = {"n": 100}
 
@@ -215,17 +231,26 @@ def test_trajectory_rmsf_subsamples_guards_and_feeds_ensemble(monkeypatch, tmp_p
 
     # 8 real dsDNA keys (int bp, string direction) with a small frame-dependent, NON-rigid
     # wobble so the aligned ensemble has genuine site fluctuation (not a pure pose change).
-    def _fake_override(design, p, dd, frame=-1):
-        out = {}
+    def _fake_decode(job_dir, p, dd, *, design=None, frame=-1):
+        out = []
         for bp in range(4):
             for k, d in enumerate(("FORWARD", "REVERSE")):
                 jitter = 0.01 * frame * (bp + 1) if (bp + k) % 2 == 0 else 0.0
-                out[("h", bp, d)] = np.array([float(bp), float(k), jitter])
-        return out
+                out.append(
+                    {
+                        "identity": f"n:{bp}:{d}",
+                        "helix_id": "h",
+                        "bp_index": bp,
+                        "direction": d,
+                        "copy": 0,
+                        "backbone_position": [float(bp), float(k), jitter],
+                        "simulation_mode": "direct",
+                        "classification": "duplex",
+                    }
+                )
+        return {"positions": out, "quality": {"usable": True}}
 
-    monkeypatch.setattr(
-        mrdna_bridge, "nuc_pos_override_display_from_coarse", _fake_override
-    )
+    monkeypatch.setattr(mrdna_decoder, "decode_mrdna_frame", _fake_decode)
 
     from backend.core.mrdna_runner import mrdna_trajectory_rmsf
 
@@ -287,7 +312,7 @@ def test_real_mrdna_trajectory_rmsf_and_source_ready(tmp_path):
     """A real short ARBD coarse run: reconstruct the relaxed display frame + a per-nt RMSF
     from the CG trajectory ensemble, and assemble a READY mrDNA source bundle whose
     descriptors + RMSF are finite — a comparable mrDNA prediction, not a smoke run."""
-    from backend.core.mrdna_bridge import find_arbd, mrdna_model_from_nadoc
+    from backend.core.mrdna_bridge import find_arbd
 
     if not find_arbd():
         pytest.skip("arbd binary not installed")
@@ -301,7 +326,20 @@ def test_real_mrdna_trajectory_rmsf_and_source_ready(tmp_path):
     d = make_6hb_design(length_bp=42)
     job_dir = tmp_path / "job"
     (job_dir / "output").mkdir(parents=True)
-    m = mrdna_model_from_nadoc(d)
+    from backend.core.mrdna_manifest import (
+        bind_manifest_to_mrdna_particles,
+        build_mrdna_nucleotide_manifest,
+    )
+    from backend.parameterization.mrdna_inject import (
+        CrossoverPotentialOverride,
+        mrdna_model_from_nadoc_parameterized,
+    )
+
+    m = mrdna_model_from_nadoc_parameterized(
+        d, CrossoverPotentialOverride.from_database("T0")
+    )
+    manifest = build_mrdna_nucleotide_manifest(d, design_fingerprint="test")
+    bind_manifest_to_mrdna_particles(manifest, m).write(job_dir)
     # A handful of trajectory frames (output_period ≪ num_steps) so RMSF has an ensemble.
     m.simulate(
         output_name=_SIM_STEM,

@@ -92,6 +92,26 @@ def _is_out_of_date(job: MrdnaJob, current_fp: "str | None") -> bool:
     return job_out_of_date(job.design_fingerprint, current_fp)
 
 
+def _required_manifest(job: MrdnaJob):
+    """Load the identity contract or report an intentional legacy-job error."""
+    from backend.core.mrdna_manifest import MrdnaNucleotideManifest
+
+    try:
+        return MrdnaNucleotideManifest.load_required(job.job_dir(_workspace()))
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+def _confidence_summary(manifest) -> dict:
+    direct = sum(r.simulation_mode == "direct" for r in manifest.records)
+    interpolated = len(manifest.records) - direct
+    return {
+        "direct": direct,
+        "interpolated": interpolated,
+        "lower_confidence": interpolated > 0,
+    }
+
+
 # ── Request models ────────────────────────────────────────────────────────────
 
 
@@ -345,6 +365,38 @@ async def delete_mrdna_job(job_id: str) -> dict:
 # ── Display ───────────────────────────────────────────────────────────────────
 
 
+@router.get("/mrdna/jobs/{job_id}/snapshot-geometry")
+async def get_mrdna_snapshot_geometry(job_id: str) -> dict:
+    """Full geometry of the job's own design snapshot for visualization overlays."""
+    from backend.core.deformation import (
+        _apply_ovhg_rotations_to_axes,
+        deformed_helix_axes,
+    )
+    from backend.core.design_geometry import _geometry_for_helices
+    from backend.core.mrdna_runner import _load_snapshot_design
+
+    job = _load_job(job_id)
+    _required_manifest(job)
+    design = _load_snapshot_design(job.job_dir(_workspace()))
+    if design is None or not design.helices:
+        return {"job_id": job.job_id, "ready": False, "nucleotides": [], "helix_axes": []}
+
+    def _compute() -> tuple[list, list]:
+        nucleotides = _geometry_for_helices(design, None, junction_balance=True)
+        axes = deformed_helix_axes(design)
+        _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
+        return nucleotides, axes
+
+    nucleotides, axes = await run_in_threadpool(_compute)
+    return {
+        "job_id": job.job_id,
+        "ready": True,
+        "design": design.model_dump(mode="json"),
+        "nucleotides": nucleotides,
+        "helix_axes": axes,
+    }
+
+
 @router.get("/mrdna/jobs/{job_id}/display")
 async def get_mrdna_display(job_id: str) -> dict:
     """Relaxed per-nucleotide positions as an applyFemPositions update list.
@@ -352,6 +404,7 @@ async def get_mrdna_display(job_id: str) -> dict:
     Returns the cached ``display.json`` (per-helix coarse-spline reconstruction).
     """
     job = _load_job(job_id)
+    manifest = _required_manifest(job)
     cached = load_display(job.job_dir(_workspace()))
     if not cached or not cached.get("positions"):
         return {"job_id": job.job_id, "ready": False, "positions": []}
@@ -362,6 +415,7 @@ async def get_mrdna_display(job_id: str) -> dict:
         "status": job.status.value,
         "n_positions": len(positions),
         "positions": positions,
+        "confidence": _confidence_summary(manifest),
     }
 
 
@@ -370,6 +424,7 @@ async def get_mrdna_beads(job_id: str) -> dict:
     """The coarse CG bead cloud (nm, aligned to the design pose) for the bead
     representation toggle."""
     job = _load_job(job_id)
+    manifest = _required_manifest(job)
     cached = load_beads_with_edges(job.job_dir(_workspace()))
     if not cached or not cached.get("beads"):
         return {"job_id": job.job_id, "ready": False, "beads": [], "edges": []}
@@ -381,6 +436,99 @@ async def get_mrdna_beads(job_id: str) -> dict:
         "n_beads": len(beads),
         "beads": beads,
         "edges": edges,
+        "confidence": _confidence_summary(manifest),
+    }
+
+
+@router.get("/mrdna/jobs/{job_id}/rmsf")
+async def get_mrdna_rmsf(job_id: str) -> dict:
+    """Trajectory RMSF and mean reconstructed positions for the flexibility map."""
+    from backend.core.mrdna_runner import _load_snapshot_design, mrdna_trajectory_rmsf
+
+    job = _load_job(job_id)
+    manifest = _required_manifest(job)
+    jd = job.job_dir(_workspace())
+    design = _load_snapshot_design(jd)
+    if design is None:
+        raise HTTPException(500, f"mrDNA job {job_id!r} has no design snapshot")
+    result = await run_in_threadpool(mrdna_trajectory_rmsf, design, jd)
+    if not result or not result.get("positions"):
+        return {"job_id": job.job_id, "ready": False, "positions": []}
+    positions = [
+        {**p, "rmsf": p.get("rmsf_nm")}
+        for p in result["positions"]
+        if p.get("rmsf_nm") is not None
+    ]
+    vals = [p["rmsf"] for p in positions]
+    return {
+        "job_id": job.job_id,
+        "ready": bool(positions),
+        "positions": positions,
+        "n_frames": result.get("n_frames"),
+        "min_rmsf": min(vals) if vals else None,
+        "max_rmsf": max(vals) if vals else None,
+        "mean_rmsf": sum(vals) / len(vals) if vals else None,
+        "confidence": _confidence_summary(manifest),
+    }
+
+
+@router.get("/mrdna/jobs/{job_id}/deviation")
+async def get_mrdna_deviation(job_id: str) -> dict:
+    """Relaxed mrDNA shape deviation from the job snapshot's intended geometry."""
+    from backend.core.design_geometry import _geometry_for_helices
+    from backend.core.mrdna_runner import _load_snapshot_design
+    from backend.core.shape_metrics import deviation_profile
+
+    job = _load_job(job_id)
+    manifest = _required_manifest(job)
+    jd = job.job_dir(_workspace())
+    cached = load_display(jd)
+    if not cached or not cached.get("positions"):
+        return {"job_id": job.job_id, "ready": False, "positions": []}
+    design = _load_snapshot_design(jd)
+    if design is None:
+        raise HTTPException(500, f"mrDNA job {job_id!r} has no design snapshot")
+    reference = await run_in_threadpool(
+        _geometry_for_helices, design, None, junction_balance=True
+    )
+    result = await run_in_threadpool(
+        deviation_profile, cached["positions"], reference, align=True
+    )
+    return {
+        "job_id": job.job_id,
+        "ready": True,
+        **result,
+        "confidence": _confidence_summary(manifest),
+    }
+
+
+@router.get("/mrdna/jobs/{job_id}/strain")
+async def get_mrdna_strain(job_id: str) -> dict:
+    """Identity-preserving geometric backbone strain for the relaxed frame."""
+    from backend.core.design_geometry import _geometry_for_helices
+    from backend.core.mrdna_decoder import mrdna_backbone_strain_profile
+    from backend.core.mrdna_runner import _load_snapshot_design
+
+    job = _load_job(job_id)
+    manifest = _required_manifest(job)
+    jd = job.job_dir(_workspace())
+    cached = load_display(jd)
+    if not cached or not cached.get("positions"):
+        return {"job_id": job.job_id, "ready": False, "positions": []}
+    design = _load_snapshot_design(jd)
+    if design is None:
+        raise HTTPException(500, f"mrDNA job {job_id!r} has no design snapshot")
+    reference = await run_in_threadpool(
+        _geometry_for_helices, design, None, junction_balance=True
+    )
+    result = await run_in_threadpool(
+        mrdna_backbone_strain_profile, manifest, cached["positions"], reference
+    )
+    return {
+        "job_id": job.job_id,
+        "ready": bool(result["positions"]),
+        **result,
+        "confidence": _confidence_summary(manifest),
     }
 
 
@@ -393,6 +541,7 @@ async def get_mrdna_curvature(job_id: str) -> dict:
     the response flags whether this job ran the fine stage.
     """
     job = _load_job(job_id)
+    _required_manifest(job)
     report = load_curvature(job.job_dir(_workspace()))
     if report is None:
         # No snapshot to compute from (or job not prepared) — analytic-only fallback.
@@ -429,6 +578,7 @@ async def get_mrdna_shape_source(job_id: str) -> dict:
     from backend.core.mrdna_shape_source import build_mrdna_shape_source
 
     job = _load_job(job_id)
+    manifest = _required_manifest(job)
     jd = job.job_dir(_workspace())
     cached = load_display(jd)
     if not cached or not cached.get("positions"):
@@ -451,6 +601,7 @@ async def get_mrdna_shape_source(job_id: str) -> dict:
         "job_id": job.job_id,
         "ready": bundle["descriptors"] is not None,
         "n_frames": (rmsf["n_frames"] if rmsf else None),
+        "confidence": _confidence_summary(manifest),
         **bundle,
     }
 

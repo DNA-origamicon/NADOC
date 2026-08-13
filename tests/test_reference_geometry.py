@@ -17,7 +17,21 @@ from backend.api.main import app
 from backend.core.deformation import deformed_nucleotide_arrays
 from backend.core.geometry import nucleotide_positions_arrays
 from backend.core.lattice import make_bundle_design
-from backend.core.models import Design, Strand, Domain, Direction, Helix, StrandType, Vec3
+from backend.core.models import (
+    Crossover,
+    Design,
+    Direction,
+    Domain,
+    ForcedLigation,
+    HalfCrossover,
+    Helix,
+    OverhangConnection,
+    OverhangSpec,
+    Strand,
+    StrandExtension,
+    StrandType,
+    Vec3,
+)
 from backend.core.sequences import assign_scaffold_sequence, assign_staple_sequences
 from backend.core.validator import validate_design
 
@@ -114,6 +128,95 @@ def test_simulation_projection_removes_reference_strands_and_reference_only_heli
     from backend.physics.oxdna_interface import _strand_nucleotide_order
 
     assert len(_strand_nucleotide_order(simulation)) == 10
+
+
+def test_simulation_projection_prunes_every_reference_owned_dependency():
+    """The shared projection protects every engine from stale reference records."""
+    design = Design(
+        helices=[
+            Helix(
+                id="active", axis_start=Vec3(x=0, y=0, z=0),
+                axis_end=Vec3(x=0, y=0, z=3.4), length_bp=10,
+            ),
+            Helix(
+                id="reference", axis_start=Vec3(x=0, y=0, z=0),
+                axis_end=Vec3(x=0, y=0, z=3.4), length_bp=10,
+            ),
+        ],
+        strands=[
+            Strand(
+                id="active-strand",
+                domains=[Domain(
+                    helix_id="active", start_bp=0, end_bp=9,
+                    direction=Direction.FORWARD,
+                )],
+            ),
+            Strand(
+                id="reference-strand",
+                is_reference=True,
+                domains=[Domain(
+                    helix_id="reference", start_bp=0, end_bp=9,
+                    direction=Direction.FORWARD,
+                )],
+            ),
+        ],
+        crossovers=[
+            Crossover(
+                id="active-xo",
+                half_a=HalfCrossover(helix_id="active", index=5, strand=Direction.FORWARD),
+                half_b=HalfCrossover(helix_id="active", index=5, strand=Direction.REVERSE),
+            ),
+            Crossover(
+                id="reference-xo",
+                half_a=HalfCrossover(helix_id="reference", index=5, strand=Direction.FORWARD),
+                half_b=HalfCrossover(helix_id="active", index=5, strand=Direction.REVERSE),
+            ),
+        ],
+        extensions=[
+            StrandExtension(strand_id="active-strand", end="three_prime", sequence="T"),
+            StrandExtension(strand_id="reference-strand", end="three_prime", sequence="T"),
+        ],
+        overhangs=[
+            OverhangSpec(id="active-oh", helix_id="active", strand_id="active-strand"),
+            OverhangSpec(id="reference-oh", helix_id="reference", strand_id="reference-strand"),
+        ],
+        overhang_connections=[
+            OverhangConnection(
+                overhang_a_id="active-oh", overhang_a_attach="root",
+                overhang_b_id="active-oh", overhang_b_attach="free_end",
+                linker_type="ss", length_value=1, length_unit="bp",
+            ),
+            OverhangConnection(
+                overhang_a_id="active-oh", overhang_a_attach="root",
+                overhang_b_id="reference-oh", overhang_b_attach="free_end",
+                linker_type="ss", length_value=1, length_unit="bp",
+            ),
+        ],
+        forced_ligations=[
+            ForcedLigation(
+                three_prime_helix_id="active", three_prime_bp=4,
+                three_prime_direction=Direction.FORWARD,
+                five_prime_helix_id="active", five_prime_bp=5,
+                five_prime_direction=Direction.FORWARD,
+            ),
+            ForcedLigation(
+                three_prime_helix_id="reference", three_prime_bp=4,
+                three_prime_direction=Direction.FORWARD,
+                five_prime_helix_id="active", five_prime_bp=5,
+                five_prime_direction=Direction.FORWARD,
+            ),
+        ],
+    )
+
+    projected = design.without_reference_geometry()
+
+    assert [h.id for h in projected.helices] == ["active"]
+    assert [s.id for s in projected.strands] == ["active-strand"]
+    assert [x.id for x in projected.crossovers] == ["active-xo"]
+    assert [x.strand_id for x in projected.extensions] == ["active-strand"]
+    assert [x.id for x in projected.overhangs] == ["active-oh"]
+    assert len(projected.overhang_connections) == 1
+    assert len(projected.forced_ligations) == 1
 
 
 def test_namd_fast_size_estimate_cannot_count_reference_geometry():

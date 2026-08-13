@@ -2984,15 +2984,71 @@ class Design(BaseModel):
         Reference strands are editor-only backdrop geometry.  Removing the
         strands keeps mixed active/reference helices usable; removing helices
         used exclusively by reference strands prevents geometry seeders and
-        job snapshots from carrying empty reference axes into an engine.
+        job snapshots from carrying empty reference axes into an engine. Every
+        dependent record is pruned with the same ownership sets so a simulation
+        snapshot cannot retain metadata pointing into the removed backdrop.
         """
-        if not any(s.is_reference for s in self.strands):
-            return self
         reference_only = self.reference_helix_ids()
+        strands = self.active_strands()
+        strand_ids = {s.id for s in strands}
+        helix_ids = {h.id for h in self.helices if h.id not in reference_only}
+        overhangs = [
+            o for o in self.overhangs
+            if o.strand_id in strand_ids and o.helix_id in helix_ids
+        ]
+        overhang_ids = {o.id for o in overhangs}
+        crossovers = [
+            x for x in self.crossovers
+            if x.half_a.helix_id in helix_ids and x.half_b.helix_id in helix_ids
+        ]
+        crossover_ids = {x.id for x in crossovers}
+        protein_attachments = [
+            a for a in self.protein_attachments
+            if getattr(a.target, "kind", None) != "overhang"
+            or getattr(a.target, "overhang_id", None) in overhang_ids
+        ]
         return self.model_copy(
             update={
-                "strands": self.active_strands(),
-                "helices": [h for h in self.helices if h.id not in reference_only],
+                "strands": strands,
+                "helices": [h for h in self.helices if h.id in helix_ids],
+                "crossovers": crossovers,
+                "deformations": [
+                    op.model_copy(update={"affected_helix_ids": [
+                        hid for hid in op.affected_helix_ids if hid in helix_ids
+                    ]})
+                    for op in self.deformations
+                    if not op.affected_helix_ids
+                    or any(hid in helix_ids for hid in op.affected_helix_ids)
+                ],
+                "extensions": [e for e in self.extensions if e.strand_id in strand_ids],
+                "overhangs": overhangs,
+                "overhang_connections": [
+                    c for c in self.overhang_connections
+                    if c.overhang_a_id in overhang_ids and c.overhang_b_id in overhang_ids
+                ],
+                "overhang_bindings": [
+                    b for b in self.overhang_bindings
+                    if b.overhang_a_id in overhang_ids and b.overhang_b_id in overhang_ids
+                ],
+                "duplexes": [
+                    x for x in self.duplexes
+                    if x.left.overhang_id in overhang_ids and x.right.overhang_id in overhang_ids
+                ],
+                "forced_ligations": [
+                    x for x in self.forced_ligations
+                    if x.three_prime_helix_id in helix_ids
+                    and x.five_prime_helix_id in helix_ids
+                ],
+                "nucleotide_transforms": [
+                    x for x in self.nucleotide_transforms
+                    if (x.kind == "base" and x.helix_id in helix_ids)
+                    or (x.kind == "extra_base" and x.crossover_id in crossover_ids)
+                ],
+                "protein_attachments": protein_attachments,
+                "protein_assets": [
+                    asset for asset in self.protein_assets
+                    if any(a.asset_id == asset.id for a in protein_attachments)
+                ],
             }
         )
 

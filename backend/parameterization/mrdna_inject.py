@@ -441,9 +441,10 @@ def mrdna_model_from_nadoc_parameterized(
     from mrdna.readers.segmentmodel_from_lists import model_from_basepair_stack_3prime
     from backend.core.mrdna_bridge import _build_nt_arrays
 
-    r, bp, stack, three_prime, orientation, seq, nt_key = _build_nt_arrays(
-        design, return_nt_key=True
-    )
+    (
+        r, bp, stack, three_prime, orientation, seq, nt_key, _identity_meta,
+        _strand_sequences,
+    ) = _build_nt_arrays(design, return_nt_key=True, return_identity=True)
 
     # Build segments without creating a full SegmentModel
     # model_from_basepair_stack_3prime creates both segments AND SegmentModel.
@@ -454,6 +455,7 @@ def mrdna_model_from_nadoc_parameterized(
     import mrdna.segmentmodel as _sm_module
 
     original_cls = _sm_module.SegmentModel
+    original_set_splines = _sfl.set_splines
     model_params_with_hj = {
         **model_params,
         "hj_equilibrium_angle": override.hj_equilibrium_angle_deg,
@@ -473,6 +475,29 @@ def mrdna_model_from_nadoc_parameterized(
             _sfl._original_SegmentModel = getattr(_sfl, "SegmentModel")
             _sfl.SegmentModel = patched_cls
 
+        # NADOC-owned instrumentation: preserve the source nucleotide indices on
+        # each segment while mrDNA still has its exact hmap/hrank/fwd arrays. The
+        # external checkout remains untouched; generated beads can later be bound
+        # by segment contour, without coordinate proximity or helix rediscovery.
+        def _set_splines_with_sources(seg, coordinate, hid, hmap, hrank, fwd, *args, **kwargs):
+            result = original_set_splines(
+                seg, coordinate, hid, hmap, hrank, fwd, *args, **kwargs
+            )
+            source = []
+            for idx in range(len(hmap)):
+                if int(hmap[idx]) == int(hid):
+                    source.append(
+                        {
+                            "model_nucleotide_index": idx,
+                            "segment_nt_index": int(hrank[idx]),
+                            "is_forward": bool(fwd[idx]),
+                        }
+                    )
+            seg._nadoc_source_nucleotides = source
+            return result
+
+        _sfl.set_splines = _set_splines_with_sources
+
         model = model_from_basepair_stack_3prime(
             r,
             bp,
@@ -483,6 +508,7 @@ def mrdna_model_from_nadoc_parameterized(
             **model_params_with_hj,
         )
     finally:
+        _sfl.set_splines = original_set_splines
         _sm_module.SegmentModel = original_cls
         _restored = True
         if hasattr(_sfl, "_original_SegmentModel"):

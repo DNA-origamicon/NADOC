@@ -4800,6 +4800,35 @@
                 </div>
               </div>
 
+              <!-- ── Visualizations (job-snapshot physical overlays) ──────── -->
+              <div class="ox-card">
+                <div id="mrdna-jobs-display-toggle" class="ox-card__header" style="color:#c9d1d9">
+                  <span id="mrdna-jobs-display-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Visualizations</span>
+                </div>
+                <div id="mrdna-jobs-display-body" class="ox-card__body">
+                  <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9;margin-bottom:3px">
+                    <input name="mrdna-display-mode" value="off" type="radio" checked> Off (native positions)
+                  </label>
+                  <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9;margin-bottom:3px">
+                    <input name="mrdna-display-mode" value="deform" type="radio" disabled> Relaxed shape
+                  </label>
+                  <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9;margin-bottom:3px">
+                    <input name="mrdna-display-mode" value="beads" type="radio" disabled> CG beads (5 bp/bead)
+                  </label>
+                  <label title="RMSF over the saved mrDNA trajectory, after rigid-body alignment" style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9;margin-bottom:3px">
+                    <input name="mrdna-display-mode" value="flex" type="radio" disabled> Flexibility map (RMSF)
+                  </label>
+                  <label title="Distance between the relaxed shape and this job's design snapshot after rigid-body alignment" style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9;margin-bottom:3px">
+                    <input name="mrdna-display-mode" value="deviation" type="radio" disabled> Deviation from design
+                  </label>
+                  <label title="Signed change in each manifest-defined covalent backbone bond relative to this job's design snapshot; interpolated coarse segments are marked lower confidence" style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9;margin-bottom:3px">
+                    <input name="mrdna-display-mode" value="strain" type="radio" disabled> Backbone strain map
+                  </label>
+                  <div id="mrdna-jobs-display-status" style="font-size:var(--text-xs);color:#8b949e;min-height:14px;margin-top:4px"></div>
+                  <div id="mrdna-jobs-display-confidence" role="img" aria-label="Lower-confidence interpolated mrDNA segments" title="" style="display:none;font-size:var(--text-xs);color:#d29922;margin-top:3px;cursor:help">⚠ Some segments are under-resolved</div>
+                </div>
+              </div>
+
               <!-- ── Detail (selected job) ─────────────────────────────────── -->
               <div id="mrdna-jobs-detail" style="display:none;margin-top:6px;border-top:1px solid #21262d;padding-top:6px">
                 <div id="mrdna-jobs-detail-status" style="font-size:var(--text-xs);color:#c9d1d9;margin-bottom:4px;min-height:14px"></div>
@@ -4819,14 +4848,6 @@
                 </button>
                 <div id="mrdna-jobs-seed-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
 
-                <!-- display toggles (deform + CG beads; both display-only) -->
-                <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9;margin-bottom:3px">
-                  <input id="mrdna-jobs-display-toggle" type="checkbox" disabled> mrDNA display (deform model)
-                </label>
-                <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9;margin-bottom:3px">
-                  <input id="mrdna-jobs-beads-toggle" type="checkbox" disabled> CG beads (5 bp/bead cloud)
-                </label>
-                <div id="mrdna-jobs-display-status" style="font-size:var(--text-xs);color:#8b949e;min-height:14px"></div>
               </div>
 
             </div>

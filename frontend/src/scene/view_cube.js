@@ -156,9 +156,9 @@ const ICON_CW  = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" st
  * @param {HTMLElement}          container  — #viewport-container
  * @param {THREE.PerspectiveCamera} camera
  * @param {*}                    controls   — OrbitControls / TrackballControls proxy
- * @param {() => THREE.Object3D} getRoot    — returns the design mesh root (may be null)
+ * @param {() => THREE.Box3}     getBox     — returns the navigable design bounds (may be null)
  */
-export function initViewCube(container, camera, controls, getRoot) {
+export function initViewCube(container, camera, controls, getBox) {
   // Inject CSS
   const styleEl = document.createElement('style')
   styleEl.textContent = STYLE
@@ -227,9 +227,9 @@ export function initViewCube(container, camera, controls, getRoot) {
     // Compute bounding box of the current design (fallback: origin)
     let center = new THREE.Vector3()
     let dist   = 20
-    const root = getRoot?.()
-    if (root) {
-      _tmpBox.makeEmpty().expandByObject(root)
+    const box = getBox?.()
+    if (box) {
+      _tmpBox.copy(box)
       if (!_tmpBox.isEmpty()) {
         _tmpBox.getCenter(center)
         const radius = _tmpBox.getSize(_tmpSize).length() * 0.5

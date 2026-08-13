@@ -174,12 +174,23 @@ def _dev_key(p) -> tuple:
     """Copy-aware key ``(helix, bp, direction, copy)`` — loop-insertion copies stay
     distinct (copy defaults 0) so each inserted base matches its own reference base
     instead of collapsing onto the last one."""
+    bp = p["bp_index"]
+    if isinstance(bp, str):
+        try:
+            bp = int(bp)
+        except ValueError:
+            pass
     return (
         p["helix_id"],
-        int(p["bp_index"]),
+        bp,
         getattr(p["direction"], "value", p["direction"]),
         int(p.get("copy", 0)),
     )
+
+
+def _sorted_dev_keys(keys) -> list[tuple]:
+    """Deterministic ordering for ordinary integer sites and synthetic string sites."""
+    return sorted(keys, key=lambda k: tuple(f"{type(v).__name__}:{v}" for v in k))
 
 
 def deviation_profile(positions, reference_positions, *, align: bool = True) -> dict:
@@ -215,7 +226,7 @@ def deviation_profile(positions, reference_positions, *, align: bool = True) -> 
         _dev_key(p): np.asarray(p["backbone_position"], float)
         for p in reference_positions
     }
-    shared = sorted(set(cand) & set(ref))
+    shared = _sorted_dev_keys(set(cand) & set(ref))
     if align and len(shared) < 3:
         raise ValueError(
             f"deviation_profile: only {len(shared)} shared nucleotide(s) — need >= 3 to "
@@ -281,7 +292,7 @@ def rmsf_from_ensemble(frames, *, align: bool = True) -> dict:
         {_dev_key(p): np.asarray(p["backbone_position"], float) for p in fr}
         for fr in frames
     ]
-    shared = sorted(set.intersection(*(set(k) for k in keyed)))
+    shared = _sorted_dev_keys(set.intersection(*(set(k) for k in keyed)))
     if not shared:
         raise ValueError("rmsf_from_ensemble: no nucleotide is present in every frame")
 

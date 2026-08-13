@@ -44,6 +44,7 @@ import { initFretChecker } from './scene/fret_checker.js'
 import { initUndefinedHighlight } from './scene/undefined_highlight.js'
 import { assemblyDuplicateOffset } from './scene/assembly_layout.js'
 import { nucleotideLocalBox, selectionBBox } from './scene/selection_bbox.js'
+import { navigationDesign, navigationGeometry, referenceGeometryHidden } from './scene/reference_navigation.js'
 import { fitViewPose } from './scene/fit_view_math.js'
 import { initAssemblyMultiBox } from './scene/assembly_multi_box.js'
 import { initAssemblyConfigAnimator } from './scene/assembly_config_animator.js'
@@ -2144,6 +2145,7 @@ async function main() {
     beadOverlay:       mrdnaBeadOverlay,
     connectionOverlay: mrdnaConnOverlay,
     setDesignVisible:  (v) => _setDesignGeometryVisible(v),  // hoisted fn decl (defined below)
+    flexScale,
   })
   const mrdnaPanel = initMrdnaJobsPanel({ mrdnaDisplay, getWorkspacePath: () => _workspacePath, getSelection: _anchorSelectionState })
   // CanDo FEM (native shape predictor) — sibling of the mrDNA panel, in-process
@@ -2669,7 +2671,7 @@ async function main() {
     document.getElementById('canvas-area'),
     camera,
     controls,
-    () => designRenderer.getHelixCtrl()?.root,
+    () => nucleotideLocalBox(navigationGeometry(store.getState())),
   )
 
   function _isUnfoldActive() { return store.getState().unfoldActive }
@@ -3862,10 +3864,11 @@ async function main() {
   }
 
   function _fitToView() {
-    const { assemblyActive, currentGeometry } = store.getState()
+    const state = store.getState()
+    const { assemblyActive } = state
     const box = assemblyActive
       ? assemblyRenderer.getBoundingBox()
-      : nucleotideLocalBox(currentGeometry)
+      : nucleotideLocalBox(navigationGeometry(state))
     const pose = fitViewPose(box, camera.position, controls.target, camera.fov)
     if (!pose) return
     controls.target.copy(pose.target)
@@ -3878,13 +3881,30 @@ async function main() {
   function _selectionBBox() {
     const st = store.getState()
     const refs = st.selection?.items ?? []
-    return selectionBBox(st.currentGeometry, {
+    return selectionBBox(navigationGeometry(st), {
       strandIds: new Set(refs.filter(ref => ref.kind === 'strand').map(ref => ref.id)),
       domainRefs: new Set(refs.filter(ref => ref.kind === 'domain')
         .map(ref => `${ref.strandId}:${ref.domainIndex}`)),
       baseKeys: new Set(refs.filter(ref => ref.kind === 'base').map(ref => ref.key)),
     })
   }
+
+  // Transparent reference instances still exist in the Three.js scene. When
+  // their visibility flips, move the camera and its pivot together to the
+  // visible design's center. Preserving the camera offset avoids a view-angle
+  // jump while making Orbit, Trackball, and Multiscale rotate as if the hidden
+  // helper geometry did not exist.
+  store.subscribe((newState, prevState) => {
+    if (newState.assemblyActive ||
+        !referenceGeometryHidden(newState) || referenceGeometryHidden(prevState)) return
+    const box = nucleotideLocalBox(navigationGeometry(newState))
+    if (!box) return
+    const center = box.getCenter(new THREE.Vector3())
+    const delta = center.sub(controls.target)
+    controls.target.add(delta)
+    camera.position.add(delta)
+    controls.update()
+  })
 
   // F-key handler: frame the selection if there is one, otherwise fit the whole
   // design. Matches the standard CAD convention (Blender F, Fusion F, etc.).
@@ -4332,7 +4352,7 @@ async function main() {
     document.getElementById(`menu-view-orbit-${m}`)?.addEventListener('click', () => _setOrbitMode(m))
   }
   // Must precede _setOrbitMode — Multiscale reads the helix-axis field on construction.
-  setNavScaleProvider(makeSegmentCache(() => store.getState().currentDesign))
+  setNavScaleProvider(makeSegmentCache(() => navigationDesign(store.getState())))
   _setOrbitMode('multiscale')  // default: zoom-to-cursor, scale-aware, no stall
 
   // ── Coloring submenu (Strand / Base / Cluster / Overhang / CPK) ─────────────

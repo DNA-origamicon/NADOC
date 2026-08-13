@@ -52,6 +52,64 @@ def _rodrigues(v: np.ndarray, axis: np.ndarray, angle: float) -> np.ndarray:
 _EXT_PREFIX = "__ext_"
 
 
+def unwrap_periodic_positions(
+    positions: np.ndarray,
+    bonds: np.ndarray,
+    box: np.ndarray,
+    *,
+    reference: Optional[np.ndarray] = None,
+) -> np.ndarray:
+    """Unwrap bonded components from an orthorhombic periodic ARBD cell."""
+    pos = np.asarray(positions, dtype=float)
+    out = pos.copy()
+    dims = np.asarray(box, dtype=float)[:3]
+    if (
+        len(pos) == 0
+        or dims.shape != (3,)
+        or not np.all(np.isfinite(dims))
+        or np.any(dims <= 0)
+    ):
+        return out
+    adjacency: list[list[int]] = [[] for _ in range(len(pos))]
+    for a, b in np.asarray(bonds, dtype=int).reshape((-1, 2)):
+        if 0 <= a < len(pos) and 0 <= b < len(pos):
+            adjacency[a].append(b)
+            adjacency[b].append(a)
+    seen = np.zeros(len(pos), dtype=bool)
+    ref = None if reference is None else np.asarray(reference, dtype=float)
+    for root in range(len(pos)):
+        if seen[root]:
+            continue
+        seen[root] = True
+        component = [root]
+        stack = [root]
+        while stack:
+            a = stack.pop()
+            for b in adjacency[a]:
+                if seen[b]:
+                    continue
+                delta = pos[b] - pos[a]
+                delta -= dims * np.round(delta / dims)
+                out[b] = out[a] + delta
+                seen[b] = True
+                component.append(b)
+                stack.append(b)
+        if ref is not None and ref.shape == pos.shape:
+            idx = np.asarray(component, dtype=int)
+            shift = dims * np.round((ref[idx].mean(0) - out[idx].mean(0)) / dims)
+            out[idx] += shift
+    return out
+
+
+def _unwrapped_universe_positions(universe, reference=None) -> np.ndarray:
+    """Return an MDAnalysis Universe's coordinates with bonded PBCs removed."""
+    bonds = getattr(getattr(universe, "bonds", None), "indices", np.empty((0, 2)))
+    box = universe.dimensions[:3] if universe.dimensions is not None else np.zeros(3)
+    return unwrap_periodic_positions(
+        universe.atoms.positions, bonds, box, reference=reference
+    )
+
+
 def mrdna_tool_path() -> str:
     """Canonical location of the mrdna source checkout (editable-installed).
 
@@ -347,7 +405,7 @@ def nuc_pos_override_from_mrdna(
         u.trajectory[-1]
     else:
         u.trajectory[frame]
-    positions = atoms.positions.copy()  # (N_beads, 3) Å
+    positions = _unwrapped_universe_positions(u, init_pos)  # (N_beads, 3) Å
     atom_names = np.array([a.name for a in atoms])
     dna_sim_idx = np.where(atom_names == "DNA")[0]
     dna_sim_pos = positions[dna_sim_idx]  # (N_dna, 3) Å
@@ -530,7 +588,7 @@ def nuc_pos_override_from_mrdna_coarse(
         u.trajectory[-1]
     else:
         u.trajectory[frame]
-    sim_pos = atoms.positions.copy()
+    sim_pos = _unwrapped_universe_positions(u, init_pos)
     atom_names = np.array([a.name for a in atoms])
     dna_sim_idx = np.where(atom_names == "DNA")[0]
     dna_sim_pos = sim_pos[dna_sim_idx]  # (N_dna, 3) Å
@@ -784,7 +842,8 @@ def nuc_pos_override_display_from_coarse(
         u.trajectory[frame]
     atom_names = np.array([a.name for a in u.atoms])
     dna_sim_idx = np.where(atom_names == "DNA")[0]
-    dna_sim_pos = u.atoms.positions[dna_sim_idx].astype(float)  # drifted, Å
+    all_sim_pos = _unwrapped_universe_positions(u, u_init.atoms.positions)
+    dna_sim_pos = all_sim_pos[dna_sim_idx].astype(float)  # drifted, unwrapped Å
 
     if len(dna_sim_pos) == n_dna and n_dna >= 3:
         mc = dna_sim_pos.mean(axis=0)
@@ -956,7 +1015,7 @@ def nuc_pos_override_from_arbd_strands(
         u.trajectory[-1]
     else:
         u.trajectory[frame]
-    all_pos = u.atoms.positions.copy()
+    all_pos = _unwrapped_universe_positions(u, u_init.atoms.positions)
     all_names = np.array([a.name for a in u.atoms])
     dna_sim_idx = np.where(all_names == "DNA")[0]
     dna_sim_pos = all_pos[dna_sim_idx].copy()  # (N_dna, 3) Å, ARBD frame
@@ -1212,8 +1271,9 @@ def nuc_pos_override_ssdna_from_arbd(
 
     u = mda.Universe(psf_path, dcd_path)
     u.trajectory[-1 if frame == -1 else frame]
-    dna_sim = u.atoms.positions[dna_i].astype(float)
-    nas_sim = u.atoms.positions[nas_i].astype(float)
+    all_sim = _unwrapped_universe_positions(u, u_init.atoms.positions)
+    dna_sim = all_sim[dna_i].astype(float)
+    nas_sim = all_sim[nas_i].astype(float)
 
     # Align the ssDNA beads with the SAME rigid transform as the ds body (from the
     # DNA beads) so ss stays consistent with the relaxed dsDNA it attaches to.
@@ -1327,6 +1387,25 @@ def nuc_pos_override_ssdna_from_arbd(
             # spline/translate; a rootless run stays 'ideal' → no override → a free
             # overhang keeps its current phantom display.
             label, chosen = candidates[-1]
+            # Sparse/mis-assigned NAS beads can make a nominal spline double back
+            # or leap across a shared child helix. Never let display fidelity trump
+            # covalent continuity: reject a spline whose internal or root-junction
+            # steps exceed a generous phosphodiester envelope. The translated ideal
+            # candidate preserves the relaxed attachment and every native bond.
+            if label == "spline":
+                steps = [
+                    float(np.linalg.norm(np.asarray(b) - np.asarray(a)))
+                    for a, b in zip(chosen, chosen[1:])
+                ]
+                if root_relaxed is not None:
+                    edge = chosen[0] if anchor_idx == 0 else chosen[-1]
+                    steps.append(float(np.linalg.norm(np.asarray(edge) - root_relaxed)))
+                if steps and (min(steps) < 0.25 or max(steps) > 1.20):
+                    label, chosen = next(
+                        (candidate for candidate in reversed(candidates[:-1])
+                         if candidate[0] == "translate"),
+                        ("ideal", ideal),
+                    )
         else:
             label, chosen = max(candidates, key=lambda c: _clearance(c[1]))
         n_spline += label == "spline"
@@ -1456,6 +1535,7 @@ def _extension_bead_positions(
 def _build_nt_arrays(
     design: Design,
     return_nt_key: bool = False,
+    return_identity: bool = False,
 ):
     """
     Build the per-nucleotide arrays required by model_from_basepair_stack_3prime.
@@ -1514,6 +1594,30 @@ def _build_nt_arrays(
             seen[dk] = k + 1
             site[(h.id, n.bp_index, n.direction.value, k)] = n
 
+    # Extruded overhang domains may intentionally retain parent-rail bp labels far
+    # outside their dedicated short helix's stored span.  The renderer already
+    # creates these occupied extended sites; mrDNA must enumerate the same topology
+    # or the overhang is silently absent from the simulation.  Add only missing
+    # occupied keys so the long-established in-span duplex frames remain unchanged.
+    from types import SimpleNamespace
+
+    from backend.core.design_geometry import _geometry_for_helices
+
+    seen_extended: Dict[Tuple[str, int, str], int] = {}
+    for g in _geometry_for_helices(design, None, junction_balance=False):
+        dk = (g["helix_id"], g["bp_index"], g["direction"])
+        k = seen_extended.get(dk, 0)
+        seen_extended[dk] = k + 1
+        sk = (*dk, k)
+        if sk in site or str(g["helix_id"]).startswith("__"):
+            continue
+        bn = np.asarray(g["base_normal"], dtype=float)
+        site[sk] = SimpleNamespace(
+            position=np.asarray(g["backbone_position"], dtype=float),
+            radial_hat=-bn,
+            axis_tangent=np.asarray(g["axis_tangent"], dtype=float),
+        )
+
     # ── Pass 1: enumerate nucleotides and assign indices ──────────────────────
     # Index map: (helix_id, bp_index, 'FORWARD'|'REVERSE') → global nt index
     nt_key: Dict[Tuple[str, int, str], int] = {}
@@ -1521,6 +1625,7 @@ def _build_nt_arrays(
     positions: List[np.ndarray] = []
     orientations: List[np.ndarray] = []
     seq_chars: List[str] = []
+    identity_meta: List[dict] = []
 
     # Per-strand list of global indices in 5′→3′ order.
     strand_seqs: List[List[int]] = []
@@ -1572,6 +1677,7 @@ def _build_nt_arrays(
         pending_xb: Optional[Tuple[str, str, int]] = None
 
         for di, domain in enumerate(strand.domains):
+            domain_ordinal = 0
             h_id = domain.helix_id
             ax_s, axis_hat, bp_start = helix_geom[h_id]
             direction = domain.direction.value  # 'FORWARD' or 'REVERSE'
@@ -1612,6 +1718,25 @@ def _build_nt_arrays(
                     positions.append(backbone_ang)
                     orientations.append(orient)
                     seq_chars.append(char)
+                    identity_meta.append({
+                        "strand_id": strand.id,
+                        "segment_kind": "domain",
+                        "segment_id": str(di),
+                        "nucleotide_ordinal": domain_ordinal,
+                        "copy": k,
+                        "helix_id": h_id,
+                        "bp_index": bp_idx,
+                        "direction": direction,
+                        "strand_type": strand.strand_type.value,
+                        "classification": (
+                            "loop_copy" if k else
+                            "overhang" if domain.overhang_id else
+                            "linker" if strand.strand_type.value == "linker" else
+                            "unpaired" if domain.binds_overhang_id else
+                            "duplex"
+                        ),
+                    })
+                    domain_ordinal += 1
 
                     anchor_rec = (idx, backbone_ang, rad, axis_hat, direction)
                     if first_anchor is None:
@@ -1633,6 +1758,18 @@ def _build_nt_arrays(
                             positions.append(p0 * (1.0 - t) + p1 * t)
                             orientations.append(orientations[prev_idx])
                             seq_chars.append(base)
+                            identity_meta.append({
+                                "strand_id": strand.id,
+                                "segment_kind": "crossover_insert",
+                                "segment_id": xo_id,
+                                "nucleotide_ordinal": j,
+                                "copy": 0,
+                                "helix_id": "__xb__",
+                                "bp_index": xo_id,
+                                "direction": j,
+                                "strand_type": strand.strand_type.value,
+                                "classification": "crossover_insert",
+                            })
                             strand_indices.append(eb_idx)
                             eb_idxs.append(eb_idx)
                         extra_base_inserts.append((prev_idx, eb_idxs, idx))
@@ -1670,6 +1807,18 @@ def _build_nt_arrays(
                 positions.append(pts[i])
                 orientations.append(orientations[a_idx])
                 seq_chars.append(ext.sequence[ordinal])
+                identity_meta.append({
+                    "strand_id": strand.id,
+                    "segment_kind": "extension",
+                    "segment_id": ext.id,
+                    "nucleotide_ordinal": ordinal,
+                    "copy": 0,
+                    "helix_id": f"{_EXT_PREFIX}{ext.id}",
+                    "bp_index": i,
+                    "direction": a_dir,
+                    "strand_type": strand.strand_type.value,
+                    "classification": "extension",
+                })
                 out.append(b_idx)
             return out
 
@@ -1778,6 +1927,11 @@ def _build_nt_arrays(
             stack_arr[a] = b
 
     seq_list = seq_chars if has_sequence else None
+    if return_identity:
+        return (
+            r, bp_arr, stack_arr, three_prime_arr, orient_arr, seq_list,
+            nt_key if return_nt_key else None, identity_meta, strand_seqs,
+        )
     if return_nt_key:
         return r, bp_arr, stack_arr, three_prime_arr, orient_arr, seq_list, nt_key
     return r, bp_arr, stack_arr, three_prime_arr, orient_arr, seq_list

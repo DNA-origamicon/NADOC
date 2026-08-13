@@ -73,6 +73,24 @@ def test_fingerprint_ignores_display_only_fields():
     assert oxdna_design_fingerprint(cursor_moved) == fp
 
 
+def test_fingerprint_ignores_reference_geometry_excluded_from_simulation():
+    """A fresh job hashes the simulation projection, not the editor backdrop."""
+    d = make_6hb_design()
+    reference = d.strands[0]
+    with_reference = d.copy_with(
+        strands=[
+            strand.model_copy(update={"is_reference": True})
+            if strand.id == reference.id
+            else strand
+            for strand in d.strands
+        ]
+    )
+
+    assert oxdna_design_fingerprint(with_reference) == oxdna_design_fingerprint(
+        with_reference.without_reference_geometry()
+    )
+
+
 def test_current_fingerprint_cached_until_design_revision_changes(monkeypatch):
     """Frequent job-card polls hash a large unchanged design only once."""
     from backend.core import oxdna_staleness
@@ -127,7 +145,8 @@ def test_job_out_of_date_comparison():
     assert job_out_of_date("a", None) is False
     # Upgrade compatibility: legacy colour-inclusive hashes cannot be directly
     # compared with v2 and must not make an unchanged existing job look stale.
-    assert job_out_of_date("a" * 64, "v2:" + "b" * 64) is False
+    assert job_out_of_date("a" * 64, "v3:" + "b" * 64) is False
+    assert job_out_of_date("v2:" + "a" * 64, "v3:" + "b" * 64) is False
 
 
 # ── Guard helper + routes ─────────────────────────────────────────────────────

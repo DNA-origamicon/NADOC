@@ -86,6 +86,9 @@ describe('coarseStageChip', () => {
     expect(coarseStageChip({ stages: [
       { name: 'coarse', status: 'done' }, { name: 'fine', status: 'running' }] }))
       .toBe('● coarse  ◐ fine')
+    expect(coarseStageChip({ status: 'running', stages: [
+      { name: 'coarse', status: 'running' }, { name: 'fine', status: 'pending' }],
+    }, { stage_name: 'fine (twist)' })).toBe('● coarse  ◐ fine')
   })
 })
 

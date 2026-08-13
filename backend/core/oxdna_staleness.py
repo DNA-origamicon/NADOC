@@ -16,6 +16,8 @@ layout, representation overrides — so repositioning a cluster or moving the ca
 does NOT mark jobs stale; only a structural / sequence / geometry edit does.
 (Cluster transforms are the Three-Layer *display* layer and never feed
 ``_geometry_for_design``, so they are correctly out of the build fingerprint.)
+Editor-only reference geometry is projected out for the same reason: every
+simulation preparer removes it before writing its frozen design snapshot.
 """
 
 from __future__ import annotations
@@ -41,7 +43,7 @@ _FINGERPRINT_FIELDS = {
     "photoproduct_junctions",
 }
 
-_FINGERPRINT_VERSION = "v2"
+_FINGERPRINT_VERSION = "v3"
 
 # Job cards ask for the current fingerprint on every status refresh.  Serialising a
 # multi-thousand-strand design can take seconds (and holds the GIL), so doing the same
@@ -55,12 +57,17 @@ _CURRENT_FP_CACHE_LOCK = threading.Lock()
 def oxdna_design_fingerprint(design: Design) -> str:
     """Stable content hash of the oxDNA-build-relevant design fields (see module
     docstring).  Deterministic for a given design state, display-layer agnostic."""
+    # Jobs are built from this exact projection.  Hashing the unprojected editor
+    # design made a job created from a design with reference backdrop geometry
+    # appear stale immediately: the job snapshot contained only active DNA while
+    # the status endpoint compared it with active + reference DNA.
+    design = design.without_reference_geometry()
     payload = design.model_dump(mode="json", include=_FINGERPRINT_FIELDS)
     # Strand colours are persisted on the Strand model so they survive a file
     # round-trip, but they do not affect topology, sequence, seed coordinates, or
     # any simulation input.  Hashing them made a purely cosmetic recolour mark all
     # existing jobs out of date.  Keep the rest of each strand intact (including
-    # is_reference, domains, and sequence), and remove only the presentation field.
+    # domains and sequence), and remove only the presentation field.
     for strand in payload.get("strands", []):
         strand.pop("color", None)
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -89,7 +96,7 @@ def job_out_of_date(
     if not job_fingerprint or not current_fingerprint:
         return False
     # An unversioned hash came from the former colour-inclusive algorithm. It
-    # cannot be compared meaningfully with v2: the only difference may be a
+    # cannot be compared meaningfully with the current version: the only difference may be a
     # cosmetic colour, or there may be no difference at all after an upgrade.
     # Callers with a frozen job snapshot derive a v2 hash before reaching here;
     # callers without one degrade to "unknown" instead of showing a false alert.
@@ -99,6 +106,12 @@ def job_out_of_date(
         and not job_fingerprint.startswith(f"{_FINGERPRINT_VERSION}:")
     ):
         return False
+    # A version bump means the canonical projection changed. Hashes produced by
+    # different algorithms are incomparable; old jobs degrade to unknown rather
+    # than all becoming falsely stale after an upgrade.
+    if ":" in job_fingerprint and ":" in current_fingerprint:
+        if job_fingerprint.split(":", 1)[0] != current_fingerprint.split(":", 1)[0]:
+            return False
     return job_fingerprint != current_fingerprint
 
 
@@ -107,6 +120,7 @@ def _design_identity(design: "Design | None"):
     WHOLLY different loaded design apart from an edit of the same one.  None-safe."""
     if design is None:
         return None
+    design = design.without_reference_geometry()
     name = getattr(getattr(design, "metadata", None), "name", None)
     lattice = str(getattr(design, "lattice_type", "")).split(".")[-1].lower()
     return (name or "untitled", lattice, len(design.helices), len(design.strands))

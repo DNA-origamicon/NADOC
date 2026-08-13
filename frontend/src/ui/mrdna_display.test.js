@@ -2,6 +2,17 @@ import { describe, it, expect, vi } from 'vitest'
 import { toFemUpdates, beadsToPoints, edgesFrom, initMrdnaDisplay } from './mrdna_display.js'
 
 describe('toFemUpdates', () => {
+  it('preserves relaxed slab frames and loop-copy addressing', () => {
+    const resp = { ready: true, positions: [{
+      helix_id: 'h0', bp_index: 3, direction: 'FORWARD', copy: 1,
+      backbone_position: [1, 2, 3], nx: 0, ny: 1, nz: 0, tx: 0, ty: 0, tz: 1,
+    }] }
+    expect(toFemUpdates(resp)).toEqual([{
+      helix_id: 'h0', bp_index: 3, direction: 'FORWARD', copy: 1,
+      backbone_position: [1, 2, 3], nx: 0, ny: 1, nz: 0, tx: 0, ty: 0, tz: 1,
+    }])
+  })
+
   it('returns [] for a not-ready / empty response', () => {
     expect(toFemUpdates(null)).toEqual([])
     expect(toFemUpdates({ ready: false, positions: [] })).toEqual([])
@@ -77,15 +88,39 @@ describe('edgesFrom', () => {
 
 describe('initMrdnaDisplay controller', () => {
   function makeDeps() {
-    const designRenderer = { applyFemPositions: vi.fn() }
+    const designRenderer = {
+      applyFemPositions: vi.fn(), clearScalarColors: vi.fn(),
+      applyScalarColors: vi.fn(), clearExternalGeometry: vi.fn(), renderExternalGeometry: vi.fn(),
+    }
     const beadOverlay = { update: vi.fn() }
     const connectionOverlay = { update: vi.fn(), clear: vi.fn() }
     const setDesignVisible = vi.fn()
     const api = {
       getMrdnaDisplay: vi.fn(async () => ({ ready: true, positions: [
         { helix_id: 'h', bp_index: 0, direction: 'FORWARD', backbone_position: [0, 0, 0] },
-      ] })),
+      ], confidence: { direct: 1, interpolated: 3, lower_confidence: true } })),
       getMrdnaBeads: vi.fn(async () => ({ ready: true, beads: [[1, 1, 1], [2, 2, 2]], edges: [[0, 1]] })),
+      getMrdnaSnapshotGeometry: vi.fn(async () => ({
+        ready: true, design: { strands: [] }, nucleotides: [{ backbone_position: [0, 0, 0] }], helix_axes: [],
+      })),
+      getMrdnaRmsf: vi.fn(async () => ({
+        ready: true, min_rmsf: 0.1, max_rmsf: 0.3, mean_rmsf: 0.2, n_frames: 4,
+        confidence: { direct: 1, interpolated: 3, lower_confidence: true },
+        positions: [{ helix_id: 'h', bp_index: 0, direction: 'FORWARD',
+          backbone_position: [1, 2, 3], rmsf: 0.3 }],
+      })),
+      getMrdnaDeviation: vi.fn(async () => ({
+        ready: true, min_deviation: 0, max_deviation: 0.5, mean_deviation: 0.2, rmsd_nm: 0.25,
+        positions: [{ helix_id: 'h', bp_index: 0, direction: 'FORWARD',
+          backbone_position: [1, 2, 3], deviation: 0.5 }],
+      })),
+      getMrdnaStrain: vi.fn(async () => ({
+        ready: true, metric: 'backbone_geometric', min_strain: -0.1, max_strain: 0.2,
+        abs_max_strain: 0.2, display_abs_strain: 0.2, n: 1,
+        confidence: { direct: 1, interpolated: 3, lower_confidence: true },
+        positions: [{ helix_id: 'h', bp_index: 0, direction: 'FORWARD', copy: 0,
+          backbone_position: [0, 0, 0], strain: 0.2, ss: false }],
+      })),
     }
     return { designRenderer, beadOverlay, connectionOverlay, setDesignVisible, api }
   }
@@ -123,12 +158,40 @@ describe('initMrdnaDisplay controller', () => {
     expect(c.beadsActive()).toBe(false)
   })
 
-  it('deform and beads are independent (both can be active)', async () => {
+  it('shows trajectory RMSF and snapshot-relative deviation as scalar maps', async () => {
+    const d = makeDeps()
+    const flexScale = { show: vi.fn(), hide: vi.fn() }
+    const c = initMrdnaDisplay({ ...d, flexScale })
+    const flex = await c.showFlex('job1')
+    expect(flex).toMatchObject({ ok: true, kind: 'flex', nFrames: 4 })
+    expect(flex.confidence).toEqual({ direct: 1, interpolated: 3, lowerConfidence: true })
+    expect(d.designRenderer.renderExternalGeometry).toHaveBeenCalled()
+    expect(d.designRenderer.applyScalarColors).toHaveBeenCalled()
+    expect(d.designRenderer.applyFemPositions).toHaveBeenLastCalledWith([
+      expect.objectContaining({ backbone_position: [0, 0, 0] }),
+    ])
+    expect(flexScale.show).toHaveBeenCalledWith(expect.objectContaining({ title: 'RMSF (nm)' }))
+
+    const dev = await c.showDeviation('job1')
+    expect(dev).toMatchObject({ ok: true, kind: 'deviation', rmsd: 0.25 })
+    expect(c.mode()).toBe('deviation')
+    expect(d.designRenderer.applyFemPositions).toHaveBeenLastCalledWith([
+      expect.objectContaining({ backbone_position: [0, 0, 0] }),
+    ])
+    expect(flexScale.show).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Deviation (nm)' }))
+
+    const strain = await c.showStrain('job1')
+    expect(strain).toMatchObject({ ok: true, kind: 'strain', n: 1 })
+    expect(c.mode()).toBe('strain')
+    expect(flexScale.show).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Backbone strain' }))
+  })
+
+  it('deform and beads are mutually exclusive visualization modes', async () => {
     const { designRenderer, beadOverlay, connectionOverlay, setDesignVisible, api } = makeDeps()
     const c = initMrdnaDisplay({ designRenderer, api, beadOverlay, connectionOverlay, setDesignVisible })
     await c.showDeform('j')
     await c.showBeads('j')
-    expect(c.deformActive()).toBe(true)
+    expect(c.deformActive()).toBe(false)
     expect(c.beadsActive()).toBe(true)
     c.stopAndRestore()
     expect(c.deformActive()).toBe(false)
@@ -138,7 +201,10 @@ describe('initMrdnaDisplay controller', () => {
 
   it('showDeform returns not-ready when the response is empty', async () => {
     const { designRenderer, beadOverlay } = makeDeps()
-    const api = { getMrdnaDisplay: vi.fn(async () => ({ ready: false, positions: [] })) }
+    const api = {
+      getMrdnaDisplay: vi.fn(async () => ({ ready: false, positions: [] })),
+      getMrdnaSnapshotGeometry: vi.fn(async () => ({ ready: false, nucleotides: [] })),
+    }
     const c = initMrdnaDisplay({ designRenderer, api, beadOverlay })
     const r = await c.showDeform('j')
     expect(r.ok).toBe(false)

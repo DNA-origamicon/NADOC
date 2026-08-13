@@ -9,6 +9,29 @@ metadata:
 
 # mrDNA relaxation panel (Dynamics tab)
 
+## Visualization card (2026-08-12)
+
+- Job-snapshot Relaxed shape, 5-bp CG beads, trajectory RMSF, and aligned
+  deviation-from-design are mutually exclusive visualization modes.
+- `/mrdna/jobs/{id}/snapshot-geometry` prevents old jobs from painting onto changed
+  live topology; `/rmsf` reconstructs and rigid-aligns saved CG trajectory frames;
+  `/deviation` compares the relaxed frame with that snapshot after Kabsch alignment.
+- Physical strain is deliberately unavailable: coarse mrDNA output lacks the
+  oriented backbone/base sites required for FENE or Watson–Crick strain. Do not
+  substitute spline-spacing distortion and label it strain.
+
+## Fine-job progress and restart recovery (2026-08-12)
+
+- `start_job` publishes `preparing` while the large mrDNA model is generated, then
+  `_run_job` persists top-level `running` before ARBD begins. Never gate progress on
+  a stage-only status while leaving the job itself `queued`.
+- Fine progress is measured from the 12-byte DCD NSET header for the real three ARBD
+  phases: coarse, twist-enabled fine, and frozen-twist fine. The bar reserves 100%
+  for extraction/cache completion.
+- ARBD uses relative config paths after chdir, so orphan detection must match
+  `/proc/<pid>/cwd` as well as cmdline. Completed three-phase outputs are finalized
+  after a server reload if the Python runner died before writing display caches.
+
 Shipped 2026-07-02. Brought the mrDNA/ARBD coarse-grained relaxation engine to
 the frontend as a managed job system + panel, mirroring the oxDNA panel
 ([[project_oxdna_relaxation]]). Before this, mrDNA existed only as the one-shot
@@ -19,8 +42,9 @@ no panel, no display.
 mrDNA's **coarse** stage begins from an energy minimisation, so it IS the
 relaxation — there's no need for a separate "relax then run" split. So: **one
 "Run mrDNA relaxation" button, one stage (`coarse`, `fine_steps=0`), no
-production/field/child-job machinery.** Display = **deform the NADOC model AND
-show the CG bead cloud** (both toggles, independent).
+production/field/child-job machinery.** The original display offered independent
+deform + CG-cloud toggles; the 2026-08-12 visualization card superseded them with
+mutually exclusive modes.
 
 ## Architecture (mirrors the oxDNA trio, simplified to one stage)
 - **`backend/core/mrdna_job.py`** — `MrdnaJob` dataclass + `MrdnaStatus` +
@@ -444,3 +468,14 @@ NAMD/GROMACS INPUT artifact, never topology. Same discipline as the oxDNA + MD d
 See also: [[project_mrdna_arbd_setup]] (install), [[project_mrdna_bead_model]]
 (1 bead/bp fine-stage caveat — but this panel uses the COARSE 5bp/bead stage),
 [[project_md_engines_panel]] (mrDNA/ARBD install rows), [[feedback_cg_pipeline_lessons]].
+
+## Periodic-boundary continuity (fixed 2026-08-12)
+
+ARBD's default 5000 Å cell was only slightly longer than VoltronCoreArm (~4200 Å).
+The coarse structure crossed a periodic face; mrDNA passed wrapped restart coordinates
+directly into the fine bead regeneration, creating genuine 125–258 nm bonds. New jobs
+set `model.dimensions` from the design bounds with 5000 Å clearance on every side.
+All NADOC mrDNA trajectory consumers also graph-unwrap PSF-bonded components with
+minimum-image edges before alignment, display reconstruction, ssDNA placement, or bead
+extraction. Display cache version 9 regenerates older wrapped caches; a fine stage already
+corrupted during handoff remains unusable, but the unwrapped coarse fallback is clean.
