@@ -15,9 +15,11 @@ body {
 #menu-bar {
   min-height: var(--layout-menubar-height);
   height: auto;
-  overflow-x: auto;
-  overflow-y: visible;
-  scrollbar-width: thin;
+  /* A scrolling axis makes the other `visible` axis compute to `auto`, which
+     clips dropdowns to the menu bar. Wrap at narrow/zoomed widths instead so
+     every dropdown can escape the bar's box. */
+  overflow: visible;
+  flex-wrap: wrap;
 }
 
 .menu-item > button,
