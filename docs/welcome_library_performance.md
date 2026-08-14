@@ -37,6 +37,22 @@ that are irrelevant to the design-file tree.
 The pruned root names must stay aligned with `frontend/src/ui/sim_folders.js`.
 Names ending in `_jobs` are also pruned by convention.
 
+## Running simulation location
+
+While the welcome screen is visible, `ui/library_panel.js` polls
+`GET /api/jobs/active` every four seconds. A design with an active simulation
+shows a spinner and an execution-location tag immediately after its part name:
+
+- `Local` for work running on the NADOC host;
+- `Alpine(GPU type)` for a remote SLURM job, with the GPU inferred from its
+  selected Alpine partition; or
+- `RunPod(GPU type)` for a rented pod, using the GPU selected for that job.
+
+The active-job response carries the display-only `accelerator_name`; simulation
+ownership and concurrency decisions continue to use `execution_target` and
+`resource_class`. Missing hardware metadata degrades to `Alpine` or `RunPod`
+rather than hiding the active simulation.
+
 ## Performance reference
 
 Measured 2026-08-09 against the development workspace (75 GB, 8,459 files, 193
@@ -58,3 +74,5 @@ identity audit and recursively traversed the complete simulation tree.
   tree pruning.
 - `frontend/src/ui/library_panel.test.js` covers cache persistence and disk-usage
   merging.
+- `frontend/src/ui/job_activity.test.js` covers execution-location tag formatting.
+- `tests/test_jobs_active_execution_target.py` covers remote GPU-name enrichment.

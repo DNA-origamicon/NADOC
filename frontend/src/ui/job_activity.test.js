@@ -5,6 +5,7 @@ import {
   jobDesignName,
   activeJobForPath,
   jobActivityTooltip,
+  jobLocationTag,
   pickBlockingJob,
   isLocalJob,
   isGpuJob,
@@ -16,6 +17,22 @@ import {
   BIG_RUN_HOURS,
   isUndersizedCellRefusal,
 } from './job_activity.js'
+
+describe('jobLocationTag', () => {
+  it('labels local and remote execution hardware compactly', () => {
+    expect(jobLocationTag({ execution_target: 'local' })).toBe('Local')
+    expect(jobLocationTag({ execution_target: 'alpine', accelerator_name: 'NVIDIA A100' }))
+      .toBe('Alpine(NVIDIA A100)')
+    expect(jobLocationTag({ execution_target: 'runpod', accelerator_name: 'RTX 4090' }))
+      .toBe('RunPod(RTX 4090)')
+  })
+
+  it('keeps legacy and incomplete job records readable', () => {
+    expect(jobLocationTag({})).toBe('Local')
+    expect(jobLocationTag({ execution_target: 'alpine' })).toBe('Alpine')
+    expect(jobLocationTag(null)).toBe('')
+  })
+})
 
 const GiB = 1024 ** 3
 

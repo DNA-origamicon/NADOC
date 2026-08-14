@@ -10,7 +10,7 @@ import { openFileBrowser } from './file_browser.js'
 import { showToast } from './toast.js'
 import { confirmAndDeleteFile } from './file_deletion.js'
 import { formatBytes } from './format_bytes.js'
-import { fetchActiveJobs, activeJobForPath, jobActivityTooltip, normPath } from './job_activity.js'
+import { fetchActiveJobs, activeJobForPath, jobActivityTooltip, jobLocationTag, normPath } from './job_activity.js'
 import { visibleWorkspaceEntries } from './sim_folders.js'
 
 const _JOB_POLL_MS = 4000   // welcome-screen activity-spinner refresh cadence
@@ -420,7 +420,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       }},
     ])
 
-    rowEl.append(iconEl, statusEl, nameEl, mtimeEl, sizeEl, actEl)
+    rowEl.append(iconEl, nameEl, statusEl, mtimeEl, sizeEl, actEl)
     rowEl.addEventListener('click', () => {
       if (file.type === 'assembly') onOpenAssembly(file.path, file.name)
       else                          onOpenPart(file.path, file.name)
@@ -459,8 +459,11 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       const spin = document.createElement('span')
       spin.className = 'nadoc-spinner'
       spin.setAttribute('aria-hidden', 'true')
-      statusEl.replaceChildren(spin)
+      const tag = document.createElement('span')
+      tag.className = 'lib-row-location-tag'
+      statusEl.replaceChildren(spin, tag)
     }
+    statusEl.querySelector('.lib-row-location-tag').textContent = jobLocationTag(job)
     statusEl.title = jobActivityTooltip(job)
   }
 

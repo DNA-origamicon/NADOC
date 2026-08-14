@@ -87,6 +87,19 @@ export function jobActivityTooltip(job) {
     : `${eng} simulation ${verb}…`
 }
 
+/** Pure: compact execution-location tag shown after a busy design's part name. */
+export function jobLocationTag(job) {
+  if (!job) return ''
+  const target = job.execution_target ?? 'local'
+  if (target === 'alpine') {
+    return `Alpine${job.accelerator_name ? `(${job.accelerator_name})` : ''}`
+  }
+  if (target === 'runpod') {
+    return `RunPod${job.accelerator_name ? `(${job.accelerator_name})` : ''}`
+  }
+  return 'Local'
+}
+
 /** Pure: true if a job runs on THIS machine (vs. the remote Alpine cluster).
  *  Missing/legacy field → local (old jobs predate the remote backend). */
 export function isLocalJob(job) {

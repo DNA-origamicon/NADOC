@@ -44,6 +44,25 @@ def test_collect_active_tags_execution_target(tmp_path, monkeypatch):
     assert all("execution_target" in j for j in active)
 
 
+def test_collect_active_names_remote_gpu(tmp_path, monkeypatch):
+    ws = tmp_path
+    monkeypatch.setattr(routes_jobs, "_WORKSPACE_DIR", ws)
+    monkeypatch.setattr(routes_jobs, "_md_eta_seconds", lambda *a, **k: None)
+    import backend.core.namd_runner as namd_runner
+
+    monkeypatch.setattr(namd_runner, "reconcile_job_status", lambda j, w: j)
+    alpine = _make_md_job(ws, execution_target="alpine")
+    alpine.partition = "aa100"
+    alpine.save(ws)
+    runpod = _make_md_job(ws, execution_target="runpod", status=MdStatus.preparing)
+    runpod.runpod_gpu_key = "NVIDIA GeForce RTX 4090"
+    runpod.save(ws)
+
+    rows = {j["execution_target"]: j for j in routes_jobs._collect_active() if j["engine"] == "md"}
+    assert rows["alpine"]["accelerator_name"] == "NVIDIA A100"
+    assert rows["runpod"]["accelerator_name"] == "RTX 4090"
+
+
 def test_missing_runpod_job_is_dropped_and_marked_resumable(tmp_path, monkeypatch):
     """A runpod job with no live pod backing it (killed CLI launcher) is orphaned — the
     detector must stop claiming it as active without falsely declaring NAMD failed."""

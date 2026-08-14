@@ -132,6 +132,36 @@ def _oxdna_eta_seconds(job, ws: Path) -> Optional[float]:
         return None
 
 
+def _md_accelerator_name(job, ws: Path) -> Optional[str]:
+    """Human GPU name for a remote MD job, when its selected hardware is known."""
+    target = getattr(job, "execution_target", "local")
+    if target == "runpod":
+        key = getattr(job, "runpod_gpu_key", None)
+        if not key:
+            return None
+        try:
+            from backend.core.runpod_select import CARDS
+
+            return next((gpu.label for gpu in CARDS if gpu.key == key), key)
+        except Exception:  # noqa: BLE001 — display metadata must not break activity
+            return key
+    if target == "alpine":
+        partition = getattr(job, "partition", None)
+        if not partition:
+            return None
+        try:
+            from backend.core.cluster_config import get_profile
+
+            profile = get_profile("alpine", ws)
+            return next(
+                (p.gpu_model for p in profile.partitions if p.name == partition),
+                None,
+            ) or partition
+        except Exception:  # noqa: BLE001 — display metadata must not break activity
+            return partition
+    return None
+
+
 def _collect_active() -> list[dict]:
     ws = _WORKSPACE_DIR
     out: list[dict] = []
@@ -219,6 +249,7 @@ def _collect_active() -> list[dict]:
                     # cluster and consumes no local resources — the concurrent-launch guard
                     # ignores remote jobs (they can't contend for the local GPU/disk).
                     "execution_target": getattr(j, "execution_target", "local"),
+                    "accelerator_name": _md_accelerator_name(j, ws),
                     # NAMD always runs GPU-resident here, so a local MD job holds the GPU.
                     # The frontend guard only makes two GPU jobs block each other; a CPU-only
                     # run (a CPU-backend oxDNA job) may launch alongside it.
