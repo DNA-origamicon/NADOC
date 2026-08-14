@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import {
   toFemUpdates, initCandoDisplay, viridisHex, deviationHex,
-  flexColorMap, deviationColorMap,
+  flexColorMap, deviationColorMap, thermalCylinderFrame,
 } from './cando_display.js'
 
 // A ready /cando/jobs/{id}/snapshot-geometry response — the job's own design snapshot
@@ -41,6 +41,21 @@ describe('toFemUpdates', () => {
       helix_id: 'h0', bp_index: 3, direction: 'FORWARD', copy: 0, backbone_position: [1, 2, 3],
       nx: 0, ny: 1, nz: 0, tx: 0, ty: 0, tz: 1,
     })
+  })
+})
+
+describe('thermalCylinderFrame', () => {
+  it('moves helix axes to backbone midpoints and carries crossover joints with them', () => {
+    const base = {
+      helices: [{ helix_id: 'h', points: [[0, 0, 0], [1, 0, 0]], rmsf: [0.1, 0.2] }],
+      joints: [[[0, 0, 0], [1, 0, 0]]],
+    }
+    const keys = [['h', 0, 'FORWARD', 0], ['h', 0, 'REVERSE', 0],
+      ['h', 1, 'FORWARD', 0], ['h', 1, 'REVERSE', 0]]
+    const moved = thermalCylinderFrame(base, keys, [0, 2, 0, 0, 4, 0, 2, 2, 0, 2, 4, 0])
+    expect(moved.helices[0].points).toEqual([[0, 3, 0], [2, 3, 0]])
+    expect(moved.joints[0]).toEqual([[0, 3, 0], [2, 3, 0]])
+    expect(moved.helices[0].rmsf).toEqual([0.1, 0.2])
   })
 })
 
@@ -89,6 +104,22 @@ describe('initCandoDisplay controller', () => {
     expect(designRenderer.renderExternalGeometry).not.toHaveBeenCalled()
     expect(designRenderer.applyFemPositions).not.toHaveBeenCalled()
     expect(c.deformActive()).toBe(false)
+  })
+
+  it('predicted shape uses thermal conformations automatically instead of the static mean', async () => {
+    const { designRenderer, api } = makeDeps()
+    api.getCandoThermalTrajectory = vi.fn(async () => ({
+      ready: true, temperature_k: 298, n_frames: 2, representative_frame: 1,
+      keys: [['h', 0, 'FORWARD', 0]], frames: [[2, 3, 4], [5, 6, 7]],
+    }))
+    const c = initCandoDisplay({ designRenderer, api })
+    const r = await c.showDeform('job-moving')
+    expect(r.ok).toBe(true)
+    expect(c.lastStats()).toMatchObject({ kind: 'deform', thermal: true, frames: 2 })
+    expect(designRenderer.applyFemPositions).toHaveBeenLastCalledWith([
+      expect.objectContaining({ backbone_position: [5, 6, 7] }),
+    ])
+    c.stopAndRestore()
   })
 
   it('showDeform returns not-ready when the snapshot geometry is unavailable', async () => {

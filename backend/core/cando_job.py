@@ -66,6 +66,7 @@ class CandoJob:
     nonlinear: bool = True
     n_steps: int = 20  # corotational load-step count (nonlinear only)
     with_rmsf: bool = True  # also compute the free-free NMA per-bp RMSF
+    with_thermal_fluctuations: bool = True  # cache representative 298 K NMA conformation
     # ── Job-request annotations (C1/C2): anchors + uniform E-field, NEVER a topology edit ──
     # anchors: shared oxDNA scope descriptors (overhang/cluster/domain/strand/base) held fixed
     # (Dirichlet BC) during the FEM solve.  field: {"field_pN": <force/nt, pN>, "dir": [x,y,z]} —
@@ -143,6 +144,7 @@ class CandoJob:
         data.setdefault("nonlinear", True)
         data.setdefault("n_steps", 20)
         data.setdefault("with_rmsf", True)
+        data.setdefault("with_thermal_fluctuations", data.get("with_rmsf", True))
         data.setdefault("anchors", None)
         data.setdefault("field", None)
         data.setdefault("design_source_path", None)
@@ -206,6 +208,7 @@ def new_cando_job(
     nonlinear: bool = True,
     n_steps: int = 20,
     with_rmsf: bool = True,
+    with_thermal_fluctuations: bool = True,
     anchors: Optional[list] = None,
     field: Optional[dict] = None,
     n_nucleotides: int = 0,
@@ -230,6 +233,7 @@ def new_cando_job(
         nonlinear=nonlinear,
         n_steps=n_steps,
         with_rmsf=with_rmsf,
+        with_thermal_fluctuations=with_thermal_fluctuations,
         anchors=anchors,
         field=field,
         stages=[CandoStageStatus(name=stage_name)],

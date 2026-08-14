@@ -102,6 +102,11 @@ def load_rmsf(job_dir: Path) -> Optional[dict]:
     return load_cached(job_dir, "rmsf.json")
 
 
+def load_thermal_trajectory(job_dir: Path) -> Optional[dict]:
+    """Cached 298 K normal-mode equilibrium conformations, or None."""
+    return load_cached(job_dir, "thermal_trajectory.json")
+
+
 # ── Progress (time-based estimate; the true completion signal is the thread) ──
 
 
@@ -177,6 +182,9 @@ def _cache_fem_analysis(job: CandoJob, jd: Path, result: dict) -> None:
         vals = [r["rmsf_nm"] for r in rmsf]
         if vals:
             rmsf_min, rmsf_max = min(vals), max(vals)
+    thermal = result.get("thermal_trajectory")
+    if thermal and thermal.get("frames"):
+        (jd / "thermal_trajectory.json").write_text(json.dumps(thermal))
     # positions carry two entries (FORWARD/REVERSE) per axis node; the RMSF list is one entry per
     # node, so it is the honest FEM-node (= base pair) count.
     job.n_nodes = len(rmsf) if rmsf else (len(positions) // 2 if positions else 0)
@@ -216,6 +224,7 @@ def _run_job(job: CandoJob, workspace_dir: Path) -> None:
             nonlinear=job.nonlinear,
             n_steps=job.n_steps,
             with_rmsf=job.with_rmsf,
+            with_thermal_fluctuations=getattr(job, "with_thermal_fluctuations", True),
             # Anchors (Dirichlet BC) + uniform E-field body load — job-request annotations, never a
             # topology edit (C1/C2). A field needs ≥1 anchor to hold against (COM drift); predict_shape
             # falls back to the free centroid-pinned solve if a selection resolves to nothing.

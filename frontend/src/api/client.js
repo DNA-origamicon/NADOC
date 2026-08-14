@@ -2587,6 +2587,8 @@ export const getCandoDisplay     = (id, signal)  => _oxdnaJSON('GET',  `/cando/j
 export const getCandoSnapshotGeometry = (id, signal) => _oxdnaJSON('GET',  `/cando/jobs/${id}/snapshot-geometry`, undefined, { signal })
 /** Per-bp RMSF (nm) for the flexibility map (Item 3). */
 export const getCandoRmsf        = (id, signal)  => _oxdnaJSON('GET',  `/cando/jobs/${id}/rmsf`, undefined, { signal })
+/** 298 K normal-mode ensemble and its representative static conformation. */
+export const getCandoThermalTrajectory = (id, signal) => _oxdnaJSON('GET', `/cando/jobs/${id}/thermal-trajectory`, undefined, { signal })
 /** Per-bp deviation from the intended (displayed) geometry + global RMSD (Item 3). */
 export const getCandoDeviation   = (id, signal)  => _oxdnaJSON('GET',  `/cando/jobs/${id}/deviation`, undefined, { signal })
 /** CanDo-style jointed-cylinder geometry (per-helix axis tubes + crossover joints). */

@@ -390,6 +390,7 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
         nonlinear,
         n_steps:   Math.max(1, parseInt(stepsInput?.value, 10) || 20),
         with_rmsf: rmsfInput ? !!rmsfInput.checked : true,
+        with_thermal_fluctuations: rmsfInput ? !!rmsfInput.checked : true,
         autostart: true,
         design_source_path: getWorkspacePath?.() || null,
         anchors: anchors.length ? anchors : null,
@@ -653,13 +654,18 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
     if (!mode) { displayStatus.textContent = ''; return }
     const s = candoDisplay?.lastStats?.()
     if (mode === 'flex' && s?.kind === 'flex') {
-      displayStatus.textContent = `Flexibility (RMSF) ${s.min.toFixed(2)}–${s.max.toFixed(2)} nm`
+      displayStatus.textContent = `Flexibility (RMSF) ${s.min.toFixed(2)}–${s.max.toFixed(2)} nm` +
+        (s.thermal ? ` · representative 298 K conformation` : '')
     } else if (mode === 'deviation' && s?.kind === 'deviation') {
       displayStatus.textContent =
-        `Deviation from design — RMSD ${s.rmsd.toFixed(2)} nm (max ${s.max.toFixed(2)} nm)`
+        `Deviation from design — RMSD ${s.rmsd.toFixed(2)} nm (max ${s.max.toFixed(2)} nm)` +
+        (s.thermal ? ` · representative 298 K conformation` : '')
     } else if (mode === 'cando' && s?.kind === 'cando') {
       displayStatus.textContent =
-        `CanDo-style cylinders — ${s.helices} helix tubes, ${s.joints} crossover joints`
+        `CanDo-style cylinders — ${s.helices} helix tubes, ${s.joints} crossover joints` +
+        (s.thermal ? ` · representative 298 K conformation` : '')
+    } else if (mode === 'deform' && s?.kind === 'deform' && s.thermal) {
+      displayStatus.textContent = `Predicted solution shape · representative 298 K thermal conformation`
     } else {
       displayStatus.textContent = 'Showing predicted shape.'
     }
@@ -696,6 +702,7 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
   async function _onModeChange() {
     if (!candoDisplay) { setMode('off'); return }
     const mode = checkedMode()
+    candoDisplay.stopThermal?.()
     if (mode === 'off') { candoDisplay.stopDeform?.(); _syncDisplayStatus(); return }
     if (!_selectedId) { setMode('off'); return }
     const r = await candoDisplay[_MODE_FNS[mode]]?.(_selectedId)

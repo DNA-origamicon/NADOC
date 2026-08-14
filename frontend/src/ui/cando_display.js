@@ -32,6 +32,7 @@
  */
 
 import { colormapHex } from './colormaps.js'
+import { framesToUpdates } from './oxdna_display.js'
 
 /**
  * Pure mapping: a /cando/jobs/{id}/display response → applyFemPositions updates.
@@ -142,6 +143,38 @@ export function deviationColorMap(devResp, loBound, hiBound, cmap = 'devramp') {
   }
 }
 
+/** Reposition a CanDo cylinder response from one nucleotide thermal frame.  Axis
+ * points are the midpoint of the two backbone positions at each (helix,bp); crossover
+ * endpoints follow the nearest original axis point. */
+export function thermalCylinderFrame(base, keys, frame) {
+  if (!base?.helices?.length || !Array.isArray(keys) || !Array.isArray(frame)) return base
+  const sums = new Map()
+  keys.forEach((k, i) => {
+    const id = `${k[0]}:${k[1]}`; const p = frame.slice(3 * i, 3 * i + 3)
+    if (p.length !== 3) return
+    const a = sums.get(id) || [0, 0, 0, 0]
+    a[0] += p[0]; a[1] += p[1]; a[2] += p[2]; a[3]++; sums.set(id, a)
+  })
+  const byHelix = new Map()
+  for (const [id, a] of sums) {
+    const cut = id.lastIndexOf(':'); const hid = id.slice(0, cut); const bp = Number(id.slice(cut + 1))
+    if (!byHelix.has(hid)) byHelix.set(hid, [])
+    byHelix.get(hid).push([bp, [a[0] / a[3], a[1] / a[3], a[2] / a[3]]])
+  }
+  const helices = base.helices.map(h => {
+    const moving = (byHelix.get(h.helix_id) || []).sort((a, b) => a[0] - b[0]).map(x => x[1])
+    return { ...h, points: moving.length === h.points.length ? moving : h.points }
+  })
+  const oldPts = [], newPts = []
+  base.helices.forEach((h, hi) => h.points.forEach((p, pi) => { oldPts.push(p); newPts.push(helices[hi].points[pi]) }))
+  const nearest = p => {
+    let bi = 0, bd = Infinity
+    oldPts.forEach((q, i) => { const d = (p[0]-q[0])**2 + (p[1]-q[1])**2 + (p[2]-q[2])**2; if (d < bd) { bd=d; bi=i } })
+    return newPts[bi] || p
+  }
+  return { ...base, helices, joints: (base.joints || []).map(j => [nearest(j[0]), nearest(j[1])]) }
+}
+
 export function initCandoDisplay({
   designRenderer, api, cylinderOverlay = null, setDesignVisible = null, flexScale = null,
 }) {
@@ -214,19 +247,33 @@ export function initCandoDisplay({
     designRenderer.renderExternalGeometry(snap.design, snap.nucleotides, axes)
   }
 
+  /** Apply one deterministic 298 K conformation whose displacement profile best
+   *  represents the NMA RMSF. Standard CanDo views are static final states—not movies. */
+  function _startThermalFrames(resp, frameApplier = null) {
+    if (!resp?.ready || !resp.n_frames || !resp.frames?.length) return false
+    const idx = Math.max(0, Math.min(resp.frames.length - 1,
+      Number.isInteger(resp.representative_frame) ? resp.representative_frame : 0))
+    if (frameApplier) frameApplier(resp.keys, resp.frames[idx])
+    else designRenderer.applyFemPositions(framesToUpdates(resp.keys, resp.frames[idx]))
+    return true
+  }
+
   /** Deform the model to the predicted shape (no recolour). */
   async function showDeform(jobId) {
     const { epoch, signal } = _beginLoad()
-    const [resp, snap] = await Promise.all([
-      api.getCandoDisplay(jobId, signal), api.getCandoSnapshotGeometry(jobId, signal)])
+    const [resp, thermal, snap] = await Promise.all([
+      api.getCandoDisplay(jobId, signal), api.getCandoThermalTrajectory?.(jobId, signal),
+      api.getCandoSnapshotGeometry(jobId, signal)])
     if (epoch !== _epoch) return { ok: false }
     const updates = toFemUpdates(resp)
     if (!updates.length || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
     _prepareForExternal()
     _renderExternal(snap)
-    designRenderer.applyFemPositions(updates)
+    const moving = _startThermalFrames(thermal)
+    if (!moving) designRenderer.applyFemPositions(updates)
     designRenderer.clearScalarColors?.()
-    _jobId = jobId; _mode = 'deform'; _stats = null
+    _jobId = jobId; _mode = 'deform'
+    _stats = { kind: 'deform', thermal: moving, frames: thermal?.n_frames || 0 }
     return { ok: true, n: updates.length }
   }
 
@@ -254,19 +301,21 @@ export function initCandoDisplay({
   /** Deform to the predicted shape + recolour beads by per-bp RMSF (flexibility map). */
   async function showFlex(jobId) {
     const { epoch, signal } = _beginLoad()
-    const [disp, rmsf, snap] = await Promise.all([
-      api.getCandoDisplay(jobId, signal), api.getCandoRmsf(jobId, signal), api.getCandoSnapshotGeometry(jobId, signal)])
+    const [disp, rmsf, thermal, snap] = await Promise.all([
+      api.getCandoDisplay(jobId, signal), api.getCandoRmsf(jobId, signal),
+      api.getCandoThermalTrajectory?.(jobId, signal), api.getCandoSnapshotGeometry(jobId, signal)])
     if (epoch !== _epoch) return { ok: false }
     const map = flexColorMap(disp, rmsf, undefined, undefined, _flexCmap)
     if (!map || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
     _prepareForExternal()
     _renderExternal(snap)
-    designRenderer.applyFemPositions(map.updates)
+    const moving = _startThermalFrames(thermal)
+    if (!moving) designRenderer.applyFemPositions(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
     _flexResp = { disp, rmsf }
     _flexBounds = { lo: map.min, hi: map.max }
     _jobId = jobId; _mode = 'flex'
-    _stats = { kind: 'flex', min: map.min, max: map.max }
+    _stats = { kind: 'flex', min: map.min, max: map.max, thermal: moving, frames: thermal?.n_frames || 0 }
     // Hand the shared scale widget this map's range + a live recolour callback; it
     // reconciles the on-structure colours to the remembered colormap on show.
     flexScale?.show({ title: 'RMSF (nm)', min: map.min, max: map.max, mapType: 'flex', onRecolor: _recolorFlex })
@@ -277,19 +326,22 @@ export function initCandoDisplay({
    *  design's intended geometry (deviation map).  Reports the global RMSD. */
   async function showDeviation(jobId) {
     const { epoch, signal } = _beginLoad()
-    const [resp, snap] = await Promise.all([
-      api.getCandoDeviation(jobId, signal), api.getCandoSnapshotGeometry(jobId, signal)])
+    const [resp, thermal, snap] = await Promise.all([
+      api.getCandoDeviation(jobId, signal), api.getCandoThermalTrajectory?.(jobId, signal),
+      api.getCandoSnapshotGeometry(jobId, signal)])
     if (epoch !== _epoch) return { ok: false }
     const map = deviationColorMap(resp, undefined, undefined, _devCmap)
     if (!map || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
     _prepareForExternal()
     _renderExternal(snap)
-    designRenderer.applyFemPositions(map.updates)
+    const moving = _startThermalFrames(thermal)
+    if (!moving) designRenderer.applyFemPositions(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
     _devResp = resp
     _devBounds = { lo: map.min, hi: map.max }
     _jobId = jobId; _mode = 'deviation'
-    _stats = { kind: 'deviation', min: map.min, max: map.max, rmsd: map.rmsd }
+    _stats = { kind: 'deviation', min: map.min, max: map.max, rmsd: map.rmsd,
+      thermal: moving, frames: thermal?.n_frames || 0 }
     flexScale?.show({ title: 'Deviation (nm)', min: map.min, max: map.max, mapType: 'deviation', onRecolor: _recolorDeviation })
     return { ok: true, n: map.updates.length, min: map.min, max: map.max, rmsd: map.rmsd }
   }
@@ -299,7 +351,8 @@ export function initCandoDisplay({
    *  NADOC model hidden.  Standalone rep, like the mrDNA CG-beads mode. */
   async function showCandoStyle(jobId) {
     const { epoch, signal } = _beginLoad()
-    const resp = await api.getCandoCylinders(jobId, signal)
+    const [resp, thermal] = await Promise.all([
+      api.getCandoCylinders(jobId, signal), api.getCandoThermalTrajectory?.(jobId, signal)])
     if (epoch !== _epoch) return { ok: false }
     if (!resp?.ready || !cylinderOverlay || (!resp.helices?.length && !resp.joints?.length)) {
       return { ok: false, reason: 'not-ready' }
@@ -309,9 +362,15 @@ export function initCandoDisplay({
       lo: resp.rmsf_min, hi: resp.rmsf_p95, colormap: _candoCmap,
     })
     _nativeVisible(false)
+    const moving = _startThermalFrames(thermal, (keys, frame) => {
+      cylinderOverlay.update(thermalCylinderFrame(resp, keys, frame), {
+        lo: resp.rmsf_min, hi: resp.rmsf_p95, colormap: _candoCmap,
+      })
+    })
     _candoResp = resp
     _jobId = jobId; _mode = 'cando'
-    _stats = { kind: 'cando', helices: resp.n_helices || 0, joints: resp.n_joints || 0 }
+    _stats = { kind: 'cando', helices: resp.n_helices || 0, joints: resp.n_joints || 0,
+      thermal: moving, frames: thermal?.n_frames || 0 }
     // The tubes are an RMSF heat map (min→p95); show the adjustable scale + colormap
     // picker when the job carried RMSF, otherwise the tubes are plain grey.
     if (resp.has_rmsf) {
@@ -319,6 +378,8 @@ export function initCandoDisplay({
     }
     return { ok: true, helices: resp.n_helices, joints: resp.n_joints }
   }
+
+  function stopThermal() {} // compatibility hook for the jobs panel; representative state is static
 
   /** Re-apply the active mode for the current job (e.g. after a running job completes,
    *  or more of the solve landed).  No-op when nothing is displayed. */
@@ -333,6 +394,7 @@ export function initCandoDisplay({
   function stopDeform() {
     _cancelLoad()
     if (_mode === null) return
+    stopThermal()
     _clearAll()
     _jobId = null; _mode = null; _stats = null
   }
@@ -347,6 +409,7 @@ export function initCandoDisplay({
     showFlex,
     showDeviation,
     showCandoStyle,
+    stopThermal,
     refresh,
     stopDeform,
     stopAndRestore,

@@ -47,6 +47,7 @@ from backend.core.cando_runner import (
     job_progress,
     load_display,
     load_rmsf,
+    load_thermal_trajectory,
     prepare_cando_job,
     reconcile_cando_status,
     start_job,
@@ -116,6 +117,9 @@ class CreateCandoJobRequest(BaseModel):
     with_rmsf: bool = Field(
         True, description="Also compute the free-free NMA per-bp RMSF"
     )
+    with_thermal_fluctuations: bool = Field(
+        True, description="Generate a representative 298 K normal-mode conformation"
+    )
     # Job-request annotations (C1/C2): anchors held fixed (Dirichlet BC) + a uniform E-field body
     # load, both threaded into predict_shape(...).  Never a topology edit (Three-Layer Law).
     anchors: Optional[list] = Field(
@@ -163,6 +167,7 @@ async def create_cando_job(body: CreateCandoJobRequest) -> dict:
         nonlinear=body.nonlinear,
         n_steps=body.n_steps,
         with_rmsf=body.with_rmsf,
+        with_thermal_fluctuations=body.with_thermal_fluctuations,
         # Autorefine is a free-free design-optimization loop → don't drive it with anchors/field
         # (they'd change the twist/bend objective); they apply only to a plain predict job.
         anchors=body.anchors if kind == "predict" else None,
@@ -381,6 +386,20 @@ async def get_cando_rmsf(job_id: str) -> dict:
         "max_nm": max(vals) if vals else None,
         "rmsf": rmsf,
     }
+
+
+@router.get("/cando/jobs/{job_id}/thermal-trajectory")
+async def get_cando_thermal_trajectory(job_id: str) -> dict:
+    """298 K normal-mode ensemble plus its representative final conformation.
+
+    Frames have no physical timestep: this is harmonic ensemble sampling from the
+    same modal covariance as RMSF, not Brownian or molecular dynamics.
+    """
+    job = _load_job(job_id)
+    cached = load_thermal_trajectory(job.job_dir(_workspace()))
+    if not cached or not cached.get("frames"):
+        return {"job_id": job.job_id, "ready": False, "keys": [], "frames": [], "n_frames": 0}
+    return {"job_id": job.job_id, "ready": True, **cached}
 
 
 @router.get("/cando/jobs/{job_id}/deviation")

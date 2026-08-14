@@ -162,6 +162,7 @@ FEM_FIELD_CHARGES_PER_NODE = 2
 N_RMSF_MODES = (
     200  # lowest eigenmodes for RMSF (CanDo uses 200 modes + equipartition @ 298 K)
 )
+N_THERMAL_FRAMES = 48  # compact, deterministic 298 K NMA ensemble for CanDo-style playback
 _MIN_FEM_NODES = (
     2  # a beam FEM needs ≥1 element (2 nodes); fewer duplex bp → nothing to solve
 )
@@ -1813,6 +1814,45 @@ def compute_rmsf(
     return rmsf
 
 
+def _free_free_nma(
+    K,
+    n_modes: int = N_RMSF_MODES,
+    n_rigid: int = 6,
+    M=None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return elastic eigenvalues/eigenvectors for the free-free NMA.
+
+    The rigid-body modes are removed here so every downstream thermal observable uses
+    exactly the same elastic modal basis.  On eigensolver failure both arrays are empty.
+    """
+    Kc = K.tocsr()
+    n_dof = Kc.shape[0]
+    k = min(n_modes + n_rigid, n_dof - 2)
+    if k <= n_rigid:
+        return np.empty(0), np.empty((n_dof, 0))
+    try:
+        if M is not None:
+            vals, vecs = eigsh(
+                Kc, k=k, M=M.tocsr(), sigma=1e-6, which="LM", v0=_eigsh_v0(n_dof)
+            )
+        else:
+            vals, vecs = eigsh(Kc, k=k, sigma=1e-6, which="LM", v0=_eigsh_v0(n_dof))
+    except Exception:
+        return np.empty(0), np.empty((n_dof, 0))
+    order = np.argsort(vals)
+    vals, vecs = vals[order], vecs[:, order]
+    return np.maximum(vals[n_rigid:], 1e-12), vecs[:, n_rigid:]
+
+
+def _rmsf_from_modes(lam: np.ndarray, phi: np.ndarray, n_nodes: int) -> np.ndarray:
+    """Per-node translational RMSF from an elastic modal basis."""
+    if not len(lam):
+        return np.zeros(n_nodes, dtype=float)
+    xyz = phi.reshape(n_nodes, 6, -1)[:, :3, :]
+    variance = KBT * np.sum(xyz * xyz / lam[None, None, :], axis=(1, 2))
+    return np.sqrt(np.maximum(variance, 0.0))
+
+
 def compute_rmsf_nma(
     K,
     n_nodes: int,
@@ -1840,38 +1880,34 @@ def compute_rmsf_nma(
     mass metric re-selects which modes dominate — SNUPI's mass-weighted NMA. Takes the
     FULL (un-pinned) global stiffness ``K``.
     """
-    Kc = K.tocsr()
-    n_dof = Kc.shape[0]
-    k = min(n_modes + n_rigid, n_dof - 2)
-    if k <= n_rigid:
-        return np.zeros(n_nodes, dtype=float)
+    lam, phi = _free_free_nma(K, n_modes=n_modes, n_rigid=n_rigid, M=M)
+    return _rmsf_from_modes(lam, phi, n_nodes)
 
-    try:
-        if M is not None:
-            # Generalized: shift-invert about ~0 → lowest generalized frequencies. eigsh
-            # returns M-orthonormal eigenvectors, so the equipartition sum below is exact.
-            vals, vecs = eigsh(
-                Kc, k=k, M=M.tocsr(), sigma=1e-6, which="LM", v0=_eigsh_v0(n_dof)
-            )
-        else:
-            vals, vecs = eigsh(Kc, k=k, sigma=1e-6, which="LM", v0=_eigsh_v0(n_dof))
-    except Exception:
-        return np.zeros(n_nodes, dtype=float)
 
-    order = np.argsort(vals)
-    vals, vecs = vals[order], vecs[:, order]
-    # Drop the rigid-body modes (≈0) and keep the elastic ones.
-    lam = np.maximum(vals[n_rigid:], 1e-12)
-    phi = vecs[:, n_rigid:]
+def compute_thermal_nma(
+    K,
+    n_nodes: int,
+    *,
+    n_modes: int = N_RMSF_MODES,
+    n_rigid: int = 6,
+    M=None,
+    n_frames: int = N_THERMAL_FRAMES,
+    seed: int = 0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return RMSF and deterministic 298 K harmonic fluctuation displacements.
 
-    rmsf = np.zeros(n_nodes, dtype=float)
-    for node_idx in range(n_nodes):
-        var = 0.0
-        for dim in range(3):  # translational DOF only
-            row = phi[6 * node_idx + dim, :]
-            var += float(KBT * np.sum(row**2 / lam))
-        rmsf[node_idx] = math.sqrt(max(var, 0.0))
-    return rmsf
+    Each modal coordinate is sampled from ``N(0, kBT/lambda)``.  These are equilibrium
+    conformations, not time-integrated dynamics; frame order therefore has no physical
+    time meaning.  Shape is ``(n_frames, 6*n_nodes)`` and includes rotations so the
+    normal-mode deformation can be converted through the ordinary FEM display path.
+    """
+    lam, phi = _free_free_nma(K, n_modes=n_modes, n_rigid=n_rigid, M=M)
+    rmsf = _rmsf_from_modes(lam, phi, n_nodes)
+    if not len(lam) or n_frames < 1:
+        return rmsf, np.empty((0, 6 * n_nodes), dtype=float)
+    rng = np.random.default_rng(seed)
+    q = rng.standard_normal((n_frames, len(lam))) * np.sqrt(KBT / lam)[None, :]
+    return rmsf, q @ phi.T
 
 
 def _nma_modes(K, n_modes: int = N_RMSF_MODES, n_rigid: int = 6, M=None):
@@ -2784,6 +2820,7 @@ def predict_shape(
     nonlinear: bool = True,
     n_steps: int = 20,
     with_rmsf: bool = True,
+    with_thermal_fluctuations: bool = True,
     anchors: Optional[List[dict]] = None,
     field: Optional[dict] = None,
     material: str = "cando",
@@ -2833,7 +2870,8 @@ def predict_shape(
         {"solver": "nonlinear"|"linear",
          "positions": [{helix_id, bp_index, direction, backbone_position}, ...],
          "anchor_keys": [[helix_id, bp], ...],   # duplex nodes actually clamped
-         "rmsf":      [{helix_id, bp_index, rmsf_nm}, ...]  # omitted if with_rmsf=False
+         "rmsf":      [{helix_id, bp_index, rmsf_nm}, ...], # omitted if with_rmsf=False
+         "thermal_trajectory": {"keys": [...], "frames": [...]} # NMA ensemble
         }
 
     ``rmsf`` is the free-free NMA per-bp RMSF (nm), CanDo-matched (~0.9), keyed to the same
@@ -2949,9 +2987,14 @@ def predict_shape(
             M = assemble_mass_matrix(mesh, design)
         # Drop 6 rigid-body modes PER connected component (a 2-body mesh has 12, not 6) —
         # otherwise a disconnected body's residual rigid modes blow its RMSF up to µm scale.
-        rmsf = compute_rmsf_nma(
-            K, len(mesh.nodes), M=M, n_rigid=6 * max(1, n_components)
-        )
+        n_rigid = 6 * max(1, n_components)
+        if with_thermal_fluctuations and material == "cando":
+            rmsf, thermal_u = compute_thermal_nma(
+                K, len(mesh.nodes), M=M, n_rigid=n_rigid
+            )
+        else:
+            rmsf = compute_rmsf_nma(K, len(mesh.nodes), M=M, n_rigid=n_rigid)
+            thermal_u = np.empty((0, 6 * len(mesh.nodes)), dtype=float)
         out["rmsf"] = [
             {
                 "helix_id": node.helix_id,
@@ -2960,6 +3003,40 @@ def predict_shape(
             }
             for i, node in enumerate(mesh.nodes)
         ]
+        if len(thermal_u):
+            # Compact oxDNA/SNUPI-compatible trajectory encoding.  Every frame is an
+            # independent equilibrium draw about the relaxed shape; it deliberately has
+            # no dt/time metadata because this is NMA sampling, not molecular dynamics.
+            keys = None
+            frames = []
+            for du in thermal_u:
+                frame_positions, _ = deformed_positions_with_axis(design, mesh, u + du)
+                if keys is None:
+                    keys = [
+                        [p["helix_id"], p["bp_index"], p["direction"], p.get("copy", 0)]
+                        for p in frame_positions
+                    ]
+                frames.append([
+                    coord
+                    for p in frame_positions
+                    for coord in p["backbone_position"]
+                ])
+            out["thermal_trajectory"] = {
+                "kind": "normal-mode-ensemble",
+                "temperature_k": 298.0,
+                "keys": keys or [],
+                "frames": frames,
+                "n_frames": len(frames),
+            }
+            # Pick one deterministic equilibrium conformation whose per-node squared
+            # translational displacement best matches the NMA expectation RMSF².  This
+            # is the single CanDo-style thermally broadened final state used by the
+            # normal visualizations; the ensemble remains cached for quantitative use.
+            xyz2 = np.sum(thermal_u[:, :].reshape(len(thermal_u), len(mesh.nodes), 6)[:, :, :3] ** 2, axis=2)
+            target = rmsf**2
+            scale = np.maximum(target, max(float(np.mean(target)), 1e-12) * 0.05)
+            scores = np.mean(((xyz2 - target[None, :]) / scale[None, :]) ** 2, axis=1)
+            out["thermal_trajectory"]["representative_frame"] = int(np.argmin(scores))
     return out
 
 
