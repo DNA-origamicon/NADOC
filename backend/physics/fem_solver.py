@@ -162,7 +162,9 @@ FEM_FIELD_CHARGES_PER_NODE = 2
 N_RMSF_MODES = (
     200  # lowest eigenmodes for RMSF (CanDo uses 200 modes + equipartition @ 298 K)
 )
-N_THERMAL_FRAMES = 48  # compact, deterministic 298 K NMA ensemble for CanDo-style playback
+N_THERMAL_FRAMES = (
+    48  # compact, deterministic 298 K NMA ensemble for CanDo-style playback
+)
 _MIN_FEM_NODES = (
     2  # a beam FEM needs ≥1 element (2 nodes); fewer duplex bp → nothing to solve
 )
@@ -2162,7 +2164,8 @@ def _wound_backbones_for_helix(helix, straight_nucs, node_anchors):
     frame carried along the curve (so beads wind correctly around a bent/twisted bundle instead of
     keeping their straight-frame radial direction).  Physical-layer / display only.
 
-    ``node_anchors`` = list of ``(global_bp, straight_axis_position, deformed_axis_position)`` for
+    ``node_anchors`` = list of ``(global_bp, straight_axis_position,
+    deformed_axis_position, rotation_vector)`` for
     this helix's duplex-core FEM nodes.  A rotation-minimising frame (RMF) is transported along the
     deformed axis, seeded from the straight helix frame.  Each bead is anchored to its OWN bp's node
     (nearest node for ssDNA ends / loop copies outside the core): its straight offset is split into
@@ -2194,6 +2197,18 @@ def _wound_backbones_for_helix(helix, straight_nucs, node_anchors):
     bps = np.array([float(a[0]) for a in anchors])
     def_pts = np.array([a[2] for a in anchors])  # DEFORMED node axis positions
     tans, E1, E2 = _rmf_frames(def_pts, e1s)
+    # RMF captures centerline bending but deliberately carries no twist. The beam's
+    # rotational DOFs supply that missing cross-section rotation. Use only the
+    # component about the local tangent; perpendicular components are bending already
+    # represented by the displaced centerline and applying them again would double it.
+    rotations = np.array(
+        [a[3] if len(a) > 3 else np.zeros(3, dtype=float) for a in anchors]
+    )
+    twist = np.sum(rotations * tans, axis=1)
+    c, s = np.cos(twist), np.sin(twist)
+    E1_old = E1.copy()
+    E1 = c[:, None] * E1_old + s[:, None] * E2
+    E2 = -s[:, None] * E1_old + c[:, None] * E2
     # ``rise_geom`` converts a bead's STRAIGHT axial coordinate ``s`` into a bp coordinate
     # (``x = bp_start + s/rise_geom``) so ``_at_bp`` anchors each bead onto its OWN bp's deformed node.
     # It MUST be the per-bp rise of the RENDERED backbone geometry — a constant BDNA_RISE_PER_BP, since
@@ -2449,10 +2464,30 @@ def deformed_positions_with_axis(
     # the DEFORMED axis (bend + global twist), instead of only translating it (which left beads
     # pointing in their straight-frame radial direction → visibly wrong on a curved bundle).
     node_anchors: Dict[str, list] = {}
+    helix_by_id = {h.id: h for h in design.helices}
     for idx, node in enumerate(mesh.nodes):
         disp = u[6 * idx : 6 * idx + 3]
+        rotation = u[6 * idx + 3 : 6 * idx + 6]
+        # Reconstruction is a NADOC→CanDo→NADOC round trip: apply the FEM
+        # DISPLACEMENT to NADOC's authoritative reference axis, never copy CanDo's
+        # absolute mesh coordinate back.  The two references intentionally differ
+        # (CanDo rise 0.340 nm/bp; NADOC B-DNA rise 0.334 nm/bp), so using
+        # ``node.position + disp`` stretched an undeformed 126-bp bundle by ~0.4 nm.
+        # At u=0 this formulation is exactly identity before the rigid alignment.
+        helix = helix_by_id[node.helix_id]
+        h_start = helix.axis_start.to_array()
+        h_axis = helix.axis_end.to_array() - h_start
+        h_axis /= np.linalg.norm(h_axis) or 1.0
+        nadoc_axis_position = (
+            h_start + (node.global_bp - helix.bp_start) * BDNA_RISE_PER_BP * h_axis
+        )
         node_anchors.setdefault(node.helix_id, []).append(
-            (node.global_bp, node.position, node.position + disp)
+            (
+                node.global_bp,
+                nadoc_axis_position,
+                nadoc_axis_position + disp,
+                rotation,
+            )
         )
 
     # LOOP-COPY INDEX: a loop insertion places several nucleotides at ONE
@@ -2995,14 +3030,6 @@ def predict_shape(
         else:
             rmsf = compute_rmsf_nma(K, len(mesh.nodes), M=M, n_rigid=n_rigid)
             thermal_u = np.empty((0, 6 * len(mesh.nodes)), dtype=float)
-        out["rmsf"] = [
-            {
-                "helix_id": node.helix_id,
-                "bp_index": node.global_bp,
-                "rmsf_nm": float(rmsf[i]),
-            }
-            for i, node in enumerate(mesh.nodes)
-        ]
         if len(thermal_u):
             # Compact oxDNA/SNUPI-compatible trajectory encoding.  Every frame is an
             # independent equilibrium draw about the relaxed shape; it deliberately has
@@ -3016,27 +3043,76 @@ def predict_shape(
                         [p["helix_id"], p["bp_index"], p["direction"], p.get("copy", 0)]
                         for p in frame_positions
                     ]
-                frames.append([
-                    coord
-                    for p in frame_positions
-                    for coord in p["backbone_position"]
-                ])
+                frames.append(
+                    [coord for p in frame_positions for coord in p["backbone_position"]]
+                )
+
+            # Report the fluctuation of the RECONSTRUCTED nucleotide geometry, not just
+            # the translational part of the FEM axis DOF.  The displayed slabs sit off
+            # axis, so rotational modes move them even when an axis node hardly moves.
+            # Pool the two strands (and any copies) at each bp after the same rigid-body
+            # alignment used for the trajectory.  This makes the flex colours describe
+            # the actual representative geometry the user sees.
+            frame_xyz = np.asarray(frames, dtype=float).reshape(len(frames), -1, 3)
+            point_msf_by_frame = np.sum(
+                (frame_xyz - np.mean(frame_xyz, axis=0, keepdims=True)) ** 2,
+                axis=2,
+            )
+            bp_columns: dict[tuple[str, int], list[int]] = {}
+            for col, key in enumerate(keys or []):
+                bp_columns.setdefault((key[0], int(key[1])), []).append(col)
+            modal_rmsf = rmsf
+            bp_msf_by_frame = np.empty((len(frames), len(mesh.nodes)), dtype=float)
+            for i, node in enumerate(mesh.nodes):
+                cols = bp_columns.get((node.helix_id, node.global_bp))
+                if cols:
+                    bp_msf_by_frame[:, i] = np.mean(point_msf_by_frame[:, cols], axis=1)
+                else:
+                    # Defensive fallback for a mesh node absent from reconstruction.
+                    bp_msf_by_frame[:, i] = modal_rmsf[i] ** 2
+            rmsf = np.sqrt(np.mean(bp_msf_by_frame, axis=0))
+
+            # Pick one equilibrium draw whose reconstructed per-bp fluctuation profile
+            # best matches the ensemble RMSF.  This is the single CanDo-style final state,
+            # not an animation or a separately coloured theoretical axis state.
+            target = rmsf**2
+            scale = np.maximum(target, max(float(np.mean(target)), 1e-12) * 0.05)
+            scores = np.mean(
+                ((bp_msf_by_frame - target[None, :]) / scale[None, :]) ** 2,
+                axis=1,
+            )
+            representative_frame = int(np.argmin(scores))
+            representative_positions, representative_axis = (
+                deformed_positions_with_axis(
+                    design, mesh, u + thermal_u[representative_frame]
+                )
+            )
             out["thermal_trajectory"] = {
                 "kind": "normal-mode-ensemble",
                 "temperature_k": 298.0,
                 "keys": keys or [],
                 "frames": frames,
                 "n_frames": len(frames),
+                "representative_frame": representative_frame,
+                # Full records are essential reconstruction data: nx/ny/nz and tx/ty/tz
+                # orient each slab in the same wound frame that placed its backbone bead.
+                # Flattened trajectory frames intentionally carry XYZ only and cannot
+                # reconstruct slab placement/orientation on their own.
+                "representative_positions": representative_positions,
+                # Preserve the true FEM helix centerline. Reconstructing it as a
+                # backbone midpoint precesses with the major/minor groove and makes
+                # the CanDo cylinders wobble—the same actual-axis-vs-idealized-axis
+                # distinction that fixed mrDNA reconstruction.
+                "representative_axis": representative_axis,
             }
-            # Pick one deterministic equilibrium conformation whose per-node squared
-            # translational displacement best matches the NMA expectation RMSF².  This
-            # is the single CanDo-style thermally broadened final state used by the
-            # normal visualizations; the ensemble remains cached for quantitative use.
-            xyz2 = np.sum(thermal_u[:, :].reshape(len(thermal_u), len(mesh.nodes), 6)[:, :, :3] ** 2, axis=2)
-            target = rmsf**2
-            scale = np.maximum(target, max(float(np.mean(target)), 1e-12) * 0.05)
-            scores = np.mean(((xyz2 - target[None, :]) / scale[None, :]) ** 2, axis=1)
-            out["thermal_trajectory"]["representative_frame"] = int(np.argmin(scores))
+        out["rmsf"] = [
+            {
+                "helix_id": node.helix_id,
+                "bp_index": node.global_bp,
+                "rmsf_nm": float(rmsf[i]),
+            }
+            for i, node in enumerate(mesh.nodes)
+        ]
     return out
 
 

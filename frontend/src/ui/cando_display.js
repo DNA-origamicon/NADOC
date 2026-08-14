@@ -87,15 +87,17 @@ function _putColor(colorByKey, helix, bp, dir, copy, hex) {
  * nucleotide); each is coloured by the RMSF of its (helix, bp) — RMSF is per axis
  * node (direction-independent), so both strands + gap-filled loop bases of a bp
  * share the colour.  Uncovered bp (no RMSF node) are left uncoloured (keep design
- * colour).  Scaled over [lo,hi] (default: the design's own RMSF min→max).
+ * colour).  Scaled over [lo,hi] (default: the design's own RMSF min→95th percentile,
+ * matching CanDo and the cylinder view; the flexible tail is clamped).
  */
-export function flexColorMap(displayResp, rmsfResp, loBound, hiBound, cmap = 'viridis') {
+export function flexColorMap(displayResp, rmsfResp, loBound, hiBound, cmap = 'jet') {
   const updates = toFemUpdates(displayResp)
   if (!updates.length || !rmsfResp?.rmsf?.length) return null
   const byBp = new Map()
   for (const r of rmsfResp.rmsf) byBp.set(`${r.helix_id}:${r.bp_index}`, r.rmsf_nm)
   const dataLo = Number.isFinite(rmsfResp.min_nm) ? rmsfResp.min_nm : 0
-  const dataHi = Number.isFinite(rmsfResp.max_nm) ? rmsfResp.max_nm : 0
+  const dataMax = Number.isFinite(rmsfResp.max_nm) ? rmsfResp.max_nm : 0
+  const dataHi = Number.isFinite(rmsfResp.p95_nm) ? rmsfResp.p95_nm : dataMax
   const lo = Number.isFinite(loBound) ? loBound : dataLo
   const hi = Number.isFinite(hiBound) ? hiBound : dataHi
   const span = hi - lo
@@ -108,7 +110,7 @@ export function flexColorMap(displayResp, rmsfResp, loBound, hiBound, cmap = 'vi
     // take that bp's colour — but keyed by their own copy so each loop bead recolours.
     _putColor(colorByKey, u.helix_id, u.bp_index, u.direction, u.copy ?? 0, colormapHex(cmap, t))
   }
-  return { updates, colorByKey, min: dataLo, max: dataHi }
+  return { updates, colorByKey, min: dataLo, max: dataHi, dataMax }
 }
 
 /**
@@ -175,6 +177,28 @@ export function thermalCylinderFrame(base, keys, frame) {
   return { ...base, helices, joints: (base.joints || []).map(j => [nearest(j[0]), nearest(j[1])]) }
 }
 
+/** Prefer the FEM's true representative axis over a backbone-midpoint reconstruction. */
+export function thermalCylinderAxis(base, axis) {
+  if (!base?.helices?.length || !Array.isArray(axis) || !axis.length) return base
+  const byHelix = new Map()
+  for (const a of axis) {
+    if (!byHelix.has(a.helix_id)) byHelix.set(a.helix_id, [])
+    byHelix.get(a.helix_id).push([a.bp_index, a.position])
+  }
+  const helices = base.helices.map(h => {
+    const points = (byHelix.get(h.helix_id) || []).sort((a, b) => a[0] - b[0]).map(x => x[1])
+    return { ...h, points: points.length === h.points.length ? points : h.points }
+  })
+  const oldPts = [], newPts = []
+  base.helices.forEach((h, hi) => h.points.forEach((p, pi) => { oldPts.push(p); newPts.push(helices[hi].points[pi]) }))
+  const nearest = p => {
+    let bi = 0, bd = Infinity
+    oldPts.forEach((q, i) => { const d = (p[0]-q[0])**2 + (p[1]-q[1])**2 + (p[2]-q[2])**2; if (d < bd) { bd=d; bi=i } })
+    return newPts[bi] || p
+  }
+  return { ...base, helices, joints: (base.joints || []).map(j => [nearest(j[0]), nearest(j[1])]) }
+}
+
 export function initCandoDisplay({
   designRenderer, api, cylinderOverlay = null, setDesignVisible = null, flexScale = null,
 }) {
@@ -194,7 +218,7 @@ export function initCandoDisplay({
   let _flexResp = null      // { disp, rmsf } for the flex map
   let _devResp = null       // deviation response
   let _candoResp = null     // cylinder response
-  let _flexCmap = 'viridis'
+  let _flexCmap = 'jet'
   let _devCmap = 'devramp'
   let _candoCmap = 'jet'
   let _flexBounds = null
@@ -251,9 +275,18 @@ export function initCandoDisplay({
    *  represents the NMA RMSF. Standard CanDo views are static final states—not movies. */
   function _startThermalFrames(resp, frameApplier = null) {
     if (!resp?.ready || !resp.n_frames || !resp.frames?.length) return false
+    const full = Array.isArray(resp.representative_positions)
+      ? toFemUpdates({ ready: true, positions: resp.representative_positions }) : []
+    if (full.length) {
+      if (frameApplier) frameApplier(resp)
+      else designRenderer.applyFemPositions(full)
+      return true
+    }
+    // Backward compatibility for caches produced before full wound-frame records were
+    // persisted. These can place beads but cannot correct slab orientation.
     const idx = Math.max(0, Math.min(resp.frames.length - 1,
       Number.isInteger(resp.representative_frame) ? resp.representative_frame : 0))
-    if (frameApplier) frameApplier(resp.keys, resp.frames[idx])
+    if (frameApplier) frameApplier({ representative_positions: framesToUpdates(resp.keys, resp.frames[idx]) })
     else designRenderer.applyFemPositions(framesToUpdates(resp.keys, resp.frames[idx]))
     return true
   }
@@ -362,7 +395,16 @@ export function initCandoDisplay({
       lo: resp.rmsf_min, hi: resp.rmsf_p95, colormap: _candoCmap,
     })
     _nativeVisible(false)
-    const moving = _startThermalFrames(thermal, (keys, frame) => {
+    const moving = _startThermalFrames(thermal, (thermalState) => {
+      if (thermalState.representative_axis?.length) {
+        cylinderOverlay.update(thermalCylinderAxis(resp, thermalState.representative_axis), {
+          lo: resp.rmsf_min, hi: resp.rmsf_p95, colormap: _candoCmap,
+        })
+        return
+      }
+      const positions = thermalState.representative_positions || []
+      const keys = positions.map(p => [p.helix_id, p.bp_index, p.direction, p.copy ?? 0])
+      const frame = positions.flatMap(p => p.backbone_position)
       cylinderOverlay.update(thermalCylinderFrame(resp, keys, frame), {
         lo: resp.rmsf_min, hi: resp.rmsf_p95, colormap: _candoCmap,
       })

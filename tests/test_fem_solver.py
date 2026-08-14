@@ -11,6 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.models import LatticeType
 from backend.physics.fem_solver import (
     apply_boundary_conditions,
@@ -19,6 +20,7 @@ from backend.physics.fem_solver import (
     build_fem_mesh,
     compute_rmsf,
     compute_rmsf_nma,
+    deformed_positions_with_axis,
     predict_shape,
     solve_equilibrium,
 )
@@ -308,6 +310,34 @@ def test_predict_shape_defaults_to_nonlinear_and_returns_positions_and_rmsf():
     assert len(res["positions"]) > 0
     assert len(res["rmsf"]) == len(mesh.nodes)  # one RMSF per axis node
     assert all(r["rmsf_nm"] >= 0.0 and np.isfinite(r["rmsf_nm"]) for r in res["rmsf"])
+    thermal = res["thermal_trajectory"]
+    assert thermal["representative_positions"]
+    assert len(thermal["representative_axis"]) == len(mesh.nodes)
+    # The displayed heat map is measured from the reconstructed thermal ensemble,
+    # including off-axis slab motion from rotational modes.
+    frame_xyz = np.asarray(thermal["frames"]).reshape(thermal["n_frames"], -1, 3)
+    point_msf = np.mean(
+        np.sum((frame_xyz - np.mean(frame_xyz, axis=0, keepdims=True)) ** 2, axis=2),
+        axis=0,
+    )
+    by_bp = {}
+    for col, key in enumerate(thermal["keys"]):
+        by_bp.setdefault((key[0], key[1]), []).append(col)
+    reconstructed = {
+        key: float(np.sqrt(np.mean(point_msf[cols]))) for key, cols in by_bp.items()
+    }
+    for value in res["rmsf"]:
+        assert value["rmsf_nm"] == pytest.approx(
+            reconstructed[(value["helix_id"], value["bp_index"])], abs=1e-12
+        )
+    # The representative final state must retain the full wound reconstruction frame.
+    # XYZ-only records move beads but leave slabs in their design orientation.
+    for p in thermal["representative_positions"][:100]:
+        n = np.array([p["nx"], p["ny"], p["nz"]])
+        t = np.array([p["tx"], p["ty"], p["tz"]])
+        assert abs(np.linalg.norm(n) - 1.0) < 1e-6
+        assert abs(np.linalg.norm(t) - 1.0) < 1e-6
+        assert abs(float(n @ t)) < 1e-3
 
     # the predicted shape actually deformed off the straight reference
     moved = max(
@@ -503,6 +533,90 @@ def test_deform_backbones_wind_around_the_curved_axis():
             f"{hid}: bead radius off ({np.mean(radii):.2f} nm)"
         )
     assert checked >= 4, "expected several duplex-core helices to validate"
+
+
+def test_nadoc_cando_nadoc_zero_displacement_round_trip_is_identity(routed_6hb):
+    """At u=0, CanDo reconstruction must return authoritative NADOC geometry exactly.
+
+    CanDo uses 0.340 nm/bp while NADOC renders B-DNA at 0.334 nm/bp. Copying absolute
+    FEM coordinates back stretched an undeformed bundle and shifted slab centers by up
+    to ~0.4 nm; reconstruction must instead apply FEM displacements to NADOC geometry.
+    """
+    from collections import Counter
+
+    from backend.core.deformation import deformed_nucleotide_positions
+    from backend.core.sequences import domain_bp_range
+
+    mesh = build_fem_mesh(routed_6hb)
+    positions, _ = deformed_positions_with_axis(
+        routed_6hb, mesh, np.zeros(6 * len(mesh.nodes))
+    )
+    got = {
+        (p["helix_id"], p["bp_index"], p["direction"], p.get("copy", 0)): p
+        for p in positions
+    }
+    covered = set()
+    for strand in routed_6hb.strands:
+        for domain in strand.domains:
+            for bp in domain_bp_range(domain):
+                covered.add((domain.helix_id, bp, domain.direction.value))
+    expected = {}
+    seen = Counter()
+    for helix in routed_6hb.helices:
+        for nuc in deformed_nucleotide_positions(helix, routed_6hb):
+            key3 = (nuc.helix_id, nuc.bp_index, nuc.direction.value)
+            if key3 not in covered:
+                continue
+            key = (*key3, seen[key3])
+            seen[key3] += 1
+            expected[key] = nuc
+
+    assert set(got) == set(expected)
+    for key, nuc in expected.items():
+        p = got[key]
+        np.testing.assert_allclose(p["backbone_position"], nuc.position, atol=2e-12)
+        np.testing.assert_allclose(
+            [p["nx"], p["ny"], p["nz"]], nuc.base_normal, atol=2e-8
+        )
+        np.testing.assert_allclose(
+            [p["tx"], p["ty"], p["tz"]], nuc.axis_tangent, atol=2e-12
+        )
+
+
+def test_reconstruction_applies_fem_torsional_rotation_to_backbones_and_slabs(
+    routed_6hb,
+):
+    """The centerline RMF does not contain beam twist; nodal rotational DOFs must.
+
+    A pure rotation about a straight helix axis leaves its axis/tangents fixed but rotates
+    both backbone winding and slab base normals by the prescribed angle.
+    """
+    from backend.core.geometry import nucleotide_positions
+    from backend.physics.fem_solver import _wound_backbones_for_helix
+
+    helix = routed_6hb.helices[0]
+    nucs = list(nucleotide_positions(helix))
+    start = helix.axis_start.to_array()
+    axis = helix.axis_end.to_array() - start
+    axis /= np.linalg.norm(axis)
+    anchors0, anchors1 = [], []
+    angle = 0.2
+    for bp in range(helix.bp_start, helix.bp_start + helix.length_bp):
+        p = start + (bp - helix.bp_start) * BDNA_RISE_PER_BP * axis
+        anchors0.append((bp, p, p, np.zeros(3)))
+        anchors1.append((bp, p, p, angle * axis))
+    p0, n0, t0 = _wound_backbones_for_helix(helix, nucs, anchors0)
+    p1, n1, t1 = _wound_backbones_for_helix(helix, nucs, anchors1)
+
+    def signed_angle(a, b):
+        return np.arctan2(axis @ np.cross(a, b), a @ b)
+
+    i = len(nucs) // 2
+    a0 = p0[i] - (start + (nucs[i].bp_index - helix.bp_start) * BDNA_RISE_PER_BP * axis)
+    a1 = p1[i] - (start + (nucs[i].bp_index - helix.bp_start) * BDNA_RISE_PER_BP * axis)
+    assert signed_angle(a0, a1) == pytest.approx(angle, abs=1e-6)
+    assert signed_angle(n0[i], n1[i]) == pytest.approx(angle, abs=1e-6)
+    np.testing.assert_allclose(t1[i], t0[i], atol=1e-12)
 
 
 def test_deform_slabs_carry_the_wound_frame_not_the_straight_orientation():

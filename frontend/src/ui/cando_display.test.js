@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
 import {
   toFemUpdates, initCandoDisplay, viridisHex, deviationHex,
-  flexColorMap, deviationColorMap, thermalCylinderFrame,
+  flexColorMap, deviationColorMap, thermalCylinderFrame, thermalCylinderAxis,
 } from './cando_display.js'
+import { colormapHex } from './colormaps.js'
 
 // A ready /cando/jobs/{id}/snapshot-geometry response — the job's own design snapshot
 // that the display modes render (via renderExternalGeometry) before overlaying the FEM
@@ -59,6 +60,21 @@ describe('thermalCylinderFrame', () => {
   })
 })
 
+describe('thermalCylinderAxis', () => {
+  it('uses the true FEM centerline rather than groove-precessing backbone midpoints', () => {
+    const base = {
+      helices: [{ helix_id: 'h', points: [[0, 0, 0], [1, 0, 0]], rmsf: [0.1, 0.2] }],
+      joints: [[[0, 0, 0], [1, 0, 0]]],
+    }
+    const moved = thermalCylinderAxis(base, [
+      { helix_id: 'h', bp_index: 0, position: [0, 2, 0] },
+      { helix_id: 'h', bp_index: 1, position: [1, 3, 0] },
+    ])
+    expect(moved.helices[0].points).toEqual([[0, 2, 0], [1, 3, 0]])
+    expect(moved.joints[0]).toEqual([[0, 2, 0], [1, 3, 0]])
+  })
+})
+
 describe('initCandoDisplay controller', () => {
   function makeDeps() {
     const designRenderer = {
@@ -111,13 +127,19 @@ describe('initCandoDisplay controller', () => {
     api.getCandoThermalTrajectory = vi.fn(async () => ({
       ready: true, temperature_k: 298, n_frames: 2, representative_frame: 1,
       keys: [['h', 0, 'FORWARD', 0]], frames: [[2, 3, 4], [5, 6, 7]],
+      representative_positions: [{
+        helix_id: 'h', bp_index: 0, direction: 'FORWARD', copy: 0,
+        backbone_position: [5, 6, 7], nx: 0, ny: 1, nz: 0, tx: 0, ty: 0, tz: 1,
+      }],
     }))
     const c = initCandoDisplay({ designRenderer, api })
     const r = await c.showDeform('job-moving')
     expect(r.ok).toBe(true)
     expect(c.lastStats()).toMatchObject({ kind: 'deform', thermal: true, frames: 2 })
     expect(designRenderer.applyFemPositions).toHaveBeenLastCalledWith([
-      expect.objectContaining({ backbone_position: [5, 6, 7] }),
+      expect.objectContaining({
+        backbone_position: [5, 6, 7], nx: 0, ny: 1, nz: 0, tx: 0, ty: 0, tz: 1,
+      }),
     ])
     c.stopAndRestore()
   })
@@ -191,7 +213,10 @@ describe('flexColorMap', () => {
     { helix_id: 'h', bp_index: 0, direction: 'reverse', backbone_position: [0, 0, 0] },
     { helix_id: 'h', bp_index: 5, direction: 'forward', backbone_position: [1, 0, 0] },  // no RMSF node
   ] }
-  const rmsf = { rmsf: [{ helix_id: 'h', bp_index: 0, rmsf_nm: 1.2 }], min_nm: 0.5, max_nm: 1.5 }
+  const rmsf = {
+    rmsf: [{ helix_id: 'h', bp_index: 0, rmsf_nm: 1.2 }],
+    min_nm: 0.5, p95_nm: 1.3, max_nm: 1.5,
+  }
 
   it('returns null when positions or RMSF are missing', () => {
     expect(flexColorMap(disp, { rmsf: [] })).toBeNull()
@@ -201,14 +226,14 @@ describe('flexColorMap', () => {
   it('colours covered bp (both strands + each loop copy), leaves uncovered bp uncoloured', () => {
     const map = flexColorMap(disp, rmsf)
     expect(map.updates).toHaveLength(4)              // every display position kept
-    const hex = viridisHex((1.2 - 0.5) / 1.0)
+    const hex = colormapHex('jet', (1.2 - 0.5) / 0.8)
     // bp 0 copy 0 → 3-part alias + 4-part key; the LOOP COPY (copy 1) → its own 4-part key.
     expect(map.colorByKey['h:0:forward']).toBe(hex)
     expect(map.colorByKey['h:0:forward:0']).toBe(hex)
     expect(map.colorByKey['h:0:forward:1']).toBe(hex)   // loop copy coloured (the bug fix)
     expect(map.colorByKey['h:0:reverse']).toBeDefined()
     expect(map.colorByKey['h:5:forward']).toBeUndefined()
-    expect(map).toMatchObject({ min: 0.5, max: 1.5 })
+    expect(map).toMatchObject({ min: 0.5, max: 1.3, dataMax: 1.5 })
   })
 })
 

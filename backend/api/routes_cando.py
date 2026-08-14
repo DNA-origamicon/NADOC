@@ -35,6 +35,7 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
 from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
@@ -378,11 +379,13 @@ async def get_cando_rmsf(job_id: str) -> dict:
         return {"job_id": job.job_id, "ready": False, "rmsf": []}
     rmsf = cached["rmsf"]
     vals = [r["rmsf_nm"] for r in rmsf]
+    p95 = float(np.percentile(vals, 95)) if vals else None
     return {
         "job_id": job.job_id,
         "ready": True,
         "n": len(rmsf),
         "min_nm": min(vals) if vals else None,
+        "p95_nm": p95,
         "max_nm": max(vals) if vals else None,
         "rmsf": rmsf,
     }
