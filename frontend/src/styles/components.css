@@ -341,8 +341,9 @@
 .ox-card__title { flex: 1; }
 .ox-card__body { padding: 8px; }
 
-/* Smooth dropdown / submenu reveal */
-.dropdown,
+/* Smooth submenu reveal. Top-level dropdowns are controlled by hover and must
+   appear immediately; reusing the modal fade briefly leaves them at opacity 0
+   each time the pointer enters the menu item. */
 .submenu {
   animation: modal-fade-in var(--motion-fast) var(--motion-ease);
 }
@@ -561,6 +562,13 @@
   box-shadow: var(--shadow-md);
   padding: var(--space-1) 0;
   z-index: var(--z-dropdown);
+}
+
+/* Keep the legacy menu markup's hover contract explicit.  The direct-child
+   selector prevents nested submenus from being mistaken for top-level menus. */
+.menu-item:not(.disabled):hover > .dropdown {
+  display: block;
+  opacity: 1;
 }
 
 .dropdown__item {
