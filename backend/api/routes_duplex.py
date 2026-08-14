@@ -322,7 +322,7 @@ def patch_duplex(duplex_id: str, body: PatchDuplexBody) -> dict:
         updated = _propagate_driver_to_binding(updated, candidate)
         # If the linked binding is bound, RE-PLACE its geometry for the new driver
         # (revert + re-bind via the proven machinery), so the toggle moves the model.
-        from backend.api.crud import reapply_binding_driver
+        from backend.api.routes_overhang_bindings import reapply_binding_driver
 
         pair = {candidate.left.overhang_id, candidate.right.overhang_id}
         linked = next(

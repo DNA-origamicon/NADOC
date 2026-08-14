@@ -403,7 +403,7 @@ def test_driver_semantics_latest_wins_then_revert():
     # different recorded angle.
     # Easiest path: directly stage two bindings in-memory and confirm the
     # driver selector picks the later one.
-    from backend.api.crud import _select_driver_for_joint as _sel
+    from backend.core.binding_drivers import select_driver_for_joint as _sel
 
     # Patch in-memory (cross-validator forbids duplicate pair — skip cross-model
     # checks by bypassing Design construction). For test purposes, mutate

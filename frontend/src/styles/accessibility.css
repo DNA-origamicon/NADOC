@@ -1,0 +1,255 @@
+/** Low-vision and reflow layer.
+ *
+ * Loaded after the legacy inline stylesheet so it can normalize the old dense
+ * workstation rules while those rules are progressively migrated to tokens.
+ */
+
+html {
+  font-size: 100%;
+}
+
+body {
+  min-width: 320px;
+}
+
+#menu-bar {
+  min-height: var(--layout-menubar-height);
+  height: auto;
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: thin;
+}
+
+.menu-item > button,
+.dropdown-item,
+.submenu-item {
+  min-height: var(--control-sm);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.dropdown-item,
+.submenu-item {
+  padding-block: 8px;
+}
+
+/* Legacy muted inline colours were selected for 10px text and become illegible
+ * against raised dark surfaces. Promote them unless disabled semantics apply. */
+:where(#app, [role="dialog"], .ctx-menu) .dim,
+:where(#app, [role="dialog"], .ctx-menu) [style*="color:#8b949e"],
+:where(#app, [role="dialog"], .ctx-menu) [style*="color: #8b949e"],
+:where(#app, [role="dialog"], .ctx-menu) [style*="color:#6e7681"],
+:where(#app, [role="dialog"], .ctx-menu) [style*="color: #6e7681"],
+:where(#app, [role="dialog"], .ctx-menu) [style*="color:#6a737d"],
+:where(#app, [role="dialog"], .ctx-menu) [style*="color: #6a737d"],
+:where(#app, [role="dialog"], .ctx-menu) [style*="color:#484f58"],
+:where(#app, [role="dialog"], .ctx-menu) [style*="color: #484f58"] {
+  color: var(--color-text-dim) !important;
+}
+
+:where(button, input, select, textarea):disabled,
+[aria-disabled="true"] {
+  color: var(--color-text-disabled) !important;
+}
+
+button,
+select,
+textarea,
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]) {
+  min-height: var(--control-sm);
+  font-size: max(1em, var(--text-sm));
+  line-height: var(--leading-normal);
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--color-bg-canvas);
+}
+
+#left-panel {
+  width: var(--layout-left-panel-width);
+  min-width: 260px;
+}
+
+#welcome-box {
+  width: min(520px, calc(100% - 24px));
+  max-width: calc(100% - 24px);
+}
+
+#library-panel-mount {
+  width: 100%;
+  min-width: 0;
+}
+
+#welcome-sub,
+.lib-section-header,
+.lib-file-mtime,
+.lib-empty,
+.lib-loading,
+.lib-folder-toggle,
+.lib-row-path,
+.lib-row-mtime,
+.lib-row-size,
+.lib-sort-label,
+.lib-sort-col {
+  color: var(--color-text-dim);
+}
+
+.lib-tree-row,
+.lib-file-name,
+.lib-actions button {
+  font-size: var(--text-xs);
+}
+
+#right-panel {
+  width: var(--layout-right-panel-width);
+  min-width: 280px;
+}
+
+#left-tab-strip,
+#right-tab-strip {
+  width: 44px;
+}
+
+.left-tab-btn,
+.right-tab-btn {
+  width: 36px;
+  min-height: 44px;
+  font-size: var(--text-xs);
+}
+
+#left-tab-toggle,
+#right-tab-toggle {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  font-size: var(--text-sm);
+}
+
+.panel-resize-handle {
+  width: 10px;
+}
+
+#main-area,
+#canvas-area,
+#left-panel,
+#right-panel,
+.tab-content,
+.right-tab-content {
+  min-height: 0;
+  min-width: 0;
+}
+
+/* Browser zoom reduces the CSS viewport. At tablet/zoomed widths, sidebars become
+ * scrollable overlays instead of consuming the complete 3D viewport or forcing
+ * horizontal page scrolling. Their existing hide buttons remain available. */
+@media (max-width: 900px) {
+  #main-area {
+    position: relative;
+    overflow: hidden;
+  }
+
+  #canvas-area {
+    width: 100%;
+    min-width: 0;
+  }
+
+  #welcome-screen {
+    left: 44px;
+  }
+
+  #left-panel,
+  #right-panel,
+  #left-tab-strip,
+  #right-tab-strip {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: var(--z-sticky);
+  }
+
+  #left-tab-strip { left: 0; }
+  #left-panel {
+    left: 44px;
+    width: min(var(--layout-left-panel-width), calc(100vw - 88px));
+    max-width: calc(100vw - 88px);
+  }
+
+  #right-tab-strip { right: 0; }
+  #right-panel {
+    right: 44px;
+    width: min(var(--layout-right-panel-width), calc(100vw - 88px));
+    max-width: calc(100vw - 88px);
+  }
+
+  #view-tools,
+  #selection-tools,
+  #spreadsheet-tab {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+  }
+}
+
+@media (max-width: 520px) {
+  #sync-status,
+  .menu-title {
+    display: none;
+  }
+
+  #welcome-box,
+  .modal,
+  [role="dialog"] {
+    max-width: calc(100vw - 24px) !important;
+    max-height: calc(100vh - 24px) !important;
+    overflow: auto;
+  }
+
+  .lib-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .lib-actions button {
+    width: 100%;
+    padding-inline: 8px;
+  }
+
+  .lib-show-sim-folders {
+    grid-column: 1 / -1;
+    justify-self: end;
+    margin-left: 0 !important;
+  }
+
+  .lib-row-path,
+  .lib-row-size {
+    display: none;
+  }
+}
+
+@media (pointer: coarse) {
+  button,
+  select,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]) {
+    min-height: var(--control-xl);
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 24px;
+    height: 24px;
+    flex-basis: 24px;
+  }
+}

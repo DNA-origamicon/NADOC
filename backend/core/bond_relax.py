@@ -41,6 +41,35 @@ from backend.core.models import (
 )
 
 
+def cluster_pair_for_bond_relax(
+    design: Design, helix_a: str, helix_b: str
+) -> tuple[Optional[str], Optional[str]]:
+    """Choose differing owning clusters when overlapping cluster sets permit it.
+
+    Autodetection can produce an encompassing scaffold cluster plus smaller
+    geometry clusters. A first-match lookup can therefore report both bond
+    endpoints in the same cluster even when a relaxable differing pair exists.
+    """
+    members_a = [
+        transform.id
+        for transform in design.cluster_transforms
+        if helix_a in transform.helix_ids
+    ]
+    members_b = [
+        transform.id
+        for transform in design.cluster_transforms
+        if helix_b in transform.helix_ids
+    ]
+    for cluster_a in members_a:
+        for cluster_b in members_b:
+            if cluster_a != cluster_b:
+                return cluster_a, cluster_b
+    return (
+        members_a[0] if members_a else None,
+        members_b[0] if members_b else None,
+    )
+
+
 def relax_bond(
     design: Design,
     *,

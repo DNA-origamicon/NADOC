@@ -17,7 +17,7 @@ from fastapi import HTTPException
 import backend.api.doc_context as dc
 from backend.api import headless_build as hb
 from backend.api import state as design_state
-from backend.api.crud import _cv_create_bound_binding
+from backend.api.routes_connection_versions import _cv_create_bound_binding
 from backend.api.routes import _demo_design
 from backend.core import ssdna_fjc
 from backend.core.constants import BDNA_RISE_PER_BP

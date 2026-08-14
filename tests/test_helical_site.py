@@ -276,6 +276,24 @@ def test_the_mrdna_seed_is_the_geometric_layers_site(fixture):
             seen[(n.bp_index, n.direction.value)] = k + 1
             site[(h.id, n.bp_index, n.direction.value, k)] = n
 
+    # Occupied extruded domains can retain parent-rail bp labels beyond their
+    # dedicated short helix span.  They are real geometric-layer sites emitted by
+    # the renderer, so include those extensions in the oracle as well.
+    from types import SimpleNamespace
+
+    from backend.core.design_geometry import _geometry_for_helices
+
+    seen_extended = {}
+    for g in _geometry_for_helices(design, None, junction_balance=False):
+        dk = (g["helix_id"], g["bp_index"], g["direction"])
+        k = seen_extended.get(dk, 0)
+        seen_extended[dk] = k + 1
+        key = (*dk, k)
+        if key not in site and not str(g["helix_id"]).startswith("__"):
+            site[key] = SimpleNamespace(
+                position=np.asarray(g["backbone_position"], dtype=float)
+            )
+
     checked = 0
     for key, idx in nt_key.items():
         if key[0].startswith("__"):  # synthetic tail beads have no lattice site

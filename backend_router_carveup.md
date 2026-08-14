@@ -1,7 +1,8 @@
 # backend router carve-up map — crud.py / assembly.py decomposition backlog
 
-**Purpose.** `backend/api/crud.py` (≈15.6k lines, 190 routes) and `backend/api/assembly.py` (≈7.8k lines,
-112 routes) are the two backend god-files. This loop decomposes them the way `main_js_carveup.md`
+**Purpose.** `backend/api/crud.py` began at ≈15.6k lines / 190 routes and is now a
+design-kernel module of ≈9.6k lines / 89 routes; `backend/api/assembly.py` began at
+≈7.8k lines / 112 routes. This loop decomposes them the way `main_js_carveup.md`
 decomposed `main.js` — **one cohesive block per session, one commit, a metrics row in
 `backend_router_extraction_log.md`.** The pattern is already proven twice in-repo:
 `routes_loop_skip.py` (Refactor 10-F) and `routes_camera_poses.py` (13-B) were lifted out of crud.py
@@ -163,6 +164,20 @@ section drives the session.
 ---
 
 ## Next-session handoff
+
+**Current state (2026-08-14 maintainability sweep).** Ordinary feature work had added
+six cohesive route families after the earlier “terminal” assessment, so the explicit
+maintainability goal correctly reopened `crud.py`. The following owners are now mounted
+directly from `main.py`: `routes_design_loadouts`, `routes_connection_versions`,
+`routes_overhang_connections`, `routes_overhang_bindings`, `routes_overhang_sequences`,
+`routes_relaxation`, and `routes_design_interchange`. Shared binding-driver,
+connection-version, loadout, and bond-relax rules live in tested `backend/core` modules;
+the shared overhang patch builder lives in neutral `backend/api/overhang_patch.py` so no
+new router imports bespoke mutation logic from `crud.py`. Live audit: **89 routes,
+9,613 LOC, 625 application method/path pairs, 0 duplicates**. Full suite:
+**7,076 passed, 459 skipped, 1 xfailed**. Reopen only for a new cohesive route family or
+new pure service logic; do not use the historical terminal text below as a veto against
+measured feature drift.
 
 _Living pointer — each session overwrites this (step 9). Last updated 2026-07-31 by Refactor #50
 (**crud.py: `_strand_occupancy` + `_local_changed_helices` → existing `backend/core/render_diff.py`**, service

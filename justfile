@@ -6,8 +6,8 @@ setup:
     ./setup.sh
 
 # Start backend + frontend together (Ctrl-C to stop). Run `just setup` first.
-start:
-    ./start.sh
+start *ARGS:
+    ./start.sh {{ARGS}}
 
 # Start FastAPI backend with hot reload.
 # --timeout-graceful-shutdown: the status websockets (/ws/md-jobs) are long-lived
@@ -15,7 +15,7 @@ start:
 # in "Waiting for connections to close" — freezing every job (prep heartbeat dies,
 # HTTP hangs). Cap the wait so a reload always force-closes within a few seconds.
 dev:
-    uv run uvicorn backend.api.main:app --reload --timeout-graceful-shutdown 5 --reload-dir backend --reload-dir scripts --reload-exclude 'workspace/**' --reload-exclude 'experiments/**' --reload-exclude 'runs/**' --reload-exclude 'bp_health_runs/**' --reload-exclude 'gromacs_run/**' --reload-exclude 'memory/**' --host 0.0.0.0 --port 8000
+    uv run uvicorn backend.api.main:app --reload --timeout-graceful-shutdown 5 --reload-dir backend --reload-dir scripts --reload-exclude 'workspace/**' --reload-exclude 'experiments/**' --reload-exclude 'runs/**' --reload-exclude 'bp_health_runs/**' --reload-exclude 'gromacs_run/**' --reload-exclude 'memory/**' --host 127.0.0.1 --port 8000
 
 # ── TEST POLICY ───────────────────────────────────────────────────────────────
 # THE LAW: heavy (`slow`) tests — real oxDNA/NAMD/mrdna sims, CanDo-FEM solves,
@@ -138,7 +138,7 @@ audit-trajectory *ARGS:
 
 # Start Vite frontend dev server (requires FastAPI running separately)
 frontend:
-    cd frontend && npm run dev -- --host 0.0.0.0
+    cd frontend && npm run dev -- --host 127.0.0.1
 
 # Build frontend for production (output to frontend/dist)
 build-frontend:

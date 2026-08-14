@@ -80,6 +80,8 @@ def test_sparse_overhang_helix_does_not_fill_its_empty_middle():
     and 168–179; it must not block the valid h_sc_48 nick at 103/104.
     """
     path = Path("workspace/VoltronCoreArm.nadoc")
+    if not path.exists():
+        pytest.skip("requires local workspace fixture VoltronCoreArm.nadoc")
     design = Design.from_dict(json.loads(path.read_text()))
     helix = design.find_helix("h_sc_48")
     assert helix is not None

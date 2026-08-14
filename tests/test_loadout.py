@@ -6,17 +6,16 @@ Names are now picked by the backend as the lowest free "Loadout N", so the
 frontend never needs to compute (and mis-compute) a name.
 """
 
-from backend.api.crud import (
+from backend.api.crud import design_state
+from backend.api.routes_design_loadouts import (
     LoadoutCreateBody,
-    _auto_loadout_name,
     create_loadout,
     delete_loadout,
-    design_state,
     select_loadout,
     activate_last_editable_loadout,
-    _encode_loadout_design_snapshot,
 )
 from backend.api import state as design_state_api
+from backend.core.design_loadouts import encode_snapshot, next_default_name
 from backend.core.models import Design, DeformationLogEntry, DesignLoadout
 from fastapi import HTTPException
 import pytest
@@ -36,8 +35,8 @@ def test_auto_loadout_name_skips_taken_numbers():
 
     loadouts = [DesignLoadout(name="Loadout 1"), DesignLoadout(name="Loadout 3")]
     # 1 taken, 2 free -> "Loadout 2"; nothing should collide.
-    assert _auto_loadout_name(loadouts) == "Loadout 2"
-    assert _auto_loadout_name([]) == "Loadout 1"
+    assert next_default_name(loadouts) == "Loadout 2"
+    assert next_default_name([]) == "Loadout 1"
 
 
 def test_first_create_from_implicit_does_not_duplicate_loadout_1():
@@ -107,7 +106,7 @@ def test_protected_simulation_loadout_rejects_edits_and_returns_to_last_editable
     create_loadout(LoadoutCreateBody(name="Working"))
     working = design_state.get_or_404()
     working_id = working.active_loadout_id
-    payload, size = _encode_loadout_design_snapshot(
+    payload, size = encode_snapshot(
         working.copy_with(feature_log=[_fl("simulation")])
     )
     sim = DesignLoadout(

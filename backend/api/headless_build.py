@@ -41,14 +41,8 @@ from backend.api.crud import (
     ForcedLigationRequest,
     HalfCrossoverRequest,
     NickRequest,
-    OverhangBindingCreateRequest,
-    OverhangBindingPatchRequest,
-    OverhangConnectionCreateRequest,
     OverhangExtrudeRequest,
     PlaceCrossoverRequest,
-    RelaxBondEndpoint,
-    RelaxBondRequest,
-    RelaxLinkerRequest,
     StrandEndResizeEntry,
     StrandEndResizeRequest,
     SubDomainPatchRequest,
@@ -63,31 +57,45 @@ from backend.api.crud import (
     auto_crossover as _route_auto_crossover,
     auto_merge as _route_auto_merge,
     batch_patch_crossover_extra_bases as _route_batch_xo_extra_bases,
-    ConnectionVersionCreateRequest,
-    apply_connection_version as _route_apply_connection_version,
     create_bundle as _route_create_bundle,
-    create_connection_version as _route_create_connection_version,
-    create_overhang_binding as _route_create_overhang_binding,
-    create_overhang_connection as _route_create_overhang_connection,
     delete_crossover as _route_delete_crossover,
     delete_forced_ligation as _route_delete_forced_ligation,
-    delete_overhang_binding as _route_delete_overhang_binding,
     delete_strand as _route_delete_strand,
     forced_ligation as _route_forced_ligation,
     get_deformed_frame as _route_deformed_frame,
     ligate_strand as _route_ligate,
     overhang_extrude as _route_overhang_extrude,
     patch_crossover_extra_bases as _route_set_xo_extra_bases,
-    patch_overhang_binding as _route_patch_overhang_binding,
     patch_sub_domain as _route_patch_sub_domain,
     place_crossover as _route_place_crossover,
-    relax_bond_endpoint as _route_relax_bond,
-    relax_overhang_binding as _route_relax_overhang_binding,
-    relax_overhang_connection as _route_relax_overhang_connection,
-    select_loadout as _route_select_loadout,
     split_sub_domain as _route_split_sub_domain,
     strand_end_resize as _route_strand_end_resize,
 )
+from backend.api.schemas_connection_versions import ConnectionVersionCreateRequest
+from backend.api.routes_connection_versions import (
+    apply_connection_version as _route_apply_connection_version,
+    create_connection_version as _route_create_connection_version,
+)
+from backend.api.routes_overhang_connections import (
+    OverhangConnectionCreateRequest,
+    create_overhang_connection as _route_create_overhang_connection,
+)
+from backend.api.routes_overhang_bindings import (
+    OverhangBindingCreateRequest,
+    OverhangBindingPatchRequest,
+    create_overhang_binding as _route_create_overhang_binding,
+    delete_overhang_binding as _route_delete_overhang_binding,
+    patch_overhang_binding as _route_patch_overhang_binding,
+)
+from backend.api.routes_relaxation import (
+    RelaxBondEndpoint,
+    RelaxBondRequest,
+    RelaxLinkerRequest,
+    relax_bond_endpoint as _route_relax_bond,
+    relax_overhang_binding as _route_relax_overhang_binding,
+    relax_overhang_connection as _route_relax_overhang_connection,
+)
+from backend.api.routes_design_loadouts import select_loadout as _route_select_loadout
 from backend.api.routes_duplex import (
     ConnectDuplexBody,
     connect_duplex as _route_connect_duplex,

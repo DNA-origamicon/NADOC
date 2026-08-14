@@ -384,6 +384,7 @@ def prepare_implicit_gbis_namd(
     salt_mode: str = "custom",  # noqa: ARG001
     padding_nm: float = 1.2,  # noqa: ARG001
     box_mode: str = "rotation",  # noqa: ARG001 — implicit solvent has no cell
+    high_aspect_ratio: bool = False,  # noqa: ARG001 — implicit solvent has no cell
     # Cell-sizing intent: meaningless here — GBIS is implicit solvent with no periodic
     # cell, so there is no image for the solute to rotate into.
     free_ns: Optional[float] = None,  # noqa: ARG001

@@ -374,7 +374,7 @@ def relax_direct_binding(
     Returns ``(updated_design, info)``. ``info["mode"]`` ∈
     ``"same_body"`` / ``"joints"`` / ``"translate"``.
     """
-    from backend.api.crud import _cluster_pair_for_bond_relax
+    from backend.core.bond_relax import cluster_pair_for_bond_relax
     from backend.core.design_geometry import fitting_geometry as _geometry_for_design
     from backend.core.duplex_cluster import (
         dematerialize_duplex_cluster,
@@ -425,7 +425,7 @@ def relax_direct_binding(
     target_chord = span + n_bonds * target_nm
 
     # Cluster ownership of the two root anchors.
-    cb_id, cr_id = _cluster_pair_for_bond_relax(design, tip_helix, root_helix)
+    cb_id, cr_id = cluster_pair_for_bond_relax(design, tip_helix, root_helix)
     cluster_a = _overhang_owning_cluster_id(design, driver_oh_id) or cb_id
     cluster_b = cr_id
     same_body = cluster_a is not None and cluster_a == cluster_b

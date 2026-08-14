@@ -181,8 +181,11 @@ the `./start.sh` window is still open and didn't show an error. Confirm you used
 **Windows/WSL2: `localhost:5173` does nothing.**
 On older WSL2 versions, `localhost` isn't forwarded. Two options:
 
-- *Quick:* in the Ubuntu window run `ip addr show eth0 | grep 'inet '`, take the
-  number after `inet` (e.g. `172.24.31.208`), and open `http://THAT-NUMBER:5173`.
+- *Quick (trusted networks only):* run `./start.sh --lan`, then in the Ubuntu
+  window run `ip addr show eth0 | grep 'inet '`, take the number after `inet`
+  (e.g. `172.24.31.208`), and open `http://THAT-NUMBER:5173`. This exposes
+  NADOC's unauthenticated file and simulation controls to devices that can reach
+  that address, so stop it when finished.
 - *Permanent (Windows 11):* create a file `C:\Users\<you>\.wslconfig` containing:
 
   ```ini

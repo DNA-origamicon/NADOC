@@ -710,3 +710,21 @@ the fixed `playwright.config.js`):
    `M` → cyan line + "Distance: … nm"; press `M` again → it clears. (This is what the HARD spec automates.)
 4. If a spec hangs at server start with `spawn /bin/sh ENOENT`, the dev servers aren't up AND the config
    cwd regressed — see the ledger entry on `playwright.config.js`.
+## 2026-08-14 maintainability sweep
+
+`frontend/src/main.js` moved from **8,525 LOC to 6,047 LOC**. The composition root now
+delegates these behavior-bearing concerns to named owners:
+
+- `app/test_api.js`, `app/cross_tab_sync.js`, `app/assembly_mode_sync.js`, and
+  `app/feature_editor.js`;
+- `ui/debug_menu.js`, `ui/left_sidebar.js`, `ui/plates_tab.js`,
+  `ui/overhang_dialog.js`, and `ui/selection_hud.js`;
+- `scene/move_rotate_subscriptions.js`, `scene/overhang_scene_sync.js`,
+  `scene/design_scene_visibility.js`, and `scene/debug/shared_renderer_debug.js`.
+
+These are controllers with explicit dependencies and narrow returned APIs, not line-only
+relocations: assembly mode owns transition/teardown and incremental rebuild decisions;
+the feature editor owns edit/preview/cancel state; overhang scene sync owns reactive maps
+and overlays. New focused tests cover the extracted public contracts. Final verification:
+**317 frontend files / 5,566 tests passed**, focused controller tests passed, and the Vite
+production build completed successfully (the pre-existing large-chunk advisory remains).

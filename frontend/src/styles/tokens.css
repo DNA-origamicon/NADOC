@@ -26,9 +26,9 @@
   /* ── Text ────────────────────────────────────────────────────────── */
   --color-text-primary:    #e6edf3;
   --color-text-secondary:  #c9d1d9;
-  --color-text-muted:      #8b949e;
-  --color-text-dim:        #6e7681;
-  --color-text-disabled:   #484f58;
+  --color-text-muted:      #b1bac4;
+  --color-text-dim:        #9aa7b3;
+  --color-text-disabled:   #768390;
   --color-text-inverse:    #0d1117;
 
   /* ── Accent / interactive ────────────────────────────────────────── */
@@ -68,12 +68,12 @@
   --font-data:  'JetBrains Mono', 'SF Mono', 'Menlo', 'Consolas', 'Courier New', monospace;
 
   /* ── Type scale — replace ad-hoc 9/10/11/12/13/14 ──────────────── */
-  --text-xs:    11px;   /* tiny metadata only */
-  --text-sm:    12px;   /* secondary labels */
-  --text-base:  13px;   /* DEFAULT — buttons, panel content */
-  --text-md:    14px;   /* dialog body, important controls */
-  --text-lg:    16px;   /* panel/dialog headers */
-  --text-xl:    18px;   /* prominent headers */
+  --text-xs:    13px;   /* metadata and compact supporting copy */
+  --text-sm:    14px;   /* secondary labels */
+  --text-base:  15px;   /* DEFAULT — buttons, panel content */
+  --text-md:    16px;   /* dialog body, important controls */
+  --text-lg:    18px;   /* panel/dialog headers */
+  --text-xl:    20px;   /* prominent headers */
 
   /* ── Line height ─────────────────────────────────────────────────── */
   --leading-tight:   1.25;
@@ -105,11 +105,11 @@
   --space-12:  48px;
 
   /* ── Control heights — touch-target safe ─────────────────────────── */
-  --control-xs:   20px;   /* dense table cells, tags */
-  --control-sm:   24px;   /* compact context-menu items */
-  --control-md:   28px;   /* secondary buttons, inputs */
-  --control-lg:   32px;   /* primary buttons, CTAs */
-  --control-xl:   36px;   /* hero / prominent CTAs */
+  --control-xs:   28px;   /* dense table cells, tags */
+  --control-sm:   32px;   /* compact context-menu items */
+  --control-md:   36px;   /* secondary buttons, inputs */
+  --control-lg:   40px;   /* primary buttons, CTAs */
+  --control-xl:   44px;   /* hero / prominent CTAs */
 
   /* ── Border radius ───────────────────────────────────────────────── */
   --radius-sm:   3px;
@@ -151,8 +151,8 @@
   --motion-ease-out: cubic-bezier(0, 0, 0.2, 1);
 
   /* ── Layout dimensions ───────────────────────────────────────────── */
-  --layout-menubar-height:    28px;
-  --layout-left-panel-width:  280px;
-  --layout-right-panel-width: 300px;
-  --layout-toolstrip-height:  36px;
+  --layout-menubar-height:    40px;
+  --layout-left-panel-width:  320px;
+  --layout-right-panel-width: 340px;
+  --layout-toolstrip-height:  44px;
 }

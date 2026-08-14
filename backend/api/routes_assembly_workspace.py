@@ -408,7 +408,7 @@ def design_about(path: Optional[str] = None) -> dict:
 
     loadouts_info = []
     if design.loadouts:
-        from backend.api.crud import _decode_loadout_design_snapshot
+        from backend.core.design_loadouts import decode_snapshot
 
         for lo in design.loadouts:
             is_active = lo.id == design.active_loadout_id
@@ -417,7 +417,7 @@ def design_about(path: Optional[str] = None) -> dict:
             else:
                 try:
                     fcount = len(
-                        _decode_loadout_design_snapshot(
+                        decode_snapshot(
                             lo.design_snapshot_gz_b64
                         ).feature_log
                     )
@@ -697,11 +697,8 @@ def save_design_to_workspace(body: SaveDesignWorkspaceRequest) -> dict:
     if not body.overwrite and dest.exists():
         raise HTTPException(409, detail=f"File already exists: {body.path!r}")
     dest.parent.mkdir(parents=True, exist_ok=True)
-    from backend.api.crud import (
-        _decode_loadout_design_snapshot,
-        _design_response,
-        _encode_loadout_design_snapshot,
-    )
+    from backend.api.crud import _design_response
+    from backend.core.design_loadouts import decode_snapshot, encode_snapshot
     from backend.core.design_identity import prepare_workspace_save
     from backend.core.validator import validate_design
 
@@ -710,13 +707,13 @@ def save_design_to_workspace(body: SaveDesignWorkspaceRequest) -> dict:
         migrated_loadouts = []
         for loadout in saved.loadouts:
             try:
-                snapshot = _decode_loadout_design_snapshot(
+                snapshot = decode_snapshot(
                     loadout.design_snapshot_gz_b64
                 )
                 snapshot = snapshot.model_copy(
                     update={"id": saved.id, "metadata": saved.metadata}
                 )
-                payload, size = _encode_loadout_design_snapshot(snapshot)
+                payload, size = encode_snapshot(snapshot)
                 loadout = loadout.model_copy(
                     update={
                         "design_snapshot_gz_b64": payload,

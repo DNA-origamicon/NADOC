@@ -6,6 +6,9 @@ Tracks the incremental decomposition of `backend/api/crud.py` (≈15.6k ln, 190 
 the backend's two target shapes (FastAPI sub-routers + `backend/core` service helpers) instead of frontend
 factories.
 
+> **2026-08-14 update:** the current `crud.py` baseline is **9,613 LOC / 89 routes**.
+> The historical bootstrap figures below are retained to show the reduction trajectory.
+
 **Why this exists:** the in-repo precedent (`routes_loop_skip.py` = Refactor 10-F, `routes_camera_poses.py`
 = 13-B) proved a route cluster *can* be lifted cleanly — but those were one-offs with no measured contract,
 and crud.py kept growing anyway. This log measures whether each move is a *real* decoupling or just LOC
@@ -441,3 +444,26 @@ shipped behavior goes to `manual_validation_debt.md` — route findings, don't b
 
 _Row template (copy for each extraction):_
 `| N | YYYY-MM-DD | crud/assembly | router/service/both | <cluster> → routes_<area>.py | <k> | −<n> | <b0>→<b1> | <core fn> + <t> tests | <pass>/<pass> green | <one sentence> |`
+## 2026-08-14 maintainability sweep
+
+The goal-driven sweep reopened the file after measured feature drift. `crud.py` moved
+from **12,881 LOC / 107 routes** at this sweep's start to **9,613 LOC / 89 routes**.
+
+| Ownership extracted | Routes | Bespoke-B / raw-B | Direct core coverage |
+|---|---:|---:|---|
+| Design loadouts → `routes_design_loadouts.py` | 5 | 0 / 2 | `core/design_loadouts.py` via loadout suite |
+| Connection versions → `routes_connection_versions.py` | 5 | 0 / 2 | 4 tests for `core/connection_versions.py` |
+| Overhang connections → `routes_overhang_connections.py` | 3 | 0 / 1 | existing topology/core suites |
+| Overhang bindings → `routes_overhang_bindings.py` | 5 | 0 / 1 | 3 tests for `core/binding_drivers.py` |
+| Relaxation/status/pose → `routes_relaxation.py` | 6 | 0 / 5 | bond-relax helper + 74 focused route tests |
+| Overhang sequence generation → `routes_overhang_sequences.py` | 3 | 0 / 1 | generator/sub-domain suites |
+| PDB/cadnano/save interchange → `routes_design_interchange.py` | 4 | 0 / 3 | 86 protein/CRUD tests |
+
+The initially observed connection-version bespoke-B=2 was removed by introducing
+`backend/api/overhang_patch.py`, a neutral shared API mutation builder; sequence boundary
+annotations now import their existing core implementation directly. Real improvement,
+not a shovel: **18 routes left the kernel, bespoke back-import surface is zero for every
+new router, and four business-rule clusters gained direct core ownership/tests.** Final
+verification: lint clean; **625 method/path pairs, 0 duplicates; 7,076 passed, 459
+skipped, 1 xfailed**. The two slow-budget observations were untrustworthy while NAMD was
+active; the test guard explicitly reported no triage owed and cleared pending work.

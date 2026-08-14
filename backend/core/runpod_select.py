@@ -405,7 +405,6 @@ def plan_options(
         )
         ordered = list(ranked)
         ordered.extend(c for c in eligible_all if c.key not in {x.key for x in ordered})
-        archs = BUILD_ARCHS[build]
         for g in cards:
             if g.key in {x.key for x in ordered}:
                 continue

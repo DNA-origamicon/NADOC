@@ -20,11 +20,14 @@ from backend.core.models import (
     Design,
     Direction,
     Domain,
+    Helix,
     OverhangSpec,
     Strand,
     StrandType,
     SubDomain,
+    Vec3,
 )
+from backend.core.constants import BDNA_RISE_PER_BP
 
 client = TestClient(app)
 
@@ -87,7 +90,20 @@ def _design_diff_lengths() -> Design:
         overhang_b_seq="T" * 10,
         applied=False,
     )
-    return Design(strands=[sa, sb], overhangs=[ohA, ohB], connection_versions=[ver])
+    def _helix(hid, length):
+        return Helix(
+            id=hid,
+            axis_start=Vec3(x=0.0, y=0.0, z=0.0),
+            axis_end=Vec3(x=0.0, y=0.0, z=length * BDNA_RISE_PER_BP),
+            length_bp=length,
+        )
+
+    return Design(
+        helices=[_helix("hA", 24), _helix("hB", 10)],
+        strands=[sa, sb],
+        overhangs=[ohA, ohB],
+        connection_versions=[ver],
+    )
 
 
 def _dom_len(design_dict, overhang_id):
@@ -108,3 +124,9 @@ def test_apply_direct_different_lengths_preserves_both_and_skips_binding():
     assert _dom_len(design, "ohB") == 10
     # No unequal-length binding was created.
     assert design["overhang_bindings"] == []
+    # The length-preserving Duplex is the pairing record for this case.
+    assert len(design["duplexes"]) == 1
+    left = design["duplexes"][0]["left"]
+    right = design["duplexes"][0]["right"]
+    assert abs(left["end_bp"] - left["start_bp"]) + 1 == 10
+    assert abs(right["end_bp"] - right["start_bp"]) + 1 == 10

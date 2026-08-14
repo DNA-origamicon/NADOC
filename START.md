@@ -27,13 +27,21 @@ just frontend   # terminal 2 — frontend (port 5173)
 
 ## Windows/WSL2: if `localhost:5173` doesn't load
 
-Older WSL2 doesn't forward `localhost`. Get the current address instead:
+Older WSL2 doesn't forward `localhost`. First try the permanent mirrored-networking
+fix below. If that is unavailable and you must use the WSL virtual-machine address,
+start NADOC with the explicit trusted-LAN opt-in:
 
 ```bash
+./start.sh --lan
 ip addr show eth0 | grep 'inet '
 ```
 
 Open `http://<that-number>:5173`.
+
+`--lan` exposes NADOC's file, process, simulation, and cloud-control APIs to other
+devices that can reach that address. NADOC has no multi-user authentication, so use
+this mode only on a trusted private network and stop it when finished. Normal
+`./start.sh`, `just dev`, and `just frontend` bind to loopback only.
 
 **Permanent fix (Windows 11):** create `C:\Users\<you>\.wslconfig` with
 

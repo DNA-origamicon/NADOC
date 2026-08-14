@@ -18,7 +18,6 @@ import { initScene }                 from './scene/scene.js'
 import { createGlowLayer }           from './scene/glow_layer.js'
 import { initDesignRenderer }        from './scene/design_renderer.js'
 import { deferrableContextMenu }      from './scene/right_click_menu.js'
-import { buildStapleColorMap } from './scene/helix_renderer.js'
 import { initSelectionManager }      from './scene/selection_manager.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
 import { initClusterClipboard }      from './scene/cluster_clipboard.js'
@@ -31,15 +30,11 @@ import { initMeasurementTool }       from './scene/measurement_tool.js'
 import { intersectCoverage, findHamiltonianPath } from './scene/scaffold_coverage.js'
 import { isNewPositioningOn, setNewPositioning } from './ui/new_positioning.js'
 import { initCreateSeam } from './scene/create_seam.js'
-import { strandLengthNt } from './scene/strand_length.js'
-import { buildSpecMap, buildDomainMapFromDesign, buildJunctionMapFromDomains, buildRootMap } from './scene/overhang_maps.js'
 import { initGroupGizmo } from './scene/group_gizmo.js'
 import { initAssemblyTransform } from './scene/assembly_transform.js'
-import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange, constraintRelevantChanged } from './scene/assembly_diff.js'
 import { flexAnchorKey, connIdForBead, flexibleRunForBead, duplexClusterForOverhang } from './scene/design_queries.js'
 import { computeGroupHiddenInstanceIds } from './scene/assembly_groups_util.js'
 import { initAssemblyPointer } from './scene/assembly_pointer.js'
-import { hexFromInt } from './scene/color_util.js'
 import { initFretChecker } from './scene/fret_checker.js'
 import { initUndefinedHighlight } from './scene/undefined_highlight.js'
 import { assemblyDuplicateOffset } from './scene/assembly_layout.js'
@@ -48,7 +43,6 @@ import { navigationDesign, navigationGeometry } from './scene/reference_navigati
 import { fitViewPose } from './scene/fit_view_math.js'
 import { initAssemblyMultiBox } from './scene/assembly_multi_box.js'
 import { initAssemblyConfigAnimator } from './scene/assembly_config_animator.js'
-import { clientToNdc } from './scene/ndc.js'
 import { makeSegmentCache } from './scene/multiscale_nav.js'
 import { initFlexRelax } from './scene/flex_relax.js'
 import { initResponseDelta } from './scene/response_delta.js'
@@ -56,7 +50,6 @@ import { initJointPick } from './scene/joint_pick.js'
 import { initEmptySpaceMenu } from './scene/empty_space_menu.js'
 import { initAssemblyLasso, toggleInstanceSelection } from './scene/assembly_lasso.js'
 import { initOverhangHoverPicker } from './scene/overhang_hover_picker.js'
-import { preservesDisplays } from './ui/display_tab_policy.js'
 import { initScaffoldModal } from './ui/scaffold_modal.js'
 import { initStrandSequenceDialog } from './ui/strand_sequence_dialog.js'
 import { initAutoscaffoldPicker } from './ui/autoscaffold_picker.js'
@@ -69,8 +62,10 @@ import { initCommandPalette }  from './ui/command_palette.js'
 import { initStrandLengthHistogram } from './ui/strand_length_histogram.js'
 import { initMolecularPlacementAudit } from './ui/molecular_placement_audit.js'
 import { initOverhangSequencesPanel } from './ui/overhang_sequences_panel.js'
+import { initOverhangDialog } from './ui/overhang_dialog.js'
 import { initStrandGroupsPanel } from './ui/strand_groups_panel.js'
 import { initSelectionFilter } from './ui/selection_filter.js'
+import { initSelectionHud } from './ui/selection_hud.js'
 import { initPropertiesPanel } from './ui/properties_panel.js'
 import { initOverhangOrientationMenu } from './ui/overhang_orientation_menu.js'
 import { initBluntEndMenus } from './ui/blunt_end_menus.js'
@@ -78,22 +73,15 @@ import { createScriptRunner }  from './ui/script_runner.js'
 import { store, popGroupUndo } from './state/store.js'
 import * as api                from './api/client.js'
 import { beginOperationTiming, markOperationTiming, finishOperationAfterRender } from './perf/operation_timing.js'
-import { initDeformationEditor, startTool, startToolForEdit as startDeformToolForEdit,
+import { startTool,
          isActive as isDeformActive,
          handlePointerMove as deformPointerMove,
          handlePointerDown as deformPointerDown,
          handlePointerUp   as deformPointerUp,
          handleEscape as deformEscape,
          exitTool as deformExitTool,
-         confirmDeformation, cancelDeformation, previewDeformation,
-         markEditCommitted as markDeformEditCommitted,
-         getState as getDeformState, getToolType as getDeformToolType,
-         getPlanes as getDeformPlanes, repositionPlane as repositionDeformPlane,
-         STATES as DEFORM_STATES,
+         getState as getDeformState,
        } from './scene/deformation_editor.js'
-import { initBendTwistPopup, openPopup as openDeformPopup,
-         closePopup as closeDeformPopup, setPlanePositions as setDeformPopupPlanes,
-       } from './ui/bend_twist_popup.js'
 import { initOverhangsManagerPopup,
          open as openOverhangsManager,
        } from './ui/overhangs_manager_popup.js'
@@ -111,12 +99,10 @@ import { initUnfoldView }          from './scene/unfold_view.js'
 import { initCadnanoView }         from './scene/cadnano_view.js'
 import { initDeformView }          from './scene/deform_view.js'
 import { initLoopSkipHighlight }   from './scene/loop_skip_highlight.js'
-import { initOverhangLocations }   from './scene/overhang_locations.js'
-import { initOverhangLinkArcs }    from './scene/overhang_link_arcs.js'
-import { initFlexibleArcs }        from './scene/flexible_arcs.js'
+import { initOverhangSceneSync } from './scene/overhang_scene_sync.js'
+import { initDesignSceneVisibility } from './scene/design_scene_visibility.js'
 import { initOverhangUnzipOverlay } from './scene/overhang_unzip_overlay.js'
 import { initMultiOverhangStrandAnim } from './scene/overhang_strand_anim.js'
-import { initUnligatedCrossoverMarkers } from './scene/unligated_crossover_markers.js'
 import { initOverhangNameOverlay } from './scene/overhang_name_overlay.js'
 import { initCrossSectionMinimap } from './scene/cross_section_minimap.js'
 import { initDevtoolsDebug } from './scene/debug/devtools_helpers.js'
@@ -129,6 +115,7 @@ import { initCpdWeldOverlay }      from './scene/cpd_weld_overlay.js'
 import { initSurfaceRenderer }     from './scene/surface_renderer.js'
 import { initAtomSurfaceDisplay }  from './scene/atom_surface_display.js'
 import { installAtomisticLoadingProbe } from './scene/debug/atomistic_loading_probe.js'
+import { installSharedRendererDebug } from './scene/debug/shared_renderer_debug.js'
 import { overhangsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './scene/representation_overrides.js'
 import { initSpreadsheet } from './ui/spreadsheet.js'
 import { initVisibilityController } from './scene/visibility_controller.js'
@@ -142,22 +129,25 @@ import { initLibraryPanel }         from './ui/library_panel.js'
 import { pickLattice }              from './ui/lattice_picker.js'
 import { openFileBrowser }          from './ui/file_browser.js'
 import { initFileIo, initFileOpen, initFileSave } from './ui/file_io.js'
-import { initSyncBadge, countCoeditingSiblings } from './ui/sync_badge.js'
+import { initSyncBadge } from './ui/sync_badge.js'
 import { createAssemblyRenderer }   from './scene/assembly_renderer.js'
 import { initNavController }        from './scene/nav_controller.js'
 import { initAssemblyJointRenderer } from './scene/assembly_joint_renderer.js'
 import { initKinematicsTicker }      from './scene/kinematics_ticker.js'
-import { applyBeltRiders, beltCurvePoints, beltLoopLength } from './scene/belt_geometry.js'
+import { beltCurvePoints, beltLoopLength } from './scene/belt_geometry.js'
 import { initBeltPolymerize } from './scene/belt_polymerize.js'
 import { initAssemblyRefresh } from './scene/assembly_refresh.js'
 import { initConnectionMonitor, initAutosaveSync } from './app/lifecycle.js'
+import { installTestApi } from './app/test_api.js'
+import { initCrossTabSync } from './app/cross_tab_sync.js'
+import { createAssemblyLoadDefaults, initAssemblyModeSync } from './app/assembly_mode_sync.js'
+import { initFeatureEditor } from './app/feature_editor.js'
 import { initDocSpawn } from './app/doc_spawn.js'
 import { initBeltPathRenderer }      from './scene/belt_path_renderer.js'
 import { computeFixedDepths } from './scene/assembly_constraint_graph.js'
 import { initClusterPanel } from './ui/cluster_panel.js'
 import { withClusterDisplay } from './scene/cluster_entries.js'
-import { initPlateView }                           from './ui/plate_view.js'
-import { STAPLE_PALETTE as PLATE_STAPLE_PALETTE } from './scene/helix_renderer/palette.js'
+import { initPlatesTab }                          from './ui/plates_tab.js'
 import { initJointsPanel }                          from './ui/joints_panel.js'
 import { initJointRenderer }                       from './scene/joint_renderer.js'
 import { initCameraPanel }                        from './ui/camera_panel.js'
@@ -175,6 +165,7 @@ import { initSubDomainGizmo } from './scene/sub_domain_gizmo.js'
 import { initInstanceGizmo }       from './scene/instance_gizmo.js'
 import { initMoveRotatePanel, moveRotateSelectionLabels } from './scene/move_rotate_panel.js'
 import { initTranslateRotateTool }  from './scene/translate_rotate_tool.js'
+import { initMoveRotateSubscriptions } from './scene/move_rotate_subscriptions.js'
 import { parseBaseKey }             from './scene/base_ref.js'
 import { createSelectionController } from './scene/selection_controller.js'
 import {
@@ -200,6 +191,8 @@ import { initSceneInspector }                  from './scene/scene_inspector.js'
 import { createModal }                         from './ui/primitives/modal.js'
 import { createButton }                        from './ui/primitives/button.js'
 import { initBackgroundModal }                 from './ui/background_modal.js'
+import { initDebugMenu }                       from './ui/debug_menu.js'
+import { initLeftSidebar }                     from './ui/left_sidebar.js'
 import { initFileLoadDialog }                  from './ui/file_load_dialog.js'
 import { nadocBroadcast } from './shared/broadcast.js'
 import { getDocId, mintDocId, docHeaders, docHeadersFor, docKey } from './shared/doc_id.js'
@@ -328,271 +321,12 @@ async function main() {
   // Debug hook (gated on shared flag for now): expose enough state for in-
   // browser diagnostic probes without leaking everything to prod. Remove
   // once shared renderer is stable.
-  if (useShared) {
-    // ── Continuous-loop FPS tracker (path-to-thousands LOD benchmark) ───────
-    // scene.js renders every frame via setAnimationLoop, so each frame-callback
-    // tick == one on-screen frame.  We keep an EMA of instantaneous FPS for the
-    // HUD plus per-frame draw-call / triangle counts (read from renderer.info,
-    // which reflects the prior frame — off-by-one is negligible).  sampleFps()
-    // turns on a fixed-duration capture window the automated sweep awaits.
-    const _frameStats = {
-      last: performance.now(), dt: 0, ema: 0, drawCalls: 0, triangles: 0,
-      _samples: null,
-    }
-    addFrameCallback(() => {
-      const now = performance.now()
-      const dt = now - _frameStats.last
-      _frameStats.last = now
-      _frameStats.dt = dt
-      const fps = dt > 0 ? 1000 / dt : 0
-      _frameStats.ema = _frameStats.ema ? _frameStats.ema * 0.9 + fps * 0.1 : fps
-      const ri = renderer.info.render
-      _frameStats.drawCalls = ri.calls
-      _frameStats.triangles = ri.triangles
-      if (_frameStats._samples) _frameStats._samples.push(dt)
-    })
-
-    window.__NADOC_DBG__ = {
-      scene, camera, renderer, assemblyRenderer, store, THREE, controls, animateCameraTo,
-      designRenderer,
-      get unfoldView() { return unfoldView },
-
-      // Crossover-tube validation metric — select a crossover, then call this to read
-      // the LIVE tube geometry (sides / completeness / NaN). See getSelectionArcTubeStats.
-      tubeStats: () => designRenderer.getSelectionArcTubeStats(),
-
-      /**
-       * Track-B diagnostic. Pre-conditions:
-       *   1. window.NADOC_DBG_RENDER_TRACE = true   (BEFORE the assembly built)
-       *   2. Reload the page and let the assembly finish loading.
-       *
-       * Then call __NADOC_DBG__.traceFrame() to render one frame with reset
-       * counters and dump structured stats: total draw calls, triangles,
-       * lines, per-shared-mesh onBeforeRender hit counts. Lets us see
-       * whether the bp InstancedMeshes are actually being drawn each frame.
-       */
-      traceFrame() {
-        if (renderer._nadocTrace) renderer._nadocTrace.clear()
-        renderer.info.reset()
-        renderer.render(scene, camera)
-        const info = renderer.info
-        console.log('--- traceFrame ---')
-        console.log('renderer.info.render:', { ...info.render })
-        console.log('renderer.info.memory:', { ...info.memory })
-        console.log('renderer.info.programs.length:', info.programs?.length)
-        if (renderer._nadocTrace && renderer._nadocTrace.size > 0) {
-          console.log('Per-shared-mesh onBeforeRender hits this frame:')
-          for (const [id, hits] of renderer._nadocTrace.entries()) {
-            console.log(' ', id, '→', hits)
-          }
-        } else {
-          console.log('No traces — was window.NADOC_DBG_RENDER_TRACE = true at rebuild time?')
-        }
-        // Also collect the shared meshes that should be drawn this frame
-        const shared = []
-        scene.traverse(o => {
-          if (o.isInstancedMesh && o.count > 0 && o.material?.userData?.shader?.uniforms?.u_instanceXform) {
-            shared.push({
-              name: o.name || '(unnamed)',
-              id: o.id,
-              count: o.count,
-              visible: o.visible,
-              materialVisible: o.material.visible,
-              frustumCulled: o.frustumCulled,
-              parentVisible: o.parent?.visible,
-            })
-          }
-        })
-        console.log('Shared-renderer InstancedMeshes that COULD draw:', shared.length)
-        shared.forEach(s => console.log(' ', s))
-      },
-
-      /**
-       * Angular-LOD diagnostic.  Prints a table of every source's last-frame
-       * bucket counts (close/mid/far), the pixel-size range across visible
-       * instances, and the current closePx/farPx thresholds.  Run this
-       * while zooming to see whether maxPxSize is crossing closePx (=60
-       * by default).  If maxPxSize stays below closePx no matter how close
-       * you zoom, the angular math has an upstream bug — call out
-       * pxFactor / bboxDiag values.
-       */
-      probeLod() {
-        const snap = assemblyRenderer.probeLod?.()
-        if (!snap) { console.warn('[dbg] probeLod not exposed (shared path off?)'); return }
-        console.log('--- LOD probe ---')
-        console.log('thresholds:', { closePx: snap.closePx, farPx: snap.farPx })
-        console.table(snap.sources)
-        return snap
-      },
-
-      /**
-       * Tune the angular-LOD thresholds without a reload.  Lower closePx
-       * to make close-LOD trigger more easily; lower farPx to delay the
-       * far billboard.  Example:
-       *   __NADOC_DBG__.setLodThresholds({ closePx: 20, farPx: 4 })
-       */
-      setLodThresholds(opts) {
-        assemblyRenderer.setLodThresholds?.(opts)
-        console.log('[dbg] new thresholds applied:', opts)
-      },
-
-      /**
-       * Toggleable on-canvas HUD that updates every frame with the current
-       * LOD bucket counts + pixel-size range, per source.  Call once to
-       * show; call again to hide.  Useful while zooming/panning to see
-       * the bucket transitions live.
-       */
-      toggleLodHud() {
-        if (window.__NADOC_LOD_HUD__) {
-          window.__NADOC_LOD_HUD__.remove()
-          window.__NADOC_LOD_HUD__ = null
-          if (window.__NADOC_LOD_HUD_RAF__) {
-            cancelAnimationFrame(window.__NADOC_LOD_HUD_RAF__)
-            window.__NADOC_LOD_HUD_RAF__ = null
-          }
-          console.log('[dbg] LOD HUD off')
-          return
-        }
-        const hud = document.createElement('div')
-        hud.style.cssText = `
-          position: fixed; top: 80px; right: 12px; z-index: 10000;
-          background: rgba(13,17,23,0.88); color: #c9d1d9;
-          padding: 8px 12px; border-radius: 6px;
-          font-family: ui-monospace, monospace; font-size: 11px;
-          line-height: 1.5; pointer-events: none;
-          border: 1px solid #30363d; white-space: pre;
-        `
-        document.body.appendChild(hud)
-        window.__NADOC_LOD_HUD__ = hud
-        const tick = () => {
-          const fpsLine = `${_frameStats.ema.toFixed(0)} fps  ${_frameStats.dt.toFixed(1)} ms  `
-            + `${_frameStats.drawCalls} draws  ${(_frameStats.triangles / 1e3).toFixed(0)}k tris`
-          const snap = assemblyRenderer.probeLod?.()
-          if (!snap || snap.sources.length === 0) {
-            hud.textContent = `LOD HUD\n${fpsLine}\n(no sources)`
-          } else {
-            const lines = [`LOD HUD  closePx=${snap.closePx}  farPx=${snap.farPx}`, fpsLine]
-            for (const s of snap.sources) {
-              const c = s.counts ?? { close: '-', mid: '-', far: '-', hull: '-' }
-              const px = (s.minPxSize == null || s.maxPxSize == null)
-                ? '(no data)'
-                : `${s.minPxSize.toFixed(1)}…${s.maxPxSize.toFixed(1)} px`
-              const key = s.srcKey.length > 28 ? s.srcKey.slice(-28) : s.srcKey
-              lines.push(
-                `${key}\n  N=${s.numInstances}  close=${c.close} mid=${c.mid} far=${c.far} hull=${c.hull ?? '-'}\n  pxSize=${px}  bboxDiag=${s.bboxDiag?.toFixed(0) ?? '?'}`,
-              )
-            }
-            hud.textContent = lines.join('\n')
-          }
-          window.__NADOC_LOD_HUD_RAF__ = requestAnimationFrame(tick)
-        }
-        tick()
-        console.log('[dbg] LOD HUD on (call toggleLodHud() again to dismiss)')
-      },
-
-      /** Live frame-stats snapshot: smoothed FPS, last frame ms, draw calls,
-       *  triangles.  Cheap — read it any time. */
-      fps() {
-        return {
-          fps: +_frameStats.ema.toFixed(1),
-          frameMs: +_frameStats.dt.toFixed(2),
-          drawCalls: _frameStats.drawCalls,
-          triangles: _frameStats.triangles,
-        }
-      },
-
-      /**
-       * Collect a fixed-duration FPS sample window (default 2 s) and return a
-       * Promise of summary stats.  The automated sweep awaits this AFTER it has
-       * positioned the camera + let the LOD settle.  p5Fps is the 5th-percentile
-       * (worst-case stutter) FPS — the number that decides whether a config is
-       * actually smooth, not just smooth-on-average.
-       */
-      async sampleFps(durationMs = 2000) {
-        _frameStats._samples = []
-        await new Promise(r => setTimeout(r, durationMs))
-        const dts = _frameStats._samples
-        _frameStats._samples = null
-        if (!dts || !dts.length) return { frames: 0 }
-        const fpsArr = dts.map(d => 1000 / d).sort((a, b) => a - b)
-        const q = p => fpsArr[Math.min(fpsArr.length - 1,
-          Math.max(0, Math.floor(p * fpsArr.length)))]
-        const avg = fpsArr.reduce((s, v) => s + v, 0) / fpsArr.length
-        return {
-          frames: dts.length,
-          avgFps: +avg.toFixed(1),
-          medianFps: +q(0.5).toFixed(1),
-          p5Fps: +q(0.05).toFixed(1),
-          minFps: +fpsArr[0].toFixed(1),
-          drawCalls: renderer.info.render.calls,
-          triangles: renderer.info.render.triangles,
-        }
-      },
-
-      /**
-       * Patch every assembly instance to one representation so the LOD ladder
-       * is exercised at that rep.  full/beads → close-LOD eligible (cap 0);
-       * cylinders → mid floor (cap 1); hull-prism → hull bucket (cap 3).
-       * Returns the instance count.  Single batched PATCH → one renderer
-       * rebuild (slow at scale for 'full' — that IS the cold-build cost).
-       */
-      async setAllRep(repr) {
-        const insts = store.getState().currentAssembly?.instances ?? []
-        if (!insts.length) { console.warn('[dbg] no assembly instances'); return 0 }
-        await api.batchPatchInstances(insts.map(i => ({ id: i.id, representation: repr })))
-        console.log(`[dbg] set ${insts.length} instances → '${repr}'`)
-        return insts.length
-      },
-
-      /**
-       * Multiscale-nav tuning handle (View → Orbit mode → Multiscale).
-       *   __NADOC_DBG__.msNav.probe()                  → nearest helix, local scale, nm per notch
-       *   __NADOC_DBG__.msNav.set({ zoomFrac, boost }) → live-tune the feel
-       * No-ops (returns null) unless Multiscale is the active orbit mode.
-       */
-      msNav: {
-        probe: () => getActiveControls().probeNavScale?.() ?? null,
-        set:   p  => getActiveControls().setNavParams?.(p) ?? null,
-        get:   () => getActiveControls().getNavParams?.() ?? null,
-      },
-
-      /**
-       * Distance (nm) that frames the whole assembly to the viewport height.
-       * margin > 1 zooms out a touch so nothing clips the edge.
-       */
-      fitDist(margin = 1.2) {
-        const box = assemblyRenderer.getBoundingBox?.()
-        if (!box || box.isEmpty()) return null
-        const radius = box.getBoundingSphere(new THREE.Sphere()).radius
-        const fov = camera.fov * Math.PI / 180
-        return +(radius * margin / Math.tan(fov / 2)).toFixed(1)
-      },
-
-      /**
-       * Place the camera at distance d (nm) from the assembly centre along the
-       * current view direction, looking at the centre.  Reproducible framing
-       * for the camera-distance sweep + manual runs.  Returns {radius, dist}.
-       */
-      setCameraDist(d, dirArr) {
-        const box = assemblyRenderer.getBoundingBox?.()
-        if (!box || box.isEmpty()) { console.warn('[dbg] no assembly bbox'); return null }
-        const center = box.getCenter(new THREE.Vector3())
-        const radius = box.getBoundingSphere(new THREE.Sphere()).radius
-        const dir = Array.isArray(dirArr)
-          ? new THREE.Vector3(dirArr[0], dirArr[1], dirArr[2])
-          : camera.position.clone().sub(controls.target)
-        if (dir.lengthSq() < 1e-9) dir.set(0, 0, 1)
-        dir.normalize()
-        camera.position.copy(center).add(dir.multiplyScalar(d))
-        controls.target.copy(center)
-        camera.near = Math.max(0.1, d - radius * 2)
-        camera.far = d + radius * 4
-        camera.updateProjectionMatrix()
-        controls.update()
-        return { radius: +radius.toFixed(1), dist: d }
-      },
-    }
-  }
+  installSharedRendererDebug({
+    useShared, scene, camera, renderer, assemblyRenderer, store, THREE, controls,
+    animateCameraTo, designRenderer, addFrameCallback,
+    getUnfoldView: () => unfoldView,
+    getActiveControls, api,
+  })
 
   // ── Camera nav: OrbitControls + always-on smooth WASD pan ───────────────
   // (Removed: auto-transition to fly mode at high zoom-out — was distracting
@@ -1071,307 +805,24 @@ async function main() {
     }, 1500)
   }
 
-  // ── Selection-count HUD ─────────────────────────────────────────────────────
-  // Persistent indicator at the bottom of the viewport for whatever has multi-
-  // selection state. Lasso/multi-pick are easy to forget about; this gives the
-  // user a fixed glanceable count.
-  const _selHudEl = document.getElementById('selection-count-hud')
-  function _updateSelectionHud() {
-    if (!_selHudEl) return
-    const st = store.getState()
-    const parts = []
-    const refs = st.selection?.items ?? []
-    const ns = refs.filter(ref => ref.kind === 'strand').length
-    const nd = refs.filter(ref => ref.kind === 'domain').length
-    const no = (selectionManager.getMultiOverhangs?.() ?? []).length
-    const nx = selectedCrossoverRefs(st).length
-    const ne = refs.filter(ref => ref.kind === 'end').length
-    const nb = selectionManager.getCtrlBeads?.().length ?? 0
-    if (ns) parts.push(`${ns} strand${ns === 1 ? '' : 's'}`)
-    if (nd) parts.push(`${nd} domain${nd === 1 ? '' : 's'}`)
-    if (no) parts.push(`${no} overhang${no === 1 ? '' : 's'}`)
-    if (nx) parts.push(`${nx} crossover${nx === 1 ? '' : 's'}`)
-    if (ne) parts.push(`${ne} end${ne === 1 ? '' : 's'}`)
-    if (nb) parts.push(`${nb} bead${nb === 1 ? '' : 's'}`)
-    if (!parts.length) { _selHudEl.style.display = 'none'; return }
-    _selHudEl.textContent = parts.join(' · ') + ' selected'
-    _selHudEl.style.display = 'flex'
-  }
-  store.subscribe((ns, ps) => {
-    if (ns.selection !== ps.selection) _updateSelectionHud()
-  })
+  const selectionHud = initSelectionHud({ store, selectionManager, selectedCrossoverRefs })
+  const _updateSelectionHud = selectionHud.update
 
   // ── Overhang dialog ──────────────────────────────────────────────────────────
 
-  ;(function _initOverhangDialog() {
-    const inputStyle = 'background:#0d1117;border:1px solid #30363d;border-radius:4px;' +
-                       'color:#c9d1d9;padding:2px 6px;font-family:inherit;font-size:12px;'
-    const tabStyle   = 'flex:1;padding:4px 0;background:none;border:none;border-bottom:2px solid transparent;' +
-                       'color:#8b949e;font-family:inherit;font-size:11px;cursor:pointer;'
-    const tabActiveStyle = tabStyle + 'color:#00e5ff;border-bottom-color:#00e5ff;'
-
-    const overlay = document.createElement('div')
-    overlay.id = 'overhang-length-dialog'
-    Object.assign(overlay.style, {
-      display:      'none',
-      position:     'fixed',
-      background:   '#161b22',
-      border:       '1px solid #30363d',
-      borderRadius: '6px',
-      padding:      '12px 16px',
-      color:        '#c9d1d9',
-      fontFamily:   "var(--font-ui)",
-      fontSize:     'var(--text-xs)',
-      zIndex:       '200',
-      boxShadow:    '0 8px 24px rgba(0,0,0,0.5)',
-      minWidth:     '260px',
-    })
-    overlay.innerHTML = `
-      <div style="margin-bottom:10px;font-weight:bold;color:#00e5ff;">Add Overhang</div>
-
-      <div style="margin-bottom:10px;">
-        <div style="margin-bottom:4px;font-size:11px;color:#8b949e;">Name (optional):</div>
-        <input id="ovhg-name-input" type="text" placeholder="e.g. toehold-1" autocomplete="off"
-          style="width:100%;box-sizing:border-box;${inputStyle}">
-      </div>
-
-      <div style="display:flex;border-bottom:1px solid #30363d;margin-bottom:10px;">
-        <button id="ovhg-tab-length" style="${tabActiveStyle}">By Length</button>
-        <button id="ovhg-tab-seq"    style="${tabStyle}">By Sequence</button>
-      </div>
-
-      <div id="ovhg-panel-length">
-        <label style="display:flex;align-items:center;gap:8px;">
-          <span>Length (bp):</span>
-          <input id="overhang-length-input" type="number" min="1" max="500" value="10"
-            style="width:60px;${inputStyle}">
-        </label>
-      </div>
-
-      <div id="ovhg-panel-seq" style="display:none">
-        <div style="margin-bottom:4px;font-size:11px;color:#8b949e;">Paste sequence (5′→3′):</div>
-        <input id="ovhg-seq-input" type="text" placeholder="ACGT…" autocomplete="off" spellcheck="false"
-          style="width:100%;box-sizing:border-box;${inputStyle}letter-spacing:0.05em;">
-        <div id="ovhg-seq-len" style="margin-top:3px;font-size:var(--text-xs);color:#484f58;">0 bp</div>
-      </div>
-
-      <label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:11px;color:#c9d1d9;cursor:pointer"
-             title="Show a translucent preview of the overhang this will add">
-        <input id="ovhg-preview-toggle" type="checkbox" checked style="cursor:pointer"> Show preview
-      </label>
-
-      <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
-        <button id="overhang-cancel-btn"
-          style="padding:3px 10px;background:#21262d;border:1px solid #30363d;border-radius:4px;
-                 color:#c9d1d9;font-family:inherit;font-size:12px;cursor:pointer;">Cancel</button>
-        <button id="overhang-ok-btn"
-          style="padding:3px 10px;background:#1f6feb;border:none;border-radius:4px;
-                 color:#fff;font-family:inherit;font-size:12px;cursor:pointer;">Extrude</button>
-      </div>
-    `
-    document.body.appendChild(overlay)
-
-    let _pendingEntry = null
-    let _activeTab    = 'length'   // 'length' | 'seq'
-    let _commitInFlight = false
-
-    const tabLength  = overlay.querySelector('#ovhg-tab-length')
-    const tabSeq     = overlay.querySelector('#ovhg-tab-seq')
-    const panelLen   = overlay.querySelector('#ovhg-panel-length')
-    const panelSeq   = overlay.querySelector('#ovhg-panel-seq')
-    const seqInput   = overlay.querySelector('#ovhg-seq-input')
-    const seqLenEl   = overlay.querySelector('#ovhg-seq-len')
-    const okBtn      = overlay.querySelector('#overhang-ok-btn')
-    const lenInput   = overlay.querySelector('#overhang-length-input')
-    const nameInput  = overlay.querySelector('#ovhg-name-input')
-    const previewToggle = overlay.querySelector('#ovhg-preview-toggle')
-
-    // bp length for the active tab — drives the live ghost preview.
-    function _currentOverhangLen() {
-      if (_activeTab === 'length') return parseInt(lenInput.value, 10)
-      return seqInput.value.replace(/\s/g, '').length
-    }
-    function _refreshGhost() { _showOverhangGhost(_pendingEntry, _currentOverhangLen()) }
-
-    // "Show preview" lives in this popup; mirror the shared flag + persist + sync slice plane.
-    previewToggle.addEventListener('change', () => {
-      _extrudePreviewEnabled = previewToggle.checked
-      localStorage.setItem('NADOC_EXTRUDE_PREVIEW', String(_extrudePreviewEnabled))
-      slicePlane.setPreviewEnabled(_extrudePreviewEnabled)
-      _refreshGhost()   // shows or clears based on the flag
-    })
-
-    function _switchTab(tab) {
-      _activeTab = tab
-      const isLen = tab === 'length'
-      tabLength.style.cssText  = isLen ? tabActiveStyle : tabStyle
-      tabSeq.style.cssText     = isLen ? tabStyle : tabActiveStyle
-      panelLen.style.display   = isLen ? '' : 'none'
-      panelSeq.style.display   = isLen ? 'none' : ''
-      okBtn.textContent        = isLen ? 'Extrude' : 'Extrude + Assign'
-      setTimeout(() => (isLen ? lenInput : seqInput).focus(), 0)
-      _refreshGhost()
-    }
-
-    tabLength.addEventListener('click', () => _switchTab('length'))
-    tabSeq.addEventListener('click',    () => _switchTab('seq'))
-
-    lenInput.addEventListener('input', _refreshGhost)
-    seqInput.addEventListener('input', () => {
-      const n = seqInput.value.replace(/\s/g, '').length
-      seqLenEl.textContent = `${n} bp`
-      seqLenEl.style.color = n > 0 ? '#8b949e' : '#484f58'
-      _refreshGhost()
-    })
-
-    function _hide({ preserveGhost = false } = {}) {
-      overlay.style.display = 'none'
-      _pendingEntry = null
-      seqInput.value  = ''
-      nameInput.value = ''
-      seqLenEl.textContent = '0 bp'
-      seqLenEl.style.color = '#484f58'
-      if (!preserveGhost) _clearOverhangGhost()
-      _refreshOverhangGhost = () => {}
-    }
-
-    _showOverhangLengthDialog = function(entry, clientX, clientY) {
-      _pendingEntry = entry
-      overlay.style.left    = `${Math.min(clientX, window.innerWidth  - 290)}px`
-      overlay.style.top     = `${Math.min(clientY, window.innerHeight - 200)}px`
-      overlay.style.display = 'block'
-      _switchTab('length')
-      lenInput.value  = '10'
-      nameInput.value = ''
-      previewToggle.checked = _extrudePreviewEnabled
-      nameInput.focus()
-      _refreshOverhangGhost = _refreshGhost
-      _refreshGhost()
-    }
-
-    async function _doExtrude() {
-      if (_commitInFlight) return
-      const entry = _pendingEntry
-      if (!entry) return
-
-      let lengthBp, sequence
-      if (_activeTab === 'length') {
-        lengthBp = parseInt(lenInput.value, 10)
-        if (!Number.isFinite(lengthBp) || lengthBp < 1) return
-        sequence = null
-      } else {
-        sequence = seqInput.value.replace(/\s/g, '').toUpperCase()
-        if (!sequence.length) return
-        lengthBp = sequence.length
-      }
-
-      // Capture name BEFORE _hide() clears the input.
-      const name = nameInput.value.trim() || null
-
-      _commitInFlight = true
-      _markOverhangGhostPending()
-      _hide({ preserveGhost: true })
-      const optimisticTrace = beginOperationTiming('POST /design/overhang/extrude', {
-        optimisticPreview: true,
-        body: { helixId: entry.helixId, bpIndex: entry.bpIndex, lengthBp },
-      })
-      markOperationTiming('optimistic-preview-visible', undefined, optimisticTrace)
-
-      try {
-        const params = {
-          helixId:     entry.helixId,
-          bpIndex:     entry.bpIndex,
-          direction:   entry.direction,
-          isFivePrime: entry.isFivePrime,
-          neighborRow: entry.neighborRow,
-          neighborCol: entry.neighborCol,
-          lengthBp,
-        }
-
-        if (entry.instanceId) {
-          // Assembly-mode extrude: writes to that PartInstance's design file,
-          // then re-renders the affected instance and broadcasts so part-editor
-          // and cadnano-editor tabs viewing the same instance auto-refresh.
-          let resp
-          try {
-            resp = await api.extrudeInstanceOverhang(entry.instanceId, params)
-          } catch (err) {
-            console.error('Overhang extrude (instance) failed:', err?.message ?? err)
-            return
-          }
-
-          // Patch sequence/label on the same instance if the user supplied them.
-          // Use the per-overhang assembly endpoint so the change lands in the
-          // part's feature_log (and an assembly-level metadata entry) — the
-          // wholesale patchInstanceDesign path bypasses the feature log.
-          if ((sequence || name) && resp?.design) {
-            const endTag     = entry.isFivePrime ? '5p' : '3p'
-            const overhangId = `ovhg_${entry.helixId}_${entry.bpIndex}_${endTag}`
-            const patch = {}
-            if (sequence) patch.sequence = sequence
-            if (name)     patch.label    = name
-            try {
-              await api.patchInstanceOverhang(entry.instanceId, overhangId, patch)
-            } catch (err) {
-              console.warn('Overhang label/sequence patch failed:', err?.message ?? err)
-            }
-          }
-
-          // Re-fetch and re-render this instance in the assembly scene, then
-          // refresh the overhang locations (active-instance arrows now reflect
-          // the new topology).
-          assemblyRenderer.invalidateInstance(entry.instanceId)
-          await assemblyRenderer.rebuild(store.getState().currentAssembly)
-          markOperationTiming('assembly-scene-rebuilt')
-          finishOperationAfterRender()
-          _rebuildOverhangLocations()
-
-          // Tell other tabs viewing this instance to refresh.
-          _broadcastInstanceChanged(entry.instanceId)
-          return
-        }
-
-        const result = await api.extrudeOverhang(params)
-        if (!result) {
-          console.error('Overhang extrude failed:', store.getState().lastError?.message)
-          return
-        }
-
-        // Assign name and/or sequence to the new OverhangSpec immediately.
-        if (sequence || name) {
-          const endTag     = entry.isFivePrime ? '5p' : '3p'
-          const overhangId = `ovhg_${entry.helixId}_${entry.bpIndex}_${endTag}`
-          const patch = {}
-          if (sequence) patch.sequence = sequence
-          if (name)     patch.label    = name
-          await api.patchOverhang(overhangId, patch)
-        }
-      } finally {
-        // The API sync above has atomically installed canonical topology and
-        // geometry. Removing the ghost now is authoritative reconciliation;
-        // failures simply reveal the untouched confirmed scene underneath.
-        _clearOverhangGhost()
-        _commitInFlight = false
-      }
-    }
-
-    okBtn.addEventListener('click', _doExtrude)
-    overlay.querySelector('#overhang-cancel-btn').addEventListener('click', _hide)
-
-    lenInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter') _doExtrude()
-      if (e.key === 'Escape') _hide()
-    })
-    seqInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter') _doExtrude()
-      if (e.key === 'Escape') _hide()
-    })
-
-    // Click outside closes dialog
-    document.addEventListener('pointerdown', e => {
-      if (overlay.style.display !== 'none' && !overlay.contains(e.target)) _hide()
-    }, true)
-  })()
+  const overhangDialog = initOverhangDialog({
+    slicePlane,
+    assemblyRenderer,
+    getPreviewEnabled: () => _extrudePreviewEnabled,
+    setPreviewEnabled: enabled => { _extrudePreviewEnabled = enabled },
+    setRefreshGhost: refresh => { _refreshOverhangGhost = refresh },
+    showGhost: _showOverhangGhost,
+    clearGhost: _clearOverhangGhost,
+    markGhostPending: _markOverhangGhostPending,
+    rebuildOverhangLocations: () => _rebuildOverhangLocations(),
+    broadcastInstanceChanged: _broadcastInstanceChanged,
+  })
+  _showOverhangLengthDialog = overhangDialog.show
 
   // Circular (loop) staples are flagged purely by the warning highlight in the 3D
   // + cadnano views (driven by store.loopStrandIds). There is intentionally no
@@ -1403,208 +854,15 @@ async function main() {
 
   // ── Bend/Twist deformation editor ──────────────────────────────────────────
 
-  // Context set while editing an existing feature; cleared on confirm or cancel.
-  let _editContext = null  // { priorCursor, pendingParams }
-
-  initDeformationEditor(scene, camera, canvas, controls, designRenderer,
-    () => {
-      // onExit: restore mode indicator + (for an unconfirmed edit) restore
-      // the original op that _onEditFeature peeled off the design.
-      //
-      // The deformation editor's preview-op DELETE already happened inside
-      // _exitTool → _clearPreviewSession. But the ORIGINAL op was peeled off
-      // separately by _onEditFeature, so design.deformations is missing it
-      // until we replay the log. A seek to priorCursor handles that — the
-      // backend re-runs the log and the original op pops back with its
-      // original params. Triggered when _editContext is still set on exit
-      // (Cancel / Escape paths). onConfirm clears _editContext BEFORE
-      // exiting, so the seek-restore is skipped on the confirm path
-      // (editFeature already updated the log and rebuilt design.deformations).
-      document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
-      const ctx = _editContext
-      _editContext = null
-      if (ctx?.editingFeatureType === 'deformation' && ctx.origOpId) {
-        _seekFeaturesWithDelta(ctx.priorCursor ?? -1).catch(() => {})
-      }
-    },
-    () => {
-      // onPlaneDragEnd: sync popup inputs with dragged plane positions
-      const { a, b } = getDeformPlanes()
-      setDeformPopupPlanes(a?.bp ?? 0, b?.bp ?? 0)
-    },
-  )
-
-  initBendTwistPopup({
-    onPreview: (params) => previewDeformation(params),
-    onConfirm: async (params) => {
-      const ctx = _editContext
-      if (ctx?.featureIndex != null && ctx.editingFeatureType === 'deformation') {
-        // Edit-confirm: the bent GHOST is currently held by a preview op
-        // (added by previewDeformation while the original op was peeled off
-        // in _onEditFeature). editFeature updates the log entry's snapshot
-        // and rebuilds design.deformations from the log — the backend
-        // explicitly drops any preview op as part of that rebuild
-        // (see backend _edit_deformation_feature). So a single editFeature
-        // call commits the new params and cleans the overlay in one shot.
-        const planes = getDeformPlanes()
-        const bpA = planes.a?.bp ?? 0
-        const bpB = planes.b?.bp ?? 0
-        const editBody = {
-          type:       getDeformToolType() ?? 'twist',
-          plane_a_bp: Math.min(bpA, bpB),
-          plane_b_bp: Math.max(bpA, bpB),
-          params,
-          cluster_ids: ctx.clusterIds ?? [],
-        }
-        markDeformEditCommitted()   // so the exit below does NOT revert the op
-        const resp = await api.editFeature(ctx.featureIndex, editBody)
-        if (resp == null) {
-          showToast(`Edit failed: ${store.getState().lastError?.message ?? 'unknown error'}`, 4000)
-        } else if (ctx.priorCursor != null && ctx.priorCursor !== -1) {
-          // editFeature leaves the cursor at latest; if the user was mid-scrub
-          // when they hit edit, return the slider to where they were.
-          await _seekFeaturesWithDelta(ctx.priorCursor)
-        }
-        _editContext = null
-        deformExitTool()
-        _watchDeformState()
-        return
-      }
-      _editContext = null   // clear before confirm; addDeformation takes over
-      await confirmDeformation(params)
-      _watchDeformState()
-    },
-    onCancel: () => {
-      // For an edit-cancel, leave _editContext set so onExit (called below
-      // via deformExitTool → _exitTool) sees it and restores the original
-      // op via seek. Escape goes through the same _exitTool path with the
-      // same restore. New-op cancels (no _editContext) just exit cleanly.
-      deformExitTool()
-      _watchDeformState()
-    },
-    onPlaneChanged: (which, bp) => repositionDeformPlane(which, bp),
+  const featureEditor = initFeatureEditor({
+    scene, camera, canvas, controls, designRenderer,
+    seekFeaturesWithDelta: _seekFeaturesWithDelta,
+    showToast,
+    getOrientPanel: () => _orientPanel,
+    activateTranslateRotateTool: _activateTranslateRotateTool,
   })
-
-  // Watch deformation editor state — open/close popup when state changes
-  let _prevDeformState = DEFORM_STATES.IDLE
-  function _watchDeformState() {
-    const st = getDeformState()
-    if (st === _prevDeformState) return
-    _prevDeformState = st
-    if (st === DEFORM_STATES.BOTH) {
-      const { a, b } = getDeformPlanes()
-      const editParams = _editContext?.pendingParams ?? null
-      const editClusterIds = _editContext ? (_editContext.clusterIds ?? []) : null
-      // Edit mode now uses the preview-op flow (the original op was peeled off
-      // in _onEditFeature). Let the initial preview fire so the popup's first
-      // previewDeformation call lands beginDeformPreview (SOLID = un-deformed)
-      // and adds the bent overlay (GHOST = deformed). The new-deformation
-      // path obviously also wants the initial preview.
-      const skipInitialPreview = false
-      openDeformPopup(
-        getDeformToolType() ?? 'twist',
-        a?.bp ?? 0, b?.bp ?? 0,
-        editParams,
-        editClusterIds,
-        skipInitialPreview,
-      )
-      if (_editContext) delete _editContext.pendingParams
-    } else {
-      closeDeformPopup()
-    }
-  }
-
-  async function _onEditFeature(entry, featureIndex) {
-    // ── Overhang orientation edit — open orientation panel for this overhang ─
-    if (entry.feature_type === 'overhang_rotation') {
-      const ovhgIds = entry.overhang_ids
-      if (!ovhgIds?.length) return
-      _orientPanel.open(ovhgIds)
-      return
-    }
-
-    // ── Move/rotate (cluster_op) edit — highlight cluster and open tool ─────
-    if (entry.feature_type === 'cluster_op') {
-      const clusterId = entry.cluster_id
-      if (!clusterId) return
-      // Editing an EARLIER op (a later cluster_op for this cluster exists): seek
-      // the feature log to this op first so the cluster shows THIS step's pose
-      // while you adjust it; commit/cancel seeks back to where the cursor was
-      // (the latest pose). Only this step's pose is rewritten — the latest op
-      // keeps defining the final pose. Editing the latest op needs no seek (the
-      // live pose already == that op), preserving the in-place edit path.
-      const log = store.getState().currentDesign?.feature_log ?? []
-      const hasLater = log.slice(featureIndex + 1).some(e =>
-        e.feature_type === 'cluster_op' && e.cluster_id === clusterId)
-      let seekRestoreCursor = null
-      if (hasLater) {
-        seekRestoreCursor = store.getState().currentDesign?.feature_log_cursor ?? -1
-        await api.seekFeatures(featureIndex)
-      }
-      store.setState({ activeClusterId: clusterId })
-      await _activateTranslateRotateTool()
-      // Mark cluster_op edit in flight; _confirmTranslateRotateTool will
-      // route the apply through api.editFeature instead of patchCluster, so
-      // the existing log entry is updated rather than a new one appended.
-      _editContext = {
-        editingFeatureType: 'cluster_op',
-        featureIndex,
-        clusterId,
-        seekRestoreCursor,
-      }
-      return
-    }
-
-    const op = entry.op_snapshot
-    if (!op) return
-
-    const design = store.getState().currentDesign
-    const priorCursor = design?.feature_log_cursor ?? -1
-
-    // Edit flow: peel the original op off the design (silent DELETE preview=true)
-    // so the live geometry becomes the pre-op (un-deformed) state. The popup's
-    // first previewDeformation then freezes THAT as the SOLID reference and
-    // re-adds the op as a preview overlay (the bent GHOST), restoring the
-    // "before/after" visual comparison that's most useful when tuning bends.
-    // The original log entry is untouched; Apply commits the new params via
-    // editFeature(featureIndex, …) and the design rebuilds from the log;
-    // Cancel deletes the preview overlay and seeks to priorCursor, replaying
-    // the log to restore the original op with its original params.
-    _editContext = {
-      priorCursor,
-      pendingParams:    op.params,
-      featureIndex,
-      editingFeatureType: entry.feature_type,
-      clusterIds:       op.cluster_ids ?? [],
-      // Original op id captured so cancel can no-op-restore it via the log
-      // replay; the deformation editor's preview-op flow takes ownership of
-      // the design from here.
-      origOpId: op.id,
-    }
-
-    // Transient DELETE — exposes the un-deformed design under the bent overlay.
-    let peeled = false
-    try {
-      const resp = await api.deleteDeformation(op.id, /*preview=*/true)
-      peeled = resp != null
-    } catch {
-      // Non-fatal: if the delete fails the user falls back to the old in-place
-      // edit (bent solid, no ghost). Without `peeled` the seek-restore below
-      // is also skipped so the editor doesn't replay the log unnecessarily.
-    }
-    if (!peeled) _editContext.origOpId = null
-
-    // Open editor in NEW-OP (preview) flow — _editOpId stays null so the
-    // popup's first previewDeformation goes through addDeformation(preview=true),
-    // producing a fresh preview op that owns the bent GHOST layer.
-    startDeformToolForEdit(op.type, op.plane_a_bp, op.plane_b_bp, /*opId=*/null, op.params)
-
-    document.getElementById('mode-indicator').textContent =
-      `EDIT ${op.type.toUpperCase()} F${featureIndex + 1} — adjust params · Apply to save · Esc to cancel`
-
-    // Open the popup now rather than waiting for a canvas pointerdown to fire it.
-    _watchDeformState()
-  }
+  const _watchDeformState = featureEditor.watchDeformState
+  const _onEditFeature = featureEditor.onEditFeature
 
   // ── 2D Unfold view ──────────────────────────────────────────────────────────
   // bluntEnds is initialized below; use a getter so unfoldView can call it lazily.
@@ -1729,71 +987,14 @@ async function main() {
     }
   })
 
-  // ── Overhang Locations overlay ───────────────────────────────────────────────
-  const overhangLocations = initOverhangLocations(scene)
-
-  /** Centralized rebuild — handles both design mode and assembly mode (active
-   *  instance only). In assembly mode the arrow group is parented to the
-   *  PartInstance's THREE.Group so it inherits the instance world transform. */
-  function _rebuildOverhangLocations() {
-    if (!overhangLocations.isVisible()) return
-    const s = store.getState()
-    if (s.assemblyActive) {
-      const instId = s.activeInstanceId
-      if (!instId) { overhangLocations.clear(); return }
-      const rd = assemblyRenderer.getInstanceRenderData(instId)
-      if (!rd?.design || !rd?.nucleotides || !rd?.group) { overhangLocations.clear(); return }
-      overhangLocations.rebuild(rd.design, rd.nucleotides, { parentGroup: rd.group, instanceId: instId })
-    } else {
-      overhangLocations.rebuild(s.currentDesign, s.currentGeometry, {
-        candidateGeometry: s.straightGeometry ?? s.currentGeometry,
-      })
-    }
-  }
-
-  store.subscribe((newState, prevState) => {
-    if (newState.currentGeometry  === prevState.currentGeometry &&
-        newState.straightGeometry === prevState.straightGeometry &&
-        newState.currentDesign    === prevState.currentDesign) return
-    if (newState.assemblyActive) return   // assembly mode rebuild is driven by other subscribers below
-    _rebuildOverhangLocations()
+  const overhangSceneSync = initOverhangSceneSync({
+    scene, store, designRenderer, assemblyRenderer,
   })
-  // Assembly-mode triggers: active instance change, currentAssembly change,
-  // and transitions in/out of assembly mode (so arrows clear when leaving).
-  store.subscribe((newState, prevState) => {
-    const modeChanged = newState.assemblyActive !== prevState.assemblyActive
-    if (!modeChanged && !newState.assemblyActive) return
-    if (!modeChanged &&
-        newState.activeInstanceId === prevState.activeInstanceId &&
-        newState.currentAssembly  === prevState.currentAssembly) return
-    _rebuildOverhangLocations()
-  })
-  // Also rebuild whenever the assembly renderer finishes a rebuild pass.
-  // Every rebuild disposes the old instance Group and creates a new one;
-  // arrows previously parented to the dead group would otherwise vanish
-  // until the user manually flipped activeInstanceId. This closes the gap
-  // for every assembly-rebuild path (initial load, SSE echo, mate resolve,
-  // refresh-instance, etc.) without requiring caller-side discipline.
-  assemblyRenderer.onRebuildComplete(() => _rebuildOverhangLocations())
-
-  // ── Overhang Link Arcs (white tubes for design.overhang_connections) ────────
-  const overhangLinkArcs = initOverhangLinkArcs(scene)
-  const flexibleArcs = initFlexibleArcs(scene, designRenderer, () => store.getState().currentHelixAxes)
-  store.subscribe((newState, prevState) => {
-    if (newState.currentGeometry === prevState.currentGeometry &&
-        newState.currentDesign   === prevState.currentDesign) return
-    overhangLinkArcs.rebuild(newState.currentDesign, newState.currentGeometry)
-    flexibleArcs.rebuild(newState.currentDesign)
-  })
-  // Initial rebuild — when the persisted design was applied to the store
-  // before this subscription was registered, the listener never fires.
-  {
-    const s = store.getState()
-    if (s.currentDesign && s.currentGeometry) {
-      overhangLinkArcs.rebuild(s.currentDesign, s.currentGeometry)
-      flexibleArcs.rebuild(s.currentDesign)
-    }
-  }
+  const overhangLocations = overhangSceneSync.locations
+  const overhangLinkArcs = overhangSceneSync.linkArcs
+  const flexibleArcs = overhangSceneSync.flexibleArcs
+  const unligatedCrossoverMarkers = overhangSceneSync.unligatedMarkers
+  const _rebuildOverhangLocations = overhangSceneSync.rebuildLocations
 
   // Display-only unzip animation driven by the animation player during bind/unbind
   // φ playback. Moves the REAL overhang beads via the helix renderer (no synthetic
@@ -1836,60 +1037,6 @@ async function main() {
     conjugateManager.showConjugateMenu({ x: e.clientX, y: e.clientY, assetId })
   }, { capture: true }), { capture: true })
 
-  // ── Unligated crossover markers (⚠ at midpoint of would-circularize crossovers) ─
-  const unligatedCrossoverMarkers = initUnligatedCrossoverMarkers(scene)
-  store.subscribe((newState, prevState) => {
-    if (newState.currentGeometry      === prevState.currentGeometry &&
-        newState.currentDesign        === prevState.currentDesign &&
-        newState.unligatedCrossoverIds === prevState.unligatedCrossoverIds) return
-    unligatedCrossoverMarkers.rebuild(
-      newState.currentDesign,
-      newState.currentGeometry,
-      newState.unligatedCrossoverIds,
-    )
-  })
-  {
-    const s = store.getState()
-    if (s.currentDesign && s.currentGeometry) {
-      unligatedCrossoverMarkers.rebuild(s.currentDesign, s.currentGeometry, s.unligatedCrossoverIds)
-    }
-  }
-
-  // ── Overhang lookup table infrastructure ─────────────────────────────────────
-  //
-  // Four maps built in dependency order on every geometry/design change. Feeds the
-  // Overhang Orientation panel (junction bead positions via _ovhgRootMap).
-  //
-  //  Map 1  _ovhgSpecMap      id → OverhangSpec
-  //  Map 2  _ovhgDomainMap    id → { strand, domIdx, domain }
-  //  Map 3  _ovhgJunctionMap  id → { junctionBp, junctionDir }
-  //  Map 4  _ovhgRootMap      id → { entry: BackboneEntry, pos: THREE.Vector3 }
-  //
-  // FINDINGS recorded during construction:
-  //  • d.overhang_id === spec.id is the safe domain match; d.helix_id is ambiguous when
-  //    a strand visits the same helix twice (latent bug in original _findOvhgRootEntry)
-  //  • helixCtrl.lookupEntry("helix_id:bp_index:direction") is O(1) — preferred over
-  //    backboneEntries.find() linear scan
-
-  let _ovhgSpecMap         = new Map()
-  let _ovhgDomainMap       = new Map()
-  let _ovhgJunctionMap     = new Map()
-  let _ovhgRootMap         = new Map()
-
-  // Master build — called on every geometry/design change.
-  function _buildOvhgMaps(design) {
-    const helixCtrl = designRenderer.getHelixCtrl()
-    _ovhgSpecMap        = buildSpecMap(design)
-    _ovhgDomainMap      = buildDomainMapFromDesign(design, _ovhgSpecMap)
-    _ovhgJunctionMap    = buildJunctionMapFromDomains(_ovhgDomainMap)
-    _ovhgRootMap        = buildRootMap(_ovhgSpecMap, _ovhgJunctionMap, helixCtrl)
-  }
-
-  store.subscribe((newState, prevState) => {
-    if (newState.currentGeometry === prevState.currentGeometry &&
-        newState.currentDesign   === prevState.currentDesign) return
-    _buildOvhgMaps(newState.currentDesign)
-  })
 
   // ── Cadnano-active watchdog ──────────────────────────────────────────────────
   // Logs whenever cadnanoActive unexpectedly transitions while debugging.
@@ -3467,6 +2614,7 @@ async function main() {
   const _ASM_PATH_KEY = docKey('nadoc:assembly-workspace-path')
   let _workspacePath         = localStorage.getItem(_WS_PATH_KEY)  || null
   let _assemblyWorkspacePath = localStorage.getItem(_ASM_PATH_KEY) || null
+  let _crossTabSync = null
   function _setWorkspacePath(path) {
     const previousPath = _workspacePath
     _workspacePath = path
@@ -3476,8 +2624,8 @@ async function main() {
     } catch { /* quota / private mode — ignore */ }
     // Our file changed → tell siblings (so they can detect co-editing) and
     // recompute our own badge. Both are hoisted fn decls, only called post-init.
-    _announceDocPresence?.()
-    _refreshCoediting?.()
+    _crossTabSync?.announceDocumentPresence()
+    _crossTabSync?.refreshCoediting()
     if (path !== previousPath) {
       window.dispatchEvent(new CustomEvent('nadoc:workspace-path-change', {
         detail: { path, previousPath },
@@ -4958,7 +4106,7 @@ async function main() {
   const _orientPanel = initOverhangOrientationPanel({
     store, api, scene, camera, canvas, controls,
     designRenderer, bluntEnds, overhangLocations, assemblyRenderer,
-    getOvhgRootMap: () => _ovhgRootMap,
+    getOvhgRootMap: overhangSceneSync.getRootMap,
   })
 
   const instanceGizmo = initInstanceGizmo(store, controls)
@@ -5370,7 +4518,7 @@ async function main() {
 
   // ── Translate/Rotate tool → scene/translate_rotate_tool.js (#81) ─────────────
   // The session flag _translateRotateActive (22 sites incl. the lifecycle spine),
-  // _clusterDirty, and the deform-editor-shared _editContext stay main `let`s; the
+  // _clusterDirty stays in the composition root; featureEditor owns edit context.
   // factory reaches them via get/set shims. jointRenderer is declared just below,
   // so it is injected lazily. Alias-consts keep every external call site verbatim.
   const _nucleotideTransformTool = initNucleotideTransformTool({
@@ -5417,8 +4565,8 @@ async function main() {
     setActive: (v) => { _translateRotateActive = v; store.setState({ translateRotateActive: v }) },
     getClusterDirty: () => _clusterDirty,
     setClusterDirty: (v) => { _clusterDirty = v },
-    getEditContext: () => _editContext,
-    setEditContext: (v) => { _editContext = v },
+    getEditContext: featureEditor.getEditContext,
+    setEditContext: featureEditor.setEditContext,
   })
   const _activateTranslateRotateTool = _translateRotateTool.activate
   const _confirmTranslateRotateTool  = _translateRotateTool.confirm
@@ -5740,144 +4888,19 @@ async function main() {
     getClusterPanel: () => clusterPanel,
   })
 
-  /**
-   * Show or hide ALL design-level scene geometry.
-   * Called when toggling assembly mode so the loaded design doesn't bleed through
-   * while assembly instances are shown (or while the scene is empty).
-   *
-   * SCENE GEOMETRY RULE — every element that renders design data must be listed here:
-   *   1. designRenderer  — _helixCtrl.root: beads, slabs, axis arrows, extension beads,
-   *                        extra-base crossover beads+slabs (children of root — ONE scene object)
-   *   2. bluntEnds       — helix-end rings + number-sprite axis labels
-   *   3. endExtrudeArrows — drag-to-resize handles on helix ends
-   *   4. jointRenderer   — cluster joint axis indicators
-   *   5. unfoldView      — crossover arc LINE geometry (_arcGroup / 'xoverArcLines')
-   *                        NB: arc lines are a SEPARATE scene object from root.
-   *                        Extra-base beads+slabs are children of root (no separate call needed).
-   *                        Arc lines require an explicit unfoldView.setArcsVisible() call.
-   *
-   * If you add a new scene module that renders design geometry, add its
-   * setVisible() call here so assembly mode automatically suppresses it.
-   * Use window.__nadocDebugXovers() in the browser console to verify.
-   */
+  const designSceneVisibility = initDesignSceneVisibility({
+    scene, store, designRenderer, bluntEnds, endExtrudeArrows,
+    jointRenderer, unfoldView, overhangLinkArcs,
+  })
   function _setDesignGeometryVisible(visible) {
-    designRenderer.setDesignVisible(visible)
-    bluntEnds.setVisible(visible)
-    endExtrudeArrows.setVisible(visible)
-    jointRenderer.setVisible(visible)
-    unfoldView.setArcsVisible(visible)  // arc lines (_arcGroup); LOD/rep gating is per-arc (refreshArcVisibility)
-    unfoldView.refreshArcVisibility()
-    overhangLinkArcs?.setVisible?.(visible)
+    designSceneVisibility.setVisible(visible)
   }
 
-  /**
-   * Browser console debug tool — inspect the visibility state of every
-   * crossover-arc-related scene object.
-   *
-   * Usage: window.__nadocDebugXovers()
-   *
-   * Reports on four layers (design_renderer is now 1 scene object, not 2):
-   *   'designRoot'       — _helixCtrl.root (beads, slabs, extra-base beads/slabs as children)
-   *   'xoverExtraBeads'  — extra-base bead InstancedMesh (child of root, inherited visibility)
-   *   'arcLines'         — unfoldView._arcGroup (LINE geometry; 'xoverArcLines')
-   *   'bluntEnds'        — blunt-end rings + number labels
-   */
-  window.__nadocDebugXovers = function () {
-    // Scan the live scene (including children) for objects by their debug names.
-    const found = {}
-    scene.traverse(obj => {
-      if (obj.name) found[obj.name] = obj
-    })
-
-    const fmt = (obj, extra = {}) => obj
-      ? { visible: obj.visible, parentVisible: obj.parent?.visible ?? null, ...extra }
-      : 'NOT IN SCENE'
-
-    const arcInfo = unfoldView.getArcDebugInfo()
-    const root = designRenderer.getHelixCtrl()?.root
-
-    const report = {
-      // Layer 1 — design_renderer (single scene object; extra-base beads are children)
-      designRoot: root
-        ? { visible: root.visible, childCount: root.children.length }
-        : 'no root (design not loaded)',
-      xoverExtraBeads: found['xoverExtraBeads']
-        ? fmt(found['xoverExtraBeads'], {
-            count: found['xoverExtraBeads'].count,
-            // 'crossoverConnections' group is the parent; root is grandparent
-            groupVisible: found['crossoverConnections']?.visible ?? null,
-          })
-        : 'not built (design has no extra-base crossovers)',
-
-      // Layer 5 — unfold_view arc lines (still a separate scene sibling)
-      arcLines: {
-        group:    fmt(found['xoverArcLines'], { childCount: found['xoverArcLines']?.children.length ?? 0 }),
-        scaffold: found['xoverArcMerged_scaffold']
-          ? fmt(found['xoverArcMerged_scaffold'], { arcCount: found['xoverArcMerged_scaffold'].userData.arcCount, xoverIds: found['xoverArcMerged_scaffold'].userData.arcXoverIds })
-          : 'not built',
-        staple:   found['xoverArcMerged_staple']
-          ? fmt(found['xoverArcMerged_staple'],   { arcCount: found['xoverArcMerged_staple'].userData.arcCount,   xoverIds: found['xoverArcMerged_staple'].userData.arcXoverIds })
-          : 'not built',
-        perArcDetail: arcInfo,
-      },
-    }
-
-    console.group('[NADOC] Crossover Arc Visibility Debug')
-    console.log('assemblyActive:', store.getState().assemblyActive)
-    console.log('──── Design root (single scene object):', report.designRoot)
-    console.log('     extra-base beads (child of root):', report.xoverExtraBeads)
-    console.log('──── Arc lines (_arcGroup, separate scene sibling):', report.arcLines.group)
-    console.log('     scaffold merged:', report.arcLines.scaffold)
-    console.log('     staple   merged:', report.arcLines.staple)
-    console.log('──── Per-arc summary:',
-      `total=${arcInfo.totalArcs}`,
-      `hidden=${arcInfo.hiddenArcs}`,
-      `scaffold=${arcInfo.arcsByType.scaffold}`,
-      `staple=${arcInfo.arcsByType.staple}`,
-    )
-    if (arcInfo.arcs.length) console.table(arcInfo.arcs)
-    console.groupEnd()
-
-    return report
-  }
-
-  // ── Auto-defaults for large assemblies ──────────────────────────────────────
-  // When entering assembly mode for an assembly that contains more than two
-  // origami-scale parts, switch to Cylinders + Overhang highlight by default
-  // so the user can immediately see what's connected without being overwhelmed
-  // by per-bp detail.  Threshold: a part counts as "full sized" when it has
-  // ≥12 helices (rectangular origamis have 24, square 16, half-rect 12 — small
-  // motifs/tiles fall below).  Fires once per mode entry; user can still pick
-  // anything they want afterward via the View menu.
-  // On every assembly load, force all parts to the Cylinders rep + the
-  // Overhang highlight coloring.  Cylinders give the clearest at-a-glance
-  // bundle silhouette, and overhang highlight makes mate-point candidates
-  // pop visually — the most informative default regardless of assembly
-  // size.  Skips the PATCH if every part is already cylinders (avoids
-  // spurious backend round-trips on a re-saved file).
-  // Called BEFORE the first renderer build on load, so the assembly builds
-  // straight to cylinders — the saved per-instance representation is NOT built
-  // first (it was always replaced by cylinders anyway, so that initial build was
-  // pure wasted load time).
-  function _applyAssemblyLoadDefaults(assembly) {
-    const instances = assembly?.instances ?? []
-    if (instances.length === 0) return
-
-    _setColoringMode('overhang-only')
-    _updateReprRadio('cylinders')
-
-    const needsPatch = instances.some(inst => inst.representation !== 'cylinders')
-    if (needsPatch) {
-      // Force cylinders in-memory so the upcoming build renders cylinders
-      // directly (no saved-rep build), then persist to the backend WITHOUT
-      // re-syncing the response — re-syncing would trigger a second rebuild.
-      for (const inst of instances) inst.representation = 'cylinders'
-      api.batchPatchInstances(
-        instances.map(inst => ({ id: inst.id, representation: 'cylinders' })),
-        { skipSync: true },
-      ).catch(err => console.error('[assembly] default rep PATCH failed:', err))
-    }
-  }
+  const _applyAssemblyLoadDefaults = createAssemblyLoadDefaults({
+    api,
+    setColoringMode: _setColoringMode,
+    updateReprRadio: _updateReprRadio,
+  })
 
   // One-shot disk-load stash, set by initFileOpen.openAssemblyFromServer (via the
   // setter shims passed below) and consumed by
@@ -5958,268 +4981,29 @@ async function main() {
   const _assemblyMultiBox = initAssemblyMultiBox({ scene, store, assemblyRenderer })
 
   // Drive assembly panel + assembly renderer from the assembly slice
-  store.subscribeSlice('assembly', (newState, prevState) => {
-    const modeChanged     = newState.assemblyActive    !== prevState.assemblyActive
-    const assemblyChanged = newState.currentAssembly   !== prevState.currentAssembly
-    const activeChanged   = newState.activeInstanceId  !== prevState.activeInstanceId
-
-    if (modeChanged) {
-      animPanel?.setAssemblyMode(newState.assemblyActive)
-      if (newState.assemblyActive) {
-        _setDesignGeometryVisible(false)
-        assemblyPanel.show()
-        // Force the cylinders load-default + coloring BEFORE the panel rebuild AND
-        // the geometry build: the renderer builds cylinders directly — never the
-        // saved representation (a surface-saved assembly would otherwise pay a
-        // ~24 s surface build here that's immediately discarded) — and the panel's
-        // per-part Repr dropdown shows the rep that's actually on screen.
-        if (newState.currentAssembly) _applyAssemblyLoadDefaults(newState.currentAssembly)
-        assemblyPanel.rebuild(newState)
-        if (newState.currentAssembly) {
-          // _runAssemblyRebuild owns the build so the disk-load path doesn't ALSO
-          // build separately.
-          _runAssemblyRebuild(newState.currentAssembly, {
-            fitOnDone: true,
-            activeInstanceId: newState.activeInstanceId,
-          })
-        }
-        controls.addEventListener('change', _updateFixedLockPositions)
-        canvas.addEventListener('pointerdown',  _onAssemblyPointerDown)
-        canvas.addEventListener('click',        _onAssemblyClick)
-        canvas.addEventListener('pointermove',  overhangHoverPicker.onHoverMove)
-        canvas.addEventListener('contextmenu',  _onAssemblyContextMenu)
-      } else {
-        if (_hasAssemblyPending()) {
-          _commitAssemblyPending().catch(err => console.error('[assembly] pending commit on exit:', err))
-        }
-        _rebuildFixedLocks(null)
-        controls.removeEventListener('change', _updateFixedLockPositions)
-        _setDesignGeometryVisible(true)
-        // Reset mixed-rep dot — only meaningful in assembly mode.
-        document.getElementById('menu-view-repr-mixed-dot')?.style.setProperty('display', 'none')
-        assemblyPanel.hide()
-        assemblyContextMenu.hide()
-        instanceGizmo.detach()
-        _assemblyPendingTransforms.clear()
-        _assemblyPendingPartJoints.clear()
-        assemblyRenderer.dispose()
-        assemblyJointRenderer.exitAttachMode()
-        assemblyJointRenderer.rebuild(null)   // clear all joint indicators
-        beltPathRenderer.rebuild(null)        // clear persistent belt tubes
-        canvas.removeEventListener('pointerdown',  _onAssemblyPointerDown)
-        canvas.removeEventListener('click',        _onAssemblyClick)
-        canvas.removeEventListener('pointermove',  overhangHoverPicker.onHoverMove)
-        canvas.removeEventListener('contextmenu',  _onAssemblyContextMenu)
-        overhangHoverPicker.reset()
-        // Clean up any in-flight free drag (handlers + state in assembly_pointer.js)
-        _assemblyPointer.cancelDrag()
-        assemblyLasso.cancel()
-        // Drop the multi-select union box from the scene; setState below also
-        // fires the subscriber which re-runs update() (which clears it), but
-        // doing it inline keeps the scene clean even if the recursive setState
-        // path is short-circuited. The factory stays reusable — a later
-        // re-entry rebuilds the box on the next update().
-        _assemblyMultiBox.dispose()
-        _setMotionChip(null)
-        // Mode exit should also drop any orphaned multi-selection so the
-        // panel/contextmenu don't surface stale group-able candidates.
-        if ((newState.multiSelectedInstanceIds ?? []).length || newState.activeGroupId) {
-          store.setState({ multiSelectedInstanceIds: [], activeGroupId: null, groupDiveStack: [] })
-        }
-        // Gizmo exit: detach if the tool was active during mode switch
-        if (_translateRotateActive) {
-          _translateRotateActive = false
-          store.setState({ translateRotateActive: false })
-          instanceGizmo.detach()
-          _translateRotateTool.hideConfirmBtn()
-        }
-      }
-    }
-
-    // ── Assembly menu item enable/disable ──────────────────────────────────
-    if (modeChanged || activeChanged) {
-      const hasActive = !!newState.activeInstanceId
-      const inAssembly = newState.assemblyActive
-      document.getElementById('menu-assembly-define-joint')
-        ?.toggleAttribute('disabled', !(inAssembly && hasActive))
-      document.getElementById('menu-assembly-define-mate')
-        ?.toggleAttribute('disabled', !inAssembly)
-    }
-
-    // Belt path needs at least two revolute mates to wrap; re-evaluate whenever
-    // the joint set may have changed (adding a mate fires assemblyChanged).
-    if (modeChanged || activeChanged || assemblyChanged) {
-      const inAssembly = newState.assemblyActive
-      const revoluteCount = (newState.currentAssembly?.joints ?? [])
-        .filter(j => j.joint_type === 'revolute').length
-      document.getElementById('menu-assembly-define-belt')
-        ?.toggleAttribute('disabled', !(inAssembly && revoluteCount >= 2))
-    }
-
-    if (!modeChanged && newState.assemblyActive) {
-      if (assemblyChanged) {
-        // Hide the assembly welcome when the first part is added
-        const prevCount = prevState.currentAssembly?.instances?.length ?? 0
-        const newCount  = newState.currentAssembly?.instances?.length ?? 0
-        if (prevCount === 0 && newCount > 0) _hideWelcome()
-
-        assemblyPanel.rebuild(newState)
-        // A disk-load reload (already in assembly mode) must never take the
-        // transform-only fast path: that skips the rebuild AND would leave
-        // _openAssemblyFromServer's load promise unsettled (hang).  Force the
-        // full rebuild whenever a load is in flight.
-        const isLoad = !!_assemblyLoadSettle
-        if (!isLoad && assemblyTransformOnlyChange(prevState.currentAssembly, newState.currentAssembly)) {
-          // Transform-only change (e.g. a move/rotate commit via propagateFk):
-          // push each instance's new world matrix straight into the renderer
-          // instead of disposing + re-fetching geometry — avoids the whole
-          // assembly blinking out and re-rendering.  Joint indicators are
-          // cheap, so we still rebuild those to track moved anchors.
-          //
-          // Push ONLY instances whose transform actually changed.  A
-          // connector-register / joint-add response carries unchanged
-          // transforms; pushing all of them would snap a live mate preview
-          // back to the stored pose (the "moves three times" jank) and
-          // re-pack every row for nothing.  Diffing prev→next keeps the moved
-          // part (and its FK children) live and leaves the rest untouched.
-          const _prevById = new Map(
-            (prevState.currentAssembly?.instances ?? []).map(i => [i.id, i]),
-          )
-          let _anyMoved = false
-          for (const inst of newState.currentAssembly.instances) {
-            const prev = _prevById.get(inst.id)
-            if (prev && sameInstanceTransform(prev, inst)) continue
-            assemblyRenderer.setLiveTransform(inst.id, matrixFromInstance(inst))
-            _anyMoved = true
-          }
-          assemblyJointRenderer.rebuild(newState.currentAssembly)
-          // Cross-part linkers are world-space geometry DERIVED from the part
-          // transforms (binding-domain complements + connector arcs + ds bridge),
-          // not GPU-instanced — so the setLiveTransform fast path moves the parts
-          // but leaves every linker stale. If a part moved and the assembly
-          // carries linkers, refetch + redraw them so the binding domains and
-          // arcs track the new poses. Covers the indirect-linker relax (a
-          // transform-only change) AND any plain part move that drags a linker —
-          // and rebuilds ALL linkers, so others sharing the moved parts update too.
-          if (_anyMoved && ((newState.currentAssembly?.assembly_strands?.length ?? 0) > 0
-                            || (newState.currentAssembly?.overhang_connections?.length ?? 0) > 0)) {
-            assemblyRenderer.rebuildLinkers?.(newState.currentAssembly)
-          }
-          // Re-apply the group visibility overlay — a transform-only patch
-          // could have changed a group's `visible` flag without touching any
-          // instance's `visible`. Cheap O(N) walk; no-op when no group is hidden.
-          assemblyRenderer.applyGroupVisibilityOverlay?.(computeGroupHiddenInstanceIds(newState.currentAssembly))
-          if (newState.activeInstanceId) {
-            assemblyRenderer.setActiveInstance(newState.activeInstanceId)
-            const depths = computeFixedDepths(newState.currentAssembly)
-            if (depths.has(newState.activeInstanceId)) _rebuildFixedLocks(newState.currentAssembly)
-          }
-        } else {
-          // Reload while already in assembly mode: apply the cylinders default +
-          // frame the camera, same as a fresh mode-enter.  Ordinary edits
-          // (isLoad false) keep their representation and camera untouched.
-          if (isLoad) _applyAssemblyLoadDefaults(newState.currentAssembly)
-          _runAssemblyRebuild(newState.currentAssembly, {
-            fitOnDone: isLoad,
-            activeInstanceId: newState.activeInstanceId,
-          })
-        }
-        // Persistent belt-path tubes (create/edit/delete change belt_paths).
-        _rebuildBeltPaths()
-        // Drive belt riders to their live pose for the current pulley angles
-        // (covers discrete rotations — ring/gizmo/group commits + load). Skip
-        // while a joint is actively RPM-spinning: the ticker owns riders then,
-        // and running both (store angle vs the ticker's live _shadow) would make
-        // the rider hitch. Mutually exclusive with the ticker's gated update.
-        const _spinning = (newState.currentAssembly?.joints ?? []).some(
-          j => j.joint_type === 'revolute' && j.angular_velocity_rpm && !j.spin_paused)
-        if (!_spinning) {
-          applyBeltRiders(
-            newState.currentAssembly,
-            (id, j) => j.current_value ?? 0,
-            (iid, mat) => assemblyRenderer.setLiveTransform(iid, mat),
-          )
-        }
-      }
-      // Multi-select union box: refresh whenever the multi-select set, the
-      // active group, OR the assembly changed (move/rotate of a member shifts
-      // the union extent). Run inside RAF so the renderer's per-instance
-      // Three.js groups have their fresh matrixWorld + bounding boxes.
-      if (
-        assemblyChanged ||
-        newState.multiSelectedInstanceIds !== prevState.multiSelectedInstanceIds ||
-        newState.activeGroupId !== prevState.activeGroupId
-      ) {
-        requestAnimationFrame(() => _assemblyMultiBox.update())
-      }
-
-      // PartGroup gizmo lifecycle. Attach on group-select; re-attach when
-      // the assembly mutates while a group is still selected (centroid +
-      // member start transforms need recapture). Detach when group is
-      // cleared AND no single instance is selected.
-      const groupChanged = newState.activeGroupId !== prevState.activeGroupId
-      if (groupChanged) {
-        if (newState.activeGroupId) {
-          _attachGroupGizmoForGroup(newState.activeGroupId)
-        } else if (!newState.activeInstanceId) {
-          instanceGizmo.detach()
-          _setMotionChip(null)
-        }
-      } else if (assemblyChanged && newState.activeGroupId) {
-        // Group still selected, members may have moved — re-anchor.
-        _attachGroupGizmoForGroup(newState.activeGroupId)
-      }
-
-      // Single-instance gizmo re-evaluation when the assembly changes around
-      // an already-selected part. Without this, editing a mate (joint type,
-      // axis, or even `fixed` on a partner) leaves the gizmo locked to the
-      // DOF the analyzer computed at original attach time. Guard against
-      // mid-drag (skip during a live drag — TransformControls state would be
-      // torn down) and against pending uncommitted moves (re-attach would
-      // snap the gizmo back to the last committed pose, hiding the user's
-      // in-flight edit). The group path above already does the same.
-      if (
-        assemblyChanged &&
-        !groupChanged &&
-        newState.activeInstanceId &&
-        !newState.activeGroupId &&
-        !instanceGizmo.isDragging() &&
-        !_hasAssemblyPending() &&
-        constraintRelevantChanged(prevState.currentAssembly, newState.currentAssembly, newState.activeInstanceId)
-      ) {
-        _attachGroupGizmo(newState.activeInstanceId)
-      }
-
-      if (activeChanged) {
-        // Clear cluster glow and sidebar selection whenever the active instance changes
-        _selectedAssemblyCluster = null
-        clusterGlowLayer.clear()
-        clusterPanel?.selectAssemblyCluster?.(null, null)
-        assemblyRenderer.setActiveInstance(newState.activeInstanceId)
-        // Joint/connector indicators draw only for the selected part (scale fix).
-        assemblyJointRenderer.setActiveInstance(newState.activeInstanceId)
-        if (newState.activeInstanceId) {
-          clusterPanel?.expandInstance?.(newState.activeInstanceId)
-        }
-        const newInst = newState.currentAssembly?.instances?.find(i => i.id === newState.activeInstanceId)
-        if (newState.activeInstanceId && !newInst?.fixed) {
-          _attachGroupGizmo(newState.activeInstanceId)
-        } else if (!newState.activeGroupId) {
-          // Guard: don't detach the group gizmo just because activeInstanceId
-          // went null. The groupChanged branch above owns gizmo lifecycle
-          // while a group is selected.
-          instanceGizmo.detach()
-          _setMotionChip(null)
-        }
-        // Show locks for all anchored parts when an anchored part is selected; hide otherwise
-        const depths = computeFixedDepths(newState.currentAssembly)
-        if (newState.activeInstanceId && depths.has(newState.activeInstanceId)) {
-          _rebuildFixedLocks(newState.currentAssembly)
-        } else {
-          _rebuildFixedLocks(null)
-        }
-      }
-    }
+  initAssemblyModeSync({
+    store, animPanel, setDesignGeometryVisible: _setDesignGeometryVisible,
+    assemblyPanel, applyAssemblyLoadDefaults: _applyAssemblyLoadDefaults,
+    runAssemblyRebuild: _runAssemblyRebuild, controls,
+    updateFixedLockPositions: _updateFixedLockPositions, canvas,
+    onAssemblyPointerDown: _onAssemblyPointerDown, onAssemblyClick: _onAssemblyClick,
+    overhangHoverPicker, onAssemblyContextMenu: _onAssemblyContextMenu,
+    hasAssemblyPending: _hasAssemblyPending, commitAssemblyPending: _commitAssemblyPending,
+    rebuildFixedLocks: _rebuildFixedLocks, assemblyContextMenu, instanceGizmo,
+    assemblyPendingTransforms: _assemblyPendingTransforms,
+    assemblyPendingPartJoints: _assemblyPendingPartJoints,
+    assemblyRenderer, assemblyJointRenderer, beltPathRenderer,
+    assemblyPointer: _assemblyPointer, assemblyLasso, assemblyMultiBox: _assemblyMultiBox,
+    setMotionChip: _setMotionChip,
+    isTranslateRotateActive: () => _translateRotateActive,
+    setTranslateRotateActive: value => { _translateRotateActive = value },
+    translateRotateTool: _translateRotateTool, hideWelcome: _hideWelcome,
+    getAssemblyLoadSettle: () => _assemblyLoadSettle,
+    rebuildBeltPaths: _rebuildBeltPaths,
+    attachGroupGizmoForGroup: _attachGroupGizmoForGroup,
+    attachGroupGizmo: _attachGroupGizmo,
+    clearSelectedAssemblyCluster: () => { _selectedAssemblyCluster = null },
+    clusterGlowLayer, getClusterPanel: () => clusterPanel,
   })
 
   // ── Fixed-instance lock indicators (persistent while assembly mode is active) ──
@@ -6534,370 +5318,16 @@ async function main() {
   // the strip is a dedicated collapse/expand affordance that mirrors the
   // active-tab click. Persists (activeTab, collapsed) to localStorage so the
   // sidebar restores its prior state across reloads.
-  let _leftSidebar = null
-  {
-    const TABS = ['feature-log', 'dynamics', 'scene', 'photo', 'plates']
-    // Tabs that install a render override and must be torn down when you leave.
-    const RENDER_OVERRIDE_TABS = ['photo']
-    const STORAGE_KEY = 'nadoc.leftSidebar.v1'
-    const leftPanel = document.getElementById('left-panel')
-    const tabStrip  = document.getElementById('left-tab-strip')
-    const toggleBtn = document.getElementById('left-tab-toggle')
-    if (leftPanel && tabStrip) {
-      const btns  = Object.fromEntries(TABS.map(id => [id, tabStrip.querySelector(`[data-tab="${id}"]`)]))
-      const panes = Object.fromEntries(TABS.map(id => [id, document.getElementById(`tab-content-${id}`)]))
+  const _leftSidebar = initLeftSidebar({
+    store,
+    animPlayer,
+    trajectoryKeyframes,
+    seekFeaturesWithDelta: _seekFeaturesWithDelta,
+    photoMode: _photoMode,
+    animPanel,
+  })
 
-      let activeTab = 'feature-log'
-      let collapsed = true
-
-      // Restore persisted state.
-      // Special case: if the saved active tab was 'photo', fall back to
-      // 'feature-log'. Photo mode is in-memory only and isn't auto-restored on
-      // reload, so we don't want to leave the sidebar parked on the Photo tab
-      // (which won't actually be in photo mode and just shows stale controls).
-      try {
-        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null')
-        if (saved) {
-          if (TABS.includes(saved.activeTab) && !RENDER_OVERRIDE_TABS.includes(saved.activeTab)) {
-            activeTab = saved.activeTab
-          }
-          if (typeof saved.collapsed === 'boolean') collapsed = saved.collapsed
-        }
-      } catch { /* ignore corrupt state */ }
-
-      function _persist() {
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ activeTab, collapsed })) } catch {}
-      }
-
-      function _render() {
-        // While locked (welcome screen / part-context), force visual hidden
-        // regardless of the controller's internal `collapsed` state, so the
-        // persisted "expanded" state doesn't leak through and pop the panel
-        // open at the welcome screen. `locked` also drives the tab highlight
-        // and the toggle arrow: a lit tab and a "Hide sidebar" arrow over a
-        // panel that is shut read as a bug, and they were what made a closed
-        // session still look like it had the sidebar open.
-        const locked = leftPanel.classList.contains('locked-hidden')
-        const shut   = collapsed || locked
-        const simulationTabActive = !shut && activeTab === 'dynamics'
-        if (store.getState().simulationTabActive !== simulationTabActive) {
-          store.setState({ simulationTabActive })
-        }
-        for (const id of TABS) {
-          if (btns[id])  btns[id].classList.toggle('active', id === activeTab && !shut)
-          if (panes[id]) panes[id].hidden = (id !== activeTab)
-        }
-        leftPanel.classList.toggle('hidden', shut)
-        if (toggleBtn) {
-          toggleBtn.textContent = shut ? '▶' : '◀'
-          toggleBtn.title       = shut ? 'Show sidebar' : 'Hide sidebar'
-        }
-      }
-
-      // Called whenever the visible state of the Animations (formerly Scene)
-      // tab changes from "active + expanded" → anything else. Stops any
-      // in-flight playback (frees baked geometry) and re-seeks the design
-      // to the feature-log slider's current cursor so the live model
-      // matches what the slider says rather than the last lerped frame.
-      function _leaveAnimationsTab() {
-        try {
-          animPlayer?.stop?.()
-          animPlayer?.setDisablePoses?.(false)
-          // An authoring PREVIEW survives the tab change (the panel still shows
-          // "■ Stop" at frame N, and the trajectory is loaded and paid for). The
-          // re-seek below rebuilds the design from topology, which would overwrite
-          // the previewed frame with design coordinates and leave the panel's
-          // needle lying about what is on screen. `animPlayer.stop()` above no
-          // longer releases a hold it doesn't own, so the preview really is alive.
-          if (trajectoryKeyframes?.isPreviewing?.()) return
-          const d = store.getState().currentDesign
-          const cursor = d?.feature_log_cursor ?? -1
-          const subCursor = d?.feature_log_sub_cursor ?? null
-          // Re-issue a seek with the same cursor so the backend rebuilds the
-          // design at exactly that index and the renderer subscribes pick up
-          // the canonical state. -1 (no features) and -2 (pre-F0) both round-trip
-          // through seekFeatures correctly.
-          _seekFeaturesWithDelta(cursor, subCursor)
-        } catch (err) {
-          console.warn('[left-tabs] reset on tab leave failed:', err)
-        }
-      }
-
-      // Animations → Photo defers the re-seek above instead of running it: the
-      // re-seek rebuilds the design from topology, which would drop whatever the
-      // user is trying to photograph (an oxDNA/NAMD frame, an animation pose).
-      // We owe it on the way OUT of Photo — that's what this flag remembers.
-      let _animLeaveDeferred = false
-
-      function _leaveAnimationsTabUnlessPhoto(tabId) {
-        if (preservesDisplays(tabId)) { _animLeaveDeferred = true; return }
-        _leaveAnimationsTab()
-      }
-
-      // Arriving on Animations: put a surviving authoring preview back on screen. No-op
-      // unless the user actually left one running. Fire-and-forget — the only async path
-      // is re-taking a hold the Feature Log / Plates policy dropped, and that resolves
-      // out of the still-resident cache.
-      function _enterAnimationsTab() {
-        animPanel?.resumePreview?.()?.catch?.(() => {})
-      }
-
-      function setActiveTab(tabId) {
-        if (leftPanel.classList.contains('locked-hidden')) return
-        if (!TABS.includes(tabId)) return
-        // Switching to any tab other than Photo leaves photo mode (the render
-        // override is in-memory only and otherwise stays installed). Pass
-        // skipTabRestore so the exit doesn't yank us back to feature-log — the
-        // switch below lands us on the tab the user actually clicked.
-        if (tabId !== 'photo') {
-          _photoMode.exit()
-          // Pay off a re-seek we skipped on the way into Photo. Going back to
-          // Animations cancels it instead — we never really left.
-          if (_animLeaveDeferred) {
-            _animLeaveDeferred = false
-            if (tabId !== 'scene') _leaveAnimationsTab()
-          }
-        }
-        const wasOnAnimations = !collapsed && activeTab === 'scene'
-        if (collapsed) {
-          collapsed = false
-          activeTab = tabId
-        } else if (tabId === activeTab) {
-          collapsed = true
-        } else {
-          activeTab = tabId
-        }
-        const nowOnAnimations = !collapsed && activeTab === 'scene'
-        if (wasOnAnimations && !nowOnAnimations) {
-          _leaveAnimationsTabUnlessPhoto(collapsed ? null : activeTab)
-        } else if (!wasOnAnimations && nowOnAnimations) {
-          _enterAnimationsTab()
-        }
-        _render()
-        // Idempotent — a second click on an active render-override tab only
-        // collapses the sidebar, deliberately leaving the render mode running
-        // so the user gets the full viewport.
-        if (activeTab === 'photo') _photoMode.enter()
-        window.dispatchEvent(new CustomEvent('nadoc:left-tab-change', {
-          detail: { activeTab, collapsed },
-        }))
-        _persist()
-      }
-
-      // Make `tabId` the active tab WITHOUT the click-toggle semantics
-      // (clicking the active tab collapses; this never collapses). Preserves
-      // the user's collapsed/expanded preference. Used to default a freshly
-      // loaded part to the Feature Log tab regardless of which tab was last
-      // persisted.
-      function selectTab(tabId) {
-        if (!TABS.includes(tabId)) return
-        if (activeTab === tabId) { _render(); return }
-        if (tabId !== 'photo') _photoMode.exit()
-        const wasOnAnimations = !collapsed && activeTab === 'scene'
-        activeTab = tabId
-        // Same photo/preview exemption as the click path — this used to leave
-        // unconditionally, so even selectTab('photo') tore the preview down.
-        if (wasOnAnimations) _leaveAnimationsTabUnlessPhoto(collapsed ? null : tabId)
-        else if (!collapsed && tabId === 'scene') _enterAnimationsTab()
-        _render()
-        window.dispatchEvent(new CustomEvent('nadoc:left-tab-change', {
-          detail: { activeTab, collapsed },
-        }))
-        _persist()
-      }
-
-      function toggleCollapsed() {
-        if (leftPanel.classList.contains('locked-hidden')) return
-        const wasOnAnimations = !collapsed && activeTab === 'scene'
-        collapsed = !collapsed
-        if (wasOnAnimations && collapsed) _leaveAnimationsTab()
-        else if (!collapsed && activeTab === 'scene') _enterAnimationsTab()
-        _render()
-        _persist()
-      }
-
-      // Session teardown (`_showWelcome`). The `locked-hidden` lock + `_render`
-      // above do the collapsing for EVERY tab; what this adds is dropping a
-      // render-override tab, so the override is off (idempotent — the usual
-      // close path already exited via `_resetForNewDesign`, but Close Session
-      // with no design loaded never goes there, and photo mode runs on an empty
-      // scene) and the pane isn't armed to flash back on the next design open.
-      //
-      // `collapsed` itself is deliberately NOT touched and nothing is persisted:
-      // it is the user's expanded/collapsed PREFERENCE, and `_setLeftPanelEnabled(true)`
-      // replays it when a design opens. Teardown overrides the view, not the choice.
-      function collapseForTeardown() {
-        if (RENDER_OVERRIDE_TABS.includes(activeTab)) {
-          _photoMode.exit()
-          activeTab = 'feature-log'
-        }
-        _render()
-      }
-
-      for (const id of TABS) {
-        if (btns[id]) btns[id].addEventListener('click', () => setActiveTab(id))
-      }
-      if (toggleBtn) toggleBtn.addEventListener('click', toggleCollapsed)
-
-      // Apply initial state without firing persistence.
-      _render()
-      window.dispatchEvent(new CustomEvent('nadoc:left-tab-change', {
-        detail: { activeTab, collapsed },
-      }))
-
-      // Expose the controller for assembly-mode entry/exit handlers and tests.
-      _leftSidebar = {
-        setActiveTab,
-        selectTab,
-        toggleCollapsed,
-        collapseForTeardown,
-        getActiveTab: () => activeTab,
-        isCollapsed:  () => collapsed,
-        // Re-applies visual state from internal `collapsed` + `locked-hidden`.
-        // Used by `_setLeftPanelEnabled` so unlocking the panel restores the
-        // user's persisted expanded/collapsed preference.
-        refresh: _render,
-      }
-      window.__leftSidebar = _leftSidebar
-    }
-  }
-
-  // ── Plates and tubes tab (96-well plate layout + IDT tube list) ──────────────
-  {
-    const canvasEl  = document.getElementById('plate-canvas')
-    const wrapEl    = document.getElementById('plate-canvas-wrap')
-    const toolbarEl = document.getElementById('plate-toolbar')
-    const tubesEl   = document.getElementById('plate-tubes')
-    const paneEl    = document.getElementById('tab-content-plates')
-    if (canvasEl && wrapEl && paneEl) {
-      const MOD_NAMES = {
-        cy3: 'Cy3', cy5: 'Cy5', fam: 'FAM', tamra: 'TAMRA', bhq1: 'BHQ-1',
-        bhq2: 'BHQ-2', atto488: 'ATTO488', atto550: 'ATTO550', biotin: 'Biotin',
-      }
-
-      // Strand length in nt (domain bp + loop/skip deltas) — mirrors the cadnano
-      // spreadsheet's strandLength().
-
-      const plateView = initPlateView(canvasEl, {
-        wrapEl,
-        toolbarEl,
-        getTubesContainer: () => tubesEl,
-        enableGroupMode: true,
-        onSaveLayout: (layout) => { api.savePlateLayout(layout) },
-        onStrandClick: (sid) => {
-          // Select the canonical strand ref; all linked views follow it. Empty well clears.
-          if (sid) selectionManager.selectStrand(sid)
-          else selectionManager.clearSelection()
-        },
-      })
-
-      // Build the normalized staple list from the current design + store colors.
-      function _buildRecords() {
-        const { currentDesign, currentGeometry, strandColors, strandGroups } = store.getState()
-        const design = currentDesign
-        if (!design) return { records: [], saved: null }
-        const helixById = Object.fromEntries((design.helices ?? []).map(h => [h.id, h]))
-
-        // Effective per-strand colors (hex ints): strandColors + group overrides.
-        const eff = { ...(strandColors ?? {}) }
-        for (const g of strandGroups ?? []) {
-          if (g.color) {
-            const hex = parseInt(g.color.replace('#', ''), 16)
-            for (const sid of g.strandIds) eff[sid] = hex
-          }
-        }
-        // Palette map = the SAME per-strand palette the 3D scene paints (staples
-        // with no explicit colour). Compute it directly from geometry so it never
-        // depends on the renderer being in a built state; fall back to the live
-        // controller map, then to the index-based palette (matches the scene's
-        // STAPLE_PALETTE[strand_index] formula).
-        const strandIdxOf = new Map((design.strands ?? []).map((s, i) => [s.id, i]))
-        const paletteMap = (currentGeometry && currentGeometry.length)
-          ? buildStapleColorMap(currentGeometry, design)
-          : (designRenderer.getHelixCtrl()?.getPaletteColors() ?? new Map())
-
-        // group order (array index = display order) + group id
-        const groupOf = new Map()
-        ;(strandGroups ?? []).forEach((g, i) => {
-          for (const sid of g.strandIds) if (!groupOf.has(sid)) groupOf.set(sid, { order: i, id: g.id })
-        })
-
-        // first modification per strand
-        const modOf = new Map()
-        for (const e of design.extensions ?? []) {
-          if (e.modification && !modOf.has(e.strand_id)) modOf.set(e.strand_id, e.modification)
-        }
-
-        const records = []
-        let stapleIdx = 0
-        for (const s of design.strands ?? []) {
-          if (s.strand_type !== 'staple' || s.is_reference) continue
-          stapleIdx += 1
-          // Resolve exactly as the scene's nucColor: override (strandColors +
-          // groups) wins, else the palette slot. Never falls back to a flat grey
-          // — every staple gets its scene colour.
-          let color
-          if (s.id in eff) {
-            color = hexFromInt(eff[s.id])
-          } else {
-            const pm = paletteMap.get(s.id)
-            color = (pm != null)
-              ? hexFromInt(pm)
-              : hexFromInt(PLATE_STAPLE_PALETTE[(strandIdxOf.get(s.id) ?? 0) % PLATE_STAPLE_PALETTE.length])
-          }
-          const grp = groupOf.get(s.id)
-          const mod = modOf.get(s.id) || null
-          records.push({
-            strandId:   s.id,
-            color,
-            lengthNt:   strandLengthNt(s, helixById),
-            groupId:    grp?.id ?? null,
-            groupOrder: grp ? grp.order : Infinity,
-            hasMod:     !!mod,
-            modName:    mod ? (MOD_NAMES[mod] || mod) : null,
-            sequence:   s.sequence || '',
-            name:       `S${stapleIdx}`,
-          })
-        }
-        return { records, saved: design.plate_layout ?? null }
-      }
-
-      // Refresh only when the inputs that affect the plate change — NOT when only
-      // plate_layout changes (our own saves), which would reset the view.
-      let _lastSig = null
-      function _inputsSig(design, strandColors, strandGroups) {
-        if (!design) return 'null'
-        const strands = (design.strands ?? [])
-          .filter(s => s.strand_type === 'staple' && !s.is_reference)
-          .map(s => `${s.id}:${s.color || ''}:${s.domains?.length ?? 0}`)
-        const exts = (design.extensions ?? []).map(e => `${e.strand_id}:${e.modification || ''}`)
-        return JSON.stringify([design.id, strands, exts,
-          strandGroups, Object.entries(strandColors ?? {})])
-      }
-      function _refresh() {
-        const { records, saved } = _buildRecords()
-        plateView.setData(records, saved)
-      }
-
-      // Refresh + re-fit the plates whenever the tab becomes visible.
-      const _vis = new MutationObserver(() => {
-        if (paneEl.hasAttribute('hidden')) return
-        _lastSig = _inputsSig(...(() => { const s = store.getState(); return [s.currentDesign, s.strandColors, s.strandGroups] })())
-        _refresh()
-        plateView.resetView()
-      })
-      _vis.observe(paneEl, { attributes: true, attributeFilter: ['hidden'] })
-
-      // Refresh on relevant design/color/group changes while the pane is visible.
-      store.subscribe((s) => {
-        if (paneEl.hasAttribute('hidden')) return
-        const sig = _inputsSig(s.currentDesign, s.strandColors, s.strandGroups)
-        if (sig === _lastSig) return
-        _lastSig = sig
-        _refresh()
-      })
-    }
-  }
+  initPlatesTab({ api, designRenderer, selectionManager, store })
 
   // ── Sidebar resize handles ───────────────────────────────────────────────────
   initSidebarResize({ getWorkspacePath: () => _workspacePath })
@@ -6990,85 +5420,20 @@ async function main() {
     selfSavedPaths:            _lifecycleSync.selfSavedPaths,
   })
 
-  // Populate transform fields and pivot options when the active cluster changes.
-  store.subscribe((newState, prevState) => {
-    if (newState.activeClusterId === prevState.activeClusterId) return
-    if (!newState.activeClusterId || !newState.translateRotateActive) return
-    // Group (multi-cluster) mode owns the panel itself — number boxes show the group
-    // delta and the pivot dropdown is disabled. Don't overwrite them with a
-    // single member's stored transform.
-    if (clusterGizmo.isGroupActive?.()) return
-    const cluster = newState.currentDesign?.cluster_transforms?.find(c => c.id === newState.activeClusterId)
-    if (!cluster) return
-    // Read from the gizmo's pending (pivot-rebased) transform when present so the number
-    // boxes match the pivot the gizmo actually uses; a +45/reset/typed commit then keeps
-    // position = pivot + field-translation instead of teleporting (duplex pivot bug).
-    const _pend = clusterGizmo.getPendingTransform(newState.activeClusterId)
-    const _t = _pend?.translation ?? cluster.translation
-    const _r = _pend?.rotation ?? cluster.rotation
-    const [rx, ry, rz] = quatToEulerDeg(_r)
-    _mrSetTransformValues(_t[0], _t[1], _t[2], rx, ry, rz)
-    const joints = newState.currentDesign?.cluster_joints?.filter(j => j.cluster_id === newState.activeClusterId) ?? []
-    _mrSetPivotOptions(joints, newState.activeClusterId)
-    _mrSetSelectedPivot('centroid')
-    clusterGizmo.setConstraint('centroid', null)
-  })
-
-  store.subscribe((newState, prevState) => {
-    if (!newState.translateRotateActive) return
-    if (newState.selection === prevState.selection &&
-        newState.activeInstanceId === prevState.activeInstanceId) return
-    _mrRefreshCurrentSelection()
-  })
-
-  // An armed design-mode session can acquire an individual nucleotide after M was
-  // pressed with no selection. Hand ownership to the residue gizmo at that moment.
-  store.subscribe(async (newState, prevState) => {
-    if (!newState.translateRotateActive) return
-    if (newState.selection === prevState.selection) return
-    if ((newState.selection?.items ?? []).filter(ref => ref.kind === 'base').length !== 1) return
-    if (!_nucleotideTransformTool.canActivate()) return
-    await _translateRotateTool.cancel()
-    _nucleotideTransformTool.activate()
-  })
-
-  // Selection→tool bridge: selection never activates Move/Rotate. While the tool is
-  // explicitly active (M / toolbar / context menu), a cluster click can retarget it.
-  // Logic + guards live in translate_rotate_tool.js; this is thin wiring.
-  store.subscribe((newState, prevState) => { _translateRotateTool.handleSelectionChange(newState, prevState) })
-
-  // Live multi-select bridge: keep Move/Rotate active and re-center it as a group when
-  // clusters are ctrl/shift-clicked or lassoed in/out while the tool is open.
-  store.subscribe((newState, prevState) => { _translateRotateTool.handleMultiClusterSelectionChange(newState, prevState) })
-
-  // Mutual exclusion: cancel translate/rotate when the deform tool starts.
-  store.subscribe((newState, prevState) => {
-    if (newState.deformToolActive && !prevState.deformToolActive && _translateRotateActive) {
-      _cancelTranslateRotateTool()
-    }
-  })
-
-  // Move/Rotate tool: the blue clusterGlowLayer marks the gizmo's active cluster.
-  // Plain design-mode cluster selection glows green via selection_manager, so this layer is reserved
-  // for the tool to avoid a double halo. Re-applies after geometry rebuilds.
-  store.subscribe((newState, prevState) => {
-    if (!newState.translateRotateActive) {
-      if (prevState.translateRotateActive) clusterGlowLayer.clear()
-      return
-    }
-    const activeId = newState.activeClusterId
-    if (!activeId) {
-      if (prevState.activeClusterId) clusterGlowLayer.clear()
-      return
-    }
-    // Update when active cluster changes, geometry rebuilds, or the tool just turned on.
-    if (activeId === prevState.activeClusterId &&
-        newState.currentGeometry === prevState.currentGeometry &&
-        prevState.translateRotateActive) return
-    const cluster = newState.currentDesign?.cluster_transforms?.find(c => c.id === activeId)
-    if (!cluster) { clusterGlowLayer.clear(); return }
-    const entries = _clusterBackboneEntries(cluster, newState.currentDesign)
-    clusterGlowLayer.setEntries(entries)
+  initMoveRotateSubscriptions({
+    cancelTranslateRotateTool: _cancelTranslateRotateTool,
+    clusterBackboneEntries: _clusterBackboneEntries,
+    clusterGizmo,
+    clusterGlowLayer,
+    isTranslateRotateActive: () => _translateRotateActive,
+    nucleotideTransformTool: _nucleotideTransformTool,
+    quatToEulerDeg,
+    refreshCurrentSelection: _mrRefreshCurrentSelection,
+    setPivotOptions: _mrSetPivotOptions,
+    setSelectedPivot: _mrSetSelectedPivot,
+    setTransformValues: _mrSetTransformValues,
+    store,
+    translateRotateTool: _translateRotateTool,
   })
 
   const { runScript } = createScriptRunner({
@@ -7410,143 +5775,17 @@ async function main() {
     await _atomSurface?.refetchAtomistic()
   })
 
-  // ── Debug > Show LOD HUD ────────────────────────────────────────────────────
-  // Toggles the on-canvas LOD overlay (per-source bucket counts + pixel-size
-  // range + thresholds).  The HUD itself is created/dismissed by
-  // `__NADOC_DBG__.toggleLodHud()` — exposed only when the shared assembly
-  // renderer is active (`localStorage.NADOC_SHARED_RENDERER = 'true'`).
-  document.getElementById('menu-debug-lod-hud')?.addEventListener('click', function () {
-    if (!window.__NADOC_DBG__?.toggleLodHud) {
-      showToast(
-        'Shared renderer not active — set localStorage.NADOC_SHARED_RENDERER = "true" then reload.',
-        { severity: 'warn' },
-      )
-      return
-    }
-    window.__NADOC_DBG__.toggleLodHud()
-    const isOn = !!window.__NADOC_LOD_HUD__
-    this.textContent = isOn ? 'Hide LOD HUD' : 'Show LOD HUD'
-  })
-
-  // ── Debug > Hull Cluster Debug ────────────────────────────────────────────────
-  // Colors each hull-prism cluster distinctly, labels it with its dsDNA bp
-  // size-% of the whole origami, and shows clusters below the size threshold
-  // faintly — so the exclusion threshold can be tuned visually. Only meaningful
-  // in the Hull Prism representation (View → Representation → Hull Prism).
-  let _hullClusterDebugOn = false
-  document.getElementById('menu-debug-hull-cluster')?.addEventListener('click', function () {
-    _hullClusterDebugOn = !!jointRenderer?.setHullClusterDebug(!_hullClusterDebugOn)
-    this.textContent = _hullClusterDebugOn ? 'Hide Hull Cluster Debug' : 'Show Hull Cluster Debug'
-    if (_hullClusterDebugOn) {
-      showToast('Hull Cluster Debug on — visible in the Hull Prism representation (View → Representation).',
-        { severity: 'info' })
-    }
-  })
-
-  // ── Debug > Render diagnostics (wireframe / double-side / opaque / inspect / camera) ──
-  // Classifiers for "weird mesh" artifacts, applied to every material under the
-  // design root (originals saved in material.userData._dbgOrig, restored when the
-  // flag clears). Re-toggle after a full geometry rebuild (rep switch keeps meshes).
-  //   Wireframe   → reveals geometry (open ends, stray caps, degenerate faces).
-  //   Double-Side → if missing parts reappear, it was back-face culling.
-  //   Opaque      → if it snaps right, it was transparent depth-sort (transparent@opacity1).
-  let _dbgWire = false, _dbgDouble = false, _dbgOpaque = false
-  function _applyRenderDebug() {
-    const root = designRenderer.getHelixCtrl()?.root
-    if (!root) { showToast('No design geometry to debug.', { severity: 'error' }); return }
-    root.traverse(o => {
-      const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : []
-      for (const m of mats) {
-        if (m.userData._dbgOrig === undefined)
-          m.userData._dbgOrig = { wireframe: m.wireframe, side: m.side, transparent: m.transparent }
-        const orig = m.userData._dbgOrig
-        m.wireframe   = _dbgWire   ? true             : orig.wireframe
-        m.side        = _dbgDouble ? THREE.DoubleSide : orig.side
-        m.transparent = _dbgOpaque ? false            : orig.transparent
-        m.needsUpdate = true
-      }
-    })
-  }
-  document.getElementById('menu-debug-wireframe')?.addEventListener('click', () => {
-    _dbgWire = !_dbgWire; _setMenuToggle('menu-debug-wireframe', _dbgWire); _applyRenderDebug()
-  })
-  document.getElementById('menu-debug-doubleside')?.addEventListener('click', () => {
-    _dbgDouble = !_dbgDouble; _setMenuToggle('menu-debug-doubleside', _dbgDouble); _applyRenderDebug()
-  })
-  document.getElementById('menu-debug-opaque')?.addEventListener('click', () => {
-    _dbgOpaque = !_dbgOpaque; _setMenuToggle('menu-debug-opaque', _dbgOpaque); _applyRenderDebug()
-  })
-  document.getElementById('menu-debug-copy-camera')?.addEventListener('click', () => {
-    const p = camera.position, t = controls.target
-    const txt = `${p.x.toFixed(3)},${p.y.toFixed(3)},${p.z.toFixed(3)},${t.x.toFixed(3)},${t.y.toFixed(3)},${t.z.toFixed(3)}`
-    navigator.clipboard?.writeText(txt).catch(() => {})
-    showToast('Camera copied (pos.xyz,target.xyz): ' + txt, { duration: 7000 })
-  })
-
-  // Inspect Mesh: when on, a canvas click reports the hit mesh's material/geometry
-  // props (toast + console.table) — removes ambiguity about what's being rendered.
-  let _dbgInspect = false
-  const _dbgRay = new THREE.Raycaster()
-  const _dbgNdc = new THREE.Vector2()
-  const _DBG_SIDE = { 0: 'FrontSide', 1: 'BackSide', 2: 'DoubleSide' }
-  document.getElementById('menu-debug-inspect')?.addEventListener('click', () => {
-    _dbgInspect = !_dbgInspect; _setMenuToggle('menu-debug-inspect', _dbgInspect)
-    showToast(_dbgInspect ? 'Inspect Mesh ON — click a mesh to report it (console.table for full props).' : 'Inspect Mesh off')
-  })
-  canvas.addEventListener('click', (e) => {
-    if (!_dbgInspect) return
-    const root = designRenderer.getHelixCtrl()?.root
-    if (!root) return
-    const r = canvas.getBoundingClientRect()
-    _dbgNdc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
-    _dbgRay.setFromCamera(_dbgNdc, camera)
-    const hit = _dbgRay.intersectObject(root, true).find(h => h.object.visible)
-    if (!hit) { showToast('Inspect: nothing under cursor'); return }
-    const o = hit.object, m = Array.isArray(o.material) ? o.material[0] : o.material
-    const info = {
-      name: o.name || '(unnamed)', objType: o.type,
-      instanced: !!o.isInstancedMesh, count: o.isInstancedMesh ? o.count : undefined,
-      geometry: o.geometry?.type, indexed: !!o.geometry?.index, vertices: o.geometry?.attributes?.position?.count,
-      material: m?.type, side: _DBG_SIDE[m?.side], transparent: m?.transparent, opacity: m?.opacity,
-      depthWrite: m?.depthWrite, wireframe: m?.wireframe, frustumCulled: o.frustumCulled,
-    }
-    console.table(info)
-    showToast(`${info.name} · ${info.geometry} · ${info.material} · ${info.side} · transp=${info.transparent} op=${info.opacity} · fc=${info.frustumCulled}`, { duration: 9000 })
-  })
-
-  // ── Debug > MrDNA Round-Trip Test ────────────────────────────────────────────
-  document.getElementById('menu-debug-mrdna-roundtrip')?.addEventListener('click', async () => {
-    const { currentDesign } = store.getState()
-    if (!currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
-
-    const btn = document.getElementById('menu-debug-mrdna-roundtrip')
-    const origText = btn.textContent
-    btn.textContent = 'Running… (may take ~10 s)'
-    btn.disabled = true
-
-    try {
-      const r = await fetch('/api/design/debug/mrdna-roundtrip', { headers: docHeaders() })
-      if (!r.ok) {
-        const msg = await r.text()
-        showToast(`Round-trip test failed:\n${msg}`, { severity: 'error' })
-        return
-      }
-      const blob = await r.blob()
-      const cd   = r.headers.get('Content-Disposition') || ''
-      const fnMatch = cd.match(/filename="([^"]+)"/)
-      const filename = fnMatch ? fnMatch[1] : 'roundtrip.zip'
-      const url = URL.createObjectURL(blob)
-      const a   = document.createElement('a')
-      a.href     = url
-      a.download = filename
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch (err) {
-      showToast(`Round-trip test error: ${err.message}`, { severity: 'error' })
-    } finally {
-      btn.textContent = origText
-      btn.disabled = false
-    }
+  initDebugMenu({
+    THREE,
+    camera,
+    canvas,
+    controls,
+    designRenderer,
+    docHeaders,
+    getJointRenderer: () => jointRenderer,
+    setMenuToggle: _setMenuToggle,
+    showToast,
+    store,
   })
 
   // ── Debug overlay (?debug=1) ─────────────────────────────────────────────────
@@ -7638,771 +5877,54 @@ async function main() {
     requestAnimationFrame(tick)
   })()
 
-  // ── Test helpers (dev only — used by Playwright e2e tests) ───────────────
+  // Dev-only Playwright facade; implementation lives outside the composition root.
   if (import.meta.env.DEV) {
-    window.__nadocTest = {
+    installTestApi({
       scene,
       store,
-      /** Automation API for persisted visibility operations. These drive the
-       * exact controller used by context menus and the spreadsheet. */
-      visibility: {
-        hideStrands: (strandIds) => visibilityController.hide({ strandIds }),
-        showStrands: (strandIds) => visibilityController.show({ strandIds }),
-        unhideAll: () => visibilityController.unhideAll(),
-        undo: () => visibilityController.undo(),
-        redo: () => visibilityController.redo(),
-        hiddenBaseKeys: () => [...visibilityController.getHiddenBaseKeys()],
-        flush: () => visibilityController.flushPersistence(),
-        strandRenderStats(strandId) {
-          const scale = new THREE.Vector3(), pos = new THREE.Vector3(), quat = new THREE.Quaternion()
-          const stats = { beads: 0, visibleBeads: 0, cones: 0, visibleCones: 0, slabs: 0, visibleSlabs: 0 }
-          for (const e of designRenderer.getBackboneEntries()) {
-            if (e.nuc?.strand_id !== strandId) continue
-            stats.beads++
-            const m = new THREE.Matrix4(); e.instMesh.getMatrixAt(e.id, m); m.decompose(pos, quat, scale)
-            if (scale.lengthSq() > 1e-10) stats.visibleBeads++
-          }
-          for (const e of designRenderer.getConeEntries()) {
-            if (e.strandId !== strandId) continue
-            stats.cones++
-            const m = new THREE.Matrix4(); e.instMesh.getMatrixAt(e.id, m); m.decompose(pos, quat, scale)
-            if (Math.abs(scale.x) > 1e-5 || Math.abs(scale.z) > 1e-5) stats.visibleCones++
-          }
-          for (const e of designRenderer.getSlabEntries()) {
-            if (e.nuc?.strand_id !== strandId) continue
-            stats.slabs++
-            const m = new THREE.Matrix4(); e.instMesh.getMatrixAt(e.id, m); m.decompose(pos, quat, scale)
-            if (scale.lengthSq() > 1e-10) stats.visibleSlabs++
-          }
-          return stats
-        },
-      },
-      setRepresentation: (repr) => _setRepresentation(repr),
-      controlsEnabled: () => controls.enabled,
-      poisonCameraForTest() {
-        camera.position.set(NaN, NaN, NaN)
-        controls.target.set(NaN, NaN, NaN)
-      },
-      viewerDiagnostic() {
-        const canvasRect = canvas.getBoundingClientRect()
-        const hit = document.elementFromPoint(
-          canvasRect.left + canvasRect.width / 2,
-          canvasRect.top + canvasRect.height / 2,
-        )
-        const helixCtrl = designRenderer.getHelixCtrl()
-        return {
-          url: location.href,
-          designId: store.getState().currentDesign?.id ?? null,
-          geometryCount: store.getState().currentGeometry?.length ?? 0,
-          backboneEntries: designRenderer.getBackboneEntries?.().length ?? 0,
-          slabEntries: designRenderer.getSlabEntries?.().length ?? 0,
-          hiddenBaseKeys: [...visibilityController.getHiddenBaseKeys()],
-          cgRootExists: Boolean(helixCtrl?.root),
-          cgRootVisible: Boolean(helixCtrl?.root?.visible),
-          controlsEnabled: controls.enabled,
-          camera: {
-            position: camera.position.toArray(), target: controls.target.toArray(),
-            near: camera.near, far: camera.far, fov: camera.fov,
-          },
-          canvas: {
-            width: canvas.width, height: canvas.height,
-            cssWidth: canvasRect.width, cssHeight: canvasRect.height,
-          },
-          webglContextLost: renderer.getContext().isContextLost(),
-          centerHit: hit ? {
-            tag: hit.tagName, id: hit.id, classes: hit.className,
-            pointerEvents: getComputedStyle(hit).pointerEvents,
-          } : null,
-          welcomeHidden: document.getElementById('welcome-screen')?.classList.contains('hidden'),
-          lastError: store.getState().lastError,
-        }
-      },
-      /** Anchors: the oxDNA card + the purple-halo sprite count, so a console/e2e check can
-       *  assert "added an anchor → it glows" without a field or a launched job. */
-      anchors: {
-        card: oxdnaAnchorsSetup,
-        selection: _anchorSelectionState,
-        glowCount: () => designRenderer.anchorGlowCount(),
-      },
-      /** Camera-pose count of the loaded design (build-primitives readiness check). */
-      getDesignCameraPoseCount: () => (store.getState().currentDesign?.camera_poses?.length ?? 0),
-      /** Render the loaded design through its saved poses → {gifBase64, posterDataUrl}.
-       *  Used by the offline build-primitives pipeline; see scene/primitive_preview_capture.js. */
-      capturePrimitivePreview: async (opts = {}) => {
-        const { capturePosesGif } = await import('./scene/primitive_preview_capture.js')
-        const poses = store.getState().currentDesign?.camera_poses ?? []
-        return capturePosesGif({ renderer, scene, camera, controls, poses, ...opts })
-      },
-      getAtomisticRenderer: () => atomisticRenderer,
-      isCGVisible: () => !!(designRenderer.getHelixCtrl()?.root?.visible),
-      /** Live rendered crossover-insert geometry for Full/atomistic registration probes.
-       * Reads InstancedMesh matrices on both sides; source placement/API coordinates are
-       * deliberately not consulted. */
-      getRenderedXoverExtraGeometry() {
-        const out = {}
-        const atomsByKey = new Map()
-        atomisticRenderer.visitAtoms((atom, pos) => {
-          if (atom.crossover_id == null || atom.extra_base_k == null) return
-          const key = `${atom.crossover_id}:${atom.extra_base_k}`
-          if (!atomsByKey.has(key)) atomsByKey.set(key, [])
-          atomsByKey.get(key).push({ name: atom.name, element: atom.element, pos: pos.toArray() })
-        })
-        for (const entry of designRenderer.getXoverBeadEntries?.() ?? []) {
-          const target = { helix_id: '__xb__', crossover_id: entry.xoId, k: entry.simK }
-          const info = designRenderer.xoverResidueInfo?.(target)
-          if (!info) continue
-          const bead = new THREE.Vector3(), slab = new THREE.Vector3()
-          const slabQ = new THREE.Quaternion(), slabScale = new THREE.Vector3()
-          const connector = new THREE.Vector3(), connectorQ = new THREE.Quaternion()
-          const connectorScale = new THREE.Vector3()
-          info.beadMatrix.decompose(bead, new THREE.Quaternion(), new THREE.Vector3())
-          info.slabMatrix.decompose(slab, slabQ, slabScale)
-          info.slabConnectorMatrix?.decompose(connector, connectorQ, connectorScale)
-          const key = `${entry.xoId}:${entry.simK}`
-          out[key] = {
-            crossoverId: entry.xoId, k: entry.simK,
-            bead: bead.toArray(), slab: slab.toArray(),
-            pointA: info.arcData?.pointA?.toArray() ?? null,
-            pointB: info.arcData?.pointB?.toArray() ?? null,
-            axisA: info.arcData?.nucA?.axis_tangent ?? null,
-            axisB: info.arcData?.nucB?.axis_tangent ?? null,
-            slabQuaternion: slabQ.toArray(), slabScale: slabScale.toArray(),
-            slabConnector: info.slabConnectorMatrix ? connector.toArray() : null,
-            slabConnectorQuaternion: info.slabConnectorMatrix ? connectorQ.toArray() : null,
-            slabConnectorScale: info.slabConnectorMatrix ? connectorScale.toArray() : null,
-            atoms: atomsByKey.get(key) ?? [],
-          }
-        }
-        return out
-      },
-      /** Return cone entries (crossover connections) with screen {x, y} midpoints. */
-      getConeScreenPositions() {
-        const rect = canvas.getBoundingClientRect()
-        const coneEntries = designRenderer.getConeEntries()
-        const out = []
-        for (const e of coneEntries) {
-          if (!e.fromNuc || !e.toNuc) continue
-          const fp = e.fromNuc.backbone_position
-          const tp = e.toNuc.backbone_position
-          const mid = new THREE.Vector3(
-            (fp[0] + tp[0]) / 2, (fp[1] + tp[1]) / 2, (fp[2] + tp[2]) / 2,
-          )
-          const ndc = mid.clone().project(camera)
-          out.push({
-            x: rect.left + (ndc.x  *  0.5 + 0.5) * rect.width,
-            y: rect.top  + (-ndc.y * 0.5 + 0.5) * rect.height,
-            fromHelixId: e.fromNuc.helix_id,
-            toHelixId:   e.toNuc.helix_id,
-          })
-        }
-        return out
-      },
-      /** Screen {x,y} centres of up to `maxN` visible, on-screen backbone beads.
-       *  Reusable primitive for gesture e2e tests (e.g. measurement_tool.spec.js). */
-      getBackboneBeadScreenPositions(maxN = 12) {
-        const rect = canvas.getBoundingClientRect()
-        let mesh = null
-        scene.traverse(o => { if (o.isInstancedMesh && o.name === 'backboneSpheres' && o.visible && o.count > 0) mesh = o })
-        if (!mesh) return []
-        const m = new THREE.Matrix4(), v = new THREE.Vector3()
-        const out = []
-        const n = Math.min(maxN, mesh.count)
-        for (let i = 0; i < n; i++) {
-          mesh.getMatrixAt(i, m)
-          v.setFromMatrixPosition(m).applyMatrix4(mesh.matrixWorld)
-          const ndc = v.clone().project(camera)
-          if (ndc.z > 1 || Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) continue  // behind camera / off-screen
-          out.push({
-            x: rect.left + (ndc.x  *  0.5 + 0.5) * rect.width,
-            y: rect.top  + (-ndc.y * 0.5 + 0.5) * rect.height,
-          })
-        }
-        return out
-      },
-      /** Visible overhang bead centres with canonical overhang identity. */
-      getOverhangBeadScreenPositions() {
-        const rect = canvas.getBoundingClientRect()
-        const out = []
-        const v = new THREE.Vector3(), m = new THREE.Matrix4()
-        for (const e of designRenderer.getBackboneEntries?.() ?? []) {
-          const overhangId = e.nuc?.overhang_id
-          if (!overhangId || !e.instMesh?.visible) continue
-          e.instMesh.getMatrixAt(e.id, m)
-          v.setFromMatrixPosition(m).applyMatrix4(e.instMesh.matrixWorld)
-          const ndc = v.clone().project(camera)
-          if (ndc.z > 1 || Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) continue
-          out.push({
-            id: overhangId,
-            x: rect.left + (ndc.x * 0.5 + 0.5) * rect.width,
-            y: rect.top + (-ndc.y * 0.5 + 0.5) * rect.height,
-          })
-        }
-        return out
-      },
-      /** Visible cluster-level click candidates, resolved by selection_manager policy. */
-      getClusterBeadScreenPositions() {
-        const rect = canvas.getBoundingClientRect()
-        const out = []
-        const v = new THREE.Vector3(), m = new THREE.Matrix4()
-        for (const e of designRenderer.getBackboneEntries?.() ?? []) {
-          if (!e.instMesh?.visible) continue
-          const id = selectionManager.clusterIdForNucleotide?.(e.nuc)
-          if (!id) continue
-          e.instMesh.getMatrixAt(e.id, m)
-          v.setFromMatrixPosition(m).applyMatrix4(e.instMesh.matrixWorld)
-          const ndc = v.clone().project(camera)
-          if (ndc.z > 1 || Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) continue
-          out.push({
-            id,
-            x: rect.left + (ndc.x * 0.5 + 0.5) * rect.width,
-            y: rect.top + (-ndc.y * 0.5 + 0.5) * rect.height,
-          })
-        }
-        return out
-      },
-      /** Live matrix probe for the selected standard nucleotide's bead/slab pair. */
-      getSelectedResidueArrangement() {
-        const keys = (store.getState().selection?.items ?? [])
-          .filter(ref => ref.kind === 'base').map(ref => ref.key)
-        if (keys.length !== 1) return null
-        const target = parseBaseKey(keys[0])
-        const info = designRenderer.residueTransformInfo?.(target)
-        if (!info?.slabMatrix) return null
-        const bead = new THREE.Vector3().setFromMatrixPosition(info.beadMatrix)
-        const slab = new THREE.Vector3().setFromMatrixPosition(info.slabMatrix)
-        const savedPose = store.getState().currentDesign?.nucleotide_transforms?.find(t =>
-          t.kind === 'base' && t.helix_id === target.helix_id && t.bp_index === target.bp_index &&
-          t.direction === target.direction && (t.copy_k ?? 0) === (target.copy ?? 0))
-        return {
-          key: keys[0], bead: bead.toArray(), slab: slab.toArray(),
-          offset: slab.clone().sub(bead).toArray(), distance: slab.distanceTo(bead),
-          independentPose: !!info.slab?.independentPose,
-          savedDisplayOffset: savedPose?.display_slab_offset ?? null,
-        }
-      },
-      /** Live bead-to-slab offsets for every rendered standard nucleotide. */
-      getResidueArrangements() {
-        const out = {}
-        for (const entry of designRenderer.getBackboneEntries?.() ?? []) {
-          const nuc = entry.nuc
-          if (!nuc?.helix_id || nuc.bp_index == null || !nuc.direction) continue
-          const target = {
-            helix_id: nuc.helix_id, bp_index: nuc.bp_index,
-            direction: nuc.direction, copy: nuc.copy_k ?? nuc.copy ?? 0,
-          }
-          const info = designRenderer.residueTransformInfo?.(target)
-          if (!info?.beadMatrix || !info?.slabMatrix) continue
-          const bead = new THREE.Vector3().setFromMatrixPosition(info.beadMatrix)
-          const slab = new THREE.Vector3().setFromMatrixPosition(info.slabMatrix)
-          const key = `${target.helix_id}:${target.bp_index}:${target.direction}:${target.copy}`
-          out[key] = { offset: slab.sub(bead).toArray() }
-        }
-        return out
-      },
-      getNucleotideTransformScreenState() {
-        const state = _nucleotideTransformTool.debugState()
-        if (!state.pivot) return state
-        const rect = canvas.getBoundingClientRect()
-        const p = new THREE.Vector3(...state.pivot).project(camera)
-        return {
-          ...state,
-          screenPivot: {
-            x: rect.left + (p.x * 0.5 + 0.5) * rect.width,
-            y: rect.top + (-p.y * 0.5 + 0.5) * rect.height,
-          },
-        }
-      },
-      /** Screen {x,y} + strand-end identity of every visible 5′/3′ terminus bead.
-       *  Gesture e2e for the End-level multi-select → forced-ligation ('x') flow:
-       *  lets a spec pick a valid opposite-polarity pair on different strands and
-       *  click each end deterministically. */
-      getEndBeadScreenPositions() {
-        const rect = canvas.getBoundingClientRect()
-        const out = []
-        const v = new THREE.Vector3(), m = new THREE.Matrix4()
-        for (const e of designRenderer.getBackboneEntries?.() ?? []) {
-          const nuc = e.nuc
-          if (!nuc?.strand_id) continue
-          if (!nuc.is_five_prime && !nuc.is_three_prime) continue
-          if (!e.instMesh?.visible) continue
-          e.instMesh.getMatrixAt(e.id, m)
-          v.setFromMatrixPosition(m).applyMatrix4(e.instMesh.matrixWorld)
-          const ndc = v.clone().project(camera)
-          if (ndc.z > 1 || Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) continue
-          out.push({
-            x: rect.left + (ndc.x  *  0.5 + 0.5) * rect.width,
-            y: rect.top  + (-ndc.y * 0.5 + 0.5) * rect.height,
-            strand_id: nuc.strand_id,
-            helix_id:  nuc.helix_id,
-            bp_index:  nuc.bp_index,
-            direction: nuc.direction,
-            is_five_prime:  !!nuc.is_five_prime,
-            is_three_prime: !!nuc.is_three_prime,
-          })
-        }
-        return out
-      },
-      /** Screen {x,y} + identity of each visible blunt-end ring (gesture e2e for
-       *  blunt-end / primitive-on-face flows). */
-      getDomainEndScreenPositions: () =>
-        bluntEnds.getEndScreenInfo?.(camera, canvas.getBoundingClientRect()) ?? [],
-      /** Slice-plane mode snapshot (visible / placement / continuation). */
-      getSliceState: () => ({
-        visible: slicePlane.isVisible(),
-        placement: slicePlane.isPlacement(),
-        armed: slicePlane.isArmed(),
-        continuation: slicePlane.isContinuation(),
-        deformed: slicePlane.isDeformed(),
-      }),
-      /** Deterministic counterpart of Blunt end → Extrude for large-scene e2e tests.
-       *  (Software-WebGL ring raycasts are too slow/flaky to be the recommendation oracle.) */
-      openExtrudeAtEnd({ helixId, diskBp, openSide = 1, plane = 'XY' }) {
-        _extrudePanel.activate('continuation', { plane })
-        slicePlane.showAtEnd(helixId, diskBp, true, { defaultDirSign: openSide })
-        const helix = store.getState().currentDesign?.helices?.find(h => h.id === helixId)
-        if (helix?.grid_pos) slicePlane.selectCellForTest(...helix.grid_pos)
-      },
-      /** Count of Alt-picked measurement beads (the measurement tool's input). */
-      getCtrlBeadCount: () => selectionManager.getCtrlBeads?.().length ?? 0,
-      /** Count of committed canonical End refs (never measurement anchors). */
-      getSelectedEndCount: () => (store.getState().selection?.items ?? []).filter(ref => ref.kind === 'end').length,
-      /** Base-level pool — app-wide base keys (scene/base_ref.js). */
-      getSelectedBaseKeys: () => selectionManager.getSelectedBaseKeys?.() ?? [],
-      /** Every base-level pick candidate as {key, family} — proves a bead family is reachable. */
-      getBaseCandidates: () => selectionManager.getBaseCandidates?.() ?? [],
-      /** Canonical mature selection snapshot (renderer-independent, JSON-safe). */
-      getCanonicalSelection: () => structuredClone(store.getState().selection),
-      /** Multi-selection pools (cluster multi-select gesture e2e). */
-      getMultiSelection: () => ({
-        clusterIds: (store.getState().selection?.items ?? [])
-          .filter(ref => ref.kind === 'cluster').map(ref => ref.id),
-        strandIds:  (store.getState().selection?.items ?? [])
-          .filter(ref => ref.kind === 'strand').map(ref => ref.id),
-      }),
-      /** Drill-v2 engaged selection level ('default'|'cluster'|'strand'|'domain'|'end'|'xover'|'base'). */
-      getSelectionLevel: () => selectionManager.getSelectionLevel?.() ?? 'default',
-
-      // ── Robust gesture harness (MapGrab-style controller) ──────────────────
-      // pickBeadAt runs the REAL raycast (same camera + bead meshes the selection
-      // manager uses) against client (viewport) coords, returning the frontmost
-      // bead hit or null. This is occlusion-correct — it answers "what would a
-      // click here actually hit?" — unlike projecting a point and hoping.
-      pickBeadAt(clientX, clientY) {
-        const rect = canvas.getBoundingClientRect()
-        const ndc = new THREE.Vector2(
-          ((clientX - rect.left) / rect.width) * 2 - 1,
-          -((clientY - rect.top) / rect.height) * 2 + 1,
-        )
-        const ray = new THREE.Raycaster()
-        ray.setFromCamera(ndc, camera)
-        const entries = designRenderer.getBackboneEntries?.() ?? []
-        const meshes = [...new Set(entries.map(e => e.instMesh))].filter(m => m && m.visible)
-        if (!meshes.length) return null
-        const hits = ray.intersectObjects(meshes)
-        if (!hits.length) return null
-        const hit = hits[0]
-        const entry = entries.find(e => e.instMesh === hit.object && e.id === hit.instanceId)
-        if (!entry) return null
-        return {
-          instanceId: hit.instanceId,
-          strand_id: entry.nuc?.strand_id, helix_id: entry.nuc?.helix_id,
-          bp_index: entry.nuc?.bp_index, direction: entry.nuc?.direction,
-        }
-      },
-      /** Cluster identity under a client point using the same front-most bead raycast. */
-      pickClusterAt(clientX, clientY) {
-        const rect = canvas.getBoundingClientRect()
-        const ray = new THREE.Raycaster()
-        ray.setFromCamera(new THREE.Vector2(
-          ((clientX - rect.left) / rect.width) * 2 - 1,
-          -((clientY - rect.top) / rect.height) * 2 + 1,
-        ), camera)
-        const entries = designRenderer.getBackboneEntries?.() ?? []
-        const meshes = [...new Set(entries.map(e => e.instMesh))].filter(mesh => mesh?.visible)
-        const hit = ray.intersectObjects(meshes)[0]
-        if (!hit) return null
-        const entry = entries.find(e => e.instMesh === hit.object && e.id === hit.instanceId)
-        return entry?.nuc ? selectionManager.clusterIdForNucleotide?.(entry.nuc) ?? null : null
-      },
-
-      // ── Assembly gesture harness (mirrors the design-view hooks above) ─────
-      // Used by e2e/helpers/scene_harness.js to validate the assembly canvas
-      // pointer handlers (_onAssemblyPointerDown / _onAssemblyClick) — part
-      // selection, group click-through, joint pick. Dev-only, never shipped.
-
-      /** Occlusion-correct "which instance is front-most at this client point?" — the
-       *  REAL pick (same NDC + camera the click handler uses). null if nothing hit.
-       *  This is the identity oracle the gesture harness scans + clicks through. */
-      pickAssemblyInstanceAt(clientX, clientY) {
-        const ndc = clientToNdc(clientX, clientY, canvas.getBoundingClientRect())
-        const hit = assemblyRenderer.pickInstance?.(ndc, camera)
-        return hit ? { id: hit.id } : null
-      },
-      /** Selection-state oracles the retry loops assert against. */
-      getActiveInstanceId: () => store.getState().activeInstanceId ?? null,
-      getMultiSelectedInstanceIds: () => store.getState().multiSelectedInstanceIds ?? [],
-      getActiveGroupId:    () => store.getState().activeGroupId ?? null,
-      isAssemblyActive:    () => !!store.getState().assemblyActive,
-      /** Arm the part-joint cluster drag (Priority 2b in _onAssemblyPointerDown):
-       *  set the selected cluster so a subsequent pointer-down on the instance
-       *  starts a cluster rotation. This is the gesture's selection PREREQUISITE
-       *  (normally a cluster re-click / panel select); the ring DRAG itself stays
-       *  the real gesture under test. */
-      selectAssemblyClusterForTest(instanceId, clusterId) {
+      visibilityController,
+      designRenderer,
+      _setRepresentation,
+      controls,
+      camera,
+      canvas,
+      renderer,
+      oxdnaAnchorsSetup,
+      _anchorSelectionState,
+      atomisticRenderer,
+      selectionManager,
+      _nucleotideTransformTool,
+      bluntEnds,
+      slicePlane,
+      _extrudePanel,
+      assemblyRenderer,
+      selectAssemblyClusterForTest: (instanceId, clusterId) => {
         _selectedAssemblyCluster = { instanceId, clusterId }
       },
-      /** Pending (uncommitted) part-joint rotations recorded by _onAssemblyDragUp.
-       *  The observable for the part-joint drag gesture: each entry's joint_value
-       *  is the rotated angle. */
-      getAssemblyPendingPartJoints() {
-        return [..._assemblyPendingPartJoints.entries()].map(([key, v]) => ({
-          key, jointValue: v?.body?.joint_value ?? null,
-        }))
-      },
-      /** Pending (uncommitted) PRIMARY instance transforms recorded by the
-       *  Move/Rotate tool — both the panel-input path (_mrCommitInputs →
-       *  _queueAssemblyPrimaryCommit) and the gizmo onCommit callback feed the
-       *  same `_assemblyPendingTransforms` map. The observable the move-tool
-       *  gate asserts against: one entry per moved instance, with the matrix's
-       *  translation column so a test can check the move actually landed.
-       *  Distinct from getAssemblyPendingPartJoints (which is joint rotation). */
-      getAssemblyPendingTransforms() {
-        return [..._assemblyPendingTransforms.entries()].map(([instanceId, mat]) => ({
-          instanceId,
-          translation: mat ? [mat.elements[12], mat.elements[13], mat.elements[14]] : null,
-        }))
-      },
-      /** Activate the assembly Move/Rotate tool on the currently-active instance
-       *  (the real entry point — same fn the right-click "Move/Rotate" menu item
-       *  and the toolbar button call). Requires an instance already selected.
-       *  Returns the resulting translateRotateActive flag so the gate can assert
-       *  the tool armed. Async — the gizmo attach awaits a pivot refresh. */
-      async activateAssemblyMoveTool() {
-        await _activateTranslateRotateTool()
-        return !!store.getState().translateRotateActive
-      },
-      /** Activate the DESIGN-mode Move/Rotate tool on a specific cluster (the real
-       *  entry point — same fn the Rotate button / cluster-row click call, with the
-       *  cluster pre-targeted). Returns the pivot-select's option values so a gate
-       *  can assert the duplex root options appear. Used by the duplex rotation-point
-       *  e2e (pivot dropdown must hold a non-centroid selection across the round-trip). */
-      async activateDesignMoveTool(clusterId) {
-        store.setState({ activeClusterId: clusterId })
-        await _activateTranslateRotateTool(clusterId)
-        const sel = document.getElementById('mr-pivot-sel')
-        return {
-          active: !!store.getState().translateRotateActive,
-          pivotOptions: sel ? [...sel.options].map(o => o.value) : [],
-          pivotValue: sel?.value ?? null,
-        }
-      },
-      /** Read the current Move/Rotate pivot-select {value, options}. The observable
-       *  for the "dropdown holds a root pivot" gate. */
-      getMoveRotatePivotState() {
-        const sel = document.getElementById('mr-pivot-sel')
-        return {
-          value: sel?.value ?? null,
-          options: sel ? [...sel.options].map(o => o.value) : [],
-        }
-      },
-      /** Move/Rotate gizmo geometry for a cluster: the rotation pivot the gizmo uses,
-       *  the world position where the gizmo HANDLES render, and the cluster's current
-       *  bead centroid (rendered positions). Lets an e2e assert the gizmo sits at its
-       *  pivot and that a +45° step rotates the beads about that pivot. */
-      getClusterGizmoState(clusterId) {
-        const design = store.getState().currentDesign
-        const cluster = design?.cluster_transforms?.find(c => c.id === clusterId)
-        const entries = cluster ? _clusterBackboneEntries(cluster, design) : []
-        let cx = 0, cy = 0, cz = 0
-        for (const e of entries) { cx += e.pos.x; cy += e.pos.y; cz += e.pos.z }
-        const n = entries.length || 1
-        return {
-          pivot:      clusterGizmo.getPivot?.() ?? null,
-          gizmoPos:   clusterGizmo.getGizmoWorldPosition?.() ?? null,
-          beadCount:  entries.length,
-          beadCentroid: [cx / n, cy / n, cz / n],
-          beads:      entries.map(e => [e.pos.x, e.pos.y, e.pos.z]),
-        }
-      },
-      /** Enter assembly mode on the doc's current server assembly. The 'a'
-       *  toggle was removed (real entry is opening/creating a .nass); this
-       *  mirrors that path's two steps — fetch into currentAssembly, then
-       *  _enterAssemblyMode (which attaches the canvas pointer handlers). */
-      async enterAssemblyMode() {
-        await api.getAssembly()
-        _enterAssemblyMode()
-      },
-      /** Exit assembly mode (flips assemblyActive → false, firing the
-       *  subscriber's tear-down: gizmo detach, renderer dispose, multi-box
-       *  dispose, listener removal). Mirrors the real close/new-doc path's
-       *  call to _exitAssemblyMode; used by e2e to exercise the cleanup. */
-      exitAssemblyMode() {
-        _exitAssemblyMode()
-      },
-      /** Deterministically frame the camera on the assembly's RENDERED geometry
-       *  (the actual instance meshes, not their transform origins — the rod body
-       *  is offset from a part's local origin). The auto-fit relies on the
-       *  renderer's bounding box, which is empty for these instances and fires
-       *  late, leaving the parts off-screen / under a side panel. Returns false
-       *  if no instance geometry is in the scene yet. */
-      frameAssemblyForTest() {
-        const bbox = new THREE.Box3()
-        let any = false
-        scene.traverse(o => {
-          if (o.userData?.assemblyInstance) {
-            o.updateWorldMatrix(true, true)
-            const b = new THREE.Box3().setFromObject(o)
-            if (!b.isEmpty() && isFinite(b.min.x) && isFinite(b.max.x)) { bbox.union(b); any = true }
-          }
-        })
-        if (!any) return false
-        const center = bbox.getCenter(new THREE.Vector3())
-        const size = bbox.getSize(new THREE.Vector3())
-        // View the broad face: place the camera dominantly along the SMALLEST
-        // bbox axis (the parts can be thin ribbons; an edge-on view makes the
-        // raycast graze past them and pick nothing).
-        const dims = [size.x, size.y, size.z]
-        const minAxis = dims.indexOf(Math.min(...dims))
-        const dist = Math.max(Math.max(...dims) * 0.85, 25)
-        const off = [0.25, 0.25, 0.25]; off[minAxis] = 1.0
-        camera.position.set(center.x + off[0] * dist, center.y + off[1] * dist, center.z + off[2] * dist)
-        camera.lookAt(center)
-        camera.updateMatrixWorld(true)
-        if (controls) { controls.target.copy(center); controls.update() }
-        return true
-      },
-    }
-    // Force-Crossover tool gesture hook (activate / pickEnd / state) — see
-    // scene/force_crossover_tool.js. Lets e2e drive a forced ligation by strand id.
-    window.__nadocForceXover = forceCrossoverTool.testApi
-  }
-
-  // ── Cadnano editor sync ───────────────────────────────────────────────────────
-  // Re-fetch the full design whenever the cadnano editor (running in another
-  // tab/window) commits a mutation (nick, crossover, strand paint, etc.).
-  // The cadnano editor emits 'design-changed' via BroadcastChannel after every
-  // successful API call; the 3D view responds by pulling the latest design and
-  // geometry so nicks and crossover connections appear automatically.
-
-  // Flag to suppress re-broadcasting when canonical selection is set from an
-  // incoming 'selection-changed' message (prevents A→B→A infinite loops).
-  let _syncingFromBroadcast = false
-
-  // Cross-window design selection publishes ordered strand owners represented by
-  // canonical strand/domain refs. The controller rejects these intents while assembly
-  // owns interaction. Empty selection remains local.
-  store.subscribe((newState, prevState) => {
-    if (newState.selection === prevState.selection) return
-    if (_syncingFromBroadcast) return
-    const ids = canonicalSelectedStrandIds(newState)
-    // Don't broadcast deselection — each window manages its own deselect state.
-    // Only positive selections sync cross-window.
-    if (ids.length === 0) return
-    nadocBroadcast.emit('selection-changed', { strandIds: ids })
-  })
-
-  nadocBroadcast.onMessage(async (data) => {
-    const { type, strandIds, source, windowName, designName, instanceId, designId, docName, docAssembly } = data
-    if (type === 'file-saved' && data.path) {
-      // A sibling tab autosaved this file. Suppress the SSE echo only if it shares
-      // OUR doc (else it's a genuine cross-tab edit that must reload — ISSUE-2).
-      _lifecycleSync.registerSiblingSave(data.path, nadocBroadcast.isSameDoc(data))
-      return
-    }
-    if (type === 'doc-presence-request') {
-      _announceDocPresence()
-    }
-    if (type === 'doc-goodbye') {
-      _otherTabDocs.delete(source)   // tab closed → drop it so the co-edit count stays honest
-      _refreshCoediting()
-    }
-    if (type === 'doc-presence') {
-      _otherTabDocs.set(source, { designId, docName, docAssembly, workspacePath: data.workspacePath ?? null, docId: data.docId ?? null })
-      _refreshCoediting()   // a same-file sibling may have just appeared
-      // Only a real clobber risk when the other tab shares THIS tab's backend
-      // document. Under multi-document (Phase 2) every tab — including each part
-      // editor — owns its own doc, so different-design tabs are NOT contending.
-      // (Pre-Phase-2 this warned on any different design; that's now a false
-      // positive that fired e.g. when opening a second part editor.)
-      if (nadocBroadcast.isSameDoc(data)) _maybeWarnDocClobber(designId, docName, docAssembly)
-    }
-    if (type === 'design-changed') {
-      // Doc-scoped: only react to mutations in OUR document. A different tab
-      // editing a different document must not make us refetch (multi-document).
-      if (!nadocBroadcast.isSameDoc(data)) return
-      // Mark live same-doc editing so a following file-changed SSE (a sibling's
-      // autosave echo) doesn't reload a stale file over the live edits.
-      _lifecycleSync.markSameDocActivity()
-      // Assembly windows ignore design-changed: their currentDesign is unused
-      // while assemblyActive=true, and pulling it in can re-enter the auto-save /
-      // overlay-rebuild chain with stale data. Part-edit / cadnano tabs still
-      // refresh because they aren't in assembly mode.
-      if (store.getState().assemblyActive) return
-      // Fetch design first (strand topology), then geometry (nucleotide positions +
-      // strand_id assignments).  Both are needed: design alone gives wrong strand_id
-      // groupings (nicks invisible); geometry alone gives wrong axis cylinders.
-      // _reloadingFromSSE suppresses the auto-save subscriber during this passive fetch
-      // so a broadcast → getDesign → store-update → auto-save → SSE → broadcast loop
-      // can't form.
-      _lifecycleSync.setReloadingFromSSE(true)
-      try {
-        await api.getDesign()
-        await api.getGeometry()
-      } finally {
-        _lifecycleSync.setReloadingFromSSE(false)
-      }
-    }
-    if (type === 'selection-changed') {
-      if (!nadocBroadcast.isSameDoc(data)) return   // doc-scoped
-      _syncingFromBroadcast = true
-      selectionManager.setMultiHighlight(strandIds ?? [])
-      _syncingFromBroadcast = false
-    }
-    if (type === 'editor-announce' || type === 'editor-title-changed') {
-      _editorRegistry.set(source, { windowName, designName })
-      _renderEditorDropdown()
-    }
-    if (type === 'editor-goodbye') {
-      _editorRegistry.delete(source)
-      _renderEditorDropdown()
-    }
-    if (type === 'part-design-updated') {
-      _syncBadge.syncLog('info', 'BC-RX', `part-design-updated id=${instanceId}`)
-      // Coalesced: a burst of edits (slider drag) emits a burst of these; collapse
-      // them into one refresh instead of one heavy rebuild per broadcast.
-      _assemblyRefresh.requestRefresh(instanceId, 'broadcast')
-      // Part-edit tabs (?part-instance=<id>) show this instance's design as
-      // their active design. Re-import from the backend so the topology in
-      // this tab reflects the assembly window's mutation. Re-import also
-      // emits 'design-changed', which refreshes any open cadnano editor.
-      if (_partEditContext?.instanceId === instanceId) {
-        try {
-          // Re-fetch the updated source FROM the assembly's doc; re-import into
-          // THIS tab's own doc (the importDesign emits a doc-scoped design-changed
-          // that refreshes only this part's cadnano editor).
-          const r = await fetch(`/api/assembly/instances/${instanceId}/design`, { headers: docHeadersFor(_partEditContext.assemblyDoc) })
-          if (r.ok) {
-            const body = await r.json()
-            if (body?.design) await api.importDesign(JSON.stringify(body.design))
-          }
-        } catch (err) {
-          console.warn('[sync] part-edit re-import failed:', err?.message ?? err)
-        }
-      }
-    }
-    if (type === 'session-closed') {
-      // Another NADOC tab closed the session. Try window.close() first
-      // (works for script-opened tabs); if the browser blocks it (tab was
-      // opened by URL bar / duplicate / bookmark), fall back to reloading
-      // this tab to the welcome screen so it's not stuck showing a part
-      // that another tab just closed. setTimeout fires only if the close
-      // didn't actually tear down the tab.
-      try { window.close() } catch { /* best-effort */ }
-      setTimeout(() => { window.location.href = '/' }, 50)
-    }
-  })
-
-  // ── Editor tab registry ──────────────────────────────────────────────────────
-  // Tracks open cadnano editor tabs via BroadcastChannel announcements.
-  // Populates the "Origami Editor" dropdown when 1+ editors are open.
-  const _editorRegistry = new Map()  // tabId → { windowName, designName }
-
-  function _renderEditorDropdown() {
-    const dropdown = document.getElementById('editor-tab-dropdown')
-    if (!dropdown) return
-    dropdown.innerHTML = ''
-
-    if (_editorRegistry.size === 0) {
-      dropdown.style.display = 'none'
-      return
-    }
-
-    for (const [, { windowName, designName }] of _editorRegistry) {
-      const btn = document.createElement('button')
-      btn.className = 'dropdown-item'
-      btn.textContent = designName || 'Untitled'
-      btn.addEventListener('click', () => {
-        const win = window.open('', windowName)
-        if (win) win.focus()
-      })
-      dropdown.appendChild(btn)
-    }
-
-    const sep = document.createElement('hr')
-    sep.style.cssText = 'border:none;border-top:1px solid #30363d;margin:4px 0'
-    dropdown.appendChild(sep)
-
-    const newBtn = document.createElement('button')
-    newBtn.className = 'dropdown-item'
-    newBtn.textContent = 'Open New Editor ↗'
-    newBtn.addEventListener('click', () => {
-      // Open with a unique target so this one gets a fresh tab; carry our doc id.
-      const qs = getDocId() ? `?doc=${encodeURIComponent(getDocId())}` : ''
-      window.open(`/cadnano-editor.html${qs}`, 'nadoc-editor-' + Date.now())
-    })
-    dropdown.appendChild(newBtn)
-
-    dropdown.style.display = ''
-  }
-
-  // Request roll-call so any already-open editors re-announce themselves.
-  nadocBroadcast.emit('editor-list-request')
-
-  // ── Interim multi-document guard (Phase 1; removed when Phase 2 lands) ────────
-  // The backend holds ONE document. If two plain design tabs edit DIFFERENT
-  // designs against it, their edits clobber each other. Announce this tab's
-  // document identity; warn once if another tab reports a different one.
-  const _otherTabDocs = new Map()   // source tabId → { designId, docName, docAssembly }
-  let _lastAnnouncedDesignId = null
-  let _docClobberWarned = false
-
-  function _announceDocPresence() {
-    const s = store.getState()
-    const id = s.currentDesign?.id ?? null
-    if (!id) return
-    nadocBroadcast.emit('doc-presence', {
-      designId:      id,
-      docName:       s.currentDesign?.metadata?.name ?? null,
-      docAssembly:   !!s.assemblyActive,
-      workspacePath: _workspacePath,   // lets siblings detect same-file co-editing (ISSUE-2 sub-phase B)
+      _assemblyPendingPartJoints,
+      _assemblyPendingTransforms,
+      _activateTranslateRotateTool,
+      _clusterBackboneEntries,
+      clusterGizmo,
+      api,
+      _enterAssemblyMode,
+      _exitAssemblyMode,
+      forceCrossoverTool,
     })
   }
 
-  // Feed the "saved" badge an honest co-editing count: how many OTHER tabs hold
-  // our workspace file in a different backend doc (a save-clobber risk, not synced).
-  function _refreshCoediting() {
-    _syncBadge.setSiblingCoediting(
-      countCoeditingSiblings(_workspacePath, getDocId(), [..._otherTabDocs.values()]),
-    )
-  }
-
-  function _maybeWarnDocClobber(otherId, otherName, otherAssembly) {
-    if (_docClobberWarned) return
-    const s = store.getState()
-    const myId = s.currentDesign?.id ?? null
-    // Assemblies use a separate backend slot (/api/assembly) — no contention.
-    if (s.assemblyActive || otherAssembly) return
-    if (!myId || !otherId || myId === otherId) return
-    _docClobberWarned = true
-    showToast(
-      `Another tab is editing "${otherName ?? 'a different design'}". This backend holds ` +
-      `one document at a time — edits from the two tabs may overwrite each other.`,
-      9000,
-    )
-  }
-
-  // Announce our document whenever its identity changes (a new design loaded).
-  store.subscribe((ns) => {
-    const id = ns.currentDesign?.id ?? null
-    if (id === _lastAnnouncedDesignId) return
-    _lastAnnouncedDesignId = id
-    _docClobberWarned = false   // new document → allow a fresh warning
-    _announceDocPresence()
+  _crossTabSync = initCrossTabSync({
+    api,
+    assemblyRefresh: _assemblyRefresh,
+    broadcast: nadocBroadcast,
+    getPartEditContext: () => _partEditContext,
+    getWorkspacePath: () => _workspacePath,
+    lifecycleSync: _lifecycleSync,
+    selectionManager,
+    showToast,
+    store,
+    syncBadge: _syncBadge,
   })
-
-  // Ask any already-open tabs to announce their document, and announce ours.
-  nadocBroadcast.emit('doc-presence-request')
-  _announceDocPresence()
 
   // ── Run the boot action for a New/Open-spawned tab (?new / ?open) ────────────
   // This tab owns a fresh ?doc=<id>, so the action targets its own document.

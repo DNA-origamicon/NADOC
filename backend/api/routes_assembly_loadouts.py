@@ -27,11 +27,10 @@ infra ``_load_design_from_source`` / ``_assembly_source_path`` (L4-blocked, 20+ 
 callers), and ``_replace_instance_design`` (the shared cross-region helper that writes a
 resolved instance design back to its workspace file + commits via ``assembly_state`` —
 L4-blocked by file-IO + state mutation, also called by the instance-design routes that
-stay in assembly.py). The two loadout-only request models moved IN. The per-loadout
-encode/decode/snapshot helpers (``_ensure_loadouts``/``_save_active_loadout_snapshot``/
-``_auto_loadout_name``/``_encode_loadout_design_snapshot``/``_decode_loadout_design_snapshot``)
-are imported function-locally from ``crud`` exactly as before (shared with the design-side
-loadout routes; the function-local import also avoids a circular import).
+stay in assembly.py). The two loadout-only request models moved IN. Snapshot
+serialization, naming, and active-branch updates are shared with the design-side
+router through the HTTP-free ``backend.core.design_loadouts`` module. This
+router no longer depends on ``crud``.
 
 URLs are unchanged from their previous home in assembly.py. Mounting is done in
 ``backend/api/main.py`` via ``app.include_router(...)``.
@@ -53,6 +52,14 @@ from backend.api.assembly import (
     _load_design_from_source,
     _replace_instance_design,
 )
+from backend.core.design_loadouts import (
+    decode_snapshot,
+    encode_snapshot,
+    ensure_loadouts,
+    next_default_name,
+    save_active_snapshot,
+)
+from backend.core.models import DesignLoadout
 
 router = APIRouter()
 
@@ -69,17 +76,14 @@ class InstanceLoadoutRenameRequest(BaseModel):
 def create_instance_loadout(
     instance_id: str, body: InstanceLoadoutCreateRequest
 ) -> dict:
-    from backend.api import crud as crud_api
-    from backend.core.models import DesignLoadout
-
     assembly = assembly_state.get_or_404()
     inst = _find_instance(assembly, instance_id)
     current = _load_design_from_source(inst.source, _assembly_source_path(assembly))
-    loadouts, active_id = crud_api._ensure_loadouts(current)
-    loadouts = crud_api._save_active_loadout_snapshot(current, loadouts, active_id)
-    name = (body.name or "").strip() or crud_api._auto_loadout_name(loadouts)
+    loadouts, active_id = ensure_loadouts(current)
+    loadouts = save_active_snapshot(current, loadouts, active_id)
+    name = (body.name or "").strip() or next_default_name(loadouts)
     new_id = str(_uuid.uuid4())
-    payload, size = crud_api._encode_loadout_design_snapshot(current)
+    payload, size = encode_snapshot(current)
     loadouts.append(
         DesignLoadout(
             id=new_id,
@@ -100,20 +104,16 @@ def create_instance_loadout(
     "/assembly/instances/{instance_id}/loadouts/{loadout_id}/select", status_code=200
 )
 def select_instance_loadout(instance_id: str, loadout_id: str) -> dict:
-    from backend.api import crud as crud_api
-
     assembly = assembly_state.get_or_404()
     inst = _find_instance(assembly, instance_id)
     current = _load_design_from_source(inst.source, _assembly_source_path(assembly))
-    loadouts, active_id = crud_api._ensure_loadouts(current)
-    loadouts = crud_api._save_active_loadout_snapshot(current, loadouts, active_id)
+    loadouts, active_id = ensure_loadouts(current)
+    loadouts = save_active_snapshot(current, loadouts, active_id)
     selected = next((l for l in loadouts if l.id == loadout_id), None)
     if selected is None:
         raise HTTPException(404, detail=f"Loadout {loadout_id!r} not found.")
     try:
-        restored = crud_api._decode_loadout_design_snapshot(
-            selected.design_snapshot_gz_b64
-        )
+        restored = decode_snapshot(selected.design_snapshot_gz_b64)
     except Exception as exc:
         raise HTTPException(500, detail=f"Failed to restore loadout: {exc}") from exc
     updated_design = restored.copy_with(loadouts=loadouts, active_loadout_id=loadout_id)
@@ -130,12 +130,10 @@ def select_instance_loadout(instance_id: str, loadout_id: str) -> dict:
 def rename_instance_loadout(
     instance_id: str, loadout_id: str, body: InstanceLoadoutRenameRequest
 ) -> dict:
-    from backend.api import crud as crud_api
-
     assembly = assembly_state.get_or_404()
     inst = _find_instance(assembly, instance_id)
     design = _load_design_from_source(inst.source, _assembly_source_path(assembly))
-    loadouts, active_id = crud_api._ensure_loadouts(design)
+    loadouts, active_id = ensure_loadouts(design)
     if loadout_id == "__implicit_loadout_1__":
         loadout_id = active_id
     name = body.name.strip()
@@ -159,17 +157,15 @@ def rename_instance_loadout(
     "/assembly/instances/{instance_id}/loadouts/{loadout_id}", status_code=200
 )
 def delete_instance_loadout(instance_id: str, loadout_id: str) -> dict:
-    from backend.api import crud as crud_api
-
     assembly = assembly_state.get_or_404()
     inst = _find_instance(assembly, instance_id)
     current = _load_design_from_source(inst.source, _assembly_source_path(assembly))
-    loadouts, active_id = crud_api._ensure_loadouts(current)
+    loadouts, active_id = ensure_loadouts(current)
     if len(loadouts) <= 1:
         raise HTTPException(400, detail="Cannot delete the only loadout.")
     if not any(l.id == loadout_id for l in loadouts):
         raise HTTPException(404, detail=f"Loadout {loadout_id!r} not found.")
-    loadouts = crud_api._save_active_loadout_snapshot(current, loadouts, active_id)
+    loadouts = save_active_snapshot(current, loadouts, active_id)
     remaining = [l for l in loadouts if l.id != loadout_id]
     next_id = active_id if active_id != loadout_id else remaining[0].id
     if next_id == active_id:
@@ -178,9 +174,7 @@ def delete_instance_loadout(instance_id: str, loadout_id: str) -> dict:
         )
     else:
         try:
-            restored = crud_api._decode_loadout_design_snapshot(
-                remaining[0].design_snapshot_gz_b64
-            )
+            restored = decode_snapshot(remaining[0].design_snapshot_gz_b64)
         except Exception as exc:
             raise HTTPException(
                 500, detail=f"Failed to restore next loadout: {exc}"
