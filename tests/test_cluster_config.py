@@ -19,6 +19,8 @@ def test_alpine_profile_shape():
     assert "$USER" in p.project_base and "$USER" in p.scratch_base
     assert p.su_per_gpu_hour == pytest.approx(108.2)
     assert p.su_per_core_hour == pytest.approx(1.0)
+    assert p.gpu_module_loads == ["gcc/11.2.0", "cuda/12.1.1", "fftw/3.3.10"]
+    assert p.gpu_namd_bin.endswith("/Linux-x86_64-g++/namd3")
 
 
 def test_alpine_partitions_and_qos_lookup():
@@ -125,7 +127,7 @@ def test_get_profile_unknown_raises(tmp_path):
 def test_modules_for_picks_gpu_build_on_gpu_target():
     p = cc.alpine_profile()
     assert "namd/3.0.1_cpu" in p.modules_for(gpu=False)
-    assert "namd/3.0.1_gpu" in p.modules_for(gpu=True)
+    assert "cuda/12.1.1" in p.modules_for(gpu=True)
     assert "namd/3.0.1_cpu" not in p.modules_for(gpu=True)
 
 
@@ -227,35 +229,16 @@ def test_partition_su_rate_roundtrips_through_json(tmp_path):
     assert prof.partition("g").su_per_gpu_hour == pytest.approx(334.0)
 
 
-def test_workspace_clusters_json_has_not_drifted_from_the_embedded_profile():
-    """workspace/clusters.json OVERWRITES the embedded alpine profile wholesale
-    (load_profiles), so a partition added only in Python is invisible to the running
-    app.  Guard the trap: shared partitions must agree, and the GPU submission
-    targets must all be present."""
-    from pathlib import Path
+def test_alpine_local_override_merges_without_hiding_shipped_capabilities(tmp_path):
+    """An old ignored config may customize one field, but must not erase new GPUs."""
+    (tmp_path / "clusters.json").write_text(json.dumps([{
+        "name": "alpine",
+        "gpu_namd_bin": "/projects/custom/namd3",
+        "partitions": [{"name": "aa100", "su_per_gpu_hour": 999.0}],
+    }]))
 
-    path = Path(__file__).resolve().parents[1] / "workspace" / "clusters.json"
-    if not path.is_file():
-        pytest.skip("no workspace/clusters.json in this checkout")
-    entries = json.loads(path.read_text())
-    alpine = next((e for e in entries if e.get("name") == "alpine"), None)
-    if alpine is None:
-        pytest.skip("workspace/clusters.json defines no alpine profile")
-
-    on_disk = {p["name"]: p for p in alpine.get("partitions", [])}
-    embedded = cc.alpine_profile()
-
-    for name in ("aa100", "ami100", "al40", "ah200", "artxpro6000"):
-        assert name in on_disk, (
-            f"{name} missing from workspace/clusters.json — it shadows the embedded "
-            f"profile, so the app will not offer this partition"
-        )
-    for name, entry in on_disk.items():
-        ref = embedded.partition(name)
-        if ref is None:
-            continue  # a deliberate local-only partition is fine
-        assert entry.get("kind") == ref.kind, f"{name}: kind drifted"
-        assert entry.get("gres_type", "") == ref.gres_type, f"{name}: gres_type drifted"
-        assert entry.get("allowed_qos", []) == ref.allowed_qos, (
-            f"{name}: allowed_qos drifted"
-        )
+    profile = cc.load_profiles(tmp_path)["alpine"]
+    assert profile.gpu_namd_bin == "/projects/custom/namd3"
+    assert profile.partition("aa100").su_per_gpu_hour == pytest.approx(999.0)
+    assert profile.partition("artxpro6000").gres_type == "rtx_pro_6000"
+    assert profile.qos("gpu-normal").max_walltime_h == 24

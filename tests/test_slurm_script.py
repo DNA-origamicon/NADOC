@@ -247,7 +247,8 @@ def test_module_block_present(alpine, gpu_resources):
     script = ss.generate_sbatch(_manifest(), alpine, gpu_resources, "/scratch/x")
     assert "module purge" in script
     assert "module load " + " ".join(alpine.modules_for(gpu=True)) in script
-    assert "namd/3.0.1_gpu" in script
+    assert "cuda/12.1.1" in script
+    assert alpine.gpu_namd_bin in script
 
 
 def test_cpu_target_loads_cpu_module_block(alpine):
@@ -589,7 +590,11 @@ def test_preview_header_no_warning_when_walltime_fits(alpine):
 def test_preview_header_warns_on_a_cpu_module_for_a_gpu_partition(alpine):
     from dataclasses import replace as _replace
 
-    bad = _replace(alpine, gpu_module_loads=["gcc/14.2.0", "namd/3.0.1_cpu"])
+    bad = _replace(
+        alpine,
+        gpu_module_loads=["gcc/14.2.0", "namd/3.0.1_cpu"],
+        gpu_namd_bin="",
+    )
     res = cr.recommend(bad, n_atoms=62_673, total_ns=10.0, partition="ah200")
     h = ss.preview_header(bad, res)
     assert any("CPU-only" in w for w in h["warnings"])

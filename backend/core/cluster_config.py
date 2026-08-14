@@ -6,10 +6,10 @@ This is the *config* half of the Alpine remote-execution backend (see
 only the durable, publishable facts about a cluster.  The live SSH session and
 secrets live in ``backend/core/cluster_ssh.py``.
 
-A profile is loaded from ``workspace/clusters.json`` if present, else the embedded
-**Alpine** default (CU Research Computing) is used.  ``$USER`` in the filesystem
-base paths is substituted at path-resolution time, not at load time, so one profile
-serves any account.
+The embedded **Alpine** profile (CU Research Computing) is the canonical, portable
+default.  An optional ``workspace/clusters.json`` may add clusters or override parts
+of Alpine, but it cannot accidentally erase checked-in partitions or QoS tiers.
+``$USER`` in filesystem base paths is substituted at path-resolution time.
 
 Everything here is pure and offline — no network, no import-time side effects.
 """
@@ -177,15 +177,18 @@ def alpine_profile() -> ClusterProfile:
             "openmpi/5.0.6",
             "namd/3.0.1_cpu",
         ],
-        # GPU-resident NAMD build for aa100/al40 (the `+devices` exec path).  Best-
-        # guess by CURC's `_cpu`→`_gpu` module-naming convention; the exact string is
-        # confirmable live via GET /api/cluster/namd-modules (`module avail namd`).
-        # If wrong, the sbatch's `module load` fails and increment-6 error surfacing
-        # shows it on the frontend — override here or in workspace/clusters.json.
+        # Alpine has no CUDA NAMD module.  These are the dependencies used by the
+        # shared private build below; they were live-confirmed in a successful H200
+        # and RTX Pro 6000 submission on 2026-08-07/13.
         gpu_module_loads=[
-            "gcc/14.2.0",
-            "namd/3.0.1_gpu",
+            "gcc/11.2.0",
+            "cuda/12.1.1",
+            "fftw/3.3.10",
         ],
+        gpu_namd_bin=(
+            "/projects/jojo6687/nadoc_jobs/nadoc_builds/namd-git/"
+            "NAMD_Git-2025-12-04_Source/Linux-x86_64-g++/namd3"
+        ),
         # ah200 (H200) is the default since 2026-08-06.  Live `sbatch --test-only` for
         # a 63k-atom / 200 ns job: aa100 would start in 13 d 16 h (630 jobs pending),
         # ah200 immediately.  It bills ~3x the A100 rate per GPU-hour, but finishes the
@@ -333,12 +336,36 @@ def _profile_from_dict(d: dict) -> ClusterProfile:
     )
 
 
+def _merge_named_rows(base: list, overrides: list[dict]) -> list[dict]:
+    """Merge dataclass rows by name without dropping checked-in capabilities."""
+    merged = {row.name: dict(vars(row)) for row in base}
+    order = [row.name for row in base]
+    for override in overrides:
+        name = override.get("name")
+        if not name:
+            continue
+        if name not in merged:
+            order.append(name)
+            merged[name] = {}
+        merged[name].update(override)
+    return [merged[name] for name in order]
+
+
+def _merge_profile_override(base: ClusterProfile, override: dict) -> ClusterProfile:
+    """Apply a local partial override while retaining canonical partitions/QoS."""
+    values = dict(vars(base))
+    values.update({k: v for k, v in override.items() if k not in {"partitions", "qos_tiers"}})
+    values["partitions"] = _merge_named_rows(base.partitions, override.get("partitions", []))
+    values["qos_tiers"] = _merge_named_rows(base.qos_tiers, override.get("qos_tiers", []))
+    return _profile_from_dict(values)
+
+
 def load_profiles(workspace_dir: str | Path | None = None) -> dict[str, ClusterProfile]:
     """Return ``{name: ClusterProfile}``.
 
-    Reads ``<workspace_dir>/clusters.json`` if it exists (a JSON list of profile
-    objects); otherwise returns just the embedded Alpine profile.  Alpine is always
-    present as a fallback even when a custom file omits it.
+    Reads ``<workspace_dir>/clusters.json`` if it exists.  New cluster names are
+    loaded as complete profiles.  The built-in Alpine entry is instead treated as a
+    partial override, so stale ignored files cannot hide newly shipped partitions.
     """
 
     profiles: dict[str, ClusterProfile] = {"alpine": alpine_profile()}
@@ -353,7 +380,12 @@ def load_profiles(workspace_dir: str | Path | None = None) -> dict[str, ClusterP
         entries = raw if isinstance(raw, list) else raw.get("clusters", [])
         for entry in entries:
             try:
-                prof = _profile_from_dict(entry)
+                name = entry.get("name")
+                prof = (
+                    _merge_profile_override(profiles[name], entry)
+                    if name in profiles
+                    else _profile_from_dict(entry)
+                )
             except (KeyError, TypeError):
                 continue
             profiles[prof.name] = prof

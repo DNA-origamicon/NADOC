@@ -1166,7 +1166,10 @@ def test_submit_preflights_modules_before_uploading_anything(
 ):
     """SLURM 30948986 died instantly on `namd/3.0.1_gpu` (which does not exist on
     Alpine) AFTER an 814 MB upload and a queue wait. Catch it on the login node."""
+    from dataclasses import replace as _replace
+
     job = _make_prepared_job(tmp_path)
+    alpine = _replace(alpine, gpu_namd_bin="", gpu_module_loads=["namd/3.0.1_gpu"])
     conn = FakeConn(
         canned={
             "module spider": RunResult(
@@ -1188,7 +1191,10 @@ def test_submit_preflights_modules_before_uploading_anything(
 
 
 def test_submit_preflight_reports_the_module_that_failed(tmp_path, alpine, resources):
+    from dataclasses import replace as _replace
+
     job = _make_prepared_job(tmp_path)
+    alpine = _replace(alpine, gpu_namd_bin="", gpu_module_loads=["missing/gpu"])
     conn = FakeConn(canned={"module spider": RunResult(1, "", "unknown module")})
     with pytest.raises(RuntimeError) as exc:
         _run(
@@ -1206,7 +1212,7 @@ def test_submit_proceeds_when_modules_load_cleanly(tmp_path, alpine, resources):
         ex.submit_job(job, tmp_path, profile=alpine, resources=resources, conn=conn)
     )
     assert out.slurm_job_id == "4242"
-    assert any("module spider" in c for c in conn.runs)  # the pre-flight really ran
+    assert any("test -x" in c for c in conn.runs)  # private binary pre-flight really ran
 
 
 def test_submit_persists_each_long_running_handoff_phase(
