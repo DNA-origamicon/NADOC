@@ -33,6 +33,7 @@ import {
   fieldScope,
   deferredNotes,
   inheritedRows,
+  highAspectRatioWarning,
   jobSettingsState,
   makeDebounce,
   paramLabel,
@@ -568,6 +569,21 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
           })],
         }))
       return
+    }
+    const aspectWarning = highAspectRatioWarning(plan, state.presetId)
+    if (aspectWarning) {
+      mounts.preset.appendChild(el('div', {
+        className: 'wizard-aspect-warning',
+        attrs: { title: aspectWarning.tooltip },
+        children: [
+          el('span', {
+            className: 'wizard-field__alert wizard-field__alert--warning',
+            attrs: { role: 'img', 'aria-label': aspectWarning.tooltip },
+            text: '⚠',
+          }),
+          el('span', { text: `${aspectWarning.label} — use High aspect ratio (rods)` }),
+        ],
+      }))
     }
     const headline = presets.filter(p => HEADLINE_PRESETS.includes(p.id))
     const rest = presets.filter(p => !HEADLINE_PRESETS.includes(p.id))

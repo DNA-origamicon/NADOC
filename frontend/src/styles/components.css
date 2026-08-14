@@ -956,6 +956,7 @@ body:has(#right-panel.locked-inactive) .toast {
 
 .wizard-modes,
 .wizard-preset-cards { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.wizard-aspect-warning { display: flex; align-items: center; gap: 4px; margin-bottom: var(--space-2); color: var(--color-warning); font-size: var(--text-xs); }
 
 .wizard-mode,
 .wizard-preset {

@@ -106,6 +106,24 @@ def test_s3_prestage_skips_when_volume_already_matches(tmp_path, monkeypatch):
     )) is None
 
 
+def test_s3_stage_extract_does_not_restore_desktop_ownership():
+    seen = {}
+
+    class Conn:
+        async def run(self, command):
+            seen["command"] = command
+            return type("Result", (), {"rc": 0, "stderr": ""})()
+
+    _run(rx._extract_s3_stage(Conn(), "/workspace/job", "/workspace/job/pkg.tgz"))
+    assert "tar --no-same-owner -xzf" in seen["command"]
+
+
+def test_equal_size_namd_conf_is_always_refreshed():
+    assert not rx._volume_file_reusable("stage.conf", 100, 100)
+    assert rx._volume_file_reusable("system.psf", 100, 100)
+    assert not rx._volume_file_reusable("system.psf", 99, 100)
+
+
 def _run(coro):
     return asyncio.run(coro)
 
@@ -796,6 +814,7 @@ class TestStagingReusesTheVolume:
         always = (
             rx.CHAIN_SCRIPT,
             rx.RESUME_CONF_NAME,
+            rx.SETTLE_RETARGET_NAME,
             rx.LIVE_METRICS_NAME,
             "md_health.py",
             "nadoc_live_health.py",
@@ -916,6 +935,7 @@ class TestProductionChildSeedsFromParentOnTheVolume:
         always = (
             rx.CHAIN_SCRIPT,
             rx.RESUME_CONF_NAME,
+            rx.SETTLE_RETARGET_NAME,
             rx.LIVE_METRICS_NAME,
             "md_health.py",
             "nadoc_live_health.py",

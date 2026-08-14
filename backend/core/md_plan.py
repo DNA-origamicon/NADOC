@@ -236,6 +236,7 @@ class PlanContext:
     enm_file: Optional[str] = None
     min_scale: float = 0.5
     seed: int = 54321
+    npt_margin_ang: float = _p.NPT_MARGIN_ANG
 
 
 def _strip(params: dict) -> dict:
@@ -270,6 +271,7 @@ def stage_parameters(
                 n_atoms=ctx.n_atoms,
                 force_resident=ctx.force_resident,
                 overrides=overrides,
+                npt_margin_ang=ctx.npt_margin_ang,
             )
         )
     )
@@ -619,6 +621,7 @@ def relaxation_stages(
     nvt_only: bool = False,
     timestep_fs: Optional[float] = None,
     stage_overrides: Optional[dict] = None,
+    high_aspect_ratio: bool = False,
 ) -> list[dict]:
     """The full ordered stage table for a relaxation, minimisation included (pure).
 
@@ -639,6 +642,7 @@ def relaxation_stages(
         gentle=gentle,
         nvt_only=nvt_only,
         timestep_fs=ladder_dt,
+        high_aspect_ratio=high_aspect_ratio,
     )
 
     rows: list[dict] = []

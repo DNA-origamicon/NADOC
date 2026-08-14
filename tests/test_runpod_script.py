@@ -305,6 +305,18 @@ class TestChainScriptActuallyRuns:
         assert "SKIP  s0_min" in proc.stdout
         assert "START s1" in proc.stdout
 
+    def test_settle_retarget_runs_after_minimization_and_before_first_segment(self):
+        script = render_chain_script(
+            steps=self.STEPS,
+            remote_dir="/work",
+            namd_bin="/namd3",
+            threads=2,
+        )
+        minimize = "run_step_with_retries s0_min s0_min.conf"
+        retarget = 'python3 nadoc_settle_retarget.py "output/s0_min.coor" restraints_settle.pdb'
+        settle = "run_step_with_retries s1 s1.conf"
+        assert script.index(minimize) < script.index(retarget) < script.index(settle)
+
     def test_a_failing_step_stops_the_ladder_and_records_which_one(self, tmp_path):
         proc = self._run(tmp_path, self._fake_namd(tmp_path, fail_on="s1"))
         assert proc.returncode == 1

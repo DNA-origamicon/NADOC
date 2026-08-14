@@ -207,6 +207,7 @@ def test_submit_job_stages_and_parses_id(tmp_path, alpine, resources):
     staged = {r for _, r in conn.puts}
     assert any(r.endswith("/6hb_demo.psf") for r in staged)
     assert any(r.endswith("/" + ex._SBATCH_NAME) for r in staged)
+    assert any(r.endswith("/nadoc_settle_retarget.py") for r in staged)
     assert conn.mirrors and conn.mirrors[0][0] == out.remote_project_dir
     assert any("sbatch" in c for c in conn.runs)
     # Persisted.

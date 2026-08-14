@@ -49,6 +49,7 @@ from backend.core.slurm_script import LIVE_METRICS_NAME
 from backend.core.runpod_script import (
     DEFAULT_BUDGET_USD,
     RESUME_CONF_NAME,
+    SETTLE_RETARGET_NAME,
     ChainStep,
     completed_steps,
     heartbeat_is_stale,
@@ -82,6 +83,17 @@ FETCH_TIMEOUT_S = 900.0
 # (resumable) rather than crashes the whole run. Reset to 0 on any successful poll.
 MAX_POLL_SSH_FAILURES = 5
 S3_STAGE_ARCHIVE = ".nadoc_stage/package.tar.gz"
+
+
+def _volume_file_reusable(rel: str, remote_size: Optional[int], local_size: int) -> bool:
+    """Whether a persistent-volume input is safely reusable from size alone.
+
+    Large topology/coordinate payloads dominate upload time and are immutable after prep,
+    so a size match is the deliberate cheap identity check.  NAMD configs are tiny and
+    may be repaired between attempts without changing byte count (for example margin 30
+    to margin 10); always refresh them or a resume can silently execute stale settings.
+    """
+    return not rel.endswith(".conf") and remote_size == local_size
 
 # The patched NAMD lives on the NETWORK VOLUME, built once per GPU architecture.
 # Pods are disposable; the toolchain is not.
@@ -168,7 +180,7 @@ async def _prestage_package_s3(
     remote_sizes = await conn.file_sizes()
     missing = [
         (path, rel) for path, rel in plan
-        if remote_sizes.get(rel) != path.stat().st_size
+        if not _volume_file_reusable(rel, remote_sizes.get(rel), path.stat().st_size)
     ]
     total_raw = sum(path.stat().st_size for path, _ in missing)
     if not missing:
@@ -231,7 +243,11 @@ async def _extract_s3_stage(conn: RunpodConnection, remote: str, archive_path: s
 
     result = await conn.run(
         f"mkdir -p {shlex.quote(remote)} && "
-        f"tar -xzf {shlex.quote(archive_path)} -C {shlex.quote(remote)} && "
+        # RunPod's network volume may root-squash chown.  Tar archives created by the
+        # desktop carry the desktop uid/gid; restoring those owners is unnecessary and
+        # can make an otherwise successful extraction exit nonzero after writing files.
+        f"tar --no-same-owner -xzf {shlex.quote(archive_path)} "
+        f"-C {shlex.quote(remote)} && "
         f"rm -f {shlex.quote(archive_path)}"
     )
     if result.rc != 0:
@@ -425,10 +441,11 @@ async def submit_job(
     bytes_done = sum(
         size
         for (local_path, rel), size in zip(plan, file_sizes)
-        if remote_sizes.get(rel) == size
+        if _volume_file_reusable(rel, remote_sizes.get(rel), size)
     )
     skipped = sum(
-        remote_sizes.get(rel) == size for (_, rel), size in zip(plan, file_sizes)
+        _volume_file_reusable(rel, remote_sizes.get(rel), size)
+        for (_, rel), size in zip(plan, file_sizes)
     )
     sent = 0
     submit_progress(
@@ -443,7 +460,7 @@ async def submit_job(
     files_done = skipped
     supports_progress = "on_progress" in inspect.signature(conn.sftp_put).parameters
     for (local_path, rel), file_size in zip(plan, file_sizes):
-        if remote_sizes.get(rel) == file_size:
+        if _volume_file_reusable(rel, remote_sizes.get(rel), file_size):
             continue
         base_bytes = bytes_done
 
@@ -489,6 +506,18 @@ async def submit_job(
         conn,
         Path(remote_resume_conf.__file__).read_text(),
         f"{remote}/{RESUME_CONF_NAME}",
+        workspace_dir,
+        job,
+    )
+
+    # The canonical settle-restraint coordinate rewrite.  The local runner imports this
+    # exact module; staging it makes the pod path byte-for-byte equivalent.
+    from backend.core import remote_settle_retarget
+
+    await md_executor._put_text(
+        conn,
+        Path(remote_settle_retarget.__file__).read_text(),
+        f"{remote}/{SETTLE_RETARGET_NAME}",
         workspace_dir,
         job,
     )

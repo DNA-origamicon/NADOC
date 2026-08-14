@@ -51,6 +51,7 @@ from backend.core.md_pipeline import (
 from backend.core.md_presets import (
     DEFAULT_PRESET,
     FAST_SHAPE,
+    HIGH_ASPECT_RATIO,
     get_preset,
     preset_availability,
     preset_catalogue,
@@ -3574,6 +3575,7 @@ async def _prepare_job_bg(
             atomistic_model=seed_model,
             declash=body.declash,
             force_soft=body.force_soft,
+            high_aspect_ratio=body.relax_preset == HIGH_ASPECT_RATIO,
             fast=body.fast,
             gpu_resident_mode=body.gpu_resident or "auto",
             # The three ladder axes, decoupled (exp51).  None on any of them keeps the

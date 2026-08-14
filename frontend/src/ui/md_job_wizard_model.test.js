@@ -18,6 +18,7 @@ import {
   formatCreatedAt,
   formatValue,
   inheritedRows,
+  highAspectRatioWarning,
   isProductionParent,
   jobSettingsState,
   productionSteps,
@@ -40,6 +41,19 @@ import {
   wizardPayload,
   WIZARD_FIELDS,
 } from './md_job_wizard_model.js'
+
+describe('high-aspect geometry advisory', () => {
+  it('warns without changing the selected protocol', () => {
+    const warning = highAspectRatioWarning({ design: { aspect_ratio: 42 } }, 'design_speed')
+    expect(warning.label).toBe('Long filament detected')
+    expect(warning.tooltip).toContain('Larger margin')
+  })
+
+  it('clears when the rod protocol is selected or geometry is ordinary', () => {
+    expect(highAspectRatioWarning({ design: { aspect_ratio: 42 } }, 'high_aspect_ratio')).toBeNull()
+    expect(highAspectRatioWarning({ design: { aspect_ratio: 4 } }, 'design_speed')).toBeNull()
+  })
+})
 
 /** A miniature plan in the exact shape POST /md/protocol-plan returns. */
 function plan(overrides = {}) {

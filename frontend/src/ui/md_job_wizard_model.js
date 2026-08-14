@@ -992,3 +992,14 @@ export function normaliseOverrideInput(raw) {
   if (text.toLowerCase() === '(none)') return null // explicit delete of the directive
   return text
 }
+
+/** Advisory only: geometry never changes the chosen protocol behind the user's back. */
+export function highAspectRatioWarning(plan, presetId, threshold = 10) {
+  const ratio = Number(plan?.design?.aspect_ratio)
+  if (!Number.isFinite(ratio) || ratio < threshold || presetId === 'high_aspect_ratio') return null
+  return {
+    ratio,
+    label: 'Long filament detected',
+    tooltip: 'Choose High aspect ratio (rods). Larger margin prevents high aspect ratio designs from crashing.',
+  }
+}

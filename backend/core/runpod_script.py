@@ -342,6 +342,7 @@ MAX_CELL_SHRINK_RETRIES = 4
 # ORIGINAL box, and shrinks into the same wall — so "bounded retry" means "fails four
 # times", not "self-heals".
 RESUME_CONF_NAME = "nadoc_resume_conf.py"
+SETTLE_RETARGET_NAME = "nadoc_settle_retarget.py"
 WATCHDOG_POLL_S = 30  # how often the watchdog checks the log mtime + heartbeat
 
 # The node-side live-metrics collector, reused verbatim from the Alpine path
@@ -587,6 +588,15 @@ def render_chain_script(
             f"run_step_with_retries {q(step.name)} {q(step.name + '.conf')} "
             f"{int(step.steps)} || exit 1"
         )
+        if step.is_minimization:
+            lines += [
+                "# Match the local runner: settle restraints reference the minimized pose,",
+                "# not the pre-minimization build coordinates. Safe and idempotent on resume.",
+                f'if [ -f restraints_settle.pdb ] && [ -f "output/{step.name}.coor" ]; then',
+                f'  python3 {SETTLE_RETARGET_NAME} "output/{step.name}.coor" '
+                'restraints_settle.pdb || echo "WARNING: settle-restraint retarget failed; using build pose"',
+                "fi",
+            ]
         if scales and _early_stop_eligible(chain, scales, i, min_k, tier):
             last = _stage_last_chunk_index(chain, i)
             lines += _early_stop_block(

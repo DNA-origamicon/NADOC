@@ -243,7 +243,7 @@ def _provenance(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> dict:
     return out
 
 
-def _design_flags() -> dict:
+def _design_flags(*, padding_nm: float = 1.2) -> dict:
     """Design facts that change the protocol, if a design is loaded (never raises)."""
     try:
         design = design_state.get_or_404()
@@ -253,13 +253,27 @@ def _design_flags() -> dict:
             "extra_bases": False,
             "extra_base_declash": False,
             "extensions": False,
+            "aspect_ratio": None,
         }
     try:
+        points = [
+            p.to_array()
+            for helix in (getattr(design, "helices", None) or [])
+            for p in (helix.axis_start, helix.axis_end)
+        ]
+        aspect_ratio = None
+        if points:
+            extents = [max(p[i] for p in points) - min(p[i] for p in points) for i in range(3)]
+            # Match the cheap solvation preview: a 1.2 nm DNA radius plus the selected
+            # water padding on both faces keeps a one-dimensional axis finite.
+            box_extents = [float(x) + 2.0 * (1.2 + padding_nm) for x in extents]
+            aspect_ratio = max(box_extents) / min(box_extents)
         return {
             "known": True,
             "extra_bases": bool(_p.design_has_extra_bases(design)),
             "extra_base_declash": bool(_p.design_requires_extra_base_declash(design)),
             "extensions": bool(_p.design_has_extensions(design)),
+            "aspect_ratio": aspect_ratio,
         }
     except Exception:  # noqa: BLE001 — a malformed design must not break the preview
         return {
@@ -267,13 +281,15 @@ def _design_flags() -> dict:
             "extra_bases": False,
             "extra_base_declash": False,
             "extensions": False,
+            "aspect_ratio": None,
         }
 
 
 def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> dict:
     carved = False
     gbis = resolved.protocol == md_presets.IMPLICIT_PROTOCOL
-    flags = _design_flags()
+    flags = _design_flags(padding_nm=float(resolved.padding_nm))
+    high_aspect_ratio = resolved.relax_preset == md_presets.HIGH_ASPECT_RATIO
     # Mirrors prepare_mgh_slow_release: 2+xT junctions and free single-stranded tails
     # turn on declash automatically.  A 1xT junction stays on the standard ladder.
     declash = bool(
@@ -312,6 +328,9 @@ def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
         carved=carved,
         gbis=gbis,
         minimize_steps=int(resolved.minimize_steps),
+        npt_margin_ang=(
+            _p.HIGH_ASPECT_NPT_MARGIN_ANG if high_aspect_ratio else _p.NPT_MARGIN_ANG
+        ),
         n_atoms=body.n_atoms_hint,
         force_resident={"on": True, "off": False}.get(
             str(resolved.gpu_resident or "auto").lower()
@@ -327,6 +346,7 @@ def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
             nvt_only=carved,
             timestep_fs=ladder_dt,
             stage_overrides=body.stage_overrides or None,
+            high_aspect_ratio=high_aspect_ratio,
         )
     except ValueError as exc:  # a protected directive — say which, do not 500
         raise HTTPException(400, str(exc)) from exc

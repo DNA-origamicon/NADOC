@@ -41,6 +41,7 @@ from backend.core.slurm_script import (
     LIVE_METRICS_FILE,
     LIVE_METRICS_NAME,
     LIVE_HEALTH_FILE,
+    SETTLE_RETARGET_NAME,
     EARLY_STOP_HEALTH_NAME,
     STAGED_MD_HEALTH_NAME,
     generate_sbatch,
@@ -501,6 +502,18 @@ async def submit_job(
         conn,
         Path(remote_live_metrics.__file__).read_text(),
         f"{project_dir}/{LIVE_METRICS_NAME}",
+        workspace_dir,
+        job,
+    )
+
+    # Same implementation imported by the local runner and staged by RunPod. Keeping
+    # this outside the prepared package prevents target choice from changing physics.
+    from backend.core import remote_settle_retarget  # noqa: PLC0415
+
+    await _put_text(
+        conn,
+        Path(remote_settle_retarget.__file__).read_text(),
+        f"{project_dir}/{SETTLE_RETARGET_NAME}",
         workspace_dir,
         job,
     )

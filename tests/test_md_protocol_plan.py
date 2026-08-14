@@ -682,6 +682,21 @@ def test_the_literature_preset_runs_the_papers_relaxation_integrator(client):
     assert all(s["params"]["rigidbonds"] == "all" for s in plan["stages"][1:])
 
 
+def test_high_aspect_preset_scopes_conservative_settings_to_settle(client):
+    plan = _plan(client, relax_preset="high_aspect_ratio")
+    dynamics = plan["stages"][1:]
+    settle = next(s for s in dynamics if "settle" in s["name"])
+    assert settle["params"]["timestep"] == "1"
+    assert settle["params"]["rigidbonds"] == "none"
+    assert settle["params"]["margin"] == "10"
+    later = [s for s in dynamics if s is not settle]
+    # The ordinary fast ladder begins with its existing 2 fs gentle chunk, then 4 fs.
+    assert later[0]["params"]["timestep"] == "2"
+    assert all(s["params"]["timestep"] == "4" for s in later[1:])
+    assert all(s["params"]["rigidbonds"] == "all" for s in later)
+    assert all(s["params"]["margin"] == "10" for s in later)
+
+
 def test_locking_is_surgical_the_rest_of_the_tier_stays_overridable(client):
     """A preset is a starting point; only the naming-critical field is a cage."""
     plan = _plan(client, relax_preset="literature", padding_nm=1.0)

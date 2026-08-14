@@ -39,6 +39,7 @@ STANDARD = "standard"
 FULL_PHYSICS = "full_physics"
 LITERATURE = "literature"
 DESIGN_SPEED = "design_speed"
+HIGH_ASPECT_RATIO = "high_aspect_ratio"
 DEFAULT_PRESET = STANDARD
 
 #: Every preset names the engine protocol it runs on.  This is the whole point of the
@@ -188,6 +189,27 @@ PRESETS: dict[str, RelaxPreset] = {
             "GPU-resident size crossover, bounding-box cell sizing under 20 ns"
         ),
     ),
+    HIGH_ASPECT_RATIO: RelaxPreset(
+        id=HIGH_ASPECT_RATIO,
+        label="High aspect ratio (rods)",
+        summary=(
+            "For long, thin filaments. Uses extra NPT patch-grid margin and a 1 fs "
+            "flexible-bond settle start, then returns to the normal accelerated ladder. "
+            "Choose it for rod-like boxes; it is deliberately not selected automatically."
+        ),
+        defaults={
+            "protocol": EXPLICIT_PROTOCOL,
+            "box_mode": "bbox",
+            "padding_nm": 1.2,
+            "salt_mode": "screening",
+            "early_stop_relax": True,
+            "fast": True,
+        },
+        reference=(
+            "NADOC high-aspect recovery: bounded margin 10 and a soft first dynamics "
+            "stage; the later ENM ladder retains its normal timestep"
+        ),
+    ),
     LITERATURE: RelaxPreset(
         id=LITERATURE,
         label="Match the literature (Aksimentiev)",
@@ -224,6 +246,7 @@ PRESET_ORDER = (
     FAST_SHAPE,
     IMPLICIT_GBIS,
     DESIGN_SPEED,
+    HIGH_ASPECT_RATIO,
     STANDARD,
     LITERATURE,
     FULL_PHYSICS,

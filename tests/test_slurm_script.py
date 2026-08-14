@@ -180,6 +180,17 @@ def test_generate_runs_min_then_all_segments_in_order(alpine, gpu_resources):
     assert i_min < i_s1 < i_s2
 
 
+def test_alpine_retargets_settle_reference_after_minimization(alpine, gpu_resources):
+    script = ss.generate_sbatch(_manifest(), alpine, gpu_resources, "/scratch/x")
+    retarget = (
+        f'python3 {ss.SETTLE_RETARGET_NAME} '
+        '"output/6hb_demo_00_min.coor" "restraints_settle.pdb"'
+    )
+    assert retarget in script
+    assert script.index("6hb_demo_00_min.conf") < script.index(retarget)
+    assert script.index(retarget) < script.index("6hb_demo_01_p100.conf")
+
+
 def test_generate_preserves_failure_tail_in_output(alpine, gpu_resources):
     script = ss.generate_sbatch(_manifest(), alpine, gpu_resources, "/scratch/x")
     assert "trap nadoc_on_exit EXIT" in script

@@ -118,6 +118,7 @@ def _chunk_fractions(pcts) -> list[tuple[float, float]]:
 # is NVT throughout, so the two never combine).  Verified 2026-07-29 on the full-box
 # 2hb_1xT package: margin 3 + GPUresident on + NPT ran 5000 steps clean at 261 ns/day.
 NPT_MARGIN_ANG = 3.0
+HIGH_ASPECT_NPT_MARGIN_ANG = 10.0
 
 # ── Electrostatics ───────────────────────────────────────────────────────────
 # The Aksimentiev origami tutorial's values (`step3/equil_k*.namd`), adopted 2026-07-29
@@ -1745,6 +1746,7 @@ def _segment_conf(
     n_atoms: Optional[int] = None,
     force_resident: Optional[bool] = None,
     overrides: Optional[dict] = None,
+    npt_margin_ang: float = NPT_MARGIN_ANG,
 ) -> str:
     from backend.core.namd_helpers import vel_force_dcd_block  # noqa: PLC0415
 
@@ -1890,6 +1892,7 @@ def _segment_conf(
             period=1000.0,
             decay=500.0,
             temp=spec.temp,
+            margin_ang=npt_margin_ang,
         )
     )
 
@@ -2563,26 +2566,11 @@ def write_declashed_pdb(coor_path: Path, src_pdb: Path, dst_pdb: Path) -> int:
     ENM atom-ordinals and health pair-building stay byte-consistent.  Returns
     the number of atoms rewritten.
     """
-    import struct  # noqa: PLC0415
+    from backend.core.remote_settle_retarget import (  # noqa: PLC0415
+        retarget_pdb_coordinates,
+    )
 
-    raw = coor_path.read_bytes()
-    n = struct.unpack("<i", raw[:4])[0]
-    xyz = np.frombuffer(raw[4 : 4 + n * 24], dtype="<f8").reshape(n, 3)
-
-    out: list[str] = []
-    ai = 0
-    for line in src_pdb.read_text().splitlines(keepends=True):
-        if line.startswith(("ATOM", "HETATM")):
-            x, y, z = xyz[ai]
-            ai += 1
-            line = f"{line[:30]}{x:8.3f}{y:8.3f}{z:8.3f}{line[54:]}"
-        out.append(line)
-    if ai != n:
-        raise RuntimeError(
-            f"Atom count mismatch: PDB has {ai} ATOM/HETATM lines, .coor has {n}"
-        )
-    dst_pdb.write_text("".join(out))
-    return ai
+    return retarget_pdb_coordinates(coor_path, src_pdb, dst_pdb)
 
 
 # ── Hydrogen Mass Repartitioning ──────────────────────────────────────────────
@@ -3100,6 +3088,7 @@ def mgh_slow_release_segments(
     timestep_fs: float = 2.0,
     chunk_pcts=LADDER_CHUNK_PCTS,
     settle_ps: float = SETTLE_STAGE_PS,
+    high_aspect_ratio: bool = False,
 ) -> tuple[str, list[SegmentSpec]]:
     """Return (min_name, segments) for the mgh_slow_release protocol.
 
@@ -3182,10 +3171,9 @@ def mgh_slow_release_segments(
     # Skipped for a carved cell: there the barostat is off throughout (vacuum corners),
     # so there is no box for this stage to settle.
     if settle_ps > 0 and not nvt_only:
-        # Same sizing rule as the ladder stages: the timestep this stage will REALLY run
-        # at, so 500 ps of settling is 500 ps whatever the integrator tier caps it to.
+        settle_dt = min(1.0, sizing_dt) if high_aspect_ratio else sizing_dt
         settle_steps = _round_up_to_cycle(
-            max(100, int(round(settle_ps * 1000.0 / sizing_dt)))
+            max(100, int(round(settle_ps * 1000.0 / settle_dt)))
         )
         # Deliberately NOT a numbered stage: the ENM ladder's 01..04 must mean the same
         # thing whether or not this stage exists, so a carved (NVT, no settle) package
@@ -3213,8 +3201,8 @@ def mgh_slow_release_segments(
                 dcd_freq=_display_dcd_freq(settle_steps),
                 extra_bonds_file=None,
                 restraint_ref_file=SOLUTE_RESTRAINT_PDB,
-                soft=soft,
-                gentle=gentle,
+                soft=soft or high_aspect_ratio,
+                gentle=gentle and not high_aspect_ratio,
             )
         )
         previous = seg_name
@@ -3342,6 +3330,7 @@ def prepare_mgh_slow_release(
     progress=None,
     declash: bool = False,
     force_soft: bool = False,
+    high_aspect_ratio: bool = False,
     fast: bool = False,
     #: The ladder's three integrator axes, decoupled (exp51).  ``relax_timestep_fs`` None
     #: keeps the historical ``fast``-derived 4/2 fs; ``relax_rigid_bonds`` / ``relax_hmr``
@@ -3690,6 +3679,7 @@ def prepare_mgh_slow_release(
         gentle=gentle_ladder,
         nvt_only=False,
         timestep_fs=ladder_dt,
+        high_aspect_ratio=high_aspect_ratio,
     )
 
     # The HMR PSF enters at the first hard, rigid-bond segment; minimisation and
@@ -3779,6 +3769,11 @@ def prepare_mgh_slow_release(
                 n_atoms=solvated_atoms,
                 force_resident=_resident_override,
                 overrides=overrides_for_stage(stage_overrides, idx),
+                npt_margin_ang=(
+                    HIGH_ASPECT_NPT_MARGIN_ANG
+                    if high_aspect_ratio
+                    else NPT_MARGIN_ANG
+                ),
             )
         )
 

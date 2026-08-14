@@ -88,6 +88,29 @@ def test_settle_conf_keeps_gpu_resident_on_a_large_system():
     assert "GPUresident        on" in conf
 
 
+def test_settle_is_soft_first_dynamics_after_minimization():
+    _, segments = P.mgh_slow_release_segments("X", timestep_fs=4.0, high_aspect_ratio=True)
+    settle = next(s for s in segments if "settle" in s.name)
+    conf = P._segment_conf(
+        settle, "X", (100.0, 90.0, 800.0), True, n_atoms=3_000_000
+    )
+    assert settle.soft is True
+    assert "rigidBonds         none" in conf
+    assert "timestep           1" in conf
+
+
+def test_elongated_npt_cell_gets_bounded_patch_grid_headroom():
+    settle, _ = _settle_and_ladder()
+    elongated = P._segment_conf(
+        settle, "X", (90.0, 90.0, 4080.0), True,
+        npt_margin_ang=P.HIGH_ASPECT_NPT_MARGIN_ANG,
+    )
+    ordinary = P._segment_conf(settle, "X", (90.0, 90.0, 200.0), True)
+    assert f"margin             {P.HIGH_ASPECT_NPT_MARGIN_ANG:g}" in elongated
+    assert f"margin             {P.NPT_MARGIN_ANG:g}" in ordinary
+    assert P.HIGH_ASPECT_NPT_MARGIN_ANG < 30.0
+
+
 def test_settle_conf_still_runs_under_the_barostat():
     """Restraining must not quietly turn the settle stage into NVT — the box HAS to move."""
     settle, _ = _settle_and_ladder()
@@ -340,6 +363,37 @@ def test_retarget_settle_restraints_is_idempotent(tmp_path):
     once = ref.read_text()
     retarget_settle_restraints(tmp_path, coor)
     assert ref.read_text() == once
+
+
+def test_remote_and_local_retarget_are_byte_identical(tmp_path):
+    """Both execution targets use one canonical coordinate-column rewrite."""
+    import struct
+
+    from backend.core.namd_runner import retarget_settle_restraints
+    from backend.core.remote_settle_retarget import retarget_pdb_coordinates
+
+    pdb = (
+        "ATOM      1  P   THY A   1       1.000   2.000   3.000  0.00  1.00      D000 P\n"
+        "ATOM      2  OH2 TIP3W   2       9.000   9.000   9.000  0.00  0.00      W000 O\n"
+    )
+    local_dir = tmp_path / "local"
+    remote_dir = tmp_path / "remote"
+    local_dir.mkdir()
+    remote_dir.mkdir()
+    for directory in (local_dir, remote_dir):
+        (directory / P.SOLUTE_RESTRAINT_PDB).write_text(pdb)
+    coor = tmp_path / "min.coor"
+    coor.write_bytes(struct.pack("<i", 2) + struct.pack("<6d", 4.5, 5.5, 6.5, 8, 9, 10))
+
+    assert retarget_settle_restraints(local_dir, coor)
+    retarget_pdb_coordinates(
+        coor,
+        remote_dir / P.SOLUTE_RESTRAINT_PDB,
+        remote_dir / P.SOLUTE_RESTRAINT_PDB,
+    )
+    assert (local_dir / P.SOLUTE_RESTRAINT_PDB).read_bytes() == (
+        remote_dir / P.SOLUTE_RESTRAINT_PDB
+    ).read_bytes()
 
 
 @pytest.mark.parametrize("missing", ["ref", "coor"])

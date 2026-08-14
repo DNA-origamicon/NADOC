@@ -43,6 +43,7 @@ LIVE_METRICS_INTERVAL_S = 30
 LIVE_HEALTH_NAME = "nadoc_live_health.py"
 LIVE_HEALTH_FILE = "output/live_health.json"
 LIVE_HEALTH_INTERVAL_S = 300
+SETTLE_RETARGET_NAME = "nadoc_settle_retarget.py"
 
 # Tier A only: the node WC health step + the verbatim md_health copy it imports.
 EARLY_STOP_HEALTH_NAME = "nadoc_health_eval.py"
@@ -516,6 +517,17 @@ def generate_sbatch(
             "  " + _exec_line(run_conf, log, resources, gpu, profile.namd_command(gpu))
         )
         lines.append("fi")
+        # Local and RunPod retarget the restrained settle reference to the completed
+        # minimization coordinates. Alpine must do the identical stdlib rewrite before
+        # its first dynamics stage; the file guard keeps production-only packages inert.
+        if i == 0:
+            lines += [
+                'if [ -f "restraints_settle.pdb" ] && '
+                f'[ -f "output/{conf}.coor" ]; then',
+                f'  python3 {SETTLE_RETARGET_NAME} "output/{conf}.coor" '
+                '"restraints_settle.pdb"',
+                "fi",
+            ]
         # In-sbatch early-stop: after a non-final relaxation chunk, let the node
         # evaluate the plateau and bridge the stage's remaining chunks.
         if early_stop_relax and _early_stop_eligible(
