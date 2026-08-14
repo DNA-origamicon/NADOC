@@ -2451,6 +2451,9 @@ class DesignLoadout(BaseModel):
     name: str = "Loadout"
     design_snapshot_gz_b64: str = ""
     snapshot_size_bytes: int = 0
+    protected: bool = False
+    simulation_engine: Optional[str] = None
+    simulation_job_id: Optional[str] = None
 
 
 # ── Protein attachment models (display-only; never part of the strand graph) ──
@@ -2671,6 +2674,7 @@ class Design(BaseModel):
     loadouts: List[DesignLoadout] = Field(default_factory=list)
     atomistic_reference: Optional[AtomisticReference] = None
     active_loadout_id: Optional[str] = None
+    last_editable_loadout_id: Optional[str] = None
     feature_log: List[FeatureLogEntry] = Field(default_factory=list)
     feature_log_cursor: int = -1  # -1 = at end; ≥0 = index of last active entry
     feature_log_sub_cursor: Optional[int] = None

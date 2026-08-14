@@ -1008,14 +1008,7 @@ async def append_oxdna_production(job_id: str, body: ProductionRequest) -> dict:
 
 @router.post("/oxdna/jobs/{job_id}/roll-design")
 async def roll_oxdna_job_design(job_id: str) -> dict:
-    """Restore the design to the EXACT state this job was run at (its frozen
-    snapshot), saving the current edits as a "Return to latest" loadout branch.
-
-    This is the robust "roll" used by the out-of-date guard: a feature-log seek can't
-    reproduce sequences / manual edits the log doesn't capture (so the stale flag
-    never cleared), but restoring the job's saved snapshot byte-for-byte makes the
-    current design match the job again → the ⚠ clears and live/production is
-    consistent.  The later edits live on in the returned ``return_loadout_id`` branch."""
+    """Select the protected loadout backed by this job's frozen design snapshot."""
     from backend.api.crud import roll_active_to_job_state
 
     job = _load_job(job_id)
@@ -1026,7 +1019,10 @@ async def roll_oxdna_job_design(job_id: str) -> dict:
         )
     name = job.design_name or "this job"
     return roll_active_to_job_state(
-        design, job.feature_log_position, f"Latest — before viewing {name}"
+        design,
+        name,
+        simulation_engine="oxdna",
+        simulation_job_id=job.job_id,
     )
 
 

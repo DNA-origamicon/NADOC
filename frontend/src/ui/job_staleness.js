@@ -7,12 +7,12 @@
  * for oxDNA, crash resolving current selections against the frozen topology). This
  * pops a roll-or-cancel dialog; on "Roll & run" it restores the job's EXACT saved
  * design snapshot (sequences + manual edits intact, unlike a feature-log seek) so the
- * design matches the job again — and saves the user's later edits as a "Latest"
- * loadout branch with a "Return to latest" toast.
+ * design matches the job again by selecting an immutable simulation loadout.
+ * The next design edit automatically resumes the last editable loadout.
  */
 
 import { showConfirm } from './primitives/confirm.js'
-import { showToast, showPersistentToast } from './toast.js'
+import { showToast } from './toast.js'
 import * as api from '../api/client.js'
 
 /** Pure: did the design change since this job was run? (backend `out_of_date` flag). */
@@ -27,8 +27,8 @@ export async function restoreSubmittedDesign({ job, rollFn, refetch }) {
   if (!jobOutOfDate(job)) return false
   const ok = await showConfirm({
     title: 'Restore to submitted design?',
-    message: 'This design has changed since the job was submitted. Restore the exact design snapshot used to prepare this job?\n\nThe job will not be stopped or modified, whether it is running locally, on Alpine, or on RunPod. Your current design will be saved as a loadout so you can return to it later.',
-    confirmLabel: 'Apply',
+    message: 'This design has changed since the job was submitted. View the protected loadout used to prepare this job?\n\nThe job will not be stopped or modified. Your current editable loadout is preserved, and NADOC will return to it automatically when you make a design change.',
+    confirmLabel: 'View loadout',
     cancelLabel: 'Cancel',
   })
   if (!ok) return false
@@ -42,11 +42,7 @@ export async function restoreSubmittedDesign({ job, rollFn, refetch }) {
     return false
   }
   if (refetch) setTimeout(() => { Promise.resolve(refetch()).catch(() => {}) }, 0)
-  if (r.return_loadout_id) {
-    showPersistentToast(
-      'Submitted design restored. The job was not modified; your later edits are saved as a “Latest” loadout.',
-      { severity: 'info', action: { label: '↩ Return to latest', onClick: () => api.selectLoadout(r.return_loadout_id, { saveCurrent: false }) } })
-  }
+  showToast('Protected simulation loadout selected. Editing returns to your last design loadout.', 'info')
   return true
 }
 
@@ -64,9 +60,9 @@ export async function ensureJobCurrent({ job, rollFn, refetch, actionLabel = 'th
     title: 'Design has changed',
     message: `The design was edited after this job was run, so running ${actionLabel} on it would be `
       + 'inconsistent with the current structure.'
-      + '\n\nRoll the design back to the exact state this job was run at and continue? Your later '
-      + 'edits are saved as a "Latest" loadout — a "Return to latest" button restores them.',
-    confirmLabel: 'Roll & run',
+      + '\n\nSwitch to the protected simulation loadout and continue? Your editable loadout is preserved; '
+      + 'the next design change returns to it automatically.',
+    confirmLabel: 'Switch & run',
     cancelLabel: 'Cancel',
   })
   if (!ok) return false
@@ -83,10 +79,6 @@ export async function ensureJobCurrent({ job, rollFn, refetch, actionLabel = 'th
   // already carries the authoritative fingerprint result; refresh historical
   // jobs after returning control so the next action is not held behind disk I/O.
   if (refetch) setTimeout(() => { Promise.resolve(refetch()).catch(() => {}) }, 0)
-  if (r.return_loadout_id) {
-    showPersistentToast(
-      'Design rolled back to this job’s run state. Your later edits are saved as a “Latest” loadout.',
-      { severity: 'info', action: { label: '↩ Return to latest', onClick: () => api.selectLoadout(r.return_loadout_id, { saveCurrent: false }) } })
-  }
+  showToast('Protected simulation loadout selected.', 'info')
   return true
 }

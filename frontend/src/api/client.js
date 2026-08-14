@@ -302,7 +302,7 @@ export function errorDetailToMessage(detail, fallback = 'Server error') {
   return fallback
 }
 
-export async function _request(method, path, body, { signal, suppressBusy = false, docId, timeoutMs = _REQUEST_TIMEOUT_MS } = {}) {
+export async function _request(method, path, body, { signal, suppressBusy = false, docId, timeoutMs = _REQUEST_TIMEOUT_MS, protectedRetry = true } = {}) {
   const isTimedOperation = method !== 'GET' && (
     path === '/design/bundle' || path === '/design/bundle-segment' ||
     path === '/design/bundle-continuation' || path === '/design/bundle-deformed-continuation' ||
@@ -406,6 +406,18 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
     }
   }
   if (!r.ok) {
+    if (r.status === 409 && json?.detail?.code === 'protected_simulation_loadout' && protectedRetry) {
+      // Protected simulation branches are immutable. Restore the most recently
+      // used editable branch and replay the user's original action there.
+      const activated = await _request(
+        'POST', '/design/loadouts/activate-editable', undefined,
+        { suppressBusy: true, docId, protectedRetry: false })
+      if (activated) {
+        return _request(method, path, body, {
+          signal, suppressBusy, docId, timeoutMs, protectedRetry: false,
+        })
+      }
+    }
     store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
     markOperationTiming('operation-rejected', { status: r.status }, operationTrace)
     finishOperationAfterRender(operationTrace)

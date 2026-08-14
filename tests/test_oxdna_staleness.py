@@ -376,11 +376,9 @@ def test_assign_sequences_are_feature_log_steps(tmp_path):
     assert "assign-staple-sequences" in kinds
 
 
-def test_roll_seeks_feature_log_cursor_and_keeps_full_log(monkeypatch, tmp_path):
-    """The reported fix: Roll & run SEEKS the feature-log cursor to the job's position
-    (visible in the Feature Log tab) instead of replacing the log — the full log is
-    kept, later entries become inactive, the model reverts to the job's state, and the
-    user can seek forward again."""
+def test_roll_selects_protected_snapshot_loadout_and_keeps_editable_log(monkeypatch, tmp_path):
+    """Viewing a run restores its exact historical log in a protected loadout while
+    retaining the later editable branch independently."""
     monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
 
     design_state.set_design(make_6hb_design())
@@ -409,20 +407,25 @@ def test_roll_seeks_feature_log_cursor_and_keeps_full_log(monkeypatch, tmp_path)
     assert full_len > pos + 1
     assert c.get(f"/api/oxdna/jobs/{job.job_id}").json()["out_of_date"] is True
 
-    # Roll: SEEK the cursor to the job position — full log kept, model reverts.
+    # Roll: exact frozen history becomes the active protected simulation loadout.
     r = c.post(f"/api/oxdna/jobs/{job.job_id}/roll-design")
     assert r.status_code == 200, r.text
     rolled = design_state.get_or_404()
-    assert len(rolled.feature_log) == full_len  # FULL log preserved (not truncated)
-    assert rolled.feature_log_cursor == pos  # cursor seeked to the job position
+    assert len(rolled.feature_log) == pos + 1
+    sim = next(l for l in rolled.loadouts if l.id == rolled.active_loadout_id)
+    assert sim.protected is True
+    assert sim.simulation_job_id == job.job_id
     assert [
         s.sequence for s in rolled.strands
     ] == seqs_at_job  # model == the job's state
     assert c.get(f"/api/oxdna/jobs/{job.job_id}").json()["out_of_date"] is False
 
-    # The user can seek forward in the Feature Log tab to return to the latest edit.
-    assert c.post("/api/design/features/seek", json={"position": -1}).status_code == 200
-    assert [s.sequence for s in design_state.get_or_404().strands] != seqs_at_job
+    # Explicitly returning to the editable branch restores its independent full log.
+    editable_id = r.json()["return_loadout_id"]
+    assert c.post(f"/api/design/loadouts/{editable_id}/select?save_current=false").status_code == 200
+    editable = design_state.get_or_404()
+    assert len(editable.feature_log) == full_len
+    assert [s.sequence for s in editable.strands] != seqs_at_job
 
 
 # ── Overhang-sequence writes are feature-log steps (the 6hb_sim_tests bug) ─────

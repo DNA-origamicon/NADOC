@@ -228,10 +228,47 @@ def copy_for_persist() -> tuple[Design | None, int]:
         return snap, s.revision
 
 
+def _assert_active_loadout_editable(
+    current: Design | None, replacement: Design | None = None
+) -> None:
+    """Reject edits to a protected simulation loadout.
+
+    The client responds to this machine-readable conflict by restoring the last
+    editable loadout and retrying the original request. A different design id is
+    file navigation rather than an edit and remains allowed.
+    """
+    if current is None or (replacement is not None and replacement.id != current.id):
+        return
+    active = next(
+        (item for item in current.loadouts if item.id == current.active_loadout_id),
+        None,
+    )
+    if active is not None and active.protected:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "protected_simulation_loadout",
+                "message": "Simulation loadouts are read-only.",
+            },
+        )
+
+
 def set_design(d: Design) -> None:
     with _lock:
         s = _session()
+        _assert_active_loadout_editable(s.design, d)
         if s.design is not None:
+            s.history.append(s.design.model_copy(deep=True))
+        s.redo.clear()
+        s.design = d
+        _bump_revision(s)
+
+
+def set_design_branch(d: Design, *, push_history: bool = True) -> None:
+    """Replace state for explicit file/branch navigation, bypassing edit protection."""
+    with _lock:
+        s = _session()
+        if push_history and s.design is not None:
             s.history.append(s.design.model_copy(deep=True))
         s.redo.clear()
         s.design = d
@@ -270,6 +307,7 @@ def mutate_and_validate(
         s = _session()
         if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
+        _assert_active_loadout_editable(s.design)
         s.history.append(s.design.model_copy(deep=True))
         s.redo.clear()
         fn(s.design)
@@ -303,6 +341,7 @@ def mutate_with_reconcile(
         s = _session()
         if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
+        _assert_active_loadout_editable(s.design)
         before = s.design.model_copy(deep=True)
         s.history.append(before)
         s.redo.clear()
@@ -330,6 +369,7 @@ def replace_with_reconcile(
         s = _session()
         if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
+        _assert_active_loadout_editable(s.design, new_design)
         before = s.design.model_copy(deep=True)
         s.history.append(before)
         s.redo.clear()
@@ -461,6 +501,7 @@ def mutate_with_feature_log(
         s = _session()
         if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
+        _assert_active_loadout_editable(s.design)
         before = s.design.model_copy(deep=True)
         s.history.append(before)
         s.redo.clear()
@@ -551,6 +592,7 @@ def mutate_with_minor_log(
         s = _session()
         if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
+        _assert_active_loadout_editable(s.design)
         before = s.design.model_copy(deep=True)
         s.history.append(before)
         s.redo.clear()
@@ -637,6 +679,7 @@ def undo() -> tuple[Design, ValidationReport]:
     """
     with _lock:
         s = _session()
+        _assert_active_loadout_editable(s.design)
         if not s.history:
             raise HTTPException(status_code=404, detail="Nothing to undo.")
         s.redo.append(s.design.model_copy(deep=True))
@@ -653,6 +696,7 @@ def redo() -> tuple[Design, ValidationReport]:
     """
     with _lock:
         s = _session()
+        _assert_active_loadout_editable(s.design)
         if not s.redo:
             raise HTTPException(status_code=404, detail="Nothing to redo.")
         s.history.append(s.design.model_copy(deep=True))
@@ -698,6 +742,7 @@ def snapshot() -> None:
     """
     with _lock:
         s = _session()
+        _assert_active_loadout_editable(s.design)
         if s.design is not None:
             s.history.append(s.design.model_copy(deep=True))
         s.redo.clear()
@@ -747,6 +792,7 @@ def set_design_silent(d: Design) -> None:
     """
     with _lock:
         s = _session()
+        _assert_active_loadout_editable(s.design, d)
         s.design = d
         _bump_revision(s)
 
@@ -765,6 +811,7 @@ def set_design_silent_reconciled(
     """
     with _lock:
         s = _session()
+        _assert_active_loadout_editable(s.design, new_design)
         reconciled = reconcile_cluster_membership(before, new_design, report)
         s.design = reconciled
         validation = validate_design(s.design)

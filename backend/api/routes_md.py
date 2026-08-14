@@ -5565,9 +5565,7 @@ async def submit_md_ensemble(parent_id: str, body: EnsembleSubmitRequest) -> dic
 
 @router.post("/md/jobs/{job_id}/roll-design")
 async def roll_md_job_design(job_id: str) -> dict:
-    """Restore the design to the EXACT state this MD job was prepared from (its frozen
-    snapshot), saving the current edits as a "Return to latest" loadout branch — so a
-    stale job's ⚠ clears and the trajectory display matches the structure again."""
+    """Select the protected loadout backed by this job's frozen design snapshot."""
     from backend.api.crud import roll_active_to_job_state
 
     job = _load_job(job_id)
@@ -5578,7 +5576,10 @@ async def roll_md_job_design(job_id: str) -> dict:
         )
     name = job.design_name or "this job"
     return roll_active_to_job_state(
-        design, job.feature_log_position, f"Latest — before viewing {name}"
+        design,
+        name,
+        simulation_engine="md",
+        simulation_job_id=job.job_id,
     )
 
 

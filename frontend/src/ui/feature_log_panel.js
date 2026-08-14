@@ -278,12 +278,13 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     for (const loadout of loadouts) {
       const opt = document.createElement('option')
       opt.value = loadout.id
-      opt.textContent = loadout.name || 'Loadout'
+      opt.textContent = `${loadout.protected ? '🔒 ' : ''}${loadout.name || 'Loadout'}`
       loadoutSelect.appendChild(opt)
     }
     if (activeId) loadoutSelect.value = activeId
-    const canRename = !!activeId
-    const canDelete = activeId && activeId !== '__implicit_loadout_1__' && loadouts.length > 1
+    const activeLoadout = loadouts.find(l => l.id === activeId)
+    const canRename = !!activeId && !activeLoadout?.protected
+    const canDelete = activeId && activeId !== '__implicit_loadout_1__' && !activeLoadout?.protected && loadouts.length > 1
     loadoutRenameBtn.disabled = !canRename
     loadoutRenameBtn.style.opacity = canRename ? '1' : '0.45'
     loadoutDeleteBtn.disabled = !canDelete

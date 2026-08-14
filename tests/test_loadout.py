@@ -13,8 +13,13 @@ from backend.api.crud import (
     delete_loadout,
     design_state,
     select_loadout,
+    activate_last_editable_loadout,
+    _encode_loadout_design_snapshot,
 )
-from backend.core.models import Design, DeformationLogEntry
+from backend.api import state as design_state_api
+from backend.core.models import Design, DeformationLogEntry, DesignLoadout
+from fastapi import HTTPException
+import pytest
 
 
 def _fl(marker: str) -> DeformationLogEntry:
@@ -94,4 +99,46 @@ def test_loadouts_have_independent_feature_logs():
     assert [e.deformation_id for e in design_state.get_or_404().feature_log] == [
         "A",
         "C",
+    ]
+
+
+def test_protected_simulation_loadout_rejects_edits_and_returns_to_last_editable():
+    design_state.set_design(Design().copy_with(feature_log=[_fl("editable")]))
+    create_loadout(LoadoutCreateBody(name="Working"))
+    working = design_state.get_or_404()
+    working_id = working.active_loadout_id
+    payload, size = _encode_loadout_design_snapshot(
+        working.copy_with(feature_log=[_fl("simulation")])
+    )
+    sim = DesignLoadout(
+        name="Simulation",
+        design_snapshot_gz_b64=payload,
+        snapshot_size_bytes=size,
+        protected=True,
+        simulation_engine="oxdna",
+        simulation_job_id="job-1",
+    )
+    protected = working.copy_with(
+        feature_log=[_fl("simulation")],
+        loadouts=[*working.loadouts, sim],
+        active_loadout_id=sim.id,
+        last_editable_loadout_id=working_id,
+    )
+    design_state_api.set_design_branch(protected)
+
+    with pytest.raises(HTTPException) as exc:
+        design_state_api.mutate_and_validate(lambda d: d.feature_log.append(_fl("bad")))
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "protected_simulation_loadout"
+    assert [e.deformation_id for e in design_state.get_or_404().feature_log] == [
+        "simulation"
+    ]
+
+    activate_last_editable_loadout()
+    restored = design_state.get_or_404()
+    assert restored.active_loadout_id == working_id
+    design_state_api.mutate_and_validate(lambda d: d.feature_log.append(_fl("new")))
+    assert [e.deformation_id for e in design_state.get_or_404().feature_log] == [
+        "editable",
+        "new",
     ]

@@ -3554,8 +3554,8 @@ def assert_roll_return_lifecycle(
       0. **Precondition** — the edit is present and the job is ``out_of_date``.
       1. **Crash-guard** — a live/production op on the stale job is refused with
          **409** (not a 500 crash, not silently allowed).
-      2. **Roll is non-destructive** — the full feature log is kept (length
-         unchanged), the cursor seeks to ``run_log_position``, and the roll banks a
+      2. **Roll is non-destructive** — the job's exact historical feature log is
+         restored in a protected simulation loadout, and the roll banks the editable
          ``return_loadout_id``.
       3. **Roll reaches the run state** — the rolled design's fingerprint equals
          ``run_fingerprint`` and ``run_state_probe`` holds (edit's topology gone,
@@ -3564,8 +3564,8 @@ def assert_roll_return_lifecycle(
       5. **Return restores the edits** — return-to-latest brings back the edited
          state (``edit_probe`` holds again).
 
-    Can-go-red: a stale job that runs without refusal (1), a roll that truncates the
-    log / lands the cursor wrong / drops the return branch (2), a rolled state that
+    Can-go-red: a stale job that runs without refusal (1), a roll that loses the
+    protected snapshot / drops the return branch (2), a rolled state that
     doesn't match the run fingerprint or loses sequences (3), a ⚠ that never clears
     (4), or a return that loses the edits (5).
     """
@@ -3600,14 +3600,9 @@ def assert_roll_return_lifecycle(
     rid = (resp or {}).get("return_loadout_id")
     assert rid, "roll must bank the later edits as a 'return_loadout_id' branch."
     rolled = design_state.get_or_404()
-    assert len(rolled.feature_log) == full_len, (
-        f"roll changed the feature-log length {full_len} -> {len(rolled.feature_log)} — "
-        "the roll must keep the full log (seek, not truncate)."
-    )
-    assert rolled.feature_log_cursor == run_log_position, (
-        f"roll left the cursor at {rolled.feature_log_cursor}, expected the job's "
-        f"run position {run_log_position}."
-    )
+    sim = next(l for l in rolled.loadouts if l.id == rolled.active_loadout_id)
+    assert sim.protected and sim.simulation_job_id
+    assert len(rolled.feature_log) == run_log_position + 1
     assert design_build_fingerprint(rolled) == run_fingerprint, (
         "rolled design fingerprint != the job's run-state fingerprint — the roll did "
         "not reproduce the state the job was relaxed at."

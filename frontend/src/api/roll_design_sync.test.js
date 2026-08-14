@@ -4,7 +4,7 @@
 // so the server seeked the design but the client never re-rendered it.
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-import { rollOxdnaJobDesign, rollMdJobDesign, seekFeatures } from './client.js'
+import { rollOxdnaJobDesign, rollMdJobDesign, seekFeatures, rollbackLastFeature } from './client.js'
 import { store } from '../state/store.js'
 
 function rollResponse() {
@@ -62,5 +62,30 @@ describe('design syncs fire the in-page nadoc:design-changed event', () => {
     await seekFeatures(6)
     window.removeEventListener('nadoc:design-changed', fired)
     expect(fired).toHaveBeenCalled()
+  })
+})
+
+describe('protected simulation loadout mutation retry', () => {
+  beforeEach(() => { vi.stubGlobal('fetch', vi.fn()) })
+
+  it('restores the editable loadout and retries the original design change', async () => {
+    fetch
+      .mockResolvedValueOnce({
+        ok: false, status: 409, statusText: 'Conflict', headers: { get: () => null },
+        json: async () => ({ detail: { code: 'protected_simulation_loadout', message: 'read-only' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true, status: 200, headers: { get: () => null },
+        json: async () => ({ design: { active_loadout_id: 'working', feature_log: [], strands: [], helices: [] }, nucleotides: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true, status: 200, headers: { get: () => null },
+        json: async () => ({ design: { active_loadout_id: 'working', feature_log: [{ id: 'changed' }], strands: [], helices: [] }, nucleotides: [] }),
+      })
+
+    await rollbackLastFeature()
+    expect(fetch).toHaveBeenCalledTimes(3)
+    expect(fetch.mock.calls[1][0]).toContain('/design/loadouts/activate-editable')
+    expect(fetch.mock.calls[2][0]).toContain('/design/features/last')
   })
 })

@@ -11063,6 +11063,9 @@ def _auto_loadout_name(loadouts: list[DesignLoadout]) -> str:
 def _save_active_loadout_snapshot(
     design: Design, loadouts: list[DesignLoadout], active_id: str
 ) -> list[DesignLoadout]:
+    active = next((l for l in loadouts if l.id == active_id), None)
+    if active is not None and active.protected:
+        return loadouts
     payload, size = _encode_loadout_design_snapshot(design)
     return [
         l.model_copy(
@@ -11127,8 +11130,49 @@ def select_loadout(loadout_id: str, save_current: bool = True) -> dict:
     except Exception as exc:
         raise HTTPException(500, detail=f"Failed to restore loadout: {exc}") from exc
 
-    updated = restored.copy_with(loadouts=loadouts, active_loadout_id=loadout_id)
-    design_state.set_design(updated)
+    last_editable_id = current.last_editable_loadout_id
+    if not selected.protected:
+        last_editable_id = selected.id
+    updated = restored.copy_with(
+        loadouts=loadouts,
+        active_loadout_id=loadout_id,
+        last_editable_loadout_id=last_editable_id,
+    )
+    design_state.set_design_branch(updated)
+    report = validate_design(updated)
+    return _design_response_with_geometry(updated, report)
+
+
+@router.post("/design/loadouts/activate-editable", status_code=200)
+def activate_last_editable_loadout() -> dict:
+    """Leave a protected simulation view without saving it, restoring the last
+    editable branch. Used automatically before retrying a design mutation."""
+    from backend.core.validator import validate_design
+
+    current = design_state.get_or_404()
+    loadouts, _active_id = _ensure_loadouts(current)
+    target = next(
+        (
+            item
+            for item in loadouts
+            if item.id == current.last_editable_loadout_id and not item.protected
+        ),
+        None,
+    )
+    if target is None:
+        target = next((item for item in loadouts if not item.protected), None)
+    if target is None:
+        raise HTTPException(409, detail="No editable loadout is available.")
+    try:
+        restored = _decode_loadout_design_snapshot(target.design_snapshot_gz_b64)
+    except Exception as exc:
+        raise HTTPException(500, detail=f"Failed to restore editable loadout: {exc}") from exc
+    updated = restored.copy_with(
+        loadouts=loadouts,
+        active_loadout_id=target.id,
+        last_editable_loadout_id=target.id,
+    )
+    design_state.set_design_branch(updated, push_history=False)
     report = validate_design(updated)
     return _design_response_with_geometry(updated, report)
 
@@ -11146,6 +11190,8 @@ def rename_loadout(loadout_id: str, body: LoadoutRenameBody) -> dict:
         raise HTTPException(400, detail="Loadout name cannot be empty.")
     if not any(l.id == loadout_id for l in loadouts):
         raise HTTPException(404, detail=f"Loadout {loadout_id!r} not found.")
+    if any(l.id == loadout_id and l.protected for l in loadouts):
+        raise HTTPException(400, detail="Simulation loadouts cannot be renamed.")
     loadouts = [
         l.model_copy(update={"name": name}) if l.id == loadout_id else l
         for l in loadouts
@@ -11167,6 +11213,8 @@ def delete_loadout(loadout_id: str) -> dict:
         raise HTTPException(400, detail="Cannot delete the only loadout.")
     if not any(l.id == loadout_id for l in loadouts):
         raise HTTPException(404, detail=f"Loadout {loadout_id!r} not found.")
+    if any(l.id == loadout_id and l.protected for l in loadouts):
+        raise HTTPException(400, detail="Simulation loadouts cannot be deleted.")
 
     loadouts = _save_active_loadout_snapshot(current, loadouts, active_id)
     remaining = [l for l in loadouts if l.id != loadout_id]
@@ -11414,70 +11462,64 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
 
 
 def roll_active_to_job_state(
-    snapshot: Design, feature_log_position, return_name: str
+    snapshot: Design,
+    return_name: str,
+    *,
+    simulation_engine: str,
+    simulation_job_id: str,
 ) -> dict:
-    """Roll the active design back to the state an oxDNA/MD job was run at, by SEEKING
-    the feature-log cursor to the job's position — exactly like sliding the Feature Log
-    tab's rail.  The full feature log is preserved (later entries — e.g. an overhang
-    added after the run — become inactive/forward, so the model loses them and the
-    user can seek forward again), and the cursor is visible in the Feature Log tab.
+    """Select an immutable, job-specific loadout containing the frozen run design.
 
-    Sequence assignment is now a logged op, so the seek reproduces the job's exact
-    state (the out-of-date fingerprint clears).  For OLD jobs created before that,
-    the seek may drop sequences → we overlay the job's saved snapshot topology while
-    keeping the seeked feature_log + cursor, so the run is still consistent.
-
-    The pre-roll design is saved as a loadout branch (``return_loadout_id``, the
-    "Return to latest" target) and pushed to undo (Ctrl-Z restores)."""
+    The current editable branch is saved first. Re-selecting the same job refreshes
+    its existing simulation loadout from ``design.json`` instead of creating a
+    duplicate. The snapshot's complete historical feature log is restored verbatim.
+    """
     from backend.core.oxdna_staleness import design_build_fingerprint
     from backend.core.validator import validate_design
 
     current = design_state.get_or_404()
-    loadouts = list(current.loadouts or [])
-    active_id = current.active_loadout_id
-    if loadouts and active_id and any(l.id == active_id for l in loadouts):
-        loadouts = _save_active_loadout_snapshot(current, loadouts, active_id)
-    return_id = str(_uuid.uuid4())
-    payload, size = _encode_loadout_design_snapshot(current)
-    loadouts.append(
-        DesignLoadout(
-            id=return_id,
-            name=return_name,
-            design_snapshot_gz_b64=payload,
-            snapshot_size_bytes=size,
-        )
+    loadouts, active_id = _ensure_loadouts(current)
+    loadouts = _save_active_loadout_snapshot(current, loadouts, active_id)
+    active = next((l for l in loadouts if l.id == active_id), None)
+    last_editable_id = current.last_editable_loadout_id
+    if active is not None and not active.protected:
+        last_editable_id = active.id
+    if last_editable_id is None:
+        editable = next((l for l in loadouts if not l.protected), None)
+        last_editable_id = editable.id if editable else None
+
+    sim_id = next(
+        (
+            l.id
+            for l in loadouts
+            if l.protected
+            and l.simulation_engine == simulation_engine
+            and l.simulation_job_id == simulation_job_id
+        ),
+        str(_uuid.uuid4()),
+    )
+    payload, size = _encode_loadout_design_snapshot(snapshot)
+    sim_loadout = DesignLoadout(
+        id=sim_id,
+        name=f"Simulation · {return_name}",
+        design_snapshot_gz_b64=payload,
+        snapshot_size_bytes=size,
+        protected=True,
+        simulation_engine=simulation_engine,
+        simulation_job_id=simulation_job_id,
+    )
+    loadouts = [l for l in loadouts if l.id != sim_id] + [sim_loadout]
+    rolled = snapshot.copy_with(
+        loadouts=loadouts,
+        active_loadout_id=sim_id,
+        last_editable_loadout_id=last_editable_id,
     )
 
-    if snapshot.id != current.id:
-        # Cross-design roll is allowed, but histories are never interchangeable.
-        # Switch to the job's complete frozen design + its own Feature Log instead
-        # of grafting the active file's log onto unrelated topology.
-        rolled = snapshot.copy_with(loadouts=loadouts, active_loadout_id=None)
-    else:
-        # Seek the cursor to the job's run position (full log kept, cursor moves).
-        n = len(current.feature_log)
-        if feature_log_position is not None and -1 <= feature_log_position < n:
-            seeked = _seek_feature_log(current, feature_log_position)
-        else:
-            seeked = current  # no recorded position / out of range → leave the cursor
-
-        # New jobs: the seek already reproduces the job's state. Old jobs: overlay
-        # the exact snapshot topology while retaining this SAME design's log/cursor.
-        if design_build_fingerprint(seeked) == design_build_fingerprint(snapshot):
-            rolled = seeked.copy_with(loadouts=loadouts, active_loadout_id=None)
-        else:
-            rolled = snapshot.copy_with(
-                feature_log=seeked.feature_log,
-                feature_log_cursor=seeked.feature_log_cursor,
-                feature_log_sub_cursor=seeked.feature_log_sub_cursor,
-                loadouts=loadouts,
-                active_loadout_id=None,
-            )
-
-    design_state.set_design(rolled)
+    design_state.set_design_branch(rolled)
     report = validate_design(rolled)
     resp = _design_response_with_geometry(rolled, report)
-    resp["return_loadout_id"] = return_id
+    resp["return_loadout_id"] = last_editable_id
+    resp["simulation_loadout_id"] = sim_id
     # Lets the UI proceed without synchronously re-listing every historical job.
     # The list refresh can update stale badges later in the background.
     resp["matches_job"] = (
