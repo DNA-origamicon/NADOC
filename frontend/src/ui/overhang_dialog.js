@@ -8,7 +8,7 @@ import {
 } from '../perf/operation_timing.js'
 
 export function initOverhangDialog({
-  slicePlane,
+  getSlicePlane,
   assemblyRenderer,
   getPreviewEnabled,
   setPreviewEnabled,
@@ -112,7 +112,7 @@ export function initOverhangDialog({
   previewToggle.addEventListener('change', () => {
     setPreviewEnabled(previewToggle.checked)
     localStorage.setItem('NADOC_EXTRUDE_PREVIEW', String(getPreviewEnabled()))
-    slicePlane.setPreviewEnabled(getPreviewEnabled())
+    getSlicePlane().setPreviewEnabled(getPreviewEnabled())
     _refreshGhost()   // shows or clears based on the flag
   })
 

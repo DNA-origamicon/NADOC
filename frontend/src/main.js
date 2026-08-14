@@ -811,7 +811,7 @@ async function main() {
   // ── Overhang dialog ──────────────────────────────────────────────────────────
 
   const overhangDialog = initOverhangDialog({
-    slicePlane,
+    getSlicePlane: () => slicePlane,
     assemblyRenderer,
     getPreviewEnabled: () => _extrudePreviewEnabled,
     setPreviewEnabled: enabled => { _extrudePreviewEnabled = enabled },
@@ -859,7 +859,7 @@ async function main() {
     seekFeaturesWithDelta: _seekFeaturesWithDelta,
     showToast,
     getOrientPanel: () => _orientPanel,
-    activateTranslateRotateTool: _activateTranslateRotateTool,
+    activateTranslateRotateTool: (...args) => _activateTranslateRotateTool(...args),
   })
   const _watchDeformState = featureEditor.watchDeformState
   const _onEditFeature = featureEditor.onEditFeature
@@ -4898,8 +4898,8 @@ async function main() {
 
   const _applyAssemblyLoadDefaults = createAssemblyLoadDefaults({
     api,
-    setColoringMode: _setColoringMode,
-    updateReprRadio: _updateReprRadio,
+    setColoringMode: (...args) => _setColoringMode(...args),
+    updateReprRadio: (...args) => _updateReprRadio(...args),
   })
 
   // One-shot disk-load stash, set by initFileOpen.openAssemblyFromServer (via the
@@ -4979,32 +4979,6 @@ async function main() {
   // active-group instance). Initialized here so it exists before the assembly
   // store subscriber below (and the group-gizmo drag handler) call `.update()`.
   const _assemblyMultiBox = initAssemblyMultiBox({ scene, store, assemblyRenderer })
-
-  // Drive assembly panel + assembly renderer from the assembly slice
-  initAssemblyModeSync({
-    store, animPanel, setDesignGeometryVisible: _setDesignGeometryVisible,
-    assemblyPanel, applyAssemblyLoadDefaults: _applyAssemblyLoadDefaults,
-    runAssemblyRebuild: _runAssemblyRebuild, controls,
-    updateFixedLockPositions: _updateFixedLockPositions, canvas,
-    onAssemblyPointerDown: _onAssemblyPointerDown, onAssemblyClick: _onAssemblyClick,
-    overhangHoverPicker, onAssemblyContextMenu: _onAssemblyContextMenu,
-    hasAssemblyPending: _hasAssemblyPending, commitAssemblyPending: _commitAssemblyPending,
-    rebuildFixedLocks: _rebuildFixedLocks, assemblyContextMenu, instanceGizmo,
-    assemblyPendingTransforms: _assemblyPendingTransforms,
-    assemblyPendingPartJoints: _assemblyPendingPartJoints,
-    assemblyRenderer, assemblyJointRenderer, beltPathRenderer,
-    assemblyPointer: _assemblyPointer, assemblyLasso, assemblyMultiBox: _assemblyMultiBox,
-    setMotionChip: _setMotionChip,
-    isTranslateRotateActive: () => _translateRotateActive,
-    setTranslateRotateActive: value => { _translateRotateActive = value },
-    translateRotateTool: _translateRotateTool, hideWelcome: _hideWelcome,
-    getAssemblyLoadSettle: () => _assemblyLoadSettle,
-    rebuildBeltPaths: _rebuildBeltPaths,
-    attachGroupGizmoForGroup: _attachGroupGizmoForGroup,
-    attachGroupGizmo: _attachGroupGizmo,
-    clearSelectedAssemblyCluster: () => { _selectedAssemblyCluster = null },
-    clusterGlowLayer, getClusterPanel: () => clusterPanel,
-  })
 
   // ── Fixed-instance lock indicators (persistent while assembly mode is active) ──
   const _fixedLockEls = new Map()   // instanceId → wrapper HTMLElement
@@ -5188,7 +5162,34 @@ async function main() {
   // (press-time contextmenu). See right_click_menu.js.
   const _onAssemblyContextMenu = deferrableContextMenu(canvas, _assemblyPointer.onAssemblyContextMenu)
 
+  // Drive assembly panel + assembly renderer only after all pointer/overlay
+  // dependencies exist. The subscriber may run synchronously on registration.
   let clusterPanel = null
+  initAssemblyModeSync({
+    store, animPanel, setDesignGeometryVisible: _setDesignGeometryVisible,
+    assemblyPanel, applyAssemblyLoadDefaults: _applyAssemblyLoadDefaults,
+    runAssemblyRebuild: _runAssemblyRebuild, controls,
+    updateFixedLockPositions: _updateFixedLockPositions, canvas,
+    onAssemblyPointerDown: _onAssemblyPointerDown, onAssemblyClick: _onAssemblyClick,
+    overhangHoverPicker, onAssemblyContextMenu: _onAssemblyContextMenu,
+    hasAssemblyPending: _hasAssemblyPending, commitAssemblyPending: _commitAssemblyPending,
+    rebuildFixedLocks: _rebuildFixedLocks, assemblyContextMenu, instanceGizmo,
+    assemblyPendingTransforms: _assemblyPendingTransforms,
+    assemblyPendingPartJoints: _assemblyPendingPartJoints,
+    assemblyRenderer, assemblyJointRenderer, beltPathRenderer,
+    assemblyPointer: _assemblyPointer, assemblyLasso, assemblyMultiBox: _assemblyMultiBox,
+    setMotionChip: _setMotionChip,
+    isTranslateRotateActive: () => _translateRotateActive,
+    setTranslateRotateActive: value => { _translateRotateActive = value },
+    translateRotateTool: _translateRotateTool, hideWelcome: _hideWelcome,
+    getAssemblyLoadSettle: () => _assemblyLoadSettle,
+    rebuildBeltPaths: _rebuildBeltPaths,
+    attachGroupGizmoForGroup: _attachGroupGizmoForGroup,
+    attachGroupGizmo: _attachGroupGizmo,
+    clearSelectedAssemblyCluster: () => { _selectedAssemblyCluster = null },
+    clusterGlowLayer, getClusterPanel: () => clusterPanel,
+  })
+
   clusterPanel = initClusterPanel(store, {
     onAssemblyClusterClick: (instanceId, clusterId) => {
       if (!instanceId || !clusterId) {
@@ -5318,15 +5319,6 @@ async function main() {
   // the strip is a dedicated collapse/expand affordance that mirrors the
   // active-tab click. Persists (activeTab, collapsed) to localStorage so the
   // sidebar restores its prior state across reloads.
-  const _leftSidebar = initLeftSidebar({
-    store,
-    animPlayer,
-    trajectoryKeyframes,
-    seekFeaturesWithDelta: _seekFeaturesWithDelta,
-    photoMode: _photoMode,
-    animPanel,
-  })
-
   initPlatesTab({ api, designRenderer, selectionManager, store })
 
   // ── Sidebar resize handles ───────────────────────────────────────────────────
@@ -5396,6 +5388,15 @@ async function main() {
   // Close the adaptive-clip seam (~600): the shadow catcher extends past the
   // content, so far has to reach its far corner or the plane gets cropped.
   _photoFloorReach = () => _photoMode.mode.getFloorReach()
+
+  const _leftSidebar = initLeftSidebar({
+    store,
+    animPlayer,
+    trajectoryKeyframes,
+    seekFeaturesWithDelta: _seekFeaturesWithDelta,
+    photoMode: _photoMode,
+    animPanel,
+  })
 
   // Save/Save-As dispatch factory (ui/file_io.js initFileSave, extraction #60).
   // Placed here — not at the menu listeners (~3924) — because its deps span the
