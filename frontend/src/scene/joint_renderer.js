@@ -115,6 +115,28 @@ function _convexHull2D(pts) {
   return hull
 }
 
+// Stable convex hull for occupancy outlines. Helix axes are derived through
+// floating-point transforms, so an epsilon-aware monotone chain avoids losing
+// a shallow bevel when points are nearly (but not actually) collinear.
+function _convexOccupancyHull2D(pts) {
+  if (pts.length < 3) return pts.slice()
+  const sorted = pts.slice().sort((a, b) => a.u - b.u || a.v - b.v)
+  const cross = (o, a, b) => (a.u - o.u) * (b.v - o.v) - (a.v - o.v) * (b.u - o.u)
+  const chain = sequence => {
+    const result = []
+    for (const point of sequence) {
+      while (result.length >= 2 && cross(result[result.length - 2], result[result.length - 1], point) <= 1e-10) {
+        result.pop()
+      }
+      result.push(point)
+    }
+    return result
+  }
+  const lower = chain(sorted)
+  const upper = chain(sorted.slice().reverse())
+  return lower.slice(0, -1).concat(upper.slice(0, -1))
+}
+
 /**
  * Expand a CCW convex hull outward by `margin` at each vertex and convert
  * to the {x,z} corner format used by the prism/panel surface builders
@@ -1756,6 +1778,664 @@ function _scanExtrusionGroup(helixIds, helixAxes, helixBp, latticeType, name, ti
   return group
 }
 
+function _polygonArea(loop) {
+  let area = 0
+  for (let i = 0; i < loop.length; i++) {
+    const a = loop[i], b = loop[(i + 1) % loop.length]
+    area += a.x * b.z - b.x * a.z
+  }
+  return area / 2
+}
+
+function _pointInLoop(point, loop) {
+  let inside = false
+  for (let i = 0, j = loop.length - 1; i < loop.length; j = i++) {
+    const a = loop[i], b = loop[j]
+    if ((a.z > point.z) !== (b.z > point.z) &&
+        point.x < (b.x - a.x) * (point.z - a.z) / (b.z - a.z) + a.x) inside = !inside
+  }
+  return inside
+}
+
+function _simplifyLatticeLoop(loop) {
+  if (loop.length <= 3) return loop
+  const out = []
+  for (let i = 0; i < loop.length; i++) {
+    const a = loop[(i - 1 + loop.length) % loop.length], b = loop[i], c = loop[(i + 1) % loop.length]
+    const cross = (b.x - a.x) * (c.z - b.z) - (b.z - a.z) * (c.x - b.x)
+    if (Math.abs(cross) > 1e-8) out.push(b)
+  }
+  return out.length >= 3 ? out : loop
+}
+
+function _simplifyBoundaryLoop(loop, tolerance = null) {
+  if (loop.length <= 4) return loop
+  if (tolerance == null) {
+    const xs = loop.map(p => p.x), zs = loop.map(p => p.z)
+    const diameter = Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs))
+    const factor = Math.min(0.52, Math.max(0.34, 0.34 + Math.max(0, diameter - 7) * 0.025))
+    tolerance = SQUARE_HELIX_SPACING * factor
+  }
+  let ai = 0, bi = 1, farthest = 0
+  for (let i = 0; i < loop.length; i++) for (let j = i + 1; j < loop.length; j++) {
+    const d = (loop[i].x - loop[j].x) ** 2 + (loop[i].z - loop[j].z) ** 2
+    if (d > farthest) { farthest = d; ai = i; bi = j }
+  }
+  const chain = (start, end) => {
+    const out = [loop[start]]
+    for (let i = (start + 1) % loop.length; i !== end; i = (i + 1) % loop.length) out.push(loop[i])
+    out.push(loop[end]); return out
+  }
+  const rdp = points => {
+    if (points.length <= 2) return points
+    const a = points[0], b = points.at(-1), dx = b.x - a.x, dz = b.z - a.z
+    const length = Math.hypot(dx, dz) || 1
+    let best = -1, index = -1
+    for (let i = 1; i < points.length - 1; i++) {
+      const distance = Math.abs(dx * (a.z - points[i].z) - (a.x - points[i].x) * dz) / length
+      if (distance > best) { best = distance; index = i }
+    }
+    if (best <= tolerance) return [a, b]
+    const left = rdp(points.slice(0, index + 1)), right = rdp(points.slice(index))
+    return left.slice(0, -1).concat(right)
+  }
+  const simplified = rdp(chain(ai, bi)).slice(0, -1).concat(rdp(chain(bi, ai)).slice(0, -1))
+  return simplified.length >= 3 ? _simplifyLatticeLoop(simplified) : loop
+}
+
+function _rotationalSymmetry(points, latticeType) {
+  if (points.length < 2) return null
+  const center = {
+    x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
+    z: points.reduce((sum, point) => sum + point.z, 0) / points.length,
+  }
+  const tolerance = SQUARE_HELIX_SPACING * 1e-4
+  const orders = latticeType === 'HONEYCOMB' ? [6, 3, 2] : [4, 2]
+  for (const order of orders) {
+    const angle = 2 * Math.PI / order, ca = Math.cos(angle), sa = Math.sin(angle)
+    const symmetric = points.every(point => {
+      const x = point.x - center.x, z = point.z - center.z
+      const rotated = { x: center.x + ca * x - sa * z, z: center.z + sa * x + ca * z }
+      return points.some(candidate => Math.hypot(candidate.x - rotated.x, candidate.z - rotated.z) < tolerance)
+    })
+    if (symmetric) {
+      let reflectionAngle = null
+      for (let step = 0; step < order; step++) {
+        const angle = step * Math.PI / order, ca2 = Math.cos(2 * angle), sa2 = Math.sin(2 * angle)
+        const reflected = points.every(point => {
+          const x = point.x - center.x, z = point.z - center.z
+          const mirror = { x: center.x + ca2 * x + sa2 * z, z: center.z + sa2 * x - ca2 * z }
+          return points.some(candidate => Math.hypot(candidate.x - mirror.x, candidate.z - mirror.z) < tolerance)
+        })
+        if (reflected) { reflectionAngle = angle; break }
+      }
+      return { center, order, reflectionAngle }
+    }
+  }
+  return null
+}
+
+// RDP's arbitrary diameter/tie choices can retain different corners in
+// otherwise equivalent sectors.  When occupancy itself proves rotational
+// symmetry, make keep/remove decisions for complete vertex orbits instead.
+function _simplifySymmetricBoundaryLoop(loop, centers, latticeType) {
+  const simplified = _simplifyBoundaryLoop(loop)
+  const symmetry = _rotationalSymmetry(centers, latticeType)
+  if (!symmetry || simplified.length === loop.length) return simplified
+  const tolerance = SQUARE_HELIX_SPACING * 1e-4
+  const nearestIndex = point => {
+    let index = -1, best = Infinity
+    for (let i = 0; i < loop.length; i++) {
+      const distance = Math.hypot(loop[i].x - point.x, loop[i].z - point.z)
+      if (distance < best) { best = distance; index = i }
+    }
+    return best < tolerance ? index : -1
+  }
+  const selected = new Set(simplified.map(nearestIndex).filter(index => index >= 0))
+  const visited = new Set(), orbits = []
+  for (let i = 0; i < loop.length; i++) {
+    if (visited.has(i)) continue
+    const orbit = new Set(), source = loop[i]
+    for (let step = 0; step < symmetry.order; step++) {
+      const angle = step * 2 * Math.PI / symmetry.order, ca = Math.cos(angle), sa = Math.sin(angle)
+      const x = source.x - symmetry.center.x, z = source.z - symmetry.center.z
+      const index = nearestIndex({
+        x: symmetry.center.x + ca * x - sa * z,
+        z: symmetry.center.z + sa * x + ca * z,
+      })
+      if (index >= 0) orbit.add(index)
+    }
+    if (symmetry.reflectionAngle != null) {
+      const angle = symmetry.reflectionAngle, ca2 = Math.cos(2 * angle), sa2 = Math.sin(2 * angle)
+      const x = source.x - symmetry.center.x, z = source.z - symmetry.center.z
+      const mirror = { x: symmetry.center.x + ca2 * x + sa2 * z, z: symmetry.center.z + sa2 * x - ca2 * z }
+      for (let step = 0; step < symmetry.order; step++) {
+        const rotation = step * 2 * Math.PI / symmetry.order, ca = Math.cos(rotation), sa = Math.sin(rotation)
+        const mx = mirror.x - symmetry.center.x, mz = mirror.z - symmetry.center.z
+        const index = nearestIndex({
+          x: symmetry.center.x + ca * mx - sa * mz,
+          z: symmetry.center.z + sa * mx + ca * mz,
+        })
+        if (index >= 0) orbit.add(index)
+      }
+    }
+    if (orbit.size !== symmetry.order && orbit.size !== symmetry.order * 2) return simplified
+    orbit.forEach(index => visited.add(index))
+    orbits.push({ indices: orbit, score: [...orbit].filter(index => selected.has(index)).length })
+  }
+  const threshold = Math.ceil(symmetry.order / 2)
+  let chosen
+  if (symmetry.reflectionAngle != null) {
+    // Preserve the simplifier's face budget while making its choices invariant
+    // under both rotations and mirrors. Prefer orbits most strongly supported
+    // by the original RDP result, stopping at the closest attainable count.
+    const ranked = orbits.slice().sort((a, b) =>
+      b.score / b.indices.size - a.score / a.indices.size || b.score - a.score)
+    chosen = []
+    let count = 0
+    for (const orbit of ranked) {
+      if (Math.abs(count + orbit.indices.size - simplified.length) < Math.abs(count - simplified.length)) {
+        chosen.push(orbit); count += orbit.indices.size
+      }
+    }
+  } else {
+    chosen = orbits.filter(orbit => orbit.score >= threshold)
+  }
+  let kept = new Set(chosen.flatMap(orbit => [...orbit.indices]))
+  if (kept.size < 3) {
+    const best = Math.max(...orbits.map(orbit => orbit.score))
+    kept = new Set(orbits.filter(orbit => orbit.score === best).flatMap(orbit => [...orbit.indices]))
+  }
+  const result = loop.filter((_, index) => kept.has(index))
+  return result.length >= 3 ? _simplifyLatticeLoop(result) : simplified
+}
+
+function _reduceBoundaryLoop(loop, centers = [], latticeType = 'SQUARE') {
+  let hull = _convexOccupancyHull2D(loop.map(p => ({ u: p.x, v: p.z })))
+    .map(p => ({ x: p.u, z: p.v }))
+  if (Math.sign(_polygonArea(hull)) !== Math.sign(_polygonArea(loop))) hull = hull.reverse()
+  const area = Math.abs(_polygonArea(loop)), hullArea = Math.abs(_polygonArea(hull))
+  const nearlyConvex = hullArea > 1e-12 && (hullArea - area) / hullArea <= 0.12
+  if (!nearlyConvex) return _simplifySymmetricBoundaryLoop(loop, centers, latticeType)
+  const reduced = hull.slice(), tolerance = SQUARE_HELIX_SPACING * 0.45
+  while (reduced.length > 3) {
+    let best = Infinity, remove = -1
+    for (let i = 0; i < reduced.length; i++) {
+      const a = reduced[(i - 1 + reduced.length) % reduced.length], p = reduced[i], b = reduced[(i + 1) % reduced.length]
+      const dx = b.x - a.x, dz = b.z - a.z, length = Math.hypot(dx, dz) || 1
+      const distance = Math.abs(dx * (a.z - p.z) - (a.x - p.x) * dz) / length
+      if (distance < best) { best = distance; remove = i }
+    }
+    if (best > tolerance) break
+    reduced.splice(remove, 1)
+  }
+  return _simplifyLatticeLoop(reduced)
+}
+
+function _latticeCellPolygon(cell, latticeType) {
+  if (latticeType === 'HONEYCOMB') {
+    const center = _idealHoneycombPoint(cell), radius = SQUARE_HELIX_SPACING / Math.sqrt(3)
+    return Array.from({ length: 6 }, (_, k) => {
+      const angle = k * Math.PI / 3
+      return { x: center.x + radius * Math.cos(angle), z: center.z + radius * Math.sin(angle) }
+    })
+  }
+  const center = { x: cell.col * SQUARE_HELIX_SPACING, z: cell.row * SQUARE_HELIX_SPACING }
+  const h = SQUARE_HELIX_SPACING / 2
+  return [
+    { x: center.x - h, z: center.z - h }, { x: center.x + h, z: center.z - h },
+    { x: center.x + h, z: center.z + h }, { x: center.x - h, z: center.z + h },
+  ]
+}
+
+function _latticeBoundaryLoops(cells, latticeType) {
+  const q = n => Math.round(n * 1e7), vertexKey = p => `${q(p.x)},${q(p.z)}`
+  const edges = new Map(), points = new Map()
+  for (const cell of cells) {
+    const polygon = _latticeCellPolygon(cell, latticeType)
+    for (let i = 0; i < polygon.length; i++) {
+      const a = polygon[i], b = polygon[(i + 1) % polygon.length]
+      const ak = vertexKey(a), bk = vertexKey(b), key = `${ak}>${bk}`, reverse = `${bk}>${ak}`
+      points.set(ak, a); points.set(bk, b)
+      if (edges.has(reverse)) edges.delete(reverse)
+      else edges.set(key, { a: ak, b: bk })
+    }
+  }
+  const outgoing = new Map()
+  for (const edge of edges.values()) {
+    if (!outgoing.has(edge.a)) outgoing.set(edge.a, [])
+    outgoing.get(edge.a).push(edge)
+  }
+  const unused = new Set(edges.keys()), loops = []
+  while (unused.size) {
+    const firstKey = unused.values().next().value, first = edges.get(firstKey)
+    const loop = [], start = first.a
+    let edge = first
+    while (edge && unused.has(`${edge.a}>${edge.b}`)) {
+      unused.delete(`${edge.a}>${edge.b}`); loop.push(points.get(edge.a))
+      if (edge.b === start) break
+      edge = (outgoing.get(edge.b) ?? []).find(candidate => unused.has(`${candidate.a}>${candidate.b}`))
+    }
+    if (loop.length >= 3) loops.push(_simplifyLatticeLoop(loop))
+  }
+  return loops
+}
+
+function _mapLatticeLoops(cells, points, loops, latticeType) {
+  const ideal = cells.map(cell => latticeType === 'HONEYCOMB'
+    ? _idealHoneycombPoint(cell)
+    : ({ x: cell.col * SQUARE_HELIX_SPACING, z: cell.row * SQUARE_HELIX_SPACING }))
+  const ic = { x: ideal.reduce((s, p) => s + p.x, 0) / ideal.length, z: ideal.reduce((s, p) => s + p.z, 0) / ideal.length }
+  const ac = { x: points.reduce((s, p) => s + p.x, 0) / points.length, z: points.reduce((s, p) => s + p.z, 0) / points.length }
+  // The bundle frame is allowed to reverse the handedness of the lattice plane
+  // (for example, a +Z helix commonly produces local axes -X/+Y).  Fit both
+  // possible 2D similarities so a symmetric layout cannot cancel to zero scale.
+  let preserveDot = 0, preserveCross = 0, reflectDot = 0, reflectCross = 0, norm = 0
+  for (let i = 0; i < ideal.length; i++) {
+    const ix = ideal[i].x - ic.x, iz = ideal[i].z - ic.z
+    const ax = points[i].x - ac.x, az = points[i].z - ac.z
+    preserveDot += ix * ax + iz * az
+    preserveCross += ix * az - iz * ax
+    reflectDot += ix * ax - iz * az
+    reflectCross += iz * ax + ix * az
+    norm += ix * ix + iz * iz
+  }
+  const preserveMagnitude = Math.hypot(preserveDot, preserveCross)
+  const reflectMagnitude = Math.hypot(reflectDot, reflectCross)
+  const reflected = reflectMagnitude > preserveMagnitude
+  const dot = reflected ? reflectDot : preserveDot
+  const cross = reflected ? reflectCross : preserveCross
+  const scale = norm > 1e-12 ? Math.hypot(dot, cross) / norm : 1
+  const angle = Math.atan2(cross, dot), ca = Math.cos(angle), sa = Math.sin(angle)
+  return loops.map(loop => loop.map(p => {
+    const x = p.x - ic.x, z = p.z - ic.z
+    return reflected
+      ? { x: ac.x + scale * (ca * x + sa * z), z: ac.z + scale * (sa * x - ca * z) }
+      : { x: ac.x + scale * (ca * x - sa * z), z: ac.z + scale * (sa * x + ca * z) }
+  }))
+}
+
+function _latticeCrossSections(cells, points, latticeType) {
+  const loops = _latticeBoundaryLoops(cells, latticeType)
+  const occupied = new Set(cells.map(cell => `${cell.row},${cell.col}`))
+  const rows = cells.map(c => c.row), cols = cells.map(c => c.col)
+  const holesWithSites = new Set()
+  for (let li = 0; li < loops.length; li++) {
+    if (_polygonArea(loops[li]) >= 0) continue
+    outer: for (let row = Math.min(...rows); row <= Math.max(...rows); row++) {
+      for (let col = Math.min(...cols); col <= Math.max(...cols); col++) {
+        if (occupied.has(`${row},${col}`)) continue
+        const p = latticeType === 'HONEYCOMB' ? _idealHoneycombPoint({ row, col })
+          : { x: col * SQUARE_HELIX_SPACING, z: row * SQUARE_HELIX_SPACING }
+        if (_pointInLoop(p, loops[li])) { holesWithSites.add(li); break outer }
+      }
+    }
+  }
+  const minimalLoop = loop => {
+    const component = _polygonArea(loop) > 0
+      ? cells.filter(cell => _pointInLoop(latticeType === 'HONEYCOMB'
+        ? _idealHoneycombPoint(cell)
+        : { x: cell.col * SQUARE_HELIX_SPACING, z: cell.row * SQUARE_HELIX_SPACING }, loop))
+      : []
+    const centers = component.map(cell => latticeType === 'HONEYCOMB'
+      ? _idealHoneycombPoint(cell)
+      : { x: cell.col * SQUARE_HELIX_SPACING, z: cell.row * SQUARE_HELIX_SPACING })
+    if (latticeType !== 'HONEYCOMB' || _polygonArea(loop) < 0) return _reduceBoundaryLoop(loop, centers, latticeType)
+    const hull = _convexOccupancyHull2D(loop.map(p => ({ u: p.x, v: p.z }))).map(p => ({ x: p.u, z: p.v }))
+    const concavity = (Math.abs(_polygonArea(hull)) - Math.abs(_polygonArea(loop))) / Math.max(1e-12, Math.abs(_polygonArea(hull)))
+    if (concavity > 0.22) return _simplifySymmetricBoundaryLoop(loop, centers, latticeType)
+    let phase = 0, best = Infinity
+    for (let i = 0; i < centers.length; i++) for (let j = i + 1; j < centers.length; j++) {
+      const dx = centers[j].x - centers[i].x, dz = centers[j].z - centers[i].z, d2 = dx * dx + dz * dz
+      if (d2 > 1e-8 && d2 < best) { best = d2; phase = Math.atan2(dz, dx) }
+    }
+    const envelope = _hasCompleteHoneycombDirections(centers)
+      ? _honeycombEnvelope(centers, SQUARE_HELIX_SPACING / 2, phase + Math.PI / 6)
+      : _partialHoneycombEnvelope(centers, SQUARE_HELIX_SPACING / 2)
+    return envelope.corners.map(p => ({ x: p.x + envelope.center.x, z: p.z + envelope.center.z }))
+  }
+  const kept = loops.filter((loop, i) => _polygonArea(loop) > 0 || holesWithSites.has(i)).map(minimalLoop)
+  const mapped = _mapLatticeLoops(cells, points, kept, latticeType)
+  const sections = []
+  for (let i = 0; i < kept.length; i++) {
+    if (_polygonArea(kept[i]) <= 0) continue
+    const holes = []
+    for (let j = 0; j < kept.length; j++) {
+      if (_polygonArea(kept[j]) < 0 && _pointInLoop(kept[j][0], kept[i])) holes.push(mapped[j])
+    }
+    sections.push({ outer: mapped[i], holes })
+  }
+  return sections
+}
+
+function _idealHoneycombPoint(cell) {
+  return {
+    x: cell.col * 1.125 * Math.sqrt(3),
+    z: cell.row * 3.375 + (((cell.row & 1) ^ (cell.col & 1)) ? 1.125 : 0),
+  }
+}
+
+function _honeycombHexCorners(radius = SQUARE_HELIX_SPACING / Math.sqrt(3)) {
+  // Pointy-top regular hexagon. Its apothem is spacing/2, so neighbouring
+  // honeycomb sites 2.25 nm apart meet face-to-face without rectangular fill.
+  return Array.from({ length: 6 }, (_, k) => {
+    const a = k * Math.PI / 3
+    return { x: radius * Math.cos(a), z: radius * Math.sin(a) }
+  })
+}
+
+// Six-plane support envelope for a honeycomb bundle. `phase` is the direction
+// of one lattice neighbour/face normal. Ordinary inter-helix voids (including
+// the centre of a canonical 6HB) lie inside this single solid; only the six
+// outer support planes define its deliberately minimal cross-section.
+function _honeycombEnvelope(points, padding = SQUARE_HELIX_SPACING / 2, phase = 0) {
+  if (!points.length) return { center: { x: 0, z: 0 }, corners: _honeycombHexCorners() }
+  const normals = Array.from({ length: 6 }, (_, k) => {
+    const a = phase + k * Math.PI / 3
+    return { x: Math.cos(a), z: Math.sin(a) }
+  })
+  const support = normals.map(n => Math.max(...points.map(p => p.x * n.x + p.z * n.z)) + padding)
+  const corners = []
+  for (let i = 0; i < 6; i++) {
+    const j = (i + 1) % 6, a = normals[i], b = normals[j]
+    const det = a.x * b.z - a.z * b.x
+    corners.push({
+      x: (support[i] * b.z - a.z * support[j]) / det,
+      z: (a.x * support[j] - support[i] * b.x) / det,
+    })
+  }
+  const center = {
+    x: corners.reduce((s, p) => s + p.x, 0) / 6,
+    z: corners.reduce((s, p) => s + p.z, 0) / 6,
+  }
+  return { center, corners: corners.map(p => ({ x: p.x - center.x, z: p.z - center.z })) }
+}
+
+function _partialHoneycombEnvelope(points, padding = SQUARE_HELIX_SPACING / 2) {
+  if (points.length < 3) return _honeycombEnvelope(points, padding, 0)
+  const hull = _convexOccupancyHull2D(points.map(p => ({ u: p.x, v: p.z })))
+  if (hull.length < 3) return _honeycombEnvelope(points, padding, 0)
+  const absolute = _expandHullCorners(hull, padding)
+  const center = {
+    x: absolute.reduce((s, p) => s + p.x, 0) / absolute.length,
+    z: absolute.reduce((s, p) => s + p.z, 0) / absolute.length,
+  }
+  return { center, corners: absolute.map(p => ({ x: p.x - center.x, z: p.z - center.z })) }
+}
+
+function _hasCompleteHoneycombDirections(points) {
+  if (points.length < 6) return false
+  const hull = _convexOccupancyHull2D(points.map(p => ({ u: p.x, v: p.z })))
+  const directions = new Set()
+  for (let i = 0; i < hull.length; i++) {
+    const a = hull[i], b = hull[(i + 1) % hull.length]
+    let deg = Math.atan2(b.v - a.v, b.u - a.u) * 180 / Math.PI
+    deg = ((deg % 180) + 180) % 180
+    directions.add(Math.round(deg / 30) % 6)
+  }
+  return directions.size === 6
+}
+
+function _colorHullElement(geometry, index) {
+  const color = new THREE.Color().setHSL((index * 0.61803398875) % 1, 0.68, 0.56)
+  const count = geometry.attributes.position.count, values = new Float32Array(count * 3)
+  for (let i = 0; i < count; i++) {
+    values[i * 3] = color.r; values[i * 3 + 1] = color.g; values[i * 3 + 2] = color.b
+  }
+  geometry.setAttribute('color', new THREE.BufferAttribute(values, 3))
+  return geometry
+}
+
+// Bridge only explicit deletion/skip sites. Missing coverage not named in the
+// helix's loop_skips remains a deliberate domain gap and splits the hull.
+function _hullSpansIgnoringSkips(bps, skipBps = new Set()) {
+  if (!bps.length) return []
+  const sorted = [...new Set(bps)].sort((a, b) => a - b)
+  const spans = []
+  let lo = sorted[0], prev = sorted[0]
+  for (const bp of sorted.slice(1)) {
+    let skipOnlyGap = true
+    for (let missing = prev + 1; missing < bp; missing++) {
+      if (!skipBps.has(missing)) { skipOnlyGap = false; break }
+    }
+    if (!skipOnlyGap) { spans.push([lo, prev + 1]); lo = bp }
+    prev = bp
+  }
+  spans.push([lo, prev + 1])
+  return spans
+}
+
+function _extrudeCrossSection(outer, holes, frame, a0, a1) {
+  const shape = new THREE.Shape()
+  shape.moveTo(outer[0].x, outer[0].z)
+  for (const p of outer.slice(1)) shape.lineTo(p.x, p.z)
+  shape.closePath()
+  for (const ring of holes) {
+    const path = new THREE.Path()
+    path.moveTo(ring[0].x, ring[0].z)
+    for (const p of ring.slice(1)) path.lineTo(p.x, p.z)
+    path.closePath(); shape.holes.push(path)
+  }
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: Math.max(a1 - a0, BDNA_RISE_PER_BP), bevelEnabled: false, steps: 1, curveSegments: 1,
+  })
+  geo.deleteAttribute('uv')
+  geo.applyMatrix4(new THREE.Matrix4().makeBasis(frame.U, frame.V, frame.dir))
+  geo.translate(
+    frame.origin.x + frame.dir.x * a0,
+    frame.origin.y + frame.dir.y * a0,
+    frame.origin.z + frame.dir.z * a0,
+  )
+  return geo
+}
+
+function _faceNeighbours(cell, allCells, latticeType) {
+  if (latticeType === 'SQUARE') {
+    return allCells.filter(other => Math.abs(other.row - cell.row) + Math.abs(other.col - cell.col) === 1)
+  }
+  const p = _idealHoneycombPoint(cell)
+  return allCells.filter(other => {
+    if (other === cell) return false
+    const q = _idealHoneycombPoint(other)
+    return Math.hypot(q.x - p.x, q.z - p.z) <= SQUARE_HELIX_SPACING * 1.05
+  })
+}
+
+function _latticeAdjacency(helices, latticeType) {
+  return new Map(helices.map(helix => [helix.id, _faceNeighbours(helix, helices, latticeType)]))
+}
+
+function _supportedLatticeOccupancy(helices, mid, latticeType, adjacency = _latticeAdjacency(helices, latticeType)) {
+  const active = new Set(helices.filter(h => h.spans.some(([lo, hi]) => lo <= mid && mid < hi)).map(h => h.id))
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const helix of helices) {
+      if (active.has(helix.id) || mid <= helix.lo || mid >= helix.hi) continue
+      const support = (adjacency.get(helix.id) ?? []).filter(n => active.has(n.id)).length
+      if (support >= 2) { active.add(helix.id); changed = true }
+    }
+  }
+  return helices.filter(h => active.has(h.id))
+}
+
+function _buildSweptCrossSectionGeometry(sections, loops) {
+  if (sections.length < 2 || !loops.length || loops[0].length < 3) return null
+  const flat = loops.flat(), perSection = flat.length, positions = []
+  for (const section of sections) for (const p of flat) {
+    const world = section.center.clone().addScaledVector(section.U, p.x).addScaledVector(section.V, p.z)
+    positions.push(world.x, world.y, world.z)
+  }
+  const indices = [], offsets = []
+  let offset = 0
+  for (const loop of loops) { offsets.push(offset); offset += loop.length }
+  for (let si = 0; si < sections.length - 1; si++) for (let li = 0; li < loops.length; li++) {
+    const loop = loops[li], base0 = si * perSection + offsets[li], base1 = (si + 1) * perSection + offsets[li]
+    for (let i = 0; i < loop.length; i++) {
+      const j = (i + 1) % loop.length
+      indices.push(base0 + i, base1 + i, base1 + j, base0 + i, base1 + j, base0 + j)
+    }
+  }
+  const contour = loops[0].map(p => new THREE.Vector2(p.x, p.z))
+  const holes = loops.slice(1).map(loop => loop.map(p => new THREE.Vector2(p.x, p.z)))
+  const triangles = THREE.ShapeUtils.triangulateShape(contour, holes)
+  const lastBase = (sections.length - 1) * perSection
+  for (const [a, b, c] of triangles) {
+    indices.push(c, b, a)
+    indices.push(lastBase + a, lastBase + b, lastBase + c)
+  }
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+  geometry.setIndex(indices); geometry.computeVertexNormals()
+  return geometry
+}
+
+/**
+ * Candidate Hull Prism: a canonical envelope of CURRENT dsDNA occupancy.
+ *
+ * The legacy builder reconstructs historical extrusion operations and then
+ * fills each connected component's bounding rectangle. This builder instead
+ * derives occupied (helix,bp) spans from current nucleotide geometry, unions
+ * the corresponding square/hexagonal lattice cells, and extracts simplified
+ * boundary loops. Genuine empty lattice sites become holes; non-site lattice
+ * interstices are filled. Locally supported routing interruptions are closed,
+ * while coordinated domain gaps remain real axial interruptions. No design
+ * names, motif dimensions, or helix-count recognizers participate.
+ *
+ * Returns the same Group shape as buildExtrusionBoxes, making it suitable for
+ * isolated A/B review before it becomes the production Hull Prism path.
+ */
+function _buildOccupancyHull(design, geometry, helixAxes, curveTolNm = 1.0) {
+  if (!design?.helices?.length || !geometry?.length || !helixAxes) return null
+  const cover = new Map()
+  for (const n of geometry) {
+    if (!n.strand_id || n.overhang_id) continue
+    const key = `${n.helix_id}:${n.bp_index}`
+    cover.set(key, (cover.get(key) ?? 0) + 1)
+  }
+  const bpByHelix = new Map()
+  for (const [key, count] of cover) {
+    if (count < 2) continue
+    const split = key.lastIndexOf(':'), hid = key.slice(0, split), bp = Number(key.slice(split + 1))
+    if (!bpByHelix.has(hid)) bpByHelix.set(hid, [])
+    bpByHelix.get(hid).push(bp)
+  }
+  const spansByHelix = new Map()
+  const skipBpsByHelix = new Map(design.helices.map(h => [h.id,
+    new Set((h.loop_skips ?? []).filter(mark => mark.delta === -1).map(mark => mark.bp_index))]))
+  for (const [hid, bps] of bpByHelix) {
+    spansByHelix.set(hid, _hullSpansIgnoringSkips(bps, skipBpsByHelix.get(hid)))
+  }
+  if (!spansByHelix.size) return null
+  const helices = []
+  for (let i = 0; i < design.helices.length; i++) {
+    const h = design.helices[i], spans = spansByHelix.get(h.id), ax = helixAxes[h.id]
+    if (!spans?.length || !ax?.start || !ax?.end) continue
+    const gp = h.grid_pos ?? [0, i]
+    helices.push({ id: h.id, row: gp[0], col: gp[1], spans, lo: spans[0][0], hi: spans.at(-1)[1], ax })
+  }
+  if (!helices.length) return null
+
+  const isHC = design.lattice_type === 'HONEYCOMB'
+  const curved = helices.some(h => (h.ax.samples?.length ?? 0) > 2)
+  const bounds = [...new Set(helices.flatMap(h => h.spans.flat()))].sort((a, b) => a - b)
+  const runs = []
+  const adjacency = _latticeAdjacency(helices, design.lattice_type)
+  let open = null
+  for (let bi = 0; bi < bounds.length - 1; bi++) {
+    const lo = bounds[bi], hi = bounds[bi + 1], mid = (lo + hi) / 2
+    const cells = _supportedLatticeOccupancy(helices, mid, design.lattice_type, adjacency)
+    if (!cells.length) { if (open) { runs.push(open); open = null }; continue }
+    const signature = cells.map(h => `${h.row},${h.col}`).sort().join(';')
+    if (open?.signature === signature && open.hi === lo) open.hi = hi
+    else { if (open) runs.push(open); open = { lo, hi, cells, signature } }
+  }
+  if (open) runs.push(open)
+  if (!runs.length) return null
+
+  const trimmedAxes = _dsTrimmedAxes(geometry, helixAxes)
+  const frame = _bundleFrame(helices.map(h => h.id), trimmedAxes)
+  if (!frame) return null
+  const mids = new Map(helices.map(h => {
+    const ax = trimmedAxes[h.id]
+    const p = new THREE.Vector3(...ax.start).add(new THREE.Vector3(...ax.end)).multiplyScalar(.5).sub(frame.origin)
+    return [h.id, { x: p.dot(frame.U), z: p.dot(frame.V) }]
+  }))
+  const geos = []
+  let elementIndex = 0
+  for (const run of runs) {
+    const points = run.cells.map(h => mids.get(h.id))
+    const crossSections = _latticeCrossSections(run.cells, points, design.lattice_type)
+    for (const crossSection of crossSections) {
+      let members = run.cells.filter(h => _pointInLoop(mids.get(h.id), crossSection.outer))
+      if (!members.length) members = run.cells
+      const axial = []
+      for (const h of members) {
+        const ax = trimmedAxes[h.id], start = new THREE.Vector3(...ax.start), end = new THREE.Vector3(...ax.end)
+        const startA = start.clone().sub(frame.origin).dot(frame.dir), endA = end.clone().sub(frame.origin).dot(frame.dir)
+        const denom = Math.max(1, h.hi - h.lo)
+        axial.push(startA + (endA - startA) * ((run.lo - h.lo) / denom),
+          startA + (endA - startA) * ((run.hi - h.lo) / denom))
+      }
+      const a0 = Math.min(...axial), a1 = Math.max(...axial)
+      let geo
+      if (curved) {
+        let sections = _boxSweptSections(design, helixAxes, members.map(h => h.id), run.lo, run.hi,
+          SQUARE_HELIX_SPACING, SQUARE_HELIX_SPACING, helices.map(h => h.id))
+        if (!sections) continue
+        sections = _decimateSections(sections, curveTolNm)
+        const center = {
+          x: members.reduce((sum, h) => sum + mids.get(h.id).x, 0) / members.length,
+          z: members.reduce((sum, h) => sum + mids.get(h.id).z, 0) / members.length,
+        }
+        const loops = [crossSection.outer, ...crossSection.holes].map(loop =>
+          loop.map(p => ({ x: p.x - center.x, z: p.z - center.z })))
+        geo = _buildSweptCrossSectionGeometry(sections, loops)
+      } else {
+        geo = _extrudeCrossSection(crossSection.outer, crossSection.holes, frame, a0, a1)
+      }
+      if (geo) geos.push(_colorHullElement(geo, elementIndex++))
+    }
+  }
+  if (!geos.length) return null
+  const merged = mergeGeometries(geos, false)
+  geos.forEach(g => g.dispose())
+  if (!merged) return null
+  return _finishOccupancyHull(design, merged, curved, 'candidate-general-lattice-union', false, true)
+}
+
+function _finishOccupancyHull(design, merged, curved, version, showEdges = true, elementEdges = false) {
+  merged.computeBoundingBox()
+  const group = new THREE.Group()
+  const center = merged.boundingBox.getCenter(new THREE.Vector3())
+  group.userData.bundleMid = center
+  group.userData.clusterName = design.metadata?.name || 'Candidate occupancy hull'
+  group.userData.hullAuditVersion = version
+  const mesh = new THREE.Mesh(merged, _extrusionMeshMat())
+  mesh.renderOrder = 100
+  mesh.userData.hullUnifiedSurface = elementEdges
+  group.add(mesh)
+  if (elementEdges && merged.attributes.color) {
+    const elementMesh = new THREE.Mesh(merged.clone(), new THREE.MeshPhongMaterial({
+      vertexColors: true, side: THREE.DoubleSide, shininess: 16,
+      specular: new THREE.Color(0x222222),
+    }))
+    elementMesh.renderOrder = 100
+    elementMesh.visible = false
+    elementMesh.userData.hullElementColors = true
+    group.add(elementMesh)
+  }
+  if (showEdges || elementEdges) {
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(merged, curved ? 15 : 1),
+      new THREE.LineBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.55, depthWrite: false }))
+    edges.renderOrder = 101
+    edges.visible = showEdges
+    edges.userData.hullElementBoundaries = elementEdges
+    group.add(edges)
+  }
+  return group
+}
+
 /**
  * Return a copy of `helixAxes` with each helix's start/end trimmed to its dsDNA
  * extent — the axial span actually covered by base-paired (≥2 stranded,
@@ -2056,13 +2736,15 @@ function _decimateSections(sections, tolNm) {
  * match the straight comb) and restricts to the box's sample-index sub-range.
  * Returns sections[] (>=2) or null (no sampled helices / range too short).
  */
-function _boxSweptSections(design, helixAxes, boxHelixIds, bpLo, bpHi, wCol, wRow) {
+function _boxSweptSections(design, helixAxes, boxHelixIds, bpLo, bpHi, wCol, wRow, frameHelixIds = boxHelixIds) {
   const sampled = boxHelixIds.filter(hid => (helixAxes[hid]?.samples?.length ?? 0) > 2)
   if (!sampled.length) return null
-  const repHelix = design.helices.find(h => h.id === sampled[0])
+  const frameSampled = frameHelixIds.filter(hid => (helixAxes[hid]?.samples?.length ?? 0) > 2)
+  if (!frameSampled.length) return null
+  const repHelix = design.helices.find(h => h.id === frameSampled[0])
   const bs = repHelix?.bp_start ?? 0
   let nMin = Infinity
-  for (const hid of sampled) nMin = Math.min(nMin, helixAxes[hid].samples.length)
+  for (const hid of [...new Set([...sampled, ...frameSampled])]) nMin = Math.min(nMin, helixAxes[hid].samples.length)
   if (nMin < 2) return null
   const idxLo = Math.max(0, Math.min(nMin - 1, Math.round((bpLo - bs) / _AXIS_SAMPLE_STEP)))
   const idxHi = Math.max(0, Math.min(nMin - 1, Math.round((bpHi - bs) / _AXIS_SAMPLE_STEP)))
@@ -2083,11 +2765,14 @@ function _boxSweptSections(design, helixAxes, boxHelixIds, bpLo, bpHi, wCol, wRo
   // degenerate → the whole final block was mis-rolled (the residual flip seen
   // even after the per-box smoothing fix).  We propagate from 0 but EMIT sections
   // only for idxLo..idxHi below.
-  const centers = []
+  const centers = [], sectionCenters = []
   for (let i = 0; i <= idxHi; i++) {
     const c = new THREE.Vector3()
-    for (const hid of sampled) { const s = helixAxes[hid].samples[i]; c.x += s[0]; c.y += s[1]; c.z += s[2] }
-    centers.push(c.divideScalar(sampled.length))
+    for (const hid of frameSampled) { const s = helixAxes[hid].samples[i]; c.x += s[0]; c.y += s[1]; c.z += s[2] }
+    centers.push(c.divideScalar(frameSampled.length))
+    const sc = new THREE.Vector3()
+    for (const hid of sampled) { const s = helixAxes[hid].samples[i]; sc.x += s[0]; sc.y += s[1]; sc.z += s[2] }
+    sectionCenters.push(sc.divideScalar(sampled.length))
   }
   const M = centers.length
   // Rotation-minimizing (parallel-transport) cross-section frame.  The original
@@ -2132,7 +2817,7 @@ function _boxSweptSections(design, helixAxes, boxHelixIds, bpLo, bpHi, wCol, wRo
     // Propagate the frame through [0, idxLo) but only EMIT the box's own sections.
     if (k < idxLo) continue
     const V = new THREE.Vector3().crossVectors(U, tangent).normalize()
-    sections.push({ center: centers[k], U: U.clone(), V, tangent, corners })
+    sections.push({ center: sectionCenters[k], U: U.clone(), V, tangent, corners })
   }
   return sections.length >= 2 ? sections : null
 }
@@ -3209,6 +3894,14 @@ export {
   _buildSweptHullGeometry as buildSweptHullGeometry,
   _hullMeshPhong          as buildHullMeshPhong,
   _buildExtrusionBoxes    as buildExtrusionBoxes,
+  _buildOccupancyHull     as buildOccupancyHull,
+  _latticeCrossSections  as latticeCrossSections,
+  _supportedLatticeOccupancy as supportedLatticeOccupancy,
+  _honeycombHexCorners    as honeycombHexCorners,
+  _honeycombEnvelope      as honeycombEnvelope,
+  _partialHoneycombEnvelope as partialHoneycombEnvelope,
+  _hasCompleteHoneycombDirections as hasCompleteHoneycombDirections,
+  _hullSpansIgnoringSkips as hullSpansIgnoringSkips,
   _scanExtrusionGroup     as scanExtrusionGroup,
   _dsTrimmedAxes          as dsTrimmedAxes,
   _dsBpByHelix            as dsBpByHelix,

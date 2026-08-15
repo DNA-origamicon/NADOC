@@ -61,6 +61,7 @@ import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
 import { initCommandPalette }  from './ui/command_palette.js'
 import { initStrandLengthHistogram } from './ui/strand_length_histogram.js'
 import { initMolecularPlacementAudit } from './ui/molecular_placement_audit.js'
+import { initHullAudit } from './ui/hull_audit.js'
 import { initOverhangSequencesPanel } from './ui/overhang_sequences_panel.js'
 import { initOverhangDialog } from './ui/overhang_dialog.js'
 import { initStrandGroupsPanel } from './ui/strand_groups_panel.js'
@@ -5730,6 +5731,11 @@ async function main() {
   initMolecularPlacementAudit({
     setMenuToggle: _setMenuToggle,
     getColorState: () => store.getState(),
+  })
+  initHullAudit({
+    getState: () => store.getState(),
+    subscribe: callback => store.subscribe(callback),
+    setMenuToggle: _setMenuToggle,
   })
 
   // ── Help > Overlay Mode ────────────────────────────────────────────────────
