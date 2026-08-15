@@ -66,6 +66,7 @@ export function initKeyboardShortcuts(deps) {
   registerShortcut({
     key: 'o', ctrl: true, shift: false,
     description: 'Open design file',
+    blockedInInput: true,
     handler(e) {
       e.preventDefault()
       document.getElementById('menu-file-open')?.click()
@@ -75,6 +76,7 @@ export function initKeyboardShortcuts(deps) {
   registerShortcut({
     key: 's', ctrl: true, shift: false,
     description: 'Save design or assembly',
+    blockedInInput: true,
     handler(e) {
       e.preventDefault()
       if (getPartEditContext()) {
@@ -98,6 +100,7 @@ export function initKeyboardShortcuts(deps) {
   registerShortcut({
     key: 's', ctrl: true, shift: true,
     description: 'Save as…',
+    blockedInInput: true,
     handler(e) {
       e.preventDefault()
       // Ctrl+Shift+S dispatches by mode same as the menu Save As item.
@@ -141,6 +144,7 @@ export function initKeyboardShortcuts(deps) {
   registerShortcut({
     key: 'z', ctrl: true, shift: false,
     description: 'Undo',
+    blockedInInput: true,
     blockedWhen: () => isDeformActive(),
     async handler(e) {
       e.preventDefault()
@@ -189,6 +193,7 @@ export function initKeyboardShortcuts(deps) {
   registerShortcut({
     key: 'y', ctrl: true,
     description: 'Redo',
+    blockedInInput: true,
     blockedWhen: () => isDeformActive(),
     async handler(e) {
       e.preventDefault()
@@ -224,6 +229,7 @@ export function initKeyboardShortcuts(deps) {
   registerShortcut({
     key: 'z', ctrl: true, shift: true,
     description: 'Redo (alternate)',
+    blockedInInput: true,
     blockedWhen: () => isDeformActive(),
     async handler(e) {
       e.preventDefault()
@@ -289,6 +295,7 @@ export function initKeyboardShortcuts(deps) {
     key: 'Tab', ctrl: false,
     description: 'Cycle selection level (cluster → strand → domain → end → xover → drill)',
     blockedInInput: true,
+    canvasOnly: true,
     blockedWhen: () => isTranslateRotateActive(),
     handler(e) {
       e.preventDefault()

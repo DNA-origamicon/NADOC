@@ -150,8 +150,16 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
     const d = makeDeps()
     d.isTranslateRotateActive.mockReturnValue(true)
     initKeyboardShortcuts(d)
-    await press('Tab')
+    await press('Tab', { tag: 'CANVAS' })
     expect(d.selectionManager.setSelectionLevel).not.toHaveBeenCalled()
+  })
+
+  it('Tab keeps native focus navigation when a button has focus', async () => {
+    const d = makeDeps()
+    initKeyboardShortcuts(d)
+    const e = await press('Tab', { tag: 'BUTTON' })
+    expect(d.selectionManager.setSelectionLevel).not.toHaveBeenCalled()
+    expect(e.preventDefault).not.toHaveBeenCalled()
   })
 
   it("'q' toggles expanded spacing only when a design is loaded and unfold/slice are off", async () => {
@@ -327,6 +335,22 @@ describe('initKeyboardShortcuts — Group 2 file/edit + Delete/Escape', () => {
     document.getElementById('menu-file-open').click = click
     await press('o', { ctrl: true })
     expect(click).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not run file/edit shortcuts while an editable control has focus', async () => {
+    const d = makeDeps()
+    initKeyboardShortcuts(d)
+    const open = vi.fn()
+    document.getElementById('menu-file-open').click = open
+    for (const tag of ['INPUT', 'TEXTAREA', 'SELECT']) {
+      await press('o', { ctrl: true, tag })
+      await press('s', { ctrl: true, tag })
+      await press('z', { ctrl: true, tag })
+      await press('y', { ctrl: true, tag })
+    }
+    expect(open).not.toHaveBeenCalled()
+    expect(d.api.undo).not.toHaveBeenCalled()
+    expect(d.api.redo).not.toHaveBeenCalled()
   })
 
   it('Ctrl+C copies when a cluster is selected', async () => {
@@ -657,28 +681,28 @@ describe('initKeyboardShortcuts — drill v2 (selectionLevel) Tab/Escape', () =>
   it('Tab cycles the unified selectionLevel default→strand→domain→… (cluster excluded)', async () => {
     const d = makeV2Deps('default')
     initKeyboardShortcuts(d)
-    await press('Tab')
+    await press('Tab', { tag: 'CANVAS' })
     expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('strand')
   })
 
   it('Tab from cluster restarts at strand (cluster is button-only, not in the cycle)', async () => {
     const d = makeV2Deps('cluster')
     initKeyboardShortcuts(d)
-    await press('Tab')
+    await press('Tab', { tag: 'CANVAS' })
     expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('strand')
   })
 
   it('Tab steps xover→base (base is the finest grain, last stop before the wrap)', async () => {
     const d = makeV2Deps('xover')
     initKeyboardShortcuts(d)
-    await press('Tab')
+    await press('Tab', { tag: 'CANVAS' })
     expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('base')
   })
 
   it('Tab wraps base→none(default)', async () => {
     const d = makeV2Deps('base')
     initKeyboardShortcuts(d)
-    await press('Tab')
+    await press('Tab', { tag: 'CANVAS' })
     expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('default')
   })
 

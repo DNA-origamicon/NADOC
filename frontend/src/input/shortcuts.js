@@ -24,6 +24,14 @@
 
 const _registry = []
 
+export function isEditableTarget(target) {
+  if (!target || typeof target !== 'object') return false
+  const tag = target.tagName?.toUpperCase()
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+    || target.isContentEditable === true
+    || target.closest?.('[contenteditable="true"]') != null
+}
+
 /**
  * Register a keyboard shortcut.
  *
@@ -70,7 +78,7 @@ export function getShortcuts() {
  * Attach this directly to document.addEventListener('keydown', dispatchKeyEvent).
  */
 export async function dispatchKeyEvent(e) {
-  const inInput    = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA'
+  const inInput    = isEditableTarget(e.target)
   const ctrlOrMeta = e.ctrlKey || e.metaKey
 
   for (const s of _registry) {
@@ -90,6 +98,7 @@ export async function dispatchKeyEvent(e) {
 
     // Runtime block conditions
     if (s.blockedInInput && inInput) continue
+    if (s.canvasOnly && !['CANVAS', 'BODY'].includes(e.target?.tagName?.toUpperCase())) continue
     if (s.blockedWhen?.())           continue
 
     await s.handler(e)

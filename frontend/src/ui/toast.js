@@ -72,6 +72,9 @@ function _removeToast(t) {
 function _createToast(msg, severity) {
   const el = document.createElement('div')
   el.className = 'toast'
+  el.setAttribute('role', severity === 'error' ? 'alert' : 'status')
+  el.setAttribute('aria-live', severity === 'error' ? 'assertive' : 'polite')
+  el.setAttribute('aria-atomic', 'true')
   if (severity && severity !== 'info') el.classList.add(`toast--${severity}`)
   // layout: message [action] [×]
   el.style.display = 'flex'
@@ -175,8 +178,8 @@ export function showPersistentToast(msg, opts = {}) {
     }
     if (!opts.loading) {
       existing.el.querySelector('.nadoc-spinner')?.remove()
-      existing.el.removeAttribute('role')
-      existing.el.removeAttribute('aria-live')
+      existing.el.setAttribute('role', severity === 'error' ? 'alert' : 'status')
+      existing.el.setAttribute('aria-live', severity === 'error' ? 'assertive' : 'polite')
     }
     // A persistent toast is a single reusable slot. Repurposing that slot must
     // also replace its controls; otherwise a roll-complete message can retain a

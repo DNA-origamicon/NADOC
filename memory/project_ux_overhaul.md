@@ -18,6 +18,13 @@ toast ground — no `.claude/rules/*.md` and no other topic file covers it (prob
 each one. Everything in Batches A/B shipped except **one** (joint-targeted Polymerize). Batch C
 has one real item left. Batch D is untouched. History → `project_ux_overhaul_archive.md`.
 
+**Accessibility pass (2026-08-13):** the legacy top menu now has keyboard/ARIA menu semantics;
+the shortcut help is generated from `input/shortcuts.js`; editable controls block design-level
+file/edit shortcuts; Space is reserved for native control activation outside the workspace;
+toasts are live regions; the WebGL workspace is labelled; and pointer-styled static/dynamic UI
+rows receive button keyboard semantics through `ui/accessibility.js`. The user explicitly retained
+canvas Tab selection-level cycling and the expert Delete/x/1–6 bindings.
+
 **Don't re-litigate the decisions.** Each item was chosen by the user with full awareness of the
 alternatives. If a tradeoff emerges during implementation that contradicts the decision, surface
 it explicitly rather than silently re-deciding.

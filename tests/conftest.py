@@ -518,6 +518,18 @@ _SLOW_MODULES = {
     # CPU). Same heavy-atomistic family as test_atomistic / test_oxdna_relaxation; the
     # whole file is atomistic reconstruction work, so relegate it whole (area "atomistic").
     "test_atomistic_display_split",
+    # Production-v7 crossover placement oracle: each case builds two full atomistic
+    # models and runs whole-model clash/bond/ring diagnostics against owner-authored
+    # 2xT design fixtures. The fixtures are intentionally workspace-local and the
+    # reconstruction is far beyond the fast-suite budget, so keep the entire contract
+    # in the dedicated atomistic slow group.
+    "test_two_base_default",
+    # Setup-dominated API modules: the first surviving test starts the complete FastAPI
+    # lifespan (workspace scan, cache restore, supervisors). Under the real xdist fast
+    # suite that setup is consistently >5 s; marking one method only moves the same
+    # module-scoped cost to its next sibling, so relegate the files as units.
+    "test_routes_runpod",
+    "test_engines_ws",
     # Real solvated PSF+DCD: parses a 32 MB topology, then runs the neighbour-grid
     # hydration-shell search per frame. Every test in the file needs that universe.
     "test_md_solvent_extraction",
@@ -701,6 +713,12 @@ _SLOW_TESTS = {
     # test_cando_extra_bases.py (C3 extra-base compliant connectors: the mesh/compliance
     # tests are fast pure-math; this one runs several real predict_shape + NMA RMSF solves)
     "test_extra_bases_raise_local_flexibility_rmsf",
+    # Standalone full-app lifespan route tests. Each is fast after startup, but each
+    # owns an isolated TestClient lifespan and consistently exceeds the 5 s xdist
+    # budget; unlike the module-scoped cases above, their sibling pure shaper/model
+    # tests remain useful in the fast suite.
+    "test_route_returns_sampled_shape",
+    "test_visibility_endpoint_persists_without_feature_log_entry",
     # ---------------------------------------------------------------------------
     # Refreshed 2026-07-10: heavy (>=~2 s) sim/FEM/routing/trajectory tests that had
     # slipped past the registry and were dominating the "fast" suite (`just test-fast`
@@ -868,7 +886,12 @@ def _slow_area_for(module: str) -> str:
         return "mrdna"
     # pdb_export builds a full atomistic model then writes the PDB — same heavy
     # reconstruction stack as the atomistic tests, so its slow tests belong there.
-    if "atomistic" in module or "pdb_export" in module or "ring_piercing" in module:
+    if (
+        "atomistic" in module
+        or "pdb_export" in module
+        or "ring_piercing" in module
+        or "two_base_default" in module
+    ):
         return "atomistic"
     if module.startswith("test_md") or "openmm" in module or "benchmark" in module:
         return "md"

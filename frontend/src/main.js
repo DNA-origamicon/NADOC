@@ -182,6 +182,7 @@ import { initZoomScope }           from './scene/zoom_scope.js'
 import { initExpandedSpacing }     from './scene/expanded_spacing.js'
 import { registerShortcut } from './input/shortcuts.js'
 import { initKeyboardShortcuts } from './ui/keyboard_shortcuts.js'
+import { initAccessibility } from './ui/accessibility.js'
 import { initViewToolButtons } from './ui/view_tool_buttons.js'
 import { initToolFilterToggles } from './ui/tool_filter_toggles.js'
 import { initViewLegends } from './ui/view_legends.js'
@@ -3850,6 +3851,7 @@ async function main() {
     getAssemblyWorkspacePath: () => _assemblyWorkspacePath,
     getOoActiveIds:           () => _orientPanel.getActiveIds(),
   })
+  initAccessibility()
 
   // ── Command palette ─────────────────────────────────────────────────────────
   initCommandPalette({

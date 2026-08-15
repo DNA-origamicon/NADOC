@@ -1419,7 +1419,7 @@ window.addEventListener('keydown', (e) => {
 
   // Tab — cycle through selectable filter items (strand, line, ends, xover only)
   // "strand" turns all on; every other key is exclusive (only that one active).
-  if (e.key === 'Tab') {
+  if (e.key === 'Tab' && e.target?.tagName?.toUpperCase() === 'CANVAS') {
     e.preventDefault()
     if (_tabCycleKeys.length) {
       const cur = editorStore.getState().selectFilter

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearDom } from '../test-helpers/factory_dom.js'
-import { dismissToast, showPersistentToast } from './toast.js'
+import { dismissToast, showPersistentToast, showToast } from './toast.js'
 
 describe('persistent loading toast', () => {
   beforeEach(() => {
@@ -20,6 +20,16 @@ describe('persistent loading toast', () => {
     dismissToast()
     vi.advanceTimersByTime(200)
     expect(document.querySelector('.toast')).toBeNull()
+  })
+
+  it('announces ordinary notifications and errors through live regions', () => {
+    showToast('Saved')
+    showToast('Save failed', { severity: 'error' })
+    const [status, alert] = document.querySelectorAll('.toast')
+    expect(status.getAttribute('role')).toBe('status')
+    expect(status.getAttribute('aria-live')).toBe('polite')
+    expect(alert.getAttribute('role')).toBe('alert')
+    expect(alert.getAttribute('aria-live')).toBe('assertive')
   })
 
   it('replaces the action when an existing persistent toast is repurposed', () => {

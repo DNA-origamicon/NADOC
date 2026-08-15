@@ -80,7 +80,9 @@
       z-index: 100;
       box-shadow: var(--shadow-md);
     }
-    .menu-item:hover .dropdown {
+    .menu-item:hover .dropdown,
+    .menu-item:focus-within > .dropdown,
+    .menu-item.a11y-open > .dropdown {
       display: block;
     }
     .dropdown-item {
@@ -146,7 +148,9 @@
       z-index: 101;
       box-shadow: var(--shadow-md);
     }
-    .submenu-item:hover > .submenu {
+    .submenu-item:hover > .submenu,
+    .submenu-item:focus-within > .submenu,
+    .submenu-item.a11y-open > .submenu {
       display: block;
     }
 
@@ -2989,7 +2993,7 @@
     <div style="margin-bottom:14px">
       <label class="input-group__label" style="display:block;margin-bottom:4px">Design name</label>
       <input id="new-design-name" type="text" placeholder="Required"
-        style="width:100%;box-sizing:border-box;padding:6px 8px;background:var(--color-bg-canvas);border:1px solid var(--color-border-default);border-radius:var(--radius-sm);color:var(--color-text-primary);font-family:var(--font-ui);font-size:var(--text-sm);outline:none">
+        style="width:100%;box-sizing:border-box;padding:6px 8px;background:var(--color-bg-canvas);border:1px solid var(--color-border-default);border-radius:var(--radius-sm);color:var(--color-text-primary);font-family:var(--font-ui);font-size:var(--text-sm)">
       <div id="new-design-name-error" style="display:none;color:var(--color-danger);font-size:var(--text-xs);margin-top:4px">A name is required.</div>
     </div>
 
@@ -3085,7 +3089,7 @@
     <textarea id="asc-custom-seq" placeholder="Paste ATGCN sequence…" spellcheck="false" autocomplete="off"
       style="width:100%;height:72px;background:var(--color-bg-canvas);border:1px solid var(--color-border-default);border-radius:var(--radius-sm);
              color:var(--color-text-primary);font-family:var(--font-data);font-size:var(--text-xs);padding:6px;resize:vertical;
-             box-sizing:border-box;outline:none"></textarea>
+             box-sizing:border-box"></textarea>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px;margin-bottom:10px">
       <div id="asc-custom-error" style="display:none;color:var(--color-danger);font-size:var(--text-xs)"></div>
       <div style="flex:1"></div>
@@ -3247,14 +3251,14 @@
           <div>
             <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Overhang A</div>
             <input id="ct-list-search-a" type="search" placeholder="Filter…"
-              style="width:100%;box-sizing:border-box;margin-bottom:4px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:11px;padding:3px 6px;outline:none">
+              style="width:100%;box-sizing:border-box;margin-bottom:4px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:11px;padding:3px 6px">
             <div id="ct-list-a" style="max-height:280px;overflow-y:auto;border:1px solid #30363d;border-radius:4px;background:#0d1117"></div>
             <div id="ct-seq-row-a" hidden style="margin-top:8px">
               <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Sequence</div>
               <div style="display:flex;gap:4px;align-items:center">
                 <input id="ct-seq-input-a" type="text" spellcheck="false" autocomplete="off"
                   style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:4px;
-                         color:#c9d1d9;font-family:monospace;font-size:12px;padding:4px 6px;outline:none">
+                         color:#c9d1d9;font-family:monospace;font-size:12px;padding:4px 6px">
                 <button id="ct-seq-gen-a" type="button" title="Generate random sequence"
                   style="padding:4px 10px;background:#21262d;border:1px solid #30363d;border-radius:4px;
                          color:#c9d1d9;font-family:monospace;font-size:11px;cursor:pointer">Gen</button>
@@ -3273,7 +3277,7 @@
               <div style="font-size:11px;color:#8b949e">Linker length</div>
               <div style="display:flex;align-items:center;gap:6px">
                 <input type="number" id="ct-length" min="0" step="1" value="12"
-                  style="width:70px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:12px;padding:4px 6px;outline:none">
+                  style="width:70px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:12px;padding:4px 6px">
                 <span style="font-size:11px;color:#8b949e">bp</span>
               </div>
             </div>
@@ -3286,14 +3290,14 @@
           <div>
             <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Overhang B</div>
             <input id="ct-list-search-b" type="search" placeholder="Filter…"
-              style="width:100%;box-sizing:border-box;margin-bottom:4px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:11px;padding:3px 6px;outline:none">
+              style="width:100%;box-sizing:border-box;margin-bottom:4px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:11px;padding:3px 6px">
             <div id="ct-list-b" style="max-height:280px;overflow-y:auto;border:1px solid #30363d;border-radius:4px;background:#0d1117"></div>
             <div id="ct-seq-row-b" hidden style="margin-top:8px">
               <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Sequence</div>
               <div style="display:flex;gap:4px;align-items:center">
                 <input id="ct-seq-input-b" type="text" spellcheck="false" autocomplete="off"
                   style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:4px;
-                         color:#c9d1d9;font-family:monospace;font-size:12px;padding:4px 6px;outline:none">
+                         color:#c9d1d9;font-family:monospace;font-size:12px;padding:4px 6px">
                 <button id="ct-seq-gen-b" type="button" title="Generate random sequence"
                   style="padding:4px 10px;background:#21262d;border:1px solid #30363d;border-radius:4px;
                          color:#c9d1d9;font-family:monospace;font-size:11px;cursor:pointer">Gen</button>
@@ -3324,7 +3328,7 @@
             <input id="ct-bridge-input-a" type="text" spellcheck="false" autocomplete="off"
               placeholder="—"
               style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:4px;
-                     color:#c9d1d9;font-family:monospace;font-size:12px;padding:4px 6px;outline:none">
+                     color:#c9d1d9;font-family:monospace;font-size:12px;padding:4px 6px">
             <button id="ct-bridge-gen-a" type="button" title="Generate a random bridge sequence of the assigned length"
               style="padding:4px 10px;background:#21262d;border:1px solid #30363d;border-radius:4px;
                      color:#c9d1d9;font-family:monospace;font-size:11px;cursor:pointer">Gen</button>
@@ -3333,7 +3337,7 @@
             <input id="ct-bridge-input-b" type="text" spellcheck="false" autocomplete="off" readonly
               placeholder="—" title="Reverse complement of the bridge above"
               style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:4px;
-                     color:#8b949e;font-family:monospace;font-size:12px;padding:4px 6px;outline:none">
+                     color:#8b949e;font-family:monospace;font-size:12px;padding:4px 6px">
           </div>
         </div>
 
@@ -3459,14 +3463,14 @@
         <div>
           <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Overhang A</div>
           <input id="aohc-list-search-a" type="search" placeholder="Filter part or overhang…"
-            style="width:100%;box-sizing:border-box;margin-bottom:4px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:11px;padding:3px 6px;outline:none">
+            style="width:100%;box-sizing:border-box;margin-bottom:4px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:11px;padding:3px 6px">
           <div id="aohc-list-a" style="max-height:280px;overflow-y:auto;border:1px solid #30363d;border-radius:4px;background:#0d1117"></div>
           <div id="aohc-seq-row-a" hidden style="margin-top:8px">
             <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Sequence</div>
             <div style="display:flex;gap:4px;align-items:center">
               <input id="aohc-seq-input-a" type="text" spellcheck="false" autocomplete="off"
                 style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:4px;
-                       color:#c9d1d9;font-family:monospace;font-size:12px;padding:4px 6px;outline:none">
+                       color:#c9d1d9;font-family:monospace;font-size:12px;padding:4px 6px">
               <button id="aohc-seq-gen-a" type="button" title="Generate random sequence"
                 style="padding:4px 10px;background:#21262d;border:1px solid #30363d;border-radius:4px;
                        color:#c9d1d9;font-family:monospace;font-size:11px;cursor:pointer">Gen</button>
@@ -3485,7 +3489,7 @@
             <div style="font-size:11px;color:#8b949e">Linker length</div>
             <div style="display:flex;align-items:center;gap:6px">
               <input type="number" id="aohc-length" min="0" step="1" value="12"
-                style="width:70px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:12px;padding:4px 6px;outline:none">
+                style="width:70px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:12px;padding:4px 6px">
               <span style="font-size:11px;color:#8b949e">bp</span>
             </div>
           </div>
@@ -3498,14 +3502,14 @@
         <div>
           <div style="font-size:11px;color:#8b949e;margin-bottom:6px">Overhang B</div>
           <input id="aohc-list-search-b" type="search" placeholder="Filter part or overhang…"
-            style="width:100%;box-sizing:border-box;margin-bottom:4px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:11px;padding:3px 6px;outline:none">
+            style="width:100%;box-sizing:border-box;margin-bottom:4px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:11px;padding:3px 6px">
           <div id="aohc-list-b" style="max-height:280px;overflow-y:auto;border:1px solid #30363d;border-radius:4px;background:#0d1117"></div>
           <div id="aohc-seq-row-b" hidden style="margin-top:8px">
             <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Sequence</div>
             <div style="display:flex;gap:4px;align-items:center">
               <input id="aohc-seq-input-b" type="text" spellcheck="false" autocomplete="off"
                 style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:4px;
-                       color:#c9d1d9;font-family:monospace;font-size:12px;padding:4px 6px;outline:none">
+                       color:#c9d1d9;font-family:monospace;font-size:12px;padding:4px 6px">
               <button id="aohc-seq-gen-b" type="button" title="Generate random sequence"
                 style="padding:4px 10px;background:#21262d;border:1px solid #30363d;border-radius:4px;
                        color:#c9d1d9;font-family:monospace;font-size:11px;cursor:pointer">Gen</button>
@@ -3527,7 +3531,7 @@
           <input id="aohc-bridge-input-a" type="text" spellcheck="false" autocomplete="off"
             placeholder="—"
             style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:4px;
-                   color:#c9d1d9;font-family:monospace;font-size:12px;padding:4px 6px;outline:none">
+                   color:#c9d1d9;font-family:monospace;font-size:12px;padding:4px 6px">
           <button id="aohc-bridge-gen-a" type="button" title="Generate a random bridge sequence of the assigned length"
             style="padding:4px 10px;background:#21262d;border:1px solid #30363d;border-radius:4px;
                    color:#c9d1d9;font-family:monospace;font-size:11px;cursor:pointer">Gen</button>
@@ -3536,7 +3540,7 @@
           <input id="aohc-bridge-input-b" type="text" spellcheck="false" autocomplete="off" readonly
             placeholder="—" title="Reverse complement of the bridge above"
             style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:4px;
-                   color:#8b949e;font-family:monospace;font-size:12px;padding:4px 6px;outline:none">
+                   color:#8b949e;font-family:monospace;font-size:12px;padding:4px 6px">
         </div>
       </div>
 
@@ -6871,7 +6875,7 @@
 
         <!-- Canvas area — actual 3D render target and its overlays -->
         <div id="canvas-area">
-          <canvas id="canvas"></canvas>
+          <canvas id="canvas">Interactive 3D molecular design workspace. Use the menus and panels to inspect and edit the current design.</canvas>
           <div id="mode-indicator">NADOC · WORKSPACE</div>
           <!-- Extrude lattice polarity legend (shown by slice_plane.js while the extrude grid is up) -->
           <div id="extrude-legend" style="
@@ -7043,7 +7047,7 @@
             #asm-oconn-select-a, #asm-oconn-select-b {
               width:100%; box-sizing:border-box; background:#0d1117; border:1px solid #30363d;
               border-radius:4px; color:#c9d1d9; font-family:var(--font-ui); font-size:12px;
-              padding:4px 6px; outline:none;
+              padding:4px 6px;
             }
             #asm-oconn-select-a { border-color:#00e1ff66 }
             #asm-oconn-select-b { border-color:#ff36c666 }
@@ -7069,7 +7073,7 @@
             <div id="asm-oconn-length-row" style="display:flex;flex-direction:column;gap:3px;width:100%">
               <label for="asm-oconn-length" style="font-size:11px;color:#8b949e">Linker length (bp)</label>
               <input id="asm-oconn-length" type="number" min="1" step="1" value="12"
-                style="width:100%;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:12px;padding:4px 6px;outline:none">
+                style="width:100%;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:12px;padding:4px 6px">
             </div>
             <div id="asm-oconn-warning" hidden style="width:100%;box-sizing:border-box;color:#f0883e;font-size:11px;line-height:1.3"></div>
             <button id="asm-oconn-generate" type="button" disabled
@@ -7463,10 +7467,10 @@
               <div style="display:flex;flex-direction:column;gap:3px;width:100%">
                 <label for="oconn-select-a" style="font-size:11px;color:#8b949e">Overhang A</label>
                 <select id="oconn-select-a"
-                  style="width:100%;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:12px;padding:4px 6px;outline:none"></select>
+                  style="width:100%;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:12px;padding:4px 6px"></select>
                 <div id="oconn-seq-row-a" hidden style="display:flex;gap:4px;align-items:center">
                   <input id="oconn-seq-input-a" type="text" spellcheck="false" autocomplete="off"
-                    style="flex:1;min-width:0;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:11px;padding:3px 5px;outline:none">
+                    style="flex:1;min-width:0;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:11px;padding:3px 5px">
                   <button id="oconn-seq-gen-a" type="button" title="Generate a sequence for overhang A"
                     style="padding:3px 8px;background:#21262d;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:11px;cursor:pointer">Gen</button>
                 </div>
@@ -7477,10 +7481,10 @@
               <div style="display:flex;flex-direction:column;gap:3px;width:100%">
                 <label for="oconn-select-b" style="font-size:11px;color:#8b949e">Overhang B</label>
                 <select id="oconn-select-b"
-                  style="width:100%;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:12px;padding:4px 6px;outline:none"></select>
+                  style="width:100%;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:12px;padding:4px 6px"></select>
                 <div id="oconn-seq-row-b" hidden style="display:flex;gap:4px;align-items:center">
                   <input id="oconn-seq-input-b" type="text" spellcheck="false" autocomplete="off"
-                    style="flex:1;min-width:0;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:11px;padding:3px 5px;outline:none">
+                    style="flex:1;min-width:0;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:11px;padding:3px 5px">
                   <button id="oconn-seq-gen-b" type="button" title="Generate a sequence for overhang B"
                     style="padding:3px 8px;background:#21262d;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:11px;cursor:pointer">Gen</button>
                 </div>
@@ -7489,7 +7493,7 @@
               <div id="oconn-length-row" style="display:flex;flex-direction:column;gap:3px;width:100%">
                 <label for="oconn-length" style="font-size:11px;color:#8b949e">Linker length (bp)</label>
                 <input id="oconn-length" type="number" min="1" step="1" value="12"
-                  style="width:100%;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:12px;padding:4px 6px;outline:none">
+                  style="width:100%;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:12px;padding:4px 6px">
               </div>
               <div id="oconn-pair-warning" hidden
                 style="width:100%;box-sizing:border-box;color:#f0883e;font-size:11px;line-height:1.3"></div>
