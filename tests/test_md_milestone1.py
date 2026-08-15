@@ -1893,6 +1893,25 @@ class TestReconcilePreparing:
         out = runner.reconcile_job_status(job, tmp_path)
         assert out.status == MdStatus.preparing  # live heartbeat → untouched
 
+    def test_completed_package_heals_false_interruption_verdict(self, tmp_path):
+        from backend.core.md_job import MdStatus, new_job
+        import backend.core.namd_runner as runner
+
+        job = new_job("P", "equilibrium_aware", "P", "package/P_namd_solvated")
+        job.status = MdStatus.queued
+        job.error = "Preparation was interrupted — its background task is no longer running"
+        job.failure_kind = "other"
+        package = job.package_dir(tmp_path)
+        package.mkdir(parents=True)
+        (package / "manifest.json").write_text("{}")
+        job.save(tmp_path)
+
+        out = runner.reconcile_job_status(job, tmp_path)
+
+        assert out.status == MdStatus.queued
+        assert out.error is None
+        assert out.failure_kind is None
+
     def test_stale_runpod_preparation_is_not_exempt_from_reconciliation(
         self, tmp_path, monkeypatch
     ):

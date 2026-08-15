@@ -782,6 +782,19 @@ class TestUniverseCacheHelpers:
         key = ws._universe_cache_key(psf, dcd)
         assert str(psf) in key and str(dcd) in key and "||" in key
 
+    def test_topology_only_cache_key_ignores_replaced_snapshot(self, tmp_path):
+        from backend.api import ws
+
+        psf = tmp_path / "huge.psf"
+        psf.write_text("topology")
+        dcd = tmp_path / "live.dcd"
+        dcd.write_text("frame one")
+        key1 = ws._universe_cache_key(psf, dcd, topology_only=True)
+        dcd.write_text("newer frame with a different size")
+        key2 = ws._universe_cache_key(psf, dcd, topology_only=True)
+        assert key1 == key2
+        assert str(dcd) not in key1
+
     def test_put_get_roundtrip_and_lru_eviction(self):
         self._reset_cache()
         from backend.api import ws

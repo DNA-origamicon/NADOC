@@ -13,10 +13,10 @@ whose DCD is 2.9 GB, and unlike the DCD it never grows.  Pulling one on demand a
 writing it as a one-frame DCD delivers the one thing a user actually wants from a
 job still on the cluster — the current shape of the design.
 
-**Why on demand and not on a timer.**  Cluster auth is Duo-gated, so there is no
-background session to stream into; NADOC can only talk to Alpine while the user is
-signed in.  The natural cadence is therefore "when the user logs in and looks", not
-"every N seconds".  Callers fire this on connect and on job selection.
+**Why on demand and not on a timer.** Remote frames are deliberately refreshed only
+when the user asks. The last fetched frame remains materialised locally and ready for
+display. A refresh first reads the tiny remote XSC checkpoint and transfers the much
+larger coordinate frame only when its step is newer than the local marker.
 
 **Why it writes to the real trajectory path.**  ``output/<segment>.dcd`` is exactly
 where ``fetch_outputs`` will later put the real thing, and writing there is what
@@ -187,33 +187,64 @@ def parse_xsc_dimensions(text: str) -> list[float] | None:
     return [la, lb, lc, _angle(b, c), _angle(a, c), _angle(a, b)]
 
 
+def parse_xsc_step(text: str) -> int | None:
+    """Checkpoint step from the last data row of a NAMD XSC, or ``None``."""
+    row = None
+    for line in text.splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            row = line.split()
+    if not row:
+        return None
+    try:
+        return int(float(row[0]))
+    except (TypeError, ValueError):
+        return None
+
+
 def _write_single_frame_dcd(
-    topology: Path, coor: Path, dest: Path, dimensions: list[float] | None = None
+    topology: Path, coor: Path, dest: Path, dimensions: list[float] | None = None,
+    on_progress=None,
 ) -> int:
-    """NAMD binary ``.coor`` + PSF -> a one-frame DCD at ``dest``.  Returns atom count.
+    """NAMD binary ``.coor`` -> a one-frame DCD at ``dest``.  Returns atom count.
 
-    Blocking and slow (a 180 MB solvated PSF parses in ~5 s), so callers run it off
-    the event loop.
+    ``topology`` is retained for API compatibility and because the caller still
+    validates that the display's PSF exists, but it must NOT be parsed here. NAMDBIN
+    contains its atom count and coordinates; DCD needs only those plus the XSC cell.
+    Parsing VoltronCoreArm's 3.24-million-atom PSF merely to copy a frame cost 30–40 s
+    on every Refresh. The direct coordinate-reader path takes ~0.2 s for the same file.
     """
-    import MDAnalysis as mda  # noqa: PLC0415 — heavy import, deferred
+    from MDAnalysis.coordinates.DCD import DCDWriter  # noqa: PLC0415
+    from MDAnalysis.coordinates.NAMDBIN import NAMDBINReader  # noqa: PLC0415
 
-    universe = mda.Universe(str(topology), str(coor), format="NAMDBIN")
+    if on_progress:
+        on_progress("processing", 80, "Reading checkpoint coordinates")
+    reader = NAMDBINReader(str(coor))
+    if on_progress:
+        on_progress("processing", 90, "Building display frame")
     if dimensions is not None:
         # See parse_xsc_dimensions: a boxless frame fails the display load outright.
-        universe.dimensions = dimensions
+        reader.ts.dimensions = dimensions
     dest.parent.mkdir(parents=True, exist_ok=True)
     # Write beside the target and rename: the display polls every 15 s and must
     # never open a half-written DCD.  `format` is explicit because MDAnalysis infers
     # it from the extension, and the temp name's is ".part".
     tmp = dest.with_name(dest.name + ".part")
-    with mda.Writer(str(tmp), n_atoms=universe.atoms.n_atoms, format="DCD") as writer:
-        writer.write(universe.atoms)
+    # WriterBase only needs an object exposing `.ts`; avoid Universe.empty(), whose
+    # millions of placeholder Atom objects would recreate much of the work removed above.
+    class _Frame:
+        ts = reader.ts
+
+    with DCDWriter(str(tmp), n_atoms=reader.n_atoms) as writer:
+        writer.write(_Frame())
+    if on_progress:
+        on_progress("processing", 98, "Committing display frame")
     tmp.replace(dest)
-    return int(universe.atoms.n_atoms)
+    return int(reader.n_atoms)
 
 
 async def fetch_live_frame(
-    job, workspace_dir: Path, *, conn=None, force: bool = False
+    job, workspace_dir: Path, *, conn=None, force: bool = False, on_progress=None
 ) -> dict:
     """Fetch the running segment's current frame and materialise it for display.
 
@@ -221,6 +252,10 @@ async def fetch_live_frame(
     and lets ``ClusterSSHError`` propagate so the route can map it to a 502.
     """
     from backend.core import md_executor, md_import  # noqa: PLC0415 — cycle
+
+    def report(phase, percent, message, **extra):
+        if on_progress:
+            on_progress(phase, percent, message, **extra)
 
     if job.execution_target == "local":
         raise ValueError("Local job — its trajectory is already on this machine.")
@@ -255,6 +290,7 @@ async def fetch_live_frame(
         and time.time() - float(previous.get("fetched_at") or 0)
         < MIN_REFETCH_INTERVAL_S
     ):
+        report("complete", 100, "Stored frame is current")
         return {"ok": True, "reused": True, **previous}
 
     topology = md_import.resolve_topology(
@@ -264,10 +300,52 @@ async def fetch_live_frame(
         raise ValueError(f"No PSF in {package_dir} to pair the frame with.")
 
     conn = conn or md_executor._default_conn()
-    tmp_coor = job.job_dir(workspace_dir) / f"_live_frame_{segment}.coor"
-    tmp_coor.parent.mkdir(parents=True, exist_ok=True)
+    report("checking", 2, "Checking remote checkpoint")
+    # Freshness probe first: XSC is a few hundred bytes while COOR is 24 bytes/atom.
+    # A manual refresh of an unchanged checkpoint therefore avoids the expensive pull.
+    tmp_xsc = job.job_dir(workspace_dir) / f"_live_frame_{segment}.xsc"
+    tmp_xsc.parent.mkdir(parents=True, exist_ok=True)
+    dimensions = None
+    remote_step = None
     try:
-        await conn.sftp_get(f"{scratch}/output/{segment}.restart.coor", str(tmp_coor))
+        await conn.sftp_get(f"{scratch}/output/{segment}.restart.xsc", str(tmp_xsc))
+        xsc_text = tmp_xsc.read_text(errors="replace")
+        dimensions = parse_xsc_dimensions(xsc_text)
+        remote_step = parse_xsc_step(xsc_text)
+    except Exception as exc:  # noqa: BLE001 — a missing .xsc must not lose the frame
+        logger.warning("[%s] no .xsc for %s: %s", job.job_id, segment, exc)
+    finally:
+        tmp_xsc.unlink(missing_ok=True)
+    previous_step = previous.get("step")
+    if previous.get("segment") == segment and dest.is_file():
+        try:
+            previous_step = int(previous_step)
+        except (TypeError, ValueError):
+            previous_step = None
+        if remote_step is None or (
+            previous_step is not None and remote_step <= previous_step
+        ):
+            report("complete", 100, "Stored frame is already current")
+            return {
+                "ok": True,
+                "reused": True,
+                "newer": False,
+                **previous,
+            }
+
+    tmp_coor = job.job_dir(workspace_dir) / f"_live_frame_{segment}.coor"
+    try:
+        def transfer(done, total):
+            fraction = done / total if total else 0
+            report(
+                "loading", 5 + 70 * fraction, "Loading newer frame",
+                bytes_done=done, bytes_total=total,
+            )
+
+        await conn.sftp_get(
+            f"{scratch}/output/{segment}.restart.coor", str(tmp_coor),
+            on_progress=transfer,
+        )
     except Exception as exc:  # noqa: BLE001 — no checkpoint written yet is normal
         logger.info("[%s] no live frame for %s: %s", job.job_id, segment, exc)
         tmp_coor.unlink(missing_ok=True)
@@ -276,20 +354,6 @@ async def fetch_live_frame(
             "segment": segment,
             "reason": "no restart checkpoint on the node yet",
         }
-
-    # The box, from the .xsc written alongside the .coor. Best-effort: a snapshot with a
-    # stale box beats no snapshot, and an older run may not have one. But see
-    # parse_xsc_dimensions — without it the display cannot load the frame at all, so a
-    # miss is worth a warning.
-    tmp_xsc = job.job_dir(workspace_dir) / f"_live_frame_{segment}.xsc"
-    dimensions = None
-    try:
-        await conn.sftp_get(f"{scratch}/output/{segment}.restart.xsc", str(tmp_xsc))
-        dimensions = parse_xsc_dimensions(tmp_xsc.read_text(errors="replace"))
-    except Exception as exc:  # noqa: BLE001 — a missing .xsc must not lose the frame
-        logger.warning("[%s] no .xsc for %s: %s", job.job_id, segment, exc)
-    finally:
-        tmp_xsc.unlink(missing_ok=True)
     if dimensions is None:
         logger.warning(
             "[%s] live frame for %s has NO unit cell — the display will refuse it",
@@ -299,14 +363,14 @@ async def fetch_live_frame(
 
     try:
         n_atoms = await asyncio.to_thread(
-            _write_single_frame_dcd, topology, tmp_coor, dest, dimensions
+            _write_single_frame_dcd, topology, tmp_coor, dest, dimensions, report
         )
     finally:
         tmp_coor.unlink(missing_ok=True)
 
     job.live_frame = {
         "segment": segment,
-        "step": (job.live_metrics or {}).get("step"),
+        "step": remote_step if remote_step is not None else (job.live_metrics or {}).get("step"),
         "n_atoms": n_atoms,
         "fetched_at": time.time(),
     }
@@ -323,4 +387,5 @@ async def fetch_live_frame(
         job.live_frame["step"],
         n_atoms,
     )
-    return {"ok": True, **job.live_frame}
+    report("complete", 100, "Display frame ready")
+    return {"ok": True, "newer": True, **job.live_frame}

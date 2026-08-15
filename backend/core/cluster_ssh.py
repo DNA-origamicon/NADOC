@@ -26,7 +26,13 @@ from typing import Awaitable, Callable, Optional
 # One connector coroutine signature: (host, user, password, duo_method) -> conn
 Connector = Callable[[str, str, str, str], Awaitable[object]]
 
-_SFTP_CHUNK = 256 * 1024  # 256 KB — flush per chunk (Appendix)
+# AsyncSSH splits large reads into protocol packets internally. Asking for only 256 KiB
+# here imposed hundreds of Python coroutine/round-trip cycles on an 80 MB NAMD checkpoint.
+# Four MiB improved bulk throughput but a sustained 22.5 GB result download starved the
+# server event loop badly enough that even /health and welcome-screen file imports hung.
+# One MiB plus an explicit scheduler yield keeps most of the throughput while guaranteeing
+# HTTP/WebSocket work gets a turn between SFTP chunks.
+_SFTP_CHUNK = 1024 * 1024
 _CHUNK_TIMEOUT_S = 300
 
 
@@ -360,6 +366,7 @@ async def _stream_put(sftp, local_path: str, remote_path: str) -> None:
                 if not chunk:
                     break
                 await asyncio.wait_for(rf.write(chunk), timeout=_CHUNK_TIMEOUT_S)
+                await asyncio.sleep(0)
 
 
 async def _stream_get(sftp, remote_path: str, local_path: str, on_progress=None) -> None:
@@ -384,7 +391,10 @@ async def _stream_get(sftp, remote_path: str, local_path: str, on_progress=None)
         on_progress(offset, remote_size)
     async with sftp.open(remote_path, "rb") as rf:
         if offset:
-            rf.seek(offset)
+            # AsyncSSH's SFTPClientFile.seek() is asynchronous.  Failing to await it
+            # leaves the remote cursor at zero while we append to the partial file,
+            # corrupting every resumed download and forcing another full retry.
+            await rf.seek(offset)
         with open(part_path, "ab" if offset else "wb") as fh:
             while True:
                 chunk = await asyncio.wait_for(
@@ -396,6 +406,10 @@ async def _stream_get(sftp, remote_path: str, local_path: str, on_progress=None)
                 offset += len(chunk)
                 if on_progress:
                     on_progress(offset, remote_size)
+                # AsyncSSH may satisfy sequential reads immediately from its buffered
+                # packet queue. An explicit yield prevents a multi-GB transfer from
+                # monopolising uvloop and freezing unrelated API requests.
+                await asyncio.sleep(0)
             fh.flush()
             os.fsync(fh.fileno())
     if os.path.getsize(part_path) != remote_size:

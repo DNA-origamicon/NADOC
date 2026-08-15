@@ -69,6 +69,12 @@ function _emitMdDisplayEvent(detail, jobId = null) {
   }))
 }
 
+function _emitMdProcess(phase, detail = {}, jobId = null) {
+  window.dispatchEvent(new CustomEvent('nadoc:md-display-process', {
+    detail: { phase, ...detail, jobId, at: performance.now() },
+  }))
+}
+
 function _activeSceneRepresentation() {
   const map = {
     'menu-view-hull-prism': 'hull-prism',
@@ -432,6 +438,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
   // the latest survives.  The backend cache (atomistic_cache.py) is the real
   // safety net; this just stops us asking for redundant work.
   function _openWebSocket() {
+    _emitMdProcess('socket-scheduled', { configPath: _configPath, mode: _repr }, _jobId)
     if (_reopenTimer) clearTimeout(_reopenTimer)
     _reopenTimer = setTimeout(() => { _reopenTimer = null; _openWebSocketNow() }, 120)
   }
@@ -444,6 +451,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
         (_ws.readyState === WebSocket.CONNECTING || _ws.readyState === WebSocket.OPEN)) {
       return
     }
+    _emitMdProcess('socket-opening', { configPath: _configPath, mode: _repr, signature: sig }, _jobId)
     _wsSig = sig
     if (_ws) {
       _ws.onclose = null
@@ -481,6 +489,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
         // different design is open in the editor.
         design:          store?.getState?.().currentDesign ?? null,
       }))
+      _emitMdProcess('load-sent', { configPath: _configPath, mode: _repr }, socketJobId)
       if (statusLine) statusLine.textContent = 'Loading…'
       if (_solventReq) _sendSolvent(_solventReq)
     }
@@ -554,6 +563,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
     }
 
     if (msg.type === 'ready') {
+      _emitMdProcess('load-ready', { nFrames: msg.n_frames, nPositions: msg.n_p_atoms }, eventJobId)
       _loadInFlight = false
       _atomIdent = msg.atom_ident ?? null
       _atomBonds = toBondPairs(msg.atom_bonds)
@@ -606,6 +616,11 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
     }
 
     if (msg.type === 'frame') {
+      _emitMdProcess('frame-received', {
+        frameIdx: msg.frame_idx,
+        nFrames: msg.n_frames ?? _nFrames,
+        nPositions: msg.positions?.length ?? msg.atoms?.length ?? 0,
+      }, eventJobId)
       // Live polling (dcd_fast) discovers frames appended after load — grow the
       // scrubber range so the user can scrub into them (the backend lazily reloads
       // the Universe when a seek lands beyond its original length).
@@ -616,16 +631,41 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
       }
       _updateTimeline(msg.frame_idx)
       _lastFrameMsg = msg
+      if (!_displayVisible) {
+        // A prewarm deliberately does not deform the scene, but receiving the requested
+        // frame is the definitive point at which Display MD is ready in memory. `ready`
+        // only means topology parsing finished and can precede this by several seconds.
+        _emitMdProcess('frame-cached', {
+          frameIdx: msg.frame_idx,
+          nFrames: msg.n_frames ?? _nFrames,
+          nPositions: msg.positions?.length ?? msg.atoms?.length ?? 0,
+        }, eventJobId)
+        _emitMdDisplayEvent({
+          state: 'prewarmed',
+          message: `MD frame ${msg.frame_idx + 1}/${msg.n_frames ?? _nFrames} cached`,
+          frameIdx: msg.frame_idx,
+          nFrames: msg.n_frames ?? _nFrames,
+          nPositions: msg.positions?.length ?? msg.atoms?.length ?? 0,
+        }, eventJobId)
+      }
       // The rep switch is over the moment a frame in the NEW wire format is on screen.
       _setSwitchBusy(false, null)
       if (_displayVisible) {
+        const applyStarted = performance.now()
         _applyFrame(msg)
+        _emitMdProcess('frame-applied', {
+          frameIdx: msg.frame_idx,
+          nPositions: msg.positions?.length ?? msg.atoms?.length ?? 0,
+          durationMs: performance.now() - applyStarted,
+          source: 'socket',
+        }, eventJobId)
         _emitMdDisplayEvent({
           state: 'frame',
           message: `Displaying frame ${msg.frame_idx + 1}/${msg.n_frames ?? _nFrames}`,
           frameIdx: msg.frame_idx,
           nFrames: msg.n_frames ?? _nFrames,
           nPositions: msg.positions?.length ?? msg.atoms?.length ?? 0,
+          source: 'socket',
         }, eventJobId)
       }
       if (_live) {
@@ -882,7 +922,22 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
     if (!_autoDisplayActive || !_lastFrameMsg) return
     if (!canReapplyFrame(_repr, _sceneRepr)) return
     if (_sceneUsesNativeCg()) designRenderer?.setDesignVisible(true)
+    const applyStarted = performance.now()
     _applyFrame(_lastFrameMsg)
+    _emitMdProcess('frame-applied', {
+      frameIdx: _lastFrameMsg.frame_idx,
+      nPositions: _lastFrameMsg.positions?.length ?? _lastFrameMsg.atoms?.length ?? 0,
+      durationMs: performance.now() - applyStarted,
+      source: 'memory-cache',
+    }, _jobId)
+    _emitMdDisplayEvent({
+      state: 'frame',
+      message: `Displaying frame ${(_lastFrameMsg.frame_idx ?? 0) + 1}/${_lastFrameMsg.n_frames ?? _nFrames}`,
+      frameIdx: _lastFrameMsg.frame_idx,
+      nFrames: _lastFrameMsg.n_frames ?? _nFrames,
+      nPositions: _lastFrameMsg.positions?.length ?? _lastFrameMsg.atoms?.length ?? 0,
+      source: 'memory-cache',
+    }, _jobId)
   }
 
   window.addEventListener('nadoc:representation-change', evt => {
@@ -949,6 +1004,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
         modeChanged: _repr !== nextMode,
         forceReload,
       })
+      _emitMdProcess('display-requested', { configPath, forceReload, live, action }, jobId)
       _autoDisplayActive = true
       _displayVisible = true
       _repr = nextMode
@@ -973,6 +1029,13 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
         else _sendPoll()
         return
       }
+      // `decideReload` treats forceReload as authoritative, so the lower socket
+      // signature guard must not veto it merely because a refreshed remote frame
+      // was written over the same stable DCD/config paths.  Without clearing the
+      // signature, Display-MD visibly kept/reapplied the old cached frame and the
+      // refresh workflow waited forever at 99% for a frame event that could never
+      // be emitted.
+      if (forceReload) _wsSig = null
       _openWebSocket()
     },
 

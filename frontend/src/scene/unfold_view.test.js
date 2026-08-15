@@ -58,6 +58,13 @@ describe('arc colour buffer is RGBA', () => {
 })
 
 describe('arc cluster display', () => {
+  it('hides a crossover when either endpoint belongs to reference geometry', () => {
+    const fn = SRC.slice(SRC.indexOf('function _reapplyArcHidden'))
+    const body = fn.slice(0, SRC.indexOf('\n  function ', SRC.indexOf('function _reapplyArcHidden') + 1) - SRC.indexOf('function _reapplyArcHidden'))
+    expect(body).toMatch(/refIds\.has\(e\.fromNuc\?\.strand_id\)\s*\|\|\s*refIds\.has\(e\.toNuc\?\.strand_id\)/)
+    expect(body).not.toMatch(/refIds\.has\(e\.fromNuc\?\.strand_id\)\s*&&/)
+  })
+
   it("_arcModeColor has a 'cluster' branch", () => {
     // Without it, arcs keep their strand colour while the helices they bridge take
     // cluster colours — the file's own comment used to say cluster "isn't wired to

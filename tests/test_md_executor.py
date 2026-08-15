@@ -464,6 +464,32 @@ def test_reconcile_completed_persists_processing_during_final_bookkeeping(
     assert out.download_status["processing_finished_at"] >= out.download_status["processing_started_at"]
 
 
+def test_restart_finishes_verified_processing_without_cluster_connection(
+    tmp_path, monkeypatch
+):
+    job = _make_prepared_job(tmp_path)
+    job.execution_target = "alpine"
+    job.slurm_state = "COMPLETED"
+    job.status = MdStatus.running
+    job.download_status = {
+        "state": "processing",
+        "verified_bytes": 123,
+        "total_bytes": 123,
+        "processing_started_at": 1.0,
+    }
+    job.save(tmp_path)
+    called = []
+    monkeypatch.setattr(ex, "_finalize_local_bookkeeping", lambda j, ws: called.append(j.job_id))
+    monkeypatch.setattr(ex, "_record_learned_throughput", lambda *_: None)
+
+    assert _run(ex.resume_local_processing_jobs(tmp_path)) == [job.job_id]
+    persisted = MdJob.load(job.job_id, tmp_path)
+    assert called == [job.job_id]
+    assert persisted.status == MdStatus.completed
+    assert persisted.download_status["state"] == "verified"
+    assert persisted.download_status["processing_finished_at"] > 0
+
+
 def test_reconcile_completed_missing_checkpoint_stays_repollable(
     tmp_path, alpine, resources
 ):
@@ -617,6 +643,32 @@ def test_fetch_outputs_prioritizes_failure_log_before_checkpoints(tmp_path):
     assert source == "nadoc_failure.log"
 
 
+def test_fetch_outputs_aborts_remaining_inventory_when_transport_drops(tmp_path):
+    job = _make_prepared_job(tmp_path)
+    job.remote_scratch_dir = "/scratch/x/" + job.job_id
+
+    class DroppingConn(FakeConn):
+        async def sftp_get(self, remote, local):
+            self.gets.append((remote, local))
+            self._connected = False
+            raise RuntimeError("not connected")
+
+    conn = DroppingConn(canned={
+        "find": RunResult(
+            0,
+            "10\toutput/a.dcd\n20\toutput/b.dcd\n30\toutput/c.dcd\n",
+            "",
+        ),
+    })
+
+    assert _run(ex.fetch_outputs(job, tmp_path, conn=conn)) is False
+    assert len(conn.gets) == 1
+    assert job.download_status["state"] == "interrupted"
+    assert set(job.download_status["failed_files"]) == {
+        "output/a.dcd", "output/b.dcd", "output/c.dcd",
+    }
+
+
 def test_scan_logs_prefers_namd_log_over_slurm_err(tmp_path):
     pkg = tmp_path / "pkg"
     pkg.mkdir()
@@ -754,6 +806,10 @@ def _make_resumable_job(tmp_path, alpine):
 
 def test_resume_job_mid_segment_from_checkpoint(tmp_path, alpine):
     job = _make_resumable_job(tmp_path, alpine)
+    job.live_metrics = {"segment": "stale"}
+    job.live_frame = {"segment": "stale"}
+    job.download_status = {"state": "verified"}
+    job.fetch_attempts = 3
     # seg 1 started but not finished (log, no .coor); its restart.xsc has a step.
     conn = FakeConn(
         canned={
@@ -769,6 +825,11 @@ def test_resume_job_mid_segment_from_checkpoint(tmp_path, alpine):
     assert out.status == MdStatus.queued
     assert out.resubmit_count == 1
     assert out.resumable is False
+    assert out.live_metrics is None
+    assert out.live_frame is None
+    assert out.download_status is None
+    assert out.fetch_attempts == 0
+    assert any(k.endswith("/nadoc_settle_retarget.py") for k in conn.put_contents)
     # A resume conf was uploaded, continuing from step 144000 for the remainder, and
     # GPUresident stripped (CPU target).
     resume = next(
@@ -934,9 +995,7 @@ def test_poll_remote_jobs_drains_pending_scancel(tmp_path):
 
 
 def test_cluster_connect_kicks_remote_poll(tmp_path, monkeypatch):
-    """A successful connect immediately reconciles remote jobs — so a run that FINISHED
-    while the session was down gets its results fetched now (not only on the ~30 s
-    supervisor pass) and any deferred scancel is drained."""
+    """Connect returns before a slow reconciliation, while still starting it."""
     import types
     from backend.api import routes_cluster
     from backend.core import cluster_ssh, cluster_config
@@ -961,17 +1020,28 @@ def test_cluster_connect_kicks_remote_poll(tmp_path, monkeypatch):
     monkeypatch.setattr(cluster_ssh, "get_manager", lambda: _Mgr())
 
     called = {}
+    reconcile_started = asyncio.Event()
+    release_reconcile = asyncio.Event()
 
     async def _spy(ws, conn=None):
         called["ws"] = ws
+        reconcile_started.set()
+        await release_reconcile.wait()
         return []
 
     monkeypatch.setattr(ex, "poll_remote_jobs", _spy)
 
-    req = routes_cluster.ConnectRequest(cluster_name="alpine", user="u", password="p")
-    out = _run(routes_cluster.cluster_connect(req))
-    assert out == {"state": "connected"}
-    assert called.get("ws") == tmp_path  # the post-connect poll ran
+    async def _scenario():
+        req = routes_cluster.ConnectRequest(cluster_name="alpine", user="u", password="p")
+        # The response must not inherit the reconciliation/download latency.
+        out = await asyncio.wait_for(routes_cluster.cluster_connect(req), timeout=0.1)
+        assert out == {"state": "connected"}
+        await asyncio.wait_for(reconcile_started.wait(), timeout=0.1)
+        assert called.get("ws") == tmp_path
+        release_reconcile.set()
+        await asyncio.gather(*tuple(routes_cluster._POST_CONNECT_TASKS))
+
+    _run(_scenario())
 
 
 def test_stop_disconnected_defers_scancel(tmp_path, monkeypatch):

@@ -111,6 +111,25 @@ router = APIRouter(tags=["md"])
 # Background preparation tasks, kept referenced so the event loop doesn't GC them
 # mid-run (asyncio only holds weak references to tasks).
 _PREP_TASKS: set[asyncio.Task] = set()
+_LIVE_FRAME_TASKS: dict[str, asyncio.Task] = {}
+_LIVE_FRAME_PROGRESS: dict[str, dict] = {}
+
+
+async def _write_prep_heartbeat(
+    job_dir: Path, tracker: PrepTracker, *, interval_s: float = 1.0
+) -> None:
+    """Persist liveness until the preparation coroutine explicitly cancels us.
+
+    Tracker completion means the measured phases reached 100%; final manifests,
+    restraint files, and job-state persistence may still be running.  Stopping
+    here creates a false stale-preparation window for large packages.
+    """
+    try:
+        while True:
+            write_prep_progress(job_dir, tracker.snapshot())
+            await asyncio.sleep(interval_s)
+    except asyncio.CancelledError:
+        pass
 _TRAJ_PROGRESS_PATHS: dict[str, Path] = {}
 
 #: Upper bound on a single production run's length.  These are sanity rails, not a
@@ -3180,6 +3199,11 @@ def _apply_run_dir(
         raise HTTPException(400, f"Run directory does not exist: {run_dir}")
     if not os.access(base, os.W_OK):
         raise HTTPException(400, f"Run directory is not writable: {run_dir}")
+    # The directory picker persists an explicit path, including NADOC's own default.
+    # Treating that explicit spelling as an external archive creates a self-referential
+    # archive index and falsely marks an ordinary job as stored on another drive.
+    if base.resolve() == _default_namd_run_dir().resolve():
+        return
     dest = base.resolve() / job.job_id
     dest.mkdir(parents=True, exist_ok=True)
     job.archived = True
@@ -3444,15 +3468,7 @@ async def _prepare_job_bg(
     ws = _workspace()
     job_dir = MdJob.load(job_id, ws).job_dir(ws)
 
-    async def _heartbeat() -> None:
-        try:
-            while not tracker.is_done():
-                write_prep_progress(job_dir, tracker.snapshot())
-                await asyncio.sleep(1.0)
-        except asyncio.CancelledError:
-            pass
-
-    hb = asyncio.create_task(_heartbeat())
+    hb = asyncio.create_task(_write_prep_heartbeat(job_dir, tracker))
 
     try:
         seed_model = None
@@ -3637,6 +3653,11 @@ async def _prepare_job_bg(
     # rather than looking idle, and confirms it finished.
     job.minimization = _minimization_from_package(job.package_dir(ws))
     job.status = MdStatus.queued
+    # Reconciliation may have observed an old heartbeat during final package
+    # assembly.  Successful preparation is authoritative and must not retain a
+    # transient interruption verdict that blocks remote submission.
+    job.error = None
+    job.failure_kind = None
     job.save(ws)
     clear_prep_progress(job_dir)
 
@@ -6036,8 +6057,8 @@ async def resume_md_job_remote(job_id: str, body: ResumeRemoteRequest) -> dict:
     job = _load_job(job_id)
     if job.execution_target != "alpine":
         raise HTTPException(400, "Not a cluster job.")
-    if not job.resumable:
-        raise HTTPException(400, "Job is not in a resumable (timed-out) state.")
+    if not job.resumable and job.status != MdStatus.failed:
+        raise HTTPException(400, "Job is not in a resumable or failed remote state.")
     if not job.remote_scratch_dir:
         raise HTTPException(400, "Job has no remote scratch dir to resume from.")
 
@@ -6401,7 +6422,84 @@ async def fetch_md_job_live_frame(job_id: str, force: bool = False) -> dict:
     return {"job_id": job.job_id, **result}
 
 
-async def _fetch_runpod_live_frame(job, *, force: bool) -> dict:
+async def _run_live_frame_refresh(job_id: str) -> None:
+    """Background refresh with transfer-byte and conversion-phase progress."""
+    from backend.core import cluster_ssh, remote_live_frame
+
+    def progress(phase, percent, message, **extra):
+        _LIVE_FRAME_PROGRESS[job_id] = {
+            "state": "running",
+            "phase": phase,
+            "percent": round(float(percent), 1),
+            "message": message,
+            "updated_at": time.time(),
+            **extra,
+        }
+
+    try:
+        job = _load_job(job_id)
+        if job.execution_target == "runpod":
+            result = await _fetch_runpod_live_frame(
+                job, force=True, on_progress=progress
+            )
+        else:
+            mgr = cluster_ssh.get_manager()
+            if not mgr.is_connected():
+                raise RuntimeError("Not connected to Alpine")
+            result = await remote_live_frame.fetch_live_frame(
+                job, _workspace(), conn=mgr, force=True, on_progress=progress
+            )
+        latest = MdJob.load(job.job_id, _workspace())
+        latest.live_frame = job.live_frame
+        latest.save(_workspace())
+        _LIVE_FRAME_PROGRESS[job_id] = {
+            "state": "complete",
+            "phase": "complete",
+            "percent": 100.0,
+            "message": "Display frame ready" if result.get("newer") else "Stored frame is current",
+            "result": {"job_id": job_id, **result},
+            "updated_at": time.time(),
+        }
+    except Exception as exc:  # noqa: BLE001 — surfaced verbatim to the polling UI
+        logger.exception("[%s] live-frame refresh failed", job_id)
+        _LIVE_FRAME_PROGRESS[job_id] = {
+            "state": "failed",
+            "phase": "failed",
+            "percent": 100.0,
+            "message": str(exc),
+            "updated_at": time.time(),
+        }
+    finally:
+        _LIVE_FRAME_TASKS.pop(job_id, None)
+
+
+@router.post("/md/jobs/{job_id}/fetch-live-frame/start")
+async def start_md_job_live_frame_refresh(job_id: str) -> dict:
+    """Start one explicit remote-frame refresh and return immediately."""
+    job = _load_job(job_id)
+    if job.execution_target == "local":
+        raise HTTPException(400, "Local MD frames do not need remote refresh.")
+    task = _LIVE_FRAME_TASKS.get(job_id)
+    if task and not task.done():
+        return {"ok": True, "already_running": True}
+    _LIVE_FRAME_PROGRESS[job_id] = {
+        "state": "running", "phase": "checking", "percent": 0.0,
+        "message": "Starting refresh", "updated_at": time.time(),
+    }
+    task = asyncio.create_task(_run_live_frame_refresh(job_id))
+    _LIVE_FRAME_TASKS[job_id] = task
+    return {"ok": True}
+
+
+@router.get("/md/jobs/{job_id}/fetch-live-frame/progress")
+async def get_md_job_live_frame_refresh_progress(job_id: str) -> dict:
+    _load_job(job_id)  # preserve the normal 404 contract
+    return _LIVE_FRAME_PROGRESS.get(job_id) or {
+        "state": "idle", "phase": "idle", "percent": 0.0, "message": ""
+    }
+
+
+async def _fetch_runpod_live_frame(job, *, force: bool, on_progress=None) -> dict:
     """The RunPod half of ``fetch-live-frame``.
 
     Alpine's transport is a single long-lived Duo-authenticated manager; a pod's is a
@@ -6432,7 +6530,7 @@ async def _fetch_runpod_live_frame(job, *, force: bool) -> dict:
 
     try:
         return await remote_live_frame.fetch_live_frame(
-            job, _workspace(), conn=conn, force=force
+            job, _workspace(), conn=conn, force=force, on_progress=on_progress
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc

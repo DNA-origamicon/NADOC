@@ -208,6 +208,70 @@ describe('live solvent side-channel', () => {
     expect(fresh.lastOf('set_solvent')).toMatchObject({ water: true, box: true })
   })
 
+  it('force-reloads an open socket when the refreshed DCD keeps the same path', () => {
+    const { c, ws: old } = connected()
+    expect(sockets).toHaveLength(1)
+
+    c.displayLatest('/tmp/run.json', { forceReload: true, live: false, jobId: 'j1' })
+    vi.advanceTimersByTime(200)
+
+    expect(sockets).toHaveLength(2)
+    expect(old.readyState).toBe(3)
+    const fresh = sockets.at(-1)
+    fresh.open()
+    expect(fresh.lastOf('load')).toMatchObject({
+      config_path: '/tmp/run.json',
+      job_id: 'j1',
+    })
+  })
+
+  it('reapplies the last downloaded frame on toggle-on without reopening', () => {
+    const applyFemPositions = vi.fn()
+    const states = []
+    const processes = []
+    const onState = e => states.push(e.detail)
+    const onProcess = e => processes.push(e.detail)
+    window.addEventListener('nadoc:md-display-state', onState)
+    window.addEventListener('nadoc:md-display-process', onProcess)
+    const { c, ws } = connected({
+      designRenderer: {
+        setDesignVisible: vi.fn(),
+        applyFemPositions,
+      },
+    })
+    ws.onmessage({ data: JSON.stringify({
+      type: 'ready', n_frames: 1, n_p_atoms: 1,
+      dt_ps: 0.004, nstxout_comp: 5000,
+    }) })
+    const frame = {
+      type: 'frame', frame_idx: 0, n_frames: 1,
+      positions: [{ helix_id: 'h1', bp_index: 0, direction: 'FORWARD', x: 1, y: 2, z: 3 }],
+    }
+    ws.onmessage({ data: JSON.stringify(frame) })
+    applyFemPositions.mockClear()
+
+    expect(c.stopDisplayKeepWarm()).toBe(true)
+    applyFemPositions.mockClear() // ignore the toggle-off equilibrium restore
+    c.displayLatest('/tmp/run.json', { forceReload: false, live: false, jobId: 'j1' })
+
+    expect(sockets).toHaveLength(1)
+    expect(applyFemPositions).toHaveBeenCalledTimes(1)
+    expect(applyFemPositions.mock.calls[0][0]).toEqual([
+      expect.objectContaining({
+        helix_id: 'h1', bp_index: 0, direction: 'FORWARD',
+        backbone_position: [1, 2, 3],
+      }),
+    ])
+    expect(processes.at(-1)).toMatchObject({
+      phase: 'frame-applied', jobId: 'j1', source: 'memory-cache',
+    })
+    expect(states.at(-1)).toMatchObject({
+      state: 'frame', jobId: 'j1', source: 'memory-cache',
+    })
+    window.removeEventListener('nadoc:md-display-state', onState)
+    window.removeEventListener('nadoc:md-display-process', onProcess)
+  })
+
   it('does not send anything when the overlay was never turned on', () => {
     const { ws } = connected()
     expect(ws.actions()).not.toContain('set_solvent')
@@ -259,6 +323,37 @@ describe('live solvent side-channel', () => {
       expect(seen).toHaveLength(before)
     } finally {
       window.removeEventListener('nadoc:md-display-state', onState)
+    }
+  })
+
+  it('signals prewarmed only after the requested frame is cached without applying it', () => {
+    const seen = []
+    const processes = []
+    const onState = e => seen.push(e.detail)
+    const onProcess = e => processes.push(e.detail)
+    window.addEventListener('nadoc:md-display-state', onState)
+    window.addEventListener('nadoc:md-display-process', onProcess)
+    try {
+      const localDeps = makeDeps()
+      const c = initMdPanel(store, localDeps)
+      c.prewarmLatest('/tmp/run.json', { forceReload: true, jobId: 'alpine-r1' })
+      vi.advanceTimersByTime(200)
+      const ws = sockets.at(-1)
+      ws.open()
+      ws.onmessage({ data: JSON.stringify({ type: 'ready', n_frames: 1 }) })
+      expect(seen.some(e => e.state === 'prewarmed')).toBe(false)
+
+      ws.onmessage({ data: JSON.stringify({
+        type: 'frame', frame_idx: 0, n_frames: 1,
+        positions: [{ helix_id: 'h1', bp_index: 0, direction: 'FORWARD', x: 1, y: 2, z: 3 }],
+      }) })
+
+      expect(seen.at(-1)).toMatchObject({ state: 'prewarmed', jobId: 'alpine-r1' })
+      expect(processes.some(e => e.phase === 'frame-cached')).toBe(true)
+      expect(localDeps.designRenderer.applyFemPositions).not.toHaveBeenCalled()
+    } finally {
+      window.removeEventListener('nadoc:md-display-state', onState)
+      window.removeEventListener('nadoc:md-display-process', onProcess)
     }
   })
 })

@@ -5,11 +5,10 @@ and remote executors stage this very file on compute nodes.  Keeping one impleme
 prevents the local and remote coordinate-column rewrites from drifting apart.
 """
 
-from __future__ import annotations
-
 import argparse
 import struct
 from pathlib import Path
+from typing import List
 
 
 def retarget_pdb_coordinates(coor_path: Path, src_pdb: Path, dst_pdb: Path) -> int:
@@ -26,7 +25,9 @@ def retarget_pdb_coordinates(coor_path: Path, src_pdb: Path, dst_pdb: Path) -> i
         )
     xyz = struct.iter_unpack("<3d", raw[4:expected])
 
-    out: list[str] = []
+    # Alpine compute nodes currently expose Python 3.6. Keep this staged helper free
+    # of postponed annotations and PEP 585 built-in generics.
+    out = []  # type: List[str]
     ai = 0
     for line in src_pdb.read_text().splitlines(keepends=True):
         if line.startswith(("ATOM", "HETATM")):

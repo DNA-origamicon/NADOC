@@ -310,8 +310,8 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
   }
 
   /** Re-evaluate e.hidden for all arcs based on _hiddenNucKeys AND the reference
-   *  toggle (a crossover with BOTH endpoints on reference strands hides when the
-   *  reference View toggle is off — matching the strand/extra-base hide). */
+   *  toggle. Any arc touching a reference strand belongs to the comparison
+   *  geometry and must disappear on Simulate, including mixed-ownership records. */
   function _reapplyArcHidden() {
     const state = store.getState()
     const hideRef = state.showReferenceGeometry === false || state.simulationTabActive === true
@@ -350,7 +350,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
                  flexKeys.has(_k(e.fromNuc)) || flexKeys.has(_k(e.toNuc)) ||
                  flexPairs.has(`${_k(e.fromNuc)}|${_k(e.toNuc)}`) ||
                  (hidePeriodic && e.isPeriodicSeam) ||
-                 (hideRef && refIds.has(e.fromNuc?.strand_id) && refIds.has(e.toNuc?.strand_id)) ||
+                 (hideRef && (refIds.has(e.fromNuc?.strand_id) || refIds.has(e.toNuc?.strand_id))) ||
                  _arcRepHidden(e)
     }
   }
@@ -726,10 +726,25 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       const base = e.vertIdx
 
       // Hidden arcs: collapse all vertices to a single point → zero-length segments → invisible.
+      // This MUST precede the reference-geometry fixed-pose branch below. A hidden
+      // reference arc used to be rewritten as a visible straight line here even
+      // though e.hidden=true, making state-only diagnostics falsely pass.
       if (e.hidden) {
         for (let j = 0; j <= ARC_SEGS; j++) {
           const bi = (base + j) * 3
           buf[bi] = e.from3D.x; buf[bi + 1] = e.from3D.y; buf[bi + 2] = e.from3D.z
+        }
+        continue
+      }
+
+      // Outside Simulate, reference arcs remain a fixed comparison backdrop even
+      // when active geometry is unfolded or displaced.
+      if (e.fromNuc?.is_reference || e.toNuc?.is_reference) {
+        for (let j = 0; j <= ARC_SEGS; j++) {
+          const u = j / ARC_SEGS, bi = (base + j) * 3
+          buf[bi] = e.from3D.x + (e.to3D.x - e.from3D.x) * u
+          buf[bi + 1] = e.from3D.y + (e.to3D.y - e.from3D.y) * u
+          buf[bi + 2] = e.from3D.z + (e.to3D.z - e.from3D.z) * u
         }
         continue
       }
@@ -1101,7 +1116,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     if (newState.staplesHidden !== prevState.staplesHidden) _applyStapleArcVisibility()
   })
 
-  // Reference View toggle: hide/show arc lines of reference-only crossovers.
+  // Reference View toggle: hide/show every arc touching reference geometry.
   store.subscribe((newState, prevState) => {
     if (newState.showReferenceGeometry === prevState.showReferenceGeometry &&
         newState.simulationTabActive === prevState.simulationTabActive) return
@@ -1638,15 +1653,24 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
             xoverIds: _stapleMerged.line.userData.arcXoverIds,
           } : null,
         },
-        arcs: _arcMeta.map(e => ({
+        arcs: _arcMeta.map(e => {
+          const merged = e.merged === 'scaffold' ? _scaffoldMerged : _stapleMerged
+          const buf = merged?.positions
+          const a = e.vertIdx * 3, b = (e.vertIdx + ARC_SEGS) * 3
+          const renderedSpanNm = buf ? Math.hypot(
+            buf[b] - buf[a], buf[b + 1] - buf[a + 1], buf[b + 2] - buf[a + 2]) : null
+          return {
           xoverId:     e.crossover_id ?? '(no id)',
           fromHelix:   e.fromHelixId,
           toHelix:     e.toHelixId,
+          fromStrand:  e.fromNuc?.strand_id ?? null,
+          toStrand:    e.toNuc?.strand_id ?? null,
           type:        e.merged,
           hidden:      e.hidden,
+          renderedSpanNm,
           isExtraBase: e.isExtraBase,
           vertIdx:     e.vertIdx,
-        })),
+        }}),
       }
     },
 

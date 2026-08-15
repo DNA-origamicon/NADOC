@@ -19,6 +19,7 @@
 import * as THREE from 'three'
 import { createGlowLayer } from './glow_layer.js'
 import { store } from '../state/store.js'
+import { isEditableTarget } from '../input/shortcuts.js'
 
 const LENS_SIZE = 240           // CSS px diameter of the lens
 const ZOOM      = 3.5           // magnification factor
@@ -196,8 +197,11 @@ export function initZoomScope(canvas, scene, mainCamera, designRenderer) {
 
   document.addEventListener('keydown', e => {
     if (e.repeat || e.key !== ' ') return
-    const inInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA'
-    if (inInput) return
+    // Space is the native activation key for buttons and other controls. The
+    // magnifier owns it only while focus is on the 3D canvas (or the document
+    // body before anything has been focused).
+    const tag = e.target?.tagName?.toUpperCase()
+    if (isEditableTarget(e.target) || (tag !== 'CANVAS' && tag !== 'BODY')) return
     e.preventDefault()
     _spaceHeld = true
     _activate()

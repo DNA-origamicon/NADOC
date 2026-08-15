@@ -213,6 +213,14 @@ const _REQUEST_TIMEOUT_MS = 240000
  *  milliseconds even if the response arrives sooner. Avoids one-frame flashes
  *  for ops that finish just after the threshold. */
 const _BUSY_POPUP_MIN_VISIBLE_MS = 400
+let _diagnosticRequestSeq = 0
+
+function _emitRequestDiagnostic(detail) {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent('nadoc:api-request', {
+    detail: { ...detail, at: performance.now() },
+  }))
+}
 
 /** Parse a Server-Timing header into a `step=ms` summary string.
  *  Format we emit on the backend: `step;dur=12.3, other_step;dur=4.5`. */
@@ -247,6 +255,7 @@ function _busyHeaderForPath(method, path) {
   if (path.startsWith('/design/bundle'))                           return 'Building Bundle'
   if (path.startsWith('/design/extrude'))                          return 'Extruding'
   if (path.startsWith('/design/load') || path.startsWith('/design/import')) return 'Loading Design'
+  if (path.startsWith('/design/geometry'))                       return 'Loading Design Geometry'
   return 'Working…'
 }
 
@@ -303,6 +312,8 @@ export function errorDetailToMessage(detail, fallback = 'Server error') {
 }
 
 export async function _request(method, path, body, { signal, suppressBusy = false, docId, timeoutMs = _REQUEST_TIMEOUT_MS, protectedRetry = true } = {}) {
+  const diagnosticId = ++_diagnosticRequestSeq
+  _emitRequestDiagnostic({ phase: 'start', id: diagnosticId, method, path, suppressBusy })
   const isTimedOperation = method !== 'GET' && (
     path === '/design/bundle' || path === '/design/bundle-segment' ||
     path === '/design/bundle-continuation' || path === '/design/bundle-deformed-continuation' ||
@@ -355,6 +366,7 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
     _busyShown = true
     _busyShownAt = performance.now()
     showOpProgress(_busyHeaderForPath(method, path), '')
+    _emitRequestDiagnostic({ phase: 'busy-show', id: diagnosticId, method, path })
     // A slow request might mean the backend is wedged, not just busy — probe
     // /health now (short timeout, off the event loop) so a true hang surfaces as
     // "reconnecting…" in seconds instead of waiting out the request ceiling.
@@ -372,6 +384,10 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
     json = await r.json().catch(() => null)
     markOperationTiming('response-parsed', undefined, operationTrace)
   } catch (err) {
+    _emitRequestDiagnostic({
+      phase: 'error', id: diagnosticId, method, path,
+      durationMs: performance.now() - t0, message: err?.message ?? String(err),
+    })
     markOperationTiming('operation-failed', { message: err?.message ?? String(err) }, operationTrace)
     finishOperationAfterRender(operationTrace)
     notifyRequestFailure()   // network-level failure → flag the connection as down
@@ -386,11 +402,19 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
       // so the floor doesn't add perceived latency.
       const visibleFor = performance.now() - _busyShownAt
       const wait = Math.max(0, _BUSY_POPUP_MIN_VISIBLE_MS - visibleFor)
-      if (wait > 0) setTimeout(hideOpProgress, wait)
-      else hideOpProgress()
+      const hide = () => {
+        hideOpProgress()
+        _emitRequestDiagnostic({ phase: 'busy-hide', id: diagnosticId, method, path })
+      }
+      if (wait > 0) setTimeout(hide, wait)
+      else hide()
     }
   }
   const tTotal = performance.now() - t0
+  _emitRequestDiagnostic({
+    phase: 'complete', id: diagnosticId, method, path,
+    durationMs: tTotal, networkMs: tNetwork, status: r?.status ?? null,
+  })
   // Cheap perf trace: log slow calls (and all calls when explicitly enabled),
   // including any Server-Timing breakdown the backend attached. Threshold keeps
   // the console quiet for fast calls; raise window.__nadocApiTraceAll = true
@@ -2195,6 +2219,12 @@ export async function runOxdna(steps = 10000) {
 // design-sync and just return parsed JSON (or null on error).
 
 async function _oxdnaJSON(method, path, body = undefined, { signal } = {}) {
+  const diagnosticId = ++_diagnosticRequestSeq
+  const diagnosticStarted = performance.now()
+  _emitRequestDiagnostic({
+    phase: 'start', id: diagnosticId, method, path,
+    suppressBusy: true, transport: 'job-json',
+  })
   const opts = { method, headers: { ...docHeaders() } }
   // Type-check rather than truthiness-check: a positional arg mix-up used to land a
   // non-signal here (e.g. `signal = true` from an `align` bound to the wrong param).
@@ -2214,17 +2244,36 @@ async function _oxdnaJSON(method, path, body = undefined, { signal } = {}) {
     opts.headers['Content-Type'] = 'application/json'
     opts.body = JSON.stringify(body)
   }
-  const r = await fetch(`${BASE}${path}`, opts).catch(err => {
+  let r
+  try {
+    r = await fetch(`${BASE}${path}`, opts)
+  } catch (err) {
+    _emitRequestDiagnostic({
+      phase: err?.name === 'AbortError' ? 'aborted' : 'error',
+      id: diagnosticId, method, path,
+      durationMs: performance.now() - diagnosticStarted,
+      message: err?.message ?? String(err), transport: 'job-json',
+    })
     if (err?.name === 'AbortError') return null
     throw err
-  })
-  if (!r) return null
+  }
   if (!r.ok) {
     const json = await r.json().catch(() => null)
     store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
+    _emitRequestDiagnostic({
+      phase: 'complete', id: diagnosticId, method, path,
+      durationMs: performance.now() - diagnosticStarted,
+      status: r.status, transport: 'job-json',
+    })
     return null
   }
-  return r.json().catch(() => null)
+  const json = await r.json().catch(() => null)
+  _emitRequestDiagnostic({
+    phase: 'complete', id: diagnosticId, method, path,
+    durationMs: performance.now() - diagnosticStarted,
+    status: r.status, transport: 'job-json',
+  })
+  return json
 }
 
 async function _backgroundJobList(path) {
@@ -2909,6 +2958,10 @@ export const getMdDisplayMeta    = (id)          => _oxdnaJSON('GET',    `/md/jo
  *  `.restart.coor`, not a multi-GB DCD.  Needs a live (Duo) cluster session. */
 export const fetchMdLiveFrame    = (id, force = false) =>
   _oxdnaJSON('POST', `/md/jobs/${id}/fetch-live-frame${force ? '?force=true' : ''}`)
+export const startMdLiveFrameRefresh = (id) =>
+  _oxdnaJSON('POST', `/md/jobs/${id}/fetch-live-frame/start`)
+export const getMdLiveFrameRefreshProgress = (id) =>
+  _oxdnaJSON('GET', `/md/jobs/${id}/fetch-live-frame/progress`)
 export const getMdJobMetrics     = (id)          => _oxdnaJSON('GET',    `/md/jobs/${id}/metrics`)
 export const getMdJobFixAdvice   = (id)          => _oxdnaJSON('GET',    `/md/jobs/${id}/fix-advice`)
 /** NAMD/GROMACS availability + recommended thread count. */
@@ -4052,7 +4105,11 @@ export async function listActiveJobs() {
   // operation's final frame has rendered.
   if (activeOperationTiming() && _activeJobsCache) return _activeJobsCache
   await whenOperationIdle()
-  const result = await _request('GET', '/jobs/active')   // { jobs, count, any_running }
+  // Background activity polling must never own the centred operation popup. On a
+  // saturated MD host this read can take tens of seconds and several independent
+  // UI consumers call it concurrently; letting each one increment op-progress's
+  // ref-count strands a generic "Working…" modal over an otherwise usable app.
+  const result = await _request('GET', '/jobs/active', undefined, { suppressBusy: true })
   if (result) _activeJobsCache = result
   return result
 }
@@ -4071,7 +4128,12 @@ export async function gpuStatus(devices = '0') {
  *  vram_used_mb, vram_total_mb } (percent fields null when unavailable). See
  *  routes_system.py system_resources. */
 export async function getSystemResources(devices = '0') {
-  return _request('GET', `/system/resources?devices=${encodeURIComponent(devices)}`)
+  // High-frequency monitor poll: on a saturated host even this cheap probe can
+  // queue for seconds. It must update its card when it lands, never open/ref-count
+  // the centred operation popup over unrelated user work.
+  return _request('GET', `/system/resources?devices=${encodeURIComponent(devices)}`, undefined, {
+    suppressBusy: true,
+  })
 }
 
 /** Recommended NAMD Advanced settings for the active design on THIS machine
@@ -4097,7 +4159,11 @@ export async function optimizeMdHardware(devices = '0') {
  *  Returns null on error so callers can degrade to "GPU unknown / recommend oxDNA". */
 export async function simulateRecommendation(devices = '0') {
   await whenOperationIdle()
-  return _request('GET', `/simulate/recommendation?devices=${encodeURIComponent(devices)}`)
+  // This read-only policy refresh runs automatically when Dynamics opens. It
+  // must not claim the global operation popup while Display MD reports its own
+  // precise progress.
+  return _request('GET', `/simulate/recommendation?devices=${encodeURIComponent(devices)}`, null,
+    { suppressBusy: true })
 }
 
 /** The UNIFIED simulation job list — every oxDNA + LAMMPS run for the active design,

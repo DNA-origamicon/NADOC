@@ -44,6 +44,7 @@ import { flexAnchorKey } from './flexible_arcs.js'
 import { selectedCrossoverRefs, selectedEndRefs } from './selection_model.js'
 import { bondRefForCone, coneForBondRef, crossoverRefForArc, endRefForEntry } from './selection_hit_resolver.js'
 import { selectionHighlightDescriptor } from './selection_highlight_model.js'
+import { referenceStrandInteractionHidden } from './reference_navigation.js'
 
 // Kick off the FJC lookup fetch at module load so the linker-config modal
 // opens instantly with the per-bin histograms already cached.
@@ -1669,6 +1670,16 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // Use the active render camera (ortho in cadnano mode, perspective otherwise).
   const _cam = () => getCamera?.() ?? camera
 
+  // Reference instances remain in the scene with alpha=0 while Simulate is open.
+  // Raycaster deliberately ignores material alpha, so every interaction path must
+  // apply the same logical visibility rule as the renderer.
+  function _isHiddenReferenceStrand(strandId) {
+    return referenceStrandInteractionHidden(store.getState(), strandId)
+  }
+  const _isHiddenReferenceNuc = nuc => _isHiddenReferenceStrand(nuc?.strand_id)
+  const _isHiddenReferenceArc = arc =>
+    _isHiddenReferenceNuc(arc?.fromNuc) && _isHiddenReferenceNuc(arc?.toNuc)
+
   // ── State ────────────────────────────────────────────────────────────────
   let _mode            = 'none'   // 'none' | 'strand' | 'domain' | 'bead' | 'cone' | 'cylinder'
   let _strandId        = null
@@ -2006,7 +2017,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const coneMeshes = [...new Set(coneEntries.map(e => e.instMesh))].filter(m => m.visible)
     const bHits = beadMeshes.length ? raycaster.intersectObjects(beadMeshes) : []
     const cHits = coneMeshes.length ? raycaster.intersectObjects(coneMeshes) : []
-    const b0 = bHits[0], c0 = cHits[0]
+    const b0 = bHits.find(hit => {
+      const entry = backboneEntries.find(e => e.instMesh === hit.object && e.id === hit.instanceId)
+      return entry && !_isHiddenReferenceNuc(entry.nuc)
+    })
+    const c0 = cHits.find(hit => {
+      const cone = coneEntries.find(e => e.instMesh === hit.object && e.id === hit.instanceId)
+      return cone && !_isHiddenReferenceStrand(cone.strandId)
+    })
     const bd = b0?.distance ?? Infinity, cd = c0?.distance ?? Infinity
     if (bd === Infinity && cd === Infinity) return null
     if (cd < bd) {
@@ -2041,7 +2059,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const { selectableTypes } = store.getState()
     let best = null, bestD = _NEAR_HOVER_PX
     for (const e of designRenderer.getBackboneEntries()) {
-      if (!(e.nuc.is_five_prime || e.nuc.is_three_prime) || !e.instMesh.visible) continue
+      if (!(e.nuc.is_five_prime || e.nuc.is_three_prime) || !e.instMesh.visible ||
+          _isHiddenReferenceNuc(e.nuc)) continue
       if (designRenderer.isColumnAtomistic?.(e.nuc.helix_id, e.nuc.bp_index)) continue
       const isScaf = e.nuc.strand_type === 'scaffold'
       if (!(isScaf ? selectableTypes.scaffold : selectableTypes.staples)) continue
@@ -2061,7 +2080,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const cam  = _cam()
     let best = null, bestD = _NEAR_HOVER_PX
     for (const e of designRenderer.getBackboneEntries()) {
-      if (!e.instMesh.visible) continue
+      if (!e.instMesh.visible || _isHiddenReferenceNuc(e.nuc)) continue
       if (designRenderer.isColumnAtomistic?.(e.nuc.helix_id, e.nuc.bp_index)) continue
       if (!e.nuc.overhang_id) {
         const isScaf = e.nuc.strand_type === 'scaffold'
@@ -2086,7 +2105,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const cam  = _cam()
     let best = null, bestD = _NEAR_HOVER_PX
     for (const e of designRenderer.getBackboneEntries()) {
-      if (!e.instMesh.visible || !e.nuc.overhang_id) continue
+      if (!e.instMesh.visible || !e.nuc.overhang_id || _isHiddenReferenceNuc(e.nuc)) continue
       if (designRenderer.isColumnAtomistic?.(e.nuc.helix_id, e.nuc.bp_index)) continue
       _instWorld(e.instMesh, e.id, _hoverPos).project(cam)
       if (_hoverPos.z > 1) continue   // behind the camera
@@ -2103,7 +2122,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const cam  = _cam()
     let best = null, bestD = _NEAR_HOVER_PX
     for (const e of _extensionEntries()) {
-      if (!e.instMesh.visible || !e.nuc.extension_id) continue
+      if (!e.instMesh.visible || !e.nuc.extension_id || _isHiddenReferenceNuc(e.nuc)) continue
       _instWorld(e.instMesh, e.id, _hoverPos).project(cam)
       if (_hoverPos.z > 1) continue
       const px = (_hoverPos.x * 0.5 + 0.5) * rect.width
@@ -2125,7 +2144,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   function _nearestXover(sx, sy) {
     let best = null, bestD = _NEAR_HOVER_PX
     for (const a of (getUnfoldView?.()?.getArcEntries() ?? [])) {
-      if (!a.crossover_id) continue
+      if (!a.crossover_id || _isHiddenReferenceArc(a)) continue
       if (_arcCrossoverBlocked(a)) continue         // scaffold/staple filter gates crossover arcs
       const mid = a.getMidWorld?.()                 // midpoint proxy — cheap (1 alloc/arc)
       if (!mid) continue
@@ -2872,7 +2891,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       ...xoverCandidates(designRenderer.getXoverBeadEntries?.() ?? []),
       ...flexCandidates(flex?.group ?? null, design, design ? flexAnchorKey(design) : null),
       ...ssLinkCandidates(getOverhangLinkArcs?.()?.group ?? null),
-    ]
+    ].filter(candidate => {
+      if (candidate.nuc) return !_isHiddenReferenceNuc(candidate.nuc)
+      if (candidate.family !== 'xover') return true
+      const xo = design?.crossovers?.find(item => item.id === candidate.xoId)
+      if (!xo) return true
+      return !(_isHiddenReferenceStrand(xo.strand_id) ||
+        (_isHiddenReferenceNuc(xo.from_nucleotide) && _isHiddenReferenceNuc(xo.to_nucleotide)))
+    })
   }
 
   // Live position accessor — glow_layer's refresh() re-reads entry.pos on every
@@ -3653,6 +3679,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // Non-crossover arcs (crossover_id null — e.g. intra-strand / OH-linker arcs) carry
   // no crossover, so they are never blocked here.
   function _arcCrossoverBlocked(arc) {
+    if (_isHiddenReferenceArc(arc)) return true
     if (!arc?.crossover_id) return false
     const { selectableTypes } = store.getState()
     const isScaffold = (arc.fromNuc?.strand_type ?? arc.toNuc?.strand_type) === 'scaffold'
@@ -3733,9 +3760,20 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       const beadMeshes = [...new Set(designRenderer.getBackboneEntries().map(e => e.instMesh))].filter(m => m.visible)
       const coneMeshes = [...new Set(designRenderer.getConeEntries().map(e => e.instMesh))].filter(m => m.visible)
       const cylMesh    = designRenderer.getCylinderMesh()
-      const beadHit = beadMeshes.length > 0 && raycaster.intersectObjects(beadMeshes).length > 0
-      const coneHit = coneMeshes.length > 0 && raycaster.intersectObjects(coneMeshes).length > 0
-      const cylHit  = (cylMesh?.visible) ? raycaster.intersectObjects([cylMesh]).length > 0 : false
+      const beadHit = beadMeshes.length > 0 && raycaster.intersectObjects(beadMeshes).some(hit => {
+        const entry = designRenderer.getBackboneEntries().find(
+          item => item.instMesh === hit.object && item.id === hit.instanceId)
+        return entry && !_isHiddenReferenceNuc(entry.nuc)
+      })
+      const coneHit = coneMeshes.length > 0 && raycaster.intersectObjects(coneMeshes).some(hit => {
+        const entry = designRenderer.getConeEntries().find(
+          item => item.instMesh === hit.object && item.id === hit.instanceId)
+        return entry && !_isHiddenReferenceStrand(entry.strandId)
+      })
+      const cylHit  = (cylMesh?.visible) && raycaster.intersectObjects([cylMesh]).some(hit => {
+        const domain = designRenderer.getCylinderDomainAt(hit.instanceId)
+        return domain && !_isHiddenReferenceStrand(domain.strandId)
+      })
       if (beadHit || coneHit || cylHit) controls.enabled = false
     }
   })
@@ -3838,7 +3876,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (globalAtoms?.getMode?.() !== 'off' &&
         designRenderer.getHelixCtrl()?.root?.visible === false) {
       const hit = globalAtoms.raycastPick(raycaster)
-      if (!hit?.atom) { _clearAll(); return }
+      if (!hit?.atom || _isHiddenReferenceNuc(hit.atom)) { _clearAll(); return }
       const a = hit.atom
       const entry = backboneEntries.find(e => e.nuc.helix_id === a.helix_id &&
         e.nuc.bp_index === a.bp_index && e.nuc.direction === a.direction)
@@ -3948,6 +3986,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     // Respect selection filter
     const selBackbone = backboneEntries.filter(e => {
+      if (_isHiddenReferenceNuc(e.nuc)) return false
       if (selectableTypes.overhangs && e.nuc.overhang_id) return true
       const isScaffold = e.nuc.strand_type === 'scaffold'
       const isEnd      = e.nuc.is_five_prime || e.nuc.is_three_prime
@@ -3956,6 +3995,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       return selectableTypes.strands || selectableTypes.domains
     })
     const selCones = coneEntries.filter(e => {
+      if (_isHiddenReferenceStrand(e.strandId)) return false
       // Cross-helix "cones" are the invisible (radius-0) crossover connectors that
       // FEED the arc pipeline — a crossover is selected via its arc, never its cone.
       // Excluding them here is what stops an invisible cone being raycast-selected
@@ -4075,7 +4115,18 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       const bridgeCyl = designRenderer.getLinkerBridgeCylinderMesh?.()
       const cylTargets = [cylMesh, ovhgCyl, ovhgFullCyl, bridgeCyl].filter(m => m?.visible)
       if (cylTargets.length) {
-        const cylHit0 = raycaster.intersectObjects(cylTargets)[0]
+        const cylHit0 = raycaster.intersectObjects(cylTargets).find(hit => {
+          if (hit.object === bridgeCyl) {
+            return !_isHiddenReferenceStrand(
+              designRenderer.getLinkerBridgeCylinderAt(hit.instanceId)?.strandId)
+          }
+          const dom = hit.object === ovhgCyl
+            ? designRenderer.getOverhangCylinderDomainAt(hit.instanceId)
+            : hit.object === ovhgFullCyl
+              ? designRenderer.getOverhangFullCylinderDomainAt(hit.instanceId)
+              : designRenderer.getCylinderDomainAt(hit.instanceId)
+          return dom && !_isHiddenReferenceStrand(dom.strandId)
+        })
         if (cylHit0 != null) {
           // ds-linker bridge cylinder → select the BRIDGE domain (route via a bead
           // ON the bridge helix so drill/right-click target the bridge, independent
@@ -4201,30 +4252,42 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const coneHits    = raycaster.intersectObjects(coneMeshes)
 
     // Resolve cone hit once — used in multiple checks below.
-    const hitCone = coneHits.length
-      ? (coneEntries.find(c => c.instMesh === coneHits[0].object && c.id === coneHits[0].instanceId) ?? null)
+    const coneHit = coneHits.find(hit => {
+      const cone = coneEntries.find(c => c.instMesh === hit.object && c.id === hit.instanceId)
+      return cone && !_isHiddenReferenceStrand(cone.strandId)
+    })
+    const hitCone = coneHit
+      ? (coneEntries.find(c => c.instMesh === coneHit.object && c.id === coneHit.instanceId) ?? null)
       : null
 
     const backboneEntries = designRenderer.getBackboneEntries()
     const backboneMeshes  = [...new Set(backboneEntries.map(e => e.instMesh))]
     const beadHits        = raycaster.intersectObjects(backboneMeshes)
-    const hitBead = beadHits.length
-      ? (backboneEntries.find(b => b.instMesh === beadHits[0].object && b.id === beadHits[0].instanceId) ?? null)
+    const beadHit = beadHits.find(hit => {
+      const bead = backboneEntries.find(b => b.instMesh === hit.object && b.id === hit.instanceId)
+      return bead && !_isHiddenReferenceNuc(bead.nuc)
+    })
+    const hitBead = beadHit
+      ? (backboneEntries.find(b => b.instMesh === beadHit.object && b.id === beadHit.instanceId) ?? null)
       : null
 
     // Extensions include ordinary tail beads plus optional fluorophore/modification tips.
     const extensionEntries = _extensionEntries()
     const extensionMeshes = [...new Set(extensionEntries.map(entry => entry.instMesh))].filter(mesh => mesh.visible)
     const extensionHits = extensionMeshes.length ? raycaster.intersectObjects(extensionMeshes) : []
-    const extensionFrontmost = extensionHits.length && extensionHits[0].distance <= Math.min(
-      beadHits[0]?.distance ?? Infinity, coneHits[0]?.distance ?? Infinity,
+    const extensionHit = extensionHits.find(hit => {
+      const entry = extensionEntries.find(item => item.instMesh === hit.object && item.id === hit.instanceId)
+      return entry && !_isHiddenReferenceNuc(entry.nuc)
+    })
+    const extensionFrontmost = extensionHit && extensionHit.distance <= Math.min(
+      beadHit?.distance ?? Infinity, coneHit?.distance ?? Infinity,
     ) + 1e-6
     const hitExtension = extensionFrontmost
-      ? (extensionEntries.find(entry => entry.instMesh === extensionHits[0].object && entry.id === extensionHits[0].instanceId) ?? null)
+      ? (extensionEntries.find(entry => entry.instMesh === extensionHit.object && entry.id === extensionHit.instanceId) ?? null)
       : null
 
     // Whether the frontmost hit is a bead (vs a terminal cone sitting behind it).
-    const _beadFrontmost = hitBead && (!coneHits.length || beadHits[0].distance <= coneHits[0].distance)
+    const _beadFrontmost = hitBead && (!coneHit || beadHit.distance <= coneHit.distance)
 
     // Multi-selection right-click — dispatch to the appropriate menu.
     if (_multiLoopSkipEntries.length > 0) {

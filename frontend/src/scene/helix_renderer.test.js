@@ -122,6 +122,13 @@ describe('instanceAlpha coverage', () => {
     }
   })
 
+  it('installs the complete alpha channel when strands become reference geometry', () => {
+    // Simulate hides reference geometry independently of the selected representation.
+    // The old setter installed bead/slab alpha only, so cylinder representations leaked.
+    const setter = HR.slice(HR.indexOf('setReferenceStrands(idSet'))
+    expect(setter.slice(0, 900)).toContain('_ensureAlphaInstalled()')
+  })
+
   it('no longer skips the impostor beads', () => {
     // iSpheres/iFluoros used to be skipped outright under impostors, so bead alpha
     // was a silent no-op with ?impostors=1.

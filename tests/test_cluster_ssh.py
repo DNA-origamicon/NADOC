@@ -59,7 +59,7 @@ class _FakeRemoteFile:
 
     async def __aenter__(self): return self
     async def __aexit__(self, *_): return None
-    def seek(self, pos): self.pos = pos
+    async def seek(self, pos): self.pos = pos
 
     async def read(self, size):
         if self.fail_after is not None and self.pos >= self.fail_after:
@@ -81,9 +81,9 @@ class _FakeSftp:
     def open(self, *_):
         f = _FakeRemoteFile(self.data, self.fail_after)
         original_seek = f.seek
-        def seek(pos):
+        async def seek(pos):
             self.open_offsets.append(pos)
-            original_seek(pos)
+            await original_seek(pos)
         f.seek = seek
         return f
 
@@ -102,6 +102,21 @@ def test_stream_get_resumes_partial_atomically(tmp_path):
     assert resumed.open_offsets == [8]
     assert target.read_bytes() == data
     assert not (tmp_path / "large.dcd.part").exists()
+
+
+def test_stream_get_yields_between_chunks_for_api_fairness(tmp_path, monkeypatch):
+    yields = []
+
+    async def fair_yield(delay):
+        yields.append(delay)
+
+    monkeypatch.setattr(cluster_ssh.asyncio, "sleep", fair_yield)
+    data = b"abcdefghijklmnop"
+    target = tmp_path / "fair.dcd"
+    _run(cluster_ssh._stream_get(_FakeSftp(data), "/remote/fair.dcd", str(target)))
+
+    assert target.read_bytes() == data
+    assert yields == [0, 0, 0, 0]
 
 
 def test_initial_state_disconnected():

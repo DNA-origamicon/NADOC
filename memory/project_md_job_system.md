@@ -24,6 +24,9 @@ narratives are in [the archive](project_md_job_system_archive.md).
 - Job snapshots and package metadata are immutable inputs for downstream metrics and display.
 - Resume/reconcile treats completed outputs as the strongest evidence and distinguishes work that
   never launched from an unrecoverable segment failure.
+- Preparation heartbeat liveness continues until the background coroutine is explicitly finished,
+  not merely until its progress tracker reaches 100%. A queued job with a completed manifest heals
+  the legacy false "Preparation was interrupted" verdict during reconciliation.
 
 ## Binding invariants
 

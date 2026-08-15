@@ -42,25 +42,19 @@ def test_a_local_run_with_no_frames_yet_resolves_itself():
     assert "no frames" in v["reason"].lower()
 
 
-def test_a_running_runpod_job_says_the_frame_is_already_coming():
-    """A pod is key-based, so NADOC pulls snapshots on a timer without being asked.
-
-    The old wording told the user to "fetch a live frame ... or fetch the results when it
-    finishes" — instructions for work the panel now does by itself, on a job the user
-    cannot help with. Only the code still has to be 'remote' (waiting on a LOCAL
-    trajectory would never resolve).
-    """
+def test_a_running_runpod_job_offers_manual_refresh():
     v = _r(execution_target="runpod")
     assert v["code"] == "remote"
     assert "pod" in v["reason"].lower()
-    assert "fetching" in v["reason"].lower()
+    assert "refresh" in v["reason"].lower()
     assert "not on this computer" not in v["reason"].lower()
 
 
 def test_an_alpine_run_says_cluster_not_pod():
     v = _r(execution_target="alpine")
     assert v["code"] == "remote"
-    assert "cluster" in v["reason"].lower()
+    assert "alpine" in v["reason"].lower()
+    assert "refresh" in v["reason"].lower()
     assert "pod" not in v["reason"].lower()
 
 

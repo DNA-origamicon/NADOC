@@ -994,16 +994,27 @@ export function initSimulateJobs({
   // ── fetch + poll ──────────────────────────────────────────────────────────
   async function _fetch() {
     const nodes = await api.listSimJobs(_currentPath(), false).catch(() => null)
-    _nodes = Array.isArray(nodes) ? nodes : []
+    if (!Array.isArray(nodes)) {
+      // Preserve the last known-good rows and selection. Clearing both on a temporary
+      // network/backend stall made a live Alpine job disappear, then stopped this poll
+      // because the newly-empty list contained no active node.
+      _schedulePoll({ retryFailedFetch: true })
+      return
+    }
+    _nodes = nodes
     if (_sel.id && !_selectedNode()) _sel = { engine: null, id: null }   // selection vanished
     _renderList()
     _renderMaster()
     _schedulePoll()
   }
-  function _schedulePoll() {
+  function _schedulePoll({ retryFailedFetch = false } = {}) {
     if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null }
     const bodyVisible = document.getElementById('simulate-body')?.style.display !== 'none'
-    if (_dynamicsActive && bodyVisible && _nodes.some(nodeNeedsPolling)) {
+    // A transient list failure must not turn itself into a permanent empty list. Large
+    // remote-result transfers can briefly delay this request while the independent
+    // /jobs/active poll continues to report the run; retry even if this was the first
+    // fetch and there are therefore no cached nodes from which to infer activity.
+    if (_dynamicsActive && bodyVisible && (retryFailedFetch || _nodes.some(nodeNeedsPolling))) {
       _pollTimer = setTimeout(_fetch, POLL_MS)
     }
   }

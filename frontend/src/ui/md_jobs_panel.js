@@ -496,6 +496,24 @@ export function mdRunControl(selectedJob, {
         title: 'Uploading the package to Alpine, then sbatch.',
       }
     }
+    // SLURM is already terminal while NADOC pulls and indexes the result tree. The
+    // persisted job deliberately remains `running` so the supervisor will retry an
+    // interrupted transfer, but offering "Stop Run" at this point is false: there is
+    // no cluster process left to stop. Represent the real local transfer phase instead.
+    const downloadState = selectedJob.download_status?.state
+    if (selectedJob.slurm_state === 'COMPLETED'
+        && ['downloading', 'processing'].includes(downloadState)) {
+      const processing = downloadState === 'processing'
+      return {
+        action: RUN_ACTION.PREPARING,
+        label: processing ? 'Processing results…' : 'Downloading results…',
+        disabled: true,
+        spinner: true,
+        title: processing
+          ? 'The completed Alpine results are being indexed locally.'
+          : 'The completed Alpine results are being downloaded and verified locally.',
+      }
+    }
     if (selectedJob.resumable) {
       const blocked = alpineTargetDisabledReason(clusterState)
       return {
@@ -942,86 +960,18 @@ export function mdIsPodRunning(job) {
     && (job?.status === 'running' || job?.status === 'preparing')
 }
 
-/** Pure: should we pull a single display frame off the remote machine for this job?
- *
- *  Only when there is nothing local to show (`ready` false) — once a real
- *  trajectory has been fetched it outranks any snapshot.
- *
- *  The two targets gate on different things, and that asymmetry is the feature:
- *  Alpine auth is Duo-gated, so a live human session is a hard precondition. A pod is
- *  key-based, so the backend can reach it whenever the RunPod session is up — which is
- *  what lets the panel fetch snapshots on a timer instead of telling the user to. */
-export function shouldFetchLiveFrame(
-  job, { clusterState, displayReady, runpodConnected = false } = {},
-) {
-  if (displayReady) return false
-  if (job?.execution_target === 'runpod') return runpodConnected && mdIsPodRunning(job)
-  return clusterState === 'connected' && mdIsRemoteRunning(job)
+/** Only a job writing trajectories on this machine should keep the display socket in
+ * live-poll mode. Remote jobs display their retained snapshot until Refresh replaces it. */
+export function mdJobNeedsLiveDisplay(job) {
+  const active = job?.status === 'queued' || job?.status === 'preparing' || job?.status === 'running'
+  const local = !job?.execution_target || job.execution_target === 'local'
+  return active && local
 }
 
-/** How often a RunPod job re-pulls its display snapshot, unprompted.
- *
- *  Matched to what the pod actually produces: NAMD rewrites `output/<seg>.restart.coor`
- *  every `restartfreq` (5,000 steps — a few minutes on a big system), so polling faster
- *  just moves identical bytes. The backend enforces its own 60 s floor
- *  (`remote_live_frame.MIN_REFETCH_INTERVAL_S`); this is the UI's cadence on top. */
-export const LIVE_FRAME_REFRESH_MS = 120_000
-
-/** Pure: the countdown to the next automatic snapshot.
- *
- *  `due` is what the caller acts on; `label` is what the user reads. Returns due=true
- *  with an empty label when nothing has been fetched yet, so the first pull happens
- *  immediately rather than after a full interval of silence.
- *
- *  @param {object} p
- *  @param {number|null} p.lastFetchAt  ms epoch of the last completed fetch
- *  @param {number} p.nowMs
- *  @param {number} p.intervalMs
- */
-export function liveFrameCountdown({
-  lastFetchAt = null, nowMs = Date.now(), intervalMs = LIVE_FRAME_REFRESH_MS,
-} = {}) {
-  if (!lastFetchAt) return { due: true, msRemaining: 0, label: '' }
-  const msRemaining = Math.max(0, lastFetchAt + intervalMs - nowMs)
-  if (msRemaining <= 0) return { due: true, msRemaining: 0, label: '' }
-  const mins = Math.ceil(msRemaining / 60_000)
-  return {
-    due: false,
-    msRemaining,
-    // "in 0 minutes" would be a lie for anything under a minute, and the exact seconds
-    // are noise at this cadence.
-    label: msRemaining < 60_000
-      ? 'next update in under a minute'
-      : `next update in ${mins} min`,
-  }
-}
-
-/** Pure: the one line under the Display MD toggle for a RunPod run with no local
- *  trajectory yet. Every branch has to say something — a blank line here is what the
- *  old "fetch a live frame yourself" wording was replacing. */
-export function runpodSnapshotStatus({
-  fetching = false, liveFrame = null, countdownLabel = '', connected = true,
-} = {}) {
-  if (!connected) {
-    return { text: 'Not connected to RunPod — cannot reach the pod for a snapshot.', busy: false }
-  }
-  if (fetching) return { text: 'Retrieving the latest frame from the pod…', busy: true }
-  const base = liveFrame ? liveFrameLabel(liveFrame, 'runpod') : 'No snapshot from the pod yet'
-  return { text: countdownLabel ? `${base} · ${countdownLabel}` : base, busy: false }
-}
-
-/** Pure: how to describe a fetched snapshot. It is ONE frame from a run still going
- *  on the cluster — it does not advance on its own, and saying "trajectory" would
- *  imply results that do not exist locally. */
-export function liveFrameLabel(liveFrame, executionTarget = 'alpine') {
-  if (!liveFrame) return ''
-  // Name the machine it is still running on. Hardcoding "Alpine" mislabelled every
-  // snapshot from a rented RunPod GPU.
-  const where = executionTarget === 'runpod' ? 'the pod' : 'Alpine'
-  const step = Number(liveFrame.step)
-  return Number.isFinite(step) && step > 0
-    ? `Snapshot at step ${step.toLocaleString()} — still running on ${where}`
-    : `Snapshot from the running ${where === 'the pod' ? 'pod' : 'Alpine'} job`
+/** Pure readiness state for the explicit remote-frame Refresh control. */
+export function mdRemoteRefreshState({ connected, fetching = false, warming = false, ready = false } = {}) {
+  if (!connected) return 'red'
+  return fetching || warming || !ready ? 'yellow' : 'green'
 }
 
 /** Pure: compact duration label from a number of seconds (e.g. "45s", "6m", "1h 3m"). */
@@ -1273,6 +1223,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const displayToggle = document.getElementById('md-jobs-display-toggle')
   const displayStatus = document.getElementById('md-jobs-display-status')
   const liveFrameRefreshBtn = document.getElementById('md-jobs-live-frame-refresh')
+  const liveFrameRefreshDot = document.getElementById('md-jobs-live-frame-refresh-dot')
+  const liveFrameProgress = document.getElementById('md-jobs-live-frame-progress')
+  const liveFrameProgressFill = document.getElementById('md-jobs-live-frame-progress-fill')
+  const liveFrameProgressLabel = document.getElementById('md-jobs-live-frame-progress-label')
   const displayIndicator      = document.getElementById('md-jobs-display-indicator')
   const displayIndicatorDot   = document.getElementById('md-jobs-display-indicator-dot')
   const displayIndicatorLabel = document.getElementById('md-jobs-display-indicator-label')
@@ -1586,7 +1540,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // that is when we go get a frame — for the job already selected, or for whichever
     // one gets selected next (_selectJob's tail runs the same refresh).
     if (became) {
-      _liveFrameTried.clear()          // a new session deserves a fresh attempt
       _refreshMdDisplay()
     }
   })
@@ -2004,111 +1957,213 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   // ── Live snapshot from a running remote job ──────────────────────────────────
-  // ALPINE is one-shot per session: Duo means we can only pull while the user is signed
-  // in, so a failed pull (no checkpoint written yet) must not retry on every 15 s display
-  // tick for the rest of the run. RUNPOD is key-based and therefore on a timer, so it
-  // deliberately does NOT consult this set — see `_liveFrameTick`.
-  const _liveFrameTried = new Set()
   let _liveFrameFetching = false        // a pull is in flight (drives the spinner)
-  let _liveFrameAt = null               // ms epoch of the last COMPLETED pull
-  let _liveFrameJobId = null            // which job `_liveFrameAt` is about
-  let _liveFrameTimer = null
+  let _alpineDisplayWarming = false     // selected Alpine snapshot is downloading/parsing
+  let _alpineWarmGeneration = 0         // invalidates a warm-up when selection changes
+
+  function _paintLiveFrameProgress(progress = null) {
+    if (!liveFrameProgress) return
+    if (!progress || progress.state === 'idle') {
+      liveFrameProgress.style.display = 'none'
+      return
+    }
+    liveFrameProgress.style.display = ''
+    const pct = Math.max(0, Math.min(100, Number(progress.percent) || 0))
+    if (liveFrameProgressFill) {
+      liveFrameProgressFill.style.width = `${pct}%`
+      liveFrameProgressFill.style.background = progress.state === 'failed' ? '#f85149' : '#58a6ff'
+    }
+    if (liveFrameProgressLabel) {
+      const bytes = progress.bytes_total
+        ? ` · ${formatBytes(progress.bytes_done || 0)} / ${formatBytes(progress.bytes_total)}`
+        : ''
+      liveFrameProgressLabel.textContent = `${progress.message || progress.phase || 'Refreshing'} · ${Math.round(pct)}%${bytes}`
+    }
+  }
 
   /** Pull one display frame off the remote machine.  Returns true if something landed. */
-  async function _fetchLiveFrame(jobId, { force = false } = {}) {
+  async function _fetchLiveFrame(jobId, { force = false, background = false } = {}) {
     const job = _jobs.find(j => j.job_id === jobId)
-    const isPod = job?.execution_target === 'runpod'
-    if (!isPod && !force && _liveFrameTried.has(jobId)) return false
     if (_liveFrameFetching) return false     // never stack pulls; ~32 MB each
-    if (!isPod) _liveFrameTried.add(jobId)
     _liveFrameFetching = true
-    if (isPod) _paintPodSnapshotStatus(job)
-    else _setDisplayStatus('Fetching a snapshot from Alpine…', _C.warn, true)
+    if (!background) {
+      _paintLiveFrameProgress({ state: 'running', phase: 'checking', percent: 0, message: 'Starting refresh' })
+    }
+    _paintRemoteSnapshotStatus(job)
+    _updateLiveFrameControls(job)
     try {
-      const res = await api.fetchMdLiveFrame(jobId, force)
+      const started = await api.startMdLiveFrameRefresh(jobId)
+      if (!started?.ok) throw new Error(api.lastErrorMessage?.() || 'Could not start refresh')
+      let progress = null
+      for (;;) {
+        await new Promise(resolve => setTimeout(resolve, 250))
+        progress = await api.getMdLiveFrameRefreshProgress(jobId)
+        if (!progress) throw new Error(api.lastErrorMessage?.() || 'Could not read refresh progress')
+        if (progress.state === 'complete') {
+          if (!background) {
+            _paintLiveFrameProgress({
+              state: 'running', phase: 'applying', percent: 99,
+              message: 'Preparing to apply frame',
+            })
+          }
+          break
+        }
+        if (!background) _paintLiveFrameProgress(progress)
+        if (progress.state === 'failed') throw new Error(progress.message || 'Frame refresh failed')
+      }
+      const res = progress?.result
       if (res?.ok) return true
       _mdDebug(`[${_ts()}] md-jobs: no live frame yet — ${res?.reason ?? 'unavailable'}`)
       return false
     } catch (err) {
       console.warn(`[${_ts()}] md-jobs: live frame fetch failed`, err)
+      if (!background) {
+        _paintLiveFrameProgress({ state: 'failed', percent: 100, message: err.message || 'Refresh failed' })
+      }
       return false
     } finally {
       _liveFrameFetching = false
-      // Stamp on FAILURE too. A pod with no checkpoint written yet answers "not ok"
-      // every time, and without a stamp the countdown would sit at "due" and re-pull on
-      // every tick — the 32 MB stampede this pacing exists to prevent.
-      _liveFrameAt = Date.now()
-      _liveFrameJobId = jobId
+      _updateLiveFrameControls(job)
     }
   }
 
-  /** The one status line for a RunPod job whose trajectory is still on the pod. */
-  function _paintPodSnapshotStatus(job) {
-    const connected = runpodConnected(_runpod.preflight)
-    const { label } = liveFrameCountdown({
-      lastFetchAt: _liveFrameJobId === job?.job_id ? _liveFrameAt : null,
-    })
-    const { text, busy } = runpodSnapshotStatus({
-      fetching: _liveFrameFetching,
-      liveFrame: _displayMeta?.live_frame ?? null,
-      countdownLabel: label,
-      connected,
-    })
-    _setDisplayStatus(text, busy ? _C.accent : _C.warn, busy)
+  /**
+   * One-shot Alpine preparation, started only by an explicit row selection.
+   *
+   * This is deliberately not a live poll: it asks the backend once whether Alpine has a
+   * newer frame, downloads only when newer, then feeds the retained local snapshot into
+   * the ordinary Display-MD prewarm path. The parsed socket/frame remains cached in the
+   * controller until Display MD is toggled on.
+   */
+  async function _prepareSelectedAlpineDisplay(job) {
+    if (job?.execution_target !== 'alpine' || !mdDisplayController?.prewarmLatest) return
+    const generation = ++_alpineWarmGeneration
+    _alpineDisplayWarming = true
+    _setDisplayIndicator('warming', 'Preparing the latest Alpine display frame', job.job_id)
+    _updateLiveFrameControls(job)
+    let parserStarted = false
+    try {
+      // A disconnected session cannot check Alpine for a newer frame. Still continue
+      // to prewarm below: an earlier retained snapshot may already be available locally.
+      if (getClusterState?.() === 'connected' && mdIsRemoteRunning(job)) {
+        await _fetchLiveFrame(job.job_id, { background: true })
+      }
+      if (generation !== _alpineWarmGeneration || !_stillSelected(job.job_id)) return
+      if (displayToggle?.checked) {
+        // The user opened Display MD while the one-shot download was still running.
+        // Hand the newly retained frame directly to the visible path and let its frame/
+        // error event end warming; otherwise Refresh could unlock during reconstruction.
+        await _refreshMdDisplay({ forceReloadRemote: true })
+        parserStarted = _displayJobId === job.job_id && !!_displayKey
+      } else {
+        parserStarted = await _refreshMdPrewarm(true, { allowAlpine: true })
+      }
+    } catch (err) {
+      console.warn(`[${_ts()}] md-jobs: Alpine display warm-up failed`, err)
+      if (generation === _alpineWarmGeneration && _stillSelected(job.job_id)) {
+        _setDisplayIndicator('error', err.message || 'Could not prepare the Alpine display frame', job.job_id)
+      }
+    } finally {
+      // Once the parser starts, its md-display-state frame/error event owns completion.
+      // Clearing here would briefly enable Refresh while the PSF/frame is still parsing.
+      if (generation === _alpineWarmGeneration && !parserStarted) {
+        _alpineDisplayWarming = false
+        _updateLiveFrameControls(_jobs.find(j => j.job_id === job.job_id))
+      }
+    }
   }
 
-  /** Show the manual ⟳ only where it means something: a RunPod job we can actually
-   *  reach. On Alpine the equivalent action is "sign in", which this button cannot do. */
+  function _paintRemoteSnapshotStatus(job) {
+    // Remote readiness is communicated solely by the dot on Refresh. Keep the status
+    // line free of persistent "on the cluster/pod" prose.
+    _setDisplayStatus('', _C.dim, false)
+  }
+
+  /** Every running non-local job uses the same explicit refresh interaction. */
   function _updateLiveFrameControls(job) {
     if (!liveFrameRefreshBtn) return
-    const show = mdIsPodRunning(job) && !!displayToggle?.checked
-    liveFrameRefreshBtn.style.display = show ? '' : 'none'
-    liveFrameRefreshBtn.disabled = _liveFrameFetching
-    liveFrameRefreshBtn.style.opacity = _liveFrameFetching ? '0.5' : '1'
-    liveFrameRefreshBtn.style.cursor = _liveFrameFetching ? 'default' : 'pointer'
-  }
-
-  /** Countdown tick for a displayed RunPod job: repaint the "next update in…" line and
-   *  pull a fresh frame when it comes due. Runs only while such a job is on screen. */
-  async function _liveFrameTick() {
-    const job = _jobs.find(j => j.job_id === _selectedId)
-    if (!job || !mdIsPodRunning(job) || !displayToggle?.checked) {
-      _stopLiveFrameTimer()
-      return
-    }
-    if (_liveFrameFetching) return
-    if (!runpodConnected(_runpod.preflight)) { _paintPodSnapshotStatus(job); return }
-    const { due } = liveFrameCountdown({
-      lastFetchAt: _liveFrameJobId === job.job_id ? _liveFrameAt : null,
+    const remote = job?.execution_target === 'runpod' || job?.execution_target === 'alpine'
+    const show = remote && !!displayToggle?.checked
+    const connected = job?.execution_target === 'runpod'
+      ? runpodConnected(_runpod.preflight)
+      : getClusterState?.() === 'connected'
+    const ready = job?.execution_target === 'runpod' ? mdIsPodRunning(job) : mdIsRemoteRunning(job)
+    const state = mdRemoteRefreshState({
+      connected,
+      fetching: _liveFrameFetching,
+      warming: _alpineDisplayWarming,
+      ready,
     })
-    if (!due) { _paintPodSnapshotStatus(job); _updateLiveFrameControls(job); return }
-    const got = await _fetchLiveFrame(job.job_id, { force: true })
-    _updateLiveFrameControls(job)
-    if (got) _refreshMdDisplay()
-    else _paintPodSnapshotStatus(job)
-  }
-
-  function _startLiveFrameTimer() {
-    if (_liveFrameTimer) return
-    // 5 s: the countdown label has to move, but the FETCH cadence is the one that costs
-    // anything and that is gated by `liveFrameCountdown`, not by this interval.
-    _liveFrameTimer = setInterval(_liveFrameTick, 5000)
+    liveFrameRefreshBtn.style.display = show ? 'flex' : 'none'
+    liveFrameRefreshBtn.disabled = state !== 'green'
+    liveFrameRefreshBtn.style.opacity = (_liveFrameFetching || _alpineDisplayWarming) ? '0.5' : '1'
+    liveFrameRefreshBtn.style.cursor = state === 'green' ? 'pointer' : 'default'
+    liveFrameRefreshBtn.title = state === 'red'
+      ? 'Remote service is not connected'
+      : state === 'yellow'
+        ? (_alpineDisplayWarming ? 'Preparing the latest Display MD frame' : 'Connected; waiting for the job status')
+        : 'Ready to check for a newer MD frame'
+    if (liveFrameRefreshDot) {
+      liveFrameRefreshDot.style.background = state === 'red'
+        ? '#f85149'
+        : state === 'yellow' ? '#d29922' : '#3fb950'
+    }
   }
 
   function _stopLiveFrameTimer() {
-    clearInterval(_liveFrameTimer)
-    _liveFrameTimer = null
     if (liveFrameRefreshBtn) liveFrameRefreshBtn.style.display = 'none'
   }
 
   liveFrameRefreshBtn?.addEventListener('click', async () => {
     const job = _jobs.find(j => j.job_id === _selectedId)
     if (!job || _liveFrameFetching) return
-    // `force` bypasses the backend's 60 s re-fetch floor: the user asked, explicitly.
     const got = await _fetchLiveFrame(job.job_id, { force: true })
     _updateLiveFrameControls(job)
-    if (got) _refreshMdDisplay()
-    else _paintPodSnapshotStatus(job)
+    if (!got) { _paintRemoteSnapshotStatus(job); return }
+    _liveFrameFetching = true
+    _updateLiveFrameControls(job)
+    _paintLiveFrameProgress({
+      state: 'running', phase: 'applying', percent: 99,
+      message: 'Applying frame to the part',
+    })
+    try {
+      const applied = new Promise((resolve, reject) => {
+        let timer = null
+        const done = evt => {
+          const detail = evt.detail || {}
+          if (detail.jobId && detail.jobId !== job.job_id) return
+          if (detail.state !== 'frame' && detail.state !== 'error') return
+          window.removeEventListener('nadoc:md-display-state', done)
+          clearTimeout(timer)
+          if (detail.state === 'frame') resolve(detail)
+          else reject(new Error(detail.message || 'Display failed'))
+        }
+        window.addEventListener('nadoc:md-display-state', done)
+        // A newly downloaded NAMD snapshot can contain millions of atoms. The
+        // backend conversion + browser reconstruction has measured above three
+        // minutes for VoltronCoreArm even though the final scene update itself
+        // takes under a second. Do not paint a false failure while that valid
+        // reconstruction is still in flight.
+        timer = setTimeout(() => {
+          window.removeEventListener('nadoc:md-display-state', done)
+          reject(new Error('Frame was loaded but was not applied to the part'))
+        }, 300_000)
+      })
+      await _refreshMdDisplay({ forceReloadRemote: true })
+      await applied
+      _paintLiveFrameProgress({
+        state: 'complete', phase: 'complete', percent: 100,
+        message: 'Display frame applied',
+      })
+    } catch (err) {
+      _paintLiveFrameProgress({
+        state: 'failed', phase: 'failed', percent: 100,
+        message: err.message || 'Could not apply frame',
+      })
+    } finally {
+      _liveFrameFetching = false
+      _updateLiveFrameControls(job)
+    }
   })
 
   async function _fetchDisplayMeta(jobId = _selectedId) {
@@ -2165,7 +2220,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   function _jobNeedsLiveDisplay(job) {
-    return job?.status === 'queued' || job?.status === 'preparing' || job?.status === 'running'
+    return mdJobNeedsLiveDisplay(job)
   }
 
   // Show the oxDNA-seed positions a seeded MD run inherited (reuses the oxDNA display
@@ -2201,7 +2256,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _inheritedSeedShown = null
   }
 
-  async function _refreshMdDisplay() {
+  async function _refreshMdDisplay({ forceReloadRemote = false } = {}) {
     if (!displayToggle?.checked) return
     if (!_isDynamicsTabVisible()) {
       _stopMdDisplay('Native positions restored')
@@ -2217,7 +2272,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       _setDisplayStatus('No MD job found', _C.dim)
       return
     }
-
     // The live trajectory is mapped onto whatever design is currently OPEN.  If the chosen
     // display job belongs to a DIFFERENT design (possible in "show all job types" mode, or
     // briefly while switching designs), streaming would paint one structure's coordinates
@@ -2255,17 +2309,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       if (!displayToggle?.checked || !_isDynamicsTabVisible()) return
       _renderProductionControls(job, d)
       if (!d.ready || !d.config_path) {
-        // A remote job's trajectory stays on the remote machine for the WHOLE run, so
-        // `ready` is false throughout and this used to spin forever. Pull one frame
-        // instead — cheap (one `.restart.coor`), and for a POD we can do it unprompted.
-        if (shouldFetchLiveFrame(job, {
-          clusterState: getClusterState?.(),
-          displayReady: d.ready,
-          runpodConnected: runpodConnected(_runpod.preflight),
-        })) {
-          const got = await _fetchLiveFrame(job.job_id)
-          if (got) { _refreshMdDisplay(); return }
-        }
+        // Remote snapshots are explicit: retain any stored frame, and wait for Refresh
+        // when none exists. Never pull coordinates merely because this display tick ran.
         _displayJobId = job.job_id
         _displayKey = null
         // Seed placeholder already on screen (if seeded) → leave it; else say waiting.
@@ -2274,22 +2319,19 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
           // it is on a snapshot timer, and the status has to show that rather than the
           // backend's static "the trajectory is elsewhere" note.
           if (mdIsPodRunning(job)) {
-            _paintPodSnapshotStatus(job)
+            _paintRemoteSnapshotStatus(job)
           } else {
             // The backend already worked out WHY (`not_ready_reason`) and it is
             // per-target. The spinner is reserved for waits that end on their own; a
             // trajectory sitting on the Duo-gated cluster is not one of them.
             const remote = d.not_ready_code === 'remote'
-            _setDisplayStatus(
-              d.not_ready_reason
-                || (mdIsRemoteRunning(job)
-                  ? 'Running on Alpine — sign in to the cluster to pull a snapshot'
-                  : `Waiting for trajectory output (${job.status})`),
-              _C.warn, !remote)
+            if (remote) _paintRemoteSnapshotStatus(job)
+            else _setDisplayStatus(
+              d.not_ready_reason || `Waiting for trajectory output (${job.status})`,
+              _C.warn, true)
           }
         }
         _updateLiveFrameControls(job)
-        if (mdIsPodRunning(job)) _startLiveFrameTimer()
         return
       }
 
@@ -2301,7 +2343,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // this exact job/segment into the shared MD-display socket and cached its
       // latest frame.  Reuse that warm socket so toggle-on paints instantly instead
       // of waiting through a fresh PSF parse — same instant-display feel as oxDNA.
-      const forceReload = shouldForceDisplayReload({
+      const forceReload = forceReloadRemote || shouldForceDisplayReload({
         key, displayKey: _displayKey, displayJobId: _displayJobId,
         jobId: job.job_id, prewarmKey: _prewarmKey,
       })
@@ -2317,11 +2359,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // countdown, because there the answer to "so when does it move?" is "on its own,
       // shortly" rather than "when you fetch it".
       if (d.live_frame) {
-        if (mdIsPodRunning(job)) _paintPodSnapshotStatus(job)
-        else _setDisplayStatus(liveFrameLabel(d.live_frame, job.execution_target), _C.warn, false)
+        if (job.execution_target === 'runpod' || job.execution_target === 'alpine') {
+          _paintRemoteSnapshotStatus(job)
+        }
       }
       _updateLiveFrameControls(job)
-      if (mdIsPodRunning(job)) _startLiveFrameTimer()
       if (!live) {
         clearInterval(_displayTimer)
         _displayTimer = null
@@ -2333,14 +2375,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     }
   }
 
-  async function _refreshMdPrewarm(force = false) {
-    if (displayToggle?.checked) return
+  async function _refreshMdPrewarm(force = false, { allowAlpine = false } = {}) {
+    if (displayToggle?.checked) return false
     // NB: intentionally NOT gated on the Dynamics tab being visible.  Prewarm now
     // warms the display socket (parse PSF + build model, ~5 s) in the background as
     // soon as a design with a loadable MD job is open, so toggling Display MD later
     // paints the latest frame instantly instead of paying that load inline.  It is
     // still self-gating: no ready job → no socket opened (returns below).
-    if (!mdDisplayController?.prewarmLatest) return
+    if (!mdDisplayController?.prewarmLatest) return false
 
     const job = _selectDisplayJob()
     if (!job) {
@@ -2349,7 +2391,20 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       mdDisplayController.stopPrewarm?.()
       _prewarmKey = null
       _setDisplayIndicator('off')
-      return
+      return false
+    }
+    if (mdIsRemoteJob(job) && !(allowAlpine && job.execution_target === 'alpine')) {
+      // Ordinary job-list/status refreshes must not tear down the explicit Alpine
+      // selection warm-up, nor discard the frame it has already cached. They are
+      // forbidden from STARTING remote work, but retaining an existing local socket
+      // is precisely what makes toggle-on instantaneous. Previously the first routine
+      // `_fetchJobs()` after selection closed the websocket ~2 s after `load` was sent.
+      if (job.execution_target === 'alpine' &&
+          (_alpineDisplayWarming || _displayIndicatorState === 'ready')) return false
+      mdDisplayController.stopPrewarm?.()
+      _prewarmKey = null
+      _setDisplayIndicator('off')
+      return false
     }
 
     try {
@@ -2357,18 +2412,18 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // Display may have been toggled ON during the await (e.g. a quick off→on).
       // Bail so this stale prewarm can't clobber the controller's _displayVisible
       // back to false and suppress the just-started live stream.
-      if (displayToggle?.checked) return
+      if (displayToggle?.checked) return false
       // …and bail if the SELECTION moved during the await. Same class of race, and the
       // one the user hits: click a RunPod job then an Alpine one and this answer, about
       // the RunPod job, used to set the dot for the Alpine one.
-      if (!_stillSelected(job.job_id)) return
+      if (!_stillSelected(job.job_id)) return false
       if (!d?.ready || !d.config_path) {
         // NOT always 'off'. A job running on a pod, or one still writing its first frame,
         // has a real reason the display is empty — and hiding the dot made that look
         // identical to having no job at all.
         const v = mdDisplayReadinessFromMeta(d)
         _setDisplayIndicator(v.state, v.title, job.job_id)
-        return
+        return false
       }
       const key = `${d.config_path}|${d.trajectory_path ?? ''}|${d.segment_name ?? ''}`
       const forceReload = force || key !== _prewarmKey
@@ -2377,10 +2432,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       if (forceReload && _displayIndicatorState !== 'ready') _setDisplayIndicator('warming')
       _prewarmKey = key
       mdDisplayController.prewarmLatest(d.config_path, { forceReload, jobId: job.job_id })
+      return true
     } catch (err) {
       console.warn(`[${_ts()}] md-jobs: MD display prewarm failed`, err)
       if (!_stillSelected(job.job_id)) return
       _setDisplayIndicator('error')
+      return false
     }
   }
 
@@ -2462,7 +2519,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     clearInterval(_prewarmTimer)
     _prewarmTimer = null
     clearInterval(_displayTimer)
-    _setDisplayStatus('Searching for current MD output...', _C.muted, true)
+    const displayJob = _selectDisplayJob()
+    if (mdIsRemoteJob(displayJob)) _setDisplayStatus('', _C.dim, false)
+    else _setDisplayStatus('Searching for current MD output...', _C.muted, true)
     _fetchJobs()
     _refreshMdDisplay()
     _displayTimer = setInterval(_refreshMdDisplay, 15000)
@@ -2484,6 +2543,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // Kill any in-flight backend trajectory/RMSF/surface analysis for this job so a
     // heavy MDAnalysis read of the live DCD can't keep running after the user
     // toggles the view off (the run-away that used to wedge the server).
+    const stoppedDisplayJob = _jobs.find(j => j.job_id === _displayJobId) ?? null
     if (_displayJobId) api.cancelMdAnalysis(_displayJobId)
     _displayJobId = null
     const displayKeyBefore = _displayKey
@@ -2498,8 +2558,17 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _setDisplayStatus(status, _C.dim)
     if (keptWarm) {
       _prewarmKey = displayKeyBefore  // so the next (non-forced) refresh reuses the socket
-      _setDisplayIndicator('ready')
-      _startMdPrewarm(false)          // non-forced → decideReload 'reuse-open', no re-warm
+      if (mdIsRemoteJob(stoppedDisplayJob)) {
+        // Remote jobs must never be polled/prewarmed while Display MD is off, but
+        // the frame the user explicitly downloaded is already in local memory.
+        // Preserve that warm socket + `_lastFrameMsg`; starting the generic prewarm
+        // loop here would enter `_refreshMdPrewarm`'s remote guard and close it,
+        // defeating the promise that toggle-on shows the last downloaded frame.
+        _setDisplayIndicator('off')
+      } else {
+        _setDisplayIndicator('ready')
+        _startMdPrewarm(false)        // non-forced → decideReload 'reuse-open', no re-warm
+      }
     } else {
       _startMdPrewarm()               // no warm socket → fresh background warm-up
     }
@@ -3060,12 +3129,32 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // Closing/replacing a socket can still drain already-queued browser events. They
     // belong to the old job and must never flash an error over the newly selected one.
     if (eventJobId && eventJobId !== _selectedId) return
+    const eventJob = _jobs.find(j => j.job_id === (eventJobId || _selectedId))
+    const remoteDisplay = mdIsRemoteJob(eventJob)
     // Drive the readiness dot for BOTH prewarm (toggle off) and live display.
     // 'loading' → warming; 'ready'/'frame' → ready; 'error' → error.
-    if (state === 'error') _setDisplayIndicator('error')
-    else if (state === 'frame') _setDisplayIndicator('ready')
-    else if (state === 'ready') _setDisplayIndicator(displayToggle?.checked ? 'warming' : 'ready')
-    else if (state === 'loading') _setDisplayIndicator('warming')
+    if (!remoteDisplay) {
+      if (state === 'error') _setDisplayIndicator('error')
+      else if (state === 'frame' || state === 'prewarmed') _setDisplayIndicator('ready')
+      else if (state === 'ready') _setDisplayIndicator(displayToggle?.checked ? 'warming' : 'ready')
+      else if (state === 'loading') _setDisplayIndicator('warming')
+    } else if (eventJob?.execution_target === 'alpine' && _alpineDisplayWarming) {
+      // Alpine selection reuses the local prewarm socket after its one-shot download.
+      // `ready` means only that topology parsing completed; keep Refresh disabled until
+      // the requested frame itself has been reconstructed and cached.
+      if (state === 'error') {
+        _alpineDisplayWarming = false
+        _setDisplayIndicator('error', evt.detail?.message || '', eventJob?.job_id)
+      } else if (state === 'frame' || state === 'prewarmed') {
+        _alpineDisplayWarming = false
+        _setDisplayIndicator('ready', 'Latest Alpine frame is prepared', eventJob?.job_id)
+      } else {
+        _setDisplayIndicator('warming', 'Preparing the latest Alpine display frame', eventJob?.job_id)
+      }
+      _updateLiveFrameControls(eventJob)
+    } else {
+      _setDisplayIndicator('off')
+    }
 
     if (!displayToggle?.checked) return
     const message = evt.detail?.message
@@ -3080,9 +3169,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // A frame/ready state means data is on screen → drop the loading spinner; the
     // 'loading' state (trajectory still being fetched/streamed) keeps it spinning.
     if (state === 'error') _setDisplayStatus(`Display failed: ${message}`, _C.err, false)
+    else if (remoteDisplay) _setDisplayStatus('', _C.dim, false)
     else if (state === 'frame') _setDisplayStatus(message, _C.accent, false)
     else if (state === 'ready') _setDisplayStatus(`${message} — loading first frame…`, _C.muted, true)
-    else _setDisplayStatus(message, _C.muted, true)   // 'loading'
+    else _setDisplayStatus(message, _C.muted, true)   // local 'loading'
   })
 
   // A job created elsewhere (the oxDNA panel's "Use as NAMD seed") must show up
@@ -4002,6 +4092,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _gateBDismissed = null   // a fresh selection may re-show a pending decision
     _mdDebug(`[${_ts()}] md-jobs: selecting job ${jobId}`)
     const selectedJob = _jobs.find(j => j.job_id === jobId) || null
+    // Selection owns the one-shot Alpine warm-up. Invalidate any older selection's
+    // completion before its async download/parser can update this job's controls.
+    _alpineWarmGeneration++
+    _alpineDisplayWarming = false
     const visualizationAction = mdVisualizationJobSwitchAction({
       display: displayToggle?.checked,
       flex: flexToggle?.checked,
@@ -4028,6 +4122,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (_selectedJob()?.execution_target === 'runpod') void _runpod.refresh()
     _paintRunpodGate()   // reveal the RunPod status box for a RunPod job
     void _applyVisualizationJobSwitch(visualizationAction, selectedJob)
+    if (selectedJob?.execution_target === 'alpine' && !displayToggle?.checked) {
+      void _prepareSelectedAlpineDisplay(selectedJob)
+    }
   }
 
   async function _applyVisualizationJobSwitch(action, job) {
@@ -4045,7 +4142,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       occupancy: () => mdHasProductionRun(job) && occupancyToggle?.checked
         ? _occupancy?.refresh()
         : undefined,
-      none: () => selectionUpdatesVisualization(job) ? _refreshMdPrewarm(true) : undefined,
+      // Alpine selection has a dedicated one-shot download + prewarm pipeline. Do not
+      // race it with the generic remote guard, which would close the socket it just opened.
+      none: () => selectionUpdatesVisualization(job) && job?.execution_target !== 'alpine'
+        ? _refreshMdPrewarm(true)
+        : undefined,
     })
   }
 

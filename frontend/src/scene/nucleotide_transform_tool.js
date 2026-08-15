@@ -213,7 +213,7 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
 
   function onKey(e) {
     if (e.key === 'Escape') { e.preventDefault(); cancel() }
-    else if (e.key === 'Tab') {
+    else if (e.key === 'Tab' && ['CANVAS', 'BODY'].includes(e.target?.tagName?.toUpperCase())) {
       e.preventDefault(); mode = mode === 'translate' ? 'rotate' : 'translate'; tc?.setMode(mode)
     }
   }

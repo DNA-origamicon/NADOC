@@ -241,26 +241,14 @@ describe('mdReadinessIndicator', () => {
       expect(mdReadinessIndicator(s).show).toBe(false)
   })
 
-  // THE BUG: 'remote' read "on the pod" for every target, so clicking an Alpine job right
-  // after a RunPod one showed a RunPod message about the Alpine run. The backend has always
-  // worded its own reason per target (md_display_status: "the pod" / "the cluster") — the
-  // dot, which is what you read first, did not.
-  it('words the remote state for the target the job actually runs on', () => {
-    expect(mdReadinessIndicator('remote', 'runpod').text).toBe('on the pod')
-    expect(mdReadinessIndicator('remote', 'alpine').text).toBe('on the cluster')
-  })
-  it('falls back to a target-neutral phrase rather than naming the wrong one', () => {
-    for (const t of [null, undefined, 'local', 'something-new'])
-      expect(mdReadinessIndicator('remote', t).text).toBe('not local')
+  it('hides remote status because Refresh owns remote readiness', () => {
+    for (const t of ['runpod', 'alpine', null, 'something-new'])
+      expect(mdReadinessIndicator('remote', t)).toEqual({ show: false, color: 'dim', text: '' })
   })
   it('the target changes only the remote wording, never the other states', () => {
     for (const s of ['warming', 'ready', 'error', 'waiting']) {
       expect(mdReadinessIndicator(s, 'alpine')).toEqual(mdReadinessIndicator(s, 'runpod'))
     }
-  })
-  it('remote is always shown and always a warning colour', () => {
-    for (const t of ['runpod', 'alpine', null])
-      expect(mdReadinessIndicator('remote', t)).toMatchObject({ show: true, color: 'warn' })
   })
 })
 
@@ -345,15 +333,13 @@ describe('mdDisplayReadinessFromMeta — why the display is empty', () => {
     expect(mdDisplayReadinessFromMeta({ ready: true })).toEqual({ state: 'ready', title: '' })
   })
 
-  it('a run on a pod SHOWS, with the reason — it used to hide', () => {
-    // Collapsing every `ready:false` to 'off' hid the dot, so a live rented-GPU run
-    // looked identical to having no job at all.
+  it('a remote run delegates its visible state to the Refresh dot', () => {
     const v = mdDisplayReadinessFromMeta({
       ready: false, not_ready_code: 'remote',
       not_ready_reason: 'This run’s trajectory is on the pod, not on this computer.',
     })
     expect(v.state).toBe('remote')
-    expect(mdReadinessIndicator(v.state).show).toBe(true)
+    expect(mdReadinessIndicator(v.state).show).toBe(false)
     expect(v.title).toMatch(/on the pod/)
   })
 
@@ -387,7 +373,7 @@ describe('mdDisplayReadinessFromMeta — why the display is empty', () => {
   })
 
   it('every shown state has a label', () => {
-    for (const s of ['warming', 'ready', 'error', 'waiting', 'remote']) {
+    for (const s of ['warming', 'ready', 'error', 'waiting']) {
       const spec = mdReadinessIndicator(s)
       expect(spec.show).toBe(true)
       expect(spec.text.length).toBeGreaterThan(0)

@@ -14,8 +14,10 @@ Routes
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 import threading
+import time
 from collections import OrderedDict
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -52,6 +54,18 @@ _UNWRAP_MAX_ATOMS = 200_000
 _UNIVERSE_CACHE: "OrderedDict[str, object]" = OrderedDict()
 _UNIVERSE_CACHE_MAX = 2
 _UNIVERSE_CACHE_LOCK = threading.Lock()
+_UNIVERSE_BUILD_LOCKS: dict[str, threading.Lock] = {}
+_UNIVERSE_BUILD_LOCKS_GUARD = threading.Lock()
+
+# The run's PDB/design mapping is as static as its PSF. VoltronCoreArm's reference PDB is
+# hundreds of MB, and rebuilding this map cost 6–7 s on every snapshot replacement even
+# after the parsed PSF itself was cached. Keep the two most recent immutable map bundles.
+_COARSE_REFERENCE_CACHE: "OrderedDict[str, tuple]" = OrderedDict()
+_COARSE_REFERENCE_CACHE_MAX = 2
+_COARSE_REFERENCE_CACHE_LOCK = threading.Lock()
+_DNA_SITE_INDEX_CACHE: "OrderedDict[str, tuple]" = OrderedDict()
+_DNA_SITE_INDEX_CACHE_MAX = 2
+_DNA_SITE_INDEX_CACHE_LOCK = threading.Lock()
 
 # Backstop so a genuinely stuck/pathological load surfaces an error instead of an
 # eternal "loading" spinner.  The parse thread is not cancellable, so on timeout it
@@ -68,8 +82,16 @@ def _file_identity(path) -> str:
         return f"{os.fspath(path)}:missing"
 
 
-def _universe_cache_key(topology_path, xtc_path) -> str:
-    return _file_identity(topology_path) + "||" + _file_identity(xtc_path)
+def _universe_cache_key(topology_path, xtc_path, *, topology_only: bool = False) -> str:
+    """Identity for a parsed topology.
+
+    Large NAMD live snapshots repeatedly replace a one-frame DCD while retaining
+    the exact same (often 400+ MB) PSF.  In that case the expensive object is the
+    parsed topology, not the tiny DCD frame table, so permit a topology-only key.
+    Ordinary/growing trajectories retain the stricter two-file identity.
+    """
+    topology_id = _file_identity(topology_path)
+    return topology_id if topology_only else topology_id + "||" + _file_identity(xtc_path)
 
 
 def _has_usable_unit_cell(universe) -> bool:
@@ -114,17 +136,97 @@ def _cache_put_universe(key: str, universe) -> None:
                 pass
 
 
+def _universe_build_lock(key: str) -> threading.Lock:
+    """Per-file single-flight lock for an expensive MDAnalysis topology parse."""
+    with _UNIVERSE_BUILD_LOCKS_GUARD:
+        return _UNIVERSE_BUILD_LOCKS.setdefault(key, threading.Lock())
+
+
+def _design_identity(design: Design) -> str:
+    """Stable digest for cache separation when the same package is viewed by two designs."""
+    try:
+        raw = design.model_dump_json()  # pydantic v2
+    except AttributeError:
+        raw = design.json()             # pydantic v1
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()
+
+
+def _cached_namd_coarse_reference(design, input_pdb, seg2chain, builder, active_builder):
+    key = f"{_file_identity(input_pdb)}||{_design_identity(design)}"
+    with _COARSE_REFERENCE_CACHE_LOCK:
+        hit = _COARSE_REFERENCE_CACHE.get(key)
+        if hit is not None:
+            _COARSE_REFERENCE_CACHE.move_to_end(key)
+            return hit, True
+    with _COARSE_REFERENCE_CACHE_LOCK:
+        # Recheck and build while holding the lock. A websocket disconnect cannot
+        # cancel its worker thread; without single-flight a quick re-open built the
+        # same hundreds-of-MB reference twice and starved the replacement socket.
+        hit = _COARSE_REFERENCE_CACHE.get(key)
+        if hit is not None:
+            _COARSE_REFERENCE_CACHE.move_to_end(key)
+            return hit, True
+        value = (*builder(design, input_pdb, seg2chain), active_builder(design))
+        _COARSE_REFERENCE_CACHE[key] = value
+        _COARSE_REFERENCE_CACHE.move_to_end(key)
+        while len(_COARSE_REFERENCE_CACHE) > _COARSE_REFERENCE_CACHE_MAX:
+            _COARSE_REFERENCE_CACHE.popitem(last=False)
+    return value, False
+
+
+def _cached_dna_site_indices(u, topology_path, dna_resnames):
+    """Cache static P/C1'/base-ring atom indices for a stable solvated topology."""
+    key = _file_identity(topology_path)
+    with _DNA_SITE_INDEX_CACHE_LOCK:
+        hit = _DNA_SITE_INDEX_CACHE.get(key)
+        if hit is not None:
+            _DNA_SITE_INDEX_CACHE.move_to_end(key)
+            return hit, True
+
+    with _DNA_SITE_INDEX_CACHE_LOCK:
+        hit = _DNA_SITE_INDEX_CACHE.get(key)
+        if hit is not None:
+            _DNA_SITE_INDEX_CACHE.move_to_end(key)
+            return hit, True
+        dna_p_sel = u.select_atoms("name P and resname " + " ".join(dna_resnames))
+        c1p_list: list[int] = []
+        purine_ring = {"N9", "C8", "N7", "C5", "C6", "N1", "C2", "N3", "C4"}
+        pyrimidine_ring = {"N1", "C2", "N3", "C4", "C5", "C6"}
+        base_ring_idx: list[np.ndarray] = []
+        for p_atom in dna_p_sel:
+            atoms = p_atom.residue.atoms
+            c1p_atoms = atoms.select_atoms("name C1'")
+            c1p_list.append(int(c1p_atoms[0].index) if len(c1p_atoms) > 0 else -1)
+            names = purine_ring if str(p_atom.resname) in {"DA", "DG", "ADE", "GUA"} else pyrimidine_ring
+            base_ring_idx.append(np.asarray(
+                [int(a.index) for a in atoms if str(a.name) in names], dtype=np.int64
+            ))
+        value = (
+            dna_p_sel.indices.copy(),
+            np.asarray(c1p_list, dtype=np.int64),
+            base_ring_idx,
+        )
+        _DNA_SITE_INDEX_CACHE[key] = value
+        _DNA_SITE_INDEX_CACHE.move_to_end(key)
+        while len(_DNA_SITE_INDEX_CACHE) > _DNA_SITE_INDEX_CACHE_MAX:
+            _DNA_SITE_INDEX_CACHE.popitem(last=False)
+    return value, False
+
+
 def _psf_natom(path) -> "int | None":
-    """Atom count from a PSF header — reads only the first lines up to `!NATOM`,
-    so it's ~free even for a 200 MB PSF (used only for a progress message)."""
+    """Atom count from a PSF header without scanning the atom table.
+
+    psfgen may emit one REMARK per source segment; VoltronCoreArm's ``!NATOM`` is
+    therefore at line 14,859, not within the formerly assumed first 50 lines.
+    Stop at 100k lines, still tiny relative to a multi-million-row PSF.
+    """
     try:
         with open(path, "r", errors="replace") as fh:
-            for _ in range(50):
-                line = fh.readline()
-                if not line:
-                    break
+            for i, line in enumerate(fh):
                 if "!NATOM" in line:
                     return int(line.split()[0])
+                if i >= 100_000:
+                    break
     except Exception:  # noqa: BLE001
         return None
     return None
@@ -349,12 +451,15 @@ async def md_run_ws(websocket: WebSocket) -> None:
             _extract_universe,
             _unwrap_min_image,
             build_chain_map,
+            build_active_design_reference,
+            build_namd_coarse_reference,
             build_p_gro_order,
             build_p_order_from_universe,
             build_p_pdb_order,
             centroid_offset,
             load_segid_chain_map,
             md_rigid_reference,
+            md_rigid_reference_from_map,
             md_snap_mask,
         )
         from backend.core.md_metrics import derive_total_ns, parse_log_metrics
@@ -362,6 +467,17 @@ async def md_run_ws(websocket: WebSocket) -> None:
 
         logs: list[str] = []
         load_warnings: list[str] = []
+        _load_t0 = time.perf_counter()
+        _load_mark_t = _load_t0
+
+        def _mark(label: str) -> None:
+            nonlocal _load_mark_t
+            now = time.perf_counter()
+            logs.append(
+                f"Timing    : {label} {now - _load_mark_t:.3f}s "
+                f"(total {now - _load_t0:.3f}s)"
+            )
+            _load_mark_t = now
 
         resolved = resolve_md_config(config_str) if config_str else None
         topology_path = resolved.topology_path if resolved else Path(topology_str)
@@ -405,38 +521,109 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     "Select a topology from a NADOC-generated GROMACS run directory."
                 )
 
+        seg2chain: dict = load_segid_chain_map(run_dir) if is_namd else {}
+
         # Build chain map from current design.  Cached + single-flight: rapid
         # re-opens (repr changes, reconnects) for the same design collapse to one
         # build instead of piling up N concurrent multi-GB models (see
         # backend/core/atomistic_cache.py).
-        model = build_atomistic_model_cached(design)
-        cm = build_chain_map(model)
+        # Coarse Display MD only consumes phosphate identity/reference positions;
+        # it never sends the generated heavy atoms. Exact bridge minimisation can
+        # occupy several GB and many CPU cores for minutes on VoltronCoreArm, then
+        # be thrown away. The interpolated bridge builder preserves the same keys
+        # and rigid reference while avoiding that minimisation. Ball-and-stick
+        # still uses the exact model because it actually displays its atoms.
+        model = None
+        p_reference = None
+        if is_namd and mode != "ballstick" and seg2chain:
+            try:
+                (cm, package_p_reference, p_reference), _coarse_cached = (
+                    _cached_namd_coarse_reference(
+                        design,
+                        input_pdb,
+                        seg2chain,
+                        build_namd_coarse_reference,
+                        build_active_design_reference,
+                    )
+                )
+                logs.append(
+                    f"Reference : active NADOC geometry ({len(p_reference)} nucleotides; "
+                    f"package map validated by {len(package_p_reference)} phosphates; "
+                    "reference strands excluded; full atomistic rebuild skipped"
+                    f"; cache={'hit' if _coarse_cached else 'miss'})"
+                )
+            except Exception as exc:  # exact fallback for uncommon synthetic layouts
+                logs.append(
+                    f"Reference : lightweight mapping unavailable ({exc}); "
+                    "building atomistic fallback"
+                )
+                model = build_atomistic_model_cached(design, fast_bridges=True)
+                cm = build_chain_map(model)
+        else:
+            model = build_atomistic_model_cached(design)
+            cm = build_chain_map(model)
+        _mark("design model + chain map")
 
         # Open the Universe up front — for NAMD we build p_order from the PSF's own
         # segids (below), which needs the topology.  Reuse a cached parse when the
         # topology+trajectory files are byte-identical (completed/archived run) — this
         # is the ~8 s solvated-PSF parse we skip on every re-open.  Only large systems
         # (which skip _try_unwrap) are cached, so no transformation is ever stacked.
-        _u_key = _universe_cache_key(topology_path, xtc_path)
-        u = _cache_get_universe(_u_key)
-        if u is not None:
+        _large_namd = bool(
+            is_namd and (_psf_natom(topology_path) or 0) > _UNWRAP_MAX_ATOMS
+        )
+        _u_key = _universe_cache_key(
+            topology_path, xtc_path, topology_only=_large_namd
+        )
+        _cached_u = _cache_get_universe(_u_key)
+        if _cached_u is None:
+            # A disconnected websocket leaves its asyncio.to_thread parse alive.
+            # Serialize only identical file identities, then recheck the cache so a
+            # replacement connection attaches to the first parse instead of starting
+            # another 400+ MB PSF parse concurrently.
+            with _universe_build_lock(_u_key):
+                _cached_u = _cache_get_universe(_u_key)
+                if _cached_u is None:
+                    logs.append("Opening MDAnalysis Universe…")
+                    u = mda.Universe(str(topology_path), str(xtc_path))
+                    if len(u.atoms) > _UNWRAP_MAX_ATOMS:
+                        _cache_put_universe(_u_key, u)
+                elif _large_namd:
+                    logs.append(
+                        "Opening MDAnalysis Universe… (single-flight topology cache; "
+                        "attaching new frame)"
+                    )
+                    u = mda.Universe(_cached_u._topology, str(xtc_path))
+                else:
+                    u = _cached_u
+                    logs.append("Opening MDAnalysis Universe… (single-flight cache hit)")
+                    try:
+                        u.trajectory[0]
+                    except Exception:  # noqa: BLE001
+                        pass
+        elif _large_namd:
+            # Constructing from MDAnalysis' already-parsed Topology object avoids
+            # reparsing a 433 MB PSF while giving this socket an independent
+            # trajectory cursor. Measured on VoltronCoreArm: 29.2 s -> 0.21 s.
+            logs.append(
+                "Opening MDAnalysis Universe… (cached topology; attaching new frame)"
+            )
+            u = mda.Universe(_cached_u._topology, str(xtc_path))
+        else:
+            u = _cached_u
             logs.append("Opening MDAnalysis Universe… (cached — re-parse skipped)")
             try:
                 u.trajectory[0]  # shared object may be mid-scrub → reset to frame 0
             except Exception:  # noqa: BLE001
                 pass
-        else:
-            logs.append("Opening MDAnalysis Universe…")
-            u = mda.Universe(str(topology_path), str(xtc_path))
-            if len(u.atoms) > _UNWRAP_MAX_ATOMS:
-                _cache_put_universe(_u_key, u)
+        _mark("topology + trajectory open")
         n_frames = len(u.trajectory)
         logs.append(f"Frames    : {n_frames}")
 
         # Build p_order: the design (helix,bp,dir) key per trajectory DNA P atom, in
         # trajectory atom order (the index-based frame extraction relies on this).
         term_specs: list = []  # 5'-terminal bases (no P) recovered via O5' — NAMD only
-        seg2chain: dict = {}  # segid→chain_id (NAMD/PSF only; also feeds atom identity)
+        # segid→chain_id was loaded before reference construction for NAMD.
         if is_namd:
             # Prefer mapping via the PSF segids + the package's charge_audit
             # segid→chain_id table.  psfgen collapses NADOC's multi-char chain ids
@@ -444,14 +631,16 @@ async def md_run_ws(websocket: WebSocket) -> None:
             # (build_p_pdb_order) collides across strands and drops atoms; the segid
             # map is collision-free.  Fall back to the reference PDB when the package
             # has no charge_audit or the map is incomplete.
-            seg2chain = load_segid_chain_map(run_dir)
             p_order = None
             if seg2chain:
-                cand, n_unmapped = build_p_order_from_universe(u, cm, seg2chain)
-                if n_unmapped == 0 and cand:
+                cand, n_unmapped = build_p_order_from_universe(
+                    u, cm, seg2chain, preserve_unmapped=(p_reference is not None)
+                )
+                if (n_unmapped == 0 or p_reference is not None) and cand:
                     p_order = cand
                     logs.append(
-                        f"P-order   : segid-mapped ({len(p_order)} DNA P atoms)"
+                        f"P-order   : segid-mapped ({len(p_order)} DNA P atoms"
+                        f"; {n_unmapped} unmapped placeholders)"
                     )
                 else:
                     # MISMATCH GUARD.  The segid map is design-INDEPENDENT, so a large
@@ -497,6 +686,24 @@ async def md_run_ws(websocket: WebSocket) -> None:
             pdb_text = input_pdb.read_text(errors="replace")
             p_order = build_p_gro_order(pdb_text, cm)
             logs.append(f"P-order   : GRO/XTC ({len(p_order)} entries)")
+        _mark("DNA topology mapping")
+
+        # Exact molecule membership for PBC reconstruction.  Never infer NAMD
+        # strand boundaries from proximity: distinct staple termini commonly sit
+        # within one backbone-bond length in a dense origami.  The PSF segid is the
+        # authoritative strand identity and follows the same selection order as
+        # p_order.  GROMACS retains the legacy geometry fallback until its chain
+        # labels are plumbed through explicitly.
+        p_strand_ids = None
+        if is_namd:
+            _dna_p_for_runs = u.select_atoms(
+                "name P and resname " + " ".join(_GRO_DNA_RESNAMES)
+            )
+            if len(_dna_p_for_runs) == len(p_order):
+                p_strand_ids = np.asarray(_dna_p_for_runs.segids, dtype=object)
+                logs.append(
+                    f"P strands : {len(set(map(str, p_strand_ids)))} exact PSF segments"
+                )
 
         logs.append(f"Chain map : {len(cm)} design P atoms")
 
@@ -508,7 +715,12 @@ async def md_run_ws(websocket: WebSocket) -> None:
         # Equilibrium P-atom reference + rigid mask for the Kabsch alignment.  Shared
         # with md_trajectory so the extra-base ("__xb__") handling can't drift (the
         # str-vs-int rigid-mask compare crashed the live display before this).
-        eq_positions, eq_valid, rigid_mask = md_rigid_reference(model, p_order)
+        if p_reference is not None:
+            eq_positions, eq_valid, rigid_mask = md_rigid_reference_from_map(
+                p_reference, p_order
+            )
+        else:
+            eq_positions, eq_valid, rigid_mask = md_rigid_reference(model, p_order)
         n_valid = int(eq_valid.sum())
         logs.append(f"Eq-pos    : {n_valid}/{len(p_order)} valid design P-atoms")
         n_rigid = int(rigid_mask.sum())
@@ -522,6 +734,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
         logs.append(
             f"Snap P    : {int(snap_mask.sum())}/{len(p_order)} (rigid+extra-base for PBC snap)"
         )
+        _mark("equilibrium alignment maps")
 
         if n_rigid < 3:
             eq_centroid = np.zeros(3)
@@ -584,10 +797,15 @@ async def md_run_ws(websocket: WebSocket) -> None:
 
         # Centroid offset — computed on the (possibly unwrapped) frame 0.
         beads_0 = _extract_universe(u, 0, p_order)
-        T = centroid_offset(beads_0, design)
+        if p_reference is not None and eq_valid.any():
+            _bead_arr = np.asarray([b.pos for b in beads_0], dtype=float)
+            T = eq_positions[eq_valid].mean(axis=0) - _bead_arr[eq_valid].mean(axis=0)
+        else:
+            T = centroid_offset(beads_0, design)
         logs.append(
             f"Centroid shift: ({T[0] * 10:.1f}, {T[1] * 10:.1f}, {T[2] * 10:.1f}) Å"
         )
+        _mark("PBC check + centroid")
 
         # Metrics from log files in the run directory.
         _LOG_PRIORITY = ["prod.log", "nvt.log", "npt.log", "em.log"]
@@ -625,32 +843,23 @@ async def md_run_ws(websocket: WebSocket) -> None:
         # Precompute C1' atom index for each P atom (same order as p_order).
         # C1' is in the same residue as P; the intra-residue P→C1' vector is
         # used as the base-normal proxy for slab orientation updates.
-        dna_p_sel = u.select_atoms("name P and resname " + " ".join(_GRO_DNA_RESNAMES))
-        c1p_list: list[int] = []
-        for p_atom in dna_p_sel:
-            c1p_atoms = p_atom.residue.atoms.select_atoms("name C1'")
-            c1p_list.append(int(c1p_atoms[0].index) if len(c1p_atoms) > 0 else -1)
-        import numpy as _np
-
-        c1p_idx = _np.array(c1p_list, dtype=_np.int64)
+        (dna_p_indices, c1p_idx, base_ring_idx), _site_cache_hit = (
+            _cached_dna_site_indices(u, topology_path, _GRO_DNA_RESNAMES)
+        )
+        dna_p_sel = u.atoms[dna_p_indices]
         logs.append(
             f"C1' map: {int((c1p_idx >= 0).sum())}/{len(c1p_idx)} entries valid"
+            f"; cache={'hit' if _site_cache_hit else 'miss'}"
         )
 
         # Actual base-ring atoms per P-bearing residue. Full-representation MD display
         # uses their per-frame centroid for its slab position, so the slab and the
         # atomistic base describe the SAME coordinates rather than translating an
         # equilibrium base site by the P displacement (which misses local base motion).
-        purine_ring = {"N9", "C8", "N7", "C5", "C6", "N1", "C2", "N3", "C4"}
-        pyrimidine_ring = {"N1", "C2", "N3", "C4", "C5", "C6"}
-        base_ring_idx: list[_np.ndarray] = []
-        for p_atom in dna_p_sel:
-            names = purine_ring if str(p_atom.resname) in {"DA", "DG", "ADE", "GUA"} else pyrimidine_ring
-            idx = [int(a.index) for a in p_atom.residue.atoms if str(a.name) in names]
-            base_ring_idx.append(_np.asarray(idx, dtype=_np.int64))
         logs.append(
             f"Base rings: {sum(len(v) >= 5 for v in base_ring_idx)}/{len(base_ring_idx)} entries valid"
         )
+        _mark("C1' + base-ring maps")
 
         result: dict = {
             "universe": u,
@@ -658,6 +867,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
             "xtc_path": str(xtc_path),
             "coordinate_path": str(coordinate_path) if coordinate_path else None,
             "p_order": p_order,
+            "p_strand_ids": p_strand_ids,
             "eq_positions": eq_positions,
             "eq_valid": eq_valid,
             "rigid_mask": rigid_mask,
@@ -715,6 +925,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 f"(not name H* and not name [0-9]H*) and resname {resnames}"
             )
         result["heavy_idx"] = dna_heavy.indices
+        _mark("DNA-heavy selection")
 
         if mode == "ballstick":
 
@@ -776,6 +987,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     "— atoms will render CPK"
                 )
 
+        _mark("load complete")
         return result
 
     def _seek_sync(frame_idx: int, _injected=None) -> dict:
@@ -795,6 +1007,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
 
         u = _ctx["universe"]
         p_order = _ctx["p_order"]
+        p_strand_ids = _ctx.get("p_strand_ids")
         T = _ctx["centroid_T"]
         mode = _ctx["mode"]
         n_frames = _ctx["n_frames"]
@@ -837,7 +1050,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 box_nm = dims[:3] / 10.0
 
                 # Step 1 — sequential nearest-image (fixes intra-strand PBC splits).
-                p_box = _unwrap_min_image(p_raw, box_nm)
+                p_box = _unwrap_min_image(p_raw, box_nm, p_strand_ids)
 
                 # Step 2 — POSE-FIRST PBC reassembly onto the design reference.
                 #   The old code placed the design reference by TRANSLATION only, then
@@ -863,6 +1076,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
                         eq_centroid,
                         rigid_mask,
                         snap_mask,
+                        p_strand_ids,
                     )
                     _T_dyn = eq_centroid - _c_box  # current box → NADOC frame
                     p_nm = p_box_corr + _T_dyn  # NADOC frame
@@ -1136,7 +1350,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 box_nm = None
                 if dims is not None and dims[0] > 0 and len(p_raw) == len(p_order):
                     box_nm = dims[:3] / 10.0
-                    p_box = _unwrap_min_image(p_raw, box_nm)
+                    p_box = _unwrap_min_image(p_raw, box_nm, p_strand_ids)
                     if rigid_mask is not None and rigid_mask.any():
                         c_box = _np.median(p_box[rigid_mask], axis=0)
                     else:
@@ -1167,6 +1381,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
                             eq_centroid,
                             rigid_mask,
                             snap_mask,
+                            p_strand_ids,
                         )
                         T_dyn = eq_centroid - c_box
                         p_pre = p_box_corr + T_dyn

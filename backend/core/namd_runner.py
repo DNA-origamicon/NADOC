@@ -709,6 +709,7 @@ def _segment_outputs_complete(output_dir: Path, segment_name: str) -> bool:
 # seconds has lost its background prep task (server restart / crash) — the 1 Hz
 # heartbeat would otherwise keep it fresh.  Generous enough to survive GC pauses.
 _PREP_STALE_S = 30.0
+_PREP_INTERRUPTED_PREFIX = "Preparation was interrupted"
 
 
 def _reconcile_preparing(job: MdJob, workspace_dir: Path) -> MdJob:
@@ -729,7 +730,7 @@ def _reconcile_preparing(job: MdJob, workspace_dir: Path) -> MdJob:
     if age is None or age > _PREP_STALE_S:
         job.status = MdStatus.failed
         job.error = (
-            "Preparation was interrupted — its background task is no longer "
+            f"{_PREP_INTERRUPTED_PREFIX} — its background task is no longer "
             "running (the server likely restarted or ran out of memory during "
             "solvation). Delete this job and start it again."
         )
@@ -768,6 +769,19 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
       states are picked up and relaunched by ``resume_interrupted_jobs`` (startup
       + periodic supervisor); ``run_job`` then resumes mid-segment if needed.
     """
+    # A completed package is stronger evidence than a transient stale-heartbeat
+    # verdict.  Older workers could stop heartbeating at 100% while still writing
+    # final assets, then finish by setting QUEUED without clearing the false error.
+    # Heal those already-persisted records on the next list/status reconciliation.
+    if (
+        job.status == MdStatus.queued
+        and (job.error or "").startswith(_PREP_INTERRUPTED_PREFIX)
+        and (job.package_dir(workspace_dir) / "manifest.json").exists()
+    ):
+        job.error = None
+        job.failure_kind = None
+        job.save(workspace_dir)
+
     # Package preparation is local for every target, including Alpine and RunPod.
     # Reconcile its heartbeat before handing launched remote jobs to their remote
     # supervisors; otherwise a server reload leaves remote drafts preparing forever.

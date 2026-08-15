@@ -209,6 +209,127 @@ def build_chain_map(model: "AtomisticModel") -> ChainMap:
     return chain_map
 
 
+def build_namd_coarse_reference(design: "Design", pdb_path, seg2chain: dict[str, str]):
+    """Build NAMD residue mapping + exact equilibrium P positions without atoms.
+
+    The package PDB already contains the exact phosphate coordinates used to build
+    its PSF. Rebuilding the complete atomistic model merely to recover those values
+    can take minutes and several GB for a solvated origami. This streams only the P
+    records and reconstructs residue identities from the design's strand traversal.
+
+    Returns ``(chain_map, p_reference)``. Raises when synthetic/extension residues
+    make the lightweight traversal incomplete, allowing callers to fall back to the
+    full model rather than silently mis-map a trajectory.
+    """
+    from pathlib import Path
+
+    from backend.core.atomistic import _atomistic_domain_bp_range, _loop_copy_order
+    from backend.core.geometry import nucleotide_positions
+
+    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    helix_map = {h.id: h for h in design.helices}
+    copies: dict[str, dict[tuple, int]] = {}
+    for hid, helix in helix_map.items():
+        counts: dict[tuple, int] = {}
+        for nuc in nucleotide_positions(helix):
+            base = (int(nuc.bp_index), nuc.direction)
+            counts[base] = counts.get(base, 0) + 1
+        copies[hid] = counts
+
+    chain_map: ChainMap = {}
+    for si, strand in enumerate(design.strands):
+        chain = letters[si] if si < 26 else letters[si // 26 - 1] + letters[si % 26]
+        seq = 0
+        for domain in strand.domains:
+            for bp in _atomistic_domain_bp_range(domain, strand):
+                n = copies.get(domain.helix_id, {}).get((int(bp), domain.direction), 0)
+                # Extruded overhang domains intentionally extend beyond the parent
+                # helix's physical bp range, so nucleotide_positions(helix) has no
+                # row to count there. They still contribute one real residue per bp
+                # in the NAMD package. Treating n=0 as a skip dropped every one of
+                # VoltronCoreArm's 36 overhang phosphates from Display MD.
+                if n == 0 and domain.overhang_id:
+                    n = 1
+                for copy_k in _loop_copy_order(domain.direction, n):
+                    seq += 1
+                    key = (domain.helix_id, int(bp), domain.direction.value)
+                    if copy_k:
+                        key = (*key, int(copy_k))
+                    chain_map[(chain, seq)] = key
+
+    p_ref: dict[tuple, np.ndarray] = {}
+    n_p = 0
+    n_mapped = 0
+    with Path(pdb_path).open("r", errors="replace") as fh:
+        for line in fh:
+            if not line.startswith(("ATOM  ", "HETATM")) or len(line) < 54:
+                continue
+            if line[12:16].strip() != "P":
+                continue
+            n_p += 1
+            cid = seg2chain.get(line[72:76].strip())
+            try:
+                resid = int(line[22:26])
+            except ValueError:
+                continue
+            key = chain_map.get((cid, resid)) if cid is not None else None
+            if key is None:
+                continue
+            try:
+                p_ref[tuple(key)] = np.array(
+                    [float(line[30:38]), float(line[38:46]), float(line[46:54])],
+                    dtype=float,
+                ) / 10.0
+                n_mapped += 1
+            except ValueError:
+                continue
+    if n_p < 1 or n_mapped < 0.99 * n_p:
+        raise ValueError(
+            f"lightweight NAMD mapping covered {n_mapped}/{n_p} phosphate records"
+        )
+    return chain_map, p_ref
+
+
+def md_rigid_reference_from_map(p_ref: dict, p_order):
+    """Equivalent to :func:`md_rigid_reference` for a precomputed P-position map."""
+    eq_list = [p_ref.get(tuple(k)) for k in p_order]
+    eq_valid = np.array([v is not None for v in eq_list], dtype=bool)
+    eq_positions = np.array([v if v is not None else np.zeros(3) for v in eq_list])
+    rigid_mask = eq_valid & np.array(
+        [
+            (not is_synthetic_pkey(tuple(k))) and isinstance(k[1], int) and k[1] >= 0
+            for k in p_order
+        ],
+        dtype=bool,
+    )
+    return eq_positions, eq_valid, rigid_mask
+
+
+def build_active_design_reference(design: "Design") -> dict[tuple, np.ndarray]:
+    """The exact active geometry rendered by NADOC, keyed for MD alignment.
+
+    This deliberately matches ``GET /design/geometry?measured_positioning=true``:
+    measured nucleotide placement plus display-only junction balance. Reference
+    strands are excluded so a comparison backdrop can never steer the MD pose.
+    """
+    from backend.core.design_geometry import _geometry_for_design
+
+    ref: dict[tuple, np.ndarray] = {}
+    for nuc in _geometry_for_design(
+        design, measured_positioning=True, junction_balance=True
+    ):
+        if nuc.get("is_reference"):
+            continue
+        copy_k = int(nuc.get("copy", nuc.get("copy_k", 0)) or 0)
+        key: tuple = (
+            str(nuc["helix_id"]), int(nuc["bp_index"]), str(nuc["direction"])
+        )
+        if copy_k:
+            key = (*key, copy_k)
+        ref[key] = np.asarray(nuc["backbone_position"], dtype=float)
+    return ref
+
+
 # ── PDB extraction (chain letters preserved) ──────────────────────────────────
 
 
@@ -377,7 +498,9 @@ def load_segid_chain_map(run_dir: Path) -> dict[str, str] | None:
     return None
 
 
-def build_p_order_from_universe(u, chain_map: ChainMap, seg2chain: dict[str, str]):
+def build_p_order_from_universe(
+    u, chain_map: ChainMap, seg2chain: dict[str, str], *, preserve_unmapped: bool = False
+):
     """Build p_order in trajectory P-atom order for a NAMD PSF/DCD Universe.
 
     Maps each DNA P atom's ``(segid → NADOC chain_id, resid)`` to its design
@@ -398,6 +521,11 @@ def build_p_order_from_universe(u, chain_map: ChainMap, seg2chain: dict[str, str
         entry = chain_map.get((cid, int(a.resid))) if cid is not None else None
         if entry is None:
             n_unmapped += 1
+            if preserve_unmapped:
+                # Preserve trajectory row alignment. The synthetic key deliberately
+                # has no design reference and is ignored by the frontend, but later
+                # rows still map to their correct nucleotides.
+                order.append(("__unmapped__", int(a.index), "FORWARD"))
             continue
         order.append(entry)
     return order, n_unmapped
@@ -662,7 +790,11 @@ def extract_from_xtc(
 _P_BACKBONE_MAX_NM: float = 1.0  # maximum realistic intra-strand P-P distance (nm)
 
 
-def _unwrap_min_image(positions: np.ndarray, box_nm: np.ndarray) -> np.ndarray:
+def _unwrap_min_image(
+    positions: np.ndarray,
+    box_nm: np.ndarray,
+    strand_ids: "list[str] | np.ndarray | None" = None,
+) -> np.ndarray:
     """
     Sequential minimum-image unwrapping along the p_order sequence.
 
@@ -672,11 +804,12 @@ def _unwrap_min_image(positions: np.ndarray, box_nm: np.ndarray) -> np.ndarray:
     applying the nearest-image convention between adjacent entries in p_order
     makes each strand whole without needing explicit bond data.
 
-    Strand boundaries (where consecutive p_order entries belong to different
-    chains) are detected by the minimum-image distance: if the nearest-image
-    distance after correction still exceeds _P_BACKBONE_MAX_NM, the pair is
-    treated as a strand boundary and no shift is applied.  This prevents a
-    wrongly-placed strand from displacing all subsequent atoms.
+    When ``strand_ids`` is supplied (the PSF segid for each P atom), strand
+    boundaries are exact.  The distance heuristic remains only as a legacy
+    fallback for formats that do not expose chain identity.  Geometry alone is
+    not a safe strand identifier: the end of one origami staple can legitimately
+    lie within 1 nm of the start of another, silently joining two independent
+    molecules and assigning the latter the former's periodic image.
 
     Vectorised (equivalent to the former per-atom loop): the shift added to the
     previous atom is always an integer number of box vectors, so it cancels out of
@@ -702,7 +835,15 @@ def _unwrap_min_image(positions: np.ndarray, box_nm: np.ndarray) -> np.ndarray:
 
     # A step longer than a real backbone bond is a strand boundary → the atom it
     # steps INTO resets to its raw position, starting a new segment.
-    reset = np.linalg.norm(diffs, axis=1) > _P_BACKBONE_MAX_NM  # (n-1,)
+    if strand_ids is not None:
+        labels = np.asarray(strand_ids)
+        if len(labels) != n:
+            raise ValueError(
+                f"strand_ids has {len(labels)} entries for {n} positions"
+            )
+        reset = labels[1:] != labels[:-1]
+    else:
+        reset = np.linalg.norm(diffs, axis=1) > _P_BACKBONE_MAX_NM  # (n-1,)
 
     # Segmented cumulative sum: within a segment starting at s,
     #   out[i] = raw[s] + (cumsum_step[i] - cumsum_step[s]).
@@ -768,18 +909,31 @@ def _kabsch_rotation(
     return Vt.T @ np.diag([1.0, 1.0, d]) @ U.T
 
 
-def _strand_runs(p_box: np.ndarray, box_nm: np.ndarray) -> "list[tuple[int, int]]":
+def _strand_runs(
+    p_box: np.ndarray,
+    box_nm: np.ndarray,
+    strand_ids: "list[str] | np.ndarray | None" = None,
+) -> "list[tuple[int, int]]":
     """Contiguous [start, end) runs of ``p_box`` that belong to one strand.
 
-    Uses the SAME criterion as ``_unwrap_min_image``: a step longer than a real backbone
-    bond is a strand boundary.  Applied to the ALREADY-UNWRAPPED positions, so a within-
-    strand step is the true ~0.6 nm bond and only genuine boundaries exceed it.
+    Uses exact topology labels when available.  The spatial heuristic is retained
+    only for legacy callers without labels; two different strand termini can be
+    spatial neighbours and must never be merged merely because they are close.
     """
     n = len(p_box)
     if n <= 1:
         return [(0, n)]
-    steps = np.linalg.norm(np.diff(p_box, axis=0), axis=1)
-    starts = [0, *(np.nonzero(steps > _P_BACKBONE_MAX_NM)[0] + 1).tolist()]
+    if strand_ids is not None:
+        labels = np.asarray(strand_ids)
+        if len(labels) != n:
+            raise ValueError(
+                f"strand_ids has {len(labels)} entries for {n} positions"
+            )
+        boundary = labels[1:] != labels[:-1]
+    else:
+        steps = np.linalg.norm(np.diff(p_box, axis=0), axis=1)
+        boundary = steps > _P_BACKBONE_MAX_NM
+    starts = [0, *(np.nonzero(boundary)[0] + 1).tolist()]
     return [(s, e) for s, e in zip(starts, [*starts[1:], n])]
 
 
@@ -790,6 +944,7 @@ def reassemble_to_posed_reference(
     eq_centroid: np.ndarray,
     rigid_mask: "np.ndarray | None",
     snap_mask: "np.ndarray | None",
+    strand_ids: "list[str] | np.ndarray | None" = None,
 ) -> "tuple[np.ndarray, np.ndarray]":
     """Pose-first PBC reassembly of a structure onto its design reference.
 
@@ -844,10 +999,17 @@ def reassemble_to_posed_reference(
         if 10 <= int(inlier.sum()) < len(resid):
             R = _kabsch_rotation(mob[inlier], tgt[inlier])
 
-    # 4. pose the full design reference into the box frame (design→box is Rᵀ)
-    ref_box = (np.asarray(eq_pos, dtype=np.float64) - eq_centroid) @ R + c_box
+    # 4. Build two reference poses.  The rotation-aware pose is normally superior,
+    # but a structure as long as (or longer than) a periodic cell has no unique
+    # circular centroid: imaging every rigid atom around that centroid folds the
+    # long axis and can make the seed Kabsch choose a catastrophically wrong pose.
+    # VoltronCoreArm is a real example (405 nm rigid span in a ~400 nm NPT cell).
+    # The translation-only candidate is the safe fallback for that regime.
+    eq_arr = np.asarray(eq_pos, dtype=np.float64)
+    ref_box_posed = (eq_arr - eq_centroid) @ R + c_box
+    ref_box_translation = eq_arr - eq_centroid + c_box
 
-    # 5. nearest-image snap to the posed reference — PER STRAND RUN, not per atom.
+    # 5. nearest-image snap to each candidate — PER STRAND RUN, not per atom.
     #
     # A per-atom snap silently tears the backbone apart.  The design reference is an
     # IDEAL structure; wherever the simulated one has drifted more than half a box from
@@ -864,22 +1026,49 @@ def reassemble_to_posed_reference(
     # construction, because a lattice translation cannot change any intra-run distance.
     # The per-run shift is the MEDIAN of its atoms' individual shifts, so a few atoms whose
     # reference is off by >L/2 are outvoted instead of escaping.
-    dc = p_box - ref_box
-    shift = np.zeros_like(dc)
-    for k in range(3):
-        if box[k] > 0:
-            shift[:, k] = np.round(dc[:, k] / box[k]) * box[k]
-    runs = _strand_runs(p_box, box)
-    for s, e in runs:
+    runs = _strand_runs(p_box, box, strand_ids)
+
+    def _whole_strand_candidate(ref_box: np.ndarray) -> np.ndarray:
+        dc = p_box - ref_box
+        shift = np.zeros_like(dc)
         for k in range(3):
             if box[k] > 0:
-                shift[s:e, k] = np.median(shift[s:e, k])
-    p_corr = p_box - shift
+                shift[:, k] = np.round(dc[:, k] / box[k]) * box[k]
+        for s, e in runs:
+            for k in range(3):
+                if box[k] > 0:
+                    shift[s:e, k] = np.median(shift[s:e, k])
+        candidate = p_box - shift
+        if snap_mask is not None:
+            keep = ~np.asarray(snap_mask, dtype=bool)
+            candidate[keep] = p_box[keep]
+        return candidate
 
-    # 6. free ssDNA keeps its sequential-unwrap position
-    if snap_mask is not None:
-        keep = ~np.asarray(snap_mask, dtype=bool)
-        p_corr[keep] = p_box[keep]
+    posed = _whole_strand_candidate(ref_box_posed)
+    translated = _whole_strand_candidate(ref_box_translation)
+
+    # Score after a GLOBAL proper-rigid alignment.  This score can select periodic
+    # copies, but cannot alter any coordinate: both candidates differ from p_box
+    # solely by whole-box translations applied uniformly per strand.  Thus the
+    # design reference cannot stretch bonds or impose local equilibrium geometry.
+    def _aligned_rms(candidate: np.ndarray) -> float:
+        mob = candidate[rigid]
+        tgt = eq_arr[rigid]
+        mob_c = mob.mean(axis=0)
+        tgt_c = tgt.mean(axis=0)
+        fit_r = _kabsch_rotation(mob - mob_c, tgt - tgt_c)
+        delta = (mob - mob_c) @ fit_r.T - (tgt - tgt_c)
+        return float(np.sqrt(np.mean(np.sum(delta * delta, axis=1))))
+
+    p_corr = (
+        translated
+        if _aligned_rms(translated) + 1e-9 < _aligned_rms(posed)
+        else posed
+    )
+
+    # 6. Free ssDNA was restored inside each candidate and therefore never gets
+    # snapped to equilibrium.  Return the PBC centroid used by the caller's final
+    # global placement.
     return p_corr, c_box
 
 

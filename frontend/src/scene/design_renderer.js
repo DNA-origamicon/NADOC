@@ -401,7 +401,7 @@ export function initDesignRenderer(scene, storeRef) {
     let dirty = false
     for (const ad of _xoverArcData) {
       const hide = _hiddenCrossoverIds.has(ad.xoId) ||
-        (refHidden && refIds.has(ad.nucA?.strand_id) && refIds.has(ad.nucB?.strand_id))
+        (refHidden && (refIds.has(ad.nucA?.strand_id) || refIds.has(ad.nucB?.strand_id)))
       if (hide) {
         for (let i = 0; i < ad.beadCount; i++) {
           const bi = ad.beadStartIdx + i
@@ -433,9 +433,9 @@ export function initDesignRenderer(scene, storeRef) {
     _syncExtraBaseConnectors()
   }
 
-  /** Hide (zero-scale) or restore (reposition) extra-base beads/slabs for
-   *  crossovers whose BOTH endpoints are reference strands — so reference
-   *  crossover geometry tracks the reference View toggle. */
+  /** Hide (zero-scale) or restore (reposition) extra-base beads/slabs for every
+   *  crossover touching a reference strand. Mixed-ownership records are still
+   *  comparison geometry and must not leak onto the Simulate tab. */
   function _applyReferenceXoverVisibility() {
     if (!_xoverArcData || !_xoverBeadsMesh || !_xoverSlabsMesh) return
     const design = storeRef.getState().currentDesign
@@ -449,7 +449,7 @@ export function initDesignRenderer(scene, storeRef) {
     const zero = new THREE.Vector3(0, 0, 0)
     let dirty = false
     for (const ad of _xoverArcData) {
-      if (!(refIds.has(ad.nucA?.strand_id) && refIds.has(ad.nucB?.strand_id))) continue
+      if (!(refIds.has(ad.nucA?.strand_id) || refIds.has(ad.nucB?.strand_id))) continue
       if (_hiddenCrossoverIds.has(ad.xoId)) continue   // already hidden by a cluster toggle
       if (hidden) {
         for (let i = 0; i < ad.beadCount; i++) {
@@ -502,7 +502,7 @@ export function initDesignRenderer(scene, storeRef) {
 
   function _xoverArcHidden(ad, refIds, refHidden) {
     if (_hiddenCrossoverIds.has(ad.xoId)) return true
-    if (refHidden && refIds.has(ad.nucA?.strand_id) && refIds.has(ad.nucB?.strand_id)) return true
+    if (refHidden && (refIds.has(ad.nucA?.strand_id) || refIds.has(ad.nucB?.strand_id))) return true
     return false
   }
 

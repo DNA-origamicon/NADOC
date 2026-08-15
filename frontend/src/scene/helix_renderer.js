@@ -2069,7 +2069,12 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // sim/scalar update carrying a copy index can address the RIGHT bead instead of
   // only the last copy. Non-loop beads are copy 0. See applyFemPositions/applyScalarColors.
   const _copyKeyToEntry = new Map()
+  // Simulation overlays address the active design only. Reference geometry can
+  // coexist in the editor but is never part of an MD job and must remain fixed.
+  const _simKeyToEntry = new Map()
+  const _simCopyKeyToEntry = new Map()
   const _copySeenBB = new Map()
+  const _simCopySeenBB = new Map()
   for (const entry of backboneEntries) {
     _nucToEntry.set(entry.nuc, entry)
     const n = entry.nuc
@@ -2079,6 +2084,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     _copySeenBB.set(bk, ci + 1)
     entry._copy = ci
     _copyKeyToEntry.set(`${bk}:${ci}`, entry)
+    if (!n.is_reference) {
+      _simKeyToEntry.set(bk, entry)
+      const sci = _simCopySeenBB.get(bk) ?? 0
+      _simCopySeenBB.set(bk, sci + 1)
+      entry._simCopy = sci
+      _simCopyKeyToEntry.set(`${bk}:${sci}`, entry)
+    }
   }
 
   const _connectorCenter = new THREE.Vector3()
@@ -3002,16 +3014,14 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     setReferenceStrands(idSet, currentDesign = design) {
       _refIdSet = idSet instanceof Set ? idSet : new Set(idSet)
       _hasReference = _refIdSet.size > 0
-      // A controller built before the first strand became reference has opaque
-      // instanced materials. Install the alpha channel lazily so reference
-      // marking can take effect without forcing a whole-scene rebuild.
+      // Reference visibility applies to every representation, including straight
+      // and curved cylinders.  Install the complete shared alpha channel here;
+      // installing only the bead/slab meshes lets reference strands reappear as
+      // soon as the global or a regional representation switches to cylinders.
+      // This is also lazy, so designs without reference geometry still avoid the
+      // transparent-material cost.
       if (_hasReference) {
-        _installInstanceAlpha(iSpheres)
-        _installInstanceAlpha(iCubes)
-        _installInstanceAlpha(iFluoros)
-        _installInstanceAlpha(iCones)
-        _installInstanceAlpha(iSlabs)
-        _installInstanceAlpha(iSlabConnectors)
+        _ensureAlphaInstalled()
       }
       const ref = new Set(), active = new Set()
       for (const s of (currentDesign?.strands ?? [])) {
@@ -3832,7 +3842,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         // Address the specific loop copy when the update carries one (copy defaults to
         // 0 → the plain bead, so non-loop designs and copy-less updates are unchanged).
         const _bk = `${upd.helix_id}:${upd.bp_index}:${upd.direction}`
-        const entry = _copyKeyToEntry.get(`${_bk}:${upd.copy ?? 0}`) ?? _keyToEntry.get(_bk)
+        const entry = _simCopyKeyToEntry.get(`${_bk}:${upd.copy ?? 0}`) ?? _simKeyToEntry.get(_bk)
         if (!entry) continue
         const bp = upd.backbone_position
         const eq = entry.nuc.backbone_position
@@ -3876,6 +3886,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
       // 2. Cones — derived from updated backbone positions.
       for (const cone of coneEntries) {
+        if (cone.fromNuc?.is_reference || cone.toNuc?.is_reference) continue
         const fe = _nucToEntry.get(cone.fromNuc)
         const te = _nucToEntry.get(cone.toNuc)
         if (!fe || !te) continue
@@ -3912,6 +3923,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const liveBaseMap = new Map()
       for (const slab of slabEntries) {
         const n = slab.nuc
+        if (n.is_reference) continue
         const entry = _nucToEntry.get(n)
         if (!entry || !n.base_position) continue
         const key = `${n.helix_id}:${n.bp_index}:${n.direction}`
@@ -3926,6 +3938,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           ))
       }
       for (const slab of slabEntries) {
+        if (slab.nuc.is_reference) continue
         const entry = _nucToEntry.get(slab.nuc)
         if (!entry) continue
         slab.bbPos.copy(entry.pos)
@@ -3971,6 +3984,50 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       }
       iSlabs.instanceMatrix.needsUpdate = true
       _refreshSlabConnectors()
+
+      // 4. Overhang rods — their matrices formerly stayed at equilibrium while
+      // their beads moved to MD coordinates. Preserve each endpoint's equilibrium
+      // bead→axis offset, then carry that endpoint by the corresponding live bead
+      // displacement. This follows translation, rotation and bending without using
+      // reference geometry or forcing simulated beads back onto an ideal rod.
+      let touchedOverhangRod = false
+      for (const dom of _overhangCylData) {
+        const strandNucs = assignedGeometry.filter(n =>
+          !n.is_reference && n.strand_id === dom.strandId && n.domain_index === dom.domainIndex)
+        if (!strandNucs.length) continue
+        const firstNuc = strandNucs[0]
+        const lastNuc = strandNucs[strandNucs.length - 1]
+        const firstEntry = _nucToEntry.get(firstNuc)
+        const lastEntry = _nucToEntry.get(lastNuc)
+        if (!firstEntry || !lastEntry) continue
+        const base0 = dom._mdBaseStart ?? (dom.wsStart?.clone() ?? new THREE.Vector3(
+          dom.arrow.aStart.x + (dom.arrow.aEnd.x - dom.arrow.aStart.x) * dom.t0,
+          dom.arrow.aStart.y + (dom.arrow.aEnd.y - dom.arrow.aStart.y) * dom.t0,
+          dom.arrow.aStart.z + (dom.arrow.aEnd.z - dom.arrow.aStart.z) * dom.t0))
+        const base1 = dom._mdBaseEnd ?? (dom.wsEnd?.clone() ?? new THREE.Vector3(
+          dom.arrow.aStart.x + (dom.arrow.aEnd.x - dom.arrow.aStart.x) * dom.t1,
+          dom.arrow.aStart.y + (dom.arrow.aEnd.y - dom.arrow.aStart.y) * dom.t1,
+          dom.arrow.aStart.z + (dom.arrow.aEnd.z - dom.arrow.aStart.z) * dom.t1))
+        dom._mdBaseStart ??= base0.clone()
+        dom._mdBaseEnd ??= base1.clone()
+        const eq0 = firstNuc.backbone_position
+        const eq1 = lastNuc.backbone_position
+        _connectorCorner.copy(base0).add(_connectorCenter.copy(firstEntry.pos)
+          .sub(_tPos.set(eq0[0], eq0[1], eq0[2])))
+        const d0x = _connectorCorner.x, d0y = _connectorCorner.y, d0z = _connectorCorner.z
+        _connectorCorner.copy(base1).add(_connectorCenter.copy(lastEntry.pos)
+          .sub(_tPos.set(eq1[0], eq1[1], eq1[2])))
+        const d1x = _connectorCorner.x, d1y = _connectorCorner.y, d1z = _connectorCorner.z
+        _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+        _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+        const cylLen = _physDir.length()
+        if (cylLen > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cylLen))
+        else _cylQ.identity()
+        _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cylLen, _cylRadiusScale))
+        _ovhgCylMesh(dom).setMatrixAt(dom.cylIdx, _tMatrix)
+        touchedOverhangRod = true
+      }
+      if (touchedOverhangRod) _markOvhgCylMatricesDirty()
     },
 
     /**

@@ -54,15 +54,25 @@ class _Job:
 
 
 class _FakeConn:
-    def __init__(self, *, coor_bytes: bytes | None = b"x" * 8192):
+    def __init__(
+        self, *, coor_bytes: bytes | None = b"x" * 8192, xsc_step: int = 285_000
+    ):
         self.coor_bytes = coor_bytes
+        self.xsc_step = xsc_step
         self.gets: list[str] = []
 
-    async def sftp_get(self, remote, local):
+    async def sftp_get(self, remote, local, on_progress=None):
         self.gets.append(remote)
+        if remote.endswith(".xsc"):
+            Path(local).write_text(
+                "# NAMD\n%d 100 0 0 0 100 0 0 0 100 50 50 50\n" % self.xsc_step
+            )
+            return
         if self.coor_bytes is None:
             raise FileNotFoundError(remote)
         Path(local).write_bytes(self.coor_bytes)
+        if on_progress:
+            on_progress(len(self.coor_bytes), len(self.coor_bytes))
 
 
 def _package(tmp: Path) -> Path:
@@ -187,8 +197,8 @@ def test_stale_frame_is_refetched(tmp_path, monkeypatch):
     # The .xsc comes too: a NAMD .coor has no unit cell, and a boxless DCD is one the
     # display refuses to load at all (see test_xsc_gives_the_box_the_display_needs).
     assert conn.gets == [
-        "/scratch/alpine/u/nadoc_jobs/abc123/output/seg0.restart.coor",
         "/scratch/alpine/u/nadoc_jobs/abc123/output/seg0.restart.xsc",
+        "/scratch/alpine/u/nadoc_jobs/abc123/output/seg0.restart.coor",
     ]
 
 
@@ -201,6 +211,20 @@ def test_force_bypasses_the_reuse_window(tmp_path, monkeypatch):
     res = _run(rlf.fetch_live_frame(job, tmp_path, conn=_FakeConn(), force=True))
     assert res.get("reused") is not True
     assert res["n_atoms"] == 7
+
+
+def test_manual_refresh_keeps_cached_frame_when_remote_step_is_not_newer(tmp_path):
+    pkg = _package(tmp_path)
+    (pkg / "output" / "seg0.dcd").write_bytes(b"x" * 20_000)
+    job = _Job(tmp_path)
+    job.live_frame = {"segment": "seg0", "step": 285_000, "fetched_at": 1}
+    conn = _FakeConn(xsc_step=285_000)
+    res = _run(rlf.fetch_live_frame(job, tmp_path, conn=conn, force=True))
+    assert res["reused"] is True
+    assert res["newer"] is False
+    assert conn.gets == [
+        "/scratch/alpine/u/nadoc_jobs/abc123/output/seg0.restart.xsc"
+    ]
 
 
 def test_no_checkpoint_yet_is_reported_not_raised(tmp_path):
@@ -243,7 +267,7 @@ def test_missing_psf_is_rejected(tmp_path):
 
 
 def test_coor_to_single_frame_dcd_round_trip(tmp_path):
-    """Pins the real MDAnalysis path: NAMDBIN + topology -> a readable 1-frame DCD."""
+    """NAMDBIN is converted directly; the huge topology is deliberately not parsed."""
     mda = pytest.importorskip("MDAnalysis")
     import numpy as np
 
@@ -256,7 +280,9 @@ def test_coor_to_single_frame_dcd_round_trip(tmp_path):
         writer.write(universe.atoms)
 
     dest = tmp_path / "out" / "seg0.dcd"
-    assert rlf._write_single_frame_dcd(pdb, coor, dest) == n
+    # The converter only validates topology at the outer fetch boundary. Supplying a
+    # nonexistent path here proves this hot conversion path does not parse it.
+    assert rlf._write_single_frame_dcd(tmp_path / "must-not-be-read.psf", coor, dest) == n
 
     reread = mda.Universe(str(pdb), str(dest))
     assert len(reread.trajectory) == 1

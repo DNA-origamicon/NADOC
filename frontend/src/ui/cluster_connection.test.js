@@ -92,6 +92,50 @@ describe('initClusterConnection factory', () => {
     expect(api.getState()).toBe('connected')
     expect(chip.textContent).toContain('jojo@alpine')
   })
+
+  it('clears Connecting from authoritative status even while connect response is delayed', async () => {
+    vi.useFakeTimers()
+    try {
+      const mount = document.createElement('div')
+      document.body.appendChild(mount)
+      let connectStarted = false
+      let releaseConnect
+      const delayedConnect = new Promise(resolve => { releaseConnect = resolve })
+      const fetchImpl = vi.fn(async (url, opts = {}) => {
+        if (url.endsWith('/profiles')) return { ok: true, json: async () => ({ profiles: [] }) }
+        if (url.endsWith('/connect') && opts.method === 'POST') {
+          connectStarted = true
+          return delayedConnect
+        }
+        if (url.endsWith('/status')) return {
+          ok: true,
+          json: async () => connectStarted
+            ? ({ state: 'connected', who: 'jojo@alpine', host: 'alpine' })
+            : ({ state: 'disconnected', who: null }),
+        }
+        return { ok: true, json: async () => ({}) }
+      })
+      const api = initClusterConnection({ mount, fetchImpl })
+      await api.refresh()
+      mount.querySelector('button[id^="md-cluster-chip"]').click()
+      document.querySelector('#cl-user').value = 'jojo'
+      document.querySelector('#cl-pass').value = 'secret'
+      document.querySelector('#cl-go').click()
+      await Promise.resolve()
+      expect(api.getState()).toBe('connecting')
+
+      await vi.advanceTimersByTimeAsync(500)
+      expect(api.getState()).toBe('connected')
+      expect(document.querySelector('#cl-go')).toBeNull() // modal closed
+      expect(mount.textContent).toContain('jojo@alpine')
+
+      releaseConnect({ ok: true, json: async () => ({ state: 'connected', who: 'jojo@alpine' }) })
+      await Promise.resolve()
+      api.dispose()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
 
 describe('two chips on screen (Clusters card + Job Wizard)', () => {

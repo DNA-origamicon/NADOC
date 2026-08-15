@@ -3,6 +3,7 @@ import {
   navigationDesign,
   navigationGeometry,
   referenceGeometryHidden,
+  referenceStrandInteractionHidden,
 } from './reference_navigation.js'
 
 const design = {
@@ -20,6 +21,13 @@ const geometry = [
 describe('reference navigation projection', () => {
   it('treats the Simulation tab as reference-hidden', () => {
     expect(referenceGeometryHidden({ simulationTabActive: true, showReferenceGeometry: true })).toBe(true)
+  })
+
+  it('makes only reference strands non-interactive while the Simulation tab is open', () => {
+    const state = { currentDesign: design, simulationTabActive: true, showReferenceGeometry: true }
+    expect(referenceStrandInteractionHidden(state, 'ref')).toBe(true)
+    expect(referenceStrandInteractionHidden(state, 'real')).toBe(false)
+    expect(referenceStrandInteractionHidden({ ...state, simulationTabActive: false }, 'ref')).toBe(false)
   })
 
   it('removes reference nucleotides from navigation bounds only while hidden', () => {

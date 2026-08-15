@@ -169,6 +169,33 @@ def test_no_warning_once_done():
     assert tr.snapshot()["warning"] == ""
 
 
+def test_background_heartbeat_continues_after_tracker_reaches_done(tmp_path, monkeypatch):
+    """100% progress is not the same as the packaging coroutine being finished."""
+    import asyncio
+    import backend.api.routes_md as routes_md
+
+    writes = []
+    monkeypatch.setattr(routes_md, "write_prep_progress", lambda *_: writes.append(1))
+
+    async def exercise():
+        tr, _ = _tracker()
+        task = asyncio.create_task(
+            routes_md._write_prep_heartbeat(tmp_path, tr, interval_s=0)
+        )
+        await asyncio.sleep(0)
+        before_done = len(writes)
+        tr.finish()
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        task.cancel()
+        await task
+        return before_done
+
+    before_done = asyncio.run(exercise())
+    assert before_done >= 1
+    assert len(writes) > before_done
+
+
 # ── Failure ──────────────────────────────────────────────────────────────────
 
 

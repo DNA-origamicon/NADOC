@@ -466,6 +466,23 @@ describe('unified list + master card', () => {
     expect(document.querySelectorAll('#simulate-jobs-list [data-job-id]').length).toBe(2)
   })
 
+  it('keeps the last good job list when a transfer-time refresh transiently fails', async () => {
+    mount()
+    const running = mdNode({ status: 'running', execution_target: 'alpine', slurm_job_id: '42' })
+    const { sim, api } = make([running])
+    sim.setActiveEngine('namd')
+    await sim.refresh()
+    expect(document.querySelectorAll('#simulate-jobs-list [data-job-id]').length).toBe(1)
+
+    // API clients return null for a failed request. Keep the row and selection while
+    // the newly-armed retry heals the view.
+    sim.selectJob('md1')
+    api.listSimJobs.mockResolvedValueOnce(null)
+    await sim.refresh()
+    expect(document.querySelectorAll('#simulate-jobs-list [data-job-id]').length).toBe(1)
+    expect(sim.getSelected()).toEqual({ engine: 'namd', id: 'md1' })
+  })
+
   it('selecting a LAMMPS node routes viz to the oxDNA panel (same card) + reflects status', async () => {
     mount()
     const { sim, oxdnaPanel, engineSelector } = make([oxNode(), lmNode()])

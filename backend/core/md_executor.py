@@ -855,9 +855,20 @@ async def resume_job(
         resume_conf_for=resume_conf_for or None,
         early_stop_relax=early_stop,
     )
-    # Re-stage the evaluator(s) straight into scratch (resume uploads only the sbatch/
-    # resume conf; the original copy is normally still there, but this keeps a resumed
-    # run self-consistent even if scratch was partially purged).
+    # Re-stage transition helpers straight into scratch. A recovery must not depend on
+    # the original helper surviving scratch cleanup or on the exact source version
+    # uploaded by the failed attempt.
+    from backend.core import remote_settle_retarget  # noqa: PLC0415
+
+    await _put_text(
+        conn,
+        Path(remote_settle_retarget.__file__).read_text(),
+        f"{scratch}/{SETTLE_RETARGET_NAME}",
+        workspace_dir,
+        job,
+    )
+    # Re-stage the evaluator(s) too (resume otherwise uploads only the sbatch/resume
+    # conf; the original copies are normally still there, but may have been purged).
     if early_stop:
         await _stage_early_stop_evaluator(
             conn, scratch, workspace_dir, job, tier=es_tier
@@ -881,6 +892,13 @@ async def resume_job(
     job.resumable = False
     job.error = None
     job.failure_kind = None
+    # Attempt-scoped UI state from the finished allocation must not leak into the
+    # new one. Live metrics will repopulate on the next poll, while download status
+    # must remain empty until this allocation actually reaches result transfer.
+    job.live_metrics = None
+    job.live_frame = None
+    job.download_status = None
+    job.fetch_attempts = 0
     job.user_stopped = False
     job.save(workspace_dir)
     logger.info(
@@ -997,7 +1015,18 @@ async def _fetch_outputs_locked(job: MdJob, workspace_dir: Path, *, conn=None) -
         return False
     failed: list[str] = []
     verified_bytes = 0
-    for rel in rels:
+    def _transport_alive() -> bool:
+        check = getattr(conn, "is_connected", None)
+        return True if not callable(check) else bool(check())
+
+    for rel_index, rel in enumerate(rels):
+        # A dropped/restarted SSH session invalidates every remaining path. Abort the
+        # inventory as one interrupted transfer; retrying every one of thousands of
+        # files three times in a tight loop pinned the event loop at 100% CPU and even
+        # prevented uvicorn from shutting down.
+        if not _transport_alive():
+            failed.extend(rels[rel_index:])
+            break
         local = package_dir / rel
         job.download_status["current_file"] = rel
         job.save(workspace_dir)
@@ -1016,6 +1045,8 @@ async def _fetch_outputs_locked(job: MdJob, workspace_dir: Path, *, conn=None) -
             if current == _file_total or transferred - last_saved["bytes"] >= 16 * 1024**2:
                 job.save(workspace_dir)
                 last_saved["bytes"] = transferred
+        fetched = False
+        transport_lost = False
         for attempt in range(3):
             try:
                 import inspect
@@ -1026,6 +1057,7 @@ async def _fetch_outputs_locked(job: MdJob, workspace_dir: Path, *, conn=None) -
                     )
                 else:  # legacy/injected connection implementations
                     await conn.sftp_get(f"{scratch}/{rel}", str(local))
+                fetched = True
                 break
             except Exception as exc:  # noqa: BLE001 — retry transient SSH/SFTP failures
                 logger.warning(
@@ -1035,7 +1067,13 @@ async def _fetch_outputs_locked(job: MdJob, workspace_dir: Path, *, conn=None) -
                     attempt + 1,
                     exc,
                 )
-        else:
+                if not _transport_alive():
+                    failed.extend(rels[rel_index:])
+                    transport_lost = True
+                    break
+        if transport_lost:
+            break
+        if not fetched:
             failed.append(rel)
             continue
         expected = inventory[rel]
@@ -1346,15 +1384,7 @@ async def reconcile_remote_job(job: MdJob, workspace_dir: Path, *, conn=None) ->
             job.download_status["state"] = "processing"
             job.download_status["processing_started_at"] = time.time()
             job.save(workspace_dir)
-        _finalize_local_bookkeeping(job, workspace_dir)
-        _record_learned_throughput(job, workspace_dir)
-        if job.download_status and job.download_status.get("state") == "processing":
-            job.download_status["state"] = "verified"
-            job.download_status["processing_finished_at"] = time.time()
-        job.status = MdStatus.completed
-        job.error = None
-        job.resumable = False
-        job.fetch_attempts = 0
+        await _finish_local_processing(job, workspace_dir)
     elif bucket == "cancelled":
         job.status = MdStatus.stopped
         job.user_stopped = True
@@ -1396,6 +1426,42 @@ async def reconcile_remote_job(job: MdJob, workspace_dir: Path, *, conn=None) ->
         "[%s] remote job %s → %s", job.job_id, job.slurm_job_id, job.status.value
     )
     return job
+
+
+async def _finish_local_processing(job: MdJob, workspace_dir: Path) -> None:
+    """Index an already-downloaded remote result without blocking the API loop."""
+    # Health/metrics extraction opens every large trajectory and is synchronous.
+    # Running it on uvicorn's event loop made /health and every jobs endpoint time out
+    # for minutes exactly when a remote download reached 100%. Keep SSH on the main
+    # loop, but move this purely local CPU/disk phase to a worker thread.
+    await asyncio.to_thread(_finalize_local_bookkeeping, job, workspace_dir)
+    _record_learned_throughput(job, workspace_dir)
+    if job.download_status and job.download_status.get("state") == "processing":
+        job.download_status["state"] = "verified"
+        job.download_status["processing_finished_at"] = time.time()
+    job.status = MdStatus.completed
+    job.error = None
+    job.resumable = False
+    job.fetch_attempts = 0
+
+
+async def resume_local_processing_jobs(workspace_dir: Path) -> list[str]:
+    """Finish verified Alpine results after a restart, without an SSH connection.
+
+    ``processing`` is persisted only after the complete remote inventory has been
+    downloaded and verified, so this phase is entirely local and safe to resume.
+    """
+    finished: list[str] = []
+    for job in MdJob.list_jobs(workspace_dir):
+        if (
+            job.execution_target == "alpine"
+            and job.slurm_state == "COMPLETED"
+            and (job.download_status or {}).get("state") == "processing"
+        ):
+            await _finish_local_processing(job, workspace_dir)
+            job.save(workspace_dir)
+            finished.append(job.job_id)
+    return finished
 
 
 async def poll_remote_jobs(workspace_dir: Path, *, conn=None) -> list[str]:
@@ -1575,12 +1641,13 @@ async def _remote_relpaths(conn, scratch: str) -> list[str]:
 
 
 def _finalize_local_bookkeeping(job: MdJob, workspace_dir: Path) -> None:
-    """Recompute metrics + health for each completed segment from the fetched
-    logs/coords — the between-segment bookkeeping the local runner does inline, which
-    a bare remote sbatch skips (plan decision #1: health is advisory, computed locally
-    post-fetch).  Best-effort; never raises."""
-    from backend.core.md_health import append_health_jsonl, run_health_check
-    from backend.core.md_job import MdHealthSample
+    """Recompute cheap log metrics from fetched outputs.
+
+    Structural health parsing is deliberately not part of remote-job completion: even
+    one solvated DCD can exceed a gigabyte and monopolise Python for minutes. Trajectory
+    health remains an explicit/on-demand concern; completing a transfer must promptly
+    release active-job UI state. Best-effort; never raises.
+    """
     from backend.core.namd_runner import (
         _append_metrics_jsonl,
         _jsonl_has_segment,
@@ -1600,7 +1667,6 @@ def _finalize_local_bookkeeping(job: MdJob, workspace_dir: Path) -> None:
     except Exception:  # noqa: BLE001
         return
     metrics_path = output_dir / "metrics.jsonl"
-    health_path = output_dir / "health.jsonl"
 
     for seg, spec in zip(job.segments, specs):
         complete = _segment_outputs_complete(output_dir, seg.name)
@@ -1622,30 +1688,6 @@ def _finalize_local_bookkeeping(job: MdJob, workspace_dir: Path) -> None:
                 _append_metrics_jsonl(output_dir, seg.name, seg.stage, log_path)
             elif not complete:
                 _append_metrics_jsonl(output_dir, seg.name, seg.stage, log_path)
-        except Exception:  # noqa: BLE001
-            pass
-        try:
-            if complete and _jsonl_has_segment(health_path, seg.name):
-                raise _SkipHealth
-            hres = run_health_check(
-                package_dir,
-                seg.name,
-                job.name_stem,
-                min_c1_paired=spec.min_c1_paired,
-                min_wc_ref_relative=spec.min_wc_ref_relative,
-            )
-            append_health_jsonl(output_dir, seg.name, seg.stage, hres)
-            sample = MdHealthSample.from_result(
-                hres, seg.stage, seg.name, blocking=hres.blocking
-            )
-            # Replace an earlier partial sample for the same segment rather than
-            # appending a second one, or a long run accretes duplicates.
-            job.health_samples = [
-                h for h in job.health_samples if getattr(h, "segment", None) != seg.name
-            ]
-            job.health_samples.append(sample)
-        except _SkipHealth:
-            pass
         except Exception:  # noqa: BLE001
             pass
     job.current_segment_idx = max(0, len(job.segments) - 1)

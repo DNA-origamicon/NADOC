@@ -772,6 +772,32 @@ class TestUnwrapMinImage:
         assert np.allclose(out[0], positions[0])
         assert np.allclose(out[1], positions[1])  # unchanged
 
+    def test_exact_strand_ids_override_misleading_proximity(self):
+        """Two different strand termini may be spatial neighbours.
+
+        The legacy distance heuristic merges this deliberately adversarial pair;
+        PSF segment labels must keep the second strand in its own periodic image.
+        """
+        positions = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.6],
+                [0.0, 0.0, 2.9],  # min-image distance 0.7 from prior strand
+                [0.0, 0.0, 0.5],  # same strand, wrapped across z
+            ]
+        )
+        box = np.array([3.0, 3.0, 3.0])
+        out = _unwrap_min_image(positions, box, ["D000", "D000", "D001", "D001"])
+        assert np.allclose(out[:2], positions[:2])
+        assert np.allclose(out[2], positions[2])
+        assert out[3, 2] == pytest.approx(3.5)
+
+    def test_exact_strand_ids_must_match_position_count(self):
+        with pytest.raises(ValueError, match="strand_ids has 1 entries for 2 positions"):
+            _unwrap_min_image(
+                np.zeros((2, 3)), np.ones(3) * 3.0, ["D000"]
+            )
+
     def test_box_zero_skips_dimension(self):
         """When box[d]==0, no min-image correction is applied along that axis."""
         positions = np.array(
@@ -1434,6 +1460,36 @@ class TestReassembleToPosedReference:
         )
         # free-ssDNA rows are returned verbatim from p_box (no design snap)
         assert np.allclose(p_corr[~snap], p_box[~snap])
+
+    def test_structure_longer_than_cell_uses_undistorted_periodic_candidate(self):
+        """A long origami cannot be centred uniquely with a circular mean.
+
+        This mirrors VoltronCoreArm's 405 nm reference span in a ~400 nm NPT
+        cell.  Reconstruction may choose whole-strand images, but must recover
+        the long arrangement without changing any within-strand step.
+        """
+        eq = self._rod(240) * np.array([1.0, 1.0, 10.15])
+        eq_c = eq.mean(0)
+        box = np.array([15.0, 15.0, 400.0])
+        labels = np.repeat(np.arange(24), 10)
+        # Each short strand is contiguous but independently wrapped by NAMD.
+        raw = np.mod(eq - eq_c + box / 2.0, box)
+        p_box = _unwrap_min_image(raw, box, labels)
+        rigid = np.ones(len(eq), bool)
+        out, _ = reassemble_to_posed_reference(
+            p_box, box, eq, eq_c, rigid, rigid, labels
+        )
+        # Compare after the same global rigid alignment used by the display.
+        mob_c = out.mean(0)
+        R = _kabsch_rotation(out - mob_c, eq - eq_c)
+        aligned = (out - mob_c) @ R.T + eq_c
+        rms = np.sqrt(np.mean(np.sum((aligned - eq) ** 2, axis=1)))
+        assert rms < 1e-6
+        for label in np.unique(labels):
+            idx = np.flatnonzero(labels == label)
+            assert np.allclose(
+                np.diff(out[idx], axis=0), np.diff(p_box[idx], axis=0), atol=1e-9
+            )
 
 
 # ── PBC reassembly must not tear the backbone ────────────────────────────────────

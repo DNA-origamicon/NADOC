@@ -18,6 +18,7 @@ editing — unrelated.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 
@@ -30,6 +31,26 @@ from backend.core import cluster_config, cluster_ssh
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Strong references for post-authentication reconciliation tasks. Authentication and
+# connection UI must not wait while a multi-GB remote job is inspected/downloaded.
+_POST_CONNECT_TASKS: set[asyncio.Task] = set()
+
+
+async def _reconcile_after_connect(mgr) -> None:
+    """Best-effort remote-job reconciliation after the connect response is released."""
+    try:
+        from backend.core import md_executor  # noqa: PLC0415
+
+        await md_executor.poll_remote_jobs(_WORKSPACE_DIR, conn=mgr)
+    except Exception:  # noqa: BLE001
+        logger.exception("post-connect remote poll failed")
+
+
+def _start_post_connect_reconciliation(mgr) -> None:
+    task = asyncio.create_task(_reconcile_after_connect(mgr))
+    _POST_CONNECT_TASKS.add(task)
+    task.add_done_callback(_POST_CONNECT_TASKS.discard)
 
 
 class SlurmPreviewRequest(BaseModel):
@@ -87,17 +108,13 @@ async def cluster_connect(req: ConnectRequest):
         await mgr.connect(host, req.user, req.password, req.duo_method)
     except cluster_ssh.ClusterSSHError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    # Just reconnected — immediately reconcile in-flight remote jobs so a run that FINISHED
-    # while the session was down gets its results fetched now (not up to ~30 s later when the
-    # supervisor next runs), and any deferred scancel (a Stop issued while disconnected) is
-    # drained.  Best-effort: a poll hiccup must never fail the connect.
-    try:
-        from backend.core import md_executor  # noqa: PLC0415
-
-        await md_executor.poll_remote_jobs(_WORKSPACE_DIR, conn=mgr)
-    except Exception:  # noqa: BLE001
-        logger.exception("post-connect remote poll failed")
-    return mgr.status()
+    # Authentication is complete NOW. Return that authoritative state before reconciling
+    # remote jobs: reconciliation may download/process VoltronCoreArm data for minutes, and
+    # awaiting it left the login modal and every cluster consumer stuck on "connecting"
+    # while the authenticated SSH connection was already moving bytes.
+    connected_status = mgr.status()
+    _start_post_connect_reconciliation(mgr)
+    return connected_status
 
 
 @router.post("/cluster/disconnect")

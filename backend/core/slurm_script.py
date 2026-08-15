@@ -461,6 +461,10 @@ def generate_sbatch(
         # A freshly-staged package has no output/ (local run artifacts are excluded
         # from the upload); each conf writes to output/<name>.* so it must exist.
         "mkdir -p output",
+        # These files describe the previous allocation, not durable simulation
+        # checkpoints. Remove them before the new trap/collector can expose stale
+        # failure or progress state to the UI.
+        "rm -f output/nadoc_failure.log output/settle-restraint-retarget.log output/live_metrics.json output/live_health.json",
         "",
         # Install failure capture before module loading / NAMD startup. The scratch
         # output directory now exists, so even an environment failure leaves evidence.
@@ -524,8 +528,10 @@ def generate_sbatch(
             lines += [
                 'if [ -f "restraints_settle.pdb" ] && '
                 f'[ -f "output/{conf}.coor" ]; then',
+                "  NADOC_CURRENT_STAGE='settle-restraint-retarget'",
+                "  NADOC_CURRENT_LOG='output/settle-restraint-retarget.log'",
                 f'  python3 {SETTLE_RETARGET_NAME} "output/{conf}.coor" '
-                '"restraints_settle.pdb"',
+                '"restraints_settle.pdb" > "$NADOC_CURRENT_LOG" 2>&1',
                 "fi",
             ]
         # In-sbatch early-stop: after a non-final relaxation chunk, let the node

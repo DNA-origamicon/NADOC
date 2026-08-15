@@ -19,6 +19,21 @@ let _fill   = null
 let _cancel = null
 let _cancelHandler = null
 
+function _emitProgressDiagnostic(action) {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent('nadoc:op-progress', {
+    detail: {
+      action,
+      depth: _busyDepth,
+      visible: !!_bar?.classList.contains('visible'),
+      header: (_header?.textContent || '').trim(),
+      label: (_label?.textContent || '').trim(),
+      fraction: _fill?.style?.width || '',
+      at: performance.now(),
+    },
+  }))
+}
+
 function _ensureRefs() {
   if (_label) return
   _bar    = document.getElementById('op-progress')
@@ -62,6 +77,7 @@ export function showOpProgress(header, label, { indeterminate = false, onCancel 
     }
   }
   _bar.classList.add('visible')
+  _emitProgressDiagnostic('show')
 }
 
 /** Hide the progress widget. Safe to call when not shown. Uses ref-counting
@@ -70,11 +86,15 @@ export function hideOpProgress() {
   _ensureRefs()
   if (!_bar) return
   _busyDepth = Math.max(0, _busyDepth - 1)
-  if (_busyDepth > 0) return
+  if (_busyDepth > 0) {
+    _emitProgressDiagnostic('hide-deferred')
+    return
+  }
   _bar.classList.remove('indeterminate')
   _bar.classList.remove('visible')
   _cancelHandler = null
   if (_cancel) _cancel.style.display = 'none'
+  _emitProgressDiagnostic('hide')
 }
 
 /** Update header + label without changing visibility. */
@@ -82,6 +102,7 @@ export function setOpProgressLabel(header, label) {
   _ensureRefs()
   if (_header && header != null) _header.textContent = header
   if (_label  && label  != null) _label.textContent  = label
+  _emitProgressDiagnostic('label')
 }
 
 /** Drive a determinate fill (0-1). Useful when work units are countable. */
@@ -90,4 +111,5 @@ export function setOpProgressFraction(t) {
   if (!_fill || !_bar) return
   _bar.classList.remove('indeterminate')
   _fill.style.width = `${Math.max(0, Math.min(1, t)) * 100}%`
+  _emitProgressDiagnostic('fraction')
 }

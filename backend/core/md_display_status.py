@@ -48,21 +48,12 @@ def display_not_ready(
     remote = execution_target in ("alpine", "runpod")
     in_flight = status in _IN_FLIGHT
     if remote and in_flight:
-        # RunPod auth is key-based, so NADOC can reach the pod whenever it likes and the
-        # panel pulls a snapshot by itself on a timer. Alpine is Duo-gated — there is no
-        # background session, so a frame only arrives when the user is signed in and asks.
-        # Saying "fetch a live frame" at a RunPod user described work already in progress.
-        if execution_target == "runpod":
-            return {
-                "code": "remote",
-                "reason": "Fetching the latest frame from the pod…",
-            }
         return {
             "code": "remote",
             "reason": (
-                "This run's trajectory is on the cluster, not on this computer. Fetch a "
-                "live frame to see where it has got to, or fetch the results when it "
-                "finishes."
+                "This run is on "
+                + ("the pod" if execution_target == "runpod" else "Alpine")
+                + ". Select Refresh to check for a newer display frame."
             ),
         }
     if in_flight:

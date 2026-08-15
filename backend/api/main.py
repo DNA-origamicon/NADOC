@@ -121,6 +121,18 @@ async def _md_supervisor_loop() -> None:
             raise
         except Exception:
             logger.exception("MD supervisor pass failed")
+        # A restart can interrupt the CPU-heavy indexing phase after every Alpine byte
+        # is already local. Resume it without requiring a new SSH/Duo session.
+        try:
+            from backend.core.md_executor import resume_local_processing_jobs
+
+            finalized = await resume_local_processing_jobs(_WORKSPACE_DIR)
+            if finalized:
+                logger.info("MD supervisor finalized downloaded jobs: %s", ", ".join(finalized))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("MD local result finalization pass failed")
         # Remote (Alpine/SLURM) jobs: poll squeue/sacct + fetch on completion.  Runs
         # on this (main) loop because the asyncssh session is bound to it; a no-op
         # when disconnected.

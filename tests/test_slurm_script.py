@@ -189,10 +189,14 @@ def test_alpine_retargets_settle_reference_after_minimization(alpine, gpu_resour
     assert retarget in script
     assert script.index("6hb_demo_00_min.conf") < script.index(retarget)
     assert script.index(retarget) < script.index("6hb_demo_01_p100.conf")
+    assert "NADOC_CURRENT_STAGE='settle-restraint-retarget'" in script
+    assert "NADOC_CURRENT_LOG='output/settle-restraint-retarget.log'" in script
+    assert '"restraints_settle.pdb" > "$NADOC_CURRENT_LOG" 2>&1' in script
 
 
 def test_generate_preserves_failure_tail_in_output(alpine, gpu_resources):
     script = ss.generate_sbatch(_manifest(), alpine, gpu_resources, "/scratch/x")
+    assert "rm -f output/nadoc_failure.log output/settle-restraint-retarget.log" in script
     assert "trap nadoc_on_exit EXIT" in script
     assert "> output/nadoc_failure.log 2>&1" in script
     assert 'echo "ERROR: NADOC remote stage failed (exit code $rc)"' in script

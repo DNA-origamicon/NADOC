@@ -343,7 +343,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
   // ── Key handler (Tab cycles translate/rotate) ───────────────────────────────
   function _onKey(e) {
     if (_isDragging || _ringDragging) return
-    if (e.key === 'Tab') {
+    if (e.key === 'Tab' && ['CANVAS', 'BODY'].includes(e.target?.tagName?.toUpperCase())) {
       e.preventDefault()
       _setMode(_mode === 'translate' ? 'rotate' : 'translate')
     }

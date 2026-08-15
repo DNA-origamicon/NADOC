@@ -537,6 +537,16 @@ describe('mdRunControl on Alpine (the ☁ button in the Cluster card folded in h
     expect(mdRunControl(live, connected)).toMatchObject({ action: 'stop' })
   })
 
+  it('a SLURM-completed job reports its local result transfer instead of Stop Run', () => {
+    const downloading = { job_id: 'j1', status: 'running', execution_target: 'alpine',
+      slurm_job_id: '42', slurm_state: 'COMPLETED', download_status: { state: 'downloading' } }
+    expect(mdRunControl(downloading, connected)).toMatchObject({
+      action: 'preparing', label: 'Downloading results…', disabled: true, spinner: true,
+    })
+    expect(mdRunControl({ ...downloading, download_status: { state: 'processing' } }, connected))
+      .toMatchObject({ label: 'Processing results…', disabled: true, spinner: true })
+  })
+
   it('a LOCAL job preparing is untouched — it still stops', () => {
     expect(mdRunControl({ status: 'preparing', execution_target: 'local' }, connected))
       .toMatchObject({ action: 'stop', label: '■ Stop Run' })
@@ -2030,7 +2040,7 @@ describe('mdForcesProvenance', () => {
 })
 
 // ── live-frame fetch for a job still running on the cluster ──────────────────
-import { mdIsRemoteRunning, shouldFetchLiveFrame, liveFrameLabel } from './md_jobs_panel.js'
+import { mdIsRemoteRunning, mdJobNeedsLiveDisplay, mdRemoteRefreshState } from './md_jobs_panel.js'
 
 describe('live-frame fetch (a running Alpine job has its trajectory on the cluster)', () => {
   const running   = { execution_target: 'alpine', status: 'running',  slurm_job_id: '30958617' }
@@ -2048,34 +2058,25 @@ describe('live-frame fetch (a running Alpine job has its trajectory on the clust
     expect(mdIsRemoteRunning(null)).toBe(false)
   })
 
-  it('shouldFetchLiveFrame: only when signed in and nothing local to show', () => {
-    expect(shouldFetchLiveFrame(running, { clusterState: 'connected', displayReady: false })).toBe(true)
-    // Duo-gated: no session, no fetch — this is the whole reason it is on-login.
-    expect(shouldFetchLiveFrame(running, { clusterState: 'disconnected', displayReady: false })).toBe(false)
-    expect(shouldFetchLiveFrame(running, { clusterState: 'expired', displayReady: false })).toBe(false)
-    // A real fetched trajectory outranks a one-frame snapshot.
-    expect(shouldFetchLiveFrame(running, { clusterState: 'connected', displayReady: true })).toBe(false)
-    expect(shouldFetchLiveFrame(queued,  { clusterState: 'connected', displayReady: false })).toBe(false)
-    expect(shouldFetchLiveFrame(local,   { clusterState: 'connected', displayReady: false })).toBe(false)
-    expect(shouldFetchLiveFrame(running, {})).toBe(false)
+  it('keeps live display polling local-only', () => {
+    expect(mdJobNeedsLiveDisplay({ status: 'running', execution_target: 'local' })).toBe(true)
+    expect(mdJobNeedsLiveDisplay({ status: 'running' })).toBe(true)
+    expect(mdJobNeedsLiveDisplay({ status: 'running', execution_target: 'alpine' })).toBe(false)
+    expect(mdJobNeedsLiveDisplay({ status: 'running', execution_target: 'runpod' })).toBe(false)
+    expect(mdJobNeedsLiveDisplay({ status: 'completed', execution_target: 'local' })).toBe(false)
   })
 
-  it('liveFrameLabel: says snapshot, never trajectory (it does not advance)', () => {
-    expect(liveFrameLabel({ step: 285000 })).toBe('Snapshot at step 285,000 — still running on Alpine')
-    expect(liveFrameLabel({ step: null })).toBe('Snapshot from the running Alpine job')
-    expect(liveFrameLabel({ step: 0 })).toBe('Snapshot from the running Alpine job')
-    expect(liveFrameLabel(null)).toBe('')
-    // It used to say "Alpine" for a snapshot pulled off a rented RunPod GPU.
-    expect(liveFrameLabel({ step: 285000 }, 'runpod'))
-      .toBe('Snapshot at step 285,000 — still running on the pod')
-    expect(liveFrameLabel({ step: 0 }, 'runpod')).toBe('Snapshot from the running pod job')
+  it('keeps Refresh yellow and disabled by policy throughout background warming', () => {
+    expect(mdRemoteRefreshState({ connected: true, ready: true, warming: true })).toBe('yellow')
+    expect(mdRemoteRefreshState({ connected: true, ready: true, fetching: true })).toBe('yellow')
+    expect(mdRemoteRefreshState({ connected: true, ready: true })).toBe('green')
+    expect(mdRemoteRefreshState({ connected: false, ready: true })).toBe('red')
   })
+
 })
 
-// ── RunPod: snapshots arrive on a timer, not on a plea to the user ────────────
-import {
-  mdIsPodRunning, liveFrameCountdown, runpodSnapshotStatus, LIVE_FRAME_REFRESH_MS,
-} from './md_jobs_panel.js'
+// ── RunPod remote-frame readiness ─────────────────────────────────────────────
+import { mdIsPodRunning } from './md_jobs_panel.js'
 
 describe('RunPod live-frame auto-refresh', () => {
   const pod      = { execution_target: 'runpod', status: 'running', runpod_pod_id: 'p1' }
@@ -2091,60 +2092,6 @@ describe('RunPod live-frame auto-refresh', () => {
     expect(mdIsPodRunning(null)).toBe(false)
   })
 
-  it('shouldFetchLiveFrame: a pod gates on the RunPod session, NOT on Duo', () => {
-    // The asymmetry is the point — a pod is key-based, so no human has to be present.
-    expect(shouldFetchLiveFrame(pod, { runpodConnected: true, displayReady: false })).toBe(true)
-    expect(shouldFetchLiveFrame(pod, { runpodConnected: false, displayReady: false })).toBe(false)
-    // A connected Alpine session says nothing about whether we can reach a pod.
-    expect(shouldFetchLiveFrame(pod, { clusterState: 'connected', displayReady: false })).toBe(false)
-    // A real fetched trajectory still outranks a snapshot.
-    expect(shouldFetchLiveFrame(pod, { runpodConnected: true, displayReady: true })).toBe(false)
-    expect(shouldFetchLiveFrame(noPod, { runpodConnected: true, displayReady: false })).toBe(false)
-    expect(shouldFetchLiveFrame(finished, { runpodConnected: true, displayReady: false })).toBe(false)
-  })
-
-  it('liveFrameCountdown: first pull is immediate, then paced', () => {
-    // Nothing fetched yet ⇒ due now. Waiting a full interval before the FIRST frame
-    // would leave the user staring at an empty viewport for two minutes.
-    expect(liveFrameCountdown({ lastFetchAt: null })).toMatchObject({ due: true, label: '' })
-
-    const t0 = 1_000_000
-    const fresh = liveFrameCountdown({ lastFetchAt: t0, nowMs: t0 + 1000 })
-    expect(fresh.due).toBe(false)
-    expect(fresh.label).toBe('next update in 2 min')
-
-    const soon = liveFrameCountdown({ lastFetchAt: t0, nowMs: t0 + LIVE_FRAME_REFRESH_MS - 30_000 })
-    expect(soon.label).toBe('next update in under a minute')
-
-    const overdue = liveFrameCountdown({ lastFetchAt: t0, nowMs: t0 + LIVE_FRAME_REFRESH_MS + 1 })
-    expect(overdue).toMatchObject({ due: true, msRemaining: 0 })
-  })
-
-  it('runpodSnapshotStatus: always says something, and never asks the user to fetch', () => {
-    const fetching = runpodSnapshotStatus({ fetching: true })
-    expect(fetching.busy).toBe(true)
-    expect(fetching.text).toContain('Retrieving')
-
-    const idle = runpodSnapshotStatus({
-      liveFrame: { step: 285000 }, countdownLabel: 'next update in 2 min',
-    })
-    expect(idle.busy).toBe(false)
-    expect(idle.text).toBe(
-      'Snapshot at step 285,000 — still running on the pod · next update in 2 min')
-
-    // Before the first frame lands there is still a line to show.
-    expect(runpodSnapshotStatus({ countdownLabel: 'next update in 1 min' }).text)
-      .toBe('No snapshot from the pod yet · next update in 1 min')
-
-    // A dropped RunPod session is the one case the user CAN act on.
-    expect(runpodSnapshotStatus({ connected: false }).text).toContain('Not connected to RunPod')
-
-    // The old wording told the user to do the work. It must not come back.
-    for (const s of [fetching, idle, runpodSnapshotStatus({})]) {
-      expect(s.text).not.toContain('not on this computer')
-      expect(s.text.toLowerCase()).not.toContain('fetch a live frame')
-    }
-  })
 })
 
 describe('mdRunpodPhase (which unattended wait a rented run is in)', () => {

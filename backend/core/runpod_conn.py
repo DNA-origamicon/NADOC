@@ -202,15 +202,24 @@ class RunpodConnection:
         except Exception as exc:  # noqa: BLE001
             raise RunpodSSHError(f"upload failed ({local_path}): {exc}") from exc
 
-    async def sftp_get(self, remote_path: str, local_path: str) -> None:
+    async def sftp_get(
+        self, remote_path: str, local_path: str, *,
+        on_progress: Optional[Callable[[int, int], None]] = None,
+    ) -> None:
         conn = self._require()
         Path(local_path).parent.mkdir(parents=True, exist_ok=True)
+        total = 0
+        transferred = 0
         try:
             async with conn.start_sftp_client() as sftp:
+                total = int((await sftp.stat(remote_path)).size)
                 async with sftp.open(remote_path, "rb") as src:
                     with Path(local_path).open("wb") as dst:
                         while chunk := await src.read(_CHUNK):
                             dst.write(chunk)
+                            transferred += len(chunk)
+                            if on_progress is not None:
+                                on_progress(transferred, total)
         except Exception as exc:  # noqa: BLE001
             raise RunpodSSHError(f"download failed ({remote_path}): {exc}") from exc
 

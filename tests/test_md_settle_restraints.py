@@ -396,6 +396,17 @@ def test_remote_and_local_retarget_are_byte_identical(tmp_path):
     ).read_bytes()
 
 
+def test_remote_retarget_helper_remains_python36_compatible():
+    """Alpine compute nodes expose Python 3.6 even when the login host is newer."""
+    from pathlib import Path
+
+    from backend.core import remote_settle_retarget
+
+    source = Path(remote_settle_retarget.__file__).read_text()
+    assert "from __future__ import annotations" not in source
+    assert "list[str]" not in source
+
+
 @pytest.mark.parametrize("missing", ["ref", "coor"])
 def test_retarget_settle_restraints_is_a_no_op_when_there_is_nothing_to_do(
     tmp_path, missing

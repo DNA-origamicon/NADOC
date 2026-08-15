@@ -8,6 +8,13 @@ export function referenceStrandIds(design) {
   return new Set((design?.strands ?? []).filter(s => s?.is_reference).map(s => s.id))
 }
 
+/** Raycast/proximity targets obey the same visibility contract as rendering. */
+export function referenceStrandInteractionHidden(state, strandId) {
+  if (!strandId || !referenceGeometryHidden(state)) return false
+  return (state?.currentDesign?.strands ?? []).some(
+    strand => strand?.id === strandId && strand?.is_reference)
+}
+
 /** Keep only geometry that is actually visible to the camera controls. */
 export function navigationGeometry(state) {
   const geometry = state?.currentGeometry ?? []

@@ -35,7 +35,10 @@ export default defineConfig({
     // FOREVER and eats the whole test budget with a useless "page closed" error. Cap it.
     actionTimeout: 20_000,
     navigationTimeout: 60_000,
-    screenshot: 'only-on-failure',
+    // Software-WebGL readback of VoltronCoreArm can take minutes and distort the
+    // timing being audited. The diagnostic's explicit evidence pass owns screenshots;
+    // its timing pass disables even Playwright's automatic failure capture.
+    screenshot: process.env.NADOC_AUDIT_SCREENSHOTS === '0' ? 'off' : 'only-on-failure',
     trace: 'retain-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],

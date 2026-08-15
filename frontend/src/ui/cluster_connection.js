@@ -200,6 +200,29 @@ export function initClusterConnection({ mount, fetchImpl = fetch } = {}) {
       }
       state = 'connecting'; render()
       errEl.textContent = 'Waiting for Duo approval…'
+      // Authentication can finish before the connect request's response is delivered
+      // (especially against an older backend that reconciles/downloads jobs inline).
+      // Probe the authoritative status while waiting so the modal and all sibling chips
+      // clear as soon as SSH is genuinely connected, independent of follow-up work.
+      let confirmedByStatus = false
+      let statusProbeBusy = false
+      const probeConnected = async () => {
+        if (statusProbeBusy || confirmedByStatus) return
+        statusProbeBusy = true
+        try {
+          const sr = await fetchImpl('/api/cluster/status')
+          const sj = await _json(sr)
+          if (sj.state === 'connected') {
+            confirmedByStatus = true
+            status = sj
+            state = 'connected'
+            render()
+            close()
+          }
+        } catch { /* POST below remains authoritative on probe failure */ }
+        finally { statusProbeBusy = false }
+      }
+      const statusProbeTimer = setInterval(probeConnected, 500)
       try {
         const r = await fetchImpl('/api/cluster/connect', {
           method: 'POST',
@@ -217,8 +240,13 @@ export function initClusterConnection({ mount, fetchImpl = fetch } = {}) {
         render()
         close()
       } catch (e) {
+        // A delayed/aborted response after the status probe confirmed the live session
+        // must not repaint a healthy connection as a failure.
+        if (confirmedByStatus) return
         errEl.textContent = `Connect failed: ${e?.message || e}`
         await refresh()
+      } finally {
+        clearInterval(statusProbeTimer)
       }
     }
   }

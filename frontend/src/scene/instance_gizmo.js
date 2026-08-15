@@ -43,7 +43,7 @@ export function initInstanceGizmo(store, controls) {
   // ── Key handler (Tab cycles translate/rotate) ────────────────────────────
   function _onKey(e) {
     if (_isDragging) return
-    if (e.key === 'Tab') {
+    if (e.key === 'Tab' && ['CANVAS', 'BODY'].includes(e.target?.tagName?.toUpperCase())) {
       e.preventDefault()
       _mode = _mode === 'translate' ? 'rotate' : 'translate'
       if (_tc) _tc.setMode(_mode)
