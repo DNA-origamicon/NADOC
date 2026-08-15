@@ -595,6 +595,63 @@
     #left-tab-toggle:disabled { opacity: 0.3; cursor: default; }
     #left-panel .tab-content[hidden] { display: none; }
 
+    /* Left-sidebar cards use several neighboring gray surfaces, so the legacy
+       muted ramp is too faint at the panel's compact type sizes.  Keep accent
+       and status colors intact while promoting neutral labels, metadata, and
+       hints to a consistently readable ramp.  Attribute selectors cover the
+       older inline-colored card markup as well as dynamically shown sections. */
+    #left-panel,
+    #left-tab-strip {
+      --left-sidebar-text: #fff;
+      --left-sidebar-text-secondary: #e6edf3;
+      --left-sidebar-text-disabled: #b6c2cf;
+    }
+    #left-panel :where(.tab-content, .panel-section, h2, h3, label) {
+      color: var(--left-sidebar-text);
+    }
+    #left-panel :where(.dim, .prop-label, .unit, .mr-section-label,
+                       .primitive-card-badge, .primitive-card-desc,
+                       .primitive-card-meta, .asm-oconn-row-sub, .pxr-note) {
+      color: var(--left-sidebar-text-secondary);
+    }
+    #left-panel :where(input, select, textarea, button) {
+      color: var(--left-sidebar-text);
+    }
+    #left-panel :where(input, textarea)::placeholder {
+      color: var(--left-sidebar-text-disabled);
+      opacity: 1;
+    }
+    #left-panel [style*="color:#8b949e"],
+    #left-panel [style*="color: #8b949e"],
+    #left-panel [style*="color:#6e7681"],
+    #left-panel [style*="color: #6e7681"],
+    #left-panel [style*="color:#6a737d"],
+    #left-panel [style*="color: #6a737d"],
+    #left-panel [style*="color:#484f58"],
+    #left-panel [style*="color: #484f58"],
+    #left-panel [style*="color:var(--color-text-muted)"],
+    #left-panel [style*="color: var(--color-text-muted)"],
+    #left-panel [style*="color:var(--color-text-dim)"],
+    #left-panel [style*="color: var(--color-text-dim)"] {
+      color: var(--left-sidebar-text-secondary) !important;
+    }
+    #left-panel :where(button, input, select, textarea):disabled,
+    #left-panel :where(button, input, select, textarea)[aria-disabled="true"],
+    #left-panel label:has(:disabled) {
+      color: var(--left-sidebar-text-disabled) !important;
+    }
+    /* Disabled state is conveyed by the dedicated readable color; reducing the
+       whole label to half opacity made its small text disappear into cards. */
+    #left-panel label:has(:disabled) { opacity: 1 !important; }
+
+    /* This compact row sits inside the Visualizations card and needs primary
+       contrast: the frame-count hint is both smaller than surrounding copy
+       and positioned beside an input with its own dark surface. */
+    #md-jobs-traj-opts > label,
+    #md-jobs-traj-frames-hint {
+      color: var(--left-sidebar-text) !important;
+    }
+
     /* ── Photomode panel (#tab-content-photo) ───────────────────────────
        The sidebar is 280 px. Every control row is label + control + value, and
        the ONLY thing that keeps it inside that width is `min-width:0` on the
