@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { COLORING_LABELS, supportedColoringSet } from '../scene/coloring_modes.js'
 import { MULTI_VIEW_REPRESENTATIONS, cloneMultiScene, disposeMultiScene,
   multiViewContentBounds, multiViewDesignCentroid } from './multi_view.js'
 import './multi_overlay.css'
@@ -41,7 +42,7 @@ function setSceneOpacity(scene, opacity) {
 }
 
 export function initMultiOverlay({ document, scene, camera, renderer, canvas, controls,
-  store, setRenderFn, resetRenderFn, setRepresentation }) {
+  store, setRenderFn, resetRenderFn, setRepresentation, setColoringMode }) {
   const host = document?.getElementById('right-multi-overlay-body')
   if (!host) return null
   let count = 0
@@ -51,6 +52,7 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
   let savedCamera = null
   const layers = Array.from({ length: 4 }, (_, i) => ({
     representation: ['full', 'surface', 'vdw', 'hull-prism'][i],
+    coloring: i === 2 ? 'cpk' : 'strand',
     opacity: i === 0 ? 1 : 0.65,
     renderScene: null,
   }))
@@ -90,7 +92,25 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
         const option = document.createElement('option'); option.value = value; option.textContent = text; select.append(option)
       }
       select.value = layers[i].representation
-      select.addEventListener('change', () => { layers[i].representation = select.value; rebuild() })
+      const coloring = document.createElement('select'); coloring.className = 'mo-coloring'; coloring.title = `Layer ${i + 1} coloring`
+      const fillColors = () => {
+        coloring.replaceChildren()
+        const modes = [...supportedColoringSet(select.value, !!store.getState().assemblyActive)]
+        if (!modes.length) {
+          const option = document.createElement('option'); option.value = ''; option.textContent = 'Not available'; coloring.append(option)
+        }
+        for (const mode of modes) {
+          const option = document.createElement('option'); option.value = mode; option.textContent = COLORING_LABELS[mode] ?? mode; coloring.append(option)
+        }
+        coloring.disabled = !modes.length
+        coloring.value = modes.includes(layers[i].coloring) ? layers[i].coloring : (modes[0] ?? '')
+        layers[i].coloring = coloring.value
+      }
+      fillColors()
+      select.addEventListener('change', () => {
+        layers[i].representation = select.value; fillColors(); rebuild()
+      })
+      coloring.addEventListener('change', () => { layers[i].coloring = coloring.value; rebuild() })
       const opacity = document.createElement('input')
       opacity.type = 'range'; opacity.className = 'mo-opacity'; opacity.min = '0'; opacity.max = '1'; opacity.step = '0.01'; opacity.value = String(layers[i].opacity)
       opacity.title = `Layer ${i + 1} opacity`
@@ -100,7 +120,7 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
         setSceneOpacity(layers[i].renderScene, layers[i].opacity)
       })
       const loading = document.createElement('span'); loading.className = 'mo-loading'; loading.textContent = 'Loading…'
-      row.append(number, select, opacity, output, loading); viewportControls.append(row)
+      row.append(number, select, coloring, opacity, output, loading); viewportControls.append(row)
     }
   }
 
@@ -131,6 +151,7 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
     for (const row of viewportControls.children) row.dataset.ready = 'false'
     for (let i = 0; i < count; i++) {
       await setRepresentation(layers[i].representation)
+      if (layers[i].coloring) setColoringMode(layers[i].coloring)
       if (mine !== generation || count === 0) return
       layers[i].renderScene = cloneMultiScene(scene)
       setSceneOpacity(layers[i].renderScene, layers[i].opacity)
@@ -170,6 +191,7 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
         camera.updateProjectionMatrix(); controls.update()
       }
       await setRepresentation(layers[0].representation)
+      if (layers[0].coloring) setColoringMode(layers[0].coloring)
       return
     }
     const waits = []

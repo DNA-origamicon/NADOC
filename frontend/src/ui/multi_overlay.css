@@ -6,7 +6,7 @@
 .mo-separation-row input { min-width:0; width:100%; }
 .mo-separation-row output { width:30px; text-align:right; font:10px/1 ui-monospace,monospace; }
 .mo-viewport-controls { position:absolute; z-index:7; top:8px; left:8px; display:grid; gap:5px; pointer-events:none; }
-.mo-layer-row { display:grid; grid-template-columns:18px minmax(100px,145px) 90px 32px auto; gap:5px; align-items:center; padding:4px; border:1px solid rgba(48,54,61,.9); border-radius:5px; background:rgba(13,17,23,.88); box-shadow:0 2px 8px rgba(0,0,0,.28); pointer-events:auto; }
+.mo-layer-row { display:grid; grid-template-columns:18px minmax(100px,145px) minmax(95px,125px) 90px 32px auto; gap:5px; align-items:center; padding:4px; border:1px solid rgba(48,54,61,.9); border-radius:5px; background:rgba(13,17,23,.88); box-shadow:0 2px 8px rgba(0,0,0,.28); pointer-events:auto; }
 .mo-layer-row select { min-width:0; color:#c9d1d9; background:#161b22; border:1px solid #30363d; border-radius:4px; padding:3px 5px; font-size:10px; }
 .mo-layer-row output { color:#8b949e; font:9px/1 ui-monospace,monospace; text-align:right; }
 .mo-opacity { width:90px; }

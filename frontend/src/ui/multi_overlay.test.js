@@ -35,12 +35,13 @@ describe('multi-overlay', () => {
       controls: { target: new THREE.Vector3(), update: vi.fn() },
       store: { getState: () => ({ currentGeometry: [] }) },
       setRenderFn: fn => { renderFn = fn }, resetRenderFn: vi.fn(),
-      setRepresentation: vi.fn(),
+      setRepresentation: vi.fn(), setColoringMode: vi.fn(),
     })
     expect(document.querySelectorAll('.mo-count-btn')).toHaveLength(4)
     await api.activate(4)
     await vi.waitFor(() => expect(document.querySelectorAll('.mo-layer-row[data-ready="true"]')).toHaveLength(4))
     expect(document.querySelectorAll('.mo-representation')).toHaveLength(4)
+    expect(document.querySelectorAll('.mo-coloring')).toHaveLength(4)
     expect(document.querySelectorAll('.mo-opacity')).toHaveLength(4)
     const opacity = document.querySelectorAll('.mo-opacity')[1]
     opacity.value = '0.35'; opacity.dispatchEvent(new Event('input', { bubbles: true }))

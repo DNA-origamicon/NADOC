@@ -87,6 +87,7 @@ test('multi-view controls live inside responsive synchronized viewport panels', 
   await expect(overlayControls.locator('.mo-layer-row')).toHaveCount(3)
   await expect(overlayControls.locator('.mo-layer-row[data-ready="true"]')).toHaveCount(3, { timeout: 60_000 })
   await expect(overlayControls.locator('.mo-representation')).toHaveCount(3)
+  await expect(overlayControls.locator('.mo-coloring')).toHaveCount(3)
   await expect(overlayControls.locator('.mo-opacity')).toHaveCount(3)
   await overlayControls.locator('.mo-opacity').nth(1).evaluate(input => {
     input.value = '0.35'; input.dispatchEvent(new Event('input', { bubbles: true }))

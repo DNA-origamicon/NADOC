@@ -40,8 +40,8 @@ restores the workspace camera and controls.
 ### Multi-overlay
 
 The **Multi-overlay** card composites one to four independently selected
-representations in the same 3D view. Its numbered Representation menus and per-layer
-Opacity sliders appear in the upper-left of the viewport. The Separation slider in
+representations in the same 3D view. Its numbered Representation and Coloring menus,
+plus per-layer Opacity sliders, appear in the upper-left of the viewport. The Separation slider in
 the card moves layers evenly along the world X axis: zero overlaps them exactly, while
 one uses the design's longest molecular dimension as the spacing between adjacent
 layers. Offsets are centered around the design, so separation does not introduce a

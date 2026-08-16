@@ -5651,6 +5651,7 @@ async function main() {
     document, scene, camera, renderer, canvas, controls, store,
     setRenderFn, resetRenderFn,
     setRepresentation: _setRepresentation,
+    setColoringMode: _setColoringMode,
   })
 
   // ── Hide Staples toggle ────────────────────────────────────────────────────────
