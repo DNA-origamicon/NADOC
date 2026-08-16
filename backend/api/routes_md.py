@@ -3769,6 +3769,28 @@ def _remote_projected_step(
     ), True
 
 
+# Alpine's supervisor polls every 30 seconds.  Allow one missed/slow pass before a
+# formerly-live observation loses its synced badge, but never equate authentication
+# alone with fresh job data.
+_ALPINE_SYNC_FRESH_S = 75.0
+
+
+def _alpine_progress_is_synced(job: MdJob, *, now: float | None = None) -> bool:
+    """True when Alpine is connected and this job has a recent successful reading."""
+    if job.execution_target != "alpine" or job.status != MdStatus.running:
+        return False
+    from backend.core import cluster_ssh  # noqa: PLC0415
+
+    if not cluster_ssh.get_manager().is_connected():
+        return False
+    retrieved_at = (job.live_metrics or {}).get("retrieved_at")
+    try:
+        age = (time.time() if now is None else now) - float(retrieved_at)
+    except (TypeError, ValueError):
+        return False
+    return 0.0 <= age <= _ALPINE_SYNC_FRESH_S
+
+
 def _namd_live_progress(job: MdJob, ws) -> tuple[float | None, float | None, bool]:
     """``(overall fraction 0..1, seconds remaining)`` for a RUNNING NAMD job — the two
     live numbers under the master progress bar.  Both are ``None`` for a non-running job
@@ -3878,7 +3900,7 @@ def _local_dcd_bytes(package_dir: Path) -> int:
 def _decorate_terminal_segment_progress(job: MdJob, payload: dict, ws: Path) -> None:
     """Expose what a deliberately-finished partial production actually completed.
 
-    ``End run and download`` marks the job complete even when its requested production
+    ``Terminate run and download`` marks the job complete even when its requested production
     length was intentionally shortened. Persisted segment status can therefore still
     say ``running``. The downloaded XST/restart markers are the durable truth for steps;
     the conf's timestep is the durable truth for simulated nanoseconds.
@@ -4065,7 +4087,10 @@ async def list_md_jobs() -> list[dict]:
         # Carried forward from the last cluster reading rather than measured — the UI
         # marks it so a projection is never mistaken for an observation.
         if estimated:
-            d["progress_estimated"] = True
+            if _alpine_progress_is_synced(j):
+                d["progress_synced"] = True
+            else:
+                d["progress_estimated"] = True
         if frac is not None and j.status != MdStatus.running and j.live_metrics:
             d["progress_last_known"] = True
             d["progress_observed_at"] = (
@@ -4246,47 +4271,89 @@ class ArchiveRequest(BaseModel):
 
 @router.post("/md/jobs/{job_id}/finish-and-download", status_code=202)
 async def finish_and_download_md_job(job_id: str, body: ArchiveRequest) -> dict:
-    """End an Alpine allocation, retain its partial output as complete, and archive it."""
+    """Terminate a remote run, retain its partial output as complete, and archive it."""
     from backend.core import job_archive
 
     job = _load_job(job_id)
-    if job.execution_target != "alpine":
+    if job.execution_target not in {"alpine", "runpod"}:
         raise HTTPException(
-            400, "End run and download currently applies to Alpine runs."
+            400, "Terminate run and download applies to Alpine and RunPod runs."
         )
-    # A stop requested while Duo was disconnected is locally terminal but the allocation
-    # may still be running and its output is still remote. Put it through the ordinary
-    # stop path too; that drains the deferred scancel and fetches scratch before archival.
-    if (
-        job.status in {MdStatus.queued, MdStatus.running, MdStatus.preparing}
-        or job.pending_scancel
-    ):
-        result = await stop_md_job(job_id)
-        if result.get("pending_scancel"):
-            raise HTTPException(
-                409,
-                "Connect to Alpine first so the SLURM job can be ended and its results downloaded.",
-            )
-    # Terminal does not mean downloaded: TIMEOUT/killed/stopped jobs may have had their
-    # earlier SFTP request interrupted. Always reconcile the remote inventory here. The
-    # resumable SFTP primitive skips exact-size local files and continues `.part` files.
-    from backend.core import cluster_ssh, md_executor
+    if job.execution_target == "runpod":
+        from backend.api import routes_runpod
+        from backend.core import runpod_executor, runpod_supervisor
+        from backend.core.runpod_api import RunpodError
+        from backend.core.runpod_conn import RunpodSSHError
 
-    mgr = cluster_ssh.get_manager()
-    if not mgr.is_connected():
-        raise HTTPException(
-            409, "Connect to Alpine to download and verify the run output."
-        )
-    job = _load_job(job_id)
-    try:
-        fetched = await md_executor.fetch_outputs(job, _workspace(), conn=mgr)
-    except cluster_ssh.ClusterSSHError as exc:
-        raise HTTPException(502, f"Cluster download interrupted: {exc}") from exc
-    if not fetched:
-        raise HTTPException(
-            502,
-            "Some Alpine output files did not finish downloading. Retry End run and download; completed bytes are preserved.",
-        )
+        session = routes_runpod._SESSION  # noqa: SLF001
+        if not session.is_connected():
+            raise HTTPException(
+                409, "Connect to RunPod to terminate the run and download its output."
+            )
+        if not job.runpod_pod_id:
+            raise HTTPException(409, "This run has no live RunPod pod to download from.")
+        client = session.require()
+        try:
+            conn = await runpod_executor.open_pod_connection(
+                job, client=client, client_keys=_runpod_client_keys()
+            )
+        except (RunpodError, RunpodSSHError, OSError) as exc:
+            raise HTTPException(502, f"Could not reach the RunPod pod: {exc}") from exc
+        fetched = False
+        try:
+            await runpod_executor.cancel_job(job, conn=conn)
+            fetched = await runpod_executor.fetch_results(job, _workspace(), conn=conn)
+        except (RunpodSSHError, RuntimeError, OSError) as exc:
+            raise HTTPException(
+                502,
+                "RunPod output did not finish downloading; it remains safe on the "
+                f"network volume: {exc}",
+            ) from exc
+        finally:
+            await conn.close()
+            # Cancel the watcher and destroy the paid pod only after the direct fetch
+            # has released its SSH channel. stop_job is idempotent if the watcher saw
+            # the killed process and already began teardown.
+            await runpod_supervisor.stop_job(job_id, client=client)
+        if not fetched:
+            raise HTTPException(
+                502, "RunPod output was not fully verified; it remains on the network volume."
+            )
+        job = _load_job(job_id)
+        job.runpod_pod_id = None
+        job.runpod_pid = None
+    else:
+        # A stop requested while Duo was disconnected is locally terminal but the allocation
+        # may still be running and its output is still remote. Put it through the ordinary
+        # stop path too; that drains the deferred scancel and fetches scratch before archival.
+        if (
+            job.status in {MdStatus.queued, MdStatus.running, MdStatus.preparing}
+            or job.pending_scancel
+        ):
+            result = await stop_md_job(job_id)
+            if result.get("pending_scancel"):
+                raise HTTPException(
+                    409,
+                    "Connect to Alpine first so the SLURM job can be terminated and its results downloaded.",
+                )
+        from backend.core import cluster_ssh, md_executor
+
+        mgr = cluster_ssh.get_manager()
+        if not mgr.is_connected():
+            raise HTTPException(
+                409, "Connect to Alpine to download and verify the run output."
+            )
+        job = _load_job(job_id)
+        try:
+            fetched = await md_executor.fetch_outputs(job, _workspace(), conn=mgr)
+        except cluster_ssh.ClusterSSHError as exc:
+            raise HTTPException(502, f"Cluster download interrupted: {exc}") from exc
+        if not fetched:
+            raise HTTPException(
+                502,
+                "Some Alpine output files did not finish downloading. Retry Terminate "
+                "run and download; completed bytes are preserved.",
+            )
     # stop_md_job fetches Alpine scratch output before writing its terminal state. Re-read
     # that record, deliberately accept the shortened trajectory, then use the existing
     # background archive mover for the selected storage location.

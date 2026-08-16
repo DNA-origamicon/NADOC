@@ -348,6 +348,10 @@ describe('canEndAndDownload', () => {
   it('allows archive-from-birth jobs because remote output may still need fetching', () => {
     expect(canEndAndDownload({ engine: 'namd', execution_target: 'alpine', status: 'paused', archived: true })).toBe(true)
   })
+
+  it.each(['running', 'paused', 'stopped', 'failed'])('allows a RunPod %s job', (status) => {
+    expect(canEndAndDownload({ engine: 'namd', execution_target: 'runpod', status })).toBe(true)
+  })
 })
 
 // ── factory drive (jsdom) ──────────────────────────────────────────────────────
@@ -384,7 +388,7 @@ function mount() {
     </div>`
 }
 
-function make(nodes, apiOverrides = {}) {
+function make(nodes, apiOverrides = {}, connectionOverrides = {}) {
   const api = {
     listSimJobs: vi.fn().mockResolvedValue(nodes),
     stopOxdnaJob: vi.fn().mockResolvedValue({}), startOxdnaJob: vi.fn().mockResolvedValue({}),
@@ -400,7 +404,9 @@ function make(nodes, apiOverrides = {}) {
     deleteSelected: vi.fn().mockResolvedValue(true), archiveSelected: vi.fn().mockResolvedValue(undefined) }
   const engineSelector = { select: vi.fn(), getSelected: () => 'oxdna' }
   const sim = initSimulateJobs({ api, getWorkspacePath: () => '/w/D.nadoc',
-    oxdnaPanel, mrdnaPanel, candoPanel, mdPanel, engineSelector })
+    oxdnaPanel, mrdnaPanel, candoPanel, mdPanel, engineSelector,
+    getClusterState: connectionOverrides.getClusterState ?? (() => 'connected'),
+    getRunpodConnected: connectionOverrides.getRunpodConnected ?? (() => true) })
   return { sim, api, oxdnaPanel, mrdnaPanel, candoPanel, mdPanel, engineSelector }
 }
 
@@ -588,7 +594,29 @@ describe('consolidated Change directory / Delete (above the jobs card)', () => {
   })
 })
 
-describe('End run and download feedback', () => {
+describe('Terminate run and download feedback', () => {
+  it('uses terminate wording for both Alpine and RunPod', async () => {
+    for (const execution_target of ['alpine', 'runpod']) {
+      mount()
+      const { sim } = make([mdNode({ status: 'running', execution_target })])
+      await sim.refresh(); sim.selectJob('md1')
+      expect(document.getElementById('simulate-jobs-end-download-btn').textContent)
+        .toBe('Terminate run and download')
+    }
+  })
+  it('disables the action unless connected to the job\'s own remote source', async () => {
+    for (const [execution_target, connectionOverrides, source] of [
+      ['alpine', { getClusterState: () => 'disconnected' }, 'Alpine'],
+      ['runpod', { getRunpodConnected: () => false }, 'RunPod'],
+    ]) {
+      mount()
+      const { sim } = make([mdNode({ status: 'running', execution_target })], {}, connectionOverrides)
+      await sim.refresh(); sim.selectJob('md1')
+      const btn = document.getElementById('simulate-jobs-end-download-btn')
+      expect(btn.disabled).toBe(true)
+      expect(btn.title).toContain(`Connect to ${source}`)
+    }
+  })
   it('never equates simulation completed with download complete after a reload', async () => {
     mount()
     const node = mdNode({ status: 'completed', execution_target: 'alpine', download_status: null })
@@ -852,6 +880,14 @@ describe('estimated progress (a cluster job is only observable while signed in)'
     const measured = { ...base, progress_fraction: 0.57, steps: 500000 }
     const txt = _stepText(measured)
     expect(txt.startsWith('~')).toBe(false)
+    expect(txt).not.toContain('estimated')
+  })
+
+  it('a fresh connected Alpine reading is named synced without an estimate hedge', () => {
+    const synced = { ...base, progress_fraction: 0.57, progress_synced: true, steps: 500000 }
+    const txt = _stepText(synced)
+    expect(txt.startsWith('~')).toBe(false)
+    expect(txt).toContain(' · synced')
     expect(txt).not.toContain('estimated')
   })
 

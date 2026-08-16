@@ -312,6 +312,7 @@ export function masterStepText(node) {
   const est = _estPrefix(node)
   const tail = progressIsEstimated(node)
     ? ' · estimated from last cluster sync'
+    : node?.progress_synced ? ' · synced'
     : node?.progress_last_known ? ' · last known' : ''
   if (!(total > 0)) return `${est}${pct}%${_etaSuffix(node)}${tail}`
   const explicit = Number(node.current_step ?? node.completed_steps ?? node.steps_completed)
@@ -401,12 +402,21 @@ export function slurmAllocationText(node, nowMs = Date.now()) {
   return `SLURM runtime requested: ${walltime} · ${formatEta(ran)} run · ${state}`
 }
 
-/** Alpine output can be accepted and transferred whether the allocation is live or has
+/** Remote output can be accepted and transferred whether the allocation/pod is live or
  * already paused/stopped/failed. `archived` does NOT exclude it: archive-from-birth jobs
- * already have a destination directory but can still have unfetched output on Alpine. */
+ * can still have unfetched output on Alpine or a RunPod network volume. */
 export function canEndAndDownload(node) {
   return node?.engine === 'namd'
-    && node?.execution_target === 'alpine'
+    && ['alpine', 'runpod'].includes(node?.execution_target)
+}
+
+/** Whether an action can reach the remote service that owns this job. */
+export function remoteSourceConnected(node, {
+  clusterState = 'disconnected', runpodConnected = false,
+} = {}) {
+  if (node?.execution_target === 'alpine') return clusterState === 'connected'
+  if (node?.execution_target === 'runpod') return !!runpodConnected
+  return true
 }
 
 /** Seconds → a two-unit duration: `45s` · `1m 35s` · `3h 07m` · `2d 06h`.
@@ -463,6 +473,8 @@ export function initSimulateJobs({
   bladePanel = null,
   mdPanel = null,
   engineSelector = null,
+  getClusterState = null,
+  getRunpodConnected = null,
 } = {}) {
   const $ = (id) => document.getElementById(id)
   const root = $('simulate-jobs')
@@ -738,14 +750,21 @@ export function initSimulateJobs({
     if (endDownloadBtn) {
       const show = canEndAndDownload(node)
       const transferLocked = ['downloading', 'moving', 'processing', 'done'].includes(transfer?.phase)
+      const sourceConnected = remoteSourceConnected(node, {
+        clusterState: getClusterState?.() ?? 'disconnected',
+        runpodConnected: getRunpodConnected?.() ?? false,
+      })
       endDownloadBtn.style.display = show ? '' : 'none'
-      endDownloadBtn.disabled = _busy || transferLocked
+      endDownloadBtn.disabled = _busy || transferLocked || !sourceConnected
       endDownloadBtn.textContent = transfer?.phase === 'done' ? 'Download complete'
         : transfer?.phase === 'processing' ? 'Processing…'
           : ['downloading', 'moving'].includes(transfer?.phase) ? 'Downloading…'
-          : transfer ? 'Retry download' : 'End run and download'
+          : transfer ? 'Retry download' : 'Terminate run and download'
       endDownloadBtn.style.opacity = endDownloadBtn.disabled ? '0.5' : '1'
       endDownloadBtn.style.cursor = endDownloadBtn.disabled ? 'not-allowed' : 'pointer'
+      endDownloadBtn.title = !sourceConnected
+        ? `Connect to ${node?.execution_target === 'alpine' ? 'Alpine' : 'RunPod'} to terminate and download this run.`
+        : ''
     }
   }
 
@@ -979,7 +998,7 @@ export function initSimulateJobs({
         _endTransfers.set(node.job_id, { phase: 'done', pct: 100, moved: 0, total: 0 })
         _renderMaster()
       }
-      showToast('Run ended and results downloaded.', { severity: 'ok' })
+      showToast('Run terminated and results downloaded.', { severity: 'ok' })
       await _fetch()
     } catch (err) {
       await stopWatching()

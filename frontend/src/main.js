@@ -1603,6 +1603,8 @@ async function main() {
     bladePanel,
     mdPanel,
     engineSelector,
+    getClusterState: () => clusterConn?.getState?.() ?? 'disconnected',
+    getRunpodConnected: () => mdPanel?.isRunpodConnected?.() ?? false,
   })
 
   // Auto engine-policy coordinator: renders the resource status line (GPU state · free

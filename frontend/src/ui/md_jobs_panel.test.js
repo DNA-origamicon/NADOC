@@ -397,7 +397,18 @@ describe('mdRunControl (ONE control for the selected job: Run / Stop / Resume)',
   })
   it('a running job → ■ Stop', () => {
     expect(mdRunControl({ status: 'running', execution_target: 'local' }))
-      .toMatchObject({ action: 'stop', label: '■ Stop Run' })
+      .toMatchObject({ action: 'stop', label: '■ Pause run' })
+  })
+  it('requires the matching remote connection to pause Alpine and RunPod runs', () => {
+    const alpine = { status: 'running', execution_target: 'alpine', slurm_job_id: '1' }
+    expect(mdRunControl(alpine, { clusterState: 'disconnected' }))
+      .toMatchObject({ label: '■ Pause run', disabled: true })
+    expect(mdRunControl(alpine, { clusterState: 'connected' }).disabled).toBe(false)
+
+    const pod = { status: 'running', execution_target: 'runpod', runpod_pod_id: 'p1', runpod_pid: 42 }
+    expect(mdRunControl(pod, { runpodConnection: false }))
+      .toMatchObject({ label: '■ Pause run', disabled: true })
+    expect(mdRunControl(pod, { runpodConnection: true }).disabled).toBe(false)
   })
   it('a stopped job → ↻ Resume', () => {
     expect(mdRunControl({ status: 'stopped', execution_target: 'local' }))
@@ -461,8 +472,9 @@ describe('mdRunControl (ONE control for the selected job: Run / Stop / Resume)',
     // runpod_pid is written when the chain script launches — that is the boundary between
     // "we are paying while nothing computes" and "the run is going".
     const rc = mdRunControl(
-      { status: 'running', execution_target: 'runpod', runpod_pod_id: 'p1', runpod_pid: 42 })
-    expect(rc.label).toMatch(/Stop/)
+      { status: 'running', execution_target: 'runpod', runpod_pod_id: 'p1', runpod_pid: 42 },
+      { runpodConnection: true })
+    expect(rc.label).toBe('■ Pause run')
     expect(rc.disabled).toBe(false)
   })
 
@@ -564,7 +576,7 @@ describe('mdRunControl on Alpine (the ☁ button in the Cluster card folded in h
 
   it('a LOCAL job preparing is untouched — it still stops', () => {
     expect(mdRunControl({ status: 'preparing', execution_target: 'local' }, connected))
-      .toMatchObject({ action: 'stop', label: '■ Stop Run' })
+      .toMatchObject({ action: 'stop', label: '■ Pause run' })
   })
 })
 

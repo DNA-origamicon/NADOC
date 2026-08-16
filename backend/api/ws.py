@@ -2226,6 +2226,7 @@ async def md_job_status_ws(websocket: WebSocket, job_id: str) -> None:
             # bar even though the detail timeline advances.  Same helper the REST list
             # uses, so the two channels never disagree.
             from backend.api.routes_md import (
+                _alpine_progress_is_synced,
                 _namd_live_progress,
             )  # lazy: avoids a router import cycle
 
@@ -2239,7 +2240,10 @@ async def md_job_status_ws(websocket: WebSocket, job_id: str) -> None:
                 if eta is not None:
                     payload["eta_seconds"] = eta
                 if estimated:
-                    payload["progress_estimated"] = True
+                    if _alpine_progress_is_synced(job):
+                        payload["progress_synced"] = True
+                    else:
+                        payload["progress_estimated"] = True
             except Exception:
                 pass
 

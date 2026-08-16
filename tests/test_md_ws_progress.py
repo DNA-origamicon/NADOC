@@ -13,6 +13,7 @@ computed by the SAME helper the REST list uses (so the two channels never disagr
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -74,6 +75,29 @@ def test_ws_state_push_includes_progress_fraction(tmp_path, monkeypatch):
     # not just per-segment live_metrics.  Before the fix this key was absent.
     assert "progress_fraction" in body
     assert body["progress_fraction"] == 0.5
+
+
+def test_ws_state_push_marks_fresh_connected_alpine_progress_synced(tmp_path, monkeypatch):
+    from backend.core import cluster_ssh
+
+    monkeypatch.setattr(assembly, "_WORKSPACE_DIR", tmp_path)
+    monkeypatch.setattr(namd_runner, "reconcile_job_status", lambda job, ws: job)
+    manager = type("Manager", (), {"is_connected": lambda self: True})()
+    monkeypatch.setattr(cluster_ssh, "get_manager", lambda: manager)
+    job = _running_job(tmp_path)
+    job.execution_target = "alpine"
+    job.live_metrics = {
+        "segment": "s2", "step": 250, "s_per_step": 2.0,
+        "retrieved_at": time.time(),
+    }
+    job.save(tmp_path)
+
+    client = TestClient(app)
+    with client.websocket_connect(f"/ws/md-jobs/{job.job_id}") as ws:
+        body = ws.receive_json()["job"]
+
+    assert body["progress_synced"] is True
+    assert "progress_estimated" not in body
 
 
 def test_ws_state_push_omits_progress_fraction_for_non_running(tmp_path, monkeypatch):
@@ -156,6 +180,22 @@ def test_paused_remote_job_keeps_exact_last_observed_progress(tmp_path):
     assert fraction == 0.5625
     assert eta is None
     assert estimated is False
+
+
+def test_alpine_progress_synced_requires_connection_and_fresh_metrics(tmp_path, monkeypatch):
+    from backend.api.routes_md import _alpine_progress_is_synced
+    from backend.core import cluster_ssh
+
+    job = _running_job(tmp_path)
+    job.execution_target = "alpine"
+    job.live_metrics = {"retrieved_at": 1000.0, "step": 250}
+    manager = type("Manager", (), {"is_connected": lambda self: True})()
+    monkeypatch.setattr(cluster_ssh, "get_manager", lambda: manager)
+
+    assert _alpine_progress_is_synced(job, now=1060.0) is True
+    assert _alpine_progress_is_synced(job, now=1080.0) is False
+    manager.is_connected = lambda: False
+    assert _alpine_progress_is_synced(job, now=1060.0) is False
 
 
 def test_running_remote_minimization_has_live_progress_and_eta(tmp_path):

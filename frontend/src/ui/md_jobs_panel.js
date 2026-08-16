@@ -452,12 +452,13 @@ const RUNPOD_PHASE_TITLE = Object.freeze({
  * @param {object|null} selectedJob
  * @param {object} opts
  * @param {boolean} [opts.runpodReady]    RunPod pre-flight passes (gates ▶ Rent & Run)
+ * @param {boolean} [opts.runpodConnection] RunPod API session is connected
  * @param {string}  [opts.runpodBlocked]  why it does not, for the tooltip
  */
 export function mdRunControl(selectedJob, {
   busy = false, runTarget = 'local', machineBusy = false, queuedIds = [],
   clusterState = 'disconnected', submitting = false,
-  runpodReady = false, runpodBlocked = '',
+  runpodReady = false, runpodConnection = runpodReady, runpodBlocked = '',
 } = {}) {
   if (!selectedJob) {
     return {
@@ -560,7 +561,15 @@ export function mdRunControl(selectedJob, {
     verb: 'Run', isActive: mdJobIsRunning, isResumable: mdJobIsResumable, busy,
   })
   if (base.action === RUN_ACTION.STOP) {
-    return { ...base, title: 'Stop this run. It can be resumed from its last checkpoint.' }
+    const remoteDisconnected = selectedJob.execution_target === 'alpine'
+      ? clusterState !== 'connected'
+      : selectedJob.execution_target === 'runpod' && !runpodConnection
+    return {
+      ...base, label: '■ Pause run', disabled: base.disabled || remoteDisconnected,
+      title: remoteDisconnected
+        ? `Connect to ${selectedJob.execution_target === 'alpine' ? 'Alpine' : 'RunPod'} to pause this run.`
+        : 'Pause this run. It can be resumed from its last checkpoint.',
+    }
   }
   // Already waiting its turn → the button takes it back out of the queue.
   const place = queuedIds.indexOf(selectedJob.job_id)
@@ -3280,6 +3289,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // check with its exact PSF atom count immediately before it creates any billing pod.
       // Unknown is blocked too, so the paid action cannot race the pre-flight request.
       runpodReady: runpodCanLaunch(_runpod.preflight),
+      runpodConnection: runpodConnected(_runpod.preflight),
       runpodBlocked: runpodBlockReason(_runpod.preflight),
     })
   }
@@ -3410,12 +3420,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         const d = await api.stopMdJob(_selectedId)
         // Surface the deferred-scancel case (stopped locally while the cluster session is
         // down → SLURM cancel happens on reconnect) so the user knows it's not orphaned.
-        showToast(d?.pending_scancel ? (d.message || 'Stopped — will cancel on reconnect')
-                                     : 'Stop requested', 'warn')
+        showToast(d?.pending_scancel ? (d.message || 'Paused — will cancel on reconnect')
+                                     : 'Pause requested', 'warn')
       } catch (err) {
         console.warn(`[${_ts()}] md-jobs: stop failed`, err)
       }
-    }, { label: 'Stopping…' })
+    }, { label: 'Pausing…' })
   }
   /** Start a job that was CREATED but not run — the "＋ New job → Create job" outcome.
    *  The package is already solvated, so this is just the launch; the only gate that
@@ -5048,6 +5058,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     hasJobSettings: (jobId) =>
       jobSettingsState(_jobs.find((j) => j.job_id === jobId)).available,
     canEditJob: (jobId) => mdJobEditable(_jobs.find((j) => j.job_id === jobId)),
+    isRunpodConnected: () => runpodConnected(_runpod.preflight),
     // Consolidated Archive/Delete (the section-level #simulate-job-actions dispatches to the
     // selected node's engine panel; both operate on this panel's currently-selected job).
     deleteSelected, archiveSelected,
