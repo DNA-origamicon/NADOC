@@ -52,6 +52,7 @@ export async function attachMdDisplayLog(page, { intervalMs = 500 } = {}) {
     window.addEventListener('nadoc:md-display-process', capture('process'))
     window.addEventListener('nadoc:op-progress', capture('popup'))
     window.addEventListener('nadoc:api-request', capture('api'))
+    window.addEventListener('nadoc:operation-timing', capture('operation'))
     window.__nadocApiTraceAll = true
   })
 
@@ -125,6 +126,7 @@ export async function attachMdDisplayLog(page, { intervalMs = 500 } = {}) {
       dotShown: !!ind && ind.style.display !== 'none',
       refreshShown: !!refresh && refresh.style.display !== 'none',
       refreshDisabled: !!refresh?.disabled,
+      refreshGate: refresh?.dataset?.gateReason || '',
       displayOn: !!toggle?.checked,
       jobId: sel?.dataset?.jobId ?? null,
       popupVisible: !!popup?.classList.contains('visible'),
@@ -226,7 +228,7 @@ function fmt(r) {
       r.displayOn ? 'display=ON' : 'display=off',
       r.jobId ? `job=${r.jobId}` : 'job=—',
       r.dotShown ? `dot=${r.dot || '—'}` : 'dot=hidden',
-      r.refreshShown ? (r.refreshDisabled ? 'refresh=busy' : 'refresh=shown') : 'refresh=hidden',
+      r.refreshShown ? (r.refreshDisabled ? `refresh=blocked:${r.refreshGate || 'unknown'}` : 'refresh=shown') : 'refresh=hidden',
       r.popupVisible ? `popup=${r.popupHeader || 'Working…'}` : 'popup=off',
       r.frameProgressVisible ? `progress=${r.frameProgress || '—'}` : 'progress=off',
     ]
@@ -235,6 +237,11 @@ function fmt(r) {
   if (r.kind === 'display') return `${t}DISPLAY ${r.state}: ${(r.message || '').slice(0, 160)}`
   if (r.kind === 'process') return `${t}PROCESS ${r.phase}: ${compact(r)}`
   if (r.kind === 'api') return `${t}API ${r.phase} #${r.id} ${r.method} ${r.path}${r.durationMs == null ? '' : ` ${Math.round(r.durationMs)}ms`}`
+  if (r.kind === 'operation') {
+    const phases = (r.marks || []).map((m, i, all) =>
+      `${m.name}=+${Math.round(m.elapsedMs - (all[i - 1]?.elapsedMs ?? 0))}ms`).join(' ')
+    return `${t}OP ${r.label} ${Math.round(r.totalMs || 0)}ms ${phases}`
+  }
   if (r.kind === 'popup') return `${t}POPUP ${r.action} depth=${r.depth} visible=${r.visible} “${r.header || ''}” ${r.label || ''}`
   if (r.kind === 'network') return `${t}NET ${r.phase} ${r.status || ''} ${r.method || ''} ${r.url}`
   if (r.kind === 'websocket') return `${t}WS ${r.phase} ${r.url} ${(r.payload || r.error || '').slice(0, 180)}`

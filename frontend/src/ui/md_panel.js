@@ -594,8 +594,10 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
       _log(`Ready: ${_nFrames} frames, ${ns}, ${temp}`, 'ok')
       if (msg.trajectory_path) _log(`Trajectory: ${_basename(msg.trajectory_path)}`, 'info')
       _emitMdDisplayEvent({
-        state: 'ready',
-        message: `Loaded ${_nFrames} MD frames`,
+        // Topology/model readiness is only an intermediate state. A usable cached
+        // frame is announced separately as `prewarmed`; a visible one as `frame`.
+        state: 'topology-ready',
+        message: `Prepared topology for ${_nFrames} MD frames`,
         nFrames: _nFrames,
         totalNs: _totalNs,
       }, eventJobId)
@@ -1062,7 +1064,9 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
       if (action === 'reuse-open') {
         // Socket already warm — no load event will fire, so signal readiness
         // explicitly for the toggle's indicator dot.
-        _emitMdDisplayEvent({ state: 'ready', message: 'MD display warm' }, _jobId)
+        _emitMdDisplayEvent({
+          state: 'topology-ready', message: 'MD topology is prepared; loading latest frame',
+        }, _jobId)
         _setLive(false)
         _sendPoll()
         return

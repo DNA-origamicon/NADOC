@@ -59,6 +59,16 @@ export function finishOperationAfterRender(trace = _active) {
       for (const resolve of _idleWaiters) resolve()
       _idleWaiters.clear()
     }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('nadoc:operation-timing', {
+        detail: {
+          id: trace.id, label: trace.label, totalMs: trace.totalMs,
+          marks: trace.marks.map(({ name, elapsedMs, data }) => ({
+            name, elapsedMs, ...(data === undefined ? {} : { data }),
+          })),
+        },
+      }))
+    }
     if (trace.totalMs >= SLOW_MS || globalThis.__nadocOperationTraceAll) {
       const rows = trace.marks.map((mark, i) => ({
         phase: mark.name,

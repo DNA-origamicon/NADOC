@@ -315,6 +315,7 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
   const diagnosticId = ++_diagnosticRequestSeq
   _emitRequestDiagnostic({ phase: 'start', id: diagnosticId, method, path, suppressBusy })
   const isTimedOperation = method !== 'GET' && (
+    path === '/design/load' || path === '/design/import' ||
     path === '/design/bundle' || path === '/design/bundle-segment' ||
     path === '/design/bundle-continuation' || path === '/design/bundle-deformed-continuation' ||
     path === '/design/overhang/extrude' || /\/assembly\/instances\/[^/]+\/overhang\/extrude$/.test(path)
@@ -698,6 +699,7 @@ export async function _syncFromDesignResponse(json, { skipGeometry = false, tran
     }
     // Re-fetch full geometry whenever the design changes (getGeometry stores it directly).
     if (json.design) {
+      markOperationTiming('geometry-fetch-start')
       await getGeometry()
       markOperationTiming('geometry-fetched')
       const axes0 = Object.values(store.getState().currentHelixAxes ?? {})[0]
@@ -2218,7 +2220,31 @@ export async function runOxdna(steps = 10000) {
 // /md/jobs API.  They do NOT mutate the design, so they bypass _request's
 // design-sync and just return parsed JSON (or null on error).
 
+// Job panels share several list/status endpoints and can refresh from timers, tab changes,
+// SSE, and explicit actions in the same turn. Collapse identical, non-abortable GETs while
+// one is in flight; each caller still receives the same parsed result. Requests carrying an
+// AbortSignal stay independent because sharing would make one consumer's cancellation
+// semantics lie to the others.
+const _jobJsonGetInflight = new Map()
+
 async function _oxdnaJSON(method, path, body = undefined, { signal } = {}) {
+  if (method !== 'GET' || signal != null) return _oxdnaJSONRequest(method, path, body, { signal })
+  const key = `${JSON.stringify(docHeaders())}|${path}`
+  const existing = _jobJsonGetInflight.get(key)
+  if (existing) {
+    _emitRequestDiagnostic({ phase: 'coalesced', method, path, transport: 'job-json' })
+    return existing
+  }
+  const request = _oxdnaJSONRequest(method, path, body, { signal })
+  _jobJsonGetInflight.set(key, request)
+  try {
+    return await request
+  } finally {
+    if (_jobJsonGetInflight.get(key) === request) _jobJsonGetInflight.delete(key)
+  }
+}
+
+async function _oxdnaJSONRequest(method, path, body = undefined, { signal } = {}) {
   const diagnosticId = ++_diagnosticRequestSeq
   const diagnosticStarted = performance.now()
   _emitRequestDiagnostic({
@@ -4085,8 +4111,15 @@ export async function saveAssemblyAs(path, overwrite = true) {
 
 // ── Workspace library ─────────────────────────────────────────────────────────
 
+let _libraryFilesInflight = null
 export async function listLibraryFiles() {
-  return _request('GET', '/library/files')   // returns array directly
+  if (_libraryFilesInflight) return _libraryFilesInflight
+  _libraryFilesInflight = _request('GET', '/library/files')   // returns array directly
+  try {
+    return await _libraryFilesInflight
+  } finally {
+    _libraryFilesInflight = null
+  }
 }
 
 /** Simulation bytes keyed by workspace-relative design path. Kept separate so
@@ -4098,20 +4131,28 @@ export async function libraryDiskUsage() {
 /** Currently-busy (running/preparing) MD + oxDNA jobs across the workspace, for the
  *  welcome-screen activity spinner and the concurrent-job guard. See routes_jobs.py. */
 let _activeJobsCache = null
+let _activeJobsInflight = null
 export async function listActiveJobs() {
   // This display-only poll repeatedly contended with the CPU-heavy geometry
   // response during large edits. Hold the last four-second poll result while an
   // interactive operation is in flight; launch guards refresh normally once the
   // operation's final frame has rendered.
   if (activeOperationTiming() && _activeJobsCache) return _activeJobsCache
+  if (_activeJobsInflight) return _activeJobsInflight
   await whenOperationIdle()
   // Background activity polling must never own the centred operation popup. On a
   // saturated MD host this read can take tens of seconds and several independent
   // UI consumers call it concurrently; letting each one increment op-progress's
   // ref-count strands a generic "Working…" modal over an otherwise usable app.
-  const result = await _request('GET', '/jobs/active', undefined, { suppressBusy: true })
-  if (result) _activeJobsCache = result
-  return result
+  if (_activeJobsInflight) return _activeJobsInflight
+  _activeJobsInflight = _request('GET', '/jobs/active', undefined, { suppressBusy: true })
+  try {
+    const result = await _activeJobsInflight
+    if (result) _activeJobsCache = result
+    return result
+  } finally {
+    _activeJobsInflight = null
+  }
 }
 
 /** Current external GPU-compute contention (a non-NADOC process holding the GPU),
@@ -4127,13 +4168,23 @@ export async function gpuStatus(devices = '0') {
  *  { cpu_pct, ram_pct, ram_used_mb, ram_total_mb, gpu_present, gpu_pct, vram_pct,
  *  vram_used_mb, vram_total_mb } (percent fields null when unavailable). See
  *  routes_system.py system_resources. */
+const _systemResourcesInflight = new Map()
 export async function getSystemResources(devices = '0') {
   // High-frequency monitor poll: on a saturated host even this cheap probe can
   // queue for seconds. It must update its card when it lands, never open/ref-count
   // the centred operation popup over unrelated user work.
-  return _request('GET', `/system/resources?devices=${encodeURIComponent(devices)}`, undefined, {
+  const key = String(devices)
+  const existing = _systemResourcesInflight.get(key)
+  if (existing) return existing
+  const request = _request('GET', `/system/resources?devices=${encodeURIComponent(devices)}`, undefined, {
     suppressBusy: true,
   })
+  _systemResourcesInflight.set(key, request)
+  try {
+    return await request
+  } finally {
+    if (_systemResourcesInflight.get(key) === request) _systemResourcesInflight.delete(key)
+  }
 }
 
 /** Recommended NAMD Advanced settings for the active design on THIS machine
@@ -4169,6 +4220,7 @@ export async function simulateRecommendation(devices = '0') {
 /** The UNIFIED simulation job list — every oxDNA + LAMMPS run for the active design,
  *  normalized into one common node shape (engine/kind/status/parent_job_id/…) so the
  *  Simulate panel renders GPU-oxDNA and CPU-LAMMPS runs in one hierarchical list. */
+const _simJobsInflight = new Map()
 export async function listSimJobs(designSourcePath = null, showAll = false) {
   const q = new URLSearchParams()
   if (designSourcePath) q.set('design_source_path', designSourcePath)
@@ -4179,7 +4231,16 @@ export async function listSimJobs(designSourcePath = null, showAll = false) {
   // saturates the machine this endpoint routinely exceeds the threshold, and a
   // repeating poll would otherwise flash the modal on a loop.
   await whenOperationIdle()
-  return _request('GET', `/simulate/jobs${s ? `?${s}` : ''}`, undefined, { suppressBusy: true })
+  const path = `/simulate/jobs${s ? `?${s}` : ''}`
+  const existing = _simJobsInflight.get(path)
+  if (existing) return existing
+  const request = _request('GET', path, undefined, { suppressBusy: true })
+  _simJobsInflight.set(path, request)
+  try {
+    return await request
+  } finally {
+    if (_simJobsInflight.get(path) === request) _simJobsInflight.delete(path)
+  }
 }
 
 export async function getLibraryFileContent(path) {

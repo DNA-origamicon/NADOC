@@ -4,6 +4,7 @@ import { attachMdDisplayLog } from './helpers/md_display_log.js'
 
 const JOB_ID = '82a3cd08ed4f'
 const OUT = 'e2e/logs/md_overhang_alignment'
+const CAPTURE_SCENE_SCREENSHOTS = process.env.NADOC_AUDIT_SCENE_SCREENSHOTS === '1'
 
 async function domClick(locator) {
   await locator.waitFor({ state: 'attached', timeout: 30_000 })
@@ -36,9 +37,14 @@ test('VoltronCoreArm MD overhangs and rods use the applied active frame', async 
     await page.evaluate(() => {
       window.__NADOC_DBG__.renderer.setAnimationLoop(null)
       window.__nadocDiagnosticRenderPaused = true
-      window.__NADOC_DBG__.renderer.render(window.__NADOC_DBG__.scene, window.__NADOC_DBG__.camera)
     })
-    await page.screenshot({ path: `${OUT}_00_equilibrium.png`, timeout: 180_000 })
+    if (CAPTURE_SCENE_SCREENSHOTS) {
+      await page.evaluate(() => window.__NADOC_DBG__.renderer.render(
+        window.__NADOC_DBG__.scene, window.__NADOC_DBG__.camera))
+      await page.screenshot({ path: `${OUT}_00_equilibrium.png`, timeout: 180_000 })
+    } else {
+      log.note('scene-screenshot-skipped:equilibrium (requires NADOC_AUDIT_SCENE_SCREENSHOTS=1)')
+    }
 
     await domClick(page.locator('.left-tab-btn[data-tab="dynamics"]'))
     await domClick(page.locator('.engine-selector-btn[data-engine="namd"]'))
@@ -136,9 +142,13 @@ test('VoltronCoreArm MD overhangs and rods use the applied active frame', async 
       }
     })
 
-    await page.evaluate(() => window.__NADOC_DBG__.renderer.render(
-      window.__NADOC_DBG__.scene, window.__NADOC_DBG__.camera))
-    await page.screenshot({ path: `${OUT}_01_md_applied.png`, timeout: 180_000 })
+    if (CAPTURE_SCENE_SCREENSHOTS) {
+      await page.evaluate(() => window.__NADOC_DBG__.renderer.render(
+        window.__NADOC_DBG__.scene, window.__NADOC_DBG__.camera))
+      await page.screenshot({ path: `${OUT}_01_md_applied.png`, timeout: 180_000 })
+    } else {
+      log.note('scene-screenshot-skipped:md-applied (requires NADOC_AUDIT_SCENE_SCREENSHOTS=1)')
+    }
     fs.writeFileSync(`${OUT}_measurements.json`, JSON.stringify(measurements, null, 2))
   } finally {
     await log.stop()

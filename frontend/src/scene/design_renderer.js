@@ -22,6 +22,7 @@ import { clusterAlphaForNuc, clusterAlphaKeys, clusterDisplaySignature } from '.
 import { buildClusterColorLookup } from './helix_renderer/palette.js'
 import { installInstanceAlpha, setInstanceAlpha } from './instance_alpha.js'
 import { markOperationTiming, finishOperationAfterRender } from '../perf/operation_timing.js'
+import { designRebuildAwaitingGeometry } from './design_render_readiness.js'
 
 /**
  * Initialise the design renderer.
@@ -728,6 +729,7 @@ export function initDesignRenderer(scene, storeRef) {
     } else if (storeRef.getState().deformToolActive) {
       _traverseSetOpacity(_helixCtrl.root, 0.15)
     }
+    markOperationTiming('scene-postbuild-complete')
   }
 
   // ── Fix B part 2 — in-place metadata fast path ───────────────────────────
@@ -1144,9 +1146,20 @@ export function initDesignRenderer(scene, storeRef) {
       console.warn(`[CN f${window._cnFrame}] design_renderer._rebuild() geo:${geoChanged} des:${designChanged} loop:${loopChanged}`,
         new Error().stack.split('\n').slice(2, 8).join('\n'))
     }
+    markOperationTiming('scene-rebuild-trigger', {
+      geoChanged, designChanged, loopChanged,
+      nucleotides: newState.currentGeometry?.length ?? 0,
+    })
     _rebuild(newState.currentGeometry, newState.currentDesign, newState.currentHelixAxes)
     markOperationTiming('scene-rebuilt')
-    finishOperationAfterRender()
+    if (designRebuildAwaitingGeometry(newState.currentDesign, newState.currentGeometry)) {
+      // `/design/import` installs topology first, then awaits `/geometry`. Keep the
+      // operation active across that gap so background polling remains deferred and the
+      // final timing describes the scene the user can actually see.
+      markOperationTiming('scene-awaiting-geometry')
+    } else {
+      finishOperationAfterRender()
+    }
     // Re-apply visibility after rebuild — root covers extra-base beads/slabs as children.
     if (!_designVisible) {
       if (_helixCtrl?.root) _helixCtrl.root.visible = false
@@ -1481,17 +1494,33 @@ export function initDesignRenderer(scene, storeRef) {
      *  `nucs` = plain nucleotide dicts (unique high bp_index, `cap<i>` helix/strand ids);
      *  `colorHex` colours them.  Pass [] to remove them.  Triggers a rebuild. */
     setExtraNucleotides(nucs, colorHex = null, highlight = undefined) {
-      _extraNucs = Array.isArray(nucs) ? nucs : []
+      const nextNucs = Array.isArray(nucs) ? nucs : []
+      const nextColor = colorHex == null
+        ? _extraColor
+        : (typeof colorHex === 'string' ? parseInt(colorHex.replace(/^#/, ''), 16) : colorHex)
+      const nextHighlight = highlight === undefined ? _captureHighlight : !!highlight
+      // Surface-strand synchronization emits an empty reset during initial design load.
+      // Rebuilding the entire 14k-position scene for an already-empty overlay cost ~3 s;
+      // two such resets accounted for both unexplained post-geometry rebuilds.
+      if (nextNucs.length === 0 && _extraNucs.length === 0) {
+        // Colour/highlight changes have no rendered target while the overlay is empty.
+        // Remember them for a later non-empty update, but do not rebuild the design.
+        _extraNucs = nextNucs
+        _extraColor = nextColor
+        _captureHighlight = nextHighlight
+        _captureGlowLayer.clear()
+        return
+      }
+      _extraNucs = nextNucs
       // nucColor → setColorAt(setHex(color)) needs an INTEGER; the store's strand colours are
       // ints too, so parse a '#rrggbb' string to an int.
-      if (colorHex != null) {
-        _extraColor = (typeof colorHex === 'string')
-          ? parseInt(colorHex.replace(/^#/, ''), 16)
-          : colorHex
-      }
-      if (highlight !== undefined) _captureHighlight = !!highlight
+      _extraColor = nextColor
+      _captureHighlight = nextHighlight
       const { currentGeometry, currentDesign, currentHelixAxes } = storeRef.getState()
       if (currentGeometry && currentDesign) {
+        markOperationTiming('extra-nucleotides-rebuild', {
+          count: _extraNucs.length, highlight: _captureHighlight,
+        })
         _rebuild(currentGeometry, currentDesign, currentHelixAxes)
         // _rebuild allocates a FRESH root with visible=true. Without this the CG model pops
         // back on under an active atomistic/surface rep — and stays up until the oxDNA

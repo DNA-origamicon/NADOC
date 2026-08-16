@@ -611,6 +611,18 @@ export function mdRunControl(selectedJob, {
   }
 }
 
+/** Resolve the primary control strictly from the selected id.
+ *
+ * A queued Alpine job elsewhere in the list must never turn the button into Submit.
+ * Keeping this lookup beside the pure control model makes that selection boundary
+ * explicit and testable instead of relying on a caller to avoid a queue-wide fallback. */
+export function mdRunControlForSelection(jobs, selectedId, options = {}) {
+  const selected = selectedId
+    ? (Array.isArray(jobs) ? jobs.find(job => job?.job_id === selectedId) : null)
+    : null
+  return mdRunControl(selected ?? null, options)
+}
+
 /** Pure: what should the detail-WebSocket watchdog do for the selected job?
  *  The status WS only drives a LOCAL, non-terminal job — so:
  *    'disarm'    → nothing to watch (no selection / terminal / remote-SLURM/Alpine job)
@@ -968,10 +980,45 @@ export function mdJobNeedsLiveDisplay(job) {
   return active && local
 }
 
-/** Pure readiness state for the explicit remote-frame Refresh control. */
-export function mdRemoteRefreshState({ connected, fetching = false, warming = false, ready = false } = {}) {
-  if (!connected) return 'red'
-  return fetching || warming || !ready ? 'yellow' : 'green'
+/** Pure, user-facing gate for the explicit remote-frame Refresh control. */
+export function mdRemoteRefreshGate({ connected, fetching = false, warming = false, ready = false } = {}) {
+  if (!connected) return {
+    state: 'red', reason: 'disconnected', enabled: false,
+    label: 'Reconnect to Alpine to refresh the frame',
+    title: 'Remote service is not connected',
+  }
+  if (fetching) return {
+    state: 'yellow', reason: 'fetching', enabled: false,
+    label: 'Fetching the latest remote frame…',
+    title: 'A remote-frame refresh is already in progress',
+  }
+  if (warming) return {
+    state: 'yellow', reason: 'warming', enabled: false,
+    label: 'Preparing the cached display frame…',
+    title: 'Preparing the latest Display MD frame',
+  }
+  if (!ready) return {
+    state: 'yellow', reason: 'job-not-running', enabled: false,
+    label: 'Refresh unlocks when the remote job is running',
+    title: 'Connected; waiting for the remote job to run',
+  }
+  return {
+    state: 'green', reason: 'ready', enabled: true,
+    label: '', title: 'Ready to check for a newer MD frame',
+  }
+}
+
+/** Backwards-compatible traffic-light projection. */
+export function mdRemoteRefreshState(options = {}) {
+  return mdRemoteRefreshGate(options).state
+}
+
+/** Pure: passive control repaints must not replace cached-frame display progress with
+ * connection policy.  Only warming is part of the current display operation; a
+ * disconnected/not-running reason belongs on the Refresh control until the user
+ * explicitly asks to refresh (whose click handler announces the blocking reason). */
+export function mdRemoteRefreshPassiveStatus(gate) {
+  return gate?.reason === 'warming' ? gate.label : ''
 }
 
 /** Pure: compact duration label from a number of seconds (e.g. "45s", "6m", "1h 3m"). */
@@ -1533,6 +1580,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // ☁ Submit to Alpine is gated on a live session, so signing in has to unlock it
     // without the user having to reselect the job.
     _paintRunControl()
+    // Use the broadcast value directly. The connection owner's getter may still expose
+    // the previous state while this event is being delivered.
+    _updateLiveFrameControls(_selectedJob(), state)
     // Edge-detect: the chip re-broadcasts on every 15 s poll, not just transitions.
     const became = state === 'connected' && _lastClusterState !== 'connected'
     _lastClusterState = state
@@ -2080,29 +2130,32 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   /** Every running non-local job uses the same explicit refresh interaction. */
-  function _updateLiveFrameControls(job) {
+  function _updateLiveFrameControls(job, clusterStateOverride = null) {
     if (!liveFrameRefreshBtn) return
     const remote = job?.execution_target === 'runpod' || job?.execution_target === 'alpine'
     const show = remote && !!displayToggle?.checked
     const connected = job?.execution_target === 'runpod'
       ? runpodConnected(_runpod.preflight)
-      : getClusterState?.() === 'connected'
+      : (clusterStateOverride ?? getClusterState?.()) === 'connected'
     const ready = job?.execution_target === 'runpod' ? mdIsPodRunning(job) : mdIsRemoteRunning(job)
-    const state = mdRemoteRefreshState({
+    const gate = mdRemoteRefreshGate({
       connected,
       fetching: _liveFrameFetching,
       warming: _alpineDisplayWarming,
       ready,
     })
+    const state = gate.state
     liveFrameRefreshBtn.style.display = show ? 'flex' : 'none'
-    liveFrameRefreshBtn.disabled = state !== 'green'
+    liveFrameRefreshBtn.disabled = !gate.enabled
+    liveFrameRefreshBtn.dataset.gateReason = gate.reason
+    liveFrameRefreshBtn.setAttribute('aria-disabled', String(!gate.enabled))
     liveFrameRefreshBtn.style.opacity = (_liveFrameFetching || _alpineDisplayWarming) ? '0.5' : '1'
     liveFrameRefreshBtn.style.cursor = state === 'green' ? 'pointer' : 'default'
-    liveFrameRefreshBtn.title = state === 'red'
-      ? 'Remote service is not connected'
-      : state === 'yellow'
-        ? (_alpineDisplayWarming ? 'Preparing the latest Display MD frame' : 'Connected; waiting for the job status')
-        : 'Ready to check for a newer MD frame'
+    liveFrameRefreshBtn.title = gate.title
+    const passiveStatus = mdRemoteRefreshPassiveStatus(gate)
+    if (show && passiveStatus && !_liveFrameFetching) {
+      _setDisplayStatus(passiveStatus, _C.warn, _alpineDisplayWarming)
+    }
     if (liveFrameRefreshDot) {
       liveFrameRefreshDot.style.background = state === 'red'
         ? '#f85149'
@@ -2117,6 +2170,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   liveFrameRefreshBtn?.addEventListener('click', async () => {
     const job = _jobs.find(j => j.job_id === _selectedId)
     if (!job || _liveFrameFetching) return
+    if (job.execution_target === 'alpine') {
+      const status = await api.getClusterStatus().catch(() => null)
+      if (status?.state !== 'connected') {
+        _updateLiveFrameControls(job, status?.state ?? 'disconnected')
+        _setDisplayStatus('Reconnect to Alpine to refresh the frame', _C.err)
+        return
+      }
+    }
     const got = await _fetchLiveFrame(job.job_id, { force: true })
     _updateLiveFrameControls(job)
     if (!got) { _paintRemoteSnapshotStatus(job); return }
@@ -3131,16 +3192,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (eventJobId && eventJobId !== _selectedId) return
     const eventJob = _jobs.find(j => j.job_id === (eventJobId || _selectedId))
     const remoteDisplay = mdIsRemoteJob(eventJob)
-    // Drive the readiness dot for BOTH prewarm (toggle off) and live display.
-    // 'loading' → warming; 'ready'/'frame' → ready; 'error' → error.
+    // Drive the readiness dot for BOTH prewarm (toggle off) and live display. Topology
+    // readiness is still warming: only a cached/applied frame makes the display ready.
     if (!remoteDisplay) {
       if (state === 'error') _setDisplayIndicator('error')
       else if (state === 'frame' || state === 'prewarmed') _setDisplayIndicator('ready')
-      else if (state === 'ready') _setDisplayIndicator(displayToggle?.checked ? 'warming' : 'ready')
-      else if (state === 'loading') _setDisplayIndicator('warming')
+      else if (state === 'topology-ready' || state === 'loading') _setDisplayIndicator('warming')
     } else if (eventJob?.execution_target === 'alpine' && _alpineDisplayWarming) {
       // Alpine selection reuses the local prewarm socket after its one-shot download.
-      // `ready` means only that topology parsing completed; keep Refresh disabled until
+      // `topology-ready` means only that parsing completed; keep Refresh disabled until
       // the requested frame itself has been reconstructed and cached.
       if (state === 'error') {
         _alpineDisplayWarming = false
@@ -3166,12 +3226,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       _clearInheritedSeed(false)
       _mdFrameShown = true
     }
-    // A frame/ready state means data is on screen → drop the loading spinner; the
-    // 'loading' state (trajectory still being fetched/streamed) keeps it spinning.
+    // Only `frame` means data is on screen. Loading and topology-ready retain the spinner.
     if (state === 'error') _setDisplayStatus(`Display failed: ${message}`, _C.err, false)
     else if (remoteDisplay) _setDisplayStatus('', _C.dim, false)
     else if (state === 'frame') _setDisplayStatus(message, _C.accent, false)
-    else if (state === 'ready') _setDisplayStatus(`${message} — loading first frame…`, _C.muted, true)
+    else if (state === 'topology-ready') _setDisplayStatus(`${message}…`, _C.muted, true)
     else _setDisplayStatus(message, _C.muted, true)   // local 'loading'
   })
 
@@ -3201,7 +3260,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (mdJobIsDraft(sel)) {
       return { action: RUN_ACTION.RUN, label: mdDraftRunLabel(sel), disabled: _launching }
     }
-    return mdRunControl(sel, {
+    return mdRunControlForSelection(_jobs, _selectedId, {
       busy: _launching,
       runTarget: _currentRunTarget(),
       // The machine runs one job at a time: while something is going, ▶ Run becomes
@@ -3630,7 +3689,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     },
     getJobs: () => _jobs,
     getPartPath: () => _currentPartPath(),
-    onJobCreated: jobId => { _reselectJob(jobId) },
+    onJobCreated: async jobId => {
+      // The launch paths normally refetch before returning, but creation can also be
+      // reported by an integration callback. Never leave the previously-selected job
+      // owning the Run button while the new record is waiting to appear in this cache.
+      if (!_jobs.some(job => job.job_id === jobId)) await _fetchJobs()
+      _reselectJob(jobId)
+    },
     onOptimizeMount: mount => _wireOptimize(mount),
   })
 

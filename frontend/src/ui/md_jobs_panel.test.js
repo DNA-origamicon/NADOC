@@ -242,7 +242,7 @@ describe('newestCompletedForPart (cross-engine compare fallback)', () => {
   })
 })
 
-import { mdJobIsActive, mdJobIsRunning, mdJobOccupiesLocalMachine, mdRequestedRunTarget, mdRunpodGpuKeyFor, mdJobIsStartable, mdJobIsResumable, mdRunControl, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob, mdWatchdogDecision, mdRemoteReconnectPrompt, mdJobIsDraft, mdDraftRunLabel, mdJobRowSig, mdJobRowCtx, gpuFallbackFromToggle, mdQueueable, mdQueueRowLabel, mdRunpodStartable, mdRunpodPhase, preferredMdSelection } from './md_jobs_panel.js'
+import { mdJobIsActive, mdJobIsRunning, mdJobOccupiesLocalMachine, mdRequestedRunTarget, mdRunpodGpuKeyFor, mdJobIsStartable, mdJobIsResumable, mdRunControl, mdRunControlForSelection, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob, mdWatchdogDecision, mdRemoteReconnectPrompt, mdJobIsDraft, mdDraftRunLabel, mdJobRowSig, mdJobRowCtx, gpuFallbackFromToggle, mdQueueable, mdQueueRowLabel, mdRunpodStartable, mdRunpodPhase, preferredMdSelection } from './md_jobs_panel.js'
 
 describe('preferredMdSelection', () => {
   const jobs = [
@@ -518,6 +518,21 @@ describe('mdRunControl on Alpine (the ☁ button in the Cluster card folded in h
   it('once prepared → ☁ Submit to Alpine', () => {
     expect(mdRunControl(ready, connected))
       .toMatchObject({ action: 'submit', label: '☁ Submit to Alpine', disabled: false })
+  })
+
+  it('offers Submit only when that queued Alpine job is selected', () => {
+    const completed = { job_id: 'done', status: 'completed', execution_target: 'alpine' }
+    const queued = { job_id: 'new', status: 'queued', execution_target: 'alpine' }
+    const jobs = [completed, queued]
+
+    expect(mdRunControlForSelection(jobs, 'new', connected))
+      .toMatchObject({ action: 'submit', label: '☁ Submit to Alpine', disabled: false })
+    expect(mdRunControlForSelection(jobs, 'done', connected))
+      .toMatchObject({ disabled: true })
+    expect(mdRunControlForSelection(jobs, null, connected))
+      .toMatchObject({ label: '▶ Run', disabled: true })
+    expect(mdRunControlForSelection(jobs, 'missing', connected))
+      .toMatchObject({ label: '▶ Run', disabled: true })
   })
 
   it('no cluster session → the submit is disabled and says why', () => {
@@ -2040,7 +2055,10 @@ describe('mdForcesProvenance', () => {
 })
 
 // ── live-frame fetch for a job still running on the cluster ──────────────────
-import { mdIsRemoteRunning, mdJobNeedsLiveDisplay, mdRemoteRefreshState } from './md_jobs_panel.js'
+import {
+  mdIsRemoteRunning, mdJobNeedsLiveDisplay, mdRemoteRefreshGate,
+  mdRemoteRefreshPassiveStatus, mdRemoteRefreshState,
+} from './md_jobs_panel.js'
 
 describe('live-frame fetch (a running Alpine job has its trajectory on the cluster)', () => {
   const running   = { execution_target: 'alpine', status: 'running',  slurm_job_id: '30958617' }
@@ -2071,6 +2089,37 @@ describe('live-frame fetch (a running Alpine job has its trajectory on the clust
     expect(mdRemoteRefreshState({ connected: true, ready: true, fetching: true })).toBe('yellow')
     expect(mdRemoteRefreshState({ connected: true, ready: true })).toBe('green')
     expect(mdRemoteRefreshState({ connected: false, ready: true })).toBe('red')
+  })
+
+  it('names every Refresh gate so a disabled control is actionable', () => {
+    expect(mdRemoteRefreshGate({ connected: false, ready: true })).toMatchObject({
+      state: 'red', reason: 'disconnected', enabled: false,
+    })
+    expect(mdRemoteRefreshGate({ connected: true, ready: true, fetching: true })).toMatchObject({
+      state: 'yellow', reason: 'fetching', enabled: false,
+    })
+    expect(mdRemoteRefreshGate({ connected: true, ready: true, warming: true })).toMatchObject({
+      state: 'yellow', reason: 'warming', enabled: false,
+    })
+    expect(mdRemoteRefreshGate({ connected: true, ready: false })).toMatchObject({
+      state: 'yellow', reason: 'job-not-running', enabled: false,
+    })
+    expect(mdRemoteRefreshGate({ connected: true, ready: true })).toEqual({
+      state: 'green', reason: 'ready', enabled: true,
+      label: '', title: 'Ready to check for a newer MD frame',
+    })
+  })
+
+  it('does not passively replace cached-frame progress with refresh policy', () => {
+    expect(mdRemoteRefreshPassiveStatus(
+      mdRemoteRefreshGate({ connected: false, ready: false }),
+    )).toBe('')
+    expect(mdRemoteRefreshPassiveStatus(
+      mdRemoteRefreshGate({ connected: true, ready: false }),
+    )).toBe('')
+    expect(mdRemoteRefreshPassiveStatus(
+      mdRemoteRefreshGate({ connected: true, ready: true, warming: true }),
+    )).toBe('Preparing the cached display frame…')
   })
 
 })

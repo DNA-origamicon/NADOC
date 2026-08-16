@@ -342,6 +342,9 @@ describe('live solvent side-channel', () => {
       ws.open()
       ws.onmessage({ data: JSON.stringify({ type: 'ready', n_frames: 1 }) })
       expect(seen.some(e => e.state === 'prewarmed')).toBe(false)
+      expect(seen.at(-1)).toMatchObject({
+        state: 'topology-ready', jobId: 'alpine-r1',
+      })
 
       ws.onmessage({ data: JSON.stringify({
         type: 'frame', frame_idx: 0, n_frames: 1,

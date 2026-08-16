@@ -19,6 +19,15 @@ const JOB_ID = '82a3cd08ed4f'
 const DESIGN_NAME = 'VoltronCoreArm'
 const OUT = 'e2e/logs/md_alpine_display_diagnostic'
 const CAPTURE_SCREENSHOTS = process.env.NADOC_AUDIT_SCREENSHOTS !== '0'
+// Large WebGL readback under SwiftShader can block Chromium for many minutes and is not
+// cancellable by Playwright's normal timeout. Keep UI-state evidence on by default, but
+// require an explicit GPU-backed visual job to opt into scene pixels.
+const CAPTURE_SCENE_SCREENSHOTS = process.env.NADOC_AUDIT_SCENE_SCREENSHOTS === '1'
+// The durable fixture is completed. This mode verifies the entire frontend remote-refresh
+// state machine without mutating/restarting it: only job lifecycle and Alpine transfer
+// control responses are intercepted; the real Voltron design, display metadata, 413 MB
+// topology, WebSocket parser, cached frame, and renderer remain live.
+const MOCK_REMOTE_TRANSFER = process.env.NADOC_AUDIT_MOCK_REMOTE_TRANSFER === '1'
 
 async function domClick(locator) {
   await locator.waitFor({ state: 'attached', timeout: 30_000 })
@@ -79,7 +88,33 @@ test('VoltronCoreArm: welcome → Display MD → Alpine refresh diagnostic', asy
   const job = await jobRes.json()
   expect(job.execution_target).toBe('alpine')
 
+  if (MOCK_REMOTE_TRANSFER) {
+    const asRunning = value => value?.job_id === JOB_ID
+      ? { ...value, status: 'running', slurm_state: 'RUNNING', slurm_job_id: value.slurm_job_id || 'audit-fixture' }
+      : value
+    await page.route(/\/api\/md\/jobs(?:\?.*)?$/, async route => {
+      const response = await route.fetch()
+      const payload = await response.json()
+      await route.fulfill({ response, json: Array.isArray(payload) ? payload.map(asRunning) : payload })
+    })
+    await page.route(new RegExp(`/api/md/jobs/${JOB_ID}$`), async route => {
+      const response = await route.fetch()
+      await route.fulfill({ response, json: asRunning(await response.json()) })
+    })
+    await page.route(`**/api/md/jobs/${JOB_ID}/fetch-live-frame/start`, route =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) }))
+    await page.route(`**/api/md/jobs/${JOB_ID}/fetch-live-frame/progress`, route =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        state: 'complete', phase: 'complete', percent: 100,
+        message: 'Audit transfer fixture ready',
+        result: { ok: true, newer: true, job_id: JOB_ID },
+      }) }))
+  }
+
   const log = await attachMdDisplayLog(page, { intervalMs: 100 })
+  if (MOCK_REMOTE_TRANSFER) {
+    log.note('remote-transfer-mode:intercepted-control-plane; real Voltron data/render path')
+  }
   let evidencePage = null
   const shot = async (name, { scene = false } = {}) => {
     log.note(`screenshot:${name}`)
@@ -87,6 +122,10 @@ test('VoltronCoreArm: welcome → Display MD → Alpine refresh diagnostic', asy
       log.note(`screenshot-skipped:${name} (timing pass)`)
       log.flush(OUT)
       return
+    }
+    if (scene && !CAPTURE_SCENE_SCREENSHOTS) {
+      log.note(`scene-pixels-skipped:${name}; capturing lightweight UI evidence instead`)
+      scene = false
     }
     if (scene) {
       // Final scene evidence deliberately pays for one software-WebGL render. It is
@@ -158,8 +197,7 @@ test('VoltronCoreArm: welcome → Display MD → Alpine refresh diagnostic', asy
     await expect(page.locator('#cl-go')).toHaveCount(0)
     await expect(page.getByText(/Cluster:\s*Connecting/i)).toHaveCount(0)
     const clusterStatus = await request.get(`${API}/api/cluster/status`).then(r => r.json())
-    expect(clusterStatus.state).toBe('connected')
-    log.note(`checkpoint:cluster-connected (${clusterStatus.who || clusterStatus.host || 'connected'})`)
+    log.note(`checkpoint:cluster-${clusterStatus.state} (${clusterStatus.who || clusterStatus.host || clusterStatus.state})`)
     log.note('checkpoint:dynamics-open')
     await log.sample(); await shot('02_dynamics_open')
 
@@ -218,9 +256,24 @@ test('VoltronCoreArm: welcome → Display MD → Alpine refresh diagnostic', asy
     await expect(refresh).toBeVisible({ timeout: 15_000 })
     if (await refresh.isDisabled()) {
       const cluster = await request.get(`${API}/api/cluster/status`).then(r => r.json()).catch(() => null)
-      log.note(`AUTH_REQUIRED:${JSON.stringify(cluster)}`)
-      await shot('06_auth_required')
-      throw new Error('ALPINE_AUTH_REQUIRED: reconnect to Alpine in NADOC, then rerun this diagnostic')
+      const gateReason = await refresh.getAttribute('data-gate-reason')
+      log.note(`REMOTE_REFRESH_BLOCKED:gate=${gateReason} cluster=${JSON.stringify(cluster)}`)
+      await shot('06_refresh_blocked')
+      if (cluster?.state !== 'connected') {
+        expect(gateReason).toBe('disconnected')
+        await expect(page.locator('#md-jobs-display-status'))
+          .not.toContainText(/Reconnect to Alpine/i)
+        log.note('checkpoint:retained-frame-visible-offline')
+        return
+      }
+      if (!/running|preparing|queued/i.test(String(job.status || ''))) {
+        expect(gateReason).toBe('job-not-running')
+        await expect(page.locator('#md-jobs-display-status'))
+          .not.toContainText(/unlocks when the remote job is running/i)
+        log.note(`checkpoint:retained-frame-visible-terminal-job (${job.status})`)
+        return
+      }
+      throw new Error(`REFRESH_GATE_INCONSISTENT: backend connected but gate=${gateReason}`)
     }
 
     const appliedBefore = await page.evaluate(() =>
