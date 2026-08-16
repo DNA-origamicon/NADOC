@@ -1,7 +1,29 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { directConnectedOverhangIds, orderStrandNucleotides } from './helix_renderer.js'
+import { coalesceCylinderRuns, directConnectedOverhangIds, orderStrandNucleotides } from './helix_renderer.js'
+
+describe('coalesceCylinderRuns', () => {
+  it('merges only contiguous same-color domains on the same helix', () => {
+    const rows = [
+      { helixId: 'h1', bp_lo: 0, bp_hi: 4, t0: 0, t1: .25, defaultColor: 1 },
+      { helixId: 'h1', bp_lo: 5, bp_hi: 9, t0: .25, t1: .5, defaultColor: 1 },
+      { helixId: 'h1', bp_lo: 10, bp_hi: 12, t0: .5, t1: .65, defaultColor: 2 },
+      { helixId: 'h2', bp_lo: 0, bp_hi: 3, t0: 0, t1: 1, defaultColor: 1 },
+    ]
+    const runs = coalesceCylinderRuns(rows)
+    expect(runs).toHaveLength(3)
+    expect(runs[0]).toMatchObject({ helixId: 'h1', bp_lo: 0, bp_hi: 9, t0: 0, t1: .5, color: 1 })
+    expect(runs[0].domains).toHaveLength(2)
+  })
+
+  it('does not bridge a physical bp gap even when colors match', () => {
+    expect(coalesceCylinderRuns([
+      { helixId: 'h1', bp_lo: 0, bp_hi: 2, t0: 0, t1: .2, defaultColor: 7 },
+      { helixId: 'h1', bp_lo: 5, bp_hi: 8, t0: .5, t1: .8, defaultColor: 7 },
+    ])).toHaveLength(2)
+  })
+})
 
 // A nucleotide with just the fields orderStrandNucleotides reads. `z` stands in for
 // the axial coordinate so we can assert monotone backbone threading through a loop.

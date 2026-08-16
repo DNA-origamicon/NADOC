@@ -74,6 +74,27 @@ export const SLAB_CONNECTOR_RADIUS = 0.025
 // the assembly renderers pass these values straight back into it.
 export const CG_LOD = { full: 0, beads: 1, cylinders: 2 }
 
+/** Merge adjacent same-colour straight-domain records into continuous runs. */
+export function coalesceCylinderRuns(domains = []) {
+  const sorted = [...domains].sort((a, b) =>
+    String(a.helixId).localeCompare(String(b.helixId)) || a.bp_lo - b.bp_lo || a.bp_hi - b.bp_hi)
+  const runs = []
+  for (const dom of sorted) {
+    const previous = runs.at(-1)
+    if (previous && previous.helixId === dom.helixId && previous.color === dom.defaultColor &&
+        dom.bp_lo <= previous.bp_hi + 1) {
+      previous.bp_hi = Math.max(previous.bp_hi, dom.bp_hi)
+      previous.t0 = Math.min(previous.t0, dom.t0)
+      previous.t1 = Math.max(previous.t1, dom.t1)
+      previous.domains.push(dom)
+    } else {
+      runs.push({ helixId: dom.helixId, color: dom.defaultColor, bp_lo: dom.bp_lo,
+        bp_hi: dom.bp_hi, t0: dom.t0, t1: dom.t1, arrow: dom.arrow, domains: [dom] })
+    }
+  }
+  return runs
+}
+
 const Y_HAT       = new THREE.Vector3(0, 1, 0)
 const ID_QUAT     = new THREE.Quaternion()
 
@@ -162,6 +183,7 @@ const _tMatrix = new THREE.Matrix4()
 const _tScale  = new THREE.Vector3()
 const _tPos    = new THREE.Vector3()
 const _physDir  = new THREE.Vector3()   // shared direction scratch (cylinder/cone/segment orientation)
+const _tmpP1    = new THREE.Vector3()   // merged-cylinder endpoint scratch
 const _physDir2 = new THREE.Vector3()   // second scratch for applyPositionLerp
 const _saDir   = new THREE.Vector3()   // straight-axis direction scratch (applyUnfoldOffsets)
 // Axis-segment per-bp-range scratch (reused inside applyPositionLerp's
@@ -1337,6 +1359,17 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   iHelixCylinders.visible = false
   iHelixCylinders.name = 'helixCylinders'
   root.add(iHelixCylinders)
+
+  // Same geometry, but regrouped into maximal adjacent same-colour runs. The
+  // per-domain mesh remains visible to raycasting through material.visible=false.
+  const iMergedHelixCylinders = new THREE.InstancedMesh(
+    GEO_UNIT_CYL, new THREE.MeshLambertMaterial({ color: 0xffffff }), Math.max(1, _domainCylCount),
+  )
+  iMergedHelixCylinders.count = 0
+  iMergedHelixCylinders.frustumCulled = false
+  iMergedHelixCylinders.visible = false
+  iMergedHelixCylinders.name = 'mergedHelixCylinders'
+  root.add(iMergedHelixCylinders)
 
   // Curved-helix straight-proxy instanced mesh — used only for lerp cross-fade.
   // Opacity 1 at t=0 (straight), 0 at t=1 (fully deformed, curved tubes take over).
@@ -2757,7 +2790,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // when overrides are active. A future fourth factor is a new term, not a new sweep.
   const _anyAlpha = () => _hasReference || _repActive || _clusterAlphaKeys.size > 0 || _hiddenNucKeys.size > 0
   function _applyAlphaChannel() {
-    if (!_anyAlpha() && !_repAlphaReady) return
+    if (!_anyAlpha() && !_repAlphaReady) { _refreshMergedCylinderRuns(); return }
+    _disableMergedCylinders()
     for (const e of backboneEntries) _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * _clusterAlphaFor(e.nuc) * _hiddenAlphaFor(e.nuc, e._copy ?? 0))
     for (const e of slabEntries)     _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * _clusterAlphaFor(e.nuc) * _hiddenAlphaFor(e.nuc, e._copy ?? 0))
     for (const e of fluoroEntries)   _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * _clusterAlphaFor(e.nuc) * _hiddenAlphaFor(e.nuc, e._copy ?? 0))
@@ -2851,6 +2885,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     iCurvedHelixCylinders.visible = coarse; _curvedCylGroup.visible = coarse
     iCurvedOverhangCylinders.visible = coarse; iCurvedOverhangFullCylinders.visible = coarse; _curvedOvhgGroup.visible = coarse
     iLinkerBindingCylinders.visible = coarse; iLinkerBridgeCylinders.visible = coarse
+    iMergedHelixCylinders.visible = coarse && _mergedCylActive
   }
   // Effective rep at a duplex column (override wins; else the global rep). Hoisted
   // out of _applyRepOverrides so the curved-tube compositor can consult it too.
@@ -2871,6 +2906,45 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   /** The full alpha for one cylinder instance: ghosting x override x cluster. */
   function _cylFactor(dom) {
     return _refAlphaFor(dom.strandId) * _cylRepVis(dom) * _clusterAlphaForCyl(dom) * _hiddenAlphaForCyl(dom)
+  }
+
+  let _mergedCylActive = false
+  let _mergedCylData = []
+  function _disableMergedCylinders() {
+    _mergedCylActive = false
+    _mergedCylData = []
+    iMergedHelixCylinders.count = 0
+    iMergedHelixCylinders.visible = false
+    iHelixCylinders.material.visible = true
+  }
+  function _refreshMergedCylinderRuns() {
+    if (_anyAlpha() || !_domainCylData.length) { _disableMergedCylinders(); return }
+    const runs = coalesceCylinderRuns(_domainCylData)
+    // Do not substitute an equivalent one-instance-per-domain mesh.
+    if (!runs.some(run => run.domains.length > 1)) { _disableMergedCylinders(); return }
+    let index = 0
+    for (const run of runs) {
+      const s = run.arrow?.aStart, e = run.arrow?.aEnd
+      if (!s || !e) continue
+      const p0 = _tPos.copy(s).lerp(e, run.t0)
+      const p1 = _tmpP1.copy(s).lerp(e, run.t1)
+      _physDir.copy(p1).sub(p0)
+      const length = _physDir.length()
+      if (length < 0.001) continue
+      _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(length))
+      _tPos.copy(p0).add(p1).multiplyScalar(0.5)
+      _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, length, _cylRadiusScale))
+      iMergedHelixCylinders.setMatrixAt(index, _tMatrix)
+      iMergedHelixCylinders.setColorAt(index, _tColor.setHex(run.color))
+      run.cylIdx = index++
+    }
+    iMergedHelixCylinders.count = index
+    iMergedHelixCylinders.instanceMatrix.needsUpdate = true
+    if (iMergedHelixCylinders.instanceColor) iMergedHelixCylinders.instanceColor.needsUpdate = true
+    _mergedCylData = runs
+    _mergedCylActive = index > 0
+    iHelixCylinders.material.visible = !_mergedCylActive
+    iMergedHelixCylinders.visible = _mergedCylActive && (_detailLevel === 2 || _repActive)
   }
 
   // ── Curved (deformed) tube compositor ───────────────────────────────────────
@@ -2916,6 +2990,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   }
 
   function _applyRepOverrides() {
+    _disableMergedCylinders()
     if (!_repActive) {
       // Overrides off — hand the channel back to its other two factors.
       _applyAlphaChannel()
@@ -3313,6 +3388,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         }
       }
       if (curvedOvhgUpd) _markCurvedOvhgCylColorsDirty()
+      _refreshMergedCylinderRuns()
     },
 
     /**
@@ -3454,6 +3530,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         _curvedOvhgCylMesh(dom).setColorAt(dom.cylIdx, _tColor.setHex(c))
       }
       _markCurvedOvhgCylColorsDirty()
+      _refreshMergedCylinderRuns()
     },
 
     /** Look up a backbone entry by "helix_id:bp_index:direction" key (for Fix B part 2). */
@@ -3514,6 +3591,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      * all other cylinders are left at their defaultColor.
      */
     highlightCylinderStrands(strandIds) {
+      _disableMergedCylinders()
       const idSet = strandIds instanceof Set ? strandIds : new Set(Array.isArray(strandIds) ? strandIds : [strandIds])
       for (const dom of _domainCylData) {
         const c = idSet.has(dom.strandId) ? 0xffffff : dom.defaultColor
@@ -3565,6 +3643,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         _curvedOvhgCylMesh(dom).setColorAt(dom.cylIdx, _tColor.setHex(dom.defaultColor))
       }
       _markCurvedOvhgCylColorsDirty()
+      _refreshMergedCylinderRuns()
     },
 
     /**
@@ -4126,6 +4205,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iSlabConnectors.visible = level === 0
       iFluoros.visible           = !coarse
       iHelixCylinders.visible          = coarse
+      iMergedHelixCylinders.visible    = coarse && _mergedCylActive
       iOverhangCylinders.visible       = coarse
       iOverhangFullCylinders.visible   = coarse
       iCurvedHelixCylinders.visible    = coarse
@@ -4135,6 +4215,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       _curvedOvhgGroup.visible         = coarse
       iLinkerBindingCylinders.visible  = coarse
       iLinkerBridgeCylinders.visible   = coarse
+      _refreshMergedCylinderRuns()
       const showArrows = !coarse && _axisArrowsVisible
       if (!showArrows) {
         for (const arrow of axisArrows) {
