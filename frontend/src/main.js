@@ -209,6 +209,7 @@ import { initReprOptionSliders } from './ui/repr_option_sliders.js'
 import { initColoringOptionsPanel } from './ui/coloring_options_panel.js'
 import { initRepresentationSwitcher } from './ui/representation_switcher.js'
 import { initMultiView } from './ui/multi_view.js'
+import { initMultiOverlay } from './ui/multi_overlay.js'
 import { initMdJobsPanel } from './ui/md_jobs_panel.js'
 import { initClusterConnection } from './ui/cluster_connection.js'
 import { initBenchmarkPanel } from './ui/benchmark_panel.js'
@@ -5645,6 +5646,11 @@ async function main() {
     setRenderFn, resetRenderFn,
     setRepresentation: _setRepresentation,
     setColoringMode: _setColoringMode,
+  })
+  initMultiOverlay({
+    document, scene, camera, renderer, canvas, controls, store,
+    setRenderFn, resetRenderFn,
+    setRepresentation: _setRepresentation,
   })
 
   // ── Hide Staples toggle ────────────────────────────────────────────────────────

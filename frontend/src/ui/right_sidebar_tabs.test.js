@@ -44,6 +44,7 @@ describe('right sidebar tabs', () => {
     expect(document.querySelector('#right-tab-content-overhangs #strand-anim-panel')).toBeTruthy()
     expect(document.querySelector('#right-tab-content-visualization #right-view-actions #reset-btn')).toBeTruthy()
     expect(document.querySelector('#right-tab-content-visualization #right-multi-view-body')).toBeTruthy()
+    expect(document.querySelector('#right-tab-content-visualization #right-multi-overlay-body')).toBeTruthy()
     tabs.select('visualization')
     expect(document.getElementById('right-tab-content-properties').hidden).toBe(true)
     expect(document.getElementById('right-tab-content-visualization').hidden).toBe(false)

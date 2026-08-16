@@ -1,6 +1,6 @@
 const TAB_SECTIONS = {
   properties: ['properties-section', 'extrude-panel', 'strand-hist-section', 'groups-panel'],
-  visualization: ['representation-modes-section', 'repr-options-section', 'right-view-actions', 'right-multi-view'],
+  visualization: ['representation-modes-section', 'repr-options-section', 'right-view-actions', 'right-multi-view', 'right-multi-overlay'],
   clustering: ['cluster-panel', 'joints-panel'],
   overhangs: ['overhang-panel', 'overhang-connections-section', 'strand-anim-panel'],
 }
@@ -51,7 +51,12 @@ function buildAddedSections(document) {
   multiViewBody.className = 'ox-card__body'
   const multiView = makeSection(document, 'right-multi-view', 'Multi-view', multiViewBody)
 
-  return { representations, actionsBody, actions, multiView }
+  const multiOverlayBody = document.createElement('div')
+  multiOverlayBody.id = 'right-multi-overlay-body'
+  multiOverlayBody.className = 'ox-card__body'
+  const multiOverlay = makeSection(document, 'right-multi-overlay', 'Multi-overlay', multiOverlayBody)
+
+  return { representations, actionsBody, actions, multiView, multiOverlay }
 }
 
 export function initRightSidebarTabs({ document, storage = globalThis.localStorage } = {}) {
@@ -61,7 +66,7 @@ export function initRightSidebarTabs({ document, storage = globalThis.localStora
   if (!panel || !strip) return null
 
   const added = buildAddedSections(document)
-  panel.append(added.representations, added.actions, added.multiView)
+  panel.append(added.representations, added.actions, added.multiView, added.multiOverlay)
   for (const id of ['reset-btn', 'unhide-all-btn']) {
     const button = document.getElementById(id)
     if (button) added.actionsBody.append(button)

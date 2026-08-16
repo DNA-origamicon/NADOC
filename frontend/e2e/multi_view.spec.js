@@ -78,5 +78,24 @@ test('multi-view controls live inside responsive synchronized viewport panels', 
   expect(Math.abs(canvasBox.width - gridBox.width)).toBeLessThanOrEqual(1)
   expect(Math.abs(canvasBox.height - gridBox.height)).toBeLessThanOrEqual(1)
 
+  // Multi-overlay is mutually exclusive with Multi-view and keeps its numbered
+  // representation/opacity controls in the 3D viewport.
+  await page.locator('#right-tab-toggle').click()
+  await page.locator('#right-multi-overlay .mo-count-btn[data-count="3"]').click()
+  await expect(grid).toHaveAttribute('data-count', '')
+  const overlayControls = page.locator('.mo-viewport-controls')
+  await expect(overlayControls.locator('.mo-layer-row')).toHaveCount(3)
+  await expect(overlayControls.locator('.mo-layer-row[data-ready="true"]')).toHaveCount(3, { timeout: 60_000 })
+  await expect(overlayControls.locator('.mo-representation')).toHaveCount(3)
+  await expect(overlayControls.locator('.mo-opacity')).toHaveCount(3)
+  await overlayControls.locator('.mo-opacity').nth(1).evaluate(input => {
+    input.value = '0.35'; input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await expect(overlayControls.locator('.mo-layer-row').nth(1).locator('output')).toHaveText('35%')
+  await page.locator('#right-multi-overlay .mo-separation-row input').evaluate(input => {
+    input.value = '1'; input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await expect(page.locator('#right-multi-overlay .mo-separation-row output')).toHaveText('100%')
+
   expect(pageErrors).toEqual([])
 })

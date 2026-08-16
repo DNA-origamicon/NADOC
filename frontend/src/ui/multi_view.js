@@ -28,7 +28,7 @@ function layoutIcon(count) {
   return `<span class="mv-layout-icon mv-layout-icon--${count}" aria-hidden="true">${cells}</span>`
 }
 
-function cloneScene(scene) {
+export function cloneMultiScene(scene) {
   const clone = scene.clone(true)
   const interactiveControls = []
   clone.traverse(obj => {
@@ -41,7 +41,7 @@ function cloneScene(scene) {
   return clone
 }
 
-function disposeScene(scene) {
+export function disposeMultiScene(scene) {
   scene?.traverse?.(obj => {
     obj.geometry?.dispose?.()
     const materials = Array.isArray(obj.material) ? obj.material : [obj.material]
@@ -190,14 +190,14 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
 
   async function rebuild() {
     const mine = ++generation
-    for (const panel of panels) { disposeScene(panel.renderScene); panel.renderScene = null }
+    for (const panel of panels) { disposeMultiScene(panel.renderScene); panel.renderScene = null }
     for (const element of viewportGrid.querySelectorAll('.mv-viewport-panel')) element.dataset.ready = 'false'
     for (let i = 0; i < count; i++) {
       await setRepresentation(panels[i].representation)
       if (panels[i].coloring) setColoringMode(panels[i].coloring)
       await Promise.resolve()
       if (mine !== generation || count === 1) return
-      panels[i].renderScene = cloneScene(scene)
+      panels[i].renderScene = cloneMultiScene(scene)
       // Molecular Audit frames the inspected geometry once, then synchronizes
       // navigation. Do the same from the first completed panel.
       if (i === 0 && needsFit) {
@@ -258,7 +258,7 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
     renderControls()
     if (count === 1) {
       generation++; resetRenderFn(); renderer.setScissorTest(false)
-      for (const panel of panels) { disposeScene(panel.renderScene); panel.renderScene = null }
+      for (const panel of panels) { disposeMultiScene(panel.renderScene); panel.renderScene = null }
       const width = canvas.clientWidth || canvas.parentElement?.clientWidth || 1
       const height = canvas.clientHeight || canvas.parentElement?.clientHeight || 1
       const ratio = renderer.getPixelRatio?.() ?? 1
@@ -277,6 +277,9 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
       await setRepresentation(panels[0].representation)
       if (panels[0].coloring) setColoringMode(panels[0].coloring)
     } else {
+      const waits = []
+      globalThis.window?.dispatchEvent(new CustomEvent('nadoc:comparison-mode', { detail: { mode: 'multi-view', waits } }))
+      await Promise.all(waits)
       if (previousCount !== count) needsFit = true
       if (!savedCamera) {
         savedCamera = {
@@ -291,5 +294,14 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
   }
 
   renderControls()
-  return { activate, getCount: () => count, panels, dispose: () => { activate(1); viewportGrid.remove() } }
+  const exclusiveMode = event => {
+    if (event.detail?.mode !== 'multi-overlay' || count <= 1) return
+    const closing = activate(1)
+    event.detail?.waits?.push(closing)
+  }
+  globalThis.window?.addEventListener('nadoc:comparison-mode', exclusiveMode)
+  return { activate, getCount: () => count, panels, dispose: () => {
+    globalThis.window?.removeEventListener('nadoc:comparison-mode', exclusiveMode)
+    activate(1); viewportGrid.remove()
+  } }
 }

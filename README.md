@@ -118,7 +118,8 @@ for interaction rules and the developer contract.
 
 Visualization includes a two-, three-, or four-panel Multi-view for comparing
 independent representations and coloring modes with synchronized, panel-local 3D
-navigation.
+navigation, plus a mutually exclusive Multi-overlay mode for compositing up to four
+representations with independent opacity and dimension-scaled separation.
 
 ### Cluster system & animation
 Helices grouped into named clusters; per-cluster deformation ops; feature log

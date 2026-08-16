@@ -12,7 +12,7 @@ The right sidebar is divided into four vertical tabs:
 | Tab | Sections |
 |---|---|
 | **Properties** | Properties, Strand Lengths, Staple Groups |
-| **Visualization** | Representation toggles, Representation Options, Reset Camera, Unhide All, Multi-view |
+| **Visualization** | Representation toggles, Representation Options, Reset Camera, Unhide All, Multi-view, Multi-overlay |
 | **Clustering** | Movable Clusters, Joints |
 | **Overhangs** | Overhangs, Overhang Connections, Strand Animation |
 
@@ -36,6 +36,22 @@ pan, and zoom are interpreted in the coordinate system of the panel under the po
 then synchronized to the other panels. Collapsing or resizing either sidebar resizes
 all viewports without changing their shared navigation state. Closing Multi-view
 restores the workspace camera and controls.
+
+### Multi-overlay
+
+The **Multi-overlay** card composites one to four independently selected
+representations in the same 3D view. Its numbered Representation menus and per-layer
+Opacity sliders appear in the upper-left of the viewport. The Separation slider in
+the card moves layers evenly along the world X axis: zero overlaps them exactly, while
+one uses the design's longest molecular dimension as the spacing between adjacent
+layers. Offsets are centered around the design, so separation does not introduce a
+one-sided drift.
+
+Multi-view and Multi-overlay are mutually exclusive. Activating either mode closes the
+other cleanly before preparing its representations. Multi-overlay uses isolated scene
+copies, so representations remain visible together even when their normal workspace
+renderers are mutually exclusive. Clicking the active layer-count button exits the
+mode and restores the prior workspace camera.
 
 ## Selection levels
 
