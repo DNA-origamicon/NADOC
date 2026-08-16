@@ -41,6 +41,8 @@ describe('multi-overlay', () => {
     await api.activate(4)
     await vi.waitFor(() => expect(document.querySelectorAll('.mo-layer-row[data-ready="true"]')).toHaveLength(4))
     expect(document.querySelectorAll('.mo-representation')).toHaveLength(4)
+    expect([...document.querySelector('.mo-representation').options].map(option => option.value))
+      .toEqual(expect.arrayContaining(['mrdna-coarse', 'mrdna-fine']))
     expect(document.querySelectorAll('.mo-coloring')).toHaveLength(4)
     expect(document.querySelectorAll('.mo-opacity')).toHaveLength(4)
     const opacity = document.querySelectorAll('.mo-opacity')[1]

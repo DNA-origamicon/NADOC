@@ -6,6 +6,7 @@ import './multi_view.css'
 export const MULTI_VIEW_REPRESENTATIONS = [
   ['hull-prism', 'Hull Prism'], ['cylinders', 'Cylinders'], ['beads', 'Beads'], ['full', 'Full'],
   ['surface', 'Surface'], ['vdw', 'VDW / Space-fill'], ['ballstick', 'Ball & Stick'], ['stick', 'Stick'],
+  ['mrdna-coarse', 'mrDNA Coarse'], ['mrdna-fine', 'mrDNA Fine'],
 ]
 
 /** CSS-pixel panel rectangles, measured from bottom-left for WebGL. */
@@ -193,7 +194,15 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
     for (const panel of panels) { disposeMultiScene(panel.renderScene); panel.renderScene = null }
     for (const element of viewportGrid.querySelectorAll('.mv-viewport-panel')) element.dataset.ready = 'false'
     for (let i = 0; i < count; i++) {
-      await setRepresentation(panels[i].representation)
+      const available = await setRepresentation(panels[i].representation)
+      if (available === false) {
+        panels[i].renderScene = new THREE.Scene()
+        const element = viewportGrid.querySelector(`.mv-viewport-panel[data-panel="${i + 1}"]`)
+        const loading = element?.querySelector('.mv-panel-loading')
+        if (loading) loading.textContent = 'Unavailable'
+        if (element) element.dataset.ready = 'unavailable'
+        continue
+      }
       if (panels[i].coloring) setColoringMode(panels[i].coloring)
       await Promise.resolve()
       if (mine !== generation || count === 1) return
@@ -225,6 +234,8 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
         }
       }
       const element = viewportGrid.querySelector(`.mv-viewport-panel[data-panel="${i + 1}"]`)
+      const loading = element?.querySelector('.mv-panel-loading')
+      if (loading) loading.textContent = 'Loading…'
       if (element) element.dataset.ready = 'true'
     }
   }

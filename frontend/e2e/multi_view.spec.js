@@ -32,6 +32,8 @@ test('multi-view controls live inside responsive synchronized viewport panels', 
   await expect(section.locator('select')).toHaveCount(0)
   await expect(grid.locator('.mv-representation')).toHaveCount(3)
   await expect(grid.locator('.mv-coloring')).toHaveCount(3)
+  await expect(grid.locator('.mv-representation').first().locator('option[value="mrdna-coarse"]')).toHaveText('mrDNA Coarse')
+  await expect(grid.locator('.mv-representation').first().locator('option[value="mrdna-fine"]')).toHaveText('mrDNA Fine')
 
   // Each Molecular-Audit-style control head must be geometrically inside its panel.
   const contained = await grid.locator('.mv-viewport-panel').evaluateAll(panels => panels.every(panel => {
@@ -89,6 +91,8 @@ test('multi-view controls live inside responsive synchronized viewport panels', 
   await expect(overlayControls.locator('.mo-representation')).toHaveCount(3)
   await expect(overlayControls.locator('.mo-coloring')).toHaveCount(3)
   await expect(overlayControls.locator('.mo-opacity')).toHaveCount(3)
+  await expect(overlayControls.locator('.mo-representation').first().locator('option[value="mrdna-coarse"]')).toHaveText('mrDNA Coarse')
+  await expect(overlayControls.locator('.mo-representation').first().locator('option[value="mrdna-fine"]')).toHaveText('mrDNA Fine')
   await overlayControls.locator('.mo-opacity').nth(1).evaluate(input => {
     input.value = '0.35'; input.dispatchEvent(new Event('input', { bubbles: true }))
   })

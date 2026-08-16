@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { JSDOM } from 'jsdom'
 import * as THREE from 'three'
-import { initMultiView, multiViewContentBounds, multiViewDesignCentroid, multiViewRects } from './multi_view.js'
+import { initMultiView, MULTI_VIEW_REPRESENTATIONS, multiViewContentBounds, multiViewDesignCentroid, multiViewRects } from './multi_view.js'
 
 describe('multi-view', () => {
   beforeEach(() => {
@@ -57,6 +57,8 @@ describe('multi-view', () => {
     expect(document.querySelectorAll('.mv-viewport-panel')).toHaveLength(3)
     expect(document.querySelectorAll('.mv-viewport-grid .mv-representation')).toHaveLength(3)
     expect(document.querySelectorAll('.mv-viewport-grid .mv-coloring')).toHaveLength(3)
+    expect(MULTI_VIEW_REPRESENTATIONS).toContainEqual(['mrdna-coarse', 'mrDNA Coarse'])
+    expect(MULTI_VIEW_REPRESENTATIONS).toContainEqual(['mrdna-fine', 'mrDNA Fine'])
     renderFn()
     expect(renderer.render).toHaveBeenCalledTimes(3)
   })

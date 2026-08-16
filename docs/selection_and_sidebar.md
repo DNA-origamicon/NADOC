@@ -29,6 +29,11 @@ to one view. Each panel contains numbered Representation and Coloring menus in i
 upper-left corner. Heavy representations show a loading status while their isolated
 scene is prepared.
 
+The menus also include **mrDNA Coarse** (the relaxed ARBD bead-and-connection model)
+and **mrDNA Fine** (the relaxed nucleotide model) from the currently selected
+completed mrDNA job. Fine geometry supports the applicable nucleotide coloring
+modes; coarse geometry retains its mrDNA bead coloring.
+
 Every panel uses Hull Audit framing: a 38° perspective camera, molecular-content-only
 bounds, and an orbit target at the arithmetic centroid of the design's nucleotide
 positions. Axes, grids, gizmos, and diagnostic overlays do not affect fitting. Orbit,
@@ -52,6 +57,10 @@ other cleanly before preparing its representations. Multi-overlay uses isolated 
 copies, so representations remain visible together even when their normal workspace
 renderers are mutually exclusive. Clicking the active layer-count button exits the
 mode and restores the prior workspace camera.
+
+The same mrDNA Coarse and mrDNA Fine choices are available for every overlay layer,
+so simulation output can be compared directly with native representations or with
+the other mrDNA resolution.
 
 ## Selection levels
 

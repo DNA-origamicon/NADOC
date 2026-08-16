@@ -150,11 +150,21 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
     for (const layer of layers) { disposeMultiScene(layer.renderScene); layer.renderScene = null }
     for (const row of viewportControls.children) row.dataset.ready = 'false'
     for (let i = 0; i < count; i++) {
-      await setRepresentation(layers[i].representation)
+      const available = await setRepresentation(layers[i].representation)
+      if (available === false) {
+        layers[i].renderScene = new THREE.Scene()
+        const row = viewportControls.children[i]
+        const loading = row?.querySelector('.mo-loading')
+        if (loading) loading.textContent = 'Unavailable'
+        if (row) row.dataset.ready = 'unavailable'
+        continue
+      }
       if (layers[i].coloring) setColoringMode(layers[i].coloring)
       if (mine !== generation || count === 0) return
       layers[i].renderScene = cloneMultiScene(scene)
       setSceneOpacity(layers[i].renderScene, layers[i].opacity)
+      const loading = viewportControls.children[i]?.querySelector('.mo-loading')
+      if (loading) loading.textContent = 'Loading…'
       viewportControls.children[i].dataset.ready = 'true'
     }
     fitInitial()

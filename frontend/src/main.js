@@ -210,6 +210,7 @@ import { initColoringOptionsPanel } from './ui/coloring_options_panel.js'
 import { initRepresentationSwitcher } from './ui/representation_switcher.js'
 import { initMultiView } from './ui/multi_view.js'
 import { initMultiOverlay } from './ui/multi_overlay.js'
+import { applyComparisonRepresentation } from './ui/comparison_representations.js'
 import { initMdJobsPanel } from './ui/md_jobs_panel.js'
 import { initClusterConnection } from './ui/cluster_connection.js'
 import { initBenchmarkPanel } from './ui/benchmark_panel.js'
@@ -5641,16 +5642,33 @@ async function main() {
   const _updateReprRadio      = _reprSwitcher.updateReprRadio
   const _syncAssemblyReprMenu = _reprSwitcher.syncAssemblyReprMenu
 
+  let _lastComparisonRepresentationWarning = null
+  const _setComparisonRepresentation = async (representation) => {
+    let warning = null
+    const available = await applyComparisonRepresentation(representation, {
+      setRepresentation: _setRepresentation,
+      mrdnaDisplay,
+      getMrdnaJob: () => mrdnaPanel?.getSelectedJob?.(),
+      onUnavailable: message => { warning = message },
+    })
+    if (available) _lastComparisonRepresentationWarning = null
+    else if (warning && warning !== _lastComparisonRepresentationWarning) {
+      _lastComparisonRepresentationWarning = warning
+      showToast(warning, { severity: 'warn' })
+    }
+    return available
+  }
+
   initMultiView({
     document, scene, camera, renderer, canvas, controls, store,
     setRenderFn, resetRenderFn,
-    setRepresentation: _setRepresentation,
+    setRepresentation: _setComparisonRepresentation,
     setColoringMode: _setColoringMode,
   })
   initMultiOverlay({
     document, scene, camera, renderer, canvas, controls, store,
     setRenderFn, resetRenderFn,
-    setRepresentation: _setRepresentation,
+    setRepresentation: _setComparisonRepresentation,
     setColoringMode: _setColoringMode,
   })
 
