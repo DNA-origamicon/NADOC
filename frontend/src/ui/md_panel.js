@@ -35,6 +35,7 @@ import {
   decideReload,
   nextLivePollAction,
   restorePlan,
+  atomFrameToCgPositions,
   zipAtomIdentity,
   toBondPairs,
 } from './md_display_state.js'
@@ -455,6 +456,10 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
     _wsSig = sig
     if (_ws) {
       _ws.onclose = null
+      // Replacing a healthy socket is an intentional representation transition.
+      // Chromium may still emit an error while the closing handshake races an
+      // outstanding frame; do not report that expected teardown as a display fault.
+      _ws.onerror = null
       _ws.close()
       _ws = null
     }
@@ -943,19 +948,42 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
   }
 
   window.addEventListener('nadoc:representation-change', evt => {
+    const switchStarted = performance.now()
+    const previousMode = _repr
+    const previousFrame = _lastFrameMsg
     _sceneRepr = evt.detail?.representation ?? _activeSceneRepresentation()
     if (!_autoDisplayActive) return
     const nextMode = _targetStreamMode()
     const modeChanged = _repr !== nextMode
     _repr = nextMode
     if (_sceneUsesNativeCg() || _sceneUsesAtomistic()) {
+      // Atomistic → Full/beads/cylinders can be reskinned synchronously from the
+      // phosphorus atoms already on screen. The representation switcher enabled the
+      // CG renderer earlier in this same task; applying before the next animation
+      // frame means authored/native coordinates are never painted between reps.
+      if (modeChanged && previousMode === 'ballstick' && nextMode === 'nadoc') {
+        const mapped = atomFrameToCgPositions(previousFrame)
+        if (mapped) {
+          _lastFrameMsg = mapped
+          _reapplyCachedFrame()
+          _emitMdProcess('representation-reskinned', {
+            from: previousMode,
+            to: nextMode,
+            frameIdx: mapped.frame_idx,
+            nPositions: mapped.positions.length,
+            durationMs: performance.now() - switchStarted,
+          }, _jobId)
+        }
+      }
       requestAnimationFrame(() => {
         if (modeChanged && _configPath) {
-          _lastFrameMsg = null
+          // Keep the directly-mapped frame as the visible fallback while the socket
+          // refreshes it. Other direction changes retain the prior CG geometry.
+          if (!(previousMode === 'ballstick' && nextMode === 'nadoc')) _lastFrameMsg = null
           _latestOnReady = true
-          // Both directions reload the socket and both leave a stale scene up meanwhile:
-          // CG→atomistic keeps the CG until the atoms land, atomistic→CG drops the atoms
-          // and shows the design at NATIVE positions until the bead frame lands.
+          // Both directions reload the authoritative wire payload. CG→atomistic keeps
+          // the simulated CG until atoms land; atomistic→CG keeps the synchronous
+          // phosphorus-derived reskin until the full coarse frame lands.
           _setSwitchBusy(true, _sceneUsesAtomistic() ? 'atomistic' : 'cg')
           _openWebSocket()
           return

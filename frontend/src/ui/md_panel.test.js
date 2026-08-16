@@ -417,8 +417,8 @@ describe('rep-switch progress signal', () => {
     expect(seen).toContainEqual(expect.objectContaining({ kind: 'atomistic', building: true }))
   })
 
-  // The reverse direction is just as blind: the atoms are torn down and the design shows
-  // at NATIVE positions until the bead frame lands.
+  // The reverse direction still refreshes the authoritative coarse payload, but the
+  // current atom frame is synchronously reskinned first (no native-position paint).
   it('announces the wait when atomistic → CG reloads the socket', () => {
     const c = live()
     setSceneRepr('ballstick'); flushRaf()
@@ -427,6 +427,36 @@ describe('rep-switch progress signal', () => {
     setSceneRepr('full'); flushRaf()
     expect(seen).toContainEqual(expect.objectContaining({ kind: 'cg', building: true }))
     expect(c).toBeTruthy()
+  })
+
+  it('reskins atomistic → CG from the current MD phosphorus before the next paint', () => {
+    live()
+    setSceneRepr('ballstick'); flushRaf()
+    const atomWs = sockets.at(-1); atomWs.open()
+    atomWs.msg({
+      type: 'ready', n_frames: 20, atom_ident: {
+        strands: ['s'], helices: ['h0'], dirs: ['FORWARD'],
+        strand_idx: [0, 0], helix_idx: [0, 0], dir_idx: [0, 0], bp: [3, 3],
+      },
+    })
+    atomWs.msg({
+      type: 'frame', frame_idx: 17, n_frames: 20,
+      atoms: [
+        { serial: 0, element: 'P', x: 8, y: 9, z: 10 },
+        { serial: 1, element: 'C', x: 9, y: 9, z: 10 },
+      ],
+    })
+    deps.designRenderer.applyFemPositions.mockClear()
+
+    setSceneRepr('full')
+
+    expect(deps.designRenderer.applyFemPositions).toHaveBeenCalledTimes(1)
+    expect(deps.designRenderer.applyFemPositions).toHaveBeenCalledWith([
+      expect.objectContaining({
+        helix_id: 'h0', bp_index: 3, direction: 'FORWARD',
+        backbone_position: [8, 9, 10],
+      }),
+    ], 1)
   })
 
   it('clears it when a frame in the new format lands', () => {

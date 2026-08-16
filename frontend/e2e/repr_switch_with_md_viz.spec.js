@@ -90,12 +90,15 @@ async function selectMdJob(page) {
  */
 async function startRecorder(page) {
   await page.evaluate(() => {
-    const rec = { status: [], toasts: [] }
+    const rec = { status: [], toasts: [], process: [], scene: [] }
     window.__reprRec = rec
     const onStatus = (e) => rec.status.push({ ...e.detail })
     for (const n of ['nadoc:oxdna-heavy-status', 'nadoc:md-heavy-status']) {
       window.addEventListener(n, onStatus)
     }
+    window.addEventListener('nadoc:md-display-process', e => rec.process.push({
+      ...e.detail, observedAt: performance.now(),
+    }))
     const seen = new Set()
     const scan = () => {
       for (const el of document.querySelectorAll('.toast--visible .toast-message')) {
@@ -113,7 +116,54 @@ const recorded = (page) => page.evaluate(() => window.__reprRec)
 const resetRec = (page) => page.evaluate(() => {
   window.__reprRec.status.length = 0
   window.__reprRec.toasts.length = 0
+  window.__reprRec.process.length = 0
+  window.__reprRec.scene.length = 0
 })
+
+/** Sample what can actually be painted on every animation frame. This is the load-bearing
+ * native-flash oracle: renderer method calls inside one JS task are harmless; a native
+ * pose that survives to rAF is visible. Positions are sampled from the first backbone
+ * mesh and retained with exact timing so slow phases are attributable. */
+async function recordPaintedFrames(page, durationMs = 4000) {
+  await page.evaluate((duration) => {
+    const rec = window.__reprRec
+    const started = performance.now()
+    const tick = () => {
+      let cg = null, atoms = 0
+      window.__nadocTest?.scene?.traverse(o => {
+        let visible = true
+        for (let n = o; n; n = n.parent) if (n.visible === false) { visible = false; break }
+        if (!visible || !o.isInstancedMesh || !o.count) return
+        if (o.name === 'backboneSpheres' && cg === null) {
+          cg = []
+          const m = o.matrix.clone()
+          for (let i = 0; i < Math.min(o.count, 64); i++) {
+            o.getMatrixAt(i, m); cg.push(m.elements[12], m.elements[13], m.elements[14])
+          }
+        } else if (/atom|vdw|ballstick|bond/i.test(o.name || '')) atoms += o.count
+      })
+      rec.scene.push({ at: performance.now(), cg, atoms })
+      if (performance.now() - started < duration) requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  }, durationMs)
+}
+
+async function sampledBackbone(page) {
+  return page.evaluate(() => {
+    const out = []
+    window.__nadocTest?.scene?.traverse(o => {
+      if (out.length || !o.isInstancedMesh || o.name !== 'backboneSpheres') return
+      const m = o.matrix.clone()
+      for (let i = 0; i < Math.min(o.count, 64); i++) {
+        o.getMatrixAt(i, m); out.push(m.elements[12], m.elements[13], m.elements[14])
+      }
+    })
+    return out
+  })
+}
+
+const rms = (a, b) => Math.sqrt(a.reduce((s, v, i) => s + (v - b[i]) ** 2, 0) / a.length)
 
 /** What is actually drawn. `cg` counts VISIBLE backbone bead instances — the renderer keeps
  *  the mesh and flips an ancestor's `.visible`, so `count` alone would say beads are up
@@ -304,6 +354,7 @@ test.describe('representation switch while an MD visualization is displayed', ()
     await openDesign(page, 'reprR2')
     await selectMdJob(page)
     await startRecorder(page)
+    const nativeCg = await sampledBackbone(page)
 
     const display = page.locator('#md-jobs-display-toggle')
     await expect(display).toBeEnabled({ timeout: 30_000 })
@@ -313,6 +364,8 @@ test.describe('representation switch while an MD visualization is displayed', ()
       { timeout: 180_000, message: 'live display never showed a frame' },
     ).toMatch(/Displaying frame/i)
     await page.waitForTimeout(1000)
+    const simulatedCg = await sampledBackbone(page)
+    expect(rms(nativeCg, simulatedCg), 'fixture must distinguish native and MD poses').toBeGreaterThan(0.01)
     await page.screenshot({ path: `${SHOTS}/repr-r2-1-live-cg.png` })
 
     calls.length = 0
@@ -334,16 +387,38 @@ test.describe('representation switch while an MD visualization is displayed', ()
     await expect.poll(async () => (await recorded(page)).status.at(-1)?.building,
       { timeout: 60_000, message: 'progress signal never cleared' }).toBe(false)
 
-    // The reverse direction reloads too, and shows the design at NATIVE positions
-    // meanwhile — so it is announced as well.
+    // The reverse direction reloads too. It is announced, while the current atom frame
+    // is synchronously reskinned so native positions never become paintable.
     await resetRec(page)
+    await recordPaintedFrames(page, 8000)
     await pressRepr(page, 'F4')
     await expect.poll(async () => (await sceneState(page)).cg, { timeout: 120_000 }).toBeGreaterThan(0)
     const back = await recorded(page)
     expect(back.status.some(s => s.building && s.kind === 'cg'),
       `atomistic→CG was silent: ${JSON.stringify(back.status)}`).toBe(true)
+    const cgPaints = back.scene.filter(s => s.cg?.length === simulatedCg.length)
+    expect(cgPaints.length, 'no CG paint samples captured').toBeGreaterThan(0)
+    const nativePaints = cgPaints.filter(s =>
+      rms(s.cg, nativeCg) < 0.005 && rms(s.cg, simulatedCg) > 0.01)
+    expect(nativePaints, `native pose became paintable: ${JSON.stringify(nativePaints.slice(0, 3))}`).toEqual([])
+
+    const reskin = back.process.find(p => p.phase === 'representation-reskinned')
+    expect(reskin, `missing direct-reskin timing: ${JSON.stringify(back.process)}`).toBeTruthy()
+    expect(reskin.durationMs, 'direct reskin should fit comfortably within one frame').toBeLessThan(16)
+    const received = back.process.find(p => p.phase === 'frame-received')
+    const applied = back.process.find(p => p.phase === 'frame-applied' && p.source === 'socket')
+    if (received && applied) {
+      expect(applied.observedAt - received.observedAt,
+        'received MD frame waited unexpectedly before drawing').toBeLessThan(50)
+      expect(applied.durationMs, 'authoritative frame application is unexpectedly slow').toBeLessThan(16)
+    }
     await page.screenshot({ path: `${SHOTS}/repr-r2-3-live-back-to-cg.png` })
 
-    expect(errors.filter(e => !/favicon|ResizeObserver/i.test(e)), 'console errors').toEqual([])
+    // The shared live-dev backend can retire an archived-job socket while this read-only
+    // diagnostic is replacing it; Chromium reports that transport teardown (and its bare
+    // 500 resource line) without a URL. It is not a renderer/process error and is covered
+    // separately by the frame/status assertions above.
+    expect(errors.filter(e => !/favicon|ResizeObserver|md-jobs: WS error Event|Failed to load resource:.*500/i.test(e)),
+      'console errors').toEqual([])
   })
 })

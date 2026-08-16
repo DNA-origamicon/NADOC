@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { WS, targetStreamMode, sceneUsesAtomistic, sceneUsesNativeCg, decideReload, canReapplyFrame, nextLivePollAction, mdReadinessIndicator, shouldForceDisplayReload, sceneUsesHeavy, solventRepMode, restorePlan, zipAtomIdentity, toBondPairs, mdDisplayReadinessFromMeta } from './md_display_state.js'
+import { WS, targetStreamMode, sceneUsesAtomistic, sceneUsesNativeCg, decideReload, canReapplyFrame, nextLivePollAction, mdReadinessIndicator, shouldForceDisplayReload, sceneUsesHeavy, solventRepMode, restorePlan, zipAtomIdentity, toBondPairs, mdDisplayReadinessFromMeta, atomFrameToCgPositions } from './md_display_state.js'
 
 describe('targetStreamMode', () => {
   it('maps atomistic scene reprs to ballstick', () => {
@@ -24,6 +24,29 @@ describe('sceneUsesAtomistic / sceneUsesNativeCg', () => {
     expect(sceneUsesNativeCg('cylinders')).toBe(true)
     expect(sceneUsesNativeCg('vdw')).toBe(false)
     expect(sceneUsesNativeCg('hull-prism')).toBe(false)
+  })
+})
+
+describe('atomFrameToCgPositions', () => {
+  it('maps each identity-stamped phosphorus directly to one CG backbone position', () => {
+    const out = atomFrameToCgPositions({
+      type: 'frame', frame_idx: 17, n_frames: 20, time_ps: 4,
+      atoms: [
+        { element: 'P', helix_id: 'h0', bp_index: 2, direction: 'FORWARD', x: 1, y: 2, z: 3 },
+        { element: 'C', helix_id: 'h0', bp_index: 2, direction: 'FORWARD', x: 9, y: 9, z: 9 },
+        { element: 'P', helix_id: 'h1', bp_index: 7, direction: 'REVERSE', x: 4, y: 5, z: 6 },
+      ],
+    })
+    expect(out).toMatchObject({ frame_idx: 17, n_frames: 20, time_ps: 4 })
+    expect(out.positions).toEqual([
+      { helix_id: 'h0', bp_index: 2, direction: 'FORWARD', copy: 0, x: 1, y: 2, z: 3 },
+      { helix_id: 'h1', bp_index: 7, direction: 'REVERSE', copy: 0, x: 4, y: 5, z: 6 },
+    ])
+  })
+
+  it('returns null rather than applying an empty or identity-less reskin', () => {
+    expect(atomFrameToCgPositions(null)).toBeNull()
+    expect(atomFrameToCgPositions({ atoms: [{ element: 'P', x: 1, y: 2, z: 3 }] })).toBeNull()
   })
 })
 

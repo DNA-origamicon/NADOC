@@ -29,6 +29,43 @@ export function sceneUsesNativeCg(sceneRepr) {
 }
 
 /**
+ * Reskin an all-atom MD frame as the CG nucleotide backbone without waiting for a
+ * second server payload.  Phosphorus is the Full/beads backbone anchor and the
+ * atom identity already carries the representation-neutral nucleotide key.
+ *
+ * The input atoms must have been passed through zipAtomIdentity. Terminal residues
+ * without a P atom are intentionally absent; applyFemPositions leaves those few
+ * entries at their prior simulated pose until the authoritative coarse frame lands.
+ */
+export function atomFrameToCgPositions(frame) {
+  if (!Array.isArray(frame?.atoms)) return null
+  const positions = []
+  const seen = new Set()
+  for (const atom of frame.atoms) {
+    if (String(atom.element).toUpperCase() !== 'P') continue
+    if (atom.helix_id == null || atom.bp_index == null || atom.direction == null) continue
+    const key = `${atom.helix_id}:${atom.bp_index}:${atom.direction}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    positions.push({
+      helix_id: atom.helix_id,
+      bp_index: atom.bp_index,
+      direction: atom.direction,
+      copy: atom.copy ?? 0,
+      x: atom.x, y: atom.y, z: atom.z,
+    })
+  }
+  if (!positions.length) return null
+  return {
+    type: 'frame',
+    frame_idx: frame.frame_idx,
+    n_frames: frame.n_frames,
+    time_ps: frame.time_ps,
+    positions,
+  }
+}
+
+/**
  * How explicit solvent should be drawn for a scene representation:
  *
  *   'sphere'    — full / beads:      one sphere per molecule at its oxygen
