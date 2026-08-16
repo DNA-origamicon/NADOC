@@ -3791,6 +3791,19 @@ def _alpine_progress_is_synced(job: MdJob, *, now: float | None = None) -> bool:
     return 0.0 <= age <= _ALPINE_SYNC_FRESH_S
 
 
+def _decorate_progress_provenance(job: MdJob, payload: dict, *, estimated: bool) -> None:
+    """Name the source of remote progress without conflating freshness with projection.
+
+    A freshly retrieved Alpine reading is synced even when it contains an exact step but
+    no rate (and therefore needs no extrapolation).  Conversely, a stale or disconnected
+    reading remains estimated when its last measured rate is carrying progress forward.
+    """
+    if _alpine_progress_is_synced(job):
+        payload["progress_synced"] = True
+    elif estimated:
+        payload["progress_estimated"] = True
+
+
 def _namd_live_progress(job: MdJob, ws) -> tuple[float | None, float | None, bool]:
     """``(overall fraction 0..1, seconds remaining)`` for a RUNNING NAMD job — the two
     live numbers under the master progress bar.  Both are ``None`` for a non-running job
@@ -4086,11 +4099,7 @@ async def list_md_jobs() -> list[dict]:
             d["eta_seconds"] = eta
         # Carried forward from the last cluster reading rather than measured — the UI
         # marks it so a projection is never mistaken for an observation.
-        if estimated:
-            if _alpine_progress_is_synced(j):
-                d["progress_synced"] = True
-            else:
-                d["progress_estimated"] = True
+        _decorate_progress_provenance(j, d, estimated=estimated)
         if frac is not None and j.status != MdStatus.running and j.live_metrics:
             d["progress_last_known"] = True
             d["progress_observed_at"] = (
@@ -4330,7 +4339,11 @@ async def finish_and_download_md_job(job_id: str, body: ArchiveRequest) -> dict:
             job.status in {MdStatus.queued, MdStatus.running, MdStatus.preparing}
             or job.pending_scancel
         ):
-            result = await stop_md_job(job_id)
+            # This route owns the one authoritative fetch below.  The ordinary Stop
+            # endpoint also fetches before marking the job terminal, so calling it with
+            # its default here downloaded the same multi-GB inventory twice and doubled
+            # the opportunity for an SFTP hiccup to expire the shared Alpine session.
+            result = await _stop_md_job_impl(job_id, fetch_remote_output=False)
             if result.get("pending_scancel"):
                 raise HTTPException(
                     409,
@@ -6610,6 +6623,10 @@ async def _fetch_runpod_live_frame(job, *, force: bool, on_progress=None) -> dic
 
 @router.post("/md/jobs/{job_id}/stop")
 async def stop_md_job(job_id: str) -> dict:
+    return await _stop_md_job_impl(job_id)
+
+
+async def _stop_md_job_impl(job_id: str, *, fetch_remote_output: bool = True) -> dict:
     """Cancel a running job."""
     job = _load_job(job_id)
 
@@ -6686,7 +6703,7 @@ async def stop_md_job(job_id: str) -> dict:
         # auto-purges.  A 43-minute run lost 1.7 GB this way (2026-08-07) with no
         # route to recover it from the UI.  Best-effort: a fetch hiccup must not
         # prevent the stop from being recorded.
-        if job.slurm_job_id:
+        if job.slurm_job_id and fetch_remote_output:
             try:
                 await md_executor.fetch_outputs(job, _workspace(), conn=mgr)
             except Exception:  # noqa: BLE001

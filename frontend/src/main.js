@@ -1143,6 +1143,10 @@ async function main() {
     getClusterState: () => clusterConn?.getState?.() ?? 'disconnected',
     // N2: the shared anchor-scope picker resolves the 3D selection to fixedAtoms scopes.
     getSelection: _anchorSelectionState,
+    onJobCreated: async jobId => {
+      await simulateJobs?.refresh?.()
+      simulateJobs?.selectJob?.(jobId)
+    },
   })
 
   // ── Benchmark controls (auto-tune oxDNA/NAMD hardware config per machine) ─────

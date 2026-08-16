@@ -1069,6 +1069,38 @@ def test_stop_disconnected_defers_scancel(tmp_path, monkeypatch):
     assert reloaded.user_stopped is True
 
 
+def test_finish_stop_phase_can_skip_its_duplicate_remote_fetch(tmp_path, monkeypatch):
+    """Finish-and-download cancels first, then owns one authoritative result fetch."""
+    from backend.api import routes_md
+    from backend.core import cluster_ssh
+
+    monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
+    job = _make_prepared_job(tmp_path)
+    job.slurm_job_id = "88"
+    job.status = MdStatus.running
+    job.save(tmp_path)
+
+    class _ConnectedMgr:
+        def is_connected(self):
+            return True
+
+    mgr = _ConnectedMgr()
+    monkeypatch.setattr(cluster_ssh, "get_manager", lambda: mgr)
+
+    async def _cancel(_job, *, conn):
+        assert conn is mgr
+        return True
+
+    async def _unexpected_fetch(*args, **kwargs):
+        raise AssertionError("stop phase must not start the finish route's result fetch")
+
+    monkeypatch.setattr(ex, "cancel_job", _cancel)
+    monkeypatch.setattr(ex, "fetch_outputs", _unexpected_fetch)
+
+    out = _run(routes_md._stop_md_job_impl(job.job_id, fetch_remote_output=False))
+    assert out["status"] == "cancelled"
+
+
 # ── GET /md/jobs/{id}/remote-recommendation (Phase 4 review-card preview) ──────
 
 

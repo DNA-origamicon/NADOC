@@ -698,6 +698,14 @@ export function mdJobEditable(job) {
     && !job?.slurm_job_id && !job?.runpod_pod_id
 }
 
+/** Keep the NAMD panel and the visible cross-engine Jobs card on the record a wizard
+ * just created. The fetch must finish before either selector can find the new ID. */
+export async function selectCreatedMdJob(jobId, { hasJob, fetchJobs, selectLocal, selectMaster }) {
+  if (!hasJob(jobId)) await fetchJobs()
+  selectLocal(jobId)
+  await selectMaster?.(jobId)
+}
+
 /** Resolve where a newly-created job runs.
  *
  * The Job Wizard owns this choice. Legacy/non-wizard callers default to local; the
@@ -707,6 +715,14 @@ export function mdRequestedRunTarget(request) {
   const requested = String(request?.execution_target || '').toLowerCase()
   if (['local', 'alpine', 'runpod'].includes(requested)) return requested
   return 'local'
+}
+
+/** The Clusters-card target represented by a selected job. Historical records without
+ * an explicit target are local (the legacy/default execution mode). */
+export function mdRunTargetForJob(job) {
+  return job?.execution_target === 'alpine' || job?.execution_target === 'runpod'
+    ? job.execution_target
+    : 'local'
 }
 
 /** Pure: the run-button label for a selected draft — names the seed engine so the
@@ -1234,7 +1250,7 @@ export function mdEarlyStopToggleState(job, busy = false) {
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverlay = null, getAnchorSelection = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getFlexScale = null, getClusterState = null, getSelection = null, getSolventOverlay = null, getBoxOverlay = null, getCurrentRepr = null, getWeldOverlay = null } = {}) {
+export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverlay = null, getAnchorSelection = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getFlexScale = null, getClusterState = null, getSelection = null, getSolventOverlay = null, getBoxOverlay = null, getCurrentRepr = null, getWeldOverlay = null, onJobCreated = null } = {}) {
   const panel   = document.getElementById('md-jobs-panel')
   const heading = document.getElementById('md-jobs-panel-heading')
   const arrow   = document.getElementById('md-jobs-panel-arrow')
@@ -1568,6 +1584,20 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       if (job?.execution_target === 'alpine') _applyJobState(job)
     }
     _paintRunpodGate()
+  }
+
+  /** Job selection is authoritative for the Clusters card. The card still chooses the
+   * destination while creating a job, but once a concrete record is selected it must
+   * describe that record's actual execution environment. */
+  function _syncRunTargetToJob(job) {
+    const target = mdRunTargetForJob(job)
+    const radio = target === 'alpine' ? runTargetAlpine
+      : target === 'runpod' ? runTargetRunpod : runTargetLocal
+    if (radio) radio.checked = true
+    const previousTarget = _visibleTarget
+    _syncTargetPane(previousTarget)
+    _visibleTarget = target
+    if (target === 'runpod') void _runpod.refresh()
   }
 
   let _visibleTarget = _currentRunTarget()
@@ -3703,8 +3733,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // The launch paths normally refetch before returning, but creation can also be
       // reported by an integration callback. Never leave the previously-selected job
       // owning the Run button while the new record is waiting to appear in this cache.
-      if (!_jobs.some(job => job.job_id === jobId)) await _fetchJobs()
-      _reselectJob(jobId)
+      await selectCreatedMdJob(jobId, {
+        hasJob: id => _jobs.some(job => job.job_id === id),
+        fetchJobs: _fetchJobs,
+        selectLocal: _reselectJob,
+        // The visible Jobs card owns a separate cross-engine selection. Let its host
+        // refresh and select this same record after the wizard closes, so the old master
+        // row/status does not remain highlighted while the NAMD panel has moved on.
+        selectMaster: onJobCreated,
+      })
     },
     onOptimizeMount: mount => _wireOptimize(mount),
   })
@@ -4178,6 +4215,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       trajectory: trajToggle?.checked,
     })
     _selectedId = jobId
+    _syncRunTargetToJob(selectedJob)
     if (visualizationAction === 'display') {
       _displayMeta = null
       _resetDisplayIndicator()
@@ -4190,11 +4228,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // hide that the job is already waiting in line).
     void _fetchQueue()
     if (selectionUpdatesVisualization(selectedJob)) void _applyRunConfig(jobId)
-    // ▶ Rent & Run is gated on the RunPod pre-flight, and until now that only ran when the
-    // run-target RADIO was moved. Selecting a prepared RunPod job is the other moment the
-    // answer matters — without this the gate would still be showing whatever it last saw
-    // (often nothing at all, for a job created in an earlier session).
-    if (_selectedJob()?.execution_target === 'runpod') void _runpod.refresh()
+    // `_syncRunTargetToJob` also refreshes RunPod pre-flight when appropriate, so the
+    // selected job's pane and paid-launch gate move together without duplicate probes.
     _paintRunpodGate()   // reveal the RunPod status box for a RunPod job
     void _applyVisualizationJobSwitch(visualizationAction, selectedJob)
     if (selectedJob?.execution_target === 'alpine' && !displayToggle?.checked) {

@@ -100,6 +100,30 @@ def test_ws_state_push_marks_fresh_connected_alpine_progress_synced(tmp_path, mo
     assert "progress_estimated" not in body
 
 
+def test_ws_state_push_marks_exact_fresh_alpine_progress_synced(tmp_path, monkeypatch):
+    """Freshness comes from the successful pull, not from whether a rate was available."""
+    from backend.core import cluster_ssh
+
+    monkeypatch.setattr(assembly, "_WORKSPACE_DIR", tmp_path)
+    monkeypatch.setattr(namd_runner, "reconcile_job_status", lambda job, ws: job)
+    manager = type("Manager", (), {"is_connected": lambda self: True})()
+    monkeypatch.setattr(cluster_ssh, "get_manager", lambda: manager)
+    job = _running_job(tmp_path)
+    job.execution_target = "alpine"
+    # Early readings may have a real step before Benchmark/TIMING provides s_per_step.
+    job.live_metrics = {
+        "segment": "s2", "step": 250, "retrieved_at": time.time(),
+    }
+    job.save(tmp_path)
+
+    client = TestClient(app)
+    with client.websocket_connect(f"/ws/md-jobs/{job.job_id}") as ws:
+        body = ws.receive_json()["job"]
+
+    assert body["progress_synced"] is True
+    assert "progress_estimated" not in body
+
+
 def test_ws_state_push_omits_progress_fraction_for_non_running(tmp_path, monkeypatch):
     """A queued/terminal job has no live fraction — the key stays absent (the bar
     falls back to done/total), matching list_md_jobs."""

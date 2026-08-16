@@ -369,3 +369,15 @@ visualization state machine and must not mutate this completed simulation fixtur
   `md_job_wizard_readonly.test.js` — **28 passed**, including the new-job callback after
   successful creation. The live job inventory was inspected read-only; no running or
   queued simulation was changed.
+
+### 2026-08-15 — Loop 8: selected job synchronizes the Clusters card
+
+- Selecting an NAMD job now makes its persisted execution target authoritative for the
+  Clusters card: legacy/explicit local selects Local, Alpine selects Alpine, and RunPod
+  selects RunPod.
+- The corresponding radio and detail pane switch together. Selecting RunPod also refreshes
+  its pre-flight once (without the former duplicate probe); leaving RunPod clears its
+  transient picker state through the existing pane-transition path.
+- Verification: `md_jobs_panel.test.js` — **241 passed**, including a real panel DOM test
+  that selects local, Alpine, and RunPod records in sequence and checks both the radio and
+  mutually-exclusive visible pane for every transition.

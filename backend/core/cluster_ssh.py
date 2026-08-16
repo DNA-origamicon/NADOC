@@ -325,11 +325,12 @@ class ClusterConnection:
         except Exception as exc:  # noqa: BLE001
             message = f"download failed: {exc}"
             kind = classify_ssh_error(message)
-            # A missing remote/local file, permissions problem, full disk, etc. fails
-            # this transfer but says nothing about the authenticated SSH transport.
-            # Expiring the Duo session here turns a recoverable file retry into a forced
-            # reconnect. Only transport-shaped failures invalidate the connection.
-            if kind in {"filesystem", "permission"}:
+            # A missing remote/local file, permissions problem, full disk, incomplete
+            # local write, callback failure, etc. fails this transfer but says nothing
+            # about the authenticated SSH transport. Unknown errors are deliberately
+            # non-fatal too: a later remote operation can prove the transport dead, but
+            # guessing here needlessly forces another Duo login.
+            if kind not in {"network", "timeout", "auth"}:
                 raise ClusterSSHError(message, kind=kind) from exc
             raise self._fail_transport(message) from exc
 

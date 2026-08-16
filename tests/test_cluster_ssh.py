@@ -75,6 +75,9 @@ class _FakeSftp:
         self.fail_after = fail_after
         self.open_offsets = []
 
+    async def __aenter__(self): return self
+    async def __aexit__(self, *_): return None
+
     async def stat(self, _):
         return type("Stat", (), {"size": len(self.data)})()
 
@@ -198,6 +201,38 @@ def test_download_filesystem_error_does_not_expire_connection(tmp_path, monkeypa
         _run(c.sftp_get("/remote/x", str(tmp_path / "x")))
     assert caught.value.kind == "filesystem"
     assert c.is_connected()
+
+
+def test_download_incomplete_local_write_does_not_expire_connection(tmp_path, monkeypatch):
+    c = ClusterConnection()
+    fake = _FakeConn()
+    fake.start_sftp_client = lambda: _FakeSftp(b"")
+    _run(c.connect("h", "u", "pw", connector=_connector_returning(fake)))
+
+    async def incomplete(*args, **kwargs):
+        raise OSError("incomplete download for /remote/x: 4/8 bytes")
+
+    monkeypatch.setattr("backend.core.cluster_ssh._stream_get", incomplete)
+    with pytest.raises(ClusterSSHError) as caught:
+        _run(c.sftp_get("/remote/x", str(tmp_path / "x")))
+    assert caught.value.kind == "unknown"
+    assert c.is_connected()
+
+
+def test_download_transport_error_expires_connection(tmp_path, monkeypatch):
+    c = ClusterConnection()
+    fake = _FakeConn()
+    fake.start_sftp_client = lambda: _FakeSftp(b"")
+    _run(c.connect("h", "u", "pw", connector=_connector_returning(fake)))
+
+    async def broken(*args, **kwargs):
+        raise BrokenPipeError("Broken pipe")
+
+    monkeypatch.setattr("backend.core.cluster_ssh._stream_get", broken)
+    with pytest.raises(ClusterSSHError) as caught:
+        _run(c.sftp_get("/remote/x", str(tmp_path / "x")))
+    assert caught.value.kind == "network"
+    assert c.state == ConnState.EXPIRED
 
 
 def test_run_returns_result():

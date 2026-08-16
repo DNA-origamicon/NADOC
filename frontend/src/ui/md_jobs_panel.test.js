@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { DEFAULT_PRODUCTION_TIMESTEP_FS, mdAnchorAtomNames, mdAnchorStiffness, mdCanReuseStatusSocket, mdForcesProvenance, DEFAULT_TRAJ_INTERVAL, MD_PRODUCTION_MARKER, TRAJ_FRAME_CONFIRM, effectiveProductionTimestepFs, filterJobsForPart, jobProductionTimestepFs, mdHasProductionRun, mdIsLocalTarget, mdIsRemoteJob, mdJobEditable, mdSegGlyphKind, newestCompletedForPart, normalizeWorkspacePath, productionNsFromSteps, seededBadge, stridedFrameCount } from './md_jobs_panel.js'
+import { DEFAULT_PRODUCTION_TIMESTEP_FS, mdAnchorAtomNames, mdAnchorStiffness, mdCanReuseStatusSocket, mdForcesProvenance, DEFAULT_TRAJ_INTERVAL, MD_PRODUCTION_MARKER, TRAJ_FRAME_CONFIRM, effectiveProductionTimestepFs, filterJobsForPart, jobProductionTimestepFs, mdHasProductionRun, mdIsLocalTarget, mdIsRemoteJob, mdJobEditable, mdRunTargetForJob, mdSegGlyphKind, newestCompletedForPart, normalizeWorkspacePath, productionNsFromSteps, seededBadge, selectCreatedMdJob, stridedFrameCount } from './md_jobs_panel.js'
 
 describe('mdCanReuseStatusSocket', () => {
   it('reuses a same-job socket while connecting or open', () => {
@@ -14,6 +14,15 @@ describe('mdCanReuseStatusSocket', () => {
   })
 })
 
+describe('mdRunTargetForJob', () => {
+  it('maps selected local, Alpine, and RunPod jobs to their cluster-card target', () => {
+    expect(mdRunTargetForJob({ execution_target: 'local' })).toBe('local')
+    expect(mdRunTargetForJob({ execution_target: 'alpine' })).toBe('alpine')
+    expect(mdRunTargetForJob({ execution_target: 'runpod' })).toBe('runpod')
+    expect(mdRunTargetForJob({})).toBe('local')
+  })
+})
+
 describe('mdJobEditable', () => {
   it('allows only draft/prepared jobs that no executor owns', () => {
     expect(mdJobEditable({ status: 'draft' })).toBe(true)
@@ -23,6 +32,20 @@ describe('mdJobEditable', () => {
     for (const status of ['preparing', 'running', 'completed', 'failed', 'stopped']) {
       expect(mdJobEditable({ status })).toBe(false)
     }
+  })
+})
+
+describe('wizard-created job selection', () => {
+  it('fetches the new record, then selects it in both the NAMD and master lists', async () => {
+    let present = false
+    const calls = []
+    await selectCreatedMdJob('new-md', {
+      hasJob: () => present,
+      fetchJobs: async () => { calls.push('fetch'); present = true },
+      selectLocal: id => calls.push(`local:${id}`),
+      selectMaster: async id => calls.push(`master:${id}`),
+    })
+    expect(calls).toEqual(['fetch', 'local:new-md', 'master:new-md'])
   })
 })
 
@@ -1366,6 +1389,7 @@ describe('initMdJobsPanel — shared jobs-panel base parity (U3 slice 2c-3b)', (
   beforeEach(() => {
     clearDom(); mountIds(IDS); localStorage.clear()
     vi.clearAllMocks()
+    mdApi.getMdTrajectoryMeta.mockResolvedValue({ ready: false })
     // markup default: section body collapsed, arrow shows the is-collapsed class.
     $('md-jobs-panel-body').style.display = 'none'
     $('md-jobs-panel-arrow').classList.add('is-collapsed')
@@ -1396,6 +1420,42 @@ describe('initMdJobsPanel — shared jobs-panel base parity (U3 slice 2c-3b)', (
     expect($('md-jobs-adv-toggle')).toBeNull()
     expect($('md-jobs-adv-body')).toBeNull()
     expect($('md-jobs-new-btn')).not.toBeNull()
+  })
+
+  it('selecting a job selects its Local, Alpine, or RunPod cluster-card pane', async () => {
+    clearDom()
+    mountIds({
+      'md-jobs-panel': 'div', 'md-jobs-panel-body': 'div', 'md-jobs-list': 'div',
+      'md-jobs-detail': 'div', 'md-jobs-run-btn': 'button',
+      'md-run-target-local': 'input', 'md-run-target-alpine': 'input',
+      'md-run-target-runpod': 'input',
+      'md-jobs-local-pane': 'div', 'md-jobs-alpine-pane': 'div',
+      'md-jobs-runpod-pane': 'div',
+    })
+    for (const id of ['md-run-target-local', 'md-run-target-alpine', 'md-run-target-runpod']) {
+      $(id).type = 'radio'
+      $(id).name = 'md-run-target'
+    }
+    $('md-run-target-local').checked = true
+    const jobs = [
+      { job_id: 'L', execution_target: 'local', status: 'completed', created_at: 3 },
+      { job_id: 'A', execution_target: 'alpine', status: 'completed', created_at: 2 },
+      { job_id: 'R', execution_target: 'runpod', status: 'completed', created_at: 1 },
+    ]
+    mdApi.listMdJobs.mockResolvedValue(jobs)
+    mdApi.getMdJob.mockImplementation(async id => jobs.find(job => job.job_id === id))
+    const panel = initMdJobsPanel({ getClusterState: () => 'disconnected' })
+    await flushMicro()
+
+    for (const [jobId, target] of [['L', 'local'], ['A', 'alpine'], ['R', 'runpod']]) {
+      await panel.selectJob(jobId)
+      await flushMicro()
+      expect($(`md-run-target-${target}`).checked).toBe(true)
+      expect($(`md-jobs-${target}-pane`).hidden).toBe(false)
+      for (const other of ['local', 'alpine', 'runpod'].filter(name => name !== target)) {
+        expect($(`md-jobs-${other}-pane`).hidden).toBe(true)
+      }
+    }
   })
 
   it('_onOpen fires on init (fetches the job list) and the remote SLURM poll runs while open', async () => {
