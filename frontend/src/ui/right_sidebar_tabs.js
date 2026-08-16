@@ -1,5 +1,5 @@
 const TAB_SECTIONS = {
-  properties: ['properties-section', 'strand-hist-section', 'groups-panel'],
+  properties: ['properties-section', 'extrude-panel', 'strand-hist-section', 'groups-panel'],
   visualization: ['representation-modes-section', 'repr-options-section', 'right-view-actions'],
   clustering: ['cluster-panel', 'joints-panel'],
   overhangs: ['overhang-panel', 'overhang-connections-section', 'strand-anim-panel'],
@@ -108,6 +108,17 @@ export function initRightSidebarTabs({ document, storage = globalThis.localStora
     persist()
     render()
   }
+
+  // Tool-driven navigation must reveal a tab without inheriting the tab button's
+  // click-again-to-collapse behaviour.  Panels such as Extrude use this when they
+  // become active so their controls are always visible.
+  function open(tab) {
+    if (!tabs.includes(tab)) return
+    activeTab = tab
+    collapsed = false
+    persist()
+    render()
+  }
   for (const button of buttons) button.addEventListener('click', () => select(button.dataset.tab))
   toggle?.addEventListener('click', () => {
     collapsed = !collapsed
@@ -129,5 +140,5 @@ export function initRightSidebarTabs({ document, storage = globalThis.localStora
   }
   updateRepresentation()
 
-  return { select, render, getActiveTab: () => activeTab, isCollapsed: () => collapsed, dispose: () => observer.disconnect() }
+  return { select, open, render, getActiveTab: () => activeTab, isCollapsed: () => collapsed, dispose: () => observer.disconnect() }
 }

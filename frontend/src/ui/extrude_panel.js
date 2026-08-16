@@ -27,9 +27,10 @@ const IDLE_INDICATOR = 'NADOC · WORKSPACE'
  * @param {object} deps.store
  * @param {object} deps.slicePlane       slice_plane API (show / showAtEnd / hide / setExtrudeUiOpen)
  * @param {object} deps.expandedSpacing  { forceOff }
+ * @param {object} deps.rightSidebar     { open } tab controller
  * @returns {{ activate: Function, hide: Function, isActive: () => boolean }}
  */
-export function initExtrudePanel({ store, slicePlane, expandedSpacing }) {
+export function initExtrudePanel({ store, slicePlane, expandedSpacing, rightSidebar }) {
   const _panel  = document.getElementById('extrude-panel')
   const _select = document.getElementById('extrude-from')
   let _active = false
@@ -53,6 +54,7 @@ export function initExtrudePanel({ store, slicePlane, expandedSpacing }) {
     _mode   = mode
     _active = true
     expandedSpacing?.forceOff?.()
+    rightSidebar?.open?.('properties')
 
     const defaultPlane = resolveDefaultPlane(store.getState().currentPlane)
     const { value, disabled } = dropdownStateForMode(mode, ctx.plane, defaultPlane)

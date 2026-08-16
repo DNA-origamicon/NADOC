@@ -18,6 +18,7 @@ describe('right sidebar tabs', () => {
         <div id="right-tab-content-clustering"></div>
         <div id="right-tab-content-overhangs"></div>
         <div class="panel-section" id="properties-section"></div>
+        <div class="panel-section" id="extrude-panel"></div>
         <div class="panel-section" id="strand-hist-section"></div>
         <div class="panel-section" id="groups-panel"></div>
         <div class="panel-section" id="repr-options-section"></div>
@@ -38,6 +39,7 @@ describe('right sidebar tabs', () => {
     const storage = { getItem: () => null, setItem: () => {} }
     const tabs = initRightSidebarTabs({ document, storage })
     expect(document.getElementById('measurements-section')).toBeNull()
+    expect(document.querySelector('#right-tab-content-properties #extrude-panel')).toBeTruthy()
     expect(document.querySelector('#right-tab-content-clustering #joints-panel')).toBeTruthy()
     expect(document.querySelector('#right-tab-content-overhangs #strand-anim-panel')).toBeTruthy()
     expect(document.querySelector('#right-tab-content-visualization #right-view-actions #reset-btn')).toBeTruthy()
@@ -48,6 +50,15 @@ describe('right sidebar tabs', () => {
     expect(document.getElementById('right-panel').classList.contains('hidden')).toBe(true)
     document.getElementById('right-tab-toggle').click()
     expect(document.getElementById('right-panel').classList.contains('hidden')).toBe(false)
+  })
+
+  it('opens a requested tab without collapsing it when it is already active', () => {
+    const tabs = initRightSidebarTabs({ document, storage: null })
+    tabs.open('properties')
+    expect(tabs.getActiveTab()).toBe('properties')
+    expect(tabs.isCollapsed()).toBe(false)
+    tabs.open('properties')
+    expect(tabs.isCollapsed()).toBe(false)
   })
 
   it('proxies representation buttons to the existing controls', () => {

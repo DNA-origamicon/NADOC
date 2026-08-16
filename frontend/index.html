@@ -823,6 +823,17 @@
     .right-tab-content[hidden] { display:none; }
     .right-tab-content { padding:8px; }
     .right-tab-content > .panel-section.ox-card { border-bottom:1px solid transparent; }
+    /* Extrude is a transient tool card, so distinguish it from the persistent
+       neutral property cards while the tool is active. */
+    #right-tab-content-properties > #extrude-panel.ox-card {
+      border: 1px solid #d29922;
+      background: #000;
+      box-shadow: none;
+    }
+    #right-tab-content-properties > #extrude-panel.ox-card > h2 {
+      color: #e3b341;
+      text-shadow: none;
+    }
     #right-representation-modes { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
     .right-repr-btn.active { border-color:#388bfd; background:#1f6feb; color:#fff; }
 

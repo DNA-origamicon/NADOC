@@ -265,7 +265,7 @@ if (document.readyState === 'loading') {
 const DEBUG = new URLSearchParams(window.location.search).has('debug')
 
 async function main() {
-  initRightSidebarTabs({ document })
+  const rightSidebar = initRightSidebarTabs({ document })
   const canvas = document.getElementById('canvas')
   const {
     scene, camera, renderer, controls,
@@ -2099,7 +2099,7 @@ async function main() {
   // Owns #extrude-panel visibility, the "Extrude from" origin-plane dropdown, and
   // the tool lifecycle. Replaces the retired workspace.js plane-picker as the entry
   // to every extrude (new-bundle / segment / blunt-end / deformed continuation).
-  _extrudePanel = initExtrudePanel({ store, slicePlane, expandedSpacing })
+  _extrudePanel = initExtrudePanel({ store, slicePlane, expandedSpacing, rightSidebar })
 
   // ── Primitives library (right-sidebar panel) → ui/primitive_library.js ──
   // Owns #primitives-panel; revealed by Tools → Add Primitive. Lists pre-validated

@@ -18,7 +18,8 @@ function makeDeps(initialState = {}) {
     setExtrudeUiOpen: vi.fn(),
   }
   const expandedSpacing = { forceOff: vi.fn() }
-  return { store, slicePlane, expandedSpacing }
+  const rightSidebar = { open: vi.fn() }
+  return { store, slicePlane, expandedSpacing, rightSidebar }
 }
 
 beforeEach(() => {
@@ -37,6 +38,7 @@ describe('initExtrudePanel — new-bundle', () => {
     panel.activate('newBundle')
 
     expect(deps.expandedSpacing.forceOff).toHaveBeenCalled()
+    expect(deps.rightSidebar.open).toHaveBeenCalledWith('properties')
     expect(document.getElementById('extrude-panel').style.display).toBe('block')
     expect(document.getElementById('extrude-from').disabled).toBe(false)
     expect(document.getElementById('extrude-from').value).toBe('XY')
