@@ -116,6 +116,10 @@ strand and marks the selected sequence letters. Multiple bases are grouped into
 helix-aware labels such as `Staple - 1[34,35]`. See [Selection and right sidebar](docs/selection_and_sidebar.md)
 for interaction rules and the developer contract.
 
+Visualization includes a two-, three-, or four-panel Multi-view for comparing
+independent representations and coloring modes with synchronized, panel-local 3D
+navigation.
+
 ### Cluster system & animation
 Helices grouped into named clusters; per-cluster deformation ops; feature log
 timeline with draggable playhead; pre-baked animation at 60 fps (one geometry

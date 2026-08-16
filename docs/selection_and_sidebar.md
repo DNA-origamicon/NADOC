@@ -12,7 +12,7 @@ The right sidebar is divided into four vertical tabs:
 | Tab | Sections |
 |---|---|
 | **Properties** | Properties, Strand Lengths, Staple Groups |
-| **Visualization** | Representation toggles, Representation Options, Reset Camera, Unhide All |
+| **Visualization** | Representation toggles, Representation Options, Reset Camera, Unhide All, Multi-view |
 | **Clustering** | Movable Clusters, Joints |
 | **Overhangs** | Overhangs, Overhang Connections, Strand Animation |
 
@@ -20,6 +20,22 @@ Each section uses the same grey-gradient card treatment as the left sidebar. Use
 chevron at the top of the tab strip to collapse or restore the sidebar. Drag the divider
 between the tab strip and viewport to resize it. The Blunt End and empty Measurements
 cards are intentionally absent.
+
+### Multi-view
+
+The **Multi-view** card splits the 3D viewport into two, three, or four synchronized
+panels. Choose a layout with its icon button; click the active layout again to return
+to one view. Each panel contains numbered Representation and Coloring menus in its
+upper-left corner. Heavy representations show a loading status while their isolated
+scene is prepared.
+
+Every panel uses Hull Audit framing: a 38° perspective camera, molecular-content-only
+bounds, and an orbit target at the arithmetic centroid of the design's nucleotide
+positions. Axes, grids, gizmos, and diagnostic overlays do not affect fitting. Orbit,
+pan, and zoom are interpreted in the coordinate system of the panel under the pointer,
+then synchronized to the other panels. Collapsing or resizing either sidebar resizes
+all viewports without changing their shared navigation state. Closing Multi-view
+restores the workspace camera and controls.
 
 ## Selection levels
 

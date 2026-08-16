@@ -1,6 +1,6 @@
 const TAB_SECTIONS = {
   properties: ['properties-section', 'extrude-panel', 'strand-hist-section', 'groups-panel'],
-  visualization: ['representation-modes-section', 'repr-options-section', 'right-view-actions'],
+  visualization: ['representation-modes-section', 'repr-options-section', 'right-view-actions', 'right-multi-view'],
   clustering: ['cluster-panel', 'joints-panel'],
   overhangs: ['overhang-panel', 'overhang-connections-section', 'strand-anim-panel'],
 }
@@ -46,7 +46,12 @@ function buildAddedSections(document) {
   actionsBody.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:6px'
   const actions = makeSection(document, 'right-view-actions', 'View Actions', actionsBody)
 
-  return { representations, actionsBody, actions }
+  const multiViewBody = document.createElement('div')
+  multiViewBody.id = 'right-multi-view-body'
+  multiViewBody.className = 'ox-card__body'
+  const multiView = makeSection(document, 'right-multi-view', 'Multi-view', multiViewBody)
+
+  return { representations, actionsBody, actions, multiView }
 }
 
 export function initRightSidebarTabs({ document, storage = globalThis.localStorage } = {}) {
@@ -56,7 +61,7 @@ export function initRightSidebarTabs({ document, storage = globalThis.localStora
   if (!panel || !strip) return null
 
   const added = buildAddedSections(document)
-  panel.append(added.representations, added.actions)
+  panel.append(added.representations, added.actions, added.multiView)
   for (const id of ['reset-btn', 'unhide-all-btn']) {
     const button = document.getElementById(id)
     if (button) added.actionsBody.append(button)

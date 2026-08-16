@@ -1,0 +1,20 @@
+#right-multi-view-body { display:grid; gap:8px; }
+.mv-layout-buttons { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; }
+.mv-layout-btn { min-height:34px; display:grid; place-items:center; border:1px solid #30363d; border-radius:5px; background:#161b22; color:#8b949e; }
+.mv-layout-btn.active { border-color:#388bfd; background:#1f6feb; color:#fff; }
+.mv-layout-icon { width:25px; height:17px; display:grid; gap:2px; }
+.mv-layout-icon i { display:block; border:1px solid currentColor; border-radius:1px; }
+.mv-layout-icon--2 { grid-template-columns:1fr 1fr; }
+.mv-layout-icon--3,.mv-layout-icon--4 { grid-template:1fr 1fr / 1fr 1fr; }
+.mv-layout-icon--3 .wide { grid-row:1 / 3; }
+.mv-sidebar-hint { color:#8b949e; font-size:10px; line-height:1.35; }
+.mv-panel-head { position:absolute; z-index:2; top:8px; left:8px; display:flex; gap:5px; align-items:center; padding:4px; border:1px solid rgba(48,54,61,.9); border-radius:5px; background:rgba(13,17,23,.88); pointer-events:auto; box-shadow:0 2px 8px rgba(0,0,0,.28); }
+.mv-panel-label { width:18px; height:18px; display:grid; place-items:center; border-radius:50%; background:#30363d; color:#c9d1d9; font:600 10px/1 ui-monospace,monospace; }
+.mv-panel-head select { min-width:0; max-width:150px; color:#c9d1d9; background:#161b22; border:1px solid #30363d; border-radius:4px; padding:3px 5px; font-size:10px; }
+.mv-panel-loading { display:none; color:#8b949e; font-size:9px; }
+.mv-viewport-panel[data-ready="false"] .mv-panel-loading { display:inline; }
+.mv-viewport-grid { position:absolute; inset:0; z-index:6; pointer-events:none; display:none; grid-template:1fr 1fr / 1fr 1fr; background:transparent; }
+.mv-viewport-grid[data-count="2"],.mv-viewport-grid[data-count="3"],.mv-viewport-grid[data-count="4"] { display:grid; }
+.mv-viewport-panel { position:relative; min-width:0; min-height:0; background:transparent; outline:1px solid #30363d; outline-offset:-1px; pointer-events:auto; touch-action:none; }
+.mv-viewport-grid[data-count="2"] { grid-template:1fr / 1fr 1fr; }
+.mv-viewport-grid[data-count="3"] .mv-viewport-panel:first-child { grid-row:1 / 3; }
