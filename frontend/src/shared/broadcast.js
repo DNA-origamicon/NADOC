@@ -24,7 +24,7 @@
 
 import { getDocId } from './doc_id.js'
 
-const _id = crypto.randomUUID()
+const _id = crypto.randomUUID?.() ?? `${Date.now()}${Math.random().toString(16).slice(2)}`
 const _channel = new BroadcastChannel('nadoc-design')
 
 export const nadocBroadcast = {

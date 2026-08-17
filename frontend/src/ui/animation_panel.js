@@ -317,7 +317,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       const n = (_partDesign?.animations?.length ?? 0) + 1
       await _partPatchFn(d => {
         d.animations = [...(d.animations ?? []), {
-          id: crypto.randomUUID(), name: `Animation ${n}`,
+          id: crypto.randomUUID?.() ?? `${Date.now()}${Math.random().toString(16).slice(2)}`, name: `Animation ${n}`,
           keyframes: [], fps: 30, loop: false,
         }]
       })
@@ -1532,7 +1532,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     if (_partMode) {
       await _partPatchFn(d => {
         const a = d.animations?.find(a => a.id === _activeAnimId)
-        if (a) a.keyframes = [...(a.keyframes ?? []), { id: crypto.randomUUID(), ...kfData }]
+        if (a) a.keyframes = [...(a.keyframes ?? []), { id: crypto.randomUUID?.() ?? `${Date.now()}${Math.random().toString(16).slice(2)}`, ...kfData }]
       })
     } else {
       await _api(api.createKeyframe, api.createAssemblyKeyframe)(_activeAnimId, kfData)
@@ -1562,7 +1562,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     if (_partMode) {
       await _partPatchFn(d => {
         const a = d.animations?.find(a => a.id === _activeAnimId)
-        if (a) a.keyframes = [...(a.keyframes ?? []), { id: crypto.randomUUID(), ...kfData }]
+        if (a) a.keyframes = [...(a.keyframes ?? []), { id: crypto.randomUUID?.() ?? `${Date.now()}${Math.random().toString(16).slice(2)}`, ...kfData }]
       })
     } else {
       await api.createKeyframe(_activeAnimId, kfData)

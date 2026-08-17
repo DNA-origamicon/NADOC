@@ -51,7 +51,7 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
       const n = (_partDesign?.camera_poses?.length ?? 0) + 1
       await _modifyPartDesign(d => {
         d.camera_poses = [...(d.camera_poses ?? []), {
-          id: crypto.randomUUID(), name: `Pose ${n}`,
+          id: crypto.randomUUID?.() ?? `${Date.now()}${Math.random().toString(16).slice(2)}`, name: `Pose ${n}`,
           position: camState.position, target: camState.target,
           up: camState.up, fov: camState.fov, orbit_mode: camState.orbitMode ?? 'trackball',
         }]
