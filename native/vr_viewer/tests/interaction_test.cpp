@@ -11,6 +11,7 @@ namespace {
 
 using nadoc_vr::HandPose;
 using nadoc_vr::ManipulationMode;
+using nadoc_vr::PendingRigidTransform;
 using nadoc_vr::SceneManipulator;
 
 void require(bool condition) {
@@ -94,6 +95,48 @@ void closeInspectionAllowsTheModelToPassThroughTheHead() {
     const glm::vec3 modelCenter(0, 0, -SceneManipulator::kViewDistanceMeters);
     require(glm::all(glm::epsilonEqual(
         transformedPoint(manipulator.transform(), modelCenter), glm::vec3(0), 1e-5F)));
+}
+
+void pendingToolDragAccumulatesInModelSpaceAndCancelsExactly() {
+    PendingRigidTransform pending;
+    pending.activate();
+    require(pending.isIdentity());
+
+    const glm::mat4 model = glm::translate(glm::mat4(1.0F), {2.0F, 0.0F, 0.0F})
+                          * glm::scale(glm::mat4(1.0F), glm::vec3(2.0F));
+    HandPose hand{true, true, {0.0F, 0.0F, -0.5F}, {1, 0, 0, 0}};
+    require(!pending.update(hand, model, true));
+    require(pending.dragging());
+    hand.position.x = 0.2F;
+    require(pending.update(hand, model, true));
+    require(glm::all(glm::epsilonEqual(
+        transformedOrigin(pending.transform()), glm::vec3(0.1F, 0.0F, 0.0F), 1e-5F)));
+
+    hand.pressed = false;
+    pending.update(hand, model, false);
+    require(!pending.dragging());
+    hand.pressed = true;
+    require(!pending.update(hand, model, true));
+    hand.position.x = 0.4F;
+    pending.update(hand, model, true);
+    require(glm::all(glm::epsilonEqual(
+        transformedOrigin(pending.transform()), glm::vec3(0.2F, 0.0F, 0.0F), 1e-5F)));
+
+    pending.cancel();
+    require(!pending.dragging());
+    require(pending.isIdentity(0.0F));
+}
+
+void pendingToolDragRotatesRigidlyWithTheController() {
+    PendingRigidTransform pending;
+    HandPose hand{true, true, {0.0F, 0.0F, 0.0F}, {1, 0, 0, 0}};
+    pending.update(hand, glm::mat4(1.0F), true);
+    hand.orientation = glm::angleAxis(
+        glm::radians(90.0F), glm::vec3(0.0F, 0.0F, 1.0F));
+    pending.update(hand, glm::mat4(1.0F), true);
+    require(glm::all(glm::epsilonEqual(
+        transformedPoint(pending.transform(), {1.0F, 0.0F, 0.0F}),
+        glm::vec3(0.0F, 1.0F, 0.0F), 1e-5F)));
 }
 
 void rayPickingHitsVisiblePrimitiveSurfaces() {
@@ -244,6 +287,8 @@ int main() {
     oneTwoOneTransitionsStayContinuous();
     recenterRestoresUnitScaleInFrontOfHead();
     closeInspectionAllowsTheModelToPassThroughTheHead();
+    pendingToolDragAccumulatesInModelSpaceAndCancelsExactly();
+    pendingToolDragRotatesRigidlyWithTheController();
     rayPickingHitsVisiblePrimitiveSurfaces();
     rayPickingRejectsMissesAndBehindControllerGeometry();
     halfCylinderPickingMatchesTheRenderedPositiveHalf();

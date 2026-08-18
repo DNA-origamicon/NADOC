@@ -24,6 +24,8 @@ struct HandPose {
     glm::quat orientation{1.0F, 0.0F, 0.0F, 0.0F};
 };
 
+inline glm::mat4 poseMatrix(const HandPose& pose);
+
 enum class ManipulationMode { none, left, right, two_hand };
 
 struct SelectionFeedback {
@@ -185,6 +187,63 @@ class ToolShell {
     ToolMode mode_ = ToolMode::inspect;
     bool previewRequested_ = false;
     std::string status_ = "VIEW ONLY";
+};
+
+/** Reversible controller-space rigid preview expressed in model-local space.
+ *
+ * The immutable activation value is identity. Each trigger-drag snapshots the
+ * accumulated local transform, so multiple grabs compose without drift while
+ * Cancel can still restore the activation value exactly. The owning tool decides
+ * whether/when this pending value is projected into authoritative desktop state.
+ */
+class PendingRigidTransform {
+  public:
+    void activate() {
+        transform_ = glm::mat4(1.0F);
+        startTransform_ = transform_;
+        dragging_ = false;
+    }
+
+    void cancel() { activate(); }
+
+    bool update(const HandPose& hand, const glm::mat4& modelTransform, bool enabled) {
+        const bool desired = enabled && hand.valid && hand.pressed;
+        if (!desired) {
+            dragging_ = false;
+            return false;
+        }
+        const glm::mat4 handTransform = poseMatrix(hand);
+        if (!dragging_) {
+            dragging_ = true;
+            startHand_ = handTransform;
+            startTransform_ = transform_;
+            return false;
+        }
+        transform_ = glm::inverse(modelTransform)
+                   * handTransform * glm::inverse(startHand_)
+                   * modelTransform * startTransform_;
+        return true;
+    }
+
+    [[nodiscard]] bool dragging() const { return dragging_; }
+    [[nodiscard]] const glm::mat4& transform() const { return transform_; }
+    [[nodiscard]] bool isIdentity(float epsilon = 1.0e-6F) const {
+        const glm::mat4 identity(1.0F);
+        for (size_t column = 0; column < 4; ++column) {
+            for (size_t row = 0; row < 4; ++row) {
+                if (std::abs(transform_[column][row] - identity[column][row]) > epsilon) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+  private:
+    bool dragging_ = false;
+    glm::mat4 transform_{1.0F};
+    glm::mat4 startTransform_{1.0F};
+    glm::mat4 startHand_{1.0F};
 };
 
 /** Resolve by feedback specificity, then stable scene order.

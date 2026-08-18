@@ -52,7 +52,9 @@ Controls on the original HTC Vive wands:
   restores natural helix spacing without changing the design.
 - Click the right trackpad while a cyan hit marker is visible to select that
   element through NADOC's active selection level and canonical selection controller.
-- Hold either trigger to grab, move, and rotate the structure.
+- Hold either trigger to grab, move, and rotate the structure outside a tool
+  preview. During Move/Rotate Preview, right trigger alone moves/rotates the
+  pending Cluster handle while left trigger remains a structure grab.
 - Hold both triggers and change the distance between the controllers to resize
   the structure around their midpoint.
 - Press either application-menu button to open or close the in-headset menu.
@@ -69,8 +71,12 @@ Controls on the original HTC Vive wands:
   Move/Rotate accepts only a canonical Cluster; finer targets report
   **UNSUPPORTED TARGET** instead of silently widening the edit. Preview draws an
   RGB translation triad at the exact current visual centroid used by NADOC's desktop
-  gizmo; its size is derived from owner-wide bounds and stays capped for reach. Cancel
-  removes it without changing geometry, selection, or history.
+  gizmo; its size is derived from owner-wide bounds and stays capped for reach.
+  Right-trigger drags accumulate across re-grabs and Cancel returns the handle exactly
+  to its activation position. This foundation deliberately moves only the handle:
+  molecule geometry waits for endpoint-aware ownership, so boundary bonds and
+  crossovers cannot be transformed as an incorrect whole primitive. No desktop
+  geometry, selection, or history is changed.
 - Cyan and orange pointers identify the left and right controllers. They turn
   green during a one-hand grab and magenta during a two-hand resize.
 - When neither trigger is held, the right pointer extends to the nearest visible

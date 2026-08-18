@@ -2155,10 +2155,17 @@ class Viewer {
                 if (hit < 5) {
                     const auto mode = static_cast<nadoc_vr::ToolMode>(hit);
                     toolShell_.activate(mode, selectedSelectionKind_);
+                    pendingToolTransform_.cancel();
                     publishToolIntent(nadoc_vr::ToolAction::activate);
                 } else if (hit < 9) {
                     const auto action = static_cast<nadoc_vr::ToolAction>(hit - 4);
                     toolShell_.apply(action, selectedSelectionKind_);
+                    if (action == nadoc_vr::ToolAction::preview &&
+                        toolShell_.previewRequested()) {
+                        pendingToolTransform_.activate();
+                    } else if (action == nadoc_vr::ToolAction::cancel) {
+                        pendingToolTransform_.cancel();
+                    }
                     publishToolIntent(action);
                 } else {
                     menuPage_ = MenuPage::options;
@@ -2204,6 +2211,9 @@ class Viewer {
                 ? glm::vec3(0.20F, 0.75F, 1.0F)
                 : glm::vec3(1.0F, 0.55F, 0.18F);
             if (hands_[hand].pressed) color = {0.35F, 1.0F, 0.42F};
+            if (hand == 1U && pendingToolTransform_.dragging()) {
+                color = {1.0F, 0.72F, 0.18F};
+            }
             if (hand == 1U && gripPressed_) color = {0.35F, 0.95F, 1.0F};
             if (manipulator_.mode() == nadoc_vr::ManipulationMode::two_hand) {
                 color = {0.95F, 0.35F, 1.0F};
@@ -2251,11 +2261,13 @@ class Viewer {
             }
             if (toolShell_.mode() == nadoc_vr::ToolMode::move_rotate &&
                 toolShell_.previewRequested() && selectedSelectionKind_ == "cluster") {
+                const glm::mat4 previewTransform = manipulator_.transform()
+                                                 * pendingToolTransform_.transform();
                 const auto bounds = glScene_->ownerBounds(
-                    selectedOwnerTokens_, manipulator_.transform());
+                    selectedOwnerTokens_, previewTransform);
                 if (bounds) {
                     const glm::vec3 center = glScene_->ownerHandle(
-                        selectedOwnerTokens_, manipulator_.transform())
+                        selectedOwnerTokens_, previewTransform)
                         .value_or(bounds->center);
                     const float handleRadius = glm::clamp(
                         bounds->radius * 0.20F, 0.050F, 0.220F);
@@ -2347,6 +2359,8 @@ class Viewer {
             record, feedbackSequence_, selectSequence_);
         if (!feedback) return;
         feedbackSequence_ = feedback->sequence;
+        const std::vector<std::string> previousOwnerTokens = selectedOwnerTokens_;
+        const std::string previousSelectionKind = selectedSelectionKind_;
         selectionLevel_ = feedback->level;
         selectedIdentity_ = feedback->accepted && feedback->selected
             ? feedback->identity : "";
@@ -2355,6 +2369,11 @@ class Viewer {
         selectedSelectionKind_ = feedback->accepted && feedback->selected
             ? feedback->selectionKind : "none";
         toolShell_.syncSelection(selectedSelectionKind_);
+        if (selectedOwnerTokens_ != previousOwnerTokens ||
+            selectedSelectionKind_ != previousSelectionKind ||
+            !toolShell_.previewRequested()) {
+            pendingToolTransform_.cancel();
+        }
     }
 
     void syncActions(XrTime displayTime) {
@@ -2447,7 +2466,18 @@ class Viewer {
             suppressManipulationUntilRelease_ = false;
         }
         auto manipulationHands = hands_;
-        if (menuOpen_ || menuOpenRequested_ || suppressManipulationUntilRelease_) {
+        const bool inputSuppressed = menuOpen_ || menuOpenRequested_
+                                  || suppressManipulationUntilRelease_;
+        const bool clusterToolPreview =
+            toolShell_.mode() == nadoc_vr::ToolMode::move_rotate &&
+            toolShell_.previewRequested() && selectedSelectionKind_ == "cluster";
+        const bool rightToolDrag = clusterToolPreview && !inputSuppressed &&
+                                   hands_[1].valid && hands_[1].pressed &&
+                                   !(hands_[0].valid && hands_[0].pressed);
+        pendingToolTransform_.update(
+            hands_[1], manipulator_.transform(), rightToolDrag);
+        if (rightToolDrag) manipulationHands[1].pressed = false;
+        if (inputSuppressed) {
             for (nadoc_vr::HandPose& hand : manipulationHands) hand.pressed = false;
         }
         const nadoc_vr::ManipulationMode next = manipulator_.update(manipulationHands);
@@ -2634,6 +2664,7 @@ class Viewer {
     uint64_t toolSequence_ = 0;
     nadoc_vr::ToolAction lastToolAction_ = nadoc_vr::ToolAction::activate;
     nadoc_vr::ToolShell toolShell_;
+    nadoc_vr::PendingRigidTransform pendingToolTransform_;
     uint64_t feedbackSequence_ = 0;
     uint32_t feedbackPollFrame_ = 0;
     std::string selectedIdentity_;
