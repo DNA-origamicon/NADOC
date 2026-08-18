@@ -28,6 +28,12 @@ describe('pure selection hit resolution', () => {
       kind: 'nucleotide', nucleotide,
       ref: { kind: 'base', key: 'helix:b:7:REVERSE:1' },
     })
+    expect(vrPrimitiveOwner(
+      'atom:12:base:helix:b:7:REVERSE:1:C', { geometry: [nucleotide] },
+    )).toEqual({
+      kind: 'atom', nucleotide,
+      ref: { kind: 'base', key: 'helix:b:7:REVERSE:1' },
+    })
   })
 
   it('resolves crossover, forced-ligation, warning, and domain primitives', () => {
@@ -48,6 +54,27 @@ describe('pure selection hit resolution', () => {
     expect(vrPrimitiveOwner(
       'segment:helix:d:strand:c:0:3:9:axis', { design },
     )?.ref).toEqual({ kind: 'domain', strandId: 'strand:c', domainIndex: 0 })
+  })
+
+  it('resolves flexible and ss-linker base owners without parsing connection IDs', () => {
+    const design = {
+      strands: [{ id: 'strand:a', domains: [{ helix_id: 'helix:b' }] }],
+      flexible_connections: [{
+        id: 'flex:c',
+        segment_bead_keys: [{
+          strand_id: 'strand:a', domain_index: 0, bp_index: 8, direction: 'REVERSE',
+        }],
+      }],
+      overhang_connections: [{ id: 'link:d' }],
+    }
+    expect(vrPrimitiveOwner('flex:flex:c:slab:0', { design })).toEqual({
+      kind: 'flexible_base', connectionId: 'flex:c',
+      ref: { kind: 'base', key: 'helix:b:8:REVERSE' },
+    })
+    expect(vrPrimitiveOwner('linker:link:d:ss:bead:3', { design })).toEqual({
+      kind: 'linker_base', connectionId: 'link:d',
+      ref: { kind: 'base', key: '__lnk__link:d:3:FORWARD' },
+    })
   })
 
   it('resolves only terminal beads as End refs', () => {

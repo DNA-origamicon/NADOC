@@ -2342,7 +2342,13 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     const backboneEntries = designRenderer.getBackboneEntries()
     let entries = []
-    if (owner.kind === 'nucleotide') {
+    let directGlowEntries = null
+    if (owner.kind === 'atom') {
+      if (_selLevel === 'base' || _selLevel === 'default') {
+        directGlowEntries = getAtomisticRenderer?.()
+          ?.selectionAtomEntries?.([owner.nucleotide], { scale: 1.35 }) ?? []
+      }
+    } else if (owner.kind === 'nucleotide') {
       const entry = backboneEntries.find(candidate => candidate.nuc === owner.nucleotide)
         ?? backboneEntries.find(candidate =>
           baseKey(candidate.nuc, candidate._copy) === owner.ref.key)
@@ -2371,13 +2377,17 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         designRenderer.setPreviewArc(arc.getPositions?.() ?? [])
       }
       return owner
+    } else if ((owner.kind === 'flexible_base' || owner.kind === 'linker_base') &&
+               (_selLevel === 'base' || _selLevel === 'default')) {
+      const candidate = _baseCandidates().find(item => item.key === owner.ref.key)
+      if (candidate) directGlowEntries = [_baseGlowEntry(candidate)]
     }
 
-    if (entries.length) {
+    if (entries.length || directGlowEntries?.length) {
       _hoverKey = `vr:${identity}`
-      designRenderer.setPreviewGlow(entries.map(entry => ({
-        pos: _instWorld(entry.instMesh, entry.id, new THREE.Vector3()),
-      })))
+      designRenderer.setPreviewGlow(directGlowEntries ?? entries.map(entry => ({
+          pos: _instWorld(entry.instMesh, entry.id, new THREE.Vector3()),
+        })))
     }
     return owner
   }

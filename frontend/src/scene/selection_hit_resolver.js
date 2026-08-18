@@ -37,6 +37,14 @@ export function vrPrimitiveOwner(identity, { geometry = [], design = null } = {}
         ref: { kind: 'base', key },
       } : null
     }
+    const key = atomBaseKey(nucleotide)
+    if (key && decoded.startsWith('atom:') && decoded.includes(`:base:${key}:`)) {
+      return {
+        kind: 'atom',
+        nucleotide,
+        ref: { kind: 'base', key },
+      }
+    }
   }
 
   const connectionCollections = [
@@ -66,6 +74,47 @@ export function vrPrimitiveOwner(identity, { geometry = [], design = null } = {}
           kind: 'domain',
           ref: { kind: 'domain', strandId: strand.id, domainIndex },
         }
+      }
+    }
+  }
+
+  const strands = new Map((design?.strands ?? []).map(strand => [strand.id, strand]))
+  for (const connection of design?.flexible_connections ?? []) {
+    for (const primitive of ['bead', 'slab']) {
+      const prefix = `flex:${connection.id}:${primitive}:`
+      if (!decoded.startsWith(prefix)) continue
+      const index = Number(decoded.slice(prefix.length))
+      const anchor = connection.segment_bead_keys?.[index]
+      const domain = strands.get(anchor?.strand_id)?.domains?.[anchor?.domain_index]
+      if (!domain || !Number.isInteger(index)) return null
+      const key = baseKey({
+        helix_id: domain.helix_id,
+        bp_index: anchor.bp_index,
+        direction: anchor.direction,
+      })
+      return key ? {
+        kind: 'flexible_base', connectionId: connection.id,
+        ref: { kind: 'base', key },
+      } : null
+    }
+  }
+
+  for (const connection of design?.overhang_connections ?? []) {
+    for (const primitive of ['bead', 'slab']) {
+      const prefix = `linker:${connection.id}:ss:${primitive}:`
+      if (!decoded.startsWith(prefix)) continue
+      const index = Number(decoded.slice(prefix.length))
+      if (!Number.isInteger(index) || index < 0) return null
+      return {
+        kind: 'linker_base', connectionId: connection.id,
+        ref: {
+          kind: 'base',
+          key: baseKey({
+            helix_id: `__lnk__${connection.id}`,
+            bp_index: index,
+            direction: 'FORWARD',
+          }),
+        },
       }
     }
   }

@@ -279,9 +279,7 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
     assert set(sections) == {"full", "cylinders", "ballstick", "stick"}
     assert all(len(values) == len(set(values)) for values in identities.values())
     assert "nuc:s1:0:h1:1:FORWARD:0:backbone" in identities["full"]
-    assert any(
-        identity.startswith("atom:0:s1:h1:0:C") for identity in identities["ballstick"]
-    )
+    assert "atom:0:base:h1:0:FORWARD:C" in identities["ballstick"]
     assert sum(record[0] == "P" for record in sections["full"]) == 1
     assert sum(record[0] == "B" for record in sections["full"]) == 3
     assert sum(record[0] == "C" for record in sections["full"]) == 4

@@ -1113,6 +1113,19 @@ def _serialize_scene(
         cpk_color = _rgb(f"#{CPK_COLOR.get(atom.element, DEFAULT_CPK_COLOR):06x}")
         atom_palettes.append((*strand_color, *base_color, *cluster_color, *cpk_color))
 
+    def atom_base_key(atom) -> str:
+        if getattr(atom, "crossover_id", None) is not None and getattr(
+            atom, "extra_base_k", None
+        ) is not None:
+            return f"__xb__:{atom.crossover_id}:{atom.extra_base_k}"
+        if getattr(atom, "extension_id", None) is not None and getattr(
+            atom, "ext_k", None
+        ) is not None:
+            return f"__ext_{atom.extension_id}:{atom.ext_k}:{atom.direction}"
+        key = f"{atom.helix_id}:{atom.bp_index}:{atom.direction}"
+        copy_k = int(getattr(atom, "copy_k", 0) or 0)
+        return f"{key}:{copy_k}" if copy_k else key
+
     def append_atomistic(name: str, include_points: bool, radius: float) -> None:
         nonlocal active_representation
         lines.append(f"R {name}")
@@ -1125,7 +1138,7 @@ def _serialize_scene(
                     radius = VDW_RADIUS.get(atom.element, DEFAULT_VDW_RADIUS) * 0.55
                     emit(
                         "P",
-                        f"atom:{atom_index}:{atom.strand_id}:{atom.helix_id}:{atom.bp_index}:{atom.element}",
+                        f"atom:{atom_index}:base:{atom_base_key(atom)}:{atom.element}",
                         *position,
                         radius,
                         *palette,
