@@ -43,6 +43,33 @@ export function clusterMemberFilter(cluster, design) {
   return nuc => helixSet.has(nuc.helix_id)
 }
 
+/** Resolve the same most-specific Cluster that desktop cluster picking uses.
+ * Non-default Clusters win by smallest helix footprint, then the default Cluster,
+ * then any containing Cluster. Array order is the deterministic tie-breaker.
+ */
+export function clusterIdForNucleotide(nucleotide, design) {
+  const clusters = design?.cluster_transforms ?? []
+  if (!nucleotide || !clusters.length) return null
+  let best = null
+  let bestSize = Infinity
+  for (const cluster of clusters) {
+    if (cluster.is_default) continue
+    const isMember = clusterMemberFilter(cluster, design)
+    if (isMember?.(nucleotide)) {
+      const size = cluster.helix_ids?.length ?? Infinity
+      if (size < bestSize) {
+        best = cluster
+        bestSize = size
+      }
+    }
+  }
+  if (best) return best.id
+  const fallback = clusters.find(cluster =>
+    cluster.is_default && clusterMemberFilter(cluster, design)?.(nucleotide)) ??
+    clusters.find(cluster => clusterMemberFilter(cluster, design)?.(nucleotide))
+  return fallback?.id ?? null
+}
+
 /**
  * Backbone entries belonging to a cluster. Mirrors the active-cluster glow so
  * picking matches the highlighted body.

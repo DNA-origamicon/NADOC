@@ -31,7 +31,7 @@ import * as api from '../api/client.js'
 import { ensureLoaded as _ensureFjcLookup } from './ssdna_fjc.js'
 import { deferrableContextMenu } from './right_click_menu.js'
 import { showConfirm } from '../ui/primitives/confirm.js'
-import { clusterMemberFilter } from './cluster_entries.js'
+import { clusterIdForNucleotide, clusterMemberFilter } from './cluster_entries.js'
 import { strandsToSegments, clustersToSegments, domainsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './representation_overrides.js'
 import { normalizeLevel, hoverPreviewTarget, lassoCaptureType, extensionSelectionEntries, extensionContextIds } from './selection_level.js'
 import { buildStrandMenuItems } from '../ui/strand_menu_items.js'
@@ -50,6 +50,7 @@ import {
 import { selectionHighlightDescriptor } from './selection_highlight_model.js'
 import { referenceStrandInteractionHidden } from './reference_navigation.js'
 import { resolveVREndToolContext } from './vr_tool_context.js'
+import { resolveVRDeformationScope } from './vr_tool_execution_plan.js'
 import { getVRDeformationPlaneFrames } from './deformation_editor.js'
 
 // Kick off the FJC lookup fetch at module load so the linker-config modal
@@ -1718,22 +1719,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // (all-helices) cluster, then any containing cluster. Mirrors the bridge/
   // exclusive membership split via clusterMemberFilter (shared with the gizmo).
   function _resolveClusterId(nuc, design) {
-    const cts = design?.cluster_transforms ?? []
-    if (!cts.length) return null
-    let best = null, bestSize = Infinity
-    for (const c of cts) {
-      if (c.is_default) continue
-      const f = clusterMemberFilter(c, design)
-      if (f && f(nuc)) {
-        const size = c.helix_ids?.length ?? Infinity
-        if (size < bestSize) { best = c; bestSize = size }
-      }
-    }
-    if (best) return best.id
-    const def = cts.find(c => c.is_default && clusterMemberFilter(c, design)?.(nuc))
-    if (def) return def.id
-    const any = cts.find(c => clusterMemberFilter(c, design)?.(nuc))
-    return any?.id ?? null
+    return clusterIdForNucleotide(nuc, design)
   }
 
   function _clusterEntries(clusterId, design, backboneEntries) {
@@ -4846,8 +4832,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       })
       if (!pick.resolved) return pick
       const selectedRef = selectionController.getState().primary ?? null
-      const clusterIds = selectedRef?.kind === 'cluster' ? [selectedRef.id] : null
-      const frames = getVRDeformationPlaneFrames(pick.bp, clusterIds)
+      const scope = resolveVRDeformationScope(selectedRef, {
+        design: state.currentDesign,
+        geometry: state.currentGeometry,
+      })
+      if (!scope.resolved) {
+        return { resolved: false, reason: 'plane_frame_unavailable' }
+      }
+      const frames = getVRDeformationPlaneFrames(pick.bp, scope.clusterIds)
       return frames ? { ...pick, frame: frames.natural, expandedFrame: frames.expanded }
         : { resolved: false, reason: 'plane_frame_unavailable' }
     },
