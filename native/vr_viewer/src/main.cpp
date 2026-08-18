@@ -12,6 +12,7 @@
 
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
+#include <zlib.h>
 
 #include "interaction.hpp"
 #include "picking.hpp"
@@ -439,8 +440,60 @@ GLuint makeBoxProgram() {
     throw std::runtime_error("OpenGL box shader link failed: " + log);
 }
 
+class GzipStreamBuffer : public std::streambuf {
+  public:
+    explicit GzipStreamBuffer(const std::string& path)
+        : file_(gzopen(path.c_str(), "rb")) {
+        setg(buffer_.data(), buffer_.data(), buffer_.data());
+    }
+
+    ~GzipStreamBuffer() override {
+        if (file_) gzclose(file_);
+    }
+
+    [[nodiscard]] bool isOpen() const { return file_ != nullptr; }
+    [[nodiscard]] bool failed() const { return failed_; }
+
+  protected:
+    int_type underflow() override {
+        if (gptr() < egptr()) return traits_type::to_int_type(*gptr());
+        if (!file_) return traits_type::eof();
+        const int count = gzread(
+            file_, buffer_.data(), static_cast<unsigned int>(buffer_.size()));
+        if (count <= 0) {
+            int error = Z_OK;
+            gzerror(file_, &error);
+            failed_ = error != Z_OK && error != Z_STREAM_END;
+            return traits_type::eof();
+        }
+        setg(buffer_.data(), buffer_.data(), buffer_.data() + count);
+        return traits_type::to_int_type(*gptr());
+    }
+
+  private:
+    gzFile file_ = nullptr;
+    bool failed_ = false;
+    std::array<char, 64 * 1024> buffer_{};
+};
+
+class GzipInputStream : public std::istream {
+  public:
+    explicit GzipInputStream(const std::string& path)
+        : std::istream(nullptr), buffer_(path) {
+        rdbuf(&buffer_);
+        if (!buffer_.isOpen()) setstate(std::ios::badbit);
+    }
+
+    [[nodiscard]] bool compressionError() const { return buffer_.failed(); }
+
+  private:
+    GzipStreamBuffer buffer_;
+};
+
 SceneData loadScene(const std::string& path) {
-    std::ifstream input(path);
+    // zlib's transparent read mode accepts both gzip and ordinary scene files,
+    // retaining legacy fixtures while production snapshots stay compact.
+    GzipInputStream input(path);
     if (!input) throw std::runtime_error("Could not open scene snapshot: " + path);
 
     std::string magic;
@@ -709,6 +762,9 @@ SceneData loadScene(const std::string& path) {
             throw std::runtime_error(std::string("Unknown scene record: ") + type);
         }
         if (!input) throw std::runtime_error("Malformed NADOC VR scene snapshot");
+    }
+    if (input.compressionError()) {
+        throw std::runtime_error("Corrupt compressed NADOC VR scene snapshot");
     }
     if (std::all_of(scene.representations.begin(), scene.representations.end(),
                     [](const RepresentationData& rep) {

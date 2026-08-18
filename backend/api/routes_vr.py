@@ -9,6 +9,7 @@ No design data is mutated and no shell command is constructed from request data.
 from __future__ import annotations
 
 import copy
+import gzip
 import hashlib
 import json
 import os
@@ -18,7 +19,7 @@ import subprocess
 import tempfile
 import threading
 import time
-from typing import Literal, Optional
+from typing import Callable, Literal, Optional
 from urllib.parse import quote, urlparse
 
 import numpy as np
@@ -360,6 +361,82 @@ def _cluster_gizmo_handle_centers(
     return tuple(records)
 
 
+_SCENE_MANIFEST_CATEGORIES = ("primitive", "D", "A", "T", "W", "K", "J")
+
+
+class _SceneLineEmitter:
+    """Optional line sink plus constant-memory natural/Expanded parity digest."""
+
+    def __init__(self, writer: Callable[[str], None] | None = None):
+        self._writer = writer
+        self._lines: list[str] | None = [] if writer is None else None
+        self._active: str | None = None
+        self._digests: dict[str, dict[str, object]] = {}
+        self.has_visible = False
+
+    def _category(self, representation: str, category: str):
+        categories = self._digests.setdefault(representation, {})
+        entry = categories.get(category)
+        if entry is None:
+            entry = [hashlib.blake2b(digest_size=20), 0]
+            categories[category] = entry
+        return entry
+
+    def append(self, line: str) -> None:
+        if self._lines is not None:
+            self._lines.append(line)
+        else:
+            assert self._writer is not None
+            self._writer(line)
+        fields = line.split()
+        if not fields or fields[0] == "#" or fields[0] == "NADOCVR":
+            return
+        record_type = fields[0]
+        if record_type == "R":
+            self._active = fields[1]
+            self._digests.setdefault(self._active, {})
+            return
+        if self._active is None:
+            return
+        if record_type in {"P", "C", "H", "B"}:
+            category = "primitive"
+            payload = f"{record_type} {fields[1]}"
+            self.has_visible = True
+        elif record_type in _SCENE_MANIFEST_CATEGORIES:
+            category = record_type
+            payload = (
+                " ".join(fields[:4])
+                if record_type == "J"
+                else " ".join(fields[:2])
+                if record_type == "K"
+                else line
+            )
+        else:
+            return
+        digest, count = self._category(self._active, category)
+        digest.update(payload.encode())
+        digest.update(b"\n")
+        self._category(self._active, category)[1] = count + 1
+
+    def extend(self, lines) -> None:
+        for line in lines:
+            self.append(line)
+
+    def text(self) -> str:
+        if self._lines is None:
+            raise RuntimeError("Streaming scene emitter has no text buffer")
+        return "\n".join(self._lines) + "\n"
+
+    def manifest(self) -> dict[str, dict[str, tuple[int, str]]]:
+        return {
+            representation: {
+                category: (entry[1], entry[0].hexdigest())
+                for category, entry in categories.items()
+            }
+            for representation, categories in self._digests.items()
+        }
+
+
 def _serialize_scene(
     design,
     nucleotides: list[dict],
@@ -369,7 +446,8 @@ def _serialize_scene(
     coloring: str = "strand",
     atomistic_model=None,
     unligated_crossover_ids: list[str] | None = None,
-) -> str:
+    line_writer: Callable[[str], None] | None = None,
+) -> str | dict[str, dict[str, tuple[int, str]]]:
     """Create the deliberately trivial line-oriented format read by the C++ viewer."""
     rotation = _view_rotation(camera)
     cluster_handles = _cluster_gizmo_handle_centers(design, nucleotides, rotation)
@@ -999,10 +1077,9 @@ def _serialize_scene(
             transform_owners=transform_owners,
         )
 
-    lines = [
-        f"NADOCVR 12 {representation} {coloring}",
-        "# stable identities, owner aliases, and endpoint-aware tool scopes",
-    ]
+    lines = _SceneLineEmitter(line_writer)
+    lines.append(f"NADOCVR 12 {representation} {coloring}")
+    lines.append("# stable identities, owner aliases, and endpoint-aware tool scopes")
     by_strand: dict[str, list[tuple[dict, np.ndarray, tuple[float, ...], str]]] = {}
     identity_palettes: dict[tuple, tuple[float, ...]] = {}
     lines.append("R full")
@@ -2098,11 +2175,11 @@ def _serialize_scene(
     append_atomistic("ballstick", True, 0.035)
     append_atomistic("stick", False, 0.055)
 
-    if not any(line.startswith(("P ", "C ", "B ")) for line in lines):
+    if not lines.has_visible:
         raise HTTPException(
             409, detail="The active design contains no display geometry."
         )
-    return "\n".join(lines) + "\n"
+    return lines.text() if line_writer is None else lines.manifest()
 
 
 def _expanded_helix_offsets(design, spacing_nm: float = 5.0) -> dict[str, np.ndarray]:
@@ -2318,7 +2395,39 @@ def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
     return "\n".join(output) + "\n"
 
 
-def _snapshot(body: VRLaunchRequest) -> str:
+def _validate_streamed_scene_manifests(
+    natural: dict[str, dict[str, tuple[int, str]]],
+    expanded: dict[str, dict[str, tuple[int, str]]],
+) -> None:
+    if set(natural) != set(expanded):
+        raise HTTPException(500, detail="Expanded VR representations do not match.")
+    labels = {
+        "primitive": "primitive identities",
+        "D": "owner dictionaries",
+        "A": "primitive owner aliases",
+        "T": "transform owners",
+        "W": "tool-scope owners",
+        "K": "cluster handles",
+        "J": "tool handles",
+    }
+    for representation in natural:
+        for category in _SCENE_MANIFEST_CATEGORIES:
+            if natural[representation].get(category) != expanded[representation].get(
+                category
+            ):
+                raise HTTPException(
+                    500,
+                    detail=(
+                        f"Expanded VR {labels[category]} differ in "
+                        f"{representation}."
+                    ),
+                )
+
+
+def _snapshot(
+    body: VRLaunchRequest,
+    line_writer: Callable[[str], None] | None = None,
+) -> str | None:
     from backend.core.deformation import (
         _apply_ovhg_rotations_to_axes,
         deformed_helix_axes,
@@ -2353,10 +2462,18 @@ def _snapshot(body: VRLaunchRequest) -> str:
         body.coloring,
         atomistic_model,
         unligated_crossover_ids(design),
+        line_writer=line_writer,
     )
     expanded_nucleotides, expanded_axes, expanded_atomistic = _expanded_scene_inputs(
         design, nucleotides, axes, atomistic_model
     )
+    expanded_writer = None
+    if line_writer is not None:
+        def expanded_writer(line: str) -> None:
+            if line.startswith("NADOCVR ") or line.startswith("#"):
+                return
+            line_writer(f"E {line[2:]}") if line.startswith("R ") else line_writer(line)
+
     expanded_scene = _serialize_scene(
         design,
         expanded_nucleotides,
@@ -2366,7 +2483,13 @@ def _snapshot(body: VRLaunchRequest) -> str:
         body.coloring,
         expanded_atomistic,
         unligated_crossover_ids(design),
+        line_writer=expanded_writer,
     )
+    if line_writer is not None:
+        assert isinstance(natural_scene, dict) and isinstance(expanded_scene, dict)
+        _validate_streamed_scene_manifests(natural_scene, expanded_scene)
+        return None
+    assert isinstance(natural_scene, str) and isinstance(expanded_scene, str)
     return _bundle_expanded_scene(natural_scene, expanded_scene)
 
 
@@ -2789,6 +2912,59 @@ def _viewer_command(
     return command
 
 
+def _write_scene_snapshot(
+    scene_text: str | None = None,
+    *,
+    producer: Callable[[Callable[[str], None]], None] | None = None,
+) -> Path:
+    """Write one private gzip snapshot from text or a constant-memory line source."""
+    if (scene_text is None) == (producer is None):
+        raise ValueError("Provide exactly one VR scene source")
+    with tempfile.NamedTemporaryFile(
+        mode="wb",
+        prefix="nadoc-vr-",
+        suffix=".nadocvr.gz",
+        delete=False,
+    ) as scene_file:
+        scene_path = Path(scene_file.name)
+    try:
+        with gzip.open(
+            scene_path,
+            mode="wt",
+            compresslevel=1,
+            encoding="utf-8",
+            newline="\n",
+        ) as compressed:
+            if scene_text is not None:
+                for offset in range(0, len(scene_text), 1 << 20):
+                    compressed.write(scene_text[offset : offset + (1 << 20)])
+            else:
+                pending: list[str] = []
+                pending_size = 0
+
+                def write_line(line: str) -> None:
+                    nonlocal pending_size
+                    pending.append(line)
+                    pending_size += len(line) + 1
+                    if pending_size >= 1 << 20:
+                        compressed.write("\n".join(pending) + "\n")
+                        pending.clear()
+                        pending_size = 0
+
+                assert producer is not None
+                producer(write_line)
+                if pending:
+                    compressed.write("\n".join(pending) + "\n")
+        scene_path.chmod(0o600)
+        return scene_path
+    except OSError as exc:
+        scene_path.unlink(missing_ok=True)
+        raise HTTPException(503, detail="Could not write the VR scene snapshot.") from exc
+    except Exception:
+        scene_path.unlink(missing_ok=True)
+        raise
+
+
 @router.post("/vr/runtime/start")
 def start_vr_runtime(request: Request) -> dict:
     _require_local(request)
@@ -2829,16 +3005,9 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         if running:
             return _status_payload()
         _ensure_viewer_built()
-        scene_text = _snapshot(body)
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            prefix="nadoc-vr-",
-            suffix=".nadocvr",
-            delete=False,
-        ) as scene_file:
-            scene_file.write(scene_text)
-            scene_path = Path(scene_file.name)
-        scene_path.chmod(0o600)
+        scene_path = _write_scene_snapshot(
+            producer=lambda write_line: _snapshot(body, line_writer=write_line)
+        )
         with tempfile.NamedTemporaryFile(
             mode="w",
             prefix="nadoc-vr-event-",

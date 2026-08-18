@@ -1,5 +1,6 @@
 """Focused checks for the local native-OpenXR bridge."""
 
+import gzip
 import json
 from types import SimpleNamespace
 from urllib.parse import quote
@@ -23,9 +24,11 @@ from backend.api.routes_vr import (
     _selection_cluster,
     _selection_clusters,
     _serialize_scene,
+    _validate_streamed_scene_manifests,
     _view_rotation,
     _viewer_command,
     _write_feedback,
+    _write_scene_snapshot,
 )
 from backend.core.vr_scene_contract import compare_scenes, parse_scene_contract
 
@@ -462,6 +465,40 @@ def test_native_launch_passes_initial_selection_as_opaque_arguments(tmp_path) ->
         )
 
 
+def test_scene_snapshot_writer_is_private_gzip_and_round_trips() -> None:
+    scene = "NADOCVR 12 full strand\nR full\n" + ("# repeated payload\n" * 5000)
+    path = _write_scene_snapshot(scene)
+    try:
+        assert path.suffixes[-2:] == [".nadocvr", ".gz"]
+        assert path.stat().st_mode & 0o777 == 0o600
+        assert path.stat().st_size < len(scene.encode()) / 10
+        with gzip.open(path, mode="rt", encoding="utf-8") as compressed:
+            assert compressed.read() == scene
+    finally:
+        path.unlink(missing_ok=True)
+
+    def produce(write_line) -> None:
+        for line in scene.splitlines():
+            write_line(line)
+
+    streamed = _write_scene_snapshot(producer=produce)
+    try:
+        with gzip.open(streamed, mode="rt", encoding="utf-8") as compressed:
+            assert compressed.read() == scene
+    finally:
+        streamed.unlink(missing_ok=True)
+
+
+def test_streamed_manifest_detects_pose_contract_drift() -> None:
+    natural = {"full": {"primitive": (2, "same"), "A": (1, "owners")}}
+    _validate_streamed_scene_manifests(natural, natural)
+    with pytest.raises(HTTPException, match="primitive identities differ in full"):
+        _validate_streamed_scene_manifests(
+            natural,
+            {"full": {"primitive": (3, "different"), "A": (1, "owners")}},
+        )
+
+
 def test_runtime_status_requires_compositor_and_reports_dashboard(monkeypatch) -> None:
     monkeypatch.setattr(
         routes_vr,
@@ -606,6 +643,17 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
         atomistic_model=SimpleNamespace(atoms=atoms, bonds=[(1, 0)]),
     )
     assert compare_scenes(text, reversed_bond_text).ok
+    streamed_lines = []
+    manifest = _serialize_scene(
+        design,
+        nucleotides,
+        [{"helix_id": "h1", "start": [0, 0, 0], "end": [0, 0, 1]}],
+        camera,
+        atomistic_model=SimpleNamespace(atoms=atoms, bonds=[(0, 1)]),
+        line_writer=streamed_lines.append,
+    )
+    assert "\n".join(streamed_lines) + "\n" == text
+    assert set(manifest) == {"full", "cylinders", "ballstick", "stick"}
 
 
 def test_v11_atom_identity_rejects_missing_or_duplicate_chemical_names() -> None:

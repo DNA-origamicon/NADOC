@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(OpenGL REQUIRED)
+find_package(ZLIB REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GLFW REQUIRED IMPORTED_TARGET glfw3)
 pkg_check_modules(OPENXR REQUIRED IMPORTED_TARGET openxr)
@@ -17,6 +18,7 @@ target_link_libraries(nadoc-vr-viewer PRIVATE
   PkgConfig::GLFW
   PkgConfig::X11
   OpenGL::GL
+  ZLIB::ZLIB
 )
 target_compile_options(nadoc-vr-viewer PRIVATE
   -Wall -Wextra -Wpedantic -Wno-missing-field-initializers
@@ -69,4 +71,13 @@ if(BUILD_TESTING)
     NAME nadoc-vr-scene-v12-tool-scope
     COMMAND nadoc-vr-viewer --validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/tool_scope_v12.nadocvr
   )
+  add_test(
+    NAME nadoc-vr-scene-v12-gzip
+    COMMAND /bin/sh -c "/usr/bin/gzip -c '${CMAKE_CURRENT_SOURCE_DIR}/examples/tool_scope_v12.nadocvr' > '${CMAKE_CURRENT_BINARY_DIR}/tool_scope_v12.nadocvr.gz' && '$<TARGET_FILE:nadoc-vr-viewer>' --validate '${CMAKE_CURRENT_BINARY_DIR}/tool_scope_v12.nadocvr.gz'"
+  )
+  add_test(
+    NAME nadoc-vr-scene-v12-corrupt-gzip
+    COMMAND /bin/sh -c "/usr/bin/gzip -c '${CMAKE_CURRENT_SOURCE_DIR}/examples/tool_scope_v12.nadocvr' > '${CMAKE_CURRENT_BINARY_DIR}/tool_scope_v12_corrupt.nadocvr.gz' && /usr/bin/truncate -s -8 '${CMAKE_CURRENT_BINARY_DIR}/tool_scope_v12_corrupt.nadocvr.gz' && '$<TARGET_FILE:nadoc-vr-viewer>' --validate '${CMAKE_CURRENT_BINARY_DIR}/tool_scope_v12_corrupt.nadocvr.gz'"
+  )
+  set_tests_properties(nadoc-vr-scene-v12-corrupt-gzip PROPERTIES WILL_FAIL TRUE)
 endif()
