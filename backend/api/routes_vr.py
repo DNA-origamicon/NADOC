@@ -653,6 +653,8 @@ def _serialize_scene(
         first_palette_by_helix.setdefault(
             nucleotide.get("helix_id"), palette_for_index(index)
         )
+    design_strands_by_id = {strand.id: strand for strand in design.strands}
+    emitted_linker_binding_domains: set[tuple[str, int]] = set()
     for axis in axes:
         fallback_palette = first_palette_by_helix.get(
             axis.get("helix_id"), solid_palette((0.45, 0.55, 0.72))
@@ -672,14 +674,120 @@ def _serialize_scene(
                 )
                 if match is not None:
                     palette = palette_for_index(match)
+            segment_strand = (
+                design_strands_by_id.get(segment.get("strand_id"))
+                if segment is not None
+                else None
+            )
+            is_linker_binding = bool(
+                segment is not None
+                and segment_strand is not None
+                and getattr(segment_strand, "strand_type", None) == "linker"
+                and not str(axis.get("helix_id") or "").startswith("__lnk__")
+            )
             record_type = (
                 "H"
                 if segment is not None
-                and segment.get("ovhg_id")
-                and str(segment.get("ovhg_id")) not in direct_overhang_ids
+                and (
+                    is_linker_binding
+                    or (
+                        segment.get("ovhg_id")
+                        and str(segment.get("ovhg_id")) not in direct_overhang_ids
+                    )
+                )
                 else "C"
             )
+            # Reversing the endpoints reverses the native half-cylinder's
+            # deterministic radial basis. The linker complement therefore fills
+            # the opposite half of the authored overhang, matching desktop's π
+            # axial roll without adding a second orientation convention.
+            if is_linker_binding:
+                first, second = second, first
+                emitted_linker_binding_domains.add(
+                    (
+                        str(segment.get("strand_id")),
+                        int(segment.get("domain_index") or 0),
+                    )
+                )
             lines.append(f"{record_type} {nums(*first, *second, 0.72, *palette)}")
+
+    # deformed_helix_axes intentionally deduplicates coincident domain ranges.
+    # On a paired overhang that means the authored overhang segment usually wins
+    # and its linker-complement domain has no separate axis record. Reuse that
+    # exact authoritative interval, reversed, for the complementary half.
+    for strand in design.strands:
+        if getattr(strand, "strand_type", None) != "linker":
+            continue
+        for domain_index, domain in enumerate(getattr(strand, "domains", [])):
+            if (
+                str(domain.helix_id).startswith("__lnk__")
+                or (
+                    strand.id,
+                    domain_index,
+                )
+                in emitted_linker_binding_domains
+            ):
+                continue
+            domain_lo = min(int(domain.start_bp), int(domain.end_bp))
+            domain_hi = max(int(domain.start_bp), int(domain.end_bp))
+            axis = next(
+                (item for item in axes if item.get("helix_id") == domain.helix_id),
+                None,
+            )
+            if axis is None:
+                continue
+            palette = palette_for_strand(strand.id)
+            for segment in axis.get("segments") or []:
+                segment_lo = int(segment.get("bp_lo", domain_lo))
+                segment_hi = int(segment.get("bp_hi", domain_hi))
+                if segment_lo < domain_lo or segment_hi > domain_hi:
+                    continue
+                first, second = point(segment.get("start")), point(segment.get("end"))
+                if first is None or second is None:
+                    continue
+                lines.append(f"H {nums(*second, *first, 0.72, *palette)}")
+
+    # A ds linker bridge lives on a synthetic helix intentionally omitted from
+    # deformed_helix_axes. Desktop reconstructs its coarse cylinder from the
+    # mean base/backbone position at the minimum and maximum bridge bp.
+    for connection in getattr(design, "overhang_connections", []):
+        if getattr(connection, "linker_type", "ds") != "ds":
+            continue
+        bridge_helix_id = f"__lnk__{connection.id}"
+        bridge_nucleotides = [
+            nucleotide
+            for nucleotide in nucleotides
+            if nucleotide.get("helix_id") == bridge_helix_id
+        ]
+        if len(bridge_nucleotides) < 2:
+            continue
+        bp_values = [
+            int(nucleotide.get("bp_index") or 0) for nucleotide in bridge_nucleotides
+        ]
+
+        def bridge_axis_at(bp_index: int) -> np.ndarray | None:
+            positions = []
+            for nucleotide in bridge_nucleotides:
+                if int(nucleotide.get("bp_index") or 0) != bp_index:
+                    continue
+                raw = nucleotide.get("base_position")
+                if raw is None:
+                    raw = nucleotide.get("backbone_position")
+                position = point(raw)
+                if position is not None:
+                    positions.append(position)
+            return np.mean(positions, axis=0) if positions else None
+
+        first = bridge_axis_at(min(bp_values))
+        second = bridge_axis_at(max(bp_values))
+        if first is None or second is None:
+            continue
+        if float(np.linalg.norm(second - first)) < 1e-3:
+            # Desktop gives a one-bp bridge a 0.001 nm minimum Y extent so the
+            # coarse primitive remains non-degenerate.
+            second = first + rotation @ np.array([0.0, 0.001, 0.0])
+        palette = palette_for_strand(f"{bridge_helix_id}__a")
+        lines.append(f"C {nums(*first, *second, 0.72, *palette)}")
 
     # Cylinders retains thin ssDNA and dsDNA connector paths but omits the
     # fine ssDNA bead/slab decoration, matching desktop detail visibility.

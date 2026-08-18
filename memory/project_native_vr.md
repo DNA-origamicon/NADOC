@@ -86,7 +86,7 @@ Ratify thresholds during Phase 0 research; do not silently turn provisional numb
 | Overhang/linker arcs | `overhang_link_arcs.js`; canonical linker topology/bridge geometry | ss/ds arcs now serialized; coarse ds bridge cylinder/duplex halves still absent | Connection id/type, anchors, ordered bridge primitives |
 | Ends and flexible details | `domain_ends.js`, `flexible_arcs.js`, loop/skip and unligated markers | Missing or filtered from VR | Stable-owner visibility/count plus rendered check |
 
-Implemented slices (pending headset check): Full and cylinder axes consume authoritative domain segments; Full projects explicit cross-helix crossover/forced-ligation chords; crossover inserts project from canonical residue frames into ordered beads, slabs, attachment corners, and backbone links with explicit base colors; extension modification tips use desktop size/chemistry color; scene v5 renders closed overhang half-cylinders while accepting v4 snapshots; and overhang connections now use the canonical complement anchors for desktop-matched ssDNA beads/slabs/backbone plus dsDNA boundary connector arcs in Full and Cylinders. Targeted route/pure numeric tests, linker-relax regression tests, and a native build/parser smoke check lock these behaviors.
+Implemented slices (pending headset check): Full and cylinder axes consume authoritative domain segments; Full projects explicit cross-helix crossover/forced-ligation chords; crossover inserts project from canonical residue frames into ordered beads, slabs, attachment corners, and backbone links with explicit base colors; extension modification tips use desktop size/chemistry color; scene v5 renders closed overhang half-cylinders while accepting v4 snapshots; and overhang connections now use the canonical complement anchors for desktop-matched ssDNA beads/slabs/backbone plus dsDNA boundary connector arcs in Full and Cylinders. Cylinder mode also reconstructs the deduplicated complement as the opposite half of its overhang and recovers one full ds bridge cylinder from mean endpoint base positions, mirroring desktop coarse geometry. Targeted route/pure numeric tests, linker-relax regression tests, and a native build/parser smoke check lock these behaviors.
 
 ## Metrics research decisions
 
@@ -100,8 +100,8 @@ Implemented slices (pending headset check): Full and cylinder axes consume autho
 
 - Representation switching still preserves one model transform; all new primitives therefore scale through the same two-hand world transform rather than changing apparent size with view/FOV.
 - The v5 half-cylinder is closed and shadow-casting. Its axial roll follows the same deterministic but visually arbitrary default as the desktop straight-domain cylinder; no new biological orientation is inferred.
-- Manual checkpoint: relaunch VR to obtain a fresh immutable snapshot, then verify (a) a same-helix empty interval stays empty in Full and Cylinders, (b) an unbound overhang reads as a half-cylinder while a direct-bound overhang reads full, (c) 1xT/2xT crossover inserts show ordered beads/slabs and no direct chord, (d) a Cy3 extension tip is a larger orange marker, (e) an unrelaxed ss linker has the same bowed path/base count in desktop Full and VR Full while Cylinders retains only its thin path, and (f) each pre-relax ds linker shows two short boundary arcs that collapse after relaxation. Record mirrored/headset evidence before calling Phase 1 complete.
-- Next slices: linker duplex halves/coarse bridge cylinders, flexible segments, terminal/end and unligated markers, then stable primitive identities for regression diagnostics.
+- Manual checkpoint: relaunch VR to obtain a fresh immutable snapshot, then verify (a) a same-helix empty interval stays empty in Full and Cylinders, (b) an unbound overhang reads as a half-cylinder while a direct-bound overhang reads full, (c) 1xT/2xT crossover inserts show ordered beads/slabs and no direct chord, (d) a Cy3 extension tip is a larger orange marker, (e) an unrelaxed ss linker has the same bowed path/base count in desktop Full and VR Full while Cylinders retains only its thin path, and (f) each pre-relax ds linker shows two short boundary arcs that collapse after relaxation, while Cylinders reads as two two-tone bound-overhang shafts joined by one full bridge cylinder. Record mirrored/headset evidence before calling Phase 1 complete.
+- Next slices: flexible segments, terminal/end and unligated markers, then stable primitive identities for regression diagnostics.
 
 ## Open questions log
 
@@ -115,4 +115,4 @@ Implemented slices (pending headset check): Full and cylinder axes consume autho
 
 ## Immediate handoff
 
-Continue Phase 1 with the canonical ds-linker bridge/duplex cylinder projection, then flexible segments and end/unligated markers. Preserve the headset debt above and do not promote Phase 1 until both numeric parity and headset evidence pass.
+Continue Phase 1 with flexible segments and end/unligated markers, then stable primitive identities. Preserve the headset debt above and do not promote Phase 1 until both numeric parity and headset evidence pass.

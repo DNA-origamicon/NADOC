@@ -568,7 +568,15 @@ def _vr_linker_design(linker_type: str) -> SimpleNamespace:
             is_scaffold=False,
             color="#8f6cff",
             sequence="AA",
-            domains=[],
+            domains=[
+                SimpleNamespace(
+                    helix_id="ha" if suffix in {"a", "s"} else "hb",
+                    start_bp=0,
+                    end_bp=1,
+                    direction="FORWARD",
+                )
+            ],
+            strand_type="linker",
         )
         for suffix in strand_suffixes
     ]
@@ -711,3 +719,78 @@ def test_ds_linker_connector_arcs_are_visible_in_full_and_cylinders() -> None:
             )
             == 96
         )
+
+
+def test_ds_linker_cylinders_pair_overhang_halves_and_recover_bridge_axis() -> None:
+    design = _vr_linker_design("ds")
+    nucleotides = _vr_linker_anchor_nucleotides("ds")
+    nucleotides.extend(
+        [
+            {
+                "strand_id": "__lnk__link__a",
+                "helix_id": "__lnk__link",
+                "bp_index": 0,
+                "base_position": [1, -1, 0],
+                "backbone_position": [1, -1.5, 0],
+            },
+            {
+                "strand_id": "__lnk__link__b",
+                "helix_id": "__lnk__link",
+                "bp_index": 0,
+                "base_position": [1, 1, 0],
+                "backbone_position": [1, 1.5, 0],
+            },
+            {
+                "strand_id": "__lnk__link__a",
+                "helix_id": "__lnk__link",
+                "bp_index": 1,
+                "base_position": [3, -1, 0],
+                "backbone_position": [3, -1.5, 0],
+            },
+            {
+                "strand_id": "__lnk__link__b",
+                "helix_id": "__lnk__link",
+                "bp_index": 1,
+                "base_position": [3, 1, 0],
+                "backbone_position": [3, 1.5, 0],
+            },
+        ]
+    )
+    axes = [
+        {
+            "helix_id": "ha",
+            "segments": [
+                {
+                    "strand_id": "oh-a",
+                    "domain_index": 0,
+                    "ovhg_id": "oh-a",
+                    "bp_lo": 0,
+                    "bp_hi": 1,
+                    "start": [0, 0, 0],
+                    "end": [0, 0, 2],
+                },
+            ],
+        }
+    ]
+    text = _serialize_scene(
+        design,
+        nucleotides,
+        axes,
+        atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
+    )
+    cylinders = _scene_sections(text)["cylinders"]
+    coarse = [
+        record
+        for record in cylinders
+        if record[0] in {"C", "H"} and float(record[7]) == pytest.approx(0.72)
+    ]
+
+    halves = [record for record in coarse if record[0] == "H"]
+    assert [tuple(float(value) for value in record[1:7]) for record in halves] == [
+        (0, 0, 0, 0, 0, 2),
+        (0, 0, 2, 0, 0, 0),
+    ]
+    bridge = [record for record in coarse if record[0] == "C"]
+    assert [tuple(float(value) for value in record[1:7]) for record in bridge] == [
+        (1, 0, 0, 3, 0, 0)
+    ]
