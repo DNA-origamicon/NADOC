@@ -1164,9 +1164,21 @@ def add_circle_segment(body: CircleSegmentRequest) -> dict:
 def _build_extrude_continuation(d: Design, body: "BundleContinuationRequest"):
     """Pure builder + cluster-membership report for a bundle-continuation extrude."""
     from backend.core.cluster_reconcile import MutationReport
-    from backend.core.lattice import make_bundle_continuation, ligate_new_strands
+    from backend.core.lattice import (
+        bundle_continuation_conflicts,
+        ligate_new_strands,
+        make_bundle_continuation,
+    )
 
     cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
+    conflicts = bundle_continuation_conflicts(
+        d, cells, body.length_bp, body.plane, body.offset_nm
+    )
+    if conflicts:
+        cells_text = ", ".join(
+            f"({row}, {col})/{helix_id}" for row, col, helix_id in conflicts
+        )
+        raise ValueError(f"Continuation overlaps existing DNA at {cells_text}.")
     updated = make_bundle_continuation(
         d,
         cells,
@@ -1182,6 +1194,47 @@ def _build_extrude_continuation(d: Design, body: "BundleContinuationRequest"):
         if new_ids:
             updated = ligate_new_strands(updated, new_ids)
     return updated, MutationReport(new_helix_origins=_origins_by_grid_pos(d, updated))
+
+
+def _continuation_validation_summary(before: Design, after: Design) -> dict:
+    before_helices = {helix.id: helix for helix in before.helices}
+    after_helices = {helix.id: helix for helix in after.helices}
+    before_strands = {strand.id: strand for strand in before.strands}
+    after_strands = {strand.id: strand for strand in after.strands}
+    return {
+        "status": "ok",
+        "message": "",
+        "new_helix_ids": sorted(set(after_helices) - set(before_helices)),
+        "extended_helix_ids": sorted(
+            helix_id
+            for helix_id in set(before_helices) & set(after_helices)
+            if after_helices[helix_id] != before_helices[helix_id]
+        ),
+        "new_strand_ids": sorted(set(after_strands) - set(before_strands)),
+        "affected_strand_ids": sorted(
+            strand_id
+            for strand_id in set(before_strands) | set(after_strands)
+            if before_strands.get(strand_id) != after_strands.get(strand_id)
+        ),
+    }
+
+
+@router.post("/design/bundle-continuation/validate", status_code=200)
+def validate_bundle_continuation(body: BundleContinuationRequest) -> dict:
+    """Dry-run the exact continuation builder without state/history mutation."""
+    design = design_state.get_or_404()
+    try:
+        updated, _ = _build_extrude_continuation(design, body)
+    except ValueError as exc:
+        return {
+            "status": "block",
+            "message": str(exc),
+            "new_helix_ids": [],
+            "extended_helix_ids": [],
+            "new_strand_ids": [],
+            "affected_strand_ids": [],
+        }
+    return _continuation_validation_summary(design, updated)
 
 
 @router.post("/design/bundle-continuation", status_code=201)

@@ -45,6 +45,13 @@ describe('native VR parameterized tool execution plans', () => {
       reason: 'ready_read_only',
       plan: {
         kind: 'extrude_continuation', targetIdentity: 'nuc:end',
+        preflight: {
+          apiMethod: 'validateBundleContinuation',
+          arguments: {
+            cells: [[2, 3]], lengthBp: 7, plane: 'XY', offsetNm: 3.4,
+            strandFilter: 'staples', ligateAdjacent: false,
+          },
+        },
         commit: {
           apiMethod: 'addBundleContinuation',
           arguments: {
@@ -54,7 +61,6 @@ describe('native VR parameterized tool execution plans', () => {
         },
         lifecycle: {
           previewAuthority: 'native_read_only_geometry',
-          preflight: 'desktop_continuation_validation_required',
           cancel: 'discard_descriptor', undo: 'desktop_feature_log',
         },
       },

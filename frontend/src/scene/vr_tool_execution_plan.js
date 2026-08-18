@@ -91,6 +91,17 @@ function _extrusionPlan(config, toolTarget) {
     plan: {
       kind: 'extrude_continuation',
       targetIdentity: config.target_identity,
+      preflight: {
+        apiMethod: 'validateBundleContinuation',
+        arguments: {
+          cells: context.footprint.cells.map(cell => [...cell]),
+          lengthBp: context.openSide * config.direction_sign * config.length_bp,
+          plane: context.plane,
+          offsetNm: context.offsetNm,
+          strandFilter: config.strand_filter,
+          ligateAdjacent: config.ligate_adjacent,
+        },
+      },
       commit: {
         apiMethod: 'addBundleContinuation',
         arguments: {
@@ -104,7 +115,6 @@ function _extrusionPlan(config, toolTarget) {
       },
       lifecycle: {
         previewAuthority: 'native_read_only_geometry',
-        preflight: 'desktop_continuation_validation_required',
         cancel: 'discard_descriptor',
         undo: 'desktop_feature_log',
       },

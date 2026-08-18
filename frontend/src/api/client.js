@@ -1156,6 +1156,18 @@ export async function addBundleContinuation({ cells, lengthBp, plane = 'XY', off
   return _syncFromDesignResponse(json)
 }
 
+/** Dry-run the exact continuation builder; never updates the design/store. */
+export async function validateBundleContinuation({ cells, lengthBp, plane = 'XY', offsetNm = 0, strandFilter = 'both', ligateAdjacent = true }) {
+  return _request('POST', '/design/bundle-continuation/validate', {
+    cells,
+    length_bp: lengthBp,
+    plane,
+    offset_nm: offsetNm,
+    strand_filter: strandFilter,
+    ligate_adjacent: ligateAdjacent,
+  })
+}
+
 export async function createDesign(name = 'Untitled', latticeType = 'HONEYCOMB') {
   const json = await _request('POST', '/design', { name, lattice_type: latticeType })
   return _syncFromDesignResponse(json)
