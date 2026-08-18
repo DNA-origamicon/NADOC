@@ -13,6 +13,8 @@
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
 
+#include "interaction.hpp"
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -23,6 +25,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cctype>
 #include <csignal>
 #include <cstddef>
 #include <cstdint>
@@ -40,8 +43,8 @@
 namespace {
 
 constexpr float kViewSizeMeters = 0.60F;
-constexpr float kViewDistanceMeters = 0.90F;
-constexpr float kNearMeters = 0.03F;
+constexpr float kViewDistanceMeters = 1.30F;
+constexpr float kNearMeters = 0.02F;
 constexpr float kFarMeters = 100.0F;
 
 std::atomic_bool gStopRequested{false};
@@ -52,10 +55,67 @@ struct Vertex {
     float size = 1.0F;
 };
 
-struct SceneData {
-    std::vector<Vertex> points;
-    std::vector<Vertex> lines;
+struct Cylinder {
+    glm::vec3 start{};
+    glm::vec3 end{};
+    float radius = 0.01F;
+    glm::vec3 color{};
 };
+
+struct CylinderMeshVertex {
+    glm::vec3 position{};
+    glm::vec3 normal{};
+};
+
+enum class Representation : size_t { cylinders = 0, full = 1, ballstick = 2, stick = 3 };
+enum class Coloring : size_t { strand = 0, base = 1, cluster = 2, cpk = 3 };
+
+struct ColorSet {
+    std::array<glm::vec3, 4> values{};
+    [[nodiscard]] glm::vec3 get(Coloring coloring) const {
+        return values[static_cast<size_t>(coloring)];
+    }
+};
+
+struct StyledPoint {
+    glm::vec3 position{};
+    ColorSet colors{};
+    float size = 1.0F;
+};
+
+struct StyledCylinder {
+    glm::vec3 start{};
+    glm::vec3 end{};
+    float radius = 0.01F;
+    ColorSet colors{};
+};
+
+struct RepresentationData {
+    std::vector<StyledPoint> points;
+    std::vector<StyledCylinder> cylinders;
+};
+
+struct SceneData {
+    std::array<RepresentationData, 4> representations;
+    Representation initialRepresentation = Representation::full;
+    Coloring initialColoring = Coloring::strand;
+};
+
+Representation representationFromName(const std::string& name) {
+    if (name == "cylinders") return Representation::cylinders;
+    if (name == "full") return Representation::full;
+    if (name == "ballstick") return Representation::ballstick;
+    if (name == "stick") return Representation::stick;
+    throw std::runtime_error("Unknown VR representation: " + name);
+}
+
+Coloring coloringFromName(const std::string& name) {
+    if (name == "strand") return Coloring::strand;
+    if (name == "base") return Coloring::base;
+    if (name == "cluster") return Coloring::cluster;
+    if (name == "cpk") return Coloring::cpk;
+    throw std::runtime_error("Unknown VR coloring: " + name);
+}
 
 struct Swapchain {
     XrSwapchain handle = XR_NULL_HANDLE;
@@ -95,29 +155,19 @@ GLuint makeProgram() {
         #version 330 core
         layout(location = 0) in vec3 aPosition;
         layout(location = 1) in vec3 aColor;
-        layout(location = 2) in float aSize;
         uniform mat4 uViewProjection;
         out vec3 vColor;
         void main() {
             gl_Position = uViewProjection * vec4(aPosition, 1.0);
-            gl_PointSize = aSize;
             vColor = aColor;
         }
     )GLSL";
     static constexpr const char* fragmentSource = R"GLSL(
         #version 330 core
         in vec3 vColor;
-        uniform int uRoundPoints;
         out vec4 outColor;
         void main() {
-            float light = 1.0;
-            if (uRoundPoints != 0) {
-                vec2 p = gl_PointCoord * 2.0 - 1.0;
-                float r2 = dot(p, p);
-                if (r2 > 1.0) discard;
-                light = 0.62 + 0.38 * sqrt(max(0.0, 1.0 - r2));
-            }
-            outColor = vec4(vColor * light, 1.0);
+            outColor = vec4(vColor, 1.0);
         }
     )GLSL";
 
@@ -140,75 +190,218 @@ GLuint makeProgram() {
     throw std::runtime_error("OpenGL program link failed: " + log);
 }
 
+GLuint makeSphereProgram() {
+    static constexpr const char* vertexSource = R"GLSL(
+        #version 330 core
+        layout(location = 0) in vec3 aUnitPosition;
+        layout(location = 1) in vec3 aCenter;
+        layout(location = 2) in float aRadius;
+        layout(location = 3) in vec3 aColor;
+        uniform mat4 uViewProjection;
+        uniform mat4 uModel;
+        out vec3 vColor;
+        out vec3 vNormal;
+        void main() {
+            vec3 localPosition = aCenter + aUnitPosition * aRadius;
+            gl_Position = uViewProjection * uModel * vec4(localPosition, 1.0);
+            vNormal = normalize(mat3(uModel) * aUnitPosition);
+            vColor = aColor;
+        }
+    )GLSL";
+    static constexpr const char* fragmentSource = R"GLSL(
+        #version 330 core
+        in vec3 vColor;
+        in vec3 vNormal;
+        out vec4 outColor;
+        void main() {
+            vec3 lightDirection = normalize(vec3(-0.35, 0.70, 0.60));
+            float diffuse = max(dot(normalize(vNormal), lightDirection), 0.0);
+            outColor = vec4(vColor * (0.48 + 0.52 * diffuse), 1.0);
+        }
+    )GLSL";
+
+    const GLuint vertex = compileShader(GL_VERTEX_SHADER, vertexSource);
+    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, fragmentSource);
+    const GLuint program = glCreateProgram();
+    glAttachShader(program, vertex);
+    glAttachShader(program, fragment);
+    glLinkProgram(program);
+    glDeleteShader(vertex);
+    glDeleteShader(fragment);
+    GLint ok = GL_FALSE;
+    glGetProgramiv(program, GL_LINK_STATUS, &ok);
+    if (ok == GL_TRUE) return program;
+    GLint length = 0;
+    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &length);
+    std::string log(static_cast<size_t>(std::max(length, 1)), '\0');
+    glGetProgramInfoLog(program, length, nullptr, log.data());
+    glDeleteProgram(program);
+    throw std::runtime_error("OpenGL sphere shader link failed: " + log);
+}
+
+GLuint makeCylinderProgram() {
+    static constexpr const char* vertexSource = R"GLSL(
+        #version 330 core
+        layout(location = 0) in vec3 aUnitPosition;
+        layout(location = 5) in vec3 aUnitNormal;
+        layout(location = 1) in vec3 aStart;
+        layout(location = 2) in vec3 aEnd;
+        layout(location = 3) in float aRadius;
+        layout(location = 4) in vec3 aColor;
+        uniform mat4 uViewProjection;
+        uniform mat4 uModel;
+        out vec3 vColor;
+        out vec3 vNormal;
+        void main() {
+            vec3 delta = aEnd - aStart;
+            float lengthAlongAxis = length(delta);
+            vec3 axis = lengthAlongAxis > 0.000001
+                ? delta / lengthAlongAxis : vec3(0.0, 0.0, 1.0);
+            vec3 helper = abs(axis.z) < 0.95 ? vec3(0.0, 0.0, 1.0)
+                                             : vec3(0.0, 1.0, 0.0);
+            vec3 basisX = normalize(cross(helper, axis));
+            vec3 basisY = cross(axis, basisX);
+            vec3 radial = basisX * aUnitPosition.x + basisY * aUnitPosition.y;
+            vec3 localPosition = mix(aStart, aEnd, aUnitPosition.z)
+                               + radial * aRadius;
+            vec3 localNormal = basisX * aUnitNormal.x
+                             + basisY * aUnitNormal.y
+                             + axis * aUnitNormal.z;
+            gl_Position = uViewProjection * uModel * vec4(localPosition, 1.0);
+            vNormal = normalize(mat3(uModel) * localNormal);
+            vColor = aColor;
+        }
+    )GLSL";
+    static constexpr const char* fragmentSource = R"GLSL(
+        #version 330 core
+        in vec3 vColor;
+        in vec3 vNormal;
+        out vec4 outColor;
+        void main() {
+            vec3 lightDirection = normalize(vec3(-0.35, 0.70, 0.60));
+            float diffuse = max(dot(normalize(vNormal), lightDirection), 0.0);
+            outColor = vec4(vColor * (0.50 + 0.50 * diffuse), 1.0);
+        }
+    )GLSL";
+
+    const GLuint vertex = compileShader(GL_VERTEX_SHADER, vertexSource);
+    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, fragmentSource);
+    const GLuint program = glCreateProgram();
+    glAttachShader(program, vertex);
+    glAttachShader(program, fragment);
+    glLinkProgram(program);
+    glDeleteShader(vertex);
+    glDeleteShader(fragment);
+    GLint ok = GL_FALSE;
+    glGetProgramiv(program, GL_LINK_STATUS, &ok);
+    if (ok == GL_TRUE) return program;
+    GLint length = 0;
+    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &length);
+    std::string log(static_cast<size_t>(std::max(length, 1)), '\0');
+    glGetProgramInfoLog(program, length, nullptr, log.data());
+    glDeleteProgram(program);
+    throw std::runtime_error("OpenGL cylinder shader link failed: " + log);
+}
+
 SceneData loadScene(const std::string& path) {
     std::ifstream input(path);
     if (!input) throw std::runtime_error("Could not open scene snapshot: " + path);
 
     std::string magic;
     int version = 0;
-    input >> magic >> version;
-    if (magic != "NADOCVR" || version != 1) {
+    std::string initialRepresentation;
+    std::string initialColoring;
+    input >> magic >> version >> initialRepresentation >> initialColoring;
+    if (magic != "NADOCVR" || version != 3) {
         throw std::runtime_error("Unsupported NADOC VR scene format");
     }
 
     SceneData scene;
+    scene.initialRepresentation = representationFromName(initialRepresentation);
+    scene.initialColoring = coloringFromName(initialColoring);
+    RepresentationData* active = nullptr;
     char type = '\0';
     while (input >> type) {
         if (type == '#') {
             input.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             continue;
         }
-        if (type == 'P') {
-            Vertex vertex;
-            input >> vertex.position.x >> vertex.position.y >> vertex.position.z
-                  >> vertex.color.r >> vertex.color.g >> vertex.color.b >> vertex.size;
-            scene.points.push_back(vertex);
-        } else if (type == 'L') {
-            Vertex a;
-            Vertex b;
-            input >> a.position.x >> a.position.y >> a.position.z
-                  >> b.position.x >> b.position.y >> b.position.z
-                  >> a.color.r >> a.color.g >> a.color.b;
-            b.color = a.color;
-            scene.lines.push_back(a);
-            scene.lines.push_back(b);
+        if (type == 'R') {
+            std::string name;
+            input >> name;
+            active = &scene.representations[static_cast<size_t>(representationFromName(name))];
+        } else if (type == 'P') {
+            if (!active) throw std::runtime_error("Point appears before representation block");
+            StyledPoint point;
+            input >> point.position.x >> point.position.y >> point.position.z >> point.size;
+            for (glm::vec3& color : point.colors.values) {
+                input >> color.r >> color.g >> color.b;
+            }
+            active->points.push_back(point);
+        } else if (type == 'C') {
+            if (!active) throw std::runtime_error("Cylinder appears before representation block");
+            StyledCylinder cylinder;
+            input >> cylinder.start.x >> cylinder.start.y >> cylinder.start.z
+                  >> cylinder.end.x >> cylinder.end.y >> cylinder.end.z
+                  >> cylinder.radius;
+            for (glm::vec3& color : cylinder.colors.values) {
+                input >> color.r >> color.g >> color.b;
+            }
+            active->cylinders.push_back(cylinder);
         } else {
             throw std::runtime_error(std::string("Unknown scene record: ") + type);
         }
         if (!input) throw std::runtime_error("Malformed NADOC VR scene snapshot");
     }
-    if (scene.points.empty() && scene.lines.empty()) {
+    if (std::all_of(scene.representations.begin(), scene.representations.end(),
+                    [](const RepresentationData& rep) {
+                        return rep.points.empty() && rep.cylinders.empty();
+                    })) {
         throw std::runtime_error("The scene snapshot contains no visible geometry");
     }
 
     glm::vec3 lo(std::numeric_limits<float>::max());
     glm::vec3 hi(std::numeric_limits<float>::lowest());
-    auto include = [&](const Vertex& vertex) {
-        lo = glm::min(lo, vertex.position);
-        hi = glm::max(hi, vertex.position);
+    auto include = [&](const glm::vec3& position) {
+        lo = glm::min(lo, position);
+        hi = glm::max(hi, position);
     };
-    for (const Vertex& vertex : scene.points) include(vertex);
-    for (const Vertex& vertex : scene.lines) include(vertex);
+    for (const RepresentationData& rep : scene.representations) {
+        for (const StyledPoint& point : rep.points) include(point.position);
+        for (const StyledCylinder& cylinder : rep.cylinders) {
+            include(cylinder.start);
+            include(cylinder.end);
+        }
+    }
     const glm::vec3 center = (lo + hi) * 0.5F;
     const glm::vec3 extent = hi - lo;
     const float maxExtent = std::max({extent.x, extent.y, extent.z, 1.0e-6F});
     const float scale = kViewSizeMeters / maxExtent;
-    auto fit = [&](Vertex& vertex) {
-        vertex.position = (vertex.position - center) * scale;
-        vertex.position.z -= kViewDistanceMeters;
-    };
-    for (Vertex& vertex : scene.points) fit(vertex);
-    for (Vertex& vertex : scene.lines) fit(vertex);
+    for (RepresentationData& rep : scene.representations) {
+        for (StyledPoint& point : rep.points) {
+            point.position = (point.position - center) * scale;
+            point.position.z -= kViewDistanceMeters;
+            point.size *= scale;
+        }
+        for (StyledCylinder& cylinder : rep.cylinders) {
+            cylinder.start = (cylinder.start - center) * scale;
+            cylinder.end = (cylinder.end - center) * scale;
+            cylinder.start.z -= kViewDistanceMeters;
+            cylinder.end.z -= kViewDistanceMeters;
+            cylinder.radius *= scale;
+        }
 
-    // A compact orientation triad under the model.
-    const glm::vec3 origin(-0.28F, -0.28F, -kViewDistanceMeters);
-    auto addAxis = [&](glm::vec3 delta, glm::vec3 color) {
-        scene.lines.push_back(Vertex{origin, color, 1.0F});
-        scene.lines.push_back(Vertex{origin + delta, color, 1.0F});
-    };
-    addAxis({0.10F, 0, 0}, {1.0F, 0.25F, 0.25F});
-    addAxis({0, 0.10F, 0}, {0.25F, 1.0F, 0.35F});
-    addAxis({0, 0, 0.10F}, {0.3F, 0.55F, 1.0F});
+        const glm::vec3 origin(-0.28F, -0.28F, -kViewDistanceMeters);
+        auto addAxis = [&](glm::vec3 delta, glm::vec3 color) {
+            ColorSet colors;
+            colors.values.fill(color);
+            rep.cylinders.push_back(
+                StyledCylinder{origin, origin + delta, 0.003F, colors});
+        };
+        addAxis({0.10F, 0, 0}, {1.0F, 0.25F, 0.25F});
+        addAxis({0, 0.10F, 0}, {0.25F, 1.0F, 0.35F});
+        addAxis({0, 0, 0.10F}, {0.3F, 0.55F, 1.0F});
+    }
     return scene;
 }
 
@@ -241,42 +434,302 @@ glm::mat4 viewFromPose(const XrPosef& pose) {
     return glm::inverse(glm::translate(glm::mat4(1.0F), position) * glm::toMat4(orientation));
 }
 
+nadoc_vr::HandPose handPoseFromXr(const XrPosef& pose) {
+    nadoc_vr::HandPose result;
+    result.valid = true;
+    result.position = {pose.position.x, pose.position.y, pose.position.z};
+    result.orientation = {
+        pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z};
+    return result;
+}
+
+std::array<uint8_t, 7> glyph(char value) {
+    switch (value) {
+        case 'A': return {14, 17, 17, 31, 17, 17, 17};
+        case 'B': return {30, 17, 17, 30, 17, 17, 30};
+        case 'C': return {14, 17, 16, 16, 16, 17, 14};
+        case 'D': return {30, 17, 17, 17, 17, 17, 30};
+        case 'E': return {31, 16, 16, 30, 16, 16, 31};
+        case 'F': return {31, 16, 16, 30, 16, 16, 16};
+        case 'G': return {14, 17, 16, 23, 17, 17, 14};
+        case 'I': return {31, 4, 4, 4, 4, 4, 31};
+        case 'K': return {17, 18, 20, 24, 20, 18, 17};
+        case 'L': return {16, 16, 16, 16, 16, 16, 31};
+        case 'M': return {17, 27, 21, 21, 17, 17, 17};
+        case 'N': return {17, 25, 21, 19, 17, 17, 17};
+        case 'O': return {14, 17, 17, 17, 17, 17, 14};
+        case 'P': return {30, 17, 17, 30, 16, 16, 16};
+        case 'R': return {30, 17, 17, 30, 20, 18, 17};
+        case 'S': return {15, 16, 16, 14, 1, 1, 30};
+        case 'T': return {31, 4, 4, 4, 4, 4, 4};
+        case 'U': return {17, 17, 17, 17, 17, 17, 14};
+        case 'V': return {17, 17, 17, 17, 17, 10, 4};
+        case 'Y': return {17, 17, 10, 4, 4, 4, 4};
+        case '+': return {0, 4, 4, 31, 4, 4, 0};
+        default: return {};
+    }
+}
+
 class GlScene {
   public:
-    explicit GlScene(const SceneData& scene) {
+    explicit GlScene(SceneData scene) : scene_(std::move(scene)) {
         program_ = makeProgram();
         viewProjection_ = glGetUniformLocation(program_, "uViewProjection");
-        roundPoints_ = glGetUniformLocation(program_, "uRoundPoints");
-        upload(scene.lines, lineVao_, lineVbo_);
-        upload(scene.points, pointVao_, pointVbo_);
-        lineCount_ = static_cast<GLsizei>(scene.lines.size());
-        pointCount_ = static_cast<GLsizei>(scene.points.size());
+        upload({}, lineVao_, lineVbo_);
+        upload({}, guideVao_, guideVbo_, GL_DYNAMIC_DRAW);
+        uploadSpheres();
+        uploadCylinders();
+        setStyle(scene_.initialRepresentation, scene_.initialColoring);
     }
+
+    void setStyle(Representation representation, Coloring coloring) {
+        representation_ = representation;
+        coloring_ = coloring;
+        const RepresentationData& source =
+            scene_.representations[static_cast<size_t>(representation)];
+
+        std::vector<Vertex> points;
+        points.reserve(source.points.size());
+        for (const StyledPoint& point : source.points) {
+            points.push_back(Vertex{point.position, point.colors.get(coloring), point.size});
+        }
+        glBindBuffer(GL_ARRAY_BUFFER, sphereInstanceVbo_);
+        glBufferData(GL_ARRAY_BUFFER,
+                     static_cast<GLsizeiptr>(points.size() * sizeof(Vertex)),
+                     points.data(), GL_DYNAMIC_DRAW);
+        sphereCount_ = static_cast<GLsizei>(points.size());
+
+        std::vector<Cylinder> cylinders;
+        cylinders.reserve(source.cylinders.size());
+        for (const StyledCylinder& cylinder : source.cylinders) {
+            cylinders.push_back(Cylinder{
+                cylinder.start, cylinder.end, cylinder.radius, cylinder.colors.get(coloring)});
+        }
+        glBindBuffer(GL_ARRAY_BUFFER, cylinderInstanceVbo_);
+        glBufferData(GL_ARRAY_BUFFER,
+                     static_cast<GLsizeiptr>(cylinders.size() * sizeof(Cylinder)),
+                     cylinders.data(), GL_DYNAMIC_DRAW);
+        cylinderCount_ = static_cast<GLsizei>(cylinders.size());
+    }
+
+    [[nodiscard]] Representation representation() const { return representation_; }
+    [[nodiscard]] Coloring coloring() const { return coloring_; }
 
     ~GlScene() {
         if (lineVbo_) glDeleteBuffers(1, &lineVbo_);
-        if (pointVbo_) glDeleteBuffers(1, &pointVbo_);
+        if (guideVbo_) glDeleteBuffers(1, &guideVbo_);
+        if (sphereMeshVbo_) glDeleteBuffers(1, &sphereMeshVbo_);
+        if (sphereIndexVbo_) glDeleteBuffers(1, &sphereIndexVbo_);
+        if (sphereInstanceVbo_) glDeleteBuffers(1, &sphereInstanceVbo_);
+        if (cylinderInstanceVbo_) glDeleteBuffers(1, &cylinderInstanceVbo_);
+        if (cylinderMeshVbo_) glDeleteBuffers(1, &cylinderMeshVbo_);
+        if (cylinderIndexVbo_) glDeleteBuffers(1, &cylinderIndexVbo_);
         if (lineVao_) glDeleteVertexArrays(1, &lineVao_);
-        if (pointVao_) glDeleteVertexArrays(1, &pointVao_);
+        if (guideVao_) glDeleteVertexArrays(1, &guideVao_);
+        if (sphereVao_) glDeleteVertexArrays(1, &sphereVao_);
+        if (cylinderVao_) glDeleteVertexArrays(1, &cylinderVao_);
         if (program_) glDeleteProgram(program_);
+        if (sphereProgram_) glDeleteProgram(sphereProgram_);
+        if (cylinderProgram_) glDeleteProgram(cylinderProgram_);
     }
 
-    void render(const glm::mat4& viewProjection) const {
+    void render(const glm::mat4& viewProjection, const glm::mat4& modelTransform,
+                const std::vector<Vertex>& guides) const {
         glUseProgram(program_);
-        glUniformMatrix4fv(viewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
-        glUniform1i(roundPoints_, 0);
+        const glm::mat4 modelViewProjection = viewProjection * modelTransform;
+        glUniformMatrix4fv(viewProjection_, 1, GL_FALSE, &modelViewProjection[0][0]);
         glBindVertexArray(lineVao_);
         glLineWidth(1.5F);
         glDrawArrays(GL_LINES, 0, lineCount_);
-        glUniform1i(roundPoints_, 1);
-        glBindVertexArray(pointVao_);
-        glDrawArrays(GL_POINTS, 0, pointCount_);
+
+        if (sphereCount_ > 0) {
+            glUseProgram(sphereProgram_);
+            glUniformMatrix4fv(sphereViewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
+            glUniformMatrix4fv(sphereModel_, 1, GL_FALSE, &modelTransform[0][0]);
+            glBindVertexArray(sphereVao_);
+            glDrawElementsInstanced(
+                GL_TRIANGLES, sphereIndexCount_, GL_UNSIGNED_SHORT, nullptr, sphereCount_);
+        }
+
+        if (cylinderCount_ > 0) {
+            glUseProgram(cylinderProgram_);
+            glUniformMatrix4fv(cylinderViewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
+            glUniformMatrix4fv(cylinderModel_, 1, GL_FALSE, &modelTransform[0][0]);
+            glBindVertexArray(cylinderVao_);
+            glDrawElementsInstanced(
+                GL_TRIANGLES, cylinderIndexCount_, GL_UNSIGNED_SHORT, nullptr, cylinderCount_);
+        }
+
+        if (!guides.empty()) {
+            glDisable(GL_DEPTH_TEST);
+            glUseProgram(program_);
+            glUniformMatrix4fv(viewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
+            glBindBuffer(GL_ARRAY_BUFFER, guideVbo_);
+            glBufferData(GL_ARRAY_BUFFER,
+                         static_cast<GLsizeiptr>(guides.size() * sizeof(Vertex)),
+                         guides.data(), GL_DYNAMIC_DRAW);
+            glBindVertexArray(guideVao_);
+            glLineWidth(3.0F);
+            glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(guides.size()));
+            glEnable(GL_DEPTH_TEST);
+        }
         glBindVertexArray(0);
         glUseProgram(0);
     }
 
   private:
-    static void upload(const std::vector<Vertex>& vertices, GLuint& vao, GLuint& vbo) {
+    void uploadSpheres() {
+        sphereProgram_ = makeSphereProgram();
+        sphereViewProjection_ = glGetUniformLocation(sphereProgram_, "uViewProjection");
+        sphereModel_ = glGetUniformLocation(sphereProgram_, "uModel");
+
+        constexpr float goldenRatio = 1.6180339887498948482F;
+        std::vector<glm::vec3> mesh = {
+            {-1, goldenRatio, 0}, {1, goldenRatio, 0},
+            {-1, -goldenRatio, 0}, {1, -goldenRatio, 0},
+            {0, -1, goldenRatio}, {0, 1, goldenRatio},
+            {0, -1, -goldenRatio}, {0, 1, -goldenRatio},
+            {goldenRatio, 0, -1}, {goldenRatio, 0, 1},
+            {-goldenRatio, 0, -1}, {-goldenRatio, 0, 1},
+        };
+        for (glm::vec3& vertex : mesh) vertex = glm::normalize(vertex);
+        static constexpr std::array<GLushort, 60> indices = {
+            0, 11, 5,  0, 5, 1,   0, 1, 7,   0, 7, 10,  0, 10, 11,
+            1, 5, 9,   5, 11, 4,  11, 10, 2, 10, 7, 6,   7, 1, 8,
+            3, 9, 4,   3, 4, 2,   3, 2, 6,   3, 6, 8,    3, 8, 9,
+            4, 9, 5,   2, 4, 11,  6, 2, 10,  8, 6, 7,    9, 8, 1,
+        };
+        sphereIndexCount_ = static_cast<GLsizei>(indices.size());
+
+        glGenVertexArrays(1, &sphereVao_);
+        glBindVertexArray(sphereVao_);
+        glGenBuffers(1, &sphereMeshVbo_);
+        glBindBuffer(GL_ARRAY_BUFFER, sphereMeshVbo_);
+        glBufferData(GL_ARRAY_BUFFER,
+                     static_cast<GLsizeiptr>(mesh.size() * sizeof(glm::vec3)),
+                     mesh.data(), GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), nullptr);
+        glGenBuffers(1, &sphereIndexVbo_);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphereIndexVbo_);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices.data(), GL_STATIC_DRAW);
+
+        glGenBuffers(1, &sphereInstanceVbo_);
+        glBindBuffer(GL_ARRAY_BUFFER, sphereInstanceVbo_);
+        glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+                              reinterpret_cast<void*>(offsetof(Vertex, position)));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+                              reinterpret_cast<void*>(offsetof(Vertex, size)));
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+                              reinterpret_cast<void*>(offsetof(Vertex, color)));
+        for (GLuint attribute = 1; attribute <= 3; ++attribute) {
+            glVertexAttribDivisor(attribute, 1);
+        }
+        glBindVertexArray(0);
+    }
+
+    void uploadCylinders() {
+        cylinderProgram_ = makeCylinderProgram();
+        cylinderViewProjection_ = glGetUniformLocation(cylinderProgram_, "uViewProjection");
+        cylinderModel_ = glGetUniformLocation(cylinderProgram_, "uModel");
+
+        constexpr size_t sides = 8;
+        constexpr float pi = 3.14159265358979323846F;
+        std::vector<CylinderMeshVertex> mesh;
+        std::vector<GLushort> indices;
+        mesh.reserve(sides * 4U + 2U);
+        indices.reserve(sides * 12U);
+        for (size_t side = 0; side < sides; ++side) {
+            const float angle = 2.0F * pi * static_cast<float>(side)
+                              / static_cast<float>(sides);
+            const glm::vec3 radial(std::cos(angle), std::sin(angle), 0.0F);
+            mesh.push_back({{radial.x, radial.y, 0.0F}, radial});
+            mesh.push_back({{radial.x, radial.y, 1.0F}, radial});
+        }
+        for (size_t side = 0; side < sides; ++side) {
+            const GLushort bottom = static_cast<GLushort>(side * 2U);
+            const GLushort top = static_cast<GLushort>(bottom + 1U);
+            const GLushort nextBottom = static_cast<GLushort>(((side + 1U) % sides) * 2U);
+            const GLushort nextTop = static_cast<GLushort>(nextBottom + 1U);
+            indices.insert(indices.end(), {bottom, top, nextBottom, top, nextTop, nextBottom});
+        }
+
+        const GLushort bottomCenter = static_cast<GLushort>(mesh.size());
+        mesh.push_back({{0, 0, 0}, {0, 0, -1}});
+        const GLushort bottomRing = static_cast<GLushort>(mesh.size());
+        for (size_t side = 0; side < sides; ++side) {
+            const float angle = 2.0F * pi * static_cast<float>(side)
+                              / static_cast<float>(sides);
+            mesh.push_back({{std::cos(angle), std::sin(angle), 0}, {0, 0, -1}});
+        }
+        const GLushort topCenter = static_cast<GLushort>(mesh.size());
+        mesh.push_back({{0, 0, 1}, {0, 0, 1}});
+        const GLushort topRing = static_cast<GLushort>(mesh.size());
+        for (size_t side = 0; side < sides; ++side) {
+            const float angle = 2.0F * pi * static_cast<float>(side)
+                              / static_cast<float>(sides);
+            mesh.push_back({{std::cos(angle), std::sin(angle), 1}, {0, 0, 1}});
+        }
+        for (size_t side = 0; side < sides; ++side) {
+            const GLushort current = static_cast<GLushort>(side);
+            const GLushort next = static_cast<GLushort>((side + 1U) % sides);
+            indices.insert(indices.end(), {
+                bottomCenter,
+                static_cast<GLushort>(bottomRing + next),
+                static_cast<GLushort>(bottomRing + current),
+                topCenter,
+                static_cast<GLushort>(topRing + current),
+                static_cast<GLushort>(topRing + next),
+            });
+        }
+        cylinderIndexCount_ = static_cast<GLsizei>(indices.size());
+
+        glGenVertexArrays(1, &cylinderVao_);
+        glBindVertexArray(cylinderVao_);
+        glGenBuffers(1, &cylinderMeshVbo_);
+        glBindBuffer(GL_ARRAY_BUFFER, cylinderMeshVbo_);
+        glBufferData(GL_ARRAY_BUFFER,
+                     static_cast<GLsizeiptr>(mesh.size() * sizeof(CylinderMeshVertex)),
+                     mesh.data(), GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(CylinderMeshVertex),
+                              reinterpret_cast<void*>(offsetof(CylinderMeshVertex, position)));
+        glEnableVertexAttribArray(5);
+        glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, sizeof(CylinderMeshVertex),
+                              reinterpret_cast<void*>(offsetof(CylinderMeshVertex, normal)));
+        glGenBuffers(1, &cylinderIndexVbo_);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cylinderIndexVbo_);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+                     static_cast<GLsizeiptr>(indices.size() * sizeof(GLushort)),
+                     indices.data(), GL_STATIC_DRAW);
+
+        glGenBuffers(1, &cylinderInstanceVbo_);
+        glBindBuffer(GL_ARRAY_BUFFER, cylinderInstanceVbo_);
+        glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Cylinder),
+                              reinterpret_cast<void*>(offsetof(Cylinder, start)));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Cylinder),
+                              reinterpret_cast<void*>(offsetof(Cylinder, end)));
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(Cylinder),
+                              reinterpret_cast<void*>(offsetof(Cylinder, radius)));
+        glEnableVertexAttribArray(4);
+        glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Cylinder),
+                              reinterpret_cast<void*>(offsetof(Cylinder, color)));
+        for (GLuint attribute = 1; attribute <= 4; ++attribute) {
+            glVertexAttribDivisor(attribute, 1);
+        }
+        glBindVertexArray(0);
+    }
+
+    static void upload(const std::vector<Vertex>& vertices, GLuint& vao, GLuint& vbo,
+                       GLenum usage = GL_STATIC_DRAW) {
         glGenVertexArrays(1, &vao);
         glGenBuffers(1, &vbo);
         glBindVertexArray(vao);
@@ -285,7 +738,7 @@ class GlScene {
             GL_ARRAY_BUFFER,
             static_cast<GLsizeiptr>(vertices.size() * sizeof(Vertex)),
             vertices.data(),
-            GL_STATIC_DRAW);
+            usage);
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
                               reinterpret_cast<void*>(offsetof(Vertex, position)));
@@ -299,14 +752,33 @@ class GlScene {
     }
 
     GLuint program_ = 0;
+    SceneData scene_;
+    Representation representation_ = Representation::full;
+    Coloring coloring_ = Coloring::strand;
     GLuint lineVao_ = 0;
     GLuint lineVbo_ = 0;
-    GLuint pointVao_ = 0;
-    GLuint pointVbo_ = 0;
+    GLuint guideVao_ = 0;
+    GLuint guideVbo_ = 0;
+    GLuint sphereProgram_ = 0;
+    GLuint sphereVao_ = 0;
+    GLuint sphereMeshVbo_ = 0;
+    GLuint sphereIndexVbo_ = 0;
+    GLuint sphereInstanceVbo_ = 0;
+    GLuint cylinderProgram_ = 0;
+    GLuint cylinderVao_ = 0;
+    GLuint cylinderMeshVbo_ = 0;
+    GLuint cylinderIndexVbo_ = 0;
+    GLuint cylinderInstanceVbo_ = 0;
     GLint viewProjection_ = -1;
-    GLint roundPoints_ = -1;
+    GLint sphereViewProjection_ = -1;
+    GLint sphereModel_ = -1;
+    GLint cylinderViewProjection_ = -1;
+    GLint cylinderModel_ = -1;
     GLsizei lineCount_ = 0;
-    GLsizei pointCount_ = 0;
+    GLsizei sphereIndexCount_ = 0;
+    GLsizei sphereCount_ = 0;
+    GLsizei cylinderIndexCount_ = 0;
+    GLsizei cylinderCount_ = 0;
 };
 
 class Viewer {
@@ -328,8 +800,12 @@ class Viewer {
             if (swapchain.handle != XR_NULL_HANDLE) xrDestroySwapchain(swapchain.handle);
         }
         if (framebuffer_) glDeleteFramebuffers(1, &framebuffer_);
+        for (XrSpace handSpace : handSpaces_) {
+            if (handSpace != XR_NULL_HANDLE) xrDestroySpace(handSpace);
+        }
         if (space_ != XR_NULL_HANDLE) xrDestroySpace(space_);
         if (session_ != XR_NULL_HANDLE) xrDestroySession(session_);
+        if (actionSet_ != XR_NULL_HANDLE) xrDestroyActionSet(actionSet_);
         if (instance_ != XR_NULL_HANDLE) xrDestroyInstance(instance_);
         if (window_) glfwDestroyWindow(window_);
         if (glfwInitialized_) glfwTerminate();
@@ -342,10 +818,112 @@ class Viewer {
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-        window_ = glfwCreateWindow(540, 180, "NADOC VR — Escape to exit", nullptr, nullptr);
+        window_ = glfwCreateWindow(
+            720, 180,
+            "NADOC VR — trigger grab · two triggers resize · menu options · Escape exit",
+            nullptr, nullptr);
         if (!window_) throw std::runtime_error("Could not create the OpenGL companion window");
         glfwMakeContextCurrent(window_);
         glfwSwapInterval(0);
+    }
+
+    XrPath path(const char* value) const {
+        XrPath result = XR_NULL_PATH;
+        checkXr(instance_, xrStringToPath(instance_, value, &result), "xrStringToPath");
+        return result;
+    }
+
+    XrAction createAction(XrActionType type, const char* name, const char* localizedName) {
+        XrActionCreateInfo info{XR_TYPE_ACTION_CREATE_INFO};
+        info.actionType = type;
+        std::snprintf(info.actionName, XR_MAX_ACTION_NAME_SIZE, "%s", name);
+        std::snprintf(info.localizedActionName, XR_MAX_LOCALIZED_ACTION_NAME_SIZE,
+                      "%s", localizedName);
+        info.countSubactionPaths = static_cast<uint32_t>(handPaths_.size());
+        info.subactionPaths = handPaths_.data();
+        XrAction action = XR_NULL_HANDLE;
+        checkXr(instance_, xrCreateAction(actionSet_, &info, &action), "xrCreateAction");
+        return action;
+    }
+
+    void suggestBindings(const char* profile,
+                         const std::array<const char*, 8>& componentPaths) {
+        std::vector<XrActionSuggestedBinding> bindings;
+        bindings.reserve(componentPaths.size());
+        for (size_t hand = 0; hand < handPaths_.size(); ++hand) {
+            const size_t offset = hand * 4U;
+            const std::array<XrAction, 4> actions = {
+                poseAction_, triggerAction_, menuAction_, hapticAction_};
+            for (size_t component = 0; component < actions.size(); ++component) {
+                if (componentPaths[offset + component]) {
+                    bindings.push_back(
+                        {actions[component], path(componentPaths[offset + component])});
+                }
+            }
+        }
+        XrInteractionProfileSuggestedBinding suggested{
+            XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
+        suggested.interactionProfile = path(profile);
+        suggested.countSuggestedBindings = static_cast<uint32_t>(bindings.size());
+        suggested.suggestedBindings = bindings.data();
+        checkXr(instance_, xrSuggestInteractionProfileBindings(instance_, &suggested),
+                "xrSuggestInteractionProfileBindings");
+    }
+
+    void initializeActions() {
+        handPaths_ = {path("/user/hand/left"), path("/user/hand/right")};
+
+        XrActionSetCreateInfo setInfo{XR_TYPE_ACTION_SET_CREATE_INFO};
+        std::snprintf(setInfo.actionSetName, XR_MAX_ACTION_SET_NAME_SIZE, "%s", "navigation");
+        std::snprintf(setInfo.localizedActionSetName,
+                      XR_MAX_LOCALIZED_ACTION_SET_NAME_SIZE, "%s", "NADOC navigation");
+        setInfo.priority = 0;
+        checkXr(instance_, xrCreateActionSet(instance_, &setInfo, &actionSet_),
+                "xrCreateActionSet");
+
+        poseAction_ = createAction(XR_ACTION_TYPE_POSE_INPUT, "hand_pose", "Hand pose");
+        triggerAction_ = createAction(XR_ACTION_TYPE_FLOAT_INPUT, "grab", "Grab model");
+        menuAction_ = createAction(
+            XR_ACTION_TYPE_BOOLEAN_INPUT, "vr_menu", "VR menu");
+        hapticAction_ = createAction(
+            XR_ACTION_TYPE_VIBRATION_OUTPUT, "haptic", "Navigation haptic");
+
+        suggestBindings(
+            "/interaction_profiles/htc/vive_controller",
+            {"/user/hand/left/input/grip/pose",
+             "/user/hand/left/input/trigger/value",
+             "/user/hand/left/input/menu/click",
+             "/user/hand/left/output/haptic",
+             "/user/hand/right/input/grip/pose",
+             "/user/hand/right/input/trigger/value",
+             "/user/hand/right/input/menu/click",
+             "/user/hand/right/output/haptic"});
+        suggestBindings(
+            "/interaction_profiles/khr/simple_controller",
+            {"/user/hand/left/input/grip/pose",
+             "/user/hand/left/input/select/click",
+             "/user/hand/left/input/menu/click",
+             "/user/hand/left/output/haptic",
+             "/user/hand/right/input/grip/pose",
+             "/user/hand/right/input/select/click",
+             nullptr,
+             "/user/hand/right/output/haptic"});
+    }
+
+    void attachActions() {
+        for (size_t hand = 0; hand < handSpaces_.size(); ++hand) {
+            XrActionSpaceCreateInfo info{XR_TYPE_ACTION_SPACE_CREATE_INFO};
+            info.action = poseAction_;
+            info.subactionPath = handPaths_[hand];
+            info.poseInActionSpace.orientation.w = 1.0F;
+            checkXr(instance_, xrCreateActionSpace(session_, &info, &handSpaces_[hand]),
+                    "xrCreateActionSpace");
+        }
+        XrSessionActionSetsAttachInfo attachInfo{XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO};
+        attachInfo.countActionSets = 1;
+        attachInfo.actionSets = &actionSet_;
+        checkXr(instance_, xrAttachSessionActionSets(session_, &attachInfo),
+                "xrAttachSessionActionSets");
     }
 
     void initializeOpenXr() {
@@ -374,6 +952,7 @@ class Viewer {
         createInfo.enabledExtensionCount = 1;
         createInfo.enabledExtensionNames = enabledExtensions;
         checkXr(XR_NULL_HANDLE, xrCreateInstance(&createInfo, &instance_), "xrCreateInstance");
+        initializeActions();
 
         XrSystemGetInfo systemInfo{XR_TYPE_SYSTEM_GET_INFO};
         systemInfo.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
@@ -426,6 +1005,7 @@ class Viewer {
         spaceInfo.poseInReferenceSpace.orientation.w = 1.0F;
         checkXr(instance_, xrCreateReferenceSpace(session_, &spaceInfo, &space_),
                 "xrCreateReferenceSpace");
+        attachActions();
     }
 
     void initializeGraphics() {
@@ -485,7 +1065,7 @@ class Viewer {
         }
 
         glGenFramebuffers(1, &framebuffer_);
-        glScene_ = std::make_unique<GlScene>(sceneData_);
+        glScene_ = std::make_unique<GlScene>(std::move(sceneData_));
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_PROGRAM_POINT_SIZE);
         glDisable(GL_CULL_FACE);
@@ -516,6 +1096,283 @@ class Viewer {
         }
     }
 
+    void pulse(size_t hand, float amplitude = 0.35F) {
+        XrHapticActionInfo info{XR_TYPE_HAPTIC_ACTION_INFO};
+        info.action = hapticAction_;
+        info.subactionPath = handPaths_[hand];
+        XrHapticVibration vibration{XR_TYPE_HAPTIC_VIBRATION};
+        vibration.duration = 30'000'000;
+        vibration.frequency = XR_FREQUENCY_UNSPECIFIED;
+        vibration.amplitude = amplitude;
+        const XrResult result = xrApplyHapticFeedback(
+            session_, &info, reinterpret_cast<const XrHapticBaseHeader*>(&vibration));
+        if (XR_FAILED(result) && result != XR_SESSION_NOT_FOCUSED) {
+            checkXr(instance_, result, "xrApplyHapticFeedback");
+        }
+    }
+
+    glm::vec3 menuWorld(float x, float y, float z = 0.0F) const {
+        return menuPosition_ + menuOrientation_ * glm::vec3(x, y, z);
+    }
+
+    void appendMenuText(const std::string& text, float x, float y, float scale,
+                        const glm::vec3& color) {
+        for (size_t character = 0; character < text.size(); ++character) {
+            const auto rows = glyph(static_cast<char>(
+                std::toupper(static_cast<unsigned char>(text[character]))));
+            for (size_t row = 0; row < rows.size(); ++row) {
+                for (int column = 0; column < 5; ++column) {
+                    if ((rows[row] & (1U << (4 - column))) == 0) continue;
+                    const float px = x + static_cast<float>(character * 6U + column) * scale;
+                    const float py = y - static_cast<float>(row) * scale;
+                    controllerGuides_.push_back(
+                        Vertex{menuWorld(px, py, 0.002F), color, 1.0F});
+                    controllerGuides_.push_back(
+                        Vertex{menuWorld(px + scale * 0.82F, py, 0.002F), color, 1.0F});
+                }
+            }
+        }
+    }
+
+    static constexpr std::array<const char*, 10> kMenuLabels = {
+        "CYLINDERS", "FULL", "BALL + STICK", "STICK ONLY",
+        "STRAND", "BASE", "CLUSTER", "CPK", "RECENTER", "CLOSE",
+    };
+    static constexpr std::array<float, 10> kMenuRows = {
+        0.190F, 0.135F, 0.080F, 0.025F,
+        -0.095F, -0.150F, -0.205F, -0.260F, -0.335F, -0.390F,
+    };
+
+    void appendMenuGuides() {
+        if (!menuOpen_) return;
+        auto line = [&](const glm::vec3& a, const glm::vec3& b, const glm::vec3& color) {
+            controllerGuides_.push_back(Vertex{a, color, 1.0F});
+            controllerGuides_.push_back(Vertex{b, color, 1.0F});
+        };
+        const glm::vec3 border(0.22F, 0.42F, 0.62F);
+        line(menuWorld(-0.29F, 0.33F), menuWorld(0.29F, 0.33F), border);
+        line(menuWorld(0.29F, 0.33F), menuWorld(0.29F, -0.425F), border);
+        line(menuWorld(0.29F, -0.425F), menuWorld(-0.29F, -0.425F), border);
+        line(menuWorld(-0.29F, -0.425F), menuWorld(-0.29F, 0.33F), border);
+        appendMenuText("VR MENU", -0.105F, 0.305F, 0.006F, {0.65F, 0.88F, 1.0F});
+        appendMenuText("REPRESENTATION", -0.245F, 0.255F, 0.0048F, {0.42F, 0.72F, 0.95F});
+        appendMenuText("COLORING", -0.245F, -0.025F, 0.0048F, {0.42F, 0.72F, 0.95F});
+
+        const int selectedRepresentation = static_cast<int>(glScene_->representation());
+        const int selectedColoring = static_cast<int>(glScene_->coloring());
+        for (size_t index = 0; index < kMenuLabels.size(); ++index) {
+            const bool selected = (index < 4 && static_cast<int>(index) == selectedRepresentation)
+                || (index >= 4 && index < 8
+                    && static_cast<int>(index - 4) == selectedColoring);
+            glm::vec3 color = selected ? glm::vec3(0.30F, 1.0F, 0.48F)
+                                       : glm::vec3(0.65F, 0.70F, 0.78F);
+            if (static_cast<int>(index) == menuHover_) color = {1.0F, 0.78F, 0.22F};
+            const float y = kMenuRows[index];
+            line(menuWorld(-0.255F, y + 0.023F), menuWorld(0.255F, y + 0.023F), color * 0.7F);
+            line(menuWorld(0.255F, y + 0.023F), menuWorld(0.255F, y - 0.023F), color * 0.7F);
+            line(menuWorld(0.255F, y - 0.023F), menuWorld(-0.255F, y - 0.023F), color * 0.7F);
+            line(menuWorld(-0.255F, y - 0.023F), menuWorld(-0.255F, y + 0.023F), color * 0.7F);
+            appendMenuText(kMenuLabels[index], -0.225F, y + 0.014F, 0.0042F, color);
+        }
+    }
+
+    int menuHit(const nadoc_vr::HandPose& hand) const {
+        if (!menuOpen_ || !hand.valid) return -1;
+        const glm::vec3 direction = hand.orientation * glm::vec3(0, 0, -1);
+        const glm::vec3 normal = menuOrientation_ * glm::vec3(0, 0, 1);
+        const float denominator = glm::dot(direction, normal);
+        if (std::abs(denominator) < 1.0e-5F) return -1;
+        const float distance = glm::dot(menuPosition_ - hand.position, normal) / denominator;
+        if (distance <= 0.0F || distance > 5.0F) return -1;
+        const glm::vec3 local = glm::inverse(menuOrientation_)
+                              * (hand.position + direction * distance - menuPosition_);
+        if (std::abs(local.x) > 0.255F) return -1;
+        for (size_t index = 0; index < kMenuRows.size(); ++index) {
+            if (std::abs(local.y - kMenuRows[index]) <= 0.025F) {
+                return static_cast<int>(index);
+            }
+        }
+        return -1;
+    }
+
+    void processMenuInput() {
+        menuHover_ = -1;
+        for (size_t hand = 0; hand < hands_.size(); ++hand) {
+            const int hit = menuHit(hands_[hand]);
+            if (hit >= 0 && menuHover_ < 0) menuHover_ = hit;
+            if (hit < 0 || !triggerClicked_[hand]) continue;
+            if (hit < 4) {
+                glScene_->setStyle(static_cast<Representation>(hit), glScene_->coloring());
+            } else if (hit < 8) {
+                glScene_->setStyle(
+                    glScene_->representation(), static_cast<Coloring>(hit - 4));
+            } else if (hit == 8) {
+                recenterRequested_ = true;
+                recenterHand_ = hand;
+                menuOpen_ = false;
+                menuHover_ = -1;
+                suppressManipulationUntilRelease_ = true;
+            } else {
+                menuOpen_ = false;
+                menuHover_ = -1;
+                suppressManipulationUntilRelease_ = true;
+            }
+            pulse(hand, 0.50F);
+        }
+    }
+
+    void updateControllerGuides() {
+        controllerGuides_.clear();
+        auto line = [&](const glm::vec3& a, const glm::vec3& b, const glm::vec3& color) {
+            controllerGuides_.push_back(Vertex{a, color, 1.0F});
+            controllerGuides_.push_back(Vertex{b, color, 1.0F});
+        };
+        for (size_t hand = 0; hand < hands_.size(); ++hand) {
+            if (!hands_[hand].valid) continue;
+            glm::vec3 color = hand == 0U
+                ? glm::vec3(0.20F, 0.75F, 1.0F)
+                : glm::vec3(1.0F, 0.55F, 0.18F);
+            if (hands_[hand].pressed) color = {0.35F, 1.0F, 0.42F};
+            if (manipulator_.mode() == nadoc_vr::ManipulationMode::two_hand) {
+                color = {0.95F, 0.35F, 1.0F};
+            }
+            const glm::vec3 origin = hands_[hand].position;
+            const glm::vec3 forward = hands_[hand].orientation * glm::vec3(0, 0, -1);
+            const glm::vec3 right = hands_[hand].orientation * glm::vec3(1, 0, 0);
+            const glm::vec3 up = hands_[hand].orientation * glm::vec3(0, 1, 0);
+            const glm::vec3 tip = origin + forward * (menuOpen_ ? 1.2F : 0.18F);
+            line(origin - forward * 0.045F, origin, color * 0.65F);
+            line(origin, tip, color);
+            line(tip - right * 0.008F, tip + right * 0.008F, color);
+            line(tip - up * 0.008F, tip + up * 0.008F, color);
+        }
+        if (hands_[0].valid && hands_[1].valid &&
+            manipulator_.mode() == nadoc_vr::ManipulationMode::two_hand) {
+            line(hands_[0].position, hands_[1].position, {0.95F, 0.35F, 1.0F});
+        }
+        appendMenuGuides();
+    }
+
+    void syncActions(XrTime displayTime) {
+        triggerClicked_.fill(false);
+        if (sessionState_ != XR_SESSION_STATE_FOCUSED) return;
+        XrActiveActionSet active{actionSet_, XR_NULL_PATH};
+        XrActionsSyncInfo syncInfo{XR_TYPE_ACTIONS_SYNC_INFO};
+        syncInfo.countActiveActionSets = 1;
+        syncInfo.activeActionSets = &active;
+        checkXr(instance_, xrSyncActions(session_, &syncInfo), "xrSyncActions");
+
+        for (size_t hand = 0; hand < hands_.size(); ++hand) {
+            hands_[hand].valid = false;
+            XrActionStateGetInfo getInfo{XR_TYPE_ACTION_STATE_GET_INFO};
+            getInfo.subactionPath = handPaths_[hand];
+
+            getInfo.action = triggerAction_;
+            XrActionStateFloat trigger{XR_TYPE_ACTION_STATE_FLOAT};
+            checkXr(instance_, xrGetActionStateFloat(session_, &getInfo, &trigger),
+                    "xrGetActionStateFloat");
+            const bool wasPressed = triggerPressed_[hand];
+            const float threshold = wasPressed ? 0.40F : 0.55F;
+            triggerPressed_[hand] = trigger.isActive && trigger.currentState >= threshold;
+            triggerClicked_[hand] = !wasPressed && triggerPressed_[hand];
+            hands_[hand].pressed = triggerPressed_[hand];
+
+            getInfo.action = poseAction_;
+            XrActionStatePose poseState{XR_TYPE_ACTION_STATE_POSE};
+            checkXr(instance_, xrGetActionStatePose(session_, &getInfo, &poseState),
+                    "xrGetActionStatePose");
+            if (poseState.isActive) {
+                XrSpaceLocation location{XR_TYPE_SPACE_LOCATION};
+                checkXr(instance_, xrLocateSpace(
+                    handSpaces_[hand], space_, displayTime, &location), "xrLocateSpace(hand)");
+                const XrSpaceLocationFlags valid = XR_SPACE_LOCATION_POSITION_VALID_BIT |
+                                                   XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
+                if ((location.locationFlags & valid) == valid) {
+                    const bool pressed = hands_[hand].pressed;
+                    hands_[hand] = handPoseFromXr(location.pose);
+                    hands_[hand].pressed = pressed;
+                }
+            }
+
+            getInfo.action = menuAction_;
+            XrActionStateBoolean menu{XR_TYPE_ACTION_STATE_BOOLEAN};
+            checkXr(instance_, xrGetActionStateBoolean(session_, &getInfo, &menu),
+                    "xrGetActionStateBoolean");
+            if (menu.isActive && menu.changedSinceLastSync && menu.currentState) {
+                menuHand_ = hand;
+                if (menuOpen_) {
+                    menuOpen_ = false;
+                    menuHover_ = -1;
+                    suppressManipulationUntilRelease_ = true;
+                } else {
+                    menuOpenRequested_ = true;
+                }
+                pulse(hand, 0.45F);
+            }
+        }
+
+        const nadoc_vr::ManipulationMode previous = manipulator_.mode();
+        if (suppressManipulationUntilRelease_ &&
+            std::none_of(triggerPressed_.begin(), triggerPressed_.end(), [](bool pressed) {
+                return pressed;
+            })) {
+            suppressManipulationUntilRelease_ = false;
+        }
+        auto manipulationHands = hands_;
+        if (menuOpen_ || menuOpenRequested_ || suppressManipulationUntilRelease_) {
+            for (nadoc_vr::HandPose& hand : manipulationHands) hand.pressed = false;
+        }
+        const nadoc_vr::ManipulationMode next = manipulator_.update(manipulationHands);
+        if (next != previous && next != nadoc_vr::ManipulationMode::none) {
+            for (size_t hand = 0; hand < hands_.size(); ++hand) {
+                if (hands_[hand].valid && hands_[hand].pressed) pulse(hand);
+            }
+        }
+        if (menuOpen_) processMenuInput();
+        updateControllerGuides();
+    }
+
+    void applyPendingMenu(uint32_t viewCount) {
+        if (!menuOpenRequested_ || viewCount == 0) return;
+        glm::vec3 headPosition{};
+        for (uint32_t i = 0; i < viewCount; ++i) {
+            headPosition += glm::vec3(
+                views_[i].pose.position.x,
+                views_[i].pose.position.y,
+                views_[i].pose.position.z);
+        }
+        headPosition /= static_cast<float>(viewCount);
+        const XrQuaternionf& orientation = views_[0].pose.orientation;
+        menuOrientation_ = glm::normalize(glm::quat(
+            orientation.w, orientation.x, orientation.y, orientation.z));
+        menuPosition_ = headPosition
+                      + menuOrientation_ * glm::vec3(0.0F, 0.04F, -1.00F);
+        menuOpen_ = true;
+        menuOpenRequested_ = false;
+        menuHover_ = -1;
+        pulse(menuHand_, 0.30F);
+        updateControllerGuides();
+    }
+
+    void applyPendingRecenter(uint32_t viewCount) {
+        if (!recenterRequested_ || viewCount == 0) return;
+        glm::vec3 headPosition{};
+        for (uint32_t i = 0; i < viewCount; ++i) {
+            headPosition += glm::vec3(
+                views_[i].pose.position.x,
+                views_[i].pose.position.y,
+                views_[i].pose.position.z);
+        }
+        headPosition /= static_cast<float>(viewCount);
+        const XrQuaternionf& orientation = views_[0].pose.orientation;
+        manipulator_.recenter(
+            headPosition,
+            {orientation.w, orientation.x, orientation.y, orientation.z});
+        pulse(recenterHand_, 0.55F);
+        recenterRequested_ = false;
+        updateControllerGuides();
+    }
+
     bool renderView(uint32_t index, const XrView& view,
                     XrCompositionLayerProjectionView& layerView) {
         Swapchain& swapchain = swapchains_[index];
@@ -540,7 +1397,10 @@ class Viewer {
         glClearColor(0.015F, 0.025F, 0.045F, 1.0F);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         const glm::mat4 projection = projectionFromFov(view.fov, kNearMeters, kFarMeters);
-        glScene_->render(projection * viewFromPose(view.pose));
+        glScene_->render(
+            projection * viewFromPose(view.pose),
+            manipulator_.transform(),
+            controllerGuides_);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glFlush();
 
@@ -563,6 +1423,7 @@ class Viewer {
         checkXr(instance_, xrWaitFrame(session_, &waitInfo, &frameState), "xrWaitFrame");
         XrFrameBeginInfo beginInfo{XR_TYPE_FRAME_BEGIN_INFO};
         checkXr(instance_, xrBeginFrame(session_, &beginInfo), "xrBeginFrame");
+        syncActions(frameState.predictedDisplayTime);
 
         std::vector<XrCompositionLayerProjectionView> layerViews(views_.size());
         XrCompositionLayerProjection layer{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
@@ -583,6 +1444,8 @@ class Viewer {
             const XrViewStateFlags valid = XR_VIEW_STATE_POSITION_VALID_BIT |
                                            XR_VIEW_STATE_ORIENTATION_VALID_BIT;
             if ((viewState.viewStateFlags & valid) == valid && viewCount == views_.size()) {
+                applyPendingMenu(viewCount);
+                applyPendingRecenter(viewCount);
                 for (uint32_t i = 0; i < viewCount; ++i) renderView(i, views_[i], layerViews[i]);
                 layer.space = space_;
                 layer.viewCount = viewCount;
@@ -600,7 +1463,8 @@ class Viewer {
     }
 
     void eventLoop() {
-        std::cout << "NADOC VR viewer ready; put on the headset. Press Escape to exit.\n";
+        std::cout << "NADOC VR viewer ready. Trigger: grab/select; both triggers: resize; "
+                     "menu: options; Escape: exit.\n";
         while (!exitLoop_) {
             glfwPollEvents();
             pollXrEvents();
@@ -628,6 +1492,27 @@ class Viewer {
     XrSystemId systemId_ = XR_NULL_SYSTEM_ID;
     XrSession session_ = XR_NULL_HANDLE;
     XrSpace space_ = XR_NULL_HANDLE;
+    XrActionSet actionSet_ = XR_NULL_HANDLE;
+    XrAction poseAction_ = XR_NULL_HANDLE;
+    XrAction triggerAction_ = XR_NULL_HANDLE;
+    XrAction menuAction_ = XR_NULL_HANDLE;
+    XrAction hapticAction_ = XR_NULL_HANDLE;
+    std::array<XrPath, 2> handPaths_{XR_NULL_PATH, XR_NULL_PATH};
+    std::array<XrSpace, 2> handSpaces_{XR_NULL_HANDLE, XR_NULL_HANDLE};
+    std::array<nadoc_vr::HandPose, 2> hands_{};
+    std::array<bool, 2> triggerPressed_{false, false};
+    std::array<bool, 2> triggerClicked_{false, false};
+    nadoc_vr::SceneManipulator manipulator_;
+    std::vector<Vertex> controllerGuides_;
+    bool menuOpen_ = false;
+    bool menuOpenRequested_ = false;
+    bool suppressManipulationUntilRelease_ = false;
+    int menuHover_ = -1;
+    glm::vec3 menuPosition_{};
+    glm::quat menuOrientation_{1.0F, 0.0F, 0.0F, 0.0F};
+    size_t menuHand_ = 0;
+    bool recenterRequested_ = false;
+    size_t recenterHand_ = 0;
     XrSessionState sessionState_ = XR_SESSION_STATE_UNKNOWN;
     bool sessionRunning_ = false;
     bool exitLoop_ = false;

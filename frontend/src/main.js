@@ -5750,6 +5750,29 @@ async function main() {
   document.getElementById('help-modal-close')?.addEventListener('click', () => helpModal.classList.remove('visible'))
   helpModal?.addEventListener('click', e => { if (e.target === helpModal) helpModal.classList.remove('visible') })
 
+  document.getElementById('menu-help-open-steamvr')?.addEventListener('click', async event => {
+    const button = event.currentTarget
+    button.disabled = true
+    let status
+    try {
+      status = await api.startSteamVR()
+    } catch {
+      showToast(api.lastErrorMessage() || 'SteamVR did not start.', { severity: 'error' })
+      return
+    } finally {
+      button.disabled = false
+    }
+    if (!status?.steamvr_running) {
+      showToast(api.lastErrorMessage() || 'SteamVR did not start.', { severity: 'error' })
+      return
+    }
+    if (!status.dashboard_running) {
+      showToast('SteamVR started, but its Dashboard is still loading. Try the Vive System button shortly.')
+      return
+    }
+    showToast('SteamVR is ready. Press the Vive System button and select Desktop to control NADOC.')
+  })
+
   initVRSession({
     renderer,
     scene,
@@ -5764,6 +5787,10 @@ async function main() {
         camera: captureCurrentCamera(),
         measured_positioning: isNewPositioningOn(),
         assembly_active: store.getState().assemblyActive,
+        representation: ['cylinders', 'full', 'ballstick', 'stick'].includes(_currentRepr)
+          ? _currentRepr : 'full',
+        coloring: ['strand', 'base', 'cluster', 'cpk'].includes(store.getState().coloringMode)
+          ? store.getState().coloringMode : 'strand',
       }),
       stop: api.stopNativeVR,
       errorMessage: api.lastErrorMessage,

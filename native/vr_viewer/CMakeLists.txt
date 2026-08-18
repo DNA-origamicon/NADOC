@@ -23,3 +23,11 @@ target_compile_options(nadoc-vr-viewer PRIVATE
 )
 
 install(TARGETS nadoc-vr-viewer RUNTIME DESTINATION bin)
+
+include(CTest)
+if(BUILD_TESTING)
+  add_executable(nadoc-vr-interaction-test tests/interaction_test.cpp)
+  target_include_directories(nadoc-vr-interaction-test PRIVATE src)
+  target_compile_options(nadoc-vr-interaction-test PRIVATE -Wall -Wextra -Wpedantic)
+  add_test(NAME nadoc-vr-interaction COMMAND nadoc-vr-interaction-test)
+endif()

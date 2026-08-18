@@ -190,7 +190,7 @@ export function initVRSession({
     }
     _setNativeActive(true)
     _scheduleNativePoll()
-    showToast('VR view started in the SteamVR companion. Move your head to inspect the structure.')
+    showToast('VR started. Trigger: grab/select · both triggers: resize · menu: VR options.')
     return true
   }
 

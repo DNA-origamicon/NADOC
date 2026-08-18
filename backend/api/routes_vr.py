@@ -16,7 +16,7 @@ import subprocess
 import tempfile
 import threading
 import time
-from typing import Optional
+from typing import Literal, Optional
 from urllib.parse import urlparse
 
 import numpy as np
@@ -34,7 +34,9 @@ _BUILD_DIR = _VIEWER_DIR / "build"
 _VIEWER = _BUILD_DIR / "nadoc-vr-viewer"
 _STATE_PATH = Path(tempfile.gettempdir()) / f"nadoc-vr-{os.getuid()}.json"
 _LOG_PATH = Path(tempfile.gettempdir()) / f"nadoc-vr-{os.getuid()}.log"
+_STEAMVR_LOG_PATH = Path(tempfile.gettempdir()) / f"nadoc-steamvr-{os.getuid()}.log"
 _STATE_LOCK = threading.Lock()
+_RUNTIME_LOCK = threading.Lock()
 
 
 class VRCamera(BaseModel):
@@ -47,6 +49,8 @@ class VRLaunchRequest(BaseModel):
     camera: Optional[VRCamera] = None
     measured_positioning: bool = False
     assembly_active: bool = False
+    representation: Literal["cylinders", "full", "ballstick", "stick"] = "full"
+    coloring: Literal["strand", "base", "cluster", "cpk"] = "strand"
 
 
 def _require_local(request: Request) -> None:
@@ -91,6 +95,84 @@ def _strand_colors(design) -> dict[str, tuple[float, float, float]]:
     return colors
 
 
+_BASE_COLORS = {
+    "A": _rgb("#44dd88"),
+    "T": _rgb("#ff5555"),
+    "G": _rgb("#ffcc00"),
+    "C": _rgb("#55aaff"),
+}
+
+
+def _base_letters(design, nucleotides: list[dict]) -> dict[int, str]:
+    """Geometry-list index → assigned base, matching the frontend's 5′→3′ walk."""
+    by_strand: dict[str, list[tuple[int, dict]]] = {}
+    for index, nucleotide in enumerate(nucleotides):
+        strand_id = nucleotide.get("strand_id")
+        if strand_id:
+            by_strand.setdefault(strand_id, []).append((index, nucleotide))
+    sequences = {strand.id: strand.sequence for strand in design.strands if strand.sequence}
+    result: dict[int, str] = {}
+    for strand_id, entries in by_strand.items():
+        sequence = sequences.get(strand_id)
+        if not sequence:
+            continue
+        entries.sort(
+            key=lambda item: (
+                int(item[1].get("domain_index") or 0),
+                int(item[1].get("bp_index") or 0)
+                if item[1].get("direction") == "FORWARD"
+                else -int(item[1].get("bp_index") or 0),
+                int(item[1].get("copy_k") or item[1].get("ext_k") or 0),
+            )
+        )
+        for offset, (index, _) in enumerate(entries):
+            if offset < len(sequence) and sequence[offset].upper() in _BASE_COLORS:
+                result[index] = sequence[offset].upper()
+    return result
+
+
+def _cluster_color(design, nucleotide: dict) -> tuple[float, float, float] | None:
+    """Resolve the best matching display cluster for one nucleotide."""
+    candidates: list[tuple[int, int, int, int]] = []
+    for index, cluster in enumerate(design.cluster_transforms):
+        domain_match = any(
+            ref.strand_id == nucleotide.get("strand_id")
+            and ref.domain_index == int(nucleotide.get("domain_index") or 0)
+            for ref in cluster.domain_ids
+        )
+        helix_match = nucleotide.get("helix_id") in cluster.helix_ids
+        if not domain_match and not helix_match:
+            continue
+        candidates.append(
+            (
+                1 if domain_match else 0,
+                0 if cluster.auto_created else 1,
+                1 if cluster.color else 0,
+                index,
+            )
+        )
+    if not candidates:
+        return None
+    index = max(candidates)[-1]
+    cluster = design.cluster_transforms[index]
+    return _rgb(cluster.color or STAPLE_PALETTE[index % len(STAPLE_PALETTE)])
+
+
+def _nucleotide_colors(design, nucleotides: list[dict], coloring: str) -> list[tuple]:
+    strand_colors = _strand_colors(design)
+    letters = _base_letters(design, nucleotides) if coloring == "base" else {}
+    result = []
+    for index, nucleotide in enumerate(nucleotides):
+        fallback = strand_colors.get(nucleotide.get("strand_id") or "", (0.55, 0.62, 0.72))
+        if coloring == "base" and index in letters:
+            result.append(_BASE_COLORS[letters[index]])
+        elif coloring == "cluster":
+            result.append(_cluster_color(design, nucleotide) or fallback)
+        else:
+            result.append(fallback)
+    return result
+
+
 def _view_rotation(camera: VRCamera | None) -> np.ndarray:
     """Rows map NADOC world coordinates into the desktop camera's view axes."""
     if camera is None:
@@ -117,11 +199,21 @@ def _view_rotation(camera: VRCamera | None) -> np.ndarray:
     return np.stack([right, up, -forward])
 
 
-def _serialize_scene(design, nucleotides: list[dict], axes: list[dict], camera=None) -> str:
+def _serialize_scene(
+    design,
+    nucleotides: list[dict],
+    axes: list[dict],
+    camera=None,
+    representation: str = "full",
+    coloring: str = "strand",
+    atomistic_model=None,
+) -> str:
     """Create the deliberately trivial line-oriented format read by the C++ viewer."""
     rotation = _view_rotation(camera)
-    colors = _strand_colors(design)
-    default_color = (0.55, 0.62, 0.72)
+    color_channels = {
+        mode: _nucleotide_colors(design, nucleotides, mode)
+        for mode in ("strand", "base", "cluster", "cpk")
+    }
 
     def point(value) -> np.ndarray | None:
         if not isinstance(value, (list, tuple)) or len(value) != 3:
@@ -134,22 +226,41 @@ def _serialize_scene(design, nucleotides: list[dict], axes: list[dict], camera=N
     def nums(*values: float) -> str:
         return " ".join(f"{float(value):.7g}" for value in values)
 
-    lines = ["NADOCVR 1", "# Read-only NADOC display snapshot"]
-    by_strand: dict[str, list[tuple[dict, np.ndarray]]] = {}
-    for nucleotide in nucleotides:
+    def palette_for_index(index: int) -> tuple[float, ...]:
+        return tuple(
+            channel
+            for mode in ("strand", "base", "cluster", "cpk")
+            for channel in color_channels[mode][index]
+        )
+
+    def solid_palette(color: tuple[float, float, float]) -> tuple[float, ...]:
+        return color * 4
+
+    lines = [f"NADOCVR 3 {representation} {coloring}", "# preloaded VR representations"]
+    by_strand: dict[str, list[tuple[dict, np.ndarray, tuple[float, ...]]]] = {}
+    identity_palettes: dict[tuple, tuple[float, ...]] = {}
+    lines.append("R full")
+    for index, nucleotide in enumerate(nucleotides):
         backbone = point(nucleotide.get("backbone_position"))
         base = point(nucleotide.get("base_position"))
         if backbone is None:
             continue
         strand_id = nucleotide.get("strand_id") or ""
-        color = colors.get(strand_id, default_color)
-        lines.append(f"P {nums(*backbone, *color, 9.0)}")
+        palette = palette_for_index(index)
+        identity = (
+            strand_id,
+            nucleotide.get("helix_id") or "",
+            int(nucleotide.get("bp_index") or 0),
+            nucleotide.get("direction") or "",
+        )
+        identity_palettes[identity] = palette
+        lines.append(f"P {nums(*backbone, 0.17, *palette)}")
         if base is not None:
-            base_color = tuple(min(1.0, channel * 0.75 + 0.25) for channel in color)
-            lines.append(f"P {nums(*base, *base_color, 7.0)}")
-            lines.append(f"L {nums(*backbone, *base, *color)}")
+            base_palette = tuple(min(1.0, channel * 0.75 + 0.25) for channel in palette)
+            lines.append(f"P {nums(*base, 0.13, *base_palette)}")
+            lines.append(f"C {nums(*backbone, *base, 0.075, *palette)}")
         if strand_id:
-            by_strand.setdefault(strand_id, []).append((nucleotide, backbone))
+            by_strand.setdefault(strand_id, []).append((nucleotide, backbone, palette))
 
     # Join sequential backbone beads. Long jumps are omitted so malformed or
     # sparse strand metadata cannot draw a line across an entire structure.
@@ -163,19 +274,85 @@ def _serialize_scene(design, nucleotides: list[dict], axes: list[dict], camera=N
                 int(item[0].get("copy_k") or item[0].get("ext_k") or 0),
             )
         )
-        for (_, first), (_, second) in zip(
+        for (_, first, palette), (_, second, _) in zip(
             strand_nucleotides, strand_nucleotides[1:]
         ):
             if float(np.linalg.norm(second - first)) <= 5.0:
-                lines.append(f"L {nums(*first, *second, 0.72, 0.76, 0.84)}")
+                lines.append(f"C {nums(*first, *second, 0.085, *palette)}")
 
+    def append_axes(radius: float = 0.025) -> None:
+        palette = solid_palette((0.30, 0.34, 0.42))
+        for axis in axes:
+            samples = axis.get("samples") or [axis.get("start"), axis.get("end")]
+            for first_raw, second_raw in zip(samples, samples[1:]):
+                first, second = point(first_raw), point(second_raw)
+                if first is not None and second is not None:
+                    lines.append(f"C {nums(*first, *second, radius, *palette)}")
+
+    append_axes()
+
+    lines.append("R cylinders")
+    first_palette_by_helix = {}
+    for index, nucleotide in enumerate(nucleotides):
+        first_palette_by_helix.setdefault(nucleotide.get("helix_id"), palette_for_index(index))
     for axis in axes:
-        start = point(axis.get("start"))
-        end = point(axis.get("end"))
-        if start is not None and end is not None:
-            lines.append(f"L {nums(*start, *end, 0.30, 0.34, 0.42)}")
+        samples = axis.get("samples") or [axis.get("start"), axis.get("end")]
+        palette = first_palette_by_helix.get(
+            axis.get("helix_id"), solid_palette((0.45, 0.55, 0.72))
+        )
+        for first_raw, second_raw in zip(samples, samples[1:]):
+            first, second = point(first_raw), point(second_raw)
+            if first is not None and second is not None:
+                lines.append(f"C {nums(*first, *second, 0.72, *palette)}")
 
-    if len(lines) == 2:
+    if atomistic_model is None:
+        raise HTTPException(500, detail="Atomistic VR snapshot was not built.")
+    from backend.core.atomistic import (
+        CPK_COLOR,
+        DEFAULT_CPK_COLOR,
+        DEFAULT_VDW_RADIUS,
+        VDW_RADIUS,
+    )
+
+    strand_colors = _strand_colors(design)
+    atom_positions = [point([atom.x, atom.y, atom.z]) for atom in atomistic_model.atoms]
+    atom_palettes = []
+    for atom in atomistic_model.atoms:
+        fallback = strand_colors.get(atom.strand_id, (0.55, 0.62, 0.72))
+        identity = identity_palettes.get(
+            (atom.strand_id, atom.helix_id, atom.bp_index, atom.direction),
+            solid_palette(fallback),
+        )
+        strand_color = identity[0:3]
+        base_color = _BASE_COLORS.get(atom.residue[-1:], identity[3:6])
+        cluster_color = identity[6:9]
+        cpk_color = _rgb(f"#{CPK_COLOR.get(atom.element, DEFAULT_CPK_COLOR):06x}")
+        atom_palettes.append((*strand_color, *base_color, *cluster_color, *cpk_color))
+
+    def append_atomistic(name: str, include_points: bool, radius: float) -> None:
+        lines.append(f"R {name}")
+        if include_points:
+            for atom, position, palette in zip(
+                atomistic_model.atoms, atom_positions, atom_palettes
+            ):
+                if position is not None:
+                    radius = VDW_RADIUS.get(atom.element, DEFAULT_VDW_RADIUS) * 0.55
+                    lines.append(f"P {nums(*position, radius, *palette)}")
+        for first_index, second_index in atomistic_model.bonds:
+            first, second = atom_positions[first_index], atom_positions[second_index]
+            if first is None or second is None:
+                continue
+            palette = tuple(
+                (a + b) * 0.5
+                for a, b in zip(atom_palettes[first_index], atom_palettes[second_index])
+            )
+            lines.append(f"C {nums(*first, *second, radius, *palette)}")
+        append_axes()
+
+    append_atomistic("ballstick", True, 0.035)
+    append_atomistic("stick", False, 0.055)
+
+    if not any(line.startswith(("P ", "C ")) for line in lines):
         raise HTTPException(409, detail="The active design contains no display geometry.")
     return "\n".join(lines) + "\n"
 
@@ -195,7 +372,24 @@ def _snapshot(body: VRLaunchRequest) -> str:
     )
     axes = deformed_helix_axes(design)
     _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
-    return _serialize_scene(design, nucleotides, axes, body.camera)
+    from backend.core.atomistic import build_atomistic_model
+
+    # The in-headset menu switches instantly, so all four representations are
+    # preloaded in one immutable snapshot instead of calling back into the browser.
+    atomistic_model = build_atomistic_model(
+        design,
+        fast_bridges=True,
+        measured_positioning=body.measured_positioning,
+    )
+    return _serialize_scene(
+        design,
+        nucleotides,
+        axes,
+        body.camera,
+        body.representation,
+        body.coloring,
+        atomistic_model,
+    )
 
 
 def _build_environment() -> dict[str, str]:
@@ -224,10 +418,12 @@ def _build_environment() -> dict[str, str]:
 
 
 def _ensure_viewer_built() -> None:
-    newest_source = max(
-        (_VIEWER_DIR / "CMakeLists.txt").stat().st_mtime,
-        *[path.stat().st_mtime for path in (_VIEWER_DIR / "src").glob("*.cpp")],
-    )
+    sources = [
+        _VIEWER_DIR / "CMakeLists.txt",
+        *(_VIEWER_DIR / "src").glob("*.cpp"),
+        *(_VIEWER_DIR / "src").glob("*.hpp"),
+    ]
+    newest_source = max(path.stat().st_mtime for path in sources)
     if _VIEWER.is_file() and _VIEWER.stat().st_mtime >= newest_source:
         return
 
@@ -280,6 +476,68 @@ def _read_state() -> dict | None:
         return None
 
 
+def _process_names() -> set[str]:
+    """Read Linux process names without introducing a psutil dependency."""
+    names: set[str] = set()
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            names.add((entry / "comm").read_text().strip())
+        except OSError:
+            continue
+    return names
+
+
+def _runtime_payload() -> dict[str, bool]:
+    names = _process_names()
+    return {
+        "steamvr_running": "vrserver" in names and "vrcompositor" in names,
+        "dashboard_running": "vrdashboard" in names,
+    }
+
+
+def _start_steamvr() -> dict[str, bool]:
+    """Start SteamVR through Steam so its dashboard owns the runtime lifecycle."""
+    with _RUNTIME_LOCK:
+        status = _runtime_payload()
+        if status["steamvr_running"] and status["dashboard_running"]:
+            return status
+        steam = Path("/usr/bin/steam")
+        if not steam.is_file():
+            raise HTTPException(503, detail="Steam is not installed at /usr/bin/steam.")
+        log = _STEAMVR_LOG_PATH.open("ab")
+        try:
+            subprocess.Popen(
+                [str(steam), "-silent", "steam://rungameid/250820"],
+                cwd=Path.home(),
+                env=dict(os.environ),
+                stdin=subprocess.DEVNULL,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+                close_fds=True,
+            )
+        except OSError as exc:
+            raise HTTPException(503, detail=f"Could not start SteamVR: {exc}") from exc
+        finally:
+            log.close()
+
+        deadline = time.monotonic() + 20.0
+        while time.monotonic() < deadline:
+            status = _runtime_payload()
+            if status["steamvr_running"] and status["dashboard_running"]:
+                return status
+            time.sleep(0.25)
+        status = _runtime_payload()
+        if not status["steamvr_running"]:
+            raise HTTPException(
+                503,
+                detail=f"SteamVR did not start. See {_STEAMVR_LOG_PATH}.",
+            )
+        return status
+
+
 def _write_state(state: dict) -> None:
     _STATE_PATH.write_text(json.dumps(state))
     _STATE_PATH.chmod(0o600)
@@ -301,6 +559,7 @@ def _status_payload() -> dict:
             "running": False,
             "available": _VIEWER.is_file() or (_VIEWER_DIR / "CMakeLists.txt").is_file(),
             "log_path": str(_LOG_PATH),
+            **_runtime_payload(),
         }
     return {
         "running": True,
@@ -308,6 +567,7 @@ def _status_payload() -> dict:
         "pid": int(state["pid"]),
         "started_at": state.get("started_at"),
         "log_path": str(_LOG_PATH),
+        **_runtime_payload(),
     }
 
 
@@ -315,6 +575,18 @@ def _status_payload() -> dict:
 def vr_status(request: Request) -> dict:
     _require_local(request)
     return _status_payload()
+
+
+@router.post("/vr/runtime/start")
+def start_vr_runtime(request: Request) -> dict:
+    _require_local(request)
+    return {
+        **_start_steamvr(),
+        "desktop_hint": (
+            "Press the Vive System button, then select Desktop in the SteamVR dashboard."
+        ),
+        "log_path": str(_STEAMVR_LOG_PATH),
+    }
 
 
 @router.post("/vr/launch")
@@ -325,6 +597,10 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             409,
             detail="The first native VR viewer supports Part view; exit Assembly mode first.",
         )
+
+    # Starting SteamVR through the Steam client (rather than incidentally through
+    # xrCreateInstance) keeps Dashboard/Desktop available after the NADOC scene exits.
+    _start_steamvr()
 
     with _STATE_LOCK:
         running = _read_state()

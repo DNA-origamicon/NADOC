@@ -4194,6 +4194,10 @@ export async function getVRStatus() {
   return _request('GET', '/vr/status', undefined, { suppressBusy: true })
 }
 
+export async function startSteamVR() {
+  return _request('POST', '/vr/runtime/start', undefined, { timeoutMs: 30000 })
+}
+
 export async function launchNativeVR(body) {
   return _request('POST', '/vr/launch', body, { timeoutMs: 120000 })
 }

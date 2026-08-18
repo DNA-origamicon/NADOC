@@ -23,5 +23,26 @@ sudo apt install build-essential cmake ninja-build libopenxr-dev \
 ```
 
 The backend selects SteamVR's `steamxr_linux64.json` automatically when it
-launches the viewer. Press Escape in the companion window, close that window,
-or select Help → Exit VR in NADOC to end the session.
+launches the viewer. Help → Open SteamVR / Desktop starts SteamVR independently,
+so its Dashboard remains available before, during, and after a NADOC VR session.
+
+Controls on the original HTC Vive wands:
+
+- Hold either trigger to grab, move, and rotate the structure.
+- Hold both triggers and change the distance between the controllers to resize
+  the structure around their midpoint.
+- Press either application-menu button to open or close the in-headset menu.
+  Point a wand and pull its trigger to select a representation (Cylinders,
+  Full, Ball + Stick, or Stick Only), coloring (Strand, Base, Cluster, or CPK),
+  Recenter, or Close.
+- Cyan and orange pointers identify the left and right controllers. They turn
+  green during a one-hand grab and magenta during a two-hand resize.
+- Press the Vive System button (not the application-menu button) to open the
+  SteamVR Dashboard, then select Desktop to operate NADOC's normal interface.
+
+Close inspection is intentionally unrestricted: structures may be pulled through
+the headset or enlarged around the viewer. A 2 cm rendering near plane prevents
+projection singularities while allowing atom-scale interior inspection.
+
+The controllers pulse when an interaction begins. Press Escape in the companion
+window, close that window, or select Help → Exit VR in NADOC to end the session.
