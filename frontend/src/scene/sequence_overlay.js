@@ -16,7 +16,7 @@
  */
 
 import * as THREE from 'three'
-import { assembleOverhangSequence } from './design_queries.js'
+import { buildNucLetterMap } from './helix_renderer/palette.js'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -170,11 +170,9 @@ export function initSequenceOverlay(scene, storeRef) {
 
     if (!geometry || !design || geometry.length === 0) return
 
-    // ── Strand sequence map ──────────────────────────────────────────────────
-    const seqMap = new Map()   // strand_id → sequence string
+    // ── Strand inventory (letter assignment uses the shared semantic map) ───
     let scaffoldId = null
     for (const strand of (design.strands ?? [])) {
-      if (strand.sequence) seqMap.set(strand.id, strand.sequence)
       if (strand.strand_type === 'scaffold') scaffoldId = strand.id
     }
 
@@ -190,65 +188,15 @@ export function initSequenceOverlay(scene, storeRef) {
       }
     }
 
-    // ── Sort nucleotides by strand 5′→3′ for sequence index mapping ──────────
     const byStrand = new Map()
     for (const nuc of geometry) {
       if (!nuc.strand_id) continue
       if (!byStrand.has(nuc.strand_id)) byStrand.set(nuc.strand_id, [])
       byStrand.get(nuc.strand_id).push(nuc)
     }
-    for (const nucs of byStrand.values()) {
-      nucs.sort((a, b) => {
-        const di = (a.domain_index ?? 0) - (b.domain_index ?? 0)
-        if (di !== 0) return di
-        return a.direction === 'FORWARD' ? a.bp_index - b.bp_index : b.bp_index - a.bp_index
-      })
-    }
-
-    // ── Assign letter to each nuc ────────────────────────────────────────────
-    const nucLetter = new Map()   // nuc → 'A'|'T'|'G'|'C' (no N — those are skipped)
-    for (const [strandId, nucs] of byStrand) {
-      const seq = seqMap.get(strandId)
-      if (!seq) continue   // no sequence → no labels for this strand
-      for (let i = 0; i < nucs.length; i++) {
-        const ch = seq[i]?.toUpperCase()
-        if (ch && 'ATGC'.includes(ch)) nucLetter.set(nucs[i], ch)
-      }
-    }
-
-    // ── Overhang sequences — read directly from design.overhangs ─────────────
-    // This works even when assign_staple_sequences hasn't been called yet,
-    // because the overhang's bases are set as soon as the user assigns one.
-    // Use the ASSEMBLED sequence (sub-domain overrides → parent → N) so a split /
-    // per-sub-domain-sequenced overhang still shows its real bases. Nucs already
-    // assigned via strand.sequence are not overwritten.
-    const overhangSeqMap = new Map()   // overhang_id → sequence string
-    for (const ovhg of (design.overhangs ?? [])) {
-      const asm = assembleOverhangSequence(ovhg)
-      if (asm && /[ACGT]/i.test(asm)) overhangSeqMap.set(ovhg.id, asm)
-    }
-    if (overhangSeqMap.size > 0) {
-      // Group geometry nucs by overhang_id
-      const byOverhang = new Map()   // overhang_id → [nuc]
-      for (const nuc of geometry) {
-        if (!nuc.overhang_id) continue
-        if (!byOverhang.has(nuc.overhang_id)) byOverhang.set(nuc.overhang_id, [])
-        byOverhang.get(nuc.overhang_id).push(nuc)
-      }
-      // Sort each group in 5′→3′ traversal order and map to sequence chars
-      for (const [ovhgId, nucs] of byOverhang) {
-        const seq = overhangSeqMap.get(ovhgId)
-        if (!seq) continue
-        nucs.sort((a, b) =>
-          a.direction === 'FORWARD' ? a.bp_index - b.bp_index : b.bp_index - a.bp_index,
-        )
-        for (let i = 0; i < nucs.length; i++) {
-          if (nucLetter.has(nucs[i])) continue   // strand.sequence already covered this
-          const ch = seq[i]?.toUpperCase()
-          if (ch && 'ATGC'.includes(ch)) nucLetter.set(nucs[i], ch)
-        }
-      }
-    }
+    // One authority now drives letter sprites, base-colored CG primitives, loop
+    // copy ordering, extension residues, and assembled OverhangSpec overrides.
+    const nucLetter = buildNucLetterMap(design, geometry)
 
     // ── Count instances per letter ───────────────────────────────────────────
     const letterCounts = { A: 0, T: 0, G: 0, C: 0 }

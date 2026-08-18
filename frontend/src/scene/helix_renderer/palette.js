@@ -1,6 +1,7 @@
 // ── Palette ───────────────────────────────────────────────────────────────────
 
 import { isAutoCluster } from '../cluster_entries.js'
+import { assembleOverhangSequence } from '../design_queries.js'
 
 export const C = {
   scaffold_backbone: 0x0070bb,
@@ -38,6 +39,28 @@ export const STAPLE_PALETTE = [
 // Coloring-mode palettes. Base colours mirror sequence_overlay.LETTER_DEFS.
 export const BASE_COLORS = { A: 0x44dd88, T: 0xff5555, G: 0xffcc00, C: 0x55aaff }
 
+function _orderNucleotides5to3(nucs) {
+  const copyIdx = new Map()
+  const seen = new Map()
+  for (const nuc of nucs) {
+    const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+    const copy = seen.get(key) ?? 0
+    copyIdx.set(nuc, copy)
+    seen.set(key, copy + 1)
+  }
+  nucs.sort((a, b) => {
+    const domain = (a.domain_index ?? 0) - (b.domain_index ?? 0)
+    if (domain !== 0) return domain
+    const bp = a.direction === 'FORWARD'
+      ? a.bp_index - b.bp_index
+      : b.bp_index - a.bp_index
+    if (bp !== 0) return bp
+    const copies = (copyIdx.get(a) ?? 0) - (copyIdx.get(b) ?? 0)
+    return a.direction === 'FORWARD' ? copies : -copies
+  })
+  return nucs
+}
+
 /**
  * Build a per-nucleotide letter lookup ('A'|'T'|'G'|'C') for the given design.
  * Mirrors the assignment logic in sequence_overlay.js so on-bead colours
@@ -52,22 +75,25 @@ export function buildNucLetterMap(design, nucs) {
   const nucLetter = new Map()
   if (!design) return nucLetter
 
+  // Synthetic extension geometry carries the exact residue identity. Its
+  // ext_k increases away from the anchor, which reverses chemical sequence at
+  // a 5′ tail; the backend has already applied that authoritative rule.
+  for (const nuc of nucs) {
+    const base = String(nuc?.nucleobase ?? '').toUpperCase()
+    if (BASE_COLORS[base] != null) nucLetter.set(nuc, base)
+  }
+
   const seqMap = new Map()
   for (const s of (design.strands ?? [])) if (s.sequence) seqMap.set(s.id, s.sequence)
   if (seqMap.size) {
     const byStrand = new Map()
     for (const nuc of nucs) {
-      if (!nuc.strand_id) continue
+      // Strand.sequence covers domains only; extensions own a separate sequence.
+      if (!nuc.strand_id || nuc.extension_id != null) continue
       if (!byStrand.has(nuc.strand_id)) byStrand.set(nuc.strand_id, [])
       byStrand.get(nuc.strand_id).push(nuc)
     }
-    for (const arr of byStrand.values()) {
-      arr.sort((a, b) => {
-        const di = (a.domain_index ?? 0) - (b.domain_index ?? 0)
-        if (di !== 0) return di
-        return a.direction === 'FORWARD' ? a.bp_index - b.bp_index : b.bp_index - a.bp_index
-      })
-    }
+    for (const arr of byStrand.values()) _orderNucleotides5to3(arr)
     for (const [sid, arr] of byStrand) {
       const seq = seqMap.get(sid)
       if (!seq) continue
@@ -78,9 +104,8 @@ export function buildNucLetterMap(design, nucs) {
     }
   }
 
-  const ovhgSeqMap = new Map()
-  for (const o of (design.overhangs ?? [])) if (o.sequence) ovhgSeqMap.set(o.id, o.sequence)
-  if (ovhgSeqMap.size) {
+  const overhangMap = new Map((design.overhangs ?? []).map(overhang => [overhang.id, overhang]))
+  if (overhangMap.size) {
     const byOvhg = new Map()
     for (const nuc of nucs) {
       if (!nuc.overhang_id) continue
@@ -88,10 +113,10 @@ export function buildNucLetterMap(design, nucs) {
       byOvhg.get(nuc.overhang_id).push(nuc)
     }
     for (const [oid, arr] of byOvhg) {
-      const seq = ovhgSeqMap.get(oid)
-      if (!seq) continue
-      arr.sort((a, b) =>
-        a.direction === 'FORWARD' ? a.bp_index - b.bp_index : b.bp_index - a.bp_index)
+      const overhang = overhangMap.get(oid)
+      if (!overhang) continue
+      _orderNucleotides5to3(arr)
+      const seq = assembleOverhangSequence(overhang, arr.length)
       for (let i = 0; i < arr.length; i++) {
         if (nucLetter.has(arr[i])) continue
         const ch = seq[i]?.toUpperCase()

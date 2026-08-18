@@ -1632,6 +1632,133 @@ def test_reverse_loop_insertions_thread_backbone_in_desktop_copy_order() -> None
         assert natural_points[identity].values[7:10] == pytest.approx(color)
 
 
+def test_base_coloring_keeps_extensions_and_overhang_fallback_semantic() -> None:
+    design = SimpleNamespace(
+        strands=[
+            SimpleNamespace(
+                id="core", is_scaffold=False, color="#ff6b6b", sequence="CG"
+            ),
+            SimpleNamespace(
+                id="overhang", is_scaffold=False, color="#ffd93d", sequence=None
+            ),
+        ],
+        extensions=[],
+        overhangs=[
+            SimpleNamespace(
+                id="oh",
+                sequence="AT",
+                sub_domains=[
+                    SimpleNamespace(
+                        start_bp_offset=0,
+                        length_bp=1,
+                        sequence_override="G",
+                    ),
+                    SimpleNamespace(
+                        start_bp_offset=1,
+                        length_bp=1,
+                        sequence_override="C",
+                    ),
+                ],
+            )
+        ],
+        cluster_transforms=[],
+        crossovers=[],
+        forced_ligations=[],
+    )
+
+    def nucleotide(
+        strand_id: str,
+        helix_id: str,
+        bp_index: int,
+        x: float,
+        **extra,
+    ) -> dict:
+        return {
+            "strand_id": strand_id,
+            "domain_index": 0,
+            "helix_id": helix_id,
+            "bp_index": bp_index,
+            "direction": "FORWARD",
+            "backbone_position": [x, 0, 0],
+            **extra,
+        }
+
+    nucleotides = [
+        nucleotide("core", "h", 0, 0),
+        nucleotide("core", "h", 1, 0.34),
+        # A 5′ AC extension is emitted root -> tip as C, A.
+        nucleotide(
+            "core",
+            "__ext_e5",
+            0,
+            1,
+            extension_id="e5",
+            nucleobase="C",
+        ),
+        nucleotide(
+            "core",
+            "__ext_e5",
+            1,
+            1.34,
+            extension_id="e5",
+            nucleobase="A",
+        ),
+        nucleotide("overhang", "ho", 0, 2, overhang_id="oh"),
+        nucleotide("overhang", "ho", 1, 2.34, overhang_id="oh"),
+    ]
+    natural = _serialize_scene(
+        design,
+        nucleotides,
+        [],
+        coloring="base",
+        atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
+    )
+    expanded = _serialize_scene(
+        design,
+        [
+            {
+                **nucleotide,
+                "backbone_position": [
+                    nucleotide["backbone_position"][0] + 5,
+                    *nucleotide["backbone_position"][1:],
+                ],
+            }
+            for nucleotide in nucleotides
+        ],
+        [],
+        coloring="base",
+        atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
+    )
+    scene = parse_scene_contract(_bundle_expanded_scene(natural, expanded))
+    expected = {
+        "nuc:core:0:h:0:FORWARD:0:backbone": pytest.approx(
+            _BASE_COLORS_FOR_TEST["C"]
+        ),
+        "nuc:core:0:h:1:FORWARD:0:backbone": pytest.approx(
+            _BASE_COLORS_FOR_TEST["G"]
+        ),
+        "nuc:core:0:__ext_e5:0:FORWARD:0:backbone": pytest.approx(
+            _BASE_COLORS_FOR_TEST["C"]
+        ),
+        "nuc:core:0:__ext_e5:1:FORWARD:0:backbone": pytest.approx(
+            _BASE_COLORS_FOR_TEST["A"]
+        ),
+        "nuc:overhang:0:ho:0:FORWARD:0:backbone": pytest.approx(
+            _BASE_COLORS_FOR_TEST["G"]
+        ),
+        "nuc:overhang:0:ho:1:FORWARD:0:backbone": pytest.approx(
+            _BASE_COLORS_FOR_TEST["C"]
+        ),
+    }
+    for pose in ("full", "expanded/full"):
+        points = {
+            primitive.identity: primitive.values[7:10]
+            for primitive in scene[pose].values()
+            if primitive.record_type == "P"
+        }
+        assert points == expected
+
+
 def test_axis_records_preserve_same_helix_domain_gaps() -> None:
     design = SimpleNamespace(
         strands=[SimpleNamespace(id="s1", is_scaffold=True, color=None, sequence="A")],

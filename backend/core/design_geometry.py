@@ -351,6 +351,18 @@ def _strand_extension_geometry(
             tlen = float(np.linalg.norm(tangent))
             tangent = tangent / tlen if tlen > 1e-6 else np.array(nuc_a.axis_tangent)
             base_pos = pos + 0.3 * bn
+            # Extension sequences are stored in chemical 5′→3′ order, while
+            # ext_k/bp_index always increases away from the duplex anchor. A
+            # 5′ tail therefore traverses its stored sequence in reverse. Keep
+            # this identical to atomistic._build_extension_atoms so every
+            # representation colors the same residue.
+            base_char = None
+            if not is_mod and ext.sequence:
+                base_char = (
+                    ext.sequence[i]
+                    if ext.end == "three_prime"
+                    else ext.sequence[n_seq - 1 - i]
+                ).upper()
             d = {
                 "helix_id": synthetic_helix_id,
                 "bp_index": i,
@@ -368,6 +380,7 @@ def _strand_extension_geometry(
                 "domain_index": domain_index,
                 "overhang_id": None,
                 "extension_id": ext.id,
+                "nucleobase": base_char,
                 "is_modification": is_mod,
                 "modification": mod_name,
             }

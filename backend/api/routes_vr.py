@@ -244,22 +244,58 @@ _BASE_COLORS = {
 
 def _base_letters(design, nucleotides: list[dict]) -> dict[int, str]:
     """Geometry-list index → assigned base, matching the frontend's 5′→3′ walk."""
+    result = {
+        index: str(base).upper()
+        for index, nucleotide in enumerate(nucleotides)
+        if (base := nucleotide.get("nucleobase"))
+        and str(base).upper() in _BASE_COLORS
+    }
     by_strand: dict[str, list[tuple[int, dict]]] = {}
     for index, nucleotide in enumerate(nucleotides):
         strand_id = nucleotide.get("strand_id")
-        if strand_id:
+        # Extension sequence is independent of Strand.sequence and is already
+        # carried as authoritative per-bead ``nucleobase`` geometry metadata.
+        if strand_id and nucleotide.get("extension_id") is None:
             by_strand.setdefault(strand_id, []).append((index, nucleotide))
     sequences = {
         strand.id: strand.sequence for strand in design.strands if strand.sequence
     }
-    result: dict[int, str] = {}
     for strand_id, entries in by_strand.items():
         sequence = sequences.get(strand_id)
         if not sequence:
             continue
         entries.sort(key=lambda item: strand_nucleotide_order_key(item[1]))
         for offset, (index, _) in enumerate(entries):
-            if offset < len(sequence) and sequence[offset].upper() in _BASE_COLORS:
+            if (
+                index not in result
+                and offset < len(sequence)
+                and sequence[offset].upper() in _BASE_COLORS
+            ):
+                result[index] = sequence[offset].upper()
+
+    overhangs = {
+        str(overhang.id): overhang
+        for overhang in getattr(design, "overhangs", [])
+    }
+    by_overhang: dict[str, list[tuple[int, dict]]] = {}
+    for index, nucleotide in enumerate(nucleotides):
+        overhang_id = nucleotide.get("overhang_id")
+        if overhang_id is not None:
+            by_overhang.setdefault(str(overhang_id), []).append((index, nucleotide))
+    from backend.core.sequences import _assemble_overhang_5to3
+
+    for overhang_id, entries in by_overhang.items():
+        overhang = overhangs.get(overhang_id)
+        if overhang is None:
+            continue
+        entries.sort(key=lambda item: strand_nucleotide_order_key(item[1]))
+        sequence = "".join(_assemble_overhang_5to3(overhang, len(entries)))
+        for offset, (index, _) in enumerate(entries):
+            if (
+                index not in result
+                and offset < len(sequence)
+                and sequence[offset].upper() in _BASE_COLORS
+            ):
                 result[index] = sequence[offset].upper()
     return result
 
