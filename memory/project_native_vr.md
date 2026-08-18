@@ -45,8 +45,8 @@ At every phase boundary:
 
 | Phase | Scope | Exit checkpoint | State |
 |---|---|---|---|
-| 0 | Durable plan, source inventory, validation metrics, fixture strategy | Memory lint; inventory and first acceptance matrix recorded | Active |
-| 1 | Exact static visual fidelity: overhangs, crossovers, forced ligations, extra bases, extensions, same-helix domain gaps, ends/markers/arcs | Primitive/topology parity tests plus headset visual check | Queued |
+| 0 | Durable plan, source inventory, validation metrics, fixture strategy | Memory lint; inventory and first acceptance matrix recorded | Complete |
+| 1 | Exact static visual fidelity: overhangs, crossovers, forced ligations, extra bases, extensions, same-helix domain gaps, ends/markers/arcs | Primitive/topology parity tests plus headset visual check | Active |
 | 2 | Scene-projection contract and representative VR regression fixtures | Stable-ID scene snapshots, tolerance tests, failure diagnostics | Queued |
 | 3 | Expanded Quick View on the right controller grip | Gesture is discoverable, reversible, tested, and comfortable | Queued |
 | 4 | VR picking and selection intents from cluster through smallest supported element | Canonical selection matrix passes in desktop and VR | Queued |
@@ -85,7 +85,7 @@ Ratify thresholds during Phase 0 research; do not silently turn provisional numb
 | Overhang/linker arcs | `overhang_link_arcs.js`; canonical linker topology/bridge geometry | Not serialized | Connection id/type, anchors, ordered bridge primitives |
 | Ends and flexible details | `domain_ends.js`, `flexible_arcs.js`, loop/skip and unligated markers | Missing or filtered from VR | Stable-owner visibility/count plus rendered check |
 
-Implemented slices (pending headset check): Full and cylinder axes consume authoritative domain segments; Full projects explicit cross-helix crossover/forced-ligation chords; and crossover inserts project from the canonical residue frames into ordered beads, slabs, attachment corners, and backbone links with their explicit base colors. Targeted route and pure numeric tests lock these behaviors.
+Implemented slices (pending headset check): Full and cylinder axes consume authoritative domain segments; Full projects explicit cross-helix crossover/forced-ligation chords; crossover inserts project from canonical residue frames into ordered beads, slabs, attachment corners, and backbone links with explicit base colors; extension modification tips use desktop size/chemistry color; and scene v5 renders closed overhang half-cylinders while accepting v4 snapshots. Targeted route and pure numeric tests plus a native build/parser smoke check lock these behaviors.
 
 ## Metrics research decisions
 
@@ -94,6 +94,13 @@ Implemented slices (pending headset check): Full and cylinder axes consume autho
 - Comfort regression uses a short pre/post VR-specific symptom measure, with symptom-level stop criteria. The original SSQ remains a historical reference, but later validation found VRSQ/CSQ more psychometrically suitable for consumer HMD environments; scores are compared to this user's own baseline, not treated as a population diagnosis. Sources: [Kennedy et al. SSQ, DOI 10.1207/s15327108ijap0303_3](https://doi.org/10.1207/s15327108ijap0303_3), [Sevinc and Berkman 2020](https://doi.org/10.1016/j.apergo.2019.102958), [Josupeit 2023 environment-specific VRSQ analysis](https://doi.org/10.3389/frvir.2023.1291078).
 - Interaction trials collect objective task completion, wrong-control activations, cancel/undo/re-grab counts, then the six NASA-TLX workload dimensions when a workflow is mature enough to compare. Source: [NASA Task Load Index](https://www.nasa.gov/human-systems-integration-division/nasa-task-load-index-tlx/).
 - Projection-space geometry copied from the same authoritative numeric records must agree within `1e-6 nm` and `1e-5°` after serialization, unless a primitive explicitly uses a documented approximation. Rendered-image and human comfort checks are separate gates and do not loosen topology parity.
+
+## Current UX review and manual debt
+
+- Representation switching still preserves one model transform; all new primitives therefore scale through the same two-hand world transform rather than changing apparent size with view/FOV.
+- The v5 half-cylinder is closed and shadow-casting. Its axial roll follows the same deterministic but visually arbitrary default as the desktop straight-domain cylinder; no new biological orientation is inferred.
+- Manual checkpoint: relaunch VR to obtain a fresh immutable snapshot, then verify (a) a same-helix empty interval stays empty in Full and Cylinders, (b) an unbound overhang reads as a half-cylinder while a direct-bound overhang reads full, (c) 1xT/2xT crossover inserts show ordered beads/slabs and no direct chord, and (d) a Cy3 extension tip is a larger orange marker. Record mirrored/headset evidence before calling Phase 1 complete.
+- Next slices: linker/overhang arcs and duplex halves, flexible segments, terminal/end and unligated markers, then stable primitive identities for regression diagnostics.
 
 ## Open questions log
 

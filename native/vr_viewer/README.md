@@ -15,6 +15,12 @@ env -u CFLAGS -u CXXFLAGS -u CPPFLAGS -u LDFLAGS \
 cmake --build native/vr_viewer/build
 ```
 
+Validate a snapshot without starting OpenXR:
+
+```bash
+native/vr_viewer/build/nadoc-vr-viewer --validate scene.nadocvr
+```
+
 Ubuntu development packages:
 
 ```bash
@@ -50,6 +56,10 @@ both eyes. Full representation geometry mirrors the editor's physical display
 primitives: 0.10 nm backbone beads, 0.18 nm 5′ cubes, oriented
 0.30 × 0.06 × 0.70 nm base slabs, 0.025 nm slab connectors, and 0.075 nm
 same-helix strand connectors.
+The snapshot format also carries explicit crossover/forced-ligation links,
+canonical crossover-insert bead/slab chains, 0.25 nm chemistry-colored extension
+markers, per-domain axis gaps, and closed half-cylinder overhang domains in the
+Cylinders representation.
 
 The controllers pulse when an interaction begins. Press Escape in the companion
 window, close that window, or select Help → Exit VR in NADOC to end the session.

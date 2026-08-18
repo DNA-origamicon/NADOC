@@ -45,7 +45,7 @@ def _scene_sections(text: str) -> dict[str, list[list[str]]]:
         if record[0] == "R":
             active = record[1]
             sections[active] = []
-        elif record[0] in {"P", "C", "B"}:
+        elif record[0] in {"P", "C", "H", "B"}:
             sections[active].append(record)
     return sections
 
@@ -155,7 +155,7 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
     )
     sections = _scene_sections(text)
 
-    assert text.startswith("NADOCVR 4 full strand\n")
+    assert text.startswith("NADOCVR 5 full strand\n")
     assert set(sections) == {"full", "cylinders", "ballstick", "stick"}
     assert sum(record[0] == "P" for record in sections["full"]) == 1
     assert sum(record[0] == "B" for record in sections["full"]) == 3
@@ -450,3 +450,111 @@ def test_full_snapshot_projects_crossover_extra_base_beads_slabs_and_chain() -> 
         > 1.0
         for record in full
     )
+
+
+def test_full_snapshot_uses_desktop_extension_modification_marker() -> None:
+    design = SimpleNamespace(
+        strands=[
+            SimpleNamespace(id="s1", is_scaffold=False, color="#123456", sequence=None)
+        ],
+        cluster_transforms=[],
+        crossovers=[],
+        forced_ligations=[],
+    )
+    modification = {
+        "strand_id": "s1",
+        "domain_index": 1,
+        "helix_id": "__ext_e1",
+        "bp_index": 0,
+        "direction": "FORWARD",
+        "backbone_position": [1, 2, 3],
+        "base_position": [1, 2, 3],
+        "base_normal": [1, 0, 0],
+        "axis_tangent": [0, 0, 1],
+        "extension_id": "e1",
+        "is_modification": True,
+        "modification": "cy3",
+    }
+    text = _serialize_scene(
+        design,
+        [modification],
+        [],
+        atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
+    )
+    full = _scene_sections(text)["full"]
+
+    assert len(full) == 1
+    marker = full[0]
+    assert marker[0] == "P"
+    assert float(marker[4]) == pytest.approx(0.25)
+    np.testing.assert_allclose(
+        [float(value) for value in marker[5:8]], [1, 140 / 255, 0]
+    )
+
+
+def test_cylinder_snapshot_distinguishes_single_stranded_overhang_halves() -> None:
+    design = SimpleNamespace(
+        strands=[
+            SimpleNamespace(id="s1", is_scaffold=False, color="#ff0000", sequence="A")
+        ],
+        cluster_transforms=[],
+        crossovers=[],
+        forced_ligations=[],
+        overhang_bindings=[],
+        duplexes=[],
+    )
+    nucleotide = {
+        "strand_id": "s1",
+        "domain_index": 0,
+        "helix_id": "oh1",
+        "bp_index": 0,
+        "direction": "FORWARD",
+        "backbone_position": [1, 0, 0],
+        "base_position": [0.5, 0, 0],
+        "base_normal": [1, 0, 0],
+        "axis_tangent": [0, 0, 1],
+        "overhang_id": "ov1",
+    }
+    axis = {
+        "helix_id": "oh1",
+        "start": [0, 0, 0],
+        "end": [0, 0, 2],
+        "segments": [
+            {
+                "strand_id": "s1",
+                "domain_index": 0,
+                "ovhg_id": "ov1",
+                "start": [0, 0, 0],
+                "end": [0, 0, 2],
+            }
+        ],
+    }
+    text = _serialize_scene(
+        design,
+        [nucleotide],
+        [axis],
+        atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
+    )
+
+    cylinders = _scene_sections(text)["cylinders"]
+    assert len(cylinders) == 1
+    assert cylinders[0][0] == "H"
+    assert float(cylinders[0][7]) == pytest.approx(0.72)
+
+    design.overhang_bindings = [
+        SimpleNamespace(
+            bound=True,
+            connection_type="root-to-root",
+            driver_oh_id="ov1",
+            driven_oh_id="ov2",
+        )
+    ]
+    direct_text = _serialize_scene(
+        design,
+        [nucleotide],
+        [axis],
+        atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
+    )
+    direct_cylinders = _scene_sections(direct_text)["cylinders"]
+    assert len(direct_cylinders) == 1
+    assert direct_cylinders[0][0] == "C"

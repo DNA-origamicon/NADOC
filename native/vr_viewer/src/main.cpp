@@ -109,6 +109,7 @@ struct StyledBox {
 struct RepresentationData {
     std::vector<StyledPoint> points;
     std::vector<StyledCylinder> cylinders;
+    std::vector<StyledCylinder> halfCylinders;
     std::vector<StyledBox> boxes;
 };
 
@@ -403,7 +404,7 @@ SceneData loadScene(const std::string& path) {
     std::string initialRepresentation;
     std::string initialColoring;
     input >> magic >> version >> initialRepresentation >> initialColoring;
-    if (magic != "NADOCVR" || version != 4) {
+    if (magic != "NADOCVR" || (version != 4 && version != 5)) {
         throw std::runtime_error("Unsupported NADOC VR scene format");
     }
 
@@ -429,7 +430,7 @@ SceneData loadScene(const std::string& path) {
                 input >> color.r >> color.g >> color.b;
             }
             active->points.push_back(point);
-        } else if (type == 'C') {
+        } else if (type == 'C' || type == 'H') {
             if (!active) throw std::runtime_error("Cylinder appears before representation block");
             StyledCylinder cylinder;
             input >> cylinder.start.x >> cylinder.start.y >> cylinder.start.z
@@ -438,7 +439,8 @@ SceneData loadScene(const std::string& path) {
             for (glm::vec3& color : cylinder.colors.values) {
                 input >> color.r >> color.g >> color.b;
             }
-            active->cylinders.push_back(cylinder);
+            if (type == 'H') active->halfCylinders.push_back(cylinder);
+            else active->cylinders.push_back(cylinder);
         } else if (type == 'B') {
             if (!active) throw std::runtime_error("Box appears before representation block");
             StyledBox box;
@@ -457,7 +459,8 @@ SceneData loadScene(const std::string& path) {
     }
     if (std::all_of(scene.representations.begin(), scene.representations.end(),
                     [](const RepresentationData& rep) {
-                        return rep.points.empty() && rep.cylinders.empty() && rep.boxes.empty();
+                        return rep.points.empty() && rep.cylinders.empty()
+                            && rep.halfCylinders.empty() && rep.boxes.empty();
                     })) {
         throw std::runtime_error("The scene snapshot contains no visible geometry");
     }
@@ -471,6 +474,10 @@ SceneData loadScene(const std::string& path) {
     for (const RepresentationData& rep : scene.representations) {
         for (const StyledPoint& point : rep.points) include(point.position);
         for (const StyledCylinder& cylinder : rep.cylinders) {
+            include(cylinder.start);
+            include(cylinder.end);
+        }
+        for (const StyledCylinder& cylinder : rep.halfCylinders) {
             include(cylinder.start);
             include(cylinder.end);
         }
@@ -495,6 +502,13 @@ SceneData loadScene(const std::string& path) {
             point.size *= scale;
         }
         for (StyledCylinder& cylinder : rep.cylinders) {
+            cylinder.start = (cylinder.start - center) * scale;
+            cylinder.end = (cylinder.end - center) * scale;
+            cylinder.start.z -= kViewDistanceMeters;
+            cylinder.end.z -= kViewDistanceMeters;
+            cylinder.radius *= scale;
+        }
+        for (StyledCylinder& cylinder : rep.halfCylinders) {
             cylinder.start = (cylinder.start - center) * scale;
             cylinder.end = (cylinder.end - center) * scale;
             cylinder.start.z -= kViewDistanceMeters;
@@ -597,6 +611,7 @@ class GlScene {
         upload({}, guideVao_, guideVbo_, GL_DYNAMIC_DRAW);
         uploadSpheres();
         uploadCylinders();
+        uploadHalfCylinders();
         uploadBoxes();
         initializeShadowMap();
         setStyle(scene_.initialRepresentation, scene_.initialColoring);
@@ -631,6 +646,18 @@ class GlScene {
                      cylinders.data(), GL_DYNAMIC_DRAW);
         cylinderCount_ = static_cast<GLsizei>(cylinders.size());
 
+        std::vector<Cylinder> halfCylinders;
+        halfCylinders.reserve(source.halfCylinders.size());
+        for (const StyledCylinder& cylinder : source.halfCylinders) {
+            halfCylinders.push_back(Cylinder{
+                cylinder.start, cylinder.end, cylinder.radius, cylinder.colors.get(coloring)});
+        }
+        glBindBuffer(GL_ARRAY_BUFFER, halfCylinderInstanceVbo_);
+        glBufferData(GL_ARRAY_BUFFER,
+                     static_cast<GLsizeiptr>(halfCylinders.size() * sizeof(Cylinder)),
+                     halfCylinders.data(), GL_DYNAMIC_DRAW);
+        halfCylinderCount_ = static_cast<GLsizei>(halfCylinders.size());
+
         std::vector<Box> boxes;
         boxes.reserve(source.boxes.size());
         for (const StyledBox& box : source.boxes) {
@@ -654,6 +681,10 @@ class GlScene {
             include(cylinder.start, cylinder.radius);
             include(cylinder.end, cylinder.radius);
         }
+        for (const StyledCylinder& cylinder : source.halfCylinders) {
+            include(cylinder.start, cylinder.radius);
+            include(cylinder.end, cylinder.radius);
+        }
         for (const StyledBox& box : source.boxes) {
             for (float x : {-0.5F, 0.5F}) {
                 for (float y : {-0.5F, 0.5F}) {
@@ -663,7 +694,8 @@ class GlScene {
                 }
             }
         }
-        if (source.points.empty() && source.cylinders.empty() && source.boxes.empty()) {
+        if (source.points.empty() && source.cylinders.empty()
+            && source.halfCylinders.empty() && source.boxes.empty()) {
             localCenter_ = {0.0F, 0.0F, -kViewDistanceMeters};
             localRadius_ = 0.5F;
         } else {
@@ -724,6 +756,14 @@ class GlScene {
             glDrawElementsInstanced(
                 GL_TRIANGLES, cylinderIndexCount_, GL_UNSIGNED_SHORT, nullptr, cylinderCount_);
         }
+        if (halfCylinderCount_ > 0) {
+            shadowUniforms(cylinderProgram_, cylinderViewProjection_, cylinderModel_,
+                           cylinderLightViewProjection_, cylinderLightDirection_);
+            glBindVertexArray(halfCylinderVao_);
+            glDrawElementsInstanced(
+                GL_TRIANGLES, halfCylinderIndexCount_, GL_UNSIGNED_SHORT, nullptr,
+                halfCylinderCount_);
+        }
         if (boxCount_ > 0) {
             shadowUniforms(boxProgram_, boxViewProjection_, boxModel_,
                            boxLightViewProjection_, boxLightDirection_);
@@ -746,6 +786,9 @@ class GlScene {
         if (cylinderInstanceVbo_) glDeleteBuffers(1, &cylinderInstanceVbo_);
         if (cylinderMeshVbo_) glDeleteBuffers(1, &cylinderMeshVbo_);
         if (cylinderIndexVbo_) glDeleteBuffers(1, &cylinderIndexVbo_);
+        if (halfCylinderInstanceVbo_) glDeleteBuffers(1, &halfCylinderInstanceVbo_);
+        if (halfCylinderMeshVbo_) glDeleteBuffers(1, &halfCylinderMeshVbo_);
+        if (halfCylinderIndexVbo_) glDeleteBuffers(1, &halfCylinderIndexVbo_);
         if (boxInstanceVbo_) glDeleteBuffers(1, &boxInstanceVbo_);
         if (boxMeshVbo_) glDeleteBuffers(1, &boxMeshVbo_);
         if (boxIndexVbo_) glDeleteBuffers(1, &boxIndexVbo_);
@@ -753,6 +796,7 @@ class GlScene {
         if (guideVao_) glDeleteVertexArrays(1, &guideVao_);
         if (sphereVao_) glDeleteVertexArrays(1, &sphereVao_);
         if (cylinderVao_) glDeleteVertexArrays(1, &cylinderVao_);
+        if (halfCylinderVao_) glDeleteVertexArrays(1, &halfCylinderVao_);
         if (boxVao_) glDeleteVertexArrays(1, &boxVao_);
         if (program_) glDeleteProgram(program_);
         if (sphereProgram_) glDeleteProgram(sphereProgram_);
@@ -791,6 +835,18 @@ class GlScene {
             glBindVertexArray(cylinderVao_);
             glDrawElementsInstanced(
                 GL_TRIANGLES, cylinderIndexCount_, GL_UNSIGNED_SHORT, nullptr, cylinderCount_);
+        }
+
+        if (halfCylinderCount_ > 0) {
+            glUseProgram(cylinderProgram_);
+            glUniformMatrix4fv(cylinderViewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
+            glUniformMatrix4fv(cylinderModel_, 1, GL_FALSE, &modelTransform[0][0]);
+            applyLightingUniforms(
+                cylinderLightViewProjection_, cylinderLightDirection_, cylinderShadowMap_);
+            glBindVertexArray(halfCylinderVao_);
+            glDrawElementsInstanced(
+                GL_TRIANGLES, halfCylinderIndexCount_, GL_UNSIGNED_SHORT, nullptr,
+                halfCylinderCount_);
         }
 
         if (boxCount_ > 0) {
@@ -1017,6 +1073,99 @@ class GlScene {
         glBindVertexArray(0);
     }
 
+    void uploadHalfCylinders() {
+        constexpr size_t sides = 8;
+        constexpr float pi = 3.14159265358979323846F;
+        std::vector<CylinderMeshVertex> mesh;
+        std::vector<GLushort> indices;
+
+        // Curved wall on the +X half, matching helix_renderer's GEO_HALF_CYL.
+        for (size_t side = 0; side <= sides; ++side) {
+            const float angle = -0.5F * pi + pi * static_cast<float>(side)
+                              / static_cast<float>(sides);
+            const glm::vec3 radial(std::cos(angle), std::sin(angle), 0.0F);
+            mesh.push_back({{radial.x, radial.y, 0.0F}, radial});
+            mesh.push_back({{radial.x, radial.y, 1.0F}, radial});
+        }
+        for (size_t side = 0; side < sides; ++side) {
+            const GLushort bottom = static_cast<GLushort>(side * 2U);
+            const GLushort top = static_cast<GLushort>(bottom + 1U);
+            const GLushort nextBottom = static_cast<GLushort>((side + 1U) * 2U);
+            const GLushort nextTop = static_cast<GLushort>(nextBottom + 1U);
+            indices.insert(indices.end(), {bottom, top, nextBottom, top, nextTop, nextBottom});
+        }
+
+        // Flat diametral face closes the trough.
+        const GLushort flat = static_cast<GLushort>(mesh.size());
+        mesh.insert(mesh.end(), {
+            {{0, -1, 0}, {-1, 0, 0}}, {{0, -1, 1}, {-1, 0, 0}},
+            {{0, 1, 1}, {-1, 0, 0}}, {{0, 1, 0}, {-1, 0, 0}},
+        });
+        indices.insert(indices.end(), {
+            flat, static_cast<GLushort>(flat + 1), static_cast<GLushort>(flat + 2),
+            flat, static_cast<GLushort>(flat + 2), static_cast<GLushort>(flat + 3),
+        });
+
+        auto addCap = [&](float z, glm::vec3 normal, bool reverse) {
+            const GLushort center = static_cast<GLushort>(mesh.size());
+            mesh.push_back({{0, 0, z}, normal});
+            const GLushort ring = static_cast<GLushort>(mesh.size());
+            for (size_t side = 0; side <= sides; ++side) {
+                const float angle = -0.5F * pi + pi * static_cast<float>(side)
+                                  / static_cast<float>(sides);
+                mesh.push_back({{std::cos(angle), std::sin(angle), z}, normal});
+            }
+            for (size_t side = 0; side < sides; ++side) {
+                const GLushort current = static_cast<GLushort>(ring + side);
+                const GLushort next = static_cast<GLushort>(current + 1U);
+                if (reverse) indices.insert(indices.end(), {center, next, current});
+                else indices.insert(indices.end(), {center, current, next});
+            }
+        };
+        addCap(0.0F, {0, 0, -1}, true);
+        addCap(1.0F, {0, 0, 1}, false);
+        halfCylinderIndexCount_ = static_cast<GLsizei>(indices.size());
+
+        glGenVertexArrays(1, &halfCylinderVao_);
+        glBindVertexArray(halfCylinderVao_);
+        glGenBuffers(1, &halfCylinderMeshVbo_);
+        glBindBuffer(GL_ARRAY_BUFFER, halfCylinderMeshVbo_);
+        glBufferData(GL_ARRAY_BUFFER,
+                     static_cast<GLsizeiptr>(mesh.size() * sizeof(CylinderMeshVertex)),
+                     mesh.data(), GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(CylinderMeshVertex),
+                              reinterpret_cast<void*>(offsetof(CylinderMeshVertex, position)));
+        glEnableVertexAttribArray(5);
+        glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, sizeof(CylinderMeshVertex),
+                              reinterpret_cast<void*>(offsetof(CylinderMeshVertex, normal)));
+        glGenBuffers(1, &halfCylinderIndexVbo_);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, halfCylinderIndexVbo_);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+                     static_cast<GLsizeiptr>(indices.size() * sizeof(GLushort)),
+                     indices.data(), GL_STATIC_DRAW);
+
+        glGenBuffers(1, &halfCylinderInstanceVbo_);
+        glBindBuffer(GL_ARRAY_BUFFER, halfCylinderInstanceVbo_);
+        glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Cylinder),
+                              reinterpret_cast<void*>(offsetof(Cylinder, start)));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Cylinder),
+                              reinterpret_cast<void*>(offsetof(Cylinder, end)));
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(Cylinder),
+                              reinterpret_cast<void*>(offsetof(Cylinder, radius)));
+        glEnableVertexAttribArray(4);
+        glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Cylinder),
+                              reinterpret_cast<void*>(offsetof(Cylinder, color)));
+        for (GLuint attribute = 1; attribute <= 4; ++attribute) {
+            glVertexAttribDivisor(attribute, 1);
+        }
+        glBindVertexArray(0);
+    }
+
     void uploadBoxes() {
         boxProgram_ = makeBoxProgram();
         boxViewProjection_ = glGetUniformLocation(boxProgram_, "uViewProjection");
@@ -1127,6 +1276,10 @@ class GlScene {
     GLuint cylinderMeshVbo_ = 0;
     GLuint cylinderIndexVbo_ = 0;
     GLuint cylinderInstanceVbo_ = 0;
+    GLuint halfCylinderVao_ = 0;
+    GLuint halfCylinderMeshVbo_ = 0;
+    GLuint halfCylinderIndexVbo_ = 0;
+    GLuint halfCylinderInstanceVbo_ = 0;
     GLuint boxProgram_ = 0;
     GLuint boxVao_ = 0;
     GLuint boxMeshVbo_ = 0;
@@ -1155,6 +1308,8 @@ class GlScene {
     GLsizei sphereCount_ = 0;
     GLsizei cylinderIndexCount_ = 0;
     GLsizei cylinderCount_ = 0;
+    GLsizei halfCylinderIndexCount_ = 0;
+    GLsizei halfCylinderCount_ = 0;
     GLsizei boxIndexCount_ = 0;
     GLsizei boxCount_ = 0;
     glm::vec3 localCenter_{0.0F, 0.0F, -kViewDistanceMeters};
@@ -1914,8 +2069,18 @@ class Viewer {
 }  // namespace
 
 int main(int argc, char** argv) {
+    if (argc == 3 && std::string(argv[1]) == "--validate") {
+        try {
+            loadScene(argv[2]);
+            std::cout << "NADOC VR scene is valid\n";
+            return 0;
+        } catch (const std::exception& error) {
+            std::cerr << "NADOC VR error: " << error.what() << '\n';
+            return 1;
+        }
+    }
     if (argc != 2) {
-        std::cerr << "Usage: nadoc-vr-viewer <scene.nadocvr>\n";
+        std::cerr << "Usage: nadoc-vr-viewer [--validate] <scene.nadocvr>\n";
         return 2;
     }
     std::signal(SIGINT, signalHandler);

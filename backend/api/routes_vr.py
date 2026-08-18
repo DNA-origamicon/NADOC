@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 
 from backend.api import state as design_state
 from backend.core.constants import STAPLE_PALETTE
+from backend.core.models import MODIFICATION_COLORS
 
 router = APIRouter(tags=["vr"])
 
@@ -242,7 +243,7 @@ def _serialize_scene(
     def solid_palette(color: tuple[float, float, float]) -> tuple[float, ...]:
         return color * 4
 
-    lines = [f"NADOCVR 4 {representation} {coloring}", "# preloaded VR representations"]
+    lines = [f"NADOCVR 5 {representation} {coloring}", "# preloaded VR representations"]
     by_strand: dict[str, list[tuple[dict, np.ndarray, tuple[float, ...]]]] = {}
     identity_palettes: dict[tuple, tuple[float, ...]] = {}
     lines.append("R full")
@@ -307,6 +308,20 @@ def _serialize_scene(
             lines.append(f"P {nums(*backbone, 0.10, *palette)}")
         if strand_id:
             by_strand.setdefault(strand_id, []).append((nucleotide, backbone, palette))
+
+    # Modification-only extension tips are intentionally not ordinary DNA beads:
+    # desktop Full renders them as larger, chemistry-colored marker spheres and
+    # excludes them from backbone cones/slabs. Preserve that separation in VR.
+    for nucleotide in nucleotides:
+        if not nucleotide.get("is_modification"):
+            continue
+        marker_position = point(nucleotide.get("backbone_position"))
+        if marker_position is None:
+            continue
+        marker_color = _rgb(
+            MODIFICATION_COLORS.get(nucleotide.get("modification"), "#ffffff")
+        )
+        lines.append(f"P {nums(*marker_position, 0.25, *solid_palette(marker_color))}")
 
     # Standard Full uses one oriented 0.30 × 0.06 × 0.70 nm base slab per
     # nucleotide. Paired slabs share their mean axial plane and are shifted
@@ -551,6 +566,31 @@ def _serialize_scene(
     append_axes(0.05)
 
     lines.append("R cylinders")
+    direct_overhang_ids: set[str] = set()
+    for binding in getattr(design, "overhang_bindings", []):
+        if getattr(binding, "bound", True) is False or getattr(
+            binding, "connection_type", None
+        ) not in {"root-to-root", "end-to-root"}:
+            continue
+        for attribute in (
+            "driver_oh_id",
+            "driven_oh_id",
+            "overhang_a_id",
+            "overhang_b_id",
+        ):
+            value = getattr(binding, attribute, None)
+            if value:
+                direct_overhang_ids.add(str(value))
+    for duplex in getattr(design, "duplexes", []):
+        if getattr(duplex, "bound", True) is False or getattr(
+            duplex, "connection_type", None
+        ) not in {"root-to-root", "end-to-root"}:
+            continue
+        for side_name in ("left", "right"):
+            value = getattr(getattr(duplex, side_name, None), "overhang_id", None)
+            if value:
+                direct_overhang_ids.add(str(value))
+
     first_palette_by_helix = {}
     for index, nucleotide in enumerate(nucleotides):
         first_palette_by_helix.setdefault(
@@ -575,7 +615,14 @@ def _serialize_scene(
                 )
                 if match is not None:
                     palette = palette_for_index(match)
-            lines.append(f"C {nums(*first, *second, 0.72, *palette)}")
+            record_type = (
+                "H"
+                if segment is not None
+                and segment.get("ovhg_id")
+                and str(segment.get("ovhg_id")) not in direct_overhang_ids
+                else "C"
+            )
+            lines.append(f"{record_type} {nums(*first, *second, 0.72, *palette)}")
 
     if atomistic_model is None:
         raise HTTPException(500, detail="Atomistic VR snapshot was not built.")
