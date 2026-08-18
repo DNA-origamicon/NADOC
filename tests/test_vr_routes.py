@@ -11,6 +11,12 @@ from backend.api import routes_vr
 from backend.api.routes_vr import VRCamera, _require_local, _serialize_scene
 
 
+_BASE_COLORS_FOR_TEST = {
+    "A": (0x44 / 255, 0xDD / 255, 0x88 / 255),
+    "T": (1.0, 0x55 / 255, 0x55 / 255),
+}
+
+
 def _request(host: str, origin: str | None = None) -> Request:
     headers = [] if origin is None else [(b"origin", origin.encode())]
     return Request(
@@ -370,3 +376,77 @@ def test_full_snapshot_projects_explicit_cross_helix_connections() -> None:
         (0.0, 0.0, 0.0, 4.0, 0.0, 0.0),
     ]
     assert sections["cylinders"] == []
+
+
+def test_full_snapshot_projects_crossover_extra_base_beads_slabs_and_chain() -> None:
+    design = SimpleNamespace(
+        strands=[
+            SimpleNamespace(
+                id="s1",
+                is_scaffold=True,
+                color=None,
+                sequence="AT",
+                domains=[SimpleNamespace(helix_id="h1", end_bp=0, direction="FORWARD")],
+            )
+        ],
+        cluster_transforms=[],
+        crossovers=[
+            SimpleNamespace(
+                half_a=SimpleNamespace(helix_id="h1", index=0, strand="FORWARD"),
+                half_b=SimpleNamespace(helix_id="h2", index=0, strand="REVERSE"),
+                extra_bases="AT",
+            )
+        ],
+        forced_ligations=[],
+    )
+    nucleotides = [
+        {
+            "strand_id": "s1",
+            "domain_index": 0,
+            "helix_id": helix_id,
+            "bp_index": 0,
+            "direction": direction,
+            "backbone_position": [x, 0, 0],
+            "base_position": [x, 0.2, 0],
+            "base_normal": [0, 1, 0],
+            "axis_tangent": [0, 0, 1],
+        }
+        for helix_id, direction, x in (
+            ("h1", "FORWARD", 0.0),
+            ("h2", "REVERSE", 2.0),
+        )
+    ]
+    text = _serialize_scene(
+        design,
+        nucleotides,
+        [],
+        atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
+    )
+    full = _scene_sections(text)["full"]
+    points = [record for record in full if record[0] == "P"]
+    boxes = [record for record in full if record[0] == "B"]
+    backbone = [
+        record
+        for record in full
+        if record[0] == "C" and float(record[7]) == pytest.approx(0.075)
+    ]
+
+    assert len(points) == 4  # two ordinary beads plus two crossover inserts
+    assert len(boxes) == 4  # two ordinary slabs plus two crossover-insert slabs
+    assert len(backbone) == 3  # endpoint → A → T → endpoint
+    # The two inserted points carry their explicit base identities in the base palette.
+    np.testing.assert_allclose(
+        [[float(value) for value in record[8:11]] for record in points[-2:]],
+        [_BASE_COLORS_FOR_TEST["A"], _BASE_COLORS_FOR_TEST["T"]],
+        atol=1e-6,
+    )
+    assert not any(
+        record[0] == "C"
+        and float(record[7]) == pytest.approx(0.025)
+        and np.linalg.norm(
+            np.asarray([float(value) for value in record[4:7]])
+            - np.asarray([float(value) for value in record[1:4]])
+        )
+        > 1.0
+        for record in full
+    )

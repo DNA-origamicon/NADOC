@@ -85,7 +85,7 @@ Ratify thresholds during Phase 0 research; do not silently turn provisional numb
 | Overhang/linker arcs | `overhang_link_arcs.js`; canonical linker topology/bridge geometry | Not serialized | Connection id/type, anchors, ordered bridge primitives |
 | Ends and flexible details | `domain_ends.js`, `flexible_arcs.js`, loop/skip and unligated markers | Missing or filtered from VR | Stable-owner visibility/count plus rendered check |
 
-First implementation slice (pending headset check): Full and cylinder axes now consume authoritative domain segments, and Full projects explicit cross-helix crossover/forced-ligation chords. Targeted route tests lock both behaviors.
+Implemented slices (pending headset check): Full and cylinder axes consume authoritative domain segments; Full projects explicit cross-helix crossover/forced-ligation chords; and crossover inserts project from the canonical residue frames into ordered beads, slabs, attachment corners, and backbone links with their explicit base colors. Targeted route and pure numeric tests lock these behaviors.
 
 ## Metrics research decisions
 

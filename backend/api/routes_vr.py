@@ -418,6 +418,16 @@ def _serialize_scene(
     def direction_value(value) -> str:
         return str(getattr(value, "value", value))
 
+    domain_end_keys = {
+        (
+            str(domain.helix_id),
+            int(domain.end_bp),
+            direction_value(domain.direction),
+        )
+        for strand in design.strands
+        for domain in getattr(strand, "domains", [])
+    }
+
     explicit_connections = [
         (
             (
@@ -453,14 +463,61 @@ def _serialize_scene(
         for fl in getattr(design, "forced_ligations", [])
     )
     for first_key, second_key, extra_bases, hidden_periodic in explicit_connections:
-        if extra_bases or hidden_periodic or first_key[0] == second_key[0]:
+        if hidden_periodic:
             continue
         first_entry = site_entries.get(first_key)
         second_entry = site_entries.get(second_key)
         if first_entry is None or second_entry is None:
             continue
         first_nucleotide, first, palette = first_entry
-        _, second, _ = second_entry
+        second_nucleotide, second, _ = second_entry
+        if extra_bases:
+            from backend.core.vr_scene_projection import (
+                crossover_extra_base_full_projections,
+            )
+
+            projections = crossover_extra_base_full_projections(
+                first_nucleotide,
+                second_nucleotide,
+                str(extra_bases),
+                sim_reversed=first_key not in domain_end_keys,
+                local_frame_reversed=first_key[2] == "REVERSE",
+            )
+            bead_palette = palette_variant(palette, first_nucleotide, "#0070bb")
+            slab_palette = palette_variant(palette, first_nucleotide, "#0277bd")
+            backbone_points = [first]
+            for projection in projections:
+                extra_palette = (
+                    *bead_palette[0:3],
+                    *_BASE_COLORS.get(projection.base, bead_palette[3:6]),
+                    *bead_palette[6:],
+                )
+                bead = rotation @ projection.bead_center
+                slab_center = rotation @ projection.slab_center
+                slab_axis_x = rotation @ projection.slab_axis_x
+                slab_axis_y = rotation @ projection.slab_axis_y
+                slab_axis_z = rotation @ projection.slab_axis_z
+                slab_corner = rotation @ projection.slab_corner
+                lines.append(f"P {nums(*bead, 0.10, *extra_palette)}")
+                box(
+                    slab_center,
+                    slab_axis_x,
+                    slab_axis_y,
+                    slab_axis_z,
+                    (
+                        *slab_palette[0:3],
+                        *_BASE_COLORS.get(projection.base, slab_palette[3:6]),
+                        *slab_palette[6:],
+                    ),
+                )
+                lines.append(f"C {nums(*bead, *slab_corner, 0.025, *slab_palette)}")
+                backbone_points.append(bead)
+            backbone_points.append(second)
+            for start, end in zip(backbone_points, backbone_points[1:]):
+                lines.append(f"C {nums(*start, *end, 0.075, *bead_palette)}")
+            continue
+        if first_key[0] == second_key[0]:
+            continue
         arc_palette = palette_variant(palette, first_nucleotide, "#0288d1")
         lines.append(f"C {nums(*first, *second, 0.025, *arc_palette)}")
 
