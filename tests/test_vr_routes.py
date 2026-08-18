@@ -316,6 +316,10 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
     assert all(len(values) == len(set(values)) for values in identities.values())
     assert "nuc:s1:0:h1:1:FORWARD:0:backbone" in identities["full"]
     assert "atom:0:base:h1:0:FORWARD:C" in identities["ballstick"]
+    assert (
+        "atom-bond:bases:h1:0:FORWARD~h1:1:FORWARD:atoms:0-1"
+        in identities["ballstick"]
+    )
     assert sum(record[0] == "P" for record in sections["full"]) == 1
     assert sum(record[0] == "B" for record in sections["full"]) == 3
     assert sum(record[0] == "C" for record in sections["full"]) == 4
@@ -820,6 +824,7 @@ def test_ss_linker_details_are_full_only_but_backbone_remains_in_cylinders() -> 
         atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
     )
     sections = _scene_sections(text)
+    identities = _scene_identities(text)
 
     linker_slabs = [
         record
@@ -842,6 +847,15 @@ def test_ss_linker_details_are_full_only_but_backbone_remains_in_cylinders() -> 
         == 48
     )
     assert sum(record[0] == "B" for record in sections["cylinders"]) == 0
+    assert any(
+        identity.startswith("linker:link:ss:backbone:0:near:0")
+        for identity in identities["full"]
+    )
+    assert any(
+        identity.endswith(":near:1")
+        for identity in identities["full"]
+        if identity.startswith("linker:link:ss:backbone:")
+    )
     assert (
         sum(
             record[0] == "C" and float(record[7]) == pytest.approx(0.055)
@@ -1034,6 +1048,7 @@ def test_flexible_segment_replaces_filtered_beads_in_full_only() -> None:
         atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
     )
     sections = _scene_sections(text)
+    identities = _scene_identities(text)
 
     assert (
         sum(
@@ -1053,6 +1068,13 @@ def test_flexible_segment_replaces_filtered_beads_in_full_only() -> None:
         record[0] == "C" and float(record[7]) == pytest.approx(0.06)
         for record in sections["cylinders"]
     )
+    flexible_backbones = [
+        identity for identity in identities["full"]
+        if identity.startswith("flex:flex-1:backbone:")
+    ]
+    assert len(flexible_backbones) == 32
+    assert flexible_backbones[0].endswith(":near:0")
+    assert flexible_backbones[-1].endswith(":near:1")
 
 
 def test_unligated_crossover_gets_full_only_amber_warning_at_midpoint() -> None:

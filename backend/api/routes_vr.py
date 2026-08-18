@@ -343,10 +343,16 @@ def _serialize_scene(
                             palette,
                         )
                 points = [rotation @ value for value in projection.backbone_points]
+                edge_count = max(len(points) - 1, 1)
+                base_count = len(projection.bases)
                 for edge_index, (first, second) in enumerate(zip(points, points[1:])):
+                    nearest_base = -1 if base_count == 0 else min(
+                        int((edge_index + 0.5) * base_count / edge_count),
+                        base_count - 1,
+                    )
                     emit(
                         "C",
-                        f"linker:{connection.id}:ss:backbone:{edge_index}",
+                        f"linker:{connection.id}:ss:backbone:{edge_index}:near:{nearest_base}",
                         *first,
                         *second,
                         0.055,
@@ -415,10 +421,16 @@ def _serialize_scene(
                     palette,
                 )
             points = [rotation @ value for value in projection.backbone_points]
+            edge_count = max(len(points) - 1, 1)
+            base_count = len(projection.bases)
             for edge_index, (first, second) in enumerate(zip(points, points[1:])):
+                nearest_base = -1 if base_count == 0 else min(
+                    int((edge_index + 0.5) * base_count / edge_count),
+                    base_count - 1,
+                )
                 emit(
                     "C",
-                    f"flex:{projection.connection_id}:backbone:{edge_index}",
+                    f"flex:{projection.connection_id}:backbone:{edge_index}:near:{nearest_base}",
                     *first,
                     *second,
                     0.06,
@@ -1167,7 +1179,10 @@ def _serialize_scene(
             )
             emit(
                 "C",
-                f"bond:{min(first_index, second_index)}:{max(first_index, second_index)}",
+                "atom-bond:bases:"
+                f"{atom_base_key(atomistic_model.atoms[first_index])}~"
+                f"{atom_base_key(atomistic_model.atoms[second_index])}:atoms:"
+                f"{min(first_index, second_index)}-{max(first_index, second_index)}",
                 *first,
                 *second,
                 radius,

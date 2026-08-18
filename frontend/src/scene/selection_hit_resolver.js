@@ -47,6 +47,53 @@ export function vrPrimitiveOwner(identity, { geometry = [], design = null } = {}
     }
   }
 
+  const geometryOwners = (geometry ?? []).map(nucleotide => ({
+    nucleotide,
+    owner: nucleotidePrimitiveOwner(nucleotide),
+    key: atomBaseKey(nucleotide),
+  })).filter(candidate => candidate.key)
+
+  for (const first of geometryOwners) {
+    const prefix = `backbone:${first.owner}~`
+    if (!decoded.startsWith(prefix)) continue
+    const second = geometryOwners.find(candidate => decoded === `${prefix}${candidate.owner}`)
+    if (!second) return null
+    return {
+      kind: 'backbone_bond',
+      fromNucleotide: first.nucleotide,
+      toNucleotide: second.nucleotide,
+      ref: {
+        kind: 'bond', fromKey: first.key, toKey: second.key,
+        ...(first.nucleotide.strand_id === second.nucleotide.strand_id
+          ? { strandId: first.nucleotide.strand_id } : {}),
+      },
+    }
+  }
+
+  for (const first of geometryOwners) {
+    const prefix = `atom-bond:bases:${first.key}~`
+    if (!decoded.startsWith(prefix)) continue
+    const second = geometryOwners.find(candidate =>
+      decoded.startsWith(`${prefix}${candidate.key}:atoms:`))
+    if (!second) return null
+    if (first.key === second.key) {
+      return {
+        kind: 'atom_bond_base', nucleotide: first.nucleotide,
+        ref: { kind: 'base', key: first.key },
+      }
+    }
+    return {
+      kind: 'atom_bond',
+      fromNucleotide: first.nucleotide,
+      toNucleotide: second.nucleotide,
+      ref: {
+        kind: 'bond', fromKey: first.key, toKey: second.key,
+        ...(first.nucleotide.strand_id === second.nucleotide.strand_id
+          ? { strandId: first.nucleotide.strand_id } : {}),
+      },
+    }
+  }
+
   const connectionCollections = [
     ['crossover', design?.crossovers ?? [], 'crossover'],
     ['ligation', design?.forced_ligations ?? [], 'forced_ligation'],
@@ -80,10 +127,13 @@ export function vrPrimitiveOwner(identity, { geometry = [], design = null } = {}
 
   const strands = new Map((design?.strands ?? []).map(strand => [strand.id, strand]))
   for (const connection of design?.flexible_connections ?? []) {
-    for (const primitive of ['bead', 'slab']) {
+    for (const primitive of ['bead', 'slab', 'backbone']) {
       const prefix = `flex:${connection.id}:${primitive}:`
       if (!decoded.startsWith(prefix)) continue
-      const index = Number(decoded.slice(prefix.length))
+      const suffix = decoded.slice(prefix.length)
+      const index = primitive === 'backbone'
+        ? Number(suffix.match(/^\d+:near:(\d+)$/)?.[1])
+        : Number(suffix)
       const anchor = connection.segment_bead_keys?.[index]
       const domain = strands.get(anchor?.strand_id)?.domains?.[anchor?.domain_index]
       if (!domain || !Number.isInteger(index)) return null
@@ -100,10 +150,13 @@ export function vrPrimitiveOwner(identity, { geometry = [], design = null } = {}
   }
 
   for (const connection of design?.overhang_connections ?? []) {
-    for (const primitive of ['bead', 'slab']) {
+    for (const primitive of ['bead', 'slab', 'backbone']) {
       const prefix = `linker:${connection.id}:ss:${primitive}:`
       if (!decoded.startsWith(prefix)) continue
-      const index = Number(decoded.slice(prefix.length))
+      const suffix = decoded.slice(prefix.length)
+      const index = primitive === 'backbone'
+        ? Number(suffix.match(/^\d+:near:(\d+)$/)?.[1])
+        : Number(suffix)
       if (!Number.isInteger(index) || index < 0) return null
       return {
         kind: 'linker_base', connectionId: connection.id,
@@ -116,6 +169,9 @@ export function vrPrimitiveOwner(identity, { geometry = [], design = null } = {}
           }),
         },
       }
+    }
+    if (decoded.startsWith(`linker:${connection.id}:ds:`)) {
+      return { kind: 'linker_connection', connectionId: connection.id, ref: null }
     }
   }
   return null

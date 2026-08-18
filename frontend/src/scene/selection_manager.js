@@ -2343,7 +2343,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const backboneEntries = designRenderer.getBackboneEntries()
     let entries = []
     let directGlowEntries = null
-    if (owner.kind === 'atom') {
+    if (owner.kind === 'atom' || owner.kind === 'atom_bond_base') {
       if (_selLevel === 'base' || _selLevel === 'default') {
         directGlowEntries = getAtomisticRenderer?.()
           ?.selectionAtomEntries?.([owner.nucleotide], { scale: 1.35 }) ?? []
@@ -2360,6 +2360,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         entries = _previewSetForLevel(entry)?.beads ?? []
       } else if (_selLevel === 'default') {
         entries = backboneEntries.filter(item => item.nuc.strand_id === entry.nuc.strand_id)
+      }
+    } else if (owner.kind === 'backbone_bond' || owner.kind === 'atom_bond') {
+      const fromEntry = backboneEntries.find(candidate =>
+        baseKey(candidate.nuc, candidate._copy) === owner.ref.fromKey)
+      if (fromEntry && (_selLevel === 'default' || _selLevel === 'strand' ||
+          _selLevel === 'cluster')) {
+        entries = _selLevel === 'default'
+          ? backboneEntries.filter(item => item.nuc.strand_id === fromEntry.nuc.strand_id)
+          : (_previewSetForLevel(fromEntry)?.beads ?? [])
       }
     } else if (owner.kind === 'domain') {
       if (!['base', 'end', 'xover'].includes(_selLevel)) {
@@ -2406,7 +2415,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     let arc = null
     let accepted = false
 
-    if (owner.kind === 'nucleotide' || owner.kind === 'atom') {
+    if (owner.kind === 'nucleotide' || owner.kind === 'atom' ||
+        owner.kind === 'atom_bond_base') {
       entry = backboneEntries.find(candidate => candidate.nuc === owner.nucleotide)
         ?? backboneEntries.find(candidate =>
           baseKey(candidate.nuc, candidate._copy) === owner.ref.key)
@@ -2417,6 +2427,24 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         (_selLevel === 'cluster' && !!_resolveClusterId(entry.nuc, state.currentDesign))
       )
       if (entry) _v2HandleBead(entry, backboneEntries, coneEntries)
+    } else if (owner.kind === 'backbone_bond' || owner.kind === 'atom_bond') {
+      const reversedRef = {
+        ...owner.ref,
+        fromKey: owner.ref.toKey,
+        toKey: owner.ref.fromKey,
+      }
+      const cone = coneForBondRef(coneEntries, owner.ref)
+        ?? coneForBondRef(coneEntries, reversedRef)
+      const representative = cone?.fromNuc ?? owner.fromNucleotide
+      accepted = !!cone && (
+        _selLevel === 'default' || _selLevel === 'strand' ||
+        (_selLevel === 'cluster' && representative &&
+          !!_resolveClusterId(representative, state.currentDesign))
+      )
+      if (cone) {
+        _v2HandleCone(
+          cone, cone.strandId ?? owner.ref.strandId, backboneEntries, coneEntries)
+      }
     } else if (owner.kind === 'domain') {
       entry = backboneEntries.find(candidate =>
         candidate.nuc.strand_id === owner.ref.strandId &&
@@ -2445,7 +2473,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
 
     const selectedRef = selectionController.getState().primary
-    const nucleotide = owner.nucleotide ?? entry?.nuc ?? arc?.fromNuc ?? arc?.toNuc
+    const nucleotide = owner.nucleotide ?? owner.fromNucleotide ??
+      entry?.nuc ?? arc?.fromNuc ?? arc?.toNuc
     const key = owner.ref?.key ?? (entry ? baseKey(entry.nuc, entry._copy) : null)
     const selected = accepted && !!selectedRef && (
       (selectedRef.kind === 'strand' && selectedRef.id === nucleotide?.strand_id) ||
@@ -2455,6 +2484,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         _resolveClusterId(nucleotide, state.currentDesign)) ||
       ((selectedRef.kind === 'base' || selectedRef.kind === 'end') &&
         selectedRef.key === key) ||
+      (selectedRef.kind === 'bond' && owner.ref?.kind === 'bond' &&
+        ((selectedRef.fromKey === owner.ref.fromKey &&
+          selectedRef.toKey === owner.ref.toKey) ||
+         (selectedRef.fromKey === owner.ref.toKey &&
+          selectedRef.toKey === owner.ref.fromKey))) ||
       (selectedRef.kind === 'crossover' && owner.kind === 'crossover' &&
         selectedRef.id === owner.ref.id)
     )

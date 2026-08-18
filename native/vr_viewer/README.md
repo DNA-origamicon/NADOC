@@ -60,6 +60,10 @@ Controls on the original HTC Vive wands:
   cue does not change NADOC selection. After a trackpad click is accepted by the
   desktop selection controller, a larger green marker remains on the selected owner;
   rejected target/level combinations never produce a false green acknowledgement.
+  Ordinary backbone cylinders and inter-residue atomistic bonds resolve through the
+  same canonical bond ownership as desktop connector picks. Intra-residue atom bonds
+  and sampled flexible/linker curve edges resolve to their owning or nearest Base;
+  display-only ds-linker connector arcs remain non-selecting.
 - Press the Vive System button (not the application-menu button) to open the
   SteamVR Dashboard, then select Desktop to operate NADOC's normal interface.
 

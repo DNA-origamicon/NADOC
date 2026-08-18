@@ -36,6 +36,35 @@ describe('pure selection hit resolution', () => {
     })
   })
 
+  it('resolves coarse and atomistic backbone bonds without index ownership', () => {
+    const first = {
+      strand_id: 'strand:a', domain_index: 0, helix_id: 'helix:b', bp_index: 3,
+      direction: 'FORWARD',
+    }
+    const second = { ...first, bp_index: 4 }
+    expect(vrPrimitiveOwner(
+      'backbone:nuc:strand:a:0:helix:b:3:FORWARD:0~nuc:strand:a:0:helix:b:4:FORWARD:0',
+      { geometry: [first, second] },
+    )).toEqual({
+      kind: 'backbone_bond', fromNucleotide: first, toNucleotide: second,
+      ref: {
+        kind: 'bond', fromKey: 'helix:b:3:FORWARD', toKey: 'helix:b:4:FORWARD',
+        strandId: 'strand:a',
+      },
+    })
+    expect(vrPrimitiveOwner(
+      'atom-bond:bases:helix:b:3:FORWARD~helix:b:4:FORWARD:atoms:10-20',
+      { geometry: [first, second] },
+    )?.kind).toBe('atom_bond')
+    expect(vrPrimitiveOwner(
+      'atom-bond:bases:helix:b:3:FORWARD~helix:b:3:FORWARD:atoms:10-11',
+      { geometry: [first, second] },
+    )).toEqual({
+      kind: 'atom_bond_base', nucleotide: first,
+      ref: { kind: 'base', key: 'helix:b:3:FORWARD' },
+    })
+  })
+
   it('resolves crossover, forced-ligation, warning, and domain primitives', () => {
     const design = {
       crossovers: [{ id: 'xo:a' }],
@@ -74,6 +103,17 @@ describe('pure selection hit resolution', () => {
     expect(vrPrimitiveOwner('linker:link:d:ss:bead:3', { design })).toEqual({
       kind: 'linker_base', connectionId: 'link:d',
       ref: { kind: 'base', key: '__lnk__link:d:3:FORWARD' },
+    })
+    expect(vrPrimitiveOwner('flex:flex:c:backbone:12:near:0', { design })).toEqual({
+      kind: 'flexible_base', connectionId: 'flex:c',
+      ref: { kind: 'base', key: 'helix:b:8:REVERSE' },
+    })
+    expect(vrPrimitiveOwner('linker:link:d:ss:backbone:9:near:3', { design })).toEqual({
+      kind: 'linker_base', connectionId: 'link:d',
+      ref: { kind: 'base', key: '__lnk__link:d:3:FORWARD' },
+    })
+    expect(vrPrimitiveOwner('linker:link:d:ds:a:connector:2', { design })).toEqual({
+      kind: 'linker_connection', connectionId: 'link:d', ref: null,
     })
   })
 
