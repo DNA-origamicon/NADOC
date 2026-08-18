@@ -1,5 +1,13 @@
 import { parseBaseKey } from './base_ref.js'
 
+const VR_TOOL_CONTEXT_REASONS = new Set([
+  'resolved', 'end_selection_required', 'invalid_end_ref',
+  'loop_copy_not_supported', 'synthetic_end_not_supported',
+  'ambiguous_live_end', 'stale_live_end', 'not_terminal', 'helix_not_live',
+  'ambiguous_continuation_face', 'no_continuation_face',
+  'invalid_continuation_face',
+])
+
 function _direction(value) {
   return value?.value ?? value
 }
@@ -96,7 +104,12 @@ export function resolveVREndToolContext(
   const face = candidates[0]
   if (!Number.isInteger(face.diskBp) || ![-1, 1].includes(face.openSide) ||
       typeof face.plane !== 'string' || !face.plane ||
-      typeof face.offsetNm !== 'number' || !Number.isFinite(face.offsetNm)) {
+      typeof face.offsetNm !== 'number' || !Number.isFinite(face.offsetNm) ||
+      !Array.isArray(face.ringPos3d) || face.ringPos3d.length !== 3 ||
+      !face.ringPos3d.every(Number.isFinite) ||
+      !Array.isArray(face.faceNormal3d) || face.faceNormal3d.length !== 3 ||
+      !face.faceNormal3d.every(Number.isFinite) ||
+      Math.hypot(...face.faceNormal3d) < 1e-9) {
     return { accepted: false, reason: 'invalid_continuation_face', context: null }
   }
   const continuationBp = face.bp + Math.max(0, face.openSide)
@@ -112,6 +125,8 @@ export function resolveVREndToolContext(
       openSide: face.openSide,
       plane: face.plane,
       offsetNm: face.offsetNm,
+      facePosition: [...face.ringPos3d],
+      faceNormal: [...face.faceNormal3d],
       strandId: nucleotide.strand_id,
       domainIndex: nucleotide.domain_index ?? 0,
       direction: parsed.direction,
@@ -122,5 +137,33 @@ export function resolveVREndToolContext(
       deformed: !!design?.deformations?.length ||
         _effectiveTransform(face.helixId, design),
     },
+  }
+}
+
+/** Build the bounded, target-bound feedback record consumed by native VR. */
+export function vrToolFeedbackPayload(sequence, draft, state) {
+  if (!Number.isSafeInteger(sequence) || sequence < 1 || draft?.target_kind !== 'end' ||
+      typeof draft.target_identity !== 'string' || !draft.target_identity ||
+      draft.target_identity.length > 2048 || /\s/.test(draft.target_identity)) return null
+  const context = state?.toolContext ?? null
+  const reason = context ? 'resolved' : state?.toolContextReason
+  if (!VR_TOOL_CONTEXT_REASONS.has(reason)) return null
+  if (context) {
+    if (!Array.isArray(context.facePosition) || context.facePosition.length !== 3 ||
+        !context.facePosition.every(Number.isFinite) ||
+        !Array.isArray(context.faceNormal) || context.faceNormal.length !== 3 ||
+        !context.faceNormal.every(Number.isFinite) ||
+        Math.hypot(...context.faceNormal) < 1e-9) return null
+  }
+  return {
+    tool_config_sequence: sequence,
+    target_identity: draft.target_identity,
+    target_kind: draft.target_kind,
+    resolved: !!context,
+    reason,
+    face_position: context ? [...context.facePosition] : null,
+    face_normal: context ? [...context.faceNormal] : null,
+    occupied: !!context?.connections?.length,
+    deformed: context?.deformed === true,
   }
 }

@@ -47,6 +47,12 @@ inline glm::mat4 normalizedToSourceTransform(
     return glm::inverse(normalization) * normalizedTransform * normalization;
 }
 
+inline glm::vec3 sourceToNormalizedPoint(
+    const glm::vec3& sourcePoint, const glm::vec3& sourceCenter,
+    float sourceToNormalizedScale, const glm::vec3& normalizedOffset) {
+    return (sourcePoint - sourceCenter) * sourceToNormalizedScale + normalizedOffset;
+}
+
 enum class ManipulationMode { none, left, right, two_hand };
 
 struct SelectionFeedback {
@@ -57,6 +63,18 @@ struct SelectionFeedback {
     std::string selectionKind = "none";
     std::string identity;
     std::vector<std::string> ownerTokens;
+};
+
+struct ToolContextFeedback {
+    uint64_t sequence = 0;
+    bool resolved = false;
+    bool occupied = false;
+    bool deformed = false;
+    std::string reason;
+    std::string selectionKind = "none";
+    std::string identity;
+    glm::vec3 facePosition{};
+    glm::vec3 faceNormal{};
 };
 
 struct OwnerAliasEntry {
@@ -600,6 +618,68 @@ inline std::optional<SelectionFeedback> parseSelectionFeedback(
         result.ownerTokens.clear();
         result.selectionKind = "none";
     }
+    return result;
+}
+
+inline std::optional<ToolContextFeedback> parseToolContextFeedback(
+    const std::string& record, uint64_t previousSequence, uint64_t expectedSequence) {
+    std::istringstream fields(record);
+    std::string magic;
+    int version = 0;
+    int resolved = 0;
+    int occupied = 0;
+    int deformed = 0;
+    ToolContextFeedback result;
+    if (!(fields >> magic >> version >> result.sequence >> resolved >> occupied >> deformed
+                 >> result.reason >> result.selectionKind >> result.identity) ||
+        magic != "NADOCVR_TOOL_FEEDBACK" || version != 1 ||
+        (resolved != 0 && resolved != 1) || (occupied != 0 && occupied != 1) ||
+        (deformed != 0 && deformed != 1) ||
+        result.sequence <= previousSequence || result.sequence != expectedSequence ||
+        result.selectionKind != "end" || result.identity.empty() ||
+        result.identity == "-" || result.identity.size() > 2048) {
+        return std::nullopt;
+    }
+    static constexpr std::array<const char*, 12> reasons = {
+        "resolved", "end_selection_required", "invalid_end_ref",
+        "loop_copy_not_supported", "synthetic_end_not_supported",
+        "ambiguous_live_end", "stale_live_end", "not_terminal",
+        "helix_not_live", "ambiguous_continuation_face",
+        "no_continuation_face", "invalid_continuation_face",
+    };
+    if (std::find(reasons.begin(), reasons.end(), result.reason) == reasons.end() ||
+        (resolved == 1) != (result.reason == "resolved")) {
+        return std::nullopt;
+    }
+    result.resolved = resolved == 1;
+    result.occupied = occupied == 1;
+    result.deformed = deformed == 1;
+    if (result.resolved) {
+        if (!(fields >> result.facePosition.x >> result.facePosition.y
+                     >> result.facePosition.z >> result.faceNormal.x
+                     >> result.faceNormal.y >> result.faceNormal.z) ||
+            !std::isfinite(result.facePosition.x) ||
+            !std::isfinite(result.facePosition.y) ||
+            !std::isfinite(result.facePosition.z) ||
+            !std::isfinite(result.faceNormal.x) ||
+            !std::isfinite(result.faceNormal.y) ||
+            !std::isfinite(result.faceNormal.z) ||
+            std::abs(result.facePosition.x) > 1.0e9F ||
+            std::abs(result.facePosition.y) > 1.0e9F ||
+            std::abs(result.facePosition.z) > 1.0e9F) {
+            return std::nullopt;
+        }
+        const double normalLength = std::hypot(
+            std::hypot(static_cast<double>(result.faceNormal.x),
+                       static_cast<double>(result.faceNormal.y)),
+            static_cast<double>(result.faceNormal.z));
+        if (normalLength <= 1.0e-9 || normalLength >= 1.0e9) return std::nullopt;
+        result.faceNormal = glm::normalize(result.faceNormal);
+    } else if (result.occupied || result.deformed) {
+        return std::nullopt;
+    }
+    std::string trailing;
+    if (fields >> trailing) return std::nullopt;
     return result;
 }
 

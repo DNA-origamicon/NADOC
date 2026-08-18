@@ -18,6 +18,7 @@ import { initScene }                 from './scene/scene.js'
 import { initVRSession }             from './scene/vr_session.js'
 import { initialVRToolShellState, reduceVRToolShell } from './scene/vr_tool_shell.js'
 import { initialVRToolConfigState, reduceVRToolConfig } from './scene/vr_tool_config.js'
+import { vrToolFeedbackPayload } from './scene/vr_tool_context.js'
 import { createGlowLayer }           from './scene/glow_layer.js'
 import { initDesignRenderer }        from './scene/design_renderer.js'
 import { deferrableContextMenu }      from './scene/right_click_menu.js'
@@ -5836,6 +5837,10 @@ async function main() {
           targetSnapshotPresent,
         })
         _vrToolConfigState = result.state
+        if (result.accepted && draft?.target_kind === 'end') {
+          const feedback = vrToolFeedbackPayload(event.sequence, draft, result.state)
+          if (feedback) api.sendVRToolFeedback(feedback).catch(() => {})
+        }
       } else if (event?.type === 'tool') {
         const targetSnapshotPresent = event.targetKind !== 'none' ||
           !!event.targetIdentity || !!event.targetOwnerTokens?.length

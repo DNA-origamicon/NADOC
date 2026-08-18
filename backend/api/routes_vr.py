@@ -43,6 +43,7 @@ _STEAMVR_LOG_PATH = Path(tempfile.gettempdir()) / f"nadoc-steamvr-{os.getuid()}.
 _STATE_LOCK = threading.Lock()
 _RUNTIME_LOCK = threading.Lock()
 _FEEDBACK_LOCK = threading.Lock()
+_TOOL_FEEDBACK_LOCK = threading.Lock()
 
 SelectionKind = Literal[
     "none",
@@ -88,6 +89,38 @@ class VRFeedbackRequest(BaseModel):
     ] = "default"
     owner_tokens: list[str] = Field(default_factory=list, max_length=8)
     selection_kind: SelectionKind = "none"
+
+
+VRToolContextReason = Literal[
+    "resolved",
+    "end_selection_required",
+    "invalid_end_ref",
+    "loop_copy_not_supported",
+    "synthetic_end_not_supported",
+    "ambiguous_live_end",
+    "stale_live_end",
+    "not_terminal",
+    "helix_not_live",
+    "ambiguous_continuation_face",
+    "no_continuation_face",
+    "invalid_continuation_face",
+]
+
+
+class VRToolFeedbackRequest(BaseModel):
+    tool_config_sequence: int = Field(ge=1)
+    target_identity: str = Field(min_length=1, max_length=2048)
+    target_kind: SelectionKind
+    resolved: bool = False
+    reason: VRToolContextReason
+    face_position: Optional[list[float]] = Field(
+        default=None, min_length=3, max_length=3
+    )
+    face_normal: Optional[list[float]] = Field(
+        default=None, min_length=3, max_length=3
+    )
+    occupied: bool = False
+    deformed: bool = False
 
 
 def _require_local(request: Request) -> None:
@@ -2653,11 +2686,13 @@ def _cleanup_after_process(
     scene_path: Path,
     event_path: Path,
     feedback_path: Path,
+    tool_feedback_path: Path,
 ) -> None:
     process.wait()
     scene_path.unlink(missing_ok=True)
     event_path.unlink(missing_ok=True)
     feedback_path.unlink(missing_ok=True)
+    tool_feedback_path.unlink(missing_ok=True)
     with _STATE_LOCK:
         state = _read_state()
         if state and int(state["pid"]) == process.pid:
@@ -3097,10 +3132,80 @@ def vr_feedback(body: VRFeedbackRequest, request: Request) -> dict:
     return {"acknowledged": True, "select_sequence": body.select_sequence}
 
 
+def _write_tool_feedback(state: dict | None, body: VRToolFeedbackRequest) -> None:
+    """Atomically return one exact browser-resolved tool locator to native VR."""
+    if not state or not state.get("tool_feedback_path"):
+        raise HTTPException(409, detail="Native VR is not running.")
+    if (
+        any(character.isspace() for character in body.target_identity)
+        or body.target_kind != "end"
+        or body.resolved != (body.reason == "resolved")
+        or body.resolved != (
+            body.face_position is not None and body.face_normal is not None
+        )
+        or (not body.resolved and (body.occupied or body.deformed))
+    ):
+        raise HTTPException(422, detail="Invalid VR tool feedback.")
+
+    values: list[float] = []
+    if body.resolved:
+        position = np.asarray(body.face_position, dtype=float)
+        normal = np.asarray(body.face_normal, dtype=float)
+        rotation = np.asarray(state.get("view_rotation"), dtype=float)
+        if (
+            position.shape != (3,)
+            or normal.shape != (3,)
+            or rotation.shape != (3, 3)
+            or not np.all(np.isfinite(position))
+            or not np.all(np.isfinite(normal))
+            or not np.all(np.isfinite(rotation))
+            or np.max(np.abs(position)) > 1e9
+            or not 1e-9 < np.linalg.norm(normal) < 1e9
+        ):
+            raise HTTPException(422, detail="Invalid VR tool feedback geometry.")
+        position = rotation @ position
+        normal = rotation @ normal
+        normal /= np.linalg.norm(normal)
+        values = [*position.tolist(), *normal.tolist()]
+
+    record = (
+        f"NADOCVR_TOOL_FEEDBACK 1 {body.tool_config_sequence} "
+        f"{int(body.resolved)} {int(body.occupied)} {int(body.deformed)} "
+        f"{body.reason} {body.target_kind} {body.target_identity}"
+        + (" " + " ".join(f"{value:.17g}" for value in values) if values else "")
+        + "\n"
+    )
+    if len(record.encode()) > 4096:
+        raise HTTPException(422, detail="Invalid VR tool feedback.")
+    path = Path(state["tool_feedback_path"])
+    temporary = path.with_name(f"{path.name}.next")
+    with _TOOL_FEEDBACK_LOCK:
+        try:
+            temporary.write_text(record)
+            temporary.chmod(0o600)
+            os.replace(temporary, path)
+        except OSError as exc:
+            temporary.unlink(missing_ok=True)
+            raise HTTPException(
+                503, detail="Could not publish VR tool locator."
+            ) from exc
+
+
+@router.post("/vr/tool-feedback")
+def vr_tool_feedback(body: VRToolFeedbackRequest, request: Request) -> dict:
+    _require_local(request)
+    _write_tool_feedback(_read_state(), body)
+    return {
+        "acknowledged": True,
+        "tool_config_sequence": body.tool_config_sequence,
+    }
+
+
 def _viewer_command(
     scene_path: Path,
     event_path: Path,
     feedback_path: Path,
+    tool_feedback_path: Path,
     body: VRLaunchRequest,
 ) -> list[str]:
     command = [
@@ -3112,6 +3217,8 @@ def _viewer_command(
         body.selection_level,
         "--feedback",
         str(feedback_path),
+        "--tool-feedback",
+        str(tool_feedback_path),
     ]
     for token in body.selected_owner_tokens:
         command.extend(["--selected-owner", token])
@@ -3247,11 +3354,24 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             )
             feedback_path = Path(feedback_file.name)
         feedback_path.chmod(0o600)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            prefix="nadoc-vr-tool-feedback-",
+            suffix=".txt",
+            delete=False,
+        ) as tool_feedback_file:
+            tool_feedback_file.write(
+                "NADOCVR_TOOL_FEEDBACK 1 0 0 0 0 unresolved none -\n"
+            )
+            tool_feedback_path = Path(tool_feedback_file.name)
+        tool_feedback_path.chmod(0o600)
 
         log = _LOG_PATH.open("ab")
         try:
             process = subprocess.Popen(
-                _viewer_command(scene_path, event_path, feedback_path, body),
+                _viewer_command(
+                    scene_path, event_path, feedback_path, tool_feedback_path, body
+                ),
                 cwd=_REPO_ROOT,
                 env=_build_environment(),
                 stdin=subprocess.DEVNULL,
@@ -3265,6 +3385,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             scene_path.unlink(missing_ok=True)
             event_path.unlink(missing_ok=True)
             feedback_path.unlink(missing_ok=True)
+            tool_feedback_path.unlink(missing_ok=True)
             raise HTTPException(
                 503, detail=f"Could not launch VR viewer: {exc}"
             ) from exc
@@ -3277,6 +3398,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             scene_path.unlink(missing_ok=True)
             event_path.unlink(missing_ok=True)
             feedback_path.unlink(missing_ok=True)
+            tool_feedback_path.unlink(missing_ok=True)
             detail = "Native VR viewer exited during startup."
             try:
                 tail = _LOG_PATH.read_text(errors="replace").splitlines()[-1]
@@ -3291,6 +3413,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             "scene_path": str(scene_path),
             "event_path": str(event_path),
             "feedback_path": str(feedback_path),
+            "tool_feedback_path": str(tool_feedback_path),
             "started_at": process_started_at,
             "launch_requested_at": launch_requested_at,
             "snapshot_started_at": snapshot_started_at,
@@ -3301,7 +3424,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         _write_state(state)
         threading.Thread(
             target=_cleanup_after_process,
-            args=(process, scene_path, event_path, feedback_path),
+            args=(process, scene_path, event_path, feedback_path, tool_feedback_path),
             daemon=True,
             name="nadoc-vr-cleanup",
         ).start()

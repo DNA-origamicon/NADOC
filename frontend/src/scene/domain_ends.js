@@ -839,6 +839,9 @@ export function initDomainEnds(scene, camera, canvas, {
         plane:        e.plane,
         offsetNm:     e.offsetNm,
         ringPos3d:    e.ringMesh.position.toArray(),
+        faceNormal3d: new THREE.Vector3(0, 0, 1)
+          .applyQuaternion(e.ringMesh.quaternion).multiplyScalar(e.openSide)
+          .normalize().toArray(),
         labelPos3d:   e.labelSprite?.position.toArray() ?? null,
         endPos3d:     e.endPos.toArray(),
       }))

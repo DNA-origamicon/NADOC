@@ -4202,6 +4202,10 @@ export async function sendVRFeedback(body) {
   return _request('POST', '/vr/feedback', body, { suppressBusy: true })
 }
 
+export async function sendVRToolFeedback(body) {
+  return _request('POST', '/vr/tool-feedback', body, { suppressBusy: true })
+}
+
 export async function startSteamVR() {
   return _request('POST', '/vr/runtime/start', undefined, { timeoutMs: 30000 })
 }

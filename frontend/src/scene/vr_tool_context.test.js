@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { resolveVREndToolContext } from './vr_tool_context.js'
+import { resolveVREndToolContext, vrToolFeedbackPayload } from './vr_tool_context.js'
 
 const design = ({ transformed = false, deformed = false } = {}) => ({
   helices: [{ id: 'h1', bp_start: 0, length_bp: 20 }],
@@ -18,6 +18,7 @@ const nucleotide = (overrides = {}) => ({
 const face = (overrides = {}) => ({
   helixId: 'h1', bp: 9, diskBp: 10, openSide: 1,
   plane: 'XY', offsetNm: 3.34, overhangId: null,
+  ringPos3d: [1, 2, 3], faceNormal3d: [0, 0, 1],
   owners: [{
     strandId: 's1', domainIndex: 0, direction: 'FORWARD',
     strandType: 'scaffold', overhangId: null,
@@ -36,6 +37,7 @@ describe('VR End tool context', () => {
       context: {
         kind: 'continuation_end', helixId: 'h1', bp: 9, diskBp: 10,
         continuationBp: 10, openSide: 1, plane: 'XY', offsetNm: 3.34,
+        facePosition: [1, 2, 3], faceNormal: [0, 0, 1],
         strandId: 's1', domainIndex: 0, direction: 'FORWARD',
         endRole: 'three_prime', overhangId: null, connections: [], deformed: false,
       },
@@ -122,5 +124,39 @@ describe('VR End tool context', () => {
       { type: 'crossover', id: 'xo1' },
       { type: 'forced_ligation', id: 'fl1' },
     ])
+  })
+
+  it('publishes a bounded exact locator without widening unresolved targets', () => {
+    const draft = { target_kind: 'end', target_identity: 'nuc:end' }
+    expect(vrToolFeedbackPayload(7, draft, {
+      toolContext: {
+        facePosition: [1, 2, 3], faceNormal: [0, 0, 2],
+        connections: [{ type: 'crossover', id: 'xo1' }], deformed: true,
+      },
+      toolContextReason: 'resolved',
+    })).toEqual({
+      tool_config_sequence: 7,
+      target_identity: 'nuc:end',
+      target_kind: 'end',
+      resolved: true,
+      reason: 'resolved',
+      face_position: [1, 2, 3],
+      face_normal: [0, 0, 2],
+      occupied: true,
+      deformed: true,
+    })
+    expect(vrToolFeedbackPayload(8, draft, {
+      toolContext: null, toolContextReason: 'no_continuation_face',
+    })).toMatchObject({
+      tool_config_sequence: 8, resolved: false,
+      reason: 'no_continuation_face', face_position: null, face_normal: null,
+      occupied: false, deformed: false,
+    })
+    expect(vrToolFeedbackPayload(9, draft, {
+      toolContext: null, toolContextReason: 'geometry_context_required',
+    })).toBeNull()
+    expect(vrToolFeedbackPayload(10, draft, {
+      toolContext: { facePosition: [1, 2, 3], faceNormal: [0, 0, 0] },
+    })).toBeNull()
   })
 })

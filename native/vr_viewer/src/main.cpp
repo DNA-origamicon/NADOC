@@ -2064,12 +2064,16 @@ class Viewer {
   public:
     explicit Viewer(SceneData scene, std::string eventPath = {},
                     std::string feedbackPath = {},
+                    std::string toolFeedbackPath = {},
                     std::string selectionLevel = "default",
                     std::vector<std::string> selectedOwnerTokens = {},
                     std::string selectedSelectionKind = "none")
         : sceneData_(std::move(scene)), eventPath_(std::move(eventPath)),
           feedbackPath_(std::move(feedbackPath)),
+          toolFeedbackPath_(std::move(toolFeedbackPath)),
           selectionLevel_(std::move(selectionLevel)) {
+        normalizationCenter_ = sceneData_.normalizationCenter;
+        normalizationScale_ = sceneData_.normalizationScale;
         const RepresentationData& initial = sceneData_.representations[
             static_cast<size_t>(sceneData_.initialRepresentation)];
         const auto identity = nadoc_vr::resolveOwnerIdentity(
@@ -2574,6 +2578,17 @@ class Viewer {
             appendMenuText(
                 "MISSING " + std::string(toolConfig_.unresolvedGeometry()),
                 -0.305F, -0.165F, 0.0038F, {0.95F, 0.48F, 0.22F});
+            if (const auto* feedback = currentToolContextFeedback()) {
+                const std::string locatorStatus = feedback->resolved
+                    ? feedback->occupied ? "FACE LOCATED - OCCUPIED" : "FACE LOCATED"
+                    : "FACE NOT LOCATED";
+                appendMenuText(locatorStatus, -0.305F, -0.125F, 0.0032F,
+                               feedback->resolved
+                                   ? feedback->occupied
+                                       ? glm::vec3(1.0F, 0.42F, 0.20F)
+                                       : glm::vec3(0.35F, 0.95F, 1.0F)
+                                   : glm::vec3(0.70F, 0.52F, 0.30F));
+            }
             appendMenuText("DESIGN UNCHANGED", -0.305F, -0.205F,
                            0.0032F, {0.65F, 0.70F, 0.78F});
             for (size_t index = 0; index < kToolConfigMenuItems.size(); ++index) {
@@ -2806,6 +2821,39 @@ class Viewer {
                  center + glm::vec3(0, 0, markerRadius), color);
         }
         if (!menuOpen_) {
+            if (const auto* feedback = currentToolContextFeedback();
+                feedback && feedback->resolved) {
+                const glm::vec3 localNormal = glm::normalize(feedback->faceNormal);
+                const glm::vec3 reference = std::abs(localNormal.z) < 0.90F
+                    ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
+                const glm::vec3 tangentA = glm::normalize(glm::cross(localNormal, reference));
+                const glm::vec3 tangentB = glm::normalize(glm::cross(localNormal, tangentA));
+                const glm::mat4 transform = manipulator_.transform();
+                auto worldPoint = [&](const glm::vec3& local) {
+                    return glm::vec3(transform * glm::vec4(local, 1.0F));
+                };
+                const glm::vec3 color = feedback->occupied
+                    ? glm::vec3(1.0F, 0.25F, 0.15F)
+                    : feedback->deformed
+                        ? glm::vec3(0.85F, 0.32F, 1.0F)
+                        : glm::vec3(0.25F, 0.95F, 1.0F);
+                constexpr int kSegments = 24;
+                constexpr float kRadius = 0.025F;
+                constexpr float kNormalLength = 0.065F;
+                for (int segment = 0; segment < kSegments; ++segment) {
+                    const float angleA = glm::two_pi<float>()
+                                       * static_cast<float>(segment) / kSegments;
+                    const float angleB = glm::two_pi<float>()
+                                       * static_cast<float>(segment + 1) / kSegments;
+                    const glm::vec3 ringA = feedback->facePosition + kRadius * (
+                        tangentA * std::cos(angleA) + tangentB * std::sin(angleA));
+                    const glm::vec3 ringB = feedback->facePosition + kRadius * (
+                        tangentA * std::cos(angleB) + tangentB * std::sin(angleB));
+                    line(worldPoint(ringA), worldPoint(ringB), color);
+                }
+                line(worldPoint(feedback->facePosition),
+                     worldPoint(feedback->facePosition + localNormal * kNormalLength), color);
+            }
             const auto anchor = glScene_->anchor(
                 selectedIdentity_, selectedOwnerTokens_, manipulator_.transform());
             if (anchor) {
@@ -3040,6 +3088,46 @@ class Viewer {
         }
     }
 
+    [[nodiscard]] const nadoc_vr::ToolContextFeedback*
+    currentToolContextFeedback() const {
+        if (!toolContextFeedback_ || !toolConfig_.active() ||
+            toolContextFeedback_->sequence != toolConfigSequence_ ||
+            toolConfig_.targetSelectionKind() != "end" ||
+            toolContextFeedback_->selectionKind != toolConfig_.targetSelectionKind() ||
+            toolContextFeedback_->identity != toolConfig_.targetIdentity()) {
+            return nullptr;
+        }
+        return &*toolContextFeedback_;
+    }
+
+    void pollToolContextFeedback() {
+        if (toolFeedbackPath_.empty() || (++toolFeedbackPollFrame_ % 3U) != 0U ||
+            !toolConfig_.active() || toolConfigSequence_ == 0) {
+            return;
+        }
+        std::ifstream input(toolFeedbackPath_, std::ios::in | std::ios::binary);
+        if (!input) return;
+        input.seekg(0, std::ios::end);
+        const std::streamoff size = input.tellg();
+        if (size < 0 || size > 4096) return;
+        input.seekg(0);
+        std::string record(static_cast<size_t>(size), '\0');
+        input.read(record.data(), size);
+        auto feedback = nadoc_vr::parseToolContextFeedback(
+            record, toolFeedbackSequence_, toolConfigSequence_);
+        if (!feedback || feedback->selectionKind != toolConfig_.targetSelectionKind() ||
+            feedback->identity != toolConfig_.targetIdentity()) {
+            return;
+        }
+        toolFeedbackSequence_ = feedback->sequence;
+        if (feedback->resolved) {
+            feedback->facePosition = nadoc_vr::sourceToNormalizedPoint(
+                feedback->facePosition, normalizationCenter_, normalizationScale_,
+                {0.0F, 0.0F, -kViewDistanceMeters});
+        }
+        toolContextFeedback_ = std::move(feedback);
+    }
+
     void syncActions(XrTime displayTime) {
         triggerClicked_.fill(false);
         if (sessionState_ != XR_SESSION_STATE_FOCUSED) return;
@@ -3157,6 +3245,7 @@ class Viewer {
         if (menuOpen_) processMenuInput();
         updateSceneHover();
         pollSelectionFeedback();
+        pollToolContextFeedback();
         updateControllerGuides();
     }
 
@@ -3355,6 +3444,9 @@ class Viewer {
     SceneData sceneData_;
     std::string eventPath_;
     std::string feedbackPath_;
+    std::string toolFeedbackPath_;
+    glm::vec3 normalizationCenter_{};
+    float normalizationScale_ = 1.0F;
     uint64_t eventSequence_ = 0;
     std::string publishedHoverIdentity_;
     uint64_t selectSequence_ = 0;
@@ -3379,6 +3471,9 @@ class Viewer {
     nadoc_vr::TimingWindow previewFrameTiming_{240};
     uint64_t feedbackSequence_ = 0;
     uint32_t feedbackPollFrame_ = 0;
+    uint64_t toolFeedbackSequence_ = 0;
+    uint32_t toolFeedbackPollFrame_ = 0;
+    std::optional<nadoc_vr::ToolContextFeedback> toolContextFeedback_;
     std::string selectedIdentity_;
     std::vector<std::string> selectedOwnerTokens_;
     std::string selectedSelectionKind_ = "none";
@@ -3441,12 +3536,14 @@ int main(int argc, char** argv) {
     if (argc < 2) {
         std::cerr << "Usage: nadoc-vr-viewer [--validate] <scene.nadocvr> "
                      "[--events <event.json>] [--feedback <feedback.txt>] "
+                     "[--tool-feedback <tool-feedback.txt>] "
                      "[--selection-level <level>] "
                      "[--selected-owner <token>]... [--selected-kind <kind>]\n";
         return 2;
     }
     std::string eventPath;
     std::string feedbackPath;
+    std::string toolFeedbackPath;
     std::string selectionLevel = "default";
     std::string selectedSelectionKind = "none";
     std::vector<std::string> selectedOwnerTokens;
@@ -3461,6 +3558,7 @@ int main(int argc, char** argv) {
         const std::string option(argv[index]);
         if (option == "--events") eventPath = argv[index + 1];
         else if (option == "--feedback") feedbackPath = argv[index + 1];
+        else if (option == "--tool-feedback") toolFeedbackPath = argv[index + 1];
         else if (option == "--selection-level") selectionLevel = argv[index + 1];
         else if (option == "--selected-owner") {
             const std::string token(argv[index + 1]);
@@ -3498,7 +3596,7 @@ int main(int argc, char** argv) {
     std::signal(SIGTERM, signalHandler);
     try {
         Viewer viewer(
-            loadScene(argv[1]), eventPath, feedbackPath, selectionLevel,
+            loadScene(argv[1]), eventPath, feedbackPath, toolFeedbackPath, selectionLevel,
             std::move(selectedOwnerTokens), std::move(selectedSelectionKind));
         return viewer.run();
     } catch (const std::exception& error) {

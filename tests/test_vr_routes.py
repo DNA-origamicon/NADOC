@@ -14,6 +14,7 @@ from backend.api import routes_vr
 from backend.api.routes_vr import (
     VRFeedbackRequest,
     VRLaunchRequest,
+    VRToolFeedbackRequest,
     VRCamera,
     _bundle_expanded_scene,
     _event_payload,
@@ -29,6 +30,7 @@ from backend.api.routes_vr import (
     _view_rotation,
     _viewer_command,
     _write_feedback,
+    _write_tool_feedback,
     _write_scene_snapshot,
 )
 from backend.core.vr_scene_contract import compare_scenes, parse_scene_contract
@@ -590,12 +592,86 @@ def test_native_feedback_writer_is_private_bounded_and_atomic(tmp_path) -> None:
         )
 
 
+def test_native_tool_feedback_rotates_exact_locator_and_fails_closed(tmp_path) -> None:
+    tool_feedback_path = tmp_path / "vr-tool-feedback.txt"
+    tool_feedback_path.write_text(
+        "NADOCVR_TOOL_FEEDBACK 1 0 0 0 0 unresolved none -\n"
+    )
+    rotation = _view_rotation(
+        VRCamera(position=[0, 0, 0], target=[1, 0, 0], up=[0, 1, 0])
+    )
+    state = {
+        "tool_feedback_path": str(tool_feedback_path),
+        "view_rotation": rotation.tolist(),
+    }
+    _write_tool_feedback(
+        state,
+        VRToolFeedbackRequest(
+            tool_config_sequence=7,
+            target_identity="nuc:s1:0:h1:3:FORWARD:0",
+            target_kind="end",
+            resolved=True,
+            reason="resolved",
+            face_position=[1, 2, 3],
+            face_normal=[1, 0, 0],
+            occupied=True,
+            deformed=False,
+        ),
+    )
+    fields = tool_feedback_path.read_text().split()
+    assert fields[:9] == [
+        "NADOCVR_TOOL_FEEDBACK", "1", "7", "1", "1", "0", "resolved",
+        "end", "nuc:s1:0:h1:3:FORWARD:0",
+    ]
+    np.testing.assert_allclose([float(value) for value in fields[9:12]], [3, 2, -1])
+    np.testing.assert_allclose([float(value) for value in fields[12:]], [0, 0, -1])
+    assert tool_feedback_path.stat().st_mode & 0o777 == 0o600
+
+    _write_tool_feedback(
+        state,
+        VRToolFeedbackRequest(
+            tool_config_sequence=8,
+            target_identity="nuc:s1:0:h1:3:FORWARD:0",
+            target_kind="end",
+            resolved=False,
+            reason="no_continuation_face",
+        ),
+    )
+    assert tool_feedback_path.read_text() == (
+        "NADOCVR_TOOL_FEEDBACK 1 8 0 0 0 no_continuation_face end "
+        "nuc:s1:0:h1:3:FORWARD:0\n"
+    )
+
+    invalid = [
+        dict(resolved=True, reason="resolved", face_position=None, face_normal=None),
+        dict(
+            resolved=True, reason="resolved", face_position=[0, 0, 0],
+            face_normal=[0, 0, 0],
+        ),
+        dict(
+            resolved=False, reason="resolved", face_position=None, face_normal=None,
+        ),
+    ]
+    for values in invalid:
+        with pytest.raises(HTTPException, match="Invalid VR tool feedback"):
+            _write_tool_feedback(
+                state,
+                VRToolFeedbackRequest(
+                    tool_config_sequence=9,
+                    target_identity="nuc:s1:0:h1:3:FORWARD:0",
+                    target_kind="end",
+                    **values,
+                ),
+            )
+
+
 def test_native_launch_passes_initial_selection_as_opaque_arguments(tmp_path) -> None:
     token = _owner_token("domain", "strand:a b", 2)
     command = _viewer_command(
         tmp_path / "scene.nadocvr",
         tmp_path / "event.json",
         tmp_path / "feedback.txt",
+        tmp_path / "tool-feedback.txt",
         VRLaunchRequest(
             selection_level="domain",
             selected_owner_tokens=[token],
@@ -604,6 +680,7 @@ def test_native_launch_passes_initial_selection_as_opaque_arguments(tmp_path) ->
     )
     assert command[-4:] == ["--selected-owner", token, "--selected-kind", "domain"]
     assert command[command.index("--selection-level") + 1] == "domain"
+    assert command[command.index("--tool-feedback") + 1].endswith("tool-feedback.txt")
 
     with pytest.raises(HTTPException, match="initial VR selection"):
         routes_vr.launch_vr(
