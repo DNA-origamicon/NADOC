@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { bondRefForCone, coneForBondRef, crossoverRefForArc, endRefForEntry } from './selection_hit_resolver.js'
+import {
+  bondRefForCone, coneForBondRef, crossoverRefForArc, endRefForEntry, vrPrimitiveOwner,
+} from './selection_hit_resolver.js'
 
 const nuc = (bp, extra = {}) => ({ helix_id: 'h1', bp_index: bp, direction: 'FORWARD', ...extra })
 
@@ -11,6 +13,41 @@ describe('pure selection hit resolution', () => {
     expect(crossoverRefForArc({ crossover_id: 'f1' }, design))
       .toEqual({ kind: 'crossover', id: 'f1', subtype: 'forced_ligation' })
     expect(crossoverRefForArc({ crossover_id: 'gone' }, design)).toBeNull()
+  })
+
+  it('resolves native nucleotide identities by live candidate, including colon IDs', () => {
+    const nucleotide = {
+      strand_id: 'strand:a', domain_index: 2, helix_id: 'helix:b', bp_index: 7,
+      direction: 'REVERSE', copy_k: 1,
+    }
+    const owner = vrPrimitiveOwner(
+      'nuc:strand:a:2:helix:b:7:REVERSE:1:slab',
+      { geometry: [nucleotide] },
+    )
+    expect(owner).toEqual({
+      kind: 'nucleotide', nucleotide,
+      ref: { kind: 'base', key: 'helix:b:7:REVERSE:1' },
+    })
+  })
+
+  it('resolves crossover, forced-ligation, warning, and domain primitives', () => {
+    const design = {
+      crossovers: [{ id: 'xo:a' }],
+      forced_ligations: [{ id: 'fl:b' }],
+      strands: [{ id: 'strand:c', domains: [{ helix_id: 'helix:d' }] }],
+    }
+    expect(vrPrimitiveOwner('crossover:xo:a:direct', { design })?.ref).toEqual(
+      { kind: 'crossover', id: 'xo:a', subtype: 'crossover' },
+    )
+    expect(vrPrimitiveOwner('warning:xo:a:outline:0', { design })?.ref).toEqual(
+      { kind: 'crossover', id: 'xo:a', subtype: 'crossover' },
+    )
+    expect(vrPrimitiveOwner('ligation:fl:b:direct', { design })?.ref).toEqual(
+      { kind: 'crossover', id: 'fl:b', subtype: 'forced_ligation' },
+    )
+    expect(vrPrimitiveOwner(
+      'segment:helix:d:strand:c:0:3:9:axis', { design },
+    )?.ref).toEqual({ kind: 'domain', strandId: 'strand:c', domainIndex: 0 })
   })
 
   it('resolves only terminal beads as End refs', () => {

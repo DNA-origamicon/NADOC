@@ -42,7 +42,9 @@ import {
 } from './base_pick.js'
 import { flexAnchorKey } from './flexible_arcs.js'
 import { selectedCrossoverRefs, selectedEndRefs } from './selection_model.js'
-import { bondRefForCone, coneForBondRef, crossoverRefForArc, endRefForEntry } from './selection_hit_resolver.js'
+import {
+  bondRefForCone, coneForBondRef, crossoverRefForArc, endRefForEntry, vrPrimitiveOwner,
+} from './selection_hit_resolver.js'
 import { selectionHighlightDescriptor } from './selection_highlight_model.js'
 import { referenceStrandInteractionHidden } from './reference_navigation.js'
 
@@ -2325,6 +2327,59 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       designRenderer.clearPreviewGlow()
       designRenderer.setPreviewArc(target.arc.getPositions?.() ?? [])
     }
+  }
+
+  /** Project a native-VR stable identity into the existing yellow desktop preview.
+   * This is renderer-only transient state: canonical selection remains untouched. */
+  function _previewVrIdentity(identity) {
+    const state = store.getState()
+    const owner = vrPrimitiveOwner(identity, {
+      geometry: state.currentGeometry,
+      design: state.currentDesign,
+    })
+    _clearHoverPreview()
+    if (!owner) return null
+
+    const backboneEntries = designRenderer.getBackboneEntries()
+    let entries = []
+    if (owner.kind === 'nucleotide') {
+      const entry = backboneEntries.find(candidate => candidate.nuc === owner.nucleotide)
+        ?? backboneEntries.find(candidate =>
+          baseKey(candidate.nuc, candidate._copy) === owner.ref.key)
+      if (!entry) return owner
+      if (_selLevel === 'base') entries = [entry]
+      else if (_selLevel === 'end') {
+        if (entry.nuc.is_five_prime || entry.nuc.is_three_prime) entries = [entry]
+      } else if (_selLevel === 'strand' || _selLevel === 'domain' || _selLevel === 'cluster') {
+        entries = _previewSetForLevel(entry)?.beads ?? []
+      } else if (_selLevel === 'default') {
+        entries = backboneEntries.filter(item => item.nuc.strand_id === entry.nuc.strand_id)
+      }
+    } else if (owner.kind === 'domain') {
+      if (!['base', 'end', 'xover'].includes(_selLevel)) {
+        entries = backboneEntries.filter(entry =>
+          entry.nuc.strand_id === owner.ref.strandId &&
+          (entry.nuc.domain_index ?? 0) === owner.ref.domainIndex)
+      }
+    } else if (owner.kind === 'crossover' &&
+               (_selLevel === 'xover' || _selLevel === 'default')) {
+      const arc = getUnfoldView?.()?.getArcEntries?.()
+        ?.find(candidate => candidate.crossover_id === owner.ref.id)
+      if (arc) {
+        _hoverArc = arc
+        _hoverKey = `vr:${identity}`
+        designRenderer.setPreviewArc(arc.getPositions?.() ?? [])
+      }
+      return owner
+    }
+
+    if (entries.length) {
+      _hoverKey = `vr:${identity}`
+      designRenderer.setPreviewGlow(entries.map(entry => ({
+        pos: _instWorld(entry.instMesh, entry.id, new THREE.Vector3()),
+      })))
+    }
+    return owner
   }
 
   // Unified backbone-bead-level hit handler — used by a real bead hit AND by the
@@ -4624,6 +4679,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     /** The active selectionLevel ('default'|'cluster'|'strand'|'domain'|'end'|'xover'). */
     getSelectionLevel() { return _selLevel },
+
+    /** Read-only native-VR hover projection; never dispatches a selection intent. */
+    previewVRIdentity(identity) { return _previewVrIdentity(identity) },
 
     /** Clear committed selection and its projected renderer state. */
     clearSelection() { _clearAll() },

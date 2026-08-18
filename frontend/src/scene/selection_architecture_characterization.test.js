@@ -87,6 +87,17 @@ describe('selection architecture — canonical enforcement', () => {
     expect(manager).toContain('selectedEndRefs(store.getState())')
   })
 
+  it('keeps native VR hover renderer-only until an explicit click intent exists', () => {
+    const preview = manager.slice(
+      manager.indexOf('function _previewVrIdentity'),
+      manager.indexOf('// Unified backbone-bead-level hit handler'),
+    )
+    expect(preview).toContain('designRenderer.setPreviewGlow')
+    expect(preview).toContain('designRenderer.setPreviewArc')
+    expect(preview).not.toContain('selectionController')
+    expect(preview).not.toContain('store.setState')
+  })
+
   it('enforces the explicit design/assembly selection boundary', () => {
     expect(main).toContain("selectionController.reload('assembly')")
     expect(main).toContain("selectionController.reload('design')")

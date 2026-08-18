@@ -1,6 +1,76 @@
 /** Pure hit-metadata → canonical SelectionRef resolution. */
 
-import { baseKey } from './base_ref.js'
+import { atomBaseKey, baseKey } from './base_ref.js'
+
+function decodedIdentity(identity) {
+  if (typeof identity !== 'string' || !identity) return null
+  try { return decodeURIComponent(identity) } catch { return null }
+}
+
+function nucleotidePrimitiveOwner(nuc) {
+  const copy = nuc?.copy_k || nuc?.ext_k || 0
+  return [
+    'nuc',
+    nuc?.strand_id || '_',
+    Number(nuc?.domain_index || 0),
+    nuc?.helix_id || '_',
+    Number(nuc?.bp_index || 0),
+    nuc?.direction || '_',
+    Number(copy),
+  ].join(':')
+}
+
+/** Resolve a native scene identity against live topology without delimiter parsing.
+ * IDs may themselves contain colons, so candidates are reconstructed from the live
+ * geometry/design and compared as complete semantic-owner prefixes. */
+export function vrPrimitiveOwner(identity, { geometry = [], design = null } = {}) {
+  const decoded = decodedIdentity(identity)
+  if (!decoded) return null
+
+  for (const nucleotide of geometry ?? []) {
+    const owner = nucleotidePrimitiveOwner(nucleotide)
+    if (decoded === owner || decoded.startsWith(`${owner}:`)) {
+      const key = atomBaseKey(nucleotide)
+      return key ? {
+        kind: 'nucleotide',
+        nucleotide,
+        ref: { kind: 'base', key },
+      } : null
+    }
+  }
+
+  const connectionCollections = [
+    ['crossover', design?.crossovers ?? [], 'crossover'],
+    ['ligation', design?.forced_ligations ?? [], 'forced_ligation'],
+    ['warning', design?.crossovers ?? [], 'crossover'],
+  ]
+  for (const [prefix, connections, subtype] of connectionCollections) {
+    // Full-prefix comparison handles connection IDs containing ':' safely.
+    const match = [...connections]
+      .sort((a, b) => String(b.id).length - String(a.id).length)
+      .find(connection => decoded.startsWith(`${prefix}:${connection.id}:`))
+    if (match) {
+      return {
+        kind: 'crossover',
+        ref: { kind: 'crossover', id: match.id, subtype },
+      }
+    }
+  }
+
+  for (const strand of design?.strands ?? []) {
+    for (let domainIndex = 0; domainIndex < (strand.domains?.length ?? 0); domainIndex++) {
+      const domain = strand.domains[domainIndex]
+      const owner = `segment:${domain.helix_id}:${strand.id}:${domainIndex}:`
+      if (decoded.startsWith(owner)) {
+        return {
+          kind: 'domain',
+          ref: { kind: 'domain', strandId: strand.id, domainIndex },
+        }
+      }
+    }
+  }
+  return null
+}
 
 export function crossoverRefForArc(arc, design) {
   const id = arc?.crossover_id
