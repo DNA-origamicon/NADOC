@@ -345,6 +345,27 @@ void toolContextFeedbackIsExactSequencedAndFinite() {
         7, 8));
 }
 
+void toolPreflightFeedbackIsTargetBoundSequencedAndStrict() {
+    const auto ok = nadoc_vr::parseToolPreflightFeedback(
+        "NADOCVR_PREFLIGHT 1 12 ok extrude end nuc:end validated\n", 12);
+    require(ok && ok->status == "ok" && ok->mode == "extrude" &&
+            ok->selectionKind == "end" && ok->identity == "nuc:end" &&
+            ok->reason == "validated");
+    const auto noTarget = nadoc_vr::parseToolPreflightFeedback(
+        "NADOCVR_PREFLIGHT 1 13 block bend none - stale_target\n", 13);
+    require(noTarget && noTarget->identity.empty());
+    require(!nadoc_vr::parseToolPreflightFeedback(
+        "NADOCVR_PREFLIGHT 1 11 ok extrude end nuc:end validated\n", 12));
+    require(!nadoc_vr::parseToolPreflightFeedback(
+        "NADOCVR_PREFLIGHT 1 12 ok extrude cluster cluster:c1 validated\n", 12));
+    require(!nadoc_vr::parseToolPreflightFeedback(
+        "NADOCVR_PREFLIGHT 1 12 ready extrude end nuc:end validated\n", 12));
+    require(!nadoc_vr::parseToolPreflightFeedback(
+        "NADOCVR_PREFLIGHT 1 12 block twist end nuc:end bad-reason\n", 12));
+    require(!nadoc_vr::parseToolPreflightFeedback(
+        "NADOCVR_PREFLIGHT 1 12 block twist end nuc:end backend_block extra\n", 12));
+}
+
 void planePickFeedbackIsTargetBoundSequencedAndStrict() {
     const auto accepted = nadoc_vr::parsePlanePickFeedback(
         "NADOCVR_PLANE_FEEDBACK 3 9 4 1 resolved a end nuc:end nuc:pick "
@@ -552,6 +573,7 @@ int main() {
     halfCylinderPickingMatchesTheRenderedPositiveHalf();
     canonicalSelectionFeedbackIsStrictAndSequenced();
     toolContextFeedbackIsExactSequencedAndFinite();
+    toolPreflightFeedbackIsTargetBoundSequencedAndStrict();
     planePickFeedbackIsTargetBoundSequencedAndStrict();
     canonicalOwnerFallbackUsesFeedbackSpecificityAndSceneOrder();
     ownerBoundsAreStableAndFollowTheWorldTransform();

@@ -191,3 +191,61 @@ export function buildVRParameterizedToolPlan(draft, {
     ? _extrusionPlan(config, toolTarget)
     : _deformationPlan(config, toolTarget, { design, geometry })
 }
+
+function _preflightFeedback(config, sequence, status, reason) {
+  return {
+    tool_config_sequence: sequence,
+    target_identity: config.target_identity,
+    target_kind: config.target_kind,
+    tool_mode: config.mode,
+    status,
+    reason,
+  }
+}
+
+/** Evaluate one descriptor through a read-only desktop API and return bounded
+ * native feedback. Sequence/target fields let native reject late responses.
+ */
+export async function evaluateVRToolPreflight(sequence, draft, {
+  toolTarget = null,
+  design = null,
+  geometry = [],
+  api = null,
+} = {}) {
+  const config = normalizeVRToolConfig(draft)
+  if (!Number.isSafeInteger(sequence) || sequence < 1 || !config) return null
+  const described = buildVRParameterizedToolPlan(config, {
+    toolTarget, design, geometry,
+  })
+  if (!described.accepted) {
+    return {
+      feedback: _preflightFeedback(
+        config, sequence, 'block', described.reason,
+      ),
+      message: described.reason,
+      plan: null,
+    }
+  }
+  let result = null
+  try {
+    result = described.plan.kind === 'extrude_continuation'
+      ? await api?.validateBundleContinuation?.(
+          described.plan.preflight.arguments,
+        )
+      : await api?.validateDeformation?.(
+          described.plan.preflight.arguments,
+        )
+  } catch {
+    result = null
+  }
+  const status = ['ok', 'warn', 'block'].includes(result?.status)
+    ? result.status : 'error'
+  const reason = status === 'ok' ? 'validated'
+    : status === 'warn' ? 'backend_warning'
+      : status === 'block' ? 'backend_block' : 'request_failed'
+  return {
+    feedback: _preflightFeedback(config, sequence, status, reason),
+    message: typeof result?.message === 'string' ? result.message : '',
+    plan: described.plan,
+  }
+}

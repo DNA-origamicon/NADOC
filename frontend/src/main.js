@@ -21,6 +21,7 @@ import {
   initialVRToolConfigState, reduceVRToolConfig, vrPlaneFeedbackPayload,
 } from './scene/vr_tool_config.js'
 import { vrToolFeedbackPayload } from './scene/vr_tool_context.js'
+import { evaluateVRToolPreflight } from './scene/vr_tool_execution_plan.js'
 import { createGlowLayer }           from './scene/glow_layer.js'
 import { initDesignRenderer }        from './scene/design_renderer.js'
 import { deferrableContextMenu }      from './scene/right_click_menu.js'
@@ -5849,6 +5850,16 @@ async function main() {
         if (result.accepted && draft?.target_kind === 'end') {
           const feedback = vrToolFeedbackPayload(event.sequence, draft, result.state)
           if (feedback) api.sendVRToolFeedback(feedback).catch(() => {})
+        }
+        if (draft) {
+          const { currentDesign, currentGeometry } = store.getState()
+          evaluateVRToolPreflight(event.sequence, draft, {
+            toolTarget, design: currentDesign, geometry: currentGeometry, api,
+          }).then(preflight => {
+            if (preflight?.feedback) {
+              api.sendVRToolPreflightFeedback(preflight.feedback).catch(() => {})
+            }
+          }).catch(() => {})
         }
       } else if (event?.type === 'plane_pick') {
         const draft = _vrToolConfigState.draft

@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstdint>
 #include <cmath>
 #include <limits>
@@ -91,6 +92,15 @@ struct ToolContextFeedback {
     glm::vec3 expandedFacePosition{};
     glm::vec3 expandedFaceNormal{};
     glm::vec3 expandedPreviewOrigin{};
+};
+
+struct ToolPreflightFeedback {
+    uint64_t toolConfigSequence = 0;
+    std::string status;
+    std::string mode;
+    std::string selectionKind = "none";
+    std::string identity;
+    std::string reason;
 };
 
 struct PlanePickFeedback {
@@ -753,6 +763,45 @@ inline std::optional<ToolContextFeedback> parseToolContextFeedback(
     }
     std::string trailing;
     if (fields >> trailing) return std::nullopt;
+    return result;
+}
+
+inline std::optional<ToolPreflightFeedback> parseToolPreflightFeedback(
+    const std::string& record, uint64_t expectedToolConfigSequence) {
+    std::istringstream fields(record);
+    std::string magic;
+    int version = 0;
+    ToolPreflightFeedback result;
+    std::string trailing;
+    if (!(fields >> magic >> version >> result.toolConfigSequence >> result.status
+                 >> result.mode >> result.selectionKind >> result.identity
+                 >> result.reason) ||
+        magic != "NADOCVR_PREFLIGHT" || version != 1 ||
+        result.toolConfigSequence != expectedToolConfigSequence ||
+        result.identity.size() > 2048 || result.reason.empty() ||
+        result.reason.size() > 64 || (fields >> trailing)) {
+        return std::nullopt;
+    }
+    static constexpr std::array<const char*, 4> statuses = {
+        "ok", "warn", "block", "error",
+    };
+    static constexpr std::array<const char*, 3> modes = {
+        "extrude", "twist", "bend",
+    };
+    if (std::find(statuses.begin(), statuses.end(), result.status) == statuses.end() ||
+        std::find(modes.begin(), modes.end(), result.mode) == modes.end() ||
+        !std::all_of(result.reason.begin(), result.reason.end(), [](unsigned char value) {
+            return std::islower(value) || std::isdigit(value) || value == '_';
+        })) {
+        return std::nullopt;
+    }
+    if (result.identity == "-") result.identity.clear();
+    const bool noTarget = result.selectionKind == "none" && result.identity.empty();
+    const bool compatibleTarget = !result.identity.empty() && (
+        (result.mode == "extrude" && result.selectionKind == "end") ||
+        ((result.mode == "twist" || result.mode == "bend") &&
+         (result.selectionKind == "cluster" || result.selectionKind == "end")));
+    if (!noTarget && !compatibleTarget) return std::nullopt;
     return result;
 }
 

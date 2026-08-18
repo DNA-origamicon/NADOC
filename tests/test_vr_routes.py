@@ -15,6 +15,7 @@ from backend.api.routes_vr import (
     VRFeedbackRequest,
     VRLaunchRequest,
     VRPlaneFeedbackRequest,
+    VRToolPreflightFeedbackRequest,
     VRToolFeedbackRequest,
     VRCamera,
     _bundle_expanded_scene,
@@ -32,6 +33,7 @@ from backend.api.routes_vr import (
     _viewer_command,
     _write_feedback,
     _write_plane_feedback,
+    _write_preflight_feedback,
     _write_tool_feedback,
     _write_scene_snapshot,
 )
@@ -832,6 +834,57 @@ def test_native_plane_feedback_is_private_target_bound_and_fail_closed(tmp_path)
             )
 
 
+def test_native_tool_preflight_feedback_is_private_target_bound_and_strict(
+    tmp_path,
+) -> None:
+    feedback_path = tmp_path / "vr-preflight-feedback.txt"
+    state = {"preflight_feedback_path": str(feedback_path)}
+    _write_preflight_feedback(
+        state,
+        VRToolPreflightFeedbackRequest(
+            tool_config_sequence=12,
+            target_identity="nuc:end",
+            target_kind="end",
+            tool_mode="extrude",
+            status="block",
+            reason="backend_block",
+        ),
+    )
+    assert feedback_path.read_text() == (
+        "NADOCVR_PREFLIGHT 1 12 block extrude end nuc:end backend_block\n"
+    )
+    assert feedback_path.stat().st_mode & 0o777 == 0o600
+    assert not feedback_path.with_name(f"{feedback_path.name}.next").exists()
+
+    _write_preflight_feedback(
+        state,
+        VRToolPreflightFeedbackRequest(
+            tool_config_sequence=13,
+            target_identity=None,
+            target_kind="none",
+            tool_mode="bend",
+            status="block",
+            reason="stale_target",
+        ),
+    )
+    assert feedback_path.read_text() == (
+        "NADOCVR_PREFLIGHT 1 13 block bend none - stale_target\n"
+    )
+
+    with pytest.raises(HTTPException, match="Invalid VR tool preflight feedback"):
+        _write_preflight_feedback(
+            state,
+            VRToolPreflightFeedbackRequest(
+                tool_config_sequence=14,
+                target_identity="cluster:c1",
+                target_kind="cluster",
+                tool_mode="extrude",
+                status="ok",
+                reason="validated",
+            ),
+        )
+
+
 def test_native_launch_passes_initial_selection_as_opaque_arguments(tmp_path) -> None:
     token = _owner_token("domain", "strand:a b", 2)
     command = _viewer_command(
@@ -840,6 +893,7 @@ def test_native_launch_passes_initial_selection_as_opaque_arguments(tmp_path) ->
         tmp_path / "feedback.txt",
         tmp_path / "tool-feedback.txt",
         tmp_path / "plane-feedback.txt",
+        tmp_path / "preflight-feedback.txt",
         VRLaunchRequest(
             selection_level="domain",
             selected_owner_tokens=[token],
@@ -850,6 +904,9 @@ def test_native_launch_passes_initial_selection_as_opaque_arguments(tmp_path) ->
     assert command[command.index("--selection-level") + 1] == "domain"
     assert command[command.index("--tool-feedback") + 1].endswith("tool-feedback.txt")
     assert command[command.index("--plane-feedback") + 1].endswith("plane-feedback.txt")
+    assert command[command.index("--preflight-feedback") + 1].endswith(
+        "preflight-feedback.txt"
+    )
 
     with pytest.raises(HTTPException, match="initial VR selection"):
         routes_vr.launch_vr(

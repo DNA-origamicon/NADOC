@@ -2078,6 +2078,7 @@ class Viewer {
                     std::string feedbackPath = {},
                     std::string toolFeedbackPath = {},
                     std::string planeFeedbackPath = {},
+                    std::string preflightFeedbackPath = {},
                     std::string selectionLevel = "default",
                     std::vector<std::string> selectedOwnerTokens = {},
                     std::string selectedSelectionKind = "none")
@@ -2085,6 +2086,7 @@ class Viewer {
           feedbackPath_(std::move(feedbackPath)),
           toolFeedbackPath_(std::move(toolFeedbackPath)),
           planeFeedbackPath_(std::move(planeFeedbackPath)),
+          preflightFeedbackPath_(std::move(preflightFeedbackPath)),
           selectionLevel_(std::move(selectionLevel)) {
         normalizationCenter_ = sceneData_.normalizationCenter;
         normalizationScale_ = sceneData_.normalizationScale;
@@ -2662,8 +2664,24 @@ class Viewer {
                                        : glm::vec3(0.35F, 0.95F, 1.0F)
                                    : glm::vec3(0.70F, 0.52F, 0.30F));
             }
-            appendMenuText("DESIGN UNCHANGED", -0.305F, -0.205F,
-                           0.0032F, {0.65F, 0.70F, 0.78F});
+            const auto* preflight = currentToolPreflightFeedback();
+            std::string preflightStatus = preflight
+                ? "PREFLIGHT " + preflight->status + " - " + preflight->reason
+                : "PREFLIGHT WAITING - DESIGN UNCHANGED";
+            std::transform(
+                preflightStatus.begin(), preflightStatus.end(),
+                preflightStatus.begin(), [](unsigned char value) {
+                    return value == '_' ? ' ' : static_cast<char>(std::toupper(value));
+                });
+            const glm::vec3 preflightColor = !preflight
+                ? glm::vec3(0.65F, 0.70F, 0.78F)
+                : preflight->status == "ok"
+                    ? glm::vec3(0.35F, 0.95F, 0.58F)
+                    : preflight->status == "warn"
+                        ? glm::vec3(0.95F, 0.72F, 0.28F)
+                        : glm::vec3(1.0F, 0.42F, 0.20F);
+            appendMenuText(preflightStatus, -0.305F, -0.205F,
+                           0.0030F, preflightColor);
             for (size_t index = 0; index < kToolConfigMenuItems.size(); ++index) {
                 glm::vec3 color = index < enabled.size() && !enabled[index]
                     ? glm::vec3(0.30F, 0.32F, 0.36F)
@@ -3153,6 +3171,7 @@ class Viewer {
 
     void publishToolConfiguration() {
         ++toolConfigSequence_;
+        toolPreflightFeedback_.reset();
         publishEventState();
     }
 
@@ -3323,6 +3342,19 @@ class Viewer {
         return &*toolContextFeedback_;
     }
 
+    [[nodiscard]] const nadoc_vr::ToolPreflightFeedback*
+    currentToolPreflightFeedback() const {
+        if (!toolPreflightFeedback_ || !toolConfig_.active() ||
+            toolPreflightFeedback_->toolConfigSequence != toolConfigSequence_ ||
+            toolPreflightFeedback_->mode != nadoc_vr::toolModeName(toolConfig_.mode()) ||
+            toolPreflightFeedback_->selectionKind !=
+                toolConfig_.targetSelectionKind() ||
+            toolPreflightFeedback_->identity != toolConfig_.targetIdentity()) {
+            return nullptr;
+        }
+        return &*toolPreflightFeedback_;
+    }
+
     void pollToolContextFeedback() {
         if (toolFeedbackPath_.empty() || (++toolFeedbackPollFrame_ % 3U) != 0U ||
             !toolConfig_.active() || toolConfigSequence_ == 0) {
@@ -3364,6 +3396,40 @@ class Viewer {
             }
         }
         toolContextFeedback_ = std::move(feedback);
+    }
+
+    void pollToolPreflightFeedback() {
+        if (preflightFeedbackPath_.empty() ||
+            (++preflightFeedbackPollFrame_ % 3U) != 0U ||
+            !toolConfig_.active() || toolConfigSequence_ == 0) {
+            return;
+        }
+        std::ifstream input(preflightFeedbackPath_, std::ios::in | std::ios::binary);
+        if (!input) return;
+        input.seekg(0, std::ios::end);
+        const std::streamoff size = input.tellg();
+        if (size <= 0 || size > 4096) return;
+        input.seekg(0);
+        std::string record(static_cast<size_t>(size), '\0');
+        input.read(record.data(), size);
+        auto feedback = nadoc_vr::parseToolPreflightFeedback(
+            record, toolConfigSequence_);
+        if (!feedback ||
+            feedback->mode != nadoc_vr::toolModeName(toolConfig_.mode()) ||
+            feedback->selectionKind != toolConfig_.targetSelectionKind() ||
+            feedback->identity != toolConfig_.targetIdentity()) {
+            return;
+        }
+        const bool changed = !toolPreflightFeedback_ ||
+            toolPreflightFeedback_->toolConfigSequence !=
+                feedback->toolConfigSequence ||
+            toolPreflightFeedback_->status != feedback->status ||
+            toolPreflightFeedback_->reason != feedback->reason;
+        toolPreflightFeedback_ = std::move(feedback);
+        if (changed) {
+            std::cout << "VR PREFLIGHT " << toolPreflightFeedback_->status
+                      << " " << toolPreflightFeedback_->reason << '\n';
+        }
     }
 
     void pollPlanePickFeedback() {
@@ -3566,6 +3632,7 @@ class Viewer {
         pollSelectionFeedback();
         pollToolContextFeedback();
         pollPlanePickFeedback();
+        pollToolPreflightFeedback();
         updateControllerGuides();
     }
 
@@ -3767,6 +3834,7 @@ class Viewer {
     std::string feedbackPath_;
     std::string toolFeedbackPath_;
     std::string planeFeedbackPath_;
+    std::string preflightFeedbackPath_;
     glm::vec3 normalizationCenter_{};
     float normalizationScale_ = 1.0F;
     uint64_t eventSequence_ = 0;
@@ -3796,6 +3864,8 @@ class Viewer {
     uint64_t toolFeedbackSequence_ = 0;
     uint32_t toolFeedbackPollFrame_ = 0;
     std::optional<nadoc_vr::ToolContextFeedback> toolContextFeedback_;
+    uint32_t preflightFeedbackPollFrame_ = 0;
+    std::optional<nadoc_vr::ToolPreflightFeedback> toolPreflightFeedback_;
     uint64_t planePickSequence_ = 0;
     uint64_t activePlanePickSequence_ = 0;
     uint64_t planePickConfigSequence_ = 0;
@@ -3870,6 +3940,7 @@ int main(int argc, char** argv) {
                      "[--events <event.json>] [--feedback <feedback.txt>] "
                      "[--tool-feedback <tool-feedback.txt>] "
                      "[--plane-feedback <plane-feedback.txt>] "
+                     "[--preflight-feedback <preflight-feedback.txt>] "
                      "[--selection-level <level>] "
                      "[--selected-owner <token>]... [--selected-kind <kind>]\n";
         return 2;
@@ -3878,6 +3949,7 @@ int main(int argc, char** argv) {
     std::string feedbackPath;
     std::string toolFeedbackPath;
     std::string planeFeedbackPath;
+    std::string preflightFeedbackPath;
     std::string selectionLevel = "default";
     std::string selectedSelectionKind = "none";
     std::vector<std::string> selectedOwnerTokens;
@@ -3894,6 +3966,7 @@ int main(int argc, char** argv) {
         else if (option == "--feedback") feedbackPath = argv[index + 1];
         else if (option == "--tool-feedback") toolFeedbackPath = argv[index + 1];
         else if (option == "--plane-feedback") planeFeedbackPath = argv[index + 1];
+        else if (option == "--preflight-feedback") preflightFeedbackPath = argv[index + 1];
         else if (option == "--selection-level") selectionLevel = argv[index + 1];
         else if (option == "--selected-owner") {
             const std::string token(argv[index + 1]);
@@ -3932,7 +4005,7 @@ int main(int argc, char** argv) {
     try {
         Viewer viewer(
             loadScene(argv[1]), eventPath, feedbackPath, toolFeedbackPath,
-            planeFeedbackPath, selectionLevel,
+            planeFeedbackPath, preflightFeedbackPath, selectionLevel,
             std::move(selectedOwnerTokens), std::move(selectedSelectionKind));
         return viewer.run();
     } catch (const std::exception& error) {

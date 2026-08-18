@@ -136,6 +136,15 @@ class VRToolFeedbackRequest(BaseModel):
     footprint_resolved: bool = False
 
 
+class VRToolPreflightFeedbackRequest(BaseModel):
+    tool_config_sequence: int = Field(ge=1)
+    target_identity: Optional[str] = Field(default=None, max_length=2048)
+    target_kind: SelectionKind
+    tool_mode: Literal["extrude", "twist", "bend"]
+    status: Literal["ok", "warn", "block", "error"]
+    reason: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9_]+$")
+
+
 VRPlanePickReason = Literal[
     "resolved",
     "invalid_primitive",
@@ -2746,6 +2755,7 @@ def _cleanup_after_process(
     feedback_path: Path,
     tool_feedback_path: Path,
     plane_feedback_path: Path,
+    preflight_feedback_path: Path,
 ) -> None:
     process.wait()
     scene_path.unlink(missing_ok=True)
@@ -2753,6 +2763,7 @@ def _cleanup_after_process(
     feedback_path.unlink(missing_ok=True)
     tool_feedback_path.unlink(missing_ok=True)
     plane_feedback_path.unlink(missing_ok=True)
+    preflight_feedback_path.unlink(missing_ok=True)
     with _STATE_LOCK:
         state = _read_state()
         if state and int(state["pid"]) == process.pid:
@@ -3475,12 +3486,72 @@ def vr_plane_feedback(body: VRPlaneFeedbackRequest, request: Request) -> dict:
     }
 
 
+def _write_preflight_feedback(
+    state: dict | None, body: VRToolPreflightFeedbackRequest
+) -> None:
+    """Atomically publish one target-bound, read-only tool preflight verdict."""
+    if not state or not state.get("preflight_feedback_path"):
+        raise HTTPException(409, detail="Native VR is not running.")
+    identity = body.target_identity or "-"
+    compatible = (
+        (body.target_kind == "none" and body.target_identity is None)
+        or (
+            body.target_kind != "none"
+            and body.target_identity is not None
+            and (
+                (body.tool_mode == "extrude" and body.target_kind == "end")
+                or (
+                    body.tool_mode in {"twist", "bend"}
+                    and body.target_kind in {"cluster", "end"}
+                )
+            )
+        )
+    )
+    if (
+        not compatible
+        or any(character.isspace() for character in identity)
+        or len(identity) > 2048
+    ):
+        raise HTTPException(422, detail="Invalid VR tool preflight feedback.")
+    record = (
+        f"NADOCVR_PREFLIGHT 1 {body.tool_config_sequence} {body.status} "
+        f"{body.tool_mode} {body.target_kind} {identity} {body.reason}\n"
+    )
+    if len(record.encode()) > 4096:
+        raise HTTPException(422, detail="Invalid VR tool preflight feedback.")
+    path = Path(state["preflight_feedback_path"])
+    temporary = path.with_name(f"{path.name}.next")
+    with _TOOL_FEEDBACK_LOCK:
+        try:
+            temporary.write_text(record)
+            temporary.chmod(0o600)
+            os.replace(temporary, path)
+        except OSError as exc:
+            temporary.unlink(missing_ok=True)
+            raise HTTPException(
+                503, detail="Could not publish VR tool preflight."
+            ) from exc
+
+
+@router.post("/vr/tool-preflight-feedback")
+def vr_tool_preflight_feedback(
+    body: VRToolPreflightFeedbackRequest, request: Request
+) -> dict:
+    _require_local(request)
+    _write_preflight_feedback(_read_state(), body)
+    return {
+        "acknowledged": True,
+        "tool_config_sequence": body.tool_config_sequence,
+    }
+
+
 def _viewer_command(
     scene_path: Path,
     event_path: Path,
     feedback_path: Path,
     tool_feedback_path: Path,
     plane_feedback_path: Path,
+    preflight_feedback_path: Path,
     body: VRLaunchRequest,
 ) -> list[str]:
     command = [
@@ -3496,6 +3567,8 @@ def _viewer_command(
         str(tool_feedback_path),
         "--plane-feedback",
         str(plane_feedback_path),
+        "--preflight-feedback",
+        str(preflight_feedback_path),
     ]
     for token in body.selected_owner_tokens:
         command.extend(["--selected-owner", token])
@@ -3653,13 +3726,24 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             )
             plane_feedback_path = Path(plane_feedback_file.name)
         plane_feedback_path.chmod(0o600)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            prefix="nadoc-vr-preflight-feedback-",
+            suffix=".txt",
+            delete=False,
+        ) as preflight_feedback_file:
+            preflight_feedback_file.write(
+                "NADOCVR_PREFLIGHT 1 0 error extrude none - waiting\n"
+            )
+            preflight_feedback_path = Path(preflight_feedback_file.name)
+        preflight_feedback_path.chmod(0o600)
 
         log = _LOG_PATH.open("ab")
         try:
             process = subprocess.Popen(
                 _viewer_command(
                     scene_path, event_path, feedback_path, tool_feedback_path,
-                    plane_feedback_path, body
+                    plane_feedback_path, preflight_feedback_path, body
                 ),
                 cwd=_REPO_ROOT,
                 env=_build_environment(),
@@ -3676,6 +3760,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             feedback_path.unlink(missing_ok=True)
             tool_feedback_path.unlink(missing_ok=True)
             plane_feedback_path.unlink(missing_ok=True)
+            preflight_feedback_path.unlink(missing_ok=True)
             raise HTTPException(
                 503, detail=f"Could not launch VR viewer: {exc}"
             ) from exc
@@ -3690,6 +3775,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             feedback_path.unlink(missing_ok=True)
             tool_feedback_path.unlink(missing_ok=True)
             plane_feedback_path.unlink(missing_ok=True)
+            preflight_feedback_path.unlink(missing_ok=True)
             detail = "Native VR viewer exited during startup."
             try:
                 tail = _LOG_PATH.read_text(errors="replace").splitlines()[-1]
@@ -3706,6 +3792,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             "feedback_path": str(feedback_path),
             "tool_feedback_path": str(tool_feedback_path),
             "plane_feedback_path": str(plane_feedback_path),
+            "preflight_feedback_path": str(preflight_feedback_path),
             "started_at": process_started_at,
             "launch_requested_at": launch_requested_at,
             "snapshot_started_at": snapshot_started_at,
@@ -3718,7 +3805,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             target=_cleanup_after_process,
             args=(
                 process, scene_path, event_path, feedback_path, tool_feedback_path,
-                plane_feedback_path,
+                plane_feedback_path, preflight_feedback_path,
             ),
             daemon=True,
             name="nadoc-vr-cleanup",

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   buildVRParameterizedToolPlan,
+  evaluateVRToolPreflight,
   resolveVRDeformationScope,
 } from './vr_tool_execution_plan.js'
 
@@ -140,5 +141,41 @@ describe('native VR parameterized tool execution plans', () => {
       design: { cluster_transforms: [{ id: 'other', helix_ids: ['h2'] }] },
       geometry,
     }).reason).toBe('target_scope_unresolved')
+  })
+
+  it('runs only the descriptor read-only preflight and returns sequenced feedback', async () => {
+    const validateBundleContinuation = async args => ({
+      status: 'ok', message: '', extended_helix_ids: [args.cells[0].join(':')],
+    })
+    const result = await evaluateVRToolPreflight(12, endDraft(), {
+      toolTarget: target(endRef, { toolContext: endContext() }), design, geometry,
+      api: { validateBundleContinuation },
+    })
+    expect(result.feedback).toEqual({
+      tool_config_sequence: 12, target_identity: 'nuc:end', target_kind: 'end',
+      tool_mode: 'extrude', status: 'ok', reason: 'validated',
+    })
+    expect(result.plan.kind).toBe('extrude_continuation')
+  })
+
+  it('returns local blocks and backend errors without invoking a mutation method', async () => {
+    let calls = 0
+    const api = {
+      validateBundleContinuation: async () => { calls += 1; return { status: 'ok' } },
+      addBundleContinuation: async () => { throw new Error('must not execute') },
+    }
+    const local = await evaluateVRToolPreflight(13, endDraft({ length_bp: 0 }), {
+      toolTarget: target(endRef, { toolContext: endContext() }), design, geometry, api,
+    })
+    expect(local.feedback.status).toBe('block')
+    expect(local.feedback.reason).toBe('length_required')
+    expect(calls).toBe(0)
+
+    const failed = await evaluateVRToolPreflight(14, endDraft(), {
+      toolTarget: target(endRef, { toolContext: endContext() }), design, geometry,
+      api: { validateBundleContinuation: async () => { throw new Error('offline') } },
+    })
+    expect(failed.feedback.status).toBe('error')
+    expect(failed.feedback.reason).toBe('request_failed')
   })
 })
