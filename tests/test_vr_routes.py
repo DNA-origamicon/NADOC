@@ -1724,6 +1724,33 @@ def test_full_snapshot_projects_explicit_cross_helix_connections() -> None:
         atom_bond.owner_aliases
     )
 
+    visible_periodic = _serialize_scene(
+        design,
+        nucleotides,
+        [],
+        atomistic_model=SimpleNamespace(atoms=atoms, bonds=[(0, 1)]),
+        show_periodic_seam_arcs=True,
+    )
+    visible_arcs = [
+        primitive
+        for primitive in parse_scene_contract(visible_periodic)["full"].values()
+        if primitive.identity.endswith(":direct")
+    ]
+    assert {primitive.identity for primitive in visible_arcs} == {
+        "crossover:xo-visible:direct",
+        "ligation:h1:0:h3:0:direct",
+        "ligation:h2:0:h3:0:direct",
+    }
+    periodic = next(
+        primitive
+        for primitive in visible_arcs
+        if primitive.identity == "ligation:h2:0:h3:0:direct"
+    )
+    assert periodic.values[:6] == pytest.approx((2, 0, 0, 4, 0, 0))
+    assert _owner_token(
+        "crossover", "forced_ligation", "h2:0:h3:0"
+    ) in periodic.owner_aliases
+
 
 def test_full_snapshot_projects_crossover_extra_base_beads_slabs_and_chain() -> None:
     design = SimpleNamespace(
@@ -1865,6 +1892,10 @@ def test_full_snapshot_uses_desktop_extension_modification_marker() -> None:
     np.testing.assert_allclose(
         [float(value) for value in marker[5:8]], [1, 140 / 255, 0]
     )
+    parsed_marker = parse_scene_contract(text)["full"][
+        "nuc:s1:1:__ext_e1:0:FORWARD:0:modification"
+    ]
+    assert _owner_token("extension", "e1") in parsed_marker.owner_aliases
 
 
 def test_cylinder_snapshot_distinguishes_single_stranded_overhang_halves() -> None:
@@ -1915,6 +1946,10 @@ def test_cylinder_snapshot_distinguishes_single_stranded_overhang_halves() -> No
     assert len(cylinders) == 1
     assert cylinders[0][0] == "H"
     assert float(cylinders[0][7]) == pytest.approx(0.72)
+    coarse = parse_scene_contract(text)["cylinders"][
+        "segment:oh1:s1:0:0:0:coarse"
+    ]
+    assert _owner_token("overhang", "ov1") in coarse.owner_aliases
 
     design.overhang_bindings = [
         SimpleNamespace(

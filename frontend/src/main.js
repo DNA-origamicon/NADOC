@@ -5839,6 +5839,7 @@ async function main() {
           ? _currentRepr : 'full',
         coloring: ['strand', 'base', 'cluster', 'cpk'].includes(store.getState().coloringMode)
           ? store.getState().coloringMode : 'strand',
+        show_periodic_seam_arcs: store.getState().showPeriodicSeamArcs === true,
         selection_level: selectionManager.getSelectionLevel?.() ?? 'default',
         selected_owner_tokens: selectionManager.getVRInitialSelectionOwnerTokens?.() ?? [],
         selected_selection_kind: selectionManager.getVRInitialSelectionKind?.() ?? 'none',

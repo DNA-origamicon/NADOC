@@ -72,6 +72,7 @@ class VRLaunchRequest(BaseModel):
     assembly_active: bool = False
     representation: Literal["cylinders", "full", "ballstick", "stick"] = "full"
     coloring: Literal["strand", "base", "cluster", "cpk"] = "strand"
+    show_periodic_seam_arcs: bool = False
     selection_level: Literal[
         "default", "cluster", "strand", "domain", "end", "xover", "base"
     ] = "default"
@@ -542,6 +543,7 @@ def _serialize_scene(
     coloring: str = "strand",
     atomistic_model=None,
     unligated_crossover_ids: list[str] | None = None,
+    show_periodic_seam_arcs: bool = False,
     line_writer: Callable[[str], None] | None = None,
 ) -> str | dict[str, dict[str, tuple[int, str]]]:
     """Create the deliberately trivial line-oriented format read by the C++ viewer."""
@@ -620,6 +622,12 @@ def _serialize_scene(
             refs.append(("base", key))
             if nucleotide.get("is_five_prime") or nucleotide.get("is_three_prime"):
                 refs.append(("end", key))
+        extension_id = nucleotide.get("extension_id")
+        if extension_id is not None:
+            refs.append(("extension", str(extension_id)))
+        overhang_id = nucleotide.get("overhang_id")
+        if overhang_id is not None:
+            refs.append(("overhang", str(overhang_id)))
         strand_id = nucleotide.get("strand_id")
         if strand_id:
             refs.append(
@@ -646,7 +654,10 @@ def _serialize_scene(
         return owner_tokens(*refs)
 
     def domain_owner_tokens(
-        strand_id: str | None, domain_index: int, helix_id: str | None
+        strand_id: str | None,
+        domain_index: int,
+        helix_id: str | None,
+        overhang_id: str | None = None,
     ) -> tuple[str, ...]:
         if not strand_id:
             return ()
@@ -655,10 +666,15 @@ def _serialize_scene(
             "domain_index": int(domain_index),
             "helix_id": helix_id or "",
         }
-        refs: list[tuple] = [
-            ("domain", str(strand_id), int(domain_index)),
-            ("strand", str(strand_id)),
-        ]
+        refs: list[tuple] = []
+        if overhang_id:
+            refs.append(("overhang", str(overhang_id)))
+        refs.extend(
+            [
+                ("domain", str(strand_id), int(domain_index)),
+                ("strand", str(strand_id)),
+            ]
+        )
         for cluster in _selection_clusters(design, nucleotide):
             if len(refs) >= 8:
                 break
@@ -1520,7 +1536,7 @@ def _serialize_scene(
         extra_bases,
         hidden_periodic,
     ) in explicit_connections:
-        if hidden_periodic:
+        if hidden_periodic and not show_periodic_seam_arcs:
             continue
         first_entry = site_entries.get(first_key)
         second_entry = site_entries.get(second_key)
@@ -1775,6 +1791,7 @@ def _serialize_scene(
                             segment.get("strand_id"),
                             int(segment.get("domain_index") or 0),
                             str(axis.get("helix_id") or ""),
+                            segment.get("ovhg_id"),
                         )
                         if segment is not None
                         else ()
@@ -1886,6 +1903,7 @@ def _serialize_scene(
                         segment.get("strand_id"),
                         int(segment.get("domain_index") or 0),
                         str(axis.get("helix_id") or ""),
+                        segment.get("ovhg_id"),
                     )
                     if segment is not None
                     else ()
@@ -2564,6 +2582,7 @@ def _snapshot(
         body.coloring,
         atomistic_model,
         unligated_crossover_ids(design),
+        body.show_periodic_seam_arcs,
         line_writer=line_writer,
     )
     expanded_nucleotides, expanded_axes, expanded_atomistic = _expanded_scene_inputs(
@@ -2585,6 +2604,7 @@ def _snapshot(
         body.coloring,
         expanded_atomistic,
         unligated_crossover_ids(design),
+        body.show_periodic_seam_arcs,
         line_writer=expanded_writer,
     )
     if line_writer is not None:
