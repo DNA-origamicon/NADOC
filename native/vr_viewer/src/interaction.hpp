@@ -96,6 +96,7 @@ struct ToolContextFeedback {
 
 struct ToolPreflightFeedback {
     uint64_t toolConfigSequence = 0;
+    uint64_t preflightSequence = 0;
     std::string status;
     std::string mode;
     std::string selectionKind = "none";
@@ -767,23 +768,26 @@ inline std::optional<ToolContextFeedback> parseToolContextFeedback(
 }
 
 inline std::optional<ToolPreflightFeedback> parseToolPreflightFeedback(
-    const std::string& record, uint64_t expectedToolConfigSequence) {
+    const std::string& record, uint64_t expectedToolConfigSequence,
+    uint64_t previousPreflightSequence = 0) {
     std::istringstream fields(record);
     std::string magic;
     int version = 0;
     ToolPreflightFeedback result;
     std::string trailing;
-    if (!(fields >> magic >> version >> result.toolConfigSequence >> result.status
+    if (!(fields >> magic >> version >> result.toolConfigSequence
+                 >> result.preflightSequence >> result.status
                  >> result.mode >> result.selectionKind >> result.identity
                  >> result.reason) ||
-        magic != "NADOCVR_PREFLIGHT" || version != 1 ||
+        magic != "NADOCVR_PREFLIGHT" || version != 2 ||
         result.toolConfigSequence != expectedToolConfigSequence ||
+        result.preflightSequence <= previousPreflightSequence ||
         result.identity.size() > 2048 || result.reason.empty() ||
         result.reason.size() > 64 || (fields >> trailing)) {
         return std::nullopt;
     }
-    static constexpr std::array<const char*, 4> statuses = {
-        "ok", "warn", "block", "error",
+    static constexpr std::array<const char*, 5> statuses = {
+        "waiting", "ok", "warn", "block", "error",
     };
     static constexpr std::array<const char*, 3> modes = {
         "extrude", "twist", "bend",

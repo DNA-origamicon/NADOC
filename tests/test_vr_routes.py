@@ -1,6 +1,7 @@
 """Focused checks for the local native-OpenXR bridge."""
 
 import gzip
+import itertools
 import json
 from types import SimpleNamespace
 from urllib.parse import quote
@@ -842,6 +843,7 @@ def test_native_tool_preflight_feedback_is_private_target_bound_and_strict(
     _write_preflight_feedback(
         state,
         VRToolPreflightFeedbackRequest(
+            preflight_sequence=1,
             tool_config_sequence=12,
             target_identity="nuc:end",
             target_kind="end",
@@ -851,7 +853,7 @@ def test_native_tool_preflight_feedback_is_private_target_bound_and_strict(
         ),
     )
     assert feedback_path.read_text() == (
-        "NADOCVR_PREFLIGHT 1 12 block extrude end nuc:end backend_block\n"
+        "NADOCVR_PREFLIGHT 2 12 1 block extrude end nuc:end backend_block\n"
     )
     assert feedback_path.stat().st_mode & 0o777 == 0o600
     assert not feedback_path.with_name(f"{feedback_path.name}.next").exists()
@@ -859,6 +861,7 @@ def test_native_tool_preflight_feedback_is_private_target_bound_and_strict(
     _write_preflight_feedback(
         state,
         VRToolPreflightFeedbackRequest(
+            preflight_sequence=3,
             tool_config_sequence=13,
             target_identity=None,
             target_kind="none",
@@ -868,13 +871,43 @@ def test_native_tool_preflight_feedback_is_private_target_bound_and_strict(
         ),
     )
     assert feedback_path.read_text() == (
-        "NADOCVR_PREFLIGHT 1 13 block bend none - stale_target\n"
+        "NADOCVR_PREFLIGHT 2 13 3 block bend none - stale_target\n"
     )
+
+    assert _write_preflight_feedback(
+        state,
+        VRToolPreflightFeedbackRequest(
+            preflight_sequence=2,
+            tool_config_sequence=12,
+            target_identity="nuc:end",
+            target_kind="end",
+            tool_mode="extrude",
+            status="waiting",
+            reason="design_changed",
+        ),
+    ) == (False, 3)
+    assert feedback_path.read_text() == (
+        "NADOCVR_PREFLIGHT 2 13 3 block bend none - stale_target\n"
+    )
+
+    assert _write_preflight_feedback(
+        state,
+        VRToolPreflightFeedbackRequest(
+            preflight_sequence=3,
+            tool_config_sequence=13,
+            target_identity=None,
+            target_kind="none",
+            tool_mode="bend",
+            status="waiting",
+            reason="geometry_changed",
+        ),
+    ) == (False, 3)
 
     with pytest.raises(HTTPException, match="Invalid VR tool preflight feedback"):
         _write_preflight_feedback(
             state,
             VRToolPreflightFeedbackRequest(
+                preflight_sequence=4,
                 tool_config_sequence=14,
                 target_identity="cluster:c1",
                 target_kind="cluster",
@@ -882,6 +915,48 @@ def test_native_tool_preflight_feedback_is_private_target_bound_and_strict(
                 status="ok",
                 reason="validated",
             ),
+        )
+
+
+def test_native_tool_preflight_feedback_converges_under_every_arrival_order(
+    tmp_path,
+) -> None:
+    messages = [
+        VRToolPreflightFeedbackRequest(
+            preflight_sequence=1,
+            tool_config_sequence=20,
+            target_identity="nuc:end",
+            target_kind="end",
+            tool_mode="extrude",
+            status="waiting",
+            reason="design_changed",
+        ),
+        VRToolPreflightFeedbackRequest(
+            preflight_sequence=2,
+            tool_config_sequence=20,
+            target_identity="nuc:end",
+            target_kind="end",
+            tool_mode="extrude",
+            status="block",
+            reason="backend_block",
+        ),
+        VRToolPreflightFeedbackRequest(
+            preflight_sequence=3,
+            tool_config_sequence=20,
+            target_identity="nuc:end",
+            target_kind="end",
+            tool_mode="extrude",
+            status="ok",
+            reason="validated",
+        ),
+    ]
+    for index, order in enumerate(itertools.permutations(messages)):
+        feedback_path = tmp_path / f"vr-preflight-order-{index}.txt"
+        state = {"preflight_feedback_path": str(feedback_path)}
+        for message in order:
+            _write_preflight_feedback(state, message)
+        assert feedback_path.read_text() == (
+            "NADOCVR_PREFLIGHT 2 20 3 ok extrude end nuc:end validated\n"
         )
 
 

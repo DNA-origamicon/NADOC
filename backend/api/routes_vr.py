@@ -137,11 +137,12 @@ class VRToolFeedbackRequest(BaseModel):
 
 
 class VRToolPreflightFeedbackRequest(BaseModel):
+    preflight_sequence: int = Field(ge=1, le=2**53 - 1)
     tool_config_sequence: int = Field(ge=1)
     target_identity: Optional[str] = Field(default=None, max_length=2048)
     target_kind: SelectionKind
     tool_mode: Literal["extrude", "twist", "bend"]
-    status: Literal["ok", "warn", "block", "error"]
+    status: Literal["waiting", "ok", "warn", "block", "error"]
     reason: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9_]+$")
 
 
@@ -3488,7 +3489,7 @@ def vr_plane_feedback(body: VRPlaneFeedbackRequest, request: Request) -> dict:
 
 def _write_preflight_feedback(
     state: dict | None, body: VRToolPreflightFeedbackRequest
-) -> None:
+) -> tuple[bool, int]:
     """Atomically publish one target-bound, read-only tool preflight verdict."""
     if not state or not state.get("preflight_feedback_path"):
         raise HTTPException(409, detail="Native VR is not running.")
@@ -3514,7 +3515,8 @@ def _write_preflight_feedback(
     ):
         raise HTTPException(422, detail="Invalid VR tool preflight feedback.")
     record = (
-        f"NADOCVR_PREFLIGHT 1 {body.tool_config_sequence} {body.status} "
+        f"NADOCVR_PREFLIGHT 2 {body.tool_config_sequence} "
+        f"{body.preflight_sequence} {body.status} "
         f"{body.tool_mode} {body.target_kind} {identity} {body.reason}\n"
     )
     if len(record.encode()) > 4096:
@@ -3523,6 +3525,30 @@ def _write_preflight_feedback(
     temporary = path.with_name(f"{path.name}.next")
     with _TOOL_FEEDBACK_LOCK:
         try:
+            try:
+                current = path.read_text()
+            except OSError:
+                current = ""
+            fields = current.split()
+            if (
+                len(fields) == 9
+                and fields[0] == "NADOCVR_PREFLIGHT"
+                and fields[1] == "2"
+            ):
+                try:
+                    current_tool_config_sequence = int(fields[2])
+                    current_sequence = int(fields[3])
+                except ValueError:
+                    current_tool_config_sequence = -1
+                    current_sequence = -1
+                if (
+                    body.tool_config_sequence < current_tool_config_sequence
+                    or (
+                        body.tool_config_sequence == current_tool_config_sequence
+                        and body.preflight_sequence <= current_sequence
+                    )
+                ):
+                    return False, current_sequence
             temporary.write_text(record)
             temporary.chmod(0o600)
             os.replace(temporary, path)
@@ -3531,6 +3557,7 @@ def _write_preflight_feedback(
             raise HTTPException(
                 503, detail="Could not publish VR tool preflight."
             ) from exc
+    return True, body.preflight_sequence
 
 
 @router.post("/vr/tool-preflight-feedback")
@@ -3538,9 +3565,12 @@ def vr_tool_preflight_feedback(
     body: VRToolPreflightFeedbackRequest, request: Request
 ) -> dict:
     _require_local(request)
-    _write_preflight_feedback(_read_state(), body)
+    published, current_sequence = _write_preflight_feedback(_read_state(), body)
     return {
         "acknowledged": True,
+        "published": published,
+        "preflight_sequence": body.preflight_sequence,
+        "current_preflight_sequence": current_sequence,
         "tool_config_sequence": body.tool_config_sequence,
     }
 
@@ -3733,7 +3763,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             delete=False,
         ) as preflight_feedback_file:
             preflight_feedback_file.write(
-                "NADOCVR_PREFLIGHT 1 0 error extrude none - waiting\n"
+                "NADOCVR_PREFLIGHT 2 0 0 error extrude none - waiting\n"
             )
             preflight_feedback_path = Path(preflight_feedback_file.name)
         preflight_feedback_path.chmod(0o600)

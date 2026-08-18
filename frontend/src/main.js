@@ -21,7 +21,7 @@ import {
   initialVRToolConfigState, reduceVRToolConfig, vrPlaneFeedbackPayload,
 } from './scene/vr_tool_config.js'
 import { vrToolFeedbackPayload } from './scene/vr_tool_context.js'
-import { evaluateVRToolPreflight } from './scene/vr_tool_execution_plan.js'
+import { createVRToolPreflightCoordinator } from './scene/vr_tool_preflight_coordinator.js'
 import { createGlowLayer }           from './scene/glow_layer.js'
 import { initDesignRenderer }        from './scene/design_renderer.js'
 import { deferrableContextMenu }      from './scene/right_click_menu.js'
@@ -5789,6 +5789,37 @@ async function main() {
 
   let _vrToolShellState = initialVRToolShellState
   let _vrToolConfigState = initialVRToolConfigState
+  const _vrToolPreflight = createVRToolPreflightCoordinator({
+    sendFeedback: api.sendVRToolPreflightFeedback,
+  })
+  const _requestVRToolPreflight = (
+    sequence, draft, { waitingReason = null } = {},
+  ) => {
+    if (!draft) return
+    const targetSnapshotPresent = draft.target_kind !== 'none' ||
+      !!draft.target_identity || !!draft.target_owner_tokens?.length
+    const toolTarget = targetSnapshotPresent
+      ? selectionManager.resolveVRToolTargetSnapshot?.({
+          identity: draft.target_identity,
+          selectionKind: draft.target_kind,
+          ownerTokens: draft.target_owner_tokens,
+        }) ?? null
+      : null
+    const { currentDesign, currentGeometry } = store.getState()
+    _vrToolPreflight.request(sequence, draft, {
+      toolTarget, design: currentDesign, geometry: currentGeometry, api,
+    }, { waitingReason }).catch(() => {})
+  }
+  store.subscribe((newState, prevState) => {
+    const designChanged = newState.currentDesign !== prevState.currentDesign
+    const geometryChanged = newState.currentGeometry !== prevState.currentGeometry
+    if ((!designChanged && !geometryChanged) || !_vrToolConfigState.draft) return
+    _requestVRToolPreflight(
+      _vrToolConfigState.sequence,
+      _vrToolConfigState.draft,
+      { waitingReason: designChanged ? 'design_changed' : 'geometry_changed' },
+    )
+  })
   initVRSession({
     renderer,
     scene,
@@ -5851,16 +5882,7 @@ async function main() {
           const feedback = vrToolFeedbackPayload(event.sequence, draft, result.state)
           if (feedback) api.sendVRToolFeedback(feedback).catch(() => {})
         }
-        if (draft) {
-          const { currentDesign, currentGeometry } = store.getState()
-          evaluateVRToolPreflight(event.sequence, draft, {
-            toolTarget, design: currentDesign, geometry: currentGeometry, api,
-          }).then(preflight => {
-            if (preflight?.feedback) {
-              api.sendVRToolPreflightFeedback(preflight.feedback).catch(() => {})
-            }
-          }).catch(() => {})
-        }
+        _requestVRToolPreflight(event.sequence, draft)
       } else if (event?.type === 'plane_pick') {
         const draft = _vrToolConfigState.draft
         const targetSnapshotPresent = draft?.target_kind !== 'none' ||
@@ -5958,6 +5980,7 @@ async function main() {
       } else if (event?.type === 'native_session_end') {
         _translateRotateTool.cancelVRPreview().catch(() => {})
         _nucleotideTransformTool.cancelVRPreview()
+        _vrToolPreflight.cancel()
         _vrToolConfigState = initialVRToolConfigState
       } else {
         if (button) button.dataset.vrHoverIdentity = event?.identity ?? ''

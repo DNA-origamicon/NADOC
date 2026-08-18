@@ -2675,6 +2675,8 @@ class Viewer {
                 });
             const glm::vec3 preflightColor = !preflight
                 ? glm::vec3(0.65F, 0.70F, 0.78F)
+                : preflight->status == "waiting"
+                    ? glm::vec3(0.65F, 0.70F, 0.78F)
                 : preflight->status == "ok"
                     ? glm::vec3(0.35F, 0.95F, 0.58F)
                     : preflight->status == "warn"
@@ -3172,6 +3174,7 @@ class Viewer {
     void publishToolConfiguration() {
         ++toolConfigSequence_;
         toolPreflightFeedback_.reset();
+        preflightFeedbackSequence_ = 0;
         publishEventState();
     }
 
@@ -3413,7 +3416,7 @@ class Viewer {
         std::string record(static_cast<size_t>(size), '\0');
         input.read(record.data(), size);
         auto feedback = nadoc_vr::parseToolPreflightFeedback(
-            record, toolConfigSequence_);
+            record, toolConfigSequence_, preflightFeedbackSequence_);
         if (!feedback ||
             feedback->mode != nadoc_vr::toolModeName(toolConfig_.mode()) ||
             feedback->selectionKind != toolConfig_.targetSelectionKind() ||
@@ -3421,11 +3424,12 @@ class Viewer {
             return;
         }
         const bool changed = !toolPreflightFeedback_ ||
-            toolPreflightFeedback_->toolConfigSequence !=
-                feedback->toolConfigSequence ||
+            toolPreflightFeedback_->preflightSequence !=
+                feedback->preflightSequence ||
             toolPreflightFeedback_->status != feedback->status ||
             toolPreflightFeedback_->reason != feedback->reason;
         toolPreflightFeedback_ = std::move(feedback);
+        preflightFeedbackSequence_ = toolPreflightFeedback_->preflightSequence;
         if (changed) {
             std::cout << "VR PREFLIGHT " << toolPreflightFeedback_->status
                       << " " << toolPreflightFeedback_->reason << '\n';
@@ -3865,6 +3869,7 @@ class Viewer {
     uint32_t toolFeedbackPollFrame_ = 0;
     std::optional<nadoc_vr::ToolContextFeedback> toolContextFeedback_;
     uint32_t preflightFeedbackPollFrame_ = 0;
+    uint64_t preflightFeedbackSequence_ = 0;
     std::optional<nadoc_vr::ToolPreflightFeedback> toolPreflightFeedback_;
     uint64_t planePickSequence_ = 0;
     uint64_t activePlanePickSequence_ = 0;

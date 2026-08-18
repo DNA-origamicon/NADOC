@@ -347,23 +347,31 @@ void toolContextFeedbackIsExactSequencedAndFinite() {
 
 void toolPreflightFeedbackIsTargetBoundSequencedAndStrict() {
     const auto ok = nadoc_vr::parseToolPreflightFeedback(
-        "NADOCVR_PREFLIGHT 1 12 ok extrude end nuc:end validated\n", 12);
+        "NADOCVR_PREFLIGHT 2 12 7 ok extrude end nuc:end validated\n", 12, 6);
     require(ok && ok->status == "ok" && ok->mode == "extrude" &&
+            ok->preflightSequence == 7 &&
             ok->selectionKind == "end" && ok->identity == "nuc:end" &&
             ok->reason == "validated");
     const auto noTarget = nadoc_vr::parseToolPreflightFeedback(
-        "NADOCVR_PREFLIGHT 1 13 block bend none - stale_target\n", 13);
+        "NADOCVR_PREFLIGHT 2 13 8 block bend none - stale_target\n", 13, 7);
     require(noTarget && noTarget->identity.empty());
+    const auto waiting = nadoc_vr::parseToolPreflightFeedback(
+        "NADOCVR_PREFLIGHT 2 13 9 waiting bend none - design_changed\n", 13, 8);
+    require(waiting && waiting->status == "waiting");
     require(!nadoc_vr::parseToolPreflightFeedback(
-        "NADOCVR_PREFLIGHT 1 11 ok extrude end nuc:end validated\n", 12));
+        "NADOCVR_PREFLIGHT 2 11 10 ok extrude end nuc:end validated\n", 12, 9));
     require(!nadoc_vr::parseToolPreflightFeedback(
-        "NADOCVR_PREFLIGHT 1 12 ok extrude cluster cluster:c1 validated\n", 12));
+        "NADOCVR_PREFLIGHT 2 12 10 ok extrude cluster cluster:c1 validated\n", 12, 9));
     require(!nadoc_vr::parseToolPreflightFeedback(
-        "NADOCVR_PREFLIGHT 1 12 ready extrude end nuc:end validated\n", 12));
+        "NADOCVR_PREFLIGHT 2 12 10 ready extrude end nuc:end validated\n", 12, 9));
     require(!nadoc_vr::parseToolPreflightFeedback(
-        "NADOCVR_PREFLIGHT 1 12 block twist end nuc:end bad-reason\n", 12));
+        "NADOCVR_PREFLIGHT 2 12 10 block twist end nuc:end bad-reason\n", 12, 9));
     require(!nadoc_vr::parseToolPreflightFeedback(
-        "NADOCVR_PREFLIGHT 1 12 block twist end nuc:end backend_block extra\n", 12));
+        "NADOCVR_PREFLIGHT 2 12 10 block twist end nuc:end backend_block extra\n", 12, 9));
+    require(!nadoc_vr::parseToolPreflightFeedback(
+        "NADOCVR_PREFLIGHT 2 12 9 ok extrude end nuc:end validated\n", 12, 9));
+    require(!nadoc_vr::parseToolPreflightFeedback(
+        "NADOCVR_PREFLIGHT 1 12 ok extrude end nuc:end validated\n", 12));
 }
 
 void planePickFeedbackIsTargetBoundSequencedAndStrict() {
