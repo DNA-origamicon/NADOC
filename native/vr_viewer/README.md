@@ -68,9 +68,9 @@ Controls on the original HTC Vive wands:
   Confirm is reported as staged and Undo reports that no VR commit exists.
   Move/Rotate accepts only a canonical Cluster; finer targets report
   **UNSUPPORTED TARGET** instead of silently widening the edit. Preview draws an
-  RGB translation triad at the center of all visible primitives carrying the
-  acknowledged Cluster owner; its size is derived from owner-wide bounds and stays
-  capped for reach. Cancel removes it without changing geometry, selection, or history.
+  RGB translation triad at the exact current visual centroid used by NADOC's desktop
+  gizmo; its size is derived from owner-wide bounds and stays capped for reach. Cancel
+  removes it without changing geometry, selection, or history.
 - Cyan and orange pointers identify the left and right controllers. They turn
   green during a one-hand grab and magenta during a two-hand resize.
 - When neither trigger is held, the right pointer extends to the nearest visible
@@ -101,12 +101,14 @@ both eyes. Full representation geometry mirrors the editor's physical display
 primitives: 0.10 nm backbone beads, 0.18 nm 5′ cubes, oriented
 0.30 × 0.06 × 0.70 nm base slabs, 0.025 nm slab connectors, and 0.075 nm
 same-helix strand connectors.
-Scene format v8 pairs natural and Expanded Quick View poses by the URL-safe
-semantic identities introduced in v6 and explicitly attaches bounded canonical-owner
-aliases to selectable primitives. It rejects duplicate, unknown, or pose-mismatched
-identities and aliases, allowing numeric regression diffs and controller picking to
-address geometry without relying on draw order or parsing delimiter-sensitive IDs.
-The reader remains compatible with v4/v5/v6/v7 snapshots.
+Scene format v9 pairs natural and Expanded Quick View poses by the URL-safe
+semantic identities introduced in v6, retains v8's bounded canonical-owner aliases,
+and adds one explicit owner-keyed Cluster gizmo center per pose and representation.
+Those centers use the same live-member visual centroid as desktop Move/Rotate rather
+than trusting a potentially stale stored pivot. The reader rejects duplicate,
+unknown, or pose-mismatched identities, aliases, and handle owners, allowing numeric
+regression diffs and controller tools to address geometry without draw order or
+delimiter-sensitive ID parsing. It remains compatible with v4-v8 snapshots.
 The snapshot also carries explicit crossover/forced-ligation links,
 canonical crossover-insert bead/slab chains, 0.25 nm chemistry-colored extension
 markers, per-domain axis gaps, and closed half-cylinder overhang domains in the

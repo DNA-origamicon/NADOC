@@ -112,12 +112,18 @@ struct StyledBox {
     ColorSet colors{};
 };
 
+struct OwnerHandle {
+    std::string token;
+    glm::vec3 center{};
+};
+
 struct RepresentationData {
     std::vector<StyledPoint> points;
     std::vector<StyledCylinder> cylinders;
     std::vector<StyledCylinder> halfCylinders;
     std::vector<StyledBox> boxes;
     std::vector<nadoc_vr::OwnerAliasEntry> ownerAliases;
+    std::vector<OwnerHandle> ownerHandles;
 };
 
 struct SceneData {
@@ -413,8 +419,7 @@ SceneData loadScene(const std::string& path) {
     std::string initialRepresentation;
     std::string initialColoring;
     input >> magic >> version >> initialRepresentation >> initialColoring;
-    if (magic != "NADOCVR" ||
-        (version != 4 && version != 5 && version != 6 && version != 7 && version != 8)) {
+    if (magic != "NADOCVR" || (version < 4 || version > 9)) {
         throw std::runtime_error("Unsupported NADOC VR scene format");
     }
 
@@ -426,6 +431,7 @@ SceneData loadScene(const std::string& path) {
     size_t legacyIdentityIndex = 0;
     std::array<std::array<std::unordered_set<std::string>, 4>, 2> identities;
     std::array<std::array<std::unordered_set<std::string>, 4>, 2> aliasIdentities;
+    std::array<std::array<std::unordered_set<std::string>, 4>, 2> handleTokens;
     size_t poseIndex = 0;
     auto readIdentity = [&](char recordType) {
         std::string identity;
@@ -487,6 +493,20 @@ SceneData loadScene(const std::string& path) {
                 }
             }
             active->ownerAliases.push_back(std::move(aliases));
+        } else if (type == 'K' && version >= 9) {
+            if (!active) {
+                throw std::runtime_error(
+                    "Cluster handle appears before representation block");
+            }
+            OwnerHandle handle;
+            input >> handle.token >> handle.center.x >> handle.center.y >> handle.center.z;
+            if (handle.token.empty() || handle.token.size() > 2048 ||
+                !handleTokens[poseIndex][activeIndex].insert(handle.token).second ||
+                !std::isfinite(handle.center.x) || !std::isfinite(handle.center.y) ||
+                !std::isfinite(handle.center.z)) {
+                throw std::runtime_error("Invalid VR cluster handle");
+            }
+            active->ownerHandles.push_back(std::move(handle));
         } else if (type == 'P') {
             if (!active) throw std::runtime_error("Point appears before representation block");
             StyledPoint point;
@@ -542,6 +562,10 @@ SceneData loadScene(const std::string& path) {
                 scene.expandedRepresentations[index].ownerAliases) {
                 throw std::runtime_error(
                     "Expanded VR pose does not match natural owner aliases");
+            }
+            if (handleTokens[0][index] != handleTokens[1][index]) {
+                throw std::runtime_error(
+                    "Expanded VR pose does not match natural cluster handles");
             }
         }
     }
@@ -602,6 +626,10 @@ SceneData loadScene(const std::string& path) {
             box.axisX *= scale;
             box.axisY *= scale;
             box.axisZ *= scale;
+        }
+        for (OwnerHandle& handle : rep.ownerHandles) {
+            handle.center = (handle.center - center) * scale;
+            handle.center.z -= kViewDistanceMeters;
         }
 
         if (!appendViewerAxes) return;
@@ -964,6 +992,25 @@ class GlScene {
             }
         }
         return bounds.summary(modelTransform);
+    }
+
+    /** Desktop-equivalent current gizmo center projected by scene v9. */
+    [[nodiscard]] std::optional<glm::vec3> ownerHandle(
+        const std::vector<std::string>& ownerTokens,
+        const glm::mat4& modelTransform) const {
+        const RepresentationData& source =
+            expanded_ && scene_.hasExpanded
+                ? scene_.expandedRepresentations[static_cast<size_t>(representation_)]
+                : scene_.representations[static_cast<size_t>(representation_)];
+        for (const std::string& token : ownerTokens) {
+            const auto handle = std::find_if(
+                source.ownerHandles.begin(), source.ownerHandles.end(),
+                [&](const OwnerHandle& candidate) { return candidate.token == token; });
+            if (handle != source.ownerHandles.end()) {
+                return glm::vec3(modelTransform * glm::vec4(handle->center, 1.0F));
+            }
+        }
+        return std::nullopt;
     }
 
     void renderShadowMap(const glm::mat4& modelTransform, glm::vec3 lightDirection) {
@@ -2207,7 +2254,9 @@ class Viewer {
                 const auto bounds = glScene_->ownerBounds(
                     selectedOwnerTokens_, manipulator_.transform());
                 if (bounds) {
-                    const glm::vec3 center = bounds->center;
+                    const glm::vec3 center = glScene_->ownerHandle(
+                        selectedOwnerTokens_, manipulator_.transform())
+                        .value_or(bounds->center);
                     const float handleRadius = glm::clamp(
                         bounds->radius * 0.20F, 0.050F, 0.220F);
                     line(center - glm::vec3(handleRadius, 0, 0),

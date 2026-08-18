@@ -205,54 +205,67 @@ def _cluster_color(design, nucleotide: dict) -> tuple[float, float, float] | Non
     return _rgb(cluster.color or STAPLE_PALETTE[index % len(STAPLE_PALETTE)])
 
 
-def _selection_cluster(design, nucleotide: dict):
-    """Mirror the desktop's smallest non-default selectable cluster resolution."""
+def _cluster_contains_nucleotide(
+    design, cluster, nucleotide: dict, strands: dict | None = None
+) -> bool:
+    """Mirror ``clusterMemberFilter`` from the desktop selection/gizmo path."""
+    helix_ids = list(getattr(cluster, "helix_ids", []) or [])
+    if not helix_ids:
+        return False
+    domain_ids = list(getattr(cluster, "domain_ids", []) or [])
+    if not domain_ids:
+        return nucleotide.get("helix_id") in helix_ids
+    if strands is None:
+        strands = {strand.id: strand for strand in getattr(design, "strands", [])}
+    domain_keys, exclusive_helices = _cluster_membership_facts(
+        cluster, strands
+    )
+    return (
+        (
+            nucleotide.get("strand_id"),
+            int(nucleotide.get("domain_index") or 0),
+        )
+        in domain_keys
+        or nucleotide.get("helix_id") in exclusive_helices
+    )
+
+
+def _cluster_membership_facts(cluster, strands: dict) -> tuple[set, set]:
+    domain_ids = list(getattr(cluster, "domain_ids", []) or [])
+    domain_keys = {(ref.strand_id, int(ref.domain_index)) for ref in domain_ids}
+    bridge_helices = set()
+    for ref in domain_ids:
+        strand = strands.get(ref.strand_id)
+        if strand is not None and 0 <= ref.domain_index < len(strand.domains):
+            bridge_helices.add(str(strand.domains[ref.domain_index].helix_id))
+    return domain_keys, set(getattr(cluster, "helix_ids", []) or []) - bridge_helices
+
+
+def _selection_clusters(design, nucleotide: dict) -> tuple:
+    """Containing clusters ordered by the desktop click default, then stable size."""
     clusters = getattr(design, "cluster_transforms", [])
     strands = {strand.id: strand for strand in getattr(design, "strands", [])}
-
-    def contains(cluster) -> bool:
-        helix_ids = list(getattr(cluster, "helix_ids", []) or [])
-        if not helix_ids:
-            return False
-        domain_ids = list(getattr(cluster, "domain_ids", []) or [])
-        if not domain_ids:
-            return nucleotide.get("helix_id") in helix_ids
-        domain_keys = {
-            (ref.strand_id, int(ref.domain_index)) for ref in domain_ids
-        }
-        bridge_helices = set()
-        for ref in domain_ids:
-            strand = strands.get(ref.strand_id)
-            if strand is not None and 0 <= ref.domain_index < len(strand.domains):
-                bridge_helices.add(str(strand.domains[ref.domain_index].helix_id))
-        exclusive_helices = set(helix_ids) - bridge_helices
-        return (
-            (
-                nucleotide.get("strand_id"),
-                int(nucleotide.get("domain_index") or 0),
-            )
-            in domain_keys
-            or nucleotide.get("helix_id") in exclusive_helices
+    matches = [
+        (index, cluster)
+        for index, cluster in enumerate(clusters)
+        if _cluster_contains_nucleotide(design, cluster, nucleotide, strands)
+    ]
+    matches.sort(
+        key=lambda item: (
+            1 if getattr(item[1], "is_default", False) else 0,
+            0
+            if getattr(item[1], "is_default", False)
+            else len(getattr(item[1], "helix_ids", []) or []),
+            item[0],
         )
-
-    best = None
-    best_size = float("inf")
-    for cluster in clusters:
-        if getattr(cluster, "is_default", False) or not contains(cluster):
-            continue
-        size = len(getattr(cluster, "helix_ids", []) or [])
-        if size < best_size:
-            best, best_size = cluster, size
-    if best is not None:
-        return best
-    return next(
-        (
-            cluster
-            for cluster in clusters
-            if getattr(cluster, "is_default", False) and contains(cluster)
-        ),
-        next((cluster for cluster in clusters if contains(cluster)), None),
     )
+    return tuple(cluster for _, cluster in matches)
+
+
+def _selection_cluster(design, nucleotide: dict):
+    """Mirror the desktop's smallest non-default selectable cluster resolution."""
+    clusters = _selection_clusters(design, nucleotide)
+    return clusters[0] if clusters else None
 
 
 def _nucleotide_colors(design, nucleotides: list[dict], coloring: str) -> list[tuple]:
@@ -298,6 +311,64 @@ def _view_rotation(camera: VRCamera | None) -> np.ndarray:
     return np.stack([right, up, -forward])
 
 
+def _cluster_gizmo_handle_centers(
+    design, nucleotides: list[dict], view_rotation: np.ndarray
+) -> tuple[tuple[str, np.ndarray], ...]:
+    """Owner token + current visual gizmo center, matching desktop attach.
+
+    Desktop computes the mean live backbone position, reverses the stored transform
+    only to rebase its persisted pivot/translation, then places the gizmo back at
+    this same visual centroid. The VR projection therefore records the centroid
+    directly and never trusts or mutates a possibly stale stored pivot.
+    """
+    records: list[tuple[str, np.ndarray]] = []
+    strands = {strand.id: strand for strand in getattr(design, "strands", [])}
+    for cluster in getattr(design, "cluster_transforms", []) or []:
+        domain_ids = list(getattr(cluster, "domain_ids", []) or [])
+        if domain_ids:
+            domain_keys, exclusive_helices = _cluster_membership_facts(
+                cluster, strands
+            )
+            def contains(nucleotide):
+                return (
+                    (
+                        nucleotide.get("strand_id"),
+                        int(nucleotide.get("domain_index") or 0),
+                    )
+                    in domain_keys
+                    or nucleotide.get("helix_id") in exclusive_helices
+                )
+        else:
+            helix_ids = set(getattr(cluster, "helix_ids", []) or [])
+
+            def contains(nucleotide):
+                return nucleotide.get("helix_id") in helix_ids
+        positions = []
+        for nucleotide in nucleotides:
+            raw = nucleotide.get("backbone_position")
+            if (
+                contains(nucleotide)
+                and isinstance(raw, (list, tuple))
+                and len(raw) == 3
+            ):
+                position = np.asarray(raw, dtype=float)
+                if np.all(np.isfinite(position)):
+                    positions.append(position)
+        if not positions:
+            continue
+        visual_centroid = np.mean(positions, axis=0)
+        token = quote(
+            json.dumps(
+                ("cluster", str(cluster.id)),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+            safe="-_.!~*'()",
+        )
+        records.append((token, view_rotation @ visual_centroid))
+    return tuple(records)
+
+
 def _serialize_scene(
     design,
     nucleotides: list[dict],
@@ -310,6 +381,7 @@ def _serialize_scene(
 ) -> str:
     """Create the deliberately trivial line-oriented format read by the C++ viewer."""
     rotation = _view_rotation(camera)
+    cluster_handles = _cluster_gizmo_handle_centers(design, nucleotides, rotation)
     color_channels = {
         mode: _nucleotide_colors(design, nucleotides, mode)
         for mode in ("strand", "base", "cluster", "cpk")
@@ -402,8 +474,9 @@ def _serialize_scene(
                     str(crossover_id),
                 )
             )
-        cluster = _selection_cluster(design, nucleotide)
-        if cluster is not None:
+        for cluster in _selection_clusters(design, nucleotide):
+            if len(refs) >= 8:
+                break
             refs.append(("cluster", str(cluster.id)))
         return owner_tokens(*refs)
 
@@ -421,8 +494,9 @@ def _serialize_scene(
             ("domain", str(strand_id), int(domain_index)),
             ("strand", str(strand_id)),
         ]
-        cluster = _selection_cluster(design, nucleotide)
-        if cluster is not None:
+        for cluster in _selection_clusters(design, nucleotide):
+            if len(refs) >= 8:
+                break
             refs.append(("cluster", str(cluster.id)))
         return owner_tokens(*refs)
 
@@ -695,14 +769,17 @@ def _serialize_scene(
         )
 
     lines = [
-        f"NADOCVR 8 {representation} {coloring}",
-        "# stable primitive identities with canonical owner aliases",
+        f"NADOCVR 9 {representation} {coloring}",
+        "# stable primitive identities, owner aliases, and cluster handles",
     ]
     by_strand: dict[
         str, list[tuple[dict, np.ndarray, tuple[float, ...], str]]
     ] = {}
     identity_palettes: dict[tuple, tuple[float, ...]] = {}
     lines.append("R full")
+    lines.extend(
+        f"K {token} {nums(*center)}" for token, center in cluster_handles
+    )
     assigned = [
         (index, nucleotide)
         for index, nucleotide in enumerate(nucleotides)
@@ -1231,6 +1308,9 @@ def _serialize_scene(
 
     lines.append("R cylinders")
     active_representation = "cylinders"
+    lines.extend(
+        f"K {token} {nums(*center)}" for token, center in cluster_handles
+    )
     direct_overhang_ids: set[str] = set()
     for binding in getattr(design, "overhang_bindings", []):
         if getattr(binding, "bound", True) is False or getattr(
@@ -1535,6 +1615,9 @@ def _serialize_scene(
         nonlocal active_representation
         lines.append(f"R {name}")
         active_representation = name
+        lines.extend(
+            f"K {token} {nums(*center)}" for token, center in cluster_handles
+        )
         if include_points:
             for atom_index, (atom, position, palette) in enumerate(
                 zip(atomistic_model.atoms, atom_positions, atom_palettes)
@@ -1720,12 +1803,12 @@ def _expanded_scene_inputs(design, nucleotides, axes, atomistic_model):
 
 
 def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
-    """Combine two identity/alias-equivalent v8 scenes into one paired contract."""
+    """Combine two identity/alias/handle-equivalent v9 scenes into one contract."""
     natural_lines = natural_text.splitlines()
     expanded_lines = expanded_text.splitlines()
     natural_header = natural_lines[0].split()
     expanded_header = expanded_lines[0].split()
-    if natural_header != expanded_header or natural_header[0:2] != ["NADOCVR", "8"]:
+    if natural_header != expanded_header or natural_header[0:2] != ["NADOCVR", "9"]:
         raise HTTPException(500, detail="Expanded VR scene headers do not match.")
 
     def blocks(lines: list[str]) -> dict[str, list[str]]:
@@ -1746,13 +1829,22 @@ def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
     if set(natural_blocks) != set(expanded_blocks):
         raise HTTPException(500, detail="Expanded VR representations do not match.")
     output = [
-        f"NADOCVR 8 {natural_header[2]} {natural_header[3]}",
-        "# natural and expanded poses share primitive identities and owner aliases",
+        f"NADOCVR 9 {natural_header[2]} {natural_header[3]}",
+        "# natural and expanded poses share identities, aliases, and cluster handles",
     ]
     for representation, natural_records in natural_blocks.items():
         expanded_records = expanded_blocks[representation]
-        natural_keys = [(line.split()[0], line.split()[1]) for line in natural_records]
-        expanded_keys = [(line.split()[0], line.split()[1]) for line in expanded_records]
+        primitive_types = {"P", "C", "H", "B"}
+        natural_keys = [
+            (line.split()[0], line.split()[1])
+            for line in natural_records
+            if line.split()[0] in primitive_types
+        ]
+        expanded_keys = [
+            (line.split()[0], line.split()[1])
+            for line in expanded_records
+            if line.split()[0] in primitive_types
+        ]
         if natural_keys != expanded_keys:
             raise HTTPException(
                 500,
@@ -1764,6 +1856,13 @@ def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
             raise HTTPException(
                 500,
                 detail=f"Expanded VR primitive owner aliases differ in {representation}.",
+            )
+        natural_handles = [line.split()[1] for line in natural_records if line.startswith("K ")]
+        expanded_handles = [line.split()[1] for line in expanded_records if line.startswith("K ")]
+        if natural_handles != expanded_handles:
+            raise HTTPException(
+                500,
+                detail=f"Expanded VR cluster handles differ in {representation}.",
             )
         output.append(f"R {representation}")
         output.extend(natural_records)

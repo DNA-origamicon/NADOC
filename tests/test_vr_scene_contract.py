@@ -86,6 +86,30 @@ A owner 1 base-owner
     assert [difference.category for difference in comparison.differences] == ["owner"]
 
 
+def test_v9_parser_and_comparator_lock_cluster_handle_positions() -> None:
+    expected = """NADOCVR 9 full strand
+R full
+K cluster-owner 1 2 3
+P owner 0 0 0 .1 1 1 1 1 1 1 1 1 1 1 1 1
+"""
+    scene = parse_scene_contract(expected)
+    assert scene["full"]["cluster-owner"].record_type == "K"
+    assert scene["full"]["cluster-owner"].values == (1.0, 2.0, 3.0)
+
+    moved = expected.replace("K cluster-owner 1 2 3", "K cluster-owner 1.01 2 3")
+    comparison = compare_scenes(expected, moved)
+    handle_difference = next(
+        difference
+        for difference in comparison.differences
+        if difference.identity == "cluster-owner"
+    )
+    assert handle_difference.category == "position"
+    assert "handle error" in handle_difference.detail
+
+    with pytest.raises(ValueError, match="cluster handles require v9"):
+        parse_scene_contract(expected.replace("NADOCVR 9", "NADOCVR 8"))
+
+
 def test_comparator_matches_within_tolerance_and_reports_semantic_owner() -> None:
     expected = FIXTURE.read_text()
     actual = expected.replace(

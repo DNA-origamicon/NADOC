@@ -18,8 +18,10 @@ from backend.api.routes_vr import (
     _event_payload,
     _expanded_helix_offsets,
     _expanded_scene_inputs,
+    _cluster_gizmo_handle_centers,
     _require_local,
     _selection_cluster,
+    _selection_clusters,
     _serialize_scene,
     _viewer_command,
     _write_feedback,
@@ -141,6 +143,45 @@ def test_vr_owner_aliases_use_desktop_smallest_selectable_cluster_rule() -> None
     )
 
     assert _selection_cluster(design, {"helix_id": "h1"}).id == "small"
+    assert [
+        cluster.id for cluster in _selection_clusters(design, {"helix_id": "h1"})
+    ] == ["small", "large", "default"]
+
+
+def test_v9_cluster_handle_matches_desktop_mixed_cluster_visual_centroid() -> None:
+    cluster = SimpleNamespace(
+        id="cluster:a b",
+        helix_ids=["bridge", "owned"],
+        domain_ids=[SimpleNamespace(strand_id="s1", domain_index=0)],
+    )
+    design = SimpleNamespace(
+        strands=[
+            SimpleNamespace(
+                id="s1", domains=[SimpleNamespace(helix_id="bridge")]
+            )
+        ],
+        cluster_transforms=[cluster],
+    )
+    nucleotides = [
+        {
+            "strand_id": "s1", "domain_index": 0, "helix_id": "bridge",
+            "backbone_position": [1, 2, 3],
+        },
+        {
+            "strand_id": "other", "domain_index": 0, "helix_id": "bridge",
+            "backbone_position": [100, 100, 100],
+        },
+        {
+            "strand_id": "s2", "domain_index": 0, "helix_id": "owned",
+            "backbone_position": [3, 4, 5],
+        },
+    ]
+    view_rotation = np.asarray([[0, 0, 1], [0, 1, 0], [-1, 0, 0]], dtype=float)
+
+    records = _cluster_gizmo_handle_centers(design, nucleotides, view_rotation)
+
+    assert records[0][0] == _owner_token("cluster", "cluster:a b")
+    np.testing.assert_allclose(records[0][1], [4, 3, -2])
 
 
 def test_expanded_scene_translates_owners_and_interpolates_crossover_atoms() -> None:
@@ -178,19 +219,22 @@ def test_expanded_scene_translates_owners_and_interpolates_crossover_atoms() -> 
     assert atom.x == 0.0  # source inputs remain immutable
 
 
-def test_v8_bundle_pairs_natural_and_expanded_primitives_by_identity_and_owner() -> None:
-    natural = """NADOCVR 8 full strand
+def test_v9_bundle_pairs_primitives_owners_and_cluster_handles() -> None:
+    natural = """NADOCVR 9 full strand
 R full
+K cluster-owner 0 0 0
 P owner 0 0 0 .1 1 1 1 1 1 1 1 1 1 1 1 1
 A owner 1 base-owner
 """
-    expanded = natural.replace("P owner 0 0 0", "P owner 2 0 0")
+    expanded = natural.replace("P owner 0 0 0", "P owner 2 0 0").replace(
+        "K cluster-owner 0 0 0", "K cluster-owner 1 0 0"
+    )
 
     bundled = _bundle_expanded_scene(natural, expanded)
 
-    assert bundled.startswith("NADOCVR 8 full strand\n")
-    assert "R full\nP owner 0 0 0" in bundled
-    assert "E full\nP owner 2 0 0" in bundled
+    assert bundled.startswith("NADOCVR 9 full strand\n")
+    assert "R full\nK cluster-owner 0 0 0" in bundled
+    assert "E full\nK cluster-owner 1 0 0" in bundled
 
     mismatched = expanded.replace("owner", "different")
     with pytest.raises(HTTPException, match="identities differ"):
@@ -199,6 +243,10 @@ A owner 1 base-owner
     mismatched_alias = expanded.replace("base-owner", "different-owner")
     with pytest.raises(HTTPException, match="owner aliases differ"):
         _bundle_expanded_scene(natural, mismatched_alias)
+
+    mismatched_handle = expanded.replace("cluster-owner", "different-handle", 1)
+    with pytest.raises(HTTPException, match="cluster handles differ"):
+        _bundle_expanded_scene(natural, mismatched_handle)
 
 
 def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -> None:
@@ -407,7 +455,7 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
     sections = _scene_sections(text)
     identities = _scene_identities(text)
 
-    assert text.startswith("NADOCVR 8 full strand\n")
+    assert text.startswith("NADOCVR 9 full strand\n")
     assert set(sections) == {"full", "cylinders", "ballstick", "stick"}
     assert all(len(values) == len(set(values)) for values in identities.values())
     assert "nuc:s1:0:h1:1:FORWARD:0:backbone" in identities["full"]
@@ -444,7 +492,7 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
     assert float(first_atom[4]) == pytest.approx(0.17 * 0.55)
 
 
-def test_v8_owner_aliases_bridge_base_domain_strand_and_cluster_representations() -> None:
+def test_v9_owner_aliases_and_handles_bridge_representations() -> None:
     strand_id = "strand: one"
     helix_id = "helix: one"
     cluster_id = "cluster one"
@@ -473,7 +521,16 @@ def test_v8_owner_aliases_bridge_base_domain_strand_and_cluster_representations(
                 helix_ids=[helix_id],
                 auto_created=False,
                 color=None,
-            )
+                is_default=False,
+            ),
+            SimpleNamespace(
+                id="larger cluster",
+                domain_ids=[],
+                helix_ids=[helix_id, "other helix"],
+                auto_created=False,
+                color=None,
+                is_default=False,
+            ),
         ],
     )
     nucleotide = {
@@ -525,7 +582,11 @@ def test_v8_owner_aliases_bridge_base_domain_strand_and_cluster_representations(
         for primitive in scene["full"].values()
         if primitive.identity.endswith(":backbone")
     )
-    atom_sphere = next(iter(scene["ballstick"].values()))
+    atom_sphere = next(
+        primitive
+        for primitive in scene["ballstick"].values()
+        if primitive.record_type == "P"
+    )
     coarse_domain = next(
         primitive
         for primitive in scene["cylinders"].values()
@@ -536,6 +597,10 @@ def test_v8_owner_aliases_bridge_base_domain_strand_and_cluster_representations(
     domain_owner = _owner_token("domain", strand_id, 0)
     strand_owner = _owner_token("strand", strand_id)
     cluster_owner = _owner_token("cluster", cluster_id)
+    larger_cluster_owner = _owner_token("cluster", "larger cluster")
+    cluster_handle = scene["full"][cluster_owner]
+    assert cluster_handle.record_type == "K"
+    np.testing.assert_allclose(cluster_handle.values, [0, 0, 0])
 
     assert full_backbone.owner_aliases == (
         base,
@@ -543,18 +608,22 @@ def test_v8_owner_aliases_bridge_base_domain_strand_and_cluster_representations(
         domain_owner,
         strand_owner,
         cluster_owner,
+        larger_cluster_owner,
     )
     assert set(atom_sphere.owner_aliases) >= {
         base,
         domain_owner,
         strand_owner,
         cluster_owner,
+        larger_cluster_owner,
     }
     assert coarse_domain.owner_aliases == (
         domain_owner,
         strand_owner,
         cluster_owner,
+        larger_cluster_owner,
     )
+    assert scene["full"][larger_cluster_owner].record_type == "K"
 
 
 def test_full_slabs_share_the_pair_plane_and_contact_the_backbone() -> None:

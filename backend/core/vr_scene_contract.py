@@ -1,4 +1,4 @@
-"""Stable-identity parser and numeric comparator for native VR scene v6-v8.
+"""Stable-identity parser and numeric comparator for native VR scene v6-v9.
 
 This module deliberately knows nothing about OpenXR or rendering. It compares the
 model-space scene contract before the native viewer normalizes it into metres, making
@@ -14,7 +14,7 @@ from urllib.parse import unquote
 import numpy as np
 
 
-_VALUE_COUNTS = {"P": 16, "C": 19, "H": 19, "B": 24}
+_VALUE_COUNTS = {"P": 16, "C": 19, "H": 19, "B": 24, "K": 3}
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,9 +76,9 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
     if (
         len(header) != 4
         or header[0] != "NADOCVR"
-        or header[1] not in {"6", "7", "8"}
+        or header[1] not in {"6", "7", "8", "9"}
     ):
-        raise ValueError("stable comparison requires NADOCVR v6, v7, or v8")
+        raise ValueError("stable comparison requires NADOCVR v6, v7, v8, or v9")
     version = int(header[1])
     result: dict[str, dict[str, ScenePrimitive]] = {}
     active: str | None = None
@@ -135,6 +135,8 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
             raise ValueError(f"line {line_number}: unknown record {record_type}")
         if active is None:
             raise ValueError(f"line {line_number}: primitive before representation")
+        if record_type == "K" and version < 9:
+            raise ValueError(f"line {line_number}: cluster handles require v9")
         expected_fields = _VALUE_COUNTS[record_type] + 2
         if len(fields) != expected_fields:
             raise ValueError(
@@ -193,6 +195,11 @@ def _numeric_differences(
 ) -> list[tuple[str, str]]:
     first, second = expected.values, actual.values
     differences = []
+    if expected.record_type == "K":
+        position_error = _norm(np.subtract(first[0:3], second[0:3]))
+        if position_error > tolerance.position_nm:
+            differences.append(("position", f"handle error {position_error:.6g} nm"))
+        return differences
     if expected.record_type == "P":
         position_error = _norm(np.subtract(first[0:3], second[0:3]))
         if position_error > tolerance.position_nm:
