@@ -2633,7 +2633,10 @@ class Viewer {
                   : "PICK PLANES IN FULL / BALL+STICK"
                 : singleCellFootprint
                     ? toolConfig_.lengthBp() > 0
-                        ? "1 CELL FOOTPRINT READ ONLY" : "1 CELL - SET LENGTH"
+                        ? glScene_->expanded()
+                            ? "1 CELL EXPANDED READ ONLY"
+                            : "1 CELL FOOTPRINT READ ONLY"
+                        : "1 CELL - SET LENGTH"
                     : "MISSING " + std::string(toolConfig_.unresolvedGeometry());
             appendMenuText(
                 geometryStatus,
@@ -2648,7 +2651,9 @@ class Viewer {
                                    : glm::vec3(0.95F, 0.62F, 0.28F));
             } else if (feedback) {
                 const std::string locatorStatus = feedback->resolved
-                    ? feedback->occupied ? "FACE LOCATED - OCCUPIED" : "FACE LOCATED"
+                    ? feedback->occupied ? "FACE LOCATED - OCCUPIED"
+                      : glScene_->expanded() ? "FACE LOCATED - EXPANDED"
+                      : "FACE LOCATED"
                     : "FACE NOT LOCATED";
                 appendMenuText(locatorStatus, -0.305F, -0.125F, 0.0032F,
                                feedback->resolved
@@ -2956,7 +2961,14 @@ class Viewer {
         if (!menuOpen_) {
             if (const auto* feedback = currentToolContextFeedback();
                 feedback && feedback->resolved) {
-                const glm::vec3 localNormal = glm::normalize(feedback->faceNormal);
+                const bool expanded = glScene_->expanded();
+                const glm::vec3& facePosition = expanded
+                    ? feedback->expandedFacePosition : feedback->facePosition;
+                const glm::vec3& faceNormal = expanded
+                    ? feedback->expandedFaceNormal : feedback->faceNormal;
+                const glm::vec3& previewOrigin = expanded
+                    ? feedback->expandedPreviewOrigin : feedback->previewOrigin;
+                const glm::vec3 localNormal = glm::normalize(faceNormal);
                 const glm::vec3 reference = std::abs(localNormal.z) < 0.90F
                     ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
                 const glm::vec3 tangentA = glm::normalize(glm::cross(localNormal, reference));
@@ -2978,19 +2990,19 @@ class Viewer {
                                        * static_cast<float>(segment) / kSegments;
                     const float angleB = glm::two_pi<float>()
                                        * static_cast<float>(segment + 1) / kSegments;
-                    const glm::vec3 ringA = feedback->facePosition + kRadius * (
+                    const glm::vec3 ringA = facePosition + kRadius * (
                         tangentA * std::cos(angleA) + tangentB * std::sin(angleA));
-                    const glm::vec3 ringB = feedback->facePosition + kRadius * (
+                    const glm::vec3 ringB = facePosition + kRadius * (
                         tangentA * std::cos(angleB) + tangentB * std::sin(angleB));
                     line(worldPoint(ringA), worldPoint(ringB), color);
                 }
-                line(worldPoint(feedback->facePosition),
-                     worldPoint(feedback->facePosition + localNormal * kNormalLength), color);
+                line(worldPoint(facePosition),
+                     worldPoint(facePosition + localNormal * kNormalLength), color);
                 if (toolConfig_.mode() == nadoc_vr::ToolMode::extrude &&
                     feedback->footprintResolved && toolConfig_.lengthBp() > 0) {
                     const float radius = 1.0F * normalizationScale_;
                     const glm::vec3 end = nadoc_vr::extrusionPreviewEnd(
-                        feedback->previewOrigin, localNormal, toolConfig_.lengthBp(),
+                        previewOrigin, localNormal, toolConfig_.lengthBp(),
                         toolConfig_.directionSign(), kDnaRiseNanometers,
                         normalizationScale_);
                     const glm::vec3 previewColor = feedback->occupied
@@ -3010,8 +3022,8 @@ class Viewer {
                             tangentA * std::cos(angleA) + tangentB * std::sin(angleA));
                         const glm::vec3 offsetB = radius * (
                             tangentA * std::cos(angleB) + tangentB * std::sin(angleB));
-                        line(worldPoint(feedback->previewOrigin + offsetA),
-                             worldPoint(feedback->previewOrigin + offsetB), previewColor);
+                        line(worldPoint(previewOrigin + offsetA),
+                             worldPoint(previewOrigin + offsetB), previewColor);
                         line(worldPoint(end + offsetA), worldPoint(end + offsetB),
                              previewColor);
                         if (segment % 4 == 0) {
@@ -3304,7 +3316,8 @@ class Viewer {
             toolContextFeedback_->sequence != toolConfigSequence_ ||
             toolConfig_.targetSelectionKind() != "end" ||
             toolContextFeedback_->selectionKind != toolConfig_.targetSelectionKind() ||
-            toolContextFeedback_->identity != toolConfig_.targetIdentity()) {
+            toolContextFeedback_->identity != toolConfig_.targetIdentity() ||
+            (glScene_->expanded() && !toolContextFeedback_->expandedPoseResolved)) {
             return nullptr;
         }
         return &*toolContextFeedback_;
@@ -3338,6 +3351,16 @@ class Viewer {
                 feedback->previewOrigin = nadoc_vr::sourceToNormalizedPoint(
                     feedback->previewOrigin, normalizationCenter_, normalizationScale_,
                     {0.0F, 0.0F, -kViewDistanceMeters});
+            }
+            if (feedback->expandedPoseResolved) {
+                feedback->expandedFacePosition = nadoc_vr::sourceToNormalizedPoint(
+                    feedback->expandedFacePosition, normalizationCenter_,
+                    normalizationScale_, {0.0F, 0.0F, -kViewDistanceMeters});
+                if (feedback->footprintResolved) {
+                    feedback->expandedPreviewOrigin = nadoc_vr::sourceToNormalizedPoint(
+                        feedback->expandedPreviewOrigin, normalizationCenter_,
+                        normalizationScale_, {0.0F, 0.0F, -kViewDistanceMeters});
+                }
             }
         }
         toolContextFeedback_ = std::move(feedback);

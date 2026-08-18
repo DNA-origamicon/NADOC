@@ -290,8 +290,8 @@ void canonicalSelectionFeedbackIsStrictAndSequenced() {
 
 void toolContextFeedbackIsExactSequencedAndFinite() {
     const auto resolved = nadoc_vr::parseToolContextFeedback(
-        "NADOCVR_TOOL_FEEDBACK 2 7 1 1 0 1 resolved end nuc:end "
-        "1 2 3 0 0 2 4 5 6\n",
+        "NADOCVR_TOOL_FEEDBACK 3 7 1 1 0 1 resolved end nuc:end "
+        "1 2 3 0 0 2 4 5 6 7 8 9 0 3 0 10 11 12\n",
         6, 7);
     require(resolved && resolved->resolved && resolved->occupied && !resolved->deformed);
     require(resolved->footprintResolved);
@@ -302,6 +302,20 @@ void toolContextFeedbackIsExactSequencedAndFinite() {
         resolved->faceNormal, glm::vec3(0, 0, 1), 1e-6F)));
     require(glm::all(glm::epsilonEqual(
         resolved->previewOrigin, glm::vec3(4, 5, 6), 1e-6F)));
+    require(resolved->expandedPoseResolved);
+    require(glm::all(glm::epsilonEqual(
+        resolved->expandedFacePosition, glm::vec3(7, 8, 9), 1e-6F)));
+    require(glm::all(glm::epsilonEqual(
+        resolved->expandedFaceNormal, glm::vec3(0, 1, 0), 1e-6F)));
+    require(glm::all(glm::epsilonEqual(
+        resolved->expandedPreviewOrigin, glm::vec3(10, 11, 12), 1e-6F)));
+
+    const auto naturalOnly = nadoc_vr::parseToolContextFeedback(
+        "NADOCVR_TOOL_FEEDBACK 2 8 1 0 0 1 resolved end nuc:end "
+        "1 2 3 0 0 1 4 5 6\n",
+        7, 8);
+    require(naturalOnly && naturalOnly->resolved &&
+            !naturalOnly->expandedPoseResolved);
 
     const auto missing = nadoc_vr::parseToolContextFeedback(
         "NADOCVR_TOOL_FEEDBACK 1 8 0 0 0 no_continuation_face end nuc:end\n",
@@ -321,6 +335,10 @@ void toolContextFeedbackIsExactSequencedAndFinite() {
         7, 8));
     require(!nadoc_vr::parseToolContextFeedback(
         "NADOCVR_TOOL_FEEDBACK 2 8 0 0 0 1 no_continuation_face end nuc:end\n",
+        7, 8));
+    require(!nadoc_vr::parseToolContextFeedback(
+        "NADOCVR_TOOL_FEEDBACK 3 8 1 0 0 1 resolved end nuc:end "
+        "1 2 3 0 0 1 4 5 6\n",
         7, 8));
     require(!nadoc_vr::parseToolContextFeedback(
         "NADOCVR_TOOL_FEEDBACK 1 8 1 0 0 resolved end nuc:end 1e10 0 0 0 0 1\n",

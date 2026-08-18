@@ -87,6 +87,10 @@ struct ToolContextFeedback {
     glm::vec3 facePosition{};
     glm::vec3 faceNormal{};
     glm::vec3 previewOrigin{};
+    bool expandedPoseResolved = false;
+    glm::vec3 expandedFacePosition{};
+    glm::vec3 expandedFaceNormal{};
+    glm::vec3 expandedPreviewOrigin{};
 };
 
 struct PlanePickFeedback {
@@ -675,10 +679,11 @@ inline std::optional<ToolContextFeedback> parseToolContextFeedback(
     int footprintResolved = 0;
     ToolContextFeedback result;
     if (!(fields >> magic >> version >> result.sequence >> resolved >> occupied >> deformed) ||
-        magic != "NADOCVR_TOOL_FEEDBACK" || (version != 1 && version != 2)) {
+        magic != "NADOCVR_TOOL_FEEDBACK" ||
+        (version != 1 && version != 2 && version != 3)) {
         return std::nullopt;
     }
-    if (version == 2 && !(fields >> footprintResolved)) return std::nullopt;
+    if (version >= 2 && !(fields >> footprintResolved)) return std::nullopt;
     if (!(fields >> result.reason >> result.selectionKind >> result.identity) ||
         (resolved != 0 && resolved != 1) || (occupied != 0 && occupied != 1) ||
         (deformed != 0 && deformed != 1) ||
@@ -704,37 +709,45 @@ inline std::optional<ToolContextFeedback> parseToolContextFeedback(
     result.deformed = deformed == 1;
     result.footprintResolved = footprintResolved == 1;
     if (result.resolved) {
-        if (!(fields >> result.facePosition.x >> result.facePosition.y
-                     >> result.facePosition.z >> result.faceNormal.x
-                     >> result.faceNormal.y >> result.faceNormal.z) ||
-            !std::isfinite(result.facePosition.x) ||
-            !std::isfinite(result.facePosition.y) ||
-            !std::isfinite(result.facePosition.z) ||
-            !std::isfinite(result.faceNormal.x) ||
-            !std::isfinite(result.faceNormal.y) ||
-            !std::isfinite(result.faceNormal.z) ||
-            std::abs(result.facePosition.x) > 1.0e9F ||
-            std::abs(result.facePosition.y) > 1.0e9F ||
-            std::abs(result.facePosition.z) > 1.0e9F) {
+        auto readPose = [&](glm::vec3& position, glm::vec3& normal,
+                            glm::vec3& origin) {
+            if (!(fields >> position.x >> position.y >> position.z
+                         >> normal.x >> normal.y >> normal.z) ||
+                !std::isfinite(position.x) || !std::isfinite(position.y) ||
+                !std::isfinite(position.z) || !std::isfinite(normal.x) ||
+                !std::isfinite(normal.y) || !std::isfinite(normal.z) ||
+                std::abs(position.x) > 1.0e9F ||
+                std::abs(position.y) > 1.0e9F ||
+                std::abs(position.z) > 1.0e9F) {
+                return false;
+            }
+            if (result.footprintResolved &&
+                (!(fields >> origin.x >> origin.y >> origin.z) ||
+                 !std::isfinite(origin.x) || !std::isfinite(origin.y) ||
+                 !std::isfinite(origin.z) || std::abs(origin.x) > 1.0e9F ||
+                 std::abs(origin.y) > 1.0e9F || std::abs(origin.z) > 1.0e9F)) {
+                return false;
+            }
+            const double normalLength = std::hypot(
+                std::hypot(static_cast<double>(normal.x),
+                           static_cast<double>(normal.y)),
+                static_cast<double>(normal.z));
+            if (normalLength <= 1.0e-9 || normalLength >= 1.0e9) return false;
+            normal = glm::normalize(normal);
+            return true;
+        };
+        if (!readPose(
+                result.facePosition, result.faceNormal, result.previewOrigin)) {
             return std::nullopt;
         }
-        if (result.footprintResolved &&
-            (!(fields >> result.previewOrigin.x >> result.previewOrigin.y
-                      >> result.previewOrigin.z) ||
-             !std::isfinite(result.previewOrigin.x) ||
-             !std::isfinite(result.previewOrigin.y) ||
-             !std::isfinite(result.previewOrigin.z) ||
-             std::abs(result.previewOrigin.x) > 1.0e9F ||
-             std::abs(result.previewOrigin.y) > 1.0e9F ||
-             std::abs(result.previewOrigin.z) > 1.0e9F)) {
-            return std::nullopt;
+        if (version >= 3) {
+            if (!readPose(
+                    result.expandedFacePosition, result.expandedFaceNormal,
+                    result.expandedPreviewOrigin)) {
+                return std::nullopt;
+            }
+            result.expandedPoseResolved = true;
         }
-        const double normalLength = std::hypot(
-            std::hypot(static_cast<double>(result.faceNormal.x),
-                       static_cast<double>(result.faceNormal.y)),
-            static_cast<double>(result.faceNormal.z));
-        if (normalLength <= 1.0e-9 || normalLength >= 1.0e9) return std::nullopt;
-        result.faceNormal = glm::normalize(result.faceNormal);
     } else if (result.occupied || result.deformed || result.footprintResolved) {
         return std::nullopt;
     }

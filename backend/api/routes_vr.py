@@ -122,6 +122,15 @@ class VRToolFeedbackRequest(BaseModel):
     preview_origin: Optional[list[float]] = Field(
         default=None, min_length=3, max_length=3
     )
+    expanded_face_position: Optional[list[float]] = Field(
+        default=None, min_length=3, max_length=3
+    )
+    expanded_face_normal: Optional[list[float]] = Field(
+        default=None, min_length=3, max_length=3
+    )
+    expanded_preview_origin: Optional[list[float]] = Field(
+        default=None, min_length=3, max_length=3
+    )
     occupied: bool = False
     deformed: bool = False
     footprint_resolved: bool = False
@@ -3241,52 +3250,84 @@ def _write_tool_feedback(state: dict | None, body: VRToolFeedbackRequest) -> Non
         or body.target_kind != "end"
         or body.resolved != (body.reason == "resolved")
         or body.resolved != (
-            body.face_position is not None and body.face_normal is not None
+            body.face_position is not None
+            and body.face_normal is not None
+            and body.expanded_face_position is not None
+            and body.expanded_face_normal is not None
         )
-        or body.footprint_resolved != (body.preview_origin is not None)
+        or body.footprint_resolved != (
+            body.preview_origin is not None
+            and body.expanded_preview_origin is not None
+        )
         or (
             not body.resolved
             and (body.occupied or body.deformed or body.footprint_resolved)
+        )
+        or (
+            not body.resolved
+            and any(
+                value is not None
+                for value in (
+                    body.face_position,
+                    body.face_normal,
+                    body.preview_origin,
+                    body.expanded_face_position,
+                    body.expanded_face_normal,
+                    body.expanded_preview_origin,
+                )
+            )
         )
     ):
         raise HTTPException(422, detail="Invalid VR tool feedback.")
 
     values: list[float] = []
     if body.resolved:
-        position = np.asarray(body.face_position, dtype=float)
-        normal = np.asarray(body.face_normal, dtype=float)
-        preview_origin = np.asarray(
-            body.preview_origin if body.preview_origin is not None else [], dtype=float
-        )
         rotation = np.asarray(state.get("view_rotation"), dtype=float)
-        if (
-            position.shape != (3,)
-            or normal.shape != (3,)
-            or rotation.shape != (3, 3)
-            or not np.all(np.isfinite(position))
-            or not np.all(np.isfinite(normal))
-            or not np.all(np.isfinite(rotation))
-            or np.max(np.abs(position)) > 1e9
-            or not 1e-9 < np.linalg.norm(normal) < 1e9
-            or (
-                body.footprint_resolved
-                and (
-                    preview_origin.shape != (3,)
-                    or not np.all(np.isfinite(preview_origin))
-                    or np.max(np.abs(preview_origin)) > 1e9
-                )
-            )
-        ):
+        if rotation.shape != (3, 3) or not np.all(np.isfinite(rotation)):
             raise HTTPException(422, detail="Invalid VR tool feedback geometry.")
-        position = rotation @ position
-        normal = rotation @ normal
-        normal /= np.linalg.norm(normal)
-        values = [*position.tolist(), *normal.tolist()]
-        if body.footprint_resolved:
-            values.extend((rotation @ preview_origin).tolist())
+
+        def pose_values(position_value, normal_value, origin_value) -> list[float]:
+            position = np.asarray(position_value, dtype=float)
+            normal = np.asarray(normal_value, dtype=float)
+            origin = np.asarray(origin_value if origin_value is not None else [], dtype=float)
+            if (
+                position.shape != (3,)
+                or normal.shape != (3,)
+                or not np.all(np.isfinite(position))
+                or not np.all(np.isfinite(normal))
+                or np.max(np.abs(position)) > 1e9
+                or not 1e-9 < np.linalg.norm(normal) < 1e9
+                or (
+                    body.footprint_resolved
+                    and (
+                        origin.shape != (3,)
+                        or not np.all(np.isfinite(origin))
+                        or np.max(np.abs(origin)) > 1e9
+                    )
+                )
+            ):
+                raise HTTPException(422, detail="Invalid VR tool feedback geometry.")
+            position = rotation @ position
+            normal = rotation @ normal
+            normal /= np.linalg.norm(normal)
+            result = [*position.tolist(), *normal.tolist()]
+            if body.footprint_resolved:
+                result.extend((rotation @ origin).tolist())
+            return result
+
+        values = pose_values(
+            body.face_position, body.face_normal, body.preview_origin
+        )
+        values.extend(
+            pose_values(
+                body.expanded_face_position,
+                body.expanded_face_normal,
+                body.expanded_preview_origin,
+            )
+        )
 
     record = (
-        f"NADOCVR_TOOL_FEEDBACK 2 {body.tool_config_sequence} "
+        f"NADOCVR_TOOL_FEEDBACK 3 {body.tool_config_sequence} "
         f"{int(body.resolved)} {int(body.occupied)} {int(body.deformed)} "
         f"{int(body.footprint_resolved)} "
         f"{body.reason} {body.target_kind} {body.target_identity}"
