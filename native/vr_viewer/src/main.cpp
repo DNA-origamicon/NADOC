@@ -14,6 +14,7 @@
 #include <openxr/openxr_platform.h>
 
 #include "interaction.hpp"
+#include "picking.hpp"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -34,6 +35,7 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -768,6 +770,46 @@ class GlScene {
         if (expanded_ == expanded || (expanded && !scene_.hasExpanded)) return;
         expanded_ = expanded;
         setStyle(representation_, coloring_);
+    }
+
+    [[nodiscard]] std::optional<nadoc_vr::PickHit> pick(
+        const nadoc_vr::Ray& worldRay, const glm::mat4& modelTransform) const {
+        const glm::mat4 worldToModel = glm::inverse(modelTransform);
+        nadoc_vr::Ray ray;
+        ray.origin = glm::vec3(worldToModel * glm::vec4(worldRay.origin, 1.0F));
+        ray.direction = glm::normalize(
+            glm::vec3(worldToModel * glm::vec4(worldRay.direction, 0.0F)));
+        const RepresentationData& source =
+            expanded_ && scene_.hasExpanded
+                ? scene_.expandedRepresentations[static_cast<size_t>(representation_)]
+                : scene_.representations[static_cast<size_t>(representation_)];
+        std::optional<nadoc_vr::PickHit> nearest;
+        auto consider = [&](const std::string& identity, std::optional<float> distance) {
+            if (!distance || identity.starts_with("viewer:") || *distance > 10.0F) return;
+            const glm::vec3 localPosition = ray.origin + ray.direction * *distance;
+            const glm::vec3 worldPosition = glm::vec3(
+                modelTransform * glm::vec4(localPosition, 1.0F));
+            const float worldDistance = glm::length(worldPosition - worldRay.origin);
+            if (!nearest || worldDistance < nearest->distance) {
+                nearest = nadoc_vr::PickHit{identity, worldDistance, worldPosition};
+            }
+        };
+        for (const StyledPoint& point : source.points) {
+            consider(point.identity, nadoc_vr::raySphere(ray, point.position, point.size));
+        }
+        for (const StyledCylinder& cylinder : source.cylinders) {
+            consider(cylinder.identity, nadoc_vr::rayCapsule(
+                ray, cylinder.start, cylinder.end, cylinder.radius));
+        }
+        for (const StyledCylinder& cylinder : source.halfCylinders) {
+            consider(cylinder.identity, nadoc_vr::rayCapsule(
+                ray, cylinder.start, cylinder.end, cylinder.radius));
+        }
+        for (const StyledBox& box : source.boxes) {
+            consider(box.identity, nadoc_vr::rayBox(
+                ray, box.center, box.axisX, box.axisY, box.axisZ));
+        }
+        return nearest;
     }
 
     void renderShadowMap(const glm::mat4& modelTransform, glm::vec3 lightDirection) {
@@ -1849,7 +1891,9 @@ class Viewer {
             const glm::vec3 forward = hands_[hand].orientation * glm::vec3(0, 0, -1);
             const glm::vec3 right = hands_[hand].orientation * glm::vec3(1, 0, 0);
             const glm::vec3 up = hands_[hand].orientation * glm::vec3(0, 1, 0);
-            const glm::vec3 tip = origin + forward * (menuOpen_ ? 1.2F : 0.18F);
+            const glm::vec3 tip = hand == 1U && sceneHover_ && !menuOpen_
+                ? sceneHover_->position
+                : origin + forward * (menuOpen_ ? 1.2F : 0.18F);
             line(origin - forward * 0.045F, origin, color * 0.65F);
             line(origin, tip, color);
             line(tip - right * 0.008F, tip + right * 0.008F, color);
@@ -1859,7 +1903,34 @@ class Viewer {
             manipulator_.mode() == nadoc_vr::ManipulationMode::two_hand) {
             line(hands_[0].position, hands_[1].position, {0.95F, 0.35F, 1.0F});
         }
+        if (sceneHover_ && !menuOpen_) {
+            constexpr float markerRadius = 0.009F;
+            const glm::vec3 center = sceneHover_->position;
+            const glm::vec3 color(0.35F, 0.95F, 1.0F);
+            line(center - glm::vec3(markerRadius, 0, 0),
+                 center + glm::vec3(markerRadius, 0, 0), color);
+            line(center - glm::vec3(0, markerRadius, 0),
+                 center + glm::vec3(0, markerRadius, 0), color);
+            line(center - glm::vec3(0, 0, markerRadius),
+                 center + glm::vec3(0, 0, markerRadius), color);
+        }
         appendMenuGuides();
+    }
+
+    void updateSceneHover() {
+        const std::string previous = sceneHover_ ? sceneHover_->identity : "";
+        sceneHover_.reset();
+        if (!menuOpen_ && !menuOpenRequested_ && hands_[1].valid &&
+            !triggerPressed_[0] && !triggerPressed_[1]) {
+            const glm::vec3 direction = hands_[1].orientation * glm::vec3(0, 0, -1);
+            sceneHover_ = glScene_->pick(
+                nadoc_vr::Ray{hands_[1].position, glm::normalize(direction)},
+                manipulator_.transform());
+        }
+        const std::string current = sceneHover_ ? sceneHover_->identity : "";
+        if (current != previous && !current.empty()) {
+            std::cout << "VR hover: " << current << '\n';
+        }
     }
 
     void syncActions(XrTime displayTime) {
@@ -1951,6 +2022,7 @@ class Viewer {
             }
         }
         if (menuOpen_) processMenuInput();
+        updateSceneHover();
         updateControllerGuides();
     }
 
@@ -2133,6 +2205,7 @@ class Viewer {
     bool gripPressed_ = false;
     nadoc_vr::SceneManipulator manipulator_;
     std::vector<Vertex> controllerGuides_;
+    std::optional<nadoc_vr::PickHit> sceneHover_;
     bool menuOpen_ = false;
     bool menuOpenRequested_ = false;
     bool suppressManipulationUntilRelease_ = false;

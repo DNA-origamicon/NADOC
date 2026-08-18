@@ -45,6 +45,9 @@ Controls on the original HTC Vive wands:
   Recenter, or Close.
 - Cyan and orange pointers identify the left and right controllers. They turn
   green during a one-hand grab and magenta during a two-hand resize.
+- When neither trigger is held, the right pointer extends to the nearest visible
+  primitive and shows a small cyan hit marker. This is currently a read-only
+  stable-identity hover cue; it does not change NADOC selection.
 - Press the Vive System button (not the application-menu button) to open the
   SteamVR Dashboard, then select Desktop to operate NADOC's normal interface.
 

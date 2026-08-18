@@ -1,4 +1,5 @@
 #include "interaction.hpp"
+#include "picking.hpp"
 
 #include <glm/gtc/epsilon.hpp>
 
@@ -95,6 +96,29 @@ void closeInspectionAllowsTheModelToPassThroughTheHead() {
         transformedPoint(manipulator.transform(), modelCenter), glm::vec3(0), 1e-5F)));
 }
 
+void rayPickingHitsVisiblePrimitiveSurfaces() {
+    const nadoc_vr::Ray ray{{0, 0, 1}, {0, 0, -1}};
+    const auto sphere = nadoc_vr::raySphere(ray, {0, 0, 0}, 0.2F);
+    require(sphere && std::abs(*sphere - 0.8F) < 1e-5F);
+
+    const auto capsule = nadoc_vr::rayCapsule(
+        nadoc_vr::Ray{{0.1F, 0, 1}, {0, 0, -1}},
+        {-0.5F, 0, 0}, {0.5F, 0, 0}, 0.2F);
+    require(capsule && *capsule > 0.79F && *capsule < 0.81F);
+
+    const auto box = nadoc_vr::rayBox(
+        ray, {0, 0, 0}, {0.4F, 0, 0}, {0, 0.2F, 0}, {0, 0, 0.6F});
+    require(box && std::abs(*box - 0.7F) < 1e-5F);
+}
+
+void rayPickingRejectsMissesAndBehindControllerGeometry() {
+    const nadoc_vr::Ray ray{{0, 0, 1}, {0, 0, -1}};
+    require(!nadoc_vr::raySphere(ray, {2, 0, 0}, 0.2F));
+    require(!nadoc_vr::rayCapsule(ray, {2, 0, 0}, {3, 0, 0}, 0.2F));
+    require(!nadoc_vr::rayBox(
+        ray, {0, 0, 2}, {0.4F, 0, 0}, {0, 0.2F, 0}, {0, 0, 0.6F}));
+}
+
 }  // namespace
 
 int main() {
@@ -103,4 +127,6 @@ int main() {
     oneTwoOneTransitionsStayContinuous();
     recenterRestoresUnitScaleInFrontOfHead();
     closeInspectionAllowsTheModelToPassThroughTheHead();
+    rayPickingHitsVisiblePrimitiveSurfaces();
+    rayPickingRejectsMissesAndBehindControllerGeometry();
 }

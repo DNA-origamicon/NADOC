@@ -50,7 +50,7 @@ At every phase boundary:
 | 1 | Exact static visual fidelity: overhangs, crossovers, forced ligations, extra bases, extensions, same-helix domain gaps, ends/markers/arcs | Primitive/topology parity tests plus headset visual check | Manual gate |
 | 2 | Scene-projection contract and representative VR regression fixtures | Stable-ID scene snapshots, tolerance tests, failure diagnostics | Complete |
 | 3 | Expanded Quick View on the right controller grip | Gesture is discoverable, reversible, tested, and comfortable | Manual gate |
-| 4 | VR picking and selection intents from cluster through smallest supported element | Canonical selection matrix passes in desktop and VR | Queued |
+| 4 | VR picking and selection intents from cluster through smallest supported element | Canonical selection matrix passes in desktop and VR | Active |
 | 5 | In-headset tools: extrude, twist, bend, move/rotate; previews, confirm/cancel, undo | Each tool has safe transaction semantics and selection-level coverage | Queued |
 | 6 | Unified job-list shell and simulation-result navigation in VR | Job identity/status/action parity with desktop | Queued |
 | 7 | Every simulation engine's visualization options and time/result controls | Engine-by-option parity matrix and playback checks pass | Queued |
@@ -92,6 +92,8 @@ Phase 2 foundation: scene v6 gives every point/cylinder/half-cylinder/box a URL-
 
 Phase 3 implementation: scene v7 pairs each natural primitive with an Expanded Quick View pose under the same identity. The backend mirrors desktop's 5.0/2.25 centroid expansion, translates helix-owned geometry and extension parents, recomputes link/flexible projections from shifted inputs, and interpolates crossover-insert atom offsets between source/destination helices. The native reader rejects pose identity mismatches, normalizes both poses in one coordinate frame, and holds the expanded pose only while the original Vive right squeeze/grip is pressed. Release restores natural spacing; press/release haptics and a cyan right pointer expose state. v4/v5/v6 remain readable, v7 has a parser fixture, and the numeric comparator now treats natural and expanded poses independently.
 
+Phase 4 first slice: a pure native ray-intersection layer covers spheres, finite cylinders/capsules, and oriented boxes. With both triggers released, the right controller resolves the nearest primitive in the current representation/expanded pose, extends its cyan ray to the surface, and draws a small world-space hit marker. Hover identity is read-only and logged; it cannot bypass the desktop canonical selection controller. Native unit tests cover hits, misses, and geometry behind the controller. Half-cylinder hover currently uses its enclosing capsule, so exact half-volume discrimination remains regression debt before selection writes.
+
 ## Metrics research decisions
 
 - Runtime cadence is authoritative: OpenXR `xrWaitFrame` supplies `predictedDisplayTime`, `predictedDisplayPeriod`, and `shouldRender`; advance one frame from that shared predicted time and skip heavy rendering when `shouldRender` is false. Do not hard-code 90 Hz even though the original Vive normally uses it. Source: [OpenXR frame synchronization](https://registry.khronos.org/OpenXR/specs/1.0-khr/html/xrspec.html#frame-synchronization).
@@ -106,7 +108,8 @@ Phase 3 implementation: scene v7 pairs each natural primitive with an Expanded Q
 - The v5 half-cylinder is closed and shadow-casting. Its axial roll follows the same deterministic but visually arbitrary default as the desktop straight-domain cylinder; no new biological orientation is inferred.
 - Manual checkpoint: relaunch VR to obtain a fresh immutable snapshot, then verify (a) a same-helix empty interval stays empty in Full and Cylinders, (b) an unbound overhang reads as a half-cylinder while a direct-bound overhang reads full, (c) 1xT/2xT crossover inserts show ordered beads/slabs and no direct chord, (d) a Cy3 extension tip is a larger orange marker, (e) an unrelaxed ss linker has the same bowed path/base count in desktop Full and VR Full while Cylinders retains only its thin path, (f) each pre-relax ds linker shows two short boundary arcs that collapse after relaxation, while Cylinders reads as two two-tone bound-overhang shafts joined by one full bridge cylinder, (g) a slack flexible run bows away from the bundle with the same base count in desktop/VR Full, straightens when taut, and disappears—not breaks into rigid remnants—in Cylinders, and (h) a known cycle-closing crossover has a readable amber warning centered over it in Full only. Record mirrored/headset evidence before calling Phase 1 complete.
 - Phase 3 headset checkpoint: launch a two-or-more-helix part, hold the right wand grip, and confirm helices move laterally apart while beads/slabs/atom radii remain constant; crossovers and linkers must stretch continuously rather than detach. Release must restore the exact natural pose. Repeat in all four representations, while holding a trigger, and at close-inspection scale. **Go** if grip never latches, model/world scale stays fixed, and there is no disorienting viewpoint jump; **no-go** on missing input, detached junctions, pose drift, or a grip/trigger conflict.
-- Next slice: establish controller-ray picking against stable primitive identities and emit read-only hover intents before connecting any canonical selection write. Phase 1 and Phase 3 remain pending their manual headset gates.
+- Phase 4 hover checkpoint: with triggers released, point the right wand at a bead, slab, connector, cylinder, and atom. The cyan ray/marker should land on the visible surface, prefer the nearer primitive through overlaps, clear on empty space, and disappear during grab/resize. **No-go** on sticky markers, hits behind the wand, systematic slab misses, or frequent coarse-cylinder false positives.
+- Next slice: define a localhost-only native intent channel and map primitive identities to read-only desktop hover state before allowing click selection. Phase 1 and Phase 3 remain pending their manual headset gates.
 
 ## Open questions log
 
@@ -121,4 +124,4 @@ Phase 3 implementation: scene v7 pairs each natural primitive with an Expanded Q
 
 ## Immediate handoff
 
-Begin Phase 4 with read-only controller-ray hover/picking by stable primitive identity, preserving the canonical selection controller as the sole selection writer. Phase 1 and Phase 3 stay at manual gates until the headset checklists above pass.
+Define and threat-model the localhost-only native intent bridge, then mirror stable VR hover through existing desktop hover/read-only affordances before any canonical selection mutation. Phase 1 and Phase 3 stay at manual gates until the headset checklists above pass.
