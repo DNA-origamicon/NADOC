@@ -2525,12 +2525,29 @@ class Viewer {
                            0.0038F, {0.65F, 0.70F, 0.78F});
             appendMenuText("STATUS " + toolShell_.status(), -0.305F, -0.165F,
                            0.0038F, {0.95F, 0.72F, 0.28F});
+            appendMenuText("AMBER NEEDS SETTINGS", -0.305F, -0.205F,
+                           0.0032F, {0.72F, 0.56F, 0.30F});
             for (size_t index = 0; index < kToolMenuItems.size(); ++index) {
                 const bool selected = index < 5 &&
                     static_cast<size_t>(toolShell_.mode()) == index;
-                glm::vec3 color = selected ? glm::vec3(0.30F, 1.0F, 0.48F)
-                                           : glm::vec3(0.65F, 0.70F, 0.78F);
-                if (static_cast<int>(index) == menuHover_) color = {1.0F, 0.78F, 0.22F};
+                const auto capability = index < 5
+                    ? nadoc_vr::ToolShell::selectionCapability(
+                        static_cast<nadoc_vr::ToolMode>(index), selectedSelectionKind_)
+                    : nadoc_vr::ToolCapability::view_only;
+                glm::vec3 color = capability == nadoc_vr::ToolCapability::unsupported
+                    ? glm::vec3(0.30F, 0.32F, 0.36F)
+                    : capability == nadoc_vr::ToolCapability::configuration_required
+                        ? glm::vec3(0.90F, 0.58F, 0.20F)
+                        : glm::vec3(0.65F, 0.70F, 0.78F);
+                if (selected &&
+                    capability != nadoc_vr::ToolCapability::configuration_required) {
+                    color = {0.30F, 1.0F, 0.48F};
+                }
+                if (static_cast<int>(index) == menuHover_) {
+                    color = capability == nadoc_vr::ToolCapability::unsupported
+                        ? glm::vec3(0.85F, 0.34F, 0.30F)
+                        : glm::vec3(1.0F, 0.78F, 0.22F);
+                }
                 itemBox(kToolMenuItems[index], color);
             }
             return;

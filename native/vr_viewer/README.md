@@ -68,8 +68,11 @@ Controls on the original HTC Vive wands:
   Undo, and Back. This first shell is visibly marked **READ ONLY**: it emits bounded
   browser-owned intents and status but cannot yet mutate geometry or create history.
   Confirm is reported as staged and Undo reports that no VR commit exists.
-  Move/Rotate accepts only a canonical Cluster; finer targets report
-  **UNSUPPORTED TARGET** instead of silently widening the edit. Preview draws an
+  Move/Rotate directly previews exact Cluster, Strand, Domain, End, and Base
+  scopes. End-target Extrude and Cluster/End Twist or Bend are amber and report
+  **CONFIG REQUIRED** until their length/direction/footprint or plane-pair/amount
+  controls exist in-headset. Other pairings report **UNSUPPORTED TARGET** instead
+  of silently widening the edit. Preview draws an
   RGB translation triad at the exact current visual centroid used by NADOC's desktop
   gizmo; its size is derived from owner-wide bounds and stays capped for reach.
   Right-trigger drags accumulate across re-grabs and Cancel returns the handle exactly
@@ -78,9 +81,10 @@ Controls on the original HTC Vive wands:
   primitives move rigidly while a boundary bond or crossover leaves its opposite
   endpoint fixed. The native companion also publishes the same rigid delta through
   the private event bridge. NADOC converts it from view/snapshot coordinates back to
-  nanometres and mirrors it through the existing desktop Cluster gizmo from one
-  immutable baseline. This remains preview-only: Confirm is blocked, Cancel or native
-  session exit restores desktop geometry, and no design/history entry is written.
+  nanometres and mirrors it through the desktop Cluster gizmo or exact nucleotide
+  transform adapter from one immutable baseline. This remains preview-only: Confirm
+  is blocked, Cancel or native session exit restores desktop geometry, and no
+  design/history entry is written.
   Every tool button event snapshots the exact acknowledged primitive, canonical kind,
   and bounded opaque owner aliases at controller-click time. The browser rejects a
   delayed event if that snapshot no longer names its current canonical selection, and
@@ -111,7 +115,9 @@ Close inspection is intentionally unrestricted: structures may be pulled through
 the headset or enlarged around the viewer. A 2 cm rendering near plane prevents
 projection singularities while allowing atom-scale interior inspection.
 
-During an active Move/Rotate Preview, the companion logs bounded 240-sample timing
+After the first submitted stereo frame, Firefox reports snapshot, viewer-startup,
+total launch, first-frame CPU, and runtime-period timing once. During an active
+Move/Rotate Preview, the companion logs bounded 240-sample timing
 windows for transform projection/VBO upload and total post-`xrWaitFrame` CPU submit
 time (p50/p95/p99/max plus the runtime-predicted display period). The live log path
 is returned by `/api/vr/status`; on the current workstation it can also be watched
@@ -124,11 +130,14 @@ both eyes. Full representation geometry mirrors the editor's physical display
 primitives: 0.10 nm backbone beads, 0.18 nm 5′ cubes, oriented
 0.30 × 0.06 × 0.70 nm base slabs, 0.025 nm slab connectors, and 0.075 nm
 same-helix strand connectors.
-Scene format v11 pairs natural and Expanded Quick View poses by the URL-safe
+Production snapshots are streamed into private gzip files; the viewer reads them
+incrementally while retaining transparent support for plain legacy fixtures.
+Scene format v12 pairs natural and Expanded Quick View poses by the URL-safe
 semantic identities introduced in v6, retains v8's bounded canonical-owner aliases,
-retains v9's explicit owner-keyed Cluster gizmo centers, and adds bounded transform
-ownership weights for both endpoints of every participating primitive.
-Those centers use the same live-member visual centroid as desktop Move/Rotate rather
+retains v9's explicit owner-keyed Cluster gizmo centers and v10 endpoint transform
+ownership, and adds a compact owner dictionary plus exact Base/End/Domain/Strand
+tool pivots and weights.
+Cluster centers use the same live-member visual centroid as desktop Move/Rotate rather
 than trusting a potentially stale stored pivot. The reader rejects duplicate,
 unknown, or pose-mismatched identities, aliases, handles, and transform owners,
 allowing numeric
@@ -137,11 +146,11 @@ delimiter-sensitive ID parsing. A boundary bond or crossover can therefore move 
 selected endpoint while leaving the opposite Cluster endpoint fixed. Fractional
 weights continuously skin crossover inserts, flexible ssDNA runs, and ss-linker
 bead/slab/backbone paths between their two authoritative endpoint Clusters. The
-v11 atomistic identities use `(base key, chemical atom name)` rather than a draw
+v11+ atomistic identities use `(base key, chemical atom name)` rather than a draw
 index, and atom-bond identities use the canonicalized pair of those semantic atom
 references. This keeps exact atom targets stable across rebuilds and reversed bond
 enumeration without promoting them to persistent design selections. The reader
-remains compatible with v4-v10 snapshots.
+remains compatible with v4-v11 snapshots.
 The snapshot also carries explicit crossover/forced-ligation links,
 canonical crossover-insert bead/slab chains, 0.25 nm chemistry-colored extension
 markers, per-domain axis gaps, and closed half-cylinder overhang domains in the

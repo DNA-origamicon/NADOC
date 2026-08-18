@@ -164,6 +164,9 @@ class BoundsAccumulator {
 
 enum class ToolMode { inspect, move_rotate, extrude, twist, bend };
 enum class ToolAction { activate, preview, confirm, cancel, undo };
+enum class ToolCapability {
+    view_only, direct_preview, configuration_required, unsupported,
+};
 
 inline const char* toolModeName(ToolMode mode) {
     static constexpr std::array<const char*, 5> names = {
@@ -186,40 +189,63 @@ inline const char* toolActionName(ToolAction action) {
  */
 class ToolShell {
   public:
+    [[nodiscard]] static ToolCapability selectionCapability(
+        ToolMode mode, const std::string& selectionKind) {
+        if (mode == ToolMode::inspect) return ToolCapability::view_only;
+        if (selectionKind.empty() || selectionKind == "none") {
+            return ToolCapability::unsupported;
+        }
+        struct CapabilityEntry {
+            ToolMode mode;
+            const char* selectionKind;
+            ToolCapability capability;
+        };
+        static constexpr std::array<CapabilityEntry, 10> entries = {{
+#define NADOC_VR_TOOL_CAPABILITY(tool, kind, capability) \
+            {ToolMode::tool, #kind, ToolCapability::capability},
+#include "../tool_capabilities.def"
+#undef NADOC_VR_TOOL_CAPABILITY
+        }};
+        for (const CapabilityEntry& entry : entries) {
+            if (entry.mode == mode && selectionKind == entry.selectionKind) {
+                return entry.capability;
+            }
+        }
+        return ToolCapability::unsupported;
+    }
+
     [[nodiscard]] static bool supportsSelection(
         ToolMode mode, const std::string& selectionKind) {
-        if (mode == ToolMode::inspect) return true;
-        if (selectionKind.empty() || selectionKind == "none") return false;
-        if (mode != ToolMode::move_rotate) return true;
-        return selectionKind == "cluster" || selectionKind == "base"
-            || selectionKind == "end" || selectionKind == "domain"
-            || selectionKind == "strand";
+        return selectionCapability(mode, selectionKind) != ToolCapability::unsupported;
     }
 
     void activate(ToolMode mode, const std::string& selectionKind) {
         mode_ = mode;
         previewRequested_ = false;
-        status_ = mode == ToolMode::inspect ? "VIEW ONLY"
-            : selectionKind.empty() || selectionKind == "none" ? "SELECT TARGET"
-            : supportsSelection(mode, selectionKind) ? "READY" : "UNSUPPORTED TARGET";
+        status_ = targetStatus(mode, selectionKind);
     }
 
     void apply(ToolAction action, const std::string& selectionKind) {
         const bool hasSelection = !selectionKind.empty() && selectionKind != "none";
-        const bool supported = supportsSelection(mode_, selectionKind);
+        const ToolCapability capability = selectionCapability(mode_, selectionKind);
+        const bool directPreview = capability == ToolCapability::direct_preview;
         if (action == ToolAction::activate) {
             activate(mode_, selectionKind);
         } else if (action == ToolAction::preview) {
             if (mode_ == ToolMode::inspect) status_ = "CHOOSE TOOL";
             else if (!hasSelection) status_ = "SELECT TARGET";
-            else if (!supported) status_ = "UNSUPPORTED TARGET";
+            else if (capability == ToolCapability::configuration_required) {
+                previewRequested_ = false;
+                status_ = "CONFIG REQUIRED";
+            } else if (!directPreview) status_ = "UNSUPPORTED TARGET";
             else {
                 previewRequested_ = true;
                 status_ = "PREVIEW ONLY";
             }
         } else if (action == ToolAction::confirm) {
-            status_ = previewRequested_ && supported
-                ? "CONFIRM STAGED" : "PREVIEW FIRST";
+            status_ = capability == ToolCapability::configuration_required
+                ? "CONFIG REQUIRED"
+                : previewRequested_ && directPreview ? "CONFIRM STAGED" : "PREVIEW FIRST";
         } else if (action == ToolAction::cancel) {
             previewRequested_ = false;
             status_ = "CANCELLED";
@@ -232,24 +258,23 @@ class ToolShell {
         if (mode_ == ToolMode::inspect) return;
         if (targetChanged && previewRequested_) {
             previewRequested_ = false;
-            status_ = selectionKind.empty() || selectionKind == "none"
-                ? "SELECT TARGET"
-                : supportsSelection(mode_, selectionKind)
-                    ? "READY" : "UNSUPPORTED TARGET";
+            status_ = targetStatus(mode_, selectionKind);
             return;
         }
         if (previewRequested_) {
-            if (supportsSelection(mode_, selectionKind)) return;
+            if (selectionCapability(mode_, selectionKind) ==
+                ToolCapability::direct_preview) return;
             previewRequested_ = false;
-            status_ = selectionKind.empty() || selectionKind == "none"
-                ? "SELECT TARGET" : "UNSUPPORTED TARGET";
+            status_ = targetStatus(mode_, selectionKind);
+            return;
+        }
+        if (targetChanged) {
+            status_ = targetStatus(mode_, selectionKind);
             return;
         }
         if (status_ == "READY" || status_ == "SELECT TARGET" ||
-            status_ == "UNSUPPORTED TARGET") {
-            const bool hasSelection = !selectionKind.empty() && selectionKind != "none";
-            status_ = !hasSelection ? "SELECT TARGET"
-                : supportsSelection(mode_, selectionKind) ? "READY" : "UNSUPPORTED TARGET";
+            status_ == "CONFIG REQUIRED" || status_ == "UNSUPPORTED TARGET") {
+            status_ = targetStatus(mode_, selectionKind);
         }
     }
 
@@ -258,6 +283,18 @@ class ToolShell {
     [[nodiscard]] const std::string& status() const { return status_; }
 
   private:
+    [[nodiscard]] static std::string targetStatus(
+        ToolMode mode, const std::string& selectionKind) {
+        if (mode == ToolMode::inspect) return "VIEW ONLY";
+        if (selectionKind.empty() || selectionKind == "none") return "SELECT TARGET";
+        const ToolCapability capability = selectionCapability(mode, selectionKind);
+        if (capability == ToolCapability::direct_preview) return "READY";
+        if (capability == ToolCapability::configuration_required) {
+            return "CONFIG REQUIRED";
+        }
+        return "UNSUPPORTED TARGET";
+    }
+
     ToolMode mode_ = ToolMode::inspect;
     bool previewRequested_ = false;
     std::string status_ = "VIEW ONLY";

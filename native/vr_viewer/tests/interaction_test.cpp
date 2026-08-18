@@ -310,17 +310,31 @@ void toolShellNeverClaimsACommitAndRequiresPreview() {
     shell.activate(nadoc_vr::ToolMode::twist, "none");
     require(shell.status() == "SELECT TARGET");
     shell.syncSelection("cluster");
-    require(shell.status() == "READY");
+    require(shell.status() == "CONFIG REQUIRED");
     shell.apply(nadoc_vr::ToolAction::confirm, "cluster");
-    require(shell.status() == "PREVIEW FIRST");
+    require(shell.status() == "CONFIG REQUIRED");
     shell.apply(nadoc_vr::ToolAction::preview, "cluster");
-    require(shell.previewRequested() && shell.status() == "PREVIEW ONLY");
-    shell.apply(nadoc_vr::ToolAction::confirm, "cluster");
-    require(shell.status() == "CONFIRM STAGED");
+    require(!shell.previewRequested() && shell.status() == "CONFIG REQUIRED");
     shell.apply(nadoc_vr::ToolAction::cancel, "cluster");
     require(!shell.previewRequested() && shell.status() == "CANCELLED");
     shell.apply(nadoc_vr::ToolAction::undo, "cluster");
     require(shell.status() == "NO VR COMMIT");
+
+    require(nadoc_vr::ToolShell::selectionCapability(
+        nadoc_vr::ToolMode::extrude, "end") ==
+        nadoc_vr::ToolCapability::configuration_required);
+    require(nadoc_vr::ToolShell::selectionCapability(
+        nadoc_vr::ToolMode::twist, "end") ==
+        nadoc_vr::ToolCapability::configuration_required);
+    require(nadoc_vr::ToolShell::selectionCapability(
+        nadoc_vr::ToolMode::bend, "cluster") ==
+        nadoc_vr::ToolCapability::configuration_required);
+    require(nadoc_vr::ToolShell::selectionCapability(
+        nadoc_vr::ToolMode::extrude, "base") ==
+        nadoc_vr::ToolCapability::unsupported);
+    require(nadoc_vr::ToolShell::selectionCapability(
+        nadoc_vr::ToolMode::bend, "domain") ==
+        nadoc_vr::ToolCapability::unsupported);
 
     shell.activate(nadoc_vr::ToolMode::move_rotate, "base");
     require(shell.status() == "READY");

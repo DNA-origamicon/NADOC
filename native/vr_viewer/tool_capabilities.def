@@ -1,0 +1,12 @@
+// Canonical directly-previewable/configuration-required selection scopes.
+// Unlisted tool × selection pairs are unsupported and must never be widened.
+NADOC_VR_TOOL_CAPABILITY(move_rotate, cluster, direct_preview)
+NADOC_VR_TOOL_CAPABILITY(move_rotate, base, direct_preview)
+NADOC_VR_TOOL_CAPABILITY(move_rotate, end, direct_preview)
+NADOC_VR_TOOL_CAPABILITY(move_rotate, domain, direct_preview)
+NADOC_VR_TOOL_CAPABILITY(move_rotate, strand, direct_preview)
+NADOC_VR_TOOL_CAPABILITY(extrude, end, configuration_required)
+NADOC_VR_TOOL_CAPABILITY(twist, cluster, configuration_required)
+NADOC_VR_TOOL_CAPABILITY(twist, end, configuration_required)
+NADOC_VR_TOOL_CAPABILITY(bend, cluster, configuration_required)
+NADOC_VR_TOOL_CAPABILITY(bend, end, configuration_required)

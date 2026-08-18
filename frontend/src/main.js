@@ -5835,8 +5835,13 @@ async function main() {
         const label = event.mode === 'move_rotate'
           ? 'Move / Rotate'
           : `${event.mode?.[0]?.toUpperCase() ?? ''}${event.mode?.slice(1) ?? ''}`
-        if (result.reason === 'unsupported_selection') {
-          showToast(`VR ${label}: this connectivity/atom target has no exact edit scope yet.`)
+        if (result.reason === 'configuration_required') {
+          const requirement = event.mode === 'extrude'
+            ? 'length, direction, and footprint controls'
+            : 'plane-pair and deformation-amount controls'
+          showToast(`VR ${label}: target recognized; ${requirement} are not in-headset yet.`)
+        } else if (result.reason === 'unsupported_selection') {
+          showToast(`VR ${label}: this target has no exact tool contract and was not widened.`)
         } else if (result.reason === 'stale_target' ||
             result.reason === 'target_changed_preview_required') {
           showToast(`VR ${label}: the target changed; select it again and restart Preview.`)

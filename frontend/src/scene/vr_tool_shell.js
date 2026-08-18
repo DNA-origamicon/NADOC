@@ -16,16 +16,40 @@ export const VR_TOOL_ACTIONS = Object.freeze([
 const MODES = new Set(VR_TOOL_MODES)
 const ACTIONS = new Set(VR_TOOL_ACTIONS)
 
-/** Tool-specific canonical selection policy. Move/Rotate accepts only scopes with
- * an exact scene-v12 endpoint contract and a reversible desktop preview adapter.
- * Bond/Crossover and transient Atom targets remain refused rather than widened. */
-export function vrToolSupportsSelection(mode, selectedRef) {
-  if (mode === 'inspect') return true
-  if (!selectedRef) return false
-  if (mode === 'move_rotate') {
-    return ['cluster', 'base', 'end', 'domain', 'strand'].includes(selectedRef.kind)
+export const VR_TOOL_CAPABILITIES = Object.freeze({
+  viewOnly: 'view_only',
+  directPreview: 'direct_preview',
+  configurationRequired: 'configuration_required',
+  unsupported: 'unsupported',
+})
+
+const DIRECT_MOVE_ROTATE_KINDS = new Set([
+  'cluster', 'base', 'end', 'domain', 'strand',
+])
+const CONFIGURATION_KINDS = Object.freeze({
+  extrude: new Set(['end']),
+  twist: new Set(['cluster', 'end']),
+  bend: new Set(['cluster', 'end']),
+})
+
+/** Honest selection × tool capability. A semantically valid target is not called
+ * previewable until every required parameter and visual adapter exists. */
+export function vrToolSelectionCapability(mode, selectedRef) {
+  if (mode === 'inspect') return VR_TOOL_CAPABILITIES.viewOnly
+  if (!selectedRef) return VR_TOOL_CAPABILITIES.unsupported
+  if (mode === 'move_rotate' && DIRECT_MOVE_ROTATE_KINDS.has(selectedRef.kind)) {
+    return VR_TOOL_CAPABILITIES.directPreview
   }
-  return true
+  if (CONFIGURATION_KINDS[mode]?.has(selectedRef.kind)) {
+    return VR_TOOL_CAPABILITIES.configurationRequired
+  }
+  return VR_TOOL_CAPABILITIES.unsupported
+}
+
+/** Backward-compatible semantic eligibility check. Configuration-required targets
+ * are valid targets even though Preview must remain disabled. */
+export function vrToolSupportsSelection(mode, selectedRef) {
+  return vrToolSelectionCapability(mode, selectedRef) !== VR_TOOL_CAPABILITIES.unsupported
 }
 
 export const initialVRToolShellState = Object.freeze({
@@ -64,16 +88,19 @@ export function reduceVRToolShell(state = initialVRToolShellState, intent = {}, 
   const selectedRef = toolTarget?.selectedRef ?? null
   const targetKey = vrToolTargetKey(toolTarget)
   const base = { mode, sequence, targetKey: null }
-  const selectionSupported = vrToolSupportsSelection(mode, selectedRef)
+  const capability = vrToolSelectionCapability(mode, selectedRef)
+  const selectionSupported = capability !== VR_TOOL_CAPABILITIES.unsupported
+  const directPreview = capability === VR_TOOL_CAPABILITIES.directPreview
   if (action === 'activate') {
     const stage = mode === 'inspect'
       ? 'inspect'
       : targetSnapshotPresent && !toolTarget ? 'stale_target'
       : !selectedRef ? 'waiting_selection'
-        : selectionSupported ? 'armed' : 'unsupported_selection'
+        : !selectionSupported ? 'unsupported_selection'
+          : directPreview ? 'armed' : 'configuration_required'
     return {
       state: { ...base, stage }, effect: null,
-      accepted: mode === 'inspect' || (!!toolTarget && selectionSupported),
+      accepted: mode === 'inspect' || (!!toolTarget && directPreview),
       reason: stage,
     }
   }
@@ -86,7 +113,8 @@ export function reduceVRToolShell(state = initialVRToolShellState, intent = {}, 
   if (action === 'cancel') {
     const stage = !selectedRef
       ? 'waiting_selection'
-      : selectionSupported ? 'armed' : 'unsupported_selection'
+      : !selectionSupported ? 'unsupported_selection'
+        : directPreview ? 'armed' : 'configuration_required'
     return {
       state: { ...base, stage },
       effect: { type: 'cancel_requested', tool: mode },
@@ -116,6 +144,12 @@ export function reduceVRToolShell(state = initialVRToolShellState, intent = {}, 
     return {
       state: { ...base, stage: 'unsupported_selection' }, effect: null,
       accepted: false, reason: 'unsupported_selection',
+    }
+  }
+  if (!directPreview) {
+    return {
+      state: { ...base, stage: 'configuration_required' }, effect: null,
+      accepted: false, reason: 'configuration_required',
     }
   }
   if (action === 'preview') {
