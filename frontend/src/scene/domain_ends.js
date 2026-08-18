@@ -202,7 +202,7 @@ function _applyDomainEndPose(end, pose) {
 
 // ── Detection (pure — no Three.js) ────────────────────────────────────────────
 
-function _computeDomainEnds(design) {
+export function _computeDomainEnds(design) {
   const helices  = design.helices ?? []
   const hmap     = new Map(helices.map(h => [h.id, h]))
   const labelMap = new Map(helices.map((h, i) => [h.id, h.label ?? i]))
@@ -284,8 +284,21 @@ function _computeDomainEnds(design) {
         if (st === 'staple' && scaf.has(diskBp)) continue  // scaffold on open side
 
         const key      = `${d.helix_id}:${diskBp}`
+        const owner = {
+          strandId: strand.id,
+          domainIndex: di,
+          direction: dir,
+          strandType: st,
+          overhangId: ovhgId,
+        }
         const existing = results.get(key)
         if (existing) {
+          if (!existing.owners.some(candidate =>
+            candidate.strandId === owner.strandId &&
+            candidate.domainIndex === owner.domainIndex &&
+            candidate.direction === owner.direction)) {
+            existing.owners.push(owner)
+          }
           if (ovhgId && !existing.overhangId) {
             existing.overhangId = ovhgId
             existing.transformKey = ovhgId
@@ -315,6 +328,10 @@ function _computeDomainEnds(design) {
           // skipping every blunt end on a partially-moved helix.
           strandId:     strand.id,
           domainIndex:  di,
+          // A rendered ring is one physical face and may cap more than one strand.
+          // Retain every exact strand-domain owner so VR/tool adapters never infer
+          // ownership from whichever strand happened to win face deduplication.
+          owners:       [owner],
         })
       }
     }
@@ -818,6 +835,7 @@ export function initDomainEnds(scene, camera, canvas, {
         transformKey: e.transformKey,
         overhangId:   e.overhangId,
         strandType:   e.strandType,
+        owners:       e.owners.map(owner => ({ ...owner })),
         plane:        e.plane,
         offsetNm:     e.offsetNm,
         ringPos3d:    e.ringMesh.position.toArray(),

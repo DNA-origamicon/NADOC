@@ -619,6 +619,7 @@ async function main() {
     getRegionBallstickRenderer: () => _atomSurface.getRegionBallstickRenderer(),
     getRegionStickRenderer: () => _atomSurface.getRegionStickRenderer(),
     getRegionSurfaceRenderer:   () => _atomSurface.getRegionSurfaceRenderer(),
+    getDomainEndTable: () => bluntEnds?.getEndTable?.() ?? [],
     onDrillLevel: selectionFilter.reflectDrillLevel,
     onNick: async ({ helixId, bpIndex, direction }) => {
       _clearStapleChecks()
@@ -5820,7 +5821,20 @@ async function main() {
           selection_kind: result?.selectionKind ?? 'none',
         }).catch(() => {})
       } else if (event?.type === 'tool_config') {
-        const result = reduceVRToolConfig(_vrToolConfigState, event)
+        const draft = event.draft
+        const targetSnapshotPresent = draft?.target_kind !== 'none' ||
+          !!draft?.target_identity || !!draft?.target_owner_tokens?.length
+        const toolTarget = targetSnapshotPresent
+          ? selectionManager.resolveVRToolTargetSnapshot?.({
+              identity: draft.target_identity,
+              selectionKind: draft.target_kind,
+              ownerTokens: draft.target_owner_tokens,
+            }) ?? null
+          : null
+        const result = reduceVRToolConfig(_vrToolConfigState, event, {
+          toolTarget,
+          targetSnapshotPresent,
+        })
         _vrToolConfigState = result.state
       } else if (event?.type === 'tool') {
         const targetSnapshotPresent = event.targetKind !== 'none' ||

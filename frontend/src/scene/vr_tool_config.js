@@ -22,6 +22,8 @@ const TWIST_AMOUNT_MODES = new Set(['total_degrees', 'degrees_per_nm'])
 export const initialVRToolConfigState = Object.freeze({
   sequence: 0,
   draft: null,
+  toolContext: null,
+  toolContextReason: null,
 })
 
 function _boundedInteger(value, minimum, maximum, { nullable = false } = {}) {
@@ -131,6 +133,7 @@ export function vrToolConfigMissing(draft) {
 export function reduceVRToolConfig(
   state = initialVRToolConfigState,
   event = {},
+  { toolTarget = null, targetSnapshotPresent = false } = {},
 ) {
   const sequence = Number(event.sequence)
   if (!Number.isSafeInteger(sequence) || sequence <= state.sequence) {
@@ -138,16 +141,32 @@ export function reduceVRToolConfig(
   }
   if (event.draft === null) {
     return {
-      state: { sequence, draft: null },
+      state: {
+        sequence, draft: null, toolContext: null, toolContextReason: null,
+      },
       accepted: true,
       reason: 'cleared',
     }
   }
   const draft = normalizeVRToolConfig(event.draft)
   if (!draft) return { state, accepted: false, reason: 'invalid_draft' }
+  if (targetSnapshotPresent && !toolTarget) {
+    return { state, accepted: false, reason: 'stale_target' }
+  }
+  if (draft.target_kind !== 'none' && (
+    !toolTarget || toolTarget.identity !== draft.target_identity ||
+    toolTarget.selectionKind !== draft.target_kind ||
+    JSON.stringify(toolTarget.ownerTokens) !== JSON.stringify(draft.target_owner_tokens)
+  )) return { state, accepted: false, reason: 'target_mismatch' }
+  const toolContext = draft.target_kind === 'end'
+    ? toolTarget?.toolContext ?? null : null
+  const toolContextReason = draft.target_kind === 'end'
+    ? toolTarget?.toolContextReason ?? 'geometry_context_required' : null
   return {
-    state: { sequence, draft },
+    state: { sequence, draft, toolContext, toolContextReason },
     accepted: true,
-    reason: vrToolConfigMissing(draft).length ? 'incomplete' : 'configured',
+    reason: draft.target_kind === 'end' && !toolContext
+      ? 'geometry_context_required'
+      : vrToolConfigMissing(draft).length ? 'incomplete' : 'configured',
   }
 }

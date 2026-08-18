@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { _physLen, _axisPoint } from './domain_ends.js'
+import { _physLen, _axisPoint, _computeDomainEnds } from './domain_ends.js'
 
 const RISE = 0.334
 
@@ -42,5 +42,34 @@ describe('_axisPoint on a BENT helix', () => {
     const p = _axisPoint(h, axDef, 5)   // bp 5 = the corner of the L
     expect(p.x).toBeCloseTo(0, 5)
     expect(p.z).toBeCloseTo(5 * RISE, 5)
+  })
+})
+
+describe('_computeDomainEnds owner identity', () => {
+  it('retains every strand-domain owner when two termini share one physical face', () => {
+    const design = {
+      helices: [{ id: 'h1', bp_start: 0, length_bp: 8 }],
+      strands: [
+        {
+          id: 'scaf', strand_type: 'scaffold',
+          domains: [{ helix_id: 'h1', start_bp: 0, end_bp: 7, direction: 'FORWARD' }],
+        },
+        {
+          id: 'stap', strand_type: 'staple',
+          domains: [{ helix_id: 'h1', start_bp: 0, end_bp: 7, direction: 'REVERSE' }],
+        },
+      ],
+    }
+    const ends = _computeDomainEnds(design)
+    const far = ends.find(end => end.diskBp === 8)
+    const near = ends.find(end => end.diskBp === -1)
+    expect(far.owners).toEqual(expect.arrayContaining([
+      expect.objectContaining({ strandId: 'scaf', domainIndex: 0, direction: 'FORWARD' }),
+      expect.objectContaining({ strandId: 'stap', domainIndex: 0, direction: 'REVERSE' }),
+    ]))
+    expect(near.owners).toEqual(expect.arrayContaining([
+      expect.objectContaining({ strandId: 'scaf', domainIndex: 0, direction: 'FORWARD' }),
+      expect.objectContaining({ strandId: 'stap', domainIndex: 0, direction: 'REVERSE' }),
+    ]))
   })
 })

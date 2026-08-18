@@ -84,6 +84,15 @@ describe('native VR tool configuration drafts', () => {
     }
     const accepted = reduceVRToolConfig(initialVRToolConfigState, {
       sequence: 4, draft,
+    }, {
+      targetSnapshotPresent: true,
+      toolTarget: {
+        identity: target.target_identity,
+        selectionKind: target.target_kind,
+        ownerTokens: target.target_owner_tokens,
+        toolContext: { kind: 'continuation_end', helixId: 'h1' },
+        toolContextReason: 'resolved',
+      },
     })
     expect(accepted.accepted).toBe(true)
     expect(accepted.reason).toBe('incomplete')
@@ -94,7 +103,62 @@ describe('native VR tool configuration drafts', () => {
     }).state).toBe(accepted.state)
     const cleared = reduceVRToolConfig(accepted.state, { sequence: 6, draft: null })
     expect(cleared).toEqual({
-      state: { sequence: 6, draft: null }, accepted: true, reason: 'cleared',
+      state: {
+        sequence: 6, draft: null, toolContext: null, toolContextReason: null,
+      },
+      accepted: true, reason: 'cleared',
     })
+  })
+
+  it('binds an exact resolved End context and rejects stale or mismatched targets', () => {
+    const draft = {
+      mode: 'extrude', ...target,
+      length_bp: 12, direction_sign: 1, strand_filter: 'both',
+      ligate_adjacent: true, footprint_state: 'unresolved',
+    }
+    const toolTarget = {
+      identity: target.target_identity,
+      selectionKind: 'end',
+      ownerTokens: ['end-token'],
+      toolContext: { kind: 'continuation_end', helixId: 'h1', continuationBp: 4 },
+      toolContextReason: 'resolved',
+    }
+    const accepted = reduceVRToolConfig(initialVRToolConfigState, {
+      sequence: 1, draft,
+    }, { toolTarget, targetSnapshotPresent: true })
+    expect(accepted.state.toolContext).toEqual(toolTarget.toolContext)
+    expect(accepted.state.toolContextReason).toBe('resolved')
+    expect(accepted.reason).toBe('incomplete')
+
+    expect(reduceVRToolConfig(initialVRToolConfigState, {
+      sequence: 1, draft,
+    }, { toolTarget: null, targetSnapshotPresent: true }).reason).toBe('stale_target')
+    expect(reduceVRToolConfig(initialVRToolConfigState, {
+      sequence: 1, draft,
+    }, {
+      toolTarget: { ...toolTarget, identity: 'other' }, targetSnapshotPresent: true,
+    }).reason).toBe('target_mismatch')
+  })
+
+  it('retains a failure reason when an exact End has no continuation face', () => {
+    const draft = {
+      mode: 'bend', ...target,
+      plane_a_bp: null, plane_b_bp: null, angle_deg: 0, direction_deg: 0,
+    }
+    const result = reduceVRToolConfig(initialVRToolConfigState, {
+      sequence: 1, draft,
+    }, {
+      targetSnapshotPresent: true,
+      toolTarget: {
+        identity: target.target_identity,
+        selectionKind: 'end',
+        ownerTokens: ['end-token'],
+        toolContext: null,
+        toolContextReason: 'no_continuation_face',
+      },
+    })
+    expect(result.accepted).toBe(true)
+    expect(result.reason).toBe('geometry_context_required')
+    expect(result.state.toolContextReason).toBe('no_continuation_face')
   })
 })

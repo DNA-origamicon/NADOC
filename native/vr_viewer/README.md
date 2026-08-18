@@ -75,7 +75,12 @@ Controls on the original HTC Vive wands:
   exposes amount and total-degrees/degrees-per-nm units; Bend exposes angle and
   direction. Exact slice footprint and ordered deformation planes remain visibly
   **UNRESOLVED**, so these settings cannot arm Preview or change the design yet.
-  Changing the canonical target resets the draft. Other pairings report
+  The browser resolves an End against the live nucleotide and the desktop's
+  deduplicated physical-face table, including every strand/domain owner,
+  overhang identity, deformation state, and crossover/forced-ligation occupancy.
+  Synthetic extension/linker tips, loop-copy beads, stale owners, and ambiguous
+  faces fail closed instead of borrowing a nearby face. Changing the canonical
+  target resets the draft. Other pairings report
   **UNSUPPORTED TARGET** instead
   of silently widening the edit. Preview draws an
   RGB translation triad at the exact current visual centroid used by NADOC's desktop

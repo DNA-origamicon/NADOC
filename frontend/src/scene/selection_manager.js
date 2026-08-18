@@ -48,6 +48,7 @@ import {
 } from './selection_hit_resolver.js'
 import { selectionHighlightDescriptor } from './selection_highlight_model.js'
 import { referenceStrandInteractionHidden } from './reference_navigation.js'
+import { resolveVREndToolContext } from './vr_tool_context.js'
 
 // Kick off the FJC lookup fetch at module load so the linker-config modal
 // opens instantly with the per-bin histograms already cached.
@@ -1665,7 +1666,7 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
  * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldAssignSequence?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onEditStrandSequence, onHideSelection, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getAtomisticRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionStickRenderer, getRegionSurfaceRenderer, onDrillLevel, selectionController } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onEditStrandSequence, onHideSelection, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, getDomainEndTable, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getAtomisticRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionStickRenderer, getRegionSurfaceRenderer, onDrillLevel, selectionController } = opts
   if (!selectionController) throw new TypeError('selection manager requires the canonical selection controller')
   _onEditStrandSequence = onEditStrandSequence ?? null
   _onHideSelection = onHideSelection ?? null
@@ -2506,11 +2507,22 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   function _resolveVRToolTargetSnapshot({ identity, selectionKind, ownerTokens } = {}) {
     const selectedRef = selectionController.getState().primary ?? null
     const state = store.getState()
-    return vrToolTargetSnapshot({
+    const target = vrToolTargetSnapshot({
       identity, selectionKind, ownerTokens, selectedRef,
       geometry: state.currentGeometry,
       design: state.currentDesign,
     })
+    if (!target || selectedRef?.kind !== 'end') return target
+    const resolution = resolveVREndToolContext(selectedRef, {
+      geometry: state.currentGeometry,
+      design: state.currentDesign,
+      domainEnds: getDomainEndTable?.() ?? [],
+    })
+    return {
+      ...target,
+      toolContext: resolution.context,
+      toolContextReason: resolution.reason,
+    }
   }
 
   // Unified backbone-bead-level hit handler — used by a real bead hit AND by the
