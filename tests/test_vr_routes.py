@@ -44,6 +44,8 @@ from backend.core.vr_scene_contract import compare_scenes, parse_scene_contract
 _BASE_COLORS_FOR_TEST = {
     "A": (0x44 / 255, 0xDD / 255, 0x88 / 255),
     "T": (1.0, 0x55 / 255, 0x55 / 255),
+    "G": (1.0, 0xCC / 255, 0.0),
+    "C": (0x55 / 255, 0xAA / 255, 1.0),
 }
 
 
@@ -1555,6 +1557,79 @@ def test_full_slabs_share_the_pair_plane_and_contact_the_backbone() -> None:
     # The contact shift leaves each bead 0.33 nm from its slab center: the
     # 0.35 nm half-extent penetrates the 0.10 nm bead center by 0.02 nm.
     np.testing.assert_allclose(centers[:, 0], [-0.67, 0.67])
+
+
+def test_reverse_loop_insertions_thread_backbone_in_desktop_copy_order() -> None:
+    design = SimpleNamespace(
+        strands=[
+            SimpleNamespace(
+                id="reverse",
+                is_scaffold=False,
+                color="#ff6b6b",
+                sequence="ATCG",
+            )
+        ],
+        cluster_transforms=[],
+        crossovers=[],
+        forced_ligations=[],
+    )
+
+    def nucleotide(bp_index: int, z: float) -> dict:
+        return {
+            "strand_id": "reverse",
+            "domain_index": 0,
+            "helix_id": "h0",
+            "bp_index": bp_index,
+            "direction": "REVERSE",
+            "backbone_position": [0, 0, z],
+        }
+
+    # Geometry emits loop copies in ascending axial/copy order for both strand
+    # directions. Desktop visits a reverse strand's copies 1 -> 0 so its 5'->3'
+    # backbone remains monotone rather than dipping into and back out of the loop.
+    natural_nucleotides = [
+        nucleotide(6, 2.00),
+        nucleotide(5, 1.50),
+        nucleotide(5, 1.84),
+        nucleotide(4, 1.34),
+    ]
+    expanded_nucleotides = [
+        {**item, "backbone_position": [5, 0, item["backbone_position"][2]]}
+        for item in natural_nucleotides
+    ]
+    kwargs = {"atomistic_model": SimpleNamespace(atoms=[], bonds=[])}
+    natural = _serialize_scene(design, natural_nucleotides, [], **kwargs)
+    expanded = _serialize_scene(design, expanded_nucleotides, [], **kwargs)
+    scene = parse_scene_contract(_bundle_expanded_scene(natural, expanded))
+
+    expected = [
+        "backbone:nuc:reverse:0:h0:6:REVERSE:0~nuc:reverse:0:h0:5:REVERSE:1",
+        "backbone:nuc:reverse:0:h0:5:REVERSE:1~nuc:reverse:0:h0:5:REVERSE:0",
+        "backbone:nuc:reverse:0:h0:5:REVERSE:0~nuc:reverse:0:h0:4:REVERSE:0",
+    ]
+    for pose in ("full", "expanded/full"):
+        connectors = [
+            primitive
+            for primitive in scene[pose].values()
+            if primitive.identity.startswith("backbone:")
+        ]
+        assert [primitive.identity for primitive in connectors] == expected
+        z_path = [connectors[0].values[2], *[item.values[5] for item in connectors]]
+        assert z_path == pytest.approx([2.00, 1.84, 1.50, 1.34])
+
+    natural_points = {
+        primitive.identity: primitive
+        for primitive in scene["full"].values()
+        if primitive.record_type == "P"
+    }
+    expected_base_colors = {
+        "nuc:reverse:0:h0:6:REVERSE:0:backbone": _BASE_COLORS_FOR_TEST["A"],
+        "nuc:reverse:0:h0:5:REVERSE:1:backbone": _BASE_COLORS_FOR_TEST["T"],
+        "nuc:reverse:0:h0:5:REVERSE:0:backbone": _BASE_COLORS_FOR_TEST["C"],
+        "nuc:reverse:0:h0:4:REVERSE:0:backbone": _BASE_COLORS_FOR_TEST["G"],
+    }
+    for identity, color in expected_base_colors.items():
+        assert natural_points[identity].values[7:10] == pytest.approx(color)
 
 
 def test_axis_records_preserve_same_helix_domain_gaps() -> None:

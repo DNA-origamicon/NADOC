@@ -30,6 +30,10 @@ from pydantic import BaseModel, Field
 from backend.api import state as design_state
 from backend.core.constants import STAPLE_PALETTE
 from backend.core.models import MODIFICATION_COLORS
+from backend.core.vr_scene_projection import (
+    normalize_geometry_copy_indices,
+    strand_nucleotide_order_key,
+)
 
 router = APIRouter(tags=["vr"])
 
@@ -253,15 +257,7 @@ def _base_letters(design, nucleotides: list[dict]) -> dict[int, str]:
         sequence = sequences.get(strand_id)
         if not sequence:
             continue
-        entries.sort(
-            key=lambda item: (
-                int(item[1].get("domain_index") or 0),
-                int(item[1].get("bp_index") or 0)
-                if item[1].get("direction") == "FORWARD"
-                else -int(item[1].get("bp_index") or 0),
-                int(item[1].get("copy_k") or item[1].get("ext_k") or 0),
-            )
-        )
+        entries.sort(key=lambda item: strand_nucleotide_order_key(item[1]))
         for offset, (index, _) in enumerate(entries):
             if offset < len(sequence) and sequence[offset].upper() in _BASE_COLORS:
                 result[index] = sequence[offset].upper()
@@ -547,6 +543,10 @@ def _serialize_scene(
     line_writer: Callable[[str], None] | None = None,
 ) -> str | dict[str, dict[str, tuple[int, str]]]:
     """Create the deliberately trivial line-oriented format read by the C++ viewer."""
+    # Stable IDs and aliases need the loop-copy identity that the canonical
+    # geometry transport deliberately leaves implicit in emission order.
+    nucleotides = normalize_geometry_copy_indices(nucleotides)
+
     rotation = _view_rotation(camera)
     cluster_handles = _cluster_gizmo_handle_centers(design, nucleotides, rotation)
     cluster_transform_tokens = tuple(token for token, _ in cluster_handles)
@@ -1402,13 +1402,7 @@ def _serialize_scene(
     # sparse strand metadata cannot draw a line across an entire structure.
     for strand_nucleotides in by_strand.values():
         strand_nucleotides.sort(
-            key=lambda item: (
-                int(item[0].get("domain_index") or 0),
-                int(item[0].get("bp_index") or 0)
-                if item[0].get("direction") == "FORWARD"
-                else -int(item[0].get("bp_index") or 0),
-                int(item[0].get("copy_k") or item[0].get("ext_k") or 0),
-            )
+            key=lambda item: strand_nucleotide_order_key(item[0])
         )
         for (
             first_nucleotide,

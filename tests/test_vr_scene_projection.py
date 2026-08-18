@@ -7,7 +7,9 @@ from backend.core.vr_scene_projection import (
     crossover_extra_base_full_projections,
     ds_linker_connector_projections,
     flexible_segment_projection,
+    normalize_geometry_copy_indices,
     ss_linker_projection,
+    strand_nucleotide_order_key,
 )
 
 
@@ -17,6 +19,24 @@ def _nucleotide(x: float, direction: str) -> dict:
         "axis_tangent": [0.0, 0.0, 1.0],
         "direction": direction,
     }
+
+
+def test_loop_copy_identity_and_order_match_desktop_without_mutating_geometry() -> None:
+    source = [
+        {"strand_id": "s", "helix_id": "h", "bp_index": 5, "direction": "REVERSE"},
+        {"strand_id": "s", "helix_id": "h", "bp_index": 5, "direction": "REVERSE"},
+        {"strand_id": "other", "helix_id": "h", "bp_index": 5, "direction": "REVERSE"},
+    ]
+    normalized = normalize_geometry_copy_indices(source)
+
+    assert all("copy_k" not in item for item in source)
+    assert [item["copy_k"] for item in normalized] == [0, 1, 0]
+    assert [item["copy_k"] for item in sorted(normalized[:2], key=strand_nucleotide_order_key)] == [1, 0]
+    forward = [
+        {**item, "direction": "FORWARD"}
+        for item in normalize_geometry_copy_indices(source[:2])
+    ]
+    assert [item["copy_k"] for item in sorted(forward, key=strand_nucleotide_order_key)] == [0, 1]
 
 
 def test_extra_base_projection_preserves_sequence_order_and_slab_frame() -> None:

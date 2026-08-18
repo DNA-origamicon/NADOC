@@ -17,6 +17,45 @@ from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.linker_relax import linker_anchor_nucleotide
 
 
+def normalize_geometry_copy_indices(nucleotides: list[dict]) -> list[dict]:
+    """Attach desktop-equivalent loop-copy identities without mutating input.
+
+    The canonical geometry payload emits repeated lattice sites in copy order but
+    normally omits ``copy_k``. Copy numbering is independent per strand/site.
+    Explicit indices from specialized callers remain authoritative.
+    """
+    copy_counts: dict[tuple[str, str, int, str], int] = {}
+    normalized = []
+    for nucleotide in nucleotides:
+        key = (
+            str(nucleotide.get("strand_id") or ""),
+            str(nucleotide.get("helix_id") or ""),
+            int(nucleotide.get("bp_index") or 0),
+            str(nucleotide.get("direction") or ""),
+        )
+        explicit_copy = nucleotide.get("copy_k")
+        copy_k = (
+            int(explicit_copy)
+            if explicit_copy is not None
+            else copy_counts.get(key, 0)
+        )
+        copy_counts[key] = max(copy_counts.get(key, 0), copy_k + 1)
+        normalized.append({**nucleotide, "copy_k": copy_k})
+    return normalized
+
+
+def strand_nucleotide_order_key(nucleotide: dict) -> tuple[int, int, int]:
+    """Desktop 5′→3′ order, including reverse loop-copy traversal."""
+    forward = nucleotide.get("direction") == "FORWARD"
+    bp_index = int(nucleotide.get("bp_index") or 0)
+    copy_k = int(nucleotide.get("copy_k") or nucleotide.get("ext_k") or 0)
+    return (
+        int(nucleotide.get("domain_index") or 0),
+        bp_index if forward else -bp_index,
+        copy_k if forward else -copy_k,
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class CrossoverExtraBaseFullProjection:
     """One crossover-insert bead, slab, and bead-to-slab attachment pose."""
