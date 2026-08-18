@@ -236,13 +236,43 @@ def _serialize_scene(
     def solid_palette(color: tuple[float, float, float]) -> tuple[float, ...]:
         return color * 4
 
-    lines = [f"NADOCVR 3 {representation} {coloring}", "# preloaded VR representations"]
+    lines = [f"NADOCVR 4 {representation} {coloring}", "# preloaded VR representations"]
     by_strand: dict[str, list[tuple[dict, np.ndarray, tuple[float, ...]]]] = {}
     identity_palettes: dict[tuple, tuple[float, ...]] = {}
     lines.append("R full")
-    for index, nucleotide in enumerate(nucleotides):
+    assigned = [
+        (index, nucleotide)
+        for index, nucleotide in enumerate(nucleotides)
+        if nucleotide.get("strand_id")
+        and not nucleotide.get("is_modification")
+        and not nucleotide.get("is_flexible_segment")
+        and not (
+            str(nucleotide.get("strand_id", "")).startswith("__lnk__")
+            and str(nucleotide.get("strand_id", "")).endswith("__s")
+            and str(nucleotide.get("helix_id", "")).startswith("__lnk__")
+        )
+    ]
+    strand_by_id = {strand.id: strand for strand in design.strands}
+
+    def palette_variant(
+        palette: tuple[float, ...], nucleotide: dict, scaffold_hex: str
+    ) -> tuple[float, ...]:
+        strand = strand_by_id.get(nucleotide.get("strand_id"))
+        if not strand or not strand.is_scaffold:
+            return palette
+        return (*_rgb(scaffold_hex), *palette[3:])
+
+    def box(
+        center: np.ndarray,
+        axis_x: np.ndarray,
+        axis_y: np.ndarray,
+        axis_z: np.ndarray,
+        palette: tuple[float, ...],
+    ) -> None:
+        lines.append(f"B {nums(*center, *axis_x, *axis_y, *axis_z, *palette)}")
+
+    for index, nucleotide in assigned:
         backbone = point(nucleotide.get("backbone_position"))
-        base = point(nucleotide.get("base_position"))
         if backbone is None:
             continue
         strand_id = nucleotide.get("strand_id") or ""
@@ -254,13 +284,92 @@ def _serialize_scene(
             nucleotide.get("direction") or "",
         )
         identity_palettes[identity] = palette
-        lines.append(f"P {nums(*backbone, 0.17, *palette)}")
-        if base is not None:
-            base_palette = tuple(min(1.0, channel * 0.75 + 0.25) for channel in palette)
-            lines.append(f"P {nums(*base, 0.13, *base_palette)}")
-            lines.append(f"C {nums(*backbone, *base, 0.075, *palette)}")
+        if nucleotide.get("is_five_prime"):
+            size = np.identity(3) * 0.18
+            box(backbone, *(rotation @ size[:, column] for column in range(3)), palette)
+        else:
+            lines.append(f"P {nums(*backbone, 0.10, *palette)}")
         if strand_id:
             by_strand.setdefault(strand_id, []).append((nucleotide, backbone, palette))
+
+    # Standard Full uses one oriented 0.30 × 0.06 × 0.70 nm base slab per
+    # nucleotide. Paired slabs share their mean axial plane and are shifted
+    # radially until their rectangle reaches the backbone bead, exactly matching
+    # helix_renderer.pairedSlabCenter().
+    pair_groups: dict[tuple, dict[str, list[tuple[int, dict]]]] = {}
+    for index, nucleotide in assigned:
+        helix_id = str(nucleotide.get("helix_id") or "")
+        if helix_id.startswith("__ext_"):
+            continue
+        key = (helix_id, int(nucleotide.get("bp_index") or 0))
+        group = pair_groups.setdefault(key, {"FORWARD": [], "REVERSE": []})
+        direction = nucleotide.get("direction")
+        if direction in group:
+            group[direction].append((index, nucleotide))
+    mates: dict[int, dict] = {}
+    for group in pair_groups.values():
+        for (_, forward), (_, reverse) in zip(group["FORWARD"], group["REVERSE"]):
+            mates[id(forward)] = reverse
+            mates[id(reverse)] = forward
+
+    for index, nucleotide in assigned:
+        if str(nucleotide.get("helix_id") or "").startswith("__ext_"):
+            continue
+        try:
+            raw_bead = np.asarray(nucleotide.get("backbone_position"), dtype=float)
+            raw_base = np.asarray(nucleotide.get("base_position"), dtype=float)
+            raw_normal = np.asarray(nucleotide.get("base_normal"), dtype=float)
+            raw_tangent = np.asarray(nucleotide.get("axis_tangent"), dtype=float)
+        except (TypeError, ValueError):
+            continue
+        if not all(
+            value.shape == (3,) and np.all(np.isfinite(value))
+            for value in (raw_bead, raw_base, raw_normal, raw_tangent)
+        ):
+            continue
+        tangent_norm = float(np.linalg.norm(raw_tangent))
+        if tangent_norm < 1e-9:
+            continue
+        tangent = raw_tangent / tangent_norm
+        normal = raw_normal - tangent * float(np.dot(raw_normal, tangent))
+        normal_norm = float(np.linalg.norm(normal))
+        if normal_norm < 1e-9:
+            continue
+        normal /= normal_norm
+        tangential = np.cross(tangent, normal)
+        tangential /= max(float(np.linalg.norm(tangential)), 1e-9)
+
+        center = raw_base.copy()
+        mate = mates.get(id(nucleotide))
+        if mate and isinstance(mate.get("base_position"), (list, tuple)):
+            mate_base = np.asarray(mate["base_position"], dtype=float)
+            if mate_base.shape == (3,) and np.all(np.isfinite(mate_base)):
+                center += tangent * float(np.dot(mate_base - center, tangent)) * 0.5
+        radial = raw_bead - center
+        radial -= tangent * float(np.dot(radial, tangent))
+        bead_distance = float(np.linalg.norm(radial))
+        if bead_distance > 1e-9:
+            radial /= bead_distance
+            support = abs(float(np.dot(radial, tangential))) * 0.15 + abs(
+                float(np.dot(radial, normal))
+            ) * 0.35
+            center += radial * max(0.0, bead_distance - support + 0.02)
+
+        palette = palette_variant(
+            palette_for_index(index), nucleotide, "#0277bd"
+        )
+        box(
+            rotation @ center,
+            rotation @ (tangential * 0.30),
+            rotation @ (tangent * 0.06),
+            rotation @ (normal * 0.70),
+            palette,
+        )
+        z_sign = -1.0 if float(np.dot(raw_bead - center, normal)) < 0 else 1.0
+        corner = center + tangential * 0.15 + normal * (z_sign * 0.35)
+        lines.append(
+            f"C {nums(*(rotation @ raw_bead), *(rotation @ corner), 0.025, *palette)}"
+        )
 
     # Join sequential backbone beads. Long jumps are omitted so malformed or
     # sparse strand metadata cannot draw a line across an entire structure.
@@ -274,11 +383,17 @@ def _serialize_scene(
                 int(item[0].get("copy_k") or item[0].get("ext_k") or 0),
             )
         )
-        for (_, first, palette), (_, second, _) in zip(
+        for (first_nucleotide, first, palette), (second_nucleotide, second, _) in zip(
             strand_nucleotides, strand_nucleotides[1:]
         ):
-            if float(np.linalg.norm(second - first)) <= 5.0:
-                lines.append(f"C {nums(*first, *second, 0.085, *palette)}")
+            if (
+                first_nucleotide.get("helix_id") == second_nucleotide.get("helix_id")
+                and float(np.linalg.norm(second - first)) <= 5.0
+            ):
+                arrow_palette = palette_variant(
+                    palette, first_nucleotide, "#0288d1"
+                )
+                lines.append(f"C {nums(*first, *second, 0.075, *arrow_palette)}")
 
     def append_axes(radius: float = 0.025) -> None:
         palette = solid_palette((0.30, 0.34, 0.42))
@@ -289,7 +404,7 @@ def _serialize_scene(
                 if first is not None and second is not None:
                     lines.append(f"C {nums(*first, *second, radius, *palette)}")
 
-    append_axes()
+    append_axes(0.05)
 
     lines.append("R cylinders")
     first_palette_by_helix = {}
@@ -347,12 +462,12 @@ def _serialize_scene(
                 for a, b in zip(atom_palettes[first_index], atom_palettes[second_index])
             )
             lines.append(f"C {nums(*first, *second, radius, *palette)}")
-        append_axes()
+        append_axes(0.05)
 
     append_atomistic("ballstick", True, 0.035)
     append_atomistic("stick", False, 0.055)
 
-    if not any(line.startswith(("P ", "C ")) for line in lines):
+    if not any(line.startswith(("P ", "C ", "B ")) for line in lines):
         raise HTTPException(409, detail="The active design contains no display geometry.")
     return "\n".join(lines) + "\n"
 

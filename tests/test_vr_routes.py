@@ -84,8 +84,11 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
             "helix_id": "h1",
             "bp_index": 0,
             "direction": "FORWARD",
+            "is_five_prime": True,
             "backbone_position": [1, 2, 3],
             "base_position": [1.2, 2, 3],
+            "base_normal": [1, 0, 0],
+            "axis_tangent": [0, 0, 1],
         },
         {
             "strand_id": "s1",
@@ -93,8 +96,11 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
             "helix_id": "h1",
             "bp_index": 1,
             "direction": "FORWARD",
+            "is_five_prime": False,
             "backbone_position": [2, 2, 3],
             "base_position": [2.2, 2, 3],
+            "base_normal": [1, 0, 0],
+            "axis_tangent": [0, 0, 1],
         },
     ]
     camera = VRCamera(position=[0, 0, 0], target=[1, 0, 0], up=[0, 1, 0])
@@ -139,21 +145,23 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
         if record[0] == "R":
             active = record[1]
             sections[active] = []
-        elif record[0] in {"P", "C"}:
+        elif record[0] in {"P", "C", "B"}:
             sections[active].append(record)
 
-    assert text.startswith("NADOCVR 3 full strand\n")
+    assert text.startswith("NADOCVR 4 full strand\n")
     assert set(sections) == {"full", "cylinders", "ballstick", "stick"}
-    assert sum(record[0] == "P" for record in sections["full"]) == 4
+    assert sum(record[0] == "P" for record in sections["full"]) == 1
+    assert sum(record[0] == "B" for record in sections["full"]) == 3
     assert sum(record[0] == "C" for record in sections["full"]) == 4
     assert sum(record[0] == "P" for record in sections["ballstick"]) == 2
     assert sum(record[0] == "P" for record in sections["stick"]) == 0
     first_point = next(record for record in sections["full"] if record[0] == "P")
-    # Looking along +X maps NADOC +Z to view +X and +X to view -Z.
+    # The non-5′ bead remains a sphere. Looking along +X maps NADOC +Z to
+    # view +X and NADOC +X to view -Z.
     np.testing.assert_allclose(
-        [float(value) for value in first_point[1:4]], [3, 2, -1]
+        [float(value) for value in first_point[1:4]], [3, 2, -2]
     )
-    assert float(first_point[4]) == pytest.approx(0.17)
+    assert float(first_point[4]) == pytest.approx(0.10)
     np.testing.assert_allclose(
         [float(value) for value in first_point[5:8]],
         [0, 112 / 255, 187 / 255],
@@ -161,6 +169,11 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
     )
     # Every primitive carries strand/base/cluster/CPK RGB channels.
     assert len(first_point) == 17
+    slabs = [record for record in sections["full"] if record[0] == "B"]
+    assert all(len(record) == 25 for record in slabs)
+    slab = slabs[-1]
+    axes = np.asarray([float(value) for value in slab[4:13]]).reshape(3, 3)
+    np.testing.assert_allclose(np.linalg.norm(axes, axis=1), [0.30, 0.06, 0.70])
     first_bond = next(
         record for record in sections["ballstick"] if record[0] == "C"
     )
@@ -169,3 +182,52 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
         record for record in sections["ballstick"] if record[0] == "P"
     )
     assert float(first_atom[4]) == pytest.approx(0.17 * 0.55)
+
+
+def test_full_slabs_share_the_pair_plane_and_contact_the_backbone() -> None:
+    design = SimpleNamespace(
+        strands=[
+            SimpleNamespace(id="forward", is_scaffold=True, color=None, sequence="A"),
+            SimpleNamespace(id="reverse", is_scaffold=False, color="#ff6b6b", sequence="T"),
+        ],
+        cluster_transforms=[],
+    )
+    nucleotides = [
+        {
+            "strand_id": "forward",
+            "domain_index": 0,
+            "helix_id": "h1",
+            "bp_index": 0,
+            "direction": "FORWARD",
+            "backbone_position": [-1, 0, 0],
+            "base_position": [-0.2, 0, 0],
+            "base_normal": [1, 0, 0],
+            "axis_tangent": [0, 0, 1],
+        },
+        {
+            "strand_id": "reverse",
+            "domain_index": 0,
+            "helix_id": "h1",
+            "bp_index": 0,
+            "direction": "REVERSE",
+            "backbone_position": [1, 0, 0.2],
+            "base_position": [0.2, 0, 0.2],
+            "base_normal": [1, 0, 0],
+            "axis_tangent": [0, 0, 1],
+        },
+    ]
+    text = _serialize_scene(
+        design,
+        nucleotides,
+        [],
+        atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
+    )
+    boxes = [line.split() for line in text.splitlines() if line.startswith("B ")]
+    assert len(boxes) == 2
+    centers = np.asarray([[float(value) for value in record[1:4]] for record in boxes])
+
+    # Both largest faces use the mean axial plane despite staggered source bases.
+    np.testing.assert_allclose(centers[:, 2], [0.1, 0.1])
+    # The contact shift leaves each bead 0.33 nm from its slab center: the
+    # 0.35 nm half-extent penetrates the 0.10 nm bead center by 0.02 nm.
+    np.testing.assert_allclose(centers[:, 0], [-0.67, 0.67])

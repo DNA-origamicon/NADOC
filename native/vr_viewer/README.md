@@ -44,5 +44,12 @@ Close inspection is intentionally unrestricted: structures may be pulled through
 the headset or enlarged around the viewer. A 2 cm rendering near plane prevents
 projection singularities while allowing atom-scale interior inspection.
 
+The native renderer uses the Photo-mode Full lighting balance: a camera-pinned
+directional key, low ambient fill, and one 2048² soft self-shadow map shared by
+both eyes. Full representation geometry mirrors the editor's physical display
+primitives: 0.10 nm backbone beads, 0.18 nm 5′ cubes, oriented
+0.30 × 0.06 × 0.70 nm base slabs, 0.025 nm slab connectors, and 0.075 nm
+same-helix strand connectors.
+
 The controllers pulse when an interaction begins. Press Escape in the companion
 window, close that window, or select Help → Exit VR in NADOC to end the session.

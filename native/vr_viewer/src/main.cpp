@@ -62,6 +62,14 @@ struct Cylinder {
     glm::vec3 color{};
 };
 
+struct Box {
+    glm::vec3 center{};
+    glm::vec3 axisX{};
+    glm::vec3 axisY{};
+    glm::vec3 axisZ{};
+    glm::vec3 color{};
+};
+
 struct CylinderMeshVertex {
     glm::vec3 position{};
     glm::vec3 normal{};
@@ -90,9 +98,18 @@ struct StyledCylinder {
     ColorSet colors{};
 };
 
+struct StyledBox {
+    glm::vec3 center{};
+    glm::vec3 axisX{};
+    glm::vec3 axisY{};
+    glm::vec3 axisZ{};
+    ColorSet colors{};
+};
+
 struct RepresentationData {
     std::vector<StyledPoint> points;
     std::vector<StyledCylinder> cylinders;
+    std::vector<StyledBox> boxes;
 };
 
 struct SceneData {
@@ -190,6 +207,45 @@ GLuint makeProgram() {
     throw std::runtime_error("OpenGL program link failed: " + log);
 }
 
+constexpr const char* kLitFragmentSource = R"GLSL(
+    #version 330 core
+    in vec3 vColor;
+    in vec3 vNormal;
+    in vec3 vWorldPosition;
+    uniform sampler2DShadow uShadowMap;
+    uniform mat4 uLightViewProjection;
+    uniform vec3 uLightDirection;
+    out vec4 outColor;
+
+    float shadowVisibility(vec3 normal) {
+        vec4 lightClip = uLightViewProjection * vec4(vWorldPosition, 1.0);
+        vec3 projected = lightClip.xyz / lightClip.w;
+        projected = projected * 0.5 + 0.5;
+        if (projected.x <= 0.0 || projected.x >= 1.0 ||
+            projected.y <= 0.0 || projected.y >= 1.0 ||
+            projected.z <= 0.0 || projected.z >= 1.0) return 1.0;
+        float facing = max(dot(normal, uLightDirection), 0.0);
+        float bias = mix(0.0012, 0.00018, facing);
+        float visibility = 0.0;
+        const float texel = 1.0 / 2048.0;
+        for (int y = -1; y <= 1; ++y) {
+            for (int x = -1; x <= 1; ++x) {
+                visibility += texture(
+                    uShadowMap,
+                    vec3(projected.xy + vec2(x, y) * texel, projected.z - bias));
+            }
+        }
+        return visibility / 9.0;
+    }
+
+    void main() {
+        vec3 normal = normalize(vNormal);
+        float diffuse = max(dot(normal, uLightDirection), 0.0);
+        float lighting = 0.20 + 0.90 * diffuse * shadowVisibility(normal);
+        outColor = vec4(vColor * lighting, 1.0);
+    }
+)GLSL";
+
 GLuint makeSphereProgram() {
     static constexpr const char* vertexSource = R"GLSL(
         #version 330 core
@@ -201,27 +257,19 @@ GLuint makeSphereProgram() {
         uniform mat4 uModel;
         out vec3 vColor;
         out vec3 vNormal;
+        out vec3 vWorldPosition;
         void main() {
             vec3 localPosition = aCenter + aUnitPosition * aRadius;
-            gl_Position = uViewProjection * uModel * vec4(localPosition, 1.0);
+            vec4 worldPosition = uModel * vec4(localPosition, 1.0);
+            gl_Position = uViewProjection * worldPosition;
             vNormal = normalize(mat3(uModel) * aUnitPosition);
+            vWorldPosition = worldPosition.xyz;
             vColor = aColor;
-        }
-    )GLSL";
-    static constexpr const char* fragmentSource = R"GLSL(
-        #version 330 core
-        in vec3 vColor;
-        in vec3 vNormal;
-        out vec4 outColor;
-        void main() {
-            vec3 lightDirection = normalize(vec3(-0.35, 0.70, 0.60));
-            float diffuse = max(dot(normalize(vNormal), lightDirection), 0.0);
-            outColor = vec4(vColor * (0.48 + 0.52 * diffuse), 1.0);
         }
     )GLSL";
 
     const GLuint vertex = compileShader(GL_VERTEX_SHADER, vertexSource);
-    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, fragmentSource);
+    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, kLitFragmentSource);
     const GLuint program = glCreateProgram();
     glAttachShader(program, vertex);
     glAttachShader(program, fragment);
@@ -252,6 +300,7 @@ GLuint makeCylinderProgram() {
         uniform mat4 uModel;
         out vec3 vColor;
         out vec3 vNormal;
+        out vec3 vWorldPosition;
         void main() {
             vec3 delta = aEnd - aStart;
             float lengthAlongAxis = length(delta);
@@ -267,25 +316,16 @@ GLuint makeCylinderProgram() {
             vec3 localNormal = basisX * aUnitNormal.x
                              + basisY * aUnitNormal.y
                              + axis * aUnitNormal.z;
-            gl_Position = uViewProjection * uModel * vec4(localPosition, 1.0);
+            vec4 worldPosition = uModel * vec4(localPosition, 1.0);
+            gl_Position = uViewProjection * worldPosition;
             vNormal = normalize(mat3(uModel) * localNormal);
+            vWorldPosition = worldPosition.xyz;
             vColor = aColor;
-        }
-    )GLSL";
-    static constexpr const char* fragmentSource = R"GLSL(
-        #version 330 core
-        in vec3 vColor;
-        in vec3 vNormal;
-        out vec4 outColor;
-        void main() {
-            vec3 lightDirection = normalize(vec3(-0.35, 0.70, 0.60));
-            float diffuse = max(dot(normalize(vNormal), lightDirection), 0.0);
-            outColor = vec4(vColor * (0.50 + 0.50 * diffuse), 1.0);
         }
     )GLSL";
 
     const GLuint vertex = compileShader(GL_VERTEX_SHADER, vertexSource);
-    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, fragmentSource);
+    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, kLitFragmentSource);
     const GLuint program = glCreateProgram();
     glAttachShader(program, vertex);
     glAttachShader(program, fragment);
@@ -303,6 +343,57 @@ GLuint makeCylinderProgram() {
     throw std::runtime_error("OpenGL cylinder shader link failed: " + log);
 }
 
+GLuint makeBoxProgram() {
+    static constexpr const char* vertexSource = R"GLSL(
+        #version 330 core
+        layout(location = 0) in vec3 aUnitPosition;
+        layout(location = 5) in vec3 aUnitNormal;
+        layout(location = 1) in vec3 aCenter;
+        layout(location = 2) in vec3 aAxisX;
+        layout(location = 3) in vec3 aAxisY;
+        layout(location = 4) in vec3 aAxisZ;
+        layout(location = 6) in vec3 aColor;
+        uniform mat4 uViewProjection;
+        uniform mat4 uModel;
+        out vec3 vColor;
+        out vec3 vNormal;
+        out vec3 vWorldPosition;
+        void main() {
+            vec3 localPosition = aCenter
+                + aAxisX * aUnitPosition.x
+                + aAxisY * aUnitPosition.y
+                + aAxisZ * aUnitPosition.z;
+            vec3 localNormal = normalize(
+                normalize(aAxisX) * aUnitNormal.x
+                + normalize(aAxisY) * aUnitNormal.y
+                + normalize(aAxisZ) * aUnitNormal.z);
+            vec4 worldPosition = uModel * vec4(localPosition, 1.0);
+            gl_Position = uViewProjection * worldPosition;
+            vNormal = normalize(mat3(uModel) * localNormal);
+            vWorldPosition = worldPosition.xyz;
+            vColor = aColor;
+        }
+    )GLSL";
+
+    const GLuint vertex = compileShader(GL_VERTEX_SHADER, vertexSource);
+    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, kLitFragmentSource);
+    const GLuint program = glCreateProgram();
+    glAttachShader(program, vertex);
+    glAttachShader(program, fragment);
+    glLinkProgram(program);
+    glDeleteShader(vertex);
+    glDeleteShader(fragment);
+    GLint ok = GL_FALSE;
+    glGetProgramiv(program, GL_LINK_STATUS, &ok);
+    if (ok == GL_TRUE) return program;
+    GLint length = 0;
+    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &length);
+    std::string log(static_cast<size_t>(std::max(length, 1)), '\0');
+    glGetProgramInfoLog(program, length, nullptr, log.data());
+    glDeleteProgram(program);
+    throw std::runtime_error("OpenGL box shader link failed: " + log);
+}
+
 SceneData loadScene(const std::string& path) {
     std::ifstream input(path);
     if (!input) throw std::runtime_error("Could not open scene snapshot: " + path);
@@ -312,7 +403,7 @@ SceneData loadScene(const std::string& path) {
     std::string initialRepresentation;
     std::string initialColoring;
     input >> magic >> version >> initialRepresentation >> initialColoring;
-    if (magic != "NADOCVR" || version != 3) {
+    if (magic != "NADOCVR" || version != 4) {
         throw std::runtime_error("Unsupported NADOC VR scene format");
     }
 
@@ -348,6 +439,17 @@ SceneData loadScene(const std::string& path) {
                 input >> color.r >> color.g >> color.b;
             }
             active->cylinders.push_back(cylinder);
+        } else if (type == 'B') {
+            if (!active) throw std::runtime_error("Box appears before representation block");
+            StyledBox box;
+            input >> box.center.x >> box.center.y >> box.center.z
+                  >> box.axisX.x >> box.axisX.y >> box.axisX.z
+                  >> box.axisY.x >> box.axisY.y >> box.axisY.z
+                  >> box.axisZ.x >> box.axisZ.y >> box.axisZ.z;
+            for (glm::vec3& color : box.colors.values) {
+                input >> color.r >> color.g >> color.b;
+            }
+            active->boxes.push_back(box);
         } else {
             throw std::runtime_error(std::string("Unknown scene record: ") + type);
         }
@@ -355,7 +457,7 @@ SceneData loadScene(const std::string& path) {
     }
     if (std::all_of(scene.representations.begin(), scene.representations.end(),
                     [](const RepresentationData& rep) {
-                        return rep.points.empty() && rep.cylinders.empty();
+                        return rep.points.empty() && rep.cylinders.empty() && rep.boxes.empty();
                     })) {
         throw std::runtime_error("The scene snapshot contains no visible geometry");
     }
@@ -371,6 +473,15 @@ SceneData loadScene(const std::string& path) {
         for (const StyledCylinder& cylinder : rep.cylinders) {
             include(cylinder.start);
             include(cylinder.end);
+        }
+        for (const StyledBox& box : rep.boxes) {
+            for (float x : {-0.5F, 0.5F}) {
+                for (float y : {-0.5F, 0.5F}) {
+                    for (float z : {-0.5F, 0.5F}) {
+                        include(box.center + box.axisX * x + box.axisY * y + box.axisZ * z);
+                    }
+                }
+            }
         }
     }
     const glm::vec3 center = (lo + hi) * 0.5F;
@@ -389,6 +500,13 @@ SceneData loadScene(const std::string& path) {
             cylinder.start.z -= kViewDistanceMeters;
             cylinder.end.z -= kViewDistanceMeters;
             cylinder.radius *= scale;
+        }
+        for (StyledBox& box : rep.boxes) {
+            box.center = (box.center - center) * scale;
+            box.center.z -= kViewDistanceMeters;
+            box.axisX *= scale;
+            box.axisY *= scale;
+            box.axisZ *= scale;
         }
 
         const glm::vec3 origin(-0.28F, -0.28F, -kViewDistanceMeters);
@@ -479,6 +597,8 @@ class GlScene {
         upload({}, guideVao_, guideVbo_, GL_DYNAMIC_DRAW);
         uploadSpheres();
         uploadCylinders();
+        uploadBoxes();
+        initializeShadowMap();
         setStyle(scene_.initialRepresentation, scene_.initialColoring);
     }
 
@@ -510,10 +630,112 @@ class GlScene {
                      static_cast<GLsizeiptr>(cylinders.size() * sizeof(Cylinder)),
                      cylinders.data(), GL_DYNAMIC_DRAW);
         cylinderCount_ = static_cast<GLsizei>(cylinders.size());
+
+        std::vector<Box> boxes;
+        boxes.reserve(source.boxes.size());
+        for (const StyledBox& box : source.boxes) {
+            boxes.push_back(Box{
+                box.center, box.axisX, box.axisY, box.axisZ, box.colors.get(coloring)});
+        }
+        glBindBuffer(GL_ARRAY_BUFFER, boxInstanceVbo_);
+        glBufferData(GL_ARRAY_BUFFER,
+                     static_cast<GLsizeiptr>(boxes.size() * sizeof(Box)),
+                     boxes.data(), GL_DYNAMIC_DRAW);
+        boxCount_ = static_cast<GLsizei>(boxes.size());
+
+        glm::vec3 lo(std::numeric_limits<float>::max());
+        glm::vec3 hi(std::numeric_limits<float>::lowest());
+        auto include = [&](const glm::vec3& point, float radius = 0.0F) {
+            lo = glm::min(lo, point - glm::vec3(radius));
+            hi = glm::max(hi, point + glm::vec3(radius));
+        };
+        for (const StyledPoint& point : source.points) include(point.position, point.size);
+        for (const StyledCylinder& cylinder : source.cylinders) {
+            include(cylinder.start, cylinder.radius);
+            include(cylinder.end, cylinder.radius);
+        }
+        for (const StyledBox& box : source.boxes) {
+            for (float x : {-0.5F, 0.5F}) {
+                for (float y : {-0.5F, 0.5F}) {
+                    for (float z : {-0.5F, 0.5F}) {
+                        include(box.center + box.axisX * x + box.axisY * y + box.axisZ * z);
+                    }
+                }
+            }
+        }
+        if (source.points.empty() && source.cylinders.empty() && source.boxes.empty()) {
+            localCenter_ = {0.0F, 0.0F, -kViewDistanceMeters};
+            localRadius_ = 0.5F;
+        } else {
+            localCenter_ = (lo + hi) * 0.5F;
+            localRadius_ = std::max(glm::length(hi - lo) * 0.5F, 0.01F);
+        }
     }
 
     [[nodiscard]] Representation representation() const { return representation_; }
     [[nodiscard]] Coloring coloring() const { return coloring_; }
+
+    void renderShadowMap(const glm::mat4& modelTransform, glm::vec3 lightDirection) {
+        lightDirection_ = glm::normalize(lightDirection);
+        const glm::vec3 worldCenter = glm::vec3(
+            modelTransform * glm::vec4(localCenter_, 1.0F));
+        const float modelScale = std::max({
+            glm::length(glm::vec3(modelTransform[0])),
+            glm::length(glm::vec3(modelTransform[1])),
+            glm::length(glm::vec3(modelTransform[2])),
+        });
+        const float radius = std::max(localRadius_ * modelScale * 1.08F, 0.02F);
+        const glm::vec3 eye = worldCenter + lightDirection_ * (2.0F * radius);
+        glm::vec3 up(0, 1, 0);
+        if (std::abs(glm::dot(up, lightDirection_)) > 0.95F) up = {1, 0, 0};
+        lightViewProjection_ = glm::ortho(
+            -radius, radius, -radius, radius, radius * 0.05F, radius * 4.0F)
+            * glm::lookAt(eye, worldCenter, up);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, shadowFramebuffer_);
+        glViewport(0, 0, kShadowMapSize, kShadowMapSize);
+        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+        glClear(GL_DEPTH_BUFFER_BIT);
+        glEnable(GL_POLYGON_OFFSET_FILL);
+        glPolygonOffset(1.5F, 2.0F);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        auto shadowUniforms = [&](GLuint program, GLint projection, GLint model,
+                                  GLint lightProjection, GLint lightDirectionUniform) {
+            glUseProgram(program);
+            glUniformMatrix4fv(projection, 1, GL_FALSE, &lightViewProjection_[0][0]);
+            glUniformMatrix4fv(model, 1, GL_FALSE, &modelTransform[0][0]);
+            glUniformMatrix4fv(
+                lightProjection, 1, GL_FALSE, &lightViewProjection_[0][0]);
+            glUniform3fv(lightDirectionUniform, 1, &lightDirection_[0]);
+        };
+        if (sphereCount_ > 0) {
+            shadowUniforms(sphereProgram_, sphereViewProjection_, sphereModel_,
+                           sphereLightViewProjection_, sphereLightDirection_);
+            glBindVertexArray(sphereVao_);
+            glDrawElementsInstanced(
+                GL_TRIANGLES, sphereIndexCount_, GL_UNSIGNED_SHORT, nullptr, sphereCount_);
+        }
+        if (cylinderCount_ > 0) {
+            shadowUniforms(cylinderProgram_, cylinderViewProjection_, cylinderModel_,
+                           cylinderLightViewProjection_, cylinderLightDirection_);
+            glBindVertexArray(cylinderVao_);
+            glDrawElementsInstanced(
+                GL_TRIANGLES, cylinderIndexCount_, GL_UNSIGNED_SHORT, nullptr, cylinderCount_);
+        }
+        if (boxCount_ > 0) {
+            shadowUniforms(boxProgram_, boxViewProjection_, boxModel_,
+                           boxLightViewProjection_, boxLightDirection_);
+            glBindVertexArray(boxVao_);
+            glDrawElementsInstanced(
+                GL_TRIANGLES, boxIndexCount_, GL_UNSIGNED_SHORT, nullptr, boxCount_);
+        }
+        glDisable(GL_POLYGON_OFFSET_FILL);
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        glBindVertexArray(0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
 
     ~GlScene() {
         if (lineVbo_) glDeleteBuffers(1, &lineVbo_);
@@ -524,13 +746,20 @@ class GlScene {
         if (cylinderInstanceVbo_) glDeleteBuffers(1, &cylinderInstanceVbo_);
         if (cylinderMeshVbo_) glDeleteBuffers(1, &cylinderMeshVbo_);
         if (cylinderIndexVbo_) glDeleteBuffers(1, &cylinderIndexVbo_);
+        if (boxInstanceVbo_) glDeleteBuffers(1, &boxInstanceVbo_);
+        if (boxMeshVbo_) glDeleteBuffers(1, &boxMeshVbo_);
+        if (boxIndexVbo_) glDeleteBuffers(1, &boxIndexVbo_);
         if (lineVao_) glDeleteVertexArrays(1, &lineVao_);
         if (guideVao_) glDeleteVertexArrays(1, &guideVao_);
         if (sphereVao_) glDeleteVertexArrays(1, &sphereVao_);
         if (cylinderVao_) glDeleteVertexArrays(1, &cylinderVao_);
+        if (boxVao_) glDeleteVertexArrays(1, &boxVao_);
         if (program_) glDeleteProgram(program_);
         if (sphereProgram_) glDeleteProgram(sphereProgram_);
         if (cylinderProgram_) glDeleteProgram(cylinderProgram_);
+        if (boxProgram_) glDeleteProgram(boxProgram_);
+        if (shadowTexture_) glDeleteTextures(1, &shadowTexture_);
+        if (shadowFramebuffer_) glDeleteFramebuffers(1, &shadowFramebuffer_);
     }
 
     void render(const glm::mat4& viewProjection, const glm::mat4& modelTransform,
@@ -546,6 +775,8 @@ class GlScene {
             glUseProgram(sphereProgram_);
             glUniformMatrix4fv(sphereViewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
             glUniformMatrix4fv(sphereModel_, 1, GL_FALSE, &modelTransform[0][0]);
+            applyLightingUniforms(
+                sphereLightViewProjection_, sphereLightDirection_, sphereShadowMap_);
             glBindVertexArray(sphereVao_);
             glDrawElementsInstanced(
                 GL_TRIANGLES, sphereIndexCount_, GL_UNSIGNED_SHORT, nullptr, sphereCount_);
@@ -555,9 +786,21 @@ class GlScene {
             glUseProgram(cylinderProgram_);
             glUniformMatrix4fv(cylinderViewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
             glUniformMatrix4fv(cylinderModel_, 1, GL_FALSE, &modelTransform[0][0]);
+            applyLightingUniforms(
+                cylinderLightViewProjection_, cylinderLightDirection_, cylinderShadowMap_);
             glBindVertexArray(cylinderVao_);
             glDrawElementsInstanced(
                 GL_TRIANGLES, cylinderIndexCount_, GL_UNSIGNED_SHORT, nullptr, cylinderCount_);
+        }
+
+        if (boxCount_ > 0) {
+            glUseProgram(boxProgram_);
+            glUniformMatrix4fv(boxViewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
+            glUniformMatrix4fv(boxModel_, 1, GL_FALSE, &modelTransform[0][0]);
+            applyLightingUniforms(boxLightViewProjection_, boxLightDirection_, boxShadowMap_);
+            glBindVertexArray(boxVao_);
+            glDrawElementsInstanced(
+                GL_TRIANGLES, boxIndexCount_, GL_UNSIGNED_SHORT, nullptr, boxCount_);
         }
 
         if (!guides.empty()) {
@@ -578,10 +821,52 @@ class GlScene {
     }
 
   private:
+    void applyLightingUniforms(
+        GLint lightProjection, GLint lightDirection, GLint shadowMap) const {
+        glUniformMatrix4fv(
+            lightProjection, 1, GL_FALSE, &lightViewProjection_[0][0]);
+        glUniform3fv(lightDirection, 1, &lightDirection_[0]);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, shadowTexture_);
+        glUniform1i(shadowMap, 0);
+    }
+
+    void initializeShadowMap() {
+        glGenTextures(1, &shadowTexture_);
+        glBindTexture(GL_TEXTURE_2D, shadowTexture_);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24,
+                     kShadowMapSize, kShadowMapSize, 0,
+                     GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+        const GLfloat border[] = {1.0F, 1.0F, 1.0F, 1.0F};
+        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+
+        glGenFramebuffers(1, &shadowFramebuffer_);
+        glBindFramebuffer(GL_FRAMEBUFFER, shadowFramebuffer_);
+        glFramebufferTexture2D(
+            GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowTexture_, 0);
+        glDrawBuffer(GL_NONE);
+        glReadBuffer(GL_NONE);
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+            throw std::runtime_error("Could not create VR shadow framebuffer");
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
     void uploadSpheres() {
         sphereProgram_ = makeSphereProgram();
         sphereViewProjection_ = glGetUniformLocation(sphereProgram_, "uViewProjection");
         sphereModel_ = glGetUniformLocation(sphereProgram_, "uModel");
+        sphereLightViewProjection_ =
+            glGetUniformLocation(sphereProgram_, "uLightViewProjection");
+        sphereLightDirection_ = glGetUniformLocation(sphereProgram_, "uLightDirection");
+        sphereShadowMap_ = glGetUniformLocation(sphereProgram_, "uShadowMap");
 
         constexpr float goldenRatio = 1.6180339887498948482F;
         std::vector<glm::vec3> mesh = {
@@ -636,6 +921,10 @@ class GlScene {
         cylinderProgram_ = makeCylinderProgram();
         cylinderViewProjection_ = glGetUniformLocation(cylinderProgram_, "uViewProjection");
         cylinderModel_ = glGetUniformLocation(cylinderProgram_, "uModel");
+        cylinderLightViewProjection_ =
+            glGetUniformLocation(cylinderProgram_, "uLightViewProjection");
+        cylinderLightDirection_ = glGetUniformLocation(cylinderProgram_, "uLightDirection");
+        cylinderShadowMap_ = glGetUniformLocation(cylinderProgram_, "uShadowMap");
 
         constexpr size_t sides = 8;
         constexpr float pi = 3.14159265358979323846F;
@@ -728,6 +1017,75 @@ class GlScene {
         glBindVertexArray(0);
     }
 
+    void uploadBoxes() {
+        boxProgram_ = makeBoxProgram();
+        boxViewProjection_ = glGetUniformLocation(boxProgram_, "uViewProjection");
+        boxModel_ = glGetUniformLocation(boxProgram_, "uModel");
+        boxLightViewProjection_ = glGetUniformLocation(boxProgram_, "uLightViewProjection");
+        boxLightDirection_ = glGetUniformLocation(boxProgram_, "uLightDirection");
+        boxShadowMap_ = glGetUniformLocation(boxProgram_, "uShadowMap");
+
+        std::vector<CylinderMeshVertex> vertices;
+        std::vector<GLushort> indices;
+        vertices.reserve(24);
+        indices.reserve(36);
+        auto face = [&](glm::vec3 a, glm::vec3 b, glm::vec3 c, glm::vec3 d,
+                        glm::vec3 normal) {
+            const GLushort first = static_cast<GLushort>(vertices.size());
+            vertices.insert(vertices.end(), {{a, normal}, {b, normal}, {c, normal}, {d, normal}});
+            indices.insert(indices.end(), {
+                first, static_cast<GLushort>(first + 1), static_cast<GLushort>(first + 2),
+                first, static_cast<GLushort>(first + 2), static_cast<GLushort>(first + 3),
+            });
+        };
+        constexpr float n = -0.5F;
+        constexpr float p = 0.5F;
+        face({p,n,n}, {p,p,n}, {p,p,p}, {p,n,p}, {1,0,0});
+        face({n,n,p}, {n,p,p}, {n,p,n}, {n,n,n}, {-1,0,0});
+        face({n,p,n}, {n,p,p}, {p,p,p}, {p,p,n}, {0,1,0});
+        face({n,n,p}, {n,n,n}, {p,n,n}, {p,n,p}, {0,-1,0});
+        face({n,n,p}, {p,n,p}, {p,p,p}, {n,p,p}, {0,0,1});
+        face({p,n,n}, {n,n,n}, {n,p,n}, {p,p,n}, {0,0,-1});
+        boxIndexCount_ = static_cast<GLsizei>(indices.size());
+
+        glGenVertexArrays(1, &boxVao_);
+        glBindVertexArray(boxVao_);
+        glGenBuffers(1, &boxMeshVbo_);
+        glBindBuffer(GL_ARRAY_BUFFER, boxMeshVbo_);
+        glBufferData(GL_ARRAY_BUFFER,
+                     static_cast<GLsizeiptr>(vertices.size() * sizeof(CylinderMeshVertex)),
+                     vertices.data(), GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(CylinderMeshVertex),
+                              reinterpret_cast<void*>(offsetof(CylinderMeshVertex, position)));
+        glEnableVertexAttribArray(5);
+        glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, sizeof(CylinderMeshVertex),
+                              reinterpret_cast<void*>(offsetof(CylinderMeshVertex, normal)));
+        glGenBuffers(1, &boxIndexVbo_);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, boxIndexVbo_);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+                     static_cast<GLsizeiptr>(indices.size() * sizeof(GLushort)),
+                     indices.data(), GL_STATIC_DRAW);
+
+        glGenBuffers(1, &boxInstanceVbo_);
+        glBindBuffer(GL_ARRAY_BUFFER, boxInstanceVbo_);
+        glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
+        const std::array<std::pair<GLuint, size_t>, 5> attributes = {{
+            {1, offsetof(Box, center)},
+            {2, offsetof(Box, axisX)},
+            {3, offsetof(Box, axisY)},
+            {4, offsetof(Box, axisZ)},
+            {6, offsetof(Box, color)},
+        }};
+        for (const auto& [location, offset] : attributes) {
+            glEnableVertexAttribArray(location);
+            glVertexAttribPointer(location, 3, GL_FLOAT, GL_FALSE, sizeof(Box),
+                                  reinterpret_cast<void*>(offset));
+            glVertexAttribDivisor(location, 1);
+        }
+        glBindVertexArray(0);
+    }
+
     static void upload(const std::vector<Vertex>& vertices, GLuint& vao, GLuint& vbo,
                        GLenum usage = GL_STATIC_DRAW) {
         glGenVertexArrays(1, &vao);
@@ -769,16 +1127,41 @@ class GlScene {
     GLuint cylinderMeshVbo_ = 0;
     GLuint cylinderIndexVbo_ = 0;
     GLuint cylinderInstanceVbo_ = 0;
+    GLuint boxProgram_ = 0;
+    GLuint boxVao_ = 0;
+    GLuint boxMeshVbo_ = 0;
+    GLuint boxIndexVbo_ = 0;
+    GLuint boxInstanceVbo_ = 0;
+    GLuint shadowFramebuffer_ = 0;
+    GLuint shadowTexture_ = 0;
     GLint viewProjection_ = -1;
     GLint sphereViewProjection_ = -1;
     GLint sphereModel_ = -1;
+    GLint sphereLightViewProjection_ = -1;
+    GLint sphereLightDirection_ = -1;
+    GLint sphereShadowMap_ = -1;
     GLint cylinderViewProjection_ = -1;
     GLint cylinderModel_ = -1;
+    GLint cylinderLightViewProjection_ = -1;
+    GLint cylinderLightDirection_ = -1;
+    GLint cylinderShadowMap_ = -1;
+    GLint boxViewProjection_ = -1;
+    GLint boxModel_ = -1;
+    GLint boxLightViewProjection_ = -1;
+    GLint boxLightDirection_ = -1;
+    GLint boxShadowMap_ = -1;
     GLsizei lineCount_ = 0;
     GLsizei sphereIndexCount_ = 0;
     GLsizei sphereCount_ = 0;
     GLsizei cylinderIndexCount_ = 0;
     GLsizei cylinderCount_ = 0;
+    GLsizei boxIndexCount_ = 0;
+    GLsizei boxCount_ = 0;
+    glm::vec3 localCenter_{0.0F, 0.0F, -kViewDistanceMeters};
+    float localRadius_ = 0.5F;
+    glm::mat4 lightViewProjection_{1.0F};
+    glm::vec3 lightDirection_{-0.577F, 0.577F, 0.577F};
+    static constexpr GLsizei kShadowMapSize = 2048;
 };
 
 class Viewer {
@@ -1446,6 +1829,11 @@ class Viewer {
             if ((viewState.viewStateFlags & valid) == valid && viewCount == views_.size()) {
                 applyPendingMenu(viewCount);
                 applyPendingRecenter(viewCount);
+                const XrQuaternionf& head = views_[0].pose.orientation;
+                const glm::quat headOrientation(head.w, head.x, head.y, head.z);
+                const glm::vec3 keyDirection = headOrientation * glm::normalize(
+                    glm::vec3(-0.577F, 0.577F, 0.577F));
+                glScene_->renderShadowMap(manipulator_.transform(), keyDirection);
                 for (uint32_t i = 0; i < viewCount; ++i) renderView(i, views_[i], layerViews[i]);
                 layer.space = space_;
                 layer.viewCount = viewCount;
