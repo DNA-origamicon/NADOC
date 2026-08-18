@@ -2179,6 +2179,8 @@ def _event_payload(state: dict | None) -> dict:
             "tool_sequence": 0,
             "tool_mode": "inspect",
             "tool_action": "activate",
+            "transform_sequence": 0,
+            "transform_matrix": np.identity(4, dtype=float).flatten(order="F").tolist(),
         }
     path = Path(state["event_path"])
     try:
@@ -2194,12 +2196,18 @@ def _event_payload(state: dict | None) -> dict:
         tool_sequence = int(event.get("tool_sequence", 0))
         tool_mode = event.get("tool_mode", "inspect")
         tool_action = event.get("tool_action", "activate")
+        transform_sequence = int(event.get("transform_sequence", 0))
+        transform_values = event.get(
+            "transform_matrix",
+            np.identity(4, dtype=float).flatten(order="F").tolist(),
+        )
         identities = (hover_identity, select_identity)
         if (
             sequence < 0
             or select_sequence < 0
             or level_sequence < 0
             or tool_sequence < 0
+            or transform_sequence < 0
             or any(value is not None and not isinstance(value, str) for value in identities)
             or selection_level
             not in {"default", "cluster", "strand", "domain", "end", "xover", "base"}
@@ -2207,10 +2215,29 @@ def _event_payload(state: dict | None) -> dict:
             not in {"inspect", "move_rotate", "extrude", "twist", "bend"}
             or tool_action
             not in {"activate", "preview", "confirm", "cancel", "undo"}
+            or not isinstance(transform_values, list)
+            or len(transform_values) != 16
         ):
             raise ValueError("invalid event record")
         if any(isinstance(value, str) and len(value) > 2048 for value in identities):
             raise ValueError("event identity is too large")
+        view_transform = np.asarray(transform_values, dtype=float).reshape(
+            (4, 4), order="F"
+        )
+        if (
+            not np.all(np.isfinite(view_transform))
+            or np.max(np.abs(view_transform)) > 1e9
+            or not np.allclose(view_transform[3], [0, 0, 0, 1], atol=1e-5)
+        ):
+            raise ValueError("invalid transform matrix")
+        view_rotation = np.asarray(
+            state.get("view_rotation", np.identity(3)), dtype=float
+        )
+        if view_rotation.shape != (3, 3) or not np.all(np.isfinite(view_rotation)):
+            raise ValueError("invalid launch view rotation")
+        basis = np.identity(4, dtype=float)
+        basis[:3, :3] = view_rotation
+        nadoc_transform = np.linalg.inv(basis) @ view_transform @ basis
         return {
             "sequence": sequence,
             "hover_identity": hover_identity,
@@ -2221,6 +2248,8 @@ def _event_payload(state: dict | None) -> dict:
             "tool_sequence": tool_sequence,
             "tool_mode": tool_mode,
             "tool_action": tool_action,
+            "transform_sequence": transform_sequence,
+            "transform_matrix": nadoc_transform.flatten(order="F").tolist(),
         }
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
         # A truncate/write can briefly expose an incomplete record. Pollers keep
@@ -2235,6 +2264,8 @@ def _event_payload(state: dict | None) -> dict:
             "tool_sequence": 0,
             "tool_mode": "inspect",
             "tool_action": "activate",
+            "transform_sequence": 0,
+            "transform_matrix": np.identity(4, dtype=float).flatten(order="F").tolist(),
         }
 
 
@@ -2372,7 +2403,8 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
                 '"select_sequence":0,"select_identity":null,'
                 f'"level_sequence":0,"selection_level":"{body.selection_level}",'
                 '"tool_sequence":0,"tool_mode":"inspect",'
-                '"tool_action":"activate"}'
+                '"tool_action":"activate","transform_sequence":0,'
+                '"transform_matrix":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]}'
             )
             event_path = Path(event_file.name)
         event_path.chmod(0o600)
@@ -2432,6 +2464,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             "event_path": str(event_path),
             "feedback_path": str(feedback_path),
             "started_at": time.time(),
+            "view_rotation": _view_rotation(body.camera).tolist(),
         }
         _write_state(state)
         threading.Thread(

@@ -48,6 +48,7 @@ export function initVRSession({
   let lastNativeSelectSequence = 0
   let lastNativeLevelSequence = 0
   let lastNativeToolSequence = 0
+  let lastNativeTransformSequence = 0
   let cameraRig = null
   let cameraSnapshot = null
   let starting = false
@@ -205,6 +206,19 @@ export function initVRSession({
             action: event?.tool_action ?? 'activate',
           })
         }
+        const transformSequence = Number(event?.transform_sequence ?? 0)
+        const transformMatrix = event?.transform_matrix
+        if (Number.isSafeInteger(transformSequence) &&
+            transformSequence > lastNativeTransformSequence &&
+            Array.isArray(transformMatrix) && transformMatrix.length === 16 &&
+            transformMatrix.every(Number.isFinite)) {
+          lastNativeTransformSequence = transformSequence
+          onNativeEvent({
+            sequence: transformSequence,
+            type: 'tool_transform',
+            matrix: [...transformMatrix],
+          })
+        }
       }
       _scheduleNativeEventPoll()
     }, nativeEventPollIntervalMs)
@@ -218,11 +232,13 @@ export function initVRSession({
       if (lastNativeEventSequence > 0) {
         onNativeEvent?.({ sequence: lastNativeEventSequence, type: 'hover', identity: null })
       }
+      onNativeEvent?.({ type: 'native_session_end' })
     } else {
       lastNativeEventSequence = 0
       lastNativeSelectSequence = 0
       lastNativeLevelSequence = 0
       lastNativeToolSequence = 0
+      lastNativeTransformSequence = 0
       _scheduleNativeEventPoll()
     }
     _setButtonState({ active })

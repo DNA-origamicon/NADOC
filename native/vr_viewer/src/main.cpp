@@ -149,6 +149,8 @@ struct SceneData {
     bool hasExpanded = false;
     Representation initialRepresentation = Representation::full;
     Coloring initialColoring = Coloring::strand;
+    glm::vec3 normalizationCenter{};
+    float normalizationScale = 1.0F;
 };
 
 Representation representationFromName(const std::string& name) {
@@ -652,6 +654,8 @@ SceneData loadScene(const std::string& path) {
     const glm::vec3 extent = hi - lo;
     const float maxExtent = std::max({extent.x, extent.y, extent.z, 1.0e-6F});
     const float scale = kViewSizeMeters / maxExtent;
+    scene.normalizationCenter = center;
+    scene.normalizationScale = scale;
     auto normalize = [&](RepresentationData& rep, bool appendViewerAxes) {
         for (StyledPoint& point : rep.points) {
             point.position = (point.position - center) * scale;
@@ -822,6 +826,13 @@ class GlScene {
         toolPreviewToken_ = std::move(token);
         toolPreviewTransform_ = transform;
         setStyle(representation_, coloring_);
+    }
+
+    [[nodiscard]] glm::mat4 viewSpaceToolTransform(
+        const glm::mat4& normalizedTransform) const {
+        return nadoc_vr::normalizedToSourceTransform(
+            normalizedTransform, scene_.normalizationCenter,
+            scene_.normalizationScale, {0.0F, 0.0F, -kViewDistanceMeters});
     }
 
     void setStyle(Representation representation, Coloring coloring) {
@@ -2338,6 +2349,7 @@ class Viewer {
                     const auto mode = static_cast<nadoc_vr::ToolMode>(hit);
                     toolShell_.activate(mode, selectedSelectionKind_);
                     pendingToolTransform_.cancel();
+                    publishToolTransform();
                     publishToolIntent(nadoc_vr::ToolAction::activate);
                 } else if (hit < 9) {
                     const auto action = static_cast<nadoc_vr::ToolAction>(hit - 4);
@@ -2345,8 +2357,10 @@ class Viewer {
                     if (action == nadoc_vr::ToolAction::preview &&
                         toolShell_.previewRequested()) {
                         pendingToolTransform_.activate();
+                        publishToolTransform();
                     } else if (action == nadoc_vr::ToolAction::cancel) {
                         pendingToolTransform_.cancel();
+                        publishToolTransform();
                     }
                     publishToolIntent(action);
                 } else {
@@ -2505,6 +2519,14 @@ class Viewer {
         publishEventState();
     }
 
+    void publishToolTransform() {
+        lastToolTransform_ = glScene_
+            ? glScene_->viewSpaceToolTransform(pendingToolTransform_.transform())
+            : glm::mat4(1.0F);
+        ++transformSequence_;
+        publishEventState();
+    }
+
     void publishEventState() {
         if (eventPath_.empty()) return;
         std::ofstream output(eventPath_, std::ios::out | std::ios::trunc);
@@ -2524,6 +2546,17 @@ class Viewer {
                << ",\"tool_mode\":\"" << nadoc_vr::toolModeName(toolShell_.mode())
                << "\",\"tool_action\":\""
                << nadoc_vr::toolActionName(lastToolAction_) << "\"";
+        output << ",\"transform_sequence\":" << transformSequence_
+               << ",\"transform_matrix\":[";
+        bool firstValue = true;
+        for (size_t column = 0; column < 4; ++column) {
+            for (size_t row = 0; row < 4; ++row) {
+                if (!firstValue) output << ',';
+                output << lastToolTransform_[column][row];
+                firstValue = false;
+            }
+        }
+        output << ']';
         output << '}';
     }
 
@@ -2656,8 +2689,9 @@ class Viewer {
         const bool rightToolDrag = clusterToolPreview && !inputSuppressed &&
                                    hands_[1].valid && hands_[1].pressed &&
                                    !(hands_[0].valid && hands_[0].pressed);
-        pendingToolTransform_.update(
+        const bool toolTransformChanged = pendingToolTransform_.update(
             hands_[1], manipulator_.transform(), rightToolDrag);
+        if (toolTransformChanged) publishToolTransform();
         glScene_->setToolPreview(
             clusterToolPreview ? selectedOwnerTokens_ : std::vector<std::string>{},
             pendingToolTransform_.transform());
@@ -2850,6 +2884,8 @@ class Viewer {
     nadoc_vr::ToolAction lastToolAction_ = nadoc_vr::ToolAction::activate;
     nadoc_vr::ToolShell toolShell_;
     nadoc_vr::PendingRigidTransform pendingToolTransform_;
+    uint64_t transformSequence_ = 0;
+    glm::mat4 lastToolTransform_{1.0F};
     uint64_t feedbackSequence_ = 0;
     uint32_t feedbackPollFrame_ = 0;
     std::string selectedIdentity_;

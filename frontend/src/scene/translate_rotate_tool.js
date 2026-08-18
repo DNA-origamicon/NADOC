@@ -1,3 +1,4 @@
+import * as THREE from 'three'
 import { quatToEulerDeg } from './rotation_math.js'
 import { showToast } from '../ui/toast.js'
 import { showOpProgress, hideOpProgress } from '../ui/op_progress.js'
@@ -122,6 +123,71 @@ export function initTranslateRotateTool(deps) {
   const _rebakeHelixAxesForClusterDelta = rebakeHelixAxesForClusterDelta
   const _reemitClusterBridges = reemitClusterBridges
   const _refreshClusterOverlays = refreshClusterOverlays
+
+  let _vrPreview = null
+  let _vrQueuedMatrix = null
+  let _vrStarting = null
+
+  function _applyVRPreviewMatrix(matrixValues) {
+    if (!Array.isArray(matrixValues) || matrixValues.length !== 16 ||
+        !matrixValues.every(Number.isFinite)) return false
+    if (!_vrPreview) {
+      _vrQueuedMatrix = [...matrixValues]
+      return false
+    }
+    const delta = new THREE.Matrix4().fromArray(matrixValues)
+    const deltaRotation = new THREE.Quaternion().setFromRotationMatrix(delta).normalize()
+    const targetPosition = _vrPreview.basePosition.clone().applyMatrix4(delta)
+    const targetRotation = deltaRotation.multiply(_vrPreview.baseRotation.clone()).normalize()
+    const translation = targetPosition.sub(_vrPreview.pivot).toArray()
+    clusterGizmo.setTransform(translation, targetRotation.toArray())
+    return true
+  }
+
+  async function _beginVRPreview(clusterId) {
+    if (_vrPreview?.clusterId === clusterId) return { accepted: true }
+    if (_vrStarting) return _vrStarting
+    if (getActive()) return { accepted: false, reason: 'desktop_tool_active' }
+    const cluster = store.getState().currentDesign?.cluster_transforms?.find(
+      candidate => candidate.id === clusterId)
+    if (!cluster) return { accepted: false, reason: 'cluster_missing' }
+    _vrStarting = (async () => {
+      await _activateTranslateRotateTool(clusterId)
+      const current = store.getState().currentDesign?.cluster_transforms?.find(
+        candidate => candidate.id === clusterId)
+      const pending = clusterGizmo.getPendingTransform(clusterId)
+      const baseline = pending ?? current
+      if (!baseline) return { accepted: false, reason: 'cluster_missing' }
+      const pivot = new THREE.Vector3(...baseline.pivot)
+      const translation = new THREE.Vector3(...baseline.translation)
+      _vrPreview = {
+        clusterId,
+        pivot,
+        basePosition: pivot.clone().add(translation),
+        baseRotation: new THREE.Quaternion(...baseline.rotation).normalize(),
+      }
+      if (_vrQueuedMatrix) {
+        const queued = _vrQueuedMatrix
+        _vrQueuedMatrix = null
+        _applyVRPreviewMatrix(queued)
+      }
+      return { accepted: true }
+    })()
+    try {
+      return await _vrStarting
+    } finally {
+      _vrStarting = null
+    }
+  }
+
+  async function _cancelVRPreview() {
+    _vrQueuedMatrix = null
+    if (_vrStarting) await _vrStarting
+    if (!_vrPreview) return false
+    _vrPreview = null
+    await _cancelTranslateRotateTool()
+    return true
+  }
 
   async function _onToolPickPointerDown(e) {
     if (e.button != null && e.button !== 0) return
@@ -311,6 +377,10 @@ export function initTranslateRotateTool(deps) {
 
   async function _confirmTranslateRotateTool() {
     if (!getActive()) return
+    if (_vrPreview) {
+      showToast('VR Move / Rotate is preview-only; use Cancel to restore the design.')
+      return
+    }
     setActive(false)
     _confirmBtn.style.display = 'none'
     if (_mrPanel) _mrPanel.style.display = 'none'
@@ -492,6 +562,8 @@ export function initTranslateRotateTool(deps) {
 
   async function _cancelTranslateRotateTool() {
     if (!getActive()) return
+    _vrPreview = null
+    _vrQueuedMatrix = null
     const hadLocalPreview = getClusterDirty()
     setActive(false)
     _confirmBtn.style.display = 'none'
@@ -732,5 +804,8 @@ export function initTranslateRotateTool(deps) {
     handleMultiClusterSelectionChange: _handleMultiClusterSelectionChange,
     removeToolPickListeners: _removeToolPickListeners,
     hideConfirmBtn: () => { _confirmBtn.style.display = 'none' },
+    beginVRPreview: _beginVRPreview,
+    applyVRPreviewMatrix: _applyVRPreviewMatrix,
+    cancelVRPreview: _cancelVRPreview,
   }
 }

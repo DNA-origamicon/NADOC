@@ -37,6 +37,16 @@ inline glm::vec3 weightedTransformVector(
     return glm::mix(vector, glm::mat3(transform) * vector, weight);
 }
 
+inline glm::mat4 normalizedToSourceTransform(
+    const glm::mat4& normalizedTransform, const glm::vec3& sourceCenter,
+    float sourceToNormalizedScale, const glm::vec3& normalizedOffset) {
+    const glm::mat4 normalization =
+        glm::translate(glm::mat4(1.0F), normalizedOffset)
+        * glm::scale(glm::mat4(1.0F), glm::vec3(sourceToNormalizedScale))
+        * glm::translate(glm::mat4(1.0F), -sourceCenter);
+    return glm::inverse(normalization) * normalizedTransform * normalization;
+}
+
 enum class ManipulationMode { none, left, right, two_hand };
 
 struct SelectionFeedback {

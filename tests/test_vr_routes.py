@@ -23,6 +23,7 @@ from backend.api.routes_vr import (
     _selection_cluster,
     _selection_clusters,
     _serialize_scene,
+    _view_rotation,
     _viewer_command,
     _write_feedback,
 )
@@ -274,6 +275,8 @@ def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -
         "tool_sequence": 4,
         "tool_mode": "twist",
         "tool_action": "preview",
+        "transform_sequence": 0,
+        "transform_matrix": np.identity(4).flatten(order="F").tolist(),
     }
 
     event_path.write_text(
@@ -281,6 +284,32 @@ def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -
         '"tool_action":"confirm"}'
     )
     assert _event_payload({"event_path": str(event_path)})["sequence"] == 0
+
+
+def test_native_tool_transform_returns_to_nadoc_coordinates(tmp_path) -> None:
+    event_path = tmp_path / "vr-transform.json"
+    view_transform = np.identity(4)
+    view_transform[:3, 3] = [1, 2, 3]
+    event_path.write_text(
+        json.dumps(
+            {
+                "sequence": 1,
+                "transform_sequence": 2,
+                "transform_matrix": view_transform.flatten(order="F").tolist(),
+            }
+        )
+    )
+    rotation = _view_rotation(
+        VRCamera(position=[0, 0, 0], target=[1, 0, 0], up=[0, 1, 0])
+    )
+
+    payload = _event_payload(
+        {"event_path": str(event_path), "view_rotation": rotation.tolist()}
+    )
+    transform = np.asarray(payload["transform_matrix"]).reshape((4, 4), order="F")
+
+    assert payload["transform_sequence"] == 2
+    np.testing.assert_allclose(transform[:3, 3], [-3, 2, 1])
 
     event_path.write_text('{"sequence":')
     assert _event_payload({"event_path": str(event_path)}) == {
@@ -293,6 +322,8 @@ def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -
         "tool_sequence": 0,
         "tool_mode": "inspect",
         "tool_action": "activate",
+        "transform_sequence": 0,
+        "transform_matrix": np.identity(4).flatten(order="F").tolist(),
     }
 
     event_path.write_text("x" * 4097)

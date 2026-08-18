@@ -156,6 +156,27 @@ void endpointWeightsMoveOnlyTheOwnedBoundaryEndpoint() {
     require(glm::all(glm::epsilonEqual(axis, glm::vec3(0.0F, 1.0F, 0.0F), 1e-5F)));
 }
 
+void normalizedPreviewDeltaReturnsToSourceCoordinates() {
+    const glm::vec3 center(10.0F, -2.0F, 4.0F);
+    constexpr float scale = 0.1F;
+    const glm::vec3 offset(0.0F, 0.0F, -0.8F);
+    const glm::mat4 normalizedDelta = glm::translate(
+        glm::mat4(1.0F), {0.2F, -0.1F, 0.3F});
+    const glm::mat4 sourceDelta = nadoc_vr::normalizedToSourceTransform(
+        normalizedDelta, center, scale, offset);
+    require(glm::all(glm::epsilonEqual(
+        transformedOrigin(sourceDelta), glm::vec3(2.0F, -1.0F, 3.0F), 1e-5F)));
+
+    const glm::vec3 sourcePoint(12.0F, 1.0F, -3.0F);
+    const glm::mat4 normalization = glm::translate(glm::mat4(1.0F), offset)
+                                  * glm::scale(glm::mat4(1.0F), glm::vec3(scale))
+                                  * glm::translate(glm::mat4(1.0F), -center);
+    const glm::vec3 viaNormalized = transformedPoint(
+        glm::inverse(normalization) * normalizedDelta * normalization, sourcePoint);
+    require(glm::all(glm::epsilonEqual(
+        transformedPoint(sourceDelta, sourcePoint), viaNormalized, 1e-5F)));
+}
+
 void rayPickingHitsVisiblePrimitiveSurfaces() {
     const nadoc_vr::Ray ray{{0, 0, 1}, {0, 0, -1}};
     const auto sphere = nadoc_vr::raySphere(ray, {0, 0, 0}, 0.2F);
@@ -307,6 +328,7 @@ int main() {
     pendingToolDragAccumulatesInModelSpaceAndCancelsExactly();
     pendingToolDragRotatesRigidlyWithTheController();
     endpointWeightsMoveOnlyTheOwnedBoundaryEndpoint();
+    normalizedPreviewDeltaReturnsToSourceCoordinates();
     rayPickingHitsVisiblePrimitiveSurfaces();
     rayPickingRejectsMissesAndBehindControllerGeometry();
     halfCylinderPickingMatchesTheRenderedPositiveHalf();

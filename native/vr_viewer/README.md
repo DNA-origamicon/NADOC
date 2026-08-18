@@ -76,8 +76,11 @@ Controls on the original HTC Vive wands:
   to its activation position. Scene-v10 endpoint ownership drives the same pending
   pose through native geometry, picking, selection anchors, and shadows: internal
   primitives move rigidly while a boundary bond or crossover leaves its opposite
-  endpoint fixed. This is still an uncommitted native preview; no desktop geometry,
-  selection, or history is changed.
+  endpoint fixed. The native companion also publishes the same rigid delta through
+  the private event bridge. NADOC converts it from view/snapshot coordinates back to
+  nanometres and mirrors it through the existing desktop Cluster gizmo from one
+  immutable baseline. This remains preview-only: Confirm is blocked, Cancel or native
+  session exit restores desktop geometry, and no design/history entry is written.
 - Cyan and orange pointers identify the left and right controllers. They turn
   green during a one-hand grab and magenta during a two-hand resize.
 - When neither trigger is held, the right pointer extends to the nearest visible

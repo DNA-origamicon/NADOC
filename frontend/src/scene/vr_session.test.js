@@ -168,6 +168,8 @@ describe('initVRSession', () => {
           tool_sequence: 1,
           tool_mode: 'twist',
           tool_action: 'preview',
+          transform_sequence: 1,
+          transform_matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 2, 3, 4, 1],
         })
         .mockResolvedValue({
           sequence: 2,
@@ -179,6 +181,8 @@ describe('initVRSession', () => {
           tool_sequence: 1,
           tool_mode: 'twist',
           tool_action: 'preview',
+          transform_sequence: 1,
+          transform_matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 2, 3, 4, 1],
         }),
     }
     const h = makeHarness({
@@ -195,12 +199,18 @@ describe('initVRSession', () => {
       [{ sequence: 1, type: 'select', identity: 'nuc:s1' }],
       [{ sequence: 1, type: 'selection_level', level: 'domain' }],
       [{ sequence: 1, type: 'tool', mode: 'twist', action: 'preview' }],
+      [{
+        sequence: 1,
+        type: 'tool_transform',
+        matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 2, 3, 4, 1],
+      }],
     ])
 
     await h.controller.exit()
-    expect(onNativeEvent).toHaveBeenLastCalledWith(
-      { sequence: 2, type: 'hover', identity: null },
-    )
+    expect(onNativeEvent.mock.calls.slice(-2)).toEqual([
+      [{ sequence: 2, type: 'hover', identity: null }],
+      [{ type: 'native_session_end' }],
+    ])
     const callsAfterExit = native.event.mock.calls.length
     await vi.advanceTimersByTimeAsync(50)
     expect(native.event).toHaveBeenCalledTimes(callsAfterExit)

@@ -5831,16 +5831,43 @@ async function main() {
             result.reason === 'selection_required') {
           showToast(`VR ${label}: select a canonical target first.`)
         } else if (result.effect?.type === 'preview_requested') {
-          showToast(`VR ${label}: preview intent received; no geometry was changed.`)
+          if (result.effect.tool === 'move_rotate') {
+            _translateRotateTool.beginVRPreview(result.effect.selectedRef.id).then(status => {
+              if (status?.accepted) {
+                showToast('VR Move / Rotate preview is mirrored on the desktop; Confirm remains disabled.')
+              } else {
+                showToast(
+                  'VR Move / Rotate could not mirror because the desktop tool is already active.',
+                  { severity: 'error' },
+                )
+              }
+            }).catch(() => showToast(
+              'VR Move / Rotate desktop preview failed to start.', { severity: 'error' },
+            ))
+          } else {
+            showToast(`VR ${label}: preview intent received; the design is unchanged.`)
+          }
         } else if (result.effect?.type === 'commit_requested') {
           showToast(
             `VR ${label}: confirm is staged; its mutation executor is not attached yet.`,
           )
         } else if (result.effect?.type === 'cancel_requested') {
-          showToast(`VR ${label}: preview cancelled.`)
+          if (result.effect.tool === 'move_rotate') {
+            _translateRotateTool.cancelVRPreview().then(() => {
+              showToast('VR Move / Rotate preview cancelled and desktop geometry restored.')
+            }).catch(() => showToast(
+              'VR Move / Rotate desktop restore failed.', { severity: 'error' },
+            ))
+          } else {
+            showToast(`VR ${label}: preview cancelled.`)
+          }
         } else if (result.effect?.type === 'undo_requested') {
           showToast('VR tools have no committed edit to undo yet.')
         }
+      } else if (event?.type === 'tool_transform') {
+        _translateRotateTool.applyVRPreviewMatrix(event.matrix)
+      } else if (event?.type === 'native_session_end') {
+        _translateRotateTool.cancelVRPreview().catch(() => {})
       } else {
         if (button) button.dataset.vrHoverIdentity = event?.identity ?? ''
         selectionManager.previewVRIdentity?.(event?.identity ?? null)
