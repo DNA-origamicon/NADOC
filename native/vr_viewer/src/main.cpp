@@ -825,7 +825,20 @@ class GlScene {
         if (token == toolPreviewToken_ && sameTransform) return;
         toolPreviewToken_ = std::move(token);
         toolPreviewTransform_ = transform;
+        const auto started = std::chrono::steady_clock::now();
         setStyle(representation_, coloring_);
+        const double milliseconds = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - started).count();
+        if (!toolPreviewToken_.empty() && previewTiming_.add(milliseconds)) {
+            const auto summary = previewTiming_.takeSummary();
+            if (summary) {
+                std::cout << "VR preview upload ms (" << summary->samples
+                          << " samples): p50=" << summary->p50Milliseconds
+                          << " p95=" << summary->p95Milliseconds
+                          << " p99=" << summary->p99Milliseconds
+                          << " max=" << summary->maxMilliseconds << std::endl;
+            }
+        }
     }
 
     [[nodiscard]] glm::mat4 viewSpaceToolTransform(
@@ -1762,6 +1775,7 @@ class GlScene {
     bool expanded_ = false;
     std::string toolPreviewToken_;
     glm::mat4 toolPreviewTransform_{1.0F};
+    nadoc_vr::TimingWindow previewTiming_{240};
     GLuint lineVao_ = 0;
     GLuint lineVbo_ = 0;
     GLuint guideVao_ = 0;
@@ -2801,6 +2815,7 @@ class Viewer {
         XrFrameWaitInfo waitInfo{XR_TYPE_FRAME_WAIT_INFO};
         XrFrameState frameState{XR_TYPE_FRAME_STATE};
         checkXr(instance_, xrWaitFrame(session_, &waitInfo, &frameState), "xrWaitFrame");
+        const auto frameStarted = std::chrono::steady_clock::now();
         XrFrameBeginInfo beginInfo{XR_TYPE_FRAME_BEGIN_INFO};
         checkXr(instance_, xrBeginFrame(session_, &beginInfo), "xrBeginFrame");
         syncActions(frameState.predictedDisplayTime);
@@ -2845,6 +2860,24 @@ class Viewer {
         endInfo.layerCount = layerCount;
         endInfo.layers = layerCount ? layers : nullptr;
         checkXr(instance_, xrEndFrame(session_, &endInfo), "xrEndFrame");
+        if (toolShell_.mode() == nadoc_vr::ToolMode::move_rotate &&
+            toolShell_.previewRequested()) {
+            const double milliseconds = std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - frameStarted).count();
+            if (previewFrameTiming_.add(milliseconds)) {
+                const auto summary = previewFrameTiming_.takeSummary();
+                if (summary) {
+                    const double runtimePeriod =
+                        static_cast<double>(frameState.predictedDisplayPeriod) / 1.0e6;
+                    std::cout << "VR preview CPU frame ms (" << summary->samples
+                              << " samples, runtime period=" << runtimePeriod
+                              << "): p50=" << summary->p50Milliseconds
+                              << " p95=" << summary->p95Milliseconds
+                              << " p99=" << summary->p99Milliseconds
+                              << " max=" << summary->maxMilliseconds << std::endl;
+                }
+            }
+        }
     }
 
     void eventLoop() {
@@ -2886,6 +2919,7 @@ class Viewer {
     nadoc_vr::PendingRigidTransform pendingToolTransform_;
     uint64_t transformSequence_ = 0;
     glm::mat4 lastToolTransform_{1.0F};
+    nadoc_vr::TimingWindow previewFrameTiming_{240};
     uint64_t feedbackSequence_ = 0;
     uint32_t feedbackPollFrame_ = 0;
     std::string selectedIdentity_;

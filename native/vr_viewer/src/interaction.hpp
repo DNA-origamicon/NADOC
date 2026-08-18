@@ -71,6 +71,48 @@ struct BoundsSummary {
     float radius = 0.0F;
 };
 
+struct TimingSummary {
+    size_t samples = 0;
+    double p50Milliseconds = 0.0;
+    double p95Milliseconds = 0.0;
+    double p99Milliseconds = 0.0;
+    double maxMilliseconds = 0.0;
+};
+
+/** Bounded nearest-rank timing window for headset performance checkpoints. */
+class TimingWindow {
+  public:
+    explicit TimingWindow(size_t capacity) : capacity_(std::max<size_t>(capacity, 1U)) {
+        samples_.reserve(capacity_);
+    }
+
+    [[nodiscard]] bool add(double milliseconds) {
+        if (!std::isfinite(milliseconds) || milliseconds < 0.0) return false;
+        samples_.push_back(milliseconds);
+        return samples_.size() >= capacity_;
+    }
+
+    [[nodiscard]] std::optional<TimingSummary> takeSummary() {
+        if (samples_.empty()) return std::nullopt;
+        std::sort(samples_.begin(), samples_.end());
+        auto percentile = [&](double fraction) {
+            const size_t rank = static_cast<size_t>(
+                std::ceil(fraction * static_cast<double>(samples_.size())));
+            return samples_[std::clamp<size_t>(rank, 1U, samples_.size()) - 1U];
+        };
+        const TimingSummary result{
+            samples_.size(), percentile(0.50), percentile(0.95),
+            percentile(0.99), samples_.back(),
+        };
+        samples_.clear();
+        return result;
+    }
+
+  private:
+    size_t capacity_;
+    std::vector<double> samples_;
+};
+
 /** Conservative owner-wide local bounds used for tool locators and future pivots. */
 class BoundsAccumulator {
   public:

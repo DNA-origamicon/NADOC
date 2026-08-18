@@ -177,6 +177,22 @@ void normalizedPreviewDeltaReturnsToSourceCoordinates() {
         transformedPoint(sourceDelta, sourcePoint), viaNormalized, 1e-5F)));
 }
 
+void timingWindowReportsBoundedNearestRankPercentiles() {
+    nadoc_vr::TimingWindow timing(100);
+    for (int sample = 1; sample <= 100; ++sample) {
+        const bool full = timing.add(static_cast<double>(sample));
+        require(full == (sample == 100));
+    }
+    const auto summary = timing.takeSummary();
+    require(summary && summary->samples == 100);
+    require(summary->p50Milliseconds == 50.0);
+    require(summary->p95Milliseconds == 95.0);
+    require(summary->p99Milliseconds == 99.0);
+    require(summary->maxMilliseconds == 100.0);
+    require(!timing.takeSummary());
+    require(!timing.add(-1.0));
+}
+
 void rayPickingHitsVisiblePrimitiveSurfaces() {
     const nadoc_vr::Ray ray{{0, 0, 1}, {0, 0, -1}};
     const auto sphere = nadoc_vr::raySphere(ray, {0, 0, 0}, 0.2F);
@@ -329,6 +345,7 @@ int main() {
     pendingToolDragRotatesRigidlyWithTheController();
     endpointWeightsMoveOnlyTheOwnedBoundaryEndpoint();
     normalizedPreviewDeltaReturnsToSourceCoordinates();
+    timingWindowReportsBoundedNearestRankPercentiles();
     rayPickingHitsVisiblePrimitiveSurfaces();
     rayPickingRejectsMissesAndBehindControllerGeometry();
     halfCylinderPickingMatchesTheRenderedPositiveHalf();

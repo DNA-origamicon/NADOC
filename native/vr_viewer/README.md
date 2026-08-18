@@ -105,6 +105,13 @@ Close inspection is intentionally unrestricted: structures may be pulled through
 the headset or enlarged around the viewer. A 2 cm rendering near plane prevents
 projection singularities while allowing atom-scale interior inspection.
 
+During an active Move/Rotate Preview, the companion logs bounded 240-sample timing
+windows for transform projection/VBO upload and total post-`xrWaitFrame` CPU submit
+time (p50/p95/p99/max plus the runtime-predicted display period). The live log path
+is returned by `/api/vr/status`; on the current workstation it can also be watched
+with `tail -f /tmp/nadoc-vr-$UID.log`. Use SteamVR's performance overlay alongside
+these CPU numbers to capture GPU/reprojection behavior.
+
 The native renderer uses the Photo-mode Full lighting balance: a camera-pinned
 directional key, low ambient fill, and one 2048² soft self-shadow map shared by
 both eyes. Full representation geometry mirrors the editor's physical display
