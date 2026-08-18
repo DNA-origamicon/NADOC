@@ -5799,7 +5799,8 @@ async function main() {
     onNativeEvent: event => {
       const button = document.getElementById('menu-help-view-vr')
       if (button) button.dataset.vrHoverIdentity = event?.identity ?? ''
-      selectionManager.previewVRIdentity?.(event?.identity ?? null)
+      if (event?.type === 'select') selectionManager.selectVRIdentity?.(event.identity)
+      else selectionManager.previewVRIdentity?.(event?.identity ?? null)
     },
   })
 

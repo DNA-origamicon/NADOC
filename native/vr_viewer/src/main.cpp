@@ -1465,7 +1465,7 @@ class Viewer {
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
         window_ = glfwCreateWindow(
             720, 180,
-            "NADOC VR — trigger grab · two triggers resize · right grip expand · menu options",
+            "NADOC VR — trigger grab · trackpad select · right grip expand · menu options",
             nullptr, nullptr);
         if (!window_) throw std::runtime_error("Could not create the OpenGL companion window");
         glfwMakeContextCurrent(window_);
@@ -1492,13 +1492,14 @@ class Viewer {
     }
 
     void suggestBindings(const char* profile,
-                         const std::array<const char*, 10>& componentPaths) {
+                         const std::array<const char*, 12>& componentPaths) {
         std::vector<XrActionSuggestedBinding> bindings;
         bindings.reserve(componentPaths.size());
         for (size_t hand = 0; hand < handPaths_.size(); ++hand) {
-            const size_t offset = hand * 5U;
-            const std::array<XrAction, 5> actions = {
-                poseAction_, triggerAction_, menuAction_, gripAction_, hapticAction_};
+            const size_t offset = hand * 6U;
+            const std::array<XrAction, 6> actions = {
+                poseAction_, triggerAction_, menuAction_, gripAction_,
+                selectAction_, hapticAction_};
             for (size_t component = 0; component < actions.size(); ++component) {
                 if (componentPaths[offset + component]) {
                     bindings.push_back(
@@ -1532,6 +1533,8 @@ class Viewer {
             XR_ACTION_TYPE_BOOLEAN_INPUT, "vr_menu", "VR menu");
         gripAction_ = createAction(
             XR_ACTION_TYPE_BOOLEAN_INPUT, "expanded_view", "Expanded Quick View");
+        selectAction_ = createAction(
+            XR_ACTION_TYPE_BOOLEAN_INPUT, "select_element", "Select element");
         hapticAction_ = createAction(
             XR_ACTION_TYPE_VIBRATION_OUTPUT, "haptic", "Navigation haptic");
 
@@ -1541,11 +1544,13 @@ class Viewer {
              "/user/hand/left/input/trigger/value",
              "/user/hand/left/input/menu/click",
              nullptr,
+             nullptr,
              "/user/hand/left/output/haptic",
              "/user/hand/right/input/grip/pose",
              "/user/hand/right/input/trigger/value",
              "/user/hand/right/input/menu/click",
              "/user/hand/right/input/squeeze/click",
+             "/user/hand/right/input/trackpad/click",
              "/user/hand/right/output/haptic"});
         suggestBindings(
             "/interaction_profiles/khr/simple_controller",
@@ -1553,9 +1558,11 @@ class Viewer {
              "/user/hand/left/input/select/click",
              "/user/hand/left/input/menu/click",
              nullptr,
+             nullptr,
              "/user/hand/left/output/haptic",
              "/user/hand/right/input/grip/pose",
              "/user/hand/right/input/select/click",
+             nullptr,
              nullptr,
              nullptr,
              "/user/hand/right/output/haptic"});
@@ -1936,13 +1943,29 @@ class Viewer {
     }
 
     void publishHover(const std::string& identity) {
+        publishedHoverIdentity_ = identity;
+        publishEventState();
+    }
+
+    void publishSelect(const std::string& identity) {
+        lastSelectIdentity_ = identity;
+        ++selectSequence_;
+        publishEventState();
+    }
+
+    void publishEventState() {
         if (eventPath_.empty()) return;
         std::ofstream output(eventPath_, std::ios::out | std::ios::trunc);
         if (!output) return;
-        output << "{\"sequence\":" << ++eventSequence_
-               << ",\"type\":\"hover\",\"identity\":";
-        if (identity.empty()) output << "null";
-        else output << '\"' << identity << '\"';
+        auto identity = [&](const std::string& value) {
+            if (value.empty()) output << "null";
+            else output << '\"' << value << '\"';
+        };
+        output << "{\"sequence\":" << ++eventSequence_ << ",\"hover_identity\":";
+        identity(publishedHoverIdentity_);
+        output << ",\"select_sequence\":" << selectSequence_
+               << ",\"select_identity\":";
+        identity(lastSelectIdentity_);
         output << '}';
     }
 
@@ -2014,6 +2037,17 @@ class Viewer {
                     glScene_->setExpanded(expanded);
                     pulse(hand, expanded ? 0.30F : 0.18F);
                 }
+
+                getInfo.action = selectAction_;
+                XrActionStateBoolean select{XR_TYPE_ACTION_STATE_BOOLEAN};
+                checkXr(instance_, xrGetActionStateBoolean(session_, &getInfo, &select),
+                        "xrGetActionStateBoolean(select element)");
+                const bool selectPressed = select.isActive && select.currentState;
+                if (selectPressed && !selectPressed_ && sceneHover_) {
+                    publishSelect(sceneHover_->identity);
+                    pulse(hand, 0.55F);
+                }
+                selectPressed_ = selectPressed;
             }
         }
 
@@ -2175,8 +2209,9 @@ class Viewer {
     }
 
     void eventLoop() {
-        std::cout << "NADOC VR viewer ready. Trigger: grab/select; both triggers: resize; "
-                     "right grip: Expanded Quick View; menu: options; Escape: exit.\n";
+        std::cout << "NADOC VR viewer ready. Trigger: grab; both triggers: resize; "
+                     "right trackpad: select; right grip: Expanded Quick View; "
+                     "menu: options; Escape: exit.\n";
         while (!exitLoop_) {
             glfwPollEvents();
             pollXrEvents();
@@ -2200,6 +2235,9 @@ class Viewer {
     SceneData sceneData_;
     std::string eventPath_;
     uint64_t eventSequence_ = 0;
+    std::string publishedHoverIdentity_;
+    uint64_t selectSequence_ = 0;
+    std::string lastSelectIdentity_;
     bool glfwInitialized_ = false;
     GLFWwindow* window_ = nullptr;
     XrInstance instance_ = XR_NULL_HANDLE;
@@ -2211,6 +2249,7 @@ class Viewer {
     XrAction triggerAction_ = XR_NULL_HANDLE;
     XrAction menuAction_ = XR_NULL_HANDLE;
     XrAction gripAction_ = XR_NULL_HANDLE;
+    XrAction selectAction_ = XR_NULL_HANDLE;
     XrAction hapticAction_ = XR_NULL_HANDLE;
     std::array<XrPath, 2> handPaths_{XR_NULL_PATH, XR_NULL_PATH};
     std::array<XrSpace, 2> handSpaces_{XR_NULL_HANDLE, XR_NULL_HANDLE};
@@ -2218,6 +2257,7 @@ class Viewer {
     std::array<bool, 2> triggerPressed_{false, false};
     std::array<bool, 2> triggerClicked_{false, false};
     bool gripPressed_ = false;
+    bool selectPressed_ = false;
     nadoc_vr::SceneManipulator manipulator_;
     std::vector<Vertex> controllerGuides_;
     std::optional<nadoc_vr::PickHit> sceneHover_;

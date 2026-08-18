@@ -39,6 +39,8 @@ Controls on the original HTC Vive wands:
 
 - Hold the right grip/squeeze button for Expanded Quick View; releasing it
   restores natural helix spacing without changing the design.
+- Click the right trackpad while a cyan hit marker is visible to select that
+  element through NADOC's active selection level and canonical selection controller.
 - Hold either trigger to grab, move, and rotate the structure.
 - Hold both triggers and change the distance between the controllers to resize
   the structure around their midpoint.

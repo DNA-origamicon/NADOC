@@ -2392,6 +2392,38 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     return owner
   }
 
+  /** Route a native Select event through the same level-aware handlers as mouse hits. */
+  function _selectVrIdentity(identity) {
+    const state = store.getState()
+    const owner = vrPrimitiveOwner(identity, {
+      geometry: state.currentGeometry,
+      design: state.currentDesign,
+    })
+    if (!owner) return null
+    const backboneEntries = designRenderer.getBackboneEntries()
+    const coneEntries = designRenderer.getConeEntries()
+
+    if (owner.kind === 'nucleotide' || owner.kind === 'atom') {
+      const entry = backboneEntries.find(candidate => candidate.nuc === owner.nucleotide)
+        ?? backboneEntries.find(candidate =>
+          baseKey(candidate.nuc, candidate._copy) === owner.ref.key)
+      if (entry) _v2HandleBead(entry, backboneEntries, coneEntries)
+    } else if (owner.kind === 'domain') {
+      const entry = backboneEntries.find(candidate =>
+        candidate.nuc.strand_id === owner.ref.strandId &&
+        (candidate.nuc.domain_index ?? 0) === owner.ref.domainIndex)
+      if (entry) _v2HandleBead(entry, backboneEntries, coneEntries)
+    } else if (owner.kind === 'crossover') {
+      const arc = getUnfoldView?.()?.getArcEntries?.()
+        ?.find(candidate => candidate.crossover_id === owner.ref.id)
+      if (arc) _v2HandleArc(arc, backboneEntries, coneEntries)
+    } else if ((owner.kind === 'flexible_base' || owner.kind === 'linker_base') &&
+               _selLevel === 'base') {
+      _selectBaseKey(owner.ref.key)
+    }
+    return owner
+  }
+
   // Unified backbone-bead-level hit handler — used by a real bead hit AND by the
   // region overlays (atom / surface / cylinder, via a representative entry). Routes
   // to the selection-level dispatch (fixed level, or default strand→leaf-under-cursor;
@@ -4692,6 +4724,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     /** Read-only native-VR hover projection; never dispatches a selection intent. */
     previewVRIdentity(identity) { return _previewVrIdentity(identity) },
+
+    /** Level-aware native Select routed through the canonical selection controller. */
+    selectVRIdentity(identity) { return _selectVrIdentity(identity) },
 
     /** Clear committed selection and its projected renderer state. */
     clearSelection() { _clearAll() },

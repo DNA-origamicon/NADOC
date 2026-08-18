@@ -158,19 +158,22 @@ P owner 0 0 0 .1 1 1 1 1 1 1 1 1 1 1 1 1
 def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -> None:
     event_path = tmp_path / "vr-event.json"
     event_path.write_text(
-        '{"sequence":7,"type":"hover","identity":"nuc:s1:0:h1:4:FORWARD:0"}'
+        '{"sequence":7,"hover_identity":"nuc:s1:0:h1:4:FORWARD:0",'
+        '"select_sequence":2,"select_identity":"nuc:s1:0:h1:3:FORWARD:0"}'
     )
     assert _event_payload({"event_path": str(event_path)}) == {
         "sequence": 7,
-        "type": "hover",
-        "identity": "nuc:s1:0:h1:4:FORWARD:0",
+        "hover_identity": "nuc:s1:0:h1:4:FORWARD:0",
+        "select_sequence": 2,
+        "select_identity": "nuc:s1:0:h1:3:FORWARD:0",
     }
 
     event_path.write_text('{"sequence":')
     assert _event_payload({"event_path": str(event_path)}) == {
         "sequence": 0,
-        "type": "hover",
-        "identity": None,
+        "hover_identity": None,
+        "select_sequence": 0,
+        "select_identity": None,
     }
 
     event_path.write_text("x" * 4097)

@@ -100,6 +100,8 @@ Phase 4 desktop preview slice: `vrPrimitiveOwner` reconstructs live nucleotide/d
 
 Phase 4 extended owners: atom primitive IDs now embed canonical base ownership instead of relying on their atom index alone; desktop resolves them back through live geometry and previews the complete residue atom set. Flexible bead/slab IDs resolve through canonical `segment_bead_keys`, and ss-linker bead/slab IDs resolve to existing `__lnk__` base keys, both reusing the live cross-renderer base-candidate pool. Atom bonds and non-base linker/flexible backbone segments remain intentionally unresolved pending bond/tool semantics.
 
+Phase 4 Select slice: the original Vive right trackpad click is a dedicated boolean action, leaving trigger grab/two-trigger resize, right-grip Expanded Quick View, and application-menu controls intact. The bounded event record latches selection under an independent sequence so a hover update cannot erase a click before the 50 ms poll. Browser events split back into hover/select intents; select resolves the same stable owner and invokes the existing level-aware bead/arc/base handlers, which alone dispatch through the canonical selection controller. No direct store writer was added.
+
 ## Metrics research decisions
 
 - Runtime cadence is authoritative: OpenXR `xrWaitFrame` supplies `predictedDisplayTime`, `predictedDisplayPeriod`, and `shouldRender`; advance one frame from that shared predicted time and skip heavy rendering when `shouldRender` is false. Do not hard-code 90 Hz even though the original Vive normally uses it. Source: [OpenXR frame synchronization](https://registry.khronos.org/OpenXR/specs/1.0-khr/html/xrspec.html#frame-synchronization).
@@ -116,7 +118,8 @@ Phase 4 extended owners: atom primitive IDs now embed canonical base ownership i
 - Phase 3 headset checkpoint: launch a two-or-more-helix part, hold the right wand grip, and confirm helices move laterally apart while beads/slabs/atom radii remain constant; crossovers and linkers must stretch continuously rather than detach. Release must restore the exact natural pose. Repeat in all four representations, while holding a trigger, and at close-inspection scale. **Go** if grip never latches, model/world scale stays fixed, and there is no disorienting viewpoint jump; **no-go** on missing input, detached junctions, pose drift, or a grip/trigger conflict.
 - Phase 4 hover checkpoint: with triggers released, point the right wand at a bead, slab, connector, cylinder, and atom. The cyan ray/marker should land on the visible surface, prefer the nearer primitive through overlaps, clear on empty space, and disappear during grab/resize. **No-go** on sticky markers, hits behind the wand, systematic slab misses, or frequent coarse-cylinder false positives.
 - Desktop mirror checkpoint: while native VR is open and the normal desktop is visible in SteamVR Dashboard, VR hover over a nucleotide/domain/crossover should produce the same yellow desktop preview as mouse hover at the active selection level, and clear within one poll after leaving the model or exiting VR. **No-go** if canonical green selection changes, undo/history changes, Assembly selection is touched, or stale yellow preview remains.
-- Next slice: specify and implement a non-conflicting click gesture before allowing canonical selection writes. Preserve trigger grab/two-trigger resize and right-grip Expanded Quick View; the Vive right trackpad click is the leading candidate for Select. Phase 1 and Phase 3 remain pending their manual headset gates.
+- Selection checkpoint: at each cluster/strand/domain/end/xover/base level, aim at a valid target and click the right trackpad. Desktop and VR should show the same canonical green selection; invalid target/level pairs must be no-ops, repeated clicks must follow desktop toggle/drill semantics, and clicking must not move/scale the model. **No-go** on duplicate clicks, missed clicks during a steady hover, any trigger/grip conflict, or selection surviving an Assembly boundary incorrectly.
+- Next slice: add in-VR selection-level controls and selected-owner feedback, then finish bond/backbone identity semantics. Phase 1 and Phase 3 remain pending their manual headset gates.
 
 ## Open questions log
 
@@ -132,4 +135,4 @@ Phase 4 extended owners: atom primitive IDs now embed canonical base ownership i
 
 ## Immediate handoff
 
-Implement right-trackpad Select as an explicit native click event routed through the selection manager/controller, with level-aware tests and no direct store writer. Phase 1 and Phase 3 stay at manual gates until the headset checklists above pass.
+Add selection-level controls and selected-owner feedback to the in-headset menu, preserving the right-trackpad canonical Select path. Phase 1 and Phase 3 stay at manual gates until the headset checklists above pass.

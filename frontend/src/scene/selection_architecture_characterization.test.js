@@ -90,12 +90,21 @@ describe('selection architecture — canonical enforcement', () => {
   it('keeps native VR hover renderer-only until an explicit click intent exists', () => {
     const preview = manager.slice(
       manager.indexOf('function _previewVrIdentity'),
-      manager.indexOf('// Unified backbone-bead-level hit handler'),
+      manager.indexOf('function _selectVrIdentity'),
     )
     expect(preview).toContain('designRenderer.setPreviewGlow')
     expect(preview).toContain('designRenderer.setPreviewArc')
     expect(preview).not.toContain('selectionController')
     expect(preview).not.toContain('store.setState')
+
+    const select = manager.slice(
+      manager.indexOf('function _selectVrIdentity'),
+      manager.indexOf('// Unified backbone-bead-level hit handler'),
+    )
+    expect(select).toContain('_v2HandleBead')
+    expect(select).toContain('_v2HandleArc')
+    expect(select).toContain('_selectBaseKey')
+    expect(select).not.toContain('store.setState')
   })
 
   it('enforces the explicit design/assembly selection boundary', () => {

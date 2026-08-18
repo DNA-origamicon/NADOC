@@ -45,6 +45,7 @@ export function initVRSession({
   let nativePollTimer = null
   let nativeEventTimer = null
   let lastNativeEventSequence = 0
+  let lastNativeSelectSequence = 0
   let cameraRig = null
   let cameraSnapshot = null
   let starting = false
@@ -170,7 +171,17 @@ export function initVRSession({
       const sequence = Number(event?.sequence ?? 0)
       if (Number.isSafeInteger(sequence) && sequence > lastNativeEventSequence) {
         lastNativeEventSequence = sequence
-        onNativeEvent(event)
+        onNativeEvent({ sequence, type: 'hover', identity: event?.hover_identity ?? null })
+        const selectSequence = Number(event?.select_sequence ?? 0)
+        if (Number.isSafeInteger(selectSequence) &&
+            selectSequence > lastNativeSelectSequence) {
+          lastNativeSelectSequence = selectSequence
+          onNativeEvent({
+            sequence: selectSequence,
+            type: 'select',
+            identity: event?.select_identity ?? null,
+          })
+        }
       }
       _scheduleNativeEventPoll()
     }, nativeEventPollIntervalMs)
@@ -186,6 +197,7 @@ export function initVRSession({
       }
     } else {
       lastNativeEventSequence = 0
+      lastNativeSelectSequence = 0
       _scheduleNativeEventPoll()
     }
     _setButtonState({ active })
@@ -226,7 +238,7 @@ export function initVRSession({
     }
     _setNativeActive(true)
     _scheduleNativePoll()
-    showToast('VR started. Trigger: grab/select · both triggers: resize · menu: VR options.')
+    showToast('VR started. Trigger: grab · right trackpad: select · both triggers: resize · menu: options.')
     return true
   }
 

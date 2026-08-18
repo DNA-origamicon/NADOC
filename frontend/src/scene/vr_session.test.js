@@ -158,8 +158,18 @@ describe('initVRSession', () => {
       launch: vi.fn().mockResolvedValue({ available: true, running: true, pid: 1234 }),
       stop: vi.fn().mockResolvedValue({ available: true, running: false }),
       event: vi.fn()
-        .mockResolvedValueOnce({ sequence: 1, type: 'hover', identity: 'nuc:s1' })
-        .mockResolvedValue({ sequence: 1, type: 'hover', identity: 'nuc:s1' }),
+        .mockResolvedValueOnce({
+          sequence: 2,
+          hover_identity: 'nuc:s1',
+          select_sequence: 1,
+          select_identity: 'nuc:s1',
+        })
+        .mockResolvedValue({
+          sequence: 2,
+          hover_identity: 'nuc:s1',
+          select_sequence: 1,
+          select_identity: 'nuc:s1',
+        }),
     }
     const h = makeHarness({
       xr: null,
@@ -170,14 +180,14 @@ describe('initVRSession', () => {
 
     await h.controller.enter()
     await vi.advanceTimersByTimeAsync(25)
-    expect(onNativeEvent).toHaveBeenCalledTimes(1)
-    expect(onNativeEvent).toHaveBeenLastCalledWith(
-      { sequence: 1, type: 'hover', identity: 'nuc:s1' },
-    )
+    expect(onNativeEvent.mock.calls).toEqual([
+      [{ sequence: 2, type: 'hover', identity: 'nuc:s1' }],
+      [{ sequence: 1, type: 'select', identity: 'nuc:s1' }],
+    ])
 
     await h.controller.exit()
     expect(onNativeEvent).toHaveBeenLastCalledWith(
-      { sequence: 1, type: 'hover', identity: null },
+      { sequence: 2, type: 'hover', identity: null },
     )
     const callsAfterExit = native.event.mock.calls.length
     await vi.advanceTimersByTimeAsync(50)

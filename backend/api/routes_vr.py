@@ -1554,23 +1554,45 @@ def _status_payload() -> dict:
 def _event_payload(state: dict | None) -> dict:
     """Read one bounded, overwrite-in-place native event record."""
     if not state or not state.get("event_path"):
-        return {"sequence": 0, "type": "hover", "identity": None}
+        return {
+            "sequence": 0,
+            "hover_identity": None,
+            "select_sequence": 0,
+            "select_identity": None,
+        }
     path = Path(state["event_path"])
     try:
         if path.stat().st_size > 4096:
             raise ValueError("event record is too large")
         event = json.loads(path.read_text())
         sequence = int(event.get("sequence", 0))
-        identity = event.get("identity")
-        if sequence < 0 or (identity is not None and not isinstance(identity, str)):
+        hover_identity = event.get("hover_identity")
+        select_sequence = int(event.get("select_sequence", 0))
+        select_identity = event.get("select_identity")
+        identities = (hover_identity, select_identity)
+        if (
+            sequence < 0
+            or select_sequence < 0
+            or any(value is not None and not isinstance(value, str) for value in identities)
+        ):
             raise ValueError("invalid event record")
-        if isinstance(identity, str) and len(identity) > 2048:
+        if any(isinstance(value, str) and len(value) > 2048 for value in identities):
             raise ValueError("event identity is too large")
-        return {"sequence": sequence, "type": "hover", "identity": identity}
+        return {
+            "sequence": sequence,
+            "hover_identity": hover_identity,
+            "select_sequence": select_sequence,
+            "select_identity": select_identity,
+        }
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
         # A truncate/write can briefly expose an incomplete record. Pollers keep
         # their prior sequence and recover on the next read.
-        return {"sequence": 0, "type": "hover", "identity": None}
+        return {
+            "sequence": 0,
+            "hover_identity": None,
+            "select_sequence": 0,
+            "select_identity": None,
+        }
 
 
 @router.get("/vr/status")
@@ -1631,7 +1653,10 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             suffix=".json",
             delete=False,
         ) as event_file:
-            event_file.write('{"sequence":0,"type":"hover","identity":null}')
+            event_file.write(
+                '{"sequence":0,"hover_identity":null,'
+                '"select_sequence":0,"select_identity":null}'
+            )
             event_path = Path(event_file.name)
         event_path.chmod(0o600)
 
