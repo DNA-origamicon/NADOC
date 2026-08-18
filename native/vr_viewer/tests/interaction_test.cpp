@@ -139,6 +139,23 @@ void pendingToolDragRotatesRigidlyWithTheController() {
         glm::vec3(0.0F, 1.0F, 0.0F), 1e-5F)));
 }
 
+void endpointWeightsMoveOnlyTheOwnedBoundaryEndpoint() {
+    const glm::mat4 transform = glm::translate(
+        glm::mat4(1.0F), {2.0F, 3.0F, 4.0F});
+    const glm::vec3 start = nadoc_vr::weightedTransformPoint(
+        {0.0F, 0.0F, 0.0F}, transform, 1.0F);
+    const glm::vec3 end = nadoc_vr::weightedTransformPoint(
+        {1.0F, 0.0F, 0.0F}, transform, 0.0F);
+    require(glm::all(glm::epsilonEqual(start, glm::vec3(2.0F, 3.0F, 4.0F), 1e-5F)));
+    require(glm::all(glm::epsilonEqual(end, glm::vec3(1.0F, 0.0F, 0.0F), 1e-5F)));
+
+    const glm::mat4 rotation = glm::toMat4(glm::angleAxis(
+        glm::radians(90.0F), glm::vec3(0.0F, 0.0F, 1.0F)));
+    const glm::vec3 axis = nadoc_vr::weightedTransformVector(
+        {1.0F, 0.0F, 0.0F}, rotation, 1.0F);
+    require(glm::all(glm::epsilonEqual(axis, glm::vec3(0.0F, 1.0F, 0.0F), 1e-5F)));
+}
+
 void rayPickingHitsVisiblePrimitiveSurfaces() {
     const nadoc_vr::Ray ray{{0, 0, 1}, {0, 0, -1}};
     const auto sphere = nadoc_vr::raySphere(ray, {0, 0, 0}, 0.2F);
@@ -289,6 +306,7 @@ int main() {
     closeInspectionAllowsTheModelToPassThroughTheHead();
     pendingToolDragAccumulatesInModelSpaceAndCancelsExactly();
     pendingToolDragRotatesRigidlyWithTheController();
+    endpointWeightsMoveOnlyTheOwnedBoundaryEndpoint();
     rayPickingHitsVisiblePrimitiveSurfaces();
     rayPickingRejectsMissesAndBehindControllerGeometry();
     halfCylinderPickingMatchesTheRenderedPositiveHalf();

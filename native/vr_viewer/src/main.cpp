@@ -40,6 +40,7 @@
 #include <string>
 #include <thread>
 #include <unordered_set>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -787,6 +788,42 @@ class GlScene {
         setStyle(scene_.initialRepresentation, scene_.initialColoring);
     }
 
+    void setToolPreview(
+        const std::vector<std::string>& ownerTokens, const glm::mat4& transform) {
+        std::string token;
+        const RepresentationData& source =
+            expanded_ && scene_.hasExpanded
+                ? scene_.expandedRepresentations[static_cast<size_t>(representation_)]
+                : scene_.representations[static_cast<size_t>(representation_)];
+        for (const std::string& candidate : ownerTokens) {
+            const bool present = std::any_of(
+                source.transformOwnership.begin(), source.transformOwnership.end(),
+                [&](const TransformOwnership& ownership) {
+                    return std::any_of(
+                        ownership.owners.begin(), ownership.owners.end(),
+                        [&](const TransformOwner& owner) { return owner.token == candidate; });
+                });
+            if (present) {
+                token = candidate;
+                break;
+            }
+        }
+        bool sameTransform = true;
+        for (size_t column = 0; column < 4 && sameTransform; ++column) {
+            for (size_t row = 0; row < 4; ++row) {
+                if (std::abs(toolPreviewTransform_[column][row] - transform[column][row])
+                    > 1.0e-6F) {
+                    sameTransform = false;
+                    break;
+                }
+            }
+        }
+        if (token == toolPreviewToken_ && sameTransform) return;
+        toolPreviewToken_ = std::move(token);
+        toolPreviewTransform_ = transform;
+        setStyle(representation_, coloring_);
+    }
+
     void setStyle(Representation representation, Coloring coloring) {
         representation_ = representation;
         coloring_ = coloring;
@@ -794,11 +831,41 @@ class GlScene {
             expanded_ && scene_.hasExpanded
                 ? scene_.expandedRepresentations[static_cast<size_t>(representation)]
                 : scene_.representations[static_cast<size_t>(representation)];
+        std::unordered_map<std::string, std::pair<float, float>> transformWeights;
+        if (!toolPreviewToken_.empty()) {
+            for (const TransformOwnership& ownership : source.transformOwnership) {
+                const auto owner = std::find_if(
+                    ownership.owners.begin(), ownership.owners.end(),
+                    [&](const TransformOwner& candidate) {
+                        return candidate.token == toolPreviewToken_;
+                    });
+                if (owner != ownership.owners.end()) {
+                    transformWeights.emplace(
+                        ownership.identity,
+                        std::pair(owner->startWeight, owner->endWeight));
+                }
+            }
+        }
+        auto weights = [&](const std::string& identity) {
+            const auto found = transformWeights.find(identity);
+            return found == transformWeights.end()
+                ? std::pair(0.0F, 0.0F) : found->second;
+        };
+        auto transformPoint = [&](const glm::vec3& point, float weight) {
+            return nadoc_vr::weightedTransformPoint(
+                point, toolPreviewTransform_, weight);
+        };
+        auto transformVector = [&](const glm::vec3& vector, float weight) {
+            return nadoc_vr::weightedTransformVector(
+                vector, toolPreviewTransform_, weight);
+        };
 
         std::vector<Vertex> points;
         points.reserve(source.points.size());
         for (const StyledPoint& point : source.points) {
-            points.push_back(Vertex{point.position, point.colors.get(coloring), point.size});
+            points.push_back(Vertex{
+                transformPoint(point.position, weights(point.identity).first),
+                point.colors.get(coloring), point.size});
         }
         glBindBuffer(GL_ARRAY_BUFFER, sphereInstanceVbo_);
         glBufferData(GL_ARRAY_BUFFER,
@@ -809,8 +876,11 @@ class GlScene {
         std::vector<Cylinder> cylinders;
         cylinders.reserve(source.cylinders.size());
         for (const StyledCylinder& cylinder : source.cylinders) {
+            const auto [startWeight, endWeight] = weights(cylinder.identity);
             cylinders.push_back(Cylinder{
-                cylinder.start, cylinder.end, cylinder.radius, cylinder.colors.get(coloring)});
+                transformPoint(cylinder.start, startWeight),
+                transformPoint(cylinder.end, endWeight),
+                cylinder.radius, cylinder.colors.get(coloring)});
         }
         glBindBuffer(GL_ARRAY_BUFFER, cylinderInstanceVbo_);
         glBufferData(GL_ARRAY_BUFFER,
@@ -821,8 +891,11 @@ class GlScene {
         std::vector<Cylinder> halfCylinders;
         halfCylinders.reserve(source.halfCylinders.size());
         for (const StyledCylinder& cylinder : source.halfCylinders) {
+            const auto [startWeight, endWeight] = weights(cylinder.identity);
             halfCylinders.push_back(Cylinder{
-                cylinder.start, cylinder.end, cylinder.radius, cylinder.colors.get(coloring)});
+                transformPoint(cylinder.start, startWeight),
+                transformPoint(cylinder.end, endWeight),
+                cylinder.radius, cylinder.colors.get(coloring)});
         }
         glBindBuffer(GL_ARRAY_BUFFER, halfCylinderInstanceVbo_);
         glBufferData(GL_ARRAY_BUFFER,
@@ -833,8 +906,13 @@ class GlScene {
         std::vector<Box> boxes;
         boxes.reserve(source.boxes.size());
         for (const StyledBox& box : source.boxes) {
+            const float weight = weights(box.identity).first;
             boxes.push_back(Box{
-                box.center, box.axisX, box.axisY, box.axisZ, box.colors.get(coloring)});
+                transformPoint(box.center, weight),
+                transformVector(box.axisX, weight),
+                transformVector(box.axisY, weight),
+                transformVector(box.axisZ, weight),
+                box.colors.get(coloring)});
         }
         glBindBuffer(GL_ARRAY_BUFFER, boxInstanceVbo_);
         glBufferData(GL_ARRAY_BUFFER,
@@ -848,16 +926,16 @@ class GlScene {
             lo = glm::min(lo, point - glm::vec3(radius));
             hi = glm::max(hi, point + glm::vec3(radius));
         };
-        for (const StyledPoint& point : source.points) include(point.position, point.size);
-        for (const StyledCylinder& cylinder : source.cylinders) {
+        for (const Vertex& point : points) include(point.position, point.size);
+        for (const Cylinder& cylinder : cylinders) {
             include(cylinder.start, cylinder.radius);
             include(cylinder.end, cylinder.radius);
         }
-        for (const StyledCylinder& cylinder : source.halfCylinders) {
+        for (const Cylinder& cylinder : halfCylinders) {
             include(cylinder.start, cylinder.radius);
             include(cylinder.end, cylinder.radius);
         }
-        for (const StyledBox& box : source.boxes) {
+        for (const Box& box : boxes) {
             for (float x : {-0.5F, 0.5F}) {
                 for (float y : {-0.5F, 0.5F}) {
                     for (float z : {-0.5F, 0.5F}) {
@@ -908,19 +986,29 @@ class GlScene {
             }
         };
         for (const StyledPoint& point : source.points) {
-            consider(point.identity, nadoc_vr::raySphere(ray, point.position, point.size));
+            const auto weight = previewWeights(source, point.identity).first;
+            consider(point.identity, nadoc_vr::raySphere(
+                ray, previewPoint(point.position, weight), point.size));
         }
         for (const StyledCylinder& cylinder : source.cylinders) {
+            const auto [startWeight, endWeight] = previewWeights(source, cylinder.identity);
             consider(cylinder.identity, nadoc_vr::rayCapsule(
-                ray, cylinder.start, cylinder.end, cylinder.radius));
+                ray, previewPoint(cylinder.start, startWeight),
+                previewPoint(cylinder.end, endWeight), cylinder.radius));
         }
         for (const StyledCylinder& cylinder : source.halfCylinders) {
+            const auto [startWeight, endWeight] = previewWeights(source, cylinder.identity);
             consider(cylinder.identity, nadoc_vr::rayHalfCylinder(
-                ray, cylinder.start, cylinder.end, cylinder.radius));
+                ray, previewPoint(cylinder.start, startWeight),
+                previewPoint(cylinder.end, endWeight), cylinder.radius));
         }
         for (const StyledBox& box : source.boxes) {
+            const float weight = previewWeights(source, box.identity).first;
             consider(box.identity, nadoc_vr::rayBox(
-                ray, box.center, box.axisX, box.axisY, box.axisZ));
+                ray, previewPoint(box.center, weight),
+                previewVector(box.axisX, weight),
+                previewVector(box.axisY, weight),
+                previewVector(box.axisZ, weight)));
         }
         return nearest;
     }
@@ -973,14 +1061,23 @@ class GlScene {
         };
         for (const StyledPoint& point : source.points) {
             if (point.identity == resolvedIdentity) {
-                return result(point.position, point.size);
+                return result(
+                    previewPoint(
+                        point.position,
+                        previewWeights(source, point.identity).first),
+                    point.size);
             }
         }
         auto cylinderAnchor = [&](const std::vector<StyledCylinder>& cylinders)
             -> std::optional<nadoc_vr::PickHit> {
             for (const StyledCylinder& cylinder : cylinders) {
                 if (cylinder.identity == resolvedIdentity) {
-                    return result((cylinder.start + cylinder.end) * 0.5F, cylinder.radius);
+                    const auto [startWeight, endWeight] =
+                        previewWeights(source, cylinder.identity);
+                    return result(
+                        (previewPoint(cylinder.start, startWeight)
+                         + previewPoint(cylinder.end, endWeight)) * 0.5F,
+                        cylinder.radius);
                 }
             }
             return std::nullopt;
@@ -989,12 +1086,13 @@ class GlScene {
         if (auto found = cylinderAnchor(source.halfCylinders)) return found;
         for (const StyledBox& box : source.boxes) {
             if (box.identity == resolvedIdentity) {
+                const float weight = previewWeights(source, box.identity).first;
                 const float radius = 0.5F * std::min({
-                    glm::length(box.axisX),
-                    glm::length(box.axisY),
-                    glm::length(box.axisZ),
+                    glm::length(previewVector(box.axisX, weight)),
+                    glm::length(previewVector(box.axisY, weight)),
+                    glm::length(previewVector(box.axisZ, weight)),
                 });
-                return result(box.center, radius);
+                return result(previewPoint(box.center, weight), radius);
             }
         }
         return std::nullopt;
@@ -1234,6 +1332,37 @@ class GlScene {
     }
 
   private:
+    [[nodiscard]] std::pair<float, float> previewWeights(
+        const RepresentationData& source, const std::string& identity) const {
+        if (toolPreviewToken_.empty()) return {0.0F, 0.0F};
+        const auto ownership = std::find_if(
+            source.transformOwnership.begin(), source.transformOwnership.end(),
+            [&](const TransformOwnership& candidate) {
+                return candidate.identity == identity;
+            });
+        if (ownership == source.transformOwnership.end()) return {0.0F, 0.0F};
+        const auto owner = std::find_if(
+            ownership->owners.begin(), ownership->owners.end(),
+            [&](const TransformOwner& candidate) {
+                return candidate.token == toolPreviewToken_;
+            });
+        return owner == ownership->owners.end()
+            ? std::pair(0.0F, 0.0F)
+            : std::pair(owner->startWeight, owner->endWeight);
+    }
+
+    [[nodiscard]] glm::vec3 previewPoint(
+        const glm::vec3& point, float weight) const {
+        return nadoc_vr::weightedTransformPoint(
+            point, toolPreviewTransform_, weight);
+    }
+
+    [[nodiscard]] glm::vec3 previewVector(
+        const glm::vec3& vector, float weight) const {
+        return nadoc_vr::weightedTransformVector(
+            vector, toolPreviewTransform_, weight);
+    }
+
     void applyLightingUniforms(
         GLint lightProjection, GLint lightDirection, GLint shadowMap) const {
         glUniformMatrix4fv(
@@ -1620,6 +1749,8 @@ class GlScene {
     Representation representation_ = Representation::full;
     Coloring coloring_ = Coloring::strand;
     bool expanded_ = false;
+    std::string toolPreviewToken_;
+    glm::mat4 toolPreviewTransform_{1.0F};
     GLuint lineVao_ = 0;
     GLuint lineVbo_ = 0;
     GLuint guideVao_ = 0;
@@ -2527,6 +2658,9 @@ class Viewer {
                                    !(hands_[0].valid && hands_[0].pressed);
         pendingToolTransform_.update(
             hands_[1], manipulator_.transform(), rightToolDrag);
+        glScene_->setToolPreview(
+            clusterToolPreview ? selectedOwnerTokens_ : std::vector<std::string>{},
+            pendingToolTransform_.transform());
         if (rightToolDrag) manipulationHands[1].pressed = false;
         if (inputSuppressed) {
             for (nadoc_vr::HandPose& hand : manipulationHands) hand.pressed = false;

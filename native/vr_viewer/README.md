@@ -73,10 +73,11 @@ Controls on the original HTC Vive wands:
   RGB translation triad at the exact current visual centroid used by NADOC's desktop
   gizmo; its size is derived from owner-wide bounds and stays capped for reach.
   Right-trigger drags accumulate across re-grabs and Cancel returns the handle exactly
-  to its activation position. This foundation deliberately moves only the handle:
-  molecule geometry waits for endpoint-aware ownership, so boundary bonds and
-  crossovers cannot be transformed as an incorrect whole primitive. No desktop
-  geometry, selection, or history is changed.
+  to its activation position. Scene-v10 endpoint ownership drives the same pending
+  pose through native geometry, picking, selection anchors, and shadows: internal
+  primitives move rigidly while a boundary bond or crossover leaves its opposite
+  endpoint fixed. This is still an uncommitted native preview; no desktop geometry,
+  selection, or history is changed.
 - Cyan and orange pointers identify the left and right controllers. They turn
   green during a one-hand grab and magenta during a two-hand resize.
 - When neither trigger is held, the right pointer extends to the nearest visible

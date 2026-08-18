@@ -26,6 +26,17 @@ struct HandPose {
 
 inline glm::mat4 poseMatrix(const HandPose& pose);
 
+inline glm::vec3 weightedTransformPoint(
+    const glm::vec3& point, const glm::mat4& transform, float weight) {
+    return glm::mix(
+        point, glm::vec3(transform * glm::vec4(point, 1.0F)), weight);
+}
+
+inline glm::vec3 weightedTransformVector(
+    const glm::vec3& vector, const glm::mat4& transform, float weight) {
+    return glm::mix(vector, glm::mat3(transform) * vector, weight);
+}
+
 enum class ManipulationMode { none, left, right, two_hand };
 
 struct SelectionFeedback {
