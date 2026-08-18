@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest'
 
 import { resolveVREndToolContext, vrToolFeedbackPayload } from './vr_tool_context.js'
 
-const design = ({ transformed = false, deformed = false } = {}) => ({
-  helices: [{ id: 'h1', bp_start: 0, length_bp: 20 }],
+const design = ({ transformed = false, deformed = false, gridPos = [2, 3] } = {}) => ({
+  lattice_type: 'HONEYCOMB',
+  helices: [{ id: 'h1', bp_start: 0, length_bp: 20, grid_pos: gridPos }],
   deformations: deformed ? [{ id: 'bend-1' }] : [],
   cluster_transforms: transformed ? [{
     helix_ids: ['h1'], rotation: [0, 0, 0, 1], translation: [1, 0, 0],
@@ -19,6 +20,7 @@ const face = (overrides = {}) => ({
   helixId: 'h1', bp: 9, diskBp: 10, openSide: 1,
   plane: 'XY', offsetNm: 3.34, overhangId: null,
   ringPos3d: [1, 2, 3], faceNormal3d: [0, 0, 1],
+  endPos3d: [1, 2, 2.666],
   owners: [{
     strandId: 's1', domainIndex: 0, direction: 'FORWARD',
     strandType: 'scaffold', overhangId: null,
@@ -38,8 +40,12 @@ describe('VR End tool context', () => {
         kind: 'continuation_end', helixId: 'h1', bp: 9, diskBp: 10,
         continuationBp: 10, openSide: 1, plane: 'XY', offsetNm: 3.34,
         facePosition: [1, 2, 3], faceNormal: [0, 0, 1],
+        continuationPosition: [1, 2, 3],
         strandId: 's1', domainIndex: 0, direction: 'FORWARD',
         endRole: 'three_prime', overhangId: null, connections: [], deformed: false,
+        footprint: {
+          kind: 'single_end_cell', latticeType: 'HONEYCOMB', cells: [[2, 3]],
+        },
       },
     })
   })
@@ -61,6 +67,7 @@ describe('VR End tool context', () => {
     )
     expect(result.context).toMatchObject({
       continuationBp: 9, openSide: -1, overhangId: 'oh1',
+      continuationPosition: [1, 2, 2.666],
       endRole: 'five_prime', deformed: true,
     })
   })
@@ -100,6 +107,29 @@ describe('VR End tool context', () => {
     ).reason).toBe('invalid_continuation_face')
   })
 
+  it('uses the canonical lattice cell and refuses to invent one', () => {
+    const resolved = resolveVREndToolContext(
+      { kind: 'end', key: 'h1:9:FORWARD' },
+      { geometry: [nucleotide()], design: design({ gridPos: [-2, 7] }), domainEnds: [face()] },
+    )
+    expect(resolved.context.footprint.cells).toEqual([[-2, 7]])
+
+    const legacy = design({ gridPos: null })
+    legacy.helices[0].id = 'h_XY_-4_6_2'
+    const legacyFace = face({ helixId: legacy.helices[0].id })
+    const legacyNucleotide = nucleotide({ helix_id: legacy.helices[0].id })
+    expect(resolveVREndToolContext(
+      { kind: 'end', key: `${legacy.helices[0].id}:9:FORWARD` },
+      { geometry: [legacyNucleotide], design: legacy, domainEnds: [legacyFace] },
+    ).context.footprint.cells).toEqual([[-4, 6]])
+
+    const ungridded = design({ gridPos: null })
+    expect(resolveVREndToolContext(
+      { kind: 'end', key: 'h1:9:FORWARD' },
+      { geometry: [nucleotide()], design: ungridded, domainEnds: [face()] },
+    ).context.footprint).toBeNull()
+  })
+
   it('reports forced ligations and crossovers without deciding tool policy', () => {
     const connectedDesign = {
       ...design(),
@@ -131,7 +161,9 @@ describe('VR End tool context', () => {
     expect(vrToolFeedbackPayload(7, draft, {
       toolContext: {
         facePosition: [1, 2, 3], faceNormal: [0, 0, 2],
+        continuationPosition: [1, 2, 2.666],
         connections: [{ type: 'crossover', id: 'xo1' }], deformed: true,
+        footprint: { kind: 'single_end_cell', latticeType: 'HONEYCOMB', cells: [[2, 3]] },
       },
       toolContextReason: 'resolved',
     })).toEqual({
@@ -142,15 +174,18 @@ describe('VR End tool context', () => {
       reason: 'resolved',
       face_position: [1, 2, 3],
       face_normal: [0, 0, 2],
+      preview_origin: [1, 2, 2.666],
       occupied: true,
       deformed: true,
+      footprint_resolved: true,
     })
     expect(vrToolFeedbackPayload(8, draft, {
       toolContext: null, toolContextReason: 'no_continuation_face',
     })).toMatchObject({
       tool_config_sequence: 8, resolved: false,
       reason: 'no_continuation_face', face_position: null, face_normal: null,
-      occupied: false, deformed: false,
+      preview_origin: null, occupied: false, deformed: false,
+      footprint_resolved: false,
     })
     expect(vrToolFeedbackPayload(9, draft, {
       toolContext: null, toolContextReason: 'geometry_context_required',
@@ -158,5 +193,11 @@ describe('VR End tool context', () => {
     expect(vrToolFeedbackPayload(10, draft, {
       toolContext: { facePosition: [1, 2, 3], faceNormal: [0, 0, 0] },
     })).toBeNull()
+    expect(vrToolFeedbackPayload(11, draft, {
+      toolContext: {
+        facePosition: [1, 2, 3], faceNormal: [0, 0, 1], connections: [],
+        footprint: { kind: 'single_end_cell', latticeType: 'HONEYCOMB', cells: [[]] },
+      },
+    }).footprint_resolved).toBe(false)
   })
 })

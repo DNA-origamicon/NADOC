@@ -53,6 +53,16 @@ inline glm::vec3 sourceToNormalizedPoint(
     return (sourcePoint - sourceCenter) * sourceToNormalizedScale + normalizedOffset;
 }
 
+inline glm::vec3 extrusionPreviewEnd(
+    const glm::vec3& facePosition, const glm::vec3& outwardNormal,
+    int32_t lengthBp, int directionSign, float riseNanometers,
+    float sourceToNormalizedScale) {
+    return facePosition + glm::normalize(outwardNormal)
+        * static_cast<float>(directionSign)
+        * static_cast<float>(lengthBp) * riseNanometers
+        * sourceToNormalizedScale;
+}
+
 enum class ManipulationMode { none, left, right, two_hand };
 
 struct SelectionFeedback {
@@ -70,11 +80,13 @@ struct ToolContextFeedback {
     bool resolved = false;
     bool occupied = false;
     bool deformed = false;
+    bool footprintResolved = false;
     std::string reason;
     std::string selectionKind = "none";
     std::string identity;
     glm::vec3 facePosition{};
     glm::vec3 faceNormal{};
+    glm::vec3 previewOrigin{};
 };
 
 struct OwnerAliasEntry {
@@ -629,12 +641,17 @@ inline std::optional<ToolContextFeedback> parseToolContextFeedback(
     int resolved = 0;
     int occupied = 0;
     int deformed = 0;
+    int footprintResolved = 0;
     ToolContextFeedback result;
-    if (!(fields >> magic >> version >> result.sequence >> resolved >> occupied >> deformed
-                 >> result.reason >> result.selectionKind >> result.identity) ||
-        magic != "NADOCVR_TOOL_FEEDBACK" || version != 1 ||
+    if (!(fields >> magic >> version >> result.sequence >> resolved >> occupied >> deformed) ||
+        magic != "NADOCVR_TOOL_FEEDBACK" || (version != 1 && version != 2)) {
+        return std::nullopt;
+    }
+    if (version == 2 && !(fields >> footprintResolved)) return std::nullopt;
+    if (!(fields >> result.reason >> result.selectionKind >> result.identity) ||
         (resolved != 0 && resolved != 1) || (occupied != 0 && occupied != 1) ||
         (deformed != 0 && deformed != 1) ||
+        (footprintResolved != 0 && footprintResolved != 1) ||
         result.sequence <= previousSequence || result.sequence != expectedSequence ||
         result.selectionKind != "end" || result.identity.empty() ||
         result.identity == "-" || result.identity.size() > 2048) {
@@ -654,6 +671,7 @@ inline std::optional<ToolContextFeedback> parseToolContextFeedback(
     result.resolved = resolved == 1;
     result.occupied = occupied == 1;
     result.deformed = deformed == 1;
+    result.footprintResolved = footprintResolved == 1;
     if (result.resolved) {
         if (!(fields >> result.facePosition.x >> result.facePosition.y
                      >> result.facePosition.z >> result.faceNormal.x
@@ -669,13 +687,24 @@ inline std::optional<ToolContextFeedback> parseToolContextFeedback(
             std::abs(result.facePosition.z) > 1.0e9F) {
             return std::nullopt;
         }
+        if (result.footprintResolved &&
+            (!(fields >> result.previewOrigin.x >> result.previewOrigin.y
+                      >> result.previewOrigin.z) ||
+             !std::isfinite(result.previewOrigin.x) ||
+             !std::isfinite(result.previewOrigin.y) ||
+             !std::isfinite(result.previewOrigin.z) ||
+             std::abs(result.previewOrigin.x) > 1.0e9F ||
+             std::abs(result.previewOrigin.y) > 1.0e9F ||
+             std::abs(result.previewOrigin.z) > 1.0e9F)) {
+            return std::nullopt;
+        }
         const double normalLength = std::hypot(
             std::hypot(static_cast<double>(result.faceNormal.x),
                        static_cast<double>(result.faceNormal.y)),
             static_cast<double>(result.faceNormal.z));
         if (normalLength <= 1.0e-9 || normalLength >= 1.0e9) return std::nullopt;
         result.faceNormal = glm::normalize(result.faceNormal);
-    } else if (result.occupied || result.deformed) {
+    } else if (result.occupied || result.deformed || result.footprintResolved) {
         return std::nullopt;
     }
     std::string trailing;

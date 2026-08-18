@@ -119,8 +119,12 @@ class VRToolFeedbackRequest(BaseModel):
     face_normal: Optional[list[float]] = Field(
         default=None, min_length=3, max_length=3
     )
+    preview_origin: Optional[list[float]] = Field(
+        default=None, min_length=3, max_length=3
+    )
     occupied: bool = False
     deformed: bool = False
+    footprint_resolved: bool = False
 
 
 def _require_local(request: Request) -> None:
@@ -3143,7 +3147,11 @@ def _write_tool_feedback(state: dict | None, body: VRToolFeedbackRequest) -> Non
         or body.resolved != (
             body.face_position is not None and body.face_normal is not None
         )
-        or (not body.resolved and (body.occupied or body.deformed))
+        or body.footprint_resolved != (body.preview_origin is not None)
+        or (
+            not body.resolved
+            and (body.occupied or body.deformed or body.footprint_resolved)
+        )
     ):
         raise HTTPException(422, detail="Invalid VR tool feedback.")
 
@@ -3151,6 +3159,9 @@ def _write_tool_feedback(state: dict | None, body: VRToolFeedbackRequest) -> Non
     if body.resolved:
         position = np.asarray(body.face_position, dtype=float)
         normal = np.asarray(body.face_normal, dtype=float)
+        preview_origin = np.asarray(
+            body.preview_origin if body.preview_origin is not None else [], dtype=float
+        )
         rotation = np.asarray(state.get("view_rotation"), dtype=float)
         if (
             position.shape != (3,)
@@ -3161,16 +3172,27 @@ def _write_tool_feedback(state: dict | None, body: VRToolFeedbackRequest) -> Non
             or not np.all(np.isfinite(rotation))
             or np.max(np.abs(position)) > 1e9
             or not 1e-9 < np.linalg.norm(normal) < 1e9
+            or (
+                body.footprint_resolved
+                and (
+                    preview_origin.shape != (3,)
+                    or not np.all(np.isfinite(preview_origin))
+                    or np.max(np.abs(preview_origin)) > 1e9
+                )
+            )
         ):
             raise HTTPException(422, detail="Invalid VR tool feedback geometry.")
         position = rotation @ position
         normal = rotation @ normal
         normal /= np.linalg.norm(normal)
         values = [*position.tolist(), *normal.tolist()]
+        if body.footprint_resolved:
+            values.extend((rotation @ preview_origin).tolist())
 
     record = (
-        f"NADOCVR_TOOL_FEEDBACK 1 {body.tool_config_sequence} "
+        f"NADOCVR_TOOL_FEEDBACK 2 {body.tool_config_sequence} "
         f"{int(body.resolved)} {int(body.occupied)} {int(body.deformed)} "
+        f"{int(body.footprint_resolved)} "
         f"{body.reason} {body.target_kind} {body.target_identity}"
         + (" " + " ".join(f"{value:.17g}" for value in values) if values else "")
         + "\n"
@@ -3361,7 +3383,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             delete=False,
         ) as tool_feedback_file:
             tool_feedback_file.write(
-                "NADOCVR_TOOL_FEEDBACK 1 0 0 0 0 unresolved none -\n"
+                "NADOCVR_TOOL_FEEDBACK 2 0 0 0 0 0 unresolved none -\n"
             )
             tool_feedback_path = Path(tool_feedback_file.name)
         tool_feedback_path.chmod(0o600)

@@ -620,7 +620,14 @@ async function main() {
     getRegionBallstickRenderer: () => _atomSurface.getRegionBallstickRenderer(),
     getRegionStickRenderer: () => _atomSurface.getRegionStickRenderer(),
     getRegionSurfaceRenderer:   () => _atomSurface.getRegionSurfaceRenderer(),
-    getDomainEndTable: () => bluntEnds?.getEndTable?.() ?? [],
+    getDomainEndTable: () => {
+      const state = store.getState()
+      const displayOnlyPose = state.cadnanoActive || state.unfoldActive ||
+        state.deformVisuActive === false
+      return displayOnlyPose
+        ? bluntEnds?.getVRToolEndTable?.() ?? []
+        : bluntEnds?.getEndTable?.() ?? []
+    },
     onDrillLevel: selectionFilter.reflectDrillLevel,
     onNick: async ({ helixId, bpIndex, direction }) => {
       _clearStapleChecks()

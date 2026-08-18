@@ -25,6 +25,30 @@ function _effectiveTransform(helixId, design) {
   })
 }
 
+function _singleEndFootprint(helix, design) {
+  let cell = helix?.grid_pos
+  if (!Array.isArray(cell) || cell.length !== 2 ||
+      !cell.every(Number.isSafeInteger)) {
+    const match = /^h_(?:XY|XZ|YZ)_(-?\d+)_(-?\d+)/.exec(helix?.id ?? '')
+    cell = match ? [Number(match[1]), Number(match[2])] : null
+  }
+  const latticeType = design?.lattice_type ?? 'HONEYCOMB'
+  if (!cell || !['HONEYCOMB', 'SQUARE'].includes(latticeType)) return null
+  return {
+    kind: 'single_end_cell',
+    latticeType,
+    cells: [[...cell]],
+  }
+}
+
+function _validSingleEndFootprint(value) {
+  return value?.kind === 'single_end_cell' &&
+    ['HONEYCOMB', 'SQUARE'].includes(value.latticeType) &&
+    Array.isArray(value.cells) && value.cells.length === 1 &&
+    Array.isArray(value.cells[0]) && value.cells[0].length === 2 &&
+    value.cells[0].every(Number.isSafeInteger)
+}
+
 function _endConnections(parsed, design) {
   const matchesHalf = half => half?.helix_id === parsed.helix_id &&
     half?.index === parsed.bp_index && _direction(half?.strand) === parsed.direction
@@ -107,6 +131,8 @@ export function resolveVREndToolContext(
       typeof face.offsetNm !== 'number' || !Number.isFinite(face.offsetNm) ||
       !Array.isArray(face.ringPos3d) || face.ringPos3d.length !== 3 ||
       !face.ringPos3d.every(Number.isFinite) ||
+      !Array.isArray(face.endPos3d) || face.endPos3d.length !== 3 ||
+      !face.endPos3d.every(Number.isFinite) ||
       !Array.isArray(face.faceNormal3d) || face.faceNormal3d.length !== 3 ||
       !face.faceNormal3d.every(Number.isFinite) ||
       Math.hypot(...face.faceNormal3d) < 1e-9) {
@@ -127,6 +153,7 @@ export function resolveVREndToolContext(
       offsetNm: face.offsetNm,
       facePosition: [...face.ringPos3d],
       faceNormal: [...face.faceNormal3d],
+      continuationPosition: [...(face.openSide < 0 ? face.endPos3d : face.ringPos3d)],
       strandId: nucleotide.strand_id,
       domainIndex: nucleotide.domain_index ?? 0,
       direction: parsed.direction,
@@ -134,6 +161,7 @@ export function resolveVREndToolContext(
         ? 'both' : nucleotide.is_five_prime ? 'five_prime' : 'three_prime',
       overhangId: face.overhangId ?? null,
       connections: _endConnections(parsed, design),
+      footprint: _singleEndFootprint(helix, design),
       deformed: !!design?.deformations?.length ||
         _effectiveTransform(face.helixId, design),
     },
@@ -155,6 +183,10 @@ export function vrToolFeedbackPayload(sequence, draft, state) {
         !context.faceNormal.every(Number.isFinite) ||
         Math.hypot(...context.faceNormal) < 1e-9) return null
   }
+  const footprintResolved = _validSingleEndFootprint(context?.footprint) &&
+    Array.isArray(context?.continuationPosition) &&
+    context.continuationPosition.length === 3 &&
+    context.continuationPosition.every(Number.isFinite)
   return {
     tool_config_sequence: sequence,
     target_identity: draft.target_identity,
@@ -163,7 +195,9 @@ export function vrToolFeedbackPayload(sequence, draft, state) {
     reason,
     face_position: context ? [...context.facePosition] : null,
     face_normal: context ? [...context.faceNormal] : null,
+    preview_origin: footprintResolved ? [...context.continuationPosition] : null,
     occupied: !!context?.connections?.length,
     deformed: context?.deformed === true,
+    footprint_resolved: footprintResolved,
   }
 }

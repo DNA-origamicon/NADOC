@@ -185,6 +185,17 @@ void toolLocatorUsesTheSceneNormalizationExactly() {
         normalized, glm::vec3(0.5F, 0.75F, -0.30F), 1.0e-6F)));
 }
 
+void extrusionPreviewUsesBpRiseScaleAndOutwardSign() {
+    const glm::vec3 outward = nadoc_vr::extrusionPreviewEnd(
+        {1.0F, 2.0F, 3.0F}, {0.0F, 0.0F, 2.0F}, 10, 1, 0.334F, 0.5F);
+    require(glm::all(glm::epsilonEqual(
+        outward, glm::vec3(1.0F, 2.0F, 4.67F), 1.0e-6F)));
+    const glm::vec3 inward = nadoc_vr::extrusionPreviewEnd(
+        {1.0F, 2.0F, 3.0F}, {0.0F, 0.0F, 1.0F}, 10, -1, 0.334F, 0.5F);
+    require(glm::all(glm::epsilonEqual(
+        inward, glm::vec3(1.0F, 2.0F, 1.33F), 1.0e-6F)));
+}
+
 void timingWindowReportsBoundedNearestRankPercentiles() {
     nadoc_vr::TimingWindow timing(100);
     for (int sample = 1; sample <= 100; ++sample) {
@@ -279,14 +290,18 @@ void canonicalSelectionFeedbackIsStrictAndSequenced() {
 
 void toolContextFeedbackIsExactSequencedAndFinite() {
     const auto resolved = nadoc_vr::parseToolContextFeedback(
-        "NADOCVR_TOOL_FEEDBACK 1 7 1 1 0 resolved end nuc:end 1 2 3 0 0 2\n",
+        "NADOCVR_TOOL_FEEDBACK 2 7 1 1 0 1 resolved end nuc:end "
+        "1 2 3 0 0 2 4 5 6\n",
         6, 7);
     require(resolved && resolved->resolved && resolved->occupied && !resolved->deformed);
+    require(resolved->footprintResolved);
     require(resolved->identity == "nuc:end");
     require(glm::all(glm::epsilonEqual(
         resolved->facePosition, glm::vec3(1, 2, 3), 1e-6F)));
     require(glm::all(glm::epsilonEqual(
         resolved->faceNormal, glm::vec3(0, 0, 1), 1e-6F)));
+    require(glm::all(glm::epsilonEqual(
+        resolved->previewOrigin, glm::vec3(4, 5, 6), 1e-6F)));
 
     const auto missing = nadoc_vr::parseToolContextFeedback(
         "NADOCVR_TOOL_FEEDBACK 1 8 0 0 0 no_continuation_face end nuc:end\n",
@@ -303,6 +318,9 @@ void toolContextFeedbackIsExactSequencedAndFinite() {
         7, 8));
     require(!nadoc_vr::parseToolContextFeedback(
         "NADOCVR_TOOL_FEEDBACK 1 8 0 1 0 no_continuation_face end nuc:end\n",
+        7, 8));
+    require(!nadoc_vr::parseToolContextFeedback(
+        "NADOCVR_TOOL_FEEDBACK 2 8 0 0 0 1 no_continuation_face end nuc:end\n",
         7, 8));
     require(!nadoc_vr::parseToolContextFeedback(
         "NADOCVR_TOOL_FEEDBACK 1 8 1 0 0 resolved end nuc:end 1e10 0 0 0 0 1\n",
@@ -444,6 +462,7 @@ int main() {
     endpointWeightsMoveOnlyTheOwnedBoundaryEndpoint();
     normalizedPreviewDeltaReturnsToSourceCoordinates();
     toolLocatorUsesTheSceneNormalizationExactly();
+    extrusionPreviewUsesBpRiseScaleAndOutwardSign();
     timingWindowReportsBoundedNearestRankPercentiles();
     rayPickingHitsVisiblePrimitiveSurfaces();
     rayPickingRejectsMissesAndBehindControllerGeometry();

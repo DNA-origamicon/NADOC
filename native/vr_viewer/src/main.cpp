@@ -51,6 +51,7 @@ namespace {
 
 constexpr float kViewSizeMeters = 0.60F;
 constexpr float kViewDistanceMeters = 1.30F;
+constexpr float kDnaRiseNanometers = 0.334F;
 constexpr float kNearMeters = 0.02F;
 constexpr float kFarMeters = 100.0F;
 
@@ -2575,10 +2576,20 @@ class Viewer {
                            {0.72F, 0.80F, 0.92F});
             appendMenuText(flag, 0.015F, -0.020F, 0.0038F,
                            {0.72F, 0.80F, 0.92F});
+            const auto* feedback = currentToolContextFeedback();
+            const bool singleCellFootprint =
+                toolConfig_.mode() == nadoc_vr::ToolMode::extrude &&
+                feedback && feedback->resolved && feedback->footprintResolved;
             appendMenuText(
-                "MISSING " + std::string(toolConfig_.unresolvedGeometry()),
-                -0.305F, -0.165F, 0.0038F, {0.95F, 0.48F, 0.22F});
-            if (const auto* feedback = currentToolContextFeedback()) {
+                singleCellFootprint
+                    ? toolConfig_.lengthBp() > 0
+                        ? "1 CELL FOOTPRINT READ ONLY" : "1 CELL - SET LENGTH"
+                    : "MISSING " + std::string(toolConfig_.unresolvedGeometry()),
+                -0.305F, -0.165F, 0.0038F,
+                singleCellFootprint
+                    ? glm::vec3(0.35F, 0.95F, 1.0F)
+                    : glm::vec3(0.95F, 0.48F, 0.22F));
+            if (feedback) {
                 const std::string locatorStatus = feedback->resolved
                     ? feedback->occupied ? "FACE LOCATED - OCCUPIED" : "FACE LOCATED"
                     : "FACE NOT LOCATED";
@@ -2853,6 +2864,40 @@ class Viewer {
                 }
                 line(worldPoint(feedback->facePosition),
                      worldPoint(feedback->facePosition + localNormal * kNormalLength), color);
+                if (toolConfig_.mode() == nadoc_vr::ToolMode::extrude &&
+                    feedback->footprintResolved && toolConfig_.lengthBp() > 0) {
+                    const float radius = 1.0F * normalizationScale_;
+                    const glm::vec3 end = nadoc_vr::extrusionPreviewEnd(
+                        feedback->previewOrigin, localNormal, toolConfig_.lengthBp(),
+                        toolConfig_.directionSign(), kDnaRiseNanometers,
+                        normalizationScale_);
+                    const glm::vec3 previewColor = feedback->occupied
+                        ? glm::vec3(1.0F, 0.20F, 0.12F)
+                        : toolConfig_.directionSign() < 0
+                            ? glm::vec3(1.0F, 0.55F, 0.15F)
+                            : glm::vec3(0.20F, 0.85F, 1.0F);
+                    constexpr int kPreviewSegments = 16;
+                    for (int segment = 0; segment < kPreviewSegments; ++segment) {
+                        const float angleA = glm::two_pi<float>()
+                                           * static_cast<float>(segment)
+                                           / kPreviewSegments;
+                        const float angleB = glm::two_pi<float>()
+                                           * static_cast<float>(segment + 1)
+                                           / kPreviewSegments;
+                        const glm::vec3 offsetA = radius * (
+                            tangentA * std::cos(angleA) + tangentB * std::sin(angleA));
+                        const glm::vec3 offsetB = radius * (
+                            tangentA * std::cos(angleB) + tangentB * std::sin(angleB));
+                        line(worldPoint(feedback->previewOrigin + offsetA),
+                             worldPoint(feedback->previewOrigin + offsetB), previewColor);
+                        line(worldPoint(end + offsetA), worldPoint(end + offsetB),
+                             previewColor);
+                        if (segment % 4 == 0) {
+                            line(worldPoint(feedback->previewOrigin + offsetA),
+                                 worldPoint(end + offsetA), previewColor);
+                        }
+                    }
+                }
             }
             const auto anchor = glScene_->anchor(
                 selectedIdentity_, selectedOwnerTokens_, manipulator_.transform());
@@ -3124,6 +3169,11 @@ class Viewer {
             feedback->facePosition = nadoc_vr::sourceToNormalizedPoint(
                 feedback->facePosition, normalizationCenter_, normalizationScale_,
                 {0.0F, 0.0F, -kViewDistanceMeters});
+            if (feedback->footprintResolved) {
+                feedback->previewOrigin = nadoc_vr::sourceToNormalizedPoint(
+                    feedback->previewOrigin, normalizationCenter_, normalizationScale_,
+                    {0.0F, 0.0F, -kViewDistanceMeters});
+            }
         }
         toolContextFeedback_ = std::move(feedback);
     }

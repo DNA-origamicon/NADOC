@@ -595,7 +595,7 @@ def test_native_feedback_writer_is_private_bounded_and_atomic(tmp_path) -> None:
 def test_native_tool_feedback_rotates_exact_locator_and_fails_closed(tmp_path) -> None:
     tool_feedback_path = tmp_path / "vr-tool-feedback.txt"
     tool_feedback_path.write_text(
-        "NADOCVR_TOOL_FEEDBACK 1 0 0 0 0 unresolved none -\n"
+        "NADOCVR_TOOL_FEEDBACK 2 0 0 0 0 0 unresolved none -\n"
     )
     rotation = _view_rotation(
         VRCamera(position=[0, 0, 0], target=[1, 0, 0], up=[0, 1, 0])
@@ -614,17 +614,20 @@ def test_native_tool_feedback_rotates_exact_locator_and_fails_closed(tmp_path) -
             reason="resolved",
             face_position=[1, 2, 3],
             face_normal=[1, 0, 0],
+            preview_origin=[2, 3, 4],
             occupied=True,
             deformed=False,
+            footprint_resolved=True,
         ),
     )
     fields = tool_feedback_path.read_text().split()
-    assert fields[:9] == [
-        "NADOCVR_TOOL_FEEDBACK", "1", "7", "1", "1", "0", "resolved",
+    assert fields[:10] == [
+        "NADOCVR_TOOL_FEEDBACK", "2", "7", "1", "1", "0", "1", "resolved",
         "end", "nuc:s1:0:h1:3:FORWARD:0",
     ]
-    np.testing.assert_allclose([float(value) for value in fields[9:12]], [3, 2, -1])
-    np.testing.assert_allclose([float(value) for value in fields[12:]], [0, 0, -1])
+    np.testing.assert_allclose([float(value) for value in fields[10:13]], [3, 2, -1])
+    np.testing.assert_allclose([float(value) for value in fields[13:16]], [0, 0, -1])
+    np.testing.assert_allclose([float(value) for value in fields[16:]], [4, 3, -2])
     assert tool_feedback_path.stat().st_mode & 0o777 == 0o600
 
     _write_tool_feedback(
@@ -638,7 +641,7 @@ def test_native_tool_feedback_rotates_exact_locator_and_fails_closed(tmp_path) -
         ),
     )
     assert tool_feedback_path.read_text() == (
-        "NADOCVR_TOOL_FEEDBACK 1 8 0 0 0 no_continuation_face end "
+        "NADOCVR_TOOL_FEEDBACK 2 8 0 0 0 0 no_continuation_face end "
         "nuc:s1:0:h1:3:FORWARD:0\n"
     )
 
@@ -649,7 +652,22 @@ def test_native_tool_feedback_rotates_exact_locator_and_fails_closed(tmp_path) -
             face_normal=[0, 0, 0],
         ),
         dict(
+            resolved=True,
+            reason="resolved",
+            face_position=[0, 0, 0],
+            face_normal=[0, 0, 1],
+            footprint_resolved=True,
+            preview_origin=None,
+        ),
+        dict(
             resolved=False, reason="resolved", face_position=None, face_normal=None,
+        ),
+        dict(
+            resolved=False,
+            reason="no_continuation_face",
+            face_position=None,
+            face_normal=None,
+            footprint_resolved=True,
         ),
     ]
     for values in invalid:
