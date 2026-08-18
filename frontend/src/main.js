@@ -5810,6 +5810,7 @@ async function main() {
           accepted: result?.accepted === true,
           selected: result?.selected === true,
           selection_level: selectionManager.getSelectionLevel?.() ?? 'default',
+          owner_tokens: result?.ownerTokens ?? [],
         }).catch(() => {})
       } else {
         if (button) button.dataset.vrHoverIdentity = event?.identity ?? ''

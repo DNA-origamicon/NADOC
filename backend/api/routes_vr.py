@@ -67,6 +67,7 @@ class VRFeedbackRequest(BaseModel):
     selection_level: Literal[
         "default", "cluster", "strand", "domain", "end", "xover", "base"
     ] = "default"
+    owner_tokens: list[str] = Field(default_factory=list, max_length=8)
 
 
 def _require_local(request: Request) -> None:
@@ -1656,12 +1657,19 @@ def _write_feedback(state: dict | None, body: VRFeedbackRequest) -> None:
     if not state or not state.get("feedback_path"):
         raise HTTPException(409, detail="Native VR is not running.")
     identity = body.identity or "-"
+    owner_tokens = body.owner_tokens if body.selected else []
     record = (
-        f"NADOCVR_FEEDBACK 1 {body.select_sequence} "
+        f"NADOCVR_FEEDBACK 2 {body.select_sequence} "
         f"{int(body.accepted)} {int(body.selected)} "
-        f"{body.selection_level} {identity}\n"
+        f"{body.selection_level} {identity} {len(owner_tokens)}"
+        + (f" {' '.join(owner_tokens)}" if owner_tokens else "")
+        + "\n"
     )
-    if len(record.encode()) > 4096 or any(character.isspace() for character in identity):
+    values = [identity, *owner_tokens]
+    if len(record.encode()) > 4096 or any(
+        any(character.isspace() for character in value) or len(value) > 2048
+        for value in values
+    ):
         raise HTTPException(422, detail="Invalid VR feedback identity.")
     path = Path(state["feedback_path"])
     temporary = path.with_name(f"{path.name}.next")
@@ -1742,8 +1750,8 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             delete=False,
         ) as feedback_file:
             feedback_file.write(
-                "NADOCVR_FEEDBACK 1 0 0 0 "
-                f"{body.selection_level} -\n"
+                "NADOCVR_FEEDBACK 2 0 0 0 "
+                f"{body.selection_level} - 0\n"
             )
             feedback_path = Path(feedback_file.name)
         feedback_path.chmod(0o600)

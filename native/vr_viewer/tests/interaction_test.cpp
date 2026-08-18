@@ -135,6 +135,16 @@ void canonicalSelectionFeedbackIsStrictAndSequenced() {
         "NADOCVR_FEEDBACK 1 6 1 1 atom future\n", 4, 6));
     require(!nadoc_vr::parseSelectionFeedback(
         "NADOCVR_FEEDBACK 1 6 1 1 base identity trailing\n", 4, 6));
+
+    const auto hierarchical = nadoc_vr::parseSelectionFeedback(
+        "NADOCVR_FEEDBACK 2 6 1 1 base primitive 3 exact base domain\n", 5, 6);
+    require(hierarchical && hierarchical->ownerTokens.size() == 3);
+    require(hierarchical->ownerTokens[0] == "exact");
+    require(!nadoc_vr::parseSelectionFeedback(
+        "NADOCVR_FEEDBACK 2 6 1 1 base primitive 2 only-one\n", 5, 6));
+    const auto cleared = nadoc_vr::parseSelectionFeedback(
+        "NADOCVR_FEEDBACK 2 7 1 0 base - 2 stale tokens\n", 6, 7);
+    require(cleared && cleared->ownerTokens.empty());
 }
 
 }  // namespace

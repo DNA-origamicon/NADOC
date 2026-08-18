@@ -1,6 +1,7 @@
 /** Pure hit-metadata → canonical SelectionRef resolution. */
 
 import { atomBaseKey, baseKey } from './base_ref.js'
+import { selectionRefKey } from './selection_ref.js'
 
 function decodedIdentity(identity) {
   if (typeof identity !== 'string' || !identity) return null
@@ -175,6 +176,32 @@ export function vrPrimitiveOwner(identity, { geometry = [], design = null } = {}
     }
   }
   return null
+}
+
+/** Ordered opaque aliases for cross-representation selection projection. */
+export function vrOwnerTokens({ selected = false, selectedRef = null, owner = null,
+  nucleotide = null, key = null } = {}) {
+  if (!selected || !selectedRef) return []
+  const refs = [selectedRef]
+  if (nucleotide) {
+    if (key) refs.push({ kind: 'base', key })
+    refs.push({
+      kind: 'domain', strandId: nucleotide.strand_id,
+      domainIndex: nucleotide.domain_index ?? 0,
+    })
+    refs.push({ kind: 'strand', id: nucleotide.strand_id })
+  }
+  if (owner?.ref?.kind === 'bond') {
+    refs.push(
+      { kind: 'base', key: owner.ref.fromKey },
+      { kind: 'base', key: owner.ref.toKey },
+    )
+    if (owner.ref.strandId) refs.push({ kind: 'strand', id: owner.ref.strandId })
+  }
+  return [...new Set(refs
+    .map(ref => selectionRefKey(ref))
+    .filter(Boolean)
+    .map(token => encodeURIComponent(token)))]
 }
 
 export function crossoverRefForArc(arc, design) {

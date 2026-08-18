@@ -37,6 +37,9 @@ exposes validated, sequenced hover, Select, and selection-level intents. The bro
 routes those intents through NADOC's canonical selection controller; the companion
 never writes design state directly. A second private, bounded record carries only the
 browser's canonical acknowledgement back to the companion.
+Feedback v2 also carries up to eight opaque, specificity-ordered canonical owner
+aliases. The native parser retains feedback-v1 compatibility and rejects truncated,
+oversized, stale, future, or whitespace-bearing alias records.
 
 Controls on the original HTC Vive wands:
 

@@ -12,6 +12,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace nadoc_vr {
 
@@ -30,6 +31,7 @@ struct SelectionFeedback {
     bool selected = false;
     std::string level;
     std::string identity;
+    std::vector<std::string> ownerTokens;
 };
 
 inline std::optional<SelectionFeedback> parseSelectionFeedback(
@@ -43,11 +45,20 @@ inline std::optional<SelectionFeedback> parseSelectionFeedback(
     std::string trailing;
     if (!(fields >> magic >> version >> result.sequence >> accepted >> selected
                 >> result.level >> result.identity) ||
-        (fields >> trailing) || magic != "NADOCVR_FEEDBACK" || version != 1 ||
+        magic != "NADOCVR_FEEDBACK" || (version != 1 && version != 2) ||
         (accepted != 0 && accepted != 1) || (selected != 0 && selected != 1) ||
         result.sequence <= previousSequence || result.sequence > maximumSequence) {
         return std::nullopt;
     }
+    if (version == 2) {
+        size_t ownerCount = 0;
+        if (!(fields >> ownerCount) || ownerCount > 8) return std::nullopt;
+        result.ownerTokens.resize(ownerCount);
+        for (std::string& token : result.ownerTokens) {
+            if (!(fields >> token) || token.size() > 2048) return std::nullopt;
+        }
+    }
+    if (fields >> trailing) return std::nullopt;
     static constexpr std::array<const char*, 7> levels = {
         "default", "cluster", "strand", "domain", "end", "xover", "base",
     };
@@ -57,6 +68,7 @@ inline std::optional<SelectionFeedback> parseSelectionFeedback(
     result.accepted = accepted == 1;
     result.selected = selected == 1;
     if (result.identity == "-") result.identity.clear();
+    if (!result.selected) result.ownerTokens.clear();
     return result;
 }
 

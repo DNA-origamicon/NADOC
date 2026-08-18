@@ -44,6 +44,7 @@ import { flexAnchorKey } from './flexible_arcs.js'
 import { selectedCrossoverRefs, selectedEndRefs } from './selection_model.js'
 import {
   bondRefForCone, coneForBondRef, crossoverRefForArc, endRefForEntry, vrPrimitiveOwner,
+  vrOwnerTokens,
 } from './selection_hit_resolver.js'
 import { selectionHighlightDescriptor } from './selection_highlight_model.js'
 import { referenceStrandInteractionHidden } from './reference_navigation.js'
@@ -2492,7 +2493,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       (selectedRef.kind === 'crossover' && owner.kind === 'crossover' &&
         selectedRef.id === owner.ref.id)
     )
-    return { owner, accepted, selected }
+    const ownerTokens = vrOwnerTokens({ selected, selectedRef, owner, nucleotide, key })
+    return { owner, accepted, selected, ownerTokens }
   }
 
   // Unified backbone-bead-level hit handler — used by a real bead hit AND by the

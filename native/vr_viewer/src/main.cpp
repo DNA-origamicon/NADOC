@@ -2087,6 +2087,8 @@ class Viewer {
         selectionLevel_ = feedback->level;
         selectedIdentity_ = feedback->accepted && feedback->selected
             ? feedback->identity : "";
+        selectedOwnerTokens_ = feedback->accepted && feedback->selected
+            ? feedback->ownerTokens : std::vector<std::string>{};
     }
 
     void syncActions(XrTime displayTime) {
@@ -2365,6 +2367,7 @@ class Viewer {
     uint64_t feedbackSequence_ = 0;
     uint32_t feedbackPollFrame_ = 0;
     std::string selectedIdentity_;
+    std::vector<std::string> selectedOwnerTokens_;
     bool glfwInitialized_ = false;
     GLFWwindow* window_ = nullptr;
     XrInstance instance_ = XR_NULL_HANDLE;

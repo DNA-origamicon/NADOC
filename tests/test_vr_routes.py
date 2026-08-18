@@ -198,10 +198,12 @@ def test_native_feedback_writer_is_private_bounded_and_atomic(tmp_path) -> None:
             accepted=True,
             selected=True,
             selection_level="base",
+            owner_tokens=["exact", "domain", "strand"],
         ),
     )
     assert feedback_path.read_text() == (
-        "NADOCVR_FEEDBACK 1 4 1 1 base nuc:s1:0:h1:3:FORWARD:0\n"
+        "NADOCVR_FEEDBACK 2 4 1 1 base nuc:s1:0:h1:3:FORWARD:0 "
+        "3 exact domain strand\n"
     )
     assert feedback_path.stat().st_mode & 0o777 == 0o600
     assert not feedback_path.with_name(f"{feedback_path.name}.next").exists()
@@ -210,6 +212,15 @@ def test_native_feedback_writer_is_private_bounded_and_atomic(tmp_path) -> None:
         _write_feedback(
             {"feedback_path": str(feedback_path)},
             VRFeedbackRequest(select_sequence=5, identity="not whitespace safe"),
+        )
+    with pytest.raises(HTTPException, match="Invalid VR feedback identity"):
+        _write_feedback(
+            {"feedback_path": str(feedback_path)},
+            VRFeedbackRequest(
+                select_sequence=6,
+                selected=True,
+                owner_tokens=["not whitespace safe"],
+            ),
         )
 
 
