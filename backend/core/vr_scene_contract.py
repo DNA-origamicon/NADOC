@@ -1,4 +1,4 @@
-"""Stable-identity parser and numeric comparator for native VR scene v6-v10.
+"""Stable-identity parser and numeric comparator for native VR scene v6-v11.
 
 This module deliberately knows nothing about OpenXR or rendering. It compares the
 model-space scene contract before the native viewer normalizes it into metres, making
@@ -77,9 +77,9 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
     if (
         len(header) != 4
         or header[0] != "NADOCVR"
-        or header[1] not in {"6", "7", "8", "9", "10"}
+        or header[1] not in {"6", "7", "8", "9", "10", "11"}
     ):
-        raise ValueError("stable comparison requires NADOCVR v6 through v10")
+        raise ValueError("stable comparison requires NADOCVR v6 through v11")
     version = int(header[1])
     result: dict[str, dict[str, ScenePrimitive]] = {}
     active: str | None = None
@@ -103,7 +103,9 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
             if version < 8:
                 raise ValueError(f"line {line_number}: owner aliases require v8")
             if active is None:
-                raise ValueError(f"line {line_number}: owner aliases before representation")
+                raise ValueError(
+                    f"line {line_number}: owner aliases before representation"
+                )
             if len(fields) < 3:
                 raise ValueError(f"line {line_number}: malformed owner aliases")
             identity = fields[1]
@@ -135,7 +137,9 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
             if version < 10:
                 raise ValueError(f"line {line_number}: transform owners require v10")
             if active is None:
-                raise ValueError(f"line {line_number}: transform owners before representation")
+                raise ValueError(
+                    f"line {line_number}: transform owners before representation"
+                )
             if len(fields) < 6:
                 raise ValueError(f"line {line_number}: malformed transform owners")
             identity = fields[1]

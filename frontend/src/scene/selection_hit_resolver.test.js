@@ -5,6 +5,10 @@ import {
 } from './selection_hit_resolver.js'
 
 const nuc = (bp, extra = {}) => ({ helix_id: 'h1', bp_index: bp, direction: 'FORWARD', ...extra })
+const atomIdentity = (key, name) => encodeURIComponent(`atom-ref:${JSON.stringify([key, name])}`)
+const atomBondIdentity = (first, second) => encodeURIComponent(
+  `atom-bond-ref:${JSON.stringify([first, second])}`,
+)
 
 describe('pure selection hit resolution', () => {
   it('resolves regular and forced-ligation arc IDs by live design ownership', () => {
@@ -24,15 +28,16 @@ describe('pure selection hit resolution', () => {
     const selectedRef = { kind: 'base', key: 'h1:7:FORWARD' }
     const ownerTokens = vrInitialSelectionOwnerTokens(selectedRef)
     const target = vrToolTargetSnapshot({
-      identity: 'atom:12:base:h1:7:FORWARD:C',
+      identity: atomIdentity('h1:7:FORWARD', "C1'"),
       selectionKind: 'base', ownerTokens, selectedRef,
       geometry: [nucleotide],
     })
     expect(target).toMatchObject({
-      identity: 'atom:12:base:h1:7:FORWARD:C',
+      identity: atomIdentity('h1:7:FORWARD', "C1'"),
       selectionKind: 'base', selectedRef,
       primitiveKind: 'atom',
       primitiveRef: selectedRef,
+      atomRef: { baseKey: 'h1:7:FORWARD', name: "C1'" },
     })
     // An individual atom remains action/session metadata beneath the stable Base.
     expect(target.selectedRef.kind).toBe('base')
@@ -45,7 +50,7 @@ describe('pure selection hit resolution', () => {
     }
     const selectedRef = { kind: 'base', key: 'h1:7:FORWARD' }
     const snapshot = {
-      identity: 'atom:12:base:h1:7:FORWARD:C', selectionKind: 'base',
+      identity: atomIdentity('h1:7:FORWARD', "C1'"), selectionKind: 'base',
       ownerTokens: vrInitialSelectionOwnerTokens(selectedRef), selectedRef,
       geometry: [nucleotide],
     }
@@ -74,6 +79,32 @@ describe('pure selection hit resolution', () => {
     )).toEqual({
       kind: 'atom', nucleotide,
       ref: { kind: 'base', key: 'helix:b:7:REVERSE:1' },
+    })
+  })
+
+  it('resolves v11 semantic atoms and bonds without draw indices', () => {
+    const first = {
+      strand_id: 'strand:a', domain_index: 0, helix_id: 'helix:b', bp_index: 3,
+      direction: 'FORWARD',
+    }
+    const second = { ...first, bp_index: 4 }
+    expect(vrPrimitiveOwner(
+      atomIdentity('helix:b:3:FORWARD', "C1'"), { geometry: [first, second] },
+    )).toMatchObject({
+      kind: 'atom', nucleotide: first,
+      atomRef: { baseKey: 'helix:b:3:FORWARD', name: "C1'" },
+    })
+    expect(vrPrimitiveOwner(
+      atomBondIdentity(
+        ['helix:b:3:FORWARD', "O3'"], ['helix:b:4:FORWARD', 'P'],
+      ),
+      { geometry: [first, second] },
+    )).toMatchObject({
+      kind: 'atom_bond',
+      atomRefs: [
+        { baseKey: 'helix:b:3:FORWARD', name: "O3'" },
+        { baseKey: 'helix:b:4:FORWARD', name: 'P' },
+      ],
     })
   })
 

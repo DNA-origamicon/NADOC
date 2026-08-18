@@ -217,17 +217,11 @@ def _cluster_contains_nucleotide(
         return nucleotide.get("helix_id") in helix_ids
     if strands is None:
         strands = {strand.id: strand for strand in getattr(design, "strands", [])}
-    domain_keys, exclusive_helices = _cluster_membership_facts(
-        cluster, strands
-    )
+    domain_keys, exclusive_helices = _cluster_membership_facts(cluster, strands)
     return (
-        (
-            nucleotide.get("strand_id"),
-            int(nucleotide.get("domain_index") or 0),
-        )
-        in domain_keys
-        or nucleotide.get("helix_id") in exclusive_helices
-    )
+        nucleotide.get("strand_id"),
+        int(nucleotide.get("domain_index") or 0),
+    ) in domain_keys or nucleotide.get("helix_id") in exclusive_helices
 
 
 def _cluster_membership_facts(cluster, strands: dict) -> tuple[set, set]:
@@ -326,23 +320,19 @@ def _cluster_gizmo_handle_centers(
     for cluster in getattr(design, "cluster_transforms", []) or []:
         domain_ids = list(getattr(cluster, "domain_ids", []) or [])
         if domain_ids:
-            domain_keys, exclusive_helices = _cluster_membership_facts(
-                cluster, strands
-            )
+            domain_keys, exclusive_helices = _cluster_membership_facts(cluster, strands)
+
             def contains(nucleotide):
                 return (
-                    (
-                        nucleotide.get("strand_id"),
-                        int(nucleotide.get("domain_index") or 0),
-                    )
-                    in domain_keys
-                    or nucleotide.get("helix_id") in exclusive_helices
-                )
+                    nucleotide.get("strand_id"),
+                    int(nucleotide.get("domain_index") or 0),
+                ) in domain_keys or nucleotide.get("helix_id") in exclusive_helices
         else:
             helix_ids = set(getattr(cluster, "helix_ids", []) or [])
 
             def contains(nucleotide):
                 return nucleotide.get("helix_id") in helix_ids
+
         positions = []
         for nucleotide in nucleotides:
             raw = nucleotide.get("backbone_position")
@@ -428,8 +418,7 @@ def _serialize_scene(
             and nucleotide.get("extra_base_k") is not None
         ):
             return (
-                f"__xb__:{nucleotide['crossover_id']}:"
-                f"{int(nucleotide['extra_base_k'])}"
+                f"__xb__:{nucleotide['crossover_id']}:{int(nucleotide['extra_base_k'])}"
             )
         if (
             nucleotide.get("extension_id") is not None
@@ -521,7 +510,9 @@ def _serialize_scene(
         primitive_ids[active_representation].add(encoded_identity)
         lines.append(f"{record_type} {encoded_identity} {nums(*values)}")
         if aliases:
-            if len(aliases) > 8 or any(not token or len(token) > 2048 for token in aliases):
+            if len(aliases) > 8 or any(
+                not token or len(token) > 2048 for token in aliases
+            ):
                 raise HTTPException(500, detail="Invalid VR primitive owner aliases.")
             lines.append(f"A {encoded_identity} {len(aliases)} {' '.join(aliases)}")
         if transform_owners is None:
@@ -665,9 +656,13 @@ def _serialize_scene(
                     return float(index + 1) / float(len(points) + 1)
 
                 for edge_index, (first, second) in enumerate(zip(points, points[1:])):
-                    nearest_base = -1 if base_count == 0 else min(
-                        int((edge_index + 0.5) * base_count / edge_count),
-                        base_count - 1,
+                    nearest_base = (
+                        -1
+                        if base_count == 0
+                        else min(
+                            int((edge_index + 0.5) * base_count / edge_count),
+                            base_count - 1,
+                        )
                     )
                     emit(
                         "C",
@@ -680,8 +675,7 @@ def _serialize_scene(
                             owner_tokens(
                                 (
                                     "base",
-                                    f"__lnk__{connection.id}:"
-                                    f"{nearest_base}:FORWARD",
+                                    f"__lnk__{connection.id}:{nearest_base}:FORWARD",
                                 )
                             )
                             if nearest_base >= 0
@@ -741,6 +735,7 @@ def _serialize_scene(
                     for token in cluster_transform_tokens
                     if token in anchor_a_aliases or token in anchor_b_aliases
                 )
+
             cluster_color = _cluster_color(
                 design,
                 {
@@ -767,10 +762,7 @@ def _serialize_scene(
                     (item for item in design.strands if item.id == anchor.strand_id),
                     None,
                 )
-                if (
-                    strand is None
-                    or not 0 <= anchor.domain_index < len(strand.domains)
-                ):
+                if strand is None or not 0 <= anchor.domain_index < len(strand.domains):
                     return ()
                 domain = strand.domains[anchor.domain_index]
                 return nucleotide_owner_tokens(
@@ -788,9 +780,7 @@ def _serialize_scene(
             for base_index, base in enumerate(projection.bases):
                 aliases = flexible_aliases(base_index)
                 parameter = float(base_index + 1) / float(len(projection.bases) + 1)
-                base_transform_owners = flexible_transform_owners(
-                    parameter, parameter
-                )
+                base_transform_owners = flexible_transform_owners(parameter, parameter)
                 bead = rotation @ base.bead_center
                 emit(
                     "P",
@@ -815,9 +805,13 @@ def _serialize_scene(
             edge_count = max(len(points) - 1, 1)
             base_count = len(projection.bases)
             for edge_index, (first, second) in enumerate(zip(points, points[1:])):
-                nearest_base = -1 if base_count == 0 else min(
-                    int((edge_index + 0.5) * base_count / edge_count),
-                    base_count - 1,
+                nearest_base = (
+                    -1
+                    if base_count == 0
+                    else min(
+                        int((edge_index + 0.5) * base_count / edge_count),
+                        base_count - 1,
+                    )
                 )
                 emit(
                     "C",
@@ -879,17 +873,13 @@ def _serialize_scene(
         )
 
     lines = [
-        f"NADOCVR 10 {representation} {coloring}",
+        f"NADOCVR 11 {representation} {coloring}",
         "# stable identities, owner aliases, handles, and endpoint transform owners",
     ]
-    by_strand: dict[
-        str, list[tuple[dict, np.ndarray, tuple[float, ...], str]]
-    ] = {}
+    by_strand: dict[str, list[tuple[dict, np.ndarray, tuple[float, ...], str]]] = {}
     identity_palettes: dict[tuple, tuple[float, ...]] = {}
     lines.append("R full")
-    lines.extend(
-        f"K {token} {nums(*center)}" for token, center in cluster_handles
-    )
+    lines.extend(f"K {token} {nums(*center)}" for token, center in cluster_handles)
     assigned = [
         (index, nucleotide)
         for index, nucleotide in enumerate(nucleotides)
@@ -1254,6 +1244,7 @@ def _serialize_scene(
                 for token in cluster_transform_tokens
                 if token in first_transform_aliases or token in second_transform_aliases
             )
+
         crossover_aliases = owner_tokens(
             (
                 "crossover",
@@ -1492,9 +1483,7 @@ def _serialize_scene(
 
     lines.append("R cylinders")
     active_representation = "cylinders"
-    lines.extend(
-        f"K {token} {nums(*center)}" for token, center in cluster_handles
-    )
+    lines.extend(f"K {token} {nums(*center)}" for token, center in cluster_handles)
     direct_overhang_ids: set[str] = set()
     for binding in getattr(design, "overhang_bindings", []):
         if getattr(binding, "bound", True) is False or getattr(
@@ -1740,17 +1729,50 @@ def _serialize_scene(
         atom_palettes.append((*strand_color, *base_color, *cluster_color, *cpk_color))
 
     def atom_base_key(atom) -> str:
-        if getattr(atom, "crossover_id", None) is not None and getattr(
-            atom, "extra_base_k", None
-        ) is not None:
+        if (
+            getattr(atom, "crossover_id", None) is not None
+            and getattr(atom, "extra_base_k", None) is not None
+        ):
             return f"__xb__:{atom.crossover_id}:{atom.extra_base_k}"
-        if getattr(atom, "extension_id", None) is not None and getattr(
-            atom, "ext_k", None
-        ) is not None:
+        if (
+            getattr(atom, "extension_id", None) is not None
+            and getattr(atom, "ext_k", None) is not None
+        ):
             return f"__ext_{atom.extension_id}:{atom.ext_k}:{atom.direction}"
         key = f"{atom.helix_id}:{atom.bp_index}:{atom.direction}"
         copy_k = int(getattr(atom, "copy_k", 0) or 0)
         return f"{key}:{copy_k}" if copy_k else key
+
+    # Atomistic draw indices are deliberately excluded from scene identity. A
+    # chemical atom name is unique within one residue/base key; treating a
+    # duplicate as an invalid snapshot is safer than inventing an order-dependent
+    # suffix that could later become an edit target.
+    atom_identity_payloads: list[tuple[str, str]] = []
+    seen_atom_refs: set[tuple[str, str]] = set()
+    for atom in atomistic_model.atoms:
+        atom_name = getattr(atom, "name", None)
+        if not isinstance(atom_name, str) or not atom_name:
+            raise HTTPException(500, detail="Atomistic VR atom is missing its name.")
+        payload = (atom_base_key(atom), atom_name)
+        if payload in seen_atom_refs:
+            raise HTTPException(
+                500,
+                detail=f"Duplicate semantic VR atom identity: {payload!r}",
+            )
+        seen_atom_refs.add(payload)
+        atom_identity_payloads.append(payload)
+
+    def atom_primitive_identity(index: int) -> str:
+        return "atom-ref:" + json.dumps(
+            atom_identity_payloads[index], ensure_ascii=False, separators=(",", ":")
+        )
+
+    def atom_bond_primitive_identity(first_index: int, second_index: int) -> str:
+        return "atom-bond-ref:" + json.dumps(
+            [atom_identity_payloads[first_index], atom_identity_payloads[second_index]],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
 
     atom_connection_aliases: dict[frozenset[str], tuple[str, ...]] = {}
     for connection in getattr(design, "crossovers", []):
@@ -1811,9 +1833,7 @@ def _serialize_scene(
         nonlocal active_representation
         lines.append(f"R {name}")
         active_representation = name
-        lines.extend(
-            f"K {token} {nums(*center)}" for token, center in cluster_handles
-        )
+        lines.extend(f"K {token} {nums(*center)}" for token, center in cluster_handles)
         if include_points:
             for atom_index, (atom, position, palette) in enumerate(
                 zip(atomistic_model.atoms, atom_positions, atom_palettes)
@@ -1829,13 +1849,21 @@ def _serialize_scene(
                     )
                     emit(
                         "P",
-                        f"atom:{atom_index}:base:{key}:{atom.element}",
+                        atom_primitive_identity(atom_index),
                         *position,
                         radius,
                         *palette,
                         aliases=aliases,
                     )
         for first_index, second_index in atomistic_model.bonds:
+            # Canonicalize undirected bond endpoint order together with positions
+            # and owner weights so identity/value parity survives topology writers
+            # that enumerate the same edge in the opposite direction.
+            if (
+                atom_identity_payloads[second_index]
+                < atom_identity_payloads[first_index]
+            ):
+                first_index, second_index = second_index, first_index
             first, second = atom_positions[first_index], atom_positions[second_index]
             if first is None or second is None:
                 continue
@@ -1880,10 +1908,7 @@ def _serialize_scene(
             )
             emit(
                 "C",
-                "atom-bond:bases:"
-                f"{atom_base_key(atomistic_model.atoms[first_index])}~"
-                f"{atom_base_key(atomistic_model.atoms[second_index])}:atoms:"
-                f"{min(first_index, second_index)}-{max(first_index, second_index)}",
+                atom_bond_primitive_identity(first_index, second_index),
                 *first,
                 *second,
                 radius,
@@ -1944,9 +1969,7 @@ def _expanded_helix_offsets(design, spacing_nm: float = 5.0) -> dict[str, np.nda
     result: dict[str, np.ndarray] = {}
     for helix, position in zip(helices, starts):
         offset = np.zeros(3, dtype=float)
-        offset[lateral_indices] = (
-            position[lateral_indices] - centroid
-        ) * scale_delta
+        offset[lateral_indices] = (position[lateral_indices] - centroid) * scale_delta
         result[str(helix.id)] = offset
     return result
 
@@ -2011,12 +2034,12 @@ def _expanded_scene_inputs(design, nucleotides, axes, atomistic_model):
 
 
 def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
-    """Combine two identity/ownership-equivalent v10 scenes into one contract."""
+    """Combine two identity/ownership-equivalent v11 scenes into one contract."""
     natural_lines = natural_text.splitlines()
     expanded_lines = expanded_text.splitlines()
     natural_header = natural_lines[0].split()
     expanded_header = expanded_lines[0].split()
-    if natural_header != expanded_header or natural_header[0:2] != ["NADOCVR", "10"]:
+    if natural_header != expanded_header or natural_header[0:2] != ["NADOCVR", "11"]:
         raise HTTPException(500, detail="Expanded VR scene headers do not match.")
 
     def blocks(lines: list[str]) -> dict[str, list[str]]:
@@ -2037,7 +2060,7 @@ def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
     if set(natural_blocks) != set(expanded_blocks):
         raise HTTPException(500, detail="Expanded VR representations do not match.")
     output = [
-        f"NADOCVR 10 {natural_header[2]} {natural_header[3]}",
+        f"NADOCVR 11 {natural_header[2]} {natural_header[3]}",
         "# natural and expanded poses share identities, aliases, handles, and transform owners",
     ]
     for representation, natural_records in natural_blocks.items():
@@ -2066,14 +2089,20 @@ def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
                 detail=f"Expanded VR primitive owner aliases differ in {representation}.",
             )
         natural_transforms = [line for line in natural_records if line.startswith("T ")]
-        expanded_transforms = [line for line in expanded_records if line.startswith("T ")]
+        expanded_transforms = [
+            line for line in expanded_records if line.startswith("T ")
+        ]
         if natural_transforms != expanded_transforms:
             raise HTTPException(
                 500,
                 detail=f"Expanded VR transform owners differ in {representation}.",
             )
-        natural_handles = [line.split()[1] for line in natural_records if line.startswith("K ")]
-        expanded_handles = [line.split()[1] for line in expanded_records if line.startswith("K ")]
+        natural_handles = [
+            line.split()[1] for line in natural_records if line.startswith("K ")
+        ]
+        expanded_handles = [
+            line.split()[1] for line in expanded_records if line.startswith("K ")
+        ]
         if natural_handles != expanded_handles:
             raise HTTPException(
                 500,
@@ -2389,13 +2418,13 @@ def _event_payload(state: dict | None) -> dict:
             or level_sequence < 0
             or tool_sequence < 0
             or transform_sequence < 0
-            or any(value is not None and not isinstance(value, str) for value in identities)
+            or any(
+                value is not None and not isinstance(value, str) for value in identities
+            )
             or selection_level
             not in {"default", "cluster", "strand", "domain", "end", "xover", "base"}
-            or tool_mode
-            not in {"inspect", "move_rotate", "extrude", "twist", "bend"}
-            or tool_action
-            not in {"activate", "preview", "confirm", "cancel", "undo"}
+            or tool_mode not in {"inspect", "move_rotate", "extrude", "twist", "bend"}
+            or tool_action not in {"activate", "preview", "confirm", "cancel", "undo"}
             or tool_target_kind not in valid_selection_kinds
             or not isinstance(tool_target_owner_tokens, list)
             or len(tool_target_owner_tokens) > 8
@@ -2505,9 +2534,13 @@ def _write_feedback(state: dict | None, body: VRFeedbackRequest) -> None:
         + "\n"
     )
     values = [identity, *owner_tokens]
-    if (body.selected and selection_kind == "none") or len(record.encode()) > 4096 or any(
-        any(character.isspace() for character in value) or len(value) > 2048
-        for value in values
+    if (
+        (body.selected and selection_kind == "none")
+        or len(record.encode()) > 4096
+        or any(
+            any(character.isspace() for character in value) or len(value) > 2048
+            for value in values
+        )
     ):
         raise HTTPException(422, detail="Invalid VR feedback identity.")
     path = Path(state["feedback_path"])
@@ -2519,7 +2552,9 @@ def _write_feedback(state: dict | None, body: VRFeedbackRequest) -> None:
             os.replace(temporary, path)
         except OSError as exc:
             temporary.unlink(missing_ok=True)
-            raise HTTPException(503, detail="Could not acknowledge VR selection.") from exc
+            raise HTTPException(
+                503, detail="Could not acknowledge VR selection."
+            ) from exc
 
 
 @router.post("/vr/feedback")
@@ -2624,8 +2659,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             delete=False,
         ) as feedback_file:
             feedback_file.write(
-                "NADOCVR_FEEDBACK 2 0 0 0 "
-                f"{body.selection_level} - 0\n"
+                f"NADOCVR_FEEDBACK 2 0 0 0 {body.selection_level} - 0\n"
             )
             feedback_path = Path(feedback_file.name)
         feedback_path.chmod(0o600)

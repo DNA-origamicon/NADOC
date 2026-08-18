@@ -438,7 +438,7 @@ SceneData loadScene(const std::string& path) {
     std::string initialRepresentation;
     std::string initialColoring;
     input >> magic >> version >> initialRepresentation >> initialColoring;
-    if (magic != "NADOCVR" || (version < 4 || version > 10)) {
+    if (magic != "NADOCVR" || (version < 4 || version > 11)) {
         throw std::runtime_error("Unsupported NADOC VR scene format");
     }
 

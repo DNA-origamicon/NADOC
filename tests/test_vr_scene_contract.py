@@ -19,6 +19,13 @@ FIXTURE = (
     / "examples"
     / "triangle.nadocvr"
 )
+V11_FIXTURE = (
+    Path(__file__).resolve().parents[1]
+    / "native"
+    / "vr_viewer"
+    / "examples"
+    / "semantic_atom_v11.nadocvr"
+)
 
 
 def test_v6_fixture_has_unique_identities_in_every_representation() -> None:
@@ -27,6 +34,13 @@ def test_v6_fixture_has_unique_identities_in_every_representation() -> None:
     assert set(scene) == {"full", "cylinders", "ballstick", "stick"}
     assert scene["full"]["triangle:a"].record_type == "P"
     assert scene["cylinders"]["triangle:ab"].record_type == "H"
+
+
+def test_v11_fixture_accepts_semantic_atom_and_bond_identities() -> None:
+    scene = parse_scene_contract(V11_FIXTURE.read_text())
+    identities = set(scene["ballstick"])
+    assert any(identity.startswith("atom-ref:") for identity in identities)
+    assert any(identity.startswith("atom-bond-ref:") for identity in identities)
 
 
 def test_parser_rejects_duplicate_identity_in_one_representation() -> None:
@@ -131,7 +145,9 @@ T boundary-bond 1 cluster-owner 1 0
     with pytest.raises(ValueError, match="transform owners require v10"):
         parse_scene_contract(expected.replace("NADOCVR 10", "NADOCVR 9"))
     with pytest.raises(ValueError, match="invalid transform owner"):
-        parse_scene_contract(expected.replace("cluster-owner 1 0", "cluster-owner 1.1 0"))
+        parse_scene_contract(
+            expected.replace("cluster-owner 1 0", "cluster-owner 1.1 0")
+        )
 
 
 def test_comparator_matches_within_tolerance_and_reports_semantic_owner() -> None:

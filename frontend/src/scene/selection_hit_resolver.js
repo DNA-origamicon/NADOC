@@ -8,6 +8,18 @@ function decodedIdentity(identity) {
   try { return decodeURIComponent(identity) } catch { return null }
 }
 
+function semanticIdentityPayload(decoded, prefix) {
+  if (!decoded?.startsWith(prefix)) return null
+  try { return JSON.parse(decoded.slice(prefix.length)) } catch { return null }
+}
+
+function semanticAtomRef(value) {
+  return Array.isArray(value) && value.length === 2 &&
+    value.every(item => typeof item === 'string' && item)
+    ? { baseKey: value[0], name: value[1] }
+    : null
+}
+
 function nucleotidePrimitiveOwner(nuc) {
   const copy = nuc?.copy_k || nuc?.ext_k || 0
   return [
@@ -27,6 +39,17 @@ function nucleotidePrimitiveOwner(nuc) {
 export function vrPrimitiveOwner(identity, { geometry = [], design = null } = {}) {
   const decoded = decodedIdentity(identity)
   if (!decoded) return null
+
+  const semanticAtom = semanticAtomRef(semanticIdentityPayload(decoded, 'atom-ref:'))
+  if (semanticAtom) {
+    const nucleotide = (geometry ?? []).find(candidate =>
+      atomBaseKey(candidate) === semanticAtom.baseKey)
+    return nucleotide ? {
+      kind: 'atom', nucleotide,
+      ref: { kind: 'base', key: semanticAtom.baseKey },
+      atomRef: semanticAtom,
+    } : null
+  }
 
   for (const nucleotide of geometry ?? []) {
     const owner = nucleotidePrimitiveOwner(nucleotide)
@@ -53,6 +76,33 @@ export function vrPrimitiveOwner(identity, { geometry = [], design = null } = {}
     owner: nucleotidePrimitiveOwner(nucleotide),
     key: atomBaseKey(nucleotide),
   })).filter(candidate => candidate.key)
+
+  const semanticBond = semanticIdentityPayload(decoded, 'atom-bond-ref:')
+  if (Array.isArray(semanticBond) && semanticBond.length === 2) {
+    const atomRefs = semanticBond.map(semanticAtomRef)
+    if (atomRefs.every(Boolean)) {
+      const first = geometryOwners.find(candidate => candidate.key === atomRefs[0].baseKey)
+      const second = geometryOwners.find(candidate => candidate.key === atomRefs[1].baseKey)
+      if (!first || !second) return null
+      if (first.key === second.key) {
+        return {
+          kind: 'atom_bond_base', nucleotide: first.nucleotide,
+          ref: { kind: 'base', key: first.key }, atomRefs,
+        }
+      }
+      return {
+        kind: 'atom_bond',
+        fromNucleotide: first.nucleotide,
+        toNucleotide: second.nucleotide,
+        ref: {
+          kind: 'bond', fromKey: first.key, toKey: second.key,
+          ...(first.nucleotide.strand_id === second.nucleotide.strand_id
+            ? { strandId: first.nucleotide.strand_id } : {}),
+        },
+        atomRefs,
+      }
+    }
+  }
 
   for (const first of geometryOwners) {
     const prefix = `backbone:${first.owner}~`
@@ -235,6 +285,10 @@ export function vrToolTargetSnapshot({
     selectedRef,
     primitiveKind: primitiveOwner.kind,
     primitiveRef: primitiveOwner.ref ?? null,
+    ...(primitiveOwner.atomRef ? { atomRef: { ...primitiveOwner.atomRef } } : {}),
+    ...(primitiveOwner.atomRefs
+      ? { atomRefs: primitiveOwner.atomRefs.map(atom => ({ ...atom })) }
+      : {}),
   }
 }
 

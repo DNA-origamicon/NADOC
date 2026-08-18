@@ -124,7 +124,7 @@ both eyes. Full representation geometry mirrors the editor's physical display
 primitives: 0.10 nm backbone beads, 0.18 nm 5′ cubes, oriented
 0.30 × 0.06 × 0.70 nm base slabs, 0.025 nm slab connectors, and 0.075 nm
 same-helix strand connectors.
-Scene format v10 pairs natural and Expanded Quick View poses by the URL-safe
+Scene format v11 pairs natural and Expanded Quick View poses by the URL-safe
 semantic identities introduced in v6, retains v8's bounded canonical-owner aliases,
 retains v9's explicit owner-keyed Cluster gizmo centers, and adds bounded transform
 ownership weights for both endpoints of every participating primitive.
@@ -137,7 +137,11 @@ delimiter-sensitive ID parsing. A boundary bond or crossover can therefore move 
 selected endpoint while leaving the opposite Cluster endpoint fixed. Fractional
 weights continuously skin crossover inserts, flexible ssDNA runs, and ss-linker
 bead/slab/backbone paths between their two authoritative endpoint Clusters. The
-reader remains compatible with v4-v9 snapshots.
+v11 atomistic identities use `(base key, chemical atom name)` rather than a draw
+index, and atom-bond identities use the canonicalized pair of those semantic atom
+references. This keeps exact atom targets stable across rebuilds and reversed bond
+enumeration without promoting them to persistent design selections. The reader
+remains compatible with v4-v10 snapshots.
 The snapshot also carries explicit crossover/forced-ligation links,
 canonical crossover-insert bead/slab chains, 0.25 nm chemistry-colored extension
 markers, per-domain axis gaps, and closed half-cylinder overhang domains in the

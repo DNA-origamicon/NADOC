@@ -27,7 +27,7 @@ from backend.api.routes_vr import (
     _viewer_command,
     _write_feedback,
 )
-from backend.core.vr_scene_contract import parse_scene_contract
+from backend.core.vr_scene_contract import compare_scenes, parse_scene_contract
 
 
 _BASE_COLORS_FOR_TEST = {
@@ -94,6 +94,18 @@ def _scene_identities(text: str) -> dict[str, list[str]]:
     return identities
 
 
+def _semantic_atom_id(base_key: str, atom_name: str) -> str:
+    payload = json.dumps(
+        (base_key, atom_name), ensure_ascii=False, separators=(",", ":")
+    )
+    return quote(f"atom-ref:{payload}", safe="-_.:~")
+
+
+def _semantic_atom_bond_id(first: tuple[str, str], second: tuple[str, str]) -> str:
+    payload = json.dumps((first, second), ensure_ascii=False, separators=(",", ":"))
+    return quote(f"atom-bond-ref:{payload}", safe="-_.:~")
+
+
 def test_native_vr_routes_are_workstation_only() -> None:
     _require_local(_request("127.0.0.1", "http://localhost:5173"))
     with pytest.raises(HTTPException, match="localhost"):
@@ -106,8 +118,12 @@ def test_expanded_quick_view_matches_desktop_centroid_spacing() -> None:
     point = lambda x, y, z: SimpleNamespace(x=x, y=y, z=z)
     design = SimpleNamespace(
         helices=[
-            SimpleNamespace(id="left", axis_start=point(-1, 0, 0), axis_end=point(-1, 0, 10)),
-            SimpleNamespace(id="right", axis_start=point(1, 0, 0), axis_end=point(1, 0, 10)),
+            SimpleNamespace(
+                id="left", axis_start=point(-1, 0, 0), axis_end=point(-1, 0, 10)
+            ),
+            SimpleNamespace(
+                id="right", axis_start=point(1, 0, 0), axis_end=point(1, 0, 10)
+            ),
         ],
         strands=[],
         extensions=[],
@@ -115,7 +131,7 @@ def test_expanded_quick_view_matches_desktop_centroid_spacing() -> None:
 
     offsets = _expanded_helix_offsets(design)
 
-    expected = (5.0 / 2.25 - 1.0)
+    expected = 5.0 / 2.25 - 1.0
     np.testing.assert_allclose(offsets["left"], [-expected, 0, 0])
     np.testing.assert_allclose(offsets["right"], [expected, 0, 0])
 
@@ -139,9 +155,7 @@ def test_vr_owner_aliases_use_desktop_smallest_selectable_cluster_rule() -> None
         helix_ids=["h1", "h2", "h3"],
         domain_ids=[],
     )
-    design = SimpleNamespace(
-        strands=[], cluster_transforms=[large, default, small]
-    )
+    design = SimpleNamespace(strands=[], cluster_transforms=[large, default, small])
 
     assert _selection_cluster(design, {"helix_id": "h1"}).id == "small"
     assert [
@@ -157,23 +171,27 @@ def test_v9_cluster_handle_matches_desktop_mixed_cluster_visual_centroid() -> No
     )
     design = SimpleNamespace(
         strands=[
-            SimpleNamespace(
-                id="s1", domains=[SimpleNamespace(helix_id="bridge")]
-            )
+            SimpleNamespace(id="s1", domains=[SimpleNamespace(helix_id="bridge")])
         ],
         cluster_transforms=[cluster],
     )
     nucleotides = [
         {
-            "strand_id": "s1", "domain_index": 0, "helix_id": "bridge",
+            "strand_id": "s1",
+            "domain_index": 0,
+            "helix_id": "bridge",
             "backbone_position": [1, 2, 3],
         },
         {
-            "strand_id": "other", "domain_index": 0, "helix_id": "bridge",
+            "strand_id": "other",
+            "domain_index": 0,
+            "helix_id": "bridge",
             "backbone_position": [100, 100, 100],
         },
         {
-            "strand_id": "s2", "domain_index": 0, "helix_id": "owned",
+            "strand_id": "s2",
+            "domain_index": 0,
+            "helix_id": "owned",
             "backbone_position": [3, 4, 5],
         },
     ]
@@ -189,8 +207,12 @@ def test_expanded_scene_translates_owners_and_interpolates_crossover_atoms() -> 
     point = lambda x, y, z: SimpleNamespace(x=x, y=y, z=z)
     design = SimpleNamespace(
         helices=[
-            SimpleNamespace(id="a", axis_start=point(-1, 0, 0), axis_end=point(-1, 0, 10)),
-            SimpleNamespace(id="b", axis_start=point(1, 0, 0), axis_end=point(1, 0, 10)),
+            SimpleNamespace(
+                id="a", axis_start=point(-1, 0, 0), axis_end=point(-1, 0, 10)
+            ),
+            SimpleNamespace(
+                id="b", axis_start=point(1, 0, 0), axis_end=point(1, 0, 10)
+            ),
         ],
         strands=[],
         extensions=[],
@@ -220,8 +242,8 @@ def test_expanded_scene_translates_owners_and_interpolates_crossover_atoms() -> 
     assert atom.x == 0.0  # source inputs remain immutable
 
 
-def test_v10_bundle_pairs_primitives_owners_handles_and_transform_owners() -> None:
-    natural = """NADOCVR 10 full strand
+def test_v11_bundle_pairs_primitives_owners_handles_and_transform_owners() -> None:
+    natural = """NADOCVR 11 full strand
 R full
 K cluster-owner 0 0 0
 P owner 0 0 0 .1 1 1 1 1 1 1 1 1 1 1 1 1
@@ -234,7 +256,7 @@ T owner 1 cluster-owner 1 1
 
     bundled = _bundle_expanded_scene(natural, expanded)
 
-    assert bundled.startswith("NADOCVR 10 full strand\n")
+    assert bundled.startswith("NADOCVR 11 full strand\n")
     assert "R full\nK cluster-owner 0 0 0" in bundled
     assert "E full\nK cluster-owner 1 0 0" in bundled
 
@@ -286,8 +308,7 @@ def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -
     }
 
     event_path.write_text(
-        '{"sequence":8,"tool_sequence":5,"tool_mode":"delete",'
-        '"tool_action":"confirm"}'
+        '{"sequence":8,"tool_sequence":5,"tool_mode":"delete","tool_action":"confirm"}'
     )
     assert _event_payload({"event_path": str(event_path)})["sequence"] == 0
 
@@ -412,9 +433,7 @@ def test_native_launch_passes_initial_selection_as_opaque_arguments(tmp_path) ->
             selected_selection_kind="domain",
         ),
     )
-    assert command[-4:] == [
-        "--selected-owner", token, "--selected-kind", "domain"
-    ]
+    assert command[-4:] == ["--selected-owner", token, "--selected-kind", "domain"]
     assert command[command.index("--selection-level") + 1] == "domain"
 
     with pytest.raises(HTTPException, match="initial VR selection"):
@@ -492,6 +511,7 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
     camera = VRCamera(position=[0, 0, 0], target=[1, 0, 0], up=[0, 1, 0])
     atoms = [
         SimpleNamespace(
+            name="C1'",
             x=1.0,
             y=2.0,
             z=3.0,
@@ -503,6 +523,7 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
             element="C",
         ),
         SimpleNamespace(
+            name="O3'",
             x=2.0,
             y=2.0,
             z=3.0,
@@ -525,13 +546,13 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
     sections = _scene_sections(text)
     identities = _scene_identities(text)
 
-    assert text.startswith("NADOCVR 10 full strand\n")
+    assert text.startswith("NADOCVR 11 full strand\n")
     assert set(sections) == {"full", "cylinders", "ballstick", "stick"}
     assert all(len(values) == len(set(values)) for values in identities.values())
     assert "nuc:s1:0:h1:1:FORWARD:0:backbone" in identities["full"]
-    assert "atom:0:base:h1:0:FORWARD:C" in identities["ballstick"]
+    assert _semantic_atom_id("h1:0:FORWARD", "C1'") in identities["ballstick"]
     assert (
-        "atom-bond:bases:h1:0:FORWARD~h1:1:FORWARD:atoms:0-1"
+        _semantic_atom_bond_id(("h1:0:FORWARD", "C1'"), ("h1:1:FORWARD", "O3'"))
         in identities["ballstick"]
     )
     assert sum(record[0] == "P" for record in sections["full"]) == 1
@@ -561,8 +582,48 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
     first_atom = next(record for record in sections["ballstick"] if record[0] == "P")
     assert float(first_atom[4]) == pytest.approx(0.17 * 0.55)
 
+    reversed_bond_text = _serialize_scene(
+        design,
+        nucleotides,
+        [{"helix_id": "h1", "start": [0, 0, 0], "end": [0, 0, 1]}],
+        camera,
+        atomistic_model=SimpleNamespace(atoms=atoms, bonds=[(1, 0)]),
+    )
+    assert compare_scenes(text, reversed_bond_text).ok
 
-def test_v10_owners_handles_and_transform_ownership_bridge_representations() -> None:
+
+def test_v11_atom_identity_rejects_missing_or_duplicate_chemical_names() -> None:
+    atom = SimpleNamespace(
+        name="P",
+        x=0.0,
+        y=0.0,
+        z=0.0,
+        strand_id="s1",
+        helix_id="h1",
+        bp_index=0,
+        direction="FORWARD",
+        residue="DA",
+        element="P",
+    )
+    with pytest.raises(HTTPException, match="Duplicate semantic VR atom identity"):
+        _serialize_scene(
+            SimpleNamespace(strands=[], cluster_transforms=[]),
+            [],
+            [],
+            atomistic_model=SimpleNamespace(atoms=[atom, atom], bonds=[]),
+        )
+    with pytest.raises(HTTPException, match="missing its name"):
+        _serialize_scene(
+            SimpleNamespace(strands=[], cluster_transforms=[]),
+            [],
+            [],
+            atomistic_model=SimpleNamespace(
+                atoms=[SimpleNamespace(**{**vars(atom), "name": ""})], bonds=[]
+            ),
+        )
+
+
+def test_v11_owners_handles_and_transform_ownership_bridge_representations() -> None:
     strand_id = "strand: one"
     helix_id = "helix: one"
     cluster_id = "cluster one"
@@ -585,9 +646,7 @@ def test_v10_owners_handles_and_transform_ownership_bridge_representations() -> 
         cluster_transforms=[
             SimpleNamespace(
                 id=cluster_id,
-                domain_ids=[
-                    SimpleNamespace(strand_id=strand_id, domain_index=0)
-                ],
+                domain_ids=[SimpleNamespace(strand_id=strand_id, domain_index=0)],
                 helix_ids=[helix_id],
                 auto_created=False,
                 color=None,
@@ -616,6 +675,7 @@ def test_v10_owners_handles_and_transform_ownership_bridge_representations() -> 
         "axis_tangent": [0, 0, 1],
     }
     atom = SimpleNamespace(
+        name="C1'",
         x=0.0,
         y=0.0,
         z=0.0,
@@ -702,7 +762,7 @@ def test_v10_owners_handles_and_transform_ownership_bridge_representations() -> 
     assert coarse_domain.transform_owners == full_backbone.transform_owners
 
 
-def test_v10_boundary_connections_assign_cluster_ownership_per_endpoint() -> None:
+def test_v11_boundary_connections_assign_cluster_ownership_per_endpoint() -> None:
     strands = [
         SimpleNamespace(
             id=f"s{index}",
@@ -757,6 +817,7 @@ def test_v10_boundary_connections_assign_cluster_ownership_per_endpoint() -> Non
     ]
     atoms = [
         SimpleNamespace(
+            name="C1'" if index == 1 else "O3'",
             x=float(index - 1),
             y=0.0,
             z=0.0,
@@ -785,7 +846,7 @@ def test_v10_boundary_connections_assign_cluster_ownership_per_endpoint() -> Non
     atom_bond = next(
         primitive
         for primitive in scene["ballstick"].values()
-        if primitive.identity.startswith("atom-bond:")
+        if primitive.identity.startswith("atom-bond-ref:")
     )
     expected = (
         (_owner_token("cluster", "c1"), 1.0, 0.0),
@@ -970,6 +1031,7 @@ def test_full_snapshot_projects_explicit_cross_helix_connections() -> None:
         )
     atoms = [
         SimpleNamespace(
+            name="C1'" if helix_id == "h1" else "O3'",
             x=x,
             y=0.0,
             z=0.0,
@@ -1029,8 +1091,12 @@ def test_full_snapshot_projects_crossover_extra_base_beads_slabs_and_chain() -> 
         ],
         cluster_transforms=[
             SimpleNamespace(
-                id=f"c{index}", domain_ids=[], helix_ids=[f"h{index}"],
-                auto_created=False, color=None, is_default=False,
+                id=f"c{index}",
+                domain_ids=[],
+                helix_ids=[f"h{index}"],
+                auto_created=False,
+                color=None,
+                is_default=False,
             )
             for index in (1, 2)
         ],
@@ -1312,12 +1378,20 @@ def test_ss_linker_details_are_full_only_but_backbone_remains_in_cylinders() -> 
     design = _vr_linker_design("ss")
     design.cluster_transforms = [
         SimpleNamespace(
-            id="left", domain_ids=[], helix_ids=["ha"], auto_created=False,
-            color=None, is_default=False,
+            id="left",
+            domain_ids=[],
+            helix_ids=["ha"],
+            auto_created=False,
+            color=None,
+            is_default=False,
         ),
         SimpleNamespace(
-            id="right", domain_ids=[], helix_ids=["hb"], auto_created=False,
-            color=None, is_default=False,
+            id="right",
+            domain_ids=[],
+            helix_ids=["hb"],
+            auto_created=False,
+            color=None,
+            is_default=False,
         ),
     ]
     text = _serialize_scene(
@@ -1385,12 +1459,20 @@ def test_ds_linker_connector_arcs_are_visible_in_full_and_cylinders() -> None:
     design = _vr_linker_design("ds")
     design.cluster_transforms = [
         SimpleNamespace(
-            id="left", domain_ids=[], helix_ids=["ha"], auto_created=False,
-            color=None, is_default=False,
+            id="left",
+            domain_ids=[],
+            helix_ids=["ha"],
+            auto_created=False,
+            color=None,
+            is_default=False,
         ),
         SimpleNamespace(
-            id="right", domain_ids=[], helix_ids=["hb"], auto_created=False,
-            color=None, is_default=False,
+            id="right",
+            domain_ids=[],
+            helix_ids=["hb"],
+            auto_created=False,
+            color=None,
+            is_default=False,
         ),
     ]
     nucleotides = _vr_linker_anchor_nucleotides("ds")
@@ -1429,9 +1511,7 @@ def test_ds_linker_connector_arcs_are_visible_in_full_and_cylinders() -> None:
     scene = parse_scene_contract(text)["full"]
     left = _owner_token("cluster", "left")
     right = _owner_token("cluster", "right")
-    assert scene["linker:link:ds:a:connector:0"].transform_owners == (
-        (left, 1.0, 1.0),
-    )
+    assert scene["linker:link:ds:a:connector:0"].transform_owners == ((left, 1.0, 1.0),)
     assert scene["linker:link:ds:b:connector:0"].transform_owners == (
         (right, 1.0, 1.0),
     )
@@ -1441,12 +1521,20 @@ def test_ds_linker_cylinders_pair_overhang_halves_and_recover_bridge_axis() -> N
     design = _vr_linker_design("ds")
     design.cluster_transforms = [
         SimpleNamespace(
-            id="left", domain_ids=[], helix_ids=["ha"], auto_created=False,
-            color=None, is_default=False,
+            id="left",
+            domain_ids=[],
+            helix_ids=["ha"],
+            auto_created=False,
+            color=None,
+            is_default=False,
         ),
         SimpleNamespace(
-            id="right", domain_ids=[], helix_ids=["hb"], auto_created=False,
-            color=None, is_default=False,
+            id="right",
+            domain_ids=[],
+            helix_ids=["hb"],
+            auto_created=False,
+            color=None,
+            is_default=False,
         ),
     ]
     nucleotides = _vr_linker_anchor_nucleotides("ds")
@@ -1561,12 +1649,20 @@ def test_flexible_segment_replaces_filtered_beads_in_full_only() -> None:
         strands=[strand],
         cluster_transforms=[
             SimpleNamespace(
-                id="left", domain_ids=[], helix_ids=["ha"], auto_created=False,
-                color=None, is_default=False,
+                id="left",
+                domain_ids=[],
+                helix_ids=["ha"],
+                auto_created=False,
+                color=None,
+                is_default=False,
             ),
             SimpleNamespace(
-                id="right", domain_ids=[], helix_ids=["hb"], auto_created=False,
-                color=None, is_default=False,
+                id="right",
+                domain_ids=[],
+                helix_ids=["hb"],
+                auto_created=False,
+                color=None,
+                is_default=False,
             ),
         ],
         crossovers=[],
@@ -1629,7 +1725,8 @@ def test_flexible_segment_replaces_filtered_beads_in_full_only() -> None:
         for record in sections["cylinders"]
     )
     flexible_backbones = [
-        identity for identity in identities["full"]
+        identity
+        for identity in identities["full"]
         if identity.startswith("flex:flex-1:backbone:")
     ]
     assert len(flexible_backbones) == 32
@@ -1669,12 +1766,20 @@ def test_unligated_crossover_gets_full_only_amber_warning_at_midpoint() -> None:
         ],
         cluster_transforms=[
             SimpleNamespace(
-                id="left", domain_ids=[], helix_ids=["h1"], auto_created=False,
-                color=None, is_default=False,
+                id="left",
+                domain_ids=[],
+                helix_ids=["h1"],
+                auto_created=False,
+                color=None,
+                is_default=False,
             ),
             SimpleNamespace(
-                id="right", domain_ids=[], helix_ids=["h2"], auto_created=False,
-                color=None, is_default=False,
+                id="right",
+                domain_ids=[],
+                helix_ids=["h2"],
+                auto_created=False,
+                color=None,
+                is_default=False,
             ),
         ],
         crossovers=[crossover],
