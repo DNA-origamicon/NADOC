@@ -121,8 +121,10 @@ unknown, or pose-mismatched identities, aliases, handles, and transform owners,
 allowing numeric
 regression diffs and controller tools to address geometry without draw order or
 delimiter-sensitive ID parsing. A boundary bond or crossover can therefore move its
-selected endpoint while leaving the opposite Cluster endpoint fixed. The reader
-remains compatible with v4-v9 snapshots.
+selected endpoint while leaving the opposite Cluster endpoint fixed. Fractional
+weights continuously skin crossover inserts, flexible ssDNA runs, and ss-linker
+bead/slab/backbone paths between their two authoritative endpoint Clusters. The
+reader remains compatible with v4-v9 snapshots.
 The snapshot also carries explicit crossover/forced-ligation links,
 canonical crossover-insert bead/slab chains, 0.25 nm chemistry-colored extension
 markers, per-domain axis gaps, and closed half-cylinder overhang domains in the

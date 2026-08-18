@@ -995,7 +995,13 @@ def test_full_snapshot_projects_crossover_extra_base_beads_slabs_and_chain() -> 
                 domains=[SimpleNamespace(helix_id="h1", end_bp=0, direction="FORWARD")],
             )
         ],
-        cluster_transforms=[],
+        cluster_transforms=[
+            SimpleNamespace(
+                id=f"c{index}", domain_ids=[], helix_ids=[f"h{index}"],
+                auto_created=False, color=None, is_default=False,
+            )
+            for index in (1, 2)
+        ],
         crossovers=[
             SimpleNamespace(
                 id="xo-extra",
@@ -1063,6 +1069,17 @@ def test_full_snapshot_projects_crossover_extra_base_beads_slabs_and_chain() -> 
         _owner_token("base", "__xb__:xo-extra:0"),
         _owner_token("crossover", "crossover", "xo-extra"),
     }
+    c1 = _owner_token("cluster", "c1")
+    c2 = _owner_token("cluster", "c2")
+    assert first_insert.transform_owners == (
+        (c1, pytest.approx(2 / 3), pytest.approx(2 / 3)),
+        (c2, pytest.approx(1 / 3), pytest.approx(1 / 3)),
+    )
+    first_edge = scene["crossover:xo-extra:extra-backbone:0"]
+    assert first_edge.transform_owners == (
+        (c1, 1.0, pytest.approx(2 / 3)),
+        (c2, 0.0, pytest.approx(1 / 3)),
+    )
 
 
 def test_full_snapshot_uses_desktop_extension_modification_marker() -> None:
@@ -1260,8 +1277,19 @@ def _vr_linker_anchor_nucleotides(linker_type: str) -> list[dict]:
 
 
 def test_ss_linker_details_are_full_only_but_backbone_remains_in_cylinders() -> None:
+    design = _vr_linker_design("ss")
+    design.cluster_transforms = [
+        SimpleNamespace(
+            id="left", domain_ids=[], helix_ids=["ha"], auto_created=False,
+            color=None, is_default=False,
+        ),
+        SimpleNamespace(
+            id="right", domain_ids=[], helix_ids=["hb"], auto_created=False,
+            color=None, is_default=False,
+        ),
+    ]
     text = _serialize_scene(
-        _vr_linker_design("ss"),
+        design,
         _vr_linker_anchor_nucleotides("ss"),
         [],
         atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
@@ -1288,6 +1316,19 @@ def test_ss_linker_details_are_full_only_but_backbone_remains_in_cylinders() -> 
             for record in sections["full"]
         )
         == 48
+    )
+    scene = parse_scene_contract(text)["full"]
+    left = _owner_token("cluster", "left")
+    right = _owner_token("cluster", "right")
+    first_bead = scene["linker:link:ss:bead:0"]
+    assert first_bead.transform_owners == (
+        (left, pytest.approx(2 / 3), pytest.approx(2 / 3)),
+        (right, pytest.approx(1 / 3), pytest.approx(1 / 3)),
+    )
+    first_edge = scene["linker:link:ss:backbone:0:near:0"]
+    assert first_edge.transform_owners == (
+        (left, 1.0, pytest.approx(47 / 48)),
+        (right, 0.0, pytest.approx(1 / 48)),
     )
     assert sum(record[0] == "B" for record in sections["cylinders"]) == 0
     assert any(
@@ -1451,7 +1492,16 @@ def test_flexible_segment_replaces_filtered_beads_in_full_only() -> None:
     )
     design = SimpleNamespace(
         strands=[strand],
-        cluster_transforms=[],
+        cluster_transforms=[
+            SimpleNamespace(
+                id="left", domain_ids=[], helix_ids=["ha"], auto_created=False,
+                color=None, is_default=False,
+            ),
+            SimpleNamespace(
+                id="right", domain_ids=[], helix_ids=["hb"], auto_created=False,
+                color=None, is_default=False,
+            ),
+        ],
         crossovers=[],
         forced_ligations=[],
         overhang_bindings=[],
@@ -1518,6 +1568,19 @@ def test_flexible_segment_replaces_filtered_beads_in_full_only() -> None:
     assert len(flexible_backbones) == 32
     assert flexible_backbones[0].endswith(":near:0")
     assert flexible_backbones[-1].endswith(":near:1")
+    scene = parse_scene_contract(text)["full"]
+    left = _owner_token("cluster", "left")
+    right = _owner_token("cluster", "right")
+    first_bead = scene["flex:flex-1:bead:0"]
+    assert first_bead.transform_owners == (
+        (left, pytest.approx(2 / 3), pytest.approx(2 / 3)),
+        (right, pytest.approx(1 / 3), pytest.approx(1 / 3)),
+    )
+    first_edge = scene["flex:flex-1:backbone:0:near:0"]
+    assert first_edge.transform_owners == (
+        (left, 1.0, pytest.approx(31 / 32)),
+        (right, 0.0, pytest.approx(1 / 32)),
+    )
 
 
 def test_unligated_crossover_gets_full_only_amber_warning_at_midpoint() -> None:

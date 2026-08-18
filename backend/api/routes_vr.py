@@ -507,6 +507,7 @@ def _serialize_scene(
         *values: float,
         aliases: tuple[str, ...] = (),
         endpoint_aliases: tuple[tuple[str, ...], tuple[str, ...]] | None = None,
+        transform_owners: tuple[tuple[str, float, float], ...] | None = None,
     ) -> None:
         encoded_identity = quote(str(identity), safe="-_.:~")
         if encoded_identity in primitive_ids[active_representation]:
@@ -523,21 +524,31 @@ def _serialize_scene(
             if len(aliases) > 8 or any(not token or len(token) > 2048 for token in aliases):
                 raise HTTPException(500, detail="Invalid VR primitive owner aliases.")
             lines.append(f"A {encoded_identity} {len(aliases)} {' '.join(aliases)}")
-        endpoint_owners = endpoint_aliases or (aliases, aliases)
-        transform_tokens = tuple(
-            token
-            for token in cluster_transform_tokens
-            if token in endpoint_owners[0] or token in endpoint_owners[1]
-        )
-        if transform_tokens:
-            if len(transform_tokens) > 8:
+        if transform_owners is None:
+            endpoint_owners = endpoint_aliases or (aliases, aliases)
+            transform_owners = tuple(
+                (
+                    token,
+                    float(token in endpoint_owners[0]),
+                    float(token in endpoint_owners[1]),
+                )
+                for token in cluster_transform_tokens
+                if token in endpoint_owners[0] or token in endpoint_owners[1]
+            )
+        if transform_owners:
+            if len(transform_owners) > 8 or any(
+                token not in cluster_transform_tokens
+                or not np.all(np.isfinite([start_weight, end_weight]))
+                or not 0.0 <= start_weight <= 1.0
+                or not 0.0 <= end_weight <= 1.0
+                for token, start_weight, end_weight in transform_owners
+            ):
                 raise HTTPException(500, detail="Too many VR transform owners.")
             values = " ".join(
-                f"{token} {int(token in endpoint_owners[0])} "
-                f"{int(token in endpoint_owners[1])}"
-                for token in transform_tokens
+                f"{token} {start_weight:.7g} {end_weight:.7g}"
+                for token, start_weight, end_weight in transform_owners
             )
-            lines.append(f"T {encoded_identity} {len(transform_tokens)} {values}")
+            lines.append(f"T {encoded_identity} {len(transform_owners)} {values}")
 
     def nucleotide_identity(nucleotide: dict) -> str:
         return ":".join(
@@ -579,8 +590,34 @@ def _serialize_scene(
             ds_linker_connector_projections,
             ss_linker_projection,
         )
+        from backend.core.linker_relax import linker_anchor_nucleotide
 
         for connection in getattr(design, "overhang_connections", []):
+            anchor_a = linker_anchor_nucleotide(
+                nucleotides, connection, connection.overhang_a_id, True
+            )
+            anchor_b = linker_anchor_nucleotide(
+                nucleotides, connection, connection.overhang_b_id, False
+            )
+            anchor_a_aliases = nucleotide_owner_tokens(anchor_a) if anchor_a else ()
+            anchor_b_aliases = nucleotide_owner_tokens(anchor_b) if anchor_b else ()
+
+            def linker_transform_owners(
+                start_t: float, end_t: float
+            ) -> tuple[tuple[str, float, float], ...]:
+                def weight(token: str, value: float) -> float:
+                    return min(
+                        1.0,
+                        (1.0 - value if token in anchor_a_aliases else 0.0)
+                        + (value if token in anchor_b_aliases else 0.0),
+                    )
+
+                return tuple(
+                    (token, weight(token, start_t), weight(token, end_t))
+                    for token in cluster_transform_tokens
+                    if token in anchor_a_aliases or token in anchor_b_aliases
+                )
+
             if getattr(connection, "linker_type", "ds") == "ss":
                 projection = ss_linker_projection(nucleotides, connection)
                 if projection is None:
@@ -592,6 +629,12 @@ def _serialize_scene(
                             ("base", f"__lnk__{connection.id}:{base_index}:FORWARD")
                         )
                         bead = rotation @ base.bead_center
+                        parameter = float(base_index + 1) / float(
+                            len(projection.bases) + 1
+                        )
+                        base_transform_owners = linker_transform_owners(
+                            parameter, parameter
+                        )
                         emit(
                             "P",
                             f"linker:{connection.id}:ss:bead:{base_index}",
@@ -599,6 +642,7 @@ def _serialize_scene(
                             0.10,
                             *palette,
                             aliases=aliases,
+                            transform_owners=base_transform_owners,
                         )
                         box(
                             f"linker:{connection.id}:ss:slab:{base_index}",
@@ -608,10 +652,18 @@ def _serialize_scene(
                             rotation @ base.slab_axis_z,
                             palette,
                             aliases=aliases,
+                            transform_owners=base_transform_owners,
                         )
                 points = [rotation @ value for value in projection.backbone_points]
                 edge_count = max(len(points) - 1, 1)
                 base_count = len(projection.bases)
+                path_has_anchors = len(points) != base_count
+
+                def path_parameter(index: int) -> float:
+                    if path_has_anchors:
+                        return float(index) / float(max(len(points) - 1, 1))
+                    return float(index + 1) / float(len(points) + 1)
+
                 for edge_index, (first, second) in enumerate(zip(points, points[1:])):
                     nearest_base = -1 if base_count == 0 else min(
                         int((edge_index + 0.5) * base_count / edge_count),
@@ -634,6 +686,10 @@ def _serialize_scene(
                             )
                             if nearest_base >= 0
                             else ()
+                        ),
+                        transform_owners=linker_transform_owners(
+                            path_parameter(edge_index),
+                            path_parameter(edge_index + 1),
                         ),
                     )
                 continue
@@ -665,6 +721,24 @@ def _serialize_scene(
                 continue
             strand_a, domain_a, helix_a = projection.anchor_a_owner
             strand_b, domain_b, helix_b = projection.anchor_b_owner
+            anchor_a_aliases = domain_owner_tokens(strand_a, domain_a, helix_a)
+            anchor_b_aliases = domain_owner_tokens(strand_b, domain_b, helix_b)
+
+            def flexible_transform_owners(
+                start_t: float, end_t: float
+            ) -> tuple[tuple[str, float, float], ...]:
+                def weight(token: str, value: float) -> float:
+                    return min(
+                        1.0,
+                        (1.0 - value if token in anchor_a_aliases else 0.0)
+                        + (value if token in anchor_b_aliases else 0.0),
+                    )
+
+                return tuple(
+                    (token, weight(token, start_t), weight(token, end_t))
+                    for token in cluster_transform_tokens
+                    if token in anchor_a_aliases or token in anchor_b_aliases
+                )
             cluster_color = _cluster_color(
                 design,
                 {
@@ -711,6 +785,10 @@ def _serialize_scene(
 
             for base_index, base in enumerate(projection.bases):
                 aliases = flexible_aliases(base_index)
+                parameter = float(base_index + 1) / float(len(projection.bases) + 1)
+                base_transform_owners = flexible_transform_owners(
+                    parameter, parameter
+                )
                 bead = rotation @ base.bead_center
                 emit(
                     "P",
@@ -719,6 +797,7 @@ def _serialize_scene(
                     0.12,
                     *palette,
                     aliases=aliases,
+                    transform_owners=base_transform_owners,
                 )
                 box(
                     f"flex:{projection.connection_id}:slab:{base_index}",
@@ -728,6 +807,7 @@ def _serialize_scene(
                     rotation @ base.slab_axis_z,
                     palette,
                     aliases=aliases,
+                    transform_owners=base_transform_owners,
                 )
             points = [rotation @ value for value in projection.backbone_points]
             edge_count = max(len(points) - 1, 1)
@@ -745,6 +825,10 @@ def _serialize_scene(
                     0.06,
                     *palette,
                     aliases=flexible_aliases(nearest_base),
+                    transform_owners=flexible_transform_owners(
+                        float(edge_index) / float(edge_count),
+                        float(edge_index + 1) / float(edge_count),
+                    ),
                 )
 
     def append_unligated_warning(crossover_id: str, center: np.ndarray) -> None:
@@ -831,6 +915,7 @@ def _serialize_scene(
         palette: tuple[float, ...],
         *,
         aliases: tuple[str, ...] = (),
+        transform_owners: tuple[tuple[str, float, float], ...] | None = None,
     ) -> None:
         emit(
             "B",
@@ -841,6 +926,7 @@ def _serialize_scene(
             *axis_z,
             *palette,
             aliases=aliases,
+            transform_owners=transform_owners,
         )
 
     for index, nucleotide in assigned:
@@ -1141,6 +1227,24 @@ def _serialize_scene(
             continue
         first_nucleotide, first, palette = first_entry
         second_nucleotide, second, _ = second_entry
+        first_transform_aliases = nucleotide_owner_tokens(first_nucleotide)
+        second_transform_aliases = nucleotide_owner_tokens(second_nucleotide)
+
+        def interpolated_transform_owners(
+            start_t: float, end_t: float
+        ) -> tuple[tuple[str, float, float], ...]:
+            def weight(token: str, value: float) -> float:
+                return min(
+                    1.0,
+                    (1.0 - value if token in first_transform_aliases else 0.0)
+                    + (value if token in second_transform_aliases else 0.0),
+                )
+
+            return tuple(
+                (token, weight(token, start_t), weight(token, end_t))
+                for token in cluster_transform_tokens
+                if token in first_transform_aliases or token in second_transform_aliases
+            )
         crossover_aliases = owner_tokens(
             (
                 "crossover",
@@ -1163,7 +1267,14 @@ def _serialize_scene(
             bead_palette = palette_variant(palette, first_nucleotide, "#0070bb")
             slab_palette = palette_variant(palette, first_nucleotide, "#0277bd")
             backbone_points = [first]
+            backbone_parameters = [0.0]
             for projection in projections:
+                parameter = float(projection.geometric_index + 1) / float(
+                    len(projections) + 1
+                )
+                projection_transform_owners = interpolated_transform_owners(
+                    parameter, parameter
+                )
                 extra_palette = (
                     *bead_palette[0:3],
                     *_BASE_COLORS.get(projection.base, bead_palette[3:6]),
@@ -1195,6 +1306,7 @@ def _serialize_scene(
                     0.10,
                     *extra_palette,
                     aliases=extra_aliases,
+                    transform_owners=projection_transform_owners,
                 )
                 box(
                     f"{projection_id}:slab",
@@ -1208,6 +1320,7 @@ def _serialize_scene(
                         *slab_palette[6:],
                     ),
                     aliases=extra_aliases,
+                    transform_owners=projection_transform_owners,
                 )
                 emit(
                     "C",
@@ -1217,9 +1330,12 @@ def _serialize_scene(
                     0.025,
                     *slab_palette,
                     aliases=extra_aliases,
+                    transform_owners=projection_transform_owners,
                 )
                 backbone_points.append(bead)
+                backbone_parameters.append(parameter)
             backbone_points.append(second)
+            backbone_parameters.append(1.0)
             for edge_index, (start, end) in enumerate(
                 zip(backbone_points, backbone_points[1:])
             ):
@@ -1231,6 +1347,10 @@ def _serialize_scene(
                     0.075,
                     *bead_palette,
                     aliases=crossover_aliases,
+                    transform_owners=interpolated_transform_owners(
+                        backbone_parameters[edge_index],
+                        backbone_parameters[edge_index + 1],
+                    ),
                 )
             continue
         if first_key[0] == second_key[0]:
