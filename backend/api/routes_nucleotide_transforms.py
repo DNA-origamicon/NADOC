@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.api import state as design_state
-from backend.api.crud import _design_response_with_geometry
+from backend.api.crud import _design_response, _design_response_with_geometry
 from backend.core.models import Direction, NucleotideTransform
 
 router = APIRouter()
@@ -110,7 +110,20 @@ def put_nucleotide_transform(body: NucleotideTransformBody) -> dict:
         {"target": list(target), "compose": body.compose},
         apply,
     )
-    return _design_response_with_geometry(updated, report)
+    if transform.kind == "base":
+        # apply_nucleotide_transforms_to_geometry bakes "base"-kind poses into
+        # _geometry_for_helices' output (design_geometry.py) — the one real
+        # helix genuinely needs its geometry re-shipped.
+        return _design_response_with_geometry(
+            updated, report, changed_helix_ids=[transform.helix_id],
+        )
+    # "extra_base" transforms are explicitly excluded from that bake-in
+    # (design_geometry.py filters to kind == "base" only) — the pose is
+    # applied client-side from design.nucleotide_transforms, same
+    # geometry_unchanged/skipGeometry contract as the extra-bases routes.
+    payload = _design_response(updated, report)
+    payload["geometry_unchanged"] = True
+    return payload
 
 
 @router.delete("/design/nucleotide-transform/{transform_id}", status_code=200)
@@ -129,4 +142,12 @@ def delete_nucleotide_transform(transform_id: str) -> dict:
             nucleotide_transforms=[t for t in current.nucleotide_transforms if t.id != transform_id]
         ),
     )
-    return _design_response_with_geometry(updated, report)
+    # See put_nucleotide_transform: only "base"-kind poses are baked into real
+    # helix geometry.
+    if existing.kind == "base":
+        return _design_response_with_geometry(
+            updated, report, changed_helix_ids=[existing.helix_id],
+        )
+    payload = _design_response(updated, report)
+    payload["geometry_unchanged"] = True
+    return payload

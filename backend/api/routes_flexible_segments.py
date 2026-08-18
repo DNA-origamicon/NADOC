@@ -154,7 +154,23 @@ def flexible_relax(body: FlexibleRelaxBody) -> dict:
     updated, validation, _entry = design_state.mutate_with_feature_log(
         "flexible-relax", label, params, fn
     )
-    return _design_response_with_geometry(updated, validation)
+    # Unlike an overhang-rotation commit, the server does no additional
+    # authoritative computation here — the frontend already ran the relax
+    # solve and this just persists the exact same cluster poses it previewed
+    # with, so there's no "trust the server over stale preview" concern.
+    # helix_ids per affected cluster are already known from cluster_transforms
+    # (captured on design0, before the mutation, since ids/composition don't
+    # change here — only pose fields do).
+    by_cluster = {c.id: c for c in design0.cluster_transforms}
+    changed_helix_ids = sorted({
+        hid
+        for t in body.transforms
+        for hid in (by_cluster[t.cluster_id].helix_ids or [])
+    })
+    return _design_response_with_geometry(
+        updated, validation,
+        changed_helix_ids=changed_helix_ids, compact_deformed=True, partial_axes=True,
+    )
 
 
 @router.post("/design/flexible-segment", status_code=200)

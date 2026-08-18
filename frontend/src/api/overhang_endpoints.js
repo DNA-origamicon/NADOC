@@ -273,7 +273,8 @@ export async function listOverhangBindings() {
 export async function createOverhangBinding(body) {
   // body: { sub_domain_a_id, sub_domain_b_id, binding_mode?, target_joint_id?, allow_n_wildcard? }
   const json = await _request('POST', '/design/overhang-bindings', body)
-  return _syncFromDesignResponse(json)
+  // A fresh binding always starts unbound (pure metadata, no geometry move).
+  return _syncFromDesignResponse(json, { skipGeometry: json?.geometry_unchanged === true })
 }
 
 export async function patchOverhangBinding(bindingId, patch) {
@@ -347,7 +348,7 @@ export async function patchBindingDisplayPose(bindingId, patch) {
     `/design/overhang-bindings/${encodeURIComponent(bindingId)}/display-pose`,
     patch,
   )
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { skipGeometry: json?.geometry_unchanged === true })
 }
 
 export async function patchOverhangStrandAnimSetup(overhangId, setup) {

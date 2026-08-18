@@ -153,7 +153,13 @@ def delete_strand_extensions_batch(body: StrandExtensionBatchDeleteRequest) -> d
     # change strand domains, cluster membership, or pending ligations. Running the
     # full cluster reconciler here made a one-item delete scale with the entire design.
     design, report = design_state.mutate_and_validate(_apply)
-    return _design_response_with_geometry(design, report)
+    # Extensions live on synthetic __ext_<id> helices, never a real strand's own
+    # helix — the __ext_ prefix tells _design_response_with_geometry to drop
+    # exactly these entries from the frontend's geometry cache without a real
+    # _geometry_for_helices recompute (see its docstring on synthetic IDs).
+    return _design_response_with_geometry(
+        design, report, changed_helix_ids=[f"__ext_{eid}" for eid in id_set],
+    )
 
 
 @router.post("/design/extensions", status_code=201)
@@ -268,4 +274,8 @@ def delete_strand_extension(ext_id: str) -> dict:
     design, report = design_state.mutate_and_validate(
         lambda d: setattr(d, "extensions", [x for x in d.extensions if x.id != ext_id])
     )
-    return _design_response_with_geometry(design, report)
+    # See delete_strand_extensions_batch: extensions live on a synthetic
+    # __ext_<id> helix, never a real one.
+    return _design_response_with_geometry(
+        design, report, changed_helix_ids=[f"__ext_{ext_id}"],
+    )

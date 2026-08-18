@@ -34,6 +34,7 @@ current state, binding invariants, open decisions, next actions, and verificatio
 | Sim/feature coverage | `SIM_COVERAGE_PLAN.md` + `sim_coverage_plan.json` + `sim_coverage_log.md` | `/continue-coverage` |
 | Stale-plan audit | `plan_audit_ledger.md` | `/audit-plan` |
 | Tech-debt burn-down | `memory/project_tech_debt.md` (+ `_archive`) | `/audit-debt` |
+| Response-diffing burn-down | `memory/project_response_diffing.md` + `response_diffing_log.md` | — |
 
 ## Path-scoped architecture maps
 

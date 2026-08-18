@@ -769,6 +769,36 @@ class TestCrossoverMove:
         xo = r2.json()["design"]["crossovers"][0]
         assert xo["extra_bases"] == "TT"
 
+    def test_extra_bases_patch_flags_geometry_unchanged(self):
+        """extra_bases lives on the Crossover record, never on any strand
+        domain, so no real nucleotide moves — the response should say so
+        (geometry_unchanged) rather than embed a nucleotide payload the
+        frontend would just discard. GEO-06/07."""
+        design = _make_bundle([[0, 0], [0, 1]])
+        ha, hb = _hid_at(design, 0, 0), _hid_at(design, 0, 1)
+        da, db = _staple_dirs(0, 0)
+        r = _place(ha, hb, 7, da, db)
+        assert r.status_code == 201
+        xo_id = r.json()["design"]["crossovers"][0]["id"]
+
+        r2 = client.patch(
+            f"/api/design/crossovers/{xo_id}/extra-bases", json={"sequence": "TT"}
+        )
+        assert r2.status_code == 200, r2.text
+        body = r2.json()
+        assert body["geometry_unchanged"] is True
+        assert "nucleotides" not in body
+        assert "nucleotides_compact" not in body
+
+        r3 = client.patch(
+            "/api/design/crossovers/extra-bases/batch",
+            json={"entries": [{"crossover_id": xo_id, "sequence": "AA"}]},
+        )
+        assert r3.status_code == 200, r3.text
+        body3 = r3.json()
+        assert body3["geometry_unchanged"] is True
+        assert "nucleotides" not in body3
+
     def test_move_undoable(self):
         """Undo after move should restore original crossover position."""
         design = _make_bundle([[0, 0], [0, 1]])

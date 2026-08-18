@@ -143,6 +143,100 @@ def test_extrude_response_slims_old_history_but_retains_server_recovery_bodies()
     assert canonical[1].post_state_gz_b64
 
 
+# ── FL-01: default blob-stripping extended to ordinary (non-feature-log) routes ─
+
+
+def test_route_that_never_threads_preserve_id_still_keeps_its_new_entry_body():
+    """A route can create a brand-new feature-log entry via mutate_with_feature_log
+    without ever passing preserve_feature_log_id to its response call — auto_break
+    is exactly this (checked directly, not assumed). Before the request-scoped
+    auto-detect (state.py's contextvar, set inside mutate_with_feature_log /
+    mutate_with_minor_log), FL-01's default-strip would have silently shipped
+    that brand-new entry's body empty: the client has never seen the id before,
+    so its cache-merge can't backfill what was never cached. Guards the whole
+    class of 47+ mutate_with_feature_log call sites, not just this one route."""
+    import inspect
+
+    from backend.api import crud
+
+    src = inspect.getsource(crud.auto_break)
+    assert "preserve_feature_log_id" not in src, (
+        "auto_break now threads preserve_feature_log_id explicitly — this test's "
+        "premise (an unthreaded route) no longer holds; find another one or drop "
+        "this test if the auto-detect contextvar mechanism was removed instead."
+    )
+
+    r = client.post("/api/design/auto-break")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    wire_entry = body["design"]["feature_log"][-1]
+    assert wire_entry["design_snapshot_gz_b64"], (
+        "brand-new entry's body must survive on the wire even though the route "
+        "never threaded preserve_feature_log_id — the request-scoped auto-detect "
+        "must have picked it up"
+    )
+    assert wire_entry["post_state_gz_b64"]
+
+
+def test_ordinary_mutation_strips_feature_log_bodies_by_default():
+    """A route that never creates or edits a feature-log entry (metadata update
+    here) still ships an existing entry's heavy body blobs on every response
+    today. FL-01 makes stripping the default everywhere except the identified
+    cold-load exemptions; canonical server state must stay untouched — this is
+    a response-shape optimization, not a data-loss risk."""
+    r = client.post("/api/design/auto-break")
+    assert r.status_code == 200, r.text
+    canonical_before = design_state.get_or_404().feature_log[0]
+    assert canonical_before.design_snapshot_gz_b64
+    assert canonical_before.post_state_gz_b64
+
+    r = client.put("/api/design/metadata", json={"name": "renamed"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["feature_log_payloads_partial"] is True
+    wire_entry = body["design"]["feature_log"][0]
+    assert wire_entry["design_snapshot_gz_b64"] == ""
+    assert wire_entry["post_state_gz_b64"] == ""
+
+    canonical_after = design_state.get_or_404().feature_log[0]
+    assert canonical_after.design_snapshot_gz_b64 == canonical_before.design_snapshot_gz_b64
+    assert canonical_after.post_state_gz_b64 == canonical_before.post_state_gz_b64
+
+
+def test_get_design_cold_load_retains_full_feature_log_bodies():
+    """GET /design is the app's cold-load/restart-recovery fetch — the client
+    may have no prior cache to reconstruct a stripped body from, so it must
+    never be slimmed (FL-02)."""
+    r = client.post("/api/design/auto-break")
+    assert r.status_code == 200, r.text
+
+    r = client.get("/api/design")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "feature_log_payloads_partial" not in body
+    assert body["design"]["feature_log"][0]["design_snapshot_gz_b64"]
+    assert body["design"]["feature_log"][0]["post_state_gz_b64"]
+
+
+def test_load_design_cold_load_retains_full_feature_log_bodies(tmp_path):
+    """POST /design/load installs a lineage the client has never seen — same
+    cold-load exemption as GET /design (FL-02)."""
+    r = client.post("/api/design/auto-break")
+    assert r.status_code == 200, r.text
+    saved = design_state.get_or_404()
+    assert saved.feature_log[0].design_snapshot_gz_b64
+
+    probe_path = tmp_path / "probe.nadoc"
+    probe_path.write_text(saved.to_json())
+
+    r = client.post("/api/design/load", json={"path": str(probe_path)})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "feature_log_payloads_partial" not in body
+    assert body["design"]["feature_log"][0]["design_snapshot_gz_b64"]
+    assert body["design"]["feature_log"][0]["post_state_gz_b64"]
+
+
 # ── Test 1: snapshot entry is appended ────────────────────────────────────────
 
 
@@ -680,6 +774,46 @@ def test_overhang_extrude_logs_snapshot():
     assert payload.get("partial_geometry") is True
     assert payload.get("changed_helix_ids")
     assert "path:partial_geometry" in undo.headers.get("server-timing", "")
+
+
+def test_overhangs_batch_delete_ships_partial_geometry():
+    """GEO-12: deleting an extruded overhang (which removes its whole helix)
+    must still use the partial-geometry path for the common no-linker case."""
+    client.post(
+        "/api/design/bundle", json={"cells": [[0, 0]], "length_bp": 42, "name": "B"}
+    )
+    design = design_state.get_or_404()
+    helix_id = design.helices[0].id
+
+    r = client.post(
+        "/api/design/overhang/extrude",
+        json={
+            "helix_id": helix_id,
+            "bp_index": 21,
+            "direction": "FORWARD",
+            "is_five_prime": False,
+            "neighbor_row": 0,
+            "neighbor_col": 1,
+            "length_bp": 8,
+        },
+    )
+    if r.status_code in (400, 422):
+        pytest.skip(f"Overhang geometry not valid for this fixture: {r.text}")
+    assert r.status_code == 200, r.text
+
+    design = design_state.get_or_404()
+    assert design.overhangs, "extrude must have created an overhang"
+    overhang_id = design.overhangs[-1].id
+
+    r2 = client.post(
+        "/api/design/overhangs/batch-delete",
+        json={"overhang_ids": [overhang_id]},
+    )
+    assert r2.status_code == 200, r2.text
+    body = r2.json()
+    assert overhang_id not in {o["id"] for o in body["design"]["overhangs"]}
+    assert body.get("partial_geometry") is True
+    assert body.get("changed_helix_ids")
 
 
 def test_overhang_extrude_new_helix_inherits_parent_cluster_not_lex_neighbor():

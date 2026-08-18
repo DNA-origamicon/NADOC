@@ -74,6 +74,35 @@ def set_request_revision(value: int) -> None:
     _request_revision.set(value)
 
 
+# Id of the feature-log SnapshotLogEntry (if any) created by the CURRENT
+# request's mutation, set by state.mutate_with_feature_log right after it
+# appends the entry. _design_response reads this as the default
+# preserve_feature_log_id so a route's response never ships its own
+# just-created entry with a stripped (empty) body — the client has never seen
+# that entry's id before, so its cache-merge can't backfill a missing body,
+# unlike an EXISTING entry. Discovered as a live gap: `mutate_with_feature_log`
+# has 47+ call sites and manually threading preserve_feature_log_id through
+# each one is exactly the kind of thing that gets missed once and silently
+# corrupts that one route's local recovery cache. Auto-detection closes the
+# whole class at once. Reset to None per request by the middleware (below).
+_last_feature_log_entry_id: contextvars.ContextVar = contextvars.ContextVar(
+    "nadoc_last_feature_log_entry_id",
+    default=None,
+)
+
+
+def current_request_feature_log_entry_id():
+    """Id of the feature-log entry created by the current request's mutation,
+    or None if this request created no entry."""
+    return _last_feature_log_entry_id.get()
+
+
+def set_request_feature_log_entry_id(value: str) -> None:
+    """Record the id of the feature-log entry just created by the current
+    request's mutation."""
+    _last_feature_log_entry_id.set(value)
+
+
 # Header / query names the frontend uses to name its document.
 DOC_HEADER = "x-nadoc-doc"
 DOC_QUERY = "doc"
@@ -160,9 +189,11 @@ class DocContextMiddleware:
             # Start each request with no recorded revision so a read-only request
             # never inherits a prior (mutating) request's value.
             rev_token = _request_revision.set(None)
+            fl_entry_token = _last_feature_log_entry_id.set(None)
             try:
                 await self.app(scope, receive, send)
             finally:
+                _last_feature_log_entry_id.reset(fl_entry_token)
                 _request_revision.reset(rev_token)
                 _measured_positioning.reset(measured_token)
                 _skip_geometry.reset(geo_token)

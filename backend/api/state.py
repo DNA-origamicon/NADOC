@@ -36,8 +36,10 @@ from fastapi import HTTPException
 
 from backend.api.doc_context import (
     current_request_revision as _doc_current_request_revision,
+    current_request_feature_log_entry_id as _doc_current_request_feature_log_entry_id,
     get_current_doc,
     set_request_revision,
+    set_request_feature_log_entry_id,
 )
 from backend.core.cluster_reconcile import (
     MutationReport,
@@ -68,6 +70,13 @@ def current_request_revision() -> int | None:
     """Current request revision, re-exported for backend.api.crud."""
 
     return _doc_current_request_revision()
+
+
+def current_request_feature_log_entry_id() -> str | None:
+    """Id of the feature-log entry the current request's mutation just
+    created, or None. Re-exported for backend.api.crud."""
+
+    return _doc_current_request_feature_log_entry_id()
 
 
 @dataclass
@@ -556,6 +565,12 @@ def mutate_with_feature_log(
 
         validation = validate_design(s.design)
         _bump_revision(s)
+        # So _design_response's default blob-stripping preserves THIS entry's
+        # body even when the calling route forgets to pass
+        # preserve_feature_log_id explicitly — the client has never seen this
+        # id before, so its cache-merge can't backfill a missing body the way
+        # it can for an existing (already-cached) entry.
+        set_request_feature_log_entry_id(snap_entry.id)
         return s.design, validation, snap_entry
 
 
@@ -669,6 +684,12 @@ def mutate_with_minor_log(
 
         validation = validate_design(s.design)
         _bump_revision(s)
+        # Preserve the PARENT cluster entry, not the child: _strip_feature_log_payloads
+        # only matches preserve_entry_ids against top-level entry ids, and a
+        # preserved parent keeps all its children's diff blobs too (see its
+        # docstring). Matters most for a brand-new cluster (is_append is
+        # False) — its id has never reached the client before.
+        set_request_feature_log_entry_id(cluster.id)
         return s.design, validation, minor_entry
 
 
