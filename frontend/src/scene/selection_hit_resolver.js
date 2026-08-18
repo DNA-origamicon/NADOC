@@ -204,6 +204,14 @@ export function vrOwnerTokens({ selected = false, selectedRef = null, owner = nu
     .map(token => encodeURIComponent(token)))]
 }
 
+/** Encode the canonical desktop selection for a native viewer launched after the
+ * selection was made. The exact ref is sufficient because selectable native
+ * primitives advertise their canonical ref among their owner aliases. */
+export function vrInitialSelectionOwnerTokens(selectedRef) {
+  const token = selectionRefKey(selectedRef)
+  return token ? [encodeURIComponent(token)] : []
+}
+
 /** Pure native-VR owner × selection-level acceptance policy.
  * Target existence and Cluster/End facts stay explicit so callers cannot report an
  * acknowledgement merely because an identity parsed successfully. */

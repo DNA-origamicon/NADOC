@@ -5795,6 +5795,7 @@ async function main() {
         coloring: ['strand', 'base', 'cluster', 'cpk'].includes(store.getState().coloringMode)
           ? store.getState().coloringMode : 'strand',
         selection_level: selectionManager.getSelectionLevel?.() ?? 'default',
+        selected_owner_tokens: selectionManager.getVRInitialSelectionOwnerTokens?.() ?? [],
       }),
       stop: api.stopNativeVR,
       errorMessage: api.lastErrorMessage,

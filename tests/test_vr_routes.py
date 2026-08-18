@@ -12,6 +12,7 @@ from starlette.requests import Request
 from backend.api import routes_vr
 from backend.api.routes_vr import (
     VRFeedbackRequest,
+    VRLaunchRequest,
     VRCamera,
     _bundle_expanded_scene,
     _event_payload,
@@ -20,6 +21,7 @@ from backend.api.routes_vr import (
     _require_local,
     _selection_cluster,
     _serialize_scene,
+    _viewer_command,
     _write_feedback,
 )
 from backend.core.vr_scene_contract import parse_scene_contract
@@ -276,6 +278,24 @@ def test_native_feedback_writer_is_private_bounded_and_atomic(tmp_path) -> None:
                 selected=True,
                 owner_tokens=["not whitespace safe"],
             ),
+        )
+
+
+def test_native_launch_passes_initial_selection_as_opaque_arguments(tmp_path) -> None:
+    token = _owner_token("domain", "strand:a b", 2)
+    command = _viewer_command(
+        tmp_path / "scene.nadocvr",
+        tmp_path / "event.json",
+        tmp_path / "feedback.txt",
+        VRLaunchRequest(selection_level="domain", selected_owner_tokens=[token]),
+    )
+    assert command[-2:] == ["--selected-owner", token]
+    assert command[command.index("--selection-level") + 1] == "domain"
+
+    with pytest.raises(HTTPException, match="initial VR selection"):
+        routes_vr.launch_vr(
+            VRLaunchRequest(selected_owner_tokens=["not whitespace safe"]),
+            _request("127.0.0.1", "http://localhost:5173"),
         )
 
 

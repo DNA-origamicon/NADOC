@@ -1538,10 +1538,20 @@ class Viewer {
   public:
     explicit Viewer(SceneData scene, std::string eventPath = {},
                     std::string feedbackPath = {},
-                    std::string selectionLevel = "default")
+                    std::string selectionLevel = "default",
+                    std::vector<std::string> selectedOwnerTokens = {})
         : sceneData_(std::move(scene)), eventPath_(std::move(eventPath)),
           feedbackPath_(std::move(feedbackPath)),
-          selectionLevel_(std::move(selectionLevel)) {}
+          selectionLevel_(std::move(selectionLevel)) {
+        const RepresentationData& initial = sceneData_.representations[
+            static_cast<size_t>(sceneData_.initialRepresentation)];
+        const auto identity = nadoc_vr::resolveOwnerIdentity(
+            initial.ownerAliases, selectedOwnerTokens);
+        if (identity) {
+            selectedIdentity_ = *identity;
+            selectedOwnerTokens_ = std::move(selectedOwnerTokens);
+        }
+    }
 
     int run() {
         initializeWindow();
@@ -2573,12 +2583,14 @@ int main(int argc, char** argv) {
     if (argc < 2) {
         std::cerr << "Usage: nadoc-vr-viewer [--validate] <scene.nadocvr> "
                      "[--events <event.json>] [--feedback <feedback.txt>] "
-                     "[--selection-level <level>]\n";
+                     "[--selection-level <level>] "
+                     "[--selected-owner <token>]...\n";
         return 2;
     }
     std::string eventPath;
     std::string feedbackPath;
     std::string selectionLevel = "default";
+    std::vector<std::string> selectedOwnerTokens;
     const std::array<std::string, 7> validSelectionLevels = {
         "default", "cluster", "strand", "domain", "end", "xover", "base",
     };
@@ -2591,6 +2603,17 @@ int main(int argc, char** argv) {
         if (option == "--events") eventPath = argv[index + 1];
         else if (option == "--feedback") feedbackPath = argv[index + 1];
         else if (option == "--selection-level") selectionLevel = argv[index + 1];
+        else if (option == "--selected-owner") {
+            const std::string token(argv[index + 1]);
+            if (token.empty() || token.size() > 2048 ||
+                std::any_of(token.begin(), token.end(), [](unsigned char character) {
+                    return std::isspace(character) != 0;
+                }) || selectedOwnerTokens.size() >= 8) {
+                std::cerr << "NADOC VR error: invalid selected owner token\n";
+                return 2;
+            }
+            selectedOwnerTokens.push_back(token);
+        }
         else {
             std::cerr << "NADOC VR error: unknown option " << option << '\n';
             return 2;
@@ -2604,7 +2627,9 @@ int main(int argc, char** argv) {
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
     try {
-        Viewer viewer(loadScene(argv[1]), eventPath, feedbackPath, selectionLevel);
+        Viewer viewer(
+            loadScene(argv[1]), eventPath, feedbackPath, selectionLevel,
+            std::move(selectedOwnerTokens));
         return viewer.run();
     } catch (const std::exception& error) {
         std::cerr << "NADOC VR error: " << error.what() << '\n';

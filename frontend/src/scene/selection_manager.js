@@ -44,7 +44,7 @@ import { flexAnchorKey } from './flexible_arcs.js'
 import { selectedCrossoverRefs, selectedEndRefs } from './selection_model.js'
 import {
   bondRefForCone, coneForBondRef, crossoverRefForArc, endRefForEntry, vrPrimitiveOwner,
-  vrOwnerTokens, vrSelectionAccepted,
+  vrInitialSelectionOwnerTokens, vrOwnerTokens, vrSelectionAccepted,
 } from './selection_hit_resolver.js'
 import { selectionHighlightDescriptor } from './selection_highlight_model.js'
 import { referenceStrandInteractionHidden } from './reference_navigation.js'
@@ -4801,6 +4801,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     /** Read-only canonical target for the browser-authoritative VR tool shell. */
     getPrimarySelectionRef() { return selectionController.getState().primary ?? null },
+
+    /** Opaque canonical owner aliases used to seed a native viewer launched after
+     *  the desktop selection was made. No renderer identity crosses this boundary. */
+    getVRInitialSelectionOwnerTokens() {
+      return vrInitialSelectionOwnerTokens(selectionController.getState().primary)
+    },
 
     /** Clear committed selection and its projected renderer state. */
     clearSelection() { _clearAll() },

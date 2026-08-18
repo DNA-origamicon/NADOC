@@ -57,6 +57,7 @@ class VRLaunchRequest(BaseModel):
     selection_level: Literal[
         "default", "cluster", "strand", "domain", "end", "xover", "base"
     ] = "default"
+    selected_owner_tokens: list[str] = Field(default_factory=list, max_length=8)
 
 
 class VRFeedbackRequest(BaseModel):
@@ -2119,6 +2120,27 @@ def vr_feedback(body: VRFeedbackRequest, request: Request) -> dict:
     return {"acknowledged": True, "select_sequence": body.select_sequence}
 
 
+def _viewer_command(
+    scene_path: Path,
+    event_path: Path,
+    feedback_path: Path,
+    body: VRLaunchRequest,
+) -> list[str]:
+    command = [
+        str(_VIEWER),
+        str(scene_path),
+        "--events",
+        str(event_path),
+        "--selection-level",
+        body.selection_level,
+        "--feedback",
+        str(feedback_path),
+    ]
+    for token in body.selected_owner_tokens:
+        command.extend(["--selected-owner", token])
+    return command
+
+
 @router.post("/vr/runtime/start")
 def start_vr_runtime(request: Request) -> dict:
     _require_local(request)
@@ -2139,6 +2161,14 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             409,
             detail="The first native VR viewer supports Part view; exit Assembly mode first.",
         )
+
+    if any(
+        not token
+        or len(token) > 2048
+        or any(character.isspace() for character in token)
+        for token in body.selected_owner_tokens
+    ):
+        raise HTTPException(422, detail="Invalid initial VR selection identity.")
 
     # Starting SteamVR through the Steam client (rather than incidentally through
     # xrCreateInstance) keeps Dashboard/Desktop available after the NADOC scene exits.
@@ -2190,16 +2220,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         log = _LOG_PATH.open("ab")
         try:
             process = subprocess.Popen(
-                [
-                    str(_VIEWER),
-                    str(scene_path),
-                    "--events",
-                    str(event_path),
-                    "--selection-level",
-                    body.selection_level,
-                    "--feedback",
-                    str(feedback_path),
-                ],
+                _viewer_command(scene_path, event_path, feedback_path, body),
                 cwd=_REPO_ROOT,
                 env=_build_environment(),
                 stdin=subprocess.DEVNULL,

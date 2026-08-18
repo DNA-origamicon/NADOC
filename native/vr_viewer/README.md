@@ -40,6 +40,10 @@ browser's canonical acknowledgement back to the companion.
 Feedback v2 also carries up to eight opaque, specificity-ordered canonical owner
 aliases. The native parser retains feedback-v1 compatibility and rejects truncated,
 oversized, stale, future, or whitespace-bearing alias records.
+If a canonical desktop selection already exists at launch, NADOC passes only its
+opaque owner alias as a bounded process argument. The viewer resolves it against the
+immutable scene ownership table, so the green marker and Tools readiness do not
+require reselecting the target in VR.
 
 Controls on the original HTC Vive wands:
 

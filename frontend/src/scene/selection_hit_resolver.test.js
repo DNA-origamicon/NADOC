@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   bondRefForCone, coneForBondRef, crossoverRefForArc, endRefForEntry, vrPrimitiveOwner,
-  vrOwnerTokens, vrSelectionAccepted,
+  vrInitialSelectionOwnerTokens, vrOwnerTokens, vrSelectionAccepted,
 } from './selection_hit_resolver.js'
 
 const nuc = (bp, extra = {}) => ({ helix_id: 'h1', bp_index: bp, direction: 'FORWARD', ...extra })
@@ -161,6 +161,13 @@ describe('pure selection hit resolution', () => {
     expect(tokens.every(token => !/\s/.test(token))).toBe(true)
     expect(vrOwnerTokens({ selected: false, selectedRef: { kind: 'strand', id: 's' } }))
       .toEqual([])
+  })
+
+  it('encodes a pre-existing canonical selection for native launch', () => {
+    expect(vrInitialSelectionOwnerTokens({
+      kind: 'domain', strandId: 'strand:a b', domainIndex: 2,
+    }).map(decodeURIComponent)).toEqual(['["domain","strand:a b",2]'])
+    expect(vrInitialSelectionOwnerTokens(null)).toEqual([])
   })
 
   it('locks the native owner × canonical selection-level acceptance matrix', () => {
