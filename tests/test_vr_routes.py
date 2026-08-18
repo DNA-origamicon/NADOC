@@ -29,6 +29,21 @@ def _request(host: str, origin: str | None = None) -> Request:
     )
 
 
+def _scene_sections(text: str) -> dict[str, list[list[str]]]:
+    sections: dict[str, list[list[str]]] = {}
+    active = ""
+    for line in text.splitlines():
+        record = line.split()
+        if not record or record[0] == "#":
+            continue
+        if record[0] == "R":
+            active = record[1]
+            sections[active] = []
+        elif record[0] in {"P", "C", "B"}:
+            sections[active].append(record)
+    return sections
+
+
 def test_native_vr_routes_are_workstation_only() -> None:
     _require_local(_request("127.0.0.1", "http://localhost:5173"))
     with pytest.raises(HTTPException, match="localhost"):
@@ -70,11 +85,7 @@ def test_start_steamvr_is_noop_when_runtime_and_dashboard_are_ready(
 
 def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() -> None:
     design = SimpleNamespace(
-        strands=[
-            SimpleNamespace(
-                id="s1", is_scaffold=True, color=None, sequence="AT"
-            )
-        ],
+        strands=[SimpleNamespace(id="s1", is_scaffold=True, color=None, sequence="AT")],
         cluster_transforms=[],
     )
     nucleotides = [
@@ -136,17 +147,7 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
         camera,
         atomistic_model=SimpleNamespace(atoms=atoms, bonds=[(0, 1)]),
     )
-    sections: dict[str, list[list[str]]] = {}
-    active = ""
-    for line in text.splitlines():
-        record = line.split()
-        if not record or record[0] == "#":
-            continue
-        if record[0] == "R":
-            active = record[1]
-            sections[active] = []
-        elif record[0] in {"P", "C", "B"}:
-            sections[active].append(record)
+    sections = _scene_sections(text)
 
     assert text.startswith("NADOCVR 4 full strand\n")
     assert set(sections) == {"full", "cylinders", "ballstick", "stick"}
@@ -158,9 +159,7 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
     first_point = next(record for record in sections["full"] if record[0] == "P")
     # The non-5′ bead remains a sphere. Looking along +X maps NADOC +Z to
     # view +X and NADOC +X to view -Z.
-    np.testing.assert_allclose(
-        [float(value) for value in first_point[1:4]], [3, 2, -2]
-    )
+    np.testing.assert_allclose([float(value) for value in first_point[1:4]], [3, 2, -2])
     assert float(first_point[4]) == pytest.approx(0.10)
     np.testing.assert_allclose(
         [float(value) for value in first_point[5:8]],
@@ -174,13 +173,9 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
     slab = slabs[-1]
     axes = np.asarray([float(value) for value in slab[4:13]]).reshape(3, 3)
     np.testing.assert_allclose(np.linalg.norm(axes, axis=1), [0.30, 0.06, 0.70])
-    first_bond = next(
-        record for record in sections["ballstick"] if record[0] == "C"
-    )
+    first_bond = next(record for record in sections["ballstick"] if record[0] == "C")
     assert len(first_bond) == 20
-    first_atom = next(
-        record for record in sections["ballstick"] if record[0] == "P"
-    )
+    first_atom = next(record for record in sections["ballstick"] if record[0] == "P")
     assert float(first_atom[4]) == pytest.approx(0.17 * 0.55)
 
 
@@ -188,7 +183,9 @@ def test_full_slabs_share_the_pair_plane_and_contact_the_backbone() -> None:
     design = SimpleNamespace(
         strands=[
             SimpleNamespace(id="forward", is_scaffold=True, color=None, sequence="A"),
-            SimpleNamespace(id="reverse", is_scaffold=False, color="#ff6b6b", sequence="T"),
+            SimpleNamespace(
+                id="reverse", is_scaffold=False, color="#ff6b6b", sequence="T"
+            ),
         ],
         cluster_transforms=[],
     )
@@ -231,3 +228,145 @@ def test_full_slabs_share_the_pair_plane_and_contact_the_backbone() -> None:
     # The contact shift leaves each bead 0.33 nm from its slab center: the
     # 0.35 nm half-extent penetrates the 0.10 nm bead center by 0.02 nm.
     np.testing.assert_allclose(centers[:, 0], [-0.67, 0.67])
+
+
+def test_axis_records_preserve_same_helix_domain_gaps() -> None:
+    design = SimpleNamespace(
+        strands=[SimpleNamespace(id="s1", is_scaffold=True, color=None, sequence="A")],
+        cluster_transforms=[],
+        crossovers=[],
+        forced_ligations=[],
+    )
+    nucleotide = {
+        "strand_id": "s1",
+        "domain_index": 0,
+        "helix_id": "h1",
+        "bp_index": 0,
+        "direction": "FORWARD",
+        "backbone_position": [1, 0, 0],
+        "base_position": [0.5, 0, 0],
+        "base_normal": [1, 0, 0],
+        "axis_tangent": [0, 0, 1],
+    }
+    axis = {
+        "helix_id": "h1",
+        "start": [0, 0, 0],
+        "end": [0, 0, 10],
+        "samples": [[0, 0, 0], [0, 0, 10]],
+        "segments": [
+            {
+                "strand_id": "s1",
+                "domain_index": 0,
+                "start": [0, 0, 0],
+                "end": [0, 0, 2],
+            },
+            {
+                "strand_id": "s1",
+                "domain_index": 1,
+                "start": [0, 0, 5],
+                "end": [0, 0, 7],
+            },
+        ],
+    }
+    text = _serialize_scene(
+        design,
+        [nucleotide],
+        [axis],
+        atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
+    )
+    sections = _scene_sections(text)
+
+    for representation, radius in (("full", 0.05), ("cylinders", 0.72)):
+        axis_records = [
+            record
+            for record in sections[representation]
+            if record[0] == "C" and float(record[7]) == pytest.approx(radius)
+        ]
+        endpoints = {
+            tuple(float(value) for value in record[1:7]) for record in axis_records
+        }
+        assert endpoints == {
+            (0.0, 0.0, 0.0, 0.0, 0.0, 2.0),
+            (0.0, 0.0, 5.0, 0.0, 0.0, 7.0),
+        }
+
+
+def test_full_snapshot_projects_explicit_cross_helix_connections() -> None:
+    design = SimpleNamespace(
+        strands=[SimpleNamespace(id="s1", is_scaffold=True, color=None, sequence="AA")],
+        cluster_transforms=[],
+        crossovers=[
+            SimpleNamespace(
+                half_a=SimpleNamespace(helix_id="h1", index=0, strand="FORWARD"),
+                half_b=SimpleNamespace(helix_id="h2", index=0, strand="REVERSE"),
+                extra_bases=None,
+            )
+        ],
+        forced_ligations=[
+            SimpleNamespace(
+                three_prime_helix_id="h1",
+                three_prime_bp=0,
+                three_prime_direction="FORWARD",
+                five_prime_helix_id="h3",
+                five_prime_bp=0,
+                five_prime_direction="REVERSE",
+                extra_bases=None,
+                is_periodic_seam=False,
+            ),
+            # Desktop hides periodic seams by default; the immutable VR snapshot
+            # mirrors that behavior until it gains the corresponding toggle.
+            SimpleNamespace(
+                three_prime_helix_id="h2",
+                three_prime_bp=0,
+                three_prime_direction="REVERSE",
+                five_prime_helix_id="h3",
+                five_prime_bp=0,
+                five_prime_direction="REVERSE",
+                extra_bases=None,
+                is_periodic_seam=True,
+            ),
+        ],
+    )
+    nucleotides = []
+    for helix_id, direction, x in (
+        ("h1", "FORWARD", 0.0),
+        ("h2", "REVERSE", 2.0),
+        ("h3", "REVERSE", 4.0),
+    ):
+        nucleotides.append(
+            {
+                "strand_id": "s1",
+                "domain_index": 0,
+                "helix_id": helix_id,
+                "bp_index": 0,
+                "direction": direction,
+                "backbone_position": [x, 0, 0],
+                "base_position": [x, 0.2, 0],
+                "base_normal": [0, 1, 0],
+                "axis_tangent": [0, 0, 1],
+            }
+        )
+    text = _serialize_scene(
+        design,
+        nucleotides,
+        [],
+        atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
+    )
+    sections = _scene_sections(text)
+    arcs = [
+        record
+        for record in sections["full"]
+        if record[0] == "C"
+        and float(record[7]) == pytest.approx(0.025)
+        and np.linalg.norm(
+            np.asarray([float(value) for value in record[4:7]])
+            - np.asarray([float(value) for value in record[1:4]])
+        )
+        > 1.0
+    ]
+
+    assert [tuple(float(value) for value in record[1:7]) for record in arcs] == [
+        (0.0, 0.0, 0.0, 2.0, 0.0, 0.0),
+        (0.0, 0.0, 0.0, 4.0, 0.0, 0.0),
+    ]
+    assert sections["cylinders"] == []

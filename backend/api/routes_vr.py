@@ -56,7 +56,9 @@ class VRLaunchRequest(BaseModel):
 def _require_local(request: Request) -> None:
     host = request.client.host if request.client else ""
     if host not in {"127.0.0.1", "::1", "localhost"}:
-        raise HTTPException(403, detail="Native VR launch is available only from localhost.")
+        raise HTTPException(
+            403, detail="Native VR launch is available only from localhost."
+        )
     # A local Vite reverse proxy makes every backend peer look loopback. Preserve
     # the workstation-only boundary by also checking the browser's Origin.
     origin = request.headers.get("origin")
@@ -65,7 +67,9 @@ def _require_local(request: Request) -> None:
         "::1",
         "localhost",
     }:
-        raise HTTPException(403, detail="Native VR launch is available only from localhost.")
+        raise HTTPException(
+            403, detail="Native VR launch is available only from localhost."
+        )
 
 
 def _rgb(hex_color: str) -> tuple[float, float, float]:
@@ -88,9 +92,7 @@ def _strand_colors(design) -> dict[str, tuple[float, float, float]]:
         elif strand.color:
             colors[strand.id] = _rgb(strand.color)
         else:
-            colors[strand.id] = _rgb(
-                STAPLE_PALETTE[staple_index % len(STAPLE_PALETTE)]
-            )
+            colors[strand.id] = _rgb(STAPLE_PALETTE[staple_index % len(STAPLE_PALETTE)])
             staple_index += 1
     return colors
 
@@ -110,7 +112,9 @@ def _base_letters(design, nucleotides: list[dict]) -> dict[int, str]:
         strand_id = nucleotide.get("strand_id")
         if strand_id:
             by_strand.setdefault(strand_id, []).append((index, nucleotide))
-    sequences = {strand.id: strand.sequence for strand in design.strands if strand.sequence}
+    sequences = {
+        strand.id: strand.sequence for strand in design.strands if strand.sequence
+    }
     result: dict[int, str] = {}
     for strand_id, entries in by_strand.items():
         sequence = sequences.get(strand_id)
@@ -163,7 +167,9 @@ def _nucleotide_colors(design, nucleotides: list[dict], coloring: str) -> list[t
     letters = _base_letters(design, nucleotides) if coloring == "base" else {}
     result = []
     for index, nucleotide in enumerate(nucleotides):
-        fallback = strand_colors.get(nucleotide.get("strand_id") or "", (0.55, 0.62, 0.72))
+        fallback = strand_colors.get(
+            nucleotide.get("strand_id") or "", (0.55, 0.62, 0.72)
+        )
         if coloring == "base" and index in letters:
             result.append(_BASE_COLORS[letters[index]])
         elif coloring == "cluster":
@@ -253,6 +259,9 @@ def _serialize_scene(
         )
     ]
     strand_by_id = {strand.id: strand for strand in design.strands}
+    site_entries: dict[
+        tuple[str, int, str], tuple[dict, np.ndarray, tuple[float, ...]]
+    ] = {}
 
     def palette_variant(
         palette: tuple[float, ...], nucleotide: dict, scaffold_hex: str
@@ -284,6 +293,13 @@ def _serialize_scene(
             nucleotide.get("direction") or "",
         )
         identity_palettes[identity] = palette
+        site_entries[
+            (
+                str(nucleotide.get("helix_id") or ""),
+                int(nucleotide.get("bp_index") or 0),
+                str(nucleotide.get("direction") or ""),
+            )
+        ] = (nucleotide, backbone, palette)
         if nucleotide.get("is_five_prime"):
             size = np.identity(3) * 0.18
             box(backbone, *(rotation @ size[:, column] for column in range(3)), palette)
@@ -350,14 +366,13 @@ def _serialize_scene(
         bead_distance = float(np.linalg.norm(radial))
         if bead_distance > 1e-9:
             radial /= bead_distance
-            support = abs(float(np.dot(radial, tangential))) * 0.15 + abs(
-                float(np.dot(radial, normal))
-            ) * 0.35
+            support = (
+                abs(float(np.dot(radial, tangential))) * 0.15
+                + abs(float(np.dot(radial, normal))) * 0.35
+            )
             center += radial * max(0.0, bead_distance - support + 0.02)
 
-        palette = palette_variant(
-            palette_for_index(index), nucleotide, "#0277bd"
-        )
+        palette = palette_variant(palette_for_index(index), nucleotide, "#0277bd")
         box(
             rotation @ center,
             rotation @ (tangential * 0.30),
@@ -390,35 +405,120 @@ def _serialize_scene(
                 first_nucleotide.get("helix_id") == second_nucleotide.get("helix_id")
                 and float(np.linalg.norm(second - first)) <= 5.0
             ):
-                arrow_palette = palette_variant(
-                    palette, first_nucleotide, "#0288d1"
-                )
+                arrow_palette = palette_variant(palette, first_nucleotide, "#0288d1")
                 lines.append(f"C {nums(*first, *second, 0.075, *arrow_palette)}")
+
+    # The desktop arc layer reads crossover and forced-ligation records directly;
+    # it never infers their endpoints from proximity. Mirror that contract here so
+    # unligated crossover records and cross-helix forced ligations cannot vanish
+    # merely because the backbone-order pass above only joins same-helix beads.
+    # Extra-base junctions are projected separately because their connector is a
+    # bead/slab chain, not a direct chord. Periodic seams are hidden by default in
+    # the desktop view and stay hidden in this immutable snapshot too.
+    def direction_value(value) -> str:
+        return str(getattr(value, "value", value))
+
+    explicit_connections = [
+        (
+            (
+                str(xo.half_a.helix_id),
+                int(xo.half_a.index),
+                direction_value(xo.half_a.strand),
+            ),
+            (
+                str(xo.half_b.helix_id),
+                int(xo.half_b.index),
+                direction_value(xo.half_b.strand),
+            ),
+            xo.extra_bases,
+            False,
+        )
+        for xo in getattr(design, "crossovers", [])
+    ]
+    explicit_connections.extend(
+        (
+            (
+                str(fl.three_prime_helix_id),
+                int(fl.three_prime_bp),
+                direction_value(fl.three_prime_direction),
+            ),
+            (
+                str(fl.five_prime_helix_id),
+                int(fl.five_prime_bp),
+                direction_value(fl.five_prime_direction),
+            ),
+            fl.extra_bases,
+            bool(fl.is_periodic_seam),
+        )
+        for fl in getattr(design, "forced_ligations", [])
+    )
+    for first_key, second_key, extra_bases, hidden_periodic in explicit_connections:
+        if extra_bases or hidden_periodic or first_key[0] == second_key[0]:
+            continue
+        first_entry = site_entries.get(first_key)
+        second_entry = site_entries.get(second_key)
+        if first_entry is None or second_entry is None:
+            continue
+        first_nucleotide, first, palette = first_entry
+        _, second, _ = second_entry
+        arc_palette = palette_variant(palette, first_nucleotide, "#0288d1")
+        lines.append(f"C {nums(*first, *second, 0.025, *arc_palette)}")
+
+    def axis_edges(axis: dict):
+        """Yield visible axis edges, preferring authoritative domain segments.
+
+        ``deformed_helix_axes`` deliberately emits one segment per occupied
+        domain interval. Falling back to the whole sampled shaft when those
+        segments exist fills the negative space between domains, which changes
+        the topology's visual reading in both Full and cylinder views.
+        """
+        segments = axis.get("segments")
+        if segments is not None:
+            for segment in segments:
+                first, second = point(segment.get("start")), point(segment.get("end"))
+                if first is not None and second is not None:
+                    yield first, second, segment
+            return
+        samples = axis.get("samples") or [axis.get("start"), axis.get("end")]
+        for first_raw, second_raw in zip(samples, samples[1:]):
+            first, second = point(first_raw), point(second_raw)
+            if first is not None and second is not None:
+                yield first, second, None
 
     def append_axes(radius: float = 0.025) -> None:
         palette = solid_palette((0.30, 0.34, 0.42))
         for axis in axes:
-            samples = axis.get("samples") or [axis.get("start"), axis.get("end")]
-            for first_raw, second_raw in zip(samples, samples[1:]):
-                first, second = point(first_raw), point(second_raw)
-                if first is not None and second is not None:
-                    lines.append(f"C {nums(*first, *second, radius, *palette)}")
+            for first, second, _ in axis_edges(axis):
+                lines.append(f"C {nums(*first, *second, radius, *palette)}")
 
     append_axes(0.05)
 
     lines.append("R cylinders")
     first_palette_by_helix = {}
     for index, nucleotide in enumerate(nucleotides):
-        first_palette_by_helix.setdefault(nucleotide.get("helix_id"), palette_for_index(index))
+        first_palette_by_helix.setdefault(
+            nucleotide.get("helix_id"), palette_for_index(index)
+        )
     for axis in axes:
-        samples = axis.get("samples") or [axis.get("start"), axis.get("end")]
-        palette = first_palette_by_helix.get(
+        fallback_palette = first_palette_by_helix.get(
             axis.get("helix_id"), solid_palette((0.45, 0.55, 0.72))
         )
-        for first_raw, second_raw in zip(samples, samples[1:]):
-            first, second = point(first_raw), point(second_raw)
-            if first is not None and second is not None:
-                lines.append(f"C {nums(*first, *second, 0.72, *palette)}")
+        for first, second, segment in axis_edges(axis):
+            palette = fallback_palette
+            if segment is not None and segment.get("strand_id"):
+                match = next(
+                    (
+                        index
+                        for index, nucleotide in enumerate(nucleotides)
+                        if nucleotide.get("strand_id") == segment.get("strand_id")
+                        and int(nucleotide.get("domain_index") or 0)
+                        == int(segment.get("domain_index") or 0)
+                    ),
+                    None,
+                )
+                if match is not None:
+                    palette = palette_for_index(match)
+            lines.append(f"C {nums(*first, *second, 0.72, *palette)}")
 
     if atomistic_model is None:
         raise HTTPException(500, detail="Atomistic VR snapshot was not built.")
@@ -468,7 +568,9 @@ def _serialize_scene(
     append_atomistic("stick", False, 0.055)
 
     if not any(line.startswith(("P ", "C ", "B ")) for line in lines):
-        raise HTTPException(409, detail="The active design contains no display geometry.")
+        raise HTTPException(
+            409, detail="The active design contains no display geometry."
+        )
     return "\n".join(lines) + "\n"
 
 
@@ -524,8 +626,7 @@ def _build_environment() -> dict[str, str]:
         env.pop(key, None)
     env["PATH"] = "/usr/local/bin:/usr/bin:/bin"
     runtime = (
-        Path.home()
-        / ".local/share/Steam/steamapps/common/SteamVR/steamxr_linux64.json"
+        Path.home() / ".local/share/Steam/steamapps/common/SteamVR/steamxr_linux64.json"
     )
     if runtime.is_file():
         env["XR_RUNTIME_JSON"] = str(runtime)
@@ -563,7 +664,9 @@ def _ensure_viewer_built() -> None:
         check=False,
     )
     if configure.returncode != 0:
-        raise HTTPException(503, detail=f"VR viewer configure failed: {configure.stderr[-1200:]}")
+        raise HTTPException(
+            503, detail=f"VR viewer configure failed: {configure.stderr[-1200:]}"
+        )
     build = subprocess.run(
         ["/usr/bin/cmake", "--build", str(_BUILD_DIR)],
         env=env,
@@ -574,7 +677,9 @@ def _ensure_viewer_built() -> None:
         check=False,
     )
     if build.returncode != 0 or not _VIEWER.is_file():
-        raise HTTPException(503, detail=f"VR viewer build failed: {build.stderr[-1200:]}")
+        raise HTTPException(
+            503, detail=f"VR viewer build failed: {build.stderr[-1200:]}"
+        )
 
 
 def _read_state() -> dict | None:
@@ -672,7 +777,8 @@ def _status_payload() -> dict:
     if not state:
         return {
             "running": False,
-            "available": _VIEWER.is_file() or (_VIEWER_DIR / "CMakeLists.txt").is_file(),
+            "available": _VIEWER.is_file()
+            or (_VIEWER_DIR / "CMakeLists.txt").is_file(),
             "log_path": str(_LOG_PATH),
             **_runtime_payload(),
         }
@@ -747,7 +853,9 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             )
         except OSError as exc:
             scene_path.unlink(missing_ok=True)
-            raise HTTPException(503, detail=f"Could not launch VR viewer: {exc}") from exc
+            raise HTTPException(
+                503, detail=f"Could not launch VR viewer: {exc}"
+            ) from exc
         finally:
             log.close()
 

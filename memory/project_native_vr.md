@@ -73,6 +73,28 @@ Ratify thresholds during Phase 0 research; do not silently turn provisional numb
 - Regression fixtures: compact designs that isolate one visual fact each plus one mixed design that exercises interactions between facts.
 - Rendering evidence: deterministic desktop/VR scene snapshots first; repeatable headset captures or mirrored screenshots for user-visible acceptance.
 
+## Phase 0 findings and acceptance map
+
+| Visual fact | Desktop authority | VR baseline gap | First oracle |
+|---|---|---|---|
+| Same-helix domain gaps | `deformation.deformed_helix_axes[].segments`; `helix_renderer` per-segment shafts | VR consumed the whole `samples` shaft and filled gaps | Segment endpoint/count parity, including negative space |
+| Crossover / forced ligation | `Design.crossovers` / `forced_ligations`; `getCrossHelixConnections`; `unfold_view` arcs | Cross-helix joins were omitted; only inferred same-helix backbone links existed | Explicit endpoint-pair parity; periodic-seam default visibility |
+| Crossover extra bases | `atomistic_helpers.crossover_extra_base_placements` mirrored by `crossover_extra_placement.js`; `crossover_connections.js` | No VR bead/slab/connector projection | Stable crossover id + k; centre/frame/dimension tolerance |
+| Extensions | `_strand_extension_geometry`; `helix_renderer` plus extension modification beads | DNA tail beads partly arrive, but slabs, modification tips, and explicit ownership are incomplete | Extension id + ordered bead/modification parity |
+| Overhangs | Geometry `overhang_id`; `helix_renderer` half/full domain cylinders | Full beads arrive; cylinder view loses ss half-cylinder/duplex distinction | Domain identity, length, half/full primitive and colour parity |
+| Overhang/linker arcs | `overhang_link_arcs.js`; canonical linker topology/bridge geometry | Not serialized | Connection id/type, anchors, ordered bridge primitives |
+| Ends and flexible details | `domain_ends.js`, `flexible_arcs.js`, loop/skip and unligated markers | Missing or filtered from VR | Stable-owner visibility/count plus rendered check |
+
+First implementation slice (pending headset check): Full and cylinder axes now consume authoritative domain segments, and Full projects explicit cross-helix crossover/forced-ligation chords. Targeted route tests lock both behaviors.
+
+## Metrics research decisions
+
+- Runtime cadence is authoritative: OpenXR `xrWaitFrame` supplies `predictedDisplayTime`, `predictedDisplayPeriod`, and `shouldRender`; advance one frame from that shared predicted time and skip heavy rendering when `shouldRender` is false. Do not hard-code 90 Hz even though the original Vive normally uses it. Source: [OpenXR frame synchronization](https://registry.khronos.org/OpenXR/specs/1.0-khr/html/xrspec.html#frame-synchronization).
+- SteamVR's official performance assessment compares rolling average frame time over 32 frames with a runtime-derived target that already includes compositor headroom, and records repeated excursions rather than failing one isolated frame. Phase gates therefore record rolling timing plus burst/p95/p99 evidence and the in-headset assessment; they do not use 11.11 ms as the only pass line. Source: [SteamVR Performance Assessment Overlay](https://partner.steamgames.com/doc/steamhardware/steamframe/compat/perf_criteria).
+- Comfort regression uses a short pre/post VR-specific symptom measure, with symptom-level stop criteria. The original SSQ remains a historical reference, but later validation found VRSQ/CSQ more psychometrically suitable for consumer HMD environments; scores are compared to this user's own baseline, not treated as a population diagnosis. Sources: [Kennedy et al. SSQ, DOI 10.1207/s15327108ijap0303_3](https://doi.org/10.1207/s15327108ijap0303_3), [Sevinc and Berkman 2020](https://doi.org/10.1016/j.apergo.2019.102958), [Josupeit 2023 environment-specific VRSQ analysis](https://doi.org/10.3389/frvir.2023.1291078).
+- Interaction trials collect objective task completion, wrong-control activations, cancel/undo/re-grab counts, then the six NASA-TLX workload dimensions when a workflow is mature enough to compare. Source: [NASA Task Load Index](https://www.nasa.gov/human-systems-integration-division/nasa-task-load-index-tlx/).
+- Projection-space geometry copied from the same authoritative numeric records must agree within `1e-6 nm` and `1e-5°` after serialization, unless a primitive explicitly uses a documented approximation. Rendered-image and human comfort checks are separate gates and do not loosen topology parity.
+
 ## Open questions log
 
 - **Q-VR-001 — Right-grip semantics:** hold-for-expanded, click-to-toggle, or contextual hold? Favor hold while it remains easy to discover and does not conflict with grab.
