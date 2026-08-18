@@ -1,4 +1,4 @@
-"""Stable-identity parser and numeric comparator for native VR scene v6/v7.
+"""Stable-identity parser and numeric comparator for native VR scene v6-v8.
 
 This module deliberately knows nothing about OpenXR or rendering. It compares the
 model-space scene contract before the native viewer normalizes it into metres, making
@@ -7,7 +7,7 @@ topology/geometry regressions deterministic and attributable to a semantic owner
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from math import acos, degrees
 from urllib.parse import unquote
 
@@ -23,6 +23,7 @@ class ScenePrimitive:
     record_type: str
     identity: str
     values: tuple[float, ...]
+    owner_aliases: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,9 +76,9 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
     if (
         len(header) != 4
         or header[0] != "NADOCVR"
-        or header[1] not in {"6", "7"}
+        or header[1] not in {"6", "7", "8"}
     ):
-        raise ValueError("stable comparison requires NADOCVR v6 or v7")
+        raise ValueError("stable comparison requires NADOCVR v6, v7, or v8")
     version = int(header[1])
     result: dict[str, dict[str, ScenePrimitive]] = {}
     active: str | None = None
@@ -96,6 +97,38 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
                     f"line {line_number}: duplicate representation {active}"
                 )
             result[active] = {}
+            continue
+        if fields[0] == "A":
+            if version < 8:
+                raise ValueError(f"line {line_number}: owner aliases require v8")
+            if active is None:
+                raise ValueError(f"line {line_number}: owner aliases before representation")
+            if len(fields) < 3:
+                raise ValueError(f"line {line_number}: malformed owner aliases")
+            identity = fields[1]
+            try:
+                alias_count = int(fields[2])
+            except ValueError as error:
+                raise ValueError(
+                    f"line {line_number}: invalid owner alias count"
+                ) from error
+            aliases = tuple(fields[3:])
+            if alias_count < 1 or alias_count > 8 or len(aliases) != alias_count:
+                raise ValueError(f"line {line_number}: invalid owner alias count")
+            if any(len(alias) > 2048 for alias in aliases):
+                raise ValueError(f"line {line_number}: owner alias is too long")
+            primitive = result[active].get(identity)
+            if primitive is None:
+                raise ValueError(
+                    f"line {line_number}: owner aliases reference unknown identity {identity}"
+                )
+            if primitive.owner_aliases:
+                raise ValueError(
+                    f"line {line_number}: duplicate owner aliases for {identity}"
+                )
+            if len(set(aliases)) != len(aliases):
+                raise ValueError(f"line {line_number}: duplicate owner alias")
+            result[active][identity] = replace(primitive, owner_aliases=aliases)
             continue
         record_type = fields[0]
         if record_type not in _VALUE_COUNTS:
@@ -255,6 +288,15 @@ def compare_scenes(
                 )
                 continue
             matched += 1
+            if expected_primitive.owner_aliases != actual_primitive.owner_aliases:
+                differences.append(
+                    SceneDifference(
+                        representation,
+                        identity,
+                        "owner",
+                        "canonical owner aliases differ",
+                    )
+                )
             differences.extend(
                 SceneDifference(representation, identity, category, detail)
                 for category, detail in _numeric_differences(

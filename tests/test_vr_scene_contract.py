@@ -55,6 +55,37 @@ P owner 2 0 0 .1 1 1 1 1 1 1 1 1 1 1 1 1
     assert scene["expanded/full"]["owner"].values[0] == 2
 
 
+def test_v8_parser_attaches_bounded_owner_aliases_to_existing_primitives() -> None:
+    text = """NADOCVR 8 full strand
+R full
+P owner 0 0 0 .1 1 1 1 1 1 1 1 1 1 1 1 1
+A owner 2 base-owner domain-owner
+"""
+    scene = parse_scene_contract(text)
+    assert scene["full"]["owner"].owner_aliases == (
+        "base-owner",
+        "domain-owner",
+    )
+
+    with pytest.raises(ValueError, match="unknown identity missing"):
+        parse_scene_contract(text.replace("A owner", "A missing"))
+    with pytest.raises(ValueError, match="invalid owner alias count"):
+        parse_scene_contract(text.replace("A owner 2", "A owner 3"))
+
+
+def test_v8_comparator_reports_owner_alias_regressions() -> None:
+    expected = """NADOCVR 8 full strand
+R full
+P owner 0 0 0 .1 1 1 1 1 1 1 1 1 1 1 1 1
+A owner 1 base-owner
+"""
+    actual = expected.replace("base-owner", "domain-owner")
+
+    comparison = compare_scenes(expected, actual)
+
+    assert [difference.category for difference in comparison.differences] == ["owner"]
+
+
 def test_comparator_matches_within_tolerance_and_reports_semantic_owner() -> None:
     expected = FIXTURE.read_text()
     actual = expected.replace(

@@ -147,6 +147,20 @@ void canonicalSelectionFeedbackIsStrictAndSequenced() {
     require(cleared && cleared->ownerTokens.empty());
 }
 
+void canonicalOwnerFallbackUsesFeedbackSpecificityAndSceneOrder() {
+    const std::vector<nadoc_vr::OwnerAliasEntry> entries = {
+        {"domain:first", {"domain", "strand"}},
+        {"base:exact", {"base", "domain", "strand"}},
+        {"domain:second", {"domain", "strand"}},
+    };
+    const auto exact = nadoc_vr::resolveOwnerIdentity(
+        entries, {"missing-primitive", "base", "domain", "strand"});
+    require(exact && *exact == "base:exact");
+    const auto coarse = nadoc_vr::resolveOwnerIdentity(entries, {"domain", "strand"});
+    require(coarse && *coarse == "domain:first");
+    require(!nadoc_vr::resolveOwnerIdentity(entries, {"cluster"}));
+}
+
 }  // namespace
 
 int main() {
@@ -158,4 +172,5 @@ int main() {
     rayPickingHitsVisiblePrimitiveSurfaces();
     rayPickingRejectsMissesAndBehindControllerGeometry();
     canonicalSelectionFeedbackIsStrictAndSequenced();
+    canonicalOwnerFallbackUsesFeedbackSpecificityAndSceneOrder();
 }

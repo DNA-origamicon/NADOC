@@ -117,6 +117,7 @@ struct RepresentationData {
     std::vector<StyledCylinder> cylinders;
     std::vector<StyledCylinder> halfCylinders;
     std::vector<StyledBox> boxes;
+    std::vector<nadoc_vr::OwnerAliasEntry> ownerAliases;
 };
 
 struct SceneData {
@@ -413,7 +414,7 @@ SceneData loadScene(const std::string& path) {
     std::string initialColoring;
     input >> magic >> version >> initialRepresentation >> initialColoring;
     if (magic != "NADOCVR" ||
-        (version != 4 && version != 5 && version != 6 && version != 7)) {
+        (version != 4 && version != 5 && version != 6 && version != 7 && version != 8)) {
         throw std::runtime_error("Unsupported NADOC VR scene format");
     }
 
@@ -424,6 +425,7 @@ SceneData loadScene(const std::string& path) {
     size_t activeIndex = 0;
     size_t legacyIdentityIndex = 0;
     std::array<std::array<std::unordered_set<std::string>, 4>, 2> identities;
+    std::array<std::array<std::unordered_set<std::string>, 4>, 2> aliasIdentities;
     size_t poseIndex = 0;
     auto readIdentity = [&](char recordType) {
         std::string identity;
@@ -461,6 +463,30 @@ SceneData loadScene(const std::string& path) {
             poseIndex = 1;
             scene.hasExpanded = true;
             active = &scene.expandedRepresentations[activeIndex];
+        } else if (type == 'A' && version >= 8) {
+            if (!active) {
+                throw std::runtime_error(
+                    "Owner aliases appear before representation block");
+            }
+            nadoc_vr::OwnerAliasEntry aliases;
+            size_t count = 0;
+            input >> aliases.identity >> count;
+            if (aliases.identity.empty() || count == 0 || count > 8 ||
+                !identities[poseIndex][activeIndex].contains(aliases.identity) ||
+                !aliasIdentities[poseIndex][activeIndex]
+                     .insert(aliases.identity).second) {
+                throw std::runtime_error("Invalid VR primitive owner aliases");
+            }
+            aliases.tokens.resize(count);
+            std::unordered_set<std::string> uniqueTokens;
+            for (std::string& token : aliases.tokens) {
+                input >> token;
+                if (token.empty() || token.size() > 2048 ||
+                    !uniqueTokens.insert(token).second) {
+                    throw std::runtime_error("Invalid VR primitive owner alias token");
+                }
+            }
+            active->ownerAliases.push_back(std::move(aliases));
         } else if (type == 'P') {
             if (!active) throw std::runtime_error("Point appears before representation block");
             StyledPoint point;
@@ -511,6 +537,11 @@ SceneData loadScene(const std::string& path) {
             if (identities[0][index] != identities[1][index]) {
                 throw std::runtime_error(
                     "Expanded VR pose does not match natural primitive identities");
+            }
+            if (scene.representations[index].ownerAliases !=
+                scene.expandedRepresentations[index].ownerAliases) {
+                throw std::runtime_error(
+                    "Expanded VR pose does not match natural owner aliases");
             }
         }
     }
@@ -813,12 +844,39 @@ class GlScene {
     }
 
     [[nodiscard]] std::optional<nadoc_vr::PickHit> anchor(
-        const std::string& identity, const glm::mat4& modelTransform) const {
+        const std::string& identity,
+        const std::vector<std::string>& ownerTokens,
+        const glm::mat4& modelTransform) const {
         if (identity.empty()) return std::nullopt;
         const RepresentationData& source =
             expanded_ && scene_.hasExpanded
                 ? scene_.expandedRepresentations[static_cast<size_t>(representation_)]
                 : scene_.representations[static_cast<size_t>(representation_)];
+        auto containsIdentity = [&](const std::string& candidate) {
+            return std::any_of(source.points.begin(), source.points.end(),
+                               [&](const StyledPoint& value) {
+                                   return value.identity == candidate;
+                               }) ||
+                   std::any_of(source.cylinders.begin(), source.cylinders.end(),
+                               [&](const StyledCylinder& value) {
+                                   return value.identity == candidate;
+                               }) ||
+                   std::any_of(source.halfCylinders.begin(), source.halfCylinders.end(),
+                               [&](const StyledCylinder& value) {
+                                   return value.identity == candidate;
+                               }) ||
+                   std::any_of(source.boxes.begin(), source.boxes.end(),
+                               [&](const StyledBox& value) {
+                                   return value.identity == candidate;
+                               });
+        };
+        std::string resolvedIdentity = identity;
+        if (!containsIdentity(resolvedIdentity)) {
+            const auto fallback = nadoc_vr::resolveOwnerIdentity(
+                source.ownerAliases, ownerTokens);
+            if (!fallback) return std::nullopt;
+            resolvedIdentity = *fallback;
+        }
         const float worldScale = std::max({
             glm::length(glm::vec3(modelTransform[0])),
             glm::length(glm::vec3(modelTransform[1])),
@@ -826,18 +884,20 @@ class GlScene {
         });
         auto result = [&](const glm::vec3& center, float radius) {
             return nadoc_vr::PickHit{
-                identity,
+                resolvedIdentity,
                 std::max(radius * worldScale, 0.009F),
                 glm::vec3(modelTransform * glm::vec4(center, 1.0F)),
             };
         };
         for (const StyledPoint& point : source.points) {
-            if (point.identity == identity) return result(point.position, point.size);
+            if (point.identity == resolvedIdentity) {
+                return result(point.position, point.size);
+            }
         }
         auto cylinderAnchor = [&](const std::vector<StyledCylinder>& cylinders)
             -> std::optional<nadoc_vr::PickHit> {
             for (const StyledCylinder& cylinder : cylinders) {
-                if (cylinder.identity == identity) {
+                if (cylinder.identity == resolvedIdentity) {
                     return result((cylinder.start + cylinder.end) * 0.5F, cylinder.radius);
                 }
             }
@@ -846,7 +906,7 @@ class GlScene {
         if (auto found = cylinderAnchor(source.cylinders)) return found;
         if (auto found = cylinderAnchor(source.halfCylinders)) return found;
         for (const StyledBox& box : source.boxes) {
-            if (box.identity == identity) {
+            if (box.identity == resolvedIdentity) {
                 const float radius = 0.5F * std::min({
                     glm::length(box.axisX),
                     glm::length(box.axisY),
@@ -2002,7 +2062,7 @@ class Viewer {
         }
         if (!menuOpen_) {
             const auto anchor = glScene_->anchor(
-                selectedIdentity_, manipulator_.transform());
+                selectedIdentity_, selectedOwnerTokens_, manipulator_.transform());
             if (anchor) {
                 const float markerRadius = anchor->distance + 0.006F;
                 const glm::vec3 center = anchor->position;

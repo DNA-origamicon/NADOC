@@ -30,4 +30,17 @@ if(BUILD_TESTING)
   target_include_directories(nadoc-vr-interaction-test PRIVATE src)
   target_compile_options(nadoc-vr-interaction-test PRIVATE -Wall -Wextra -Wpedantic)
   add_test(NAME nadoc-vr-interaction COMMAND nadoc-vr-interaction-test)
+  add_test(
+    NAME nadoc-vr-scene-v6
+    COMMAND nadoc-vr-viewer --validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/triangle.nadocvr
+  )
+  add_test(
+    NAME nadoc-vr-scene-v8
+    COMMAND nadoc-vr-viewer --validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/owner_alias_v8.nadocvr
+  )
+  add_test(
+    NAME nadoc-vr-scene-v8-invalid-alias
+    COMMAND nadoc-vr-viewer --validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/owner_alias_v8_invalid.nadocvr
+  )
+  set_tests_properties(nadoc-vr-scene-v8-invalid-alias PROPERTIES WILL_FAIL TRUE)
 endif()

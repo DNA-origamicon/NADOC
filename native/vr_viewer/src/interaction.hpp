@@ -34,6 +34,32 @@ struct SelectionFeedback {
     std::vector<std::string> ownerTokens;
 };
 
+struct OwnerAliasEntry {
+    std::string identity;
+    std::vector<std::string> tokens;
+
+    bool operator==(const OwnerAliasEntry&) const = default;
+};
+
+/** Resolve by feedback specificity, then stable scene order.
+ *
+ * Feedback tokens are ordered exact→coarse. Scene order makes a coarse Domain,
+ * Strand, or Cluster acknowledgement deterministic when many primitives share it.
+ */
+inline std::optional<std::string> resolveOwnerIdentity(
+    const std::vector<OwnerAliasEntry>& entries,
+    const std::vector<std::string>& feedbackTokens) {
+    for (const std::string& token : feedbackTokens) {
+        for (const OwnerAliasEntry& entry : entries) {
+            if (std::find(entry.tokens.begin(), entry.tokens.end(), token)
+                != entry.tokens.end()) {
+                return entry.identity;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 inline std::optional<SelectionFeedback> parseSelectionFeedback(
     const std::string& record, uint64_t previousSequence, uint64_t maximumSequence) {
     std::istringstream fields(record);

@@ -152,10 +152,11 @@ def _base_letters(design, nucleotides: list[dict]) -> dict[int, str]:
     return result
 
 
-def _cluster_color(design, nucleotide: dict) -> tuple[float, float, float] | None:
-    """Resolve the best matching display cluster for one nucleotide."""
+def _display_cluster(design, nucleotide: dict):
+    """Resolve the same best matching cluster used by desktop coloring."""
     candidates: list[tuple[int, int, int, int]] = []
-    for index, cluster in enumerate(design.cluster_transforms):
+    clusters = getattr(design, "cluster_transforms", [])
+    for index, cluster in enumerate(clusters):
         domain_match = any(
             ref.strand_id == nucleotide.get("strand_id")
             and ref.domain_index == int(nucleotide.get("domain_index") or 0)
@@ -175,8 +176,66 @@ def _cluster_color(design, nucleotide: dict) -> tuple[float, float, float] | Non
     if not candidates:
         return None
     index = max(candidates)[-1]
-    cluster = design.cluster_transforms[index]
+    return clusters[index]
+
+
+def _cluster_color(design, nucleotide: dict) -> tuple[float, float, float] | None:
+    """Resolve the best matching display cluster color for one nucleotide."""
+    cluster = _display_cluster(design, nucleotide)
+    if cluster is None:
+        return None
+    index = getattr(design, "cluster_transforms", []).index(cluster)
     return _rgb(cluster.color or STAPLE_PALETTE[index % len(STAPLE_PALETTE)])
+
+
+def _selection_cluster(design, nucleotide: dict):
+    """Mirror the desktop's smallest non-default selectable cluster resolution."""
+    clusters = getattr(design, "cluster_transforms", [])
+    strands = {strand.id: strand for strand in getattr(design, "strands", [])}
+
+    def contains(cluster) -> bool:
+        helix_ids = list(getattr(cluster, "helix_ids", []) or [])
+        if not helix_ids:
+            return False
+        domain_ids = list(getattr(cluster, "domain_ids", []) or [])
+        if not domain_ids:
+            return nucleotide.get("helix_id") in helix_ids
+        domain_keys = {
+            (ref.strand_id, int(ref.domain_index)) for ref in domain_ids
+        }
+        bridge_helices = set()
+        for ref in domain_ids:
+            strand = strands.get(ref.strand_id)
+            if strand is not None and 0 <= ref.domain_index < len(strand.domains):
+                bridge_helices.add(str(strand.domains[ref.domain_index].helix_id))
+        exclusive_helices = set(helix_ids) - bridge_helices
+        return (
+            (
+                nucleotide.get("strand_id"),
+                int(nucleotide.get("domain_index") or 0),
+            )
+            in domain_keys
+            or nucleotide.get("helix_id") in exclusive_helices
+        )
+
+    best = None
+    best_size = float("inf")
+    for cluster in clusters:
+        if getattr(cluster, "is_default", False) or not contains(cluster):
+            continue
+        size = len(getattr(cluster, "helix_ids", []) or [])
+        if size < best_size:
+            best, best_size = cluster, size
+    if best is not None:
+        return best
+    return next(
+        (
+            cluster
+            for cluster in clusters
+            if getattr(cluster, "is_default", False) and contains(cluster)
+        ),
+        next((cluster for cluster in clusters if contains(cluster)), None),
+    )
 
 
 def _nucleotide_colors(design, nucleotides: list[dict], coloring: str) -> list[tuple]:
@@ -265,7 +324,97 @@ def _serialize_scene(
     }
     active_representation = "full"
 
-    def emit(record_type: str, identity: str, *values: float) -> None:
+    def selection_token(*values) -> str:
+        payload = json.dumps(values, ensure_ascii=False, separators=(",", ":"))
+        # Match JavaScript encodeURIComponent, which produces the feedback tokens.
+        return quote(payload, safe="-_.!~*'()")
+
+    def owner_tokens(*refs: tuple) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(selection_token(*ref) for ref in refs if ref))
+
+    def base_key(nucleotide: dict) -> str | None:
+        if (
+            nucleotide.get("crossover_id") is not None
+            and nucleotide.get("extra_base_k") is not None
+        ):
+            return (
+                f"__xb__:{nucleotide['crossover_id']}:"
+                f"{int(nucleotide['extra_base_k'])}"
+            )
+        if (
+            nucleotide.get("extension_id") is not None
+            and nucleotide.get("ext_k") is not None
+            and nucleotide.get("direction")
+        ):
+            return (
+                f"__ext_{nucleotide['extension_id']}:"
+                f"{int(nucleotide['ext_k'])}:{nucleotide['direction']}"
+            )
+        helix_id = nucleotide.get("helix_id")
+        direction = nucleotide.get("direction")
+        if not helix_id or not direction:
+            return None
+        bp_index = int(nucleotide.get("bp_index") or nucleotide.get("ext_k") or 0)
+        copy_k = int(nucleotide.get("copy_k") or 0)
+        key = f"{helix_id}:{bp_index}:{direction}"
+        return f"{key}:{copy_k}" if copy_k else key
+
+    def nucleotide_owner_tokens(nucleotide: dict) -> tuple[str, ...]:
+        refs: list[tuple] = []
+        key = base_key(nucleotide)
+        if key:
+            refs.append(("base", key))
+            if nucleotide.get("is_five_prime") or nucleotide.get("is_three_prime"):
+                refs.append(("end", key))
+        strand_id = nucleotide.get("strand_id")
+        if strand_id:
+            refs.append(
+                ("domain", str(strand_id), int(nucleotide.get("domain_index") or 0))
+            )
+            refs.append(("strand", str(strand_id)))
+        crossover_id = nucleotide.get("crossover_id")
+        if crossover_id is not None:
+            forced = any(
+                str(getattr(connection, "id", "")) == str(crossover_id)
+                for connection in getattr(design, "forced_ligations", [])
+            )
+            refs.append(
+                (
+                    "crossover",
+                    "forced_ligation" if forced else "crossover",
+                    str(crossover_id),
+                )
+            )
+        cluster = _selection_cluster(design, nucleotide)
+        if cluster is not None:
+            refs.append(("cluster", str(cluster.id)))
+        return owner_tokens(*refs)
+
+    def domain_owner_tokens(
+        strand_id: str | None, domain_index: int, helix_id: str | None
+    ) -> tuple[str, ...]:
+        if not strand_id:
+            return ()
+        nucleotide = {
+            "strand_id": str(strand_id),
+            "domain_index": int(domain_index),
+            "helix_id": helix_id or "",
+        }
+        refs: list[tuple] = [
+            ("domain", str(strand_id), int(domain_index)),
+            ("strand", str(strand_id)),
+        ]
+        cluster = _selection_cluster(design, nucleotide)
+        if cluster is not None:
+            refs.append(("cluster", str(cluster.id)))
+        return owner_tokens(*refs)
+
+    def emit(
+        record_type: str,
+        identity: str,
+        *values: float,
+        aliases: tuple[str, ...] = (),
+    ) -> None:
         encoded_identity = quote(str(identity), safe="-_.:~")
         if encoded_identity in primitive_ids[active_representation]:
             raise HTTPException(
@@ -277,6 +426,10 @@ def _serialize_scene(
             )
         primitive_ids[active_representation].add(encoded_identity)
         lines.append(f"{record_type} {encoded_identity} {nums(*values)}")
+        if aliases:
+            if len(aliases) > 8 or any(not token or len(token) > 2048 for token in aliases):
+                raise HTTPException(500, detail="Invalid VR primitive owner aliases.")
+            lines.append(f"A {encoded_identity} {len(aliases)} {' '.join(aliases)}")
 
     def nucleotide_identity(nucleotide: dict) -> str:
         return ":".join(
@@ -327,6 +480,9 @@ def _serialize_scene(
                 palette = palette_for_strand(projection.strand_id)
                 if include_full_bases:
                     for base_index, base in enumerate(projection.bases):
+                        aliases = owner_tokens(
+                            ("base", f"__lnk__{connection.id}:{base_index}:FORWARD")
+                        )
                         bead = rotation @ base.bead_center
                         emit(
                             "P",
@@ -334,6 +490,7 @@ def _serialize_scene(
                             *bead,
                             0.10,
                             *palette,
+                            aliases=aliases,
                         )
                         box(
                             f"linker:{connection.id}:ss:slab:{base_index}",
@@ -342,6 +499,7 @@ def _serialize_scene(
                             rotation @ base.slab_axis_y,
                             rotation @ base.slab_axis_z,
                             palette,
+                            aliases=aliases,
                         )
                 points = [rotation @ value for value in projection.backbone_points]
                 edge_count = max(len(points) - 1, 1)
@@ -358,6 +516,17 @@ def _serialize_scene(
                         *second,
                         0.055,
                         *palette,
+                        aliases=(
+                            owner_tokens(
+                                (
+                                    "base",
+                                    f"__lnk__{connection.id}:"
+                                    f"{nearest_base}:FORWARD",
+                                )
+                            )
+                            if nearest_base >= 0
+                            else ()
+                        ),
                     )
                 continue
 
@@ -404,7 +573,36 @@ def _serialize_scene(
                 },
             )
             palette = (*magenta, *magenta, *(cluster_color or magenta), *magenta)
+
+            def flexible_aliases(base_index: int) -> tuple[str, ...]:
+                anchors = getattr(connection, "segment_bead_keys", [])
+                if not 0 <= base_index < len(anchors):
+                    return ()
+                anchor = anchors[base_index]
+                strand = next(
+                    (item for item in design.strands if item.id == anchor.strand_id),
+                    None,
+                )
+                if (
+                    strand is None
+                    or not 0 <= anchor.domain_index < len(strand.domains)
+                ):
+                    return ()
+                domain = strand.domains[anchor.domain_index]
+                return nucleotide_owner_tokens(
+                    {
+                        "strand_id": anchor.strand_id,
+                        "domain_index": anchor.domain_index,
+                        "helix_id": str(domain.helix_id),
+                        "bp_index": anchor.bp_index,
+                        "direction": str(
+                            getattr(anchor.direction, "value", anchor.direction)
+                        ),
+                    }
+                )
+
             for base_index, base in enumerate(projection.bases):
+                aliases = flexible_aliases(base_index)
                 bead = rotation @ base.bead_center
                 emit(
                     "P",
@@ -412,6 +610,7 @@ def _serialize_scene(
                     *bead,
                     0.12,
                     *palette,
+                    aliases=aliases,
                 )
                 box(
                     f"flex:{projection.connection_id}:slab:{base_index}",
@@ -420,6 +619,7 @@ def _serialize_scene(
                     rotation @ base.slab_axis_y,
                     rotation @ base.slab_axis_z,
                     palette,
+                    aliases=aliases,
                 )
             points = [rotation @ value for value in projection.backbone_points]
             edge_count = max(len(points) - 1, 1)
@@ -436,11 +636,13 @@ def _serialize_scene(
                     *second,
                     0.06,
                     *palette,
+                    aliases=flexible_aliases(nearest_base),
                 )
 
     def append_unligated_warning(crossover_id: str, center: np.ndarray) -> None:
         """Add a physical amber counterpart of desktop's warning sprite."""
         palette = solid_palette(_rgb("#f5a623"))
+        aliases = owner_tokens(("crossover", "crossover", crossover_id))
         top = center + np.array([0.0, 1.8, 0.0])
         left = center + np.array([-1.6, -1.2, 0.0])
         right = center + np.array([1.6, -1.2, 0.0])
@@ -454,6 +656,7 @@ def _serialize_scene(
                 *second,
                 0.12,
                 *palette,
+                aliases=aliases,
             )
         box(
             f"warning:{crossover_id}:stem",
@@ -462,6 +665,7 @@ def _serialize_scene(
             np.array([0.0, 0.90, 0.0]),
             np.array([0.0, 0.0, 0.12]),
             palette,
+            aliases=aliases,
         )
         box(
             f"warning:{crossover_id}:dot",
@@ -470,9 +674,13 @@ def _serialize_scene(
             np.array([0.0, 0.28, 0.0]),
             np.array([0.0, 0.0, 0.14]),
             palette,
+            aliases=aliases,
         )
 
-    lines = [f"NADOCVR 6 {representation} {coloring}", "# stable primitive identities"]
+    lines = [
+        f"NADOCVR 8 {representation} {coloring}",
+        "# stable primitive identities with canonical owner aliases",
+    ]
     by_strand: dict[
         str, list[tuple[dict, np.ndarray, tuple[float, ...], str]]
     ] = {}
@@ -510,8 +718,19 @@ def _serialize_scene(
         axis_y: np.ndarray,
         axis_z: np.ndarray,
         palette: tuple[float, ...],
+        *,
+        aliases: tuple[str, ...] = (),
     ) -> None:
-        emit("B", identity, *center, *axis_x, *axis_y, *axis_z, *palette)
+        emit(
+            "B",
+            identity,
+            *center,
+            *axis_x,
+            *axis_y,
+            *axis_z,
+            *palette,
+            aliases=aliases,
+        )
 
     for index, nucleotide in assigned:
         backbone = point(nucleotide.get("backbone_position"))
@@ -534,6 +753,7 @@ def _serialize_scene(
             )
         ] = (nucleotide, backbone, palette)
         primitive_owner = nucleotide_identity(nucleotide)
+        aliases = nucleotide_owner_tokens(nucleotide)
         if nucleotide.get("is_five_prime"):
             size = np.identity(3) * 0.18
             box(
@@ -541,9 +761,17 @@ def _serialize_scene(
                 backbone,
                 *(rotation @ size[:, column] for column in range(3)),
                 palette,
+                aliases=aliases,
             )
         else:
-            emit("P", f"{primitive_owner}:backbone", *backbone, 0.10, *palette)
+            emit(
+                "P",
+                f"{primitive_owner}:backbone",
+                *backbone,
+                0.10,
+                *palette,
+                aliases=aliases,
+            )
         if strand_id:
             by_strand.setdefault(strand_id, []).append(
                 (nucleotide, backbone, palette, primitive_owner)
@@ -567,6 +795,7 @@ def _serialize_scene(
             *marker_position,
             0.25,
             *solid_palette(marker_color),
+            aliases=nucleotide_owner_tokens(nucleotide),
         )
 
     # Standard Full uses one oriented 0.30 × 0.06 × 0.70 nm base slab per
@@ -641,6 +870,7 @@ def _serialize_scene(
             rotation @ (tangent * 0.06),
             rotation @ (normal * 0.70),
             palette,
+            aliases=nucleotide_owner_tokens(nucleotide),
         )
         z_sign = -1.0 if float(np.dot(raw_bead - center, normal)) < 0 else 1.0
         corner = center + tangential * 0.15 + normal * (z_sign * 0.35)
@@ -651,6 +881,7 @@ def _serialize_scene(
             *(rotation @ corner),
             0.025,
             *palette,
+            aliases=nucleotide_owner_tokens(nucleotide),
         )
 
     # Join sequential backbone beads. Long jumps are omitted so malformed or
@@ -678,6 +909,33 @@ def _serialize_scene(
                 and float(np.linalg.norm(second - first)) <= 5.0
             ):
                 arrow_palette = palette_variant(palette, first_nucleotide, "#0288d1")
+                first_key = base_key(first_nucleotide)
+                second_key = base_key(second_nucleotide)
+                bond_aliases = owner_tokens(
+                    (
+                        "bond",
+                        first_key,
+                        second_key,
+                        (
+                            str(first_nucleotide.get("strand_id"))
+                            if first_nucleotide.get("strand_id")
+                            == second_nucleotide.get("strand_id")
+                            else None
+                        ),
+                    )
+                    if first_key and second_key
+                    else (),
+                    ("base", first_key) if first_key else (),
+                    ("base", second_key) if second_key else (),
+                    (
+                        "strand",
+                        str(first_nucleotide.get("strand_id")),
+                    )
+                    if first_nucleotide.get("strand_id")
+                    == second_nucleotide.get("strand_id")
+                    and first_nucleotide.get("strand_id")
+                    else (),
+                )
                 emit(
                     "C",
                     f"backbone:{first_identity}~{second_identity}",
@@ -685,6 +943,7 @@ def _serialize_scene(
                     *second,
                     0.075,
                     *arrow_palette,
+                    aliases=bond_aliases,
                 )
 
     # The desktop arc layer reads crossover and forced-ligation records directly;
@@ -767,6 +1026,13 @@ def _serialize_scene(
             continue
         first_nucleotide, first, palette = first_entry
         second_nucleotide, second, _ = second_entry
+        crossover_aliases = owner_tokens(
+            (
+                "crossover",
+                "forced_ligation" if connection_kind == "ligation" else "crossover",
+                connection_id,
+            )
+        )
         if extra_bases:
             from backend.core.vr_scene_projection import (
                 crossover_extra_base_full_projections,
@@ -795,7 +1061,26 @@ def _serialize_scene(
                 slab_axis_z = rotation @ projection.slab_axis_z
                 slab_corner = rotation @ projection.slab_corner
                 projection_id = f"{connection_kind}:{connection_id}:extra:{projection.geometric_index}"
-                emit("P", f"{projection_id}:bead", *bead, 0.10, *extra_palette)
+                extra_aliases = owner_tokens(
+                    ("base", f"__xb__:{connection_id}:{projection.sim_k}"),
+                    (
+                        "crossover",
+                        (
+                            "forced_ligation"
+                            if connection_kind == "ligation"
+                            else "crossover"
+                        ),
+                        connection_id,
+                    ),
+                )
+                emit(
+                    "P",
+                    f"{projection_id}:bead",
+                    *bead,
+                    0.10,
+                    *extra_palette,
+                    aliases=extra_aliases,
+                )
                 box(
                     f"{projection_id}:slab",
                     slab_center,
@@ -807,6 +1092,7 @@ def _serialize_scene(
                         *_BASE_COLORS.get(projection.base, slab_palette[3:6]),
                         *slab_palette[6:],
                     ),
+                    aliases=extra_aliases,
                 )
                 emit(
                     "C",
@@ -815,6 +1101,7 @@ def _serialize_scene(
                     *slab_corner,
                     0.025,
                     *slab_palette,
+                    aliases=extra_aliases,
                 )
                 backbone_points.append(bead)
             backbone_points.append(second)
@@ -828,6 +1115,7 @@ def _serialize_scene(
                     *end,
                     0.075,
                     *bead_palette,
+                    aliases=crossover_aliases,
                 )
             continue
         if first_key[0] == second_key[0]:
@@ -840,6 +1128,7 @@ def _serialize_scene(
             *second,
             0.025,
             *arc_palette,
+            aliases=crossover_aliases,
         )
 
     unligated_ids = set(unligated_crossover_ids or [])
@@ -1018,6 +1307,15 @@ def _serialize_scene(
                 *second,
                 0.72,
                 *palette,
+                aliases=(
+                    domain_owner_tokens(
+                        segment.get("strand_id"),
+                        int(segment.get("domain_index") or 0),
+                        str(axis.get("helix_id") or ""),
+                    )
+                    if segment is not None
+                    else ()
+                ),
             )
 
     # deformed_helix_axes intentionally deduplicates coincident domain ranges.
@@ -1061,6 +1359,9 @@ def _serialize_scene(
                     *first,
                     0.72,
                     *palette,
+                    aliases=domain_owner_tokens(
+                        strand.id, domain_index, str(domain.helix_id)
+                    ),
                 )
 
     # A ds linker bridge lives on a synthetic helix intentionally omitted from
@@ -1126,6 +1427,11 @@ def _serialize_scene(
     )
 
     strand_colors = _strand_colors(design)
+    nucleotide_by_base_key = {
+        key: nucleotide
+        for nucleotide in nucleotides
+        if (key := base_key(nucleotide)) is not None
+    }
     atom_positions = [point([atom.x, atom.y, atom.z]) for atom in atomistic_model.atoms]
     atom_palettes = []
     for atom in atomistic_model.atoms:
@@ -1153,6 +1459,61 @@ def _serialize_scene(
         copy_k = int(getattr(atom, "copy_k", 0) or 0)
         return f"{key}:{copy_k}" if copy_k else key
 
+    atom_connection_aliases: dict[frozenset[str], tuple[str, ...]] = {}
+    for connection in getattr(design, "crossovers", []):
+        keys = frozenset(
+            (
+                f"{connection.half_a.helix_id}:{connection.half_a.index}:"
+                f"{getattr(connection.half_a.strand, 'value', connection.half_a.strand)}",
+                f"{connection.half_b.helix_id}:{connection.half_b.index}:"
+                f"{getattr(connection.half_b.strand, 'value', connection.half_b.strand)}",
+            )
+        )
+        atom_connection_aliases[keys] = owner_tokens(
+            ("crossover", "crossover", str(connection.id))
+        )
+    for connection in getattr(design, "forced_ligations", []):
+        keys = frozenset(
+            (
+                f"{connection.three_prime_helix_id}:{connection.three_prime_bp}:"
+                f"{getattr(connection.three_prime_direction, 'value', connection.three_prime_direction)}",
+                f"{connection.five_prime_helix_id}:{connection.five_prime_bp}:"
+                f"{getattr(connection.five_prime_direction, 'value', connection.five_prime_direction)}",
+            )
+        )
+        atom_connection_aliases[keys] = owner_tokens(
+            (
+                "crossover",
+                "forced_ligation",
+                str(
+                    getattr(
+                        connection,
+                        "id",
+                        f"{connection.three_prime_helix_id}:"
+                        f"{connection.three_prime_bp}:"
+                        f"{connection.five_prime_helix_id}:"
+                        f"{connection.five_prime_bp}",
+                    )
+                ),
+            )
+        )
+
+    def atom_crossover_aliases(atom) -> tuple[str, ...]:
+        crossover_id = getattr(atom, "crossover_id", None)
+        if crossover_id is None:
+            return ()
+        forced = any(
+            str(getattr(connection, "id", "")) == str(crossover_id)
+            for connection in getattr(design, "forced_ligations", [])
+        )
+        return owner_tokens(
+            (
+                "crossover",
+                "forced_ligation" if forced else "crossover",
+                str(crossover_id),
+            )
+        )
+
     def append_atomistic(name: str, include_points: bool, radius: float) -> None:
         nonlocal active_representation
         lines.append(f"R {name}")
@@ -1163,12 +1524,20 @@ def _serialize_scene(
             ):
                 if position is not None:
                     radius = VDW_RADIUS.get(atom.element, DEFAULT_VDW_RADIUS) * 0.55
+                    key = atom_base_key(atom)
+                    nucleotide = nucleotide_by_base_key.get(key)
+                    aliases = (
+                        nucleotide_owner_tokens(nucleotide)
+                        if nucleotide is not None
+                        else owner_tokens(("base", key))
+                    )
                     emit(
                         "P",
-                        f"atom:{atom_index}:base:{atom_base_key(atom)}:{atom.element}",
+                        f"atom:{atom_index}:base:{key}:{atom.element}",
                         *position,
                         radius,
                         *palette,
+                        aliases=aliases,
                     )
         for first_index, second_index in atomistic_model.bonds:
             first, second = atom_positions[first_index], atom_positions[second_index]
@@ -1177,6 +1546,41 @@ def _serialize_scene(
             palette = tuple(
                 (a + b) * 0.5
                 for a, b in zip(atom_palettes[first_index], atom_palettes[second_index])
+            )
+            first_atom = atomistic_model.atoms[first_index]
+            second_atom = atomistic_model.atoms[second_index]
+            first_key = atom_base_key(first_atom)
+            second_key = atom_base_key(second_atom)
+            common_strand = (
+                str(first_atom.strand_id)
+                if first_atom.strand_id == second_atom.strand_id
+                and first_atom.strand_id
+                else None
+            )
+            bond_aliases = owner_tokens(
+                (
+                    "bond",
+                    first_key,
+                    second_key,
+                    common_strand,
+                )
+                if first_key != second_key
+                else (),
+                ("base", first_key),
+                ("base", second_key),
+                ("strand", common_strand) if common_strand else (),
+            )
+            bond_aliases = tuple(
+                dict.fromkeys(
+                    (
+                        *bond_aliases,
+                        *atom_connection_aliases.get(
+                            frozenset((first_key, second_key)), ()
+                        ),
+                        *atom_crossover_aliases(first_atom),
+                        *atom_crossover_aliases(second_atom),
+                    )
+                )
             )
             emit(
                 "C",
@@ -1188,6 +1592,7 @@ def _serialize_scene(
                 *second,
                 radius,
                 *palette,
+                aliases=bond_aliases,
             )
         append_axes(0.05)
 
@@ -1298,12 +1703,12 @@ def _expanded_scene_inputs(design, nucleotides, axes, atomistic_model):
 
 
 def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
-    """Combine two identity-equivalent v6 scenes into the native v7 contract."""
+    """Combine two identity/alias-equivalent v8 scenes into one paired contract."""
     natural_lines = natural_text.splitlines()
     expanded_lines = expanded_text.splitlines()
     natural_header = natural_lines[0].split()
     expanded_header = expanded_lines[0].split()
-    if natural_header != expanded_header or natural_header[0:2] != ["NADOCVR", "6"]:
+    if natural_header != expanded_header or natural_header[0:2] != ["NADOCVR", "8"]:
         raise HTTPException(500, detail="Expanded VR scene headers do not match.")
 
     def blocks(lines: list[str]) -> dict[str, list[str]]:
@@ -1324,8 +1729,8 @@ def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
     if set(natural_blocks) != set(expanded_blocks):
         raise HTTPException(500, detail="Expanded VR representations do not match.")
     output = [
-        f"NADOCVR 7 {natural_header[2]} {natural_header[3]}",
-        "# natural and expanded primitive poses share stable identities",
+        f"NADOCVR 8 {natural_header[2]} {natural_header[3]}",
+        "# natural and expanded poses share primitive identities and owner aliases",
     ]
     for representation, natural_records in natural_blocks.items():
         expanded_records = expanded_blocks[representation]
@@ -1335,6 +1740,13 @@ def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
             raise HTTPException(
                 500,
                 detail=f"Expanded VR primitive identities differ in {representation}.",
+            )
+        natural_aliases = [line for line in natural_records if line.startswith("A ")]
+        expanded_aliases = [line for line in expanded_records if line.startswith("A ")]
+        if natural_aliases != expanded_aliases:
+            raise HTTPException(
+                500,
+                detail=f"Expanded VR primitive owner aliases differ in {representation}.",
             )
         output.append(f"R {representation}")
         output.extend(natural_records)

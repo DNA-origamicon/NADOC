@@ -1,6 +1,8 @@
 """Focused checks for the local native-OpenXR bridge."""
 
+import json
 from types import SimpleNamespace
+from urllib.parse import quote
 
 import numpy as np
 import pytest
@@ -16,15 +18,24 @@ from backend.api.routes_vr import (
     _expanded_helix_offsets,
     _expanded_scene_inputs,
     _require_local,
+    _selection_cluster,
     _serialize_scene,
     _write_feedback,
 )
+from backend.core.vr_scene_contract import parse_scene_contract
 
 
 _BASE_COLORS_FOR_TEST = {
     "A": (0x44 / 255, 0xDD / 255, 0x88 / 255),
     "T": (1.0, 0x55 / 255, 0x55 / 255),
 }
+
+
+def _owner_token(*values) -> str:
+    return quote(
+        json.dumps(values, ensure_ascii=False, separators=(",", ":")),
+        safe="-_.!~*'()",
+    )
 
 
 def _request(host: str, origin: str | None = None) -> Request:
@@ -104,6 +115,32 @@ def test_expanded_quick_view_matches_desktop_centroid_spacing() -> None:
     np.testing.assert_allclose(offsets["right"], [expected, 0, 0])
 
 
+def test_vr_owner_aliases_use_desktop_smallest_selectable_cluster_rule() -> None:
+    large = SimpleNamespace(
+        id="large",
+        is_default=False,
+        helix_ids=["h1", "h2"],
+        domain_ids=[],
+    )
+    small = SimpleNamespace(
+        id="small",
+        is_default=False,
+        helix_ids=["h1"],
+        domain_ids=[],
+    )
+    default = SimpleNamespace(
+        id="default",
+        is_default=True,
+        helix_ids=["h1", "h2", "h3"],
+        domain_ids=[],
+    )
+    design = SimpleNamespace(
+        strands=[], cluster_transforms=[large, default, small]
+    )
+
+    assert _selection_cluster(design, {"helix_id": "h1"}).id == "small"
+
+
 def test_expanded_scene_translates_owners_and_interpolates_crossover_atoms() -> None:
     point = lambda x, y, z: SimpleNamespace(x=x, y=y, z=z)
     design = SimpleNamespace(
@@ -139,22 +176,27 @@ def test_expanded_scene_translates_owners_and_interpolates_crossover_atoms() -> 
     assert atom.x == 0.0  # source inputs remain immutable
 
 
-def test_v7_bundle_pairs_natural_and_expanded_primitives_by_identity() -> None:
-    natural = """NADOCVR 6 full strand
+def test_v8_bundle_pairs_natural_and_expanded_primitives_by_identity_and_owner() -> None:
+    natural = """NADOCVR 8 full strand
 R full
 P owner 0 0 0 .1 1 1 1 1 1 1 1 1 1 1 1 1
+A owner 1 base-owner
 """
     expanded = natural.replace("P owner 0 0 0", "P owner 2 0 0")
 
     bundled = _bundle_expanded_scene(natural, expanded)
 
-    assert bundled.startswith("NADOCVR 7 full strand\n")
+    assert bundled.startswith("NADOCVR 8 full strand\n")
     assert "R full\nP owner 0 0 0" in bundled
     assert "E full\nP owner 2 0 0" in bundled
 
     mismatched = expanded.replace("owner", "different")
     with pytest.raises(HTTPException, match="identities differ"):
         _bundle_expanded_scene(natural, mismatched)
+
+    mismatched_alias = expanded.replace("base-owner", "different-owner")
+    with pytest.raises(HTTPException, match="owner aliases differ"):
+        _bundle_expanded_scene(natural, mismatched_alias)
 
 
 def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -> None:
@@ -322,7 +364,7 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
     sections = _scene_sections(text)
     identities = _scene_identities(text)
 
-    assert text.startswith("NADOCVR 6 full strand\n")
+    assert text.startswith("NADOCVR 8 full strand\n")
     assert set(sections) == {"full", "cylinders", "ballstick", "stick"}
     assert all(len(values) == len(set(values)) for values in identities.values())
     assert "nuc:s1:0:h1:1:FORWARD:0:backbone" in identities["full"]
@@ -357,6 +399,119 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
     assert len(first_bond) == 20
     first_atom = next(record for record in sections["ballstick"] if record[0] == "P")
     assert float(first_atom[4]) == pytest.approx(0.17 * 0.55)
+
+
+def test_v8_owner_aliases_bridge_base_domain_strand_and_cluster_representations() -> None:
+    strand_id = "strand: one"
+    helix_id = "helix: one"
+    cluster_id = "cluster one"
+    domain = SimpleNamespace(
+        helix_id=helix_id,
+        start_bp=0,
+        end_bp=0,
+        direction="FORWARD",
+    )
+    design = SimpleNamespace(
+        strands=[
+            SimpleNamespace(
+                id=strand_id,
+                is_scaffold=False,
+                color="#3366cc",
+                sequence="A",
+                domains=[domain],
+            )
+        ],
+        cluster_transforms=[
+            SimpleNamespace(
+                id=cluster_id,
+                domain_ids=[
+                    SimpleNamespace(strand_id=strand_id, domain_index=0)
+                ],
+                helix_ids=[helix_id],
+                auto_created=False,
+                color=None,
+            )
+        ],
+    )
+    nucleotide = {
+        "strand_id": strand_id,
+        "domain_index": 0,
+        "helix_id": helix_id,
+        "bp_index": 0,
+        "direction": "FORWARD",
+        "is_five_prime": True,
+        "backbone_position": [0, 0, 0],
+        "base_position": [0.2, 0, 0],
+        "base_normal": [1, 0, 0],
+        "axis_tangent": [0, 0, 1],
+    }
+    atom = SimpleNamespace(
+        x=0.0,
+        y=0.0,
+        z=0.0,
+        strand_id=strand_id,
+        helix_id=helix_id,
+        bp_index=0,
+        direction="FORWARD",
+        residue="DA",
+        element="C",
+    )
+    text = _serialize_scene(
+        design,
+        [nucleotide],
+        [
+            {
+                "helix_id": helix_id,
+                "segments": [
+                    {
+                        "start": [0, 0, -0.5],
+                        "end": [0, 0, 0.5],
+                        "strand_id": strand_id,
+                        "domain_index": 0,
+                        "bp_lo": 0,
+                        "bp_hi": 0,
+                    }
+                ],
+            }
+        ],
+        atomistic_model=SimpleNamespace(atoms=[atom], bonds=[]),
+    )
+    scene = parse_scene_contract(text)
+    full_backbone = next(
+        primitive
+        for primitive in scene["full"].values()
+        if primitive.identity.endswith(":backbone")
+    )
+    atom_sphere = next(iter(scene["ballstick"].values()))
+    coarse_domain = next(
+        primitive
+        for primitive in scene["cylinders"].values()
+        if primitive.identity.endswith(":coarse")
+    )
+    base = _owner_token("base", f"{helix_id}:0:FORWARD")
+    end = _owner_token("end", f"{helix_id}:0:FORWARD")
+    domain_owner = _owner_token("domain", strand_id, 0)
+    strand_owner = _owner_token("strand", strand_id)
+    cluster_owner = _owner_token("cluster", cluster_id)
+
+    assert full_backbone.owner_aliases == (
+        base,
+        end,
+        domain_owner,
+        strand_owner,
+        cluster_owner,
+    )
+    assert set(atom_sphere.owner_aliases) >= {
+        base,
+        domain_owner,
+        strand_owner,
+        cluster_owner,
+    }
+    assert coarse_domain.owner_aliases == (
+        domain_owner,
+        strand_owner,
+        cluster_owner,
+    )
 
 
 def test_full_slabs_share_the_pair_plane_and_contact_the_backbone() -> None:
@@ -532,11 +687,28 @@ def test_full_snapshot_projects_explicit_cross_helix_connections() -> None:
                 "axis_tangent": [0, 0, 1],
             }
         )
+    atoms = [
+        SimpleNamespace(
+            x=x,
+            y=0.0,
+            z=0.0,
+            strand_id="s1",
+            helix_id=helix_id,
+            bp_index=0,
+            direction=direction,
+            residue="DA",
+            element="C",
+        )
+        for helix_id, direction, x in (
+            ("h1", "FORWARD", 0.0),
+            ("h2", "REVERSE", 2.0),
+        )
+    ]
     text = _serialize_scene(
         design,
         nucleotides,
         [],
-        atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
+        atomistic_model=SimpleNamespace(atoms=atoms, bonds=[(0, 1)]),
     )
     sections = _scene_sections(text)
     arcs = [
@@ -556,6 +728,11 @@ def test_full_snapshot_projects_explicit_cross_helix_connections() -> None:
         (0.0, 0.0, 0.0, 4.0, 0.0, 0.0),
     ]
     assert sections["cylinders"] == []
+    stick = parse_scene_contract(text)["stick"]
+    atom_bond = next(iter(stick.values()))
+    assert _owner_token("crossover", "crossover", "xo-visible") in (
+        atom_bond.owner_aliases
+    )
 
 
 def test_full_snapshot_projects_crossover_extra_base_beads_slabs_and_chain() -> None:
@@ -631,6 +808,12 @@ def test_full_snapshot_projects_crossover_extra_base_beads_slabs_and_chain() -> 
         > 1.0
         for record in full
     )
+    scene = parse_scene_contract(text)["full"]
+    first_insert = scene["crossover:xo-extra:extra:0:bead"]
+    assert set(first_insert.owner_aliases) == {
+        _owner_token("base", "__xb__:xo-extra:0"),
+        _owner_token("crossover", "crossover", "xo-extra"),
+    }
 
 
 def test_full_snapshot_uses_desktop_extension_modification_marker() -> None:

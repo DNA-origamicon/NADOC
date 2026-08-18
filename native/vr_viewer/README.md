@@ -63,6 +63,10 @@ Controls on the original HTC Vive wands:
   cue does not change NADOC selection. After a trackpad click is accepted by the
   desktop selection controller, a larger green marker remains on the selected owner;
   rejected target/level combinations never produce a false green acknowledgement.
+  When a representation has no exact copy of the clicked primitive, the marker uses
+  the browser-confirmed canonical owner hierarchy (including exact End, Bond, or
+  Crossover aliases where available, then Base, Domain, Strand, and Cluster), so
+  switching representations does not silently lose canonical selection.
   Ordinary backbone cylinders and inter-residue atomistic bonds resolve through the
   same canonical bond ownership as desktop connector picks. Intra-residue atom bonds
   and sampled flexible/linker curve edges resolve to their owning or nearest Base;
@@ -80,10 +84,12 @@ both eyes. Full representation geometry mirrors the editor's physical display
 primitives: 0.10 nm backbone beads, 0.18 nm 5′ cubes, oriented
 0.30 × 0.06 × 0.70 nm base slabs, 0.025 nm slab connectors, and 0.075 nm
 same-helix strand connectors.
-Scene format v7 pairs natural and Expanded Quick View poses by the URL-safe
-semantic identities introduced in v6. It rejects duplicate or mismatched identities,
-allowing numeric regression diffs and future controller picking to address geometry
-without relying on draw order. The reader remains compatible with v4/v5/v6 snapshots.
+Scene format v8 pairs natural and Expanded Quick View poses by the URL-safe
+semantic identities introduced in v6 and explicitly attaches bounded canonical-owner
+aliases to selectable primitives. It rejects duplicate, unknown, or pose-mismatched
+identities and aliases, allowing numeric regression diffs and controller picking to
+address geometry without relying on draw order or parsing delimiter-sensitive IDs.
+The reader remains compatible with v4/v5/v6/v7 snapshots.
 The snapshot also carries explicit crossover/forced-ligation links,
 canonical crossover-insert bead/slab chains, 0.25 nm chemistry-colored extension
 markers, per-domain axis gaps, and closed half-cylinder overhang domains in the
