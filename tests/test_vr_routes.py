@@ -38,6 +38,7 @@ def _request(host: str, origin: str | None = None) -> Request:
 def _scene_sections(text: str) -> dict[str, list[list[str]]]:
     sections: dict[str, list[list[str]]] = {}
     active = ""
+    version = int(text.splitlines()[0].split()[1])
     for line in text.splitlines():
         record = line.split()
         if not record or record[0] == "#":
@@ -46,8 +47,25 @@ def _scene_sections(text: str) -> dict[str, list[list[str]]]:
             active = record[1]
             sections[active] = []
         elif record[0] in {"P", "C", "H", "B"}:
+            if version >= 6:
+                record = [record[0], *record[2:]]
             sections[active].append(record)
     return sections
+
+
+def _scene_identities(text: str) -> dict[str, list[str]]:
+    identities: dict[str, list[str]] = {}
+    active = ""
+    for line in text.splitlines():
+        record = line.split()
+        if not record or record[0] == "#":
+            continue
+        if record[0] == "R":
+            active = record[1]
+            identities[active] = []
+        elif record[0] in {"P", "C", "H", "B"}:
+            identities[active].append(record[1])
+    return identities
 
 
 def test_native_vr_routes_are_workstation_only() -> None:
@@ -154,9 +172,15 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
         atomistic_model=SimpleNamespace(atoms=atoms, bonds=[(0, 1)]),
     )
     sections = _scene_sections(text)
+    identities = _scene_identities(text)
 
-    assert text.startswith("NADOCVR 5 full strand\n")
+    assert text.startswith("NADOCVR 6 full strand\n")
     assert set(sections) == {"full", "cylinders", "ballstick", "stick"}
+    assert all(len(values) == len(set(values)) for values in identities.values())
+    assert "nuc:s1:0:h1:1:FORWARD:0:backbone" in identities["full"]
+    assert any(
+        identity.startswith("atom:0:s1:h1:0:C") for identity in identities["ballstick"]
+    )
     assert sum(record[0] == "P" for record in sections["full"]) == 1
     assert sum(record[0] == "B" for record in sections["full"]) == 3
     assert sum(record[0] == "C" for record in sections["full"]) == 4
@@ -225,7 +249,12 @@ def test_full_slabs_share_the_pair_plane_and_contact_the_backbone() -> None:
         [],
         atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
     )
-    boxes = [line.split() for line in text.splitlines() if line.startswith("B ")]
+    boxes = [
+        [record[0], *record[2:]]
+        for line in text.splitlines()
+        if line.startswith("B ")
+        for record in [line.split()]
+    ]
     assert len(boxes) == 2
     centers = np.asarray([[float(value) for value in record[1:4]] for record in boxes])
 

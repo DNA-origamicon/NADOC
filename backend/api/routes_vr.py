@@ -17,7 +17,7 @@ import tempfile
 import threading
 import time
 from typing import Literal, Optional
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import numpy as np
 from fastapi import APIRouter, HTTPException, Request
@@ -244,6 +244,38 @@ def _serialize_scene(
     def solid_palette(color: tuple[float, float, float]) -> tuple[float, ...]:
         return color * 4
 
+    primitive_ids: dict[str, set[str]] = {
+        name: set() for name in ("full", "cylinders", "ballstick", "stick")
+    }
+    active_representation = "full"
+
+    def emit(record_type: str, identity: str, *values: float) -> None:
+        encoded_identity = quote(str(identity), safe="-_.:~")
+        if encoded_identity in primitive_ids[active_representation]:
+            raise HTTPException(
+                500,
+                detail=(
+                    f"Duplicate VR primitive identity in {active_representation}: "
+                    f"{identity}"
+                ),
+            )
+        primitive_ids[active_representation].add(encoded_identity)
+        lines.append(f"{record_type} {encoded_identity} {nums(*values)}")
+
+    def nucleotide_identity(nucleotide: dict) -> str:
+        return ":".join(
+            str(value)
+            for value in (
+                "nuc",
+                nucleotide.get("strand_id") or "_",
+                int(nucleotide.get("domain_index") or 0),
+                nucleotide.get("helix_id") or "_",
+                int(nucleotide.get("bp_index") or 0),
+                nucleotide.get("direction") or "_",
+                int(nucleotide.get("copy_k") or nucleotide.get("ext_k") or 0),
+            )
+        )
+
     def palette_for_strand(strand_id: str) -> tuple[float, ...]:
         match = next(
             (
@@ -278,10 +310,17 @@ def _serialize_scene(
                     continue
                 palette = palette_for_strand(projection.strand_id)
                 if include_full_bases:
-                    for base in projection.bases:
+                    for base_index, base in enumerate(projection.bases):
                         bead = rotation @ base.bead_center
-                        lines.append(f"P {nums(*bead, 0.10, *palette)}")
+                        emit(
+                            "P",
+                            f"linker:{connection.id}:ss:bead:{base_index}",
+                            *bead,
+                            0.10,
+                            *palette,
+                        )
                         box(
+                            f"linker:{connection.id}:ss:slab:{base_index}",
                             rotation @ base.slab_center,
                             rotation @ base.slab_axis_x,
                             rotation @ base.slab_axis_y,
@@ -289,15 +328,30 @@ def _serialize_scene(
                             palette,
                         )
                 points = [rotation @ value for value in projection.backbone_points]
-                for first, second in zip(points, points[1:]):
-                    lines.append(f"C {nums(*first, *second, 0.055, *palette)}")
+                for edge_index, (first, second) in enumerate(zip(points, points[1:])):
+                    emit(
+                        "C",
+                        f"linker:{connection.id}:ss:backbone:{edge_index}",
+                        *first,
+                        *second,
+                        0.055,
+                        *palette,
+                    )
                 continue
 
             for connector in ds_linker_connector_projections(nucleotides, connection):
                 palette = palette_for_strand(connector.strand_id)
                 points = [rotation @ value for value in connector.points]
-                for first, second in zip(points, points[1:]):
-                    lines.append(f"C {nums(*first, *second, 0.065, *palette)}")
+                side = connector.strand_id.rsplit("__", 1)[-1]
+                for edge_index, (first, second) in enumerate(zip(points, points[1:])):
+                    emit(
+                        "C",
+                        f"linker:{connection.id}:ds:{side}:connector:{edge_index}",
+                        *first,
+                        *second,
+                        0.065,
+                        *palette,
+                    )
 
     def append_flexible_geometry() -> None:
         """Append Full-only fixed-contour flexible ssDNA runs."""
@@ -328,10 +382,17 @@ def _serialize_scene(
                 },
             )
             palette = (*magenta, *magenta, *(cluster_color or magenta), *magenta)
-            for base in projection.bases:
+            for base_index, base in enumerate(projection.bases):
                 bead = rotation @ base.bead_center
-                lines.append(f"P {nums(*bead, 0.12, *palette)}")
+                emit(
+                    "P",
+                    f"flex:{projection.connection_id}:bead:{base_index}",
+                    *bead,
+                    0.12,
+                    *palette,
+                )
                 box(
+                    f"flex:{projection.connection_id}:slab:{base_index}",
                     rotation @ base.slab_center,
                     rotation @ base.slab_axis_x,
                     rotation @ base.slab_axis_y,
@@ -339,18 +400,35 @@ def _serialize_scene(
                     palette,
                 )
             points = [rotation @ value for value in projection.backbone_points]
-            for first, second in zip(points, points[1:]):
-                lines.append(f"C {nums(*first, *second, 0.06, *palette)}")
+            for edge_index, (first, second) in enumerate(zip(points, points[1:])):
+                emit(
+                    "C",
+                    f"flex:{projection.connection_id}:backbone:{edge_index}",
+                    *first,
+                    *second,
+                    0.06,
+                    *palette,
+                )
 
-    def append_unligated_warning(center: np.ndarray) -> None:
+    def append_unligated_warning(crossover_id: str, center: np.ndarray) -> None:
         """Add a physical amber counterpart of desktop's warning sprite."""
         palette = solid_palette(_rgb("#f5a623"))
         top = center + np.array([0.0, 1.8, 0.0])
         left = center + np.array([-1.6, -1.2, 0.0])
         right = center + np.array([1.6, -1.2, 0.0])
-        for first, second in ((top, left), (left, right), (right, top)):
-            lines.append(f"C {nums(*first, *second, 0.12, *palette)}")
+        for edge_index, (first, second) in enumerate(
+            ((top, left), (left, right), (right, top))
+        ):
+            emit(
+                "C",
+                f"warning:{crossover_id}:outline:{edge_index}",
+                *first,
+                *second,
+                0.12,
+                *palette,
+            )
         box(
+            f"warning:{crossover_id}:stem",
             center + np.array([0.0, 0.25, 0.0]),
             np.array([0.24, 0.0, 0.0]),
             np.array([0.0, 0.90, 0.0]),
@@ -358,6 +436,7 @@ def _serialize_scene(
             palette,
         )
         box(
+            f"warning:{crossover_id}:dot",
             center + np.array([0.0, -0.72, 0.0]),
             np.array([0.28, 0.0, 0.0]),
             np.array([0.0, 0.28, 0.0]),
@@ -365,8 +444,10 @@ def _serialize_scene(
             palette,
         )
 
-    lines = [f"NADOCVR 5 {representation} {coloring}", "# preloaded VR representations"]
-    by_strand: dict[str, list[tuple[dict, np.ndarray, tuple[float, ...]]]] = {}
+    lines = [f"NADOCVR 6 {representation} {coloring}", "# stable primitive identities"]
+    by_strand: dict[
+        str, list[tuple[dict, np.ndarray, tuple[float, ...], str]]
+    ] = {}
     identity_palettes: dict[tuple, tuple[float, ...]] = {}
     lines.append("R full")
     assigned = [
@@ -395,13 +476,14 @@ def _serialize_scene(
         return (*_rgb(scaffold_hex), *palette[3:])
 
     def box(
+        identity: str,
         center: np.ndarray,
         axis_x: np.ndarray,
         axis_y: np.ndarray,
         axis_z: np.ndarray,
         palette: tuple[float, ...],
     ) -> None:
-        lines.append(f"B {nums(*center, *axis_x, *axis_y, *axis_z, *palette)}")
+        emit("B", identity, *center, *axis_x, *axis_y, *axis_z, *palette)
 
     for index, nucleotide in assigned:
         backbone = point(nucleotide.get("backbone_position"))
@@ -423,13 +505,21 @@ def _serialize_scene(
                 str(nucleotide.get("direction") or ""),
             )
         ] = (nucleotide, backbone, palette)
+        primitive_owner = nucleotide_identity(nucleotide)
         if nucleotide.get("is_five_prime"):
             size = np.identity(3) * 0.18
-            box(backbone, *(rotation @ size[:, column] for column in range(3)), palette)
+            box(
+                f"{primitive_owner}:backbone",
+                backbone,
+                *(rotation @ size[:, column] for column in range(3)),
+                palette,
+            )
         else:
-            lines.append(f"P {nums(*backbone, 0.10, *palette)}")
+            emit("P", f"{primitive_owner}:backbone", *backbone, 0.10, *palette)
         if strand_id:
-            by_strand.setdefault(strand_id, []).append((nucleotide, backbone, palette))
+            by_strand.setdefault(strand_id, []).append(
+                (nucleotide, backbone, palette, primitive_owner)
+            )
 
     # Modification-only extension tips are intentionally not ordinary DNA beads:
     # desktop Full renders them as larger, chemistry-colored marker spheres and
@@ -443,7 +533,13 @@ def _serialize_scene(
         marker_color = _rgb(
             MODIFICATION_COLORS.get(nucleotide.get("modification"), "#ffffff")
         )
-        lines.append(f"P {nums(*marker_position, 0.25, *solid_palette(marker_color))}")
+        emit(
+            "P",
+            f"{nucleotide_identity(nucleotide)}:modification",
+            *marker_position,
+            0.25,
+            *solid_palette(marker_color),
+        )
 
     # Standard Full uses one oriented 0.30 × 0.06 × 0.70 nm base slab per
     # nucleotide. Paired slabs share their mean axial plane and are shifted
@@ -511,6 +607,7 @@ def _serialize_scene(
 
         palette = palette_variant(palette_for_index(index), nucleotide, "#0277bd")
         box(
+            f"{nucleotide_identity(nucleotide)}:slab",
             rotation @ center,
             rotation @ (tangential * 0.30),
             rotation @ (tangent * 0.06),
@@ -519,8 +616,13 @@ def _serialize_scene(
         )
         z_sign = -1.0 if float(np.dot(raw_bead - center, normal)) < 0 else 1.0
         corner = center + tangential * 0.15 + normal * (z_sign * 0.35)
-        lines.append(
-            f"C {nums(*(rotation @ raw_bead), *(rotation @ corner), 0.025, *palette)}"
+        emit(
+            "C",
+            f"{nucleotide_identity(nucleotide)}:slab-connector",
+            *(rotation @ raw_bead),
+            *(rotation @ corner),
+            0.025,
+            *palette,
         )
 
     # Join sequential backbone beads. Long jumps are omitted so malformed or
@@ -535,7 +637,12 @@ def _serialize_scene(
                 int(item[0].get("copy_k") or item[0].get("ext_k") or 0),
             )
         )
-        for (first_nucleotide, first, palette), (second_nucleotide, second, _) in zip(
+        for (
+            first_nucleotide,
+            first,
+            palette,
+            first_identity,
+        ), (second_nucleotide, second, _, second_identity) in zip(
             strand_nucleotides, strand_nucleotides[1:]
         ):
             if (
@@ -543,7 +650,14 @@ def _serialize_scene(
                 and float(np.linalg.norm(second - first)) <= 5.0
             ):
                 arrow_palette = palette_variant(palette, first_nucleotide, "#0288d1")
-                lines.append(f"C {nums(*first, *second, 0.075, *arrow_palette)}")
+                emit(
+                    "C",
+                    f"backbone:{first_identity}~{second_identity}",
+                    *first,
+                    *second,
+                    0.075,
+                    *arrow_palette,
+                )
 
     # The desktop arc layer reads crossover and forced-ligation records directly;
     # it never infers their endpoints from proximity. Mirror that contract here so
@@ -567,6 +681,8 @@ def _serialize_scene(
 
     explicit_connections = [
         (
+            "crossover",
+            str(getattr(xo, "id", f"{xo.half_a.helix_id}:{xo.half_a.index}")),
             (
                 str(xo.half_a.helix_id),
                 int(xo.half_a.index),
@@ -584,6 +700,14 @@ def _serialize_scene(
     ]
     explicit_connections.extend(
         (
+            "ligation",
+            str(
+                getattr(
+                    fl,
+                    "id",
+                    f"{fl.three_prime_helix_id}:{fl.three_prime_bp}:{fl.five_prime_helix_id}:{fl.five_prime_bp}",
+                )
+            ),
             (
                 str(fl.three_prime_helix_id),
                 int(fl.three_prime_bp),
@@ -599,7 +723,14 @@ def _serialize_scene(
         )
         for fl in getattr(design, "forced_ligations", [])
     )
-    for first_key, second_key, extra_bases, hidden_periodic in explicit_connections:
+    for (
+        connection_kind,
+        connection_id,
+        first_key,
+        second_key,
+        extra_bases,
+        hidden_periodic,
+    ) in explicit_connections:
         if hidden_periodic:
             continue
         first_entry = site_entries.get(first_key)
@@ -635,8 +766,10 @@ def _serialize_scene(
                 slab_axis_y = rotation @ projection.slab_axis_y
                 slab_axis_z = rotation @ projection.slab_axis_z
                 slab_corner = rotation @ projection.slab_corner
-                lines.append(f"P {nums(*bead, 0.10, *extra_palette)}")
+                projection_id = f"{connection_kind}:{connection_id}:extra:{projection.geometric_index}"
+                emit("P", f"{projection_id}:bead", *bead, 0.10, *extra_palette)
                 box(
+                    f"{projection_id}:slab",
                     slab_center,
                     slab_axis_x,
                     slab_axis_y,
@@ -647,16 +780,39 @@ def _serialize_scene(
                         *slab_palette[6:],
                     ),
                 )
-                lines.append(f"C {nums(*bead, *slab_corner, 0.025, *slab_palette)}")
+                emit(
+                    "C",
+                    f"{projection_id}:slab-connector",
+                    *bead,
+                    *slab_corner,
+                    0.025,
+                    *slab_palette,
+                )
                 backbone_points.append(bead)
             backbone_points.append(second)
-            for start, end in zip(backbone_points, backbone_points[1:]):
-                lines.append(f"C {nums(*start, *end, 0.075, *bead_palette)}")
+            for edge_index, (start, end) in enumerate(
+                zip(backbone_points, backbone_points[1:])
+            ):
+                emit(
+                    "C",
+                    f"{connection_kind}:{connection_id}:extra-backbone:{edge_index}",
+                    *start,
+                    *end,
+                    0.075,
+                    *bead_palette,
+                )
             continue
         if first_key[0] == second_key[0]:
             continue
         arc_palette = palette_variant(palette, first_nucleotide, "#0288d1")
-        lines.append(f"C {nums(*first, *second, 0.025, *arc_palette)}")
+        emit(
+            "C",
+            f"{connection_kind}:{connection_id}:direct",
+            *first,
+            *second,
+            0.025,
+            *arc_palette,
+        )
 
     unligated_ids = set(unligated_crossover_ids or [])
     for crossover in getattr(design, "crossovers", []):
@@ -678,7 +834,9 @@ def _serialize_scene(
         )
         if first_entry is None or second_entry is None:
             continue
-        append_unligated_warning((first_entry[1] + second_entry[1]) * 0.5)
+        append_unligated_warning(
+            str(crossover.id), (first_entry[1] + second_entry[1]) * 0.5
+        )
 
     append_linker_geometry(include_full_bases=True)
     append_flexible_geometry()
@@ -693,26 +851,52 @@ def _serialize_scene(
         """
         segments = axis.get("segments")
         if segments is not None:
-            for segment in segments:
+            for segment_index, segment in enumerate(segments):
                 first, second = point(segment.get("start")), point(segment.get("end"))
                 if first is not None and second is not None:
-                    yield first, second, segment
+                    edge_identity = ":".join(
+                        str(value)
+                        for value in (
+                            "segment",
+                            axis.get("helix_id") or "_",
+                            segment.get("strand_id") or "_",
+                            int(segment.get("domain_index") or 0),
+                            int(segment.get("bp_lo", segment_index)),
+                            int(segment.get("bp_hi", segment_index)),
+                        )
+                    )
+                    yield first, second, segment, edge_identity
             return
         samples = axis.get("samples") or [axis.get("start"), axis.get("end")]
-        for first_raw, second_raw in zip(samples, samples[1:]):
+        for sample_index, (first_raw, second_raw) in enumerate(
+            zip(samples, samples[1:])
+        ):
             first, second = point(first_raw), point(second_raw)
             if first is not None and second is not None:
-                yield first, second, None
+                yield (
+                    first,
+                    second,
+                    None,
+                    f"axis:{axis.get('helix_id') or '_'}:sample:{sample_index}",
+                )
 
     def append_axes(radius: float = 0.025) -> None:
         palette = solid_palette((0.30, 0.34, 0.42))
         for axis in axes:
-            for first, second, _ in axis_edges(axis):
-                lines.append(f"C {nums(*first, *second, radius, *palette)}")
+            for first, second, _, edge_identity in axis_edges(axis):
+                emit(
+                    "C",
+                    f"{edge_identity}:axis",
+                    *first,
+                    *second,
+                    radius,
+                    *palette,
+                )
 
     append_axes(0.05)
 
     lines.append("R cylinders")
+    active_representation = "cylinders"
     direct_overhang_ids: set[str] = set()
     for binding in getattr(design, "overhang_bindings", []):
         if getattr(binding, "bound", True) is False or getattr(
@@ -749,7 +933,7 @@ def _serialize_scene(
         fallback_palette = first_palette_by_helix.get(
             axis.get("helix_id"), solid_palette((0.45, 0.55, 0.72))
         )
-        for first, second, segment in axis_edges(axis):
+        for first, second, segment, edge_identity in axis_edges(axis):
             palette = fallback_palette
             if segment is not None and segment.get("strand_id"):
                 match = next(
@@ -799,7 +983,14 @@ def _serialize_scene(
                         int(segment.get("domain_index") or 0),
                     )
                 )
-            lines.append(f"{record_type} {nums(*first, *second, 0.72, *palette)}")
+            emit(
+                record_type,
+                f"{edge_identity}:coarse",
+                *first,
+                *second,
+                0.72,
+                *palette,
+            )
 
     # deformed_helix_axes intentionally deduplicates coincident domain ranges.
     # On a paired overhang that means the authored overhang segment usually wins
@@ -835,7 +1026,14 @@ def _serialize_scene(
                 first, second = point(segment.get("start")), point(segment.get("end"))
                 if first is None or second is None:
                     continue
-                lines.append(f"H {nums(*second, *first, 0.72, *palette)}")
+                emit(
+                    "H",
+                    f"linker:{strand.id}:binding:{domain_index}:{segment_lo}:{segment_hi}",
+                    *second,
+                    *first,
+                    0.72,
+                    *palette,
+                )
 
     # A ds linker bridge lives on a synthetic helix intentionally omitted from
     # deformed_helix_axes. Desktop reconstructs its coarse cylinder from the
@@ -877,7 +1075,14 @@ def _serialize_scene(
             # coarse primitive remains non-degenerate.
             second = first + rotation @ np.array([0.0, 0.001, 0.0])
         palette = palette_for_strand(f"{bridge_helix_id}__a")
-        lines.append(f"C {nums(*first, *second, 0.72, *palette)}")
+        emit(
+            "C",
+            f"linker:{connection.id}:ds:bridge",
+            *first,
+            *second,
+            0.72,
+            *palette,
+        )
 
     # Cylinders retains thin ssDNA and dsDNA connector paths but omits the
     # fine ssDNA bead/slab decoration, matching desktop detail visibility.
@@ -908,14 +1113,22 @@ def _serialize_scene(
         atom_palettes.append((*strand_color, *base_color, *cluster_color, *cpk_color))
 
     def append_atomistic(name: str, include_points: bool, radius: float) -> None:
+        nonlocal active_representation
         lines.append(f"R {name}")
+        active_representation = name
         if include_points:
-            for atom, position, palette in zip(
-                atomistic_model.atoms, atom_positions, atom_palettes
+            for atom_index, (atom, position, palette) in enumerate(
+                zip(atomistic_model.atoms, atom_positions, atom_palettes)
             ):
                 if position is not None:
                     radius = VDW_RADIUS.get(atom.element, DEFAULT_VDW_RADIUS) * 0.55
-                    lines.append(f"P {nums(*position, radius, *palette)}")
+                    emit(
+                        "P",
+                        f"atom:{atom_index}:{atom.strand_id}:{atom.helix_id}:{atom.bp_index}:{atom.element}",
+                        *position,
+                        radius,
+                        *palette,
+                    )
         for first_index, second_index in atomistic_model.bonds:
             first, second = atom_positions[first_index], atom_positions[second_index]
             if first is None or second is None:
@@ -924,7 +1137,14 @@ def _serialize_scene(
                 (a + b) * 0.5
                 for a, b in zip(atom_palettes[first_index], atom_palettes[second_index])
             )
-            lines.append(f"C {nums(*first, *second, radius, *palette)}")
+            emit(
+                "C",
+                f"bond:{min(first_index, second_index)}:{max(first_index, second_index)}",
+                *first,
+                *second,
+                radius,
+                *palette,
+            )
         append_axes(0.05)
 
     append_atomistic("ballstick", True, 0.035)

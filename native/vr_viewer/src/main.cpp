@@ -37,6 +37,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -86,12 +87,14 @@ struct ColorSet {
 };
 
 struct StyledPoint {
+    std::string identity;
     glm::vec3 position{};
     ColorSet colors{};
     float size = 1.0F;
 };
 
 struct StyledCylinder {
+    std::string identity;
     glm::vec3 start{};
     glm::vec3 end{};
     float radius = 0.01F;
@@ -99,6 +102,7 @@ struct StyledCylinder {
 };
 
 struct StyledBox {
+    std::string identity;
     glm::vec3 center{};
     glm::vec3 axisX{};
     glm::vec3 axisY{};
@@ -404,7 +408,7 @@ SceneData loadScene(const std::string& path) {
     std::string initialRepresentation;
     std::string initialColoring;
     input >> magic >> version >> initialRepresentation >> initialColoring;
-    if (magic != "NADOCVR" || (version != 4 && version != 5)) {
+    if (magic != "NADOCVR" || (version != 4 && version != 5 && version != 6)) {
         throw std::runtime_error("Unsupported NADOC VR scene format");
     }
 
@@ -412,6 +416,26 @@ SceneData loadScene(const std::string& path) {
     scene.initialRepresentation = representationFromName(initialRepresentation);
     scene.initialColoring = coloringFromName(initialColoring);
     RepresentationData* active = nullptr;
+    size_t activeIndex = 0;
+    size_t legacyIdentityIndex = 0;
+    std::array<std::unordered_set<std::string>, 4> identities;
+    auto readIdentity = [&](char recordType) {
+        std::string identity;
+        if (version >= 6) {
+            input >> identity;
+            if (identity.empty()) {
+                throw std::runtime_error("VR primitive has an empty identity");
+            }
+            if (!identities[activeIndex].insert(identity).second) {
+                throw std::runtime_error(
+                    "Duplicate VR primitive identity: " + identity);
+            }
+        } else {
+            identity = "legacy:" + std::string(1, recordType) + ":"
+                     + std::to_string(legacyIdentityIndex++);
+        }
+        return identity;
+    };
     char type = '\0';
     while (input >> type) {
         if (type == '#') {
@@ -421,10 +445,12 @@ SceneData loadScene(const std::string& path) {
         if (type == 'R') {
             std::string name;
             input >> name;
-            active = &scene.representations[static_cast<size_t>(representationFromName(name))];
+            activeIndex = static_cast<size_t>(representationFromName(name));
+            active = &scene.representations[activeIndex];
         } else if (type == 'P') {
             if (!active) throw std::runtime_error("Point appears before representation block");
             StyledPoint point;
+            point.identity = readIdentity(type);
             input >> point.position.x >> point.position.y >> point.position.z >> point.size;
             for (glm::vec3& color : point.colors.values) {
                 input >> color.r >> color.g >> color.b;
@@ -433,6 +459,7 @@ SceneData loadScene(const std::string& path) {
         } else if (type == 'C' || type == 'H') {
             if (!active) throw std::runtime_error("Cylinder appears before representation block");
             StyledCylinder cylinder;
+            cylinder.identity = readIdentity(type);
             input >> cylinder.start.x >> cylinder.start.y >> cylinder.start.z
                   >> cylinder.end.x >> cylinder.end.y >> cylinder.end.z
                   >> cylinder.radius;
@@ -444,6 +471,7 @@ SceneData loadScene(const std::string& path) {
         } else if (type == 'B') {
             if (!active) throw std::runtime_error("Box appears before representation block");
             StyledBox box;
+            box.identity = readIdentity(type);
             input >> box.center.x >> box.center.y >> box.center.z
                   >> box.axisX.x >> box.axisX.y >> box.axisX.z
                   >> box.axisY.x >> box.axisY.y >> box.axisY.z
@@ -524,15 +552,15 @@ SceneData loadScene(const std::string& path) {
         }
 
         const glm::vec3 origin(-0.28F, -0.28F, -kViewDistanceMeters);
-        auto addAxis = [&](glm::vec3 delta, glm::vec3 color) {
+        auto addAxis = [&](const char* name, glm::vec3 delta, glm::vec3 color) {
             ColorSet colors;
             colors.values.fill(color);
             rep.cylinders.push_back(
-                StyledCylinder{origin, origin + delta, 0.003F, colors});
+                StyledCylinder{name, origin, origin + delta, 0.003F, colors});
         };
-        addAxis({0.10F, 0, 0}, {1.0F, 0.25F, 0.25F});
-        addAxis({0, 0.10F, 0}, {0.25F, 1.0F, 0.35F});
-        addAxis({0, 0, 0.10F}, {0.3F, 0.55F, 1.0F});
+        addAxis("viewer:axis:x", {0.10F, 0, 0}, {1.0F, 0.25F, 0.25F});
+        addAxis("viewer:axis:y", {0, 0.10F, 0}, {0.25F, 1.0F, 0.35F});
+        addAxis("viewer:axis:z", {0, 0, 0.10F}, {0.3F, 0.55F, 1.0F});
     }
     return scene;
 }
