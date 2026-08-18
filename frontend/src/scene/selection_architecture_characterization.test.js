@@ -9,6 +9,7 @@ const read = relative => readFileSync(path.resolve(HERE, relative), 'utf8')
 const manager = read('./selection_manager.js')
 const controller = read('./selection_controller.js')
 const selectionRefs = read('./selection_ref.js')
+const vrToolShell = read('./vr_tool_shell.js')
 const store = read('../state/store.js')
 const main = read('../main.js')
 
@@ -107,6 +108,16 @@ describe('selection architecture — canonical enforcement', () => {
     expect(select).toContain('selectionController.getState().primary')
     expect(select).not.toContain('store.setState')
     expect(main).toMatch(/selectVRIdentity[\s\S]*sendVRFeedback/)
+  })
+
+  it('keeps the first VR tool shell effect-only and browser-authoritative', () => {
+    expect(vrToolShell).toContain("type: 'preview_requested'")
+    expect(vrToolShell).toContain("type: 'commit_requested'")
+    expect(vrToolShell).toContain("type: 'cancel_requested'")
+    expect(vrToolShell).toContain("type: 'undo_requested'")
+    expect(vrToolShell).not.toContain('store.setState')
+    expect(vrToolShell).not.toMatch(/api\.|fetch\(/)
+    expect(main).toMatch(/event\?\.type === 'tool'[\s\S]*reduceVRToolShell/)
   })
 
   it('enforces the explicit design/assembly selection boundary', () => {

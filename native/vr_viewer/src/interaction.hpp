@@ -41,6 +41,75 @@ struct OwnerAliasEntry {
     bool operator==(const OwnerAliasEntry&) const = default;
 };
 
+enum class ToolMode { inspect, move_rotate, extrude, twist, bend };
+enum class ToolAction { activate, preview, confirm, cancel, undo };
+
+inline const char* toolModeName(ToolMode mode) {
+    static constexpr std::array<const char*, 5> names = {
+        "inspect", "move_rotate", "extrude", "twist", "bend",
+    };
+    return names[static_cast<size_t>(mode)];
+}
+
+inline const char* toolActionName(ToolAction action) {
+    static constexpr std::array<const char*, 5> names = {
+        "activate", "preview", "confirm", "cancel", "undo",
+    };
+    return names[static_cast<size_t>(action)];
+}
+
+/** In-headset read-only mirror of the browser-authoritative tool session.
+ *
+ * It supplies immediate, honest affordance text and emits intents only. It owns no
+ * design mutation, commit, or undo implementation.
+ */
+class ToolShell {
+  public:
+    void activate(ToolMode mode, bool hasSelection) {
+        mode_ = mode;
+        previewRequested_ = false;
+        status_ = mode == ToolMode::inspect
+            ? "VIEW ONLY" : hasSelection ? "READY" : "SELECT TARGET";
+    }
+
+    void apply(ToolAction action, bool hasSelection) {
+        if (action == ToolAction::activate) {
+            activate(mode_, hasSelection);
+        } else if (action == ToolAction::preview) {
+            if (mode_ == ToolMode::inspect) status_ = "CHOOSE TOOL";
+            else if (!hasSelection) status_ = "SELECT TARGET";
+            else {
+                previewRequested_ = true;
+                status_ = "PREVIEW ONLY";
+            }
+        } else if (action == ToolAction::confirm) {
+            status_ = previewRequested_ && hasSelection
+                ? "CONFIRM STAGED" : "PREVIEW FIRST";
+        } else if (action == ToolAction::cancel) {
+            previewRequested_ = false;
+            status_ = "CANCELLED";
+        } else {
+            status_ = "NO VR COMMIT";
+        }
+    }
+
+    void syncSelection(bool hasSelection) {
+        if (mode_ == ToolMode::inspect || previewRequested_) return;
+        if (status_ == "READY" || status_ == "SELECT TARGET") {
+            status_ = hasSelection ? "READY" : "SELECT TARGET";
+        }
+    }
+
+    [[nodiscard]] ToolMode mode() const { return mode_; }
+    [[nodiscard]] bool previewRequested() const { return previewRequested_; }
+    [[nodiscard]] const std::string& status() const { return status_; }
+
+  private:
+    ToolMode mode_ = ToolMode::inspect;
+    bool previewRequested_ = false;
+    std::string status_ = "VIEW ONLY";
+};
+
 /** Resolve by feedback specificity, then stable scene order.
  *
  * Feedback tokens are ordered exact→coarse. Scene order makes a coarse Domain,

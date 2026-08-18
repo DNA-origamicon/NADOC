@@ -165,6 +165,9 @@ describe('initVRSession', () => {
           select_identity: 'nuc:s1',
           level_sequence: 1,
           selection_level: 'domain',
+          tool_sequence: 1,
+          tool_mode: 'twist',
+          tool_action: 'preview',
         })
         .mockResolvedValue({
           sequence: 2,
@@ -173,6 +176,9 @@ describe('initVRSession', () => {
           select_identity: 'nuc:s1',
           level_sequence: 1,
           selection_level: 'domain',
+          tool_sequence: 1,
+          tool_mode: 'twist',
+          tool_action: 'preview',
         }),
     }
     const h = makeHarness({
@@ -188,6 +194,7 @@ describe('initVRSession', () => {
       [{ sequence: 2, type: 'hover', identity: 'nuc:s1' }],
       [{ sequence: 1, type: 'select', identity: 'nuc:s1' }],
       [{ sequence: 1, type: 'selection_level', level: 'domain' }],
+      [{ sequence: 1, type: 'tool', mode: 'twist', action: 'preview' }],
     ])
 
     await h.controller.exit()

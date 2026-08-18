@@ -204,7 +204,8 @@ def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -
     event_path.write_text(
         '{"sequence":7,"hover_identity":"nuc:s1:0:h1:4:FORWARD:0",'
         '"select_sequence":2,"select_identity":"nuc:s1:0:h1:3:FORWARD:0",'
-        '"level_sequence":3,"selection_level":"domain"}'
+        '"level_sequence":3,"selection_level":"domain",'
+        '"tool_sequence":4,"tool_mode":"twist","tool_action":"preview"}'
     )
     assert _event_payload({"event_path": str(event_path)}) == {
         "sequence": 7,
@@ -213,7 +214,16 @@ def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -
         "select_identity": "nuc:s1:0:h1:3:FORWARD:0",
         "level_sequence": 3,
         "selection_level": "domain",
+        "tool_sequence": 4,
+        "tool_mode": "twist",
+        "tool_action": "preview",
     }
+
+    event_path.write_text(
+        '{"sequence":8,"tool_sequence":5,"tool_mode":"delete",'
+        '"tool_action":"confirm"}'
+    )
+    assert _event_payload({"event_path": str(event_path)})["sequence"] == 0
 
     event_path.write_text('{"sequence":')
     assert _event_payload({"event_path": str(event_path)}) == {
@@ -223,6 +233,9 @@ def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -
         "select_identity": None,
         "level_sequence": 0,
         "selection_level": "default",
+        "tool_sequence": 0,
+        "tool_mode": "inspect",
+        "tool_action": "activate",
     }
 
     event_path.write_text("x" * 4097)

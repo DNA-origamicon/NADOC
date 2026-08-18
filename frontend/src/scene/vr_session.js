@@ -47,6 +47,7 @@ export function initVRSession({
   let lastNativeEventSequence = 0
   let lastNativeSelectSequence = 0
   let lastNativeLevelSequence = 0
+  let lastNativeToolSequence = 0
   let cameraRig = null
   let cameraSnapshot = null
   let starting = false
@@ -193,6 +194,17 @@ export function initVRSession({
             level: event?.selection_level ?? 'default',
           })
         }
+        const toolSequence = Number(event?.tool_sequence ?? 0)
+        if (Number.isSafeInteger(toolSequence) &&
+            toolSequence > lastNativeToolSequence) {
+          lastNativeToolSequence = toolSequence
+          onNativeEvent({
+            sequence: toolSequence,
+            type: 'tool',
+            mode: event?.tool_mode ?? 'inspect',
+            action: event?.tool_action ?? 'activate',
+          })
+        }
       }
       _scheduleNativeEventPoll()
     }, nativeEventPollIntervalMs)
@@ -210,6 +222,7 @@ export function initVRSession({
       lastNativeEventSequence = 0
       lastNativeSelectSequence = 0
       lastNativeLevelSequence = 0
+      lastNativeToolSequence = 0
       _scheduleNativeEventPoll()
     }
     _setButtonState({ active })

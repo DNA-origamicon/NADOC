@@ -2007,6 +2007,9 @@ def _event_payload(state: dict | None) -> dict:
             "select_identity": None,
             "level_sequence": 0,
             "selection_level": "default",
+            "tool_sequence": 0,
+            "tool_mode": "inspect",
+            "tool_action": "activate",
         }
     path = Path(state["event_path"])
     try:
@@ -2019,14 +2022,22 @@ def _event_payload(state: dict | None) -> dict:
         select_identity = event.get("select_identity")
         level_sequence = int(event.get("level_sequence", 0))
         selection_level = event.get("selection_level", "default")
+        tool_sequence = int(event.get("tool_sequence", 0))
+        tool_mode = event.get("tool_mode", "inspect")
+        tool_action = event.get("tool_action", "activate")
         identities = (hover_identity, select_identity)
         if (
             sequence < 0
             or select_sequence < 0
             or level_sequence < 0
+            or tool_sequence < 0
             or any(value is not None and not isinstance(value, str) for value in identities)
             or selection_level
             not in {"default", "cluster", "strand", "domain", "end", "xover", "base"}
+            or tool_mode
+            not in {"inspect", "move_rotate", "extrude", "twist", "bend"}
+            or tool_action
+            not in {"activate", "preview", "confirm", "cancel", "undo"}
         ):
             raise ValueError("invalid event record")
         if any(isinstance(value, str) and len(value) > 2048 for value in identities):
@@ -2038,6 +2049,9 @@ def _event_payload(state: dict | None) -> dict:
             "select_identity": select_identity,
             "level_sequence": level_sequence,
             "selection_level": selection_level,
+            "tool_sequence": tool_sequence,
+            "tool_mode": tool_mode,
+            "tool_action": tool_action,
         }
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
         # A truncate/write can briefly expose an incomplete record. Pollers keep
@@ -2049,6 +2063,9 @@ def _event_payload(state: dict | None) -> dict:
             "select_identity": None,
             "level_sequence": 0,
             "selection_level": "default",
+            "tool_sequence": 0,
+            "tool_mode": "inspect",
+            "tool_action": "activate",
         }
 
 
@@ -2151,7 +2168,9 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             event_file.write(
                 '{"sequence":0,"hover_identity":null,'
                 '"select_sequence":0,"select_identity":null,'
-                f'"level_sequence":0,"selection_level":"{body.selection_level}"}}'
+                f'"level_sequence":0,"selection_level":"{body.selection_level}",'
+                '"tool_sequence":0,"tool_mode":"inspect",'
+                '"tool_action":"activate"}'
             )
             event_path = Path(event_file.name)
         event_path.chmod(0o600)

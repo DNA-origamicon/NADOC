@@ -672,6 +672,7 @@ std::array<uint8_t, 7> glyph(char value) {
         case 'E': return {31, 16, 16, 30, 16, 16, 31};
         case 'F': return {31, 16, 16, 30, 16, 16, 16};
         case 'G': return {14, 17, 16, 23, 17, 17, 14};
+        case 'H': return {17, 17, 17, 31, 17, 17, 17};
         case 'I': return {31, 4, 4, 4, 4, 4, 31};
         case 'K': return {17, 18, 20, 24, 20, 18, 17};
         case 'L': return {16, 16, 16, 16, 16, 16, 31};
@@ -684,6 +685,8 @@ std::array<uint8_t, 7> glyph(char value) {
         case 'T': return {31, 4, 4, 4, 4, 4, 4};
         case 'U': return {17, 17, 17, 17, 17, 17, 14};
         case 'V': return {17, 17, 17, 17, 17, 10, 4};
+        case 'W': return {17, 17, 17, 21, 21, 21, 10};
+        case 'X': return {17, 17, 10, 4, 10, 17, 17};
         case 'Y': return {17, 17, 10, 4, 4, 4, 4};
         case '+': return {0, 4, 4, 31, 4, 4, 0};
         default: return {};
@@ -1902,6 +1905,8 @@ class Viewer {
         }
     }
 
+    enum class MenuPage { options, tools };
+
     struct MenuItem {
         const char* label;
         float x;
@@ -1911,7 +1916,7 @@ class Viewer {
     static constexpr std::array<const char*, 7> kSelectionLevels = {
         "default", "cluster", "strand", "domain", "end", "xover", "base",
     };
-    static constexpr std::array<MenuItem, 17> kMenuItems = {{
+    static constexpr std::array<MenuItem, 18> kOptionsMenuItems = {{
         {"CYLINDERS", -0.16F, 0.190F, 0.145F},
         {"FULL", -0.16F, 0.135F, 0.145F},
         {"BALL + STICK", -0.16F, 0.080F, 0.145F},
@@ -1927,8 +1932,21 @@ class Viewer {
         {"END", 0.16F, -0.105F, 0.145F},
         {"CROSSOVER", 0.16F, -0.160F, 0.145F},
         {"BASE", 0.16F, -0.215F, 0.145F},
-        {"RECENTER", -0.16F, -0.350F, 0.145F},
-        {"CLOSE", 0.16F, -0.350F, 0.145F},
+        {"TOOLS", -0.16F, -0.350F, 0.145F},
+        {"RECENTER", 0.16F, -0.350F, 0.145F},
+        {"CLOSE", 0.0F, -0.415F, 0.305F},
+    }};
+    static constexpr std::array<MenuItem, 10> kToolMenuItems = {{
+        {"INSPECT", -0.16F, 0.190F, 0.145F},
+        {"MOVE ROTATE", -0.16F, 0.135F, 0.145F},
+        {"EXTRUDE", -0.16F, 0.080F, 0.145F},
+        {"TWIST", -0.16F, 0.025F, 0.145F},
+        {"BEND", -0.16F, -0.030F, 0.145F},
+        {"PREVIEW", 0.16F, 0.190F, 0.145F},
+        {"CONFIRM", 0.16F, 0.135F, 0.145F},
+        {"CANCEL", 0.16F, 0.080F, 0.145F},
+        {"UNDO", 0.16F, 0.025F, 0.145F},
+        {"BACK", 0.0F, -0.260F, 0.305F},
     }};
 
     void appendMenuGuides() {
@@ -1937,19 +1955,56 @@ class Viewer {
             controllerGuides_.push_back(Vertex{a, color, 1.0F});
             controllerGuides_.push_back(Vertex{b, color, 1.0F});
         };
+        auto itemBox = [&](const MenuItem& item, const glm::vec3& color) {
+            const float left = item.x - item.halfWidth;
+            const float right = item.x + item.halfWidth;
+            line(menuWorld(left, item.y + 0.023F),
+                 menuWorld(right, item.y + 0.023F), color * 0.7F);
+            line(menuWorld(right, item.y + 0.023F),
+                 menuWorld(right, item.y - 0.023F), color * 0.7F);
+            line(menuWorld(right, item.y - 0.023F),
+                 menuWorld(left, item.y - 0.023F), color * 0.7F);
+            line(menuWorld(left, item.y - 0.023F),
+                 menuWorld(left, item.y + 0.023F), color * 0.7F);
+            appendMenuText(
+                item.label, left + 0.012F, item.y + 0.012F, 0.0036F, color);
+        };
         const glm::vec3 border(0.22F, 0.42F, 0.62F);
         line(menuWorld(-0.33F, 0.33F), menuWorld(0.33F, 0.33F), border);
-        line(menuWorld(0.33F, 0.33F), menuWorld(0.33F, -0.390F), border);
-        line(menuWorld(0.33F, -0.390F), menuWorld(-0.33F, -0.390F), border);
-        line(menuWorld(-0.33F, -0.390F), menuWorld(-0.33F, 0.33F), border);
-        appendMenuText("VR MENU", -0.105F, 0.305F, 0.006F, {0.65F, 0.88F, 1.0F});
+        line(menuWorld(0.33F, 0.33F), menuWorld(0.33F, -0.455F), border);
+        line(menuWorld(0.33F, -0.455F), menuWorld(-0.33F, -0.455F), border);
+        line(menuWorld(-0.33F, -0.455F), menuWorld(-0.33F, 0.33F), border);
+        appendMenuText(
+            menuPage_ == MenuPage::options ? "VR MENU" : "VR TOOLS READ ONLY",
+            menuPage_ == MenuPage::options ? -0.105F : -0.235F,
+            0.305F, 0.006F, {0.65F, 0.88F, 1.0F});
+
+        if (menuPage_ == MenuPage::tools) {
+            appendMenuText("TOOL", -0.305F, 0.255F, 0.0042F, {0.42F, 0.72F, 0.95F});
+            appendMenuText("TRANSACTION", 0.015F, 0.255F, 0.0042F,
+                           {0.42F, 0.72F, 0.95F});
+            appendMenuText("SELECTION " + selectionLevel_, -0.305F, -0.115F,
+                           0.0038F, {0.65F, 0.70F, 0.78F});
+            appendMenuText("STATUS " + toolShell_.status(), -0.305F, -0.165F,
+                           0.0038F, {0.95F, 0.72F, 0.28F});
+            for (size_t index = 0; index < kToolMenuItems.size(); ++index) {
+                const bool selected = index < 5 &&
+                    static_cast<size_t>(toolShell_.mode()) == index;
+                glm::vec3 color = selected ? glm::vec3(0.30F, 1.0F, 0.48F)
+                                           : glm::vec3(0.65F, 0.70F, 0.78F);
+                if (static_cast<int>(index) == menuHover_) color = {1.0F, 0.78F, 0.22F};
+                itemBox(kToolMenuItems[index], color);
+            }
+            return;
+        }
+
         appendMenuText("REPRESENTATION", -0.305F, 0.255F, 0.0042F, {0.42F, 0.72F, 0.95F});
         appendMenuText("COLORING", 0.015F, 0.255F, 0.0042F, {0.42F, 0.72F, 0.95F});
         appendMenuText("SELECTION LEVEL", -0.305F, -0.035F, 0.0042F, {0.42F, 0.72F, 0.95F});
 
         const int selectedRepresentation = static_cast<int>(glScene_->representation());
         const int selectedColoring = static_cast<int>(glScene_->coloring());
-        for (size_t index = 0; index < kMenuItems.size(); ++index) {
+        for (size_t index = 0; index < kOptionsMenuItems.size(); ++index) {
             const bool selected = (index < 4 && static_cast<int>(index) == selectedRepresentation)
                 || (index >= 4 && index < 8
                     && static_cast<int>(index - 4) == selectedColoring)
@@ -1958,14 +2013,7 @@ class Viewer {
             glm::vec3 color = selected ? glm::vec3(0.30F, 1.0F, 0.48F)
                                        : glm::vec3(0.65F, 0.70F, 0.78F);
             if (static_cast<int>(index) == menuHover_) color = {1.0F, 0.78F, 0.22F};
-            const MenuItem& item = kMenuItems[index];
-            const float left = item.x - item.halfWidth;
-            const float right = item.x + item.halfWidth;
-            line(menuWorld(left, item.y + 0.023F), menuWorld(right, item.y + 0.023F), color * 0.7F);
-            line(menuWorld(right, item.y + 0.023F), menuWorld(right, item.y - 0.023F), color * 0.7F);
-            line(menuWorld(right, item.y - 0.023F), menuWorld(left, item.y - 0.023F), color * 0.7F);
-            line(menuWorld(left, item.y - 0.023F), menuWorld(left, item.y + 0.023F), color * 0.7F);
-            appendMenuText(item.label, left + 0.012F, item.y + 0.012F, 0.0036F, color);
+            itemBox(kOptionsMenuItems[index], color);
         }
     }
 
@@ -1979,8 +2027,12 @@ class Viewer {
         if (distance <= 0.0F || distance > 5.0F) return -1;
         const glm::vec3 local = glm::inverse(menuOrientation_)
                               * (hand.position + direction * distance - menuPosition_);
-        for (size_t index = 0; index < kMenuItems.size(); ++index) {
-            const MenuItem& item = kMenuItems[index];
+        const MenuItem* items = menuPage_ == MenuPage::options
+            ? kOptionsMenuItems.data() : kToolMenuItems.data();
+        const size_t itemCount = menuPage_ == MenuPage::options
+            ? kOptionsMenuItems.size() : kToolMenuItems.size();
+        for (size_t index = 0; index < itemCount; ++index) {
+            const MenuItem& item = items[index];
             if (std::abs(local.x - item.x) <= item.halfWidth &&
                 std::abs(local.y - item.y) <= 0.025F) {
                 return static_cast<int>(index);
@@ -1995,6 +2047,22 @@ class Viewer {
             const int hit = menuHit(hands_[hand]);
             if (hit >= 0 && menuHover_ < 0) menuHover_ = hit;
             if (hit < 0 || !triggerClicked_[hand]) continue;
+            if (menuPage_ == MenuPage::tools) {
+                if (hit < 5) {
+                    const auto mode = static_cast<nadoc_vr::ToolMode>(hit);
+                    toolShell_.activate(mode, !selectedIdentity_.empty());
+                    publishToolIntent(nadoc_vr::ToolAction::activate);
+                } else if (hit < 9) {
+                    const auto action = static_cast<nadoc_vr::ToolAction>(hit - 4);
+                    toolShell_.apply(action, !selectedIdentity_.empty());
+                    publishToolIntent(action);
+                } else {
+                    menuPage_ = MenuPage::options;
+                    menuHover_ = -1;
+                }
+                pulse(hand, 0.50F);
+                continue;
+            }
             if (hit < 4) {
                 glScene_->setStyle(static_cast<Representation>(hit), glScene_->coloring());
             } else if (hit < 8) {
@@ -2003,6 +2071,9 @@ class Viewer {
             } else if (hit < 15) {
                 publishSelectionLevel(kSelectionLevels[hit - 8]);
             } else if (hit == 15) {
+                menuPage_ = MenuPage::tools;
+                menuHover_ = -1;
+            } else if (hit == 16) {
                 recenterRequested_ = true;
                 recenterHand_ = hand;
                 menuOpen_ = false;
@@ -2112,6 +2183,12 @@ class Viewer {
         publishEventState();
     }
 
+    void publishToolIntent(nadoc_vr::ToolAction action) {
+        lastToolAction_ = action;
+        ++toolSequence_;
+        publishEventState();
+    }
+
     void publishEventState() {
         if (eventPath_.empty()) return;
         std::ofstream output(eventPath_, std::ios::out | std::ios::trunc);
@@ -2127,6 +2204,10 @@ class Viewer {
         identity(lastSelectIdentity_);
         output << ",\"level_sequence\":" << levelSequence_
                << ",\"selection_level\":\"" << selectionLevel_ << "\"";
+        output << ",\"tool_sequence\":" << toolSequence_
+               << ",\"tool_mode\":\"" << nadoc_vr::toolModeName(toolShell_.mode())
+               << "\",\"tool_action\":\""
+               << nadoc_vr::toolActionName(lastToolAction_) << "\"";
         output << '}';
     }
 
@@ -2149,6 +2230,7 @@ class Viewer {
             ? feedback->identity : "";
         selectedOwnerTokens_ = feedback->accepted && feedback->selected
             ? feedback->ownerTokens : std::vector<std::string>{};
+        toolShell_.syncSelection(!selectedIdentity_.empty());
     }
 
     void syncActions(XrTime displayTime) {
@@ -2272,6 +2354,7 @@ class Viewer {
         menuPosition_ = headPosition
                       + menuOrientation_ * glm::vec3(0.0F, 0.04F, -1.00F);
         menuOpen_ = true;
+        menuPage_ = MenuPage::options;
         menuOpenRequested_ = false;
         menuHover_ = -1;
         pulse(menuHand_, 0.30F);
@@ -2424,6 +2507,9 @@ class Viewer {
     std::string lastSelectIdentity_;
     uint64_t levelSequence_ = 0;
     std::string selectionLevel_ = "default";
+    uint64_t toolSequence_ = 0;
+    nadoc_vr::ToolAction lastToolAction_ = nadoc_vr::ToolAction::activate;
+    nadoc_vr::ToolShell toolShell_;
     uint64_t feedbackSequence_ = 0;
     uint32_t feedbackPollFrame_ = 0;
     std::string selectedIdentity_;
@@ -2452,6 +2538,7 @@ class Viewer {
     std::vector<Vertex> controllerGuides_;
     std::optional<nadoc_vr::PickHit> sceneHover_;
     bool menuOpen_ = false;
+    MenuPage menuPage_ = MenuPage::options;
     bool menuOpenRequested_ = false;
     bool suppressManipulationUntilRelease_ = false;
     int menuHover_ = -1;

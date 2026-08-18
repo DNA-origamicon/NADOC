@@ -4799,6 +4799,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     /** Level-aware native Select routed through the canonical selection controller. */
     selectVRIdentity(identity) { return _selectVrIdentity(identity) },
 
+    /** Read-only canonical target for the browser-authoritative VR tool shell. */
+    getPrimarySelectionRef() { return selectionController.getState().primary ?? null },
+
     /** Clear committed selection and its projected renderer state. */
     clearSelection() { _clearAll() },
 

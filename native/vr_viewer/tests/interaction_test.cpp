@@ -181,6 +181,24 @@ void canonicalOwnerFallbackUsesFeedbackSpecificityAndSceneOrder() {
     require(!nadoc_vr::resolveOwnerIdentity(entries, {"cluster"}));
 }
 
+void toolShellNeverClaimsACommitAndRequiresPreview() {
+    nadoc_vr::ToolShell shell;
+    shell.activate(nadoc_vr::ToolMode::twist, false);
+    require(shell.status() == "SELECT TARGET");
+    shell.syncSelection(true);
+    require(shell.status() == "READY");
+    shell.apply(nadoc_vr::ToolAction::confirm, true);
+    require(shell.status() == "PREVIEW FIRST");
+    shell.apply(nadoc_vr::ToolAction::preview, true);
+    require(shell.previewRequested() && shell.status() == "PREVIEW ONLY");
+    shell.apply(nadoc_vr::ToolAction::confirm, true);
+    require(shell.status() == "CONFIRM STAGED");
+    shell.apply(nadoc_vr::ToolAction::cancel, true);
+    require(!shell.previewRequested() && shell.status() == "CANCELLED");
+    shell.apply(nadoc_vr::ToolAction::undo, true);
+    require(shell.status() == "NO VR COMMIT");
+}
+
 }  // namespace
 
 int main() {
@@ -194,4 +212,5 @@ int main() {
     halfCylinderPickingMatchesTheRenderedPositiveHalf();
     canonicalSelectionFeedbackIsStrictAndSequenced();
     canonicalOwnerFallbackUsesFeedbackSpecificityAndSceneOrder();
+    toolShellNeverClaimsACommitAndRequiresPreview();
 }

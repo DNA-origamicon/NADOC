@@ -56,6 +56,11 @@ Controls on the original HTC Vive wands:
   selection level (Auto / Drill, Cluster, Strand, Domain, End, Crossover, or Base),
   Recenter, or Close. The active level is green and begins at the desktop's current
   level when VR launches.
+- Select Tools in that panel to open the Phase 5 transaction shell. It exposes
+  Inspect, Move/Rotate, Extrude, Twist, and Bend plus Preview, Confirm, Cancel,
+  Undo, and Back. This first shell is visibly marked **READ ONLY**: it emits bounded
+  browser-owned intents and status but cannot yet mutate geometry or create history.
+  Confirm is reported as staged and Undo reports that no VR commit exists.
 - Cyan and orange pointers identify the left and right controllers. They turn
   green during a one-hand grab and magenta during a two-hand resize.
 - When neither trigger is held, the right pointer extends to the nearest visible

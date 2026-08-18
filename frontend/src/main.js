@@ -16,6 +16,7 @@
 import * as THREE from 'three'
 import { initScene }                 from './scene/scene.js'
 import { initVRSession }             from './scene/vr_session.js'
+import { initialVRToolShellState, reduceVRToolShell } from './scene/vr_tool_shell.js'
 import { createGlowLayer }           from './scene/glow_layer.js'
 import { initDesignRenderer }        from './scene/design_renderer.js'
 import { deferrableContextMenu }      from './scene/right_click_menu.js'
@@ -5773,6 +5774,7 @@ async function main() {
     showToast('SteamVR is ready. Press the Vive System button and select Desktop to control NADOC.')
   })
 
+  let _vrToolShellState = initialVRToolShellState
   initVRSession({
     renderer,
     scene,
@@ -5812,6 +5814,28 @@ async function main() {
           selection_level: selectionManager.getSelectionLevel?.() ?? 'default',
           owner_tokens: result?.ownerTokens ?? [],
         }).catch(() => {})
+      } else if (event?.type === 'tool') {
+        const result = reduceVRToolShell(_vrToolShellState, event, {
+          selectedRef: selectionManager.getPrimarySelectionRef?.() ?? null,
+        })
+        _vrToolShellState = result.state
+        const label = event.mode === 'move_rotate'
+          ? 'Move / Rotate'
+          : `${event.mode?.[0]?.toUpperCase() ?? ''}${event.mode?.slice(1) ?? ''}`
+        if (result.reason === 'waiting_selection' ||
+            result.reason === 'selection_required') {
+          showToast(`VR ${label}: select a canonical target first.`)
+        } else if (result.effect?.type === 'preview_requested') {
+          showToast(`VR ${label}: preview intent received; no geometry was changed.`)
+        } else if (result.effect?.type === 'commit_requested') {
+          showToast(
+            `VR ${label}: confirm is staged; its mutation executor is not attached yet.`,
+          )
+        } else if (result.effect?.type === 'cancel_requested') {
+          showToast(`VR ${label}: preview cancelled.`)
+        } else if (result.effect?.type === 'undo_requested') {
+          showToast('VR tools have no committed edit to undo yet.')
+        }
       } else {
         if (button) button.dataset.vrHoverIdentity = event?.identity ?? ''
         selectionManager.previewVRIdentity?.(event?.identity ?? null)
