@@ -250,6 +250,24 @@ def test_expanded_scene_translates_owners_and_interpolates_crossover_atoms() -> 
     assert atom.x == 0.0  # source inputs remain immutable
 
 
+def test_expanded_offsets_match_desktop_axis_tie_priority() -> None:
+    point = lambda x, y, z: SimpleNamespace(x=x, y=y, z=z)
+    design = SimpleNamespace(helices=[
+        SimpleNamespace(
+            id="a", axis_start=point(0, 0, 0), axis_end=point(1, 1, 1)
+        ),
+        SimpleNamespace(
+            id="b", axis_start=point(2, 0, 0), axis_end=point(3, 1, 1)
+        ),
+    ])
+
+    offsets = _expanded_helix_offsets(design)
+
+    assert offsets["a"][0] < 0
+    assert offsets["b"][0] > 0
+    assert offsets["a"][2] == offsets["b"][2] == 0
+
+
 def test_v12_bundle_pairs_primitives_owners_handles_and_endpoint_scopes() -> None:
     natural = """NADOCVR 12 full strand
 R full
@@ -753,11 +771,15 @@ def test_native_plane_feedback_is_private_target_bound_and_fail_closed(tmp_path)
             plane_center=[1, 2, 3],
             plane_normal=[0, 0, 2],
             plane_half_extent_nm=8,
+            expanded_plane_center=[4, 5, 6],
+            expanded_plane_normal=[0, 2, 0],
+            expanded_plane_half_extent_nm=8,
         ),
     )
     assert tool_feedback_path.read_text() == (
-        "NADOCVR_PLANE_FEEDBACK 2 5 7 1 resolved a cluster cluster:c1 "
-        "nuc:s1:0:h1:12:FORWARD:0 12 -2 1 3 0 0 1 8\n"
+        "NADOCVR_PLANE_FEEDBACK 3 5 7 1 resolved a cluster cluster:c1 "
+        "nuc:s1:0:h1:12:FORWARD:0 12 -2 1 3 0 0 1 8 "
+        "-5 4 6 -1 0 0 8\n"
     )
     assert tool_feedback_path.stat().st_mode & 0o777 == 0o600
     assert not tool_feedback_path.with_name(f"{tool_feedback_path.name}.next").exists()
@@ -770,11 +792,22 @@ def test_native_plane_feedback_is_private_target_bound_and_fail_closed(tmp_path)
             resolved=True, reason="resolved", plane_bp=12,
             plane_center=[0, 0, 0], plane_normal=[0, 0, 0],
             plane_half_extent_nm=8,
+            expanded_plane_center=[1, 0, 0], expanded_plane_normal=[0, 0, 1],
+            expanded_plane_half_extent_nm=8,
         ),
         dict(
             resolved=True, reason="resolved", plane_bp=12,
             plane_center=[float("nan"), 0, 0], plane_normal=[0, 0, 1],
             plane_half_extent_nm=8,
+            expanded_plane_center=[1, 0, 0], expanded_plane_normal=[0, 0, 1],
+            expanded_plane_half_extent_nm=8,
+        ),
+        dict(
+            resolved=True, reason="resolved", plane_bp=12,
+            plane_center=[0, 0, 0], plane_normal=[0, 0, 1],
+            plane_half_extent_nm=8,
+            expanded_plane_center=[1, 0, 0], expanded_plane_normal=[0, 0, 0],
+            expanded_plane_half_extent_nm=8,
         ),
     ]
     for values in invalid:

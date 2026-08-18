@@ -182,6 +182,7 @@ describe('native VR tool configuration drafts', () => {
       planePick: {
         resolved: true, reason: 'resolved', bp: 12, helixId: 'h1',
         frame: { center: [1, 2, 3], normal: [0, 0, 1], halfExtentNm: 8 },
+        expandedFrame: { center: [4, 5, 6], normal: [0, 0, 1], halfExtentNm: 8 },
       },
     })).toEqual({
       plane_pick_sequence: 3,
@@ -196,6 +197,9 @@ describe('native VR tool configuration drafts', () => {
       plane_center: [1, 2, 3],
       plane_normal: [0, 0, 1],
       plane_half_extent_nm: 8,
+      expanded_plane_center: [4, 5, 6],
+      expanded_plane_normal: [0, 0, 1],
+      expanded_plane_half_extent_nm: 8,
     })
     expect(vrPlaneFeedbackPayload({
       sequence: 4, toolConfigSequence: 7, slot: 'b', identity: 'segment:coarse',
@@ -209,19 +213,30 @@ describe('native VR tool configuration drafts', () => {
       toolTarget,
       planePick: {
         resolved: true, reason: 'resolved', bp: 12,
-        frame: { center: [0, 0, 0], normal: [0, 0, 0], halfExtentNm: 8 },
+        frame: { center: [0, 0, 0], normal: [0, 0, 1], halfExtentNm: 8 },
       },
     })?.reason).toBe('plane_frame_unavailable')
     expect(vrPlaneFeedbackPayload({
       sequence: 6, toolConfigSequence: 7, slot: 'b', identity: 'nuc:pick',
+    }, state, {
+      toolTarget,
+      planePick: {
+        resolved: true, reason: 'resolved', bp: 12,
+        frame: { center: [0, 0, 0], normal: [0, 0, 0], halfExtentNm: 8 },
+        expandedFrame: { center: [0, 0, 0], normal: [0, 0, 1], halfExtentNm: 8 },
+      },
+    })?.reason).toBe('plane_frame_unavailable')
+    expect(vrPlaneFeedbackPayload({
+      sequence: 7, toolConfigSequence: 7, slot: 'b', identity: 'nuc:pick',
     }, state, { toolTarget: null })?.reason).toBe('stale_target')
     expect(vrPlaneFeedbackPayload({
-      sequence: 7, toolConfigSequence: 6, slot: 'a', identity: 'nuc:pick',
+      sequence: 8, toolConfigSequence: 6, slot: 'a', identity: 'nuc:pick',
     }, state, {
       toolTarget,
       planePick: {
         resolved: true, bp: 12,
         frame: { center: [0, 0, 0], normal: [0, 0, 1], halfExtentNm: 8 },
+        expandedFrame: { center: [1, 0, 0], normal: [0, 0, 1], halfExtentNm: 8 },
       },
     })).toBeNull()
   })

@@ -2061,10 +2061,15 @@ class GlScene {
     static constexpr GLsizei kShadowMapSize = 2048;
 };
 
-struct DeformationPlaneGuide {
+struct DeformationPlanePose {
     glm::vec3 center{};
     glm::vec3 normal{};
     float halfExtent = 0.0F;
+};
+
+struct DeformationPlaneGuide {
+    DeformationPlanePose natural;
+    std::optional<DeformationPlanePose> expanded;
 };
 
 class Viewer {
@@ -2617,10 +2622,12 @@ class Viewer {
             const bool orderedPlanes = hasBothPlanes &&
                 *toolConfig_.planeABp() < *toolConfig_.planeBBp();
             const std::string geometryStatus = deformationTool
-                ? orderedPlanes && glScene_->expanded()
-                    ? "PLANE GUIDES HIDDEN IN EXPANDED"
-                  : orderedPlanes && planeGuides_[0] && planeGuides_[1]
-                    ? "PLANES A/B FRAMED READ ONLY"
+                ? orderedPlanes && planeGuides_[0] && planeGuides_[1] &&
+                    (!glScene_->expanded() ||
+                     (planeGuides_[0]->expanded && planeGuides_[1]->expanded))
+                    ? glScene_->expanded()
+                        ? "PLANES A/B EXPANDED READ ONLY"
+                        : "PLANES A/B FRAMED READ ONLY"
                   : orderedPlanes ? "PLANE FRAME MISSING"
                   : hasBothPlanes ? "PLANES MUST BE A < B"
                   : "PICK PLANES IN FULL / BALL+STICK"
@@ -2903,7 +2910,7 @@ class Viewer {
         const bool deformationTool = toolConfig_.active() &&
             (toolConfig_.mode() == nadoc_vr::ToolMode::twist ||
              toolConfig_.mode() == nadoc_vr::ToolMode::bend);
-        if (deformationTool && !glScene_->expanded()) {
+        if (deformationTool) {
             const glm::mat4 transform = manipulator_.transform();
             auto worldPoint = [&](const glm::vec3& local) {
                 return glm::vec3(transform * glm::vec4(local, 1.0F));
@@ -2911,35 +2918,39 @@ class Viewer {
             for (size_t slot = 0; slot < planeGuides_.size(); ++slot) {
                 if (!planeGuides_[slot]) continue;
                 const DeformationPlaneGuide& guide = *planeGuides_[slot];
-                const glm::vec3 reference = std::abs(guide.normal.y) < 0.90F
+                const DeformationPlanePose* pose = glScene_->expanded()
+                    ? guide.expanded ? &*guide.expanded : nullptr
+                    : &guide.natural;
+                if (!pose) continue;
+                const glm::vec3 reference = std::abs(pose->normal.y) < 0.90F
                     ? glm::vec3(0, 1, 0) : glm::vec3(1, 0, 0);
                 const glm::vec3 axisU = glm::normalize(glm::cross(
-                    guide.normal, reference));
+                    pose->normal, reference));
                 const glm::vec3 axisV = glm::normalize(glm::cross(
-                    guide.normal, axisU));
+                    pose->normal, axisU));
                 const glm::vec3 color = slot == 0U
                     ? glm::vec3(1.0F, 0.95F, 0.35F)
                     : glm::vec3(1.0F, 0.52F, 0.18F);
-                const glm::vec3 cornerA = guide.center
-                    - axisU * guide.halfExtent - axisV * guide.halfExtent;
-                const glm::vec3 cornerB = guide.center
-                    + axisU * guide.halfExtent - axisV * guide.halfExtent;
-                const glm::vec3 cornerC = guide.center
-                    + axisU * guide.halfExtent + axisV * guide.halfExtent;
-                const glm::vec3 cornerD = guide.center
-                    - axisU * guide.halfExtent + axisV * guide.halfExtent;
+                const glm::vec3 cornerA = pose->center
+                    - axisU * pose->halfExtent - axisV * pose->halfExtent;
+                const glm::vec3 cornerB = pose->center
+                    + axisU * pose->halfExtent - axisV * pose->halfExtent;
+                const glm::vec3 cornerC = pose->center
+                    + axisU * pose->halfExtent + axisV * pose->halfExtent;
+                const glm::vec3 cornerD = pose->center
+                    - axisU * pose->halfExtent + axisV * pose->halfExtent;
                 line(worldPoint(cornerA), worldPoint(cornerB), color);
                 line(worldPoint(cornerB), worldPoint(cornerC), color);
                 line(worldPoint(cornerC), worldPoint(cornerD), color);
                 line(worldPoint(cornerD), worldPoint(cornerA), color);
                 const float marker = glm::clamp(
-                    guide.halfExtent * 0.08F, 0.006F, 0.05F);
-                line(worldPoint(guide.center - axisU * marker),
-                     worldPoint(guide.center + axisU * marker), color);
-                line(worldPoint(guide.center - axisV * marker),
-                     worldPoint(guide.center + axisV * marker), color);
-                line(worldPoint(guide.center),
-                     worldPoint(guide.center + guide.normal * marker * 2.0F), color);
+                    pose->halfExtent * 0.08F, 0.006F, 0.05F);
+                line(worldPoint(pose->center - axisU * marker),
+                     worldPoint(pose->center + axisU * marker), color);
+                line(worldPoint(pose->center - axisV * marker),
+                     worldPoint(pose->center + axisV * marker), color);
+                line(worldPoint(pose->center),
+                     worldPoint(pose->center + pose->normal * marker * 2.0F), color);
             }
         }
         if (!menuOpen_) {
@@ -3359,16 +3370,27 @@ class Viewer {
         const std::string slot = feedback->slot;
         const size_t slotIndex = slot == "a" ? 0U : 1U;
         const bool retainedGuide = planeGuides_[slotIndex].has_value();
-        const bool accepted = feedback->resolved && feedback->frameResolved;
+        const bool accepted = feedback->resolved && feedback->frameResolved &&
+            feedback->expandedFrameResolved;
         bool changed = false;
         if (accepted) {
             DeformationPlaneGuide guide;
-            guide.center = nadoc_vr::sourceToNormalizedPoint(
+            guide.natural.center = nadoc_vr::sourceToNormalizedPoint(
                 feedback->planeCenter, normalizationCenter_, normalizationScale_,
                 {0.0F, 0.0F, -kViewDistanceMeters});
-            guide.normal = glm::normalize(feedback->planeNormal);
-            guide.halfExtent = feedback->planeHalfExtentNanometers
-                             * normalizationScale_;
+            guide.natural.normal = glm::normalize(feedback->planeNormal);
+            guide.natural.halfExtent = feedback->planeHalfExtentNanometers
+                                     * normalizationScale_;
+            if (feedback->expandedFrameResolved) {
+                DeformationPlanePose expanded;
+                expanded.center = nadoc_vr::sourceToNormalizedPoint(
+                    feedback->expandedPlaneCenter, normalizationCenter_,
+                    normalizationScale_, {0.0F, 0.0F, -kViewDistanceMeters});
+                expanded.normal = glm::normalize(feedback->expandedPlaneNormal);
+                expanded.halfExtent = feedback->expandedPlaneHalfExtentNanometers
+                                    * normalizationScale_;
+                guide.expanded = expanded;
+            }
             planeGuides_[slotIndex] = guide;
             changed = toolConfig_.setPlaneBp(slot, feedback->planeBp);
         }

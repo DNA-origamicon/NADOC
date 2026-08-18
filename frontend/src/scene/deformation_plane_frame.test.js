@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { deformationPlaneFrame } from './deformation_plane_frame.js'
+import {
+  deformationPlaneFrame,
+  deformationPlaneFramePair,
+} from './deformation_plane_frame.js'
 
 describe('desktop-authoritative deformation plane frame', () => {
   it('averages scoped straight helices and preserves global-bp stagger semantics', () => {
@@ -33,5 +36,21 @@ describe('desktop-authoritative deformation plane frame', () => {
       { bpStart: 0, lengthBp: 4, start: [0, 0, 0], end: [0, 0, 2] },
       { bpStart: 0, lengthBp: 4, start: [0, 0, 2], end: [0, 0, 0] },
     ])).toBeNull()
+  })
+
+  it('recomputes the Expanded center while preserving tangent and extent', () => {
+    const helices = [
+      { id: 'a', bpStart: 0, lengthBp: 20, start: [-1, 0, 0], end: [-1, 0, 10] },
+      { id: 'b', bpStart: 0, lengthBp: 20, start: [1, 0, 0], end: [1, 0, 10] },
+    ]
+    const frames = deformationPlaneFramePair(5, helices, new Map([
+      ['a', [-2, 1, 0]], ['b', [4, 1, 0]],
+    ]))
+    expect(frames.natural.center).toEqual([0, 0, 5 * 0.334])
+    expect(frames.expanded.center).toEqual([1, 1, 5 * 0.334])
+    expect(frames.expanded.normal).toEqual(frames.natural.normal)
+    expect(frames.expanded.halfExtentNm).toBe(frames.natural.halfExtentNm)
+    const missingOffset = new Map([['a', [0, 0, 0]]])
+    expect(deformationPlaneFramePair(5, helices, missingOffset)).toBeNull()
   })
 })

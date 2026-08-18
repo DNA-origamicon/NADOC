@@ -103,6 +103,10 @@ struct PlanePickFeedback {
     glm::vec3 planeCenter{};
     glm::vec3 planeNormal{};
     float planeHalfExtentNanometers = 0.0F;
+    bool expandedFrameResolved = false;
+    glm::vec3 expandedPlaneCenter{};
+    glm::vec3 expandedPlaneNormal{};
+    float expandedPlaneHalfExtentNanometers = 0.0F;
 };
 
 struct OwnerAliasEntry {
@@ -752,7 +756,8 @@ inline std::optional<PlanePickFeedback> parsePlanePickFeedback(
                  >> resolved >> result.reason >> result.slot
                  >> result.targetSelectionKind >> result.targetIdentity
                  >> result.pickedIdentity) ||
-        magic != "NADOCVR_PLANE_FEEDBACK" || (version != 1 && version != 2) ||
+        magic != "NADOCVR_PLANE_FEEDBACK" ||
+        (version != 1 && version != 2 && version != 3) ||
         (resolved != 0 && resolved != 1) ||
         result.sequence <= previousSequence ||
         result.sequence != expectedPickSequence ||
@@ -781,34 +786,42 @@ inline std::optional<PlanePickFeedback> parsePlanePickFeedback(
             return std::nullopt;
         }
         result.planeBp = static_cast<int32_t>(planeBp);
+        auto readFrame = [&](glm::vec3& center, glm::vec3& normal,
+                             float& halfExtent) {
+            if (!(fields >> center.x >> center.y >> center.z
+                         >> normal.x >> normal.y >> normal.z >> halfExtent) ||
+                !std::isfinite(center.x) || !std::isfinite(center.y) ||
+                !std::isfinite(center.z) || !std::isfinite(normal.x) ||
+                !std::isfinite(normal.y) || !std::isfinite(normal.z) ||
+                !std::isfinite(halfExtent) || std::abs(center.x) > 1.0e9F ||
+                std::abs(center.y) > 1.0e9F || std::abs(center.z) > 1.0e9F ||
+                halfExtent <= 0.0F || halfExtent > 1.0e6F) {
+                return false;
+            }
+            const double normalLength = std::hypot(
+                std::hypot(static_cast<double>(normal.x),
+                           static_cast<double>(normal.y)),
+                static_cast<double>(normal.z));
+            if (normalLength <= 1.0e-9 || normalLength >= 1.0e9) return false;
+            normal = glm::normalize(normal);
+            return true;
+        };
         // Version 1 never carried a frame. Do not accept an exact bp without
         // the geometry required to display what will eventually be edited.
-        if (version != 2 ||
-            !(fields >> result.planeCenter.x >> result.planeCenter.y
-                      >> result.planeCenter.z >> result.planeNormal.x
-                      >> result.planeNormal.y >> result.planeNormal.z
-                      >> result.planeHalfExtentNanometers) ||
-            !std::isfinite(result.planeCenter.x) ||
-            !std::isfinite(result.planeCenter.y) ||
-            !std::isfinite(result.planeCenter.z) ||
-            !std::isfinite(result.planeNormal.x) ||
-            !std::isfinite(result.planeNormal.y) ||
-            !std::isfinite(result.planeNormal.z) ||
-            !std::isfinite(result.planeHalfExtentNanometers) ||
-            std::abs(result.planeCenter.x) > 1.0e9F ||
-            std::abs(result.planeCenter.y) > 1.0e9F ||
-            std::abs(result.planeCenter.z) > 1.0e9F ||
-            result.planeHalfExtentNanometers <= 0.0F ||
-            result.planeHalfExtentNanometers > 1.0e6F) {
+        if (version < 2 || !readFrame(
+                result.planeCenter, result.planeNormal,
+                result.planeHalfExtentNanometers)) {
             return std::nullopt;
         }
-        const double normalLength = std::hypot(
-            std::hypot(static_cast<double>(result.planeNormal.x),
-                       static_cast<double>(result.planeNormal.y)),
-            static_cast<double>(result.planeNormal.z));
-        if (normalLength <= 1.0e-9 || normalLength >= 1.0e9) return std::nullopt;
-        result.planeNormal = glm::normalize(result.planeNormal);
         result.frameResolved = true;
+        if (version >= 3) {
+            if (!readFrame(
+                    result.expandedPlaneCenter, result.expandedPlaneNormal,
+                    result.expandedPlaneHalfExtentNanometers)) {
+                return std::nullopt;
+            }
+            result.expandedFrameResolved = true;
+        }
     }
     std::string trailing;
     if (fields >> trailing) return std::nullopt;

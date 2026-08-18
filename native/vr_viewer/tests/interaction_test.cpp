@@ -329,8 +329,8 @@ void toolContextFeedbackIsExactSequencedAndFinite() {
 
 void planePickFeedbackIsTargetBoundSequencedAndStrict() {
     const auto accepted = nadoc_vr::parsePlanePickFeedback(
-        "NADOCVR_PLANE_FEEDBACK 2 9 4 1 resolved a end nuc:end nuc:pick "
-        "27 1 2 3 0 0 2 8\n",
+        "NADOCVR_PLANE_FEEDBACK 3 9 4 1 resolved a end nuc:end nuc:pick "
+        "27 1 2 3 0 0 2 8 4 5 6 0 3 0 8\n",
         8, 9, 4);
     require(accepted && accepted->resolved && accepted->slot == "a" &&
             accepted->planeBp == 27 && accepted->targetIdentity == "nuc:end" &&
@@ -339,10 +339,22 @@ void planePickFeedbackIsTargetBoundSequencedAndStrict() {
                 accepted->planeCenter, glm::vec3(1, 2, 3), 1e-6F)) &&
             glm::all(glm::epsilonEqual(
                 accepted->planeNormal, glm::vec3(0, 0, 1), 1e-6F)) &&
-            std::abs(accepted->planeHalfExtentNanometers - 8.0F) < 1e-6F);
-    const auto rejected = nadoc_vr::parsePlanePickFeedback(
-        "NADOCVR_PLANE_FEEDBACK 2 10 4 0 ambiguous_primitive b cluster cluster:c1 bond:x\n",
+            std::abs(accepted->planeHalfExtentNanometers - 8.0F) < 1e-6F &&
+            accepted->expandedFrameResolved &&
+            glm::all(glm::epsilonEqual(
+                accepted->expandedPlaneCenter, glm::vec3(4, 5, 6), 1e-6F)) &&
+            glm::all(glm::epsilonEqual(
+                accepted->expandedPlaneNormal, glm::vec3(0, 1, 0), 1e-6F)) &&
+            std::abs(accepted->expandedPlaneHalfExtentNanometers - 8.0F) < 1e-6F);
+    const auto naturalOnly = nadoc_vr::parsePlanePickFeedback(
+        "NADOCVR_PLANE_FEEDBACK 2 10 4 1 resolved a end nuc:end nuc:pick "
+        "27 1 2 3 0 0 1 8\n",
         9, 10, 4);
+    require(naturalOnly && naturalOnly->frameResolved &&
+            !naturalOnly->expandedFrameResolved);
+    const auto rejected = nadoc_vr::parsePlanePickFeedback(
+        "NADOCVR_PLANE_FEEDBACK 3 11 4 0 ambiguous_primitive b cluster cluster:c1 bond:x\n",
+        10, 11, 4);
     require(rejected && !rejected->resolved && rejected->slot == "b");
     require(!nadoc_vr::parsePlanePickFeedback(
         "NADOCVR_PLANE_FEEDBACK 2 9 4 1 resolved a end nuc:end nuc:pick "
@@ -361,6 +373,10 @@ void planePickFeedbackIsTargetBoundSequencedAndStrict() {
         10, 11, 4));
     require(!nadoc_vr::parsePlanePickFeedback(
         "NADOCVR_PLANE_FEEDBACK 1 11 4 1 resolved a end nuc:end nuc:pick 27\n",
+        10, 11, 4));
+    require(!nadoc_vr::parsePlanePickFeedback(
+        "NADOCVR_PLANE_FEEDBACK 3 11 4 1 resolved a end nuc:end nuc:pick "
+        "27 1 2 3 0 0 1 8\n",
         10, 11, 4));
     require(!nadoc_vr::parsePlanePickFeedback(
         "NADOCVR_PLANE_FEEDBACK 2 11 4 1 resolved a end nuc:end nuc:pick "

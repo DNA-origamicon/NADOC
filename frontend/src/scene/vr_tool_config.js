@@ -23,6 +23,14 @@ const PLANE_PICK_REASONS = new Set([
   'synthetic_not_supported', 'out_of_range', 'plane_frame_unavailable', 'stale_target',
 ])
 
+function _validPlaneFrame(frame) {
+  return Array.isArray(frame?.center) && frame.center.length === 3 &&
+    frame.center.every(Number.isFinite) && Array.isArray(frame?.normal) &&
+    frame.normal.length === 3 && frame.normal.every(Number.isFinite) &&
+    Math.hypot(...frame.normal) > 1e-9 && Number.isFinite(frame?.halfExtentNm) &&
+    frame.halfExtentNm > 0 && frame.halfExtentNm <= 1_000_000
+}
+
 export const initialVRToolConfigState = Object.freeze({
   sequence: 0,
   draft: null,
@@ -195,17 +203,14 @@ export function vrPlaneFeedbackPayload(event, state, { toolTarget = null, planeP
     toolTarget.selectionKind === draft.target_kind &&
     JSON.stringify(toolTarget.ownerTokens) === JSON.stringify(draft.target_owner_tokens)
   const frame = planePick?.frame
-  const validFrame = Array.isArray(frame?.center) && frame.center.length === 3 &&
-    frame.center.every(Number.isFinite) && Array.isArray(frame?.normal) &&
-    frame.normal.length === 3 && frame.normal.every(Number.isFinite) &&
-    Math.hypot(...frame.normal) > 1e-9 && Number.isFinite(frame?.halfExtentNm) &&
-    frame.halfExtentNm > 0 && frame.halfExtentNm <= 1_000_000
-  const resolved = targetMatches && planePick?.resolved === true && validFrame &&
+  const expandedFrame = planePick?.expandedFrame
+  const validFrames = _validPlaneFrame(frame) && _validPlaneFrame(expandedFrame)
+  const resolved = targetMatches && planePick?.resolved === true && validFrames &&
     Number.isSafeInteger(planePick.bp) &&
     Math.abs(planePick.bp) <= VR_TOOL_CONFIG_LIMITS.maxPlaneBp
   const reason = resolved ? 'resolved'
     : !targetMatches ? 'stale_target'
-    : planePick?.resolved === true && !validFrame ? 'plane_frame_unavailable'
+    : planePick?.resolved === true && !validFrames ? 'plane_frame_unavailable'
     : planePick?.resolved === true ? 'out_of_range'
     : PLANE_PICK_REASONS.has(planePick?.reason) && planePick.reason !== 'resolved'
       ? planePick.reason : 'invalid_primitive'
@@ -222,5 +227,8 @@ export function vrPlaneFeedbackPayload(event, state, { toolTarget = null, planeP
     plane_center: resolved ? [...frame.center] : null,
     plane_normal: resolved ? [...frame.normal] : null,
     plane_half_extent_nm: resolved ? frame.halfExtentNm : null,
+    expanded_plane_center: resolved ? [...expandedFrame.center] : null,
+    expanded_plane_normal: resolved ? [...expandedFrame.normal] : null,
+    expanded_plane_half_extent_nm: resolved ? expandedFrame.halfExtentNm : null,
   }
 }

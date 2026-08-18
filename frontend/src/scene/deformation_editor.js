@@ -24,7 +24,11 @@ import { store }          from '../state/store.js'
 import * as api           from '../api/client.js'
 import { BDNA_RISE_PER_BP } from '../constants.js'
 import { showPersistentToast, dismissToast } from '../ui/toast.js'
-import { deformationPlaneFrame } from './deformation_plane_frame.js'
+import {
+  deformationPlaneFrame,
+  deformationPlaneFramePair,
+} from './deformation_plane_frame.js'
+import { expandedHelixOffsetFrame } from './expanded_helix_offsets.js'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -839,15 +843,26 @@ function _tangentAtBp(globalBp) {
 
 /** Exact frame shared by desktop plane meshes and native-VR read-only guides. */
 export function getDeformationPlaneFrame(globalBp, clusterIdsOverride = null) {
-  return deformationPlaneFrame(
-    globalBp, _getHelixAxisData(clusterIdsOverride).map(helix => ({
-      bpStart: helix.bpStart,
-      lengthBp: helix.lengthBp,
-      start: helix.start.toArray(),
-      end: helix.end.toArray(),
-      samples: helix.samples,
-    })),
-  )
+  return deformationPlaneFrame(globalBp, _numericHelixAxes(clusterIdsOverride))
+}
+
+function _numericHelixAxes(clusterIdsOverride = null) {
+  return _getHelixAxisData(clusterIdsOverride).map(helix => ({
+    id: helix.id,
+    bpStart: helix.bpStart,
+    lengthBp: helix.lengthBp,
+    start: helix.start.toArray(),
+    end: helix.end.toArray(),
+    samples: helix.samples,
+  }))
+}
+
+/** Natural and 5 nm Expanded frames for the immutable native scene pair. */
+export function getVRDeformationPlaneFrames(globalBp, clusterIdsOverride = null) {
+  const axes = _numericHelixAxes(clusterIdsOverride)
+  const expansion = expandedHelixOffsetFrame(store.getState().currentDesign)
+  return expansion
+    ? deformationPlaneFramePair(globalBp, axes, expansion.offsets) : null
 }
 
 // ── Ghost planes ──────────────────────────────────────────────────────────────

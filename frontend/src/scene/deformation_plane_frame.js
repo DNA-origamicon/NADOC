@@ -86,3 +86,27 @@ export function deformationPlaneFrame(globalBp, helices = []) {
     halfExtentNm: DEFORMATION_PLANE_HALF_EXTENT_NM,
   }
 }
+
+/** Natural/Expanded pair using the exact per-helix translations of Quick View. */
+export function deformationPlaneFramePair(globalBp, helices = [], offsets = null) {
+  const natural = deformationPlaneFrame(globalBp, helices)
+  if (!natural || !(offsets instanceof Map)) return null
+  const expandedHelices = helices.map(helix => {
+    const offset = offsets.get(helix?.id)
+    if (!Array.isArray(offset) || offset.length !== 3 || !offset.every(Number.isFinite)) {
+      return null
+    }
+    const translate = point => Array.isArray(point) && point.length === 3
+      ? point.map((value, axis) => value + offset[axis]) : point
+    return {
+      ...helix,
+      start: translate(helix.start),
+      end: translate(helix.end),
+      samples: Array.isArray(helix.samples)
+        ? helix.samples.map(translate) : helix.samples,
+    }
+  })
+  if (expandedHelices.some(helix => !helix)) return null
+  const expanded = deformationPlaneFrame(globalBp, expandedHelices)
+  return expanded ? { natural, expanded } : null
+}

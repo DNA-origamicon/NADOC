@@ -155,6 +155,15 @@ class VRPlaneFeedbackRequest(BaseModel):
         default=None, min_length=3, max_length=3
     )
     plane_half_extent_nm: Optional[float] = Field(default=None, gt=0, le=1e6)
+    expanded_plane_center: Optional[list[float]] = Field(
+        default=None, min_length=3, max_length=3
+    )
+    expanded_plane_normal: Optional[list[float]] = Field(
+        default=None, min_length=3, max_length=3
+    )
+    expanded_plane_half_extent_nm: Optional[float] = Field(
+        default=None, gt=0, le=1e6
+    )
 
 
 def _require_local(request: Request) -> None:
@@ -2266,7 +2275,13 @@ def _expanded_helix_offsets(design, spacing_nm: float = 5.0) -> dict[str, np.nda
     end = np.asarray(
         [first.axis_end.x, first.axis_end.y, first.axis_end.z], dtype=float
     )
-    axis_index = int(np.argmax(np.abs(end - start)))
+    delta = np.abs(end - start)
+    # Match desktop Expanded Quick View's deterministic Z/Y/X tie priority.
+    axis_index = (
+        2 if delta[2] >= delta[0] and delta[2] >= delta[1]
+        else 1 if delta[1] >= delta[0] and delta[1] >= delta[2]
+        else 0
+    )
     lateral_indices = [index for index in range(3) if index != axis_index]
     starts = np.asarray(
         [
@@ -3318,6 +3333,9 @@ def _write_plane_feedback(state: dict | None, body: VRPlaneFeedbackRequest) -> N
             and body.plane_center is not None
             and body.plane_normal is not None
             and body.plane_half_extent_nm is not None
+            and body.expanded_plane_center is not None
+            and body.expanded_plane_normal is not None
+            and body.expanded_plane_half_extent_nm is not None
         )
         or (
             not body.resolved
@@ -3328,6 +3346,9 @@ def _write_plane_feedback(state: dict | None, body: VRPlaneFeedbackRequest) -> N
                     body.plane_center,
                     body.plane_normal,
                     body.plane_half_extent_nm,
+                    body.expanded_plane_center,
+                    body.expanded_plane_normal,
+                    body.expanded_plane_half_extent_nm,
                 )
             )
         )
@@ -3336,31 +3357,46 @@ def _write_plane_feedback(state: dict | None, body: VRPlaneFeedbackRequest) -> N
 
     values: list[float] = []
     if body.resolved:
-        center = np.asarray(body.plane_center, dtype=float)
-        normal = np.asarray(body.plane_normal, dtype=float)
         rotation = np.asarray(state.get("view_rotation"), dtype=float)
-        if (
-            center.shape != (3,)
-            or normal.shape != (3,)
-            or rotation.shape != (3, 3)
-            or not np.all(np.isfinite(center))
-            or not np.all(np.isfinite(normal))
-            or not np.all(np.isfinite(rotation))
-            or np.max(np.abs(center)) > 1e9
-            or not 1e-9 < np.linalg.norm(normal) < 1e9
-            or not np.isfinite(body.plane_half_extent_nm)
-            or not 0 < body.plane_half_extent_nm <= 1e6
-        ):
+        if rotation.shape != (3, 3) or not np.all(np.isfinite(rotation)):
             raise HTTPException(
                 422, detail="Invalid VR deformation plane feedback geometry."
             )
-        center = rotation @ center
-        normal = rotation @ normal
-        normal /= np.linalg.norm(normal)
-        values = [*center.tolist(), *normal.tolist(), body.plane_half_extent_nm]
+
+        def frame_values(center_value, normal_value, extent_value) -> list[float]:
+            center = np.asarray(center_value, dtype=float)
+            normal = np.asarray(normal_value, dtype=float)
+            if (
+                center.shape != (3,)
+                or normal.shape != (3,)
+                or not np.all(np.isfinite(center))
+                or not np.all(np.isfinite(normal))
+                or np.max(np.abs(center)) > 1e9
+                or not 1e-9 < np.linalg.norm(normal) < 1e9
+                or not np.isfinite(extent_value)
+                or not 0 < extent_value <= 1e6
+            ):
+                raise HTTPException(
+                    422, detail="Invalid VR deformation plane feedback geometry."
+                )
+            center = rotation @ center
+            normal = rotation @ normal
+            normal /= np.linalg.norm(normal)
+            return [*center.tolist(), *normal.tolist(), extent_value]
+
+        values = frame_values(
+            body.plane_center, body.plane_normal, body.plane_half_extent_nm
+        )
+        values.extend(
+            frame_values(
+                body.expanded_plane_center,
+                body.expanded_plane_normal,
+                body.expanded_plane_half_extent_nm,
+            )
+        )
 
     record = (
-        f"NADOCVR_PLANE_FEEDBACK 2 {body.plane_pick_sequence} "
+        f"NADOCVR_PLANE_FEEDBACK 3 {body.plane_pick_sequence} "
         f"{body.tool_config_sequence} {int(body.resolved)} {body.reason} "
         f"{body.plane_slot} {body.target_kind} {body.target_identity} "
         f"{body.picked_identity}"

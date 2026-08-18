@@ -50,7 +50,7 @@ import {
 import { selectionHighlightDescriptor } from './selection_highlight_model.js'
 import { referenceStrandInteractionHidden } from './reference_navigation.js'
 import { resolveVREndToolContext } from './vr_tool_context.js'
-import { getDeformationPlaneFrame } from './deformation_editor.js'
+import { getVRDeformationPlaneFrames } from './deformation_editor.js'
 
 // Kick off the FJC lookup fetch at module load so the linker-config modal
 // opens instantly with the per-bin histograms already cached.
@@ -4847,8 +4847,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if (!pick.resolved) return pick
       const selectedRef = selectionController.getState().primary ?? null
       const clusterIds = selectedRef?.kind === 'cluster' ? [selectedRef.id] : null
-      const frame = getDeformationPlaneFrame(pick.bp, clusterIds)
-      return frame ? { ...pick, frame }
+      const frames = getVRDeformationPlaneFrames(pick.bp, clusterIds)
+      return frames ? { ...pick, frame: frames.natural, expandedFrame: frames.expanded }
         : { resolved: false, reason: 'plane_frame_unavailable' }
     },
 

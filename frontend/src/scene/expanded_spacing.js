@@ -24,29 +24,17 @@
 import * as THREE from 'three'
 import { store }  from '../state/store.js'
 import { adjustedSpacingForDesign } from './extra_base_spacing.js'
+import {
+  DEFAULT_EXPANDED_HELIX_SPACING_NM,
+  NATURAL_HELIX_SPACING_NM,
+  expandedHelixOffsetFrame,
+} from './expanded_helix_offsets.js'
 
 const ANIM_DURATION_MS  = 300
-const DEFAULT_SPACING_NM = 5.0
-const MIN_SPACING_NM    = 2.25   // natural HC / SQ helix spacing
+const DEFAULT_SPACING_NM = DEFAULT_EXPANDED_HELIX_SPACING_NM
 const MAX_SPACING_NM    = 10.0
 
 // ── Offset computation ────────────────────────────────────────────────────────
-
-/**
- * Detect the dominant helix axis direction from the first helix.
- * Returns 'Z', 'Y', or 'X' — the axis along which helices are extruded.
- * Lateral expansion is applied to the OTHER two axes.
- */
-function _axisDir(design) {
-  const h = design.helices[0]
-  if (!h) return 'Z'
-  const dx = Math.abs(h.axis_end.x - h.axis_start.x)
-  const dy = Math.abs(h.axis_end.y - h.axis_start.y)
-  const dz = Math.abs(h.axis_end.z - h.axis_start.z)
-  if (dz >= dx && dz >= dy) return 'Z'
-  if (dy >= dx && dy >= dz) return 'Y'
-  return 'X'
-}
 
 /**
  * Compute per-helix 3D offset vectors for expanding spacing to `spacingNm`.
@@ -58,35 +46,15 @@ function _axisDir(design) {
  * @returns {Map<string, THREE.Vector3>}  helix_id → world-space offset at t=1
  */
 function _computeOffsets(design, spacingNm) {
-  const helices = design.helices
-  if (!helices.length) return new Map()
-
-  const axis = _axisDir(design)
-  const scale = spacingNm / MIN_SPACING_NM   // e.g. 5.0 / 2.25 ≈ 2.22×
-  console.log(`[EXPAND] _computeOffsets: ${helices.length} helices, axis=${axis}, spacing=${spacingNm.toFixed(2)} nm, scale=${scale.toFixed(3)}`)
-
-  // For each helix, extract its two lateral coordinates.
-  const lats = helices.map(h => {
-    const s = h.axis_start
-    if (axis === 'Z') return { id: h.id, u: s.x, v: s.y }
-    if (axis === 'Y') return { id: h.id, u: s.x, v: s.z }
-    return                 { id: h.id, u: s.y, v: s.z }
-  })
-
-  // Centroid of lateral positions
-  const cu = lats.reduce((a, l) => a + l.u, 0) / lats.length
-  const cv = lats.reduce((a, l) => a + l.v, 0) / lats.length
-
+  const frame = expandedHelixOffsetFrame(design, spacingNm)
+  if (!frame) return new Map()
+  const scale = spacingNm / NATURAL_HELIX_SPACING_NM
+  console.log(`[EXPAND] _computeOffsets: ${frame.offsets.size} helices, axis=${frame.axis}, spacing=${spacingNm.toFixed(2)} nm, scale=${scale.toFixed(3)}`)
   const offsets = new Map()
-  for (const l of lats) {
-    const du = (l.u - cu) * (scale - 1)
-    const dv = (l.v - cv) * (scale - 1)
-    let dx = 0, dy = 0, dz = 0
-    if (axis === 'Z') { dx = du; dy = dv }
-    else if (axis === 'Y') { dx = du; dz = dv }
-    else              { dy = du; dz = dv }
-    offsets.set(l.id, new THREE.Vector3(dx, dy, dz))
-    console.log(`[EXPAND]   helix ${l.id.slice(0, 8)}: offset=(${dx.toFixed(3)}, ${dy.toFixed(3)}, ${dz.toFixed(3)})`)
+  for (const [id, value] of frame.offsets) {
+    const offset = new THREE.Vector3(...value)
+    offsets.set(id, offset)
+    console.log(`[EXPAND]   helix ${id.slice(0, 8)}: offset=(${offset.x.toFixed(3)}, ${offset.y.toFixed(3)}, ${offset.z.toFixed(3)})`)
   }
   return offsets
 }
