@@ -41,6 +41,20 @@ _STATE_LOCK = threading.Lock()
 _RUNTIME_LOCK = threading.Lock()
 _FEEDBACK_LOCK = threading.Lock()
 
+SelectionKind = Literal[
+    "none",
+    "cluster",
+    "strand",
+    "domain",
+    "base",
+    "end",
+    "bond",
+    "crossover",
+    "overhang",
+    "extension",
+    "protein",
+]
+
 
 class VRCamera(BaseModel):
     position: list[float] = Field(min_length=3, max_length=3)
@@ -58,6 +72,7 @@ class VRLaunchRequest(BaseModel):
         "default", "cluster", "strand", "domain", "end", "xover", "base"
     ] = "default"
     selected_owner_tokens: list[str] = Field(default_factory=list, max_length=8)
+    selected_selection_kind: SelectionKind = "none"
 
 
 class VRFeedbackRequest(BaseModel):
@@ -69,6 +84,7 @@ class VRFeedbackRequest(BaseModel):
         "default", "cluster", "strand", "domain", "end", "xover", "base"
     ] = "default"
     owner_tokens: list[str] = Field(default_factory=list, max_length=8)
+    selection_kind: SelectionKind = "none"
 
 
 def _require_local(request: Request) -> None:
@@ -2088,15 +2104,16 @@ def _write_feedback(state: dict | None, body: VRFeedbackRequest) -> None:
         raise HTTPException(409, detail="Native VR is not running.")
     identity = body.identity or "-"
     owner_tokens = body.owner_tokens if body.selected else []
+    selection_kind = body.selection_kind if body.selected else "none"
     record = (
-        f"NADOCVR_FEEDBACK 2 {body.select_sequence} "
+        f"NADOCVR_FEEDBACK 3 {body.select_sequence} "
         f"{int(body.accepted)} {int(body.selected)} "
-        f"{body.selection_level} {identity} {len(owner_tokens)}"
+        f"{body.selection_level} {selection_kind} {identity} {len(owner_tokens)}"
         + (f" {' '.join(owner_tokens)}" if owner_tokens else "")
         + "\n"
     )
     values = [identity, *owner_tokens]
-    if len(record.encode()) > 4096 or any(
+    if (body.selected and selection_kind == "none") or len(record.encode()) > 4096 or any(
         any(character.isspace() for character in value) or len(value) > 2048
         for value in values
     ):
@@ -2138,6 +2155,7 @@ def _viewer_command(
     ]
     for token in body.selected_owner_tokens:
         command.extend(["--selected-owner", token])
+    command.extend(["--selected-kind", body.selected_selection_kind])
     return command
 
 
@@ -2162,7 +2180,9 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             detail="The first native VR viewer supports Part view; exit Assembly mode first.",
         )
 
-    if any(
+    if bool(body.selected_owner_tokens) != (
+        body.selected_selection_kind != "none"
+    ) or any(
         not token
         or len(token) > 2048
         or any(character.isspace() for character in token)

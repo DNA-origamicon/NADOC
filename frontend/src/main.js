@@ -5796,6 +5796,7 @@ async function main() {
           ? store.getState().coloringMode : 'strand',
         selection_level: selectionManager.getSelectionLevel?.() ?? 'default',
         selected_owner_tokens: selectionManager.getVRInitialSelectionOwnerTokens?.() ?? [],
+        selected_selection_kind: selectionManager.getVRInitialSelectionKind?.() ?? 'none',
       }),
       stop: api.stopNativeVR,
       errorMessage: api.lastErrorMessage,
@@ -5814,6 +5815,7 @@ async function main() {
           selected: result?.selected === true,
           selection_level: selectionManager.getSelectionLevel?.() ?? 'default',
           owner_tokens: result?.ownerTokens ?? [],
+          selection_kind: result?.selectionKind ?? 'none',
         }).catch(() => {})
       } else if (event?.type === 'tool') {
         const result = reduceVRToolShell(_vrToolShellState, event, {
@@ -5823,7 +5825,9 @@ async function main() {
         const label = event.mode === 'move_rotate'
           ? 'Move / Rotate'
           : `${event.mode?.[0]?.toUpperCase() ?? ''}${event.mode?.slice(1) ?? ''}`
-        if (result.reason === 'waiting_selection' ||
+        if (result.reason === 'unsupported_selection') {
+          showToast(`VR ${label}: this target level is not supported; Move / Rotate requires a Cluster.`)
+        } else if (result.reason === 'waiting_selection' ||
             result.reason === 'selection_required') {
           showToast(`VR ${label}: select a canonical target first.`)
         } else if (result.effect?.type === 'preview_requested') {

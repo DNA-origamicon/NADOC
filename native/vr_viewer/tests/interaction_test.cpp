@@ -165,6 +165,11 @@ void canonicalSelectionFeedbackIsStrictAndSequenced() {
     const auto cleared = nadoc_vr::parseSelectionFeedback(
         "NADOCVR_FEEDBACK 2 7 1 0 base - 2 stale tokens\n", 6, 7);
     require(cleared && cleared->ownerTokens.empty());
+    const auto typed = nadoc_vr::parseSelectionFeedback(
+        "NADOCVR_FEEDBACK 3 8 1 1 cluster cluster primitive 1 cluster-token\n", 7, 8);
+    require(typed && typed->selectionKind == "cluster");
+    require(!nadoc_vr::parseSelectionFeedback(
+        "NADOCVR_FEEDBACK 3 9 1 1 cluster atom primitive 1 token\n", 8, 9));
 }
 
 void canonicalOwnerFallbackUsesFeedbackSpecificityAndSceneOrder() {
@@ -183,20 +188,30 @@ void canonicalOwnerFallbackUsesFeedbackSpecificityAndSceneOrder() {
 
 void toolShellNeverClaimsACommitAndRequiresPreview() {
     nadoc_vr::ToolShell shell;
-    shell.activate(nadoc_vr::ToolMode::twist, false);
+    shell.activate(nadoc_vr::ToolMode::twist, "none");
     require(shell.status() == "SELECT TARGET");
-    shell.syncSelection(true);
+    shell.syncSelection("cluster");
     require(shell.status() == "READY");
-    shell.apply(nadoc_vr::ToolAction::confirm, true);
+    shell.apply(nadoc_vr::ToolAction::confirm, "cluster");
     require(shell.status() == "PREVIEW FIRST");
-    shell.apply(nadoc_vr::ToolAction::preview, true);
+    shell.apply(nadoc_vr::ToolAction::preview, "cluster");
     require(shell.previewRequested() && shell.status() == "PREVIEW ONLY");
-    shell.apply(nadoc_vr::ToolAction::confirm, true);
+    shell.apply(nadoc_vr::ToolAction::confirm, "cluster");
     require(shell.status() == "CONFIRM STAGED");
-    shell.apply(nadoc_vr::ToolAction::cancel, true);
+    shell.apply(nadoc_vr::ToolAction::cancel, "cluster");
     require(!shell.previewRequested() && shell.status() == "CANCELLED");
-    shell.apply(nadoc_vr::ToolAction::undo, true);
+    shell.apply(nadoc_vr::ToolAction::undo, "cluster");
     require(shell.status() == "NO VR COMMIT");
+
+    shell.activate(nadoc_vr::ToolMode::move_rotate, "base");
+    require(shell.status() == "UNSUPPORTED TARGET");
+    shell.apply(nadoc_vr::ToolAction::preview, "base");
+    require(!shell.previewRequested() && shell.status() == "UNSUPPORTED TARGET");
+    shell.syncSelection("cluster");
+    require(shell.status() == "READY");
+    shell.apply(nadoc_vr::ToolAction::preview, "cluster");
+    shell.syncSelection("base");
+    require(!shell.previewRequested() && shell.status() == "UNSUPPORTED TARGET");
 }
 
 }  // namespace

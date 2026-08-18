@@ -256,10 +256,11 @@ def test_native_feedback_writer_is_private_bounded_and_atomic(tmp_path) -> None:
             selected=True,
             selection_level="base",
             owner_tokens=["exact", "domain", "strand"],
+            selection_kind="base",
         ),
     )
     assert feedback_path.read_text() == (
-        "NADOCVR_FEEDBACK 2 4 1 1 base nuc:s1:0:h1:3:FORWARD:0 "
+        "NADOCVR_FEEDBACK 3 4 1 1 base base nuc:s1:0:h1:3:FORWARD:0 "
         "3 exact domain strand\n"
     )
     assert feedback_path.stat().st_mode & 0o777 == 0o600
@@ -287,14 +288,23 @@ def test_native_launch_passes_initial_selection_as_opaque_arguments(tmp_path) ->
         tmp_path / "scene.nadocvr",
         tmp_path / "event.json",
         tmp_path / "feedback.txt",
-        VRLaunchRequest(selection_level="domain", selected_owner_tokens=[token]),
+        VRLaunchRequest(
+            selection_level="domain",
+            selected_owner_tokens=[token],
+            selected_selection_kind="domain",
+        ),
     )
-    assert command[-2:] == ["--selected-owner", token]
+    assert command[-4:] == [
+        "--selected-owner", token, "--selected-kind", "domain"
+    ]
     assert command[command.index("--selection-level") + 1] == "domain"
 
     with pytest.raises(HTTPException, match="initial VR selection"):
         routes_vr.launch_vr(
-            VRLaunchRequest(selected_owner_tokens=["not whitespace safe"]),
+            VRLaunchRequest(
+                selected_owner_tokens=["not whitespace safe"],
+                selected_selection_kind="domain",
+            ),
             _request("127.0.0.1", "http://localhost:5173"),
         )
 

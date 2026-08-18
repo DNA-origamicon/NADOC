@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  initialVRToolShellState, reduceVRToolShell, VR_TOOL_ACTIONS, VR_TOOL_MODES,
+  initialVRToolShellState, reduceVRToolShell, vrToolSupportsSelection,
+  VR_TOOL_ACTIONS, VR_TOOL_MODES,
 } from './vr_tool_shell.js'
 
 describe('native VR transactional tool shell', () => {
@@ -66,6 +67,16 @@ describe('native VR transactional tool shell', () => {
     expect(undo.accepted).toBe(false)
     expect(undo.reason).toBe('no_vr_commit')
     expect(undo.effect?.type).toBe('undo_requested')
+  })
+
+  it('never silently promotes a fine selection into a Move/Rotate cluster', () => {
+    expect(vrToolSupportsSelection('move_rotate', { kind: 'cluster', id: 'c1' })).toBe(true)
+    expect(vrToolSupportsSelection('move_rotate', { kind: 'base', key: 'h:1:FORWARD' })).toBe(false)
+    const result = reduceVRToolShell(initialVRToolShellState, {
+      sequence: 1, mode: 'move_rotate', action: 'preview',
+    }, { selectedRef: { kind: 'domain', strandId: 's1', domainIndex: 0 } })
+    expect(result.state.stage).toBe('unsupported_selection')
+    expect(result.effect).toBeNull()
   })
 
   it('rejects stale or unknown intents without changing state', () => {

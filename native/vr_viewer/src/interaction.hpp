@@ -30,6 +30,7 @@ struct SelectionFeedback {
     bool accepted = false;
     bool selected = false;
     std::string level;
+    std::string selectionKind = "none";
     std::string identity;
     std::vector<std::string> ownerTokens;
 };
@@ -65,25 +66,36 @@ inline const char* toolActionName(ToolAction action) {
  */
 class ToolShell {
   public:
-    void activate(ToolMode mode, bool hasSelection) {
-        mode_ = mode;
-        previewRequested_ = false;
-        status_ = mode == ToolMode::inspect
-            ? "VIEW ONLY" : hasSelection ? "READY" : "SELECT TARGET";
+    [[nodiscard]] static bool supportsSelection(
+        ToolMode mode, const std::string& selectionKind) {
+        if (mode == ToolMode::inspect) return true;
+        if (selectionKind.empty() || selectionKind == "none") return false;
+        return mode != ToolMode::move_rotate || selectionKind == "cluster";
     }
 
-    void apply(ToolAction action, bool hasSelection) {
+    void activate(ToolMode mode, const std::string& selectionKind) {
+        mode_ = mode;
+        previewRequested_ = false;
+        status_ = mode == ToolMode::inspect ? "VIEW ONLY"
+            : selectionKind.empty() || selectionKind == "none" ? "SELECT TARGET"
+            : supportsSelection(mode, selectionKind) ? "READY" : "UNSUPPORTED TARGET";
+    }
+
+    void apply(ToolAction action, const std::string& selectionKind) {
+        const bool hasSelection = !selectionKind.empty() && selectionKind != "none";
+        const bool supported = supportsSelection(mode_, selectionKind);
         if (action == ToolAction::activate) {
-            activate(mode_, hasSelection);
+            activate(mode_, selectionKind);
         } else if (action == ToolAction::preview) {
             if (mode_ == ToolMode::inspect) status_ = "CHOOSE TOOL";
             else if (!hasSelection) status_ = "SELECT TARGET";
+            else if (!supported) status_ = "UNSUPPORTED TARGET";
             else {
                 previewRequested_ = true;
                 status_ = "PREVIEW ONLY";
             }
         } else if (action == ToolAction::confirm) {
-            status_ = previewRequested_ && hasSelection
+            status_ = previewRequested_ && supported
                 ? "CONFIRM STAGED" : "PREVIEW FIRST";
         } else if (action == ToolAction::cancel) {
             previewRequested_ = false;
@@ -93,10 +105,20 @@ class ToolShell {
         }
     }
 
-    void syncSelection(bool hasSelection) {
-        if (mode_ == ToolMode::inspect || previewRequested_) return;
-        if (status_ == "READY" || status_ == "SELECT TARGET") {
-            status_ = hasSelection ? "READY" : "SELECT TARGET";
+    void syncSelection(const std::string& selectionKind) {
+        if (mode_ == ToolMode::inspect) return;
+        if (previewRequested_) {
+            if (supportsSelection(mode_, selectionKind)) return;
+            previewRequested_ = false;
+            status_ = selectionKind.empty() || selectionKind == "none"
+                ? "SELECT TARGET" : "UNSUPPORTED TARGET";
+            return;
+        }
+        if (status_ == "READY" || status_ == "SELECT TARGET" ||
+            status_ == "UNSUPPORTED TARGET") {
+            const bool hasSelection = !selectionKind.empty() && selectionKind != "none";
+            status_ = !hasSelection ? "SELECT TARGET"
+                : supportsSelection(mode_, selectionKind) ? "READY" : "UNSUPPORTED TARGET";
         }
     }
 
@@ -139,13 +161,18 @@ inline std::optional<SelectionFeedback> parseSelectionFeedback(
     int selected = 0;
     std::string trailing;
     if (!(fields >> magic >> version >> result.sequence >> accepted >> selected
-                >> result.level >> result.identity) ||
-        magic != "NADOCVR_FEEDBACK" || (version != 1 && version != 2) ||
+                >> result.level) ||
+        magic != "NADOCVR_FEEDBACK" || (version < 1 || version > 3) ||
         (accepted != 0 && accepted != 1) || (selected != 0 && selected != 1) ||
         result.sequence <= previousSequence || result.sequence > maximumSequence) {
         return std::nullopt;
     }
-    if (version == 2) {
+    if (version == 3) {
+        if (!(fields >> result.selectionKind >> result.identity)) return std::nullopt;
+    } else if (!(fields >> result.identity)) {
+        return std::nullopt;
+    }
+    if (version >= 2) {
         size_t ownerCount = 0;
         if (!(fields >> ownerCount) || ownerCount > 8) return std::nullopt;
         result.ownerTokens.resize(ownerCount);
@@ -160,10 +187,22 @@ inline std::optional<SelectionFeedback> parseSelectionFeedback(
     if (std::find(levels.begin(), levels.end(), result.level) == levels.end()) {
         return std::nullopt;
     }
+    static constexpr std::array<const char*, 11> selectionKinds = {
+        "none", "cluster", "strand", "domain", "base", "end", "bond",
+        "crossover", "overhang", "extension", "protein",
+    };
+    if (version == 3 && std::find(
+            selectionKinds.begin(), selectionKinds.end(), result.selectionKind)
+            == selectionKinds.end()) {
+        return std::nullopt;
+    }
     result.accepted = accepted == 1;
     result.selected = selected == 1;
     if (result.identity == "-") result.identity.clear();
-    if (!result.selected) result.ownerTokens.clear();
+    if (!result.selected) {
+        result.ownerTokens.clear();
+        result.selectionKind = "none";
+    }
     return result;
 }
 

@@ -40,10 +40,11 @@ browser's canonical acknowledgement back to the companion.
 Feedback v2 also carries up to eight opaque, specificity-ordered canonical owner
 aliases. The native parser retains feedback-v1 compatibility and rejects truncated,
 oversized, stale, future, or whitespace-bearing alias records.
-If a canonical desktop selection already exists at launch, NADOC passes only its
-opaque owner alias as a bounded process argument. The viewer resolves it against the
-immutable scene ownership table, so the green marker and Tools readiness do not
-require reselecting the target in VR.
+If a canonical desktop selection already exists at launch, NADOC passes its opaque
+owner alias plus a bounded kind discriminator as separate process arguments. Kind
+alone cannot select anything: the viewer must resolve the alias against the immutable
+scene ownership table before the green marker or Tools readiness appears, so the
+target need not be reselected in VR and an absent owner cannot become a false match.
 
 Controls on the original HTC Vive wands:
 
@@ -65,6 +66,10 @@ Controls on the original HTC Vive wands:
   Undo, and Back. This first shell is visibly marked **READ ONLY**: it emits bounded
   browser-owned intents and status but cannot yet mutate geometry or create history.
   Confirm is reported as staged and Undo reports that no VR commit exists.
+  Move/Rotate accepts only a canonical Cluster; finer targets report
+  **UNSUPPORTED TARGET** instead of silently widening the edit. Preview draws an
+  RGB translation triad at the acknowledged target and Cancel removes it without
+  changing geometry, selection, or history.
 - Cyan and orange pointers identify the left and right controllers. They turn
   green during a one-hand grab and magenta during a two-hand resize.
 - When neither trigger is held, the right pointer extends to the nearest visible

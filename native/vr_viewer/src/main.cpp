@@ -1539,7 +1539,8 @@ class Viewer {
     explicit Viewer(SceneData scene, std::string eventPath = {},
                     std::string feedbackPath = {},
                     std::string selectionLevel = "default",
-                    std::vector<std::string> selectedOwnerTokens = {})
+                    std::vector<std::string> selectedOwnerTokens = {},
+                    std::string selectedSelectionKind = "none")
         : sceneData_(std::move(scene)), eventPath_(std::move(eventPath)),
           feedbackPath_(std::move(feedbackPath)),
           selectionLevel_(std::move(selectionLevel)) {
@@ -1547,9 +1548,10 @@ class Viewer {
             static_cast<size_t>(sceneData_.initialRepresentation)];
         const auto identity = nadoc_vr::resolveOwnerIdentity(
             initial.ownerAliases, selectedOwnerTokens);
-        if (identity) {
+        if (identity && selectedSelectionKind != "none") {
             selectedIdentity_ = *identity;
             selectedOwnerTokens_ = std::move(selectedOwnerTokens);
+            selectedSelectionKind_ = std::move(selectedSelectionKind);
         }
     }
 
@@ -2060,11 +2062,11 @@ class Viewer {
             if (menuPage_ == MenuPage::tools) {
                 if (hit < 5) {
                     const auto mode = static_cast<nadoc_vr::ToolMode>(hit);
-                    toolShell_.activate(mode, !selectedIdentity_.empty());
+                    toolShell_.activate(mode, selectedSelectionKind_);
                     publishToolIntent(nadoc_vr::ToolAction::activate);
                 } else if (hit < 9) {
                     const auto action = static_cast<nadoc_vr::ToolAction>(hit - 4);
-                    toolShell_.apply(action, !selectedIdentity_.empty());
+                    toolShell_.apply(action, selectedSelectionKind_);
                     publishToolIntent(action);
                 } else {
                     menuPage_ = MenuPage::options;
@@ -2154,6 +2156,16 @@ class Viewer {
                      center + glm::vec3(0, markerRadius, 0), color);
                 line(center - glm::vec3(0, 0, markerRadius),
                      center + glm::vec3(0, 0, markerRadius), color);
+                if (toolShell_.mode() == nadoc_vr::ToolMode::move_rotate &&
+                    toolShell_.previewRequested() && selectedSelectionKind_ == "cluster") {
+                    const float handleRadius = markerRadius + 0.045F;
+                    line(center - glm::vec3(handleRadius, 0, 0),
+                         center + glm::vec3(handleRadius, 0, 0), {1.0F, 0.25F, 0.20F});
+                    line(center - glm::vec3(0, handleRadius, 0),
+                         center + glm::vec3(0, handleRadius, 0), {0.25F, 1.0F, 0.35F});
+                    line(center - glm::vec3(0, 0, handleRadius),
+                         center + glm::vec3(0, 0, handleRadius), {0.25F, 0.55F, 1.0F});
+                }
             }
         }
         appendMenuGuides();
@@ -2240,7 +2252,9 @@ class Viewer {
             ? feedback->identity : "";
         selectedOwnerTokens_ = feedback->accepted && feedback->selected
             ? feedback->ownerTokens : std::vector<std::string>{};
-        toolShell_.syncSelection(!selectedIdentity_.empty());
+        selectedSelectionKind_ = feedback->accepted && feedback->selected
+            ? feedback->selectionKind : "none";
+        toolShell_.syncSelection(selectedSelectionKind_);
     }
 
     void syncActions(XrTime displayTime) {
@@ -2524,6 +2538,7 @@ class Viewer {
     uint32_t feedbackPollFrame_ = 0;
     std::string selectedIdentity_;
     std::vector<std::string> selectedOwnerTokens_;
+    std::string selectedSelectionKind_ = "none";
     bool glfwInitialized_ = false;
     GLFWwindow* window_ = nullptr;
     XrInstance instance_ = XR_NULL_HANDLE;
@@ -2584,12 +2599,13 @@ int main(int argc, char** argv) {
         std::cerr << "Usage: nadoc-vr-viewer [--validate] <scene.nadocvr> "
                      "[--events <event.json>] [--feedback <feedback.txt>] "
                      "[--selection-level <level>] "
-                     "[--selected-owner <token>]...\n";
+                     "[--selected-owner <token>]... [--selected-kind <kind>]\n";
         return 2;
     }
     std::string eventPath;
     std::string feedbackPath;
     std::string selectionLevel = "default";
+    std::string selectedSelectionKind = "none";
     std::vector<std::string> selectedOwnerTokens;
     const std::array<std::string, 7> validSelectionLevels = {
         "default", "cluster", "strand", "domain", "end", "xover", "base",
@@ -2614,6 +2630,7 @@ int main(int argc, char** argv) {
             }
             selectedOwnerTokens.push_back(token);
         }
+        else if (option == "--selected-kind") selectedSelectionKind = argv[index + 1];
         else {
             std::cerr << "NADOC VR error: unknown option " << option << '\n';
             return 2;
@@ -2624,12 +2641,22 @@ int main(int argc, char** argv) {
         std::cerr << "NADOC VR error: invalid selection level " << selectionLevel << '\n';
         return 2;
     }
+    const std::array<std::string, 11> validSelectionKinds = {
+        "none", "cluster", "strand", "domain", "base", "end", "bond",
+        "crossover", "overhang", "extension", "protein",
+    };
+    if (std::find(validSelectionKinds.begin(), validSelectionKinds.end(),
+                  selectedSelectionKind) == validSelectionKinds.end() ||
+        selectedOwnerTokens.empty() != (selectedSelectionKind == "none")) {
+        std::cerr << "NADOC VR error: invalid selected owner kind\n";
+        return 2;
+    }
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
     try {
         Viewer viewer(
             loadScene(argv[1]), eventPath, feedbackPath, selectionLevel,
-            std::move(selectedOwnerTokens));
+            std::move(selectedOwnerTokens), std::move(selectedSelectionKind));
         return viewer.run();
     } catch (const std::exception& error) {
         std::cerr << "NADOC VR error: " << error.what() << '\n';

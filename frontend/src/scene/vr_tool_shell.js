@@ -16,6 +16,16 @@ export const VR_TOOL_ACTIONS = Object.freeze([
 const MODES = new Set(VR_TOOL_MODES)
 const ACTIONS = new Set(VR_TOOL_ACTIONS)
 
+/** Tool-specific canonical selection policy. Move/Rotate is intentionally strict:
+ * desktop owns transforms at Cluster granularity and VR must not silently widen a
+ * Base, End, Bond, Domain, or Strand selection into a whole cluster. */
+export function vrToolSupportsSelection(mode, selectedRef) {
+  if (mode === 'inspect') return true
+  if (!selectedRef) return false
+  if (mode === 'move_rotate') return selectedRef.kind === 'cluster'
+  return true
+}
+
 export const initialVRToolShellState = Object.freeze({
   mode: 'inspect',
   stage: 'inspect',
@@ -35,11 +45,15 @@ export function reduceVRToolShell(state = initialVRToolShellState, intent = {}, 
   }
 
   const base = { mode, sequence }
+  const selectionSupported = vrToolSupportsSelection(mode, selectedRef)
   if (action === 'activate') {
-    const stage = mode === 'inspect' ? 'inspect' : selectedRef ? 'armed' : 'waiting_selection'
+    const stage = mode === 'inspect'
+      ? 'inspect'
+      : !selectedRef ? 'waiting_selection'
+        : selectionSupported ? 'armed' : 'unsupported_selection'
     return {
       state: { ...base, stage }, effect: null,
-      accepted: mode === 'inspect' || !!selectedRef,
+      accepted: mode === 'inspect' || selectionSupported,
       reason: stage,
     }
   }
@@ -50,7 +64,9 @@ export function reduceVRToolShell(state = initialVRToolShellState, intent = {}, 
     }
   }
   if (action === 'cancel') {
-    const stage = selectedRef ? 'armed' : 'waiting_selection'
+    const stage = !selectedRef
+      ? 'waiting_selection'
+      : selectionSupported ? 'armed' : 'unsupported_selection'
     return {
       state: { ...base, stage },
       effect: { type: 'cancel_requested', tool: mode },
@@ -68,6 +84,12 @@ export function reduceVRToolShell(state = initialVRToolShellState, intent = {}, 
     return {
       state: { ...base, stage: 'waiting_selection' }, effect: null,
       accepted: false, reason: 'selection_required',
+    }
+  }
+  if (!selectionSupported) {
+    return {
+      state: { ...base, stage: 'unsupported_selection' }, effect: null,
+      accepted: false, reason: 'unsupported_selection',
     }
   }
   if (action === 'preview') {

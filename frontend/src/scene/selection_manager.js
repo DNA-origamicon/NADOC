@@ -2492,7 +2492,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         selectedRef.id === owner.ref.id)
     )
     const ownerTokens = vrOwnerTokens({ selected, selectedRef, owner, nucleotide, key })
-    return { owner, accepted, selected, ownerTokens }
+    return {
+      owner, accepted, selected, ownerTokens,
+      selectionKind: selected ? selectedRef.kind : 'none',
+    }
   }
 
   // Unified backbone-bead-level hit handler — used by a real bead hit AND by the
@@ -4806,6 +4809,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
      *  the desktop selection was made. No renderer identity crosses this boundary. */
     getVRInitialSelectionOwnerTokens() {
       return vrInitialSelectionOwnerTokens(selectionController.getState().primary)
+    },
+
+    /** Canonical kind accompanies opaque aliases only so the native tool shell can
+     *  enforce capability; it is never sufficient to identify or mutate a target. */
+    getVRInitialSelectionKind() {
+      return selectionController.getState().primary?.kind ?? 'none'
     },
 
     /** Clear committed selection and its projected renderer state. */
