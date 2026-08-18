@@ -26,6 +26,7 @@ import { showOpProgress, hideOpProgress } from '../ui/op_progress.js'
 import { notifyRequestFailure, notifyRequestSuccess, pokeProbe } from '../shared/connection_monitor.js'
 import { docHeaders, docHeadersFor, docKey, docKeyFor } from '../shared/doc_id.js'
 import { activeOperationTiming, beginOperationTiming, finishOperationAfterRender, markOperationTiming, whenOperationIdle } from '../perf/operation_timing.js'
+import { buildVRJobSnapshot } from '../scene/vr_job_snapshot.js'
 
 const BASE = '/api'
 
@@ -4231,7 +4232,32 @@ export async function startSteamVR() {
 }
 
 export async function launchNativeVR(body) {
-  return _request('POST', '/vr/launch', body, { timeoutMs: 120000 })
+  // Native VR starts from an immutable scene, so give its first read-only Jobs
+  // page a matching bounded launch snapshot. The unified list endpoint remains
+  // authoritative; failure to read it must not prevent molecular inspection.
+  const browserRequestedAtMs = Date.now()
+  const jobSnapshotStartedAt = globalThis.performance?.now?.() ?? browserRequestedAtMs
+  let jobs = []
+  let jobsSnapshotAvailable = false
+  let jobsSnapshotTotal = 0
+  try {
+    const sourcePath = globalThis.localStorage?.getItem(docKey('nadoc:workspace-path')) || null
+    const nodes = await listSimJobs(sourcePath, false)
+    if (Array.isArray(nodes)) {
+      jobs = buildVRJobSnapshot(nodes)
+      jobsSnapshotAvailable = true
+      jobsSnapshotTotal = nodes.length
+    }
+  } catch { /* launch with an explicit empty snapshot */ }
+  const jobSnapshotFinishedAt = globalThis.performance?.now?.() ?? Date.now()
+  return _request('POST', '/vr/launch', {
+    ...body,
+    browser_requested_at_ms: browserRequestedAtMs,
+    job_snapshot_ms: Math.max(0, jobSnapshotFinishedAt - jobSnapshotStartedAt),
+    jobs_snapshot_available: jobsSnapshotAvailable,
+    jobs_snapshot_total: jobsSnapshotTotal,
+    jobs,
+  }, { timeoutMs: 120000 })
 }
 
 export async function stopNativeVR() {

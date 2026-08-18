@@ -70,7 +70,25 @@ class VRCamera(BaseModel):
     up: list[float] = Field(min_length=3, max_length=3)
 
 
+class VRJobSnapshotRow(BaseModel):
+    """One bounded read-only row from the canonical unified jobs list."""
+
+    job_id: str = Field(min_length=1, max_length=128)
+    parent_job_id: Optional[str] = Field(default=None, max_length=128)
+    engine: str = Field(min_length=1, max_length=24, pattern=r"^[a-z0-9_-]+$")
+    status: str = Field(min_length=1, max_length=32, pattern=r"^[a-z0-9_-]+$")
+    label: str = Field(min_length=1, max_length=48)
+    status_text: str = Field(min_length=1, max_length=96)
+    depth: int = Field(ge=0, le=8)
+    progress_permille: int = Field(ge=0, le=1000)
+    viewable: bool = False
+    stale: bool = False
+    archived: bool = False
+
+
 class VRLaunchRequest(BaseModel):
+    browser_requested_at_ms: Optional[float] = Field(default=None, gt=0, lt=1e15)
+    job_snapshot_ms: Optional[float] = Field(default=None, ge=0, lt=1e6)
     camera: Optional[VRCamera] = None
     measured_positioning: bool = False
     assembly_active: bool = False
@@ -82,6 +100,9 @@ class VRLaunchRequest(BaseModel):
     ] = "default"
     selected_owner_tokens: list[str] = Field(default_factory=list, max_length=8)
     selected_selection_kind: SelectionKind = "none"
+    jobs_snapshot_available: bool = False
+    jobs_snapshot_total: int = Field(default=0, ge=0, le=1_000_000)
+    jobs: list[VRJobSnapshotRow] = Field(default_factory=list, max_length=64)
 
 
 class VRFeedbackRequest(BaseModel):
@@ -2807,6 +2828,7 @@ def _cleanup_after_process(
     tool_feedback_path: Path,
     plane_feedback_path: Path,
     preflight_feedback_path: Path,
+    job_path: Path,
 ) -> None:
     process.wait()
     scene_path.unlink(missing_ok=True)
@@ -2815,6 +2837,7 @@ def _cleanup_after_process(
     tool_feedback_path.unlink(missing_ok=True)
     plane_feedback_path.unlink(missing_ok=True)
     preflight_feedback_path.unlink(missing_ok=True)
+    job_path.unlink(missing_ok=True)
     with _STATE_LOCK:
         state = _read_state()
         if state and int(state["pid"]) == process.pid:
@@ -2845,6 +2868,7 @@ def _status_payload() -> dict:
 def _runtime_timing(state: dict, event: dict) -> dict:
     """Return launch milestones without trusting native clock-derived durations."""
     requested_at = state.get("launch_requested_at")
+    browser_requested_at = state.get("browser_requested_at")
     snapshot_started_at = state.get("snapshot_started_at")
     snapshot_ready_at = state.get("snapshot_ready_at")
     process_started_at = state.get("process_started_at")
@@ -2866,6 +2890,8 @@ def _runtime_timing(state: dict, event: dict) -> dict:
         "snapshot_ms": elapsed_ms(snapshot_started_at, snapshot_ready_at),
         "process_to_first_frame_ms": elapsed_ms(process_started_at, first_frame_at),
         "launch_to_first_frame_ms": elapsed_ms(requested_at, first_frame_at),
+        "click_to_first_frame_ms": elapsed_ms(browser_requested_at, first_frame_at),
+        "job_snapshot_ms": state.get("job_snapshot_ms"),
         "first_frame_cpu_ms": event.get("first_frame_cpu_ms"),
         "display_period_ms": event.get("display_period_ms"),
     }
@@ -3625,6 +3651,40 @@ def vr_tool_preflight_feedback(
     }
 
 
+def _write_job_snapshot(
+    rows: list[VRJobSnapshotRow], *, available: bool = True, total: int | None = None
+) -> Path:
+    """Write a private, immutable, whitespace-safe native job-list snapshot."""
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        prefix="nadoc-vr-jobs-",
+        suffix=".txt",
+        delete=False,
+    ) as job_file:
+        job_file.write(
+            f"NADOCVR_JOBS 1 {len(rows)} {int(available)} "
+            f"{len(rows) if total is None else total}\n"
+        )
+        for row in rows:
+            fields = (
+                row.depth,
+                row.progress_permille,
+                int(row.viewable),
+                int(row.stale),
+                int(row.archived),
+                quote(row.engine, safe=""),
+                quote(row.status, safe=""),
+                quote(row.job_id, safe=""),
+                quote(row.parent_job_id or "-", safe=""),
+                quote(row.label, safe=""),
+                quote(row.status_text, safe=""),
+            )
+            job_file.write("J " + " ".join(map(str, fields)) + "\n")
+        job_path = Path(job_file.name)
+    job_path.chmod(0o600)
+    return job_path
+
+
 def _viewer_command(
     scene_path: Path,
     event_path: Path,
@@ -3632,6 +3692,7 @@ def _viewer_command(
     tool_feedback_path: Path,
     plane_feedback_path: Path,
     preflight_feedback_path: Path,
+    job_path: Path,
     body: VRLaunchRequest,
 ) -> list[str]:
     command = [
@@ -3649,6 +3710,8 @@ def _viewer_command(
         str(plane_feedback_path),
         "--preflight-feedback",
         str(preflight_feedback_path),
+        "--jobs",
+        str(job_path),
     ]
     for token in body.selected_owner_tokens:
         command.extend(["--selected-owner", token])
@@ -3740,6 +3803,11 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         for token in body.selected_owner_tokens
     ):
         raise HTTPException(422, detail="Invalid initial VR selection identity.")
+    if (
+        (not body.jobs_snapshot_available and (body.jobs or body.jobs_snapshot_total))
+        or body.jobs_snapshot_total < len(body.jobs)
+    ):
+        raise HTTPException(422, detail="Invalid VR job snapshot availability or total.")
 
     # Starting SteamVR through the Steam client (rather than incidentally through
     # xrCreateInstance) keeps Dashboard/Desktop available after the NADOC scene exits.
@@ -3817,13 +3885,18 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             )
             preflight_feedback_path = Path(preflight_feedback_file.name)
         preflight_feedback_path.chmod(0o600)
+        job_path = _write_job_snapshot(
+            body.jobs,
+            available=body.jobs_snapshot_available,
+            total=body.jobs_snapshot_total,
+        )
 
         log = _LOG_PATH.open("ab")
         try:
             process = subprocess.Popen(
                 _viewer_command(
                     scene_path, event_path, feedback_path, tool_feedback_path,
-                    plane_feedback_path, preflight_feedback_path, body
+                    plane_feedback_path, preflight_feedback_path, job_path, body
                 ),
                 cwd=_REPO_ROOT,
                 env=_build_environment(),
@@ -3841,6 +3914,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             tool_feedback_path.unlink(missing_ok=True)
             plane_feedback_path.unlink(missing_ok=True)
             preflight_feedback_path.unlink(missing_ok=True)
+            job_path.unlink(missing_ok=True)
             raise HTTPException(
                 503, detail=f"Could not launch VR viewer: {exc}"
             ) from exc
@@ -3856,6 +3930,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             tool_feedback_path.unlink(missing_ok=True)
             plane_feedback_path.unlink(missing_ok=True)
             preflight_feedback_path.unlink(missing_ok=True)
+            job_path.unlink(missing_ok=True)
             detail = "Native VR viewer exited during startup."
             try:
                 tail = _LOG_PATH.read_text(errors="replace").splitlines()[-1]
@@ -3873,8 +3948,15 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             "tool_feedback_path": str(tool_feedback_path),
             "plane_feedback_path": str(plane_feedback_path),
             "preflight_feedback_path": str(preflight_feedback_path),
+            "job_path": str(job_path),
             "started_at": process_started_at,
             "launch_requested_at": launch_requested_at,
+            "browser_requested_at": (
+                body.browser_requested_at_ms / 1000.0
+                if body.browser_requested_at_ms is not None
+                else None
+            ),
+            "job_snapshot_ms": body.job_snapshot_ms,
             "snapshot_started_at": snapshot_started_at,
             "snapshot_ready_at": snapshot_ready_at,
             "process_started_at": process_started_at,
@@ -3885,7 +3967,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             target=_cleanup_after_process,
             args=(
                 process, scene_path, event_path, feedback_path, tool_feedback_path,
-                plane_feedback_path, preflight_feedback_path,
+                plane_feedback_path, preflight_feedback_path, job_path,
             ),
             daemon=True,
             name="nadoc-vr-cleanup",

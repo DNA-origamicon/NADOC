@@ -168,6 +168,8 @@ describe('initVRSession', () => {
         snapshot_ms: 54_800,
         process_to_first_frame_ms: 1400,
         launch_to_first_frame_ms: 56_200,
+        click_to_first_frame_ms: 56_500,
+        job_snapshot_ms: 300,
         first_frame_cpu_ms: 8.5,
         display_period_ms: 11.111,
       },
@@ -178,7 +180,7 @@ describe('initVRSession', () => {
     const timingCalls = h.showToast.mock.calls.filter(([message]) =>
       message.startsWith('VR first frame submitted'))
     expect(timingCalls).toEqual([[
-      'VR first frame submitted in 56.2 s (snapshot 54.8 s; viewer 1.4 s). ' +
+      'VR first frame submitted in 56.5 s (jobs 300.0 ms; snapshot 54.8 s; viewer 1.4 s). ' +
       'Frame CPU 8.5 ms / 11.1 ms runtime period.',
     ]])
     await h.controller.exit()

@@ -303,9 +303,12 @@ export function initVRSession({
         const timing = status?.timing
         if (!nativeTimingReported && timing?.first_frame_ready === true) {
           nativeTimingReported = true
+          const totalMs = Number.isFinite(timing.click_to_first_frame_ms)
+            ? timing.click_to_first_frame_ms : timing.launch_to_first_frame_ms
           showToast(
-            `VR first frame submitted in ${_durationLabel(timing.launch_to_first_frame_ms)} ` +
-            `(snapshot ${_durationLabel(timing.snapshot_ms)}; viewer ` +
+            `VR first frame submitted in ${_durationLabel(totalMs)} ` +
+            `(jobs ${_durationLabel(timing.job_snapshot_ms)}; snapshot ` +
+            `${_durationLabel(timing.snapshot_ms)}; viewer ` +
             `${_durationLabel(timing.process_to_first_frame_ms)}). ` +
             `Frame CPU ${_durationLabel(timing.first_frame_cpu_ms)} / ` +
             `${_durationLabel(timing.display_period_ms)} runtime period.`,

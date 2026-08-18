@@ -1,4 +1,5 @@
 #include "interaction.hpp"
+#include "jobs.hpp"
 #include "picking.hpp"
 
 #include <glm/gtc/epsilon.hpp>
@@ -6,6 +7,8 @@
 #include <array>
 #include <cmath>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 
 namespace {
 
@@ -561,6 +564,42 @@ void parameterizedToolDraftsResetOnTargetChangesAndStayBounded() {
     require(!draft.clear());
 }
 
+void jobSnapshotParserPreservesIdentityStatusAndRejectsAmbiguity() {
+    const auto path = std::filesystem::temp_directory_path() /
+                      "nadoc-vr-job-snapshot-test.txt";
+    {
+        std::ofstream output(path);
+        output << "NADOCVR_JOBS 1 2 1 9\n"
+               << "J 0 1000 1 1 0 oxdna completed relax - Six%20helix%20bundle "
+                  "oxDNA%20-%20completed%20-%20100.0%25\n"
+               << "J 1 125 0 0 1 oxdna running production relax Production "
+                  "oxDNA%20-%20running%20-%2012.5%25\n";
+    }
+    const auto snapshot = nadoc_vr::loadJobSnapshot(path.string());
+    const auto& rows = snapshot.rows;
+    require(snapshot.available && snapshot.total == 9);
+    require(rows.size() == 2);
+    require(rows[0].jobId == "relax" && rows[0].label == "Six helix bundle");
+    require(rows[0].viewable && rows[0].stale && rows[0].progressPermille == 1000);
+    require(rows[1].parentJobId == "relax" && rows[1].depth == 1);
+    require(rows[1].archived && rows[1].statusText == "oxDNA - running - 12.5%");
+
+    {
+        std::ofstream output(path);
+        output << "NADOCVR_JOBS 1 2 1 2\n"
+               << "J 0 0 0 0 0 namd queued duplicate - First waiting\n"
+               << "J 0 0 0 0 0 namd queued duplicate - Second waiting\n";
+    }
+    bool rejected = false;
+    try {
+        (void)nadoc_vr::loadJobSnapshot(path.string());
+    } catch (const std::runtime_error&) {
+        rejected = true;
+    }
+    std::filesystem::remove(path);
+    require(rejected);
+}
+
 }  // namespace
 
 int main() {
@@ -587,4 +626,5 @@ int main() {
     ownerBoundsAreStableAndFollowTheWorldTransform();
     toolShellNeverClaimsACommitAndRequiresPreview();
     parameterizedToolDraftsResetOnTargetChangesAndStayBounded();
+    jobSnapshotParserPreservesIdentityStatusAndRejectsAmbiguity();
 }

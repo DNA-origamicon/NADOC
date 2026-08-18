@@ -6,8 +6,9 @@ vi.mock('../state/store.js', () => ({
 
 import {
   enginesStatus, getMdJob, getMdTrajectory, getSystemResources,
-  listActiveJobs, listLibraryFiles, listSimJobs,
+  launchNativeVR, listActiveJobs, listLibraryFiles, listSimJobs,
 } from './client.js'
+import { docKey } from '../shared/doc_id.js'
 
 function deferredResponse(payload = { ok: true }) {
   let release
@@ -93,5 +94,35 @@ describe('job JSON GET coalescing', () => {
     library.release()
     simulations.release()
     await expect(Promise.all(calls)).resolves.toEqual([[], [], [], []])
+  })
+
+  it('launches native VR with a bounded snapshot from the current design job list', async () => {
+    localStorage.setItem(docKey('nadoc:workspace-path'), 'Parts/Bundle.nadoc')
+    let launchBody = null
+    global.fetch = vi.fn(async (url, options = {}) => {
+      if (url.includes('/simulate/jobs')) {
+        return { ok: true, status: 200, json: async () => [{
+          job_id: 'run-1', engine: 'cando', status: 'completed', created_at: 1,
+          design_name: 'Bundle solve', viewable: true,
+        }] }
+      }
+      launchBody = JSON.parse(options.body)
+      return { ok: true, status: 200, json: async () => ({ running: true }) }
+    })
+
+    await expect(launchNativeVR({ representation: 'full' }))
+      .resolves.toEqual({ running: true })
+    expect(global.fetch.mock.calls[0][0]).toContain(
+      '/simulate/jobs?design_source_path=Parts%2FBundle.nadoc',
+    )
+    expect(launchBody).toEqual(expect.objectContaining({
+      representation: 'full',
+      jobs_snapshot_available: true,
+      jobs_snapshot_total: 1,
+      jobs: [expect.objectContaining({
+        job_id: 'run-1', engine: 'cando', status: 'completed',
+        label: 'Bundle solve', progress_permille: 1000, viewable: true,
+      })],
+    }))
   })
 })

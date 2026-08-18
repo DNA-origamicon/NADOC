@@ -14,6 +14,7 @@ from starlette.requests import Request
 from backend.api import routes_vr
 from backend.api.routes_vr import (
     VRFeedbackRequest,
+    VRJobSnapshotRow,
     VRLaunchRequest,
     VRPlaneFeedbackRequest,
     VRToolPreflightFeedbackRequest,
@@ -33,6 +34,7 @@ from backend.api.routes_vr import (
     _view_rotation,
     _viewer_command,
     _write_feedback,
+    _write_job_snapshot,
     _write_plane_feedback,
     _write_preflight_feedback,
     _write_tool_feedback,
@@ -603,6 +605,8 @@ def test_native_first_frame_timing_is_bounded_and_uses_backend_milestones(
     )
     state = {
         "event_path": str(event_path),
+        "browser_requested_at": 1997.8,
+        "job_snapshot_ms": 180.0,
         "launch_requested_at": 1998.0,
         "snapshot_started_at": 1998.2,
         "snapshot_ready_at": 1999.0,
@@ -615,6 +619,8 @@ def test_native_first_frame_timing_is_bounded_and_uses_backend_milestones(
         "snapshot_ms": 800.0,
         "process_to_first_frame_ms": 500.0,
         "launch_to_first_frame_ms": 2000.0,
+        "click_to_first_frame_ms": 2200.0,
+        "job_snapshot_ms": 180.0,
         "first_frame_cpu_ms": 8.5,
         "display_period_ms": 11.111,
     }
@@ -971,6 +977,7 @@ def test_native_launch_passes_initial_selection_as_opaque_arguments(tmp_path) ->
         tmp_path / "tool-feedback.txt",
         tmp_path / "plane-feedback.txt",
         tmp_path / "preflight-feedback.txt",
+        tmp_path / "jobs.txt",
         VRLaunchRequest(
             selection_level="domain",
             selected_owner_tokens=[token],
@@ -984,6 +991,7 @@ def test_native_launch_passes_initial_selection_as_opaque_arguments(tmp_path) ->
     assert command[command.index("--preflight-feedback") + 1].endswith(
         "preflight-feedback.txt"
     )
+    assert command[command.index("--jobs") + 1].endswith("jobs.txt")
 
     with pytest.raises(HTTPException, match="initial VR selection"):
         routes_vr.launch_vr(
@@ -993,6 +1001,60 @@ def test_native_launch_passes_initial_selection_as_opaque_arguments(tmp_path) ->
             ),
             _request("127.0.0.1", "http://localhost:5173"),
         )
+
+    with pytest.raises(HTTPException, match="Invalid VR job snapshot"):
+        routes_vr.launch_vr(
+            VRLaunchRequest(
+                jobs_snapshot_available=False,
+                jobs=[
+                    VRJobSnapshotRow(
+                        job_id="run",
+                        engine="cando",
+                        status="completed",
+                        label="Run",
+                        status_text="CanDo - completed - 100.0%",
+                        depth=0,
+                        progress_permille=1000,
+                    )
+                ],
+            ),
+            _request("127.0.0.1", "http://localhost:5173"),
+        )
+
+
+def test_native_job_snapshot_is_private_bounded_and_url_safe() -> None:
+    rows = [
+        VRJobSnapshotRow(
+            job_id="run 17/alpha",
+            parent_job_id=None,
+            engine="namd",
+            status="running",
+            label="Production run 17",
+            status_text="NAMD - running - 42.5%",
+            depth=0,
+            progress_permille=425,
+            viewable=True,
+            stale=True,
+            archived=False,
+        )
+    ]
+    path = _write_job_snapshot(rows)
+    try:
+        lines = path.read_text().splitlines()
+        assert lines == [
+            "NADOCVR_JOBS 1 1 1 1",
+            "J 0 425 1 1 0 namd running run%2017%2Falpha - "
+            "Production%20run%2017 NAMD%20-%20running%20-%2042.5%25",
+        ]
+        assert path.stat().st_mode & 0o777 == 0o600
+    finally:
+        path.unlink(missing_ok=True)
+
+    unavailable = _write_job_snapshot([], available=False)
+    try:
+        assert unavailable.read_text() == "NADOCVR_JOBS 1 0 0 0\n"
+    finally:
+        unavailable.unlink(missing_ok=True)
 
 
 def test_scene_snapshot_writer_is_private_gzip_and_round_trips() -> None:

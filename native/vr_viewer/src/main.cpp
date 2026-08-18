@@ -15,6 +15,7 @@
 #include <zlib.h>
 
 #include "interaction.hpp"
+#include "jobs.hpp"
 #include "picking.hpp"
 
 #include <glm/glm.hpp>
@@ -2079,6 +2080,7 @@ class Viewer {
                     std::string toolFeedbackPath = {},
                     std::string planeFeedbackPath = {},
                     std::string preflightFeedbackPath = {},
+                    nadoc_vr::JobSnapshot jobSnapshot = {},
                     std::string selectionLevel = "default",
                     std::vector<std::string> selectedOwnerTokens = {},
                     std::string selectedSelectionKind = "none")
@@ -2087,6 +2089,9 @@ class Viewer {
           toolFeedbackPath_(std::move(toolFeedbackPath)),
           planeFeedbackPath_(std::move(planeFeedbackPath)),
           preflightFeedbackPath_(std::move(preflightFeedbackPath)),
+          jobsSnapshotAvailable_(jobSnapshot.available),
+          jobsSnapshotTotal_(jobSnapshot.total),
+          jobs_(std::move(jobSnapshot.rows)),
           selectionLevel_(std::move(selectionLevel)) {
         normalizationCenter_ = sceneData_.normalizationCenter;
         normalizationScale_ = sceneData_.normalizationScale;
@@ -2463,7 +2468,7 @@ class Viewer {
         }
     }
 
-    enum class MenuPage { options, tools, tool_config };
+    enum class MenuPage { options, tools, tool_config, jobs, job_detail };
 
     struct MenuItem {
         const char* label;
@@ -2474,7 +2479,7 @@ class Viewer {
     static constexpr std::array<const char*, 7> kSelectionLevels = {
         "default", "cluster", "strand", "domain", "end", "xover", "base",
     };
-    static constexpr std::array<MenuItem, 18> kOptionsMenuItems = {{
+    static constexpr std::array<MenuItem, 19> kOptionsMenuItems = {{
         {"CYLINDERS", -0.16F, 0.190F, 0.145F},
         {"FULL", -0.16F, 0.135F, 0.145F},
         {"BALL + STICK", -0.16F, 0.080F, 0.145F},
@@ -2491,8 +2496,9 @@ class Viewer {
         {"CROSSOVER", 0.16F, -0.160F, 0.145F},
         {"BASE", 0.16F, -0.215F, 0.145F},
         {"TOOLS", -0.16F, -0.350F, 0.145F},
-        {"RECENTER", 0.16F, -0.350F, 0.145F},
-        {"CLOSE", 0.0F, -0.415F, 0.305F},
+        {"JOBS", 0.16F, -0.350F, 0.145F},
+        {"RECENTER", -0.16F, -0.415F, 0.145F},
+        {"CLOSE", 0.16F, -0.415F, 0.145F},
     }};
     static constexpr std::array<MenuItem, 10> kToolMenuItems = {{
         {"INSPECT", -0.16F, 0.190F, 0.145F},
@@ -2514,6 +2520,19 @@ class Viewer {
         {"OPTION", -0.16F, -0.085F, 0.145F},
         {"FLAG", 0.16F, -0.085F, 0.145F},
         {"BACK TO TOOLS", 0.0F, -0.260F, 0.305F},
+    }};
+    static constexpr std::array<MenuItem, 8> kJobsMenuItems = {{
+        {"JOB", 0.0F, 0.205F, 0.305F},
+        {"JOB", 0.0F, 0.145F, 0.305F},
+        {"JOB", 0.0F, 0.085F, 0.305F},
+        {"JOB", 0.0F, 0.025F, 0.305F},
+        {"JOB", 0.0F, -0.035F, 0.305F},
+        {"PREVIOUS", -0.16F, -0.120F, 0.145F},
+        {"NEXT", 0.16F, -0.120F, 0.145F},
+        {"BACK", 0.0F, -0.260F, 0.305F},
+    }};
+    static constexpr std::array<MenuItem, 1> kJobDetailMenuItems = {{
+        {"BACK TO JOBS", 0.0F, -0.260F, 0.305F},
     }};
 
     void appendMenuGuides() {
@@ -2546,10 +2565,128 @@ class Viewer {
         const std::string title = menuPage_ == MenuPage::options
             ? "VR MENU"
             : menuPage_ == MenuPage::tools
-                ? "VR TOOLS READ ONLY" : "VR TOOL SETTINGS DRAFT";
+                ? "VR TOOLS READ ONLY"
+                : menuPage_ == MenuPage::tool_config
+                    ? "VR TOOL SETTINGS DRAFT"
+                    : menuPage_ == MenuPage::jobs
+                        ? "SIMULATION JOBS SNAPSHOT"
+                        : "SIMULATION JOB DETAILS";
+        const bool jobMenu = menuPage_ == MenuPage::jobs ||
+                             menuPage_ == MenuPage::job_detail;
         appendMenuText(
-            title, menuPage_ == MenuPage::options ? -0.105F : -0.235F,
-            0.305F, 0.006F, {0.65F, 0.88F, 1.0F});
+            title, menuPage_ == MenuPage::options ? -0.105F
+                                                 : jobMenu ? -0.300F : -0.235F,
+            0.305F, jobMenu ? 0.0042F : 0.006F, {0.65F, 0.88F, 1.0F});
+
+        auto jobColor = [](const nadoc_vr::JobSnapshotRow& row) {
+            if (row.stale) return glm::vec3(0.95F, 0.68F, 0.22F);
+            if (row.status == "failed") return glm::vec3(1.0F, 0.34F, 0.28F);
+            if (row.status == "completed") return glm::vec3(0.35F, 0.95F, 0.58F);
+            if (row.status == "running" || row.status == "preparing") {
+                return glm::vec3(0.35F, 0.78F, 1.0F);
+            }
+            return glm::vec3(0.65F, 0.70F, 0.78F);
+        };
+        auto shortened = [](std::string value, size_t limit) {
+            if (value.size() <= limit) return value;
+            if (limit <= 3) return value.substr(0, limit);
+            return value.substr(0, limit - 3) + "...";
+        };
+        auto shortenedMiddle = [](const std::string& value, size_t limit) {
+            if (value.size() <= limit) return value;
+            if (limit <= 3) return value.substr(0, limit);
+            const size_t left = (limit - 3) / 2;
+            return value.substr(0, left) + "..." +
+                   value.substr(value.size() - (limit - 3 - left));
+        };
+
+        if (menuPage_ == MenuPage::jobs) {
+            constexpr size_t perPage = 5;
+            const size_t pageCount = std::max<size_t>(1, (jobs_.size() + perPage - 1) / perPage);
+            if (jobPage_ >= pageCount) jobPage_ = pageCount - 1;
+            std::ostringstream snapshotLabel;
+            if (jobsSnapshotTotal_ > static_cast<int>(jobs_.size())) {
+                snapshotLabel << "SHOWING " << jobs_.size() << " OF "
+                              << jobsSnapshotTotal_ << " - READ ONLY";
+            } else {
+                snapshotLabel << "LAUNCH SNAPSHOT - READ ONLY";
+            }
+            appendMenuText(shortened(snapshotLabel.str(), 35), -0.285F, 0.265F,
+                           0.0032F, {0.72F, 0.78F, 0.88F});
+            if (!jobsSnapshotAvailable_) {
+                appendMenuText("JOB LIST UNAVAILABLE AT LAUNCH", -0.260F, 0.120F,
+                               0.0035F, {0.95F, 0.68F, 0.22F});
+                appendMenuText("RELAUNCH TO RETRY", -0.150F, 0.065F,
+                               0.0038F, {0.65F, 0.70F, 0.78F});
+            } else if (jobs_.empty()) {
+                appendMenuText("NO RUNS FOR THIS DESIGN", -0.205F, 0.120F,
+                               0.0040F, {0.65F, 0.70F, 0.78F});
+            }
+            const size_t first = jobPage_ * perPage;
+            for (size_t slot = 0; slot < perPage; ++slot) {
+                const size_t index = first + slot;
+                if (index >= jobs_.size()) continue;
+                const auto& row = jobs_[index];
+                std::string label(static_cast<size_t>(row.depth) * 2U, ' ');
+                label += row.engine + " " + row.label;
+                glm::vec3 color = jobColor(row);
+                if (static_cast<int>(slot) == menuHover_) color = {1.0F, 0.78F, 0.22F};
+                itemBox(kJobsMenuItems[slot], color, shortened(label, 28).c_str());
+            }
+            const bool hasPrevious = jobPage_ > 0;
+            const bool hasNext = jobPage_ + 1 < pageCount;
+            for (size_t index = 5; index < kJobsMenuItems.size(); ++index) {
+                const bool enabled = index == 7 || (index == 5 && hasPrevious) ||
+                                     (index == 6 && hasNext);
+                glm::vec3 color = enabled
+                    ? glm::vec3(0.65F, 0.70F, 0.78F)
+                    : glm::vec3(0.30F, 0.32F, 0.36F);
+                if (static_cast<int>(index) == menuHover_) {
+                    color = enabled ? glm::vec3(1.0F, 0.78F, 0.22F)
+                                    : glm::vec3(0.48F, 0.32F, 0.30F);
+                }
+                itemBox(kJobsMenuItems[index], color);
+            }
+            std::ostringstream page;
+            page << "PAGE " << (jobPage_ + 1) << " / " << pageCount;
+            appendMenuText(page.str(), -0.055F, -0.180F, 0.0032F,
+                           {0.55F, 0.62F, 0.72F});
+            return;
+        }
+
+        if (menuPage_ == MenuPage::job_detail) {
+            if (selectedJobIndex_ < jobs_.size()) {
+                const auto& row = jobs_[selectedJobIndex_];
+                const glm::vec3 color = jobColor(row);
+                appendMenuText(shortened(row.engine + " - " + row.label, 42),
+                               -0.305F, 0.255F, 0.0042F, color);
+                appendMenuText("ID " + shortenedMiddle(row.jobId, 42),
+                               -0.305F, 0.205F, 0.0030F,
+                               {0.60F, 0.67F, 0.76F});
+                appendMenuText(shortened(row.statusText, 48), -0.305F, 0.155F,
+                               0.0036F, color);
+                std::ostringstream progress;
+                progress << "PROGRESS " << std::fixed << std::setprecision(1)
+                         << static_cast<double>(row.progressPermille) / 10.0 << "%";
+                appendMenuText(progress.str(), -0.305F, 0.100F, 0.0038F,
+                               {0.72F, 0.80F, 0.92F});
+                appendMenuText(row.viewable ? "RESULTS AVAILABLE" : "RESULTS NOT READY",
+                               -0.305F, 0.045F, 0.0038F,
+                               row.viewable ? glm::vec3(0.35F, 0.95F, 0.58F)
+                                            : glm::vec3(0.65F, 0.70F, 0.78F));
+                if (row.stale) appendMenuText("DESIGN CHANGED SINCE RUN", -0.305F, -0.010F,
+                                              0.0038F, {0.95F, 0.68F, 0.22F});
+                if (row.archived) appendMenuText("ARCHIVED", -0.305F, -0.055F,
+                                                 0.0038F, {0.95F, 0.68F, 0.22F});
+                appendMenuText("ACTIONS REMAIN ON DESKTOP", -0.305F, -0.145F,
+                               0.0035F, {0.72F, 0.78F, 0.88F});
+            }
+            glm::vec3 backColor = menuHover_ == 0
+                ? glm::vec3(1.0F, 0.78F, 0.22F)
+                : glm::vec3(0.65F, 0.70F, 0.78F);
+            itemBox(kJobDetailMenuItems[0], backColor);
+            return;
+        }
 
         if (menuPage_ == MenuPage::tool_config) {
             std::ostringstream primary;
@@ -2767,11 +2904,19 @@ class Viewer {
         const MenuItem* items = menuPage_ == MenuPage::options
             ? kOptionsMenuItems.data()
             : menuPage_ == MenuPage::tools
-                ? kToolMenuItems.data() : kToolConfigMenuItems.data();
+                ? kToolMenuItems.data()
+                : menuPage_ == MenuPage::tool_config
+                    ? kToolConfigMenuItems.data()
+                    : menuPage_ == MenuPage::jobs
+                        ? kJobsMenuItems.data() : kJobDetailMenuItems.data();
         const size_t itemCount = menuPage_ == MenuPage::options
             ? kOptionsMenuItems.size()
             : menuPage_ == MenuPage::tools
-                ? kToolMenuItems.size() : kToolConfigMenuItems.size();
+                ? kToolMenuItems.size()
+                : menuPage_ == MenuPage::tool_config
+                    ? kToolConfigMenuItems.size()
+                    : menuPage_ == MenuPage::jobs
+                        ? kJobsMenuItems.size() : kJobDetailMenuItems.size();
         for (size_t index = 0; index < itemCount; ++index) {
             const MenuItem& item = items[index];
             if (std::abs(local.x - item.x) <= item.halfWidth &&
@@ -2788,6 +2933,35 @@ class Viewer {
             const int hit = menuHit(hands_[hand]);
             if (hit >= 0 && menuHover_ < 0) menuHover_ = hit;
             if (hit < 0 || !triggerClicked_[hand]) continue;
+            if (menuPage_ == MenuPage::job_detail) {
+                menuPage_ = MenuPage::jobs;
+                menuHover_ = -1;
+                pulse(hand, 0.50F);
+                continue;
+            }
+            if (menuPage_ == MenuPage::jobs) {
+                constexpr size_t perPage = 5;
+                const size_t index = jobPage_ * perPage + static_cast<size_t>(hit);
+                if (hit < 5 && index < jobs_.size()) {
+                    selectedJobIndex_ = index;
+                    menuPage_ = MenuPage::job_detail;
+                    menuHover_ = -1;
+                    pulse(hand, 0.50F);
+                } else if (hit == 5 && jobPage_ > 0) {
+                    --jobPage_;
+                    pulse(hand, 0.35F);
+                } else if (hit == 6 && (jobPage_ + 1) * perPage < jobs_.size()) {
+                    ++jobPage_;
+                    pulse(hand, 0.35F);
+                } else if (hit == 7) {
+                    menuPage_ = MenuPage::options;
+                    menuHover_ = -1;
+                    pulse(hand, 0.50F);
+                } else {
+                    pulse(hand, 0.15F);
+                }
+                continue;
+            }
             if (menuPage_ == MenuPage::tool_config) {
                 bool changed = false;
                 if (hit == 0) changed = toolConfig_.adjustPrimary(-1);
@@ -2872,6 +3046,10 @@ class Viewer {
                 menuPage_ = MenuPage::tools;
                 menuHover_ = -1;
             } else if (hit == 16) {
+                jobPage_ = 0;
+                menuPage_ = MenuPage::jobs;
+                menuHover_ = -1;
+            } else if (hit == 17) {
                 recenterRequested_ = true;
                 recenterHand_ = hand;
                 menuOpen_ = false;
@@ -3839,6 +4017,9 @@ class Viewer {
     std::string toolFeedbackPath_;
     std::string planeFeedbackPath_;
     std::string preflightFeedbackPath_;
+    bool jobsSnapshotAvailable_ = false;
+    int jobsSnapshotTotal_ = 0;
+    std::vector<nadoc_vr::JobSnapshotRow> jobs_;
     glm::vec3 normalizationCenter_{};
     float normalizationScale_ = 1.0F;
     uint64_t eventSequence_ = 0;
@@ -3912,6 +4093,8 @@ class Viewer {
     bool menuOpenRequested_ = false;
     bool suppressManipulationUntilRelease_ = false;
     int menuHover_ = -1;
+    size_t jobPage_ = 0;
+    size_t selectedJobIndex_ = 0;
     glm::vec3 menuPosition_{};
     glm::quat menuOrientation_{1.0F, 0.0F, 0.0F, 0.0F};
     size_t menuHand_ = 0;
@@ -3946,6 +4129,7 @@ int main(int argc, char** argv) {
                      "[--tool-feedback <tool-feedback.txt>] "
                      "[--plane-feedback <plane-feedback.txt>] "
                      "[--preflight-feedback <preflight-feedback.txt>] "
+                     "[--jobs <jobs.txt>] "
                      "[--selection-level <level>] "
                      "[--selected-owner <token>]... [--selected-kind <kind>]\n";
         return 2;
@@ -3955,6 +4139,7 @@ int main(int argc, char** argv) {
     std::string toolFeedbackPath;
     std::string planeFeedbackPath;
     std::string preflightFeedbackPath;
+    std::string jobPath;
     std::string selectionLevel = "default";
     std::string selectedSelectionKind = "none";
     std::vector<std::string> selectedOwnerTokens;
@@ -3972,6 +4157,7 @@ int main(int argc, char** argv) {
         else if (option == "--tool-feedback") toolFeedbackPath = argv[index + 1];
         else if (option == "--plane-feedback") planeFeedbackPath = argv[index + 1];
         else if (option == "--preflight-feedback") preflightFeedbackPath = argv[index + 1];
+        else if (option == "--jobs") jobPath = argv[index + 1];
         else if (option == "--selection-level") selectionLevel = argv[index + 1];
         else if (option == "--selected-owner") {
             const std::string token(argv[index + 1]);
@@ -4010,7 +4196,8 @@ int main(int argc, char** argv) {
     try {
         Viewer viewer(
             loadScene(argv[1]), eventPath, feedbackPath, toolFeedbackPath,
-            planeFeedbackPath, preflightFeedbackPath, selectionLevel,
+            planeFeedbackPath, preflightFeedbackPath,
+            nadoc_vr::loadJobSnapshot(jobPath), selectionLevel,
             std::move(selectedOwnerTokens), std::move(selectedSelectionKind));
         return viewer.run();
     } catch (const std::exception& error) {
