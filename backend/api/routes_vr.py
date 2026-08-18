@@ -298,6 +298,49 @@ def _serialize_scene(
                 for first, second in zip(points, points[1:]):
                     lines.append(f"C {nums(*first, *second, 0.065, *palette)}")
 
+    def append_flexible_geometry() -> None:
+        """Append Full-only fixed-contour flexible ssDNA runs."""
+        from backend.core.vr_scene_projection import flexible_segment_projection
+
+        magenta = _rgb("#ff33cc")
+        for connection in getattr(design, "flexible_connections", []):
+            projection = flexible_segment_projection(
+                design, nucleotides, axes, connection
+            )
+            if projection is None:
+                continue
+            strand_a, domain_a, helix_a = projection.anchor_a_owner
+            strand_b, domain_b, helix_b = projection.anchor_b_owner
+            cluster_color = _cluster_color(
+                design,
+                {
+                    "strand_id": strand_a,
+                    "domain_index": domain_a,
+                    "helix_id": helix_a,
+                },
+            ) or _cluster_color(
+                design,
+                {
+                    "strand_id": strand_b,
+                    "domain_index": domain_b,
+                    "helix_id": helix_b,
+                },
+            )
+            palette = (*magenta, *magenta, *(cluster_color or magenta), *magenta)
+            for base in projection.bases:
+                bead = rotation @ base.bead_center
+                lines.append(f"P {nums(*bead, 0.12, *palette)}")
+                box(
+                    rotation @ base.slab_center,
+                    rotation @ base.slab_axis_x,
+                    rotation @ base.slab_axis_y,
+                    rotation @ base.slab_axis_z,
+                    palette,
+                )
+            points = [rotation @ value for value in projection.backbone_points]
+            for first, second in zip(points, points[1:]):
+                lines.append(f"C {nums(*first, *second, 0.06, *palette)}")
+
     lines = [f"NADOCVR 5 {representation} {coloring}", "# preloaded VR representations"]
     by_strand: dict[str, list[tuple[dict, np.ndarray, tuple[float, ...]]]] = {}
     identity_palettes: dict[tuple, tuple[float, ...]] = {}
@@ -592,6 +635,7 @@ def _serialize_scene(
         lines.append(f"C {nums(*first, *second, 0.025, *arc_palette)}")
 
     append_linker_geometry(include_full_bases=True)
+    append_flexible_geometry()
 
     def axis_edges(axis: dict):
         """Yield visible axis edges, preferring authoritative domain segments.

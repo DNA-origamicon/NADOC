@@ -794,3 +794,96 @@ def test_ds_linker_cylinders_pair_overhang_halves_and_recover_bridge_axis() -> N
     assert [tuple(float(value) for value in record[1:7]) for record in bridge] == [
         (1, 0, 0, 3, 0, 0)
     ]
+
+
+def test_flexible_segment_replaces_filtered_beads_in_full_only() -> None:
+    domains = [
+        SimpleNamespace(
+            helix_id=helix_id,
+            start_bp=bp,
+            end_bp=bp,
+            direction="FORWARD",
+        )
+        for helix_id, bp in (("ha", 2), ("run", 0), ("hb", 7))
+    ]
+    strand = SimpleNamespace(
+        id="flex-strand",
+        is_scaffold=False,
+        color="#0066cc",
+        sequence="AAAA",
+        domains=domains,
+        strand_type="staple",
+    )
+    anchor_a = SimpleNamespace(
+        strand_id="flex-strand",
+        domain_index=0,
+        bp_index=2,
+        direction="FORWARD",
+    )
+    anchor_b = SimpleNamespace(
+        strand_id="flex-strand",
+        domain_index=2,
+        bp_index=7,
+        direction="FORWARD",
+    )
+    design = SimpleNamespace(
+        strands=[strand],
+        cluster_transforms=[],
+        crossovers=[],
+        forced_ligations=[],
+        overhang_bindings=[],
+        duplexes=[],
+        overhang_connections=[],
+        flexible_connections=[
+            SimpleNamespace(
+                id="flex-1",
+                anchor_a=anchor_a,
+                anchor_b=anchor_b,
+                n_ss_bases=2,
+                contour_length_nm=5.0,
+            )
+        ],
+    )
+    nucleotides = [
+        {
+            "strand_id": "flex-strand",
+            "domain_index": domain_index,
+            "helix_id": helix_id,
+            "bp_index": bp,
+            "direction": "FORWARD",
+            "backbone_position": position,
+            "is_flexible_segment": flexible,
+        }
+        for domain_index, helix_id, bp, position, flexible in (
+            (0, "ha", 2, [0, 0, 0], False),
+            (1, "run", 0, [1, 0, 0], True),
+            (1, "run", 1, [3, 0, 0], True),
+            (2, "hb", 7, [4, 0, 0], False),
+        )
+    ]
+    text = _serialize_scene(
+        design,
+        nucleotides,
+        [{"helix_id": "obstacle", "start": [0, -1, -1], "end": [4, -1, -1]}],
+        atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
+    )
+    sections = _scene_sections(text)
+
+    assert (
+        sum(
+            record[0] == "P" and float(record[4]) == pytest.approx(0.12)
+            for record in sections["full"]
+        )
+        == 2
+    )
+    assert (
+        sum(
+            record[0] == "C" and float(record[7]) == pytest.approx(0.06)
+            for record in sections["full"]
+        )
+        == 32
+    )
+    assert not any(
+        record[0] == "C" and float(record[7]) == pytest.approx(0.06)
+        for record in sections["cylinders"]
+    )

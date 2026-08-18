@@ -60,6 +60,28 @@ class DsLinkerConnectorProjection:
     points: tuple[np.ndarray, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class FlexibleBaseProjection:
+    """One flexible-run bead and synthetic Full slab."""
+
+    bead_center: np.ndarray
+    slab_center: np.ndarray
+    slab_axis_x: np.ndarray
+    slab_axis_y: np.ndarray
+    slab_axis_z: np.ndarray
+
+
+@dataclass(frozen=True, slots=True)
+class FlexibleSegmentProjection:
+    """One fixed-contour flexible run in its static desktop pose."""
+
+    connection_id: str
+    anchor_a_owner: tuple[str, int, str]
+    anchor_b_owner: tuple[str, int, str]
+    bases: tuple[FlexibleBaseProjection, ...]
+    backbone_points: tuple[np.ndarray, ...]
+
+
 def _unit(vector: np.ndarray, fallback: np.ndarray) -> np.ndarray:
     length = float(np.linalg.norm(vector))
     if length < 1e-9:
@@ -318,6 +340,230 @@ def ds_linker_connector_projections(
             )
         )
     return tuple(result)
+
+
+def _closest_on_segment(
+    point: np.ndarray, first: np.ndarray, second: np.ndarray
+) -> np.ndarray:
+    delta = second - first
+    denominator = float(np.dot(delta, delta))
+    t = np.clip(
+        float(np.dot(point - first, delta)) / (denominator if denominator else 1.0),
+        0,
+        1,
+    )
+    return first + delta * t
+
+
+def _fallback_flexible_bow(chord_direction: np.ndarray) -> np.ndarray:
+    bow = np.cross(chord_direction, np.array([0.0, 1.0, 0.0]))
+    if float(np.dot(bow, bow)) < 1e-6:
+        bow = np.cross(chord_direction, np.array([1.0, 0.0, 0.0]))
+    return _unit(bow, np.array([0.0, 0.0, 1.0]))
+
+
+def _flexible_bow(
+    first: np.ndarray, second: np.ndarray, axes: list[dict]
+) -> np.ndarray:
+    chord_direction = _unit(second - first, np.array([1.0, 0.0, 0.0]))
+    midpoint = (first + second) * 0.5
+    repulsion = np.zeros(3, dtype=float)
+    for axis in axes:
+        if not isinstance(axis.get("start"), (list, tuple)) or not isinstance(
+            axis.get("end"), (list, tuple)
+        ):
+            continue
+        start = np.asarray(axis["start"], dtype=float)
+        end = np.asarray(axis["end"], dtype=float)
+        if start.shape != (3,) or end.shape != (3,):
+            continue
+        closest = _closest_on_segment(midpoint, start, end)
+        away = midpoint - closest
+        distance = float(np.linalg.norm(away))
+        if distance < 1e-3 or distance > 12.0:
+            continue
+        repulsion += away / (distance**3)
+    repulsion -= chord_direction * float(np.dot(repulsion, chord_direction))
+    if float(np.dot(repulsion, repulsion)) > 1e-9:
+        return _unit(repulsion, _fallback_flexible_bow(chord_direction))
+    return _fallback_flexible_bow(chord_direction)
+
+
+def _flexible_arc_points(
+    first: np.ndarray,
+    second: np.ndarray,
+    contour_length: float,
+    count: int,
+    bow: np.ndarray,
+) -> tuple[np.ndarray, ...]:
+    if count <= 0:
+        return ()
+    chord = second - first
+    chord_length = float(np.linalg.norm(chord))
+    if chord_length < 1e-6 or chord_length >= contour_length:
+        return tuple(
+            first + chord * (index / (count + 1)) for index in range(1, count + 1)
+        )
+    ratio = chord_length / contour_length
+    low, high = 1e-4, np.pi - 1e-4
+    for _ in range(40):
+        middle = (low + high) * 0.5
+        if np.sin(middle) / middle > ratio:
+            low = middle
+        else:
+            high = middle
+    theta = (low + high) * 0.5
+    radius = contour_length / (2.0 * theta)
+    center = (first + second) * 0.5 - bow * radius * np.cos(theta)
+    radial_a = _unit(first - center, np.array([1.0, 0.0, 0.0]))
+    radial_b = _unit(second - center, np.array([1.0, 0.0, 0.0]))
+    rotation_axis = np.cross(radial_a, radial_b)
+    if float(np.dot(rotation_axis, rotation_axis)) < 1e-9:
+        rotation_axis = np.cross(_unit(chord, np.array([1.0, 0.0, 0.0])), bow)
+    rotation_axis = _unit(rotation_axis, np.array([0.0, 0.0, 1.0]))
+    angle = float(np.arccos(np.clip(np.dot(radial_a, radial_b), -1.0, 1.0)))
+    result = []
+    skew = np.array(
+        [
+            [0.0, -rotation_axis[2], rotation_axis[1]],
+            [rotation_axis[2], 0.0, -rotation_axis[0]],
+            [-rotation_axis[1], rotation_axis[0], 0.0],
+        ]
+    )
+    for index in range(1, count + 1):
+        step = angle * index / (count + 1)
+        rotation = (
+            np.identity(3) + np.sin(step) * skew + (1 - np.cos(step)) * (skew @ skew)
+        )
+        result.append(center + rotation @ radial_a * radius)
+    return tuple(result)
+
+
+def _centripetal_catmull_rom(
+    control_points: tuple[np.ndarray, ...], *, segments: int = 32
+) -> tuple[np.ndarray, ...]:
+    """Sample Three.js' default centripetal CatmullRomCurve3."""
+    if len(control_points) < 2:
+        return control_points
+
+    def point_at(t: float) -> np.ndarray:
+        point_count = len(control_points)
+        scaled = (point_count - 1) * t
+        index = int(np.floor(scaled))
+        weight = scaled - index
+        if weight == 0 and index == point_count - 1:
+            index = point_count - 2
+            weight = 1.0
+        p1, p2 = control_points[index], control_points[index + 1]
+        p0 = (
+            control_points[index - 1]
+            if index > 0
+            else 2.0 * control_points[0] - control_points[1]
+        )
+        p3 = (
+            control_points[index + 2]
+            if index + 2 < point_count
+            else 2.0 * control_points[-1] - control_points[-2]
+        )
+        dt0 = float(np.linalg.norm(p1 - p0) ** 0.5)
+        dt1 = float(np.linalg.norm(p2 - p1) ** 0.5)
+        dt2 = float(np.linalg.norm(p3 - p2) ** 0.5)
+        if dt1 < 1e-4:
+            dt1 = 1.0
+        if dt0 < 1e-4:
+            dt0 = dt1
+        if dt2 < 1e-4:
+            dt2 = dt1
+        tangent1 = (p1 - p0) / dt0 - (p2 - p0) / (dt0 + dt1) + (p2 - p1) / dt1
+        tangent2 = (p2 - p1) / dt1 - (p3 - p1) / (dt1 + dt2) + (p3 - p2) / dt2
+        tangent1 *= dt1
+        tangent2 *= dt1
+        c0 = p1
+        c1 = tangent1
+        c2 = -3.0 * p1 + 3.0 * p2 - 2.0 * tangent1 - tangent2
+        c3 = 2.0 * p1 - 2.0 * p2 + tangent1 + tangent2
+        return c0 + c1 * weight + c2 * weight**2 + c3 * weight**3
+
+    return tuple(point_at(index / segments) for index in range(segments + 1))
+
+
+def _flexible_anchor_nucleotide(design, nucleotides: list[dict], anchor):
+    strand = next(
+        (candidate for candidate in design.strands if candidate.id == anchor.strand_id),
+        None,
+    )
+    if strand is None or not (0 <= int(anchor.domain_index) < len(strand.domains)):
+        return None, None
+    domain = strand.domains[int(anchor.domain_index)]
+    direction = str(getattr(anchor.direction, "value", anchor.direction))
+    nucleotide = next(
+        (
+            candidate
+            for candidate in nucleotides
+            if candidate.get("helix_id") == domain.helix_id
+            and int(candidate.get("bp_index") or 0) == int(anchor.bp_index)
+            and str(
+                getattr(candidate.get("direction"), "value", candidate.get("direction"))
+            )
+            == direction
+        ),
+        None,
+    )
+    return nucleotide, (
+        str(anchor.strand_id),
+        int(anchor.domain_index),
+        str(domain.helix_id),
+    )
+
+
+def flexible_segment_projection(
+    design, nucleotides: list[dict], axes: list[dict], connection
+) -> FlexibleSegmentProjection | None:
+    """Project one static flexible connection using desktop Full rules."""
+    first_nucleotide, owner_a = _flexible_anchor_nucleotide(
+        design, nucleotides, connection.anchor_a
+    )
+    second_nucleotide, owner_b = _flexible_anchor_nucleotide(
+        design, nucleotides, connection.anchor_b
+    )
+    first, second = _position(first_nucleotide), _position(second_nucleotide)
+    if first is None or second is None or owner_a is None or owner_b is None:
+        return None
+    bow = _flexible_bow(first, second, axes)
+    bead_centers = _flexible_arc_points(
+        first,
+        second,
+        float(connection.contour_length_nm),
+        int(connection.n_ss_bases),
+        bow,
+    )
+    path_sites = (first, *bead_centers, second)
+    plane_normal = np.cross(_unit(second - first, np.array([1.0, 0.0, 0.0])), bow)
+    bases = []
+    if float(np.dot(plane_normal, plane_normal)) > 1e-9:
+        plane_normal = _unit(plane_normal, np.array([0.0, 0.0, 1.0]))
+        for index, center in enumerate(bead_centers):
+            tangent = _unit(path_sites[index + 2] - path_sites[index], second - first)
+            base_normal = _unit(np.cross(plane_normal, tangent), -bow)
+            if float(np.dot(base_normal, bow)) > 0:
+                base_normal *= -1.0
+            tangential = _unit(np.cross(tangent, base_normal), plane_normal)
+            bases.append(
+                FlexibleBaseProjection(
+                    bead_center=center,
+                    slab_center=center + base_normal * 0.55,
+                    slab_axis_x=tangential * 0.30,
+                    slab_axis_y=tangent * 0.06,
+                    slab_axis_z=base_normal * 0.70,
+                )
+            )
+    return FlexibleSegmentProjection(
+        connection_id=str(connection.id),
+        anchor_a_owner=owner_a,
+        anchor_b_owner=owner_b,
+        bases=tuple(bases),
+        backbone_points=_centripetal_catmull_rom(path_sites),
+    )
 
 
 def _base_centroid(base: str) -> np.ndarray:

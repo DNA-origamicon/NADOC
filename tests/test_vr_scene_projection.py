@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from backend.core.vr_scene_projection import (
     crossover_extra_base_full_projections,
     ds_linker_connector_projections,
+    flexible_segment_projection,
     ss_linker_projection,
 )
 
@@ -116,7 +117,7 @@ def test_ss_linker_projection_uses_complement_anchors_and_full_slab_frame() -> N
     assert len(projection.bases) == 2
     assert len(projection.backbone_points) == 49
     np.testing.assert_allclose(projection.backbone_points[0], [0, 0, 0])
-    np.testing.assert_allclose(projection.backbone_points[-1], [4, 0, 0])
+    np.testing.assert_allclose(projection.backbone_points[-1], [4, 0, 0], atol=1e-12)
     for base in projection.bases:
         axes = np.stack([base.slab_axis_x, base.slab_axis_y, base.slab_axis_z])
         np.testing.assert_allclose(np.linalg.norm(axes, axis=1), [0.30, 0.06, 0.70])
@@ -165,3 +166,82 @@ def test_ds_linker_projection_connects_each_anchor_to_bridge_boundary() -> None:
     np.testing.assert_allclose(connectors[0].points[-1], [0.5, 0.5, 0])
     np.testing.assert_allclose(connectors[1].points[0], [4, 0, 0])
     np.testing.assert_allclose(connectors[1].points[-1], [3.5, 0.5, 0])
+
+
+def _flexible_fixture(contour_length: float = 5.0):
+    design = SimpleNamespace(
+        strands=[
+            SimpleNamespace(
+                id="flex-strand",
+                domains=[
+                    SimpleNamespace(helix_id="ha"),
+                    SimpleNamespace(helix_id="run"),
+                    SimpleNamespace(helix_id="hb"),
+                ],
+            )
+        ]
+    )
+    anchor_a = SimpleNamespace(
+        strand_id="flex-strand",
+        domain_index=0,
+        bp_index=2,
+        direction="FORWARD",
+    )
+    anchor_b = SimpleNamespace(
+        strand_id="flex-strand",
+        domain_index=2,
+        bp_index=7,
+        direction="FORWARD",
+    )
+    connection = SimpleNamespace(
+        id="flex-1",
+        anchor_a=anchor_a,
+        anchor_b=anchor_b,
+        n_ss_bases=2,
+        contour_length_nm=contour_length,
+    )
+    nucleotides = [
+        {
+            "strand_id": "flex-strand",
+            "domain_index": 0,
+            "helix_id": "ha",
+            "bp_index": 2,
+            "direction": "FORWARD",
+            "backbone_position": [0, 0, 0],
+        },
+        {
+            "strand_id": "flex-strand",
+            "domain_index": 2,
+            "helix_id": "hb",
+            "bp_index": 7,
+            "direction": "FORWARD",
+            "backbone_position": [4, 0, 0],
+        },
+    ]
+    axes = [{"start": [0, -1, -1], "end": [4, -1, -1]}]
+    return design, nucleotides, axes, connection
+
+
+def test_flexible_projection_conserves_bow_direction_and_full_slab_dimensions() -> None:
+    projection = flexible_segment_projection(*_flexible_fixture())
+
+    assert projection is not None
+    assert projection.connection_id == "flex-1"
+    assert len(projection.bases) == 2
+    assert len(projection.backbone_points) == 33
+    np.testing.assert_allclose(projection.backbone_points[0], [0, 0, 0])
+    np.testing.assert_allclose(projection.backbone_points[-1], [4, 0, 0], atol=1e-12)
+    assert all(base.bead_center[1] > 0 for base in projection.bases)
+    for base in projection.bases:
+        axes = np.stack([base.slab_axis_x, base.slab_axis_y, base.slab_axis_z])
+        np.testing.assert_allclose(np.linalg.norm(axes, axis=1), [0.30, 0.06, 0.70])
+
+
+def test_taut_flexible_projection_places_beads_on_the_anchor_chord() -> None:
+    projection = flexible_segment_projection(*_flexible_fixture(contour_length=4.0))
+
+    assert projection is not None
+    np.testing.assert_allclose(
+        [base.bead_center for base in projection.bases],
+        [[4 / 3, 0, 0], [8 / 3, 0, 0]],
+    )
