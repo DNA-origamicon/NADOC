@@ -189,9 +189,17 @@ const _ts = () => new Date().toISOString().slice(11, 23)
 
 // ── Pure job-filtering helpers (exported for testing) ─────────────────────────
 
-/** Normalise a workspace path for comparison: forward slashes, no trailing `/`. */
+/**
+ * Normalise a workspace path for comparison.
+ *
+ * Library/open responses may identify the same file as `workspace/foo.nadoc`, while
+ * simulation jobs historically persisted the workspace-relative `foo.nadoc`. Treat
+ * those spellings as identical so reopening a design cannot hide its archived jobs.
+ */
 export function normalizeWorkspacePath(path) {
-  return path ? String(path).replace(/\\/g, '/').replace(/\/+$/, '') : ''
+  return path
+    ? String(path).replace(/\\/g, '/').replace(/^\.\//, '').replace(/^workspace\//, '').replace(/\/+$/, '')
+    : ''
 }
 
 /**
@@ -497,13 +505,19 @@ export function mdRunControl(selectedJob, {
         title: 'Uploading the package to Alpine, then sbatch.',
       }
     }
-    // SLURM is already terminal while NADOC pulls and indexes the result tree. The
-    // persisted job deliberately remains `running` so the supervisor will retry an
-    // interrupted transfer, but offering "Stop Run" at this point is false: there is
-    // no cluster process left to stop. Represent the real local transfer phase instead.
+    // The cluster side is already terminal while NADOC pulls and indexes the result
+    // tree — true whether it got there by finishing, by a walltime TIMEOUT, or by a
+    // manual Terminate-and-download (which scancels BEFORE it ever sets this state;
+    // see finish_and_download_md_job). The persisted job deliberately remains
+    // `running` so the supervisor will retry an interrupted transfer, but offering
+    // "Pause run" at this point is false: there is no cluster process left to pause.
+    // This used to also require `slurm_state === 'COMPLETED'`, which made a job that
+    // TIMED OUT fall through to the generic active-job branch below and offer to
+    // "Pause" a run Alpine had already killed — for a several-hundred-GB trajectory
+    // that download can run for hours, during which the button must not lie.
+    // Represent the real local transfer phase instead.
     const downloadState = selectedJob.download_status?.state
-    if (selectedJob.slurm_state === 'COMPLETED'
-        && ['downloading', 'processing'].includes(downloadState)) {
+    if (['downloading', 'processing'].includes(downloadState)) {
       const processing = downloadState === 'processing'
       return {
         action: RUN_ACTION.PREPARING,
@@ -511,8 +525,8 @@ export function mdRunControl(selectedJob, {
         disabled: true,
         spinner: true,
         title: processing
-          ? 'The completed Alpine results are being indexed locally.'
-          : 'The completed Alpine results are being downloaded and verified locally.',
+          ? 'The Alpine results are being indexed locally.'
+          : 'The Alpine run has ended on the cluster — its results are being downloaded and verified locally.',
       }
     }
     if (selectedJob.resumable) {

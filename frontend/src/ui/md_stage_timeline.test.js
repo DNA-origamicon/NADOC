@@ -103,4 +103,23 @@ describe('mdShortStage / mdLatestStageLabel', () => {
     }
     expect(mdLatestStageLabel(job, { stage: '300K NPT k=0' }, null)).toBe('300K NPT k=0')
   })
+
+  it('reports the actually-completed ns after Terminate run and download, not the submitted target', () => {
+    // _decorate_terminal_segment_progress (routes_md.py) stamps completed_ns on the
+    // segment once the job is done — the raw stage string alone still says "500 ns
+    // production run" no matter how much of it actually ran, which used to leave the
+    // "Latest" card claiming the full submitted length even for a run cut short.
+    const seg = { name: 'p1', stage: '310K NPT production 500 ns unrestrained', completed_ns: 42.5 }
+    const job = { status: 'completed', current_segment_idx: 0, segments: [seg] }
+    expect(mdLatestStageLabel(job, null, null)).toBe('42.5 ns production complete')
+    // Same via a health sample / persisted metrics record naming that segment.
+    expect(mdLatestStageLabel(job, { stage: seg.stage, segment: 'p1' }, null)).toBe('42.5 ns production complete')
+    expect(mdLatestStageLabel(job, null, { stage: seg.stage, segment: 'p1' })).toBe('42.5 ns production complete')
+  })
+
+  it('leaves the submitted-target label alone when the segment has no completed_ns yet', () => {
+    const seg = { name: 'p1', stage: '310K NPT production 500 ns unrestrained' }
+    const job = { status: 'running', current_segment_idx: 0, segments: [seg] }
+    expect(mdLatestStageLabel(job, null, null)).toBe('500 ns production run')
+  })
 })

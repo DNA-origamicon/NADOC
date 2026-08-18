@@ -44,6 +44,27 @@ export function mdShortStage(stage) {
     .replace(/\s+unrestrained$/i, '')
 }
 
+/** Pure: swap a "N ns production run" label for what actually completed, when the
+ *  named segment carries it. ``Terminate run and download`` (and a timed-out remote
+ *  job whose walltime cut a production segment short) decorates that segment with
+ *  ``completed_ns`` — see the backend's ``_decorate_terminal_segment_progress`` — but
+ *  a bare stage string can't tell "ran to its submitted target" from "cut short", so
+ *  the raw label alone would keep reporting the submitted total forever. Falls back
+ *  to the raw label when no segment matches or it carries no completed_ns yet (a run
+ *  still in progress, or a job persisted before this decoration existed). */
+function _withCompletedNs(shortLabel, seg) {
+  const completedNs = Number(seg?.completed_ns)
+  if (!Number.isFinite(completedNs) || completedNs < 0) return shortLabel
+  const m = /^([0-9.]+)\s*ns production run$/.exec(shortLabel)
+  if (!m) return shortLabel
+  const shown = completedNs.toFixed(2).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')
+  return `${shown} ns production complete`
+}
+
+function _segmentByName(job, name) {
+  return name ? (job?.segments ?? []).find(s => s.name === name) ?? null : null
+}
+
 /** Pure: what the "Latest" stat card shows. A live health sample wins, then the last
  *  persisted one, then a RUNNING minimisation — that step emits no health sample, so
  *  without it the card reads "—" for the whole (long) minimisation.
@@ -54,11 +75,11 @@ export function mdShortStage(stage) {
  *  first segment of a production run, which produces exactly one health sample at its
  *  very end. */
 export function mdLatestStageLabel(job, health, persisted) {
-  if (health) return mdShortStage(health.stage)
-  if (persisted?.stage) return mdShortStage(persisted.stage)
+  if (health) return _withCompletedNs(mdShortStage(health.stage), _segmentByName(job, health.segment))
+  if (persisted?.stage) return _withCompletedNs(mdShortStage(persisted.stage), _segmentByName(job, persisted.segment))
   const min = mdMinimizationRow(job)
   if (min && min.status === 'running') return mdShortStage(min.stage)
   const seg = job?.segments?.[job?.current_segment_idx]
-  if (seg?.stage) return mdShortStage(seg.stage)
+  if (seg?.stage) return _withCompletedNs(mdShortStage(seg.stage), seg)
   return '—'
 }
