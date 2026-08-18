@@ -698,6 +698,7 @@ def _serialize_scene(
                 palette = palette_for_strand(connector.strand_id)
                 points = [rotation @ value for value in connector.points]
                 side = connector.strand_id.rsplit("__", 1)[-1]
+                side_aliases = anchor_a_aliases if side == "a" else anchor_b_aliases
                 for edge_index, (first, second) in enumerate(zip(points, points[1:])):
                     emit(
                         "C",
@@ -706,6 +707,7 @@ def _serialize_scene(
                         *second,
                         0.065,
                         *palette,
+                        endpoint_aliases=(side_aliases, side_aliases),
                     )
 
     def append_flexible_geometry() -> None:
@@ -831,7 +833,11 @@ def _serialize_scene(
                     ),
                 )
 
-    def append_unligated_warning(crossover_id: str, center: np.ndarray) -> None:
+    def append_unligated_warning(
+        crossover_id: str,
+        center: np.ndarray,
+        transform_owners: tuple[tuple[str, float, float], ...] = (),
+    ) -> None:
         """Add a physical amber counterpart of desktop's warning sprite."""
         palette = solid_palette(_rgb("#f5a623"))
         aliases = owner_tokens(("crossover", "crossover", crossover_id))
@@ -849,6 +855,7 @@ def _serialize_scene(
                 0.12,
                 *palette,
                 aliases=aliases,
+                transform_owners=transform_owners,
             )
         box(
             f"warning:{crossover_id}:stem",
@@ -858,6 +865,7 @@ def _serialize_scene(
             np.array([0.0, 0.0, 0.12]),
             palette,
             aliases=aliases,
+            transform_owners=transform_owners,
         )
         box(
             f"warning:{crossover_id}:dot",
@@ -867,6 +875,7 @@ def _serialize_scene(
             np.array([0.0, 0.0, 0.14]),
             palette,
             aliases=aliases,
+            transform_owners=transform_owners,
         )
 
     lines = [
@@ -1390,8 +1399,29 @@ def _serialize_scene(
         )
         if first_entry is None or second_entry is None:
             continue
+        first_aliases = nucleotide_owner_tokens(first_entry[0])
+        second_aliases = nucleotide_owner_tokens(second_entry[0])
+        warning_transform_owners = tuple(
+            (
+                token,
+                min(
+                    1.0,
+                    (0.5 if token in first_aliases else 0.0)
+                    + (0.5 if token in second_aliases else 0.0),
+                ),
+                min(
+                    1.0,
+                    (0.5 if token in first_aliases else 0.0)
+                    + (0.5 if token in second_aliases else 0.0),
+                ),
+            )
+            for token in cluster_transform_tokens
+            if token in first_aliases or token in second_aliases
+        )
         append_unligated_warning(
-            str(crossover.id), (first_entry[1] + second_entry[1]) * 0.5
+            str(crossover.id),
+            (first_entry[1] + second_entry[1]) * 0.5,
+            warning_transform_owners,
         )
 
     append_linker_geometry(include_full_bases=True)
@@ -1655,6 +1685,14 @@ def _serialize_scene(
             # coarse primitive remains non-degenerate.
             second = first + rotation @ np.array([0.0, 0.001, 0.0])
         palette = palette_for_strand(f"{bridge_helix_id}__a")
+        from backend.core.linker_relax import linker_anchor_nucleotide
+
+        anchor_a = linker_anchor_nucleotide(
+            nucleotides, connection, connection.overhang_a_id, True
+        )
+        anchor_b = linker_anchor_nucleotide(
+            nucleotides, connection, connection.overhang_b_id, False
+        )
         emit(
             "C",
             f"linker:{connection.id}:ds:bridge",
@@ -1662,6 +1700,10 @@ def _serialize_scene(
             *second,
             0.72,
             *palette,
+            endpoint_aliases=(
+                nucleotide_owner_tokens(anchor_a) if anchor_a else (),
+                nucleotide_owner_tokens(anchor_b) if anchor_b else (),
+            ),
         )
 
     # Cylinders retains thin ssDNA and dsDNA connector paths but omits the

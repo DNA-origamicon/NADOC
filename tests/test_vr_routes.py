@@ -1350,6 +1350,17 @@ def test_ss_linker_details_are_full_only_but_backbone_remains_in_cylinders() -> 
 
 
 def test_ds_linker_connector_arcs_are_visible_in_full_and_cylinders() -> None:
+    design = _vr_linker_design("ds")
+    design.cluster_transforms = [
+        SimpleNamespace(
+            id="left", domain_ids=[], helix_ids=["ha"], auto_created=False,
+            color=None, is_default=False,
+        ),
+        SimpleNamespace(
+            id="right", domain_ids=[], helix_ids=["hb"], auto_created=False,
+            color=None, is_default=False,
+        ),
+    ]
     nucleotides = _vr_linker_anchor_nucleotides("ds")
     nucleotides.extend(
         [
@@ -1368,7 +1379,7 @@ def test_ds_linker_connector_arcs_are_visible_in_full_and_cylinders() -> None:
         ]
     )
     text = _serialize_scene(
-        _vr_linker_design("ds"),
+        design,
         nucleotides,
         [],
         atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
@@ -1383,10 +1394,29 @@ def test_ds_linker_connector_arcs_are_visible_in_full_and_cylinders() -> None:
             )
             == 96
         )
+    scene = parse_scene_contract(text)["full"]
+    left = _owner_token("cluster", "left")
+    right = _owner_token("cluster", "right")
+    assert scene["linker:link:ds:a:connector:0"].transform_owners == (
+        (left, 1.0, 1.0),
+    )
+    assert scene["linker:link:ds:b:connector:0"].transform_owners == (
+        (right, 1.0, 1.0),
+    )
 
 
 def test_ds_linker_cylinders_pair_overhang_halves_and_recover_bridge_axis() -> None:
     design = _vr_linker_design("ds")
+    design.cluster_transforms = [
+        SimpleNamespace(
+            id="left", domain_ids=[], helix_ids=["ha"], auto_created=False,
+            color=None, is_default=False,
+        ),
+        SimpleNamespace(
+            id="right", domain_ids=[], helix_ids=["hb"], auto_created=False,
+            color=None, is_default=False,
+        ),
+    ]
     nucleotides = _vr_linker_anchor_nucleotides("ds")
     nucleotides.extend(
         [
@@ -1458,6 +1488,11 @@ def test_ds_linker_cylinders_pair_overhang_halves_and_recover_bridge_axis() -> N
     assert [tuple(float(value) for value in record[1:7]) for record in bridge] == [
         (1, 0, 0, 3, 0, 0)
     ]
+    bridge_owner = parse_scene_contract(text)["cylinders"]["linker:link:ds:bridge"]
+    assert bridge_owner.transform_owners == (
+        (_owner_token("cluster", "left"), 1.0, 0.0),
+        (_owner_token("cluster", "right"), 0.0, 1.0),
+    )
 
 
 def test_flexible_segment_replaces_filtered_beads_in_full_only() -> None:
@@ -1600,7 +1635,16 @@ def test_unligated_crossover_gets_full_only_amber_warning_at_midpoint() -> None:
                 domains=[],
             )
         ],
-        cluster_transforms=[],
+        cluster_transforms=[
+            SimpleNamespace(
+                id="left", domain_ids=[], helix_ids=["h1"], auto_created=False,
+                color=None, is_default=False,
+            ),
+            SimpleNamespace(
+                id="right", domain_ids=[], helix_ids=["h2"], auto_created=False,
+                color=None, is_default=False,
+            ),
+        ],
         crossovers=[crossover],
         forced_ligations=[],
         overhang_bindings=[],
@@ -1649,4 +1693,9 @@ def test_unligated_crossover_gets_full_only_amber_warning_at_midpoint() -> None:
     assert not any(
         record[0] == "C" and float(record[7]) == pytest.approx(0.12)
         for record in sections["cylinders"]
+    )
+    warning = parse_scene_contract(text)["full"]["warning:xo-open:stem"]
+    assert warning.transform_owners == (
+        (_owner_token("cluster", "left"), 0.5, 0.5),
+        (_owner_token("cluster", "right"), 0.5, 0.5),
     )
