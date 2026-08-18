@@ -68,8 +68,9 @@ Controls on the original HTC Vive wands:
   Confirm is reported as staged and Undo reports that no VR commit exists.
   Move/Rotate accepts only a canonical Cluster; finer targets report
   **UNSUPPORTED TARGET** instead of silently widening the edit. Preview draws an
-  RGB translation triad at the acknowledged target and Cancel removes it without
-  changing geometry, selection, or history.
+  RGB translation triad at the center of all visible primitives carrying the
+  acknowledged Cluster owner; its size is derived from owner-wide bounds and stays
+  capped for reach. Cancel removes it without changing geometry, selection, or history.
 - Cyan and orange pointers identify the left and right controllers. They turn
   green during a one-hand grab and magenta during a two-hand resize.
 - When neither trigger is held, the right pointer extends to the nearest visible

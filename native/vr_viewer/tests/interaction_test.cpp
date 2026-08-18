@@ -186,6 +186,28 @@ void canonicalOwnerFallbackUsesFeedbackSpecificityAndSceneOrder() {
     require(!nadoc_vr::resolveOwnerIdentity(entries, {"cluster"}));
 }
 
+void ownerBoundsAreStableAndFollowTheWorldTransform() {
+    nadoc_vr::BoundsAccumulator bounds;
+    require(!bounds.summary());
+    bounds.includePoint({-1.0F, 0.0F, 0.0F}, 0.2F);
+    bounds.includeSegment({1.0F, -0.5F, 0.0F}, {1.0F, 0.5F, 0.0F}, 0.1F);
+    bounds.includeBox(
+        {0.0F, 0.0F, 1.0F}, {0.4F, 0.0F, 0.0F},
+        {0.0F, 0.2F, 0.0F}, {0.0F, 0.0F, 0.6F});
+    const auto local = bounds.summary();
+    require(local.has_value());
+    require(glm::all(glm::epsilonEqual(
+        local->center, glm::vec3(-0.05F, 0.0F, 0.55F), 1e-5F)));
+
+    const glm::mat4 transform = glm::translate(glm::mat4(1.0F), {2.0F, 3.0F, 4.0F})
+                              * glm::scale(glm::mat4(1.0F), glm::vec3(2.0F));
+    const auto world = bounds.summary(transform);
+    require(world.has_value());
+    require(glm::all(glm::epsilonEqual(
+        world->center, glm::vec3(1.9F, 3.0F, 5.1F), 1e-5F)));
+    require(std::abs(world->radius - local->radius * 2.0F) < 1e-5F);
+}
+
 void toolShellNeverClaimsACommitAndRequiresPreview() {
     nadoc_vr::ToolShell shell;
     shell.activate(nadoc_vr::ToolMode::twist, "none");
@@ -227,5 +249,6 @@ int main() {
     halfCylinderPickingMatchesTheRenderedPositiveHalf();
     canonicalSelectionFeedbackIsStrictAndSequenced();
     canonicalOwnerFallbackUsesFeedbackSpecificityAndSceneOrder();
+    ownerBoundsAreStableAndFollowTheWorldTransform();
     toolShellNeverClaimsACommitAndRequiresPreview();
 }

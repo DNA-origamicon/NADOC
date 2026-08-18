@@ -921,6 +921,51 @@ class GlScene {
         return std::nullopt;
     }
 
+    /** Bounds of every primitive carrying the most-specific available owner token.
+     * Unlike anchor(), this describes the selected owner rather than one fallback
+     * primitive, so tool affordances remain stable across representation changes. */
+    [[nodiscard]] std::optional<nadoc_vr::BoundsSummary> ownerBounds(
+        const std::vector<std::string>& ownerTokens,
+        const glm::mat4& modelTransform) const {
+        const RepresentationData& source =
+            expanded_ && scene_.hasExpanded
+                ? scene_.expandedRepresentations[static_cast<size_t>(representation_)]
+                : scene_.representations[static_cast<size_t>(representation_)];
+        std::unordered_set<std::string> identities;
+        for (const std::string& token : ownerTokens) {
+            for (const nadoc_vr::OwnerAliasEntry& entry : source.ownerAliases) {
+                if (std::find(entry.tokens.begin(), entry.tokens.end(), token)
+                    != entry.tokens.end()) {
+                    identities.insert(entry.identity);
+                }
+            }
+            if (!identities.empty()) break;
+        }
+        if (identities.empty()) return std::nullopt;
+
+        nadoc_vr::BoundsAccumulator bounds;
+        for (const StyledPoint& point : source.points) {
+            if (identities.contains(point.identity)) {
+                bounds.includePoint(point.position, point.size);
+            }
+        }
+        auto includeCylinders = [&](const std::vector<StyledCylinder>& cylinders) {
+            for (const StyledCylinder& cylinder : cylinders) {
+                if (identities.contains(cylinder.identity)) {
+                    bounds.includeSegment(cylinder.start, cylinder.end, cylinder.radius);
+                }
+            }
+        };
+        includeCylinders(source.cylinders);
+        includeCylinders(source.halfCylinders);
+        for (const StyledBox& box : source.boxes) {
+            if (identities.contains(box.identity)) {
+                bounds.includeBox(box.center, box.axisX, box.axisY, box.axisZ);
+            }
+        }
+        return bounds.summary(modelTransform);
+    }
+
     void renderShadowMap(const glm::mat4& modelTransform, glm::vec3 lightDirection) {
         lightDirection_ = glm::normalize(lightDirection);
         const glm::vec3 worldCenter = glm::vec3(
@@ -2156,9 +2201,15 @@ class Viewer {
                      center + glm::vec3(0, markerRadius, 0), color);
                 line(center - glm::vec3(0, 0, markerRadius),
                      center + glm::vec3(0, 0, markerRadius), color);
-                if (toolShell_.mode() == nadoc_vr::ToolMode::move_rotate &&
-                    toolShell_.previewRequested() && selectedSelectionKind_ == "cluster") {
-                    const float handleRadius = markerRadius + 0.045F;
+            }
+            if (toolShell_.mode() == nadoc_vr::ToolMode::move_rotate &&
+                toolShell_.previewRequested() && selectedSelectionKind_ == "cluster") {
+                const auto bounds = glScene_->ownerBounds(
+                    selectedOwnerTokens_, manipulator_.transform());
+                if (bounds) {
+                    const glm::vec3 center = bounds->center;
+                    const float handleRadius = glm::clamp(
+                        bounds->radius * 0.20F, 0.050F, 0.220F);
                     line(center - glm::vec3(handleRadius, 0, 0),
                          center + glm::vec3(handleRadius, 0, 0), {1.0F, 0.25F, 0.20F});
                     line(center - glm::vec3(0, handleRadius, 0),

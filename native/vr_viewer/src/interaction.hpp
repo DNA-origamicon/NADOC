@@ -9,6 +9,7 @@
 #include <array>
 #include <cstdint>
 #include <cmath>
+#include <limits>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -40,6 +41,60 @@ struct OwnerAliasEntry {
     std::vector<std::string> tokens;
 
     bool operator==(const OwnerAliasEntry&) const = default;
+};
+
+struct BoundsSummary {
+    glm::vec3 center{};
+    float radius = 0.0F;
+};
+
+/** Conservative owner-wide local bounds used for tool locators and future pivots. */
+class BoundsAccumulator {
+  public:
+    void includePoint(const glm::vec3& point, float radius = 0.0F) {
+        const glm::vec3 extent(std::max(radius, 0.0F));
+        minimum_ = glm::min(minimum_, point - extent);
+        maximum_ = glm::max(maximum_, point + extent);
+        empty_ = false;
+    }
+
+    void includeSegment(
+        const glm::vec3& start, const glm::vec3& end, float radius = 0.0F) {
+        includePoint(start, radius);
+        includePoint(end, radius);
+    }
+
+    void includeBox(const glm::vec3& center, const glm::vec3& axisX,
+                    const glm::vec3& axisY, const glm::vec3& axisZ) {
+        for (float x : {-0.5F, 0.5F}) {
+            for (float y : {-0.5F, 0.5F}) {
+                for (float z : {-0.5F, 0.5F}) {
+                    includePoint(center + axisX * x + axisY * y + axisZ * z);
+                }
+            }
+        }
+    }
+
+    [[nodiscard]] std::optional<BoundsSummary> summary(
+        const glm::mat4& transform = glm::mat4(1.0F)) const {
+        if (empty_) return std::nullopt;
+        const glm::vec3 localCenter = (minimum_ + maximum_) * 0.5F;
+        const float localRadius = glm::length(maximum_ - minimum_) * 0.5F;
+        const float scale = std::max({
+            glm::length(glm::vec3(transform[0])),
+            glm::length(glm::vec3(transform[1])),
+            glm::length(glm::vec3(transform[2])),
+        });
+        return BoundsSummary{
+            glm::vec3(transform * glm::vec4(localCenter, 1.0F)),
+            localRadius * scale,
+        };
+    }
+
+  private:
+    bool empty_ = true;
+    glm::vec3 minimum_{std::numeric_limits<float>::max()};
+    glm::vec3 maximum_{std::numeric_limits<float>::lowest()};
 };
 
 enum class ToolMode { inspect, move_rotate, extrude, twist, bend };
