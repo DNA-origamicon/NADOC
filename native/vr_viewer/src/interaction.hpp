@@ -190,7 +190,10 @@ class ToolShell {
         ToolMode mode, const std::string& selectionKind) {
         if (mode == ToolMode::inspect) return true;
         if (selectionKind.empty() || selectionKind == "none") return false;
-        return mode != ToolMode::move_rotate || selectionKind == "cluster";
+        if (mode != ToolMode::move_rotate) return true;
+        return selectionKind == "cluster" || selectionKind == "base"
+            || selectionKind == "end" || selectionKind == "domain"
+            || selectionKind == "strand";
     }
 
     void activate(ToolMode mode, const std::string& selectionKind) {

@@ -323,16 +323,16 @@ void toolShellNeverClaimsACommitAndRequiresPreview() {
     require(shell.status() == "NO VR COMMIT");
 
     shell.activate(nadoc_vr::ToolMode::move_rotate, "base");
-    require(shell.status() == "UNSUPPORTED TARGET");
-    shell.apply(nadoc_vr::ToolAction::preview, "base");
-    require(!shell.previewRequested() && shell.status() == "UNSUPPORTED TARGET");
-    shell.syncSelection("cluster");
     require(shell.status() == "READY");
+    shell.apply(nadoc_vr::ToolAction::preview, "base");
+    require(shell.previewRequested() && shell.status() == "PREVIEW ONLY");
+    shell.syncSelection("domain", true);
+    require(!shell.previewRequested() && shell.status() == "READY");
     shell.apply(nadoc_vr::ToolAction::preview, "cluster");
     shell.syncSelection("cluster", true);
     require(!shell.previewRequested() && shell.status() == "READY");
     shell.apply(nadoc_vr::ToolAction::preview, "cluster");
-    shell.syncSelection("base");
+    shell.syncSelection("bond");
     require(!shell.previewRequested() && shell.status() == "UNSUPPORTED TARGET");
 }
 

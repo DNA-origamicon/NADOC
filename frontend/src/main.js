@@ -5836,7 +5836,7 @@ async function main() {
           ? 'Move / Rotate'
           : `${event.mode?.[0]?.toUpperCase() ?? ''}${event.mode?.slice(1) ?? ''}`
         if (result.reason === 'unsupported_selection') {
-          showToast(`VR ${label}: this target level is not supported; Move / Rotate requires a Cluster.`)
+          showToast(`VR ${label}: this connectivity/atom target has no exact edit scope yet.`)
         } else if (result.reason === 'stale_target' ||
             result.reason === 'target_changed_preview_required') {
           showToast(`VR ${label}: the target changed; select it again and restart Preview.`)
@@ -5845,7 +5845,11 @@ async function main() {
           showToast(`VR ${label}: select a canonical target first.`)
         } else if (result.effect?.type === 'preview_requested') {
           if (result.effect.tool === 'move_rotate') {
-            _translateRotateTool.beginVRPreview(result.effect.selectedRef.id).then(status => {
+            const previewStart = result.effect.selectedRef.kind === 'cluster'
+              ? _translateRotateTool.beginVRPreview(result.effect.selectedRef.id)
+              : Promise.resolve(
+                  _nucleotideTransformTool.beginVRPreview(result.effect.selectedRef))
+            previewStart.then(status => {
               if (status?.accepted) {
                 showToast('VR Move / Rotate preview is mirrored on the desktop; Confirm remains disabled.')
               } else {
@@ -5866,7 +5870,10 @@ async function main() {
           )
         } else if (result.effect?.type === 'cancel_requested') {
           if (result.effect.tool === 'move_rotate') {
-            _translateRotateTool.cancelVRPreview().then(() => {
+            Promise.all([
+              _translateRotateTool.cancelVRPreview(),
+              Promise.resolve(_nucleotideTransformTool.cancelVRPreview()),
+            ]).then(() => {
               showToast('VR Move / Rotate preview cancelled and desktop geometry restored.')
             }).catch(() => showToast(
               'VR Move / Rotate desktop restore failed.', { severity: 'error' },
@@ -5878,9 +5885,12 @@ async function main() {
           showToast('VR tools have no committed edit to undo yet.')
         }
       } else if (event?.type === 'tool_transform') {
-        _translateRotateTool.applyVRPreviewMatrix(event.matrix)
+        if (!_nucleotideTransformTool.applyVRPreviewMatrix(event.matrix)) {
+          _translateRotateTool.applyVRPreviewMatrix(event.matrix)
+        }
       } else if (event?.type === 'native_session_end') {
         _translateRotateTool.cancelVRPreview().catch(() => {})
+        _nucleotideTransformTool.cancelVRPreview()
       } else {
         if (button) button.dataset.vrHoverIdentity = event?.identity ?? ''
         selectionManager.previewVRIdentity?.(event?.identity ?? null)

@@ -39,6 +39,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <tuple>
 #include <unordered_set>
 #include <unordered_map>
 #include <utility>
@@ -118,6 +119,13 @@ struct OwnerHandle {
     glm::vec3 center{};
 };
 
+struct ToolHandle {
+    std::string id;
+    std::string token;
+    std::string kind;
+    glm::vec3 center{};
+};
+
 struct TransformOwner {
     std::string token;
     float startWeight = 0.0F;
@@ -141,6 +149,8 @@ struct RepresentationData {
     std::vector<nadoc_vr::OwnerAliasEntry> ownerAliases;
     std::vector<OwnerHandle> ownerHandles;
     std::vector<TransformOwnership> transformOwnership;
+    std::vector<ToolHandle> toolHandles;
+    std::vector<TransformOwnership> toolScopeOwnership;
 };
 
 struct SceneData {
@@ -438,7 +448,7 @@ SceneData loadScene(const std::string& path) {
     std::string initialRepresentation;
     std::string initialColoring;
     input >> magic >> version >> initialRepresentation >> initialColoring;
-    if (magic != "NADOCVR" || (version < 4 || version > 11)) {
+    if (magic != "NADOCVR" || (version < 4 || version > 12)) {
         throw std::runtime_error("Unsupported NADOC VR scene format");
     }
 
@@ -452,6 +462,15 @@ SceneData loadScene(const std::string& path) {
     std::array<std::array<std::unordered_set<std::string>, 4>, 2> aliasIdentities;
     std::array<std::array<std::unordered_set<std::string>, 4>, 2> handleTokens;
     std::array<std::array<std::unordered_set<std::string>, 4>, 2> transformIdentities;
+    std::array<std::array<std::unordered_set<std::string>, 4>, 2> scopeHandleTokens;
+    std::array<std::array<std::unordered_map<std::string, std::string>, 4>, 2>
+        scopeHandleIds;
+    std::array<std::array<std::unordered_set<std::string>, 4>, 2>
+        declaredOwnerTokens;
+    std::array<std::array<std::unordered_set<std::string>, 4>, 2> scopeIdentities;
+    std::array<std::array<
+        std::vector<std::tuple<std::string, std::string, std::string>>, 4>, 2>
+        toolHandleKeys;
     size_t poseIndex = 0;
     auto readIdentity = [&](char recordType) {
         std::string identity;
@@ -506,7 +525,16 @@ SceneData loadScene(const std::string& path) {
             aliases.tokens.resize(count);
             std::unordered_set<std::string> uniqueTokens;
             for (std::string& token : aliases.tokens) {
-                input >> token;
+                std::string wireToken;
+                input >> wireToken;
+                if (version >= 12) {
+                    const auto mapped = scopeHandleIds[poseIndex][activeIndex].find(
+                        wireToken);
+                    token = mapped == scopeHandleIds[poseIndex][activeIndex].end()
+                        ? "" : mapped->second;
+                } else {
+                    token = std::move(wireToken);
+                }
                 if (token.empty() || token.size() > 2048 ||
                     !uniqueTokens.insert(token).second) {
                     throw std::runtime_error("Invalid VR primitive owner alias token");
@@ -522,11 +550,55 @@ SceneData loadScene(const std::string& path) {
             input >> handle.token >> handle.center.x >> handle.center.y >> handle.center.z;
             if (handle.token.empty() || handle.token.size() > 2048 ||
                 !handleTokens[poseIndex][activeIndex].insert(handle.token).second ||
+                !scopeHandleTokens[poseIndex][activeIndex]
+                     .insert(handle.token).second ||
                 !std::isfinite(handle.center.x) || !std::isfinite(handle.center.y) ||
                 !std::isfinite(handle.center.z)) {
                 throw std::runtime_error("Invalid VR cluster handle");
             }
             active->ownerHandles.push_back(std::move(handle));
+        } else if (type == 'J' && version >= 12) {
+            if (!active) {
+                throw std::runtime_error(
+                    "Tool handle appears before representation block");
+            }
+            ToolHandle handle;
+            input >> handle.id >> handle.token >> handle.kind
+                  >> handle.center.x >> handle.center.y >> handle.center.z;
+            const bool validKind = handle.kind == "base" || handle.kind == "end"
+                || handle.kind == "domain" || handle.kind == "strand"
+                || handle.kind == "atom";
+            if (handle.id.empty() || handle.id.size() > 64 ||
+                handle.token.empty() || handle.token.size() > 2048 || !validKind ||
+                !scopeHandleIds[poseIndex][activeIndex]
+                     .emplace(handle.id, handle.token).second ||
+                !declaredOwnerTokens[poseIndex][activeIndex]
+                     .insert(handle.token).second ||
+                !scopeHandleTokens[poseIndex][activeIndex]
+                     .insert(handle.token).second ||
+                !std::isfinite(handle.center.x) || !std::isfinite(handle.center.y) ||
+                !std::isfinite(handle.center.z)) {
+                throw std::runtime_error("Invalid VR tool handle");
+            }
+            toolHandleKeys[poseIndex][activeIndex].emplace_back(
+                handle.id, handle.token, handle.kind);
+            active->toolHandles.push_back(std::move(handle));
+        } else if (type == 'D' && version >= 12) {
+            if (!active) {
+                throw std::runtime_error(
+                    "Owner dictionary appears before representation block");
+            }
+            std::string ownerId;
+            std::string token;
+            input >> ownerId >> token;
+            if (ownerId.empty() || ownerId.size() > 64 || token.empty() ||
+                token.size() > 2048 ||
+                !scopeHandleIds[poseIndex][activeIndex]
+                     .emplace(ownerId, token).second ||
+                !declaredOwnerTokens[poseIndex][activeIndex]
+                     .insert(token).second) {
+                throw std::runtime_error("Invalid VR owner dictionary");
+            }
         } else if (type == 'T' && version >= 10) {
             if (!active) {
                 throw std::runtime_error(
@@ -544,7 +616,16 @@ SceneData loadScene(const std::string& path) {
             ownership.owners.resize(count);
             std::unordered_set<std::string> uniqueTokens;
             for (TransformOwner& owner : ownership.owners) {
-                input >> owner.token >> owner.startWeight >> owner.endWeight;
+                std::string wireOwner;
+                input >> wireOwner >> owner.startWeight >> owner.endWeight;
+                if (version >= 12) {
+                    const auto mapped = scopeHandleIds[poseIndex][activeIndex].find(
+                        wireOwner);
+                    owner.token = mapped == scopeHandleIds[poseIndex][activeIndex].end()
+                        ? "" : mapped->second;
+                } else {
+                    owner.token = std::move(wireOwner);
+                }
                 if (owner.token.empty() || owner.token.size() > 2048 ||
                     !handleTokens[poseIndex][activeIndex].contains(owner.token) ||
                     !uniqueTokens.insert(owner.token).second ||
@@ -556,6 +637,41 @@ SceneData loadScene(const std::string& path) {
                 }
             }
             active->transformOwnership.push_back(std::move(ownership));
+        } else if (type == 'W' && version >= 12) {
+            if (!active) {
+                throw std::runtime_error(
+                    "Tool-scope ownership appears before representation block");
+            }
+            TransformOwnership ownership;
+            size_t count = 0;
+            input >> ownership.identity >> count;
+            if (ownership.identity.empty() || count == 0 || count > 32 ||
+                !identities[poseIndex][activeIndex].contains(ownership.identity) ||
+                !scopeIdentities[poseIndex][activeIndex]
+                     .insert(ownership.identity).second) {
+                throw std::runtime_error("Invalid VR tool-scope ownership");
+            }
+            ownership.owners.resize(count);
+            std::unordered_set<std::string> uniqueTokens;
+            for (TransformOwner& owner : ownership.owners) {
+                std::string wireOwner;
+                input >> wireOwner >> owner.startWeight >> owner.endWeight;
+                const auto mapped = scopeHandleIds[poseIndex][activeIndex].find(
+                    wireOwner);
+                owner.token = mapped == scopeHandleIds[poseIndex][activeIndex].end()
+                    ? wireOwner : mapped->second;
+                if (owner.token.empty() || owner.token.size() > 2048 ||
+                    !scopeHandleTokens[poseIndex][activeIndex]
+                         .contains(owner.token) ||
+                    !uniqueTokens.insert(owner.token).second ||
+                    !std::isfinite(owner.startWeight) ||
+                    !std::isfinite(owner.endWeight) ||
+                    owner.startWeight < 0.0F || owner.startWeight > 1.0F ||
+                    owner.endWeight < 0.0F || owner.endWeight > 1.0F) {
+                    throw std::runtime_error("Invalid VR tool-scope owner");
+                }
+            }
+            active->toolScopeOwnership.push_back(std::move(ownership));
         } else if (type == 'P') {
             if (!active) throw std::runtime_error("Point appears before representation block");
             StyledPoint point;
@@ -621,6 +737,19 @@ SceneData loadScene(const std::string& path) {
                 throw std::runtime_error(
                     "Expanded VR pose does not match natural transform ownership");
             }
+            if (toolHandleKeys[0][index] != toolHandleKeys[1][index]) {
+                throw std::runtime_error(
+                    "Expanded VR pose does not match natural tool handles");
+            }
+            if (scopeHandleIds[0][index] != scopeHandleIds[1][index]) {
+                throw std::runtime_error(
+                    "Expanded VR pose does not match natural owner dictionary");
+            }
+            if (scene.representations[index].toolScopeOwnership !=
+                scene.expandedRepresentations[index].toolScopeOwnership) {
+                throw std::runtime_error(
+                    "Expanded VR pose does not match natural tool-scope ownership");
+            }
         }
     }
 
@@ -684,6 +813,10 @@ SceneData loadScene(const std::string& path) {
             box.axisZ *= scale;
         }
         for (OwnerHandle& handle : rep.ownerHandles) {
+            handle.center = (handle.center - center) * scale;
+            handle.center.z -= kViewDistanceMeters;
+        }
+        for (ToolHandle& handle : rep.toolHandles) {
             handle.center = (handle.center - center) * scale;
             handle.center.z -= kViewDistanceMeters;
         }
@@ -800,14 +933,22 @@ class GlScene {
                 ? scene_.expandedRepresentations[static_cast<size_t>(representation_)]
                 : scene_.representations[static_cast<size_t>(representation_)];
         for (const std::string& candidate : ownerTokens) {
-            const bool present = std::any_of(
-                source.transformOwnership.begin(), source.transformOwnership.end(),
+            const auto& ownershipRecords = source.toolScopeOwnership.empty()
+                ? source.transformOwnership : source.toolScopeOwnership;
+            const bool explicitOwner = std::any_of(
+                ownershipRecords.begin(), ownershipRecords.end(),
                 [&](const TransformOwnership& ownership) {
                     return std::any_of(
                         ownership.owners.begin(), ownership.owners.end(),
                         [&](const TransformOwner& owner) { return owner.token == candidate; });
                 });
-            if (present) {
+            const bool implicitOwner = std::any_of(
+                source.ownerAliases.begin(), source.ownerAliases.end(),
+                [&](const nadoc_vr::OwnerAliasEntry& entry) {
+                    return std::find(entry.tokens.begin(), entry.tokens.end(), candidate)
+                        != entry.tokens.end();
+                });
+            if (explicitOwner || implicitOwner) {
                 token = candidate;
                 break;
             }
@@ -857,7 +998,9 @@ class GlScene {
                 : scene_.representations[static_cast<size_t>(representation)];
         std::unordered_map<std::string, std::pair<float, float>> transformWeights;
         if (!toolPreviewToken_.empty()) {
-            for (const TransformOwnership& ownership : source.transformOwnership) {
+            const auto& ownershipRecords = source.toolScopeOwnership.empty()
+                ? source.transformOwnership : source.toolScopeOwnership;
+            for (const TransformOwnership& ownership : ownershipRecords) {
                 const auto owner = std::find_if(
                     ownership.owners.begin(), ownership.owners.end(),
                     [&](const TransformOwner& candidate) {
@@ -867,6 +1010,14 @@ class GlScene {
                     transformWeights.emplace(
                         ownership.identity,
                         std::pair(owner->startWeight, owner->endWeight));
+                }
+            }
+            for (const nadoc_vr::OwnerAliasEntry& aliases : source.ownerAliases) {
+                if (std::find(
+                        aliases.tokens.begin(), aliases.tokens.end(), toolPreviewToken_)
+                    != aliases.tokens.end()) {
+                    transformWeights.emplace(
+                        aliases.identity, std::pair(1.0F, 1.0F));
                 }
             }
         }
@@ -1176,6 +1327,13 @@ class GlScene {
                 ? scene_.expandedRepresentations[static_cast<size_t>(representation_)]
                 : scene_.representations[static_cast<size_t>(representation_)];
         for (const std::string& token : ownerTokens) {
+            const auto toolHandle = std::find_if(
+                source.toolHandles.begin(), source.toolHandles.end(),
+                [&](const ToolHandle& candidate) { return candidate.token == token; });
+            if (toolHandle != source.toolHandles.end()) {
+                return glm::vec3(
+                    modelTransform * glm::vec4(toolHandle->center, 1.0F));
+            }
             const auto handle = std::find_if(
                 source.ownerHandles.begin(), source.ownerHandles.end(),
                 [&](const OwnerHandle& candidate) { return candidate.token == token; });
@@ -1359,20 +1517,32 @@ class GlScene {
     [[nodiscard]] std::pair<float, float> previewWeights(
         const RepresentationData& source, const std::string& identity) const {
         if (toolPreviewToken_.empty()) return {0.0F, 0.0F};
+        const auto& ownershipRecords = source.toolScopeOwnership.empty()
+            ? source.transformOwnership : source.toolScopeOwnership;
         const auto ownership = std::find_if(
-            source.transformOwnership.begin(), source.transformOwnership.end(),
+            ownershipRecords.begin(), ownershipRecords.end(),
             [&](const TransformOwnership& candidate) {
                 return candidate.identity == identity;
             });
-        if (ownership == source.transformOwnership.end()) return {0.0F, 0.0F};
-        const auto owner = std::find_if(
-            ownership->owners.begin(), ownership->owners.end(),
-            [&](const TransformOwner& candidate) {
-                return candidate.token == toolPreviewToken_;
+        if (ownership != ownershipRecords.end()) {
+            const auto owner = std::find_if(
+                ownership->owners.begin(), ownership->owners.end(),
+                [&](const TransformOwner& candidate) {
+                    return candidate.token == toolPreviewToken_;
+                });
+            if (owner != ownership->owners.end()) {
+                return {owner->startWeight, owner->endWeight};
+            }
+        }
+        const auto aliases = std::find_if(
+            source.ownerAliases.begin(), source.ownerAliases.end(),
+            [&](const nadoc_vr::OwnerAliasEntry& candidate) {
+                return candidate.identity == identity &&
+                    std::find(candidate.tokens.begin(), candidate.tokens.end(),
+                              toolPreviewToken_) != candidate.tokens.end();
             });
-        return owner == ownership->owners.end()
-            ? std::pair(0.0F, 0.0F)
-            : std::pair(owner->startWeight, owner->endWeight);
+        return aliases == source.ownerAliases.end()
+            ? std::pair(0.0F, 0.0F) : std::pair(1.0F, 1.0F);
     }
 
     [[nodiscard]] glm::vec3 previewPoint(
@@ -2470,7 +2640,7 @@ class Viewer {
                      center + glm::vec3(0, 0, markerRadius), color);
             }
             if (toolShell_.mode() == nadoc_vr::ToolMode::move_rotate &&
-                toolShell_.previewRequested() && selectedSelectionKind_ == "cluster") {
+                toolShell_.previewRequested()) {
                 const glm::mat4 previewTransform = manipulator_.transform()
                                                  * pendingToolTransform_.transform();
                 const auto bounds = glScene_->ownerBounds(
@@ -2715,17 +2885,17 @@ class Viewer {
         auto manipulationHands = hands_;
         const bool inputSuppressed = menuOpen_ || menuOpenRequested_
                                   || suppressManipulationUntilRelease_;
-        const bool clusterToolPreview =
+        const bool rigidToolPreview =
             toolShell_.mode() == nadoc_vr::ToolMode::move_rotate &&
-            toolShell_.previewRequested() && selectedSelectionKind_ == "cluster";
-        const bool rightToolDrag = clusterToolPreview && !inputSuppressed &&
+            toolShell_.previewRequested();
+        const bool rightToolDrag = rigidToolPreview && !inputSuppressed &&
                                    hands_[1].valid && hands_[1].pressed &&
                                    !(hands_[0].valid && hands_[0].pressed);
         const bool toolTransformChanged = pendingToolTransform_.update(
             hands_[1], manipulator_.transform(), rightToolDrag);
         if (toolTransformChanged) publishToolTransform();
         glScene_->setToolPreview(
-            clusterToolPreview ? selectedOwnerTokens_ : std::vector<std::string>{},
+            rigidToolPreview ? selectedOwnerTokens_ : std::vector<std::string>{},
             pendingToolTransform_.transform());
         if (rightToolDrag) manipulationHands[1].pressed = false;
         if (inputSuppressed) {

@@ -1,4 +1,4 @@
-"""Stable-identity parser and numeric comparator for native VR scene v6-v11.
+"""Stable-identity parser and numeric comparator for native VR scene v6-v12.
 
 This module deliberately knows nothing about OpenXR or rendering. It compares the
 model-space scene contract before the native viewer normalizes it into metres, making
@@ -25,6 +25,9 @@ class ScenePrimitive:
     values: tuple[float, ...]
     owner_aliases: tuple[str, ...] = ()
     transform_owners: tuple[tuple[str, float, float], ...] = ()
+    tool_scope_id: str | None = None
+    tool_scope_kind: str | None = None
+    tool_scope_owners: tuple[tuple[str, float, float], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,11 +80,13 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
     if (
         len(header) != 4
         or header[0] != "NADOCVR"
-        or header[1] not in {"6", "7", "8", "9", "10", "11"}
+        or header[1] not in {"6", "7", "8", "9", "10", "11", "12"}
     ):
-        raise ValueError("stable comparison requires NADOCVR v6 through v11")
+        raise ValueError("stable comparison requires NADOCVR v6 through v12")
     version = int(header[1])
     result: dict[str, dict[str, ScenePrimitive]] = {}
+    handle_tokens: dict[str, set[str]] = {}
+    handle_ids: dict[str, dict[str, str]] = {}
     active: str | None = None
     for line_number, line in enumerate(lines[1:], start=2):
         fields = line.split()
@@ -98,6 +103,60 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
                     f"line {line_number}: duplicate representation {active}"
                 )
             result[active] = {}
+            handle_tokens[active] = set()
+            handle_ids[active] = {}
+            continue
+        if fields[0] == "J":
+            if version < 12:
+                raise ValueError(f"line {line_number}: tool handles require v12")
+            if active is None:
+                raise ValueError(f"line {line_number}: tool handle before representation")
+            if len(fields) != 7:
+                raise ValueError(f"line {line_number}: malformed tool handle")
+            scope_id, identity, kind = fields[1], fields[2], fields[3]
+            if (
+                kind not in {"base", "end", "domain", "strand", "atom"}
+                or not scope_id
+                or identity in result[active]
+                or identity in handle_tokens[active]
+                or scope_id in handle_ids[active]
+            ):
+                raise ValueError(f"line {line_number}: invalid tool handle")
+            try:
+                values = tuple(float(value) for value in fields[4:])
+            except ValueError as error:
+                raise ValueError(
+                    f"line {line_number}: non-numeric tool handle"
+                ) from error
+            if not np.all(np.isfinite(values)):
+                raise ValueError(f"line {line_number}: non-finite tool handle")
+            result[active][identity] = ScenePrimitive(
+                representation=active,
+                record_type="J",
+                identity=identity,
+                values=values,
+                tool_scope_id=scope_id,
+                tool_scope_kind=kind,
+            )
+            handle_tokens[active].add(identity)
+            handle_ids[active][scope_id] = identity
+            continue
+        if fields[0] == "D":
+            if version < 12:
+                raise ValueError(f"line {line_number}: owner dictionary requires v12")
+            if active is None or len(fields) != 3:
+                raise ValueError(f"line {line_number}: malformed owner dictionary")
+            owner_id, token = fields[1], fields[2]
+            if (
+                not owner_id
+                or not token
+                or len(owner_id) > 64
+                or len(token) > 2048
+                or owner_id in handle_ids[active]
+                or token in handle_ids[active].values()
+            ):
+                raise ValueError(f"line {line_number}: invalid owner dictionary")
+            handle_ids[active][owner_id] = token
             continue
         if fields[0] == "A":
             if version < 8:
@@ -115,10 +174,14 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
                 raise ValueError(
                     f"line {line_number}: invalid owner alias count"
                 ) from error
-            aliases = tuple(fields[3:])
+            wire_aliases = tuple(fields[3:])
+            aliases = tuple(
+                handle_ids[active].get(alias, "") if version >= 12 else alias
+                for alias in wire_aliases
+            )
             if alias_count < 1 or alias_count > 8 or len(aliases) != alias_count:
                 raise ValueError(f"line {line_number}: invalid owner alias count")
-            if any(len(alias) > 2048 for alias in aliases):
+            if any(not alias or len(alias) > 2048 for alias in aliases):
                 raise ValueError(f"line {line_number}: owner alias is too long")
             primitive = result[active].get(identity)
             if primitive is None:
@@ -162,7 +225,12 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
                 raise ValueError(f"line {line_number}: invalid transform owner count")
             owners = []
             for index in range(owner_count):
-                token = fields[3 + index * 3]
+                wire_owner = fields[3 + index * 3]
+                token = (
+                    handle_ids[active].get(wire_owner, "")
+                    if version >= 12
+                    else wire_owner
+                )
                 try:
                     start_weight = float(fields[4 + index * 3])
                     end_weight = float(fields[5 + index * 3])
@@ -183,6 +251,67 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
                 raise ValueError(f"line {line_number}: duplicate transform owner")
             result[active][identity] = replace(
                 primitive, transform_owners=tuple(owners)
+            )
+            continue
+        if fields[0] == "W":
+            if version < 12:
+                raise ValueError(f"line {line_number}: tool-scope owners require v12")
+            if active is None:
+                raise ValueError(
+                    f"line {line_number}: tool-scope owners before representation"
+                )
+            if len(fields) < 6:
+                raise ValueError(f"line {line_number}: malformed tool-scope owners")
+            identity = fields[1]
+            try:
+                owner_count = int(fields[2])
+            except ValueError as error:
+                raise ValueError(
+                    f"line {line_number}: invalid tool-scope owner count"
+                ) from error
+            primitive = result[active].get(identity)
+            if primitive is None or primitive.record_type in {"J", "K"}:
+                raise ValueError(
+                    f"line {line_number}: tool-scope owners reference unknown identity {identity}"
+                )
+            if primitive.tool_scope_owners:
+                raise ValueError(
+                    f"line {line_number}: duplicate tool-scope owners for {identity}"
+                )
+            if (
+                owner_count < 1
+                or owner_count > 32
+                or len(fields) != 3 + owner_count * 3
+            ):
+                raise ValueError(
+                    f"line {line_number}: invalid tool-scope owner count"
+                )
+            owners = []
+            for index in range(owner_count):
+                wire_owner = fields[3 + index * 3]
+                token = handle_ids[active].get(wire_owner)
+                if token is None and wire_owner in handle_tokens[active]:
+                    token = wire_owner
+                try:
+                    start_weight = float(fields[4 + index * 3])
+                    end_weight = float(fields[5 + index * 3])
+                except ValueError as error:
+                    raise ValueError(
+                        f"line {line_number}: invalid tool-scope owner weight"
+                    ) from error
+                if (
+                    token is None
+                    or not np.all(np.isfinite([start_weight, end_weight]))
+                    or not 0.0 <= start_weight <= 1.0
+                    or not 0.0 <= end_weight <= 1.0
+                ):
+                    raise ValueError(f"line {line_number}: invalid tool-scope owner")
+                assert token is not None
+                owners.append((token, start_weight, end_weight))
+            if len({owner[0] for owner in owners}) != len(owners):
+                raise ValueError(f"line {line_number}: duplicate tool-scope owner")
+            result[active][identity] = replace(
+                primitive, tool_scope_owners=tuple(owners)
             )
             continue
         record_type = fields[0]
@@ -217,6 +346,33 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
             identity=identity,
             values=values,
         )
+        if record_type == "K":
+            handle_tokens[active].add(identity)
+    # Canonical aliases are implicit rigid (1/1) tool ownership. Materialize
+    # that semantic view for diagnostics while the wire/native representation
+    # keeps only asymmetric, interpolated, or transient W entries.
+    for representation, primitives in result.items():
+        for identity, primitive in tuple(primitives.items()):
+            if primitive.record_type in {"J", "K"}:
+                continue
+            explicit = {
+                token: (start_weight, end_weight)
+                for token, start_weight, end_weight in primitive.tool_scope_owners
+            }
+            owners: list[tuple[str, float, float]] = []
+            for token in primitive.owner_aliases:
+                if token not in handle_tokens[representation]:
+                    continue
+                start_weight, end_weight = explicit.pop(token, (1.0, 1.0))
+                owners.append((token, start_weight, end_weight))
+            owners.extend(
+                (token, start_weight, end_weight)
+                for token, (start_weight, end_weight) in explicit.items()
+            )
+            if owners:
+                primitives[identity] = replace(
+                    primitive, tool_scope_owners=tuple(owners)
+                )
     if not result or not any(result.values()):
         raise ValueError("VR scene contains no primitives")
     return result
@@ -250,7 +406,7 @@ def _numeric_differences(
 ) -> list[tuple[str, str]]:
     first, second = expected.values, actual.values
     differences = []
-    if expected.record_type == "K":
+    if expected.record_type in {"J", "K"}:
         position_error = _norm(np.subtract(first[0:3], second[0:3]))
         if position_error > tolerance.position_nm:
             differences.append(("position", f"handle error {position_error:.6g} nm"))
@@ -350,6 +506,24 @@ def compare_scenes(
                 )
                 continue
             matched += 1
+            if expected_primitive.tool_scope_id != actual_primitive.tool_scope_id:
+                differences.append(
+                    SceneDifference(
+                        representation,
+                        identity,
+                        "tool_scope_id",
+                        "tool scope ID differs",
+                    )
+                )
+            if expected_primitive.tool_scope_kind != actual_primitive.tool_scope_kind:
+                differences.append(
+                    SceneDifference(
+                        representation,
+                        identity,
+                        "tool_scope_kind",
+                        "tool scope kind differs",
+                    )
+                )
             if expected_primitive.owner_aliases != actual_primitive.owner_aliases:
                 differences.append(
                     SceneDifference(
@@ -366,6 +540,18 @@ def compare_scenes(
                         identity,
                         "transform_owner",
                         "endpoint transform ownership differs",
+                    )
+                )
+            if (
+                expected_primitive.tool_scope_owners
+                != actual_primitive.tool_scope_owners
+            ):
+                differences.append(
+                    SceneDifference(
+                        representation,
+                        identity,
+                        "tool_scope_owner",
+                        "endpoint tool-scope ownership differs",
                     )
                 )
             differences.extend(

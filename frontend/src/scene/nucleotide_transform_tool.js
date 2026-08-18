@@ -7,6 +7,7 @@ import { baseKey, parseBaseKey } from './base_ref.js'
 import { putNucleotideTransform } from '../api/client.js'
 import { showToast } from '../ui/toast.js'
 import { canonicalSelection } from './selection_model.js'
+import { selectionRefsEqual } from './selection_ref.js'
 
 export function transformBodyForTarget(target, pivot, translation, quaternion, residueInfo = null) {
   const pose = {
@@ -54,9 +55,11 @@ export function abstractPreviewUpdate(info, matrix) {
 /** Resolve every non-cluster design selection to residue targets. This deliberately
  * uses logical geometry identities, so the same selection works in CG, atomistic,
  * surface, and mixed representations. */
-export function transformTargetsForSelection(state) {
-  const refs = canonicalSelection(state).items
-  const explicit = refs.filter(ref => ref.kind === 'base').map(ref => ref.key)
+export function transformTargetsForSelection(state, exactRef = null) {
+  const refs = exactRef ? [exactRef] : canonicalSelection(state).items
+  const explicit = refs
+    .filter(ref => ref.kind === 'base' || ref.kind === 'end')
+    .map(ref => ref.key)
   const geometry = state.currentGeometry ?? []
   const strands = new Set(refs.filter(ref => ref.kind === 'strand').map(ref => ref.id))
   const domains = new Set(refs.filter(ref => ref.kind === 'domain')
@@ -88,6 +91,8 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
   let dragging = false
   let mode = 'translate'
   let targetInfos = []
+  let exactSessionRef = null
+  let vrPreviewRef = null
 
   const identity = () => new THREE.Matrix4()
   function liveMatrix() {
@@ -96,7 +101,8 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
       .multiply(new THREE.Matrix4().makeTranslation(-pivot.x, -pivot.y, -pivot.z))
   }
 
-  const selectedTargets = () => transformTargetsForSelection(store.getState())
+  const selectedTargets = (exactRef = null) => transformTargetsForSelection(
+    store.getState(), exactRef)
 
   function renderers() {
     const supplied = getAtomisticRenderers?.() ?? [atomisticRenderer]
@@ -114,14 +120,15 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
     return info ? { target, info, kind: 'abstract', renderer: designRenderer } : null
   }
 
-  function canActivate() {
-    const selected = selectedTargets()
+  function canActivate(exactRef = null) {
+    const selected = selectedTargets(exactRef)
     return selected.length > 0 && selected.every(t => !!infoFor(t))
   }
 
-  function activate() {
-    if (!canActivate()) return false
-    targets = selectedTargets()
+  function activate({ exactRef = null } = {}) {
+    if (!canActivate(exactRef)) return false
+    targets = selectedTargets(exactRef)
+    exactSessionRef = exactRef ? { ...exactRef } : null
     targetInfos = targets.map(infoFor)
     if (!targetInfos.length || targetInfos.some(x => !x)) {
       showToast('Some selected elements are not present in the current representation.', { severity: 'error' })
@@ -207,8 +214,53 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
     if (moveRotatePanel?.panel) moveRotatePanel.panel.style.display = 'none'
     tc = helper = dummy = pivot = null
     targets = []; targetInfos = []
+    exactSessionRef = null
+    vrPreviewRef = null
     dragging = false
     document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+  }
+
+  function beginVRPreview(selectedRef) {
+    const primary = canonicalSelection(store.getState()).primary
+    if (!selectedRef || !selectionRefsEqual(primary, selectedRef)) {
+      return { accepted: false, reason: 'selection_changed' }
+    }
+    if (vrPreviewRef && selectionRefsEqual(vrPreviewRef, selectedRef)) {
+      return { accepted: true }
+    }
+    if (tc) return { accepted: false, reason: 'desktop_tool_active' }
+    if (!activate({ exactRef: selectedRef })) {
+      return { accepted: false, reason: 'target_unavailable' }
+    }
+    vrPreviewRef = { ...selectedRef }
+    return { accepted: true }
+  }
+
+  function applyVRPreviewMatrix(matrixValues) {
+    if (!vrPreviewRef || !Array.isArray(matrixValues) || matrixValues.length !== 16 ||
+        !matrixValues.every(Number.isFinite)) return false
+    const primary = canonicalSelection(store.getState()).primary
+    if (!selectionRefsEqual(primary, vrPreviewRef)) {
+      cancel()
+      return false
+    }
+    const matrix = new THREE.Matrix4().fromArray(matrixValues)
+    for (const targetInfo of targetInfos) applyPreview(targetInfo, matrix)
+    return true
+  }
+
+  function cancelVRPreview() {
+    if (!vrPreviewRef) return false
+    cancel()
+    return true
+  }
+
+  function handleSelectionChange(newState, previousState) {
+    if (!vrPreviewRef || newState.selection === previousState.selection) return false
+    const primary = canonicalSelection(newState).primary
+    if (selectionRefsEqual(primary, vrPreviewRef)) return false
+    cancel()
+    return true
   }
 
   function onKey(e) {
@@ -220,7 +272,13 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
 
   return {
     activate, confirm, cancel, reset, detach, canActivate,
+    beginVRPreview, applyVRPreviewMatrix, cancelVRPreview, handleSelectionChange,
+    isVRPreviewActive: () => !!vrPreviewRef,
     isActive: () => !!tc,
-    debugState: () => ({ active: !!tc, mode, pivot: pivot?.toArray() ?? null }),
+    debugState: () => ({
+      active: !!tc, mode, pivot: pivot?.toArray() ?? null,
+      exactSessionRef: exactSessionRef ? { ...exactSessionRef } : null,
+      vrPreview: !!vrPreviewRef,
+    }),
   }
 }

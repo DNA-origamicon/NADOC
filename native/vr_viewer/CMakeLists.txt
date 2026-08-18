@@ -65,4 +65,8 @@ if(BUILD_TESTING)
     NAME nadoc-vr-scene-v11-semantic-atom
     COMMAND nadoc-vr-viewer --validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/semantic_atom_v11.nadocvr
   )
+  add_test(
+    NAME nadoc-vr-scene-v12-tool-scope
+    COMMAND nadoc-vr-viewer --validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/tool_scope_v12.nadocvr
+  )
 endif()

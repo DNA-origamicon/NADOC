@@ -79,13 +79,17 @@ describe('native VR transactional tool shell', () => {
     expect(undo.effect?.type).toBe('undo_requested')
   })
 
-  it('never silently promotes a fine selection into a Move/Rotate cluster', () => {
+  it('accepts exact v12 scopes and never widens unsupported connectivity targets', () => {
     expect(vrToolSupportsSelection('move_rotate', { kind: 'cluster', id: 'c1' })).toBe(true)
-    expect(vrToolSupportsSelection('move_rotate', { kind: 'base', key: 'h:1:FORWARD' })).toBe(false)
+    expect(vrToolSupportsSelection('move_rotate', { kind: 'base', key: 'h:1:FORWARD' })).toBe(true)
+    expect(vrToolSupportsSelection('move_rotate', {
+      kind: 'domain', strandId: 's1', domainIndex: 0,
+    })).toBe(true)
+    expect(vrToolSupportsSelection('move_rotate', { kind: 'bond' })).toBe(false)
     const result = reduceVRToolShell(initialVRToolShellState, {
       sequence: 1, mode: 'move_rotate', action: 'preview',
     }, {
-      toolTarget: targetFor({ kind: 'domain', strandId: 's1', domainIndex: 0 }),
+      toolTarget: targetFor({ kind: 'bond', fromKey: 'a', toKey: 'b' }),
       targetSnapshotPresent: true,
     })
     expect(result.state.stage).toBe('unsupported_selection')

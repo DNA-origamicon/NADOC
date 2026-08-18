@@ -9,6 +9,7 @@ No design data is mutated and no shell command is constructed from request data.
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -490,6 +491,92 @@ def _serialize_scene(
             refs.append(("cluster", str(cluster.id)))
         return owner_tokens(*refs)
 
+    def nucleotide_tool_handles() -> tuple[tuple[str, str, np.ndarray], ...]:
+        """Representation-independent pivots for residue-backed tool scopes.
+
+        These use the same live backbone centroids as the desktop nucleotide
+        transform tool. Cluster pivots remain in legacy ``K`` records; atom
+        pivots are added only to the atomistic representation blocks below.
+        """
+        grouped: dict[tuple[str, str], list[np.ndarray]] = {}
+        for nucleotide in nucleotides:
+            raw = nucleotide.get("backbone_position")
+            if not isinstance(raw, (list, tuple)) or len(raw) != 3:
+                continue
+            position = np.asarray(raw, dtype=float)
+            if not np.all(np.isfinite(position)):
+                continue
+            key = base_key(nucleotide)
+            if key:
+                grouped.setdefault(
+                    (selection_token("base", key), "base"), []
+                ).append(position)
+                if nucleotide.get("is_five_prime") or nucleotide.get(
+                    "is_three_prime"
+                ):
+                    grouped.setdefault(
+                        (selection_token("end", key), "end"), []
+                    ).append(position)
+            strand_id = nucleotide.get("strand_id")
+            if strand_id:
+                grouped.setdefault(
+                    (
+                        selection_token(
+                            "domain",
+                            str(strand_id),
+                            int(nucleotide.get("domain_index") or 0),
+                        ),
+                        "domain",
+                    ),
+                    [],
+                ).append(position)
+                grouped.setdefault(
+                    (selection_token("strand", str(strand_id)), "strand"), []
+                ).append(position)
+        return tuple(
+            (token, kind, rotation @ np.mean(positions, axis=0))
+            for (token, kind), positions in sorted(grouped.items())
+        )
+
+    tool_handles = nucleotide_tool_handles()
+    tool_handle_tokens = {
+        *(token for token, _ in cluster_handles),
+        *(token for token, _, _ in tool_handles),
+    }
+    owner_token_ids: dict[str, str] = {}
+    owner_id_tokens: dict[str, str] = {}
+    declared_owner_tokens: set[str] = set()
+
+    def register_owner_token(token: str) -> str:
+        cached = owner_token_ids.get(token)
+        if cached is not None:
+            return cached
+        scope_id = hashlib.blake2s(token.encode(), digest_size=8).hexdigest()
+        previous = owner_id_tokens.setdefault(scope_id, token)
+        if previous != token:
+            raise HTTPException(500, detail="VR owner token ID collision.")
+        owner_token_ids[token] = scope_id
+        return scope_id
+
+    for token, _, _ in tool_handles:
+        register_owner_token(token)
+
+    def declare_owner_tokens(tokens) -> None:
+        for token in dict.fromkeys(tokens):
+            owner_id = register_owner_token(token)
+            if token not in declared_owner_tokens:
+                lines.append(f"D {owner_id} {token}")
+                declared_owner_tokens.add(token)
+
+    def append_tool_handles(
+        handles: tuple[tuple[str, str, np.ndarray], ...] = tool_handles,
+    ) -> None:
+        for token, kind, center in handles:
+            lines.append(
+                f"J {owner_token_ids[token]} {token} {kind} {nums(*center)}"
+            )
+            declared_owner_tokens.add(token)
+
     def emit(
         record_type: str,
         identity: str,
@@ -497,6 +584,9 @@ def _serialize_scene(
         aliases: tuple[str, ...] = (),
         endpoint_aliases: tuple[tuple[str, ...], tuple[str, ...]] | None = None,
         transform_owners: tuple[tuple[str, float, float], ...] | None = None,
+        tool_endpoint_tokens: (
+            tuple[tuple[str, ...], tuple[str, ...]] | None
+        ) = None,
     ) -> None:
         encoded_identity = quote(str(identity), safe="-_.:~")
         if encoded_identity in primitive_ids[active_representation]:
@@ -514,7 +604,11 @@ def _serialize_scene(
                 not token or len(token) > 2048 for token in aliases
             ):
                 raise HTTPException(500, detail="Invalid VR primitive owner aliases.")
-            lines.append(f"A {encoded_identity} {len(aliases)} {' '.join(aliases)}")
+            declare_owner_tokens(aliases)
+            lines.append(
+                f"A {encoded_identity} {len(aliases)} "
+                f"{' '.join(owner_token_ids[token] for token in aliases)}"
+            )
         if transform_owners is None:
             endpoint_owners = endpoint_aliases or (aliases, aliases)
             transform_owners = tuple(
@@ -535,11 +629,44 @@ def _serialize_scene(
                 for token, start_weight, end_weight in transform_owners
             ):
                 raise HTTPException(500, detail="Too many VR transform owners.")
+            declare_owner_tokens(token for token, _, _ in transform_owners)
             values = " ".join(
-                f"{token} {start_weight:.7g} {end_weight:.7g}"
+                f"{owner_token_ids[token]} {start_weight:.7g} {end_weight:.7g}"
                 for token, start_weight, end_weight in transform_owners
             )
             lines.append(f"T {encoded_identity} {len(transform_owners)} {values}")
+        scope_endpoints = tool_endpoint_tokens or endpoint_aliases or (aliases, aliases)
+        scope_owners = {
+            token: (
+                float(token in scope_endpoints[0]),
+                float(token in scope_endpoints[1]),
+            )
+            for token in dict.fromkeys((*scope_endpoints[0], *scope_endpoints[1]))
+            if token in tool_handle_tokens
+        }
+        # Preserve fractional ownership already computed for interpolated detail
+        # and Cluster boundaries while adding exact non-Cluster endpoint scopes.
+        for token, start_weight, end_weight in transform_owners or ():
+            if token in tool_handle_tokens:
+                scope_owners[token] = (start_weight, end_weight)
+        # A canonical alias implies rigid 1/1 ownership. W records exist only
+        # for endpoint asymmetry, interpolation, or transient scopes (Atom),
+        # avoiding a redundant owner table beside every static primitive.
+        scope_owners = {
+            token: weights
+            for token, weights in scope_owners.items()
+            if weights != (1.0, 1.0) or token not in aliases
+        }
+        if scope_owners:
+            if len(scope_owners) > 32:
+                raise HTTPException(500, detail="Too many VR tool-scope owners.")
+            declare_owner_tokens(scope_owners)
+            values = " ".join(
+                f"{owner_token_ids[token]} "
+                f"{start_weight:.7g} {end_weight:.7g}"
+                for token, (start_weight, end_weight) in scope_owners.items()
+            )
+            lines.append(f"W {encoded_identity} {len(scope_owners)} {values}")
 
     def nucleotide_identity(nucleotide: dict) -> str:
         return ":".join(
@@ -873,13 +1000,15 @@ def _serialize_scene(
         )
 
     lines = [
-        f"NADOCVR 11 {representation} {coloring}",
-        "# stable identities, owner aliases, handles, and endpoint transform owners",
+        f"NADOCVR 12 {representation} {coloring}",
+        "# stable identities, owner aliases, and endpoint-aware tool scopes",
     ]
     by_strand: dict[str, list[tuple[dict, np.ndarray, tuple[float, ...], str]]] = {}
     identity_palettes: dict[tuple, tuple[float, ...]] = {}
     lines.append("R full")
+    declared_owner_tokens.clear()
     lines.extend(f"K {token} {nums(*center)}" for token, center in cluster_handles)
+    append_tool_handles()
     assigned = [
         (index, nucleotide)
         for index, nucleotide in enumerate(nucleotides)
@@ -1483,7 +1612,9 @@ def _serialize_scene(
 
     lines.append("R cylinders")
     active_representation = "cylinders"
+    declared_owner_tokens.clear()
     lines.extend(f"K {token} {nums(*center)}" for token, center in cluster_handles)
+    append_tool_handles()
     direct_overhang_ids: set[str] = set()
     for binding in getattr(design, "overhang_bindings", []):
         if getattr(binding, "bound", True) is False or getattr(
@@ -1762,6 +1893,19 @@ def _serialize_scene(
         seen_atom_refs.add(payload)
         atom_identity_payloads.append(payload)
 
+    atom_tool_tokens = tuple(
+        selection_token("atom", base_key_value, atom_name)
+        for base_key_value, atom_name in atom_identity_payloads
+    )
+    atom_tool_handles = tuple(
+        (token, "atom", position)
+        for token, position in zip(atom_tool_tokens, atom_positions)
+        if position is not None
+    )
+    tool_handle_tokens.update(token for token, _, _ in atom_tool_handles)
+    for token, _, _ in atom_tool_handles:
+        register_owner_token(token)
+
     def atom_primitive_identity(index: int) -> str:
         return "atom-ref:" + json.dumps(
             atom_identity_payloads[index], ensure_ascii=False, separators=(",", ":")
@@ -1833,7 +1977,11 @@ def _serialize_scene(
         nonlocal active_representation
         lines.append(f"R {name}")
         active_representation = name
+        declared_owner_tokens.clear()
         lines.extend(f"K {token} {nums(*center)}" for token, center in cluster_handles)
+        append_tool_handles()
+        if include_points:
+            append_tool_handles(atom_tool_handles)
         if include_points:
             for atom_index, (atom, position, palette) in enumerate(
                 zip(atomistic_model.atoms, atom_positions, atom_palettes)
@@ -1854,6 +2002,10 @@ def _serialize_scene(
                         radius,
                         *palette,
                         aliases=aliases,
+                        tool_endpoint_tokens=(
+                            (*aliases, atom_tool_tokens[atom_index]),
+                            (*aliases, atom_tool_tokens[atom_index]),
+                        ),
                     )
         for first_index, second_index in atomistic_model.bonds:
             # Canonicalize undirected bond endpoint order together with positions
@@ -1906,6 +2058,21 @@ def _serialize_scene(
                     )
                 )
             )
+            first_endpoint_aliases = (
+                nucleotide_owner_tokens(nucleotide_by_base_key[first_key])
+                if first_key in nucleotide_by_base_key
+                else ()
+            )
+            second_endpoint_aliases = (
+                nucleotide_owner_tokens(nucleotide_by_base_key[second_key])
+                if second_key in nucleotide_by_base_key
+                else ()
+            )
+            bond_aliases = tuple(
+                dict.fromkeys(
+                    (*bond_aliases, *first_endpoint_aliases, *second_endpoint_aliases)
+                )
+            )[:8]
             emit(
                 "C",
                 atom_bond_primitive_identity(first_index, second_index),
@@ -1914,16 +2081,15 @@ def _serialize_scene(
                 radius,
                 *palette,
                 aliases=bond_aliases,
-                endpoint_aliases=(
+                endpoint_aliases=(first_endpoint_aliases, second_endpoint_aliases),
+                tool_endpoint_tokens=(
                     (
-                        nucleotide_owner_tokens(nucleotide_by_base_key[first_key])
-                        if first_key in nucleotide_by_base_key
-                        else ()
+                        *first_endpoint_aliases,
+                        *((atom_tool_tokens[first_index],) if include_points else ()),
                     ),
                     (
-                        nucleotide_owner_tokens(nucleotide_by_base_key[second_key])
-                        if second_key in nucleotide_by_base_key
-                        else ()
+                        *second_endpoint_aliases,
+                        *((atom_tool_tokens[second_index],) if include_points else ()),
                     ),
                 ),
             )
@@ -2034,12 +2200,12 @@ def _expanded_scene_inputs(design, nucleotides, axes, atomistic_model):
 
 
 def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
-    """Combine two identity/ownership-equivalent v11 scenes into one contract."""
+    """Combine two identity/ownership-equivalent v12 scenes into one contract."""
     natural_lines = natural_text.splitlines()
     expanded_lines = expanded_text.splitlines()
     natural_header = natural_lines[0].split()
     expanded_header = expanded_lines[0].split()
-    if natural_header != expanded_header or natural_header[0:2] != ["NADOCVR", "11"]:
+    if natural_header != expanded_header or natural_header[0:2] != ["NADOCVR", "12"]:
         raise HTTPException(500, detail="Expanded VR scene headers do not match.")
 
     def blocks(lines: list[str]) -> dict[str, list[str]]:
@@ -2060,8 +2226,8 @@ def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
     if set(natural_blocks) != set(expanded_blocks):
         raise HTTPException(500, detail="Expanded VR representations do not match.")
     output = [
-        f"NADOCVR 11 {natural_header[2]} {natural_header[3]}",
-        "# natural and expanded poses share identities, aliases, handles, and transform owners",
+        f"NADOCVR 12 {natural_header[2]} {natural_header[3]}",
+        "# natural and expanded poses share identities and endpoint-aware tool scopes",
     ]
     for representation, natural_records in natural_blocks.items():
         expanded_records = expanded_blocks[representation]
@@ -2081,6 +2247,17 @@ def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
                 500,
                 detail=f"Expanded VR primitive identities differ in {representation}.",
             )
+        natural_declarations = [
+            line for line in natural_records if line.startswith("D ")
+        ]
+        expanded_declarations = [
+            line for line in expanded_records if line.startswith("D ")
+        ]
+        if natural_declarations != expanded_declarations:
+            raise HTTPException(
+                500,
+                detail=f"Expanded VR owner dictionaries differ in {representation}.",
+            )
         natural_aliases = [line for line in natural_records if line.startswith("A ")]
         expanded_aliases = [line for line in expanded_records if line.startswith("A ")]
         if natural_aliases != expanded_aliases:
@@ -2097,6 +2274,17 @@ def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
                 500,
                 detail=f"Expanded VR transform owners differ in {representation}.",
             )
+        natural_scope_owners = [
+            line for line in natural_records if line.startswith("W ")
+        ]
+        expanded_scope_owners = [
+            line for line in expanded_records if line.startswith("W ")
+        ]
+        if natural_scope_owners != expanded_scope_owners:
+            raise HTTPException(
+                500,
+                detail=f"Expanded VR tool-scope owners differ in {representation}.",
+            )
         natural_handles = [
             line.split()[1] for line in natural_records if line.startswith("K ")
         ]
@@ -2107,6 +2295,21 @@ def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
             raise HTTPException(
                 500,
                 detail=f"Expanded VR cluster handles differ in {representation}.",
+            )
+        natural_tool_handles = [
+            tuple(line.split()[1:4])
+            for line in natural_records
+            if line.startswith("J ")
+        ]
+        expanded_tool_handles = [
+            tuple(line.split()[1:4])
+            for line in expanded_records
+            if line.startswith("J ")
+        ]
+        if natural_tool_handles != expanded_tool_handles:
+            raise HTTPException(
+                500,
+                detail=f"Expanded VR tool handles differ in {representation}.",
             )
         output.append(f"R {representation}")
         output.extend(natural_records)

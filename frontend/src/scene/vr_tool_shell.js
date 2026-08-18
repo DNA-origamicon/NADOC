@@ -16,13 +16,15 @@ export const VR_TOOL_ACTIONS = Object.freeze([
 const MODES = new Set(VR_TOOL_MODES)
 const ACTIONS = new Set(VR_TOOL_ACTIONS)
 
-/** Tool-specific canonical selection policy. Move/Rotate is intentionally strict:
- * desktop owns transforms at Cluster granularity and VR must not silently widen a
- * Base, End, Bond, Domain, or Strand selection into a whole cluster. */
+/** Tool-specific canonical selection policy. Move/Rotate accepts only scopes with
+ * an exact scene-v12 endpoint contract and a reversible desktop preview adapter.
+ * Bond/Crossover and transient Atom targets remain refused rather than widened. */
 export function vrToolSupportsSelection(mode, selectedRef) {
   if (mode === 'inspect') return true
   if (!selectedRef) return false
-  if (mode === 'move_rotate') return selectedRef.kind === 'cluster'
+  if (mode === 'move_rotate') {
+    return ['cluster', 'base', 'end', 'domain', 'strand'].includes(selectedRef.kind)
+  }
   return true
 }
 

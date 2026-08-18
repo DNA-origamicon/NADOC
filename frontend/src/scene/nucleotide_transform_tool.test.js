@@ -32,6 +32,9 @@ describe('transformTargetsForSelection', () => {
       { kind: 'base', key: 'h1:1:FORWARD' }, { kind: 'base', key: 'h2:1:REVERSE' },
     ] } }))
       .toHaveLength(2)
+    expect(transformTargetsForSelection({ selection: { items: [
+      { kind: 'end', key: 'h1:1:FORWARD' },
+    ] } })).toHaveLength(1)
     expect(transformTargetsForSelection({
       currentGeometry: geometry, selection: { items: [{ kind: 'cluster', id: 'c1' }] },
     })).toEqual([])
@@ -46,6 +49,18 @@ describe('transformTargetsForSelection', () => {
     })
     expect(targets.map(t => `${t.helix_id}:${t.bp_index}:${t.direction}`))
       .toEqual(['h2:1:REVERSE', 'h1:1:FORWARD', 'h1:2:FORWARD'])
+  })
+
+  it('can constrain a VR session to one exact ref without widening to co-selection', () => {
+    const targets = transformTargetsForSelection({
+      currentGeometry: geometry,
+      selection: { items: [
+        { kind: 'strand', id: 's1' },
+        { kind: 'base', key: 'h2:1:REVERSE' },
+      ] },
+    }, { kind: 'domain', strandId: 's1', domainIndex: 0 })
+    expect(targets.map(t => `${t.helix_id}:${t.bp_index}:${t.direction}`))
+      .toEqual(['h1:1:FORWARD'])
   })
 })
 
@@ -174,5 +189,49 @@ describe('atomistic transform commit', () => {
     await committing
     expect(atomisticRenderer.applyResidueMatrix).not.toHaveBeenCalled()
     expect(obsoleteExplicitRefresh).not.toHaveBeenCalled()
+  })
+
+  it('mirrors an exact reversible VR Domain preview and restores on selection change', () => {
+    document.body.innerHTML = '<div id="mode-indicator"></div>'
+    const selectedRef = { kind: 'domain', strandId: 's1', domainIndex: 0 }
+    let state = {
+      currentGeometry: [
+        { helix_id: 'h1', bp_index: 1, direction: 'FORWARD', strand_id: 's1', domain_index: 0 },
+        { helix_id: 'h1', bp_index: 2, direction: 'FORWARD', strand_id: 's1', domain_index: 1 },
+      ],
+      selection: { items: [selectedRef], primary: selectedRef },
+    }
+    const store = { getState: () => state }
+    const atomisticRenderer = {
+      residueInfo: vi.fn(target => ({
+        centroid: new THREE.Vector3(target.bp_index, 0, 0),
+      })),
+      applyResidueMatrix: vi.fn(),
+    }
+    const tool = initNucleotideTransformTool({
+      store, scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(),
+      canvas: document.createElement('canvas'), controls: { enabled: true },
+      designRenderer: {}, atomisticRenderer,
+    })
+
+    expect(tool.beginVRPreview(selectedRef)).toEqual({ accepted: true })
+    expect(tool.debugState()).toMatchObject({
+      vrPreview: true, exactSessionRef: selectedRef,
+    })
+    expect(atomisticRenderer.residueInfo).toHaveBeenCalledTimes(2)
+    const matrix = new THREE.Matrix4().makeTranslation(1, 2, 3)
+    expect(tool.applyVRPreviewMatrix(matrix.toArray())).toBe(true)
+    expect(atomisticRenderer.applyResidueMatrix).toHaveBeenLastCalledWith(
+      expect.objectContaining({ bp_index: 1 }),
+      expect.any(THREE.Matrix4),
+    )
+
+    const previousState = state
+    const nextRef = { kind: 'base', key: 'h1:2:FORWARD' }
+    state = { ...state, selection: { items: [nextRef], primary: nextRef } }
+    expect(tool.handleSelectionChange(state, previousState)).toBe(true)
+    expect(tool.isVRPreviewActive()).toBe(false)
+    const restored = atomisticRenderer.applyResidueMatrix.mock.calls.at(-1)[1]
+    expect(restored.equals(new THREE.Matrix4())).toBe(true)
   })
 })

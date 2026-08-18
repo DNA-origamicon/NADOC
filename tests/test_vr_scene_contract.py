@@ -26,6 +26,13 @@ V11_FIXTURE = (
     / "examples"
     / "semantic_atom_v11.nadocvr"
 )
+V12_FIXTURE = (
+    Path(__file__).resolve().parents[1]
+    / "native"
+    / "vr_viewer"
+    / "examples"
+    / "tool_scope_v12.nadocvr"
+)
 
 
 def test_v6_fixture_has_unique_identities_in_every_representation() -> None:
@@ -41,6 +48,35 @@ def test_v11_fixture_accepts_semantic_atom_and_bond_identities() -> None:
     identities = set(scene["ballstick"])
     assert any(identity.startswith("atom-ref:") for identity in identities)
     assert any(identity.startswith("atom-bond-ref:") for identity in identities)
+
+
+def test_v12_fixture_locks_generalized_handles_and_endpoint_ownership() -> None:
+    scene = parse_scene_contract(V12_FIXTURE.read_text())
+
+    assert scene["ballstick"]["atom-token"].tool_scope_kind == "atom"
+    assert scene["ballstick"]["boundary-bond"].tool_scope_owners == (
+        ("cluster-token", 1.0, 0.0),
+        ("base-token", 1.0, 0.0),
+        ("atom-token", 1.0, 0.0),
+    )
+
+    changed = V12_FIXTURE.read_text().replace(
+        "W boundary-bond 3 c 1 0 b 1 0 a 1 0",
+        "W boundary-bond 3 c 1 0 b 1 1 a 1 0",
+        1,
+    )
+    comparison = compare_scenes(V12_FIXTURE.read_text(), changed)
+    assert "tool_scope_owner" in {
+        difference.category for difference in comparison.differences
+    }
+
+
+def test_v12_rejects_unknown_or_duplicate_tool_scope_handles() -> None:
+    text = V12_FIXTURE.read_text()
+    with pytest.raises(ValueError, match="invalid tool-scope owner"):
+        parse_scene_contract(text.replace("a 1 0", "missing-id 1 0", 1))
+    with pytest.raises(ValueError, match="invalid tool handle"):
+        parse_scene_contract(text.replace("J a atom-token atom", "J a base-token atom", 1))
 
 
 def test_parser_rejects_duplicate_identity_in_one_representation() -> None:

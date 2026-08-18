@@ -242,13 +242,16 @@ def test_expanded_scene_translates_owners_and_interpolates_crossover_atoms() -> 
     assert atom.x == 0.0  # source inputs remain immutable
 
 
-def test_v11_bundle_pairs_primitives_owners_handles_and_transform_owners() -> None:
-    natural = """NADOCVR 11 full strand
+def test_v12_bundle_pairs_primitives_owners_handles_and_endpoint_scopes() -> None:
+    natural = """NADOCVR 12 full strand
 R full
 K cluster-owner 0 0 0
+J b base-owner base 0 0 0
+D c cluster-owner
 P owner 0 0 0 .1 1 1 1 1 1 1 1 1 1 1 1 1
-A owner 1 base-owner
-T owner 1 cluster-owner 1 1
+A owner 1 b
+T owner 1 c 1 1
+W owner 2 c 1 1 b 1 1
 """
     expanded = natural.replace("P owner 0 0 0", "P owner 2 0 0").replace(
         "K cluster-owner 0 0 0", "K cluster-owner 1 0 0"
@@ -256,7 +259,7 @@ T owner 1 cluster-owner 1 1
 
     bundled = _bundle_expanded_scene(natural, expanded)
 
-    assert bundled.startswith("NADOCVR 11 full strand\n")
+    assert bundled.startswith("NADOCVR 12 full strand\n")
     assert "R full\nK cluster-owner 0 0 0" in bundled
     assert "E full\nK cluster-owner 1 0 0" in bundled
 
@@ -264,7 +267,7 @@ T owner 1 cluster-owner 1 1
     with pytest.raises(HTTPException, match="identities differ"):
         _bundle_expanded_scene(natural, mismatched)
 
-    mismatched_alias = expanded.replace("base-owner", "different-owner")
+    mismatched_alias = expanded.replace("A owner 1 b", "A owner 1 c")
     with pytest.raises(HTTPException, match="owner aliases differ"):
         _bundle_expanded_scene(natural, mismatched_alias)
 
@@ -273,10 +276,23 @@ T owner 1 cluster-owner 1 1
         _bundle_expanded_scene(natural, mismatched_handle)
 
     mismatched_transform = expanded.replace(
-        "T owner 1 cluster-owner 1 1", "T owner 1 cluster-owner 1 0"
+        "T owner 1 c 1 1", "T owner 1 c 1 0"
     )
     with pytest.raises(HTTPException, match="transform owners differ"):
         _bundle_expanded_scene(natural, mismatched_transform)
+
+    mismatched_tool_handle = expanded.replace(
+        "J b base-owner base", "J b base-owner atom"
+    )
+    with pytest.raises(HTTPException, match="tool handles differ"):
+        _bundle_expanded_scene(natural, mismatched_tool_handle)
+
+    mismatched_scope_owner = expanded.replace(
+        "W owner 2 c 1 1 b 1 1",
+        "W owner 2 c 1 1 b 1 0",
+    )
+    with pytest.raises(HTTPException, match="tool-scope owners differ"):
+        _bundle_expanded_scene(natural, mismatched_scope_owner)
 
 
 def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -> None:
@@ -546,7 +562,7 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
     sections = _scene_sections(text)
     identities = _scene_identities(text)
 
-    assert text.startswith("NADOCVR 11 full strand\n")
+    assert text.startswith("NADOCVR 12 full strand\n")
     assert set(sections) == {"full", "cylinders", "ballstick", "stick"}
     assert all(len(values) == len(set(values)) for values in identities.values())
     assert "nuc:s1:0:h1:1:FORWARD:0:backbone" in identities["full"]
@@ -623,7 +639,7 @@ def test_v11_atom_identity_rejects_missing_or_duplicate_chemical_names() -> None
         )
 
 
-def test_v11_owners_handles_and_transform_ownership_bridge_representations() -> None:
+def test_v12_generalized_handles_and_tool_scopes_bridge_representations() -> None:
     strand_id = "strand: one"
     helix_id = "helix: one"
     cluster_id = "cluster one"
@@ -728,6 +744,7 @@ def test_v11_owners_handles_and_transform_ownership_bridge_representations() -> 
     strand_owner = _owner_token("strand", strand_id)
     cluster_owner = _owner_token("cluster", cluster_id)
     larger_cluster_owner = _owner_token("cluster", "larger cluster")
+    atom_owner = _owner_token("atom", f"{helix_id}:0:FORWARD", "C1'")
     cluster_handle = scene["full"][cluster_owner]
     assert cluster_handle.record_type == "K"
     np.testing.assert_allclose(cluster_handle.values, [0, 0, 0])
@@ -754,15 +771,38 @@ def test_v11_owners_handles_and_transform_ownership_bridge_representations() -> 
         larger_cluster_owner,
     )
     assert scene["full"][larger_cluster_owner].record_type == "K"
+    assert scene["full"][base].tool_scope_kind == "base"
+    assert scene["full"][end].tool_scope_kind == "end"
+    assert scene["full"][domain_owner].tool_scope_kind == "domain"
+    assert scene["full"][strand_owner].tool_scope_kind == "strand"
+    assert scene["ballstick"][atom_owner].tool_scope_kind == "atom"
     assert full_backbone.transform_owners == (
         (cluster_owner, 1.0, 1.0),
         (larger_cluster_owner, 1.0, 1.0),
     )
     assert atom_sphere.transform_owners == full_backbone.transform_owners
     assert coarse_domain.transform_owners == full_backbone.transform_owners
+    assert full_backbone.tool_scope_owners == (
+        (base, 1.0, 1.0),
+        (end, 1.0, 1.0),
+        (domain_owner, 1.0, 1.0),
+        (strand_owner, 1.0, 1.0),
+        (cluster_owner, 1.0, 1.0),
+        (larger_cluster_owner, 1.0, 1.0),
+    )
+    assert atom_sphere.tool_scope_owners == (
+        *full_backbone.tool_scope_owners,
+        (atom_owner, 1.0, 1.0),
+    )
+    assert coarse_domain.tool_scope_owners == (
+        (domain_owner, 1.0, 1.0),
+        (strand_owner, 1.0, 1.0),
+        (cluster_owner, 1.0, 1.0),
+        (larger_cluster_owner, 1.0, 1.0),
+    )
 
 
-def test_v11_boundary_connections_assign_cluster_ownership_per_endpoint() -> None:
+def test_v12_boundary_connections_assign_every_tool_scope_per_endpoint() -> None:
     strands = [
         SimpleNamespace(
             id=f"s{index}",
@@ -854,6 +894,35 @@ def test_v11_boundary_connections_assign_cluster_ownership_per_endpoint() -> Non
     )
     assert direct.transform_owners == expected
     assert atom_bond.transform_owners == expected
+    direct_scopes = {
+        token: (start, end)
+        for token, start, end in direct.tool_scope_owners
+    }
+    atom_scopes = {
+        token: (start, end)
+        for token, start, end in atom_bond.tool_scope_owners
+    }
+    for kind, values, weights in (
+        ("base", ("h1:0:FORWARD",), (1.0, 0.0)),
+        ("domain", ("s1", 0), (1.0, 0.0)),
+        ("strand", ("s1",), (1.0, 0.0)),
+        ("cluster", ("c1",), (1.0, 0.0)),
+        ("base", ("h2:0:FORWARD",), (0.0, 1.0)),
+        ("domain", ("s2", 0), (0.0, 1.0)),
+        ("strand", ("s2",), (0.0, 1.0)),
+        ("cluster", ("c2",), (0.0, 1.0)),
+    ):
+        token = _owner_token(kind, *values)
+        assert direct_scopes[token] == weights
+        assert atom_scopes[token] == weights
+    assert atom_scopes[_owner_token("atom", "h1:0:FORWARD", "C1'")] == (
+        1.0,
+        0.0,
+    )
+    assert atom_scopes[_owner_token("atom", "h2:0:FORWARD", "O3'")] == (
+        0.0,
+        1.0,
+    )
 
 
 def test_full_slabs_share_the_pair_plane_and_contact_the_backbone() -> None:
@@ -1072,7 +1141,9 @@ def test_full_snapshot_projects_explicit_cross_helix_connections() -> None:
     ]
     assert sections["cylinders"] == []
     stick = parse_scene_contract(text)["stick"]
-    atom_bond = next(iter(stick.values()))
+    atom_bond = next(
+        primitive for primitive in stick.values() if primitive.record_type == "C"
+    )
     assert _owner_token("crossover", "crossover", "xo-visible") in (
         atom_bond.owner_aliases
     )
