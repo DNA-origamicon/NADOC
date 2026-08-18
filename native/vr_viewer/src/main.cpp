@@ -1427,7 +1427,8 @@ class GlScene {
 
 class Viewer {
   public:
-    explicit Viewer(SceneData scene) : sceneData_(std::move(scene)) {}
+    explicit Viewer(SceneData scene, std::string eventPath = {})
+        : sceneData_(std::move(scene)), eventPath_(std::move(eventPath)) {}
 
     int run() {
         initializeWindow();
@@ -1928,9 +1929,21 @@ class Viewer {
                 manipulator_.transform());
         }
         const std::string current = sceneHover_ ? sceneHover_->identity : "";
-        if (current != previous && !current.empty()) {
-            std::cout << "VR hover: " << current << '\n';
+        if (current != previous) {
+            publishHover(current);
+            if (!current.empty()) std::cout << "VR hover: " << current << '\n';
         }
+    }
+
+    void publishHover(const std::string& identity) {
+        if (eventPath_.empty()) return;
+        std::ofstream output(eventPath_, std::ios::out | std::ios::trunc);
+        if (!output) return;
+        output << "{\"sequence\":" << ++eventSequence_
+               << ",\"type\":\"hover\",\"identity\":";
+        if (identity.empty()) output << "null";
+        else output << '\"' << identity << '\"';
+        output << '}';
     }
 
     void syncActions(XrTime displayTime) {
@@ -2185,6 +2198,8 @@ class Viewer {
     }
 
     SceneData sceneData_;
+    std::string eventPath_;
+    uint64_t eventSequence_ = 0;
     bool glfwInitialized_ = false;
     GLFWwindow* window_ = nullptr;
     XrInstance instance_ = XR_NULL_HANDLE;
@@ -2238,14 +2253,16 @@ int main(int argc, char** argv) {
             return 1;
         }
     }
-    if (argc != 2) {
-        std::cerr << "Usage: nadoc-vr-viewer [--validate] <scene.nadocvr>\n";
+    if (argc != 2 &&
+        !(argc == 4 && std::string(argv[2]) == "--events")) {
+        std::cerr << "Usage: nadoc-vr-viewer [--validate] <scene.nadocvr> "
+                     "[--events <event.json>]\n";
         return 2;
     }
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
     try {
-        Viewer viewer(loadScene(argv[1]));
+        Viewer viewer(loadScene(argv[1]), argc == 4 ? argv[3] : "");
         return viewer.run();
     } catch (const std::exception& error) {
         std::cerr << "NADOC VR error: " << error.what() << '\n';

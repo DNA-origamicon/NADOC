@@ -6,7 +6,13 @@ class FakeSession extends EventTarget {
   async end() { this.dispatchEvent(new Event('end')) }
 }
 
-function makeHarness({ requestError = null, xr: xrOverride, native = null } = {}) {
+function makeHarness({
+  requestError = null,
+  xr: xrOverride,
+  native = null,
+  nativeEventPollIntervalMs = 0,
+  onNativeEvent = null,
+} = {}) {
   document.body.innerHTML = `
     <button id="menu-help-view-vr" aria-pressed="false">
       <span class="vr-menu-label">View in VR</span><span class="menu-toggle-pill"></span>
@@ -39,6 +45,7 @@ function makeHarness({ requestError = null, xr: xrOverride, native = null } = {}
   const showToast = vi.fn()
   const controller = initVRSession({
     renderer, scene, camera, button, xr, native, nativePollIntervalMs: 0,
+    nativeEventPollIntervalMs, onNativeEvent,
     setMenuToggle, showToast,
   })
 
@@ -141,5 +148,40 @@ describe('initVRSession', () => {
     expect(native.stop).toHaveBeenCalledOnce()
     expect(h.controller.isActive()).toBe(false)
     expect(h.button.querySelector('.vr-menu-label').textContent).toBe('View in VR')
+  })
+
+  it('delivers sequenced native events only while the companion is active', async () => {
+    vi.useFakeTimers()
+    const onNativeEvent = vi.fn()
+    const native = {
+      status: vi.fn().mockResolvedValue({ available: true, running: false }),
+      launch: vi.fn().mockResolvedValue({ available: true, running: true, pid: 1234 }),
+      stop: vi.fn().mockResolvedValue({ available: true, running: false }),
+      event: vi.fn()
+        .mockResolvedValueOnce({ sequence: 1, type: 'hover', identity: 'nuc:s1' })
+        .mockResolvedValue({ sequence: 1, type: 'hover', identity: 'nuc:s1' }),
+    }
+    const h = makeHarness({
+      xr: null,
+      native,
+      nativeEventPollIntervalMs: 10,
+      onNativeEvent,
+    })
+
+    await h.controller.enter()
+    await vi.advanceTimersByTimeAsync(25)
+    expect(onNativeEvent).toHaveBeenCalledTimes(1)
+    expect(onNativeEvent).toHaveBeenLastCalledWith(
+      { sequence: 1, type: 'hover', identity: 'nuc:s1' },
+    )
+
+    await h.controller.exit()
+    expect(onNativeEvent).toHaveBeenLastCalledWith(
+      { sequence: 1, type: 'hover', identity: null },
+    )
+    const callsAfterExit = native.event.mock.calls.length
+    await vi.advanceTimersByTimeAsync(50)
+    expect(native.event).toHaveBeenCalledTimes(callsAfterExit)
+    vi.useRealTimers()
   })
 })

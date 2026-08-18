@@ -31,6 +31,9 @@ sudo apt install build-essential cmake ninja-build libopenxr-dev \
 The backend selects SteamVR's `steamxr_linux64.json` automatically when it
 launches the viewer. Help → Open SteamVR / Desktop starts SteamVR independently,
 so its Dashboard remains available before, during, and after a NADOC VR session.
+For native-to-browser interaction, the backend creates a private (`0600`), bounded
+event record and passes its path directly to the viewer. A localhost-only endpoint
+exposes validated, sequenced hover changes; this channel never writes design state.
 
 Controls on the original HTC Vive wands:
 

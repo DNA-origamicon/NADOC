@@ -11,6 +11,7 @@ from backend.api import routes_vr
 from backend.api.routes_vr import (
     VRCamera,
     _bundle_expanded_scene,
+    _event_payload,
     _expanded_helix_offsets,
     _expanded_scene_inputs,
     _require_local,
@@ -152,6 +153,28 @@ P owner 0 0 0 .1 1 1 1 1 1 1 1 1 1 1 1 1
     mismatched = expanded.replace("owner", "different")
     with pytest.raises(HTTPException, match="identities differ"):
         _bundle_expanded_scene(natural, mismatched)
+
+
+def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -> None:
+    event_path = tmp_path / "vr-event.json"
+    event_path.write_text(
+        '{"sequence":7,"type":"hover","identity":"nuc:s1:0:h1:4:FORWARD:0"}'
+    )
+    assert _event_payload({"event_path": str(event_path)}) == {
+        "sequence": 7,
+        "type": "hover",
+        "identity": "nuc:s1:0:h1:4:FORWARD:0",
+    }
+
+    event_path.write_text('{"sequence":')
+    assert _event_payload({"event_path": str(event_path)}) == {
+        "sequence": 0,
+        "type": "hover",
+        "identity": None,
+    }
+
+    event_path.write_text("x" * 4097)
+    assert _event_payload({"event_path": str(event_path)})["sequence"] == 0
 
 
 def test_runtime_status_requires_compositor_and_reports_dashboard(monkeypatch) -> None:

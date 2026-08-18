@@ -5783,6 +5783,7 @@ async function main() {
     showToast,
     native: {
       status: api.getVRStatus,
+      event: api.getVREvent,
       launch: () => api.launchNativeVR({
         camera: captureCurrentCamera(),
         measured_positioning: isNewPositioningOn(),
@@ -5794,6 +5795,10 @@ async function main() {
       }),
       stop: api.stopNativeVR,
       errorMessage: api.lastErrorMessage,
+    },
+    onNativeEvent: event => {
+      const button = document.getElementById('menu-help-view-vr')
+      if (button) button.dataset.vrHoverIdentity = event?.identity ?? ''
     },
   })
 

@@ -1506,9 +1506,12 @@ def _write_state(state: dict) -> None:
     _STATE_PATH.chmod(0o600)
 
 
-def _cleanup_after_process(process: subprocess.Popen, scene_path: Path) -> None:
+def _cleanup_after_process(
+    process: subprocess.Popen, scene_path: Path, event_path: Path
+) -> None:
     process.wait()
     scene_path.unlink(missing_ok=True)
+    event_path.unlink(missing_ok=True)
     with _STATE_LOCK:
         state = _read_state()
         if state and int(state["pid"]) == process.pid:
@@ -1535,10 +1538,38 @@ def _status_payload() -> dict:
     }
 
 
+def _event_payload(state: dict | None) -> dict:
+    """Read one bounded, overwrite-in-place native event record."""
+    if not state or not state.get("event_path"):
+        return {"sequence": 0, "type": "hover", "identity": None}
+    path = Path(state["event_path"])
+    try:
+        if path.stat().st_size > 4096:
+            raise ValueError("event record is too large")
+        event = json.loads(path.read_text())
+        sequence = int(event.get("sequence", 0))
+        identity = event.get("identity")
+        if sequence < 0 or (identity is not None and not isinstance(identity, str)):
+            raise ValueError("invalid event record")
+        if isinstance(identity, str) and len(identity) > 2048:
+            raise ValueError("event identity is too large")
+        return {"sequence": sequence, "type": "hover", "identity": identity}
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        # A truncate/write can briefly expose an incomplete record. Pollers keep
+        # their prior sequence and recover on the next read.
+        return {"sequence": 0, "type": "hover", "identity": None}
+
+
 @router.get("/vr/status")
 def vr_status(request: Request) -> dict:
     _require_local(request)
     return _status_payload()
+
+
+@router.get("/vr/event")
+def vr_event(request: Request) -> dict:
+    _require_local(request)
+    return _event_payload(_read_state())
 
 
 @router.post("/vr/runtime/start")
@@ -1581,11 +1612,20 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             scene_file.write(scene_text)
             scene_path = Path(scene_file.name)
         scene_path.chmod(0o600)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            prefix="nadoc-vr-event-",
+            suffix=".json",
+            delete=False,
+        ) as event_file:
+            event_file.write('{"sequence":0,"type":"hover","identity":null}')
+            event_path = Path(event_file.name)
+        event_path.chmod(0o600)
 
         log = _LOG_PATH.open("ab")
         try:
             process = subprocess.Popen(
-                [str(_VIEWER), str(scene_path)],
+                [str(_VIEWER), str(scene_path), "--events", str(event_path)],
                 cwd=_REPO_ROOT,
                 env=_build_environment(),
                 stdin=subprocess.DEVNULL,
@@ -1596,6 +1636,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             )
         except OSError as exc:
             scene_path.unlink(missing_ok=True)
+            event_path.unlink(missing_ok=True)
             raise HTTPException(
                 503, detail=f"Could not launch VR viewer: {exc}"
             ) from exc
@@ -1606,6 +1647,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         time.sleep(0.15)
         if process.poll() is not None:
             scene_path.unlink(missing_ok=True)
+            event_path.unlink(missing_ok=True)
             detail = "Native VR viewer exited during startup."
             try:
                 tail = _LOG_PATH.read_text(errors="replace").splitlines()[-1]
@@ -1618,12 +1660,13 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         state = {
             "pid": process.pid,
             "scene_path": str(scene_path),
+            "event_path": str(event_path),
             "started_at": time.time(),
         }
         _write_state(state)
         threading.Thread(
             target=_cleanup_after_process,
-            args=(process, scene_path),
+            args=(process, scene_path, event_path),
             daemon=True,
             name="nadoc-vr-cleanup",
         ).start()

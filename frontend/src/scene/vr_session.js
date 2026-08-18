@@ -37,10 +37,14 @@ export function initVRSession({
   secureContext = globalThis.isSecureContext ?? true,
   native = null,
   nativePollIntervalMs = 1000,
+  nativeEventPollIntervalMs = 50,
+  onNativeEvent = null,
 } = {}) {
   let session = null
   let nativeActive = false
   let nativePollTimer = null
+  let nativeEventTimer = null
+  let lastNativeEventSequence = 0
   let cameraRig = null
   let cameraSnapshot = null
   let starting = false
@@ -149,9 +153,41 @@ export function initVRSession({
     nativePollTimer = null
   }
 
+  function _clearNativeEventPoll() {
+    if (nativeEventTimer !== null) clearTimeout(nativeEventTimer)
+    nativeEventTimer = null
+  }
+
+  function _scheduleNativeEventPoll() {
+    _clearNativeEventPoll()
+    if (!nativeActive || disposed || nativeEventPollIntervalMs <= 0 ||
+        !native?.event || !onNativeEvent) return
+    nativeEventTimer = setTimeout(async () => {
+      nativeEventTimer = null
+      let event = null
+      try { event = await native.event() } catch { /* transient partial record/network */ }
+      if (disposed || !nativeActive) return
+      const sequence = Number(event?.sequence ?? 0)
+      if (Number.isSafeInteger(sequence) && sequence > lastNativeEventSequence) {
+        lastNativeEventSequence = sequence
+        onNativeEvent(event)
+      }
+      _scheduleNativeEventPoll()
+    }, nativeEventPollIntervalMs)
+  }
+
   function _setNativeActive(active) {
     nativeActive = active
-    if (!active) _clearNativePoll()
+    if (!active) {
+      _clearNativePoll()
+      _clearNativeEventPoll()
+      if (lastNativeEventSequence > 0) {
+        onNativeEvent?.({ sequence: lastNativeEventSequence, type: 'hover', identity: null })
+      }
+    } else {
+      lastNativeEventSequence = 0
+      _scheduleNativeEventPoll()
+    }
     _setButtonState({ active })
   }
 
@@ -307,6 +343,7 @@ export function initVRSession({
   function dispose() {
     disposed = true
     _clearNativePoll()
+    _clearNativeEventPoll()
     button?.removeEventListener('click', onClick)
     if (session || nativeActive) void exit()
     else _restoreCamera()
