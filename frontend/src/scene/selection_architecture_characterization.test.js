@@ -104,7 +104,9 @@ describe('selection architecture — canonical enforcement', () => {
     expect(select).toContain('_v2HandleBead')
     expect(select).toContain('_v2HandleArc')
     expect(select).toContain('_selectBaseKey')
+    expect(select).toContain('selectionController.getState().primary')
     expect(select).not.toContain('store.setState')
+    expect(main).toMatch(/selectVRIdentity[\s\S]*sendVRFeedback/)
   })
 
   it('enforces the explicit design/assembly selection boundary', () => {

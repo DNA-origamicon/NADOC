@@ -35,7 +35,8 @@ For native-to-browser interaction, the backend creates a private (`0600`), bound
 event record and passes its path directly to the viewer. A localhost-only endpoint
 exposes validated, sequenced hover, Select, and selection-level intents. The browser
 routes those intents through NADOC's canonical selection controller; the companion
-never writes design state directly.
+never writes design state directly. A second private, bounded record carries only the
+browser's canonical acknowledgement back to the companion.
 
 Controls on the original HTC Vive wands:
 
@@ -55,8 +56,10 @@ Controls on the original HTC Vive wands:
 - Cyan and orange pointers identify the left and right controllers. They turn
   green during a one-hand grab and magenta during a two-hand resize.
 - When neither trigger is held, the right pointer extends to the nearest visible
-  primitive and shows a small cyan hit marker. This is currently a read-only
-  stable-identity hover cue; it does not change NADOC selection.
+  primitive and shows a small cyan hit marker. This read-only stable-identity hover
+  cue does not change NADOC selection. After a trackpad click is accepted by the
+  desktop selection controller, a larger green marker remains on the selected owner;
+  rejected target/level combinations never produce a false green acknowledgement.
 - Press the Vive System button (not the application-menu button) to open the
   SteamVR Dashboard, then select Desktop to operate NADOC's normal interface.
 

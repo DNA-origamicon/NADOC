@@ -2402,26 +2402,63 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (!owner) return null
     const backboneEntries = designRenderer.getBackboneEntries()
     const coneEntries = designRenderer.getConeEntries()
+    let entry = null
+    let arc = null
+    let accepted = false
 
     if (owner.kind === 'nucleotide' || owner.kind === 'atom') {
-      const entry = backboneEntries.find(candidate => candidate.nuc === owner.nucleotide)
+      entry = backboneEntries.find(candidate => candidate.nuc === owner.nucleotide)
         ?? backboneEntries.find(candidate =>
           baseKey(candidate.nuc, candidate._copy) === owner.ref.key)
+      accepted = !!entry && (
+        _selLevel === 'default' || _selLevel === 'strand' || _selLevel === 'domain' ||
+        _selLevel === 'base' ||
+        (_selLevel === 'end' && (entry.nuc.is_five_prime || entry.nuc.is_three_prime)) ||
+        (_selLevel === 'cluster' && !!_resolveClusterId(entry.nuc, state.currentDesign))
+      )
       if (entry) _v2HandleBead(entry, backboneEntries, coneEntries)
     } else if (owner.kind === 'domain') {
-      const entry = backboneEntries.find(candidate =>
+      entry = backboneEntries.find(candidate =>
         candidate.nuc.strand_id === owner.ref.strandId &&
         (candidate.nuc.domain_index ?? 0) === owner.ref.domainIndex)
+      accepted = !!entry && (
+        _selLevel === 'default' || _selLevel === 'strand' || _selLevel === 'domain' ||
+        _selLevel === 'base' ||
+        (_selLevel === 'end' && (entry.nuc.is_five_prime || entry.nuc.is_three_prime)) ||
+        (_selLevel === 'cluster' && !!_resolveClusterId(entry.nuc, state.currentDesign))
+      )
       if (entry) _v2HandleBead(entry, backboneEntries, coneEntries)
     } else if (owner.kind === 'crossover') {
-      const arc = getUnfoldView?.()?.getArcEntries?.()
+      arc = getUnfoldView?.()?.getArcEntries?.()
         ?.find(candidate => candidate.crossover_id === owner.ref.id)
+      const representative = arc?.fromNuc ?? arc?.toNuc
+      accepted = !!arc && (
+        _selLevel === 'default' || _selLevel === 'strand' || _selLevel === 'xover' ||
+        (_selLevel === 'cluster' && representative &&
+          !!_resolveClusterId(representative, state.currentDesign))
+      )
       if (arc) _v2HandleArc(arc, backboneEntries, coneEntries)
     } else if ((owner.kind === 'flexible_base' || owner.kind === 'linker_base') &&
                _selLevel === 'base') {
+      accepted = true
       _selectBaseKey(owner.ref.key)
     }
-    return owner
+
+    const selectedRef = selectionController.getState().primary
+    const nucleotide = owner.nucleotide ?? entry?.nuc ?? arc?.fromNuc ?? arc?.toNuc
+    const key = owner.ref?.key ?? (entry ? baseKey(entry.nuc, entry._copy) : null)
+    const selected = accepted && !!selectedRef && (
+      (selectedRef.kind === 'strand' && selectedRef.id === nucleotide?.strand_id) ||
+      (selectedRef.kind === 'domain' && selectedRef.strandId === nucleotide?.strand_id &&
+        selectedRef.domainIndex === (nucleotide?.domain_index ?? 0)) ||
+      (selectedRef.kind === 'cluster' && selectedRef.id ===
+        _resolveClusterId(nucleotide, state.currentDesign)) ||
+      ((selectedRef.kind === 'base' || selectedRef.kind === 'end') &&
+        selectedRef.key === key) ||
+      (selectedRef.kind === 'crossover' && owner.kind === 'crossover' &&
+        selectedRef.id === owner.ref.id)
+    )
+    return { owner, accepted, selected }
   }
 
   // Unified backbone-bead-level hit handler — used by a real bead hit AND by the

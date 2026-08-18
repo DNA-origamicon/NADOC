@@ -9,6 +9,7 @@ from starlette.requests import Request
 
 from backend.api import routes_vr
 from backend.api.routes_vr import (
+    VRFeedbackRequest,
     VRCamera,
     _bundle_expanded_scene,
     _event_payload,
@@ -16,6 +17,7 @@ from backend.api.routes_vr import (
     _expanded_scene_inputs,
     _require_local,
     _serialize_scene,
+    _write_feedback,
 )
 
 
@@ -183,6 +185,32 @@ def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -
 
     event_path.write_text("x" * 4097)
     assert _event_payload({"event_path": str(event_path)})["sequence"] == 0
+
+
+def test_native_feedback_writer_is_private_bounded_and_atomic(tmp_path) -> None:
+    feedback_path = tmp_path / "vr-feedback.txt"
+    feedback_path.write_text("NADOCVR_FEEDBACK 1 0 0 0 default -\n")
+    _write_feedback(
+        {"feedback_path": str(feedback_path)},
+        VRFeedbackRequest(
+            select_sequence=4,
+            identity="nuc:s1:0:h1:3:FORWARD:0",
+            accepted=True,
+            selected=True,
+            selection_level="base",
+        ),
+    )
+    assert feedback_path.read_text() == (
+        "NADOCVR_FEEDBACK 1 4 1 1 base nuc:s1:0:h1:3:FORWARD:0\n"
+    )
+    assert feedback_path.stat().st_mode & 0o777 == 0o600
+    assert not feedback_path.with_name(f"{feedback_path.name}.next").exists()
+
+    with pytest.raises(HTTPException, match="Invalid VR feedback identity"):
+        _write_feedback(
+            {"feedback_path": str(feedback_path)},
+            VRFeedbackRequest(select_sequence=5, identity="not whitespace safe"),
+        )
 
 
 def test_runtime_status_requires_compositor_and_reports_dashboard(monkeypatch) -> None:

@@ -4198,6 +4198,10 @@ export async function getVREvent() {
   return _request('GET', '/vr/event', undefined, { suppressBusy: true })
 }
 
+export async function sendVRFeedback(body) {
+  return _request('POST', '/vr/feedback', body, { suppressBusy: true })
+}
+
 export async function startSteamVR() {
   return _request('POST', '/vr/runtime/start', undefined, { timeoutMs: 30000 })
 }

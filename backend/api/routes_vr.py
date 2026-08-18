@@ -39,6 +39,7 @@ _LOG_PATH = Path(tempfile.gettempdir()) / f"nadoc-vr-{os.getuid()}.log"
 _STEAMVR_LOG_PATH = Path(tempfile.gettempdir()) / f"nadoc-steamvr-{os.getuid()}.log"
 _STATE_LOCK = threading.Lock()
 _RUNTIME_LOCK = threading.Lock()
+_FEEDBACK_LOCK = threading.Lock()
 
 
 class VRCamera(BaseModel):
@@ -53,6 +54,16 @@ class VRLaunchRequest(BaseModel):
     assembly_active: bool = False
     representation: Literal["cylinders", "full", "ballstick", "stick"] = "full"
     coloring: Literal["strand", "base", "cluster", "cpk"] = "strand"
+    selection_level: Literal[
+        "default", "cluster", "strand", "domain", "end", "xover", "base"
+    ] = "default"
+
+
+class VRFeedbackRequest(BaseModel):
+    select_sequence: int = Field(ge=0)
+    identity: Optional[str] = Field(default=None, max_length=2048)
+    accepted: bool = False
+    selected: bool = False
     selection_level: Literal[
         "default", "cluster", "strand", "domain", "end", "xover", "base"
     ] = "default"
@@ -1523,11 +1534,15 @@ def _write_state(state: dict) -> None:
 
 
 def _cleanup_after_process(
-    process: subprocess.Popen, scene_path: Path, event_path: Path
+    process: subprocess.Popen,
+    scene_path: Path,
+    event_path: Path,
+    feedback_path: Path,
 ) -> None:
     process.wait()
     scene_path.unlink(missing_ok=True)
     event_path.unlink(missing_ok=True)
+    feedback_path.unlink(missing_ok=True)
     with _STATE_LOCK:
         state = _read_state()
         if state and int(state["pid"]) == process.pid:
@@ -1621,6 +1636,37 @@ def vr_event(request: Request) -> dict:
     return _event_payload(_read_state())
 
 
+def _write_feedback(state: dict | None, body: VRFeedbackRequest) -> None:
+    """Atomically publish one bounded canonical-selection acknowledgement."""
+    if not state or not state.get("feedback_path"):
+        raise HTTPException(409, detail="Native VR is not running.")
+    identity = body.identity or "-"
+    record = (
+        f"NADOCVR_FEEDBACK 1 {body.select_sequence} "
+        f"{int(body.accepted)} {int(body.selected)} "
+        f"{body.selection_level} {identity}\n"
+    )
+    if len(record.encode()) > 4096 or any(character.isspace() for character in identity):
+        raise HTTPException(422, detail="Invalid VR feedback identity.")
+    path = Path(state["feedback_path"])
+    temporary = path.with_name(f"{path.name}.next")
+    with _FEEDBACK_LOCK:
+        try:
+            temporary.write_text(record)
+            temporary.chmod(0o600)
+            os.replace(temporary, path)
+        except OSError as exc:
+            temporary.unlink(missing_ok=True)
+            raise HTTPException(503, detail="Could not acknowledge VR selection.") from exc
+
+
+@router.post("/vr/feedback")
+def vr_feedback(body: VRFeedbackRequest, request: Request) -> dict:
+    _require_local(request)
+    _write_feedback(_read_state(), body)
+    return {"acknowledged": True, "select_sequence": body.select_sequence}
+
+
 @router.post("/vr/runtime/start")
 def start_vr_runtime(request: Request) -> dict:
     _require_local(request)
@@ -1674,6 +1720,18 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             )
             event_path = Path(event_file.name)
         event_path.chmod(0o600)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            prefix="nadoc-vr-feedback-",
+            suffix=".txt",
+            delete=False,
+        ) as feedback_file:
+            feedback_file.write(
+                "NADOCVR_FEEDBACK 1 0 0 0 "
+                f"{body.selection_level} -\n"
+            )
+            feedback_path = Path(feedback_file.name)
+        feedback_path.chmod(0o600)
 
         log = _LOG_PATH.open("ab")
         try:
@@ -1685,6 +1743,8 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
                     str(event_path),
                     "--selection-level",
                     body.selection_level,
+                    "--feedback",
+                    str(feedback_path),
                 ],
                 cwd=_REPO_ROOT,
                 env=_build_environment(),
@@ -1697,6 +1757,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         except OSError as exc:
             scene_path.unlink(missing_ok=True)
             event_path.unlink(missing_ok=True)
+            feedback_path.unlink(missing_ok=True)
             raise HTTPException(
                 503, detail=f"Could not launch VR viewer: {exc}"
             ) from exc
@@ -1708,6 +1769,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         if process.poll() is not None:
             scene_path.unlink(missing_ok=True)
             event_path.unlink(missing_ok=True)
+            feedback_path.unlink(missing_ok=True)
             detail = "Native VR viewer exited during startup."
             try:
                 tail = _LOG_PATH.read_text(errors="replace").splitlines()[-1]
@@ -1721,12 +1783,13 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             "pid": process.pid,
             "scene_path": str(scene_path),
             "event_path": str(event_path),
+            "feedback_path": str(feedback_path),
             "started_at": time.time(),
         }
         _write_state(state)
         threading.Thread(
             target=_cleanup_after_process,
-            args=(process, scene_path, event_path),
+            args=(process, scene_path, event_path, feedback_path),
             daemon=True,
             name="nadoc-vr-cleanup",
         ).start()

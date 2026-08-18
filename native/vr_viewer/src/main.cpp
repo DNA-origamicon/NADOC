@@ -812,6 +812,52 @@ class GlScene {
         return nearest;
     }
 
+    [[nodiscard]] std::optional<nadoc_vr::PickHit> anchor(
+        const std::string& identity, const glm::mat4& modelTransform) const {
+        if (identity.empty()) return std::nullopt;
+        const RepresentationData& source =
+            expanded_ && scene_.hasExpanded
+                ? scene_.expandedRepresentations[static_cast<size_t>(representation_)]
+                : scene_.representations[static_cast<size_t>(representation_)];
+        const float worldScale = std::max({
+            glm::length(glm::vec3(modelTransform[0])),
+            glm::length(glm::vec3(modelTransform[1])),
+            glm::length(glm::vec3(modelTransform[2])),
+        });
+        auto result = [&](const glm::vec3& center, float radius) {
+            return nadoc_vr::PickHit{
+                identity,
+                std::max(radius * worldScale, 0.009F),
+                glm::vec3(modelTransform * glm::vec4(center, 1.0F)),
+            };
+        };
+        for (const StyledPoint& point : source.points) {
+            if (point.identity == identity) return result(point.position, point.size);
+        }
+        auto cylinderAnchor = [&](const std::vector<StyledCylinder>& cylinders)
+            -> std::optional<nadoc_vr::PickHit> {
+            for (const StyledCylinder& cylinder : cylinders) {
+                if (cylinder.identity == identity) {
+                    return result((cylinder.start + cylinder.end) * 0.5F, cylinder.radius);
+                }
+            }
+            return std::nullopt;
+        };
+        if (auto found = cylinderAnchor(source.cylinders)) return found;
+        if (auto found = cylinderAnchor(source.halfCylinders)) return found;
+        for (const StyledBox& box : source.boxes) {
+            if (box.identity == identity) {
+                const float radius = 0.5F * std::min({
+                    glm::length(box.axisX),
+                    glm::length(box.axisY),
+                    glm::length(box.axisZ),
+                });
+                return result(box.center, radius);
+            }
+        }
+        return std::nullopt;
+    }
+
     void renderShadowMap(const glm::mat4& modelTransform, glm::vec3 lightDirection) {
         lightDirection_ = glm::normalize(lightDirection);
         const glm::vec3 worldCenter = glm::vec3(
@@ -1428,8 +1474,10 @@ class GlScene {
 class Viewer {
   public:
     explicit Viewer(SceneData scene, std::string eventPath = {},
+                    std::string feedbackPath = {},
                     std::string selectionLevel = "default")
         : sceneData_(std::move(scene)), eventPath_(std::move(eventPath)),
+          feedbackPath_(std::move(feedbackPath)),
           selectionLevel_(std::move(selectionLevel)) {}
 
     int run() {
@@ -1952,6 +2000,21 @@ class Viewer {
             line(center - glm::vec3(0, 0, markerRadius),
                  center + glm::vec3(0, 0, markerRadius), color);
         }
+        if (!menuOpen_) {
+            const auto anchor = glScene_->anchor(
+                selectedIdentity_, manipulator_.transform());
+            if (anchor) {
+                const float markerRadius = anchor->distance + 0.006F;
+                const glm::vec3 center = anchor->position;
+                const glm::vec3 color(0.30F, 1.0F, 0.48F);
+                line(center - glm::vec3(markerRadius, 0, 0),
+                     center + glm::vec3(markerRadius, 0, 0), color);
+                line(center - glm::vec3(0, markerRadius, 0),
+                     center + glm::vec3(0, markerRadius, 0), color);
+                line(center - glm::vec3(0, 0, markerRadius),
+                     center + glm::vec3(0, 0, markerRadius), color);
+            }
+        }
         appendMenuGuides();
     }
 
@@ -2005,6 +2068,25 @@ class Viewer {
         output << ",\"level_sequence\":" << levelSequence_
                << ",\"selection_level\":\"" << selectionLevel_ << "\"";
         output << '}';
+    }
+
+    void pollSelectionFeedback() {
+        if (feedbackPath_.empty() || (++feedbackPollFrame_ % 3U) != 0U) return;
+        std::ifstream input(feedbackPath_, std::ios::in | std::ios::binary);
+        if (!input) return;
+        input.seekg(0, std::ios::end);
+        const std::streamoff size = input.tellg();
+        if (size < 0 || size > 4096) return;
+        input.seekg(0);
+        std::string record(static_cast<size_t>(size), '\0');
+        input.read(record.data(), size);
+        const auto feedback = nadoc_vr::parseSelectionFeedback(
+            record, feedbackSequence_, selectSequence_);
+        if (!feedback) return;
+        feedbackSequence_ = feedback->sequence;
+        selectionLevel_ = feedback->level;
+        selectedIdentity_ = feedback->accepted && feedback->selected
+            ? feedback->identity : "";
     }
 
     void syncActions(XrTime displayTime) {
@@ -2108,6 +2190,7 @@ class Viewer {
         }
         if (menuOpen_) processMenuInput();
         updateSceneHover();
+        pollSelectionFeedback();
         updateControllerGuides();
     }
 
@@ -2272,12 +2355,16 @@ class Viewer {
 
     SceneData sceneData_;
     std::string eventPath_;
+    std::string feedbackPath_;
     uint64_t eventSequence_ = 0;
     std::string publishedHoverIdentity_;
     uint64_t selectSequence_ = 0;
     std::string lastSelectIdentity_;
     uint64_t levelSequence_ = 0;
     std::string selectionLevel_ = "default";
+    uint64_t feedbackSequence_ = 0;
+    uint32_t feedbackPollFrame_ = 0;
+    std::string selectedIdentity_;
     bool glfwInitialized_ = false;
     GLFWwindow* window_ = nullptr;
     XrInstance instance_ = XR_NULL_HANDLE;
@@ -2335,10 +2422,12 @@ int main(int argc, char** argv) {
     }
     if (argc < 2) {
         std::cerr << "Usage: nadoc-vr-viewer [--validate] <scene.nadocvr> "
-                     "[--events <event.json>] [--selection-level <level>]\n";
+                     "[--events <event.json>] [--feedback <feedback.txt>] "
+                     "[--selection-level <level>]\n";
         return 2;
     }
     std::string eventPath;
+    std::string feedbackPath;
     std::string selectionLevel = "default";
     const std::array<std::string, 7> validSelectionLevels = {
         "default", "cluster", "strand", "domain", "end", "xover", "base",
@@ -2350,6 +2439,7 @@ int main(int argc, char** argv) {
         }
         const std::string option(argv[index]);
         if (option == "--events") eventPath = argv[index + 1];
+        else if (option == "--feedback") feedbackPath = argv[index + 1];
         else if (option == "--selection-level") selectionLevel = argv[index + 1];
         else {
             std::cerr << "NADOC VR error: unknown option " << option << '\n';
@@ -2364,7 +2454,7 @@ int main(int argc, char** argv) {
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
     try {
-        Viewer viewer(loadScene(argv[1]), eventPath, selectionLevel);
+        Viewer viewer(loadScene(argv[1]), eventPath, feedbackPath, selectionLevel);
         return viewer.run();
     } catch (const std::exception& error) {
         std::cerr << "NADOC VR error: " << error.what() << '\n';

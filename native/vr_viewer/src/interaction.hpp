@@ -7,7 +7,11 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <cmath>
+#include <optional>
+#include <sstream>
+#include <string>
 
 namespace nadoc_vr {
 
@@ -19,6 +23,42 @@ struct HandPose {
 };
 
 enum class ManipulationMode { none, left, right, two_hand };
+
+struct SelectionFeedback {
+    uint64_t sequence = 0;
+    bool accepted = false;
+    bool selected = false;
+    std::string level;
+    std::string identity;
+};
+
+inline std::optional<SelectionFeedback> parseSelectionFeedback(
+    const std::string& record, uint64_t previousSequence, uint64_t maximumSequence) {
+    std::istringstream fields(record);
+    std::string magic;
+    int version = 0;
+    SelectionFeedback result;
+    int accepted = 0;
+    int selected = 0;
+    std::string trailing;
+    if (!(fields >> magic >> version >> result.sequence >> accepted >> selected
+                >> result.level >> result.identity) ||
+        (fields >> trailing) || magic != "NADOCVR_FEEDBACK" || version != 1 ||
+        (accepted != 0 && accepted != 1) || (selected != 0 && selected != 1) ||
+        result.sequence <= previousSequence || result.sequence > maximumSequence) {
+        return std::nullopt;
+    }
+    static constexpr std::array<const char*, 7> levels = {
+        "default", "cluster", "strand", "domain", "end", "xover", "base",
+    };
+    if (std::find(levels.begin(), levels.end(), result.level) == levels.end()) {
+        return std::nullopt;
+    }
+    result.accepted = accepted == 1;
+    result.selected = selected == 1;
+    if (result.identity == "-") result.identity.clear();
+    return result;
+}
 
 inline glm::mat4 poseMatrix(const HandPose& pose) {
     return glm::translate(glm::mat4(1.0F), pose.position) * glm::toMat4(pose.orientation);

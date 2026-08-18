@@ -119,6 +119,24 @@ void rayPickingRejectsMissesAndBehindControllerGeometry() {
         ray, {0, 0, 2}, {0.4F, 0, 0}, {0, 0.2F, 0}, {0, 0, 0.6F}));
 }
 
+void canonicalSelectionFeedbackIsStrictAndSequenced() {
+    const auto selected = nadoc_vr::parseSelectionFeedback(
+        "NADOCVR_FEEDBACK 1 4 1 1 base nuc:s1:0:h1:3:FORWARD:0\n", 3, 4);
+    require(selected && selected->sequence == 4 && selected->accepted && selected->selected);
+    require(selected->level == "base");
+    require(selected->identity == "nuc:s1:0:h1:3:FORWARD:0");
+
+    const auto deselected = nadoc_vr::parseSelectionFeedback(
+        "NADOCVR_FEEDBACK 1 5 1 0 domain -\n", 4, 5);
+    require(deselected && deselected->identity.empty() && !deselected->selected);
+    require(!nadoc_vr::parseSelectionFeedback(
+        "NADOCVR_FEEDBACK 1 4 1 1 base stale\n", 4, 5));
+    require(!nadoc_vr::parseSelectionFeedback(
+        "NADOCVR_FEEDBACK 1 6 1 1 atom future\n", 4, 6));
+    require(!nadoc_vr::parseSelectionFeedback(
+        "NADOCVR_FEEDBACK 1 6 1 1 base identity trailing\n", 4, 6));
+}
+
 }  // namespace
 
 int main() {
@@ -129,4 +147,5 @@ int main() {
     closeInspectionAllowsTheModelToPassThroughTheHead();
     rayPickingHitsVisiblePrimitiveSurfaces();
     rayPickingRejectsMissesAndBehindControllerGeometry();
+    canonicalSelectionFeedbackIsStrictAndSequenced();
 }

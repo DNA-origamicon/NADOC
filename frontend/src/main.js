@@ -5803,7 +5803,14 @@ async function main() {
         selectionManager.setSelectionLevel?.(event.level)
         selectionManager.previewVRIdentity?.(button?.dataset.vrHoverIdentity || null)
       } else if (event?.type === 'select') {
-        selectionManager.selectVRIdentity?.(event.identity)
+        const result = selectionManager.selectVRIdentity?.(event.identity)
+        api.sendVRFeedback({
+          select_sequence: event.sequence,
+          identity: event.identity,
+          accepted: result?.accepted === true,
+          selected: result?.selected === true,
+          selection_level: selectionManager.getSelectionLevel?.() ?? 'default',
+        }).catch(() => {})
       } else {
         if (button) button.dataset.vrHoverIdentity = event?.identity ?? ''
         selectionManager.previewVRIdentity?.(event?.identity ?? null)
