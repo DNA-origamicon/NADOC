@@ -350,6 +350,47 @@ void toolShellNeverClaimsACommitAndRequiresPreview() {
     require(!shell.previewRequested() && shell.status() == "UNSUPPORTED TARGET");
 }
 
+void parameterizedToolDraftsResetOnTargetChangesAndStayBounded() {
+    nadoc_vr::ToolConfigurationDraft draft;
+    require(draft.bind(
+        nadoc_vr::ToolMode::extrude, "end:first", "end", {"end-token"}));
+    require(draft.active() && draft.lengthBp() == 0);
+    require(std::string(draft.unresolvedGeometry()) == "FOOTPRINT");
+    require(draft.adjustPrimary(1) && draft.lengthBp() == 1);
+    require(draft.adjustSecondary(1) && draft.directionSign() == -1);
+    require(draft.cycleOption() &&
+            draft.strandFilter() == nadoc_vr::ToolStrandFilter::scaffold);
+    require(draft.toggleFlag() && !draft.ligateAdjacent());
+    require(!draft.bind(
+        nadoc_vr::ToolMode::extrude, "end:first", "end", {"end-token"}));
+    require(draft.lengthBp() == 1);  // Same target preserves its draft.
+
+    require(draft.bind(
+        nadoc_vr::ToolMode::extrude, "end:second", "end", {"other-token"}));
+    require(draft.lengthBp() == 0 && draft.directionSign() == 1 &&
+            draft.strandFilter() == nadoc_vr::ToolStrandFilter::both &&
+            draft.ligateAdjacent());
+
+    require(draft.bind(
+        nadoc_vr::ToolMode::twist, "cluster:c1", "cluster", {"cluster-token"}));
+    require(!draft.planeABp() && !draft.planeBBp());
+    require(std::string(draft.unresolvedGeometry()) == "PLANES A/B");
+    require(draft.twistAmount() == 90.0);
+    require(draft.adjustPrimary(-1) && draft.twistAmount() == 85.0);
+    require(draft.cycleOption());
+    require(draft.twistAmountMode() == nadoc_vr::TwistAmountMode::degrees_per_nm);
+    require(draft.twistAmount() == 1.0);
+    require(draft.adjustPrimary(-1) && std::abs(draft.twistAmount() - 0.9) < 1e-9);
+
+    require(draft.bind(
+        nadoc_vr::ToolMode::bend, "cluster:c1", "cluster", {"cluster-token"}));
+    require(!draft.adjustPrimary(-1));
+    require(draft.adjustPrimary(1) && draft.bendAngleDegrees() == 1.0);
+    require(draft.adjustSecondary(-1) && draft.bendDirectionDegrees() == 355.0);
+    require(draft.clear() && !draft.active());
+    require(!draft.clear());
+}
+
 }  // namespace
 
 int main() {
@@ -370,4 +411,5 @@ int main() {
     canonicalOwnerFallbackUsesFeedbackSpecificityAndSceneOrder();
     ownerBoundsAreStableAndFollowTheWorldTransform();
     toolShellNeverClaimsACommitAndRequiresPreview();
+    parameterizedToolDraftsResetOnTargetChangesAndStayBounded();
 }

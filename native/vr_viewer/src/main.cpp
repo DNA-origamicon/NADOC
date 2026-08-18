@@ -2443,7 +2443,7 @@ class Viewer {
         }
     }
 
-    enum class MenuPage { options, tools };
+    enum class MenuPage { options, tools, tool_config };
 
     struct MenuItem {
         const char* label;
@@ -2486,6 +2486,15 @@ class Viewer {
         {"UNDO", 0.16F, 0.025F, 0.145F},
         {"BACK", 0.0F, -0.260F, 0.305F},
     }};
+    static constexpr std::array<MenuItem, 7> kToolConfigMenuItems = {{
+        {"-", -0.16F, 0.135F, 0.145F},
+        {"+", 0.16F, 0.135F, 0.145F},
+        {"SECONDARY -", -0.16F, 0.025F, 0.145F},
+        {"SECONDARY +", 0.16F, 0.025F, 0.145F},
+        {"OPTION", -0.16F, -0.085F, 0.145F},
+        {"FLAG", 0.16F, -0.085F, 0.145F},
+        {"BACK TO TOOLS", 0.0F, -0.260F, 0.305F},
+    }};
 
     void appendMenuGuides() {
         if (!menuOpen_) return;
@@ -2512,10 +2521,74 @@ class Viewer {
         line(menuWorld(0.33F, 0.33F), menuWorld(0.33F, -0.455F), border);
         line(menuWorld(0.33F, -0.455F), menuWorld(-0.33F, -0.455F), border);
         line(menuWorld(-0.33F, -0.455F), menuWorld(-0.33F, 0.33F), border);
+        const std::string title = menuPage_ == MenuPage::options
+            ? "VR MENU"
+            : menuPage_ == MenuPage::tools
+                ? "VR TOOLS READ ONLY" : "VR TOOL SETTINGS DRAFT";
         appendMenuText(
-            menuPage_ == MenuPage::options ? "VR MENU" : "VR TOOLS READ ONLY",
-            menuPage_ == MenuPage::options ? -0.105F : -0.235F,
+            title, menuPage_ == MenuPage::options ? -0.105F : -0.235F,
             0.305F, 0.006F, {0.65F, 0.88F, 1.0F});
+
+        if (menuPage_ == MenuPage::tool_config) {
+            std::ostringstream primary;
+            std::ostringstream secondary;
+            std::string option;
+            std::string flag;
+            std::array<bool, 6> enabled{true, true, true, true, true, true};
+            primary << std::fixed << std::setprecision(1);
+            secondary << std::fixed << std::setprecision(1);
+            if (toolConfig_.mode() == nadoc_vr::ToolMode::extrude) {
+                primary << "LENGTH " << toolConfig_.lengthBp() << " BP";
+                secondary << "DIRECTION "
+                          << (toolConfig_.directionSign() > 0 ? "+" : "-");
+                option = "STRANDS " + std::string(nadoc_vr::toolStrandFilterName(
+                    toolConfig_.strandFilter()));
+                flag = std::string("LIGATE ") +
+                    (toolConfig_.ligateAdjacent() ? "YES" : "NO");
+            } else if (toolConfig_.mode() == nadoc_vr::ToolMode::twist) {
+                primary << "AMOUNT " << toolConfig_.twistAmount();
+                secondary << "PLANES A/B UNRESOLVED";
+                option = toolConfig_.twistAmountMode() ==
+                        nadoc_vr::TwistAmountMode::total_degrees
+                    ? "UNITS TOTAL DEG" : "UNITS DEG PER NM";
+                flag = "NO FLAG";
+                enabled[2] = enabled[3] = enabled[5] = false;
+            } else {
+                primary << "BEND ANGLE " << toolConfig_.bendAngleDegrees();
+                secondary << "DIRECTION " << toolConfig_.bendDirectionDegrees();
+                option = "PLANES A/B UNRESOLVED";
+                flag = "NO FLAG";
+                enabled[4] = enabled[5] = false;
+            }
+            appendMenuText(
+                nadoc_vr::toolModeName(toolConfig_.mode()), -0.305F, 0.255F,
+                0.0042F, {0.42F, 0.72F, 0.95F});
+            appendMenuText(primary.str(), -0.305F, 0.200F, 0.0038F,
+                           {0.95F, 0.78F, 0.34F});
+            appendMenuText(secondary.str(), -0.305F, 0.090F, 0.0038F,
+                           {0.95F, 0.78F, 0.34F});
+            appendMenuText(option, -0.305F, -0.020F, 0.0038F,
+                           {0.72F, 0.80F, 0.92F});
+            appendMenuText(flag, 0.015F, -0.020F, 0.0038F,
+                           {0.72F, 0.80F, 0.92F});
+            appendMenuText(
+                "MISSING " + std::string(toolConfig_.unresolvedGeometry()),
+                -0.305F, -0.165F, 0.0038F, {0.95F, 0.48F, 0.22F});
+            appendMenuText("DESIGN UNCHANGED", -0.305F, -0.205F,
+                           0.0032F, {0.65F, 0.70F, 0.78F});
+            for (size_t index = 0; index < kToolConfigMenuItems.size(); ++index) {
+                glm::vec3 color = index < enabled.size() && !enabled[index]
+                    ? glm::vec3(0.30F, 0.32F, 0.36F)
+                    : glm::vec3(0.65F, 0.70F, 0.78F);
+                if (static_cast<int>(index) == menuHover_) {
+                    color = index < enabled.size() && !enabled[index]
+                        ? glm::vec3(0.48F, 0.32F, 0.30F)
+                        : glm::vec3(1.0F, 0.78F, 0.22F);
+                }
+                itemBox(kToolConfigMenuItems[index], color);
+            }
+            return;
+        }
 
         if (menuPage_ == MenuPage::tools) {
             appendMenuText("TOOL", -0.305F, 0.255F, 0.0042F, {0.42F, 0.72F, 0.95F});
@@ -2583,9 +2656,13 @@ class Viewer {
         const glm::vec3 local = glm::inverse(menuOrientation_)
                               * (hand.position + direction * distance - menuPosition_);
         const MenuItem* items = menuPage_ == MenuPage::options
-            ? kOptionsMenuItems.data() : kToolMenuItems.data();
+            ? kOptionsMenuItems.data()
+            : menuPage_ == MenuPage::tools
+                ? kToolMenuItems.data() : kToolConfigMenuItems.data();
         const size_t itemCount = menuPage_ == MenuPage::options
-            ? kOptionsMenuItems.size() : kToolMenuItems.size();
+            ? kOptionsMenuItems.size()
+            : menuPage_ == MenuPage::tools
+                ? kToolMenuItems.size() : kToolConfigMenuItems.size();
         for (size_t index = 0; index < itemCount; ++index) {
             const MenuItem& item = items[index];
             if (std::abs(local.x - item.x) <= item.halfWidth &&
@@ -2602,13 +2679,42 @@ class Viewer {
             const int hit = menuHit(hands_[hand]);
             if (hit >= 0 && menuHover_ < 0) menuHover_ = hit;
             if (hit < 0 || !triggerClicked_[hand]) continue;
+            if (menuPage_ == MenuPage::tool_config) {
+                bool changed = false;
+                if (hit == 0) changed = toolConfig_.adjustPrimary(-1);
+                else if (hit == 1) changed = toolConfig_.adjustPrimary(1);
+                else if (hit == 2) changed = toolConfig_.adjustSecondary(-1);
+                else if (hit == 3) changed = toolConfig_.adjustSecondary(1);
+                else if (hit == 4) changed = toolConfig_.cycleOption();
+                else if (hit == 5) changed = toolConfig_.toggleFlag();
+                else {
+                    menuPage_ = MenuPage::tools;
+                    menuHover_ = -1;
+                }
+                if (changed) publishToolConfiguration();
+                pulse(hand, changed ? 0.50F : 0.20F);
+                continue;
+            }
             if (menuPage_ == MenuPage::tools) {
                 if (hit < 5) {
                     const auto mode = static_cast<nadoc_vr::ToolMode>(hit);
+                    const auto capability = nadoc_vr::ToolShell::selectionCapability(
+                        mode, selectedSelectionKind_);
                     toolShell_.activate(mode, selectedSelectionKind_);
                     pendingToolTransform_.cancel();
                     publishToolTransform();
                     publishToolIntent(nadoc_vr::ToolAction::activate);
+                    if (capability == nadoc_vr::ToolCapability::configuration_required) {
+                        if (toolConfig_.bind(
+                                mode, selectedIdentity_, selectedSelectionKind_,
+                                selectedOwnerTokens_)) {
+                            publishToolConfiguration();
+                        }
+                        menuPage_ = MenuPage::tool_config;
+                        menuHover_ = -1;
+                    } else if (toolConfig_.clear()) {
+                        publishToolConfiguration();
+                    }
                 } else if (hit < 9) {
                     const auto action = static_cast<nadoc_vr::ToolAction>(hit - 4);
                     toolShell_.apply(action, selectedSelectionKind_);
@@ -2791,6 +2897,11 @@ class Viewer {
         publishEventState();
     }
 
+    void publishToolConfiguration() {
+        ++toolConfigSequence_;
+        publishEventState();
+    }
+
     void publishEventState() {
         if (eventPath_.empty()) return;
         std::ofstream output(eventPath_, std::ios::out | std::ios::trunc);
@@ -2819,6 +2930,51 @@ class Viewer {
             output << '\"' << lastToolTargetOwnerTokens_[index] << '\"';
         }
         output << ']';
+        output << ",\"tool_config_sequence\":" << toolConfigSequence_
+               << ",\"tool_config\":";
+        if (!toolConfig_.active()) {
+            output << "null";
+        } else {
+            output << "{\"mode\":\"" << nadoc_vr::toolModeName(toolConfig_.mode())
+                   << "\",\"target_identity\":";
+            identity(toolConfig_.targetIdentity());
+            output << ",\"target_kind\":\"" << toolConfig_.targetSelectionKind()
+                   << "\",\"target_owner_tokens\":[";
+            const auto& configTokens = toolConfig_.targetOwnerTokens();
+            for (size_t index = 0; index < configTokens.size(); ++index) {
+                if (index != 0) output << ',';
+                output << '\"' << configTokens[index] << '\"';
+            }
+            output << ']';
+            if (toolConfig_.mode() == nadoc_vr::ToolMode::extrude) {
+                output << ",\"length_bp\":" << toolConfig_.lengthBp()
+                       << ",\"direction_sign\":" << toolConfig_.directionSign()
+                       << ",\"strand_filter\":\""
+                       << nadoc_vr::toolStrandFilterName(toolConfig_.strandFilter())
+                       << "\",\"ligate_adjacent\":"
+                       << (toolConfig_.ligateAdjacent() ? "true" : "false")
+                       << ",\"footprint_state\":\"unresolved\"";
+            } else {
+                auto optionalInteger = [&](const std::optional<int32_t>& value) {
+                    if (value) output << *value;
+                    else output << "null";
+                };
+                output << ",\"plane_a_bp\":";
+                optionalInteger(toolConfig_.planeABp());
+                output << ",\"plane_b_bp\":";
+                optionalInteger(toolConfig_.planeBBp());
+                if (toolConfig_.mode() == nadoc_vr::ToolMode::twist) {
+                    output << ",\"amount_mode\":\""
+                           << nadoc_vr::twistAmountModeName(toolConfig_.twistAmountMode())
+                           << "\",\"amount\":" << toolConfig_.twistAmount();
+                } else {
+                    output << ",\"angle_deg\":" << toolConfig_.bendAngleDegrees()
+                           << ",\"direction_deg\":"
+                           << toolConfig_.bendDirectionDegrees();
+                }
+            }
+            output << '}';
+        }
         output << ",\"transform_sequence\":" << transformSequence_
                << ",\"transform_matrix\":[";
         bool firstValue = true;
@@ -2872,6 +3028,12 @@ class Viewer {
             selectedOwnerTokens_ != previousOwnerTokens ||
             selectedSelectionKind_ != previousSelectionKind;
         toolShell_.syncSelection(selectedSelectionKind_, targetChanged);
+        if (targetChanged && toolConfig_.active() &&
+            toolConfig_.bind(
+                toolConfig_.mode(), selectedIdentity_, selectedSelectionKind_,
+                selectedOwnerTokens_)) {
+            publishToolConfiguration();
+        }
         if (targetChanged ||
             !toolShell_.previewRequested()) {
             pendingToolTransform_.cancel();
@@ -3205,6 +3367,8 @@ class Viewer {
     std::vector<std::string> lastToolTargetOwnerTokens_;
     std::string lastToolTargetKind_ = "none";
     nadoc_vr::ToolShell toolShell_;
+    uint64_t toolConfigSequence_ = 0;
+    nadoc_vr::ToolConfigurationDraft toolConfig_;
     nadoc_vr::PendingRigidTransform pendingToolTransform_;
     uint64_t transformSequence_ = 0;
     glm::mat4 lastToolTransform_{1.0F};

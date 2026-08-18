@@ -70,8 +70,13 @@ Controls on the original HTC Vive wands:
   Confirm is reported as staged and Undo reports that no VR commit exists.
   Move/Rotate directly previews exact Cluster, Strand, Domain, End, and Base
   scopes. End-target Extrude and Cluster/End Twist or Bend are amber and report
-  **CONFIG REQUIRED** until their length/direction/footprint or plane-pair/amount
-  controls exist in-headset. Other pairings report **UNSUPPORTED TARGET** instead
+  **CONFIG REQUIRED**. Selecting one opens a target-bound draft-settings page:
+  Extrude exposes length, direction, strand filter, and adjacent-ligation; Twist
+  exposes amount and total-degrees/degrees-per-nm units; Bend exposes angle and
+  direction. Exact slice footprint and ordered deformation planes remain visibly
+  **UNRESOLVED**, so these settings cannot arm Preview or change the design yet.
+  Changing the canonical target resets the draft. Other pairings report
+  **UNSUPPORTED TARGET** instead
   of silently widening the edit. Preview draws an
   RGB translation triad at the exact current visual centroid used by NADOC's desktop
   gizmo; its size is derived from owner-wide bounds and stays capped for reach.

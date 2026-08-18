@@ -55,6 +55,7 @@ export function initVRSession({
   let lastNativeSelectSequence = 0
   let lastNativeLevelSequence = 0
   let lastNativeToolSequence = 0
+  let lastNativeToolConfigSequence = 0
   let lastNativeTransformSequence = 0
   let nativeTimingReported = false
   let cameraRig = null
@@ -221,6 +222,17 @@ export function initVRSession({
               : [],
           })
         }
+        const toolConfigSequence = Number(event?.tool_config_sequence ?? 0)
+        if (Number.isSafeInteger(toolConfigSequence) &&
+            toolConfigSequence > lastNativeToolConfigSequence &&
+            (event?.tool_config === null || typeof event?.tool_config === 'object')) {
+          lastNativeToolConfigSequence = toolConfigSequence
+          onNativeEvent({
+            sequence: toolConfigSequence,
+            type: 'tool_config',
+            draft: event.tool_config === null ? null : structuredClone(event.tool_config),
+          })
+        }
         const transformSequence = Number(event?.transform_sequence ?? 0)
         const transformMatrix = event?.transform_matrix
         if (Number.isSafeInteger(transformSequence) &&
@@ -253,6 +265,7 @@ export function initVRSession({
       lastNativeSelectSequence = 0
       lastNativeLevelSequence = 0
       lastNativeToolSequence = 0
+      lastNativeToolConfigSequence = 0
       lastNativeTransformSequence = 0
       nativeTimingReported = false
       _scheduleNativeEventPoll()

@@ -12,6 +12,7 @@ import copy
 import gzip
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import signal
@@ -2713,6 +2714,135 @@ def _runtime_timing(state: dict, event: dict) -> dict:
     }
 
 
+_VR_TOOL_CONFIG_TARGET_KINDS = {
+    "none",
+    "cluster",
+    "strand",
+    "domain",
+    "base",
+    "end",
+    "bond",
+    "crossover",
+    "overhang",
+    "extension",
+    "protein",
+}
+
+
+def _parse_tool_config(raw: object, sequence: int) -> dict | None:
+    """Validate one bounded, target-bound configuration draft.
+
+    Bounds protect the localhost transport only. A future desktop-authoritative
+    adapter must still resolve footprint/plane geometry and run normal operation
+    validation before previewing or mutating a design.
+    """
+    if sequence == 0:
+        if raw is not None:
+            raise ValueError("configuration without sequence")
+        return None
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("missing tool configuration")
+
+    mode = raw.get("mode")
+    target_identity = raw.get("target_identity")
+    target_kind = raw.get("target_kind")
+    target_owner_tokens = raw.get("target_owner_tokens")
+    if (
+        mode not in {"extrude", "twist", "bend"}
+        or target_kind not in _VR_TOOL_CONFIG_TARGET_KINDS
+        or not isinstance(target_owner_tokens, list)
+        or len(target_owner_tokens) > 8
+        or any(
+            not isinstance(token, str)
+            or not token
+            or len(token) > 2048
+            or any(character.isspace() for character in token)
+            for token in target_owner_tokens
+        )
+        or (
+            target_kind == "none"
+            and (target_identity is not None or target_owner_tokens)
+        )
+        or (
+            target_kind != "none"
+            and (
+                not isinstance(target_identity, str)
+                or not target_identity
+                or len(target_identity) > 2048
+                or not target_owner_tokens
+            )
+        )
+    ):
+        raise ValueError("invalid tool configuration target")
+
+    common = {
+        "mode": mode,
+        "target_identity": target_identity,
+        "target_kind": target_kind,
+        "target_owner_tokens": target_owner_tokens,
+    }
+
+    def bounded_int(value: object, low: int, high: int, *, nullable=False):
+        if nullable and value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
+            raise ValueError("invalid tool configuration integer")
+        return value
+
+    def bounded_float(value: object, low: float, high: float) -> float:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError("invalid tool configuration number")
+        result = float(value)
+        if not math.isfinite(result) or not low <= result <= high:
+            raise ValueError("invalid tool configuration number")
+        return result
+
+    if mode == "extrude":
+        length_bp = bounded_int(raw.get("length_bp"), 0, 1_000_000)
+        direction_sign = bounded_int(raw.get("direction_sign"), -1, 1)
+        if (
+            direction_sign == 0
+            or raw.get("strand_filter") not in {"both", "scaffold", "staples"}
+            or not isinstance(raw.get("ligate_adjacent"), bool)
+            or raw.get("footprint_state") != "unresolved"
+        ):
+            raise ValueError("invalid extrusion configuration")
+        return {
+            **common,
+            "length_bp": length_bp,
+            "direction_sign": direction_sign,
+            "strand_filter": raw["strand_filter"],
+            "ligate_adjacent": raw["ligate_adjacent"],
+            "footprint_state": "unresolved",
+        }
+
+    plane_a_bp = bounded_int(
+        raw.get("plane_a_bp"), -(2**31 - 1), 2**31 - 1, nullable=True
+    )
+    plane_b_bp = bounded_int(
+        raw.get("plane_b_bp"), -(2**31 - 1), 2**31 - 1, nullable=True
+    )
+    if mode == "twist":
+        if raw.get("amount_mode") not in {"total_degrees", "degrees_per_nm"}:
+            raise ValueError("invalid twist amount mode")
+        return {
+            **common,
+            "plane_a_bp": plane_a_bp,
+            "plane_b_bp": plane_b_bp,
+            "amount_mode": raw["amount_mode"],
+            "amount": bounded_float(raw.get("amount"), -1_000_000, 1_000_000),
+        }
+    return {
+        **common,
+        "plane_a_bp": plane_a_bp,
+        "plane_b_bp": plane_b_bp,
+        "angle_deg": bounded_float(raw.get("angle_deg"), 0, 360),
+        "direction_deg": bounded_float(raw.get("direction_deg"), 0, 360),
+    }
+
+
 def _event_payload(state: dict | None) -> dict:
     """Read one bounded, overwrite-in-place native event record."""
     if not state or not state.get("event_path"):
@@ -2729,6 +2859,8 @@ def _event_payload(state: dict | None) -> dict:
             "tool_target_identity": None,
             "tool_target_kind": "none",
             "tool_target_owner_tokens": [],
+            "tool_config_sequence": 0,
+            "tool_config": None,
             "transform_sequence": 0,
             "transform_matrix": np.identity(4, dtype=float).flatten(order="F").tolist(),
             "ready_sequence": 0,
@@ -2753,6 +2885,15 @@ def _event_payload(state: dict | None) -> dict:
         tool_target_identity = event.get("tool_target_identity")
         tool_target_kind = event.get("tool_target_kind", "none")
         tool_target_owner_tokens = event.get("tool_target_owner_tokens", [])
+        raw_tool_config_sequence = event.get("tool_config_sequence", 0)
+        if isinstance(raw_tool_config_sequence, bool) or not isinstance(
+            raw_tool_config_sequence, int
+        ):
+            raise ValueError("invalid tool configuration sequence")
+        tool_config_sequence = raw_tool_config_sequence
+        tool_config = _parse_tool_config(
+            event.get("tool_config"), tool_config_sequence
+        )
         transform_sequence = int(event.get("transform_sequence", 0))
         transform_values = event.get(
             "transform_matrix",
@@ -2763,24 +2904,12 @@ def _event_payload(state: dict | None) -> dict:
         first_frame_cpu_ms = event.get("first_frame_cpu_ms")
         display_period_ms = event.get("display_period_ms")
         identities = (hover_identity, select_identity, tool_target_identity)
-        valid_selection_kinds = {
-            "none",
-            "cluster",
-            "strand",
-            "domain",
-            "base",
-            "end",
-            "bond",
-            "crossover",
-            "overhang",
-            "extension",
-            "protein",
-        }
         if (
             sequence < 0
             or select_sequence < 0
             or level_sequence < 0
             or tool_sequence < 0
+            or tool_config_sequence < 0
             or transform_sequence < 0
             or ready_sequence < 0
             or any(
@@ -2790,7 +2919,7 @@ def _event_payload(state: dict | None) -> dict:
             not in {"default", "cluster", "strand", "domain", "end", "xover", "base"}
             or tool_mode not in {"inspect", "move_rotate", "extrude", "twist", "bend"}
             or tool_action not in {"activate", "preview", "confirm", "cancel", "undo"}
-            or tool_target_kind not in valid_selection_kinds
+            or tool_target_kind not in _VR_TOOL_CONFIG_TARGET_KINDS
             or not isinstance(tool_target_owner_tokens, list)
             or len(tool_target_owner_tokens) > 8
             or any(
@@ -2875,6 +3004,8 @@ def _event_payload(state: dict | None) -> dict:
             "tool_target_identity": tool_target_identity,
             "tool_target_kind": tool_target_kind,
             "tool_target_owner_tokens": tool_target_owner_tokens,
+            "tool_config_sequence": tool_config_sequence,
+            "tool_config": tool_config,
             "transform_sequence": transform_sequence,
             "transform_matrix": nadoc_transform.flatten(order="F").tolist(),
             "ready_sequence": ready_sequence,
@@ -2898,6 +3029,8 @@ def _event_payload(state: dict | None) -> dict:
             "tool_target_identity": None,
             "tool_target_kind": "none",
             "tool_target_owner_tokens": [],
+            "tool_config_sequence": 0,
+            "tool_config": None,
             "transform_sequence": 0,
             "transform_matrix": np.identity(4, dtype=float).flatten(order="F").tolist(),
             "ready_sequence": 0,

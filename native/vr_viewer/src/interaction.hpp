@@ -167,6 +167,8 @@ enum class ToolAction { activate, preview, confirm, cancel, undo };
 enum class ToolCapability {
     view_only, direct_preview, configuration_required, unsupported,
 };
+enum class ToolStrandFilter { both, scaffold, staples };
+enum class TwistAmountMode { total_degrees, degrees_per_nm };
 
 inline const char* toolModeName(ToolMode mode) {
     static constexpr std::array<const char*, 5> names = {
@@ -181,6 +183,176 @@ inline const char* toolActionName(ToolAction action) {
     };
     return names[static_cast<size_t>(action)];
 }
+
+inline const char* toolStrandFilterName(ToolStrandFilter filter) {
+    static constexpr std::array<const char*, 3> names = {
+        "both", "scaffold", "staples",
+    };
+    return names[static_cast<size_t>(filter)];
+}
+
+inline const char* twistAmountModeName(TwistAmountMode mode) {
+    static constexpr std::array<const char*, 2> names = {
+        "total_degrees", "degrees_per_nm",
+    };
+    return names[static_cast<size_t>(mode)];
+}
+
+/** Target-bound, non-authoritative settings for parameterized VR tools.
+ *
+ * Every target change resets the draft. Plane anchors and extrusion footprints
+ * intentionally begin unresolved: no controller-side default is allowed to
+ * invent design geometry. Numeric limits only bound the private IPC record.
+ */
+class ToolConfigurationDraft {
+  public:
+    static constexpr int32_t kMaximumLengthBp = 1'000'000;
+    static constexpr double kMaximumTwistMagnitude = 1'000'000.0;
+
+    [[nodiscard]] bool bind(
+        ToolMode mode, const std::string& identity, const std::string& selectionKind,
+        const std::vector<std::string>& ownerTokens) {
+        const bool parameterized = mode == ToolMode::extrude || mode == ToolMode::twist ||
+                                   mode == ToolMode::bend;
+        if (!parameterized) return clear();
+        if (active_ && mode_ == mode && targetIdentity_ == identity &&
+            targetSelectionKind_ == selectionKind && targetOwnerTokens_ == ownerTokens) {
+            return false;
+        }
+        active_ = true;
+        mode_ = mode;
+        targetIdentity_ = identity;
+        targetSelectionKind_ = selectionKind.empty() ? "none" : selectionKind;
+        targetOwnerTokens_ = ownerTokens;
+        lengthBp_ = 0;
+        directionSign_ = 1;
+        strandFilter_ = ToolStrandFilter::both;
+        ligateAdjacent_ = true;
+        planeABp_.reset();
+        planeBBp_.reset();
+        twistAmountMode_ = TwistAmountMode::total_degrees;
+        twistAmount_ = 90.0;
+        bendAngleDegrees_ = 0.0;
+        bendDirectionDegrees_ = 0.0;
+        return true;
+    }
+
+    [[nodiscard]] bool clear() {
+        if (!active_) return false;
+        active_ = false;
+        targetIdentity_.clear();
+        targetSelectionKind_ = "none";
+        targetOwnerTokens_.clear();
+        return true;
+    }
+
+    [[nodiscard]] bool adjustPrimary(int direction) {
+        if (!active_ || direction == 0) return false;
+        if (mode_ == ToolMode::extrude) {
+            const int64_t next = static_cast<int64_t>(lengthBp_) + (direction > 0 ? 1 : -1);
+            const int32_t clamped = static_cast<int32_t>(
+                std::clamp<int64_t>(next, 0, kMaximumLengthBp));
+            if (clamped == lengthBp_) return false;
+            lengthBp_ = clamped;
+            return true;
+        }
+        if (mode_ == ToolMode::twist) {
+            const double step = twistAmountMode_ == TwistAmountMode::total_degrees
+                ? 5.0 : 0.1;
+            const double next = std::clamp(
+                twistAmount_ + (direction > 0 ? step : -step),
+                -kMaximumTwistMagnitude, kMaximumTwistMagnitude);
+            if (next == twistAmount_) return false;
+            twistAmount_ = next;
+            return true;
+        }
+        if (mode_ == ToolMode::bend) {
+            const double next = std::clamp(
+                bendAngleDegrees_ + (direction > 0 ? 1.0 : -1.0), 0.0, 360.0);
+            if (next == bendAngleDegrees_) return false;
+            bendAngleDegrees_ = next;
+            return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] bool adjustSecondary(int direction) {
+        if (!active_ || direction == 0) return false;
+        if (mode_ == ToolMode::extrude) {
+            directionSign_ = directionSign_ > 0 ? -1 : 1;
+            return true;
+        }
+        if (mode_ == ToolMode::bend) {
+            bendDirectionDegrees_ += direction > 0 ? 5.0 : -5.0;
+            if (bendDirectionDegrees_ < 0.0) bendDirectionDegrees_ += 360.0;
+            if (bendDirectionDegrees_ >= 360.0) bendDirectionDegrees_ -= 360.0;
+            return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] bool cycleOption() {
+        if (!active_) return false;
+        if (mode_ == ToolMode::extrude) {
+            strandFilter_ = static_cast<ToolStrandFilter>(
+                (static_cast<size_t>(strandFilter_) + 1U) % 3U);
+            return true;
+        }
+        if (mode_ == ToolMode::twist) {
+            twistAmountMode_ = twistAmountMode_ == TwistAmountMode::total_degrees
+                ? TwistAmountMode::degrees_per_nm : TwistAmountMode::total_degrees;
+            twistAmount_ = twistAmountMode_ == TwistAmountMode::total_degrees ? 90.0 : 1.0;
+            return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] bool toggleFlag() {
+        if (!active_ || mode_ != ToolMode::extrude) return false;
+        ligateAdjacent_ = !ligateAdjacent_;
+        return true;
+    }
+
+    [[nodiscard]] bool active() const { return active_; }
+    [[nodiscard]] ToolMode mode() const { return mode_; }
+    [[nodiscard]] const std::string& targetIdentity() const { return targetIdentity_; }
+    [[nodiscard]] const std::string& targetSelectionKind() const {
+        return targetSelectionKind_;
+    }
+    [[nodiscard]] const std::vector<std::string>& targetOwnerTokens() const {
+        return targetOwnerTokens_;
+    }
+    [[nodiscard]] int32_t lengthBp() const { return lengthBp_; }
+    [[nodiscard]] int directionSign() const { return directionSign_; }
+    [[nodiscard]] ToolStrandFilter strandFilter() const { return strandFilter_; }
+    [[nodiscard]] bool ligateAdjacent() const { return ligateAdjacent_; }
+    [[nodiscard]] const std::optional<int32_t>& planeABp() const { return planeABp_; }
+    [[nodiscard]] const std::optional<int32_t>& planeBBp() const { return planeBBp_; }
+    [[nodiscard]] TwistAmountMode twistAmountMode() const { return twistAmountMode_; }
+    [[nodiscard]] double twistAmount() const { return twistAmount_; }
+    [[nodiscard]] double bendAngleDegrees() const { return bendAngleDegrees_; }
+    [[nodiscard]] double bendDirectionDegrees() const { return bendDirectionDegrees_; }
+    [[nodiscard]] const char* unresolvedGeometry() const {
+        return mode_ == ToolMode::extrude ? "FOOTPRINT" : "PLANES A/B";
+    }
+
+  private:
+    bool active_ = false;
+    ToolMode mode_ = ToolMode::inspect;
+    std::string targetIdentity_;
+    std::string targetSelectionKind_ = "none";
+    std::vector<std::string> targetOwnerTokens_;
+    int32_t lengthBp_ = 0;
+    int directionSign_ = 1;
+    ToolStrandFilter strandFilter_ = ToolStrandFilter::both;
+    bool ligateAdjacent_ = true;
+    std::optional<int32_t> planeABp_;
+    std::optional<int32_t> planeBBp_;
+    TwistAmountMode twistAmountMode_ = TwistAmountMode::total_degrees;
+    double twistAmount_ = 90.0;
+    double bendAngleDegrees_ = 0.0;
+    double bendDirectionDegrees_ = 0.0;
+};
 
 /** In-headset read-only mirror of the browser-authoritative tool session.
  *

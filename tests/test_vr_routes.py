@@ -323,6 +323,8 @@ def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -
         "tool_target_identity": "nuc:s1:0:h1:3:FORWARD:0",
         "tool_target_kind": "domain",
         "tool_target_owner_tokens": ["domain-token"],
+        "tool_config_sequence": 0,
+        "tool_config": None,
         "transform_sequence": 0,
         "transform_matrix": np.identity(4).flatten(order="F").tolist(),
         "ready_sequence": 0,
@@ -399,6 +401,8 @@ def test_native_tool_transform_returns_to_nadoc_coordinates(tmp_path) -> None:
         "tool_target_identity": None,
         "tool_target_kind": "none",
         "tool_target_owner_tokens": [],
+        "tool_config_sequence": 0,
+        "tool_config": None,
         "transform_sequence": 0,
         "transform_matrix": np.identity(4).flatten(order="F").tolist(),
         "ready_sequence": 0,
@@ -409,6 +413,103 @@ def test_native_tool_transform_returns_to_nadoc_coordinates(tmp_path) -> None:
 
     event_path.write_text("x" * 4097)
     assert _event_payload({"event_path": str(event_path)})["sequence"] == 0
+
+
+def test_native_tool_configuration_drafts_are_bounded_and_target_bound(
+    tmp_path,
+) -> None:
+    event_path = tmp_path / "vr-tool-config.json"
+    base = {
+        "sequence": 4,
+        "tool_config_sequence": 3,
+        "tool_config": {
+            "mode": "extrude",
+            "target_identity": "nuc:s1:0:h1:3:FORWARD:0",
+            "target_kind": "end",
+            "target_owner_tokens": ["end-token"],
+            "length_bp": 42,
+            "direction_sign": -1,
+            "strand_filter": "staples",
+            "ligate_adjacent": False,
+            "footprint_state": "unresolved",
+        },
+    }
+    event_path.write_text(json.dumps(base))
+    payload = _event_payload({"event_path": str(event_path)})
+    assert payload["sequence"] == 4
+    assert payload["tool_config_sequence"] == 3
+    assert payload["tool_config"] == base["tool_config"]
+
+    twist = {
+        **base,
+        "tool_config": {
+            "mode": "twist",
+            "target_identity": None,
+            "target_kind": "none",
+            "target_owner_tokens": [],
+            "plane_a_bp": None,
+            "plane_b_bp": None,
+            "amount_mode": "total_degrees",
+            "amount": 90,
+        },
+    }
+    event_path.write_text(json.dumps(twist))
+    assert _event_payload({"event_path": str(event_path)})["tool_config"] == {
+        **twist["tool_config"],
+        "amount": 90.0,
+    }
+
+    bend = {
+        **base,
+        "tool_config": {
+            "mode": "bend",
+            "target_identity": "cluster:c1",
+            "target_kind": "cluster",
+            "target_owner_tokens": ["cluster-token"],
+            "plane_a_bp": -5,
+            "plane_b_bp": 15,
+            "angle_deg": 45,
+            "direction_deg": 360,
+        },
+    }
+    event_path.write_text(json.dumps(bend))
+    assert _event_payload({"event_path": str(event_path)})["tool_config"] == {
+        **bend["tool_config"],
+        "angle_deg": 45.0,
+        "direction_deg": 360.0,
+    }
+
+    invalid_configs = [
+        {**base, "tool_config_sequence": 0},
+        {**base, "tool_config": {**base["tool_config"], "length_bp": -1}},
+        {**base, "tool_config": {**base["tool_config"], "length_bp": True}},
+        {**base, "tool_config": {**base["tool_config"], "direction_sign": 0}},
+        {**base, "tool_config": {**base["tool_config"], "footprint_state": "resolved"}},
+        {**base, "tool_config_sequence": 1.5},
+        {**twist, "tool_config": {**twist["tool_config"], "amount": float("nan")}},
+        {**bend, "tool_config": {**bend["tool_config"], "direction_deg": 361}},
+        {
+            **bend,
+            "tool_config": {
+                **bend["tool_config"],
+                "target_identity": None,
+                "target_kind": "cluster",
+            },
+        },
+    ]
+    for invalid in invalid_configs:
+        event_path.write_text(json.dumps(invalid))
+        assert _event_payload({"event_path": str(event_path)})["sequence"] == 0
+
+    event_path.write_text(json.dumps({
+        "sequence": 5,
+        "tool_config_sequence": 4,
+        "tool_config": None,
+    }))
+    cleared = _event_payload({"event_path": str(event_path)})
+    assert cleared["sequence"] == 5
+    assert cleared["tool_config_sequence"] == 4
+    assert cleared["tool_config"] is None
 
 
 def test_native_first_frame_timing_is_bounded_and_uses_backend_milestones(

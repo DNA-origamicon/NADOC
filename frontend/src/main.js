@@ -17,6 +17,7 @@ import * as THREE from 'three'
 import { initScene }                 from './scene/scene.js'
 import { initVRSession }             from './scene/vr_session.js'
 import { initialVRToolShellState, reduceVRToolShell } from './scene/vr_tool_shell.js'
+import { initialVRToolConfigState, reduceVRToolConfig } from './scene/vr_tool_config.js'
 import { createGlowLayer }           from './scene/glow_layer.js'
 import { initDesignRenderer }        from './scene/design_renderer.js'
 import { deferrableContextMenu }      from './scene/right_click_menu.js'
@@ -5775,6 +5776,7 @@ async function main() {
   })
 
   let _vrToolShellState = initialVRToolShellState
+  let _vrToolConfigState = initialVRToolConfigState
   initVRSession({
     renderer,
     scene,
@@ -5817,6 +5819,9 @@ async function main() {
           owner_tokens: result?.ownerTokens ?? [],
           selection_kind: result?.selectionKind ?? 'none',
         }).catch(() => {})
+      } else if (event?.type === 'tool_config') {
+        const result = reduceVRToolConfig(_vrToolConfigState, event)
+        _vrToolConfigState = result.state
       } else if (event?.type === 'tool') {
         const targetSnapshotPresent = event.targetKind !== 'none' ||
           !!event.targetIdentity || !!event.targetOwnerTokens?.length
@@ -5836,10 +5841,10 @@ async function main() {
           ? 'Move / Rotate'
           : `${event.mode?.[0]?.toUpperCase() ?? ''}${event.mode?.slice(1) ?? ''}`
         if (result.reason === 'configuration_required') {
-          const requirement = event.mode === 'extrude'
-            ? 'length, direction, and footprint controls'
-            : 'plane-pair and deformation-amount controls'
-          showToast(`VR ${label}: target recognized; ${requirement} are not in-headset yet.`)
+          const remaining = event.mode === 'extrude'
+            ? 'the settings page is available; exact slice-footprint placement is still unresolved'
+            : 'the settings page is available; ordered plane placement is still unresolved'
+          showToast(`VR ${label}: target recognized; ${remaining}.`)
         } else if (result.reason === 'unsupported_selection') {
           showToast(`VR ${label}: this target has no exact tool contract and was not widened.`)
         } else if (result.reason === 'stale_target' ||
@@ -5896,6 +5901,7 @@ async function main() {
       } else if (event?.type === 'native_session_end') {
         _translateRotateTool.cancelVRPreview().catch(() => {})
         _nucleotideTransformTool.cancelVRPreview()
+        _vrToolConfigState = initialVRToolConfigState
       } else {
         if (button) button.dataset.vrHoverIdentity = event?.identity ?? ''
         selectionManager.previewVRIdentity?.(event?.identity ?? null)
