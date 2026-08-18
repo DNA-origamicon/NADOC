@@ -127,6 +127,28 @@ class VRToolFeedbackRequest(BaseModel):
     footprint_resolved: bool = False
 
 
+VRPlanePickReason = Literal[
+    "resolved",
+    "invalid_primitive",
+    "ambiguous_primitive",
+    "synthetic_not_supported",
+    "out_of_range",
+    "stale_target",
+]
+
+
+class VRPlaneFeedbackRequest(BaseModel):
+    plane_pick_sequence: int = Field(ge=1)
+    tool_config_sequence: int = Field(ge=1)
+    target_identity: str = Field(min_length=1, max_length=2048)
+    target_kind: SelectionKind
+    picked_identity: str = Field(min_length=1, max_length=2048)
+    plane_slot: Literal["a", "b"]
+    resolved: bool = False
+    reason: VRPlanePickReason
+    plane_bp: Optional[int] = Field(default=None, ge=-(2**31 - 1), le=2**31 - 1)
+
+
 def _require_local(request: Request) -> None:
     host = request.client.host if request.client else ""
     if host not in {"127.0.0.1", "::1", "localhost"}:
@@ -2691,12 +2713,14 @@ def _cleanup_after_process(
     event_path: Path,
     feedback_path: Path,
     tool_feedback_path: Path,
+    plane_feedback_path: Path,
 ) -> None:
     process.wait()
     scene_path.unlink(missing_ok=True)
     event_path.unlink(missing_ok=True)
     feedback_path.unlink(missing_ok=True)
     tool_feedback_path.unlink(missing_ok=True)
+    plane_feedback_path.unlink(missing_ok=True)
     with _STATE_LOCK:
         state = _read_state()
         if state and int(state["pid"]) == process.pid:
@@ -2900,6 +2924,10 @@ def _event_payload(state: dict | None) -> dict:
             "tool_target_owner_tokens": [],
             "tool_config_sequence": 0,
             "tool_config": None,
+            "plane_pick_sequence": 0,
+            "plane_pick_config_sequence": 0,
+            "plane_pick_slot": None,
+            "plane_pick_identity": None,
             "transform_sequence": 0,
             "transform_matrix": np.identity(4, dtype=float).flatten(order="F").tolist(),
             "ready_sequence": 0,
@@ -2933,6 +2961,21 @@ def _event_payload(state: dict | None) -> dict:
         tool_config = _parse_tool_config(
             event.get("tool_config"), tool_config_sequence
         )
+        raw_plane_pick_sequence = event.get("plane_pick_sequence", 0)
+        raw_plane_pick_config_sequence = event.get(
+            "plane_pick_config_sequence", 0
+        )
+        if (
+            isinstance(raw_plane_pick_sequence, bool)
+            or not isinstance(raw_plane_pick_sequence, int)
+            or isinstance(raw_plane_pick_config_sequence, bool)
+            or not isinstance(raw_plane_pick_config_sequence, int)
+        ):
+            raise ValueError("invalid plane pick sequence")
+        plane_pick_sequence = raw_plane_pick_sequence
+        plane_pick_config_sequence = raw_plane_pick_config_sequence
+        plane_pick_slot = event.get("plane_pick_slot")
+        plane_pick_identity = event.get("plane_pick_identity")
         transform_sequence = int(event.get("transform_sequence", 0))
         transform_values = event.get(
             "transform_matrix",
@@ -2949,6 +2992,8 @@ def _event_payload(state: dict | None) -> dict:
             or level_sequence < 0
             or tool_sequence < 0
             or tool_config_sequence < 0
+            or plane_pick_sequence < 0
+            or plane_pick_config_sequence < 0
             or transform_sequence < 0
             or ready_sequence < 0
             or any(
@@ -2958,6 +3003,26 @@ def _event_payload(state: dict | None) -> dict:
             not in {"default", "cluster", "strand", "domain", "end", "xover", "base"}
             or tool_mode not in {"inspect", "move_rotate", "extrude", "twist", "bend"}
             or tool_action not in {"activate", "preview", "confirm", "cancel", "undo"}
+            or (
+                plane_pick_sequence == 0
+                and (
+                    plane_pick_config_sequence != 0
+                    or plane_pick_slot is not None
+                    or plane_pick_identity is not None
+                )
+            )
+            or (
+                plane_pick_sequence > 0
+                and (
+                    plane_pick_config_sequence < 1
+                    or plane_pick_config_sequence != tool_config_sequence
+                    or plane_pick_slot not in {"a", "b"}
+                    or not isinstance(plane_pick_identity, str)
+                    or not plane_pick_identity
+                    or len(plane_pick_identity) > 2048
+                    or any(character.isspace() for character in plane_pick_identity)
+                )
+            )
             or tool_target_kind not in _VR_TOOL_CONFIG_TARGET_KINDS
             or not isinstance(tool_target_owner_tokens, list)
             or len(tool_target_owner_tokens) > 8
@@ -3045,6 +3110,10 @@ def _event_payload(state: dict | None) -> dict:
             "tool_target_owner_tokens": tool_target_owner_tokens,
             "tool_config_sequence": tool_config_sequence,
             "tool_config": tool_config,
+            "plane_pick_sequence": plane_pick_sequence,
+            "plane_pick_config_sequence": plane_pick_config_sequence,
+            "plane_pick_slot": plane_pick_slot,
+            "plane_pick_identity": plane_pick_identity,
             "transform_sequence": transform_sequence,
             "transform_matrix": nadoc_transform.flatten(order="F").tolist(),
             "ready_sequence": ready_sequence,
@@ -3070,6 +3139,10 @@ def _event_payload(state: dict | None) -> dict:
             "tool_target_owner_tokens": [],
             "tool_config_sequence": 0,
             "tool_config": None,
+            "plane_pick_sequence": 0,
+            "plane_pick_config_sequence": 0,
+            "plane_pick_slot": None,
+            "plane_pick_identity": None,
             "transform_sequence": 0,
             "transform_matrix": np.identity(4, dtype=float).flatten(order="F").tolist(),
             "ready_sequence": 0,
@@ -3223,11 +3296,60 @@ def vr_tool_feedback(body: VRToolFeedbackRequest, request: Request) -> dict:
     }
 
 
+def _write_plane_feedback(state: dict | None, body: VRPlaneFeedbackRequest) -> None:
+    """Atomically acknowledge one explicit native deformation-plane pick."""
+    if not state or not state.get("plane_feedback_path"):
+        raise HTTPException(409, detail="Native VR is not running.")
+    if (
+        any(character.isspace() for character in body.target_identity)
+        or any(character.isspace() for character in body.picked_identity)
+        or body.target_kind not in {"cluster", "end"}
+        or body.resolved != (body.reason == "resolved")
+        or body.resolved != (body.plane_bp is not None)
+    ):
+        raise HTTPException(422, detail="Invalid VR deformation plane feedback.")
+
+    record = (
+        f"NADOCVR_PLANE_FEEDBACK 1 {body.plane_pick_sequence} "
+        f"{body.tool_config_sequence} {int(body.resolved)} {body.reason} "
+        f"{body.plane_slot} {body.target_kind} {body.target_identity} "
+        f"{body.picked_identity}"
+        + (f" {body.plane_bp}" if body.plane_bp is not None else "")
+        + "\n"
+    )
+    if len(record.encode()) > 4096:
+        raise HTTPException(422, detail="Invalid VR deformation plane feedback.")
+    path = Path(state["plane_feedback_path"])
+    temporary = path.with_name(f"{path.name}.next")
+    with _TOOL_FEEDBACK_LOCK:
+        try:
+            temporary.write_text(record)
+            temporary.chmod(0o600)
+            os.replace(temporary, path)
+        except OSError as exc:
+            temporary.unlink(missing_ok=True)
+            raise HTTPException(
+                503, detail="Could not acknowledge VR deformation plane."
+            ) from exc
+
+
+@router.post("/vr/plane-feedback")
+def vr_plane_feedback(body: VRPlaneFeedbackRequest, request: Request) -> dict:
+    _require_local(request)
+    _write_plane_feedback(_read_state(), body)
+    return {
+        "acknowledged": True,
+        "plane_pick_sequence": body.plane_pick_sequence,
+        "tool_config_sequence": body.tool_config_sequence,
+    }
+
+
 def _viewer_command(
     scene_path: Path,
     event_path: Path,
     feedback_path: Path,
     tool_feedback_path: Path,
+    plane_feedback_path: Path,
     body: VRLaunchRequest,
 ) -> list[str]:
     command = [
@@ -3241,6 +3363,8 @@ def _viewer_command(
         str(feedback_path),
         "--tool-feedback",
         str(tool_feedback_path),
+        "--plane-feedback",
+        str(plane_feedback_path),
     ]
     for token in body.selected_owner_tokens:
         command.extend(["--selected-owner", token])
@@ -3387,12 +3511,24 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             )
             tool_feedback_path = Path(tool_feedback_file.name)
         tool_feedback_path.chmod(0o600)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            prefix="nadoc-vr-plane-feedback-",
+            suffix=".txt",
+            delete=False,
+        ) as plane_feedback_file:
+            plane_feedback_file.write(
+                "NADOCVR_PLANE_FEEDBACK 1 0 0 0 stale_target a end - -\n"
+            )
+            plane_feedback_path = Path(plane_feedback_file.name)
+        plane_feedback_path.chmod(0o600)
 
         log = _LOG_PATH.open("ab")
         try:
             process = subprocess.Popen(
                 _viewer_command(
-                    scene_path, event_path, feedback_path, tool_feedback_path, body
+                    scene_path, event_path, feedback_path, tool_feedback_path,
+                    plane_feedback_path, body
                 ),
                 cwd=_REPO_ROOT,
                 env=_build_environment(),
@@ -3408,6 +3544,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             event_path.unlink(missing_ok=True)
             feedback_path.unlink(missing_ok=True)
             tool_feedback_path.unlink(missing_ok=True)
+            plane_feedback_path.unlink(missing_ok=True)
             raise HTTPException(
                 503, detail=f"Could not launch VR viewer: {exc}"
             ) from exc
@@ -3421,6 +3558,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             event_path.unlink(missing_ok=True)
             feedback_path.unlink(missing_ok=True)
             tool_feedback_path.unlink(missing_ok=True)
+            plane_feedback_path.unlink(missing_ok=True)
             detail = "Native VR viewer exited during startup."
             try:
                 tail = _LOG_PATH.read_text(errors="replace").splitlines()[-1]
@@ -3436,6 +3574,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             "event_path": str(event_path),
             "feedback_path": str(feedback_path),
             "tool_feedback_path": str(tool_feedback_path),
+            "plane_feedback_path": str(plane_feedback_path),
             "started_at": process_started_at,
             "launch_requested_at": launch_requested_at,
             "snapshot_started_at": snapshot_started_at,
@@ -3446,7 +3585,10 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         _write_state(state)
         threading.Thread(
             target=_cleanup_after_process,
-            args=(process, scene_path, event_path, feedback_path, tool_feedback_path),
+            args=(
+                process, scene_path, event_path, feedback_path, tool_feedback_path,
+                plane_feedback_path,
+            ),
             daemon=True,
             name="nadoc-vr-cleanup",
         ).start()

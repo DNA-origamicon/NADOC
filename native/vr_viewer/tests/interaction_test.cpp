@@ -327,6 +327,31 @@ void toolContextFeedbackIsExactSequencedAndFinite() {
         7, 8));
 }
 
+void planePickFeedbackIsTargetBoundSequencedAndStrict() {
+    const auto accepted = nadoc_vr::parsePlanePickFeedback(
+        "NADOCVR_PLANE_FEEDBACK 1 9 4 1 resolved a end nuc:end nuc:pick 27\n",
+        8, 9, 4);
+    require(accepted && accepted->resolved && accepted->slot == "a" &&
+            accepted->planeBp == 27 && accepted->targetIdentity == "nuc:end" &&
+            accepted->pickedIdentity == "nuc:pick");
+    const auto rejected = nadoc_vr::parsePlanePickFeedback(
+        "NADOCVR_PLANE_FEEDBACK 1 10 4 0 ambiguous_primitive b cluster cluster:c1 bond:x\n",
+        9, 10, 4);
+    require(rejected && !rejected->resolved && rejected->slot == "b");
+    require(!nadoc_vr::parsePlanePickFeedback(
+        "NADOCVR_PLANE_FEEDBACK 1 9 4 1 resolved a end nuc:end nuc:pick 27\n",
+        9, 9, 4));
+    require(!nadoc_vr::parsePlanePickFeedback(
+        "NADOCVR_PLANE_FEEDBACK 1 11 5 1 resolved a end nuc:end nuc:pick 27\n",
+        10, 11, 4));
+    require(!nadoc_vr::parsePlanePickFeedback(
+        "NADOCVR_PLANE_FEEDBACK 1 11 4 0 resolved a end nuc:end nuc:pick\n",
+        10, 11, 4));
+    require(!nadoc_vr::parsePlanePickFeedback(
+        "NADOCVR_PLANE_FEEDBACK 1 11 4 1 resolved x end nuc:end nuc:pick 27\n",
+        10, 11, 4));
+}
+
 void canonicalOwnerFallbackUsesFeedbackSpecificityAndSceneOrder() {
     const std::vector<nadoc_vr::OwnerAliasEntry> entries = {
         {"domain:first", {"domain", "strand"}},
@@ -439,6 +464,10 @@ void parameterizedToolDraftsResetOnTargetChangesAndStayBounded() {
     require(draft.twistAmountMode() == nadoc_vr::TwistAmountMode::degrees_per_nm);
     require(draft.twistAmount() == 1.0);
     require(draft.adjustPrimary(-1) && std::abs(draft.twistAmount() - 0.9) < 1e-9);
+    require(draft.setPlaneBp("a", 12) && draft.planeABp() == 12);
+    require(draft.setPlaneBp("b", 24) && draft.planeBBp() == 24);
+    require(!draft.setPlaneBp("b", 24));
+    require(!draft.setPlaneBp("x", 30));
 
     require(draft.bind(
         nadoc_vr::ToolMode::bend, "cluster:c1", "cluster", {"cluster-token"}));
@@ -469,6 +498,7 @@ int main() {
     halfCylinderPickingMatchesTheRenderedPositiveHalf();
     canonicalSelectionFeedbackIsStrictAndSequenced();
     toolContextFeedbackIsExactSequencedAndFinite();
+    planePickFeedbackIsTargetBoundSequencedAndStrict();
     canonicalOwnerFallbackUsesFeedbackSpecificityAndSceneOrder();
     ownerBoundsAreStableAndFollowTheWorldTransform();
     toolShellNeverClaimsACommitAndRequiresPreview();

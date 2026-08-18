@@ -56,6 +56,7 @@ export function initVRSession({
   let lastNativeLevelSequence = 0
   let lastNativeToolSequence = 0
   let lastNativeToolConfigSequence = 0
+  let lastNativePlanePickSequence = 0
   let lastNativeTransformSequence = 0
   let nativeTimingReported = false
   let cameraRig = null
@@ -233,6 +234,22 @@ export function initVRSession({
             draft: event.tool_config === null ? null : structuredClone(event.tool_config),
           })
         }
+        const planePickSequence = Number(event?.plane_pick_sequence ?? 0)
+        const planePickConfigSequence = Number(event?.plane_pick_config_sequence ?? 0)
+        if (Number.isSafeInteger(planePickSequence) &&
+            planePickSequence > lastNativePlanePickSequence &&
+            Number.isSafeInteger(planePickConfigSequence) && planePickConfigSequence > 0 &&
+            ['a', 'b'].includes(event?.plane_pick_slot) &&
+            typeof event?.plane_pick_identity === 'string' && event.plane_pick_identity) {
+          lastNativePlanePickSequence = planePickSequence
+          onNativeEvent({
+            sequence: planePickSequence,
+            type: 'plane_pick',
+            toolConfigSequence: planePickConfigSequence,
+            slot: event.plane_pick_slot,
+            identity: event.plane_pick_identity,
+          })
+        }
         const transformSequence = Number(event?.transform_sequence ?? 0)
         const transformMatrix = event?.transform_matrix
         if (Number.isSafeInteger(transformSequence) &&
@@ -266,6 +283,7 @@ export function initVRSession({
       lastNativeLevelSequence = 0
       lastNativeToolSequence = 0
       lastNativeToolConfigSequence = 0
+      lastNativePlanePickSequence = 0
       lastNativeTransformSequence = 0
       nativeTimingReported = false
       _scheduleNativeEventPoll()

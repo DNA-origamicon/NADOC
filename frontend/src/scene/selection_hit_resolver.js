@@ -228,6 +228,48 @@ export function vrPrimitiveOwner(identity, { geometry = [], design = null } = {}
   return null
 }
 
+/** Resolve one native primitive to an exact global deformation-plane bp.
+ *
+ * A plane pick is deliberately stricter than ordinary selection. Only a live,
+ * physical nucleotide (or atom wholly owned by that nucleotide) supplies an
+ * unambiguous lattice cross-section. Domain cylinders, bonds spanning two bps,
+ * crossovers, flexible/linker visuals, extensions, and crossover-insert copies
+ * fail closed instead of being rounded to a nearby plane.
+ */
+export function vrDeformationPlanePick(identity, { geometry = [], design = null } = {}) {
+  const owner = vrPrimitiveOwner(identity, { geometry, design })
+  if (!owner) return { resolved: false, reason: 'invalid_primitive' }
+
+  let nucleotide = null
+  if (['nucleotide', 'atom', 'atom_bond_base'].includes(owner.kind)) {
+    nucleotide = owner.nucleotide
+  } else if (owner.kind === 'backbone_bond' || owner.kind === 'atom_bond') {
+    const first = owner.fromNucleotide
+    const second = owner.toNucleotide
+    if (first?.helix_id === second?.helix_id &&
+        first?.bp_index === second?.bp_index) nucleotide = first
+    else return { resolved: false, reason: 'ambiguous_primitive' }
+  } else {
+    return { resolved: false, reason: 'ambiguous_primitive' }
+  }
+
+  const helixId = nucleotide?.helix_id
+  const bp = nucleotide?.bp_index
+  if (typeof helixId !== 'string' || !helixId || helixId.startsWith('__') ||
+      !Number.isSafeInteger(bp) || nucleotide?.extra_base_k != null ||
+      nucleotide?.ext_k != null || Number(nucleotide?.copy_k ?? 0) !== 0) {
+    return { resolved: false, reason: 'synthetic_not_supported' }
+  }
+  const helix = design?.helices?.find(candidate => candidate.id === helixId)
+  const start = helix?.bp_start ?? 0
+  const length = helix?.length_bp
+  if (!helix || !Number.isSafeInteger(start) || !Number.isSafeInteger(length) ||
+      length < 1 || bp < start || bp >= start + length) {
+    return { resolved: false, reason: 'out_of_range' }
+  }
+  return { resolved: true, reason: 'resolved', bp, helixId }
+}
+
 /** Ordered opaque aliases for cross-representation selection projection. */
 export function vrOwnerTokens({ selected = false, selectedRef = null, owner = null,
   nucleotide = null, key = null } = {}) {

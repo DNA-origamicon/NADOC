@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   bondRefForCone, coneForBondRef, crossoverRefForArc, endRefForEntry, vrPrimitiveOwner,
-  vrInitialSelectionOwnerTokens, vrOwnerTokens, vrSelectionAccepted, vrToolTargetSnapshot,
+  vrDeformationPlanePick, vrInitialSelectionOwnerTokens, vrOwnerTokens,
+  vrSelectionAccepted, vrToolTargetSnapshot,
 } from './selection_hit_resolver.js'
 
 const nuc = (bp, extra = {}) => ({ helix_id: 'h1', bp_index: bp, direction: 'FORWARD', ...extra })
@@ -135,6 +136,47 @@ describe('pure selection hit resolution', () => {
       kind: 'atom_bond_base', nucleotide: first,
       ref: { kind: 'base', key: 'helix:b:3:FORWARD' },
     })
+  })
+
+  it('accepts only exact physical nucleotide cross-sections for VR deformation planes', () => {
+    const first = {
+      strand_id: 's1', domain_index: 0, helix_id: 'h1', bp_index: 3,
+      direction: 'FORWARD',
+    }
+    const second = { ...first, bp_index: 4 }
+    const design = { helices: [{ id: 'h1', bp_start: 0, length_bp: 12 }] }
+    const context = { geometry: [first, second], design }
+    expect(vrDeformationPlanePick(
+      'nuc:s1:0:h1:3:FORWARD:0:slab', context,
+    )).toEqual({ resolved: true, reason: 'resolved', bp: 3, helixId: 'h1' })
+    expect(vrDeformationPlanePick(
+      atomIdentity('h1:4:FORWARD', "C1'"), context,
+    )).toEqual({ resolved: true, reason: 'resolved', bp: 4, helixId: 'h1' })
+    expect(vrDeformationPlanePick(
+      'backbone:nuc:s1:0:h1:3:FORWARD:0~nuc:s1:0:h1:4:FORWARD:0', context,
+    )).toEqual({ resolved: false, reason: 'ambiguous_primitive' })
+  })
+
+  it('rejects synthetic, copied, stale, and coarse VR plane picks', () => {
+    const physical = {
+      strand_id: 's1', domain_index: 0, helix_id: 'h1', bp_index: 3,
+      direction: 'FORWARD',
+    }
+    const design = {
+      helices: [{ id: 'h1', bp_start: 0, length_bp: 5 }],
+      strands: [{ id: 's1', domains: [{ helix_id: 'h1' }] }],
+    }
+    expect(vrDeformationPlanePick(
+      'segment:h1:s1:0:axis', { geometry: [physical], design },
+    )).toEqual({ resolved: false, reason: 'ambiguous_primitive' })
+    const copied = { ...physical, copy_k: 1 }
+    expect(vrDeformationPlanePick(
+      'nuc:s1:0:h1:3:FORWARD:1:bead', { geometry: [copied], design },
+    )).toEqual({ resolved: false, reason: 'synthetic_not_supported' })
+    const stale = { ...physical, bp_index: 9 }
+    expect(vrDeformationPlanePick(
+      'nuc:s1:0:h1:9:FORWARD:0:bead', { geometry: [stale], design },
+    )).toEqual({ resolved: false, reason: 'out_of_range' })
   })
 
   it('resolves crossover, forced-ligation, warning, and domain primitives', () => {

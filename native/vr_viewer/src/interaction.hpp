@@ -89,6 +89,18 @@ struct ToolContextFeedback {
     glm::vec3 previewOrigin{};
 };
 
+struct PlanePickFeedback {
+    uint64_t sequence = 0;
+    uint64_t toolConfigSequence = 0;
+    bool resolved = false;
+    std::string reason;
+    std::string slot;
+    std::string targetSelectionKind = "none";
+    std::string targetIdentity;
+    std::string pickedIdentity;
+    int32_t planeBp = 0;
+};
+
 struct OwnerAliasEntry {
     std::string identity;
     std::vector<std::string> tokens;
@@ -340,6 +352,17 @@ class ToolConfigurationDraft {
     [[nodiscard]] bool toggleFlag() {
         if (!active_ || mode_ != ToolMode::extrude) return false;
         ligateAdjacent_ = !ligateAdjacent_;
+        return true;
+    }
+
+    [[nodiscard]] bool setPlaneBp(const std::string& slot, int32_t bp) {
+        if (!active_ || (mode_ != ToolMode::twist && mode_ != ToolMode::bend)) {
+            return false;
+        }
+        std::optional<int32_t>* target = slot == "a" ? &planeABp_
+            : slot == "b" ? &planeBBp_ : nullptr;
+        if (!target || (*target && **target == bp)) return false;
+        *target = bp;
         return true;
     }
 
@@ -706,6 +729,53 @@ inline std::optional<ToolContextFeedback> parseToolContextFeedback(
         result.faceNormal = glm::normalize(result.faceNormal);
     } else if (result.occupied || result.deformed || result.footprintResolved) {
         return std::nullopt;
+    }
+    std::string trailing;
+    if (fields >> trailing) return std::nullopt;
+    return result;
+}
+
+inline std::optional<PlanePickFeedback> parsePlanePickFeedback(
+    const std::string& record, uint64_t previousSequence,
+    uint64_t expectedPickSequence, uint64_t expectedToolConfigSequence) {
+    std::istringstream fields(record);
+    std::string magic;
+    int version = 0;
+    int resolved = 0;
+    int64_t planeBp = 0;
+    PlanePickFeedback result;
+    if (!(fields >> magic >> version >> result.sequence >> result.toolConfigSequence
+                 >> resolved >> result.reason >> result.slot
+                 >> result.targetSelectionKind >> result.targetIdentity
+                 >> result.pickedIdentity) ||
+        magic != "NADOCVR_PLANE_FEEDBACK" || version != 1 ||
+        (resolved != 0 && resolved != 1) ||
+        result.sequence <= previousSequence ||
+        result.sequence != expectedPickSequence ||
+        result.toolConfigSequence != expectedToolConfigSequence ||
+        (result.slot != "a" && result.slot != "b") ||
+        (result.targetSelectionKind != "cluster" &&
+         result.targetSelectionKind != "end") ||
+        result.targetIdentity.empty() || result.targetIdentity == "-" ||
+        result.targetIdentity.size() > 2048 || result.pickedIdentity.empty() ||
+        result.pickedIdentity == "-" || result.pickedIdentity.size() > 2048) {
+        return std::nullopt;
+    }
+    static constexpr std::array<const char*, 6> reasons = {
+        "resolved", "invalid_primitive", "ambiguous_primitive",
+        "synthetic_not_supported", "out_of_range", "stale_target",
+    };
+    if (std::find(reasons.begin(), reasons.end(), result.reason) == reasons.end() ||
+        (resolved == 1) != (result.reason == "resolved")) {
+        return std::nullopt;
+    }
+    result.resolved = resolved == 1;
+    if (result.resolved) {
+        if (!(fields >> planeBp) || planeBp < -(static_cast<int64_t>(1) << 31) + 1 ||
+            planeBp > (static_cast<int64_t>(1) << 31) - 1) {
+            return std::nullopt;
+        }
+        result.planeBp = static_cast<int32_t>(planeBp);
     }
     std::string trailing;
     if (fields >> trailing) return std::nullopt;

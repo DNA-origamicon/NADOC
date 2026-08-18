@@ -4,6 +4,7 @@ import {
   initialVRToolConfigState,
   normalizeVRToolConfig,
   reduceVRToolConfig,
+  vrPlaneFeedbackPayload,
   vrToolConfigMissing,
 } from './vr_tool_config.js'
 
@@ -160,5 +161,47 @@ describe('native VR tool configuration drafts', () => {
     expect(result.accepted).toBe(true)
     expect(result.reason).toBe('geometry_context_required')
     expect(result.state.toolContextReason).toBe('no_continuation_face')
+  })
+
+  it('builds target-bound deformation plane acknowledgements and fails stale picks closed', () => {
+    const draft = {
+      mode: 'twist', ...target,
+      plane_a_bp: null, plane_b_bp: null,
+      amount_mode: 'total_degrees', amount: 90,
+    }
+    const state = { sequence: 7, draft }
+    const toolTarget = {
+      identity: target.target_identity,
+      selectionKind: target.target_kind,
+      ownerTokens: target.target_owner_tokens,
+    }
+    expect(vrPlaneFeedbackPayload({
+      sequence: 3, toolConfigSequence: 7, slot: 'a', identity: 'nuc:pick',
+    }, state, {
+      toolTarget,
+      planePick: { resolved: true, reason: 'resolved', bp: 12, helixId: 'h1' },
+    })).toEqual({
+      plane_pick_sequence: 3,
+      tool_config_sequence: 7,
+      target_identity: target.target_identity,
+      target_kind: 'end',
+      picked_identity: 'nuc:pick',
+      plane_slot: 'a',
+      resolved: true,
+      reason: 'resolved',
+      plane_bp: 12,
+    })
+    expect(vrPlaneFeedbackPayload({
+      sequence: 4, toolConfigSequence: 7, slot: 'b', identity: 'segment:coarse',
+    }, state, {
+      toolTarget,
+      planePick: { resolved: false, reason: 'ambiguous_primitive' },
+    })?.reason).toBe('ambiguous_primitive')
+    expect(vrPlaneFeedbackPayload({
+      sequence: 5, toolConfigSequence: 7, slot: 'b', identity: 'nuc:pick',
+    }, state, { toolTarget: null })?.reason).toBe('stale_target')
+    expect(vrPlaneFeedbackPayload({
+      sequence: 6, toolConfigSequence: 6, slot: 'a', identity: 'nuc:pick',
+    }, state, { toolTarget, planePick: { resolved: true, bp: 12 } })).toBeNull()
   })
 })

@@ -17,7 +17,9 @@ import * as THREE from 'three'
 import { initScene }                 from './scene/scene.js'
 import { initVRSession }             from './scene/vr_session.js'
 import { initialVRToolShellState, reduceVRToolShell } from './scene/vr_tool_shell.js'
-import { initialVRToolConfigState, reduceVRToolConfig } from './scene/vr_tool_config.js'
+import {
+  initialVRToolConfigState, reduceVRToolConfig, vrPlaneFeedbackPayload,
+} from './scene/vr_tool_config.js'
 import { vrToolFeedbackPayload } from './scene/vr_tool_context.js'
 import { createGlowLayer }           from './scene/glow_layer.js'
 import { initDesignRenderer }        from './scene/design_renderer.js'
@@ -5848,6 +5850,24 @@ async function main() {
           const feedback = vrToolFeedbackPayload(event.sequence, draft, result.state)
           if (feedback) api.sendVRToolFeedback(feedback).catch(() => {})
         }
+      } else if (event?.type === 'plane_pick') {
+        const draft = _vrToolConfigState.draft
+        const targetSnapshotPresent = draft?.target_kind !== 'none' ||
+          !!draft?.target_identity || !!draft?.target_owner_tokens?.length
+        const toolTarget = targetSnapshotPresent
+          ? selectionManager.resolveVRToolTargetSnapshot?.({
+              identity: draft?.target_identity,
+              selectionKind: draft?.target_kind,
+              ownerTokens: draft?.target_owner_tokens,
+            }) ?? null
+          : null
+        const pick = toolTarget
+          ? selectionManager.resolveVRDeformationPlanePick?.(event.identity) ?? null
+          : null
+        const feedback = vrPlaneFeedbackPayload(event, _vrToolConfigState, {
+          toolTarget, planePick: pick,
+        })
+        if (feedback) api.sendVRPlaneFeedback(feedback).catch(() => {})
       } else if (event?.type === 'tool') {
         const targetSnapshotPresent = event.targetKind !== 'none' ||
           !!event.targetIdentity || !!event.targetOwnerTokens?.length

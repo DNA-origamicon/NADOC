@@ -44,7 +44,8 @@ import { flexAnchorKey } from './flexible_arcs.js'
 import { selectedCrossoverRefs, selectedEndRefs } from './selection_model.js'
 import {
   bondRefForCone, coneForBondRef, crossoverRefForArc, endRefForEntry, vrPrimitiveOwner,
-  vrInitialSelectionOwnerTokens, vrOwnerTokens, vrSelectionAccepted, vrToolTargetSnapshot,
+  vrDeformationPlanePick, vrInitialSelectionOwnerTokens, vrOwnerTokens,
+  vrSelectionAccepted, vrToolTargetSnapshot,
 } from './selection_hit_resolver.js'
 import { selectionHighlightDescriptor } from './selection_highlight_model.js'
 import { referenceStrandInteractionHidden } from './reference_navigation.js'
@@ -4834,6 +4835,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     /** Validate the immutable target snapshot attached to one native tool intent. */
     resolveVRToolTargetSnapshot(snapshot) { return _resolveVRToolTargetSnapshot(snapshot) },
+
+    /** Resolve a model hit to one exact global bp without changing selection. */
+    resolveVRDeformationPlanePick(identity) {
+      const state = store.getState()
+      return vrDeformationPlanePick(identity, {
+        geometry: state.currentGeometry,
+        design: state.currentDesign,
+      })
+    },
 
     /** Opaque canonical owner aliases used to seed a native viewer launched after
      *  the desktop selection was made. No renderer identity crosses this boundary. */

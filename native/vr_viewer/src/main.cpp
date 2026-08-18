@@ -2066,12 +2066,14 @@ class Viewer {
     explicit Viewer(SceneData scene, std::string eventPath = {},
                     std::string feedbackPath = {},
                     std::string toolFeedbackPath = {},
+                    std::string planeFeedbackPath = {},
                     std::string selectionLevel = "default",
                     std::vector<std::string> selectedOwnerTokens = {},
                     std::string selectedSelectionKind = "none")
         : sceneData_(std::move(scene)), eventPath_(std::move(eventPath)),
           feedbackPath_(std::move(feedbackPath)),
           toolFeedbackPath_(std::move(toolFeedbackPath)),
+          planeFeedbackPath_(std::move(planeFeedbackPath)),
           selectionLevel_(std::move(selectionLevel)) {
         normalizationCenter_ = sceneData_.normalizationCenter;
         normalizationScale_ = sceneData_.normalizationScale;
@@ -2507,7 +2509,8 @@ class Viewer {
             controllerGuides_.push_back(Vertex{a, color, 1.0F});
             controllerGuides_.push_back(Vertex{b, color, 1.0F});
         };
-        auto itemBox = [&](const MenuItem& item, const glm::vec3& color) {
+        auto itemBox = [&](const MenuItem& item, const glm::vec3& color,
+                           const char* overrideLabel = nullptr) {
             const float left = item.x - item.halfWidth;
             const float right = item.x + item.halfWidth;
             line(menuWorld(left, item.y + 0.023F),
@@ -2519,7 +2522,8 @@ class Viewer {
             line(menuWorld(left, item.y - 0.023F),
                  menuWorld(left, item.y + 0.023F), color * 0.7F);
             appendMenuText(
-                item.label, left + 0.012F, item.y + 0.012F, 0.0036F, color);
+                overrideLabel ? overrideLabel : item.label,
+                left + 0.012F, item.y + 0.012F, 0.0036F, color);
         };
         const glm::vec3 border(0.22F, 0.42F, 0.62F);
         line(menuWorld(-0.33F, 0.33F), menuWorld(0.33F, 0.33F), border);
@@ -2539,6 +2543,10 @@ class Viewer {
             std::ostringstream secondary;
             std::string option;
             std::string flag;
+            std::array<std::string, 7> configLabels = {
+                "-", "+", "SECONDARY -", "SECONDARY +",
+                "OPTION", "FLAG", "BACK TO TOOLS",
+            };
             std::array<bool, 6> enabled{true, true, true, true, true, true};
             primary << std::fixed << std::setprecision(1);
             secondary << std::fixed << std::setprecision(1);
@@ -2550,19 +2558,35 @@ class Viewer {
                     toolConfig_.strandFilter()));
                 flag = std::string("LIGATE ") +
                     (toolConfig_.ligateAdjacent() ? "YES" : "NO");
+                configLabels[2] = "DIRECTION -";
+                configLabels[3] = "DIRECTION +";
             } else if (toolConfig_.mode() == nadoc_vr::ToolMode::twist) {
                 primary << "AMOUNT " << toolConfig_.twistAmount();
-                secondary << "PLANES A/B UNRESOLVED";
+                secondary << "PLANE A ";
+                if (toolConfig_.planeABp()) secondary << *toolConfig_.planeABp();
+                else secondary << "?";
+                secondary << " / B ";
+                if (toolConfig_.planeBBp()) secondary << *toolConfig_.planeBBp();
+                else secondary << "?";
                 option = toolConfig_.twistAmountMode() ==
                         nadoc_vr::TwistAmountMode::total_degrees
                     ? "UNITS TOTAL DEG" : "UNITS DEG PER NM";
                 flag = "NO FLAG";
-                enabled[2] = enabled[3] = enabled[5] = false;
+                configLabels[2] = "PICK PLANE A";
+                configLabels[3] = "PICK PLANE B";
+                enabled[5] = false;
             } else {
                 primary << "BEND ANGLE " << toolConfig_.bendAngleDegrees();
                 secondary << "DIRECTION " << toolConfig_.bendDirectionDegrees();
-                option = "PLANES A/B UNRESOLVED";
+                option = "PLANE A ";
+                option += toolConfig_.planeABp()
+                    ? std::to_string(*toolConfig_.planeABp()) : "?";
+                option += " / B ";
+                option += toolConfig_.planeBBp()
+                    ? std::to_string(*toolConfig_.planeBBp()) : "?";
                 flag = "NO FLAG";
+                configLabels[2] = "PICK PLANE A";
+                configLabels[3] = "PICK PLANE B";
                 enabled[4] = enabled[5] = false;
             }
             appendMenuText(
@@ -2580,16 +2604,32 @@ class Viewer {
             const bool singleCellFootprint =
                 toolConfig_.mode() == nadoc_vr::ToolMode::extrude &&
                 feedback && feedback->resolved && feedback->footprintResolved;
-            appendMenuText(
-                singleCellFootprint
+            const bool deformationTool =
+                toolConfig_.mode() == nadoc_vr::ToolMode::twist ||
+                toolConfig_.mode() == nadoc_vr::ToolMode::bend;
+            const bool hasBothPlanes = toolConfig_.planeABp() && toolConfig_.planeBBp();
+            const bool orderedPlanes = hasBothPlanes &&
+                *toolConfig_.planeABp() < *toolConfig_.planeBBp();
+            const std::string geometryStatus = deformationTool
+                ? orderedPlanes ? "PLANES A/B READ ONLY"
+                  : hasBothPlanes ? "PLANES MUST BE A < B"
+                  : "PICK PLANES IN FULL / BALL+STICK"
+                : singleCellFootprint
                     ? toolConfig_.lengthBp() > 0
                         ? "1 CELL FOOTPRINT READ ONLY" : "1 CELL - SET LENGTH"
-                    : "MISSING " + std::string(toolConfig_.unresolvedGeometry()),
+                    : "MISSING " + std::string(toolConfig_.unresolvedGeometry());
+            appendMenuText(
+                geometryStatus,
                 -0.305F, -0.165F, 0.0038F,
-                singleCellFootprint
+                (deformationTool && orderedPlanes) || singleCellFootprint
                     ? glm::vec3(0.35F, 0.95F, 1.0F)
                     : glm::vec3(0.95F, 0.48F, 0.22F));
-            if (feedback) {
+            if (deformationTool && !planePickStatus_.empty()) {
+                appendMenuText(planePickStatus_, -0.305F, -0.125F, 0.0032F,
+                               orderedPlanes
+                                   ? glm::vec3(0.35F, 0.95F, 1.0F)
+                                   : glm::vec3(0.95F, 0.62F, 0.28F));
+            } else if (feedback) {
                 const std::string locatorStatus = feedback->resolved
                     ? feedback->occupied ? "FACE LOCATED - OCCUPIED" : "FACE LOCATED"
                     : "FACE NOT LOCATED";
@@ -2611,7 +2651,8 @@ class Viewer {
                         ? glm::vec3(0.48F, 0.32F, 0.30F)
                         : glm::vec3(1.0F, 0.78F, 0.22F);
                 }
-                itemBox(kToolConfigMenuItems[index], color);
+                itemBox(kToolConfigMenuItems[index], color,
+                        configLabels[index].c_str());
             }
             return;
         }
@@ -2709,7 +2750,21 @@ class Viewer {
                 bool changed = false;
                 if (hit == 0) changed = toolConfig_.adjustPrimary(-1);
                 else if (hit == 1) changed = toolConfig_.adjustPrimary(1);
-                else if (hit == 2) changed = toolConfig_.adjustSecondary(-1);
+                else if ((hit == 2 || hit == 3) &&
+                         (toolConfig_.mode() == nadoc_vr::ToolMode::twist ||
+                          toolConfig_.mode() == nadoc_vr::ToolMode::bend)) {
+                    planePickSlot_ = hit == 2 ? "a" : "b";
+                    activePlanePickSequence_ = 0;
+                    planePickIdentity_.clear();
+                    planePickStatus_ = std::string("AIM + TRACKPAD: PLANE ")
+                                     + (hit == 2 ? "A" : "B");
+                    menuOpen_ = false;
+                    menuHover_ = -1;
+                    suppressManipulationUntilRelease_ = true;
+                    std::cout << "VR " << planePickStatus_ << '\n';
+                    pulse(hand, 0.50F);
+                    continue;
+                } else if (hit == 2) changed = toolConfig_.adjustSecondary(-1);
                 else if (hit == 3) changed = toolConfig_.adjustSecondary(1);
                 else if (hit == 4) changed = toolConfig_.cycleOption();
                 else if (hit == 5) changed = toolConfig_.toggleFlag();
@@ -2734,11 +2789,13 @@ class Viewer {
                         if (toolConfig_.bind(
                                 mode, selectedIdentity_, selectedSelectionKind_,
                                 selectedOwnerTokens_)) {
+                            clearPlanePick();
                             publishToolConfiguration();
                         }
                         menuPage_ = MenuPage::tool_config;
                         menuHover_ = -1;
                     } else if (toolConfig_.clear()) {
+                        clearPlanePick();
                         publishToolConfiguration();
                     }
                 } else if (hit < 9) {
@@ -2964,6 +3021,29 @@ class Viewer {
         publishEventState();
     }
 
+    void publishPlanePick(const std::string& identity) {
+        if (!planePickSlot_ || activePlanePickSequence_ != 0 ||
+            !toolConfig_.active() ||
+            (toolConfig_.mode() != nadoc_vr::ToolMode::twist &&
+             toolConfig_.mode() != nadoc_vr::ToolMode::bend)) {
+            return;
+        }
+        activePlanePickSequence_ = ++planePickSequence_;
+        planePickConfigSequence_ = toolConfigSequence_;
+        planePickIdentity_ = identity;
+        planePickStatus_ = std::string("VALIDATING PLANE ") +
+                         (*planePickSlot_ == "a" ? "A" : "B");
+        publishEventState();
+    }
+
+    void clearPlanePick(bool keepStatus = false) {
+        planePickSlot_.reset();
+        activePlanePickSequence_ = 0;
+        planePickConfigSequence_ = 0;
+        planePickIdentity_.clear();
+        if (!keepStatus) planePickStatus_.clear();
+    }
+
     void publishSelectionLevel(const std::string& level) {
         selectionLevel_ = level;
         ++levelSequence_;
@@ -3068,6 +3148,20 @@ class Viewer {
             }
             output << '}';
         }
+        output << ",\"plane_pick_sequence\":" << activePlanePickSequence_
+               << ",\"plane_pick_config_sequence\":" << planePickConfigSequence_
+               << ",\"plane_pick_slot\":";
+        if (planePickSlot_ && activePlanePickSequence_ > 0) {
+            output << '\"' << *planePickSlot_ << '\"';
+        } else {
+            output << "null";
+        }
+        output << ",\"plane_pick_identity\":";
+        if (!planePickIdentity_.empty() && activePlanePickSequence_ > 0) {
+            identity(planePickIdentity_);
+        } else {
+            output << "null";
+        }
         output << ",\"transform_sequence\":" << transformSequence_
                << ",\"transform_matrix\":[";
         bool firstValue = true;
@@ -3125,6 +3219,7 @@ class Viewer {
             toolConfig_.bind(
                 toolConfig_.mode(), selectedIdentity_, selectedSelectionKind_,
                 selectedOwnerTokens_)) {
+            clearPlanePick();
             publishToolConfiguration();
         }
         if (targetChanged ||
@@ -3178,6 +3273,56 @@ class Viewer {
         toolContextFeedback_ = std::move(feedback);
     }
 
+    void pollPlanePickFeedback() {
+        if (planeFeedbackPath_.empty() || (++planeFeedbackPollFrame_ % 3U) != 0U ||
+            !planePickSlot_ || activePlanePickSequence_ == 0 ||
+            planePickConfigSequence_ != toolConfigSequence_) {
+            return;
+        }
+        std::ifstream input(planeFeedbackPath_, std::ios::in | std::ios::binary);
+        if (!input) return;
+        input.seekg(0, std::ios::end);
+        const std::streamoff size = input.tellg();
+        if (size < 0 || size > 4096) return;
+        input.seekg(0);
+        std::string record(static_cast<size_t>(size), '\0');
+        input.read(record.data(), size);
+        auto feedback = nadoc_vr::parsePlanePickFeedback(
+            record, planePickFeedbackSequence_, activePlanePickSequence_,
+            planePickConfigSequence_);
+        if (!feedback || feedback->slot != *planePickSlot_ ||
+            feedback->targetSelectionKind != toolConfig_.targetSelectionKind() ||
+            feedback->targetIdentity != toolConfig_.targetIdentity() ||
+            feedback->pickedIdentity != planePickIdentity_) {
+            return;
+        }
+        planePickFeedbackSequence_ = feedback->sequence;
+        const std::string slot = feedback->slot;
+        const bool changed = feedback->resolved &&
+            toolConfig_.setPlaneBp(slot, feedback->planeBp);
+        const auto reasonLabel = [&]() -> const char* {
+            if (feedback->reason == "ambiguous_primitive") return "COARSE OR SPANNING HIT";
+            if (feedback->reason == "synthetic_not_supported") return "SYNTHETIC HIT REJECTED";
+            if (feedback->reason == "out_of_range") return "STALE BP";
+            if (feedback->reason == "stale_target") return "TARGET CHANGED";
+            return "HIT NOT RESOLVED";
+        };
+        planePickStatus_ = feedback->resolved
+            ? std::string("PLANE ") + (slot == "a" ? "A " : "B ") +
+                std::to_string(feedback->planeBp) + " SET - READ ONLY"
+            : std::string("PLANE ") + (slot == "a" ? "A " : "B ") +
+                "NOT SET: " + reasonLabel();
+        std::cout << "VR " << planePickStatus_ << '\n';
+        clearPlanePick(true);
+        if (changed) publishToolConfiguration();
+        else publishEventState();
+        requestedMenuPage_ = MenuPage::tool_config;
+        menuHand_ = 1U;
+        menuOpenRequested_ = true;
+        suppressManipulationUntilRelease_ = true;
+        pulse(1U, feedback->resolved ? 0.60F : 0.20F);
+    }
+
     void syncActions(XrTime displayTime) {
         triggerClicked_.fill(false);
         if (sessionState_ != XR_SESSION_STATE_FOCUSED) return;
@@ -3229,7 +3374,12 @@ class Viewer {
                     menuOpen_ = false;
                     menuHover_ = -1;
                     suppressManipulationUntilRelease_ = true;
+                } else if (planePickSlot_) {
+                    clearPlanePick();
+                    requestedMenuPage_ = MenuPage::tool_config;
+                    menuOpenRequested_ = true;
                 } else {
+                    requestedMenuPage_ = MenuPage::options;
                     menuOpenRequested_ = true;
                 }
                 pulse(hand, 0.45F);
@@ -3253,7 +3403,8 @@ class Viewer {
                         "xrGetActionStateBoolean(select element)");
                 const bool selectPressed = select.isActive && select.currentState;
                 if (selectPressed && !selectPressed_ && sceneHover_) {
-                    publishSelect(sceneHover_->identity);
+                    if (planePickSlot_) publishPlanePick(sceneHover_->identity);
+                    else publishSelect(sceneHover_->identity);
                     pulse(hand, 0.55F);
                 }
                 selectPressed_ = selectPressed;
@@ -3296,6 +3447,7 @@ class Viewer {
         updateSceneHover();
         pollSelectionFeedback();
         pollToolContextFeedback();
+        pollPlanePickFeedback();
         updateControllerGuides();
     }
 
@@ -3315,7 +3467,8 @@ class Viewer {
         menuPosition_ = headPosition
                       + menuOrientation_ * glm::vec3(0.0F, 0.04F, -1.00F);
         menuOpen_ = true;
-        menuPage_ = MenuPage::options;
+        menuPage_ = requestedMenuPage_;
+        requestedMenuPage_ = MenuPage::options;
         menuOpenRequested_ = false;
         menuHover_ = -1;
         pulse(menuHand_, 0.30F);
@@ -3495,6 +3648,7 @@ class Viewer {
     std::string eventPath_;
     std::string feedbackPath_;
     std::string toolFeedbackPath_;
+    std::string planeFeedbackPath_;
     glm::vec3 normalizationCenter_{};
     float normalizationScale_ = 1.0F;
     uint64_t eventSequence_ = 0;
@@ -3524,6 +3678,14 @@ class Viewer {
     uint64_t toolFeedbackSequence_ = 0;
     uint32_t toolFeedbackPollFrame_ = 0;
     std::optional<nadoc_vr::ToolContextFeedback> toolContextFeedback_;
+    uint64_t planePickSequence_ = 0;
+    uint64_t activePlanePickSequence_ = 0;
+    uint64_t planePickConfigSequence_ = 0;
+    uint64_t planePickFeedbackSequence_ = 0;
+    uint32_t planeFeedbackPollFrame_ = 0;
+    std::optional<std::string> planePickSlot_;
+    std::string planePickIdentity_;
+    std::string planePickStatus_;
     std::string selectedIdentity_;
     std::vector<std::string> selectedOwnerTokens_;
     std::string selectedSelectionKind_ = "none";
@@ -3552,6 +3714,7 @@ class Viewer {
     std::optional<nadoc_vr::PickHit> sceneHover_;
     bool menuOpen_ = false;
     MenuPage menuPage_ = MenuPage::options;
+    MenuPage requestedMenuPage_ = MenuPage::options;
     bool menuOpenRequested_ = false;
     bool suppressManipulationUntilRelease_ = false;
     int menuHover_ = -1;
@@ -3587,6 +3750,7 @@ int main(int argc, char** argv) {
         std::cerr << "Usage: nadoc-vr-viewer [--validate] <scene.nadocvr> "
                      "[--events <event.json>] [--feedback <feedback.txt>] "
                      "[--tool-feedback <tool-feedback.txt>] "
+                     "[--plane-feedback <plane-feedback.txt>] "
                      "[--selection-level <level>] "
                      "[--selected-owner <token>]... [--selected-kind <kind>]\n";
         return 2;
@@ -3594,6 +3758,7 @@ int main(int argc, char** argv) {
     std::string eventPath;
     std::string feedbackPath;
     std::string toolFeedbackPath;
+    std::string planeFeedbackPath;
     std::string selectionLevel = "default";
     std::string selectedSelectionKind = "none";
     std::vector<std::string> selectedOwnerTokens;
@@ -3609,6 +3774,7 @@ int main(int argc, char** argv) {
         if (option == "--events") eventPath = argv[index + 1];
         else if (option == "--feedback") feedbackPath = argv[index + 1];
         else if (option == "--tool-feedback") toolFeedbackPath = argv[index + 1];
+        else if (option == "--plane-feedback") planeFeedbackPath = argv[index + 1];
         else if (option == "--selection-level") selectionLevel = argv[index + 1];
         else if (option == "--selected-owner") {
             const std::string token(argv[index + 1]);
@@ -3646,7 +3812,8 @@ int main(int argc, char** argv) {
     std::signal(SIGTERM, signalHandler);
     try {
         Viewer viewer(
-            loadScene(argv[1]), eventPath, feedbackPath, toolFeedbackPath, selectionLevel,
+            loadScene(argv[1]), eventPath, feedbackPath, toolFeedbackPath,
+            planeFeedbackPath, selectionLevel,
             std::move(selectedOwnerTokens), std::move(selectedSelectionKind));
         return viewer.run();
     } catch (const std::exception& error) {

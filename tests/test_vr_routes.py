@@ -14,6 +14,7 @@ from backend.api import routes_vr
 from backend.api.routes_vr import (
     VRFeedbackRequest,
     VRLaunchRequest,
+    VRPlaneFeedbackRequest,
     VRToolFeedbackRequest,
     VRCamera,
     _bundle_expanded_scene,
@@ -30,6 +31,7 @@ from backend.api.routes_vr import (
     _view_rotation,
     _viewer_command,
     _write_feedback,
+    _write_plane_feedback,
     _write_tool_feedback,
     _write_scene_snapshot,
 )
@@ -327,6 +329,10 @@ def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -
         "tool_target_owner_tokens": ["domain-token"],
         "tool_config_sequence": 0,
         "tool_config": None,
+        "plane_pick_sequence": 0,
+        "plane_pick_config_sequence": 0,
+        "plane_pick_slot": None,
+        "plane_pick_identity": None,
         "transform_sequence": 0,
         "transform_matrix": np.identity(4).flatten(order="F").tolist(),
         "ready_sequence": 0,
@@ -405,6 +411,10 @@ def test_native_tool_transform_returns_to_nadoc_coordinates(tmp_path) -> None:
         "tool_target_owner_tokens": [],
         "tool_config_sequence": 0,
         "tool_config": None,
+        "plane_pick_sequence": 0,
+        "plane_pick_config_sequence": 0,
+        "plane_pick_slot": None,
+        "plane_pick_identity": None,
         "transform_sequence": 0,
         "transform_matrix": np.identity(4).flatten(order="F").tolist(),
         "ready_sequence": 0,
@@ -512,6 +522,45 @@ def test_native_tool_configuration_drafts_are_bounded_and_target_bound(
     assert cleared["sequence"] == 5
     assert cleared["tool_config_sequence"] == 4
     assert cleared["tool_config"] is None
+
+
+def test_native_deformation_plane_pick_events_are_bounded_and_config_bound(
+    tmp_path,
+) -> None:
+    event_path = tmp_path / "vr-plane-pick.json"
+    event = {
+        "sequence": 7,
+        "tool_config_sequence": 4,
+        "tool_config": {
+            "mode": "twist",
+            "target_identity": "cluster:c1",
+            "target_kind": "cluster",
+            "target_owner_tokens": ["cluster-token"],
+            "plane_a_bp": None,
+            "plane_b_bp": None,
+            "amount_mode": "total_degrees",
+            "amount": 90,
+        },
+        "plane_pick_sequence": 3,
+        "plane_pick_config_sequence": 4,
+        "plane_pick_slot": "a",
+        "plane_pick_identity": "nuc:s1:0:h1:12:FORWARD:0",
+    }
+    event_path.write_text(json.dumps(event))
+    payload = _event_payload({"event_path": str(event_path)})
+    assert payload["plane_pick_sequence"] == 3
+    assert payload["plane_pick_config_sequence"] == 4
+    assert payload["plane_pick_slot"] == "a"
+    assert payload["plane_pick_identity"] == event["plane_pick_identity"]
+
+    for update in (
+        {"plane_pick_config_sequence": 3},
+        {"plane_pick_sequence": True},
+        {"plane_pick_slot": "x"},
+        {"plane_pick_identity": "not whitespace safe"},
+    ):
+        event_path.write_text(json.dumps({**event, **update}))
+        assert _event_payload({"event_path": str(event_path)})["sequence"] == 0
 
 
 def test_native_first_frame_timing_is_bounded_and_uses_backend_milestones(
@@ -683,6 +732,51 @@ def test_native_tool_feedback_rotates_exact_locator_and_fails_closed(tmp_path) -
             )
 
 
+def test_native_plane_feedback_is_private_target_bound_and_fail_closed(tmp_path) -> None:
+    tool_feedback_path = tmp_path / "vr-tool-feedback.txt"
+    state = {"plane_feedback_path": str(tool_feedback_path)}
+    _write_plane_feedback(
+        state,
+        VRPlaneFeedbackRequest(
+            plane_pick_sequence=5,
+            tool_config_sequence=7,
+            target_identity="cluster:c1",
+            target_kind="cluster",
+            picked_identity="nuc:s1:0:h1:12:FORWARD:0",
+            plane_slot="a",
+            resolved=True,
+            reason="resolved",
+            plane_bp=12,
+        ),
+    )
+    assert tool_feedback_path.read_text() == (
+        "NADOCVR_PLANE_FEEDBACK 1 5 7 1 resolved a cluster cluster:c1 "
+        "nuc:s1:0:h1:12:FORWARD:0 12\n"
+    )
+    assert tool_feedback_path.stat().st_mode & 0o777 == 0o600
+    assert not tool_feedback_path.with_name(f"{tool_feedback_path.name}.next").exists()
+
+    invalid = [
+        dict(resolved=False, reason="resolved", plane_bp=None),
+        dict(resolved=True, reason="resolved", plane_bp=None),
+        dict(resolved=False, reason="ambiguous_primitive", plane_bp=12),
+    ]
+    for values in invalid:
+        with pytest.raises(HTTPException, match="Invalid VR deformation plane feedback"):
+            _write_plane_feedback(
+                state,
+                VRPlaneFeedbackRequest(
+                    plane_pick_sequence=6,
+                    tool_config_sequence=7,
+                    target_identity="cluster:c1",
+                    target_kind="cluster",
+                    picked_identity="bond:x",
+                    plane_slot="b",
+                    **values,
+                ),
+            )
+
+
 def test_native_launch_passes_initial_selection_as_opaque_arguments(tmp_path) -> None:
     token = _owner_token("domain", "strand:a b", 2)
     command = _viewer_command(
@@ -690,6 +784,7 @@ def test_native_launch_passes_initial_selection_as_opaque_arguments(tmp_path) ->
         tmp_path / "event.json",
         tmp_path / "feedback.txt",
         tmp_path / "tool-feedback.txt",
+        tmp_path / "plane-feedback.txt",
         VRLaunchRequest(
             selection_level="domain",
             selected_owner_tokens=[token],
@@ -699,6 +794,7 @@ def test_native_launch_passes_initial_selection_as_opaque_arguments(tmp_path) ->
     assert command[-4:] == ["--selected-owner", token, "--selected-kind", "domain"]
     assert command[command.index("--selection-level") + 1] == "domain"
     assert command[command.index("--tool-feedback") + 1].endswith("tool-feedback.txt")
+    assert command[command.index("--plane-feedback") + 1].endswith("plane-feedback.txt")
 
     with pytest.raises(HTTPException, match="initial VR selection"):
         routes_vr.launch_vr(

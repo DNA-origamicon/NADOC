@@ -18,6 +18,10 @@ const TARGET_KINDS = new Set([
 ])
 const STRAND_FILTERS = new Set(['both', 'scaffold', 'staples'])
 const TWIST_AMOUNT_MODES = new Set(['total_degrees', 'degrees_per_nm'])
+const PLANE_PICK_REASONS = new Set([
+  'resolved', 'invalid_primitive', 'ambiguous_primitive',
+  'synthetic_not_supported', 'out_of_range', 'stale_target',
+])
 
 export const initialVRToolConfigState = Object.freeze({
   sequence: 0,
@@ -168,5 +172,43 @@ export function reduceVRToolConfig(
     reason: draft.target_kind === 'end' && !toolContext
       ? 'geometry_context_required'
       : vrToolConfigMissing(draft).length ? 'incomplete' : 'configured',
+  }
+}
+
+/** Build one bounded acknowledgement for an explicit, non-selecting plane hit. */
+export function vrPlaneFeedbackPayload(event, state, { toolTarget = null, planePick = null } = {}) {
+  const sequence = Number(event?.sequence)
+  const toolConfigSequence = Number(event?.toolConfigSequence)
+  const slot = event?.slot
+  const pickedIdentity = event?.identity
+  const draft = normalizeVRToolConfig(state?.draft)
+  if (!Number.isSafeInteger(sequence) || sequence < 1 ||
+      !Number.isSafeInteger(toolConfigSequence) || toolConfigSequence < 1 ||
+      toolConfigSequence !== state?.sequence || !['a', 'b'].includes(slot) ||
+      typeof pickedIdentity !== 'string' || !pickedIdentity ||
+      pickedIdentity.length > 2048 || /\s/.test(pickedIdentity) ||
+      !draft || !['twist', 'bend'].includes(draft.mode) ||
+      !['cluster', 'end'].includes(draft.target_kind)) return null
+
+  const targetMatches = !!toolTarget &&
+    toolTarget.identity === draft.target_identity &&
+    toolTarget.selectionKind === draft.target_kind &&
+    JSON.stringify(toolTarget.ownerTokens) === JSON.stringify(draft.target_owner_tokens)
+  const resolved = targetMatches && planePick?.resolved === true &&
+    Number.isSafeInteger(planePick.bp) &&
+    Math.abs(planePick.bp) <= VR_TOOL_CONFIG_LIMITS.maxPlaneBp
+  const reason = resolved ? 'resolved'
+    : targetMatches && PLANE_PICK_REASONS.has(planePick?.reason)
+      ? planePick.reason : 'stale_target'
+  return {
+    plane_pick_sequence: sequence,
+    tool_config_sequence: toolConfigSequence,
+    target_identity: draft.target_identity,
+    target_kind: draft.target_kind,
+    picked_identity: pickedIdentity,
+    plane_slot: slot,
+    resolved,
+    reason,
+    plane_bp: resolved ? planePick.bp : null,
   }
 }
