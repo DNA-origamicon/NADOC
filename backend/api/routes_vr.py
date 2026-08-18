@@ -214,6 +214,7 @@ def _serialize_scene(
     representation: str = "full",
     coloring: str = "strand",
     atomistic_model=None,
+    unligated_crossover_ids: list[str] | None = None,
 ) -> str:
     """Create the deliberately trivial line-oriented format read by the C++ viewer."""
     rotation = _view_rotation(camera)
@@ -340,6 +341,29 @@ def _serialize_scene(
             points = [rotation @ value for value in projection.backbone_points]
             for first, second in zip(points, points[1:]):
                 lines.append(f"C {nums(*first, *second, 0.06, *palette)}")
+
+    def append_unligated_warning(center: np.ndarray) -> None:
+        """Add a physical amber counterpart of desktop's warning sprite."""
+        palette = solid_palette(_rgb("#f5a623"))
+        top = center + np.array([0.0, 1.8, 0.0])
+        left = center + np.array([-1.6, -1.2, 0.0])
+        right = center + np.array([1.6, -1.2, 0.0])
+        for first, second in ((top, left), (left, right), (right, top)):
+            lines.append(f"C {nums(*first, *second, 0.12, *palette)}")
+        box(
+            center + np.array([0.0, 0.25, 0.0]),
+            np.array([0.24, 0.0, 0.0]),
+            np.array([0.0, 0.90, 0.0]),
+            np.array([0.0, 0.0, 0.12]),
+            palette,
+        )
+        box(
+            center + np.array([0.0, -0.72, 0.0]),
+            np.array([0.28, 0.0, 0.0]),
+            np.array([0.0, 0.28, 0.0]),
+            np.array([0.0, 0.0, 0.14]),
+            palette,
+        )
 
     lines = [f"NADOCVR 5 {representation} {coloring}", "# preloaded VR representations"]
     by_strand: dict[str, list[tuple[dict, np.ndarray, tuple[float, ...]]]] = {}
@@ -634,6 +658,28 @@ def _serialize_scene(
         arc_palette = palette_variant(palette, first_nucleotide, "#0288d1")
         lines.append(f"C {nums(*first, *second, 0.025, *arc_palette)}")
 
+    unligated_ids = set(unligated_crossover_ids or [])
+    for crossover in getattr(design, "crossovers", []):
+        if getattr(crossover, "id", None) not in unligated_ids:
+            continue
+        first_key = (
+            str(crossover.half_a.helix_id),
+            int(crossover.half_a.index),
+            direction_value(crossover.half_a.strand),
+        )
+        second_key = (
+            str(crossover.half_b.helix_id),
+            int(crossover.half_b.index),
+            direction_value(crossover.half_b.strand),
+        )
+        first_entry, second_entry = (
+            site_entries.get(first_key),
+            site_entries.get(second_key),
+        )
+        if first_entry is None or second_entry is None:
+            continue
+        append_unligated_warning((first_entry[1] + second_entry[1]) * 0.5)
+
     append_linker_geometry(include_full_bases=True)
     append_flexible_geometry()
 
@@ -915,6 +961,8 @@ def _snapshot(body: VRLaunchRequest) -> str:
         fast_bridges=True,
         measured_positioning=body.measured_positioning,
     )
+    from backend.api.crud import unligated_crossover_ids
+
     return _serialize_scene(
         design,
         nucleotides,
@@ -923,6 +971,7 @@ def _snapshot(body: VRLaunchRequest) -> str:
         body.representation,
         body.coloring,
         atomistic_model,
+        unligated_crossover_ids(design),
     )
 
 

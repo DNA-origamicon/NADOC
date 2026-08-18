@@ -303,6 +303,7 @@ def test_full_snapshot_projects_explicit_cross_helix_connections() -> None:
         cluster_transforms=[],
         crossovers=[
             SimpleNamespace(
+                id="xo-visible",
                 half_a=SimpleNamespace(helix_id="h1", index=0, strand="FORWARD"),
                 half_b=SimpleNamespace(helix_id="h2", index=0, strand="REVERSE"),
                 extra_bases=None,
@@ -392,6 +393,7 @@ def test_full_snapshot_projects_crossover_extra_base_beads_slabs_and_chain() -> 
         cluster_transforms=[],
         crossovers=[
             SimpleNamespace(
+                id="xo-extra",
                 half_a=SimpleNamespace(helix_id="h1", index=0, strand="FORWARD"),
                 half_b=SimpleNamespace(helix_id="h2", index=0, strand="REVERSE"),
                 extra_bases="AT",
@@ -885,5 +887,74 @@ def test_flexible_segment_replaces_filtered_beads_in_full_only() -> None:
     )
     assert not any(
         record[0] == "C" and float(record[7]) == pytest.approx(0.06)
+        for record in sections["cylinders"]
+    )
+
+
+def test_unligated_crossover_gets_full_only_amber_warning_at_midpoint() -> None:
+    crossover = SimpleNamespace(
+        id="xo-open",
+        half_a=SimpleNamespace(helix_id="h1", index=0, strand="FORWARD"),
+        half_b=SimpleNamespace(helix_id="h2", index=0, strand="REVERSE"),
+        extra_bases=None,
+    )
+    design = SimpleNamespace(
+        strands=[
+            SimpleNamespace(
+                id="s1",
+                is_scaffold=False,
+                color="#0066cc",
+                sequence="AA",
+                domains=[],
+            )
+        ],
+        cluster_transforms=[],
+        crossovers=[crossover],
+        forced_ligations=[],
+        overhang_bindings=[],
+        duplexes=[],
+        overhang_connections=[],
+        flexible_connections=[],
+    )
+    nucleotides = [
+        {
+            "strand_id": "s1",
+            "domain_index": 0,
+            "helix_id": helix_id,
+            "bp_index": 0,
+            "direction": direction,
+            "backbone_position": [x, 0, 0],
+        }
+        for helix_id, direction, x in (
+            ("h1", "FORWARD", 0),
+            ("h2", "REVERSE", 2),
+        )
+    ]
+    text = _serialize_scene(
+        design,
+        nucleotides,
+        [],
+        atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
+        unligated_crossover_ids=["xo-open"],
+    )
+    sections = _scene_sections(text)
+
+    warning_edges = [
+        record
+        for record in sections["full"]
+        if record[0] == "C" and float(record[7]) == pytest.approx(0.12)
+    ]
+    warning_boxes = [
+        record
+        for record in sections["full"]
+        if record[0] == "B"
+        and np.allclose(
+            [float(value) for value in record[13:16]], [245 / 255, 166 / 255, 35 / 255]
+        )
+    ]
+    assert len(warning_edges) == 3
+    assert len(warning_boxes) == 2
+    assert not any(
+        record[0] == "C" and float(record[7]) == pytest.approx(0.12)
         for record in sections["cylinders"]
     )
