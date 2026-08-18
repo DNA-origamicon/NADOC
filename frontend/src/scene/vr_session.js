@@ -1,0 +1,323 @@
+import * as THREE from 'three'
+
+const VIEW_SIZE_METERS = 0.55
+const VIEW_DISTANCE_METERS = 0.8
+
+function _errorMessage(error, secureContext) {
+  if (!secureContext) {
+    return 'VR requires NADOC to be opened from localhost or HTTPS.'
+  }
+  if (error?.name === 'NotSupportedError') {
+    return 'Immersive VR is not available to this browser. Start SteamVR and use a WebXR-capable browser.'
+  }
+  if (error?.name === 'SecurityError') {
+    return 'The browser blocked VR. Open NADOC from localhost or HTTPS and select View in VR again.'
+  }
+  const detail = error?.message ? `: ${error.message}` : ''
+  return `Could not start VR${detail}`
+}
+
+/**
+ * Connect the current Three.js scene to an immersive WebXR session.
+ *
+ * NADOC models use nanometres as scene units while WebXR uses metres. A
+ * temporary XR camera rig supplies the world-units-per-metre conversion and
+ * places the current scene at a comfortable inspection distance. Scene objects
+ * are never reparented, so normal reactive renderer updates remain safe in VR.
+ */
+export function initVRSession({
+  renderer,
+  scene,
+  camera,
+  button,
+  getRenderCamera = () => camera,
+  setMenuToggle = () => {},
+  showToast = () => {},
+  xr = globalThis.navigator?.xr,
+  secureContext = globalThis.isSecureContext ?? true,
+  native = null,
+  nativePollIntervalMs = 1000,
+} = {}) {
+  let session = null
+  let nativeActive = false
+  let nativePollTimer = null
+  let cameraRig = null
+  let cameraSnapshot = null
+  let starting = false
+  let ending = false
+  let disposed = false
+
+  const label = button?.querySelector('.vr-menu-label')
+
+  function _setButtonState({ active = false, busy = false } = {}) {
+    setMenuToggle(button?.id, active)
+    if (button) {
+      button.disabled = busy
+      button.setAttribute('aria-pressed', String(active))
+    }
+    if (label) label.textContent = active ? 'Exit VR' : (busy ? 'Starting VR…' : 'View in VR')
+  }
+
+  function _sceneBounds() {
+    const bounds = new THREE.Box3()
+    for (const child of scene.children) {
+      if (child === cameraRig || child.isLight || child.isCamera || !child.visible) continue
+      bounds.expandByObject(child, true)
+    }
+    return bounds
+  }
+
+  function _installCameraRig() {
+    scene.updateWorldMatrix(true, true)
+    camera.updateWorldMatrix(true, false)
+
+    const bounds = _sceneBounds()
+    const center = bounds.isEmpty()
+      ? new THREE.Vector3()
+      : bounds.getCenter(new THREE.Vector3())
+    const size = bounds.isEmpty()
+      ? new THREE.Vector3(1, 1, 1)
+      : bounds.getSize(new THREE.Vector3())
+    const maxDimension = Math.max(size.x, size.y, size.z, Number.EPSILON)
+    const worldUnitsPerMeter = maxDimension / VIEW_SIZE_METERS
+    const forward = camera.getWorldDirection(new THREE.Vector3()).normalize()
+    const worldQuaternion = camera.getWorldQuaternion(new THREE.Quaternion())
+    const parent = camera.parent
+
+    cameraSnapshot = {
+      parent,
+      parentIndex: parent?.children.indexOf(camera) ?? -1,
+      position: camera.position.clone(),
+      quaternion: camera.quaternion.clone(),
+      scale: camera.scale.clone(),
+      up: camera.up.clone(),
+      fov: camera.fov,
+      zoom: camera.zoom,
+    }
+
+    camera.removeFromParent()
+    cameraRig = new THREE.Group()
+    cameraRig.name = 'nadoc-vr-camera-rig'
+    cameraRig.position.copy(center).addScaledVector(forward, -VIEW_DISTANCE_METERS * worldUnitsPerMeter)
+    cameraRig.quaternion.copy(worldQuaternion)
+    cameraRig.scale.setScalar(worldUnitsPerMeter)
+    scene.add(cameraRig)
+    cameraRig.add(camera)
+    camera.position.set(0, 0, 0)
+    camera.quaternion.identity()
+    camera.scale.set(1, 1, 1)
+    cameraRig.updateMatrixWorld(true)
+  }
+
+  function _restoreCamera() {
+    if (!cameraRig || !cameraSnapshot) return
+
+    cameraRig.remove(camera)
+    scene.remove(cameraRig)
+    const { parent, parentIndex, position, quaternion, scale, up, fov, zoom } = cameraSnapshot
+    if (parent) {
+      parent.add(camera)
+      if (parentIndex >= 0) {
+        const currentIndex = parent.children.indexOf(camera)
+        parent.children.splice(currentIndex, 1)
+        parent.children.splice(Math.min(parentIndex, parent.children.length), 0, camera)
+      }
+    }
+    camera.position.copy(position)
+    camera.quaternion.copy(quaternion)
+    camera.scale.copy(scale)
+    camera.up.copy(up)
+    camera.fov = fov
+    camera.zoom = zoom
+    camera.updateProjectionMatrix()
+    camera.updateMatrixWorld(true)
+
+    cameraRig = null
+    cameraSnapshot = null
+  }
+
+  function _onSessionEnd() {
+    _restoreCamera()
+    session = null
+    starting = false
+    ending = false
+    _setButtonState()
+  }
+
+  function _clearNativePoll() {
+    if (nativePollTimer !== null) clearTimeout(nativePollTimer)
+    nativePollTimer = null
+  }
+
+  function _setNativeActive(active) {
+    nativeActive = active
+    if (!active) _clearNativePoll()
+    _setButtonState({ active })
+  }
+
+  function _scheduleNativePoll() {
+    _clearNativePoll()
+    if (!nativeActive || disposed || nativePollIntervalMs <= 0 || !native?.status) return
+    nativePollTimer = setTimeout(async () => {
+      nativePollTimer = null
+      let status = null
+      try { status = await native.status() } catch { /* next user action can retry */ }
+      if (disposed || !nativeActive) return
+      if (status?.running) _scheduleNativePoll()
+      else _setNativeActive(false)
+    }, nativePollIntervalMs)
+  }
+
+  function _nativeFailureMessage() {
+    return native?.errorMessage?.()
+      || 'Could not start the native VR viewer. Make sure SteamVR is running and try again.'
+  }
+
+  async function _enterNative() {
+    if (!native?.launch) {
+      showToast('This browser does not provide WebXR immersive VR.', { severity: 'error' })
+      return false
+    }
+    starting = true
+    _setButtonState({ busy: true })
+    let status = null
+    try { status = await native.launch() } catch { /* API client reports the detail */ }
+    starting = false
+    if (!status?.running) {
+      _setButtonState()
+      showToast(_nativeFailureMessage(), { severity: 'error' })
+      return false
+    }
+    _setNativeActive(true)
+    _scheduleNativePoll()
+    showToast('VR view started in the SteamVR companion. Move your head to inspect the structure.')
+    return true
+  }
+
+  async function isSupported() {
+    if (xr?.isSessionSupported) {
+      try {
+        if (await xr.isSessionSupported('immersive-vr')) return true
+      } catch { /* try the native companion */ }
+    }
+    if (!native?.status) return false
+    try { return (await native.status())?.available === true } catch { return false }
+  }
+
+  async function enter() {
+    if (session || nativeActive || starting) return true
+    if (!camera?.isPerspectiveCamera || getRenderCamera() !== camera) {
+      showToast('Exit the current 2D or photo view before entering VR.', { severity: 'error' })
+      return false
+    }
+
+    if (!xr?.requestSession) return _enterNative()
+
+    starting = true
+    _setButtonState({ busy: true })
+
+    try {
+      // requestSession is deliberately the first awaited operation: browsers
+      // require it to consume the transient user activation from the menu click.
+      const nextSession = await xr.requestSession('immersive-vr', {
+        optionalFeatures: ['local-floor', 'bounded-floor'],
+      })
+      session = nextSession
+      session.addEventListener('end', _onSessionEnd, { once: true })
+
+      // `local` starts at the headset pose and does not require Room Setup,
+      // making the basic viewer usable with a single Lighthouse/base station.
+      renderer.xr.setReferenceSpaceType('local')
+      _installCameraRig()
+      await renderer.xr.setSession(session)
+
+      starting = false
+      _setButtonState({ active: true })
+      showToast('VR view started. Move your head to inspect the structure.')
+      return true
+    } catch (error) {
+      const failedSession = session
+      session = null
+      starting = false
+      _restoreCamera()
+      _setButtonState()
+      if (failedSession) {
+        try { await failedSession.end() } catch { /* already ended */ }
+      }
+      if (error?.name === 'NotSupportedError' && native?.launch) {
+        return _enterNative()
+      }
+      starting = false
+      _setButtonState()
+      showToast(_errorMessage(error, secureContext), { severity: 'error' })
+      return false
+    }
+  }
+
+  async function exit() {
+    if (nativeActive && !ending) {
+      ending = true
+      if (button) button.disabled = true
+      try { await native?.stop?.() } catch { /* status polling confirms exit */ }
+      ending = false
+      _setNativeActive(false)
+      return true
+    }
+    if (!session || ending) return false
+    ending = true
+    if (button) button.disabled = true
+    try {
+      await session.end()
+    } catch {
+      _onSessionEnd()
+    }
+    return true
+  }
+
+  async function toggle() {
+    return (session || nativeActive) ? exit() : enter()
+  }
+
+  const onClick = () => { void toggle() }
+  button?.addEventListener('click', onClick)
+  _setButtonState()
+
+  // This is advisory only. The button remains actionable so starting SteamVR
+  // after page load does not require refreshing NADOC.
+  void isSupported().then(supported => {
+    if (!button || session || starting) return
+    button.dataset.vrSupported = String(supported)
+    button.title = supported
+      ? (xr?.requestSession
+          ? 'View the current 3D scene in an immersive VR headset.'
+          : 'View the active Part with NADOC\'s native SteamVR companion.')
+      : 'Immersive VR is not currently available to this browser. Start SteamVR or use a WebXR-capable browser.'
+  })
+
+  // Reconnect the menu state after a page refresh while the companion is open.
+  if (native?.status) {
+    void native.status().then(status => {
+      if (!disposed && !session && !starting && status?.running) {
+        _setNativeActive(true)
+        _scheduleNativePoll()
+      }
+    }).catch(() => {})
+  }
+
+  function dispose() {
+    disposed = true
+    _clearNativePoll()
+    button?.removeEventListener('click', onClick)
+    if (session || nativeActive) void exit()
+    else _restoreCamera()
+  }
+
+  return {
+    isSupported,
+    enter,
+    exit,
+    toggle,
+    isActive: () => session !== null || nativeActive,
+    dispose,
+  }
+}

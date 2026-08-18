@@ -4187,6 +4187,21 @@ export async function getSystemResources(devices = '0') {
   }
 }
 
+/** Local native-OpenXR companion used when the browser has no immersive WebXR
+ * bridge (notably stock Firefox/Chromium on Linux). These endpoints are
+ * localhost-only and never mutate the active design. */
+export async function getVRStatus() {
+  return _request('GET', '/vr/status', undefined, { suppressBusy: true })
+}
+
+export async function launchNativeVR(body) {
+  return _request('POST', '/vr/launch', body, { timeoutMs: 120000 })
+}
+
+export async function stopNativeVR() {
+  return _request('POST', '/vr/stop', undefined, { suppressBusy: true })
+}
+
 /** Recommended NAMD Advanced settings for the active design on THIS machine
  *  (backs the Advanced card's ⚡ Optimize button). Read-only — it proposes, the
  *  panel applies only after the user confirms. Returns

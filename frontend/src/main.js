@@ -15,6 +15,7 @@
 
 import * as THREE from 'three'
 import { initScene }                 from './scene/scene.js'
+import { initVRSession }             from './scene/vr_session.js'
 import { createGlowLayer }           from './scene/glow_layer.js'
 import { initDesignRenderer }        from './scene/design_renderer.js'
 import { deferrableContextMenu }      from './scene/right_click_menu.js'
@@ -5748,6 +5749,26 @@ async function main() {
     () => window.open('/strand-anim.html', 'nadoc-strand-anim'))
   document.getElementById('help-modal-close')?.addEventListener('click', () => helpModal.classList.remove('visible'))
   helpModal?.addEventListener('click', e => { if (e.target === helpModal) helpModal.classList.remove('visible') })
+
+  initVRSession({
+    renderer,
+    scene,
+    camera,
+    button: document.getElementById('menu-help-view-vr'),
+    getRenderCamera,
+    setMenuToggle: _setMenuToggle,
+    showToast,
+    native: {
+      status: api.getVRStatus,
+      launch: () => api.launchNativeVR({
+        camera: captureCurrentCamera(),
+        measured_positioning: isNewPositioningOn(),
+        assembly_active: store.getState().assemblyActive,
+      }),
+      stop: api.stopNativeVR,
+      errorMessage: api.lastErrorMessage,
+    },
+  })
 
   document.getElementById('menu-help-fjc-sim')?.addEventListener('click', async () => {
     // Lazy-load the modal so the dev bundle stays slim until the user opens it.
