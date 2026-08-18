@@ -53,6 +53,9 @@ class VRLaunchRequest(BaseModel):
     assembly_active: bool = False
     representation: Literal["cylinders", "full", "ballstick", "stick"] = "full"
     coloring: Literal["strand", "base", "cluster", "cpk"] = "strand"
+    selection_level: Literal[
+        "default", "cluster", "strand", "domain", "end", "xover", "base"
+    ] = "default"
 
 
 def _require_local(request: Request) -> None:
@@ -1559,6 +1562,8 @@ def _event_payload(state: dict | None) -> dict:
             "hover_identity": None,
             "select_sequence": 0,
             "select_identity": None,
+            "level_sequence": 0,
+            "selection_level": "default",
         }
     path = Path(state["event_path"])
     try:
@@ -1569,11 +1574,16 @@ def _event_payload(state: dict | None) -> dict:
         hover_identity = event.get("hover_identity")
         select_sequence = int(event.get("select_sequence", 0))
         select_identity = event.get("select_identity")
+        level_sequence = int(event.get("level_sequence", 0))
+        selection_level = event.get("selection_level", "default")
         identities = (hover_identity, select_identity)
         if (
             sequence < 0
             or select_sequence < 0
+            or level_sequence < 0
             or any(value is not None and not isinstance(value, str) for value in identities)
+            or selection_level
+            not in {"default", "cluster", "strand", "domain", "end", "xover", "base"}
         ):
             raise ValueError("invalid event record")
         if any(isinstance(value, str) and len(value) > 2048 for value in identities):
@@ -1583,6 +1593,8 @@ def _event_payload(state: dict | None) -> dict:
             "hover_identity": hover_identity,
             "select_sequence": select_sequence,
             "select_identity": select_identity,
+            "level_sequence": level_sequence,
+            "selection_level": selection_level,
         }
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
         # A truncate/write can briefly expose an incomplete record. Pollers keep
@@ -1592,6 +1604,8 @@ def _event_payload(state: dict | None) -> dict:
             "hover_identity": None,
             "select_sequence": 0,
             "select_identity": None,
+            "level_sequence": 0,
+            "selection_level": "default",
         }
 
 
@@ -1655,7 +1669,8 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         ) as event_file:
             event_file.write(
                 '{"sequence":0,"hover_identity":null,'
-                '"select_sequence":0,"select_identity":null}'
+                '"select_sequence":0,"select_identity":null,'
+                f'"level_sequence":0,"selection_level":"{body.selection_level}"}}'
             )
             event_path = Path(event_file.name)
         event_path.chmod(0o600)
@@ -1663,7 +1678,14 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         log = _LOG_PATH.open("ab")
         try:
             process = subprocess.Popen(
-                [str(_VIEWER), str(scene_path), "--events", str(event_path)],
+                [
+                    str(_VIEWER),
+                    str(scene_path),
+                    "--events",
+                    str(event_path),
+                    "--selection-level",
+                    body.selection_level,
+                ],
                 cwd=_REPO_ROOT,
                 env=_build_environment(),
                 stdin=subprocess.DEVNULL,

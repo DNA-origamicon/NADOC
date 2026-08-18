@@ -5792,15 +5792,22 @@ async function main() {
           ? _currentRepr : 'full',
         coloring: ['strand', 'base', 'cluster', 'cpk'].includes(store.getState().coloringMode)
           ? store.getState().coloringMode : 'strand',
+        selection_level: selectionManager.getSelectionLevel?.() ?? 'default',
       }),
       stop: api.stopNativeVR,
       errorMessage: api.lastErrorMessage,
     },
     onNativeEvent: event => {
       const button = document.getElementById('menu-help-view-vr')
-      if (button) button.dataset.vrHoverIdentity = event?.identity ?? ''
-      if (event?.type === 'select') selectionManager.selectVRIdentity?.(event.identity)
-      else selectionManager.previewVRIdentity?.(event?.identity ?? null)
+      if (event?.type === 'selection_level') {
+        selectionManager.setSelectionLevel?.(event.level)
+        selectionManager.previewVRIdentity?.(button?.dataset.vrHoverIdentity || null)
+      } else if (event?.type === 'select') {
+        selectionManager.selectVRIdentity?.(event.identity)
+      } else {
+        if (button) button.dataset.vrHoverIdentity = event?.identity ?? ''
+        selectionManager.previewVRIdentity?.(event?.identity ?? null)
+      }
     },
   })
 

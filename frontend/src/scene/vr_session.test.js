@@ -163,12 +163,16 @@ describe('initVRSession', () => {
           hover_identity: 'nuc:s1',
           select_sequence: 1,
           select_identity: 'nuc:s1',
+          level_sequence: 1,
+          selection_level: 'domain',
         })
         .mockResolvedValue({
           sequence: 2,
           hover_identity: 'nuc:s1',
           select_sequence: 1,
           select_identity: 'nuc:s1',
+          level_sequence: 1,
+          selection_level: 'domain',
         }),
     }
     const h = makeHarness({
@@ -183,6 +187,7 @@ describe('initVRSession', () => {
     expect(onNativeEvent.mock.calls).toEqual([
       [{ sequence: 2, type: 'hover', identity: 'nuc:s1' }],
       [{ sequence: 1, type: 'select', identity: 'nuc:s1' }],
+      [{ sequence: 1, type: 'selection_level', level: 'domain' }],
     ])
 
     await h.controller.exit()

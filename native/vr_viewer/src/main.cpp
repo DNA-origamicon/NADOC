@@ -1427,8 +1427,10 @@ class GlScene {
 
 class Viewer {
   public:
-    explicit Viewer(SceneData scene, std::string eventPath = {})
-        : sceneData_(std::move(scene)), eventPath_(std::move(eventPath)) {}
+    explicit Viewer(SceneData scene, std::string eventPath = {},
+                    std::string selectionLevel = "default")
+        : sceneData_(std::move(scene)), eventPath_(std::move(eventPath)),
+          selectionLevel_(std::move(selectionLevel)) {}
 
     int run() {
         initializeWindow();
@@ -1792,14 +1794,34 @@ class Viewer {
         }
     }
 
-    static constexpr std::array<const char*, 10> kMenuLabels = {
-        "CYLINDERS", "FULL", "BALL + STICK", "STICK ONLY",
-        "STRAND", "BASE", "CLUSTER", "CPK", "RECENTER", "CLOSE",
+    struct MenuItem {
+        const char* label;
+        float x;
+        float y;
+        float halfWidth;
     };
-    static constexpr std::array<float, 10> kMenuRows = {
-        0.190F, 0.135F, 0.080F, 0.025F,
-        -0.095F, -0.150F, -0.205F, -0.260F, -0.335F, -0.390F,
+    static constexpr std::array<const char*, 7> kSelectionLevels = {
+        "default", "cluster", "strand", "domain", "end", "xover", "base",
     };
+    static constexpr std::array<MenuItem, 17> kMenuItems = {{
+        {"CYLINDERS", -0.16F, 0.190F, 0.145F},
+        {"FULL", -0.16F, 0.135F, 0.145F},
+        {"BALL + STICK", -0.16F, 0.080F, 0.145F},
+        {"STICK ONLY", -0.16F, 0.025F, 0.145F},
+        {"STRAND", 0.16F, 0.190F, 0.145F},
+        {"BASE", 0.16F, 0.135F, 0.145F},
+        {"CLUSTER", 0.16F, 0.080F, 0.145F},
+        {"CPK", 0.16F, 0.025F, 0.145F},
+        {"AUTO / DRILL", -0.16F, -0.105F, 0.145F},
+        {"CLUSTER", -0.16F, -0.160F, 0.145F},
+        {"STRAND", -0.16F, -0.215F, 0.145F},
+        {"DOMAIN", -0.16F, -0.270F, 0.145F},
+        {"END", 0.16F, -0.105F, 0.145F},
+        {"CROSSOVER", 0.16F, -0.160F, 0.145F},
+        {"BASE", 0.16F, -0.215F, 0.145F},
+        {"RECENTER", -0.16F, -0.350F, 0.145F},
+        {"CLOSE", 0.16F, -0.350F, 0.145F},
+    }};
 
     void appendMenuGuides() {
         if (!menuOpen_) return;
@@ -1808,29 +1830,34 @@ class Viewer {
             controllerGuides_.push_back(Vertex{b, color, 1.0F});
         };
         const glm::vec3 border(0.22F, 0.42F, 0.62F);
-        line(menuWorld(-0.29F, 0.33F), menuWorld(0.29F, 0.33F), border);
-        line(menuWorld(0.29F, 0.33F), menuWorld(0.29F, -0.425F), border);
-        line(menuWorld(0.29F, -0.425F), menuWorld(-0.29F, -0.425F), border);
-        line(menuWorld(-0.29F, -0.425F), menuWorld(-0.29F, 0.33F), border);
+        line(menuWorld(-0.33F, 0.33F), menuWorld(0.33F, 0.33F), border);
+        line(menuWorld(0.33F, 0.33F), menuWorld(0.33F, -0.390F), border);
+        line(menuWorld(0.33F, -0.390F), menuWorld(-0.33F, -0.390F), border);
+        line(menuWorld(-0.33F, -0.390F), menuWorld(-0.33F, 0.33F), border);
         appendMenuText("VR MENU", -0.105F, 0.305F, 0.006F, {0.65F, 0.88F, 1.0F});
-        appendMenuText("REPRESENTATION", -0.245F, 0.255F, 0.0048F, {0.42F, 0.72F, 0.95F});
-        appendMenuText("COLORING", -0.245F, -0.025F, 0.0048F, {0.42F, 0.72F, 0.95F});
+        appendMenuText("REPRESENTATION", -0.305F, 0.255F, 0.0042F, {0.42F, 0.72F, 0.95F});
+        appendMenuText("COLORING", 0.015F, 0.255F, 0.0042F, {0.42F, 0.72F, 0.95F});
+        appendMenuText("SELECTION LEVEL", -0.305F, -0.035F, 0.0042F, {0.42F, 0.72F, 0.95F});
 
         const int selectedRepresentation = static_cast<int>(glScene_->representation());
         const int selectedColoring = static_cast<int>(glScene_->coloring());
-        for (size_t index = 0; index < kMenuLabels.size(); ++index) {
+        for (size_t index = 0; index < kMenuItems.size(); ++index) {
             const bool selected = (index < 4 && static_cast<int>(index) == selectedRepresentation)
                 || (index >= 4 && index < 8
-                    && static_cast<int>(index - 4) == selectedColoring);
+                    && static_cast<int>(index - 4) == selectedColoring)
+                || (index >= 8 && index < 15
+                    && selectionLevel_ == kSelectionLevels[index - 8]);
             glm::vec3 color = selected ? glm::vec3(0.30F, 1.0F, 0.48F)
                                        : glm::vec3(0.65F, 0.70F, 0.78F);
             if (static_cast<int>(index) == menuHover_) color = {1.0F, 0.78F, 0.22F};
-            const float y = kMenuRows[index];
-            line(menuWorld(-0.255F, y + 0.023F), menuWorld(0.255F, y + 0.023F), color * 0.7F);
-            line(menuWorld(0.255F, y + 0.023F), menuWorld(0.255F, y - 0.023F), color * 0.7F);
-            line(menuWorld(0.255F, y - 0.023F), menuWorld(-0.255F, y - 0.023F), color * 0.7F);
-            line(menuWorld(-0.255F, y - 0.023F), menuWorld(-0.255F, y + 0.023F), color * 0.7F);
-            appendMenuText(kMenuLabels[index], -0.225F, y + 0.014F, 0.0042F, color);
+            const MenuItem& item = kMenuItems[index];
+            const float left = item.x - item.halfWidth;
+            const float right = item.x + item.halfWidth;
+            line(menuWorld(left, item.y + 0.023F), menuWorld(right, item.y + 0.023F), color * 0.7F);
+            line(menuWorld(right, item.y + 0.023F), menuWorld(right, item.y - 0.023F), color * 0.7F);
+            line(menuWorld(right, item.y - 0.023F), menuWorld(left, item.y - 0.023F), color * 0.7F);
+            line(menuWorld(left, item.y - 0.023F), menuWorld(left, item.y + 0.023F), color * 0.7F);
+            appendMenuText(item.label, left + 0.012F, item.y + 0.012F, 0.0036F, color);
         }
     }
 
@@ -1844,9 +1871,10 @@ class Viewer {
         if (distance <= 0.0F || distance > 5.0F) return -1;
         const glm::vec3 local = glm::inverse(menuOrientation_)
                               * (hand.position + direction * distance - menuPosition_);
-        if (std::abs(local.x) > 0.255F) return -1;
-        for (size_t index = 0; index < kMenuRows.size(); ++index) {
-            if (std::abs(local.y - kMenuRows[index]) <= 0.025F) {
+        for (size_t index = 0; index < kMenuItems.size(); ++index) {
+            const MenuItem& item = kMenuItems[index];
+            if (std::abs(local.x - item.x) <= item.halfWidth &&
+                std::abs(local.y - item.y) <= 0.025F) {
                 return static_cast<int>(index);
             }
         }
@@ -1864,7 +1892,9 @@ class Viewer {
             } else if (hit < 8) {
                 glScene_->setStyle(
                     glScene_->representation(), static_cast<Coloring>(hit - 4));
-            } else if (hit == 8) {
+            } else if (hit < 15) {
+                publishSelectionLevel(kSelectionLevels[hit - 8]);
+            } else if (hit == 15) {
                 recenterRequested_ = true;
                 recenterHand_ = hand;
                 menuOpen_ = false;
@@ -1953,6 +1983,12 @@ class Viewer {
         publishEventState();
     }
 
+    void publishSelectionLevel(const std::string& level) {
+        selectionLevel_ = level;
+        ++levelSequence_;
+        publishEventState();
+    }
+
     void publishEventState() {
         if (eventPath_.empty()) return;
         std::ofstream output(eventPath_, std::ios::out | std::ios::trunc);
@@ -1966,6 +2002,8 @@ class Viewer {
         output << ",\"select_sequence\":" << selectSequence_
                << ",\"select_identity\":";
         identity(lastSelectIdentity_);
+        output << ",\"level_sequence\":" << levelSequence_
+               << ",\"selection_level\":\"" << selectionLevel_ << "\"";
         output << '}';
     }
 
@@ -2238,6 +2276,8 @@ class Viewer {
     std::string publishedHoverIdentity_;
     uint64_t selectSequence_ = 0;
     std::string lastSelectIdentity_;
+    uint64_t levelSequence_ = 0;
+    std::string selectionLevel_ = "default";
     bool glfwInitialized_ = false;
     GLFWwindow* window_ = nullptr;
     XrInstance instance_ = XR_NULL_HANDLE;
@@ -2293,16 +2333,38 @@ int main(int argc, char** argv) {
             return 1;
         }
     }
-    if (argc != 2 &&
-        !(argc == 4 && std::string(argv[2]) == "--events")) {
+    if (argc < 2) {
         std::cerr << "Usage: nadoc-vr-viewer [--validate] <scene.nadocvr> "
-                     "[--events <event.json>]\n";
+                     "[--events <event.json>] [--selection-level <level>]\n";
+        return 2;
+    }
+    std::string eventPath;
+    std::string selectionLevel = "default";
+    const std::array<std::string, 7> validSelectionLevels = {
+        "default", "cluster", "strand", "domain", "end", "xover", "base",
+    };
+    for (int index = 2; index < argc; index += 2) {
+        if (index + 1 >= argc) {
+            std::cerr << "NADOC VR error: missing value for " << argv[index] << '\n';
+            return 2;
+        }
+        const std::string option(argv[index]);
+        if (option == "--events") eventPath = argv[index + 1];
+        else if (option == "--selection-level") selectionLevel = argv[index + 1];
+        else {
+            std::cerr << "NADOC VR error: unknown option " << option << '\n';
+            return 2;
+        }
+    }
+    if (std::find(validSelectionLevels.begin(), validSelectionLevels.end(), selectionLevel)
+        == validSelectionLevels.end()) {
+        std::cerr << "NADOC VR error: invalid selection level " << selectionLevel << '\n';
         return 2;
     }
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
     try {
-        Viewer viewer(loadScene(argv[1]), argc == 4 ? argv[3] : "");
+        Viewer viewer(loadScene(argv[1]), eventPath, selectionLevel);
         return viewer.run();
     } catch (const std::exception& error) {
         std::cerr << "NADOC VR error: " << error.what() << '\n';

@@ -33,7 +33,9 @@ launches the viewer. Help → Open SteamVR / Desktop starts SteamVR independentl
 so its Dashboard remains available before, during, and after a NADOC VR session.
 For native-to-browser interaction, the backend creates a private (`0600`), bounded
 event record and passes its path directly to the viewer. A localhost-only endpoint
-exposes validated, sequenced hover changes; this channel never writes design state.
+exposes validated, sequenced hover, Select, and selection-level intents. The browser
+routes those intents through NADOC's canonical selection controller; the companion
+never writes design state directly.
 
 Controls on the original HTC Vive wands:
 
@@ -47,7 +49,9 @@ Controls on the original HTC Vive wands:
 - Press either application-menu button to open or close the in-headset menu.
   Point a wand and pull its trigger to select a representation (Cylinders,
   Full, Ball + Stick, or Stick Only), coloring (Strand, Base, Cluster, or CPK),
-  Recenter, or Close.
+  selection level (Auto / Drill, Cluster, Strand, Domain, End, Crossover, or Base),
+  Recenter, or Close. The active level is green and begins at the desktop's current
+  level when VR launches.
 - Cyan and orange pointers identify the left and right controllers. They turn
   green during a one-hand grab and magenta during a two-hand resize.
 - When neither trigger is held, the right pointer extends to the nearest visible
