@@ -117,6 +117,21 @@ struct OwnerHandle {
     glm::vec3 center{};
 };
 
+struct TransformOwner {
+    std::string token;
+    float startWeight = 0.0F;
+    float endWeight = 0.0F;
+
+    bool operator==(const TransformOwner&) const = default;
+};
+
+struct TransformOwnership {
+    std::string identity;
+    std::vector<TransformOwner> owners;
+
+    bool operator==(const TransformOwnership&) const = default;
+};
+
 struct RepresentationData {
     std::vector<StyledPoint> points;
     std::vector<StyledCylinder> cylinders;
@@ -124,6 +139,7 @@ struct RepresentationData {
     std::vector<StyledBox> boxes;
     std::vector<nadoc_vr::OwnerAliasEntry> ownerAliases;
     std::vector<OwnerHandle> ownerHandles;
+    std::vector<TransformOwnership> transformOwnership;
 };
 
 struct SceneData {
@@ -419,7 +435,7 @@ SceneData loadScene(const std::string& path) {
     std::string initialRepresentation;
     std::string initialColoring;
     input >> magic >> version >> initialRepresentation >> initialColoring;
-    if (magic != "NADOCVR" || (version < 4 || version > 9)) {
+    if (magic != "NADOCVR" || (version < 4 || version > 10)) {
         throw std::runtime_error("Unsupported NADOC VR scene format");
     }
 
@@ -432,6 +448,7 @@ SceneData loadScene(const std::string& path) {
     std::array<std::array<std::unordered_set<std::string>, 4>, 2> identities;
     std::array<std::array<std::unordered_set<std::string>, 4>, 2> aliasIdentities;
     std::array<std::array<std::unordered_set<std::string>, 4>, 2> handleTokens;
+    std::array<std::array<std::unordered_set<std::string>, 4>, 2> transformIdentities;
     size_t poseIndex = 0;
     auto readIdentity = [&](char recordType) {
         std::string identity;
@@ -507,6 +524,35 @@ SceneData loadScene(const std::string& path) {
                 throw std::runtime_error("Invalid VR cluster handle");
             }
             active->ownerHandles.push_back(std::move(handle));
+        } else if (type == 'T' && version >= 10) {
+            if (!active) {
+                throw std::runtime_error(
+                    "Transform ownership appears before representation block");
+            }
+            TransformOwnership ownership;
+            size_t count = 0;
+            input >> ownership.identity >> count;
+            if (ownership.identity.empty() || count == 0 || count > 8 ||
+                !identities[poseIndex][activeIndex].contains(ownership.identity) ||
+                !transformIdentities[poseIndex][activeIndex]
+                     .insert(ownership.identity).second) {
+                throw std::runtime_error("Invalid VR transform ownership");
+            }
+            ownership.owners.resize(count);
+            std::unordered_set<std::string> uniqueTokens;
+            for (TransformOwner& owner : ownership.owners) {
+                input >> owner.token >> owner.startWeight >> owner.endWeight;
+                if (owner.token.empty() || owner.token.size() > 2048 ||
+                    !handleTokens[poseIndex][activeIndex].contains(owner.token) ||
+                    !uniqueTokens.insert(owner.token).second ||
+                    !std::isfinite(owner.startWeight) ||
+                    !std::isfinite(owner.endWeight) ||
+                    owner.startWeight < 0.0F || owner.startWeight > 1.0F ||
+                    owner.endWeight < 0.0F || owner.endWeight > 1.0F) {
+                    throw std::runtime_error("Invalid VR transform owner");
+                }
+            }
+            active->transformOwnership.push_back(std::move(ownership));
         } else if (type == 'P') {
             if (!active) throw std::runtime_error("Point appears before representation block");
             StyledPoint point;
@@ -566,6 +612,11 @@ SceneData loadScene(const std::string& path) {
             if (handleTokens[0][index] != handleTokens[1][index]) {
                 throw std::runtime_error(
                     "Expanded VR pose does not match natural cluster handles");
+            }
+            if (scene.representations[index].transformOwnership !=
+                scene.expandedRepresentations[index].transformOwnership) {
+                throw std::runtime_error(
+                    "Expanded VR pose does not match natural transform ownership");
             }
         }
     }

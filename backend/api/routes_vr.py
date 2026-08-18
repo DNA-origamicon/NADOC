@@ -382,6 +382,7 @@ def _serialize_scene(
     """Create the deliberately trivial line-oriented format read by the C++ viewer."""
     rotation = _view_rotation(camera)
     cluster_handles = _cluster_gizmo_handle_centers(design, nucleotides, rotation)
+    cluster_transform_tokens = tuple(token for token, _ in cluster_handles)
     color_channels = {
         mode: _nucleotide_colors(design, nucleotides, mode)
         for mode in ("strand", "base", "cluster", "cpk")
@@ -505,6 +506,7 @@ def _serialize_scene(
         identity: str,
         *values: float,
         aliases: tuple[str, ...] = (),
+        endpoint_aliases: tuple[tuple[str, ...], tuple[str, ...]] | None = None,
     ) -> None:
         encoded_identity = quote(str(identity), safe="-_.:~")
         if encoded_identity in primitive_ids[active_representation]:
@@ -521,6 +523,21 @@ def _serialize_scene(
             if len(aliases) > 8 or any(not token or len(token) > 2048 for token in aliases):
                 raise HTTPException(500, detail="Invalid VR primitive owner aliases.")
             lines.append(f"A {encoded_identity} {len(aliases)} {' '.join(aliases)}")
+        endpoint_owners = endpoint_aliases or (aliases, aliases)
+        transform_tokens = tuple(
+            token
+            for token in cluster_transform_tokens
+            if token in endpoint_owners[0] or token in endpoint_owners[1]
+        )
+        if transform_tokens:
+            if len(transform_tokens) > 8:
+                raise HTTPException(500, detail="Too many VR transform owners.")
+            values = " ".join(
+                f"{token} {int(token in endpoint_owners[0])} "
+                f"{int(token in endpoint_owners[1])}"
+                for token in transform_tokens
+            )
+            lines.append(f"T {encoded_identity} {len(transform_tokens)} {values}")
 
     def nucleotide_identity(nucleotide: dict) -> str:
         return ":".join(
@@ -769,8 +786,8 @@ def _serialize_scene(
         )
 
     lines = [
-        f"NADOCVR 9 {representation} {coloring}",
-        "# stable primitive identities, owner aliases, and cluster handles",
+        f"NADOCVR 10 {representation} {coloring}",
+        "# stable identities, owner aliases, handles, and endpoint transform owners",
     ]
     by_strand: dict[
         str, list[tuple[dict, np.ndarray, tuple[float, ...], str]]
@@ -1038,6 +1055,10 @@ def _serialize_scene(
                     0.075,
                     *arrow_palette,
                     aliases=bond_aliases,
+                    endpoint_aliases=(
+                        nucleotide_owner_tokens(first_nucleotide),
+                        nucleotide_owner_tokens(second_nucleotide),
+                    ),
                 )
 
     # The desktop arc layer reads crossover and forced-ligation records directly;
@@ -1223,6 +1244,10 @@ def _serialize_scene(
             0.025,
             *arc_palette,
             aliases=crossover_aliases,
+            endpoint_aliases=(
+                nucleotide_owner_tokens(first_nucleotide),
+                nucleotide_owner_tokens(second_nucleotide),
+            ),
         )
 
     unligated_ids = set(unligated_crossover_ids or [])
@@ -1294,7 +1319,7 @@ def _serialize_scene(
     def append_axes(radius: float = 0.025) -> None:
         palette = solid_palette((0.30, 0.34, 0.42))
         for axis in axes:
-            for first, second, _, edge_identity in axis_edges(axis):
+            for first, second, segment, edge_identity in axis_edges(axis):
                 emit(
                     "C",
                     f"{edge_identity}:axis",
@@ -1302,6 +1327,15 @@ def _serialize_scene(
                     *second,
                     radius,
                     *palette,
+                    aliases=(
+                        domain_owner_tokens(
+                            segment.get("strand_id"),
+                            int(segment.get("domain_index") or 0),
+                            str(axis.get("helix_id") or ""),
+                        )
+                        if segment is not None
+                        else ()
+                    ),
                 )
 
     append_axes(0.05)
@@ -1693,6 +1727,18 @@ def _serialize_scene(
                 radius,
                 *palette,
                 aliases=bond_aliases,
+                endpoint_aliases=(
+                    (
+                        nucleotide_owner_tokens(nucleotide_by_base_key[first_key])
+                        if first_key in nucleotide_by_base_key
+                        else ()
+                    ),
+                    (
+                        nucleotide_owner_tokens(nucleotide_by_base_key[second_key])
+                        if second_key in nucleotide_by_base_key
+                        else ()
+                    ),
+                ),
             )
         append_axes(0.05)
 
@@ -1803,12 +1849,12 @@ def _expanded_scene_inputs(design, nucleotides, axes, atomistic_model):
 
 
 def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
-    """Combine two identity/alias/handle-equivalent v9 scenes into one contract."""
+    """Combine two identity/ownership-equivalent v10 scenes into one contract."""
     natural_lines = natural_text.splitlines()
     expanded_lines = expanded_text.splitlines()
     natural_header = natural_lines[0].split()
     expanded_header = expanded_lines[0].split()
-    if natural_header != expanded_header or natural_header[0:2] != ["NADOCVR", "9"]:
+    if natural_header != expanded_header or natural_header[0:2] != ["NADOCVR", "10"]:
         raise HTTPException(500, detail="Expanded VR scene headers do not match.")
 
     def blocks(lines: list[str]) -> dict[str, list[str]]:
@@ -1829,8 +1875,8 @@ def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
     if set(natural_blocks) != set(expanded_blocks):
         raise HTTPException(500, detail="Expanded VR representations do not match.")
     output = [
-        f"NADOCVR 9 {natural_header[2]} {natural_header[3]}",
-        "# natural and expanded poses share identities, aliases, and cluster handles",
+        f"NADOCVR 10 {natural_header[2]} {natural_header[3]}",
+        "# natural and expanded poses share identities, aliases, handles, and transform owners",
     ]
     for representation, natural_records in natural_blocks.items():
         expanded_records = expanded_blocks[representation]
@@ -1856,6 +1902,13 @@ def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
             raise HTTPException(
                 500,
                 detail=f"Expanded VR primitive owner aliases differ in {representation}.",
+            )
+        natural_transforms = [line for line in natural_records if line.startswith("T ")]
+        expanded_transforms = [line for line in expanded_records if line.startswith("T ")]
+        if natural_transforms != expanded_transforms:
+            raise HTTPException(
+                500,
+                detail=f"Expanded VR transform owners differ in {representation}.",
             )
         natural_handles = [line.split()[1] for line in natural_records if line.startswith("K ")]
         expanded_handles = [line.split()[1] for line in expanded_records if line.startswith("K ")]

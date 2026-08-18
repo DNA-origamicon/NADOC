@@ -52,4 +52,13 @@ if(BUILD_TESTING)
     COMMAND nadoc-vr-viewer --validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/owner_handle_v9_invalid.nadocvr
   )
   set_tests_properties(nadoc-vr-scene-v9-invalid-handle PROPERTIES WILL_FAIL TRUE)
+  add_test(
+    NAME nadoc-vr-scene-v10
+    COMMAND nadoc-vr-viewer --validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/transform_owner_v10.nadocvr
+  )
+  add_test(
+    NAME nadoc-vr-scene-v10-invalid-transform-owner
+    COMMAND nadoc-vr-viewer --validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/transform_owner_v10_invalid.nadocvr
+  )
+  set_tests_properties(nadoc-vr-scene-v10-invalid-transform-owner PROPERTIES WILL_FAIL TRUE)
 endif()

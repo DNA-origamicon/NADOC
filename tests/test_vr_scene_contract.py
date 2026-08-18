@@ -110,6 +110,30 @@ P owner 0 0 0 .1 1 1 1 1 1 1 1 1 1 1 1 1
         parse_scene_contract(expected.replace("NADOCVR 9", "NADOCVR 8"))
 
 
+def test_v10_parser_locks_endpoint_transform_ownership() -> None:
+    expected = """NADOCVR 10 full strand
+R full
+K cluster-owner 1 2 3
+C boundary-bond 0 0 0 1 0 0 .1 1 1 1 1 1 1 1 1 1 1 1 1
+T boundary-bond 1 cluster-owner 1 0
+"""
+    scene = parse_scene_contract(expected)
+    assert scene["full"]["boundary-bond"].transform_owners == (
+        ("cluster-owner", 1.0, 0.0),
+    )
+
+    changed = expected.replace("cluster-owner 1 0", "cluster-owner 1 1")
+    comparison = compare_scenes(expected, changed)
+    assert [difference.category for difference in comparison.differences] == [
+        "transform_owner"
+    ]
+
+    with pytest.raises(ValueError, match="transform owners require v10"):
+        parse_scene_contract(expected.replace("NADOCVR 10", "NADOCVR 9"))
+    with pytest.raises(ValueError, match="invalid transform owner"):
+        parse_scene_contract(expected.replace("cluster-owner 1 0", "cluster-owner 1.1 0"))
+
+
 def test_comparator_matches_within_tolerance_and_reports_semantic_owner() -> None:
     expected = FIXTURE.read_text()
     actual = expected.replace(

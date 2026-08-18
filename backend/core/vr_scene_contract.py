@@ -1,4 +1,4 @@
-"""Stable-identity parser and numeric comparator for native VR scene v6-v9.
+"""Stable-identity parser and numeric comparator for native VR scene v6-v10.
 
 This module deliberately knows nothing about OpenXR or rendering. It compares the
 model-space scene contract before the native viewer normalizes it into metres, making
@@ -24,6 +24,7 @@ class ScenePrimitive:
     identity: str
     values: tuple[float, ...]
     owner_aliases: tuple[str, ...] = ()
+    transform_owners: tuple[tuple[str, float, float], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,9 +77,9 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
     if (
         len(header) != 4
         or header[0] != "NADOCVR"
-        or header[1] not in {"6", "7", "8", "9"}
+        or header[1] not in {"6", "7", "8", "9", "10"}
     ):
-        raise ValueError("stable comparison requires NADOCVR v6, v7, v8, or v9")
+        raise ValueError("stable comparison requires NADOCVR v6 through v10")
     version = int(header[1])
     result: dict[str, dict[str, ScenePrimitive]] = {}
     active: str | None = None
@@ -129,6 +130,56 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
             if len(set(aliases)) != len(aliases):
                 raise ValueError(f"line {line_number}: duplicate owner alias")
             result[active][identity] = replace(primitive, owner_aliases=aliases)
+            continue
+        if fields[0] == "T":
+            if version < 10:
+                raise ValueError(f"line {line_number}: transform owners require v10")
+            if active is None:
+                raise ValueError(f"line {line_number}: transform owners before representation")
+            if len(fields) < 6:
+                raise ValueError(f"line {line_number}: malformed transform owners")
+            identity = fields[1]
+            try:
+                owner_count = int(fields[2])
+            except ValueError as error:
+                raise ValueError(
+                    f"line {line_number}: invalid transform owner count"
+                ) from error
+            primitive = result[active].get(identity)
+            if primitive is None:
+                raise ValueError(
+                    f"line {line_number}: transform owners reference unknown identity {identity}"
+                )
+            if primitive.transform_owners:
+                raise ValueError(
+                    f"line {line_number}: duplicate transform owners for {identity}"
+                )
+            if owner_count < 1 or owner_count > 8 or len(fields) != 3 + owner_count * 3:
+                raise ValueError(f"line {line_number}: invalid transform owner count")
+            owners = []
+            for index in range(owner_count):
+                token = fields[3 + index * 3]
+                try:
+                    start_weight = float(fields[4 + index * 3])
+                    end_weight = float(fields[5 + index * 3])
+                except ValueError as error:
+                    raise ValueError(
+                        f"line {line_number}: invalid transform owner weight"
+                    ) from error
+                if (
+                    not token
+                    or len(token) > 2048
+                    or not np.all(np.isfinite([start_weight, end_weight]))
+                    or not 0.0 <= start_weight <= 1.0
+                    or not 0.0 <= end_weight <= 1.0
+                ):
+                    raise ValueError(f"line {line_number}: invalid transform owner")
+                owners.append((token, start_weight, end_weight))
+            if len({owner[0] for owner in owners}) != len(owners):
+                raise ValueError(f"line {line_number}: duplicate transform owner")
+            result[active][identity] = replace(
+                primitive, transform_owners=tuple(owners)
+            )
             continue
         record_type = fields[0]
         if record_type not in _VALUE_COUNTS:
@@ -302,6 +353,15 @@ def compare_scenes(
                         identity,
                         "owner",
                         "canonical owner aliases differ",
+                    )
+                )
+            if expected_primitive.transform_owners != actual_primitive.transform_owners:
+                differences.append(
+                    SceneDifference(
+                        representation,
+                        identity,
+                        "transform_owner",
+                        "endpoint transform ownership differs",
                     )
                 )
             differences.extend(

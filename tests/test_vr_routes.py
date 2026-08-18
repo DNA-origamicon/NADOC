@@ -219,12 +219,13 @@ def test_expanded_scene_translates_owners_and_interpolates_crossover_atoms() -> 
     assert atom.x == 0.0  # source inputs remain immutable
 
 
-def test_v9_bundle_pairs_primitives_owners_and_cluster_handles() -> None:
-    natural = """NADOCVR 9 full strand
+def test_v10_bundle_pairs_primitives_owners_handles_and_transform_owners() -> None:
+    natural = """NADOCVR 10 full strand
 R full
 K cluster-owner 0 0 0
 P owner 0 0 0 .1 1 1 1 1 1 1 1 1 1 1 1 1
 A owner 1 base-owner
+T owner 1 cluster-owner 1 1
 """
     expanded = natural.replace("P owner 0 0 0", "P owner 2 0 0").replace(
         "K cluster-owner 0 0 0", "K cluster-owner 1 0 0"
@@ -232,7 +233,7 @@ A owner 1 base-owner
 
     bundled = _bundle_expanded_scene(natural, expanded)
 
-    assert bundled.startswith("NADOCVR 9 full strand\n")
+    assert bundled.startswith("NADOCVR 10 full strand\n")
     assert "R full\nK cluster-owner 0 0 0" in bundled
     assert "E full\nK cluster-owner 1 0 0" in bundled
 
@@ -247,6 +248,12 @@ A owner 1 base-owner
     mismatched_handle = expanded.replace("cluster-owner", "different-handle", 1)
     with pytest.raises(HTTPException, match="cluster handles differ"):
         _bundle_expanded_scene(natural, mismatched_handle)
+
+    mismatched_transform = expanded.replace(
+        "T owner 1 cluster-owner 1 1", "T owner 1 cluster-owner 1 0"
+    )
+    with pytest.raises(HTTPException, match="transform owners differ"):
+        _bundle_expanded_scene(natural, mismatched_transform)
 
 
 def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -> None:
@@ -455,7 +462,7 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
     sections = _scene_sections(text)
     identities = _scene_identities(text)
 
-    assert text.startswith("NADOCVR 9 full strand\n")
+    assert text.startswith("NADOCVR 10 full strand\n")
     assert set(sections) == {"full", "cylinders", "ballstick", "stick"}
     assert all(len(values) == len(set(values)) for values in identities.values())
     assert "nuc:s1:0:h1:1:FORWARD:0:backbone" in identities["full"]
@@ -492,7 +499,7 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
     assert float(first_atom[4]) == pytest.approx(0.17 * 0.55)
 
 
-def test_v9_owner_aliases_and_handles_bridge_representations() -> None:
+def test_v10_owners_handles_and_transform_ownership_bridge_representations() -> None:
     strand_id = "strand: one"
     helix_id = "helix: one"
     cluster_id = "cluster one"
@@ -624,6 +631,105 @@ def test_v9_owner_aliases_and_handles_bridge_representations() -> None:
         larger_cluster_owner,
     )
     assert scene["full"][larger_cluster_owner].record_type == "K"
+    assert full_backbone.transform_owners == (
+        (cluster_owner, 1.0, 1.0),
+        (larger_cluster_owner, 1.0, 1.0),
+    )
+    assert atom_sphere.transform_owners == full_backbone.transform_owners
+    assert coarse_domain.transform_owners == full_backbone.transform_owners
+
+
+def test_v10_boundary_connections_assign_cluster_ownership_per_endpoint() -> None:
+    strands = [
+        SimpleNamespace(
+            id=f"s{index}",
+            is_scaffold=index == 1,
+            color=None,
+            sequence="A",
+            domains=[
+                SimpleNamespace(
+                    helix_id=f"h{index}", start_bp=0, end_bp=0, direction="FORWARD"
+                )
+            ],
+        )
+        for index in (1, 2)
+    ]
+    clusters = [
+        SimpleNamespace(
+            id=f"c{index}",
+            domain_ids=[SimpleNamespace(strand_id=f"s{index}", domain_index=0)],
+            helix_ids=[f"h{index}"],
+            auto_created=False,
+            color=None,
+            is_default=False,
+        )
+        for index in (1, 2)
+    ]
+    crossover = SimpleNamespace(
+        id="boundary",
+        half_a=SimpleNamespace(helix_id="h1", index=0, strand="FORWARD"),
+        half_b=SimpleNamespace(helix_id="h2", index=0, strand="FORWARD"),
+        extra_bases=None,
+    )
+    design = SimpleNamespace(
+        strands=strands,
+        cluster_transforms=clusters,
+        crossovers=[crossover],
+        forced_ligations=[],
+        overhang_bindings=[],
+        duplexes=[],
+        overhang_connections=[],
+        flexible_connections=[],
+    )
+    nucleotides = [
+        {
+            "strand_id": f"s{index}",
+            "domain_index": 0,
+            "helix_id": f"h{index}",
+            "bp_index": 0,
+            "direction": "FORWARD",
+            "backbone_position": [float(index - 1), 0, 0],
+        }
+        for index in (1, 2)
+    ]
+    atoms = [
+        SimpleNamespace(
+            x=float(index - 1),
+            y=0.0,
+            z=0.0,
+            strand_id=f"s{index}",
+            helix_id=f"h{index}",
+            bp_index=0,
+            direction="FORWARD",
+            residue="DA",
+            element="C",
+        )
+        for index in (1, 2)
+    ]
+    scene = parse_scene_contract(
+        _serialize_scene(
+            design,
+            nucleotides,
+            [],
+            atomistic_model=SimpleNamespace(atoms=atoms, bonds=[(0, 1)]),
+        )
+    )
+    direct = next(
+        primitive
+        for primitive in scene["full"].values()
+        if primitive.identity == "crossover:boundary:direct"
+    )
+    atom_bond = next(
+        primitive
+        for primitive in scene["ballstick"].values()
+        if primitive.identity.startswith("atom-bond:")
+    )
+    expected = (
+        (_owner_token("cluster", "c1"), 1.0, 0.0),
+        (_owner_token("cluster", "c2"), 0.0, 1.0),
+    )
+    assert direct.transform_owners == expected
+    assert atom_bond.transform_owners == expected
 
 
 def test_full_slabs_share_the_pair_plane_and_contact_the_backbone() -> None:
