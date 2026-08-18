@@ -3,6 +3,13 @@ import * as THREE from 'three'
 const VIEW_SIZE_METERS = 0.55
 const VIEW_DISTANCE_METERS = 0.8
 
+function _durationLabel(milliseconds) {
+  if (!Number.isFinite(milliseconds)) return 'unavailable'
+  return milliseconds >= 1000
+    ? `${(milliseconds / 1000).toFixed(1)} s`
+    : `${milliseconds.toFixed(1)} ms`
+}
+
 function _errorMessage(error, secureContext) {
   if (!secureContext) {
     return 'VR requires NADOC to be opened from localhost or HTTPS.'
@@ -49,6 +56,7 @@ export function initVRSession({
   let lastNativeLevelSequence = 0
   let lastNativeToolSequence = 0
   let lastNativeTransformSequence = 0
+  let nativeTimingReported = false
   let cameraRig = null
   let cameraSnapshot = null
   let starting = false
@@ -246,6 +254,7 @@ export function initVRSession({
       lastNativeLevelSequence = 0
       lastNativeToolSequence = 0
       lastNativeTransformSequence = 0
+      nativeTimingReported = false
       _scheduleNativeEventPoll()
     }
     _setButtonState({ active })
@@ -259,7 +268,20 @@ export function initVRSession({
       let status = null
       try { status = await native.status() } catch { /* next user action can retry */ }
       if (disposed || !nativeActive) return
-      if (status?.running) _scheduleNativePoll()
+      if (status?.running) {
+        const timing = status?.timing
+        if (!nativeTimingReported && timing?.first_frame_ready === true) {
+          nativeTimingReported = true
+          showToast(
+            `VR first frame submitted in ${_durationLabel(timing.launch_to_first_frame_ms)} ` +
+            `(snapshot ${_durationLabel(timing.snapshot_ms)}; viewer ` +
+            `${_durationLabel(timing.process_to_first_frame_ms)}). ` +
+            `Frame CPU ${_durationLabel(timing.first_frame_cpu_ms)} / ` +
+            `${_durationLabel(timing.display_period_ms)} runtime period.`,
+          )
+        }
+        _scheduleNativePoll()
+      }
       else _setNativeActive(false)
     }, nativePollIntervalMs)
   }

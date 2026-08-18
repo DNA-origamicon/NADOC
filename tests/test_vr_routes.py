@@ -21,6 +21,7 @@ from backend.api.routes_vr import (
     _expanded_scene_inputs,
     _cluster_gizmo_handle_centers,
     _require_local,
+    _runtime_timing,
     _selection_cluster,
     _selection_clusters,
     _serialize_scene,
@@ -324,6 +325,10 @@ def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -
         "tool_target_owner_tokens": ["domain-token"],
         "transform_sequence": 0,
         "transform_matrix": np.identity(4).flatten(order="F").tolist(),
+        "ready_sequence": 0,
+        "first_frame_at_ms": None,
+        "first_frame_cpu_ms": None,
+        "display_period_ms": None,
     }
 
     event_path.write_text(
@@ -396,10 +401,54 @@ def test_native_tool_transform_returns_to_nadoc_coordinates(tmp_path) -> None:
         "tool_target_owner_tokens": [],
         "transform_sequence": 0,
         "transform_matrix": np.identity(4).flatten(order="F").tolist(),
+        "ready_sequence": 0,
+        "first_frame_at_ms": None,
+        "first_frame_cpu_ms": None,
+        "display_period_ms": None,
     }
 
     event_path.write_text("x" * 4097)
     assert _event_payload({"event_path": str(event_path)})["sequence"] == 0
+
+
+def test_native_first_frame_timing_is_bounded_and_uses_backend_milestones(
+    tmp_path,
+) -> None:
+    event_path = tmp_path / "vr-timing.json"
+    event_path.write_text(
+        json.dumps(
+            {
+                "sequence": 1,
+                "ready_sequence": 1,
+                "first_frame_at_ms": 2_000_000.0,
+                "first_frame_cpu_ms": 8.5,
+                "display_period_ms": 11.111,
+            }
+        )
+    )
+    state = {
+        "event_path": str(event_path),
+        "launch_requested_at": 1998.0,
+        "snapshot_started_at": 1998.2,
+        "snapshot_ready_at": 1999.0,
+        "process_started_at": 1999.5,
+    }
+    event = _event_payload(state)
+    assert event["ready_sequence"] == 1
+    assert _runtime_timing(state, event) == {
+        "first_frame_ready": True,
+        "snapshot_ms": 800.0,
+        "process_to_first_frame_ms": 500.0,
+        "launch_to_first_frame_ms": 2000.0,
+        "first_frame_cpu_ms": 8.5,
+        "display_period_ms": 11.111,
+    }
+
+    event_path.write_text(
+        '{"sequence":2,"ready_sequence":1,"first_frame_at_ms":NaN,'
+        '"first_frame_cpu_ms":8.5,"display_period_ms":11.111}'
+    )
+    assert _event_payload(state)["sequence"] == 0
 
 
 def test_native_feedback_writer_is_private_bounded_and_atomic(tmp_path) -> None:

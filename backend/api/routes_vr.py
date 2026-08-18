@@ -2678,8 +2678,38 @@ def _status_payload() -> dict:
         "available": True,
         "pid": int(state["pid"]),
         "started_at": state.get("started_at"),
+        "timing": _runtime_timing(state, _event_payload(state)),
         "log_path": str(_LOG_PATH),
         **_runtime_payload(),
+    }
+
+
+def _runtime_timing(state: dict, event: dict) -> dict:
+    """Return launch milestones without trusting native clock-derived durations."""
+    requested_at = state.get("launch_requested_at")
+    snapshot_started_at = state.get("snapshot_started_at")
+    snapshot_ready_at = state.get("snapshot_ready_at")
+    process_started_at = state.get("process_started_at")
+    first_frame_at_ms = event.get("first_frame_at_ms")
+
+    def elapsed_ms(start, end) -> float | None:
+        if not isinstance(start, (int, float)) or not isinstance(end, (int, float)):
+            return None
+        value = (float(end) - float(start)) * 1000.0
+        return round(value, 1) if np.isfinite(value) and value >= 0 else None
+
+    first_frame_at = (
+        float(first_frame_at_ms) / 1000.0
+        if isinstance(first_frame_at_ms, (int, float))
+        else None
+    )
+    return {
+        "first_frame_ready": int(event.get("ready_sequence", 0)) > 0,
+        "snapshot_ms": elapsed_ms(snapshot_started_at, snapshot_ready_at),
+        "process_to_first_frame_ms": elapsed_ms(process_started_at, first_frame_at),
+        "launch_to_first_frame_ms": elapsed_ms(requested_at, first_frame_at),
+        "first_frame_cpu_ms": event.get("first_frame_cpu_ms"),
+        "display_period_ms": event.get("display_period_ms"),
     }
 
 
@@ -2701,6 +2731,10 @@ def _event_payload(state: dict | None) -> dict:
             "tool_target_owner_tokens": [],
             "transform_sequence": 0,
             "transform_matrix": np.identity(4, dtype=float).flatten(order="F").tolist(),
+            "ready_sequence": 0,
+            "first_frame_at_ms": None,
+            "first_frame_cpu_ms": None,
+            "display_period_ms": None,
         }
     path = Path(state["event_path"])
     try:
@@ -2724,6 +2758,10 @@ def _event_payload(state: dict | None) -> dict:
             "transform_matrix",
             np.identity(4, dtype=float).flatten(order="F").tolist(),
         )
+        ready_sequence = int(event.get("ready_sequence", 0))
+        first_frame_at_ms = event.get("first_frame_at_ms")
+        first_frame_cpu_ms = event.get("first_frame_cpu_ms")
+        display_period_ms = event.get("display_period_ms")
         identities = (hover_identity, select_identity, tool_target_identity)
         valid_selection_kinds = {
             "none",
@@ -2744,6 +2782,7 @@ def _event_payload(state: dict | None) -> dict:
             or level_sequence < 0
             or tool_sequence < 0
             or transform_sequence < 0
+            or ready_sequence < 0
             or any(
                 value is not None and not isinstance(value, str) for value in identities
             )
@@ -2775,6 +2814,33 @@ def _event_payload(state: dict | None) -> dict:
             )
             or not isinstance(transform_values, list)
             or len(transform_values) != 16
+            or (
+                ready_sequence == 0
+                and any(
+                    value is not None
+                    for value in (
+                        first_frame_at_ms,
+                        first_frame_cpu_ms,
+                        display_period_ms,
+                    )
+                )
+            )
+            or (
+                ready_sequence > 0
+                and (
+                    not isinstance(first_frame_at_ms, (int, float))
+                    or not isinstance(first_frame_cpu_ms, (int, float))
+                    or not isinstance(display_period_ms, (int, float))
+                    or not np.all(
+                        np.isfinite(
+                            [first_frame_at_ms, first_frame_cpu_ms, display_period_ms]
+                        )
+                    )
+                    or not 0 < first_frame_at_ms < 1e15
+                    or not 0 <= first_frame_cpu_ms < 1e6
+                    or not 0 < display_period_ms < 1e6
+                )
+            )
         ):
             raise ValueError("invalid event record")
         if any(isinstance(value, str) and len(value) > 2048 for value in identities):
@@ -2811,6 +2877,10 @@ def _event_payload(state: dict | None) -> dict:
             "tool_target_owner_tokens": tool_target_owner_tokens,
             "transform_sequence": transform_sequence,
             "transform_matrix": nadoc_transform.flatten(order="F").tolist(),
+            "ready_sequence": ready_sequence,
+            "first_frame_at_ms": first_frame_at_ms,
+            "first_frame_cpu_ms": first_frame_cpu_ms,
+            "display_period_ms": display_period_ms,
         }
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
         # A truncate/write can briefly expose an incomplete record. Pollers keep
@@ -2830,6 +2900,10 @@ def _event_payload(state: dict | None) -> dict:
             "tool_target_owner_tokens": [],
             "transform_sequence": 0,
             "transform_matrix": np.identity(4, dtype=float).flatten(order="F").tolist(),
+            "ready_sequence": 0,
+            "first_frame_at_ms": None,
+            "first_frame_cpu_ms": None,
+            "display_period_ms": None,
         }
 
 
@@ -2980,6 +3054,7 @@ def start_vr_runtime(request: Request) -> dict:
 @router.post("/vr/launch")
 def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
     _require_local(request)
+    launch_requested_at = time.time()
     if body.assembly_active:
         raise HTTPException(
             409,
@@ -3005,9 +3080,11 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         if running:
             return _status_payload()
         _ensure_viewer_built()
+        snapshot_started_at = time.time()
         scene_path = _write_scene_snapshot(
             producer=lambda write_line: _snapshot(body, line_writer=write_line)
         )
+        snapshot_ready_at = time.time()
         with tempfile.NamedTemporaryFile(
             mode="w",
             prefix="nadoc-vr-event-",
@@ -3020,7 +3097,9 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
                 f'"level_sequence":0,"selection_level":"{body.selection_level}",'
                 '"tool_sequence":0,"tool_mode":"inspect",'
                 '"tool_action":"activate","transform_sequence":0,'
-                '"transform_matrix":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]}'
+                '"transform_matrix":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],'
+                '"ready_sequence":0,"first_frame_at_ms":null,'
+                '"first_frame_cpu_ms":null,"display_period_ms":null}'
             )
             event_path = Path(event_file.name)
         event_path.chmod(0o600)
@@ -3048,6 +3127,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
                 start_new_session=True,
                 close_fds=True,
             )
+            process_started_at = time.time()
         except OSError as exc:
             scene_path.unlink(missing_ok=True)
             event_path.unlink(missing_ok=True)
@@ -3078,7 +3158,11 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             "scene_path": str(scene_path),
             "event_path": str(event_path),
             "feedback_path": str(feedback_path),
-            "started_at": time.time(),
+            "started_at": process_started_at,
+            "launch_requested_at": launch_requested_at,
+            "snapshot_started_at": snapshot_started_at,
+            "snapshot_ready_at": snapshot_ready_at,
+            "process_started_at": process_started_at,
             "view_rotation": _view_rotation(body.camera).tolist(),
         }
         _write_state(state)

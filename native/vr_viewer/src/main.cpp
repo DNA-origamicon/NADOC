@@ -33,6 +33,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -2812,6 +2813,17 @@ class Viewer {
             }
         }
         output << ']';
+        output << ",\"ready_sequence\":" << readySequence_;
+        if (readySequence_ == 0) {
+            output << ",\"first_frame_at_ms\":null"
+                   << ",\"first_frame_cpu_ms\":null"
+                   << ",\"display_period_ms\":null";
+        } else {
+            output << std::setprecision(17)
+                   << ",\"first_frame_at_ms\":" << firstFrameAtMilliseconds_
+                   << ",\"first_frame_cpu_ms\":" << firstFrameCpuMilliseconds_
+                   << ",\"display_period_ms\":" << displayPeriodMilliseconds_;
+        }
         output << '}';
     }
 
@@ -3104,6 +3116,19 @@ class Viewer {
         endInfo.layerCount = layerCount;
         endInfo.layers = layerCount ? layers : nullptr;
         checkXr(instance_, xrEndFrame(session_, &endInfo), "xrEndFrame");
+        if (layerCount > 0 && readySequence_ == 0) {
+            firstFrameAtMilliseconds_ = std::chrono::duration<double, std::milli>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+            firstFrameCpuMilliseconds_ = std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - frameStarted).count();
+            displayPeriodMilliseconds_ =
+                static_cast<double>(frameState.predictedDisplayPeriod) / 1.0e6;
+            ++readySequence_;
+            publishEventState();
+            std::cout << "VR first frame submitted: CPU="
+                      << firstFrameCpuMilliseconds_ << " ms, runtime period="
+                      << displayPeriodMilliseconds_ << " ms" << std::endl;
+        }
         if (toolShell_.mode() == nadoc_vr::ToolMode::move_rotate &&
             toolShell_.previewRequested()) {
             const double milliseconds = std::chrono::duration<double, std::milli>(
@@ -3166,6 +3191,10 @@ class Viewer {
     nadoc_vr::PendingRigidTransform pendingToolTransform_;
     uint64_t transformSequence_ = 0;
     glm::mat4 lastToolTransform_{1.0F};
+    uint64_t readySequence_ = 0;
+    double firstFrameAtMilliseconds_ = 0.0;
+    double firstFrameCpuMilliseconds_ = 0.0;
+    double displayPeriodMilliseconds_ = 0.0;
     nadoc_vr::TimingWindow previewFrameTiming_{240};
     uint64_t feedbackSequence_ = 0;
     uint32_t feedbackPollFrame_ = 0;

@@ -10,6 +10,7 @@ function makeHarness({
   requestError = null,
   xr: xrOverride,
   native = null,
+  nativePollIntervalMs = 0,
   nativeEventPollIntervalMs = 0,
   onNativeEvent = null,
 } = {}) {
@@ -44,7 +45,7 @@ function makeHarness({
   const setMenuToggle = vi.fn((id, on) => button.classList.toggle('is-on', on))
   const showToast = vi.fn()
   const controller = initVRSession({
-    renderer, scene, camera, button, xr, native, nativePollIntervalMs: 0,
+    renderer, scene, camera, button, xr, native, nativePollIntervalMs,
     nativeEventPollIntervalMs, onNativeEvent,
     setMenuToggle, showToast,
   })
@@ -148,6 +149,40 @@ describe('initVRSession', () => {
     expect(native.stop).toHaveBeenCalledOnce()
     expect(h.controller.isActive()).toBe(false)
     expect(h.button.querySelector('.vr-menu-label').textContent).toBe('View in VR')
+  })
+
+  it('reports native first-frame timing once per launch', async () => {
+    vi.useFakeTimers()
+    const native = {
+      status: vi.fn().mockResolvedValue({ available: true, running: false }),
+      launch: vi.fn().mockResolvedValue({ available: true, running: true, pid: 1234 }),
+      stop: vi.fn().mockResolvedValue({ available: true, running: false }),
+    }
+    const h = makeHarness({ xr: null, native, nativePollIntervalMs: 10 })
+    await vi.advanceTimersByTimeAsync(0)
+    native.status.mockResolvedValue({
+      available: true,
+      running: true,
+      timing: {
+        first_frame_ready: true,
+        snapshot_ms: 54_800,
+        process_to_first_frame_ms: 1400,
+        launch_to_first_frame_ms: 56_200,
+        first_frame_cpu_ms: 8.5,
+        display_period_ms: 11.111,
+      },
+    })
+
+    await h.controller.enter()
+    await vi.advanceTimersByTimeAsync(25)
+    const timingCalls = h.showToast.mock.calls.filter(([message]) =>
+      message.startsWith('VR first frame submitted'))
+    expect(timingCalls).toEqual([[
+      'VR first frame submitted in 56.2 s (snapshot 54.8 s; viewer 1.4 s). ' +
+      'Frame CPU 8.5 ms / 11.1 ms runtime period.',
+    ]])
+    await h.controller.exit()
+    vi.useRealTimers()
   })
 
   it('delivers sequenced native events only while the companion is active', async () => {
