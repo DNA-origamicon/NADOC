@@ -1,4 +1,4 @@
-"""Stable-identity parser and numeric comparator for native VR scene v6.
+"""Stable-identity parser and numeric comparator for native VR scene v6/v7.
 
 This module deliberately knows nothing about OpenXR or rendering. It compares the
 model-space scene contract before the native viewer normalizes it into metres, making
@@ -66,24 +66,31 @@ class SceneComparison:
         return "VR scene parity failed:\n" + "\n".join(f"- {line}" for line in shown)
 
 
-def parse_scene_v6(text: str) -> dict[str, dict[str, ScenePrimitive]]:
-    """Parse a v6 snapshot into ``representation → identity → primitive``."""
+def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
+    """Parse stable natural/expanded poses into ``pose/representation → primitives``."""
     lines = text.splitlines()
     if not lines:
         raise ValueError("empty VR scene")
     header = lines[0].split()
-    if len(header) != 4 or header[0] != "NADOCVR" or header[1] != "6":
-        raise ValueError("stable comparison requires NADOCVR v6")
+    if (
+        len(header) != 4
+        or header[0] != "NADOCVR"
+        or header[1] not in {"6", "7"}
+    ):
+        raise ValueError("stable comparison requires NADOCVR v6 or v7")
+    version = int(header[1])
     result: dict[str, dict[str, ScenePrimitive]] = {}
     active: str | None = None
     for line_number, line in enumerate(lines[1:], start=2):
         fields = line.split()
         if not fields or fields[0].startswith("#"):
             continue
-        if fields[0] == "R":
+        if fields[0] in {"R", "E"}:
             if len(fields) != 2:
                 raise ValueError(f"line {line_number}: malformed representation record")
-            active = fields[1]
+            if fields[0] == "E" and version < 7:
+                raise ValueError(f"line {line_number}: expanded pose requires v7")
+            active = fields[1] if fields[0] == "R" else f"expanded/{fields[1]}"
             if active in result:
                 raise ValueError(
                     f"line {line_number}: duplicate representation {active}"
@@ -123,6 +130,14 @@ def parse_scene_v6(text: str) -> dict[str, dict[str, ScenePrimitive]]:
     if not result or not any(result.values()):
         raise ValueError("VR scene contains no primitives")
     return result
+
+
+def parse_scene_v6(text: str) -> dict[str, dict[str, ScenePrimitive]]:
+    """Backward-compatible strict v6 entry point used by existing fixtures."""
+    header = text.splitlines()[0].split() if text.splitlines() else []
+    if len(header) < 2 or header[1] != "6":
+        raise ValueError("stable comparison requires NADOCVR v6")
+    return parse_scene_contract(text)
 
 
 def _norm(vector) -> float:
@@ -206,8 +221,9 @@ def compare_scenes(
     actual_text: str,
     tolerance: SceneTolerance = SceneTolerance(),
 ) -> SceneComparison:
-    """Compare two v6 scenes by semantic identity with concise diagnostics."""
-    expected, actual = parse_scene_v6(expected_text), parse_scene_v6(actual_text)
+    """Compare two stable scene contracts by semantic identity."""
+    expected = parse_scene_contract(expected_text)
+    actual = parse_scene_contract(actual_text)
     differences: list[SceneDifference] = []
     matched = 0
     for representation in sorted(set(expected) | set(actual)):

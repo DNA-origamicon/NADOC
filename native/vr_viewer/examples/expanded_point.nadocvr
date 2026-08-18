@@ -1,0 +1,6 @@
+NADOCVR 7 full strand
+# Minimal natural/expanded pose smoke-test fixture.
+R full
+P point:center 0 0 0 .18 1 .25 .25 1 .25 .25 1 .25 .25 1 .25 .25
+E full
+P point:center 1 0 0 .18 1 .25 .25 1 .25 .25 1 .25 .25 1 .25 .25

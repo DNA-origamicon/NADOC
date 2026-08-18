@@ -119,6 +119,8 @@ struct RepresentationData {
 
 struct SceneData {
     std::array<RepresentationData, 4> representations;
+    std::array<RepresentationData, 4> expandedRepresentations;
+    bool hasExpanded = false;
     Representation initialRepresentation = Representation::full;
     Coloring initialColoring = Coloring::strand;
 };
@@ -408,7 +410,8 @@ SceneData loadScene(const std::string& path) {
     std::string initialRepresentation;
     std::string initialColoring;
     input >> magic >> version >> initialRepresentation >> initialColoring;
-    if (magic != "NADOCVR" || (version != 4 && version != 5 && version != 6)) {
+    if (magic != "NADOCVR" ||
+        (version != 4 && version != 5 && version != 6 && version != 7)) {
         throw std::runtime_error("Unsupported NADOC VR scene format");
     }
 
@@ -418,7 +421,8 @@ SceneData loadScene(const std::string& path) {
     RepresentationData* active = nullptr;
     size_t activeIndex = 0;
     size_t legacyIdentityIndex = 0;
-    std::array<std::unordered_set<std::string>, 4> identities;
+    std::array<std::array<std::unordered_set<std::string>, 4>, 2> identities;
+    size_t poseIndex = 0;
     auto readIdentity = [&](char recordType) {
         std::string identity;
         if (version >= 6) {
@@ -426,7 +430,7 @@ SceneData loadScene(const std::string& path) {
             if (identity.empty()) {
                 throw std::runtime_error("VR primitive has an empty identity");
             }
-            if (!identities[activeIndex].insert(identity).second) {
+            if (!identities[poseIndex][activeIndex].insert(identity).second) {
                 throw std::runtime_error(
                     "Duplicate VR primitive identity: " + identity);
             }
@@ -446,7 +450,15 @@ SceneData loadScene(const std::string& path) {
             std::string name;
             input >> name;
             activeIndex = static_cast<size_t>(representationFromName(name));
+            poseIndex = 0;
             active = &scene.representations[activeIndex];
+        } else if (type == 'E' && version >= 7) {
+            std::string name;
+            input >> name;
+            activeIndex = static_cast<size_t>(representationFromName(name));
+            poseIndex = 1;
+            scene.hasExpanded = true;
+            active = &scene.expandedRepresentations[activeIndex];
         } else if (type == 'P') {
             if (!active) throw std::runtime_error("Point appears before representation block");
             StyledPoint point;
@@ -492,6 +504,14 @@ SceneData loadScene(const std::string& path) {
                     })) {
         throw std::runtime_error("The scene snapshot contains no visible geometry");
     }
+    if (scene.hasExpanded) {
+        for (size_t index = 0; index < scene.representations.size(); ++index) {
+            if (identities[0][index] != identities[1][index]) {
+                throw std::runtime_error(
+                    "Expanded VR pose does not match natural primitive identities");
+            }
+        }
+    }
 
     glm::vec3 lo(std::numeric_limits<float>::max());
     glm::vec3 hi(std::numeric_limits<float>::lowest());
@@ -523,7 +543,7 @@ SceneData loadScene(const std::string& path) {
     const glm::vec3 extent = hi - lo;
     const float maxExtent = std::max({extent.x, extent.y, extent.z, 1.0e-6F});
     const float scale = kViewSizeMeters / maxExtent;
-    for (RepresentationData& rep : scene.representations) {
+    auto normalize = [&](RepresentationData& rep, bool appendViewerAxes) {
         for (StyledPoint& point : rep.points) {
             point.position = (point.position - center) * scale;
             point.position.z -= kViewDistanceMeters;
@@ -551,6 +571,7 @@ SceneData loadScene(const std::string& path) {
             box.axisZ *= scale;
         }
 
+        if (!appendViewerAxes) return;
         const glm::vec3 origin(-0.28F, -0.28F, -kViewDistanceMeters);
         auto addAxis = [&](const char* name, glm::vec3 delta, glm::vec3 color) {
             ColorSet colors;
@@ -561,6 +582,12 @@ SceneData loadScene(const std::string& path) {
         addAxis("viewer:axis:x", {0.10F, 0, 0}, {1.0F, 0.25F, 0.25F});
         addAxis("viewer:axis:y", {0, 0.10F, 0}, {0.25F, 1.0F, 0.35F});
         addAxis("viewer:axis:z", {0, 0, 0.10F}, {0.3F, 0.55F, 1.0F});
+    };
+    for (size_t index = 0; index < scene.representations.size(); ++index) {
+        normalize(scene.representations[index], true);
+        if (scene.hasExpanded) {
+            normalize(scene.expandedRepresentations[index], true);
+        }
     }
     return scene;
 }
@@ -649,7 +676,9 @@ class GlScene {
         representation_ = representation;
         coloring_ = coloring;
         const RepresentationData& source =
-            scene_.representations[static_cast<size_t>(representation)];
+            expanded_ && scene_.hasExpanded
+                ? scene_.expandedRepresentations[static_cast<size_t>(representation)]
+                : scene_.representations[static_cast<size_t>(representation)];
 
         std::vector<Vertex> points;
         points.reserve(source.points.size());
@@ -734,6 +763,12 @@ class GlScene {
 
     [[nodiscard]] Representation representation() const { return representation_; }
     [[nodiscard]] Coloring coloring() const { return coloring_; }
+    [[nodiscard]] bool expanded() const { return expanded_; }
+    void setExpanded(bool expanded) {
+        if (expanded_ == expanded || (expanded && !scene_.hasExpanded)) return;
+        expanded_ = expanded;
+        setStyle(representation_, coloring_);
+    }
 
     void renderShadowMap(const glm::mat4& modelTransform, glm::vec3 lightDirection) {
         lightDirection_ = glm::normalize(lightDirection);
@@ -1290,6 +1325,7 @@ class GlScene {
     SceneData scene_;
     Representation representation_ = Representation::full;
     Coloring coloring_ = Coloring::strand;
+    bool expanded_ = false;
     GLuint lineVao_ = 0;
     GLuint lineVbo_ = 0;
     GLuint guideVao_ = 0;
@@ -1386,7 +1422,7 @@ class Viewer {
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
         window_ = glfwCreateWindow(
             720, 180,
-            "NADOC VR — trigger grab · two triggers resize · menu options · Escape exit",
+            "NADOC VR — trigger grab · two triggers resize · right grip expand · menu options",
             nullptr, nullptr);
         if (!window_) throw std::runtime_error("Could not create the OpenGL companion window");
         glfwMakeContextCurrent(window_);
@@ -1413,13 +1449,13 @@ class Viewer {
     }
 
     void suggestBindings(const char* profile,
-                         const std::array<const char*, 8>& componentPaths) {
+                         const std::array<const char*, 10>& componentPaths) {
         std::vector<XrActionSuggestedBinding> bindings;
         bindings.reserve(componentPaths.size());
         for (size_t hand = 0; hand < handPaths_.size(); ++hand) {
-            const size_t offset = hand * 4U;
-            const std::array<XrAction, 4> actions = {
-                poseAction_, triggerAction_, menuAction_, hapticAction_};
+            const size_t offset = hand * 5U;
+            const std::array<XrAction, 5> actions = {
+                poseAction_, triggerAction_, menuAction_, gripAction_, hapticAction_};
             for (size_t component = 0; component < actions.size(); ++component) {
                 if (componentPaths[offset + component]) {
                     bindings.push_back(
@@ -1451,6 +1487,8 @@ class Viewer {
         triggerAction_ = createAction(XR_ACTION_TYPE_FLOAT_INPUT, "grab", "Grab model");
         menuAction_ = createAction(
             XR_ACTION_TYPE_BOOLEAN_INPUT, "vr_menu", "VR menu");
+        gripAction_ = createAction(
+            XR_ACTION_TYPE_BOOLEAN_INPUT, "expanded_view", "Expanded Quick View");
         hapticAction_ = createAction(
             XR_ACTION_TYPE_VIBRATION_OUTPUT, "haptic", "Navigation haptic");
 
@@ -1459,19 +1497,23 @@ class Viewer {
             {"/user/hand/left/input/grip/pose",
              "/user/hand/left/input/trigger/value",
              "/user/hand/left/input/menu/click",
+             nullptr,
              "/user/hand/left/output/haptic",
              "/user/hand/right/input/grip/pose",
              "/user/hand/right/input/trigger/value",
              "/user/hand/right/input/menu/click",
+             "/user/hand/right/input/squeeze/click",
              "/user/hand/right/output/haptic"});
         suggestBindings(
             "/interaction_profiles/khr/simple_controller",
             {"/user/hand/left/input/grip/pose",
              "/user/hand/left/input/select/click",
              "/user/hand/left/input/menu/click",
+             nullptr,
              "/user/hand/left/output/haptic",
              "/user/hand/right/input/grip/pose",
              "/user/hand/right/input/select/click",
+             nullptr,
              nullptr,
              "/user/hand/right/output/haptic"});
     }
@@ -1799,6 +1841,7 @@ class Viewer {
                 ? glm::vec3(0.20F, 0.75F, 1.0F)
                 : glm::vec3(1.0F, 0.55F, 0.18F);
             if (hands_[hand].pressed) color = {0.35F, 1.0F, 0.42F};
+            if (hand == 1U && gripPressed_) color = {0.35F, 0.95F, 1.0F};
             if (manipulator_.mode() == nadoc_vr::ManipulationMode::two_hand) {
                 color = {0.95F, 0.35F, 1.0F};
             }
@@ -1874,6 +1917,19 @@ class Viewer {
                     menuOpenRequested_ = true;
                 }
                 pulse(hand, 0.45F);
+            }
+
+            if (hand == 1U) {
+                getInfo.action = gripAction_;
+                XrActionStateBoolean grip{XR_TYPE_ACTION_STATE_BOOLEAN};
+                checkXr(instance_, xrGetActionStateBoolean(session_, &getInfo, &grip),
+                        "xrGetActionStateBoolean(expanded view)");
+                const bool expanded = grip.isActive && grip.currentState;
+                if (expanded != gripPressed_) {
+                    gripPressed_ = expanded;
+                    glScene_->setExpanded(expanded);
+                    pulse(hand, expanded ? 0.30F : 0.18F);
+                }
             }
         }
 
@@ -2035,7 +2091,7 @@ class Viewer {
 
     void eventLoop() {
         std::cout << "NADOC VR viewer ready. Trigger: grab/select; both triggers: resize; "
-                     "menu: options; Escape: exit.\n";
+                     "right grip: Expanded Quick View; menu: options; Escape: exit.\n";
         while (!exitLoop_) {
             glfwPollEvents();
             pollXrEvents();
@@ -2067,12 +2123,14 @@ class Viewer {
     XrAction poseAction_ = XR_NULL_HANDLE;
     XrAction triggerAction_ = XR_NULL_HANDLE;
     XrAction menuAction_ = XR_NULL_HANDLE;
+    XrAction gripAction_ = XR_NULL_HANDLE;
     XrAction hapticAction_ = XR_NULL_HANDLE;
     std::array<XrPath, 2> handPaths_{XR_NULL_PATH, XR_NULL_PATH};
     std::array<XrSpace, 2> handSpaces_{XR_NULL_HANDLE, XR_NULL_HANDLE};
     std::array<nadoc_vr::HandPose, 2> hands_{};
     std::array<bool, 2> triggerPressed_{false, false};
     std::array<bool, 2> triggerClicked_{false, false};
+    bool gripPressed_ = false;
     nadoc_vr::SceneManipulator manipulator_;
     std::vector<Vertex> controllerGuides_;
     bool menuOpen_ = false;

@@ -34,6 +34,8 @@ so its Dashboard remains available before, during, and after a NADOC VR session.
 
 Controls on the original HTC Vive wands:
 
+- Hold the right grip/squeeze button for Expanded Quick View; releasing it
+  restores natural helix spacing without changing the design.
 - Hold either trigger to grab, move, and rotate the structure.
 - Hold both triggers and change the distance between the controllers to resize
   the structure around their midpoint.
@@ -56,10 +58,11 @@ both eyes. Full representation geometry mirrors the editor's physical display
 primitives: 0.10 nm backbone beads, 0.18 nm 5′ cubes, oriented
 0.30 × 0.06 × 0.70 nm base slabs, 0.025 nm slab connectors, and 0.075 nm
 same-helix strand connectors.
-Scene format v6 assigns every primitive a URL-safe semantic identity and rejects
-duplicates within a representation, allowing numeric regression diffs and future
-controller picking to address geometry without relying on draw order. The reader
-remains compatible with v4/v5 snapshots. The snapshot also carries explicit crossover/forced-ligation links,
+Scene format v7 pairs natural and Expanded Quick View poses by the URL-safe
+semantic identities introduced in v6. It rejects duplicate or mismatched identities,
+allowing numeric regression diffs and future controller picking to address geometry
+without relying on draw order. The reader remains compatible with v4/v5/v6 snapshots.
+The snapshot also carries explicit crossover/forced-ligation links,
 canonical crossover-insert bead/slab chains, 0.25 nm chemistry-colored extension
 markers, per-domain axis gaps, and closed half-cylinder overhang domains in the
 Cylinders representation.

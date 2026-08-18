@@ -8,6 +8,7 @@ No design data is mutated and no shell command is constructed from request data.
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 from pathlib import Path
@@ -1157,6 +1158,148 @@ def _serialize_scene(
     return "\n".join(lines) + "\n"
 
 
+def _expanded_helix_offsets(design, spacing_nm: float = 5.0) -> dict[str, np.ndarray]:
+    """Mirror Expanded Quick View's per-helix lateral translations.
+
+    This is display-only geometry.  The 2.25 nm reference spacing and centroid
+    expansion intentionally match ``frontend/src/scene/expanded_spacing.js``.
+    """
+    helices = list(getattr(design, "helices", []) or [])
+    if not helices:
+        return {}
+    first = helices[0]
+    start = np.asarray(
+        [first.axis_start.x, first.axis_start.y, first.axis_start.z], dtype=float
+    )
+    end = np.asarray(
+        [first.axis_end.x, first.axis_end.y, first.axis_end.z], dtype=float
+    )
+    axis_index = int(np.argmax(np.abs(end - start)))
+    lateral_indices = [index for index in range(3) if index != axis_index]
+    starts = np.asarray(
+        [
+            [helix.axis_start.x, helix.axis_start.y, helix.axis_start.z]
+            for helix in helices
+        ],
+        dtype=float,
+    )
+    centroid = np.mean(starts[:, lateral_indices], axis=0)
+    scale_delta = float(spacing_nm) / 2.25 - 1.0
+    result: dict[str, np.ndarray] = {}
+    for helix, position in zip(helices, starts):
+        offset = np.zeros(3, dtype=float)
+        offset[lateral_indices] = (
+            position[lateral_indices] - centroid
+        ) * scale_delta
+        result[str(helix.id)] = offset
+    return result
+
+
+def _expanded_scene_inputs(design, nucleotides, axes, atomistic_model):
+    """Translate immutable scene inputs to Expanded Quick View's target pose."""
+    offsets = _expanded_helix_offsets(design)
+    expanded_nucleotides = copy.deepcopy(nucleotides)
+
+    extension_parents: dict[str, str] = {}
+    strands = {str(strand.id): strand for strand in getattr(design, "strands", [])}
+    for extension in getattr(design, "extensions", []) or []:
+        strand = strands.get(str(extension.strand_id))
+        domains = list(getattr(strand, "domains", []) or []) if strand else []
+        if not domains:
+            continue
+        domain = domains[0] if extension.end == "five_prime" else domains[-1]
+        extension_parents[f"__ext_{extension.id}"] = str(domain.helix_id)
+
+    def owner_offset(helix_id) -> np.ndarray:
+        key = str(helix_id or "")
+        return offsets.get(extension_parents.get(key, key), np.zeros(3, dtype=float))
+
+    for nucleotide in expanded_nucleotides:
+        offset = owner_offset(nucleotide.get("helix_id"))
+        for field in ("backbone_position", "base_position"):
+            value = nucleotide.get(field)
+            if isinstance(value, (list, tuple)) and len(value) == 3:
+                nucleotide[field] = (np.asarray(value, dtype=float) + offset).tolist()
+
+    expanded_axes = copy.deepcopy(axes)
+    for axis in expanded_axes:
+        offset = owner_offset(axis.get("helix_id"))
+
+        def translate(value):
+            if isinstance(value, (list, tuple)) and len(value) == 3:
+                return (np.asarray(value, dtype=float) + offset).tolist()
+            return value
+
+        for field in ("start", "end"):
+            if field in axis:
+                axis[field] = translate(axis[field])
+        if isinstance(axis.get("samples"), list):
+            axis["samples"] = [translate(value) for value in axis["samples"]]
+        for segment in axis.get("segments") or []:
+            for field in ("start", "end"):
+                if field in segment:
+                    segment[field] = translate(segment[field])
+
+    expanded_atomistic = copy.deepcopy(atomistic_model)
+    for atom in expanded_atomistic.atoms:
+        offset = owner_offset(atom.helix_id)
+        aux_helix_id = getattr(atom, "aux_helix_id", "")
+        if aux_helix_id:
+            aux_offset = owner_offset(aux_helix_id)
+            weight = float(getattr(atom, "aux_t", 0.0))
+            offset = offset * (1.0 - weight) + aux_offset * weight
+        atom.x += float(offset[0])
+        atom.y += float(offset[1])
+        atom.z += float(offset[2])
+    return expanded_nucleotides, expanded_axes, expanded_atomistic
+
+
+def _bundle_expanded_scene(natural_text: str, expanded_text: str) -> str:
+    """Combine two identity-equivalent v6 scenes into the native v7 contract."""
+    natural_lines = natural_text.splitlines()
+    expanded_lines = expanded_text.splitlines()
+    natural_header = natural_lines[0].split()
+    expanded_header = expanded_lines[0].split()
+    if natural_header != expanded_header or natural_header[0:2] != ["NADOCVR", "6"]:
+        raise HTTPException(500, detail="Expanded VR scene headers do not match.")
+
+    def blocks(lines: list[str]) -> dict[str, list[str]]:
+        result: dict[str, list[str]] = {}
+        active = None
+        for line in lines[1:]:
+            fields = line.split()
+            if not fields or fields[0] == "#":
+                continue
+            if fields[0] == "R":
+                active = fields[1]
+                result[active] = []
+            elif active is not None:
+                result[active].append(line)
+        return result
+
+    natural_blocks, expanded_blocks = blocks(natural_lines), blocks(expanded_lines)
+    if set(natural_blocks) != set(expanded_blocks):
+        raise HTTPException(500, detail="Expanded VR representations do not match.")
+    output = [
+        f"NADOCVR 7 {natural_header[2]} {natural_header[3]}",
+        "# natural and expanded primitive poses share stable identities",
+    ]
+    for representation, natural_records in natural_blocks.items():
+        expanded_records = expanded_blocks[representation]
+        natural_keys = [(line.split()[0], line.split()[1]) for line in natural_records]
+        expanded_keys = [(line.split()[0], line.split()[1]) for line in expanded_records]
+        if natural_keys != expanded_keys:
+            raise HTTPException(
+                500,
+                detail=f"Expanded VR primitive identities differ in {representation}.",
+            )
+        output.append(f"R {representation}")
+        output.extend(natural_records)
+        output.append(f"E {representation}")
+        output.extend(expanded_records)
+    return "\n".join(output) + "\n"
+
+
 def _snapshot(body: VRLaunchRequest) -> str:
     from backend.core.deformation import (
         _apply_ovhg_rotations_to_axes,
@@ -1183,7 +1326,7 @@ def _snapshot(body: VRLaunchRequest) -> str:
     )
     from backend.api.crud import unligated_crossover_ids
 
-    return _serialize_scene(
+    natural_scene = _serialize_scene(
         design,
         nucleotides,
         axes,
@@ -1193,6 +1336,20 @@ def _snapshot(body: VRLaunchRequest) -> str:
         atomistic_model,
         unligated_crossover_ids(design),
     )
+    expanded_nucleotides, expanded_axes, expanded_atomistic = _expanded_scene_inputs(
+        design, nucleotides, axes, atomistic_model
+    )
+    expanded_scene = _serialize_scene(
+        design,
+        expanded_nucleotides,
+        expanded_axes,
+        body.camera,
+        body.representation,
+        body.coloring,
+        expanded_atomistic,
+        unligated_crossover_ids(design),
+    )
+    return _bundle_expanded_scene(natural_scene, expanded_scene)
 
 
 def _build_environment() -> dict[str, str]:

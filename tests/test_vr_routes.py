@@ -8,7 +8,14 @@ from fastapi import HTTPException
 from starlette.requests import Request
 
 from backend.api import routes_vr
-from backend.api.routes_vr import VRCamera, _require_local, _serialize_scene
+from backend.api.routes_vr import (
+    VRCamera,
+    _bundle_expanded_scene,
+    _expanded_helix_offsets,
+    _expanded_scene_inputs,
+    _require_local,
+    _serialize_scene,
+)
 
 
 _BASE_COLORS_FOR_TEST = {
@@ -74,6 +81,77 @@ def test_native_vr_routes_are_workstation_only() -> None:
         _require_local(_request("192.0.2.4"))
     with pytest.raises(HTTPException, match="localhost"):
         _require_local(_request("127.0.0.1", "http://192.0.2.4:5173"))
+
+
+def test_expanded_quick_view_matches_desktop_centroid_spacing() -> None:
+    point = lambda x, y, z: SimpleNamespace(x=x, y=y, z=z)
+    design = SimpleNamespace(
+        helices=[
+            SimpleNamespace(id="left", axis_start=point(-1, 0, 0), axis_end=point(-1, 0, 10)),
+            SimpleNamespace(id="right", axis_start=point(1, 0, 0), axis_end=point(1, 0, 10)),
+        ],
+        strands=[],
+        extensions=[],
+    )
+
+    offsets = _expanded_helix_offsets(design)
+
+    expected = (5.0 / 2.25 - 1.0)
+    np.testing.assert_allclose(offsets["left"], [-expected, 0, 0])
+    np.testing.assert_allclose(offsets["right"], [expected, 0, 0])
+
+
+def test_expanded_scene_translates_owners_and_interpolates_crossover_atoms() -> None:
+    point = lambda x, y, z: SimpleNamespace(x=x, y=y, z=z)
+    design = SimpleNamespace(
+        helices=[
+            SimpleNamespace(id="a", axis_start=point(-1, 0, 0), axis_end=point(-1, 0, 10)),
+            SimpleNamespace(id="b", axis_start=point(1, 0, 0), axis_end=point(1, 0, 10)),
+        ],
+        strands=[],
+        extensions=[],
+    )
+    nucleotides = [
+        {
+            "helix_id": "a",
+            "backbone_position": [-1, 2, 3],
+            "base_position": [-0.8, 2, 3],
+        }
+    ]
+    axes = [{"helix_id": "b", "start": [1, 0, 0], "end": [1, 0, 10]}]
+    atom = SimpleNamespace(
+        helix_id="a", aux_helix_id="b", aux_t=0.25, x=0.0, y=0.0, z=0.0
+    )
+
+    expanded_nucleotides, expanded_axes, expanded_model = _expanded_scene_inputs(
+        design, nucleotides, axes, SimpleNamespace(atoms=[atom], bonds=[])
+    )
+
+    delta = 5.0 / 2.25 - 1.0
+    np.testing.assert_allclose(
+        expanded_nucleotides[0]["backbone_position"], [-1 - delta, 2, 3]
+    )
+    np.testing.assert_allclose(expanded_axes[0]["start"], [1 + delta, 0, 0])
+    assert expanded_model.atoms[0].x == pytest.approx(-0.5 * delta)
+    assert atom.x == 0.0  # source inputs remain immutable
+
+
+def test_v7_bundle_pairs_natural_and_expanded_primitives_by_identity() -> None:
+    natural = """NADOCVR 6 full strand
+R full
+P owner 0 0 0 .1 1 1 1 1 1 1 1 1 1 1 1 1
+"""
+    expanded = natural.replace("P owner 0 0 0", "P owner 2 0 0")
+
+    bundled = _bundle_expanded_scene(natural, expanded)
+
+    assert bundled.startswith("NADOCVR 7 full strand\n")
+    assert "R full\nP owner 0 0 0" in bundled
+    assert "E full\nP owner 2 0 0" in bundled
+
+    mismatched = expanded.replace("owner", "different")
+    with pytest.raises(HTTPException, match="identities differ"):
+        _bundle_expanded_scene(natural, mismatched)
 
 
 def test_runtime_status_requires_compositor_and_reports_dashboard(monkeypatch) -> None:

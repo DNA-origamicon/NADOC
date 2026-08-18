@@ -7,6 +7,7 @@ import pytest
 from backend.core.vr_scene_contract import (
     SceneTolerance,
     compare_scenes,
+    parse_scene_contract,
     parse_scene_v6,
 )
 
@@ -37,6 +38,21 @@ P same 1 0 0 .1 1 1 1 1 1 1 1 1 1 1 1 1
 
     with pytest.raises(ValueError, match="duplicate identity same in full"):
         parse_scene_v6(duplicate)
+
+
+def test_v7_parser_compares_natural_and_expanded_poses_independently() -> None:
+    scene = parse_scene_contract(
+        """NADOCVR 7 full strand
+R full
+P owner 0 0 0 .1 1 1 1 1 1 1 1 1 1 1 1 1
+E full
+P owner 2 0 0 .1 1 1 1 1 1 1 1 1 1 1 1 1
+"""
+    )
+
+    assert set(scene) == {"full", "expanded/full"}
+    assert scene["full"]["owner"].values[0] == 0
+    assert scene["expanded/full"]["owner"].values[0] == 2
 
 
 def test_comparator_matches_within_tolerance_and_reports_semantic_owner() -> None:
