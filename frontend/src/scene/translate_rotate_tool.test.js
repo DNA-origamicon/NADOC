@@ -168,8 +168,9 @@ describe('initTranslateRotateTool — native VR preview adapter', () => {
     const tool = initTranslateRotateTool(ctx.deps)
     const matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 2, 3, 4, 1]
 
-    expect(tool.applyVRPreviewMatrix(matrix)).toBe(false) // queued before async attach
-    await expect(tool.beginVRPreview('C1')).resolves.toEqual({ accepted: true })
+    const starting = tool.beginVRPreview('C1')
+    expect(tool.applyVRPreviewMatrix(matrix)).toBe(false) // queued during async attach
+    await expect(starting).resolves.toEqual({ accepted: true })
     expect(ctx.clusterGizmo.setTransform).toHaveBeenCalledWith(
       [3, 3, 4], [0, 0, 0, 1],
     )
@@ -178,6 +179,12 @@ describe('initTranslateRotateTool — native VR preview adapter', () => {
     expect(ctx.clusterGizmo.discardPendingTransforms).toHaveBeenCalled()
     expect(ctx.clusterGizmo.detach).toHaveBeenCalled()
     expect(ctx.active).toBe(false)
+
+    ctx.clusterGizmo.setTransform.mockClear()
+    expect(tool.applyVRPreviewMatrix(matrix)).toBe(false)
+    await tool.beginVRPreview('C1')
+    expect(ctx.clusterGizmo.setTransform).not.toHaveBeenCalled()
+    await tool.cancelVRPreview()
   })
 
   it('refuses to attach over an existing desktop tool and blocks preview commit', async () => {
@@ -194,6 +201,41 @@ describe('initTranslateRotateTool — native VR preview adapter', () => {
     expect(ctx.active).toBe(true)
     expect(ctx.clusterGizmo.commitPendingTransforms).not.toHaveBeenCalled()
     expect(toastCalls.at(-1)?.[0]).toContain('preview-only')
+  })
+
+  it('cancels and restores instead of retargeting when selection changes mid-preview', async () => {
+    const ctx = vrContext()
+    ctx.store.setState({
+      selection: {
+        context: 'design', level: 'cluster',
+        items: [{ kind: 'cluster', id: 'C1' }],
+        primary: { kind: 'cluster', id: 'C1' },
+      },
+    })
+    const tool = initTranslateRotateTool(ctx.deps)
+    await tool.beginVRPreview('C1')
+    const previous = ctx.store.getState()
+    ctx.store.setState({
+      selection: {
+        context: 'design', level: 'cluster',
+        items: [{ kind: 'cluster', id: 'C2' }],
+        primary: { kind: 'cluster', id: 'C2' },
+      },
+      activeClusterId: 'C2',
+    })
+    const next = ctx.store.getState()
+
+    await Promise.all([
+      tool.handleSelectionChange(next, previous),
+      tool.handleMultiClusterSelectionChange(next, previous),
+    ])
+
+    expect(ctx.clusterGizmo.discardPendingTransforms).toHaveBeenCalledOnce()
+    expect(ctx.clusterGizmo.detach).toHaveBeenCalledOnce()
+    expect(ctx.clusterGizmo.attach).not.toHaveBeenCalledWith(
+      'C2', expect.anything(), expect.anything(), expect.anything(),
+    )
+    expect(ctx.active).toBe(false)
   })
 })
 

@@ -127,12 +127,16 @@ export function initTranslateRotateTool(deps) {
   let _vrPreview = null
   let _vrQueuedMatrix = null
   let _vrStarting = null
+  let _vrCancelling = null
 
   function _applyVRPreviewMatrix(matrixValues) {
     if (!Array.isArray(matrixValues) || matrixValues.length !== 16 ||
         !matrixValues.every(Number.isFinite)) return false
     if (!_vrPreview) {
-      _vrQueuedMatrix = [...matrixValues]
+      // A transform can legitimately arrive in the same poll while async gizmo
+      // attachment is starting. Outside that narrow window it belongs to an old
+      // or cancelled native target and must never seed the next Preview.
+      if (_vrStarting) _vrQueuedMatrix = [...matrixValues]
       return false
     }
     const delta = new THREE.Matrix4().fromArray(matrixValues)
@@ -181,11 +185,36 @@ export function initTranslateRotateTool(deps) {
   }
 
   async function _cancelVRPreview() {
+    if (_vrCancelling) return _vrCancelling
     _vrQueuedMatrix = null
     if (_vrStarting) await _vrStarting
     if (!_vrPreview) return false
     _vrPreview = null
-    await _cancelTranslateRotateTool()
+    _vrCancelling = (async () => {
+      await _cancelTranslateRotateTool()
+      return true
+    })()
+    try {
+      return await _vrCancelling
+    } finally {
+      _vrCancelling = null
+    }
+  }
+
+  /** VR preview owns the desktop gizmo as one immutable-target transaction.
+   * Any canonical selection change must cancel/restore it; the ordinary desktop
+   * selection bridge must never retarget the in-flight transform. */
+  async function _consumeSelectionChangeDuringVRPreview(newState) {
+    if (_vrCancelling) {
+      await _vrCancelling
+      return true
+    }
+    if (_vrStarting) await _vrStarting
+    if (!_vrPreview) return false
+    const primary = canonicalSelection(newState).primary
+    if (primary?.kind !== 'cluster' || primary.id !== _vrPreview.clusterId) {
+      await _cancelVRPreview()
+    }
     return true
   }
 
@@ -655,6 +684,7 @@ export function initTranslateRotateTool(deps) {
   // subscribers so subscription order is explicit.
   async function _handleSelectionChange(newState, prevState) {
     if (newState.selection === prevState.selection) return
+    if (await _consumeSelectionChangeDuringVRPreview(newState)) return
     if (selectedClusterIds(newState).length !== 1) return
     const { action, clusterId } = decideSelectionAction({
       newSel:          canonicalSelection(newState).primary,
@@ -680,6 +710,7 @@ export function initTranslateRotateTool(deps) {
   // leaving a group or landing on a different cluster); 0 → leave it to _handleSelectionChange.
   async function _handleMultiClusterSelectionChange(newState, prevState) {
     if (newState.selection === prevState.selection) return
+    if (await _consumeSelectionChangeDuringVRPreview(newState)) return
     if (!getActive()) return
     if (newState.assemblyActive || newState.cadnanoActive || newState.unfoldActive) return
     const clusters = newState.currentDesign?.cluster_transforms ?? []

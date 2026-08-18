@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   bondRefForCone, coneForBondRef, crossoverRefForArc, endRefForEntry, vrPrimitiveOwner,
-  vrInitialSelectionOwnerTokens, vrOwnerTokens, vrSelectionAccepted,
+  vrInitialSelectionOwnerTokens, vrOwnerTokens, vrSelectionAccepted, vrToolTargetSnapshot,
 } from './selection_hit_resolver.js'
 
 const nuc = (bp, extra = {}) => ({ helix_id: 'h1', bp_index: bp, direction: 'FORWARD', ...extra })
@@ -14,6 +14,46 @@ describe('pure selection hit resolution', () => {
     expect(crossoverRefForArc({ crossover_id: 'f1' }, design))
       .toEqual({ kind: 'crossover', id: 'f1', subtype: 'forced_ligation' })
     expect(crossoverRefForArc({ crossover_id: 'gone' }, design)).toBeNull()
+  })
+
+  it('binds a tool target to its exact transient primitive and current canonical ref', () => {
+    const nucleotide = {
+      strand_id: 's1', domain_index: 0, helix_id: 'h1', bp_index: 7,
+      direction: 'FORWARD',
+    }
+    const selectedRef = { kind: 'base', key: 'h1:7:FORWARD' }
+    const ownerTokens = vrInitialSelectionOwnerTokens(selectedRef)
+    const target = vrToolTargetSnapshot({
+      identity: 'atom:12:base:h1:7:FORWARD:C',
+      selectionKind: 'base', ownerTokens, selectedRef,
+      geometry: [nucleotide],
+    })
+    expect(target).toMatchObject({
+      identity: 'atom:12:base:h1:7:FORWARD:C',
+      selectionKind: 'base', selectedRef,
+      primitiveKind: 'atom',
+      primitiveRef: selectedRef,
+    })
+    // An individual atom remains action/session metadata beneath the stable Base.
+    expect(target.selectedRef.kind).toBe('base')
+  })
+
+  it('rejects delayed tool targets after canonical selection or scene identity changes', () => {
+    const nucleotide = {
+      strand_id: 's1', domain_index: 0, helix_id: 'h1', bp_index: 7,
+      direction: 'FORWARD',
+    }
+    const selectedRef = { kind: 'base', key: 'h1:7:FORWARD' }
+    const snapshot = {
+      identity: 'atom:12:base:h1:7:FORWARD:C', selectionKind: 'base',
+      ownerTokens: vrInitialSelectionOwnerTokens(selectedRef), selectedRef,
+      geometry: [nucleotide],
+    }
+    expect(vrToolTargetSnapshot({
+      ...snapshot, selectedRef: { kind: 'base', key: 'h1:8:FORWARD' },
+    })).toBeNull()
+    expect(vrToolTargetSnapshot({ ...snapshot, selectionKind: 'domain' })).toBeNull()
+    expect(vrToolTargetSnapshot({ ...snapshot, geometry: [] })).toBeNull()
   })
 
   it('resolves native nucleotide identities by live candidate, including colon IDs', () => {

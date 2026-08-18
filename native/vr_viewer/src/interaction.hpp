@@ -225,8 +225,16 @@ class ToolShell {
         }
     }
 
-    void syncSelection(const std::string& selectionKind) {
+    void syncSelection(const std::string& selectionKind, bool targetChanged = false) {
         if (mode_ == ToolMode::inspect) return;
+        if (targetChanged && previewRequested_) {
+            previewRequested_ = false;
+            status_ = selectionKind.empty() || selectionKind == "none"
+                ? "SELECT TARGET"
+                : supportsSelection(mode_, selectionKind)
+                    ? "READY" : "UNSUPPORTED TARGET";
+            return;
+        }
         if (previewRequested_) {
             if (supportsSelection(mode_, selectionKind)) return;
             previewRequested_ = false;

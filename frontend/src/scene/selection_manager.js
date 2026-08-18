@@ -44,7 +44,7 @@ import { flexAnchorKey } from './flexible_arcs.js'
 import { selectedCrossoverRefs, selectedEndRefs } from './selection_model.js'
 import {
   bondRefForCone, coneForBondRef, crossoverRefForArc, endRefForEntry, vrPrimitiveOwner,
-  vrInitialSelectionOwnerTokens, vrOwnerTokens, vrSelectionAccepted,
+  vrInitialSelectionOwnerTokens, vrOwnerTokens, vrSelectionAccepted, vrToolTargetSnapshot,
 } from './selection_hit_resolver.js'
 import { selectionHighlightDescriptor } from './selection_highlight_model.js'
 import { referenceStrandInteractionHidden } from './reference_navigation.js'
@@ -2498,6 +2498,21 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
   }
 
+  /** Resolve an action-time native tool target against the browser's current
+   * canonical selection. The exact primitive remains transient session metadata;
+   * it is never promoted to a persistent Atom/design ref. At least one opaque
+   * owner alias must still name the current canonical ref, preventing a delayed
+   * tool event from acting on a newer selection of the same kind. */
+  function _resolveVRToolTargetSnapshot({ identity, selectionKind, ownerTokens } = {}) {
+    const selectedRef = selectionController.getState().primary ?? null
+    const state = store.getState()
+    return vrToolTargetSnapshot({
+      identity, selectionKind, ownerTokens, selectedRef,
+      geometry: state.currentGeometry,
+      design: state.currentDesign,
+    })
+  }
+
   // Unified backbone-bead-level hit handler — used by a real bead hit AND by the
   // region overlays (atom / surface / cylinder, via a representative entry). Routes
   // to the selection-level dispatch (fixed level, or default strand→leaf-under-cursor;
@@ -4804,6 +4819,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     /** Read-only canonical target for the browser-authoritative VR tool shell. */
     getPrimarySelectionRef() { return selectionController.getState().primary ?? null },
+
+    /** Validate the immutable target snapshot attached to one native tool intent. */
+    resolveVRToolTargetSnapshot(snapshot) { return _resolveVRToolTargetSnapshot(snapshot) },
 
     /** Opaque canonical owner aliases used to seed a native viewer launched after
      *  the desktop selection was made. No renderer identity crosses this boundary. */

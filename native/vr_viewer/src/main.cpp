@@ -2529,6 +2529,12 @@ class Viewer {
 
     void publishToolIntent(nadoc_vr::ToolAction action) {
         lastToolAction_ = action;
+        // Bind the intent to the acknowledged target visible at controller-click
+        // time. Browser polling is asynchronous; looking up its later selection
+        // could otherwise redirect Preview or Confirm to a different object.
+        lastToolTargetIdentity_ = selectedIdentity_;
+        lastToolTargetOwnerTokens_ = selectedOwnerTokens_;
+        lastToolTargetKind_ = selectedSelectionKind_;
         ++toolSequence_;
         publishEventState();
     }
@@ -2560,6 +2566,15 @@ class Viewer {
                << ",\"tool_mode\":\"" << nadoc_vr::toolModeName(toolShell_.mode())
                << "\",\"tool_action\":\""
                << nadoc_vr::toolActionName(lastToolAction_) << "\"";
+        output << ",\"tool_target_identity\":";
+        identity(lastToolTargetIdentity_);
+        output << ",\"tool_target_kind\":\"" << lastToolTargetKind_
+               << "\",\"tool_target_owner_tokens\":[";
+        for (size_t index = 0; index < lastToolTargetOwnerTokens_.size(); ++index) {
+            if (index != 0) output << ',';
+            output << '\"' << lastToolTargetOwnerTokens_[index] << '\"';
+        }
+        output << ']';
         output << ",\"transform_sequence\":" << transformSequence_
                << ",\"transform_matrix\":[";
         bool firstValue = true;
@@ -2588,6 +2603,7 @@ class Viewer {
             record, feedbackSequence_, selectSequence_);
         if (!feedback) return;
         feedbackSequence_ = feedback->sequence;
+        const std::string previousIdentity = selectedIdentity_;
         const std::vector<std::string> previousOwnerTokens = selectedOwnerTokens_;
         const std::string previousSelectionKind = selectedSelectionKind_;
         selectionLevel_ = feedback->level;
@@ -2597,9 +2613,11 @@ class Viewer {
             ? feedback->ownerTokens : std::vector<std::string>{};
         selectedSelectionKind_ = feedback->accepted && feedback->selected
             ? feedback->selectionKind : "none";
-        toolShell_.syncSelection(selectedSelectionKind_);
-        if (selectedOwnerTokens_ != previousOwnerTokens ||
-            selectedSelectionKind_ != previousSelectionKind ||
+        const bool targetChanged = selectedIdentity_ != previousIdentity ||
+            selectedOwnerTokens_ != previousOwnerTokens ||
+            selectedSelectionKind_ != previousSelectionKind;
+        toolShell_.syncSelection(selectedSelectionKind_, targetChanged);
+        if (targetChanged ||
             !toolShell_.previewRequested()) {
             pendingToolTransform_.cancel();
         }
@@ -2915,6 +2933,9 @@ class Viewer {
     std::string selectionLevel_ = "default";
     uint64_t toolSequence_ = 0;
     nadoc_vr::ToolAction lastToolAction_ = nadoc_vr::ToolAction::activate;
+    std::string lastToolTargetIdentity_;
+    std::vector<std::string> lastToolTargetOwnerTokens_;
+    std::string lastToolTargetKind_ = "none";
     nadoc_vr::ToolShell toolShell_;
     nadoc_vr::PendingRigidTransform pendingToolTransform_;
     uint64_t transformSequence_ = 0;

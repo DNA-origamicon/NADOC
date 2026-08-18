@@ -263,7 +263,10 @@ def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -
         '{"sequence":7,"hover_identity":"nuc:s1:0:h1:4:FORWARD:0",'
         '"select_sequence":2,"select_identity":"nuc:s1:0:h1:3:FORWARD:0",'
         '"level_sequence":3,"selection_level":"domain",'
-        '"tool_sequence":4,"tool_mode":"twist","tool_action":"preview"}'
+        '"tool_sequence":4,"tool_mode":"twist","tool_action":"preview",'
+        '"tool_target_identity":"nuc:s1:0:h1:3:FORWARD:0",'
+        '"tool_target_kind":"domain",'
+        '"tool_target_owner_tokens":["domain-token"]}'
     )
     assert _event_payload({"event_path": str(event_path)}) == {
         "sequence": 7,
@@ -275,6 +278,9 @@ def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -
         "tool_sequence": 4,
         "tool_mode": "twist",
         "tool_action": "preview",
+        "tool_target_identity": "nuc:s1:0:h1:3:FORWARD:0",
+        "tool_target_kind": "domain",
+        "tool_target_owner_tokens": ["domain-token"],
         "transform_sequence": 0,
         "transform_matrix": np.identity(4).flatten(order="F").tolist(),
     }
@@ -284,6 +290,29 @@ def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -
         '"tool_action":"confirm"}'
     )
     assert _event_payload({"event_path": str(event_path)})["sequence"] == 0
+
+    for invalid_target in (
+        {
+            "sequence": 9,
+            "tool_target_identity": "nuc:s1",
+            "tool_target_kind": "none",
+            "tool_target_owner_tokens": [],
+        },
+        {
+            "sequence": 9,
+            "tool_target_identity": "nuc:s1",
+            "tool_target_kind": "domain",
+            "tool_target_owner_tokens": [],
+        },
+        {
+            "sequence": 9,
+            "tool_target_identity": "nuc:s1",
+            "tool_target_kind": "domain",
+            "tool_target_owner_tokens": ["not whitespace safe"],
+        },
+    ):
+        event_path.write_text(json.dumps(invalid_target))
+        assert _event_payload({"event_path": str(event_path)})["sequence"] == 0
 
 
 def test_native_tool_transform_returns_to_nadoc_coordinates(tmp_path) -> None:
@@ -322,6 +351,9 @@ def test_native_tool_transform_returns_to_nadoc_coordinates(tmp_path) -> None:
         "tool_sequence": 0,
         "tool_mode": "inspect",
         "tool_action": "activate",
+        "tool_target_identity": None,
+        "tool_target_kind": "none",
+        "tool_target_owner_tokens": [],
         "transform_sequence": 0,
         "transform_matrix": np.identity(4).flatten(order="F").tolist(),
     }

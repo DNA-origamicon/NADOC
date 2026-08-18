@@ -212,6 +212,32 @@ export function vrInitialSelectionOwnerTokens(selectedRef) {
   return token ? [encodeURIComponent(token)] : []
 }
 
+/** Validate one native tool intent's action-time target against the current
+ * canonical browser selection. Exact primitive identity is intentionally
+ * transient: it can describe an atom/bond beneath a stable Base selection without
+ * inventing a persistent design ref for renderer-owned data. */
+export function vrToolTargetSnapshot({
+  identity, selectionKind, ownerTokens, selectedRef, geometry = [], design = null,
+} = {}) {
+  const tokens = Array.isArray(ownerTokens)
+    ? ownerTokens.filter(token => typeof token === 'string').slice(0, 8)
+    : []
+  const expectedToken = vrInitialSelectionOwnerTokens(selectedRef)[0] ?? null
+  if (!selectedRef || typeof identity !== 'string' || !identity ||
+      selectionKind !== selectedRef.kind || !expectedToken ||
+      !tokens.includes(expectedToken)) return null
+  const primitiveOwner = vrPrimitiveOwner(identity, { geometry, design })
+  if (!primitiveOwner) return null
+  return {
+    identity,
+    selectionKind,
+    ownerTokens: [...tokens],
+    selectedRef,
+    primitiveKind: primitiveOwner.kind,
+    primitiveRef: primitiveOwner.ref ?? null,
+  }
+}
+
 /** Pure native-VR owner × selection-level acceptance policy.
  * Target existence and Cluster/End facts stay explicit so callers cannot report an
  * acknowledgement merely because an identity parsed successfully. */

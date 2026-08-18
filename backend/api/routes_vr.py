@@ -2341,6 +2341,9 @@ def _event_payload(state: dict | None) -> dict:
             "tool_sequence": 0,
             "tool_mode": "inspect",
             "tool_action": "activate",
+            "tool_target_identity": None,
+            "tool_target_kind": "none",
+            "tool_target_owner_tokens": [],
             "transform_sequence": 0,
             "transform_matrix": np.identity(4, dtype=float).flatten(order="F").tolist(),
         }
@@ -2358,12 +2361,28 @@ def _event_payload(state: dict | None) -> dict:
         tool_sequence = int(event.get("tool_sequence", 0))
         tool_mode = event.get("tool_mode", "inspect")
         tool_action = event.get("tool_action", "activate")
+        tool_target_identity = event.get("tool_target_identity")
+        tool_target_kind = event.get("tool_target_kind", "none")
+        tool_target_owner_tokens = event.get("tool_target_owner_tokens", [])
         transform_sequence = int(event.get("transform_sequence", 0))
         transform_values = event.get(
             "transform_matrix",
             np.identity(4, dtype=float).flatten(order="F").tolist(),
         )
-        identities = (hover_identity, select_identity)
+        identities = (hover_identity, select_identity, tool_target_identity)
+        valid_selection_kinds = {
+            "none",
+            "cluster",
+            "strand",
+            "domain",
+            "base",
+            "end",
+            "bond",
+            "crossover",
+            "overhang",
+            "extension",
+            "protein",
+        }
         if (
             sequence < 0
             or select_sequence < 0
@@ -2377,6 +2396,28 @@ def _event_payload(state: dict | None) -> dict:
             not in {"inspect", "move_rotate", "extrude", "twist", "bend"}
             or tool_action
             not in {"activate", "preview", "confirm", "cancel", "undo"}
+            or tool_target_kind not in valid_selection_kinds
+            or not isinstance(tool_target_owner_tokens, list)
+            or len(tool_target_owner_tokens) > 8
+            or any(
+                not isinstance(token, str)
+                or not token
+                or len(token) > 2048
+                or any(character.isspace() for character in token)
+                for token in tool_target_owner_tokens
+            )
+            or (
+                tool_target_kind == "none"
+                and (tool_target_identity is not None or tool_target_owner_tokens)
+            )
+            or (
+                tool_target_kind != "none"
+                and (
+                    not isinstance(tool_target_identity, str)
+                    or not tool_target_identity
+                    or not tool_target_owner_tokens
+                )
+            )
             or not isinstance(transform_values, list)
             or len(transform_values) != 16
         ):
@@ -2410,6 +2451,9 @@ def _event_payload(state: dict | None) -> dict:
             "tool_sequence": tool_sequence,
             "tool_mode": tool_mode,
             "tool_action": tool_action,
+            "tool_target_identity": tool_target_identity,
+            "tool_target_kind": tool_target_kind,
+            "tool_target_owner_tokens": tool_target_owner_tokens,
             "transform_sequence": transform_sequence,
             "transform_matrix": nadoc_transform.flatten(order="F").tolist(),
         }
@@ -2426,6 +2470,9 @@ def _event_payload(state: dict | None) -> dict:
             "tool_sequence": 0,
             "tool_mode": "inspect",
             "tool_action": "activate",
+            "tool_target_identity": None,
+            "tool_target_kind": "none",
+            "tool_target_owner_tokens": [],
             "transform_sequence": 0,
             "transform_matrix": np.identity(4, dtype=float).flatten(order="F").tolist(),
         }

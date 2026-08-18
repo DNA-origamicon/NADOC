@@ -81,6 +81,12 @@ Controls on the original HTC Vive wands:
   nanometres and mirrors it through the existing desktop Cluster gizmo from one
   immutable baseline. This remains preview-only: Confirm is blocked, Cancel or native
   session exit restores desktop geometry, and no design/history entry is written.
+  Every tool button event snapshots the exact acknowledged primitive, canonical kind,
+  and bounded opaque owner aliases at controller-click time. The browser rejects a
+  delayed event if that snapshot no longer names its current canonical selection, and
+  Preview/Confirm must name the identical snapshot. Changing selection during a
+  VR-origin desktop preview cancels and restores it instead of retargeting the gizmo;
+  stale transform samples are discarded rather than queued for a later Preview.
 - Cyan and orange pointers identify the left and right controllers. They turn
   green during a one-hand grab and magenta during a two-hand resize.
 - When neither trigger is held, the right pointer extends to the nearest visible

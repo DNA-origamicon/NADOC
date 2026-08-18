@@ -329,6 +329,9 @@ void toolShellNeverClaimsACommitAndRequiresPreview() {
     shell.syncSelection("cluster");
     require(shell.status() == "READY");
     shell.apply(nadoc_vr::ToolAction::preview, "cluster");
+    shell.syncSelection("cluster", true);
+    require(!shell.previewRequested() && shell.status() == "READY");
+    shell.apply(nadoc_vr::ToolAction::preview, "cluster");
     shell.syncSelection("base");
     require(!shell.previewRequested() && shell.status() == "UNSUPPORTED TARGET");
 }

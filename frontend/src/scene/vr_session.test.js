@@ -168,6 +168,9 @@ describe('initVRSession', () => {
           tool_sequence: 1,
           tool_mode: 'twist',
           tool_action: 'preview',
+          tool_target_identity: 'nuc:s1',
+          tool_target_kind: 'domain',
+          tool_target_owner_tokens: ['domain-token'],
           transform_sequence: 1,
           transform_matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 2, 3, 4, 1],
         })
@@ -181,6 +184,9 @@ describe('initVRSession', () => {
           tool_sequence: 1,
           tool_mode: 'twist',
           tool_action: 'preview',
+          tool_target_identity: 'nuc:s1',
+          tool_target_kind: 'domain',
+          tool_target_owner_tokens: ['domain-token'],
           transform_sequence: 1,
           transform_matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 2, 3, 4, 1],
         }),
@@ -198,7 +204,11 @@ describe('initVRSession', () => {
       [{ sequence: 2, type: 'hover', identity: 'nuc:s1' }],
       [{ sequence: 1, type: 'select', identity: 'nuc:s1' }],
       [{ sequence: 1, type: 'selection_level', level: 'domain' }],
-      [{ sequence: 1, type: 'tool', mode: 'twist', action: 'preview' }],
+      [{
+        sequence: 1, type: 'tool', mode: 'twist', action: 'preview',
+        targetIdentity: 'nuc:s1', targetKind: 'domain',
+        targetOwnerTokens: ['domain-token'],
+      }],
       [{
         sequence: 1,
         type: 'tool_transform',

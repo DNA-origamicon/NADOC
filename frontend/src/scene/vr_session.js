@@ -204,6 +204,13 @@ export function initVRSession({
             type: 'tool',
             mode: event?.tool_mode ?? 'inspect',
             action: event?.tool_action ?? 'activate',
+            targetIdentity: typeof event?.tool_target_identity === 'string'
+              ? event.tool_target_identity : null,
+            targetKind: typeof event?.tool_target_kind === 'string'
+              ? event.tool_target_kind : 'none',
+            targetOwnerTokens: Array.isArray(event?.tool_target_owner_tokens)
+              ? event.tool_target_owner_tokens.filter(token => typeof token === 'string').slice(0, 8)
+              : [],
           })
         }
         const transformSequence = Number(event?.transform_sequence ?? 0)

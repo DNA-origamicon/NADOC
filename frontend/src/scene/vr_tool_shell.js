@@ -30,11 +30,26 @@ export const initialVRToolShellState = Object.freeze({
   mode: 'inspect',
   stage: 'inspect',
   sequence: 0,
+  targetKey: null,
 })
+
+/** Collision-safe identity for one validated action-time native target snapshot. */
+export function vrToolTargetKey(target) {
+  if (!target || typeof target.identity !== 'string' || !target.identity ||
+      typeof target.selectionKind !== 'string' || !target.selectionKind ||
+      !Array.isArray(target.ownerTokens) || !target.ownerTokens.length ||
+      !target.ownerTokens.every(token => typeof token === 'string' && token)) return null
+  return JSON.stringify([
+    target.selectionKind,
+    target.identity,
+    target.ownerTokens,
+  ])
+}
 
 /** Reduce one validated native intent into UI state plus an unexecuted effect. */
 export function reduceVRToolShell(state = initialVRToolShellState, intent = {}, {
-  selectedRef = null,
+  toolTarget = null,
+  targetSnapshotPresent = false,
 } = {}) {
   const sequence = Number(intent.sequence)
   const mode = intent.mode
@@ -44,16 +59,19 @@ export function reduceVRToolShell(state = initialVRToolShellState, intent = {}, 
     return { state, effect: null, accepted: false, reason: 'invalid_or_stale' }
   }
 
-  const base = { mode, sequence }
+  const selectedRef = toolTarget?.selectedRef ?? null
+  const targetKey = vrToolTargetKey(toolTarget)
+  const base = { mode, sequence, targetKey: null }
   const selectionSupported = vrToolSupportsSelection(mode, selectedRef)
   if (action === 'activate') {
     const stage = mode === 'inspect'
       ? 'inspect'
+      : targetSnapshotPresent && !toolTarget ? 'stale_target'
       : !selectedRef ? 'waiting_selection'
         : selectionSupported ? 'armed' : 'unsupported_selection'
     return {
       state: { ...base, stage }, effect: null,
-      accepted: mode === 'inspect' || selectionSupported,
+      accepted: mode === 'inspect' || (!!toolTarget && selectionSupported),
       reason: stage,
     }
   }
@@ -75,9 +93,15 @@ export function reduceVRToolShell(state = initialVRToolShellState, intent = {}, 
   }
   if (action === 'undo') {
     return {
-      state: { ...base, stage: state.stage },
+      state: { ...base, stage: state.stage, targetKey: state.targetKey ?? null },
       effect: { type: 'undo_requested', tool: mode },
       accepted: false, reason: 'no_vr_commit',
+    }
+  }
+  if (targetSnapshotPresent && !toolTarget) {
+    return {
+      state: { ...base, stage: 'stale_target' }, effect: null,
+      accepted: false, reason: 'stale_target',
     }
   }
   if (!selectedRef) {
@@ -94,16 +118,24 @@ export function reduceVRToolShell(state = initialVRToolShellState, intent = {}, 
   }
   if (action === 'preview') {
     return {
-      state: { ...base, stage: 'preview' },
-      effect: { type: 'preview_requested', tool: mode, selectedRef },
+      state: { ...base, stage: 'preview', targetKey },
+      effect: { type: 'preview_requested', tool: mode, selectedRef, toolTarget },
       accepted: true, reason: 'preview_requested',
     }
   }
-  if (action === 'confirm' && state.mode === mode && state.stage === 'preview') {
+  if (action === 'confirm' && state.mode === mode && state.stage === 'preview' &&
+      targetKey != null && state.targetKey === targetKey) {
     return {
-      state: { ...base, stage: 'confirm_pending' },
-      effect: { type: 'commit_requested', tool: mode, selectedRef },
+      state: { ...base, stage: 'confirm_pending', targetKey },
+      effect: { type: 'commit_requested', tool: mode, selectedRef, toolTarget },
       accepted: false, reason: 'executor_not_attached',
+    }
+  }
+  if (action === 'confirm' && state.mode === mode && state.stage === 'preview' &&
+      state.targetKey !== targetKey) {
+    return {
+      state: { ...base, stage: 'armed' }, effect: null,
+      accepted: false, reason: 'target_changed_preview_required',
     }
   }
   return {

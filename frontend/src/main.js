@@ -5818,8 +5818,18 @@ async function main() {
           selection_kind: result?.selectionKind ?? 'none',
         }).catch(() => {})
       } else if (event?.type === 'tool') {
+        const targetSnapshotPresent = event.targetKind !== 'none' ||
+          !!event.targetIdentity || !!event.targetOwnerTokens?.length
+        const toolTarget = targetSnapshotPresent
+          ? selectionManager.resolveVRToolTargetSnapshot?.({
+              identity: event.targetIdentity,
+              selectionKind: event.targetKind,
+              ownerTokens: event.targetOwnerTokens,
+            }) ?? null
+          : null
         const result = reduceVRToolShell(_vrToolShellState, event, {
-          selectedRef: selectionManager.getPrimarySelectionRef?.() ?? null,
+          toolTarget,
+          targetSnapshotPresent,
         })
         _vrToolShellState = result.state
         const label = event.mode === 'move_rotate'
@@ -5827,6 +5837,9 @@ async function main() {
           : `${event.mode?.[0]?.toUpperCase() ?? ''}${event.mode?.slice(1) ?? ''}`
         if (result.reason === 'unsupported_selection') {
           showToast(`VR ${label}: this target level is not supported; Move / Rotate requires a Cluster.`)
+        } else if (result.reason === 'stale_target' ||
+            result.reason === 'target_changed_preview_required') {
+          showToast(`VR ${label}: the target changed; select it again and restart Preview.`)
         } else if (result.reason === 'waiting_selection' ||
             result.reason === 'selection_required') {
           showToast(`VR ${label}: select a canonical target first.`)
