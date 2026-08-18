@@ -558,3 +558,156 @@ def test_cylinder_snapshot_distinguishes_single_stranded_overhang_halves() -> No
     direct_cylinders = _scene_sections(direct_text)["cylinders"]
     assert len(direct_cylinders) == 1
     assert direct_cylinders[0][0] == "C"
+
+
+def _vr_linker_design(linker_type: str) -> SimpleNamespace:
+    strand_suffixes = ("s",) if linker_type == "ss" else ("a", "b")
+    strands = [
+        SimpleNamespace(
+            id=f"__lnk__link__{suffix}",
+            is_scaffold=False,
+            color="#8f6cff",
+            sequence="AA",
+            domains=[],
+        )
+        for suffix in strand_suffixes
+    ]
+    return SimpleNamespace(
+        strands=strands,
+        cluster_transforms=[],
+        crossovers=[],
+        forced_ligations=[],
+        overhang_bindings=[],
+        duplexes=[],
+        overhang_connections=[
+            SimpleNamespace(
+                id="link",
+                overhang_a_id="oh-a",
+                overhang_a_attach="free_end",
+                overhang_b_id="oh-b",
+                overhang_b_attach="free_end",
+                linker_type=linker_type,
+                length_value=2,
+                length_unit="bp",
+                bridge_relaxed=False,
+                bridge_bin_index=0,
+            )
+        ],
+    )
+
+
+def _vr_linker_anchor_nucleotides(linker_type: str) -> list[dict]:
+    strand_ids = (
+        ("__lnk__link__s", "__lnk__link__s")
+        if linker_type == "ss"
+        else ("__lnk__link__a", "__lnk__link__b")
+    )
+    return [
+        {
+            "strand_id": "oh-a",
+            "overhang_id": "oh-a",
+            "helix_id": "ha",
+            "bp_index": 0,
+            "is_five_prime": True,
+            "backbone_position": [-0.2, 0, 0],
+        },
+        {
+            "strand_id": "oh-b",
+            "overhang_id": "oh-b",
+            "helix_id": "hb",
+            "bp_index": 0,
+            "is_three_prime": True,
+            "backbone_position": [4.2, 0, 0],
+        },
+        {
+            "strand_id": strand_ids[0],
+            "helix_id": "ha",
+            "bp_index": 0,
+            "backbone_position": [0, 0, 0],
+            "base_normal": [0, 1, 0],
+            "axis_tangent": [0, 0, 1],
+        },
+        {
+            "strand_id": strand_ids[1],
+            "helix_id": "hb",
+            "bp_index": 0,
+            "backbone_position": [4, 0, 0],
+            "base_normal": [0, 1, 0],
+            "axis_tangent": [0, 0, 1],
+        },
+    ]
+
+
+def test_ss_linker_details_are_full_only_but_backbone_remains_in_cylinders() -> None:
+    text = _serialize_scene(
+        _vr_linker_design("ss"),
+        _vr_linker_anchor_nucleotides("ss"),
+        [],
+        atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
+    )
+    sections = _scene_sections(text)
+
+    linker_slabs = [
+        record
+        for record in sections["full"]
+        if record[0] == "B"
+        and np.allclose(
+            np.linalg.norm(
+                np.asarray([float(value) for value in record[4:13]]).reshape(3, 3),
+                axis=1,
+            ),
+            [0.30, 0.06, 0.70],
+        )
+    ]
+    assert len(linker_slabs) == 2
+    assert (
+        sum(
+            record[0] == "C" and float(record[7]) == pytest.approx(0.055)
+            for record in sections["full"]
+        )
+        == 48
+    )
+    assert sum(record[0] == "B" for record in sections["cylinders"]) == 0
+    assert (
+        sum(
+            record[0] == "C" and float(record[7]) == pytest.approx(0.055)
+            for record in sections["cylinders"]
+        )
+        == 48
+    )
+
+
+def test_ds_linker_connector_arcs_are_visible_in_full_and_cylinders() -> None:
+    nucleotides = _vr_linker_anchor_nucleotides("ds")
+    nucleotides.extend(
+        [
+            {
+                "strand_id": "__lnk__link__a",
+                "helix_id": "__lnk__link",
+                "bp_index": 0,
+                "backbone_position": [0.5, 0.5, 0],
+            },
+            {
+                "strand_id": "__lnk__link__b",
+                "helix_id": "__lnk__link",
+                "bp_index": 1,
+                "backbone_position": [3.5, 0.5, 0],
+            },
+        ]
+    )
+    text = _serialize_scene(
+        _vr_linker_design("ds"),
+        nucleotides,
+        [],
+        atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
+    )
+    sections = _scene_sections(text)
+
+    for representation in ("full", "cylinders"):
+        assert (
+            sum(
+                record[0] == "C" and float(record[7]) == pytest.approx(0.065)
+                for record in sections[representation]
+            )
+            == 96
+        )

@@ -243,6 +243,61 @@ def _serialize_scene(
     def solid_palette(color: tuple[float, float, float]) -> tuple[float, ...]:
         return color * 4
 
+    def palette_for_strand(strand_id: str) -> tuple[float, ...]:
+        match = next(
+            (
+                index
+                for index, nucleotide in enumerate(nucleotides)
+                if nucleotide.get("strand_id") == strand_id
+            ),
+            None,
+        )
+        if match is not None:
+            return palette_for_index(match)
+        strand = next(
+            (strand for strand in design.strands if strand.id == strand_id), None
+        )
+        if strand is not None:
+            return solid_palette(
+                _strand_colors(design).get(strand_id, (0.55, 0.62, 0.72))
+            )
+        return solid_palette((1.0, 1.0, 1.0))
+
+    def append_linker_geometry(*, include_full_bases: bool) -> None:
+        """Append canonical overhang-linker visuals to Full or Cylinders."""
+        from backend.core.vr_scene_projection import (
+            ds_linker_connector_projections,
+            ss_linker_projection,
+        )
+
+        for connection in getattr(design, "overhang_connections", []):
+            if getattr(connection, "linker_type", "ds") == "ss":
+                projection = ss_linker_projection(nucleotides, connection)
+                if projection is None:
+                    continue
+                palette = palette_for_strand(projection.strand_id)
+                if include_full_bases:
+                    for base in projection.bases:
+                        bead = rotation @ base.bead_center
+                        lines.append(f"P {nums(*bead, 0.10, *palette)}")
+                        box(
+                            rotation @ base.slab_center,
+                            rotation @ base.slab_axis_x,
+                            rotation @ base.slab_axis_y,
+                            rotation @ base.slab_axis_z,
+                            palette,
+                        )
+                points = [rotation @ value for value in projection.backbone_points]
+                for first, second in zip(points, points[1:]):
+                    lines.append(f"C {nums(*first, *second, 0.055, *palette)}")
+                continue
+
+            for connector in ds_linker_connector_projections(nucleotides, connection):
+                palette = palette_for_strand(connector.strand_id)
+                points = [rotation @ value for value in connector.points]
+                for first, second in zip(points, points[1:]):
+                    lines.append(f"C {nums(*first, *second, 0.065, *palette)}")
+
     lines = [f"NADOCVR 5 {representation} {coloring}", "# preloaded VR representations"]
     by_strand: dict[str, list[tuple[dict, np.ndarray, tuple[float, ...]]]] = {}
     identity_palettes: dict[tuple, tuple[float, ...]] = {}
@@ -536,6 +591,8 @@ def _serialize_scene(
         arc_palette = palette_variant(palette, first_nucleotide, "#0288d1")
         lines.append(f"C {nums(*first, *second, 0.025, *arc_palette)}")
 
+    append_linker_geometry(include_full_bases=True)
+
     def axis_edges(axis: dict):
         """Yield visible axis edges, preferring authoritative domain segments.
 
@@ -623,6 +680,10 @@ def _serialize_scene(
                 else "C"
             )
             lines.append(f"{record_type} {nums(*first, *second, 0.72, *palette)}")
+
+    # Cylinders retains thin ssDNA and dsDNA connector paths but omits the
+    # fine ssDNA bead/slab decoration, matching desktop detail visibility.
+    append_linker_geometry(include_full_bases=False)
 
     if atomistic_model is None:
         raise HTTPException(500, detail="Atomistic VR snapshot was not built.")
