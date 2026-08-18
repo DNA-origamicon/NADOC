@@ -3,16 +3,16 @@ import { applyComparisonRepresentation } from './comparison_representations.js'
 
 describe('comparison representations', () => {
   it.each([
-    ['mrdna-coarse', 'showBeads'],
-    ['mrdna-fine', 'showDeform'],
-  ])('routes %s through the selected mrDNA job', async (representation, method) => {
-    const mrdnaDisplay = { stopAndRestore: vi.fn(), showBeads: vi.fn(), showDeform: vi.fn() }
-    mrdnaDisplay[method].mockResolvedValue({ ok: true })
+    ['mrdna-coarse', 'coarse'],
+    ['mrdna-fine', 'fine'],
+  ])('routes %s through the current design input preview', async (representation, resolution) => {
+    const geometry = [{ helix_id: 'h', bp_index: 1, axis_position: [0, 0, 0] }]
+    const mrdnaDisplay = { stopAndRestore: vi.fn(), showInputPreview: vi.fn(() => ({ ok: true })) }
     const result = await applyComparisonRepresentation(representation, {
-      setRepresentation: vi.fn(), mrdnaDisplay, getMrdnaJob: () => ({ job_id: 'job-7' }),
+      setRepresentation: vi.fn(), mrdnaDisplay, getCurrentGeometry: () => geometry,
     })
     expect(result).toBe(true)
-    expect(mrdnaDisplay[method]).toHaveBeenCalledWith('job-7')
+    expect(mrdnaDisplay.showInputPreview).toHaveBeenCalledWith(geometry, resolution)
   })
 
   it('restores mrDNA geometry before applying a native representation', async () => {
@@ -23,10 +23,19 @@ describe('comparison representations', () => {
     expect(setRepresentation).toHaveBeenCalledWith('surface')
   })
 
-  it('does not capture stale geometry when no mrDNA job is selected', async () => {
+  it('routes oxDNA through the current design rigid-nucleotide preview', async () => {
+    const geometry = [{ helix_id: 'h', bp_index: 1, backbone_position: [0, 0, 0] }]
+    const mrdnaDisplay = { stopAndRestore: vi.fn(), showOxdnaInputPreview: vi.fn(() => ({ ok: true })) }
+    expect(await applyComparisonRepresentation('oxdna', {
+      setRepresentation: vi.fn(), mrdnaDisplay, getCurrentGeometry: () => geometry,
+    })).toBe(true)
+    expect(mrdnaDisplay.showOxdnaInputPreview).toHaveBeenCalledWith(geometry, undefined, undefined, undefined, undefined)
+  })
+
+  it('does not capture stale geometry when the current design has no geometry', async () => {
     const onUnavailable = vi.fn()
     expect(await applyComparisonRepresentation('mrdna-coarse', {
-      setRepresentation: vi.fn(), mrdnaDisplay: {}, getMrdnaJob: () => null, onUnavailable,
+      setRepresentation: vi.fn(), mrdnaDisplay: {}, getCurrentGeometry: () => [], onUnavailable,
     })).toBe(false)
     expect(onUnavailable).toHaveBeenCalled()
   })

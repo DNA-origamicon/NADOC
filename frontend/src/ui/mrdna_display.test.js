@@ -96,6 +96,7 @@ describe('initMrdnaDisplay controller', () => {
     }
     const beadOverlay = { update: vi.fn() }
     const connectionOverlay = { update: vi.fn(), clear: vi.fn() }
+    const oxdnaInputOverlay = { update: vi.fn(), clear: vi.fn() }
     const setDesignVisible = vi.fn()
     const api = {
       getMrdnaDisplay: vi.fn(async () => ({ ready: true, positions: [
@@ -124,7 +125,7 @@ describe('initMrdnaDisplay controller', () => {
           backbone_position: [0, 0, 0], strain: 0.2, ss: false }],
       })),
     }
-    return { designRenderer, beadOverlay, connectionOverlay, setDesignVisible, api }
+    return { designRenderer, beadOverlay, connectionOverlay, oxdnaInputOverlay, setDesignVisible, api }
   }
 
   it('showDeform applies fem positions and marks active; stopDeform restores', async () => {
@@ -158,6 +159,34 @@ describe('initMrdnaDisplay controller', () => {
     expect(connectionOverlay.clear).toHaveBeenCalled()
     expect(setDesignVisible).toHaveBeenLastCalledWith(true)    // native model restored
     expect(c.beadsActive()).toBe(false)
+  })
+
+  it('renders pre-run coarse and fine abstractions without requesting a job', () => {
+    const d = makeDeps()
+    const c = initMrdnaDisplay(d)
+    const geometry = Array.from({ length: 6 }, (_, bp) => ({
+      helix_id: 'h', bp_index: bp, strand_id: 's', axis_position: [0, 0, bp],
+    }))
+    expect(c.showInputPreview(geometry, 'coarse')).toMatchObject({ ok: true, n: 2 })
+    expect(d.api.getMrdnaBeads).not.toHaveBeenCalled()
+    expect(d.setDesignVisible).toHaveBeenLastCalledWith(false)
+    expect(c.showInputPreview(geometry, 'fine')).toMatchObject({ ok: true, n: 6 })
+    expect(c.mode()).toBe('input-fine')
+  })
+
+  it('renders the pre-run oxDNA rigid-nucleotide centres and backbone bonds', () => {
+    const d = makeDeps()
+    const c = initMrdnaDisplay(d)
+    const geometry = [0, 1].map(bp => ({
+      helix_id: 'h', bp_index: bp, direction: 'FORWARD', strand_id: 's', domain_index: 0,
+      backbone_position: [1, 2, bp], base_normal: [1, 0, 0], axis_tangent: [0, 0, 1],
+    }))
+    expect(c.showOxdnaInputPreview(geometry)).toMatchObject({ ok: true, kind: 'input-oxdna', n: 2, edges: 1 })
+    expect(d.oxdnaInputOverlay.update).toHaveBeenLastCalledWith(
+      expect.arrayContaining([expect.objectContaining({ r: [1, 2, 0], a1: [1, 0, 0], a3: [0, 0, 1] })]),
+      [[0, 1]], 'base', undefined, {})
+    expect(d.setDesignVisible).toHaveBeenLastCalledWith(false)
+    expect(c.mode()).toBe('input-oxdna')
   })
 
   it('shows trajectory RMSF and snapshot-relative deviation as scalar maps', async () => {

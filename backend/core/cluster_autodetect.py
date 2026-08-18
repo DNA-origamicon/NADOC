@@ -698,3 +698,53 @@ def _autodetect_clusters(design: Design) -> Design:
         ]
 
     return design.copy_with(cluster_transforms=scaffold_clusters + geometry_clusters)
+
+
+def repair_empty_auto_clusters(design: Design) -> Design:
+    """Rebuild membership for the legacy/corrupt all-empty auto-cluster state.
+
+    Some imported designs retained the autodetected cluster names and display
+    metadata after reference extraction, but lost every ``helix_ids`` and
+    ``domain_ids`` entry.  Their non-empty cluster array then prevented the
+    ordinary default-cluster bootstrap, leaving cluster coloring/selection with
+    no resolvable members.  Repair only this unambiguous state; any user cluster
+    or any surviving membership makes the function a no-op.
+    """
+    existing = list(design.cluster_transforms)
+    if not existing or any(
+        not c.auto_created or c.helix_ids or c.domain_ids for c in existing
+    ):
+        return design
+
+    detected = _autodetect_clusters(
+        design.copy_with(cluster_transforms=[])
+    ).cluster_transforms
+    reference_helices = design.reference_helix_ids()
+    domain_helix = {
+        (strand.id, index): domain.helix_id
+        for strand in design.strands
+        for index, domain in enumerate(strand.domains)
+    }
+    old_by_name = {cluster.name: cluster for cluster in existing}
+    repaired = []
+    for cluster in detected:
+        helix_ids = [hid for hid in cluster.helix_ids if hid not in reference_helices]
+        domain_ids = [
+            ref for ref in cluster.domain_ids
+            if domain_helix.get((ref.strand_id, ref.domain_index)) not in reference_helices
+        ]
+        if not helix_ids and not domain_ids:
+            continue
+        old = old_by_name.get(cluster.name)
+        updates = {"helix_ids": helix_ids, "domain_ids": domain_ids}
+        if old is not None:
+            updates.update({
+                "id": old.id,
+                "color": old.color,
+                "opacity": old.opacity,
+                "translation": old.translation,
+                "rotation": old.rotation,
+                "pivot": old.pivot,
+            })
+        repaired.append(cluster.model_copy(update=updates))
+    return design.copy_with(cluster_transforms=repaired)

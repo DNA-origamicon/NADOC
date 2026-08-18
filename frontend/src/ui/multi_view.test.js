@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { JSDOM } from 'jsdom'
 import * as THREE from 'three'
-import { initMultiView, MULTI_VIEW_REPRESENTATIONS, multiViewContentBounds, multiViewDesignCentroid, multiViewRects } from './multi_view.js'
+import { cloneMultiScene, initMultiView, MULTI_VIEW_REPRESENTATIONS, multiViewContentBounds, multiViewDesignCentroid, multiViewRects } from './multi_view.js'
 
 describe('multi-view', () => {
   beforeEach(() => {
@@ -38,6 +38,20 @@ describe('multi-view', () => {
     expect(multiViewDesignCentroid({ assemblyActive: true }, fallback).toArray()).toEqual([99, 99, 99])
   })
 
+  it('preserves instance-only colors when cloning comparison scenes', () => {
+    const scene = new THREE.Scene()
+    const source = new THREE.InstancedMesh(
+      new THREE.SphereGeometry(1), new THREE.MeshBasicMaterial({ color: 0xffffff }), 1)
+    source.setColorAt(0, new THREE.Color(0xff3333))
+    scene.add(source)
+    const clone = cloneMultiScene(scene).children[0]
+    const color = new THREE.Color()
+    clone.getColorAt(0, color)
+    expect(color.getHex()).toBe(0xff3333)
+    expect(clone.material.vertexColors).toBe(false)
+    expect(clone.geometry.getAttribute('color')).toBeUndefined()
+  })
+
   it('creates configuration icons and per-panel representation/color selectors', async () => {
     const canvas = document.getElementById('canvas')
     Object.defineProperties(canvas, { clientWidth: { value: 900 }, clientHeight: { value: 600 } })
@@ -53,12 +67,16 @@ describe('multi-view', () => {
     })
     expect(document.querySelectorAll('.mv-layout-btn')).toHaveLength(3)
     await api.activate(3)
+    expect(api.panels.map(panel => panel.representation)).toEqual([
+      'hull-prism', 'cylinders', 'mrdna-fine', 'full',
+    ])
     expect(api.panels.slice(0, 3).every(panel => panel.camera.fov === 38)).toBe(true)
     expect(document.querySelectorAll('.mv-viewport-panel')).toHaveLength(3)
     expect(document.querySelectorAll('.mv-viewport-grid .mv-representation')).toHaveLength(3)
     expect(document.querySelectorAll('.mv-viewport-grid .mv-coloring')).toHaveLength(3)
     expect(MULTI_VIEW_REPRESENTATIONS).toContainEqual(['mrdna-coarse', 'mrDNA Coarse'])
     expect(MULTI_VIEW_REPRESENTATIONS).toContainEqual(['mrdna-fine', 'mrDNA Fine'])
+    expect(MULTI_VIEW_REPRESENTATIONS).toContainEqual(['oxdna', 'oxDNA'])
     renderFn()
     expect(renderer.render).toHaveBeenCalledTimes(3)
   })

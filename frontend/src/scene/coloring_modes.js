@@ -15,7 +15,8 @@ export const COLORING_SUPPORT = {
   'surface':    new Set(['strand', 'cluster']),
   'hull-prism': new Set(),
   'mrdna-coarse': new Set(),
-  'mrdna-fine': new Set(['strand', 'base', 'cluster', 'overhang-only']),
+  'mrdna-fine': new Set(),
+  'oxdna': new Set(['strand', 'base', 'cluster', 'overhang-only']),
 }
 
 /** Human-readable labels for every coloring mode (single source of truth). */

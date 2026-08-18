@@ -6,7 +6,7 @@ const FIXTURE = readFileSync(fileURLToPath(
   new URL('../../workspace/2hb_1xT.nadoc', import.meta.url)), 'utf8')
 
 test('multi-view controls live inside responsive synchronized viewport panels', async ({ page }) => {
-  test.setTimeout(90_000)
+  test.setTimeout(180_000)
   const pageErrors = []
   page.on('pageerror', error => pageErrors.push(error.stack || error.message))
 
@@ -24,6 +24,10 @@ test('multi-view controls live inside responsive synchronized viewport panels', 
   await page.locator('.right-tab-btn[data-tab="visualization"]').click()
   const section = page.locator('#right-multi-view')
   await expect(section).toBeVisible()
+  await expect(page.locator('#right-representation-modes .right-repr-btn', { hasText: 'mrDNA Coarse' })).toBeVisible()
+  await expect(page.locator('#right-representation-modes .right-repr-btn', { hasText: 'mrDNA Fine' })).toBeVisible()
+  await expect(page.locator('#menu-view-mrdna-coarse')).toBeAttached()
+  await expect(page.locator('#menu-view-mrdna-fine')).toBeAttached()
   await section.locator('.mv-layout-btn[data-count="3"]').click()
 
   const grid = page.locator('.mv-viewport-grid')
@@ -43,9 +47,15 @@ test('multi-view controls live inside responsive synchronized viewport panels', 
   }))
   expect(contained).toBe(true)
 
+  // mrDNA modes are input abstractions of the current design, so they render
+  // without selecting or running a simulation job.
+  await grid.locator('.mv-representation').first().selectOption('mrdna-coarse')
+  await expect(grid.locator('.mv-coloring').first()).toBeDisabled()
+  await expect(grid.locator('.mv-viewport-panel[data-ready="true"]')).toHaveCount(3, { timeout: 60_000 })
+
   // Representation changes update that panel's coloring choices in place.
   await grid.locator('.mv-representation').nth(1).selectOption('vdw')
-  await expect(grid.locator('.mv-coloring').nth(1)).toHaveValue('cpk')
+  await expect(grid.locator('.mv-coloring').nth(1)).toHaveValue('strand')
   await expect(grid.locator('.mv-viewport-panel[data-ready="true"]')).toHaveCount(3, { timeout: 60_000 })
 
   // One OrbitControls instance drives the camera used by every panel render.
@@ -93,6 +103,71 @@ test('multi-view controls live inside responsive synchronized viewport panels', 
   await expect(overlayControls.locator('.mo-opacity')).toHaveCount(3)
   await expect(overlayControls.locator('.mo-representation').first().locator('option[value="mrdna-coarse"]')).toHaveText('mrDNA Coarse')
   await expect(overlayControls.locator('.mo-representation').first().locator('option[value="mrdna-fine"]')).toHaveText('mrDNA Fine')
+  await overlayControls.locator('.mo-representation').first().selectOption('mrdna-fine')
+  await expect(overlayControls.locator('.mo-layer-row[data-ready="true"]')).toHaveCount(3, { timeout: 60_000 })
+
+  // The fine bead radius and design-based camera framing stay invariant when
+  // mrDNA moves between layers or is combined with differently sized reps.
+  const combinations = [
+    ['mrdna-fine', 'hull-prism', 'full'],
+    ['cylinders', 'mrdna-fine', 'hull-prism'],
+    ['full', 'cylinders', 'mrdna-fine'],
+  ]
+  const measured = []
+  for (const combination of combinations) {
+    for (let i = 0; i < combination.length; i++) {
+      await overlayControls.locator('.mo-representation').nth(i).selectOption(combination[i])
+    }
+    await expect(overlayControls.locator('.mo-layer-row[data-ready="true"]')).toHaveCount(3, { timeout: 60_000 })
+    measured.push(await page.evaluate(() => ({
+      layers: window.__nadocTest.multiOverlayDiagnostics(),
+      camera: window.__nadocTest.viewerDiagnostic().camera,
+    })))
+  }
+  for (const measurement of measured) {
+    const fine = measurement.layers.find(layer => layer.representation === 'mrdna-fine')
+    expect(fine.beadCount).toBeGreaterThan(0)
+    expect(fine.minBeadRadius).toBeCloseTo(0.28, 5)
+    expect(fine.maxBeadRadius).toBeCloseTo(0.28, 5)
+  }
+  const distances = measured.map(({ camera }) => Math.hypot(
+    camera.position[0] - camera.target[0],
+    camera.position[1] - camera.target[1],
+    camera.position[2] - camera.target[2],
+  ))
+  expect(Math.max(...distances) - Math.min(...distances)).toBeLessThan(1e-5)
+
+  // At non-zero separation, transparent isolated scenes must be composited
+  // back-to-front. Crossing from X+ to X- therefore reverses their draw order.
+  await page.locator('#right-multi-overlay .mo-separation-row input').evaluate(input => {
+    input.value = '0.2'; input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  const pose = measured.at(-1).camera
+  const distance = distances.at(-1)
+  await page.evaluate(({ target, distance }) => {
+    window.__nadocTest.setCameraPositionForTest([target[0] + distance, target[1], target[2]])
+  }, { target: pose.target, distance })
+  expect(await page.evaluate(() => window.__nadocTest.multiOverlayRenderOrder())).toEqual([0, 1, 2])
+  await page.evaluate(({ target, distance }) => {
+    window.__nadocTest.setCameraPositionForTest([target[0] - distance, target[1], target[2]])
+  }, { target: pose.target, distance })
+  expect(await page.evaluate(() => window.__nadocTest.multiOverlayRenderOrder())).toEqual([2, 1, 0])
+  await page.evaluate(position => window.__nadocTest.setCameraPositionForTest(position), pose.position)
+
+  // Recovery/completeness sweep: every available representation must survive
+  // the isolated-scene overlay capture path and reach a ready state.
+  await page.locator('#right-multi-overlay .mo-count-btn[data-count="1"]').click()
+  await expect(overlayControls.locator('.mo-layer-row')).toHaveCount(1)
+  const everyRepresentation = [
+    'hull-prism', 'cylinders', 'beads', 'full', 'surface',
+    'vdw', 'ballstick', 'stick', 'mrdna-coarse', 'mrdna-fine',
+  ]
+  for (const representation of everyRepresentation) {
+    await overlayControls.locator('.mo-representation').selectOption(representation)
+    await expect(overlayControls.locator('.mo-layer-row[data-ready="true"]')).toHaveCount(1, { timeout: 60_000 })
+  }
+  await page.locator('#right-multi-overlay .mo-count-btn[data-count="3"]').click()
+  await expect(overlayControls.locator('.mo-layer-row[data-ready="true"]')).toHaveCount(3, { timeout: 60_000 })
   await overlayControls.locator('.mo-opacity').nth(1).evaluate(input => {
     input.value = '0.35'; input.dispatchEvent(new Event('input', { bubbles: true }))
   })

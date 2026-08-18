@@ -19,6 +19,9 @@
  */
 
 import { deviationColorMap, rmsfColorMap, strainColorMap } from './oxdna_display.js'
+import { buildMrdnaInputPreview } from './mrdna_input_preview.js'
+import { buildOxdnaInputPreview } from './oxdna_input_preview.js'
+import { activeDesignGeometry } from './oxdna_input_preview.js'
 
 /**
  * Pure mapping: a /mrdna/jobs/{id}/display response → applyFemPositions updates.
@@ -69,6 +72,7 @@ export function edgesFrom(beadsResponse) {
 
 // Coarse mrDNA beads are 5 bp/bead — bigger than the oxDNA P-atom beads.
 const _BEAD_RADIUS_NM = 0.55
+const _FINE_BEAD_RADIUS_NM = 0.28
 
 function _confidence(resp) {
   const confidence = resp?.confidence
@@ -82,7 +86,7 @@ function _confidence(resp) {
 
 export function initMrdnaDisplay({
   designRenderer, api, beadOverlay = null, connectionOverlay = null,
-  setDesignVisible = null, flexScale = null,
+  setDesignVisible = null, flexScale = null, oxdnaInputOverlay = null,
 }) {
   let _epoch = 0                 // bumps on every request → stale responses ignored
   let _deformJobId = null        // job whose relaxed positions are applied (or null)
@@ -129,6 +133,7 @@ export function initMrdnaDisplay({
     flexScale?.hide()
     beadOverlay?.update([], _BEAD_RADIUS_NM, 0.95)
     connectionOverlay?.clear()
+    oxdnaInputOverlay?.clear?.()
     designRenderer.applyFemPositions?.(null)
     designRenderer.clearScalarColors?.()
     designRenderer.clearExternalGeometry?.()
@@ -272,6 +277,37 @@ export function initMrdnaDisplay({
     return { ok: true, n: pts.length, edges: edges.length }
   }
 
+  function showInputPreview(geometry, resolution) {
+    _cancelLoad()
+    const { points, edges } = buildMrdnaInputPreview(geometry, resolution)
+    if (!points.length || !beadOverlay) return { ok: false, reason: 'not-ready' }
+    _clearVisuals()
+    const radius = resolution === 'coarse' ? _BEAD_RADIUS_NM : _FINE_BEAD_RADIUS_NM
+    beadOverlay.update(points, radius, 0.95)
+    const mesh = beadOverlay.mesh?.()
+    if (mesh) {
+      mesh.userData.mrdnaInputResolution = resolution
+      mesh.userData.mrdnaBeadRadiusNm = radius
+    }
+    connectionOverlay?.update(points, edges)
+    _nativeVisible(false)
+    _mode = `input-${resolution}`
+    _stats = { kind: _mode, n: points.length, edges: edges.length }
+    return { ok: true, ..._stats }
+  }
+
+  function showOxdnaInputPreview(geometry, design, coloringMode = 'base', hideReference = true, colorState = {}) {
+    _cancelLoad()
+    const { points, edges, frames } = buildOxdnaInputPreview(activeDesignGeometry(geometry, design, hideReference))
+    if (!points.length || !oxdnaInputOverlay) return { ok: false, reason: 'not-ready' }
+    _clearVisuals()
+    oxdnaInputOverlay.update(frames, edges, coloringMode, design, colorState)
+    _nativeVisible(false)
+    _mode = 'input-oxdna'
+    _stats = { kind: _mode, n: points.length, edges: edges.length }
+    return { ok: true, ..._stats }
+  }
+
   function hideBeads() {
     _cancelLoad()
     if (_beadsJobId === null) return
@@ -291,6 +327,9 @@ export function initMrdnaDisplay({
     showStrain,
     stopDeform,
     showBeads,
+    showInputPreview,
+    showOxdnaInputPreview,
+    setOxdnaColoringMode: mode => oxdnaInputOverlay?.setColoringMode?.(mode),
     hideBeads,
     stopAndRestore,
     deformActive: () => _deformJobId !== null,

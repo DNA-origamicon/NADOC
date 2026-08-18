@@ -234,6 +234,12 @@ def _export_filename_stem(name: str | None, fallback: str = "design") -> str:
 def _ensure_default_cluster(design: Design) -> Design:
     """If the design has helices but no clusters, auto-create a default cluster
     containing all helices and persist it silently (no undo snapshot)."""
+    from backend.core.cluster_autodetect import repair_empty_auto_clusters
+
+    repaired = repair_empty_auto_clusters(design)
+    if repaired is not design:
+        design = repaired
+        design_state.set_design_silent(design)
     if design.cluster_transforms or not design.helices:
         return design
     from backend.core.models import ClusterRigidTransform

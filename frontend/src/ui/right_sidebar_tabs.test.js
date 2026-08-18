@@ -68,6 +68,8 @@ describe('right sidebar tabs', () => {
     document.getElementById('menu-view-detail-full').addEventListener('click', () => clicks++)
     initRightSidebarTabs({ document, storage: null })
     const full = [...document.querySelectorAll('.right-repr-btn')].find(b => b.textContent === 'Full')
+    expect([...document.querySelectorAll('.right-repr-btn')].map(b => b.textContent))
+      .toEqual(expect.arrayContaining(['mrDNA Coarse', 'mrDNA Fine']))
     expect(full.classList.contains('active')).toBe(true)
     full.click()
     expect(clicks).toBe(1)

@@ -24,6 +24,7 @@ const REPR_IDS = [
   'menu-view-detail-full', 'menu-view-surface', 'menu-view-atomistic-vdw',
   'menu-view-atomistic-ballstick',
   'menu-view-atomistic-stick',
+  'menu-view-mrdna-coarse', 'menu-view-mrdna-fine',
 ]
 const COLORING_IDS = [
   'menu-view-coloring-strand', 'menu-view-coloring-base', 'menu-view-coloring-cluster',
@@ -182,6 +183,29 @@ describe('setRepresentation — design-mode activation', () => {
     await api.setRepresentation('surface')
     expect(deps.applySurfaceMode).toHaveBeenCalledWith('on')
     expect(deps.store.getState().surfaceMode).toBe('on')
+  })
+
+  it('mrDNA representations delegate to the external result renderer', async () => {
+    mountIds(DOM)
+    const deps = makeDeps()
+    deps.beforeRepresentationChange = vi.fn()
+    deps.applyExternalRepresentation = vi.fn().mockResolvedValue(true)
+    const api = initRepresentationSwitcher(deps)
+    expect(await api.setRepresentation('mrdna-coarse')).not.toBe(false)
+    expect(deps.beforeRepresentationChange).toHaveBeenCalledWith('mrdna-coarse')
+    expect(deps.applyExternalRepresentation).toHaveBeenCalledWith('mrdna-coarse')
+    expect(document.getElementById('menu-view-mrdna-coarse').classList.contains('is-checked')).toBe(true)
+  })
+
+  it('leaves the prior radio selected when mrDNA geometry is unavailable', async () => {
+    mountIds(DOM)
+    document.getElementById('menu-view-detail-full').classList.add('is-checked')
+    const deps = makeDeps()
+    deps.applyExternalRepresentation = vi.fn().mockResolvedValue(false)
+    const api = initRepresentationSwitcher(deps)
+    expect(await api.setRepresentation('mrdna-fine')).toBe(false)
+    expect(document.getElementById('menu-view-detail-full').classList.contains('is-checked')).toBe(true)
+    expect(deps.setCurrentRepr).not.toHaveBeenCalled()
   })
 
   it('hull-prism honeycomb → CG off, scan tick 8, hull repr on', async () => {

@@ -29,10 +29,14 @@ to one view. Each panel contains numbered Representation and Coloring menus in i
 upper-left corner. Heavy representations show a loading status while their isolated
 scene is prepared.
 
-The menus also include **mrDNA Coarse** (the relaxed ARBD bead-and-connection model)
-and **mrDNA Fine** (the relaxed nucleotide model) from the currently selected
-completed mrDNA job. Fine geometry supports the applicable nucleotide coloring
-modes; coarse geometry retains its mrDNA bead coloring.
+The menus also include **mrDNA Coarse** and **mrDNA Fine** input previews. They show
+the current design before simulation: coarse combines adjacent geometry into the
+five-base-pair beads sent to ARBD, while fine uses one site per base pair. Connections
+follow strand order, including crossovers. Both retain mrDNA's model coloring.
+
+These two input representations are also available as normal global choices in
+**View → Representation** and in the Visualization tab's **Representations** card.
+They apply to individual designs rather than assemblies.
 
 Every panel uses Hull Audit framing: a 38° perspective camera, molecular-content-only
 bounds, and an orbit target at the arithmetic centroid of the design's nucleotide
