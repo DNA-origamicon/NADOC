@@ -833,7 +833,7 @@ class GlScene {
                 ray, cylinder.start, cylinder.end, cylinder.radius));
         }
         for (const StyledCylinder& cylinder : source.halfCylinders) {
-            consider(cylinder.identity, nadoc_vr::rayCapsule(
+            consider(cylinder.identity, nadoc_vr::rayHalfCylinder(
                 ray, cylinder.start, cylinder.end, cylinder.radius));
         }
         for (const StyledBox& box : source.boxes) {

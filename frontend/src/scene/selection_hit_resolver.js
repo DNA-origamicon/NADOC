@@ -204,6 +204,29 @@ export function vrOwnerTokens({ selected = false, selectedRef = null, owner = nu
     .map(token => encodeURIComponent(token)))]
 }
 
+/** Pure native-VR owner × selection-level acceptance policy.
+ * Target existence and Cluster/End facts stay explicit so callers cannot report an
+ * acknowledgement merely because an identity parsed successfully. */
+export function vrSelectionAccepted(ownerKind, level, {
+  hasTarget = true, isTerminal = false, hasCluster = false,
+} = {}) {
+  if (!hasTarget) return false
+  if (['nucleotide', 'atom', 'atom_bond_base', 'domain'].includes(ownerKind)) {
+    return ['default', 'strand', 'domain', 'base'].includes(level) ||
+      (level === 'end' && isTerminal) || (level === 'cluster' && hasCluster)
+  }
+  if (ownerKind === 'backbone_bond' || ownerKind === 'atom_bond') {
+    return level === 'default' || level === 'strand' ||
+      (level === 'cluster' && hasCluster)
+  }
+  if (ownerKind === 'crossover') {
+    return ['default', 'strand', 'xover'].includes(level) ||
+      (level === 'cluster' && hasCluster)
+  }
+  return (ownerKind === 'flexible_base' || ownerKind === 'linker_base') &&
+    level === 'base'
+}
+
 export function crossoverRefForArc(arc, design) {
   const id = arc?.crossover_id
   if (!id) return null

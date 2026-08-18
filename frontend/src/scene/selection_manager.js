@@ -44,7 +44,7 @@ import { flexAnchorKey } from './flexible_arcs.js'
 import { selectedCrossoverRefs, selectedEndRefs } from './selection_model.js'
 import {
   bondRefForCone, coneForBondRef, crossoverRefForArc, endRefForEntry, vrPrimitiveOwner,
-  vrOwnerTokens,
+  vrOwnerTokens, vrSelectionAccepted,
 } from './selection_hit_resolver.js'
 import { selectionHighlightDescriptor } from './selection_highlight_model.js'
 import { referenceStrandInteractionHidden } from './reference_navigation.js'
@@ -2421,12 +2421,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       entry = backboneEntries.find(candidate => candidate.nuc === owner.nucleotide)
         ?? backboneEntries.find(candidate =>
           baseKey(candidate.nuc, candidate._copy) === owner.ref.key)
-      accepted = !!entry && (
-        _selLevel === 'default' || _selLevel === 'strand' || _selLevel === 'domain' ||
-        _selLevel === 'base' ||
-        (_selLevel === 'end' && (entry.nuc.is_five_prime || entry.nuc.is_three_prime)) ||
-        (_selLevel === 'cluster' && !!_resolveClusterId(entry.nuc, state.currentDesign))
-      )
+      accepted = vrSelectionAccepted(owner.kind, _selLevel, {
+        hasTarget: !!entry,
+        isTerminal: !!entry && (entry.nuc.is_five_prime || entry.nuc.is_three_prime),
+        hasCluster: !!entry && !!_resolveClusterId(entry.nuc, state.currentDesign),
+      })
       if (entry) _v2HandleBead(entry, backboneEntries, coneEntries)
     } else if (owner.kind === 'backbone_bond' || owner.kind === 'atom_bond') {
       const reversedRef = {
@@ -2437,11 +2436,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       const cone = coneForBondRef(coneEntries, owner.ref)
         ?? coneForBondRef(coneEntries, reversedRef)
       const representative = cone?.fromNuc ?? owner.fromNucleotide
-      accepted = !!cone && (
-        _selLevel === 'default' || _selLevel === 'strand' ||
-        (_selLevel === 'cluster' && representative &&
-          !!_resolveClusterId(representative, state.currentDesign))
-      )
+      accepted = vrSelectionAccepted(owner.kind, _selLevel, {
+        hasTarget: !!cone,
+        hasCluster: !!cone && !!representative &&
+          !!_resolveClusterId(representative, state.currentDesign),
+      })
       if (cone) {
         _v2HandleCone(
           cone, cone.strandId ?? owner.ref.strandId, backboneEntries, coneEntries)
@@ -2450,25 +2449,24 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       entry = backboneEntries.find(candidate =>
         candidate.nuc.strand_id === owner.ref.strandId &&
         (candidate.nuc.domain_index ?? 0) === owner.ref.domainIndex)
-      accepted = !!entry && (
-        _selLevel === 'default' || _selLevel === 'strand' || _selLevel === 'domain' ||
-        _selLevel === 'base' ||
-        (_selLevel === 'end' && (entry.nuc.is_five_prime || entry.nuc.is_three_prime)) ||
-        (_selLevel === 'cluster' && !!_resolveClusterId(entry.nuc, state.currentDesign))
-      )
+      accepted = vrSelectionAccepted(owner.kind, _selLevel, {
+        hasTarget: !!entry,
+        isTerminal: !!entry && (entry.nuc.is_five_prime || entry.nuc.is_three_prime),
+        hasCluster: !!entry && !!_resolveClusterId(entry.nuc, state.currentDesign),
+      })
       if (entry) _v2HandleBead(entry, backboneEntries, coneEntries)
     } else if (owner.kind === 'crossover') {
       arc = getUnfoldView?.()?.getArcEntries?.()
         ?.find(candidate => candidate.crossover_id === owner.ref.id)
       const representative = arc?.fromNuc ?? arc?.toNuc
-      accepted = !!arc && (
-        _selLevel === 'default' || _selLevel === 'strand' || _selLevel === 'xover' ||
-        (_selLevel === 'cluster' && representative &&
-          !!_resolveClusterId(representative, state.currentDesign))
-      )
+      accepted = vrSelectionAccepted(owner.kind, _selLevel, {
+        hasTarget: !!arc,
+        hasCluster: !!arc && !!representative &&
+          !!_resolveClusterId(representative, state.currentDesign),
+      })
       if (arc) _v2HandleArc(arc, backboneEntries, coneEntries)
     } else if ((owner.kind === 'flexible_base' || owner.kind === 'linker_base') &&
-               _selLevel === 'base') {
+               vrSelectionAccepted(owner.kind, _selLevel)) {
       accepted = true
       _selectBaseKey(owner.ref.key)
     }

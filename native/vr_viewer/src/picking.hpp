@@ -67,6 +67,76 @@ inline std::optional<float> rayCapsule(
     return first ? first : second;
 }
 
+/** Intersect the closed +basisX half-cylinder used by the render mesh.
+ *
+ * The radial basis intentionally duplicates the cylinder vertex shader. This
+ * includes the curved wall, flat diametral face, and both half-disc caps, so a
+ * controller cannot hit the absent curved half that the old capsule proxy added.
+ */
+inline std::optional<float> rayHalfCylinder(
+    const Ray& ray, const glm::vec3& start, const glm::vec3& end, float radius) {
+    const glm::vec3 delta = end - start;
+    const float length = glm::length(delta);
+    if (length < 1.0e-6F || radius <= 0.0F) return std::nullopt;
+    const glm::vec3 axis = delta / length;
+    const glm::vec3 helper = std::abs(axis.z) < 0.95F
+        ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
+    const glm::vec3 basisX = glm::normalize(glm::cross(helper, axis));
+    const glm::vec3 basisY = glm::cross(axis, basisX);
+    const glm::vec3 offset = ray.origin - start;
+    const glm::vec3 origin(
+        glm::dot(offset, basisX), glm::dot(offset, basisY), glm::dot(offset, axis));
+    const glm::vec3 direction(
+        glm::dot(ray.direction, basisX), glm::dot(ray.direction, basisY),
+        glm::dot(ray.direction, axis));
+    constexpr float epsilon = 1.0e-6F;
+    float nearest = std::numeric_limits<float>::max();
+    auto consider = [&](float distance, bool onSurface) {
+        if (distance >= 0.0F && onSurface) nearest = std::min(nearest, distance);
+    };
+
+    const float radialA = direction.x * direction.x + direction.y * direction.y;
+    if (radialA > 1.0e-12F) {
+        const float radialB = 2.0F * (
+            origin.x * direction.x + origin.y * direction.y);
+        const float radialC = origin.x * origin.x + origin.y * origin.y
+                            - radius * radius;
+        const float discriminant = radialB * radialB - 4.0F * radialA * radialC;
+        if (discriminant >= 0.0F) {
+            const float root = std::sqrt(discriminant);
+            const float first = (-radialB - root) / (2.0F * radialA);
+            const float second = (-radialB + root) / (2.0F * radialA);
+            for (float distance : {first, second}) {
+                const float x = origin.x + direction.x * distance;
+                const float z = origin.z + direction.z * distance;
+                consider(distance, x >= -epsilon && z >= -epsilon && z <= length + epsilon);
+            }
+        }
+    }
+
+    if (std::abs(direction.x) > 1.0e-12F) {
+        const float distance = -origin.x / direction.x;
+        const float y = origin.y + direction.y * distance;
+        const float z = origin.z + direction.z * distance;
+        consider(
+            distance,
+            std::abs(y) <= radius + epsilon && z >= -epsilon && z <= length + epsilon);
+    }
+
+    if (std::abs(direction.z) > 1.0e-12F) {
+        for (float cap : {0.0F, length}) {
+            const float distance = (cap - origin.z) / direction.z;
+            const float x = origin.x + direction.x * distance;
+            const float y = origin.y + direction.y * distance;
+            consider(
+                distance,
+                x >= -epsilon && x * x + y * y <= radius * radius + epsilon);
+        }
+    }
+    return nearest < std::numeric_limits<float>::max()
+        ? std::optional<float>(nearest) : std::nullopt;
+}
+
 inline std::optional<float> rayBox(
     const Ray& ray,
     const glm::vec3& center,

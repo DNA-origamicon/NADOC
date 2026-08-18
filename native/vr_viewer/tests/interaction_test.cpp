@@ -119,6 +119,26 @@ void rayPickingRejectsMissesAndBehindControllerGeometry() {
         ray, {0, 0, 2}, {0.4F, 0, 0}, {0, 0.2F, 0}, {0, 0, 0.6F}));
 }
 
+void halfCylinderPickingMatchesTheRenderedPositiveHalf() {
+    const glm::vec3 start(0, 0, 0);
+    const glm::vec3 end(0, 0, 2);
+    const auto curved = nadoc_vr::rayHalfCylinder(
+        nadoc_vr::Ray{{2, 0, 1}, {-1, 0, 0}}, start, end, 1.0F);
+    require(curved && std::abs(*curved - 1.0F) < 1.0e-5F);
+
+    // From the missing -X half, the first visible surface is the flat face at X=0,
+    // not the nonexistent negative curved wall at X=-radius.
+    const auto flat = nadoc_vr::rayHalfCylinder(
+        nadoc_vr::Ray{{-2, 0, 1}, {1, 0, 0}}, start, end, 1.0F);
+    require(flat && std::abs(*flat - 2.0F) < 1.0e-5F);
+    require(!nadoc_vr::rayHalfCylinder(
+        nadoc_vr::Ray{{-2, 0, 1}, {-1, 0, 0}}, start, end, 1.0F));
+
+    const auto cap = nadoc_vr::rayHalfCylinder(
+        nadoc_vr::Ray{{0.5F, 0, 3}, {0, 0, -1}}, start, end, 1.0F);
+    require(cap && std::abs(*cap - 1.0F) < 1.0e-5F);
+}
+
 void canonicalSelectionFeedbackIsStrictAndSequenced() {
     const auto selected = nadoc_vr::parseSelectionFeedback(
         "NADOCVR_FEEDBACK 1 4 1 1 base nuc:s1:0:h1:3:FORWARD:0\n", 3, 4);
@@ -171,6 +191,7 @@ int main() {
     closeInspectionAllowsTheModelToPassThroughTheHead();
     rayPickingHitsVisiblePrimitiveSurfaces();
     rayPickingRejectsMissesAndBehindControllerGeometry();
+    halfCylinderPickingMatchesTheRenderedPositiveHalf();
     canonicalSelectionFeedbackIsStrictAndSequenced();
     canonicalOwnerFallbackUsesFeedbackSpecificityAndSceneOrder();
 }

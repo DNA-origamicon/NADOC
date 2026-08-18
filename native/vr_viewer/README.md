@@ -70,7 +70,9 @@ Controls on the original HTC Vive wands:
   Ordinary backbone cylinders and inter-residue atomistic bonds resolve through the
   same canonical bond ownership as desktop connector picks. Intra-residue atom bonds
   and sampled flexible/linker curve edges resolve to their owning or nearest Base;
-  display-only ds-linker connector arcs remain non-selecting.
+  display-only ds-linker connector arcs remain non-selecting. Overhang half-cylinder
+  picking follows its curved wall, flat face, and caps rather than an enclosing full
+  capsule, so the missing half cannot steal hits from geometry behind it.
 - Press the Vive System button (not the application-menu button) to open the
   SteamVR Dashboard, then select Desktop to operate NADOC's normal interface.
 

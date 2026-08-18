@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   bondRefForCone, coneForBondRef, crossoverRefForArc, endRefForEntry, vrPrimitiveOwner,
-  vrOwnerTokens,
+  vrOwnerTokens, vrSelectionAccepted,
 } from './selection_hit_resolver.js'
 
 const nuc = (bp, extra = {}) => ({ helix_id: 'h1', bp_index: bp, direction: 'FORWARD', ...extra })
@@ -161,5 +161,79 @@ describe('pure selection hit resolution', () => {
     expect(tokens.every(token => !/\s/.test(token))).toBe(true)
     expect(vrOwnerTokens({ selected: false, selectedRef: { kind: 'strand', id: 's' } }))
       .toEqual([])
+  })
+
+  it('locks the native owner × canonical selection-level acceptance matrix', () => {
+    const levels = ['default', 'cluster', 'strand', 'domain', 'end', 'xover', 'base']
+    const accepted = (kind, facts = {}) => levels.filter(level =>
+      vrSelectionAccepted(kind, level, facts))
+
+    expect(accepted('nucleotide', { isTerminal: true, hasCluster: true }))
+      .toEqual(['default', 'cluster', 'strand', 'domain', 'end', 'base'])
+    expect(accepted('atom', { hasCluster: true }))
+      .toEqual(['default', 'cluster', 'strand', 'domain', 'base'])
+    expect(accepted('domain', { hasCluster: true }))
+      .toEqual(['default', 'cluster', 'strand', 'domain', 'base'])
+    expect(accepted('backbone_bond', { hasCluster: true }))
+      .toEqual(['default', 'cluster', 'strand'])
+    expect(accepted('atom_bond', { hasCluster: false }))
+      .toEqual(['default', 'strand'])
+    expect(accepted('crossover', { hasCluster: true }))
+      .toEqual(['default', 'cluster', 'strand', 'xover'])
+    expect(accepted('flexible_base')).toEqual(['base'])
+    expect(accepted('linker_base')).toEqual(['base'])
+    expect(accepted('linker_connection')).toEqual([])
+    expect(accepted('nucleotide', { hasTarget: false, isTerminal: true,
+      hasCluster: true })).toEqual([])
+  })
+
+  it('covers primitive ownership and accepted levels across every VR representation', () => {
+    const first = {
+      strand_id: 'strand:a', domain_index: 0, helix_id: 'helix:b', bp_index: 3,
+      direction: 'FORWARD', is_five_prime: true,
+    }
+    const second = { ...first, bp_index: 4, is_five_prime: false }
+    const design = {
+      crossovers: [{ id: 'xo:c' }],
+      forced_ligations: [],
+      strands: [{ id: 'strand:a', domains: [{ helix_id: 'helix:b' }] }],
+      flexible_connections: [{
+        id: 'flex:d',
+        segment_bead_keys: [{
+          strand_id: 'strand:a', domain_index: 0, bp_index: 3, direction: 'FORWARD',
+        }],
+      }],
+    }
+    const context = { geometry: [first, second], design }
+    const cases = [
+      ['full', 'nucleotide',
+        'nuc:strand:a:0:helix:b:3:FORWARD:0:backbone',
+        { isTerminal: true }, ['default', 'strand', 'domain', 'end', 'base']],
+      ['full', 'backbone_bond',
+        'backbone:nuc:strand:a:0:helix:b:3:FORWARD:0~nuc:strand:a:0:helix:b:4:FORWARD:0',
+        {}, ['default', 'strand']],
+      ['full', 'crossover', 'crossover:xo:c:direct',
+        {}, ['default', 'strand', 'xover']],
+      ['full', 'flexible_base', 'flex:flex:d:bead:0', {}, ['base']],
+      ['cylinders', 'domain', 'segment:helix:b:strand:a:0:3:4:coarse',
+        {}, ['default', 'strand', 'domain', 'base']],
+      ['ballstick', 'atom', 'atom:8:base:helix:b:4:FORWARD:C',
+        {}, ['default', 'strand', 'domain', 'base']],
+      ['ballstick', 'atom_bond',
+        'atom-bond:bases:helix:b:3:FORWARD~helix:b:4:FORWARD:atoms:8-9',
+        {}, ['default', 'strand']],
+      ['stick', 'atom_bond',
+        'atom-bond:bases:helix:b:3:FORWARD~helix:b:4:FORWARD:atoms:8-9',
+        {}, ['default', 'strand']],
+    ]
+    const levels = ['default', 'cluster', 'strand', 'domain', 'end', 'xover', 'base']
+    for (const [representation, expectedKind, identity, facts, expectedLevels] of cases) {
+      const owner = vrPrimitiveOwner(identity, context)
+      expect(owner?.kind, `${representation}: ${identity}`).toBe(expectedKind)
+      expect(
+        levels.filter(level => vrSelectionAccepted(owner?.kind, level, facts)),
+        `${representation}: ${expectedKind}`,
+      ).toEqual(expectedLevels)
+    }
   })
 })
