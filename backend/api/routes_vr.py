@@ -133,6 +133,7 @@ VRPlanePickReason = Literal[
     "ambiguous_primitive",
     "synthetic_not_supported",
     "out_of_range",
+    "plane_frame_unavailable",
     "stale_target",
 ]
 
@@ -147,6 +148,13 @@ class VRPlaneFeedbackRequest(BaseModel):
     resolved: bool = False
     reason: VRPlanePickReason
     plane_bp: Optional[int] = Field(default=None, ge=-(2**31 - 1), le=2**31 - 1)
+    plane_center: Optional[list[float]] = Field(
+        default=None, min_length=3, max_length=3
+    )
+    plane_normal: Optional[list[float]] = Field(
+        default=None, min_length=3, max_length=3
+    )
+    plane_half_extent_nm: Optional[float] = Field(default=None, gt=0, le=1e6)
 
 
 def _require_local(request: Request) -> None:
@@ -3305,16 +3313,62 @@ def _write_plane_feedback(state: dict | None, body: VRPlaneFeedbackRequest) -> N
         or any(character.isspace() for character in body.picked_identity)
         or body.target_kind not in {"cluster", "end"}
         or body.resolved != (body.reason == "resolved")
-        or body.resolved != (body.plane_bp is not None)
+        or body.resolved != (
+            body.plane_bp is not None
+            and body.plane_center is not None
+            and body.plane_normal is not None
+            and body.plane_half_extent_nm is not None
+        )
+        or (
+            not body.resolved
+            and any(
+                value is not None
+                for value in (
+                    body.plane_bp,
+                    body.plane_center,
+                    body.plane_normal,
+                    body.plane_half_extent_nm,
+                )
+            )
+        )
     ):
         raise HTTPException(422, detail="Invalid VR deformation plane feedback.")
 
+    values: list[float] = []
+    if body.resolved:
+        center = np.asarray(body.plane_center, dtype=float)
+        normal = np.asarray(body.plane_normal, dtype=float)
+        rotation = np.asarray(state.get("view_rotation"), dtype=float)
+        if (
+            center.shape != (3,)
+            or normal.shape != (3,)
+            or rotation.shape != (3, 3)
+            or not np.all(np.isfinite(center))
+            or not np.all(np.isfinite(normal))
+            or not np.all(np.isfinite(rotation))
+            or np.max(np.abs(center)) > 1e9
+            or not 1e-9 < np.linalg.norm(normal) < 1e9
+            or not np.isfinite(body.plane_half_extent_nm)
+            or not 0 < body.plane_half_extent_nm <= 1e6
+        ):
+            raise HTTPException(
+                422, detail="Invalid VR deformation plane feedback geometry."
+            )
+        center = rotation @ center
+        normal = rotation @ normal
+        normal /= np.linalg.norm(normal)
+        values = [*center.tolist(), *normal.tolist(), body.plane_half_extent_nm]
+
     record = (
-        f"NADOCVR_PLANE_FEEDBACK 1 {body.plane_pick_sequence} "
+        f"NADOCVR_PLANE_FEEDBACK 2 {body.plane_pick_sequence} "
         f"{body.tool_config_sequence} {int(body.resolved)} {body.reason} "
         f"{body.plane_slot} {body.target_kind} {body.target_identity} "
         f"{body.picked_identity}"
-        + (f" {body.plane_bp}" if body.plane_bp is not None else "")
+        + (
+            f" {body.plane_bp} "
+            + " ".join(f"{value:.17g}" for value in values)
+            if body.resolved else ""
+        )
         + "\n"
     )
     if len(record.encode()) > 4096:

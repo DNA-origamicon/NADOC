@@ -2061,6 +2061,12 @@ class GlScene {
     static constexpr GLsizei kShadowMapSize = 2048;
 };
 
+struct DeformationPlaneGuide {
+    glm::vec3 center{};
+    glm::vec3 normal{};
+    float halfExtent = 0.0F;
+};
+
 class Viewer {
   public:
     explicit Viewer(SceneData scene, std::string eventPath = {},
@@ -2611,7 +2617,11 @@ class Viewer {
             const bool orderedPlanes = hasBothPlanes &&
                 *toolConfig_.planeABp() < *toolConfig_.planeBBp();
             const std::string geometryStatus = deformationTool
-                ? orderedPlanes ? "PLANES A/B READ ONLY"
+                ? orderedPlanes && glScene_->expanded()
+                    ? "PLANE GUIDES HIDDEN IN EXPANDED"
+                  : orderedPlanes && planeGuides_[0] && planeGuides_[1]
+                    ? "PLANES A/B FRAMED READ ONLY"
+                  : orderedPlanes ? "PLANE FRAME MISSING"
                   : hasBothPlanes ? "PLANES MUST BE A < B"
                   : "PICK PLANES IN FULL / BALL+STICK"
                 : singleCellFootprint
@@ -2790,12 +2800,14 @@ class Viewer {
                                 mode, selectedIdentity_, selectedSelectionKind_,
                                 selectedOwnerTokens_)) {
                             clearPlanePick();
+                            clearPlaneGuides();
                             publishToolConfiguration();
                         }
                         menuPage_ = MenuPage::tool_config;
                         menuHover_ = -1;
                     } else if (toolConfig_.clear()) {
                         clearPlanePick();
+                        clearPlaneGuides();
                         publishToolConfiguration();
                     }
                 } else if (hit < 9) {
@@ -2887,6 +2899,48 @@ class Viewer {
                  center + glm::vec3(0, markerRadius, 0), color);
             line(center - glm::vec3(0, 0, markerRadius),
                  center + glm::vec3(0, 0, markerRadius), color);
+        }
+        const bool deformationTool = toolConfig_.active() &&
+            (toolConfig_.mode() == nadoc_vr::ToolMode::twist ||
+             toolConfig_.mode() == nadoc_vr::ToolMode::bend);
+        if (deformationTool && !glScene_->expanded()) {
+            const glm::mat4 transform = manipulator_.transform();
+            auto worldPoint = [&](const glm::vec3& local) {
+                return glm::vec3(transform * glm::vec4(local, 1.0F));
+            };
+            for (size_t slot = 0; slot < planeGuides_.size(); ++slot) {
+                if (!planeGuides_[slot]) continue;
+                const DeformationPlaneGuide& guide = *planeGuides_[slot];
+                const glm::vec3 reference = std::abs(guide.normal.y) < 0.90F
+                    ? glm::vec3(0, 1, 0) : glm::vec3(1, 0, 0);
+                const glm::vec3 axisU = glm::normalize(glm::cross(
+                    guide.normal, reference));
+                const glm::vec3 axisV = glm::normalize(glm::cross(
+                    guide.normal, axisU));
+                const glm::vec3 color = slot == 0U
+                    ? glm::vec3(1.0F, 0.95F, 0.35F)
+                    : glm::vec3(1.0F, 0.52F, 0.18F);
+                const glm::vec3 cornerA = guide.center
+                    - axisU * guide.halfExtent - axisV * guide.halfExtent;
+                const glm::vec3 cornerB = guide.center
+                    + axisU * guide.halfExtent - axisV * guide.halfExtent;
+                const glm::vec3 cornerC = guide.center
+                    + axisU * guide.halfExtent + axisV * guide.halfExtent;
+                const glm::vec3 cornerD = guide.center
+                    - axisU * guide.halfExtent + axisV * guide.halfExtent;
+                line(worldPoint(cornerA), worldPoint(cornerB), color);
+                line(worldPoint(cornerB), worldPoint(cornerC), color);
+                line(worldPoint(cornerC), worldPoint(cornerD), color);
+                line(worldPoint(cornerD), worldPoint(cornerA), color);
+                const float marker = glm::clamp(
+                    guide.halfExtent * 0.08F, 0.006F, 0.05F);
+                line(worldPoint(guide.center - axisU * marker),
+                     worldPoint(guide.center + axisU * marker), color);
+                line(worldPoint(guide.center - axisV * marker),
+                     worldPoint(guide.center + axisV * marker), color);
+                line(worldPoint(guide.center),
+                     worldPoint(guide.center + guide.normal * marker * 2.0F), color);
+            }
         }
         if (!menuOpen_) {
             if (const auto* feedback = currentToolContextFeedback();
@@ -3042,6 +3096,10 @@ class Viewer {
         planePickConfigSequence_ = 0;
         planePickIdentity_.clear();
         if (!keepStatus) planePickStatus_.clear();
+    }
+
+    void clearPlaneGuides() {
+        planeGuides_.fill(std::nullopt);
     }
 
     void publishSelectionLevel(const std::string& level) {
@@ -3220,6 +3278,7 @@ class Viewer {
                 toolConfig_.mode(), selectedIdentity_, selectedSelectionKind_,
                 selectedOwnerTokens_)) {
             clearPlanePick();
+            clearPlaneGuides();
             publishToolConfiguration();
         }
         if (targetChanged ||
@@ -3298,20 +3357,34 @@ class Viewer {
         }
         planePickFeedbackSequence_ = feedback->sequence;
         const std::string slot = feedback->slot;
-        const bool changed = feedback->resolved &&
-            toolConfig_.setPlaneBp(slot, feedback->planeBp);
+        const size_t slotIndex = slot == "a" ? 0U : 1U;
+        const bool retainedGuide = planeGuides_[slotIndex].has_value();
+        const bool accepted = feedback->resolved && feedback->frameResolved;
+        bool changed = false;
+        if (accepted) {
+            DeformationPlaneGuide guide;
+            guide.center = nadoc_vr::sourceToNormalizedPoint(
+                feedback->planeCenter, normalizationCenter_, normalizationScale_,
+                {0.0F, 0.0F, -kViewDistanceMeters});
+            guide.normal = glm::normalize(feedback->planeNormal);
+            guide.halfExtent = feedback->planeHalfExtentNanometers
+                             * normalizationScale_;
+            planeGuides_[slotIndex] = guide;
+            changed = toolConfig_.setPlaneBp(slot, feedback->planeBp);
+        }
         const auto reasonLabel = [&]() -> const char* {
             if (feedback->reason == "ambiguous_primitive") return "COARSE OR SPANNING HIT";
             if (feedback->reason == "synthetic_not_supported") return "SYNTHETIC HIT REJECTED";
             if (feedback->reason == "out_of_range") return "STALE BP";
+            if (feedback->reason == "plane_frame_unavailable") return "PLANE FRAME UNAVAILABLE";
             if (feedback->reason == "stale_target") return "TARGET CHANGED";
             return "HIT NOT RESOLVED";
         };
-        planePickStatus_ = feedback->resolved
+        planePickStatus_ = accepted
             ? std::string("PLANE ") + (slot == "a" ? "A " : "B ") +
-                std::to_string(feedback->planeBp) + " SET - READ ONLY"
+                std::to_string(feedback->planeBp) + " FRAMED - READ ONLY"
             : std::string("PLANE ") + (slot == "a" ? "A " : "B ") +
-                "NOT SET: " + reasonLabel();
+                (retainedGuide ? "RETAINED: " : "NOT SET: ") + reasonLabel();
         std::cout << "VR " << planePickStatus_ << '\n';
         clearPlanePick(true);
         if (changed) publishToolConfiguration();
@@ -3320,7 +3393,7 @@ class Viewer {
         menuHand_ = 1U;
         menuOpenRequested_ = true;
         suppressManipulationUntilRelease_ = true;
-        pulse(1U, feedback->resolved ? 0.60F : 0.20F);
+        pulse(1U, accepted ? 0.60F : 0.20F);
     }
 
     void syncActions(XrTime displayTime) {
@@ -3686,6 +3759,7 @@ class Viewer {
     std::optional<std::string> planePickSlot_;
     std::string planePickIdentity_;
     std::string planePickStatus_;
+    std::array<std::optional<DeformationPlaneGuide>, 2> planeGuides_{};
     std::string selectedIdentity_;
     std::vector<std::string> selectedOwnerTokens_;
     std::string selectedSelectionKind_ = "none";

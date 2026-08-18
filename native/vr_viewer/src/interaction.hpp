@@ -99,6 +99,10 @@ struct PlanePickFeedback {
     std::string targetIdentity;
     std::string pickedIdentity;
     int32_t planeBp = 0;
+    bool frameResolved = false;
+    glm::vec3 planeCenter{};
+    glm::vec3 planeNormal{};
+    float planeHalfExtentNanometers = 0.0F;
 };
 
 struct OwnerAliasEntry {
@@ -748,7 +752,7 @@ inline std::optional<PlanePickFeedback> parsePlanePickFeedback(
                  >> resolved >> result.reason >> result.slot
                  >> result.targetSelectionKind >> result.targetIdentity
                  >> result.pickedIdentity) ||
-        magic != "NADOCVR_PLANE_FEEDBACK" || version != 1 ||
+        magic != "NADOCVR_PLANE_FEEDBACK" || (version != 1 && version != 2) ||
         (resolved != 0 && resolved != 1) ||
         result.sequence <= previousSequence ||
         result.sequence != expectedPickSequence ||
@@ -761,9 +765,10 @@ inline std::optional<PlanePickFeedback> parsePlanePickFeedback(
         result.pickedIdentity == "-" || result.pickedIdentity.size() > 2048) {
         return std::nullopt;
     }
-    static constexpr std::array<const char*, 6> reasons = {
+    static constexpr std::array<const char*, 7> reasons = {
         "resolved", "invalid_primitive", "ambiguous_primitive",
-        "synthetic_not_supported", "out_of_range", "stale_target",
+        "synthetic_not_supported", "out_of_range", "plane_frame_unavailable",
+        "stale_target",
     };
     if (std::find(reasons.begin(), reasons.end(), result.reason) == reasons.end() ||
         (resolved == 1) != (result.reason == "resolved")) {
@@ -776,6 +781,34 @@ inline std::optional<PlanePickFeedback> parsePlanePickFeedback(
             return std::nullopt;
         }
         result.planeBp = static_cast<int32_t>(planeBp);
+        // Version 1 never carried a frame. Do not accept an exact bp without
+        // the geometry required to display what will eventually be edited.
+        if (version != 2 ||
+            !(fields >> result.planeCenter.x >> result.planeCenter.y
+                      >> result.planeCenter.z >> result.planeNormal.x
+                      >> result.planeNormal.y >> result.planeNormal.z
+                      >> result.planeHalfExtentNanometers) ||
+            !std::isfinite(result.planeCenter.x) ||
+            !std::isfinite(result.planeCenter.y) ||
+            !std::isfinite(result.planeCenter.z) ||
+            !std::isfinite(result.planeNormal.x) ||
+            !std::isfinite(result.planeNormal.y) ||
+            !std::isfinite(result.planeNormal.z) ||
+            !std::isfinite(result.planeHalfExtentNanometers) ||
+            std::abs(result.planeCenter.x) > 1.0e9F ||
+            std::abs(result.planeCenter.y) > 1.0e9F ||
+            std::abs(result.planeCenter.z) > 1.0e9F ||
+            result.planeHalfExtentNanometers <= 0.0F ||
+            result.planeHalfExtentNanometers > 1.0e6F) {
+            return std::nullopt;
+        }
+        const double normalLength = std::hypot(
+            std::hypot(static_cast<double>(result.planeNormal.x),
+                       static_cast<double>(result.planeNormal.y)),
+            static_cast<double>(result.planeNormal.z));
+        if (normalLength <= 1.0e-9 || normalLength >= 1.0e9) return std::nullopt;
+        result.planeNormal = glm::normalize(result.planeNormal);
+        result.frameResolved = true;
     }
     std::string trailing;
     if (fields >> trailing) return std::nullopt;

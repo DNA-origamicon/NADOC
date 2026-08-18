@@ -24,6 +24,7 @@ import { store }          from '../state/store.js'
 import * as api           from '../api/client.js'
 import { BDNA_RISE_PER_BP } from '../constants.js'
 import { showPersistentToast, dismissToast } from '../ui/toast.js'
+import { deformationPlaneFrame } from './deformation_plane_frame.js'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -583,7 +584,7 @@ export function getDeformDefaultClusterIds() {
   return _defaultClusterIds()
 }
 
-function _getHelixAxisData() {
+function _getHelixAxisData(clusterIdsOverride = null) {
   const { currentDesign } = store.getState()
   if (!currentDesign) return []
   // While a preview is live, the store has the bent axes — use the original snapshot
@@ -592,7 +593,8 @@ function _getHelixAxisData() {
 
   // Restrict plane interaction to the union of selected clusters' helices so ghost
   // planes, picking, and centering are all scoped to the clusters being deformed.
-  const cids = _effectiveClusterIds()
+  const cids = clusterIdsOverride === null
+    ? _effectiveClusterIds() : clusterIdsOverride
   let clusterHelixIds = null
   if (cids.length > 0) {
     clusterHelixIds = new Set()
@@ -824,42 +826,28 @@ function _interpolateSamplePos(samples, bp, lengthBp) {
   )
 }
 
-/** Tangent direction along a samples array at the given bp. */
-function _interpolateSampleTangent(samples, bp) {
-  const si = Math.max(0, Math.min(Math.floor(bp / _SAMPLE_STEP), samples.length - 2))
-  return new THREE.Vector3(...samples[si + 1]).sub(new THREE.Vector3(...samples[si])).normalize()
-}
-
 function _worldPosForBp(globalBp) {
-  const helices = _getHelixAxisData()
-  if (!helices.length) return new THREE.Vector3()
-  const sum = new THREE.Vector3()
-  for (const h of helices) {
-    const localBp = globalBp - h.bpStart
-    if (h.samples && h.samples.length > 2) {
-      sum.add(_interpolateSamplePos(h.samples, localBp, h.lengthBp))
-    } else {
-      const dir = h.end.clone().sub(h.start).normalize()
-      sum.add(h.start.clone().addScaledVector(dir, localBp * BDNA_RISE_PER_BP))
-    }
-  }
-  return sum.divideScalar(helices.length)
+  const frame = getDeformationPlaneFrame(globalBp)
+  return frame ? new THREE.Vector3(...frame.center) : new THREE.Vector3()
 }
 
 /** Average tangent direction across all helices at *globalBp*, following the deformed contour. */
 function _tangentAtBp(globalBp) {
-  const helices = _getHelixAxisData()
-  if (!helices.length) return new THREE.Vector3(0, 0, 1)
-  const sum = new THREE.Vector3()
-  for (const h of helices) {
-    const localBp = globalBp - h.bpStart
-    if (h.samples && h.samples.length > 2) {
-      sum.add(_interpolateSampleTangent(h.samples, localBp))
-    } else {
-      sum.add(h.end.clone().sub(h.start).normalize())
-    }
-  }
-  return sum.normalize()
+  const frame = getDeformationPlaneFrame(globalBp)
+  return frame ? new THREE.Vector3(...frame.normal) : new THREE.Vector3(0, 0, 1)
+}
+
+/** Exact frame shared by desktop plane meshes and native-VR read-only guides. */
+export function getDeformationPlaneFrame(globalBp, clusterIdsOverride = null) {
+  return deformationPlaneFrame(
+    globalBp, _getHelixAxisData(clusterIdsOverride).map(helix => ({
+      bpStart: helix.bpStart,
+      lengthBp: helix.lengthBp,
+      start: helix.start.toArray(),
+      end: helix.end.toArray(),
+      samples: helix.samples,
+    })),
+  )
 }
 
 // ── Ghost planes ──────────────────────────────────────────────────────────────

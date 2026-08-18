@@ -329,26 +329,46 @@ void toolContextFeedbackIsExactSequencedAndFinite() {
 
 void planePickFeedbackIsTargetBoundSequencedAndStrict() {
     const auto accepted = nadoc_vr::parsePlanePickFeedback(
-        "NADOCVR_PLANE_FEEDBACK 1 9 4 1 resolved a end nuc:end nuc:pick 27\n",
+        "NADOCVR_PLANE_FEEDBACK 2 9 4 1 resolved a end nuc:end nuc:pick "
+        "27 1 2 3 0 0 2 8\n",
         8, 9, 4);
     require(accepted && accepted->resolved && accepted->slot == "a" &&
             accepted->planeBp == 27 && accepted->targetIdentity == "nuc:end" &&
-            accepted->pickedIdentity == "nuc:pick");
+            accepted->pickedIdentity == "nuc:pick" && accepted->frameResolved &&
+            glm::all(glm::epsilonEqual(
+                accepted->planeCenter, glm::vec3(1, 2, 3), 1e-6F)) &&
+            glm::all(glm::epsilonEqual(
+                accepted->planeNormal, glm::vec3(0, 0, 1), 1e-6F)) &&
+            std::abs(accepted->planeHalfExtentNanometers - 8.0F) < 1e-6F);
     const auto rejected = nadoc_vr::parsePlanePickFeedback(
-        "NADOCVR_PLANE_FEEDBACK 1 10 4 0 ambiguous_primitive b cluster cluster:c1 bond:x\n",
+        "NADOCVR_PLANE_FEEDBACK 2 10 4 0 ambiguous_primitive b cluster cluster:c1 bond:x\n",
         9, 10, 4);
     require(rejected && !rejected->resolved && rejected->slot == "b");
     require(!nadoc_vr::parsePlanePickFeedback(
-        "NADOCVR_PLANE_FEEDBACK 1 9 4 1 resolved a end nuc:end nuc:pick 27\n",
+        "NADOCVR_PLANE_FEEDBACK 2 9 4 1 resolved a end nuc:end nuc:pick "
+        "27 1 2 3 0 0 1 8\n",
         9, 9, 4));
     require(!nadoc_vr::parsePlanePickFeedback(
-        "NADOCVR_PLANE_FEEDBACK 1 11 5 1 resolved a end nuc:end nuc:pick 27\n",
+        "NADOCVR_PLANE_FEEDBACK 2 11 5 1 resolved a end nuc:end nuc:pick "
+        "27 1 2 3 0 0 1 8\n",
         10, 11, 4));
     require(!nadoc_vr::parsePlanePickFeedback(
-        "NADOCVR_PLANE_FEEDBACK 1 11 4 0 resolved a end nuc:end nuc:pick\n",
+        "NADOCVR_PLANE_FEEDBACK 2 11 4 0 resolved a end nuc:end nuc:pick\n",
         10, 11, 4));
     require(!nadoc_vr::parsePlanePickFeedback(
-        "NADOCVR_PLANE_FEEDBACK 1 11 4 1 resolved x end nuc:end nuc:pick 27\n",
+        "NADOCVR_PLANE_FEEDBACK 2 11 4 1 resolved x end nuc:end nuc:pick "
+        "27 1 2 3 0 0 1 8\n",
+        10, 11, 4));
+    require(!nadoc_vr::parsePlanePickFeedback(
+        "NADOCVR_PLANE_FEEDBACK 1 11 4 1 resolved a end nuc:end nuc:pick 27\n",
+        10, 11, 4));
+    require(!nadoc_vr::parsePlanePickFeedback(
+        "NADOCVR_PLANE_FEEDBACK 2 11 4 1 resolved a end nuc:end nuc:pick "
+        "27 1 2 3 0 0 0 8\n",
+        10, 11, 4));
+    require(!nadoc_vr::parsePlanePickFeedback(
+        "NADOCVR_PLANE_FEEDBACK 2 11 4 1 resolved a end nuc:end nuc:pick "
+        "27 1 2 3 0 0 1 -8\n",
         10, 11, 4));
 }
 

@@ -734,7 +734,10 @@ def test_native_tool_feedback_rotates_exact_locator_and_fails_closed(tmp_path) -
 
 def test_native_plane_feedback_is_private_target_bound_and_fail_closed(tmp_path) -> None:
     tool_feedback_path = tmp_path / "vr-tool-feedback.txt"
-    state = {"plane_feedback_path": str(tool_feedback_path)}
+    state = {
+        "plane_feedback_path": str(tool_feedback_path),
+        "view_rotation": [[0, -1, 0], [1, 0, 0], [0, 0, 1]],
+    }
     _write_plane_feedback(
         state,
         VRPlaneFeedbackRequest(
@@ -747,11 +750,14 @@ def test_native_plane_feedback_is_private_target_bound_and_fail_closed(tmp_path)
             resolved=True,
             reason="resolved",
             plane_bp=12,
+            plane_center=[1, 2, 3],
+            plane_normal=[0, 0, 2],
+            plane_half_extent_nm=8,
         ),
     )
     assert tool_feedback_path.read_text() == (
-        "NADOCVR_PLANE_FEEDBACK 1 5 7 1 resolved a cluster cluster:c1 "
-        "nuc:s1:0:h1:12:FORWARD:0 12\n"
+        "NADOCVR_PLANE_FEEDBACK 2 5 7 1 resolved a cluster cluster:c1 "
+        "nuc:s1:0:h1:12:FORWARD:0 12 -2 1 3 0 0 1 8\n"
     )
     assert tool_feedback_path.stat().st_mode & 0o777 == 0o600
     assert not tool_feedback_path.with_name(f"{tool_feedback_path.name}.next").exists()
@@ -760,6 +766,16 @@ def test_native_plane_feedback_is_private_target_bound_and_fail_closed(tmp_path)
         dict(resolved=False, reason="resolved", plane_bp=None),
         dict(resolved=True, reason="resolved", plane_bp=None),
         dict(resolved=False, reason="ambiguous_primitive", plane_bp=12),
+        dict(
+            resolved=True, reason="resolved", plane_bp=12,
+            plane_center=[0, 0, 0], plane_normal=[0, 0, 0],
+            plane_half_extent_nm=8,
+        ),
+        dict(
+            resolved=True, reason="resolved", plane_bp=12,
+            plane_center=[float("nan"), 0, 0], plane_normal=[0, 0, 1],
+            plane_half_extent_nm=8,
+        ),
     ]
     for values in invalid:
         with pytest.raises(HTTPException, match="Invalid VR deformation plane feedback"):

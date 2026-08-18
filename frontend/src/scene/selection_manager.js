@@ -50,6 +50,7 @@ import {
 import { selectionHighlightDescriptor } from './selection_highlight_model.js'
 import { referenceStrandInteractionHidden } from './reference_navigation.js'
 import { resolveVREndToolContext } from './vr_tool_context.js'
+import { getDeformationPlaneFrame } from './deformation_editor.js'
 
 // Kick off the FJC lookup fetch at module load so the linker-config modal
 // opens instantly with the per-bin histograms already cached.
@@ -4839,10 +4840,16 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     /** Resolve a model hit to one exact global bp without changing selection. */
     resolveVRDeformationPlanePick(identity) {
       const state = store.getState()
-      return vrDeformationPlanePick(identity, {
+      const pick = vrDeformationPlanePick(identity, {
         geometry: state.currentGeometry,
         design: state.currentDesign,
       })
+      if (!pick.resolved) return pick
+      const selectedRef = selectionController.getState().primary ?? null
+      const clusterIds = selectedRef?.kind === 'cluster' ? [selectedRef.id] : null
+      const frame = getDeformationPlaneFrame(pick.bp, clusterIds)
+      return frame ? { ...pick, frame }
+        : { resolved: false, reason: 'plane_frame_unavailable' }
     },
 
     /** Opaque canonical owner aliases used to seed a native viewer launched after
