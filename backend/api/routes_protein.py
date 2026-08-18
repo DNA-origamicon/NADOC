@@ -38,6 +38,7 @@ from backend.api import state as design_state
 from backend.api.crud import _design_response, _find_ovhg_or_404, _geometry_for_helices
 from backend.core.models import Design
 from backend.core.protein import protein_asset_meta
+from backend.core.render_diff import _local_changed_helices, _strand_occupancy
 
 router = APIRouter()
 
@@ -313,6 +314,7 @@ def conjugate_protein_to_overhang(body: ProteinConjugateRequest) -> dict:
             protein_attachments=[*d.protein_attachments, attachment],
         )
 
+    before_occ = _strand_occupancy(design)
     updated, report, _entry = design_state.mutate_with_feature_log(
         "protein-conjugate",
         f"Conjugate {asset.name} to {spec.label or body.overhang_id}",
@@ -325,7 +327,10 @@ def conjugate_protein_to_overhang(body: ProteinConjugateRequest) -> dict:
     )
     from backend.api.crud import _design_response_with_geometry
 
-    resp = _design_response_with_geometry(updated, report)
+    changed = _local_changed_helices(before_occ, _strand_occupancy(updated))
+    resp = _design_response_with_geometry(
+        updated, report, changed_helix_ids=changed, compact_deformed=True,
+    )
     resp["attachment_id"] = attachment.id
     resp["binder_strand_id"] = binder.id
     return resp

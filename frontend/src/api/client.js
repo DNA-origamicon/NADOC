@@ -1210,7 +1210,10 @@ export async function batchDeleteCrossovers(crossoverIds) {
 
 export async function patchCrossoverExtraBases(crossoverId, sequence) {
   const json = await _request('PATCH', `/design/crossovers/${crossoverId}/extra-bases`, { sequence })
-  return _syncFromDesignResponse(json)
+  // extra_bases never moves real nucleotide geometry (see crud.py); the backend
+  // flags this so the beads-only crossover-connections rebuild (which reads
+  // design.crossovers directly) doesn't pay for a geometry round-trip.
+  return _syncFromDesignResponse(json, { skipGeometry: json?.geometry_unchanged === true })
 }
 
 /** Set extra bases on multiple crossovers atomically (PATCH /design/crossovers/extra-bases/batch).
@@ -1218,12 +1221,12 @@ export async function patchCrossoverExtraBases(crossoverId, sequence) {
 export async function batchCrossoverExtraBases(entries) {
   if (!entries.length) return null
   const json = await _request('PATCH', '/design/crossovers/extra-bases/batch', { entries })
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { skipGeometry: json?.geometry_unchanged === true })
 }
 
 export async function patchForcedLigationExtraBases(flId, sequence) {
   const json = await _request('PATCH', `/design/forced-ligations/${flId}/extra-bases`, { sequence })
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { skipGeometry: json?.geometry_unchanged === true })
 }
 
 /**
@@ -3084,12 +3087,16 @@ export async function deleteCluster(clusterId) {
 
 export async function putNucleotideTransform(body) {
   const json = await _request('PUT', '/design/nucleotide-transform', body)
-  return _syncFromDesignResponse(json)
+  // "extra_base" poses aren't baked into backend geometry (applied client-side
+  // instead), so those responses flag geometry_unchanged — same contract as
+  // the extra-bases routes. "base" poses DO move real geometry and arrive
+  // through the normal partial/full path, where this flag is absent.
+  return _syncFromDesignResponse(json, { skipGeometry: json?.geometry_unchanged === true })
 }
 
 export async function deleteNucleotideTransform(transformId) {
   const json = await _request('DELETE', `/design/nucleotide-transform/${transformId}`)
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { skipGeometry: json?.geometry_unchanged === true })
 }
 
 /**

@@ -280,22 +280,13 @@ def _strip_feature_log_payloads(
                     c[k] = "1"
 
 
-def _slim_mutation_history_payload(payload: dict, new_entry_id: str) -> None:
-    """Strip old history bodies while retaining the newly-created entry.
-
-    The client merges old bodies from its current store before persistence. This
-    keeps mutation responses proportional to the operation instead of the entire
-    edit history without recreating the recovery corruption caused by stripping
-    every entry indiscriminately.
-    """
-    design_dict = payload.get("design")
-    if not isinstance(design_dict, dict):
-        return
-    _strip_feature_log_payloads(design_dict, preserve_entry_ids={new_entry_id})
-    payload["feature_log_payloads_partial"] = True
-
-
-def _design_response(design: Design, report: ValidationReport) -> dict:
+def _design_response(
+    design: Design,
+    report: ValidationReport,
+    *,
+    preserve_feature_log_id: str | None = None,
+    full_feature_log: bool = False,
+) -> dict:
     design = _ensure_default_cluster(design)
     design_dict = design.to_dict()
     # Loadout branch payloads are full compressed design snapshots. They must
@@ -311,12 +302,35 @@ def _design_response(design: Design, report: ValidationReport) -> dict:
         for l in design.loadouts
     ]
     _inject_joint_world_axes(design_dict)
-    # Editor (skip-geometry) responses: drop the heavy feature_log payload blobs.
-    # The main 3D client persists response designs for server-restart recovery,
-    # so its responses MUST retain the bodies. Stripping them globally silently
-    # turns the recovery copy into non-revertable history after a restart.
+    # Feature-log body blobs (design_snapshot_gz_b64 / pre_state_gz_b64 /
+    # post_state_gz_b64 / per-child diff_*_b64) measured at 53-90% of gzipped
+    # response size on real designs with editing history — not just heavily
+    # edited ones. Stripped by default on every response. The client
+    # reconstructs stripped bodies from its own in-memory cache, keyed by
+    # feature-log entry id (_mergeFeatureLogPayloads, client.js:485), so this
+    # is safe on any response that follows an already-loaded client design.
+    # *full_feature_log* is the escape hatch for cold-load paths (GET /design)
+    # where the client has no prior cache to merge from — there,
+    # should_skip_geometry() (2D editor) still takes priority since that
+    # client never decodes bodies at all, cold load or not.
+    feature_log_partial = False
     if should_skip_geometry():
         _strip_feature_log_payloads(design_dict)
+    elif not full_feature_log:
+        # Auto-detect: if THIS request's mutation just created/appended a
+        # feature-log entry (mutate_with_feature_log / mutate_with_minor_log),
+        # its id is recorded in the per-request contextvar regardless of
+        # whether the calling route remembered to pass preserve_feature_log_id
+        # explicitly. A brand-new entry's id has never reached the client
+        # before, so — unlike an existing entry — the client's cache-merge
+        # cannot backfill a stripped body for it; shipping it empty would
+        # silently make that operation non-recoverable from the local cache.
+        effective_preserve_id = (
+            preserve_feature_log_id or design_state.current_request_feature_log_entry_id()
+        )
+        preserve_ids = {effective_preserve_id} if effective_preserve_id else None
+        _strip_feature_log_payloads(design_dict, preserve_entry_ids=preserve_ids)
+        feature_log_partial = True
     # Monotonic per-document revision, captured ATOMICALLY at mutation time for a
     # mutating request (falls back to the current value for read-only GETs). The
     # client drops any design response whose revision is older than the newest
@@ -325,7 +339,7 @@ def _design_response(design: Design, report: ValidationReport) -> dict:
     rev = design_state.current_request_revision()
     if rev is None:
         rev = design_state.revision()
-    return {
+    resp = {
         "design": design_dict,
         "validation": _validation_dict(report, design),
         # Crossovers whose two halves currently resolve to the same strand
@@ -336,6 +350,9 @@ def _design_response(design: Design, report: ValidationReport) -> dict:
         "unligated_crossover_ids": unligated_crossover_ids(design),
         "revision": rev,
     }
+    if feature_log_partial:
+        resp["feature_log_payloads_partial"] = True
+    return resp
 
 
 def _inject_joint_world_axes(design_dict: dict) -> None:
@@ -402,9 +419,16 @@ def _design_response_with_geometry(
     embed_straight: bool | None = None,
     compact_deformed: bool = False,
     partial_axes: bool = False,
+    preserve_feature_log_id: str | None = None,
+    full_feature_log: bool = False,
 ) -> dict:
     """Like _design_response but embeds geometry so the frontend needs only one
     round-trip and can update design + geometry atomically (one scene rebuild).
+
+    *preserve_feature_log_id* / *full_feature_log* — passed through to
+    _design_response (see there): preserve one newly-created entry's body, or
+    skip blob-stripping entirely for a route that installs a design lineage the
+    client hasn't cached (file load/import, loadout branch switch).
 
     *changed_helix_ids* — when given, activates partial geometry (Fix B):
       • Only nucleotides on those helices are computed and returned.
@@ -437,7 +461,11 @@ def _design_response_with_geometry(
     editor a multi-MB JSON.parse of a payload it would discard.
     """
     if should_skip_geometry():
-        return _design_response(design, report)
+        return _design_response(
+            design, report,
+            preserve_feature_log_id=preserve_feature_log_id,
+            full_feature_log=full_feature_log,
+        )
     # The Design stores canonical topology/poses, while measured vs legacy
     # positioning is a browser-owned display projection. Mutation responses must
     # use the same projection as GET /geometry or replacing currentGeometry causes
@@ -471,7 +499,11 @@ def _design_response_with_geometry(
             else {"nucleotides": nucs}
         )
         resp = {
-            **_design_response(design, report),
+            **_design_response(
+                design, report,
+                preserve_feature_log_id=preserve_feature_log_id,
+                full_feature_log=full_feature_log,
+            ),
             **geometry_payload,
             "partial_geometry": True,
             "changed_helix_ids": changed_helix_ids,
@@ -504,13 +536,21 @@ def _design_response_with_geometry(
         # names don't repeat per nuc. Frontend's _syncFromDesignResponse
         # rematerialises a flat nuc list before the renderer consumes it.
         out = {
-            **_design_response(design, report),
+            **_design_response(
+                design, report,
+                preserve_feature_log_id=preserve_feature_log_id,
+                full_feature_log=full_feature_log,
+            ),
             "nucleotides_compact": _compact_geometry_from_nucleotides(nucleotides),
             "helix_axes": axes,
         }
     else:
         out = {
-            **_design_response(design, report),
+            **_design_response(
+                design, report,
+                preserve_feature_log_id=preserve_feature_log_id,
+                full_feature_log=full_feature_log,
+            ),
             "nucleotides": nucleotides,
             "helix_axes": axes,
         }
@@ -856,7 +896,9 @@ def get_active_design() -> dict:
 
     design = design_state.get_or_404()
     report = validate_design(design)
-    return _design_response(design, report)
+    # Cold-load path: the client may have no prior cache to reconstruct stripped
+    # feature-log bodies from (fresh tab, restart recovery), so ship them in full.
+    return _design_response(design, report, full_feature_log=True)
 
 
 @router.delete("/design", status_code=200)
@@ -906,12 +948,21 @@ def _design_replace_response(
 
     When *trace* is given, the chosen path is appended as a 0-duration step
     so the frontend's API perf log shows which fast path fired.
+
+    Every branch below passes full_feature_log=True: undo/redo/seek can move
+    the design to a point where a feature-log entry's BODY differs from what
+    the client has cached under the same id (e.g. edit_feature regenerates an
+    entry's snapshot in place), not just add/remove entries wholesale. The
+    default blob-stripping's client-side merge only fills in a MISSING body
+    from cache — it cannot tell a stale cached body from a current one — so
+    this path is excluded from FL-01's default until that's addressed on its
+    own (see memory/project_response_diffing.md, deferred FL item).
     """
     if _diff_is_cluster_only(prev_design, design):
         if trace is not None:
             trace._steps.append(("path:cluster_only", 0.0))
         return {
-            **_design_response(design, report),
+            **_design_response(design, report, full_feature_log=True),
             "diff_kind": "cluster_only",
             "cluster_diffs": _cluster_diff_payload(prev_design, design),
         }
@@ -927,7 +978,7 @@ def _design_replace_response(
         # earlier _positions_by_helix(_geometry_for_helices(design)) chain.
         positions, axes = _positions_for_design(design)
         return {
-            **_design_response(design, report),
+            **_design_response(design, report, full_feature_log=True),
             "diff_kind": "positions_only",
             "positions_by_helix": positions,
             "helix_axes": axes,
@@ -950,6 +1001,7 @@ def _design_replace_response(
             report,
             embed_straight=None,
             compact_deformed=False,
+            full_feature_log=True,
         )
     # Undo/redo used to send every nucleotide for every topology change. For a
     # local identity-pose edit we can derive the same affected-helix footprint
@@ -969,6 +1021,7 @@ def _design_replace_response(
                 changed_helix_ids=changed,
                 compact_deformed=True,
                 partial_axes=True,
+                full_feature_log=True,
             )
     # Auto-embedding bundles straight geometry when the design has a real
     # deformation/non-identity cluster pose. Identity-only designs reuse current
@@ -981,6 +1034,7 @@ def _design_replace_response(
         report,
         embed_straight=None,
         compact_deformed=True,
+        full_feature_log=True,
     )
 
 
@@ -1106,8 +1160,8 @@ def add_bundle_segment(body: BundleSegmentRequest) -> dict:
             changed_helix_ids=changed,
             compact_deformed=True,
             partial_axes=changed is not None,
+            preserve_feature_log_id=_entry.id,
         )
-        _slim_mutation_history_payload(payload, _entry.id)
     return trace.attach(ORJSONResponse(payload, status_code=201))
 
 
@@ -1218,8 +1272,8 @@ def add_bundle_continuation(body: BundleContinuationRequest) -> dict:
             changed_helix_ids=changed,
             compact_deformed=True,
             partial_axes=changed is not None,
+            preserve_feature_log_id=_entry.id,
         )
-        _slim_mutation_history_payload(payload, _entry.id)
     return trace.attach(ORJSONResponse(payload, status_code=201))
 
 
@@ -1320,8 +1374,8 @@ def add_bundle_deformed_continuation(body: BundleDeformedContinuationRequest) ->
             changed_helix_ids=changed,
             compact_deformed=True,
             partial_axes=changed is not None,
+            preserve_feature_log_id=_entry.id,
         )
-        _slim_mutation_history_payload(payload, _entry.id)
     return trace.attach(ORJSONResponse(payload, status_code=201))
 
 
@@ -1357,7 +1411,11 @@ def create_bundle(body: BundleRequest) -> dict:
             fn=lambda _d: _cluster_bundle_regions(_build_bundle(cells, body)),
         )
     with trace.step("geometry_response"):
-        payload = _design_response_with_geometry(new_design, report, compact_deformed=True)
+        # New lineage (reset-to-empty above) — nothing in the client's cache
+        # matches this design's history.
+        payload = _design_response_with_geometry(
+            new_design, report, compact_deformed=True, full_feature_log=True,
+        )
     return trace.attach(ORJSONResponse(payload, status_code=201))
 
 
@@ -1393,7 +1451,8 @@ def create_design(body: CreateDesignRequest) -> dict:
     design_state.clear_history()
     design_state.set_design(new_design)
     report = validate_design(new_design)
-    return _design_response(new_design, report)
+    # New lineage — nothing in the client's cache matches this design's history.
+    return _design_response(new_design, report, full_feature_log=True)
 
 
 @router.put("/design/metadata")
@@ -1559,7 +1618,8 @@ def load_design(body: FilePathRequest) -> dict:
     design_state.clear_history()  # fresh baseline — no undo into previous session
     design_state.set_design(design)
     report = validate_design(design)
-    return _design_response(design, report)
+    # New lineage (fresh load/import) — nothing in the client's cache matches this design's history.
+    return _design_response(design, report, full_feature_log=True)
 
 
 @router.post("/design/import", status_code=200)
@@ -1597,7 +1657,8 @@ def import_design(body: DesignImportRequest) -> dict:
     design_state.clear_history()
     design_state.set_design(design)
     report = validate_design(design)
-    return _design_response(design, report)
+    # New lineage (fresh load/import) — nothing in the client's cache matches this design's history.
+    return _design_response(design, report, full_feature_log=True)
 
 
 class CadnanoImportRequest(BaseModel):
@@ -1638,7 +1699,8 @@ def import_cadnano_design(body: CadnanoImportRequest) -> dict:
     design_state.clear_history()
     design_state.set_design(design)
     report = validate_design(design)
-    resp = _design_response(design, report)
+    # New lineage (fresh load/import) — nothing in the client's cache matches this design's history.
+    resp = _design_response(design, report, full_feature_log=True)
     if import_warnings:
         resp["import_warnings"] = import_warnings
     return resp
@@ -1873,7 +1935,8 @@ def import_scadnano_design(body: ScadnanoImportRequest) -> dict:
     design_state.clear_history()
     design_state.set_design(design)
     report = validate_design(design)
-    resp = _design_response(design, report)
+    # New lineage (fresh load/import) — nothing in the client's cache matches this design's history.
+    resp = _design_response(design, report, full_feature_log=True)
     if import_warnings:
         resp["import_warnings"] = import_warnings
     resp["debug"] = {
@@ -2572,6 +2635,8 @@ def generate_binder_for_overhang_endpoint(overhang_id: str) -> dict:
     """
     from backend.core.lattice import make_binder_for_overhang
 
+    before_occ = _strand_occupancy(design_state.get_or_404())
+
     def _build(d: Design) -> Design:
         return make_binder_for_overhang(d, overhang_id)
 
@@ -2585,7 +2650,10 @@ def generate_binder_for_overhang_endpoint(overhang_id: str) -> dict:
     except ValueError as exc:
         raise HTTPException(404, detail=str(exc)) from exc
 
-    return _design_response_with_geometry(design, report)
+    changed = _local_changed_helices(before_occ, _strand_occupancy(design))
+    return _design_response_with_geometry(
+        design, report, changed_helix_ids=changed, compact_deformed=True,
+    )
 
 
 @router.post("/design/strands/{strand_id}/convert-to-scaffold", status_code=200)
@@ -2687,6 +2755,7 @@ def domain_shift(body: DomainShiftRequest) -> dict:
     """Shift one or more whole domains by a signed bp offset (cadnano drag-to-move)."""
     if not body.entries:
         raise HTTPException(400, detail="domain-shift requires at least one entry.")
+    before_occ = _strand_occupancy(design_state.get_or_404())
     try:
         n = len(body.entries)
         deltas = {entry.delta_bp for entry in body.entries}
@@ -2709,7 +2778,11 @@ def domain_shift(body: DomainShiftRequest) -> dict:
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 
-    return _design_response_with_geometry(updated, report)
+    changed = _local_changed_helices(before_occ, _strand_occupancy(updated))
+    return _design_response_with_geometry(
+        updated, report, changed_helix_ids=changed, compact_deformed=True,
+        partial_axes=True,
+    )
 
 
 def _build_delete_strands_batch(d: Design, body: "StrandBatchDeleteRequest") -> Design:
@@ -3257,6 +3330,7 @@ def place_crossover(body: PlaceCrossoverRequest) -> dict:
         return current
 
     _d = design_state.get_or_404()
+    before_occ = _strand_occupancy(_d)
     label = (
         f"Crossover h{_helix_label(_d, body.half_a.helix_id)} ↔ "
         f"h{_helix_label(_d, body.half_b.helix_id)} bp {body.half_a.index}"
@@ -3267,9 +3341,12 @@ def place_crossover(body: PlaceCrossoverRequest) -> dict:
         params=body.model_dump(mode="json"),
         fn=_fn,
     )
+    changed = _local_changed_helices(before_occ, _strand_occupancy(current))
     resp = {
         "crossover": holder["xover"].model_dump(),
-        **_design_response_with_geometry(current, report),
+        **_design_response_with_geometry(
+            current, report, changed_helix_ids=changed, compact_deformed=True,
+        ),
     }
     if not holder.get("ligated"):
         x = holder["xover"]
@@ -3319,6 +3396,7 @@ def place_crossover_batch(body: PlaceCrossoverBatchRequest) -> dict:
         holder["skipped_ids"] = skipped_ids
         return current
 
+    before_occ = _strand_occupancy(design_state.get_or_404())
     n = len(body.placements)
     label = f"Place {n} crossover{'s' if n != 1 else ''}"
     current, report, _entry = design_state.mutate_with_minor_log(
@@ -3327,9 +3405,12 @@ def place_crossover_batch(body: PlaceCrossoverBatchRequest) -> dict:
         params=body.model_dump(mode="json"),
         fn=_fn,
     )
+    changed = _local_changed_helices(before_occ, _strand_occupancy(current))
     resp = {
         "crossovers": [x.model_dump() for x in holder["xovers"]],
-        **_design_response_with_geometry(current, report),
+        **_design_response_with_geometry(
+            current, report, changed_helix_ids=changed, compact_deformed=True,
+        ),
     }
     skipped = holder.get("skipped_ids") or []
     if skipped:
@@ -4246,7 +4327,16 @@ def batch_patch_crossover_extra_bases(body: BatchCrossoverExtraBasesRequest) -> 
         params=body.model_dump(mode="json"),
         fn=_apply,
     )
-    return _design_response_with_geometry(design, report)
+    # extra_bases lives on the Crossover record, not on any strand domain —
+    # design_geometry.py never reads it, so no real nucleotide moves. The
+    # extra-base beads themselves are a pure frontend Bezier interpolation
+    # between the crossover's two (unmoved) flanking nucleotides
+    # (crossover_connections.js's file-header invariant). Geometry payload
+    # is skippable entirely — same geometry_unchanged/skipGeometry contract
+    # patch_strands_reference established (crud.py, client.js:2101).
+    payload = _design_response(design, report)
+    payload["geometry_unchanged"] = True
+    return payload
 
 
 @router.patch("/design/crossovers/{crossover_id}/extra-bases", status_code=200)
@@ -4284,7 +4374,11 @@ def patch_crossover_extra_bases(
         params={"crossover_id": crossover_id, **body.model_dump(mode="json")},
         fn=_apply,
     )
-    return _design_response_with_geometry(design, report)
+    # See batch_patch_crossover_extra_bases: extra_bases never affects real
+    # nucleotide geometry.
+    payload = _design_response(design, report)
+    payload["geometry_unchanged"] = True
+    return payload
 
 
 @router.patch("/design/forced-ligations/{fl_id}/extra-bases", status_code=200)
@@ -4322,7 +4416,11 @@ def patch_forced_ligation_extra_bases(
         params={"fl_id": fl_id, **body.model_dump(mode="json")},
         fn=_apply,
     )
-    return _design_response_with_geometry(design, report)
+    # See batch_patch_crossover_extra_bases: extra_bases never affects real
+    # nucleotide geometry (same reasoning applies to forced-ligation junctions).
+    payload = _design_response(design, report)
+    payload["geometry_unchanged"] = True
+    return payload
 
 
 def _build_nick(design: Design, body: "NickRequest") -> Design:
@@ -4982,8 +5080,8 @@ def overhang_extrude(body: OverhangExtrudeRequest) -> dict:
             changed_helix_ids=changed,
             compact_deformed=True,
             partial_axes=changed is not None,
+            preserve_feature_log_id=_entry.id,
         )
-        _slim_mutation_history_payload(payload, _entry.id)
     # ORJSONResponse serializes eagerly in its constructor. Keep that cost in
     # Server-Timing; previously it appeared as an unexplained server→browser gap.
     with trace.step("serialize_response"):
@@ -5830,11 +5928,11 @@ def patch_strands_reference(body: BulkReferenceRequest) -> dict:
             changed_helix_ids=changed_helix_ids,
             compact_deformed=True,
             partial_axes=True,
+            preserve_feature_log_id=_entry.id,
         )
     else:
-        payload = _design_response(updated, report)
+        payload = _design_response(updated, report, preserve_feature_log_id=_entry.id)
         payload["geometry_unchanged"] = True
-    _slim_mutation_history_payload(payload, _entry.id)
     return ORJSONResponse(payload)
 
 
@@ -5931,6 +6029,7 @@ def delete_overhangs_batch(body: OverhangBatchDeleteRequest) -> dict:
     from backend.core.lattice import _overhang_chain_descendants
 
     design = design_state.get_or_404()
+    before_occ = _strand_occupancy(design)
     requested_ids = {oid for oid in body.overhang_ids if oid}
     existing_ids = {o.id for o in design.overhangs}
     target_ids = requested_ids & existing_ids
@@ -6105,7 +6204,17 @@ def delete_overhangs_batch(body: OverhangBatchDeleteRequest) -> dict:
         },
         fn=_build,
     )
-    return _design_response_with_geometry(updated, report)
+    # _local_changed_helices correctly bails to full geometry (returns None)
+    # when overhang_connections changed too (linker cleanup above), so this is
+    # safe even though the route can remove whole helices, not just domains —
+    # the simple no-linker case is the common one and gets the partial win.
+    # partial_axes=True: a removed helix must also drop out of
+    # currentHelixAxes, which only happens when the frontend's partial-axes
+    # merge branch runs (it explicitly deletes every changed id first).
+    changed = _local_changed_helices(before_occ, _strand_occupancy(updated))
+    return _design_response_with_geometry(
+        updated, report, changed_helix_ids=changed, partial_axes=True,
+    )
 
 
 
@@ -6480,7 +6589,13 @@ def resize_overhang_free_end(
         raise HTTPException(400, detail=str(exc)) from exc
 
     _validate_sub_domain_tiling(updated, overhang_id)
-    return _design_response_with_geometry(updated, report)
+    # Same helix throughout (resize never creates/removes a helix) — no need
+    # for occupancy diffing, the id is already known. partial_axes=True: the
+    # resized domain's bp range changes what the axis's segments[] cover, the
+    # same axis-carried-metadata case test_domain_shift.py pinned for GEO-03.
+    return _design_response_with_geometry(
+        updated, report, changed_helix_ids=[spec.helix_id], partial_axes=True,
+    )
 
 
 # ── Sub-domain endpoints ──────────────────────────────────────────────────────
@@ -8263,7 +8378,9 @@ def roll_active_to_job_state(
 
     design_state.set_design_branch(rolled)
     report = validate_design(rolled)
-    resp = _design_response_with_geometry(rolled, report)
+    # Branch switch to a job snapshot — "complete historical feature log is
+    # restored verbatim" (see docstring); unrelated to the client's cache.
+    resp = _design_response_with_geometry(rolled, report, full_feature_log=True)
     resp["return_loadout_id"] = last_editable_id
     resp["simulation_loadout_id"] = sim_id
     # Lets the UI proceed without synchronously re-listing every historical job.

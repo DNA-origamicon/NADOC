@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from backend.api import state as design_state
 from backend.api.crud import (
     BindingDisplayPoseBody,
+    _design_response,
     _design_response_with_geometry,
 )
 from backend.core.binding_drivers import (
@@ -23,11 +24,28 @@ router = APIRouter()
 
 
 def _binding_response(
-    design: Design, report: ValidationReport, binding_id: Optional[str] = None
+    design: Design,
+    report: ValidationReport,
+    binding_id: Optional[str] = None,
+    *,
+    geometry_unchanged: bool = False,
 ) -> dict:
     """Standard envelope: full design response, optionally including the
-    affected binding by id for client convenience."""
-    base = _design_response_with_geometry(design, report)
+    affected binding by id for client convenience.
+
+    *geometry_unchanged* — set by callers whose mutation is metadata-only
+    (create an UNBOUND binding, or an annotation-only display-pose patch):
+    no strand relocates and no nucleotide moves, so shipping geometry at all
+    is wasted bytes. NOT set for the general PATCH route, which can drive
+    joint/cluster kinematics via _apply_driver_to_joint — an unbounded set of
+    helices outside the one binding, same family as the relax_direct_binding
+    routes (GEO-14/21) and not safely reducible to changed_helix_ids here.
+    """
+    if geometry_unchanged:
+        base = _design_response(design, report)
+        base["geometry_unchanged"] = True
+    else:
+        base = _design_response_with_geometry(design, report)
     if binding_id is not None:
         b = next((bb for bb in design.overhang_bindings if bb.id == binding_id), None)
         if b is not None:
@@ -183,7 +201,11 @@ def create_overhang_binding(body: OverhangBindingCreateRequest) -> dict:
         },
         fn=_fn,
     )
-    response = _binding_response(updated, report, binding_id=binding.id)
+    # A freshly created binding always starts bound=False — pure metadata,
+    # no strand/geometry change (binding it later is a separate PATCH).
+    response = _binding_response(
+        updated, report, binding_id=binding.id, geometry_unchanged=True,
+    )
     # 201 Created — return the response payload with the new binding embedded.
     return response
 
@@ -496,7 +518,11 @@ def patch_binding_display_pose(binding_id: str, body: BindingDisplayPoseBody) ->
             b.bound_angle_deg = patch["bound_angle_deg"]
 
     updated, report = design_state.mutate_and_validate(_fn)
-    return _binding_response(updated, report, binding_id=binding_id)
+    # Annotation-only per this route's own docstring: "Does not relocate
+    # topology."
+    return _binding_response(
+        updated, report, binding_id=binding_id, geometry_unchanged=True,
+    )
 
 
 

@@ -75,7 +75,11 @@ def select_loadout(loadout_id: str, save_current: bool = True) -> dict:
         last_editable_loadout_id=last_editable_id,
     )
     design_state.set_design_branch(updated)
-    return _design_response_with_geometry(updated, validate_design(updated))
+    # Branch switch — the restored design's feature log has no relation to
+    # whatever the client currently has cached.
+    return _design_response_with_geometry(
+        updated, validate_design(updated), full_feature_log=True,
+    )
 
 
 @router.post("/design/loadouts/activate-editable", status_code=200)
@@ -104,7 +108,11 @@ def activate_last_editable_loadout() -> dict:
         last_editable_loadout_id=target.id,
     )
     design_state.set_design_branch(updated, push_history=False)
-    return _design_response_with_geometry(updated, validate_design(updated))
+    # Branch switch — the restored design's feature log has no relation to
+    # whatever the client currently has cached.
+    return _design_response_with_geometry(
+        updated, validate_design(updated), full_feature_log=True,
+    )
 
 
 @router.patch("/design/loadouts/{loadout_id}", status_code=200)
@@ -142,7 +150,11 @@ def delete_loadout(loadout_id: str) -> dict:
     loadouts = save_active_snapshot(current, loadouts, active_id)
     remaining = [item for item in loadouts if item.id != loadout_id]
     next_id = active_id if active_id != loadout_id else remaining[0].id
-    if next_id == active_id:
+    # Same-branch delete keeps `updated` in the current lineage (safe to strip
+    # feature-log bodies, client's cache still applies). Deleting the ACTIVE
+    # loadout switches to a restored snapshot with an unrelated feature log.
+    branch_switch = next_id != active_id
+    if not branch_switch:
         updated = current.copy_with(loadouts=remaining, active_loadout_id=next_id)
     else:
         try:
@@ -151,4 +163,6 @@ def delete_loadout(loadout_id: str) -> dict:
             raise HTTPException(500, detail=f"Failed to restore next loadout: {exc}") from exc
         updated = restored.copy_with(loadouts=remaining, active_loadout_id=next_id)
     design_state.set_design(updated)
-    return _design_response_with_geometry(updated, validate_design(updated))
+    return _design_response_with_geometry(
+        updated, validate_design(updated), full_feature_log=branch_switch,
+    )

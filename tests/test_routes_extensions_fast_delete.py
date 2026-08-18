@@ -24,7 +24,7 @@ def test_batch_delete_skips_cluster_reconciliation(monkeypatch):
         return design, object()
 
     monkeypatch.setattr(routes_extensions.design_state, "mutate_and_validate", mutate_and_validate)
-    monkeypatch.setattr(routes_extensions, "_design_response_with_geometry", lambda current, _report: {"design": current})
+    monkeypatch.setattr(routes_extensions, "_design_response_with_geometry", lambda current, _report, **_kw: {"design": current})
 
     routes_extensions.delete_strand_extensions_batch(
         routes_extensions.StrandExtensionBatchDeleteRequest(ext_ids=["e1"])
@@ -48,7 +48,7 @@ def test_single_delete_skips_cluster_reconciliation(monkeypatch):
         return design, object()
 
     monkeypatch.setattr(routes_extensions.design_state, "mutate_and_validate", mutate_and_validate)
-    monkeypatch.setattr(routes_extensions, "_design_response_with_geometry", lambda current, _report: {"design": current})
+    monkeypatch.setattr(routes_extensions, "_design_response_with_geometry", lambda current, _report, **_kw: {"design": current})
 
     routes_extensions.delete_strand_extension("e1")
 

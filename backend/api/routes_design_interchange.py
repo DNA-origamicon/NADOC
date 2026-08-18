@@ -56,7 +56,8 @@ def import_pdb_design(body: PdbImportRequest) -> dict:
     design_state.set_design(design)
     design_state.set_pdb_atomistic(pdb_atomistic)
     report = validate_design(design)
-    resp = _design_response(design, report)
+    # New lineage — nothing in the client's cache matches this design's history.
+    resp = _design_response(design, report, full_feature_log=True)
     if import_warnings:
         resp["import_warnings"] = import_warnings
     return resp
@@ -178,7 +179,8 @@ def import_pdb_auto(body: PdbAutoImportRequest) -> dict:
     design_state.set_design(design)
     design_state.set_pdb_atomistic(pdb_atomistic)
     report = validate_design(design)
-    resp.update(_design_response(design, report))
+    # New lineage — nothing in the client's cache matches this design's history.
+    resp.update(_design_response(design, report, full_feature_log=True))
     resp["imported"]["dna"] = True
     if w:
         resp["import_warnings"] = w
