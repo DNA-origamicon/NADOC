@@ -1109,17 +1109,88 @@ def test_runtime_status_requires_compositor_and_reports_dashboard(monkeypatch) -
     }
 
 
+def test_build_environment_keeps_sbin_on_path_but_drops_conda() -> None:
+    """Regression test: the sanitized launch environment has two competing jobs.
+
+    It must drop conda/Miniforge's LD_LIBRARY_PATH (which shadows SteamVR's own
+    bundled Qt5 and breaks vrmonitor), while still exposing /usr/sbin, because
+    SteamVR's vrsetup.sh shells out to `getcap` there. A PATH without sbin makes
+    setup "fail" and raises a BLOCKING zenity dialog that stalls every launch.
+    """
+    env = routes_vr._build_environment()
+    path_entries = env["PATH"].split(":")
+    assert "/usr/sbin" in path_entries
+    assert "/sbin" in path_entries
+    assert "/usr/bin" in path_entries
+    for leaked in ("LD_LIBRARY_PATH", "CONDA_PREFIX", "CMAKE_PREFIX_PATH"):
+        assert leaked not in env
+
+
 def test_start_steamvr_is_noop_when_runtime_and_dashboard_are_ready(
     monkeypatch,
 ) -> None:
     ready = {"steamvr_running": True, "dashboard_running": True}
     monkeypatch.setattr(routes_vr, "_runtime_payload", lambda: ready)
+    monkeypatch.setattr(routes_vr, "_detach_hmd_from_desktop", lambda: None)
 
     def unexpected_spawn(*_args, **_kwargs):
         raise AssertionError("Steam must not be spawned for an already-ready runtime")
 
     monkeypatch.setattr(routes_vr.subprocess, "Popen", unexpected_spawn)
     assert routes_vr._start_steamvr() == ready
+
+
+def test_start_steamvr_launches_steam_with_sanitized_environment(
+    monkeypatch, tmp_path
+) -> None:
+    """Regression test: launching Steam with the raw dev-shell environment leaks
+    conda/Miniforge's LD_LIBRARY_PATH into SteamVR's whole process tree, which
+    breaks vrmonitor's ability to find its own bundled Qt5 libs (observed:
+    'vrmonitor: error while loading shared libraries: libQt5OpenGL.so.5'), so
+    Steam must launch with the same sanitized environment as the native viewer."""
+    not_ready = {"steamvr_running": False, "dashboard_running": False}
+    ready = {"steamvr_running": True, "dashboard_running": True}
+    payloads = iter([not_ready, ready])
+    monkeypatch.setattr(routes_vr, "_runtime_payload", lambda: next(payloads))
+    monkeypatch.setattr(routes_vr, "_detach_hmd_from_desktop", lambda: None)
+    monkeypatch.setattr(routes_vr.Path, "is_file", lambda self: True)
+    monkeypatch.setattr(
+        routes_vr, "_STEAMVR_LOG_PATH", tmp_path / "steamvr.log"
+    )
+    sentinel_env = {"PATH": "/usr/local/bin:/usr/bin:/bin"}
+    monkeypatch.setattr(routes_vr, "_build_environment", lambda: dict(sentinel_env))
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/home/jojo/miniforge3/lib.AVX2_256")
+
+    captured: dict = {}
+
+    def fake_popen(*_args, **kwargs):
+        captured["env"] = kwargs["env"]
+        return SimpleNamespace(pid=1)
+
+    monkeypatch.setattr(routes_vr.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(routes_vr.time, "sleep", lambda _seconds: None)
+
+    assert routes_vr._start_steamvr() == ready
+    assert captured["env"] == sentinel_env
+    assert "LD_LIBRARY_PATH" not in captured["env"]
+
+
+def test_start_steamvr_detaches_hmd_even_when_already_ready(monkeypatch) -> None:
+    """Regression test: process-name readiness doesn't prove direct mode ever
+    succeeded, so the HMD must be detached on every call, not only fresh launches."""
+    ready = {"steamvr_running": True, "dashboard_running": True}
+    monkeypatch.setattr(routes_vr, "_runtime_payload", lambda: ready)
+    calls: list[None] = []
+    monkeypatch.setattr(
+        routes_vr, "_detach_hmd_from_desktop", lambda: calls.append(None)
+    )
+
+    def unexpected_spawn(*_args, **_kwargs):
+        raise AssertionError("Steam must not be spawned for an already-ready runtime")
+
+    monkeypatch.setattr(routes_vr.subprocess, "Popen", unexpected_spawn)
+    assert routes_vr._start_steamvr() == ready
+    assert calls == [None]
 
 
 def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() -> None:

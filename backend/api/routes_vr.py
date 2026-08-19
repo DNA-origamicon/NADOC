@@ -15,6 +15,7 @@ import json
 import math
 import os
 from pathlib import Path
+import shutil
 import signal
 import subprocess
 import tempfile
@@ -2681,7 +2682,11 @@ def _build_environment() -> dict[str, str]:
         "CONDA_PREFIX",
     ):
         env.pop(key, None)
-    env["PATH"] = "/usr/local/bin:/usr/bin:/bin"
+    # sbin must stay on PATH: SteamVR's own vrsetup.sh shells out to `getcap`
+    # (/usr/sbin/getcap) to verify vrcompositor-launcher's CAP_SYS_NICE. Without it
+    # setup "fails", and vrstartup raises a BLOCKING zenity dialog ("SteamVR setup is
+    # incomplete") that stalls the whole launch until a human dismisses it.
+    env["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
     runtime = (
         Path.home() / ".local/share/Steam/steamapps/common/SteamVR/steamxr_linux64.json"
     )
@@ -2774,9 +2779,33 @@ def _runtime_payload() -> dict[str, bool]:
     }
 
 
+#: The Vive's own EDID does not advertise itself as a non-desktop device, so GNOME/X
+#: shows it as an ordinary extended monitor and SteamVR's compositor cannot DRM-lease
+#: it away from the desktop (fails with CannotDRMLeaseDisplay). Marking the connector
+#: non-desktop and detaching it fixes this, but the property is session-local: it
+#: resets whenever the connector re-links (headset standby/wake, replug, logout), so
+#: this must be reapplied before every SteamVR launch rather than once.
+_HMD_DISPLAY_CONNECTOR = "HDMI-0"
+
+
+def _detach_hmd_from_desktop() -> None:
+    xrandr = shutil.which("xrandr")
+    if not xrandr:
+        return
+    subprocess.run(
+        [xrandr, "--output", _HMD_DISPLAY_CONNECTOR, "--set", "non-desktop", "1", "--off"],
+        env=dict(os.environ),
+        capture_output=True,
+        text=True,
+        timeout=5,
+        check=False,
+    )
+
+
 def _start_steamvr() -> dict[str, bool]:
     """Start SteamVR through Steam so its dashboard owns the runtime lifecycle."""
     with _RUNTIME_LOCK:
+        _detach_hmd_from_desktop()
         status = _runtime_payload()
         if status["steamvr_running"] and status["dashboard_running"]:
             return status
@@ -2788,7 +2817,7 @@ def _start_steamvr() -> dict[str, bool]:
             subprocess.Popen(
                 [str(steam), "-silent", "steam://rungameid/250820"],
                 cwd=Path.home(),
-                env=dict(os.environ),
+                env=_build_environment(),
                 stdin=subprocess.DEVNULL,
                 stdout=log,
                 stderr=subprocess.STDOUT,
@@ -2800,7 +2829,11 @@ def _start_steamvr() -> dict[str, bool]:
         finally:
             log.close()
 
-        deadline = time.monotonic() + 20.0
+        # Headroom for a genuinely cold start: this may boot the Steam client itself,
+        # then vrstartup, vrserver, vrcompositor, vrmonitor and vrdashboard. A measured
+        # cold start with Steam not running took 18.8s. The old 20s ceiling left almost
+        # no margin and failed the first launch even when SteamVR came up moments later.
+        deadline = time.monotonic() + 60.0
         while time.monotonic() < deadline:
             status = _runtime_payload()
             if status["steamvr_running"] and status["dashboard_running"]:

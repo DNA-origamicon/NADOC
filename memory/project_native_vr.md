@@ -149,6 +149,64 @@ Cross-phase semantic base-color slice: extension geometry now carries the exact 
 
 Phase 6 unified-job snapshot foundation: native launch now reads the active design's existing `GET /simulate/jobs` unified nodes and projects at most 64 rows into a private immutable launch file; it does not scan job directories or create a second job store. Engine-qualified job identity, parent hierarchy, canonical status, bounded progress, stale/viewable/archive flags, and a display label cross a strict URL-escaped v1 contract; duplicate identities, malformed counts/booleans/escapes, controls, and oversized fields fail closed. An unavailable fetch is distinguished from a genuinely empty design and says `JOB LIST UNAVAILABLE AT LAUNCH` instead of falsely claiming no runs; a list over the transport cap explicitly says `SHOWING 64 OF N` instead of silently omitting older rows. The options page opens a paginated five-row **SIMULATION JOBS SNAPSHOT** and a progressive-disclosure detail page with an engine-qualified canonical ID and an explicit statement that actions remain on desktop. Running status is intentionally a launch snapshot, not falsely live; Run/Stop/Delete/result-loading intents do not exist yet. The first-frame timing record now includes the job-list fetch and browser-click-to-first-frame interval, closing the earlier blind spot before the backend request. Evidence: 17 focused frontend projection/client/session tests, all 5,731 frontend tests, the production build, 40 VR route tests plus Ruff, native build, and all 12 validators pass. No package or sudo change is needed; the clean system linker path remains required when Miniforge shadows `ld`.
 
+## Workstation VR runtime gotcha (system-local, not a NADOC feature)
+
+SteamVR's compositor fails `xrCreateSession` with `CannotDRMLeaseDisplay` ("Failed to acquire xlib
+display" / "VR requires direct mode") whenever the Vive's `HDMI-0` connector is a live ordinary
+GNOME/X desktop monitor: the Vive's own EDID does not self-report as non-desktop, so X does not
+release the connector for SteamVR's DRM lease. Fix is `xrandr --output HDMI-0 --set non-desktop 1
+--off`; this is **session-local** and resets on every connector re-link (headset standby/wake,
+replug, logout) — a one-off manual run does not stick. `_detach_hmd_from_desktop()` in
+`backend/api/routes_vr.py` now runs unconditionally at the top of `_start_steamvr()`, before the
+already-running early-return — deliberately unconditional, because `_runtime_payload()`'s
+"steamvr_running" only checks process names (`vrserver`/`vrcompositor` present), which says nothing
+about whether direct mode actually succeeded. Gating the detach behind "not already running" (the
+first version of this fix) meant it silently never ran whenever SteamVR was already up from an
+earlier, possibly-failed attempt — exactly the case that matters most. Regression-tested by
+`test_start_steamvr_detaches_hmd_even_when_already_ready` in `tests/test_vr_routes.py`.
+`--reload-dir backend` means editing this file should hot-reload `just dev`; verify the running
+uvicorn worker PID actually changed (`ps -o pid,lstart -p <pid>`) before assuming a code edit here is
+live — reload has been observed to silently not fire. If `CannotDRMLeaseDisplay` recurs, check
+whether the backend serving the request is actually running the current file before assuming the fix
+regressed.
+
+This is orthogonal to a **genuinely disconnected** `HDMI-0` (`xrandr --query` shows no mode line, or
+the headset is idle/asleep) — no xrandr property can lease a connector with no live signal. That's a
+physical link-state check, not a desktop-ownership one; don't conflate the two when triaging.
+
+**The launch environment is a two-sided constraint.** `_build_environment()` must satisfy *both*:
+
+1. Drop conda/Miniforge `LD_LIBRARY_PATH` — it shadows SteamVR's own bundled Qt5 and kills
+   `vrmonitor` (`libQt5OpenGL.so.5: cannot open shared object file`), after which SteamVR silently
+   falls back to SteamVR Home and never hands off to NADOC.
+2. Keep `/usr/sbin` on `PATH` — Valve's `vrsetup.sh:40` does `command -v getcap` to verify
+   `vrcompositor-launcher`'s `CAP_SYS_NICE`. A PATH of `/usr/local/bin:/usr/bin:/bin` (the first
+   version of fix 1) makes that lookup fail, and `vrstartup` then raises a **blocking zenity
+   dialog** ("SteamVR setup is incomplete") that stalls the launch until a human clicks it —
+   observed stalling ~59 s and causing the whole VR launch to fail. The capability itself is
+   already correctly set; the dialog is a false alarm with a real blocking cost.
+
+Locked by `test_build_environment_keeps_sbin_on_path_but_drops_conda`.
+
+**Steam must be fully restarted for an env fix to take effect.** `steam steam://rungameid/250820`
+against an already-running client just hands the URL to that client, which keeps its original
+environment; `vrsetup.sh` then runs under the *old* `steam-runtime-launcher-service`. Verify with
+`tr '\0' '\n' < /proc/$(pgrep -f steam-runtime-launcher-service)/environ | grep ^PATH=` before
+concluding an environment fix did not work.
+
+**`SYNCHRONIZED` is not a failure.** A healthy viewer sits in `XR_SESSION_STATE_SYNCHRONIZED`
+(rendering, submitting frames, holding Scene Focus) while the headset is **not being worn** — the
+Vive's proximity sensor gates presentation. It advances `SYNCHRONIZED → VISIBLE → FOCUSED` only when
+someone puts the headset on. A 2026-08-18 live run measured a 65 s gap that was purely the human
+picking the headset up. Do not read `SYNCHRONIZED` as a hang. The real failure signature is
+`STOPPING`/`EXITING` arriving seconds after start (seen when SteamVR was half-started behind the
+zenity dialog); a healthy run logs **zero** of those.
+
+Verified end-to-end on 2026-08-18 19:33–19:35 after both env fixes, with Steam fully restarted:
+no getcap error, no zenity, `Acquired xlib display` → `Direct mode: enabled` → `Headset is using
+direct mode` → `Startup Complete (1.72 s)`; SteamVR Home cleanly disconnected and NADOC captured
+Scene Focus 60 ms after connecting, then held `SYNCHRONIZED` with zero `STOPPING`/`EXITING`.
+
 ## Metrics research decisions
 
 - Runtime cadence is authoritative: OpenXR `xrWaitFrame` supplies `predictedDisplayTime`, `predictedDisplayPeriod`, and `shouldRender`; advance one frame from that shared predicted time and skip heavy rendering when `shouldRender` is false. Do not hard-code 90 Hz even though the original Vive normally uses it. Source: [OpenXR frame synchronization](https://registry.khronos.org/OpenXR/specs/1.0-khr/html/xrspec.html#frame-synchronization).

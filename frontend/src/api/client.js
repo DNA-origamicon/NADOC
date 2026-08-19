@@ -257,6 +257,7 @@ function _busyHeaderForPath(method, path) {
   if (path.startsWith('/design/extrude'))                          return 'Extruding'
   if (path.startsWith('/design/load') || path.startsWith('/design/import')) return 'Loading Design'
   if (path.startsWith('/design/geometry'))                       return 'Loading Design Geometry'
+  if (path === '/vr/launch')                                     return 'Starting SteamVR'
   return 'Working…'
 }
 
