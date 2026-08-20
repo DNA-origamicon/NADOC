@@ -116,6 +116,7 @@ describe('initTranslateRotateTool — API + init side effects', () => {
     expect(typeof t.hideConfirmBtn).toBe('function')
     expect(typeof t.beginVRPreview).toBe('function')
     expect(typeof t.applyVRPreviewMatrix).toBe('function')
+    expect(typeof t.confirmVRPreview).toBe('function')
     expect(typeof t.cancelVRPreview).toBe('function')
   })
 
@@ -235,6 +236,37 @@ describe('initTranslateRotateTool — native VR preview adapter', () => {
     expect(ctx.clusterGizmo.attach).not.toHaveBeenCalledWith(
       'C2', expect.anything(), expect.anything(), expect.anything(),
     )
+    expect(ctx.active).toBe(false)
+  })
+
+  it('commits one dirty VR Cluster preview and captures its feature-log identity', async () => {
+    const ctx = vrContext()
+    const tool = initTranslateRotateTool(ctx.deps)
+    await tool.beginVRPreview('C1')
+    ctx.deps.setClusterDirty(true)
+    ctx.clusterGizmo.commitPendingTransforms.mockImplementation(async () => {
+      const currentDesign = ctx.store.getState().currentDesign
+      ctx.store.setState({
+        currentDesign: {
+          ...currentDesign,
+          feature_log: [{ id: 'vr-cluster-move-1', op_kind: 'cluster_op' }],
+        },
+      })
+      return { clusterIds: ['C1'] }
+    })
+
+    await expect(tool.confirmVRPreview()).resolves.toEqual({
+      accepted: true,
+      reason: 'committed',
+      result: {
+        vr_transaction: {
+          kind: 'move_rotate', feature_log_entry_id: 'vr-cluster-move-1',
+          target_count: 1, cluster_id: 'C1',
+        },
+      },
+    })
+    expect(ctx.clusterGizmo.commitPendingTransforms).toHaveBeenCalledWith({ log: true })
+    expect(ctx.clusterGizmo.detach).toHaveBeenCalled()
     expect(ctx.active).toBe(false)
   })
 })

@@ -201,6 +201,52 @@ export function initTranslateRotateTool(deps) {
     }
   }
 
+  async function _confirmVRPreview() {
+    if (_vrStarting) await _vrStarting
+    if (!_vrPreview) {
+      return { accepted: false, reason: 'preview_required', result: null }
+    }
+    if (!getClusterDirty()) {
+      return { accepted: false, reason: 'no_change', result: null }
+    }
+    const clusterId = _vrPreview.clusterId
+    const beforeEntryId = store.getState().currentDesign?.feature_log?.at(-1)?.id ?? null
+    _vrPreview = null
+    try {
+      await _confirmTranslateRotateTool()
+    } catch (error) {
+      clusterGizmo.discardPendingTransforms?.()
+      clusterGizmo.detach()
+      _removeToolPickListeners()
+      setActive(false)
+      setClusterDirty(false)
+      await _restoreTransformPreviewFromStore()
+      return {
+        accepted: false,
+        reason: 'request_failed',
+        result: null,
+        error,
+      }
+    }
+    const featureLogEntryId =
+      store.getState().currentDesign?.feature_log?.at(-1)?.id ?? null
+    if (!featureLogEntryId || featureLogEntryId === beforeEntryId) {
+      return { accepted: false, reason: 'transaction_unresolved', result: null }
+    }
+    return {
+      accepted: true,
+      reason: 'committed',
+      result: {
+        vr_transaction: {
+          kind: 'move_rotate',
+          feature_log_entry_id: featureLogEntryId,
+          target_count: 1,
+          cluster_id: clusterId,
+        },
+      },
+    }
+  }
+
   /** VR preview owns the desktop gizmo as one immutable-target transaction.
    * Any canonical selection change must cancel/restore it; the ordinary desktop
    * selection bridge must never retarget the in-flight transform. */
@@ -837,6 +883,7 @@ export function initTranslateRotateTool(deps) {
     hideConfirmBtn: () => { _confirmBtn.style.display = 'none' },
     beginVRPreview: _beginVRPreview,
     applyVRPreviewMatrix: _applyVRPreviewMatrix,
+    confirmVRPreview: _confirmVRPreview,
     cancelVRPreview: _cancelVRPreview,
   }
 }

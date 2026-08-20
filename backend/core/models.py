@@ -1724,6 +1724,7 @@ SnapshotOpKind = Literal[
     "assembly-delete-belt-rider",
     "assembly-polymerize-belt",
     "nucleotide-transform",
+    "nucleotide-transform-batch",
     "nucleotide-transform-delete",
 ]
 

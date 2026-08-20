@@ -130,6 +130,74 @@ def test_put_route_persists_one_undoable_pose_and_composes_followup_delta():
     ]
 
 
+def test_batch_route_persists_exact_scope_as_one_undo_transaction():
+    design_state.set_design(make_minimal_design())
+    design_state.clear_history()
+    client = TestClient(app)
+
+    def pose(bp_index: int, direction: str) -> dict:
+        return {
+            "kind": "base",
+            "helix_id": "h0",
+            "bp_index": bp_index,
+            "direction": direction,
+            "copy_k": 0,
+            "pivot": [0, 0, 0],
+            "translation": [1, 2, 3],
+            "rotation": [0, 0, 0, 1],
+            "compose": True,
+        }
+
+    response = client.put(
+        "/api/design/nucleotide-transforms",
+        json={"transforms": [pose(4, "FORWARD"), pose(5, "REVERSE")]},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["design"]["nucleotide_transforms"]) == 2
+    assert payload["design"]["feature_log"][-1]["op_kind"] == (
+        "nucleotide-transform-batch"
+    )
+    assert payload["vr_transaction"] == {
+        "kind": "move_rotate",
+        "feature_log_entry_id": payload["design"]["feature_log"][-1]["id"],
+        "target_count": 2,
+    }
+
+    undone = client.post("/api/design/undo")
+    assert undone.status_code == 200
+    assert undone.json()["design"]["nucleotide_transforms"] == []
+    assert undone.json()["design"]["feature_log"] == []
+
+
+def test_batch_route_rejects_duplicate_or_missing_targets_without_mutation():
+    design_state.set_design(make_minimal_design())
+    design_state.clear_history()
+    client = TestClient(app)
+    pose = {
+        "kind": "base",
+        "helix_id": "h0",
+        "bp_index": 4,
+        "direction": "FORWARD",
+        "copy_k": 0,
+        "pivot": [0, 0, 0],
+        "translation": [1, 0, 0],
+        "rotation": [0, 0, 0, 1],
+    }
+    duplicate = client.put(
+        "/api/design/nucleotide-transforms",
+        json={"transforms": [pose, pose]},
+    )
+    assert duplicate.status_code == 422
+    missing = client.put(
+        "/api/design/nucleotide-transforms",
+        json={"transforms": [{**pose, "bp_index": 999}]},
+    )
+    assert missing.status_code == 404
+    assert design_state.get_or_404().nucleotide_transforms == []
+    assert design_state.undo_depth() == 0
+
+
 def test_delete_transform_records_pose_reset_in_feature_log():
     design_state.set_design(make_minimal_design())
     client = TestClient(app)

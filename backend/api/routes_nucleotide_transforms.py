@@ -32,6 +32,12 @@ class NucleotideTransformBody(BaseModel):
     compose: bool = False
 
 
+class NucleotideTransformBatchBody(BaseModel):
+    transforms: list[NucleotideTransformBody] = Field(
+        min_length=1, max_length=100_000
+    )
+
+
 def _quat_matrix(q: list[float]) -> np.ndarray:
     x, y, z, w = q
     return np.array([
@@ -82,6 +88,28 @@ def _target_exists(design, transform: NucleotideTransform) -> bool:
     return loop_skip is not None and transform.copy_k <= max(0, loop_skip.delta)
 
 
+def _apply_transform_body(
+    transforms: list[NucleotideTransform], body: NucleotideTransformBody
+) -> NucleotideTransform:
+    transform = NucleotideTransform(**body.model_dump(exclude={"compose"}))
+    idx = next(
+        (
+            i
+            for i, item in enumerate(transforms)
+            if item.target_key() == transform.target_key()
+        ),
+        None,
+    )
+    if idx is None:
+        transforms.append(transform)
+    else:
+        transform.id = transforms[idx].id
+        if body.compose:
+            transform = _compose(transforms[idx], transform)
+        transforms[idx] = transform
+    return transform
+
+
 @router.put("/design/nucleotide-transform", status_code=200)
 def put_nucleotide_transform(body: NucleotideTransformBody) -> dict:
     """Create or replace the pose for one residue and push one undo step."""
@@ -93,14 +121,7 @@ def put_nucleotide_transform(body: NucleotideTransformBody) -> dict:
     def apply(current):
         nonlocal transform
         transforms = list(current.nucleotide_transforms)
-        idx = next((i for i, item in enumerate(transforms) if item.target_key() == transform.target_key()), None)
-        if idx is None:
-            transforms.append(transform)
-        else:
-            transform.id = transforms[idx].id
-            if body.compose:
-                transform = _compose(transforms[idx], transform)
-            transforms[idx] = transform
+        transform = _apply_transform_body(transforms, body)
         return current.copy_with(nucleotide_transforms=transforms)
 
     target = transform.target_key()
@@ -123,6 +144,59 @@ def put_nucleotide_transform(body: NucleotideTransformBody) -> dict:
     # geometry_unchanged/skipGeometry contract as the extra-bases routes.
     payload = _design_response(updated, report)
     payload["geometry_unchanged"] = True
+    return payload
+
+
+@router.put("/design/nucleotide-transforms", status_code=200)
+def put_nucleotide_transforms(body: NucleotideTransformBatchBody) -> dict:
+    """Persist one exact residue scope as one feature-log and undo transaction."""
+    requested = [
+        NucleotideTransform(**item.model_dump(exclude={"compose"}))
+        for item in body.transforms
+    ]
+    target_keys = [transform.target_key() for transform in requested]
+    if len(set(target_keys)) != len(target_keys):
+        raise HTTPException(422, detail="Duplicate nucleotide transform target.")
+    design = design_state.get_or_404()
+    missing = [key for key, transform in zip(target_keys, requested) if not _target_exists(design, transform)]
+    if missing:
+        raise HTTPException(
+            404, detail="A nucleotide transform target does not exist in this design."
+        )
+
+    def apply(current):
+        transforms = list(current.nucleotide_transforms)
+        for item in body.transforms:
+            _apply_transform_body(transforms, item)
+        return current.copy_with(nucleotide_transforms=transforms)
+
+    sample = [list(key) for key in target_keys[:16]]
+    updated, report, entry = design_state.mutate_with_feature_log(
+        "nucleotide-transform-batch",
+        f"Move/rotate {len(target_keys)} nucleotide"
+        f"{'s' if len(target_keys) != 1 else ''}",
+        {"count": len(target_keys), "target_sample": sample},
+        apply,
+    )
+    changed_helix_ids = sorted(
+        {
+            transform.helix_id
+            for transform in requested
+            if transform.kind == "base" and transform.helix_id is not None
+        }
+    )
+    if changed_helix_ids:
+        payload = _design_response_with_geometry(
+            updated, report, changed_helix_ids=changed_helix_ids
+        )
+    else:
+        payload = _design_response(updated, report)
+        payload["geometry_unchanged"] = True
+    payload["vr_transaction"] = {
+        "kind": "move_rotate",
+        "feature_log_entry_id": entry.id,
+        "target_count": len(target_keys),
+    }
     return payload
 
 

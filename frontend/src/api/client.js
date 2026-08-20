@@ -3108,6 +3108,13 @@ export async function putNucleotideTransform(body) {
   return _syncFromDesignResponse(json, { skipGeometry: json?.geometry_unchanged === true })
 }
 
+/** Persist an exact Base/End/Domain/Strand transform scope atomically. Every
+ * residue pose is committed under one feature-log entry and one undo step. */
+export async function putNucleotideTransforms(transforms) {
+  const json = await _request('PUT', '/design/nucleotide-transforms', { transforms })
+  return _syncFromDesignResponse(json, { skipGeometry: json?.geometry_unchanged === true })
+}
+
 export async function deleteNucleotideTransform(transformId) {
   const json = await _request('DELETE', `/design/nucleotide-transform/${transformId}`)
   return _syncFromDesignResponse(json, { skipGeometry: json?.geometry_unchanged === true })

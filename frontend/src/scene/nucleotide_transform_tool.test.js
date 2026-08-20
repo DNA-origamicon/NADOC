@@ -2,9 +2,12 @@ import { describe, it, expect } from 'vitest'
 import * as THREE from 'three'
 import { vi } from 'vitest'
 
-vi.mock('../api/client.js', () => ({ putNucleotideTransform: vi.fn() }))
+vi.mock('../api/client.js', () => ({
+  putNucleotideTransform: vi.fn(),
+  putNucleotideTransforms: vi.fn(),
+}))
 
-import { putNucleotideTransform } from '../api/client.js'
+import { putNucleotideTransform, putNucleotideTransforms } from '../api/client.js'
 import { abstractPreviewUpdate, abstractResidueInfo, initNucleotideTransformTool, transformBodyForTarget, transformTargetsForSelection } from './nucleotide_transform_tool.js'
 
 describe('transformTargetsForSelection', () => {
@@ -233,5 +236,50 @@ describe('atomistic transform commit', () => {
     expect(tool.isVRPreviewActive()).toBe(false)
     const restored = atomisticRenderer.applyResidueMatrix.mock.calls.at(-1)[1]
     expect(restored.equals(new THREE.Matrix4())).toBe(true)
+  })
+
+  it('commits an exact VR Domain scope through one atomic persistence call', async () => {
+    document.body.innerHTML = '<div id="mode-indicator"></div>'
+    const selectedRef = { kind: 'domain', strandId: 's1', domainIndex: 0 }
+    const state = {
+      currentGeometry: [
+        { helix_id: 'h1', bp_index: 1, direction: 'FORWARD', strand_id: 's1', domain_index: 0 },
+        { helix_id: 'h1', bp_index: 2, direction: 'FORWARD', strand_id: 's1', domain_index: 0 },
+      ],
+      selection: { items: [selectedRef], primary: selectedRef },
+    }
+    const atomisticRenderer = {
+      residueInfo: vi.fn(target => ({
+        centroid: new THREE.Vector3(target.bp_index, 0, 0),
+      })),
+      applyResidueMatrix: vi.fn(),
+    }
+    putNucleotideTransforms.mockResolvedValueOnce({
+      design: { feature_log: [{ id: 'vr-move-1' }] },
+      vr_transaction: {
+        kind: 'move_rotate', feature_log_entry_id: 'vr-move-1', target_count: 2,
+      },
+    })
+    const tool = initNucleotideTransformTool({
+      store: { getState: () => state }, scene: new THREE.Scene(),
+      camera: new THREE.PerspectiveCamera(), canvas: document.createElement('canvas'),
+      controls: { enabled: true }, designRenderer: {}, atomisticRenderer,
+    })
+    const singleCallsBefore = putNucleotideTransform.mock.calls.length
+
+    expect(tool.beginVRPreview(selectedRef)).toEqual({ accepted: true })
+    expect(tool.applyVRPreviewMatrix(
+      new THREE.Matrix4().makeTranslation(1, 2, 3).toArray(),
+    )).toBe(true)
+    const committed = await tool.confirmVRPreview()
+
+    expect(committed).toMatchObject({
+      accepted: true, reason: 'committed', targetCount: 2,
+      result: { vr_transaction: { feature_log_entry_id: 'vr-move-1' } },
+    })
+    expect(putNucleotideTransforms).toHaveBeenCalledTimes(1)
+    expect(putNucleotideTransforms.mock.calls[0][0]).toHaveLength(2)
+    expect(putNucleotideTransform).toHaveBeenCalledTimes(singleCallsBefore)
+    expect(tool.isVRPreviewActive()).toBe(false)
   })
 })
