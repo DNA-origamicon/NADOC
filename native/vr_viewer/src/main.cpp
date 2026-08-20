@@ -9,6 +9,7 @@
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 #include <X11/Xlib.h>
+#include <X11/Xutil.h>
 
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
@@ -17,6 +18,7 @@
 #include "interaction.hpp"
 #include "jobs.hpp"
 #include "picking.hpp"
+#include "visualization.hpp"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -33,6 +35,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <dlfcn.h>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -260,6 +263,55 @@ GLuint makeProgram() {
     glGetProgramInfoLog(program, length, nullptr, log.data());
     glDeleteProgram(program);
     throw std::runtime_error("OpenGL program link failed: " + log);
+}
+
+GLuint makeDesktopProgram() {
+    static constexpr const char* vertexSource = R"GLSL(
+        #version 330 core
+        layout(location = 0) in vec3 aPosition;
+        layout(location = 1) in vec2 aUv;
+        uniform mat4 uViewProjection;
+        out vec2 vUv;
+        void main() {
+            gl_Position = uViewProjection * vec4(aPosition, 1.0);
+            vUv = aUv;
+        }
+    )GLSL";
+    static constexpr const char* fragmentSource = R"GLSL(
+        #version 330 core
+        in vec2 vUv;
+        uniform sampler2D uDesktop;
+        uniform vec2 uPointer;
+        uniform int uPointerVisible;
+        out vec4 outColor;
+        void main() {
+            vec3 color = texture(uDesktop, vUv).rgb;
+            if (uPointerVisible != 0) {
+                vec2 delta = abs(vUv - uPointer);
+                bool stem = delta.x < 0.003 && delta.y < 0.030;
+                bool bar = delta.y < 0.005 && delta.x < 0.022;
+                if (stem || bar) color = vec3(1.0, 0.72, 0.10);
+            }
+            outColor = vec4(color, 1.0);
+        }
+    )GLSL";
+    const GLuint vertex = compileShader(GL_VERTEX_SHADER, vertexSource);
+    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, fragmentSource);
+    const GLuint program = glCreateProgram();
+    glAttachShader(program, vertex);
+    glAttachShader(program, fragment);
+    glLinkProgram(program);
+    glDeleteShader(vertex);
+    glDeleteShader(fragment);
+    GLint ok = GL_FALSE;
+    glGetProgramiv(program, GL_LINK_STATUS, &ok);
+    if (ok == GL_TRUE) return program;
+    GLint length = 0;
+    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &length);
+    std::string log(static_cast<size_t>(std::max(length, 1)), '\0');
+    glGetProgramInfoLog(program, length, nullptr, log.data());
+    glDeleteProgram(program);
+    throw std::runtime_error("OpenGL desktop shader link failed: " + log);
 }
 
 constexpr const char* kLitFragmentSource = R"GLSL(
@@ -993,6 +1045,25 @@ class GlScene {
         setStyle(scene_.initialRepresentation, scene_.initialColoring);
     }
 
+    void setVisualization(const nadoc_vr::VisualizationSnapshot& snapshot) {
+        visualizationMode_ = snapshot.mode;
+        visualizationPositions_.clear();
+        visualizationColors_.clear();
+        visualizationPositions_.reserve(snapshot.points.size());
+        visualizationColors_.reserve(snapshot.points.size());
+        for (const auto& point : snapshot.points) {
+            visualizationPositions_.emplace(point.ownerToken, point.position);
+            if (point.hasColor) {
+                visualizationColors_.emplace(point.ownerToken, point.color);
+            }
+        }
+        setStyle(representation_, coloring_);
+    }
+
+    [[nodiscard]] const std::string& visualizationMode() const {
+        return visualizationMode_;
+    }
+
     void setToolPreview(
         const std::vector<std::string>& ownerTokens, const glm::mat4& transform) {
         std::string token;
@@ -1100,6 +1171,13 @@ class GlScene {
     }
 
     void setStyle(Representation representation, Coloring coloring) {
+        // Coarse helix cylinders have domain-level ownership and cannot represent
+        // independent per-base MD motion. Keep an active desktop visualization in
+        // one of the base-resolved representations instead of showing a stale pose.
+        if (!visualizationPositions_.empty() &&
+            representation == Representation::cylinders) {
+            representation = Representation::full;
+        }
         representation_ = representation;
         coloring_ = coloring;
         prepareDisplayedSource();
@@ -1142,8 +1220,10 @@ class GlScene {
                                   bool end) {
             const auto committed = weights(committedWeights, identity);
             const auto pending = weights(pendingWeights, identity);
+            const auto visualization = visualizationOffsets(source, identity);
             glm::vec3 result = nadoc_vr::weightedTransformPoint(
-                point, toolCommittedTransform_, end ? committed.second : committed.first);
+                point + (end ? visualization.second : visualization.first),
+                toolCommittedTransform_, end ? committed.second : committed.first);
             return nadoc_vr::weightedTransformPoint(
                 result, toolPreviewTransform_, end ? pending.second : pending.first);
         };
@@ -1185,7 +1265,11 @@ class GlScene {
         for (const StyledPoint& point : source.points) {
             const glm::vec3 position = transformPoint(
                 point.position, point.identity, false);
-            points.push_back(Vertex{position, point.colors.get(coloring), point.size});
+            points.push_back(Vertex{
+                position,
+                visualizationColor(source, point.identity)
+                    .value_or(point.colors.get(coloring)),
+                point.size});
             if (const auto color = glowColor(point.identity)) {
                 glowPoints.push_back(Vertex{position, *color, point.size * 1.55F});
             }
@@ -1210,7 +1294,9 @@ class GlScene {
             const glm::vec3 end = transformPoint(
                 cylinder.end, cylinder.identity, true);
             cylinders.push_back(Cylinder{
-                start, end, cylinder.radius, cylinder.colors.get(coloring)});
+                start, end, cylinder.radius,
+                visualizationColor(source, cylinder.identity)
+                    .value_or(cylinder.colors.get(coloring))});
             if (const auto color = glowColor(cylinder.identity)) {
                 glowCylinders.push_back(Cylinder{
                     start, end, cylinder.radius * 1.55F, *color});
@@ -1236,7 +1322,9 @@ class GlScene {
             const glm::vec3 end = transformPoint(
                 cylinder.end, cylinder.identity, true);
             halfCylinders.push_back(Cylinder{
-                start, end, cylinder.radius, cylinder.colors.get(coloring)});
+                start, end, cylinder.radius,
+                visualizationColor(source, cylinder.identity)
+                    .value_or(cylinder.colors.get(coloring))});
             if (const auto color = glowColor(cylinder.identity)) {
                 glowHalfCylinders.push_back(Cylinder{
                     start, end, cylinder.radius * 1.55F, *color});
@@ -1264,7 +1352,9 @@ class GlScene {
             const glm::vec3 axisY = transformVector(box.axisY, box.identity);
             const glm::vec3 axisZ = transformVector(box.axisZ, box.identity);
             boxes.push_back(Box{
-                center, axisX, axisY, axisZ, box.colors.get(coloring)});
+                center, axisX, axisY, axisZ,
+                visualizationColor(source, box.identity)
+                    .value_or(box.colors.get(coloring))});
             if (const auto color = glowColor(box.identity)) {
                 glowBoxes.push_back(Box{
                     center, axisX * 1.18F, axisY * 1.18F, axisZ * 1.18F, *color});
@@ -1351,30 +1441,26 @@ class GlScene {
             }
         };
         for (const StyledPoint& point : source.points) {
-            const float committed = committedWeights(source, point.identity).first;
-            const float pending = previewWeights(source, point.identity).first;
             consider(point.identity, nadoc_vr::raySphere(
-                ray, previewPoint(point.position, committed, pending), point.size));
+                ray, displayedPoint(source, point.position, point.identity), point.size));
         }
         for (const StyledCylinder& cylinder : source.cylinders) {
-            const auto committed = committedWeights(source, cylinder.identity);
-            const auto pending = previewWeights(source, cylinder.identity);
             consider(cylinder.identity, nadoc_vr::rayCapsule(
-                ray, previewPoint(cylinder.start, committed.first, pending.first),
-                previewPoint(cylinder.end, committed.second, pending.second), cylinder.radius));
+                ray, displayedPoint(source, cylinder.start, cylinder.identity),
+                displayedPoint(source, cylinder.end, cylinder.identity, true),
+                cylinder.radius));
         }
         for (const StyledCylinder& cylinder : source.halfCylinders) {
-            const auto committed = committedWeights(source, cylinder.identity);
-            const auto pending = previewWeights(source, cylinder.identity);
             consider(cylinder.identity, nadoc_vr::rayHalfCylinder(
-                ray, previewPoint(cylinder.start, committed.first, pending.first),
-                previewPoint(cylinder.end, committed.second, pending.second), cylinder.radius));
+                ray, displayedPoint(source, cylinder.start, cylinder.identity),
+                displayedPoint(source, cylinder.end, cylinder.identity, true),
+                cylinder.radius));
         }
         for (const StyledBox& box : source.boxes) {
             const float committed = committedWeights(source, box.identity).first;
             const float pending = previewWeights(source, box.identity).first;
             consider(box.identity, nadoc_vr::rayBox(
-                ray, previewPoint(box.center, committed, pending),
+                ray, displayedPoint(source, box.center, box.identity),
                 previewVector(box.axisX, committed, pending),
                 previewVector(box.axisY, committed, pending),
                 previewVector(box.axisZ, committed, pending)));
@@ -1405,22 +1491,18 @@ class GlScene {
             hits.push_back({identity, glm::length(position - worldCenter), position});
         };
         for (const StyledPoint& point : source.points) {
-            const glm::vec3 position = previewPoint(
-                point.position,
-                committedWeights(source, point.identity).first,
-                previewWeights(source, point.identity).first);
+            const glm::vec3 position = displayedPoint(
+                source, point.position, point.identity);
             include(point.identity, nadoc_vr::sphereOverlapsSphere(
                 center, radius, position, point.size), position);
         }
         auto includeCylinders = [&](const std::vector<StyledCylinder>& cylinders,
                                     bool half) {
             for (const StyledCylinder& cylinder : cylinders) {
-                const auto committed = committedWeights(source, cylinder.identity);
-                const auto pending = previewWeights(source, cylinder.identity);
-                const glm::vec3 start = previewPoint(
-                    cylinder.start, committed.first, pending.first);
-                const glm::vec3 end = previewPoint(
-                    cylinder.end, committed.second, pending.second);
+                const glm::vec3 start = displayedPoint(
+                    source, cylinder.start, cylinder.identity);
+                const glm::vec3 end = displayedPoint(
+                    source, cylinder.end, cylinder.identity, true);
                 const bool overlaps = half
                     ? nadoc_vr::sphereOverlapsHalfCylinder(
                         center, radius, start, end, cylinder.radius)
@@ -1435,7 +1517,8 @@ class GlScene {
         for (const StyledBox& box : source.boxes) {
             const float committed = committedWeights(source, box.identity).first;
             const float pending = previewWeights(source, box.identity).first;
-            const glm::vec3 boxCenter = previewPoint(box.center, committed, pending);
+            const glm::vec3 boxCenter = displayedPoint(
+                source, box.center, box.identity);
             const glm::vec3 axisX = previewVector(box.axisX, committed, pending);
             const glm::vec3 axisY = previewVector(box.axisY, committed, pending);
             const glm::vec3 axisZ = previewVector(box.axisZ, committed, pending);
@@ -1553,10 +1636,7 @@ class GlScene {
         for (const StyledPoint& point : source.points) {
             if (point.identity == resolvedIdentity) {
                 return result(
-                    previewPoint(
-                        point.position,
-                        committedWeights(source, point.identity).first,
-                        previewWeights(source, point.identity).first),
+                    displayedPoint(source, point.position, point.identity),
                     point.size);
             }
         }
@@ -1564,11 +1644,10 @@ class GlScene {
             -> std::optional<nadoc_vr::PickHit> {
             for (const StyledCylinder& cylinder : cylinders) {
                 if (cylinder.identity == resolvedIdentity) {
-                    const auto committed = committedWeights(source, cylinder.identity);
-                    const auto pending = previewWeights(source, cylinder.identity);
                     return result(
-                        (previewPoint(cylinder.start, committed.first, pending.first)
-                         + previewPoint(cylinder.end, committed.second, pending.second)) * 0.5F,
+                        (displayedPoint(source, cylinder.start, cylinder.identity)
+                         + displayedPoint(
+                             source, cylinder.end, cylinder.identity, true)) * 0.5F,
                         cylinder.radius);
                 }
             }
@@ -1585,7 +1664,7 @@ class GlScene {
                     glm::length(previewVector(box.axisY, committed, pending)),
                     glm::length(previewVector(box.axisZ, committed, pending)),
                 });
-                return result(previewPoint(box.center, committed, pending), radius);
+                return result(displayedPoint(source, box.center, box.identity), radius);
             }
         }
         return std::nullopt;
@@ -1613,20 +1692,17 @@ class GlScene {
         nadoc_vr::BoundsAccumulator bounds;
         for (const StyledPoint& point : source.points) {
             if (identities.contains(point.identity)) {
-                bounds.includePoint(previewPoint(
-                    point.position,
-                    committedWeights(source, point.identity).first,
-                    previewWeights(source, point.identity).first), point.size);
+                bounds.includePoint(displayedPoint(
+                    source, point.position, point.identity), point.size);
             }
         }
         auto includeCylinders = [&](const std::vector<StyledCylinder>& cylinders) {
             for (const StyledCylinder& cylinder : cylinders) {
                 if (identities.contains(cylinder.identity)) {
-                    const auto committed = committedWeights(source, cylinder.identity);
-                    const auto pending = previewWeights(source, cylinder.identity);
                     bounds.includeSegment(
-                        previewPoint(cylinder.start, committed.first, pending.first),
-                        previewPoint(cylinder.end, committed.second, pending.second),
+                        displayedPoint(source, cylinder.start, cylinder.identity),
+                        displayedPoint(
+                            source, cylinder.end, cylinder.identity, true),
                         cylinder.radius);
                 }
             }
@@ -1638,7 +1714,7 @@ class GlScene {
                 const float committed = committedWeights(source, box.identity).first;
                 const float pending = previewWeights(source, box.identity).first;
                 bounds.includeBox(
-                    previewPoint(box.center, committed, pending),
+                    displayedPoint(source, box.center, box.identity),
                     previewVector(box.axisX, committed, pending),
                     previewVector(box.axisY, committed, pending),
                     previewVector(box.axisZ, committed, pending));
@@ -2150,6 +2226,92 @@ class GlScene {
         displayedSourceValid_ = false;
     }
 
+    [[nodiscard]] std::optional<glm::vec3> visualizationDelta(
+        const RepresentationData& source, const std::string& token) const {
+        const auto target = visualizationPositions_.find(token);
+        if (target == visualizationPositions_.end()) return std::nullopt;
+        const auto handle = std::find_if(
+            source.toolHandles.begin(), source.toolHandles.end(),
+            [&](const ToolHandle& candidate) { return candidate.token == token; });
+        if (handle == source.toolHandles.end()) return std::nullopt;
+        glm::vec3 normalized =
+            (target->second - scene_.normalizationCenter) * scene_.normalizationScale;
+        normalized.z -= kViewDistanceMeters;
+        return normalized - handle->center;
+    }
+
+    [[nodiscard]] std::pair<glm::vec3, glm::vec3> visualizationOffsets(
+        const RepresentationData& source, const std::string& identity) const {
+        if (visualizationPositions_.empty()) return {};
+        const auto& ownershipRecords = source.toolScopeOwnership.empty()
+            ? source.transformOwnership : source.toolScopeOwnership;
+        const auto ownership = std::find_if(
+            ownershipRecords.begin(), ownershipRecords.end(),
+            [&](const TransformOwnership& candidate) {
+                return candidate.identity == identity;
+            });
+        if (ownership != ownershipRecords.end()) {
+            glm::vec3 start{};
+            glm::vec3 end{};
+            bool found = false;
+            for (const TransformOwner& owner : ownership->owners) {
+                if (const auto delta = visualizationDelta(source, owner.token)) {
+                    start += *delta * owner.startWeight;
+                    end += *delta * owner.endWeight;
+                    found = true;
+                }
+            }
+            if (found) return {start, end};
+        }
+        const auto aliases = std::find_if(
+            source.ownerAliases.begin(), source.ownerAliases.end(),
+            [&](const nadoc_vr::OwnerAliasEntry& candidate) {
+                return candidate.identity == identity;
+            });
+        if (aliases != source.ownerAliases.end()) {
+            for (const std::string& token : aliases->tokens) {
+                if (const auto delta = visualizationDelta(source, token)) {
+                    return {*delta, *delta};
+                }
+            }
+        }
+        return {};
+    }
+
+    [[nodiscard]] std::optional<glm::vec3> visualizationColor(
+        const RepresentationData& source, const std::string& identity) const {
+        if (visualizationColors_.empty()) return std::nullopt;
+        const auto aliases = std::find_if(
+            source.ownerAliases.begin(), source.ownerAliases.end(),
+            [&](const nadoc_vr::OwnerAliasEntry& candidate) {
+                return candidate.identity == identity;
+            });
+        if (aliases != source.ownerAliases.end()) {
+            for (const std::string& token : aliases->tokens) {
+                const auto color = visualizationColors_.find(token);
+                if (color != visualizationColors_.end()) return color->second;
+            }
+        }
+        const auto& ownershipRecords = source.toolScopeOwnership.empty()
+            ? source.transformOwnership : source.toolScopeOwnership;
+        const auto ownership = std::find_if(
+            ownershipRecords.begin(), ownershipRecords.end(),
+            [&](const TransformOwnership& candidate) {
+                return candidate.identity == identity;
+            });
+        if (ownership == ownershipRecords.end()) return std::nullopt;
+        glm::vec3 total{};
+        float weight = 0.0F;
+        for (const TransformOwner& owner : ownership->owners) {
+            const auto color = visualizationColors_.find(owner.token);
+            if (color == visualizationColors_.end()) continue;
+            const float ownerWeight = (owner.startWeight + owner.endWeight) * 0.5F;
+            total += color->second * ownerWeight;
+            weight += ownerWeight;
+        }
+        return weight > 0.0F ? std::optional<glm::vec3>(total / weight) : std::nullopt;
+    }
+
     [[nodiscard]] std::pair<float, float> previewWeights(
         const RepresentationData& source, const std::string& identity) const {
         return layerWeights(source, identity, toolPreviewToken_);
@@ -2166,6 +2328,18 @@ class GlScene {
             point, toolCommittedTransform_, committedWeight);
         return nadoc_vr::weightedTransformPoint(
             committed, toolPreviewTransform_, pendingWeight);
+    }
+
+    [[nodiscard]] glm::vec3 displayedPoint(
+        const RepresentationData& source, const glm::vec3& point,
+        const std::string& identity, bool end = false) const {
+        const auto offsets = visualizationOffsets(source, identity);
+        const auto committed = committedWeights(source, identity);
+        const auto pending = previewWeights(source, identity);
+        return previewPoint(
+            point + (end ? offsets.second : offsets.first),
+            end ? committed.second : committed.first,
+            end ? pending.second : pending.first);
     }
 
     [[nodiscard]] glm::vec3 previewVector(
@@ -2681,6 +2855,9 @@ class GlScene {
     glm::mat4 toolCommittedTransform_{1.0F};
     std::string toolPreviewToken_;
     glm::mat4 toolPreviewTransform_{1.0F};
+    std::string visualizationMode_ = "none";
+    std::unordered_map<std::string, glm::vec3> visualizationPositions_;
+    std::unordered_map<std::string, glm::vec3> visualizationColors_;
     std::unordered_set<std::string> snapHighlightOwnerTokens_;
     std::unordered_set<std::string> snapHighlightIdentities_;
     std::unordered_set<std::string> selectedHighlightOwnerTokens_;
@@ -2772,6 +2949,190 @@ struct DeformationPlaneGuide {
     std::optional<DeformationPlanePose> expanded;
 };
 
+struct DesktopVertex {
+    glm::vec3 position{};
+    glm::vec2 uv{};
+};
+
+/** X11 desktop capture and input owned by NADOC rather than Steam's browser bridge.
+ *
+ * SteamVR's native Dashboard remains available, but its Linux Desktop surface can
+ * exist as a blank overlay when Steam's XComposite browser window loses its XID.
+ * This small fallback captures the real X11 root and injects ordinary pointer input,
+ * keeping the desktop usable inside the same controller-mounted tablet.
+ */
+class DesktopSurface {
+  public:
+    void initialize(Display* display) {
+        display_ = display;
+        root_ = DefaultRootWindow(display_);
+        program_ = makeDesktopProgram();
+        viewProjection_ = glGetUniformLocation(program_, "uViewProjection");
+        textureUniform_ = glGetUniformLocation(program_, "uDesktop");
+        pointerUniform_ = glGetUniformLocation(program_, "uPointer");
+        pointerVisibleUniform_ = glGetUniformLocation(program_, "uPointerVisible");
+        glGenVertexArrays(1, &vao_);
+        glGenBuffers(1, &vbo_);
+        glBindVertexArray(vao_);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo_);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(DesktopVertex) * 4, nullptr, GL_DYNAMIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(
+            0, 3, GL_FLOAT, GL_FALSE, sizeof(DesktopVertex),
+            reinterpret_cast<void*>(offsetof(DesktopVertex, position)));
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(
+            1, 2, GL_FLOAT, GL_FALSE, sizeof(DesktopVertex),
+            reinterpret_cast<void*>(offsetof(DesktopVertex, uv)));
+        glBindVertexArray(0);
+        glGenTextures(1, &texture_);
+        glBindTexture(GL_TEXTURE_2D, texture_);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        xtestLibrary_ = dlopen("libXtst.so.6", RTLD_LAZY | RTLD_LOCAL);
+        if (xtestLibrary_) {
+            fakeMotion_ = reinterpret_cast<FakeMotion>(
+                dlsym(xtestLibrary_, "XTestFakeMotionEvent"));
+            fakeButton_ = reinterpret_cast<FakeButton>(
+                dlsym(xtestLibrary_, "XTestFakeButtonEvent"));
+        }
+    }
+
+    void shutdown() {
+        if (texture_) glDeleteTextures(1, &texture_);
+        if (vbo_) glDeleteBuffers(1, &vbo_);
+        if (vao_) glDeleteVertexArrays(1, &vao_);
+        if (program_) glDeleteProgram(program_);
+        texture_ = vbo_ = vao_ = program_ = 0;
+        if (xtestLibrary_) dlclose(xtestLibrary_);
+        xtestLibrary_ = nullptr;
+        fakeMotion_ = nullptr;
+        fakeButton_ = nullptr;
+        display_ = nullptr;
+    }
+
+    void setPointer(const glm::vec2& uv) {
+        pointer_ = glm::clamp(uv, glm::vec2(0.0F), glm::vec2(1.0F));
+        pointerVisible_ = true;
+        if (!display_ || width_ <= 0 || height_ <= 0) return;
+        const int x = static_cast<int>(std::round(pointer_.x * (width_ - 1)));
+        const int y = static_cast<int>(std::round(pointer_.y * (height_ - 1)));
+        if (x == pointerX_ && y == pointerY_) return;
+        pointerX_ = x;
+        pointerY_ = y;
+        if (fakeMotion_) fakeMotion_(display_, -1, x, y, CurrentTime);
+        else XWarpPointer(display_, None, root_, 0, 0, 0, 0, x, y);
+        XFlush(display_);
+    }
+
+    void hidePointer() { pointerVisible_ = false; }
+
+    void click() { button(1); }
+    void scroll(bool upward) { button(upward ? 4U : 5U); }
+
+    void update(bool visible) {
+        if (!visible || !display_) return;
+        const auto now = std::chrono::steady_clock::now();
+        if (textureReady_ && now - lastCapture_ < std::chrono::milliseconds(80)) return;
+        lastCapture_ = now;
+        XWindowAttributes attributes{};
+        if (!XGetWindowAttributes(display_, root_, &attributes) ||
+            attributes.width <= 0 || attributes.height <= 0) {
+            return;
+        }
+        XImage* image = XGetImage(
+            display_, root_, 0, 0,
+            static_cast<unsigned int>(attributes.width),
+            static_cast<unsigned int>(attributes.height), AllPlanes, ZPixmap);
+        if (!image) return;
+        if (image->bits_per_pixel == 32) {
+            const bool resized = width_ != image->width || height_ != image->height;
+            width_ = image->width;
+            height_ = image->height;
+            glBindTexture(GL_TEXTURE_2D, texture_);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, image->bytes_per_line / 4);
+            if (resized || !textureReady_) {
+                glTexImage2D(
+                    GL_TEXTURE_2D, 0, GL_RGBA8, width_, height_, 0,
+                    GL_BGRA, GL_UNSIGNED_BYTE, image->data);
+            } else {
+                glTexSubImage2D(
+                    GL_TEXTURE_2D, 0, 0, 0, width_, height_,
+                    GL_BGRA, GL_UNSIGNED_BYTE, image->data);
+            }
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+            glBindTexture(GL_TEXTURE_2D, 0);
+            textureReady_ = true;
+        }
+        XDestroyImage(image);
+    }
+
+    void render(const glm::mat4& viewProjection,
+                const std::array<glm::vec3, 4>& corners) const {
+        if (!textureReady_) return;
+        const std::array<DesktopVertex, 4> vertices = {{
+            {corners[0], {0.0F, 0.0F}},
+            {corners[1], {0.0F, 1.0F}},
+            {corners[2], {1.0F, 0.0F}},
+            {corners[3], {1.0F, 1.0F}},
+        }};
+        glDisable(GL_DEPTH_TEST);
+        glUseProgram(program_);
+        glUniformMatrix4fv(viewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
+        glUniform2fv(pointerUniform_, 1, &pointer_[0]);
+        glUniform1i(pointerVisibleUniform_, pointerVisible_ ? 1 : 0);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texture_);
+        glUniform1i(textureUniform_, 0);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo_);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices.data());
+        glBindVertexArray(vao_);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        glBindVertexArray(0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glUseProgram(0);
+        glEnable(GL_DEPTH_TEST);
+    }
+
+  private:
+    using FakeMotion = int (*)(Display*, int, int, int, unsigned long);
+    using FakeButton = int (*)(Display*, unsigned int, Bool, unsigned long);
+
+    void button(unsigned int number) {
+        if (!display_ || !fakeButton_) return;
+        fakeButton_(display_, number, True, CurrentTime);
+        fakeButton_(display_, number, False, CurrentTime);
+        XFlush(display_);
+    }
+
+    Display* display_ = nullptr;
+    Window root_ = None;
+    void* xtestLibrary_ = nullptr;
+    FakeMotion fakeMotion_ = nullptr;
+    FakeButton fakeButton_ = nullptr;
+    GLuint program_ = 0;
+    GLuint vao_ = 0;
+    GLuint vbo_ = 0;
+    GLuint texture_ = 0;
+    GLint viewProjection_ = -1;
+    GLint textureUniform_ = -1;
+    GLint pointerUniform_ = -1;
+    GLint pointerVisibleUniform_ = -1;
+    int width_ = 0;
+    int height_ = 0;
+    int pointerX_ = -1;
+    int pointerY_ = -1;
+    bool textureReady_ = false;
+    bool pointerVisible_ = false;
+    glm::vec2 pointer_{0.5F, 0.5F};
+    std::chrono::steady_clock::time_point lastCapture_{};
+};
+
 class Viewer {
   public:
     explicit Viewer(SceneData scene, std::string eventPath = {},
@@ -2782,6 +3143,8 @@ class Viewer {
                     std::string toolExecutionFeedbackPath = {},
                     std::string jobPath = {},
                     nadoc_vr::JobSnapshot jobSnapshot = {},
+                    std::string visualizationPath = {},
+                    nadoc_vr::VisualizationSnapshot visualizationSnapshot = {},
                     std::string selectionLevel = "default",
                     std::vector<std::string> selectedOwnerTokens = {},
                     std::string selectedSelectionKind = "none")
@@ -2792,10 +3155,17 @@ class Viewer {
           preflightFeedbackPath_(std::move(preflightFeedbackPath)),
           toolExecutionFeedbackPath_(std::move(toolExecutionFeedbackPath)),
           jobPath_(std::move(jobPath)),
+          visualizationPath_(std::move(visualizationPath)),
           jobsSnapshotAvailable_(jobSnapshot.available),
           jobsSnapshotTotal_(jobSnapshot.total),
           jobSnapshotSequence_(jobSnapshot.sequence),
           jobSnapshotUpdatedAtMs_(jobSnapshot.updatedAtMs),
+          visualizationSnapshot_(std::move(visualizationSnapshot)),
+          visualizationSequence_(visualizationSnapshot_.sequence),
+          desktopActiveJobEngine_(jobSnapshot.activeEngine),
+          desktopActiveJobId_(jobSnapshot.activeJobId),
+          desktopRepresentation_(jobSnapshot.representation),
+          desktopColoring_(jobSnapshot.coloring),
           jobs_(std::move(jobSnapshot.rows)),
           selectionLevel_(std::move(selectionLevel)) {
         normalizationCenter_ = sceneData_.normalizationCenter;
@@ -2813,6 +3183,15 @@ class Viewer {
                 committedSelectionOwnerTokens_ = {selectedOwnerTokens_.front()};
             }
         }
+        const auto activeJob = std::find_if(
+            jobs_.begin(), jobs_.end(), [&](const nadoc_vr::JobSnapshotRow& row) {
+                return row.engine == desktopActiveJobEngine_ &&
+                       row.jobId == desktopActiveJobId_;
+            });
+        if (activeJob != jobs_.end()) {
+            selectedJobIndex_ = static_cast<size_t>(activeJob - jobs_.begin());
+            jobPage_ = selectedJobIndex_ / 5U;
+        }
     }
 
     int run() {
@@ -2824,6 +3203,7 @@ class Viewer {
     }
 
     ~Viewer() {
+        desktopSurface_.shutdown();
         glScene_.reset();
         for (Swapchain& swapchain : swapchains_) {
             if (swapchain.depth) glDeleteRenderbuffers(1, &swapchain.depth);
@@ -3121,8 +3501,10 @@ class Viewer {
 
         glGenFramebuffers(1, &framebuffer_);
         glScene_ = std::make_unique<GlScene>(std::move(sceneData_));
+        glScene_->setVisualization(visualizationSnapshot_);
         glScene_->setSelectionHighlights(
             {}, {}, committedSelectionOwnerTokens_, committedSelectionIdentities_);
+        desktopSurface_.initialize(glfwGetX11Display());
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_PROGRAM_POINT_SIZE);
         glDisable(GL_CULL_FACE);
@@ -3191,7 +3573,7 @@ class Viewer {
         }
     }
 
-    enum class MenuPage { options, tools, tool_config, jobs, job_detail };
+    enum class MenuPage { options, tools, tool_config, jobs, job_detail, desktop };
 
     struct MenuItem {
         const char* label;
@@ -3202,7 +3584,7 @@ class Viewer {
     static constexpr std::array<const char*, 7> kSelectionLevels = {
         "default", "cluster", "strand", "domain", "end", "xover", "base",
     };
-    static constexpr std::array<MenuItem, 19> kOptionsMenuItems = {{
+    static constexpr std::array<MenuItem, 18> kOptionsMenuItems = {{
         {"CYLINDERS", -0.16F, 0.190F, 0.145F},
         {"FULL", -0.16F, 0.135F, 0.145F},
         {"BALL + STICK", -0.16F, 0.080F, 0.145F},
@@ -3219,9 +3601,8 @@ class Viewer {
         {"CROSSOVER", 0.16F, -0.160F, 0.145F},
         {"BASE", 0.16F, -0.215F, 0.145F},
         {"TOOLS", -0.16F, -0.350F, 0.145F},
-        {"JOBS", 0.16F, -0.350F, 0.145F},
-        {"RECENTER", -0.16F, -0.415F, 0.145F},
-        {"CLOSE", 0.16F, -0.415F, 0.145F},
+        {"RECENTER", 0.16F, -0.350F, 0.145F},
+        {"DESKTOP", 0.0F, -0.415F, 0.305F},
     }};
     static constexpr std::array<MenuItem, 10> kToolMenuItems = {{
         {"INSPECT", -0.16F, 0.190F, 0.145F},
@@ -3257,12 +3638,17 @@ class Viewer {
     static constexpr std::array<MenuItem, 1> kJobDetailMenuItems = {{
         {"BACK TO JOBS", 0.0F, -0.260F, 0.305F},
     }};
+    static constexpr std::array<MenuItem, 1> kDesktopMenuItems = {{
+        {"BACK TO VR MENU", 0.0F, -0.260F, 0.305F},
+    }};
     static constexpr std::array<MenuItem, 3> kMenuControlItems = {{
         {"DOCK", -0.20F, -0.505F, 0.12F},
         {"SIZE -", 0.02F, -0.505F, 0.08F},
         {"SIZE +", 0.22F, -0.505F, 0.10F},
     }};
     static constexpr int kMenuControlHitBase = 100;
+    static constexpr float kMenuTop = 0.33F;
+    static constexpr float kMenuBottom = -0.545F;
 
     void appendMenuGuides() {
         if (!menuOpen_) return;
@@ -3287,11 +3673,17 @@ class Viewer {
                 left + 0.012F, item.y + 0.012F, 0.0036F, color);
         };
         const glm::vec3 border(0.22F, 0.42F, 0.62F);
-        line(menuWorld(-0.33F, 0.33F), menuWorld(0.33F, 0.33F), border);
-        line(menuWorld(0.33F, 0.33F), menuWorld(0.33F, -0.545F), border);
-        line(menuWorld(0.33F, -0.545F), menuWorld(-0.33F, -0.545F), border);
-        line(menuWorld(-0.33F, -0.545F), menuWorld(-0.33F, 0.33F), border);
-        line(menuWorld(-0.33F, -0.465F), menuWorld(0.33F, -0.465F), border * 0.7F);
+        constexpr float halfWidth = nadoc_vr::MenuPlacement::kMenuHalfWidth;
+        line(menuWorld(-halfWidth, kMenuTop),
+             menuWorld(halfWidth, kMenuTop), border);
+        line(menuWorld(halfWidth, kMenuTop),
+             menuWorld(halfWidth, kMenuBottom), border);
+        line(menuWorld(halfWidth, kMenuBottom),
+             menuWorld(-halfWidth, kMenuBottom), border);
+        line(menuWorld(-halfWidth, kMenuBottom),
+             menuWorld(-halfWidth, kMenuTop), border);
+        line(menuWorld(-halfWidth, -0.465F),
+             menuWorld(halfWidth, -0.465F), border * 0.7F);
         const std::string title = menuPage_ == MenuPage::options
             ? "VR MENU"
             : menuPage_ == MenuPage::tools
@@ -3299,14 +3691,29 @@ class Viewer {
                 : menuPage_ == MenuPage::tool_config
                     ? "VR TOOL SETTINGS DRAFT"
                     : menuPage_ == MenuPage::jobs
-                        ? "SIMULATION JOBS LIVE"
-                        : "SIMULATION JOB DETAILS";
+                        ? "SIMULATION CONTEXT"
+                        : menuPage_ == MenuPage::job_detail
+                            ? "SIMULATION JOB DETAILS" : "NADOC DESKTOP";
         const bool jobMenu = menuPage_ == MenuPage::jobs ||
                              menuPage_ == MenuPage::job_detail;
         appendMenuText(
             title, menuPage_ == MenuPage::options ? -0.105F
                                                  : jobMenu ? -0.300F : -0.235F,
             0.305F, jobMenu ? 0.0042F : 0.006F, {0.65F, 0.88F, 1.0F});
+        if (menuPage_ == MenuPage::options &&
+            glScene_->visualizationMode() != "none") {
+            std::string display = glScene_->visualizationMode();
+            std::transform(
+                display.begin(), display.end(), display.begin(),
+                [](unsigned char value) {
+                    return value == '_' ? ' '
+                                        : static_cast<char>(std::toupper(value));
+                });
+            if (display.size() > 24U) display.resize(24U);
+            appendMenuText(
+                "DESKTOP " + display + " LIVE", -0.245F, 0.255F,
+                0.0034F, {0.35F, 1.0F, 0.68F});
+        }
 
         for (size_t index = 0; index < kMenuControlItems.size(); ++index) {
             const MenuItem& item = kMenuControlItems[index];
@@ -3316,6 +3723,20 @@ class Viewer {
             const char* label = index == 0U && menuPlacement_.worldDocked()
                 ? "FOLLOW" : item.label;
             itemBox(item, color, label);
+        }
+
+        if (menuPage_ == MenuPage::desktop) {
+            appendMenuText("LIVE X11 DESKTOP", -0.155F, 0.255F,
+                           0.0042F, {0.42F, 0.92F, 1.0F});
+            appendMenuText("AIM + TRIGGER CLICK", -0.150F, -0.185F,
+                           0.0034F, {0.72F, 0.80F, 0.92F});
+            appendMenuText("TRACKPAD SWIPE SCROLLS", -0.175F, -0.215F,
+                           0.0034F, {0.72F, 0.80F, 0.92F});
+            const glm::vec3 backColor = menuHover_ == 0
+                ? glm::vec3(1.0F, 0.78F, 0.22F)
+                : glm::vec3(0.65F, 0.70F, 0.78F);
+            itemBox(kDesktopMenuItems[0], backColor);
+            return;
         }
 
         auto jobColor = [](const nadoc_vr::JobSnapshotRow& row) {
@@ -3351,11 +3772,11 @@ class Viewer {
             const uint64_t ageSeconds = jobSnapshotUpdatedAtMs_ > 0 &&
                     nowMs >= jobSnapshotUpdatedAtMs_
                 ? (nowMs - jobSnapshotUpdatedAtMs_) / 1000U : 999U;
-            snapshotLabel << (ageSeconds <= 5U ? "LIVE " : "LINK STALE ");
+            snapshotLabel << (ageSeconds <= 5U ? "DESKTOP LIVE " : "DESKTOP LINK STALE ");
             if (jobsSnapshotTotal_ > static_cast<int>(jobs_.size())) {
                 snapshotLabel << jobs_.size() << " OF " << jobsSnapshotTotal_ << " ";
             }
-            snapshotLabel << "READ ONLY";
+            snapshotLabel << "CONTEXT";
             appendMenuText(shortened(snapshotLabel.str(), 35), -0.285F, 0.265F,
                            0.0032F, {0.72F, 0.78F, 0.88F});
             if (!jobsSnapshotAvailable_) {
@@ -3373,8 +3794,12 @@ class Viewer {
                 if (index >= jobs_.size()) continue;
                 const auto& row = jobs_[index];
                 std::string label(static_cast<size_t>(row.depth) * 2U, ' ');
+                const bool desktopActive = row.engine == desktopActiveJobEngine_ &&
+                                           row.jobId == desktopActiveJobId_;
+                if (desktopActive) label += "> ";
                 label += row.engine + " " + row.label;
-                glm::vec3 color = jobColor(row);
+                glm::vec3 color = desktopActive
+                    ? glm::vec3(0.35F, 1.0F, 0.68F) : jobColor(row);
                 if (static_cast<int>(slot) == menuHover_) color = {1.0F, 0.78F, 0.22F};
                 itemBox(kJobsMenuItems[slot], color, shortened(label, 28).c_str());
             }
@@ -3410,6 +3835,11 @@ class Viewer {
                                {0.60F, 0.67F, 0.76F});
                 appendMenuText(shortened(row.statusText, 48), -0.305F, 0.155F,
                                0.0036F, color);
+                if (row.engine == desktopActiveJobEngine_ &&
+                    row.jobId == desktopActiveJobId_) {
+                    appendMenuText("SELECTED ON DESKTOP", -0.305F, -0.100F,
+                                   0.0038F, {0.35F, 1.0F, 0.68F});
+                }
                 std::ostringstream progress;
                 progress << "PROGRESS " << std::fixed << std::setprecision(1)
                          << static_cast<double>(row.progressPermille) / 10.0 << "%";
@@ -3636,17 +4066,37 @@ class Viewer {
         }
     }
 
+    std::optional<glm::vec3> menuRayPanelLocalPoint(
+        const nadoc_vr::HandPose& hand) const {
+        if (!menuOpen_) return std::nullopt;
+        return menuPlacement_.rayPanelLocalPoint(
+            hand,
+            {-nadoc_vr::MenuPlacement::kMenuHalfWidth, kMenuBottom},
+            {nadoc_vr::MenuPlacement::kMenuHalfWidth, kMenuTop});
+    }
+
+    static constexpr float kDesktopLeft = -0.31F;
+    static constexpr float kDesktopRight = 0.31F;
+    static constexpr float kDesktopTop = 0.220F;
+    static constexpr float kDesktopBottom = -0.129F;
+
+    std::optional<glm::vec2> desktopPointerUv(
+        const nadoc_vr::HandPose& hand) const {
+        if (!menuOpen_ || menuPage_ != MenuPage::desktop) return std::nullopt;
+        const auto local = menuRayPanelLocalPoint(hand);
+        if (!local || local->x < kDesktopLeft || local->x > kDesktopRight ||
+            local->y < kDesktopBottom || local->y > kDesktopTop) {
+            return std::nullopt;
+        }
+        return glm::vec2(
+            (local->x - kDesktopLeft) / (kDesktopRight - kDesktopLeft),
+            (kDesktopTop - local->y) / (kDesktopTop - kDesktopBottom));
+    }
+
     int menuHit(const nadoc_vr::HandPose& hand) const {
-        if (!menuOpen_ || !hand.valid) return -1;
-        const glm::vec3 direction = hand.orientation * glm::vec3(0, 0, -1);
-        const glm::vec3 normal = menuPlacement_.orientation() * glm::vec3(0, 0, 1);
-        const float denominator = glm::dot(direction, normal);
-        if (std::abs(denominator) < 1.0e-5F) return -1;
-        const float distance = glm::dot(
-            menuPlacement_.position() - hand.position, normal) / denominator;
-        if (distance <= 0.0F || distance > 5.0F) return -1;
-        const glm::vec3 local = menuPlacement_.localPoint(
-            hand.position + direction * distance);
+        const auto panelHit = menuRayPanelLocalPoint(hand);
+        if (!panelHit) return -1;
+        const glm::vec3& local = *panelHit;
         const MenuItem* items = menuPage_ == MenuPage::options
             ? kOptionsMenuItems.data()
             : menuPage_ == MenuPage::tools
@@ -3654,7 +4104,9 @@ class Viewer {
                 : menuPage_ == MenuPage::tool_config
                     ? kToolConfigMenuItems.data()
                     : menuPage_ == MenuPage::jobs
-                        ? kJobsMenuItems.data() : kJobDetailMenuItems.data();
+                        ? kJobsMenuItems.data()
+                        : menuPage_ == MenuPage::job_detail
+                            ? kJobDetailMenuItems.data() : kDesktopMenuItems.data();
         const size_t itemCount = menuPage_ == MenuPage::options
             ? kOptionsMenuItems.size()
             : menuPage_ == MenuPage::tools
@@ -3662,7 +4114,9 @@ class Viewer {
                 : menuPage_ == MenuPage::tool_config
                     ? kToolConfigMenuItems.size()
                     : menuPage_ == MenuPage::jobs
-                        ? kJobsMenuItems.size() : kJobDetailMenuItems.size();
+                        ? kJobsMenuItems.size()
+                        : menuPage_ == MenuPage::job_detail
+                            ? kJobDetailMenuItems.size() : kDesktopMenuItems.size();
         for (size_t index = 0; index < itemCount; ++index) {
             const MenuItem& item = items[index];
             if (std::abs(local.x - item.x) <= item.halfWidth &&
@@ -3680,29 +4134,48 @@ class Viewer {
         return -1;
     }
 
-    void processMenuInput() {
+    std::array<bool, 2> processMenuInput() {
+        std::array<bool, 2> controlTargeted{};
         menuHover_ = -1;
+        desktopSurface_.hidePointer();
         for (size_t hand = 0; hand < hands_.size(); ++hand) {
             const int hit = menuHit(hands_[hand]);
+            const auto desktopPointer = desktopPointerUv(hands_[hand]);
+            controlTargeted[hand] = hit >= 0 || desktopPointer.has_value();
+            const int hoverTarget = hit < 0
+                ? -1 : static_cast<int>(menuPage_) * 1000 + hit;
+            if (nadoc_vr::menuHoverHapticRequested(
+                    menuHoverTargets_[hand], hoverTarget)) {
+                pulse(hand, 0.10F);
+            }
+            menuHoverTargets_[hand] = hoverTarget;
             if (hit >= 0 && menuHover_ < 0) menuHover_ = hit;
+            if (menuPage_ == MenuPage::desktop && desktopPointer) {
+                desktopSurface_.setPointer(*desktopPointer);
+                if (triggerClicked_[hand]) desktopSurface_.click();
+                continue;
+            }
             if (hit < 0 || !triggerClicked_[hand]) continue;
             if (hit >= kMenuControlHitBase) {
                 const int control = hit - kMenuControlHitBase;
                 if (control == 0) {
                     menuPlacement_.toggleDock(hand, hands_);
-                    pulse(hand, 0.50F);
                 } else {
-                    const bool changed = menuPlacement_.adjustScale(
-                        control == 1 ? -1 : 1);
-                    pulse(hand, changed ? 0.40F : 0.15F);
+                    (void)menuPlacement_.adjustScale(control == 1 ? -1 : 1);
                 }
                 menuHover_ = -1;
+                continue;
+            }
+            if (menuPage_ == MenuPage::desktop) {
+                if (hit == 0 && triggerClicked_[hand]) {
+                    menuPage_ = MenuPage::options;
+                    menuHover_ = -1;
+                }
                 continue;
             }
             if (menuPage_ == MenuPage::job_detail) {
                 menuPage_ = MenuPage::jobs;
                 menuHover_ = -1;
-                pulse(hand, 0.50F);
                 continue;
             }
             if (menuPage_ == MenuPage::jobs) {
@@ -3712,19 +4185,13 @@ class Viewer {
                     selectedJobIndex_ = index;
                     menuPage_ = MenuPage::job_detail;
                     menuHover_ = -1;
-                    pulse(hand, 0.50F);
                 } else if (hit == 5 && jobPage_ > 0) {
                     --jobPage_;
-                    pulse(hand, 0.35F);
                 } else if (hit == 6 && (jobPage_ + 1) * perPage < jobs_.size()) {
                     ++jobPage_;
-                    pulse(hand, 0.35F);
                 } else if (hit == 7) {
                     menuPage_ = MenuPage::options;
                     menuHover_ = -1;
-                    pulse(hand, 0.50F);
-                } else {
-                    pulse(hand, 0.15F);
                 }
                 continue;
             }
@@ -3744,7 +4211,6 @@ class Viewer {
                     menuHover_ = -1;
                     suppressManipulationUntilRelease_ = true;
                     std::cout << "VR " << planePickStatus_ << '\n';
-                    pulse(hand, 0.50F);
                     continue;
                 } else if (hit == 2) changed = toolConfig_.adjustSecondary(-1);
                 else if (hit == 3) changed = toolConfig_.adjustSecondary(1);
@@ -3755,12 +4221,10 @@ class Viewer {
                     menuHover_ = -1;
                 }
                 if (changed) publishToolConfiguration();
-                pulse(hand, changed ? 0.50F : 0.20F);
                 continue;
             }
             if (menuPage_ == MenuPage::tools) {
                 if (toolShell_.executionPending()) {
-                    pulse(hand, 0.15F);
                     continue;
                 }
                 if (hit < 5) {
@@ -3802,7 +4266,6 @@ class Viewer {
                     menuPage_ = MenuPage::options;
                     menuHover_ = -1;
                 }
-                pulse(hand, 0.50F);
                 continue;
             }
             if (hit < 4) {
@@ -3816,22 +4279,17 @@ class Viewer {
                 menuPage_ = MenuPage::tools;
                 menuHover_ = -1;
             } else if (hit == 16) {
-                jobPage_ = 0;
-                menuPage_ = MenuPage::jobs;
-                menuHover_ = -1;
-            } else if (hit == 17) {
                 recenterRequested_ = true;
                 recenterHand_ = hand;
                 menuOpen_ = false;
                 menuHover_ = -1;
                 suppressManipulationUntilRelease_ = true;
-            } else {
-                menuOpen_ = false;
+            } else if (hit == 17) {
+                menuPage_ = MenuPage::desktop;
                 menuHover_ = -1;
-                suppressManipulationUntilRelease_ = true;
             }
-            pulse(hand, 0.50F);
         }
+        return controlTargeted;
     }
 
     void updateControllerGuides() {
@@ -3875,12 +4333,14 @@ class Viewer {
             const glm::vec3 right = hands_[hand].orientation * glm::vec3(1, 0, 0);
             const glm::vec3 up = hands_[hand].orientation * glm::vec3(0, 1, 0);
             const glm::vec3 sphereCenter = selectionVolumeCenter(hand);
-            const glm::vec3 tip = menuOpen_
-                ? origin + forward * 1.2F : sphereCenter;
+            const glm::vec3 tip = sphereCenter;
             line(origin - forward * 0.045F, origin, color * 0.65F);
             line(origin, tip, color);
             line(tip - right * 0.008F, tip + right * 0.008F, color);
             line(tip - up * 0.008F, tip + up * 0.008F, color);
+            if (const auto panelHit = menuRayPanelLocalPoint(hands_[hand])) {
+                line(tip, menuPlacement_.worldPoint(*panelHit), color * 0.42F);
+            }
             const glm::vec3 sphereColor = triggerPartial_[hand]
                 ? glm::mix(color, glm::vec3(1.0F), 0.35F) : color * 0.52F;
             const float radius = selectionVolumes_[hand].radius();
@@ -3944,7 +4404,9 @@ class Viewer {
                      worldPoint(pose.center + pose.normal * marker * 2.0F), color);
             }
         }
-        if (!menuOpen_) {
+        // The tablet is an overlay, so scene selection and tool feedback stay
+        // visible while it is open.
+        {
             if (const auto* feedback = currentToolContextFeedback();
                 feedback && feedback->resolved) {
                 const float amount = feedback->expandedPoseResolved
@@ -4062,14 +4524,15 @@ class Viewer {
              + hands_[hand].orientation * glm::vec3(0.0F, 0.0F, -0.12F);
     }
 
-    void updateSelectionVolumeCandidates() {
+    void updateSelectionVolumeCandidates(
+        const std::array<bool, 2>& menuControlTargeted) {
         const std::string previous = sceneHover_ ? sceneHover_->identity : "";
         sceneHover_.reset();
         for (size_t hand = 0; hand < hands_.size(); ++hand) {
             snapSelectionHits_[hand].clear();
             snapSelectionOwnerTokens_[hand].clear();
             snapSelectionDirectIdentities_[hand].clear();
-            if (menuOpen_ || menuOpenRequested_ || !hands_[hand].valid ||
+            if (menuControlTargeted[hand] || !hands_[hand].valid ||
                 !triggerPartial_[hand] || gripPressed_[hand]) {
                 continue;
             }
@@ -4675,7 +5138,25 @@ class Viewer {
                 "xrGetActionStateVector2f(trackpad axis)");
             const bool touching = trackpadTouch.isActive && trackpadTouch.currentState &&
                                   trackpadAxis.isActive;
-            if (touching) {
+            const bool desktopActive = menuOpen_ && menuPage_ == MenuPage::desktop;
+            if (touching && desktopActive) {
+                const float y = glm::clamp(trackpadAxis.currentState.y, -1.0F, 1.0F);
+                if (!desktopTrackpadTouching_[hand]) {
+                    desktopTrackpadTouching_[hand] = true;
+                    desktopTrackpadLastY_[hand] = y;
+                    desktopTrackpadTravel_[hand] = 0.0F;
+                } else {
+                    desktopTrackpadTravel_[hand] += y - desktopTrackpadLastY_[hand];
+                    desktopTrackpadLastY_[hand] = y;
+                    if (std::abs(desktopTrackpadTravel_[hand]) >= 0.18F) {
+                        desktopSurface_.scroll(desktopTrackpadTravel_[hand] > 0.0F);
+                        desktopTrackpadTravel_[hand] = 0.0F;
+                        trackpadScrolled_[hand] = true;
+                    }
+                }
+                selectionVolumes_[hand].endScroll();
+            } else if (touching) {
+                desktopTrackpadTouching_[hand] = false;
                 if (!selectionVolumes_[hand].scrolling()) {
                     selectionVolumes_[hand].beginScroll(trackpadAxis.currentState.y);
                 } else if (selectionVolumes_[hand].updateScroll(
@@ -4683,14 +5164,16 @@ class Viewer {
                     trackpadScrolled_[hand] = true;
                 }
             } else {
+                desktopTrackpadTouching_[hand] = false;
+                desktopTrackpadTravel_[hand] = 0.0F;
                 selectionVolumes_[hand].endScroll();
                 if (!trackpadPressed) trackpadScrolled_[hand] = false;
             }
 
-            if (trackpadClicked && !trackpadScrolled_[hand] && hand == 0U) {
+            if (!desktopActive && trackpadClicked && !trackpadScrolled_[hand] && hand == 0U) {
                 publishSelectionLevel(nadoc_vr::nextTabSelectionLevel(selectionLevel_));
                 pulse(hand, 0.40F);
-            } else if (trackpadClicked && !trackpadScrolled_[hand] && hand == 1U &&
+            } else if (!desktopActive && trackpadClicked && !trackpadScrolled_[hand] && hand == 1U &&
                        glScene_->toggleExpanded()) {
                 pulse(hand, glScene_->expanded() ? 0.40F : 0.24F);
             }
@@ -4706,8 +5189,7 @@ class Viewer {
             suppressManipulationUntilRelease_ = false;
         }
         auto manipulationHands = hands_;
-        const bool inputSuppressed = menuOpen_ || menuOpenRequested_
-                                  || suppressManipulationUntilRelease_;
+        const bool inputSuppressed = suppressManipulationUntilRelease_;
         const bool rigidToolPreview =
             toolShell_.mode() == nadoc_vr::ToolMode::move_rotate &&
             toolShell_.previewRequested();
@@ -4730,28 +5212,29 @@ class Viewer {
                 if (hands_[hand].valid && hands_[hand].pressed) pulse(hand);
             }
         }
-        const bool menuWasOpen = menuOpen_;
-        if (menuOpen_) processMenuInput();
-        updateSelectionVolumeCandidates();
-        if (!menuWasOpen && !menuOpen_ && !menuOpenRequested_) {
-            for (size_t hand = 0; hand < hands_.size(); ++hand) {
-                if (!triggerClicked_[hand] || !hands_[hand].valid) continue;
-                if (snapSelectionHits_[hand].empty()) {
-                    pulse(hand, 0.15F);
-                    continue;
-                }
-                if (planePickSlot_) {
-                    publishPlanePick(snapSelectionHits_[hand].front().identity);
-                } else {
-                    std::vector<std::string> identities;
-                    identities.reserve(snapSelectionHits_[hand].size());
-                    for (const auto& hit : snapSelectionHits_[hand]) {
-                        identities.push_back(hit.identity);
-                    }
-                    publishSelect(identities);
-                }
-                pulse(hand, 0.55F);
+        std::array<bool, 2> menuControlTargeted{};
+        if (menuOpen_) menuControlTargeted = processMenuInput();
+        updateSelectionVolumeCandidates(menuControlTargeted);
+        for (size_t hand = 0; hand < hands_.size(); ++hand) {
+            if (menuControlTargeted[hand] || !triggerClicked_[hand] ||
+                !hands_[hand].valid) {
+                continue;
             }
+            if (snapSelectionHits_[hand].empty()) {
+                publishSelect({});
+                continue;
+            }
+            if (planePickSlot_) {
+                publishPlanePick(snapSelectionHits_[hand].front().identity);
+            } else {
+                std::vector<std::string> identities;
+                identities.reserve(snapSelectionHits_[hand].size());
+                for (const auto& hit : snapSelectionHits_[hand]) {
+                    identities.push_back(hit.identity);
+                }
+                publishSelect(identities);
+            }
+            pulse(hand, 0.55F);
         }
         pollSelectionFeedback();
         pollToolContextFeedback();
@@ -4783,6 +5266,7 @@ class Viewer {
         requestedMenuPage_ = MenuPage::options;
         menuOpenRequested_ = false;
         menuHover_ = -1;
+        menuHoverTargets_.fill(-1);
         pulse(menuHand_, 0.30F);
         updateControllerGuides();
     }
@@ -4830,10 +5314,19 @@ class Viewer {
         glClearColor(0.015F, 0.025F, 0.045F, 1.0F);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         const glm::mat4 projection = projectionFromFov(view.fov, kNearMeters, kFarMeters);
+        const glm::mat4 viewProjection = projection * viewFromPose(view.pose);
         glScene_->render(
-            projection * viewFromPose(view.pose),
+            viewProjection,
             manipulator_.transform(),
             controllerGuides_);
+        if (menuOpen_ && menuPage_ == MenuPage::desktop) {
+            desktopSurface_.render(viewProjection, {{
+                menuWorld(kDesktopLeft, kDesktopTop, 0.004F),
+                menuWorld(kDesktopLeft, kDesktopBottom, 0.004F),
+                menuWorld(kDesktopRight, kDesktopTop, 0.004F),
+                menuWorld(kDesktopRight, kDesktopBottom, 0.004F),
+            }});
+        }
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glFlush();
 
@@ -4858,6 +5351,7 @@ class Viewer {
         XrFrameBeginInfo beginInfo{XR_TYPE_FRAME_BEGIN_INFO};
         checkXr(instance_, xrBeginFrame(session_, &beginInfo), "xrBeginFrame");
         syncActions(frameState.predictedDisplayTime);
+        desktopSurface_.update(menuOpen_ && menuPage_ == MenuPage::desktop);
         glScene_->updateExpanded(
             static_cast<float>(frameState.predictedDisplayPeriod) / 1.0e9F);
 
@@ -4946,18 +5440,42 @@ class Viewer {
                 selectedEngine = jobs_[selectedJobIndex_].engine;
                 selectedJobId = jobs_[selectedJobIndex_].jobId;
             }
+            const bool desktopActiveChanged =
+                next.activeEngine != desktopActiveJobEngine_ ||
+                next.activeJobId != desktopActiveJobId_;
+            const bool desktopStyleChanged =
+                !next.representation.empty() && !next.coloring.empty() &&
+                (next.representation != desktopRepresentation_ ||
+                 next.coloring != desktopColoring_);
             jobsSnapshotAvailable_ = next.available;
             jobsSnapshotTotal_ = next.total;
             jobSnapshotSequence_ = next.sequence;
             jobSnapshotUpdatedAtMs_ = next.updatedAtMs;
+            desktopActiveJobEngine_ = std::move(next.activeEngine);
+            desktopActiveJobId_ = std::move(next.activeJobId);
+            if (!next.representation.empty()) {
+                desktopRepresentation_ = std::move(next.representation);
+                desktopColoring_ = std::move(next.coloring);
+            }
             jobs_ = std::move(next.rows);
 
+            if (desktopStyleChanged) {
+                glScene_->setStyle(
+                    representationFromName(desktopRepresentation_),
+                    coloringFromName(desktopColoring_));
+            }
+
+            const std::string targetEngine = desktopActiveChanged
+                ? desktopActiveJobEngine_ : selectedEngine;
+            const std::string targetJobId = desktopActiveChanged
+                ? desktopActiveJobId_ : selectedJobId;
             const auto selected = std::find_if(
                 jobs_.begin(), jobs_.end(), [&](const nadoc_vr::JobSnapshotRow& row) {
-                    return row.engine == selectedEngine && row.jobId == selectedJobId;
+                    return row.engine == targetEngine && row.jobId == targetJobId;
                 });
             if (selected != jobs_.end()) {
                 selectedJobIndex_ = static_cast<size_t>(selected - jobs_.begin());
+                if (desktopActiveChanged) jobPage_ = selectedJobIndex_ / 5U;
             } else {
                 selectedJobIndex_ = 0;
                 if (menuPage_ == MenuPage::job_detail) menuPage_ = MenuPage::jobs;
@@ -4965,6 +5483,24 @@ class Viewer {
         } catch (const std::exception&) {
             // Atomic publication makes this rare. Retain the last complete
             // revision; its visible age tells the user the desktop link is stale.
+        }
+    }
+
+    void pollVisualizationSnapshot() {
+        if (visualizationPath_.empty() ||
+            (++visualizationSnapshotPollFrame_ % 10U) != 0U) return;
+        try {
+            auto next = nadoc_vr::loadVisualizationSnapshot(visualizationPath_);
+            if (next.sequence <= visualizationSequence_) return;
+            visualizationSequence_ = next.sequence;
+            visualizationSnapshot_ = std::move(next);
+            glScene_->setVisualization(visualizationSnapshot_);
+            std::cout << "VR desktop visualization: "
+                      << visualizationSnapshot_.mode << " ("
+                      << visualizationSnapshot_.points.size() << " positions)\n";
+        } catch (const std::exception&) {
+            // Atomic publication means a failed revision is never required for
+            // progress. Retain the last complete desktop visualization.
         }
     }
 
@@ -4987,6 +5523,7 @@ class Viewer {
             }
             if (sessionRunning_) {
                 pollJobSnapshot();
+                pollVisualizationSnapshot();
                 renderFrame();
             } else {
                 std::this_thread::sleep_for(std::chrono::milliseconds(20));
@@ -5002,11 +5539,19 @@ class Viewer {
     std::string preflightFeedbackPath_;
     std::string toolExecutionFeedbackPath_;
     std::string jobPath_;
+    std::string visualizationPath_;
     bool jobsSnapshotAvailable_ = false;
     int jobsSnapshotTotal_ = 0;
     uint64_t jobSnapshotSequence_ = 0;
     uint64_t jobSnapshotUpdatedAtMs_ = 0;
     uint32_t jobSnapshotPollFrame_ = 0;
+    nadoc_vr::VisualizationSnapshot visualizationSnapshot_;
+    uint64_t visualizationSequence_ = 0;
+    uint32_t visualizationSnapshotPollFrame_ = 0;
+    std::string desktopActiveJobEngine_;
+    std::string desktopActiveJobId_;
+    std::string desktopRepresentation_;
+    std::string desktopColoring_;
     std::vector<nadoc_vr::JobSnapshotRow> jobs_;
     glm::vec3 normalizationCenter_{};
     float normalizationScale_ = 1.0F;
@@ -5081,6 +5626,9 @@ class Viewer {
     std::array<bool, 2> gripPressed_{false, false};
     std::array<bool, 2> trackpadPressed_{false, false};
     std::array<bool, 2> trackpadScrolled_{false, false};
+    std::array<bool, 2> desktopTrackpadTouching_{false, false};
+    std::array<float, 2> desktopTrackpadLastY_{0.0F, 0.0F};
+    std::array<float, 2> desktopTrackpadTravel_{0.0F, 0.0F};
     std::array<nadoc_vr::SelectionVolumeControl, 2> selectionVolumes_{};
     std::array<std::vector<nadoc_vr::PickHit>, 2> snapSelectionHits_{};
     std::array<std::vector<std::string>, 2> snapSelectionOwnerTokens_{};
@@ -5096,6 +5644,7 @@ class Viewer {
     bool menuOpenRequested_ = false;
     bool suppressManipulationUntilRelease_ = false;
     int menuHover_ = -1;
+    std::array<int, 2> menuHoverTargets_{-1, -1};
     size_t jobPage_ = 0;
     size_t selectedJobIndex_ = 0;
     nadoc_vr::MenuPlacement menuPlacement_;
@@ -5110,6 +5659,7 @@ class Viewer {
     std::vector<XrView> views_;
     std::vector<Swapchain> swapchains_;
     std::unique_ptr<GlScene> glScene_;
+    DesktopSurface desktopSurface_;
 };
 
 }  // namespace
@@ -5133,6 +5683,7 @@ int main(int argc, char** argv) {
                      "[--preflight-feedback <preflight-feedback.txt>] "
                      "[--tool-execution-feedback <tool-execution-feedback.txt>] "
                      "[--jobs <jobs.txt>] "
+                     "[--visualization <visualization.txt>] "
                      "[--selection-level <level>] "
                      "[--selected-owner <token>]... [--selected-kind <kind>]\n";
         return 2;
@@ -5144,6 +5695,7 @@ int main(int argc, char** argv) {
     std::string preflightFeedbackPath;
     std::string toolExecutionFeedbackPath;
     std::string jobPath;
+    std::string visualizationPath;
     std::string selectionLevel = "default";
     std::string selectedSelectionKind = "none";
     std::vector<std::string> selectedOwnerTokens;
@@ -5165,6 +5717,7 @@ int main(int argc, char** argv) {
             toolExecutionFeedbackPath = argv[index + 1];
         }
         else if (option == "--jobs") jobPath = argv[index + 1];
+        else if (option == "--visualization") visualizationPath = argv[index + 1];
         else if (option == "--selection-level") selectionLevel = argv[index + 1];
         else if (option == "--selected-owner") {
             const std::string token(argv[index + 1]);
@@ -5205,7 +5758,8 @@ int main(int argc, char** argv) {
             loadScene(argv[1]), eventPath, feedbackPath, toolFeedbackPath,
             planeFeedbackPath, preflightFeedbackPath, toolExecutionFeedbackPath,
             jobPath,
-            nadoc_vr::loadJobSnapshot(jobPath), selectionLevel,
+            nadoc_vr::loadJobSnapshot(jobPath), visualizationPath,
+            nadoc_vr::loadVisualizationSnapshot(visualizationPath), selectionLevel,
             std::move(selectedOwnerTokens), std::move(selectedSelectionKind));
         return viewer.run();
     } catch (const std::exception& error) {

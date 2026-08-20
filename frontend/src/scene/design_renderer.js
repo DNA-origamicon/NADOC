@@ -1511,6 +1511,14 @@ export function initDesignRenderer(scene, storeRef) {
       return _activeFemUpdates?.map(u => ({ ...u, backbone_position: [...u.backbone_position] })) ?? null
     },
 
+    /** Snapshot of active scalar colors for the native VR display bridge. */
+    getScalarColors() {
+      if (!_activeScalarColors) return null
+      return _activeScalarColors instanceof Map
+        ? new Map(_activeScalarColors)
+        : { ..._activeScalarColors }
+    },
+
     /** Register unfold_view's applyFemArcs so the arcs follow applyFemPositions. */
     setFemArcUpdater(fn) { _femArcUpdater = fn },
 

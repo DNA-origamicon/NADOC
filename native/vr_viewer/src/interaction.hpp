@@ -41,6 +41,7 @@ class MenuPlacement {
     static constexpr float kMaximumScale = 1.25F;
     static constexpr float kScaleStep = 0.10F;
     static constexpr float kDefaultScale = 0.75F;
+    static constexpr float kMenuHalfWidth = 0.33F;
 
     void open(
         size_t hand, const std::array<HandPose, 2>& hands,
@@ -56,7 +57,10 @@ class MenuPlacement {
         if (worldDocked_ || !hands[anchorHand_].valid) return;
         const HandPose& hand = hands[anchorHand_];
         orientation_ = glm::normalize(hand.orientation * kTabletTilt);
-        position_ = hand.position + orientation_ * kControllerOffset;
+        const float centerDirection = anchorHand_ == 0U ? 1.0F : -1.0F;
+        position_ = hand.position + orientation_ * (
+            kControllerOffset
+            + glm::vec3(centerDirection * kMenuHalfWidth * scale_, 0.0F, 0.0F));
     }
 
     void toggleDock(size_t hand, const std::array<HandPose, 2>& hands) {
@@ -74,6 +78,11 @@ class MenuPlacement {
             scale_ + (direction < 0 ? -kScaleStep : kScaleStep),
             kMinimumScale, kMaximumScale);
         if (std::abs(next - scale_) < 1.0e-6F) return false;
+        if (!worldDocked_) {
+            const float centerDirection = anchorHand_ == 0U ? 1.0F : -1.0F;
+            position_ += orientation_ * glm::vec3(
+                centerDirection * kMenuHalfWidth * (next - scale_), 0.0F, 0.0F);
+        }
         scale_ = next;
         return true;
     }
@@ -86,6 +95,24 @@ class MenuPlacement {
         return (glm::inverse(orientation_) * (world - position_)) / scale_;
     }
 
+    [[nodiscard]] std::optional<glm::vec3> rayPanelLocalPoint(
+        const HandPose& hand, const glm::vec2& minimum,
+        const glm::vec2& maximum, float maximumDistance = 5.0F) const {
+        if (!hand.valid) return std::nullopt;
+        const glm::vec3 direction = hand.orientation * glm::vec3(0, 0, -1);
+        const glm::vec3 normal = orientation_ * glm::vec3(0, 0, 1);
+        const float denominator = glm::dot(direction, normal);
+        if (std::abs(denominator) < 1.0e-5F) return std::nullopt;
+        const float distance = glm::dot(position_ - hand.position, normal) / denominator;
+        if (distance <= 0.0F || distance > maximumDistance) return std::nullopt;
+        const glm::vec3 local = localPoint(hand.position + direction * distance);
+        if (local.x < minimum.x || local.x > maximum.x ||
+            local.y < minimum.y || local.y > maximum.y) {
+            return std::nullopt;
+        }
+        return local;
+    }
+
     [[nodiscard]] const glm::vec3& position() const { return position_; }
     [[nodiscard]] const glm::quat& orientation() const { return orientation_; }
     [[nodiscard]] float scale() const { return scale_; }
@@ -93,10 +120,11 @@ class MenuPlacement {
     [[nodiscard]] bool worldDocked() const { return worldDocked_; }
 
   private:
-    // Close enough to feel hand-held, with the top edge tilted away like a
-    // large tablet rather than a floating head-up display.
+    // Close enough to feel hand-held, with the top edge tilted farther away like
+    // a large tablet rather than a floating head-up display. The horizontal
+    // center offset puts the matching side edge over the anchoring controller.
     static inline const glm::quat kTabletTilt = glm::angleAxis(
-        glm::radians(-18.0F), glm::vec3(1.0F, 0.0F, 0.0F));
+        glm::radians(-38.0F), glm::vec3(1.0F, 0.0F, 0.0F));
     static constexpr glm::vec3 kControllerOffset{0.0F, 0.18F, -0.13F};
 
     glm::vec3 position_{};
@@ -147,6 +175,11 @@ inline std::string nextTabSelectionLevel(const std::string& current) {
     });
     if (found == cycle.end()) return cycle.front();
     return cycle[(static_cast<size_t>(found - cycle.begin()) + 1U) % cycle.size()];
+}
+
+/** A menu hover ticks once on entry or when crossing to another control. */
+inline bool menuHoverHapticRequested(int previousTarget, int currentTarget) {
+    return currentTarget >= 0 && currentTarget != previousTarget;
 }
 
 /** Per-controller Selection Volume radius driven by a vertical trackpad drag. */

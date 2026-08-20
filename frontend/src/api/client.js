@@ -26,7 +26,7 @@ import { showOpProgress, hideOpProgress } from '../ui/op_progress.js'
 import { notifyRequestFailure, notifyRequestSuccess, pokeProbe } from '../shared/connection_monitor.js'
 import { docHeaders, docHeadersFor, docKey, docKeyFor } from '../shared/doc_id.js'
 import { activeOperationTiming, beginOperationTiming, finishOperationAfterRender, markOperationTiming, whenOperationIdle } from '../perf/operation_timing.js'
-import { buildVRJobSnapshot } from '../scene/vr_job_snapshot.js'
+import { buildVRJobSnapshot, VR_JOB_SNAPSHOT_LIMIT } from '../scene/vr_job_snapshot.js'
 
 const BASE = '/api'
 
@@ -4250,6 +4250,10 @@ export async function sendVRJobsFeedback(body) {
   return _request('POST', '/vr/jobs-feedback', body, { suppressBusy: true })
 }
 
+export async function sendVRVisualizationFeedback(body) {
+  return _request('POST', '/vr/visualization-feedback', body, { suppressBusy: true })
+}
+
 export async function startSteamVR() {
   return _request('POST', '/vr/runtime/start', undefined, { timeoutMs: 30000 })
 }
@@ -4257,48 +4261,66 @@ export async function startSteamVR() {
 /** Read the same canonical, document-scoped unified job list used by the desktop.
  * Returns null on transport failure so the native viewer can retain its last
  * complete revision and expose its age instead of replacing it with false emptiness. */
-export async function fetchVRJobSnapshot() {
+export async function fetchVRJobSnapshot(companionState = {}) {
   const sourcePath = globalThis.localStorage?.getItem(docKey('nadoc:workspace-path')) || null
   const nodes = await listSimJobs(sourcePath, false)
   if (!Array.isArray(nodes)) return null
+  const requestedActive = {
+    engine: companionState.active_job_engine ?? null,
+    id: companionState.active_job_id ?? null,
+  }
+  const jobs = buildVRJobSnapshot(nodes, VR_JOB_SNAPSHOT_LIMIT, requestedActive)
+  const active = jobs.some(row =>
+    row.engine === requestedActive.engine && row.job_id === requestedActive.id)
+    ? requestedActive : { engine: null, id: null }
   return {
     jobs_snapshot_total: nodes.length,
-    jobs: buildVRJobSnapshot(nodes),
+    jobs,
+    active_job_engine: active.engine,
+    active_job_id: active.id,
+    representation: ['cylinders', 'full', 'ballstick', 'stick'].includes(
+      companionState.representation,
+    ) ? companionState.representation : 'full',
+    coloring: ['strand', 'base', 'cluster', 'cpk'].includes(companionState.coloring)
+      ? companionState.coloring : 'strand',
+    visualization_mode: typeof companionState.visualization_mode === 'string'
+      ? companionState.visualization_mode : 'none',
+    visualization_points: Array.isArray(companionState.visualization_points)
+      ? companionState.visualization_points : [],
   }
 }
 
 /** Publish one successful unified-list refresh to a running native viewer. */
-export async function refreshNativeVRJobs() {
-  const snapshot = await fetchVRJobSnapshot()
+export async function refreshNativeVRJobs(companionState = {}) {
+  const snapshot = await fetchVRJobSnapshot(companionState)
   if (!snapshot) return null
   return sendVRJobsFeedback(snapshot)
 }
 
+/** Publish only the active desktop visualization. Native job navigation is archived,
+ * so the live VR loop no longer fetches the unified job tree every 1.5 seconds. */
+export async function refreshNativeVRVisualization(companionState = {}) {
+  return sendVRVisualizationFeedback({
+    visualization_mode: typeof companionState.visualization_mode === 'string'
+      ? companionState.visualization_mode : 'none',
+    visualization_points: Array.isArray(companionState.visualization_points)
+      ? companionState.visualization_points : [],
+  })
+}
+
 export async function launchNativeVR(body) {
-  // Native VR starts from an immutable scene, so give its first read-only Jobs
-  // page a matching bounded launch snapshot. The unified list endpoint remains
-  // authoritative; failure to read it must not prevent molecular inspection.
+  // Native job navigation is archived while the hybrid UI focuses on display.
+  // Launch immediately with only the current visualization overlay.
   const browserRequestedAtMs = Date.now()
-  const jobSnapshotStartedAt = globalThis.performance?.now?.() ?? browserRequestedAtMs
-  let jobs = []
-  let jobsSnapshotAvailable = false
-  let jobsSnapshotTotal = 0
-  try {
-    const snapshot = await fetchVRJobSnapshot()
-    if (snapshot) {
-      jobs = snapshot.jobs
-      jobsSnapshotAvailable = true
-      jobsSnapshotTotal = snapshot.jobs_snapshot_total
-    }
-  } catch { /* launch with an explicit empty snapshot */ }
-  const jobSnapshotFinishedAt = globalThis.performance?.now?.() ?? Date.now()
   return _request('POST', '/vr/launch', {
     ...body,
     browser_requested_at_ms: browserRequestedAtMs,
-    job_snapshot_ms: Math.max(0, jobSnapshotFinishedAt - jobSnapshotStartedAt),
-    jobs_snapshot_available: jobsSnapshotAvailable,
-    jobs_snapshot_total: jobsSnapshotTotal,
-    jobs,
+    job_snapshot_ms: 0,
+    jobs_snapshot_available: false,
+    jobs_snapshot_total: 0,
+    jobs: [],
+    active_job_engine: null,
+    active_job_id: null,
   }, { timeoutMs: 120000 })
 }
 

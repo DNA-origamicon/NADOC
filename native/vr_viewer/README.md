@@ -31,6 +31,17 @@ sudo apt install build-essential cmake ninja-build libopenxr-dev \
 The backend selects SteamVR's `steamxr_linux64.json` automatically when it
 launches the viewer. Help → Open SteamVR / Desktop starts SteamVR independently,
 so its Dashboard remains available before, during, and after a NADOC VR session.
+NADOC also provides its own X11 desktop surface in the controller tablet because
+SteamVR's Linux Desktop overlay can be present but blank. Open the VR menu and
+select Desktop; aim with either controller, fully pull the trigger to click, and
+swipe vertically on either trackpad to scroll. The same Dock/Follow and Size
+controls apply to the desktop tablet.
+MD/FEM visualization overlays are also mirrored into the native model while VR is
+running. Selecting MD Display moves the corresponding VR bases and backbone geometry;
+selecting a Flex Map applies both its mean positions and scalar colors. Clearing the
+desktop overlay restores the launch geometry and normal VR coloring. This is a compact
+per-base feed rather than a repeated full-scene rebuild, so the OpenXR session and the
+user's scene placement remain intact.
 For native-to-browser interaction, the backend creates a private (`0600`), bounded
 event record and passes its path directly to the viewer. A localhost-only endpoint
 exposes validated, sequenced hover, Select, and selection-level intents. The browser
@@ -67,16 +78,30 @@ Controls on the original HTC Vive wands:
 - Hold both grips and change the distance between the controllers to resize
   the structure around their midpoint.
 - Press either application-menu button to open or close the in-headset menu.
-  The menu sits close to the controller that opened it with its top tilted away,
-  like a large hand-held tablet; use the opposite wand to point and select. Choose
+  The menu sits close to the controller that opened it, with its matching side edge
+  aligned to that controller and its top tilted farther away like a large hand-held
+  tablet; use either wand to point and select. Choose
   Dock to leave the panel fixed in the world, or Follow to
   attach it to the controller that selected the button. Size - and Size + resize
-  the panel while preserving accurate pointing. Point a wand and pull its trigger
+  the panel while preserving accurate pointing. The tablet is non-modal: grips,
+  Selection Volumes, trackpads, and scene tools remain active while it is open.
+  A trigger is routed to the menu only while its controller points at a menu control;
+  otherwise it continues selecting the scene. Entering a menu control with the ray
+  gives one light haptic tick; clicking it adds no further vibration. Point a wand
+  and pull its trigger
   to select a representation (Cylinders,
   Full, Ball + Stick, or Stick Only), coloring (Strand, Base, Cluster, or CPK),
   selection level (Auto / Drill, Cluster, Strand, Domain, End, Crossover, or Base),
-  Recenter, or Close. The active level is green and begins at the desktop's current
+  Recenter, or Desktop. The active level is green and begins at the desktop's current
   level when VR launches.
+- A full trigger pull with an empty Selection Volume clears the canonical desktop
+  selection and its retained native geometry glow. Controller rays are shown only
+  while they intersect the tablet panel.
+- The former native Jobs/OBS status page is disabled. It was read-only and could be
+  mistaken for a visualization control even though it did not affect the model. Its
+  rationale and deferred contract are retained in
+  `archive/simulation_jobs_menu.md`; simulation display choices stay on the interactive
+  desktop tablet for now.
 - Select Tools in that panel to open the Phase 5 transaction shell. It exposes
   Inspect, Move/Rotate, Extrude, Twist, and Bend plus Preview, Confirm, Cancel,
   Undo, and Back. Move/Rotate is browser-authoritative and transactional; the
@@ -136,8 +161,9 @@ Controls on the original HTC Vive wands:
   display-only ds-linker connector arcs remain non-selecting. Overhang half-cylinder
   picking follows its curved wall, flat face, and caps rather than an enclosing full
   capsule, so the missing half cannot steal hits from geometry behind it.
-- Press the Vive System button (not the application-menu button) to open the
-  SteamVR Dashboard, then select Desktop to operate NADOC's normal interface.
+- Select Desktop in NADOC's controller menu to operate the live workstation
+  desktop without leaving the scene. SteamVR's System-button Dashboard/Desktop
+  remains available as a secondary path.
 
 Close inspection is intentionally unrestricted: structures may be pulled through
 the headset or enlarged around the viewer. A 2 cm rendering near plane prevents

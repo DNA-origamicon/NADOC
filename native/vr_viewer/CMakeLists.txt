@@ -19,6 +19,7 @@ target_link_libraries(nadoc-vr-viewer PRIVATE
   PkgConfig::X11
   OpenGL::GL
   ZLIB::ZLIB
+  ${CMAKE_DL_LIBS}
 )
 target_compile_options(nadoc-vr-viewer PRIVATE
   -Wall -Wextra -Wpedantic -Wno-missing-field-initializers

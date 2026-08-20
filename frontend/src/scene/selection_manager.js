@@ -2492,8 +2492,22 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const bounded = [...new Set(
       identities.filter(identity => typeof identity === 'string' && identity),
     )].slice(0, 16)
-    if (bounded.length <= 1) {
-      const result = _selectVrIdentity(bounded[0] ?? null)
+    if (bounded.length === 0) {
+      _clearAll()
+      return {
+        owner: null,
+        accepted: true,
+        selected: false,
+        ownerTokens: [],
+        selectionKind: 'none',
+        identity: null,
+        selectionCount: 0,
+        selectedIdentities: [],
+        selectedOwnerTokens: [],
+      }
+    }
+    if (bounded.length === 1) {
+      const result = _selectVrIdentity(bounded[0])
       return result ? {
         ...result,
         identity: bounded[0],

@@ -17,6 +17,8 @@ from backend.api.routes_vr import (
     VRJobSnapshotRow,
     VRJobsFeedbackRequest,
     VRLaunchRequest,
+    VRVisualizationPoint,
+    VRVisualizationFeedbackRequest,
     VRPlaneFeedbackRequest,
     VRToolPreflightFeedbackRequest,
     VRToolExecutionFeedbackRequest,
@@ -29,6 +31,7 @@ from backend.api.routes_vr import (
     _cluster_gizmo_handle_centers,
     _require_local,
     _publish_job_feedback,
+    _publish_visualization_feedback,
     _runtime_timing,
     _selection_cluster,
     _selection_clusters,
@@ -38,6 +41,7 @@ from backend.api.routes_vr import (
     _viewer_command,
     _write_feedback,
     _write_job_snapshot,
+    _write_visualization_snapshot,
     _write_plane_feedback,
     _write_preflight_feedback,
     _write_tool_feedback,
@@ -694,6 +698,19 @@ def test_native_feedback_writer_is_private_bounded_and_atomic(tmp_path) -> None:
         "2 primitive:a primitive:b 2 owner:a owner:b\n"
     )
 
+    _write_feedback(
+        {"feedback_path": str(feedback_path)},
+        VRFeedbackRequest(
+            select_sequence=7,
+            accepted=True,
+            selected=False,
+            selection_level="base",
+        ),
+    )
+    assert feedback_path.read_text() == (
+        "NADOCVR_FEEDBACK 5 7 1 0 base none - 0 0 0\n"
+    )
+
     with pytest.raises(HTTPException, match="Invalid VR feedback identity"):
         _write_feedback(
             {"feedback_path": str(feedback_path)},
@@ -1074,6 +1091,7 @@ def test_native_launch_passes_initial_selection_as_opaque_arguments(tmp_path) ->
         tmp_path / "preflight-feedback.txt",
         tmp_path / "tool-execution-feedback.txt",
         tmp_path / "jobs.txt",
+        tmp_path / "visualization.txt",
         VRLaunchRequest(
             selection_level="domain",
             selected_owner_tokens=[token],
@@ -1091,6 +1109,9 @@ def test_native_launch_passes_initial_selection_as_opaque_arguments(tmp_path) ->
         "tool-execution-feedback.txt"
     )
     assert command[command.index("--jobs") + 1].endswith("jobs.txt")
+    assert command[command.index("--visualization") + 1].endswith(
+        "visualization.txt"
+    )
 
     with pytest.raises(HTTPException, match="initial VR selection"):
         routes_vr.launch_vr(
@@ -1137,11 +1158,19 @@ def test_native_job_snapshot_is_private_bounded_and_url_safe() -> None:
             archived=False,
         )
     ]
-    path = _write_job_snapshot(rows, updated_at_ms=1_700_000_000_000)
+    path = _write_job_snapshot(
+        rows,
+        updated_at_ms=1_700_000_000_000,
+        active_job_engine="namd",
+        active_job_id="run 17/alpha",
+        representation="stick",
+        coloring="cpk",
+    )
     try:
         lines = path.read_text().splitlines()
         assert lines == [
-            "NADOCVR_JOBS 2 1 1 1 1 1700000000000",
+            "NADOCVR_JOBS 3 1 1 1 1 1700000000000 namd "
+            "run%2017%2Falpha stick cpk",
             "J 0 425 1 1 0 namd running run%2017%2Falpha - "
             "Production%20run%2017 NAMD%20-%20running%20-%2042.5%25",
         ]
@@ -1154,7 +1183,7 @@ def test_native_job_snapshot_is_private_bounded_and_url_safe() -> None:
     )
     try:
         assert unavailable.read_text() == (
-            "NADOCVR_JOBS 2 1 0 0 0 1700000000000\n"
+            "NADOCVR_JOBS 3 1 0 0 0 1700000000000 - - full strand\n"
         )
     finally:
         unavailable.unlink(missing_ok=True)
@@ -1175,7 +1204,14 @@ def test_native_job_feedback_atomically_advances_complete_revisions() -> None:
     try:
         first = _publish_job_feedback(
             {"job_path": str(path)},
-            VRJobsFeedbackRequest(jobs_snapshot_total=3, jobs=[row]),
+            VRJobsFeedbackRequest(
+                jobs_snapshot_total=3,
+                jobs=[row],
+                active_job_engine="oxdna",
+                active_job_id="production",
+                representation="ballstick",
+                coloring="base",
+            ),
             now_ms=1_700_000_001_500,
         )
         second = _publish_job_feedback(
@@ -1184,7 +1220,9 @@ def test_native_job_feedback_atomically_advances_complete_revisions() -> None:
             now_ms=1_700_000_003_000,
         )
         assert (first, second) == (2, 3)
-        assert path.read_text() == "NADOCVR_JOBS 2 3 0 1 0 1700000003000\n"
+        assert path.read_text() == (
+            "NADOCVR_JOBS 3 3 0 1 0 1700000003000 - - full strand\n"
+        )
         assert path.stat().st_mode & 0o777 == 0o600
         assert not path.with_name(f"{path.name}.next").exists()
     finally:
@@ -1192,6 +1230,47 @@ def test_native_job_feedback_atomically_advances_complete_revisions() -> None:
 
     with pytest.raises(HTTPException, match="not running"):
         _publish_job_feedback(None, VRJobsFeedbackRequest())
+    with pytest.raises(HTTPException, match="Invalid VR job snapshot"):
+        _publish_job_feedback(
+            {"job_path": str(path)},
+            VRJobsFeedbackRequest(
+                jobs_snapshot_total=0,
+                active_job_engine="namd",
+                active_job_id="missing",
+            ),
+        )
+
+
+def test_native_visualization_feed_rotates_positions_and_skips_duplicates() -> None:
+    token = _owner_token("base", "h0:4:FORWARD")
+    point = VRVisualizationPoint(
+        owner_token=token, position=[1.0, 2.0, 3.0], color=0x12ABEF,
+    )
+    rotation = np.array([[0, 1, 0], [-1, 0, 0], [0, 0, 1]], dtype=float)
+    path = _write_visualization_snapshot(
+        [point], mode="namd_display", view_rotation=rotation,
+    )
+    state = {"visualization_path": str(path), "view_rotation": rotation.tolist()}
+    body = VRVisualizationFeedbackRequest(
+        visualization_mode="namd_display", visualization_points=[point],
+    )
+    try:
+        assert path.read_text() == (
+            f"NADOCVR_VISUALIZATION 1 1 namd_display 1\n"
+            f"V {token} 2 -1 3 12abef\n"
+        )
+        assert _publish_visualization_feedback(state, body) == 1
+        changed = VRVisualizationFeedbackRequest(
+            visualization_mode="oxdna_rmsf",
+            visualization_points=[point.model_copy(update={"color": 0xFF0088})],
+        )
+        assert _publish_visualization_feedback(state, changed) == 2
+        assert path.read_text().startswith(
+            "NADOCVR_VISUALIZATION 1 2 oxdna_rmsf 1\n"
+        )
+        assert path.read_text().endswith("ff0088\n")
+    finally:
+        path.unlink(missing_ok=True)
 
 
 def test_scene_snapshot_writer_is_private_gzip_and_round_trips() -> None:
@@ -1228,21 +1307,31 @@ def test_streamed_manifest_detects_pose_contract_drift() -> None:
         )
 
 
-def test_runtime_status_requires_compositor_and_reports_dashboard(monkeypatch) -> None:
+def test_runtime_status_reports_dashboard_helpers_and_native_desktop(monkeypatch) -> None:
+    monkeypatch.setenv("DISPLAY", ":1")
+    monkeypatch.setenv("XDG_SESSION_TYPE", "x11")
     monkeypatch.setattr(
         routes_vr,
         "_process_names",
-        lambda: {"vrserver", "vrcompositor", "vrdashboard"},
+        lambda: {
+            "vrserver", "vrcompositor", "vrdashboard", "vrwebhelper",
+            "steamwebhelper",
+        },
     )
     assert routes_vr._runtime_payload() == {
         "steamvr_running": True,
         "dashboard_running": True,
+        "desktop_overlay_running": True,
+        "native_desktop_available": True,
     }
 
+    monkeypatch.delenv("DISPLAY")
     monkeypatch.setattr(routes_vr, "_process_names", lambda: {"vrserver"})
     assert routes_vr._runtime_payload() == {
         "steamvr_running": False,
         "dashboard_running": False,
+        "desktop_overlay_running": False,
+        "native_desktop_available": False,
     }
 
 
@@ -1266,7 +1355,12 @@ def test_build_environment_keeps_sbin_on_path_but_drops_conda() -> None:
 def test_start_steamvr_is_noop_when_runtime_and_dashboard_are_ready(
     monkeypatch,
 ) -> None:
-    ready = {"steamvr_running": True, "dashboard_running": True}
+    ready = {
+        "steamvr_running": True,
+        "dashboard_running": True,
+        "desktop_overlay_running": True,
+        "native_desktop_available": True,
+    }
     monkeypatch.setattr(routes_vr, "_runtime_payload", lambda: ready)
     monkeypatch.setattr(routes_vr, "_detach_hmd_from_desktop", lambda: None)
 
@@ -1285,8 +1379,18 @@ def test_start_steamvr_launches_steam_with_sanitized_environment(
     breaks vrmonitor's ability to find its own bundled Qt5 libs (observed:
     'vrmonitor: error while loading shared libraries: libQt5OpenGL.so.5'), so
     Steam must launch with the same sanitized environment as the native viewer."""
-    not_ready = {"steamvr_running": False, "dashboard_running": False}
-    ready = {"steamvr_running": True, "dashboard_running": True}
+    not_ready = {
+        "steamvr_running": False,
+        "dashboard_running": False,
+        "desktop_overlay_running": False,
+        "native_desktop_available": True,
+    }
+    ready = {
+        "steamvr_running": True,
+        "dashboard_running": True,
+        "desktop_overlay_running": True,
+        "native_desktop_available": True,
+    }
     payloads = iter([not_ready, ready])
     monkeypatch.setattr(routes_vr, "_runtime_payload", lambda: next(payloads))
     monkeypatch.setattr(routes_vr, "_detach_hmd_from_desktop", lambda: None)
@@ -1315,7 +1419,12 @@ def test_start_steamvr_launches_steam_with_sanitized_environment(
 def test_start_steamvr_detaches_hmd_even_when_already_ready(monkeypatch) -> None:
     """Regression test: process-name readiness doesn't prove direct mode ever
     succeeded, so the HMD must be detached on every call, not only fresh launches."""
-    ready = {"steamvr_running": True, "dashboard_running": True}
+    ready = {
+        "steamvr_running": True,
+        "dashboard_running": True,
+        "desktop_overlay_running": True,
+        "native_desktop_available": True,
+    }
     monkeypatch.setattr(routes_vr, "_runtime_payload", lambda: ready)
     calls: list[None] = []
     monkeypatch.setattr(

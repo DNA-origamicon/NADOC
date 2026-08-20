@@ -51,6 +51,7 @@ _FEEDBACK_LOCK = threading.Lock()
 _TOOL_FEEDBACK_LOCK = threading.Lock()
 _TOOL_EXECUTION_FEEDBACK_LOCK = threading.Lock()
 _JOB_FEEDBACK_LOCK = threading.Lock()
+_VISUALIZATION_FEEDBACK_LOCK = threading.Lock()
 
 SelectionKind = Literal[
     "none",
@@ -89,6 +90,14 @@ class VRJobSnapshotRow(BaseModel):
     archived: bool = False
 
 
+class VRVisualizationPoint(BaseModel):
+    """One browser-rendered base position and optional scalar-map color."""
+
+    owner_token: str = Field(min_length=1, max_length=2048)
+    position: list[float] = Field(min_length=3, max_length=3)
+    color: Optional[int] = Field(default=None, ge=0, le=0xFFFFFF)
+
+
 class VRLaunchRequest(BaseModel):
     browser_requested_at_ms: Optional[float] = Field(default=None, gt=0, lt=1e15)
     job_snapshot_ms: Optional[float] = Field(default=None, ge=0, lt=1e6)
@@ -106,6 +115,16 @@ class VRLaunchRequest(BaseModel):
     jobs_snapshot_available: bool = False
     jobs_snapshot_total: int = Field(default=0, ge=0, le=1_000_000)
     jobs: list[VRJobSnapshotRow] = Field(default_factory=list, max_length=64)
+    active_job_id: Optional[str] = Field(default=None, max_length=128)
+    active_job_engine: Optional[str] = Field(
+        default=None, max_length=24, pattern=r"^[a-z0-9_-]+$"
+    )
+    visualization_mode: str = Field(
+        default="none", min_length=1, max_length=32, pattern=r"^[a-z0-9_-]+$"
+    )
+    visualization_points: list[VRVisualizationPoint] = Field(
+        default_factory=list, max_length=200_000
+    )
 
 
 class VRJobsFeedbackRequest(BaseModel):
@@ -113,6 +132,27 @@ class VRJobsFeedbackRequest(BaseModel):
 
     jobs_snapshot_total: int = Field(default=0, ge=0, le=1_000_000)
     jobs: list[VRJobSnapshotRow] = Field(default_factory=list, max_length=64)
+    active_job_id: Optional[str] = Field(default=None, max_length=128)
+    active_job_engine: Optional[str] = Field(
+        default=None, max_length=24, pattern=r"^[a-z0-9_-]+$"
+    )
+    representation: Literal["cylinders", "full", "ballstick", "stick"] = "full"
+    coloring: Literal["strand", "base", "cluster", "cpk"] = "strand"
+    visualization_mode: str = Field(
+        default="none", min_length=1, max_length=32, pattern=r"^[a-z0-9_-]+$"
+    )
+    visualization_points: list[VRVisualizationPoint] = Field(
+        default_factory=list, max_length=200_000
+    )
+
+
+class VRVisualizationFeedbackRequest(BaseModel):
+    visualization_mode: str = Field(
+        default="none", min_length=1, max_length=32, pattern=r"^[a-z0-9_-]+$"
+    )
+    visualization_points: list[VRVisualizationPoint] = Field(
+        default_factory=list, max_length=200_000
+    )
 
 
 class VRFeedbackRequest(BaseModel):
@@ -2818,6 +2858,17 @@ def _runtime_payload() -> dict[str, bool]:
     return {
         "steamvr_running": "vrserver" in names and "vrcompositor" in names,
         "dashboard_running": "vrdashboard" in names,
+        # The legacy dashboard process alone does not prove that its browser-backed
+        # Steam/Desktop surfaces exist. Report the two UI helpers independently so
+        # a blank Linux overlay is no longer misreported as fully ready.
+        "desktop_overlay_running": (
+            "steamwebhelper" in names and "vrwebhelper" in names
+        ),
+        # The native viewer has an X11 root-capture fallback in its controller tablet.
+        "native_desktop_available": (
+            bool(os.environ.get("DISPLAY"))
+            and os.environ.get("XDG_SESSION_TYPE", "x11").lower() == "x11"
+        ),
     }
 
 
@@ -2849,7 +2900,11 @@ def _start_steamvr() -> dict[str, bool]:
     with _RUNTIME_LOCK:
         _detach_hmd_from_desktop()
         status = _runtime_payload()
-        if status["steamvr_running"] and status["dashboard_running"]:
+        if (
+            status["steamvr_running"]
+            and status["dashboard_running"]
+            and status["desktop_overlay_running"]
+        ):
             return status
         steam = Path("/usr/bin/steam")
         if not steam.is_file():
@@ -2878,7 +2933,11 @@ def _start_steamvr() -> dict[str, bool]:
         deadline = time.monotonic() + 60.0
         while time.monotonic() < deadline:
             status = _runtime_payload()
-            if status["steamvr_running"] and status["dashboard_running"]:
+            if (
+                status["steamvr_running"]
+                and status["dashboard_running"]
+                and status["desktop_overlay_running"]
+            ):
                 return status
             time.sleep(0.25)
         status = _runtime_payload()
@@ -2905,6 +2964,7 @@ def _cleanup_after_process(
     preflight_feedback_path: Path,
     tool_execution_feedback_path: Path,
     job_path: Path,
+    visualization_path: Path,
 ) -> None:
     process.wait()
     scene_path.unlink(missing_ok=True)
@@ -2915,6 +2975,7 @@ def _cleanup_after_process(
     preflight_feedback_path.unlink(missing_ok=True)
     tool_execution_feedback_path.unlink(missing_ok=True)
     job_path.unlink(missing_ok=True)
+    visualization_path.unlink(missing_ok=True)
     with _STATE_LOCK:
         state = _read_state()
         if state and int(state["pid"]) == process.pid:
@@ -3838,6 +3899,8 @@ def vr_tool_execution_feedback(
 def _write_job_snapshot(
     rows: list[VRJobSnapshotRow], *, available: bool = True, total: int | None = None,
     sequence: int = 1, updated_at_ms: int | None = None,
+    active_job_id: str | None = None, active_job_engine: str | None = None,
+    representation: str = "full", coloring: str = "strand",
 ) -> Path:
     """Write the initial private, whitespace-safe native live-job feed."""
     if updated_at_ms is None:
@@ -3850,26 +3913,130 @@ def _write_job_snapshot(
     ) as job_file:
         job_file.write(_job_snapshot_record(
             rows, available=available, total=total, sequence=sequence,
-            updated_at_ms=updated_at_ms,
+            updated_at_ms=updated_at_ms, active_job_id=active_job_id,
+            active_job_engine=active_job_engine, representation=representation,
+            coloring=coloring,
         ))
         job_path = Path(job_file.name)
     job_path.chmod(0o600)
     return job_path
 
 
+def _visualization_snapshot_record(
+    points: list[VRVisualizationPoint], *, sequence: int, mode: str,
+    view_rotation: np.ndarray,
+) -> str:
+    """Serialize the live desktop display as a bounded, atomic native feed."""
+    if not 1 <= sequence <= 2**53 - 1:
+        raise ValueError("Invalid VR visualization sequence.")
+    rotation = np.asarray(view_rotation, dtype=float)
+    if rotation.shape != (3, 3) or not np.all(np.isfinite(rotation)):
+        raise ValueError("Invalid VR visualization view rotation.")
+    seen: set[str] = set()
+    lines = [f"NADOCVR_VISUALIZATION 1 {sequence} {mode} {len(points)}"]
+    for point in points:
+        position = np.asarray(point.position, dtype=float)
+        if (
+            point.owner_token in seen
+            or any(character.isspace() for character in point.owner_token)
+            or position.shape != (3,)
+            or not np.all(np.isfinite(position))
+            or np.max(np.abs(position)) > 1e9
+        ):
+            raise ValueError("Invalid VR visualization point.")
+        seen.add(point.owner_token)
+        transformed = rotation @ position
+        color = "-" if point.color is None else f"{point.color:06x}"
+        lines.append(
+            f"V {point.owner_token} "
+            f"{transformed[0]:.7g} {transformed[1]:.7g} {transformed[2]:.7g} "
+            f"{color}"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _write_visualization_snapshot(
+    points: list[VRVisualizationPoint], *, mode: str, view_rotation: np.ndarray,
+) -> Path:
+    with tempfile.NamedTemporaryFile(
+        mode="w", prefix="nadoc-vr-visualization-", suffix=".txt", delete=False,
+    ) as visualization_file:
+        visualization_file.write(
+            _visualization_snapshot_record(
+                points, sequence=1, mode=mode, view_rotation=view_rotation,
+            )
+        )
+        path = Path(visualization_file.name)
+    path.chmod(0o600)
+    return path
+
+
+def _publish_visualization_feedback(
+    state: dict | None,
+    body: VRJobsFeedbackRequest | VRVisualizationFeedbackRequest,
+) -> int:
+    if not state or not state.get("visualization_path"):
+        raise HTTPException(409, detail="Native VR is not running.")
+    path = Path(state["visualization_path"])
+    temporary = path.with_name(f"{path.name}.next")
+    with _VISUALIZATION_FEEDBACK_LOCK:
+        try:
+            current_record = path.read_text()
+            header = current_record.splitlines()[0].split()
+            if len(header) != 5 or header[:2] != ["NADOCVR_VISUALIZATION", "1"]:
+                raise ValueError("invalid VR visualization header")
+            current_sequence = int(header[2])
+            sequence = current_sequence + 1
+            record = _visualization_snapshot_record(
+                body.visualization_points,
+                sequence=sequence,
+                mode=body.visualization_mode,
+                view_rotation=np.asarray(state["view_rotation"], dtype=float),
+            )
+            current_payload = current_record.split("\n", 1)[1]
+            next_payload = record.split("\n", 1)[1]
+            if header[3] == body.visualization_mode and current_payload == next_payload:
+                return current_sequence
+            temporary.write_text(record)
+            temporary.chmod(0o600)
+            os.replace(temporary, path)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            temporary.unlink(missing_ok=True)
+            raise HTTPException(
+                503, detail="Could not publish VR visualization."
+            ) from exc
+    return sequence
+
+
 def _job_snapshot_record(
     rows: list[VRJobSnapshotRow], *, available: bool, total: int | None,
-    sequence: int, updated_at_ms: int,
+    sequence: int, updated_at_ms: int, active_job_id: str | None = None,
+    active_job_engine: str | None = None, representation: str = "full",
+    coloring: str = "strand",
 ) -> str:
     """Serialize one bounded feed revision for atomic publication."""
     resolved_total = len(rows) if total is None else total
     if not 1 <= sequence <= 2**53 - 1 or not 0 < updated_at_ms < 10**15:
         raise ValueError("Invalid VR job feed sequence or timestamp.")
-    if resolved_total < len(rows) or (not available and (rows or resolved_total)):
+    active_pair = (active_job_engine, active_job_id)
+    active_present = active_pair != (None, None)
+    if (
+        resolved_total < len(rows)
+        or (not available and (rows or resolved_total or active_present))
+        or (active_job_engine is None) != (active_job_id is None)
+        or (active_present and not any(
+            row.engine == active_job_engine and row.job_id == active_job_id
+            for row in rows
+        ))
+        or representation not in {"cylinders", "full", "ballstick", "stick"}
+        or coloring not in {"strand", "base", "cluster", "cpk"}
+    ):
         raise ValueError("Invalid VR job feed availability or total.")
     lines = [
-        f"NADOCVR_JOBS 2 {sequence} {len(rows)} {int(available)} "
-        f"{resolved_total} {updated_at_ms}"
+        f"NADOCVR_JOBS 3 {sequence} {len(rows)} {int(available)} "
+        f"{resolved_total} {updated_at_ms} "
+        f"{quote(active_job_engine or '-', safe='')} "
+        f"{quote(active_job_id or '-', safe='')} {representation} {coloring}"
     ]
     for row in rows:
         fields = (
@@ -3895,14 +4062,27 @@ def _publish_job_feedback(
     """Atomically replace the running viewer feed with a newer complete record."""
     if not state or not state.get("job_path"):
         raise HTTPException(409, detail="Native VR is not running.")
-    if body.jobs_snapshot_total < len(body.jobs):
+    if (
+        body.jobs_snapshot_total < len(body.jobs)
+        or (body.active_job_engine is None) != (body.active_job_id is None)
+        or (
+            body.active_job_id is not None
+            and not any(
+                row.engine == body.active_job_engine
+                and row.job_id == body.active_job_id
+                for row in body.jobs
+            )
+        )
+    ):
         raise HTTPException(422, detail="Invalid VR job snapshot total.")
     path = Path(state["job_path"])
     temporary = path.with_name(f"{path.name}.next")
     with _JOB_FEEDBACK_LOCK:
         try:
             header = path.read_text().splitlines()[0].split()
-            if len(header) == 7 and header[:2] == ["NADOCVR_JOBS", "2"]:
+            if len(header) == 11 and header[:2] == ["NADOCVR_JOBS", "3"]:
+                current_sequence = int(header[2])
+            elif len(header) == 7 and header[:2] == ["NADOCVR_JOBS", "2"]:
                 current_sequence = int(header[2])
             elif len(header) == 5 and header[:2] == ["NADOCVR_JOBS", "1"]:
                 current_sequence = 0
@@ -3917,6 +4097,10 @@ def _publish_job_feedback(
                 updated_at_ms=(
                     now_ms if now_ms is not None else int(time.time() * 1000)
                 ),
+                active_job_id=body.active_job_id,
+                active_job_engine=body.active_job_engine,
+                representation=body.representation,
+                coloring=body.coloring,
             )
             temporary.write_text(record)
             temporary.chmod(0o600)
@@ -3930,8 +4114,24 @@ def _publish_job_feedback(
 @router.post("/vr/jobs-feedback")
 def vr_jobs_feedback(body: VRJobsFeedbackRequest, request: Request) -> dict:
     _require_local(request)
-    sequence = _publish_job_feedback(_read_state(), body)
-    return {"acknowledged": True, "sequence": sequence}
+    state = _read_state()
+    sequence = _publish_job_feedback(state, body)
+    visualization_sequence = _publish_visualization_feedback(state, body)
+    return {
+        "acknowledged": True,
+        "sequence": sequence,
+        "visualization_sequence": visualization_sequence,
+    }
+
+
+@router.post("/vr/visualization-feedback")
+def vr_visualization_feedback(
+    body: VRVisualizationFeedbackRequest, request: Request,
+) -> dict:
+    """Publish only the desktop display overlay; native job navigation is archived."""
+    _require_local(request)
+    sequence = _publish_visualization_feedback(_read_state(), body)
+    return {"acknowledged": True, "visualization_sequence": sequence}
 
 
 def _viewer_command(
@@ -3943,6 +4143,7 @@ def _viewer_command(
     preflight_feedback_path: Path,
     tool_execution_feedback_path: Path,
     job_path: Path,
+    visualization_path: Path,
     body: VRLaunchRequest,
 ) -> list[str]:
     command = [
@@ -3964,6 +4165,8 @@ def _viewer_command(
         str(tool_execution_feedback_path),
         "--jobs",
         str(job_path),
+        "--visualization",
+        str(visualization_path),
     ]
     for token in body.selected_owner_tokens:
         command.extend(["--selected-owner", token])
@@ -4030,7 +4233,8 @@ def start_vr_runtime(request: Request) -> dict:
     return {
         **_start_steamvr(),
         "desktop_hint": (
-            "Press the Vive System button, then select Desktop in the SteamVR dashboard."
+            "Launch NADOC VR, open its controller menu, and select Desktop. "
+            "The Vive System button and SteamVR Desktop remain available as a fallback."
         ),
         "log_path": str(_STEAMVR_LOG_PATH),
     }
@@ -4058,6 +4262,15 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
     if (
         (not body.jobs_snapshot_available and (body.jobs or body.jobs_snapshot_total))
         or body.jobs_snapshot_total < len(body.jobs)
+        or (body.active_job_engine is None) != (body.active_job_id is None)
+        or (
+            body.active_job_id is not None
+            and not any(
+                row.engine == body.active_job_engine
+                and row.job_id == body.active_job_id
+                for row in body.jobs
+            )
+        )
     ):
         raise HTTPException(422, detail="Invalid VR job snapshot availability or total.")
 
@@ -4153,6 +4366,16 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             body.jobs,
             available=body.jobs_snapshot_available,
             total=body.jobs_snapshot_total,
+            active_job_id=body.active_job_id,
+            active_job_engine=body.active_job_engine,
+            representation=body.representation,
+            coloring=body.coloring,
+        )
+        view_rotation = _view_rotation(body.camera)
+        visualization_path = _write_visualization_snapshot(
+            body.visualization_points,
+            mode=body.visualization_mode,
+            view_rotation=view_rotation,
         )
 
         log = _LOG_PATH.open("ab")
@@ -4161,7 +4384,8 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
                 _viewer_command(
                     scene_path, event_path, feedback_path, tool_feedback_path,
                     plane_feedback_path, preflight_feedback_path,
-                    tool_execution_feedback_path, job_path, body
+                    tool_execution_feedback_path, job_path,
+                    visualization_path, body
                 ),
                 cwd=_REPO_ROOT,
                 env=_build_environment(),
@@ -4181,6 +4405,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             preflight_feedback_path.unlink(missing_ok=True)
             tool_execution_feedback_path.unlink(missing_ok=True)
             job_path.unlink(missing_ok=True)
+            visualization_path.unlink(missing_ok=True)
             raise HTTPException(
                 503, detail=f"Could not launch VR viewer: {exc}"
             ) from exc
@@ -4198,6 +4423,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             preflight_feedback_path.unlink(missing_ok=True)
             tool_execution_feedback_path.unlink(missing_ok=True)
             job_path.unlink(missing_ok=True)
+            visualization_path.unlink(missing_ok=True)
             detail = "Native VR viewer exited during startup."
             try:
                 tail = _LOG_PATH.read_text(errors="replace").splitlines()[-1]
@@ -4217,6 +4443,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             "preflight_feedback_path": str(preflight_feedback_path),
             "tool_execution_feedback_path": str(tool_execution_feedback_path),
             "job_path": str(job_path),
+            "visualization_path": str(visualization_path),
             "started_at": process_started_at,
             "launch_requested_at": launch_requested_at,
             "browser_requested_at": (
@@ -4228,7 +4455,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             "snapshot_started_at": snapshot_started_at,
             "snapshot_ready_at": snapshot_ready_at,
             "process_started_at": process_started_at,
-            "view_rotation": _view_rotation(body.camera).tolist(),
+            "view_rotation": view_rotation.tolist(),
         }
         _write_state(state)
         threading.Thread(
@@ -4236,7 +4463,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             args=(
                 process, scene_path, event_path, feedback_path, tool_feedback_path,
                 plane_feedback_path, preflight_feedback_path,
-                tool_execution_feedback_path, job_path,
+                tool_execution_feedback_path, job_path, visualization_path,
             ),
             daemon=True,
             name="nadoc-vr-cleanup",

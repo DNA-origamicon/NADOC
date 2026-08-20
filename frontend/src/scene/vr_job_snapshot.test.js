@@ -69,4 +69,18 @@ describe('buildVRJobSnapshot', () => {
     expect(buildVRJobSnapshot(jobs, 0)).toEqual([])
     expect(buildVRJobSnapshot(jobs).every(row => !/[\r\n]/.test(row.label))).toBe(true)
   })
+
+  it('prioritizes the desktop-selected job inside the bounded companion context', () => {
+    const jobs = Array.from({ length: VR_JOB_SNAPSHOT_LIMIT + 4 }, (_, index) => ({
+      job_id: `job-${index}`,
+      engine: 'namd',
+      status: 'completed',
+      created_at: index,
+    }))
+    const rows = buildVRJobSnapshot(
+      jobs, VR_JOB_SNAPSHOT_LIMIT, { engine: 'namd', id: 'job-0' },
+    )
+    expect(rows).toHaveLength(VR_JOB_SNAPSHOT_LIMIT)
+    expect(rows[0].job_id).toBe('job-0')
+  })
 })

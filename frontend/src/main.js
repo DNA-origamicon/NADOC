@@ -16,6 +16,7 @@
 import * as THREE from 'three'
 import { initScene }                 from './scene/scene.js'
 import { initVRSession }             from './scene/vr_session.js'
+import { buildVRVisualizationSnapshot } from './scene/vr_visualization_snapshot.js'
 import { initialVRToolShellState, reduceVRToolShell } from './scene/vr_tool_shell.js'
 import { createVRToolTransactionCoordinator } from './scene/vr_tool_transaction.js'
 import {
@@ -5791,7 +5792,11 @@ async function main() {
       showToast('SteamVR started, but its Dashboard is still loading. Try the Vive System button shortly.')
       return
     }
-    showToast('SteamVR is ready. Press the Vive System button and select Desktop to control NADOC.')
+    if (!status.desktop_overlay_running) {
+      showToast('SteamVR is ready, but its desktop helper is still loading. NADOC VR’s Menu → Desktop remains available.')
+      return
+    }
+    showToast('SteamVR is ready. In NADOC VR, open the controller menu and select Desktop for the live interactive desktop.')
   })
 
   let _vrToolShellState = initialVRToolShellState
@@ -5867,6 +5872,34 @@ async function main() {
       { waitingReason: designChanged ? 'design_changed' : 'geometry_changed' },
     )
   })
+  const _vrCompanionState = () => {
+    const visualizations = [
+      [mdDisplayController, 'namd'], [mdViz, 'namd'],
+      [oxdnaDisplay, 'oxdna'], [lammpsDisplay, 'lammps'],
+      [snupiDisplay, 'snupi'], [bladeDisplay, 'blade'],
+      [candoDisplay, 'cando'], [mrdnaDisplay, 'mrdna'],
+    ]
+    const activeVisualization = visualizations.find(([controller]) => {
+      const mode = controller?.mode?.()
+      return controller?.isActive?.() || controller?.deformActive?.() ||
+        (mode != null && mode !== 'off')
+    })
+    const activeMode = activeVisualization
+      ? `${activeVisualization[1]}_${activeVisualization[0].mode?.() || 'display'}`
+      : 'none'
+    return {
+      representation: ['cylinders', 'full', 'ballstick', 'stick'].includes(_currentRepr)
+        ? _currentRepr : 'full',
+      coloring: ['strand', 'base', 'cluster', 'cpk'].includes(store.getState().coloringMode)
+        ? store.getState().coloringMode : 'strand',
+      ...buildVRVisualizationSnapshot(
+        designRenderer.getFemPositions?.(),
+        designRenderer.getScalarColors?.(),
+        activeMode,
+      ),
+    }
+  }
+
   initVRSession({
     renderer,
     scene,
@@ -5879,13 +5912,10 @@ async function main() {
       status: api.getVRStatus,
       event: api.getVREvent,
       launch: () => api.launchNativeVR({
+        ..._vrCompanionState(),
         camera: captureCurrentCamera(),
         measured_positioning: isNewPositioningOn(),
         assembly_active: store.getState().assemblyActive,
-        representation: ['cylinders', 'full', 'ballstick', 'stick'].includes(_currentRepr)
-          ? _currentRepr : 'full',
-        coloring: ['strand', 'base', 'cluster', 'cpk'].includes(store.getState().coloringMode)
-          ? store.getState().coloringMode : 'strand',
         show_periodic_seam_arcs: store.getState().showPeriodicSeamArcs === true,
         selection_level: selectionManager.getSelectionLevel?.() ?? 'default',
         selected_owner_tokens: selectionManager.getVRInitialSelectionOwnerTokens?.() ?? [],
@@ -5894,6 +5924,7 @@ async function main() {
       stop: api.stopNativeVR,
       errorMessage: api.lastErrorMessage,
     },
+    publishNativeJobs: () => api.refreshNativeVRVisualization(_vrCompanionState()),
     onNativeEvent: event => {
       const button = document.getElementById('menu-help-view-vr')
       if (event?.type === 'selection_level') {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <charconv>
 #include <cctype>
 #include <cstdint>
@@ -32,6 +33,10 @@ struct JobSnapshot {
     int total = 0;
     uint64_t sequence = 0;
     uint64_t updatedAtMs = 0;
+    std::string activeEngine;
+    std::string activeJobId;
+    std::string representation;
+    std::string coloring;
     std::vector<JobSnapshotRow> rows;
 };
 
@@ -108,11 +113,15 @@ inline JobSnapshot loadJobSnapshot(const std::string& path) {
     std::string totalToken;
     std::string sequenceToken;
     std::string updatedAtToken;
+    std::string activeEngineToken;
+    std::string activeJobToken;
+    std::string representationToken;
+    std::string coloringToken;
     std::string extra;
     if (!(headerStream >> magic >> versionToken) || magic != "NADOCVR_JOBS") {
         throw std::runtime_error("invalid VR job snapshot header");
     }
-    const int version = strictJobInteger(versionToken, 1, 2);
+    const int version = strictJobInteger(versionToken, 1, 3);
     uint64_t sequence = 0;
     uint64_t updatedAtMs = 0;
     if (version == 1) {
@@ -120,9 +129,17 @@ inline JobSnapshot loadJobSnapshot(const std::string& path) {
             headerStream >> extra) {
             throw std::runtime_error("invalid VR job snapshot header");
         }
-    } else {
+    } else if (version == 2) {
         if (!(headerStream >> sequenceToken >> countToken >> availableToken >> totalToken >>
               updatedAtToken) || headerStream >> extra) {
+            throw std::runtime_error("invalid VR job snapshot header");
+        }
+        sequence = strictJobUnsigned(sequenceToken, 1, 9'007'199'254'740'991ULL);
+        updatedAtMs = strictJobUnsigned(updatedAtToken, 1, 999'999'999'999'999ULL);
+    } else {
+        if (!(headerStream >> sequenceToken >> countToken >> availableToken >> totalToken >>
+              updatedAtToken >> activeEngineToken >> activeJobToken >>
+              representationToken >> coloringToken) || headerStream >> extra) {
             throw std::runtime_error("invalid VR job snapshot header");
         }
         sequence = strictJobUnsigned(sequenceToken, 1, 9'007'199'254'740'991ULL);
@@ -133,6 +150,30 @@ inline JobSnapshot loadJobSnapshot(const std::string& path) {
     const int total = strictJobInteger(totalToken, 0, 1'000'000);
     if (total < count || (!available && total != 0)) {
         throw std::runtime_error("invalid VR job snapshot total");
+    }
+    std::string activeEngine;
+    std::string activeJobId;
+    std::string representation;
+    std::string coloring;
+    if (version >= 3) {
+        activeEngine = decodeJobField(activeEngineToken, 24);
+        activeJobId = decodeJobField(activeJobToken, 128);
+        if (activeEngine == "-") activeEngine.clear();
+        if (activeJobId == "-") activeJobId.clear();
+        representation = decodeJobField(representationToken, 16);
+        coloring = decodeJobField(coloringToken, 16);
+        static const std::unordered_set<std::string> representations = {
+            "cylinders", "full", "ballstick", "stick",
+        };
+        static const std::unordered_set<std::string> colorings = {
+            "strand", "base", "cluster", "cpk",
+        };
+        if (activeEngine.empty() != activeJobId.empty() ||
+            (!activeEngine.empty() && !validJobWord(activeEngine, 24)) ||
+            representations.find(representation) == representations.end() ||
+            colorings.find(coloring) == colorings.end()) {
+            throw std::runtime_error("invalid VR companion state");
+        }
     }
 
     std::vector<JobSnapshotRow> rows;
@@ -170,13 +211,23 @@ inline JobSnapshot loadJobSnapshot(const std::string& path) {
         }
         rows.push_back(std::move(row));
     }
+    if (!activeJobId.empty() && std::none_of(
+            rows.begin(), rows.end(), [&](const JobSnapshotRow& row) {
+                return row.engine == activeEngine && row.jobId == activeJobId;
+            })) {
+        throw std::runtime_error("active VR job is missing from snapshot");
+    }
     std::string trailing;
     while (std::getline(input, trailing)) {
         if (trailing.find_first_not_of(" \t\r") != std::string::npos) {
             throw std::runtime_error("unexpected VR job snapshot data");
         }
     }
-    return {available, total, sequence, updatedAtMs, std::move(rows)};
+    return {
+        available, total, sequence, updatedAtMs,
+        std::move(activeEngine), std::move(activeJobId),
+        std::move(representation), std::move(coloring), std::move(rows),
+    };
 }
 
 }  // namespace nadoc_vr

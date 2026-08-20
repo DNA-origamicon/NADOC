@@ -109,6 +109,7 @@ describe('selection architecture — canonical enforcement', () => {
     expect(select).toContain('function _selectVrIdentities')
     expect(select).toContain('selectedOwnerTokens')
     expect(select).toContain('selectionController.replace')
+    expect(select).toMatch(/bounded\.length === 0[\s\S]*?_clearAll\(\)/)
     expect(select).not.toContain('store.setState')
     expect(main).toMatch(/selectVRIdentity[\s\S]*sendVRFeedback/)
     expect(main).toContain('selected_owner_tokens: result?.selectedOwnerTokens ?? []')

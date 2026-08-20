@@ -1,6 +1,7 @@
 #include "interaction.hpp"
 #include "jobs.hpp"
 #include "picking.hpp"
+#include "visualization.hpp"
 
 #include <glm/gtc/epsilon.hpp>
 
@@ -110,6 +111,12 @@ void menuFollowsItsControllerAndDockingFreezesItsWorldPose() {
     hands[1] = {true, false, {-0.2F, 0.1F, -0.4F}, {1, 0, 0, 0}};
     menu.open(0, hands, {0, 0, -1}, {1, 0, 0, 0});
     const glm::vec3 initial = menu.position();
+    require(std::abs(
+        menu.localPoint(hands[0].position).x + MenuPlacement::kMenuHalfWidth)
+        < 1e-5F);
+    const glm::quat expectedTilt = glm::angleAxis(
+        glm::radians(-38.0F), glm::vec3(1.0F, 0.0F, 0.0F));
+    require(std::abs(glm::dot(menu.orientation(), expectedTilt)) > 1.0F - 1e-5F);
 
     hands[0].position += glm::vec3(0.25F, -0.10F, 0.05F);
     hands[0].orientation = glm::angleAxis(
@@ -129,6 +136,9 @@ void menuFollowsItsControllerAndDockingFreezesItsWorldPose() {
 
     menu.toggleDock(1, hands);
     require(!menu.worldDocked() && menu.anchorHand() == 1U);
+    require(std::abs(
+        menu.localPoint(hands[1].position).x - MenuPlacement::kMenuHalfWidth)
+        < 1e-5F);
     const glm::vec3 followed = menu.position();
     hands[1].position.x += 0.2F;
     menu.update(hands);
@@ -164,6 +174,15 @@ void vrSelectionLevelCycleMatchesDesktopTabOrder() {
     require(nadoc_vr::nextTabSelectionLevel("end") == "xover");
     require(nadoc_vr::nextTabSelectionLevel("xover") == "base");
     require(nadoc_vr::nextTabSelectionLevel("base") == "default");
+}
+
+void menuHoverHapticsTickOnlyWhenEnteringOrChangingControls() {
+    require(!nadoc_vr::menuHoverHapticRequested(-1, -1));
+    require(nadoc_vr::menuHoverHapticRequested(-1, 4));
+    require(!nadoc_vr::menuHoverHapticRequested(4, 4));
+    require(nadoc_vr::menuHoverHapticRequested(4, 5));
+    require(!nadoc_vr::menuHoverHapticRequested(5, -1));
+    require(nadoc_vr::menuHoverHapticRequested(-1, 5));
 }
 
 void selectionVolumeScrollResizesPreciselyAndStaysBounded() {
@@ -238,6 +257,13 @@ void menuScalingKeepsRenderingAndHitCoordinatesAligned() {
     require(glm::all(glm::epsilonEqual(
         menu.localPoint(menu.worldPoint(local)), local, 1e-5F)));
 
+    const float leftEdgeBefore = menu.localPoint(hands[0].position).x;
+    require(std::abs(leftEdgeBefore + MenuPlacement::kMenuHalfWidth) < 1e-5F);
+    require(menu.adjustScale(1));
+    require(std::abs(
+        menu.localPoint(hands[0].position).x + MenuPlacement::kMenuHalfWidth)
+        < 1e-5F);
+
     while (menu.adjustScale(-1)) {}
     require(std::abs(menu.scale() - MenuPlacement::kMinimumScale) < 1e-5F);
     require(!menu.adjustScale(-1));
@@ -246,6 +272,25 @@ void menuScalingKeepsRenderingAndHitCoordinatesAligned() {
     require(!menu.adjustScale(1));
     require(glm::all(glm::epsilonEqual(
         menu.localPoint(menu.worldPoint(local)), local, 1e-5F)));
+}
+
+void menuRayPanelHitExistsOnlyInsideTheVisibleTablet() {
+    MenuPlacement menu;
+    std::array<HandPose, 2> hands{};
+    menu.open(0, hands, {0, 0, -1}, {1, 0, 0, 0});
+    const glm::vec2 minimum(-MenuPlacement::kMenuHalfWidth, -0.545F);
+    const glm::vec2 maximum(MenuPlacement::kMenuHalfWidth, 0.33F);
+
+    HandPose ray{true, false, {0, 0, 0}, {1, 0, 0, 0}};
+    const auto center = menu.rayPanelLocalPoint(ray, minimum, maximum);
+    require(center && glm::length(*center) < 1e-5F);
+
+    ray.position.x = 1.0F;
+    require(!menu.rayPanelLocalPoint(ray, minimum, maximum));
+    ray.position.x = 0.0F;
+    ray.orientation = glm::angleAxis(
+        glm::radians(180.0F), glm::vec3(0.0F, 1.0F, 0.0F));
+    require(!menu.rayPanelLocalPoint(ray, minimum, maximum));
 }
 
 void pendingToolDragAccumulatesInModelSpaceAndCancelsExactly() {
@@ -803,6 +848,16 @@ void jobSnapshotParserPreservesIdentityStatusAndRejectsAmbiguity() {
 
     {
         std::ofstream output(path);
+        output << "NADOCVR_JOBS 3 8 1 1 1 1700000002000 namd run%2017 stick cpk\n"
+               << "J 0 425 1 0 0 namd running run%2017 - Production "
+                  "NAMD%20-%20running%20-%2042.5%25\n";
+    }
+    const auto companion = nadoc_vr::loadJobSnapshot(path.string());
+    require(companion.activeEngine == "namd" && companion.activeJobId == "run 17");
+    require(companion.representation == "stick" && companion.coloring == "cpk");
+
+    {
+        std::ofstream output(path);
         output << "NADOCVR_JOBS 1 2 1 2\n"
                << "J 0 0 0 0 0 namd queued duplicate - First waiting\n"
                << "J 0 0 0 0 0 namd queued duplicate - Second waiting\n";
@@ -810,6 +865,53 @@ void jobSnapshotParserPreservesIdentityStatusAndRejectsAmbiguity() {
     bool rejected = false;
     try {
         (void)nadoc_vr::loadJobSnapshot(path.string());
+    } catch (const std::runtime_error&) {
+        rejected = true;
+    }
+    require(rejected);
+
+    {
+        std::ofstream output(path);
+        output << "NADOCVR_JOBS 3 9 0 1 0 1700000003000 namd missing full strand\n";
+    }
+    rejected = false;
+    try {
+        (void)nadoc_vr::loadJobSnapshot(path.string());
+    } catch (const std::runtime_error&) {
+        rejected = true;
+    }
+    std::filesystem::remove(path);
+    require(rejected);
+}
+
+void visualizationSnapshotParserPreservesPositionsColorsAndRejectsDuplicates() {
+    const auto path = std::filesystem::temp_directory_path() /
+                      "nadoc-vr-visualization-test.txt";
+    {
+        std::ofstream output(path);
+        output << "NADOCVR_VISUALIZATION 1 7 namd_rmsf 2\n"
+               << "V %5B%22base%22%2C%22h0%3A4%3AFORWARD%22%5D 1 2 3 12abef\n"
+               << "V %5B%22base%22%2C%22h0%3A5%3AFORWARD%22%5D -1 0.5 8 -\n";
+    }
+    const auto snapshot = nadoc_vr::loadVisualizationSnapshot(path.string());
+    require(snapshot.sequence == 7 && snapshot.mode == "namd_rmsf");
+    require(snapshot.points.size() == 2 && snapshot.points[0].hasColor);
+    require(glm::all(glm::epsilonEqual(
+        snapshot.points[0].position, glm::vec3(1, 2, 3), 1.0e-6F)));
+    require(glm::all(glm::epsilonEqual(
+        snapshot.points[0].color,
+        glm::vec3(0x12 / 255.0F, 0xab / 255.0F, 0xef / 255.0F), 1.0e-6F)));
+    require(!snapshot.points[1].hasColor);
+
+    {
+        std::ofstream output(path);
+        output << "NADOCVR_VISUALIZATION 1 8 flex 2\n"
+               << "V duplicate 1 2 3 -\n"
+               << "V duplicate 4 5 6 ffffff\n";
+    }
+    bool rejected = false;
+    try {
+        (void)nadoc_vr::loadVisualizationSnapshot(path.string());
     } catch (const std::runtime_error&) {
         rejected = true;
     }
@@ -827,8 +929,10 @@ int main() {
     closeInspectionAllowsTheModelToPassThroughTheHead();
     menuFollowsItsControllerAndDockingFreezesItsWorldPose();
     menuScalingKeepsRenderingAndHitCoordinatesAligned();
+    menuRayPanelHitExistsOnlyInsideTheVisibleTablet();
     expandedQuickViewEasesAndReversesWithoutSnapping();
     vrSelectionLevelCycleMatchesDesktopTabOrder();
+    menuHoverHapticsTickOnlyWhenEnteringOrChangingControls();
     selectionVolumeScrollResizesPreciselyAndStaysBounded();
     selectionVolumeOverlapMatchesRenderedPrimitiveVolumes();
     selectionVolumeUsesDesktopFilterOwner();
@@ -852,4 +956,5 @@ int main() {
     toolExecutionFeedbackIsStrictSequencedAndTransactionBound();
     parameterizedToolDraftsResetOnTargetChangesAndStayBounded();
     jobSnapshotParserPreservesIdentityStatusAndRejectsAmbiguity();
+    visualizationSnapshotParserPreservesPositionsColorsAndRejectsDuplicates();
 }

@@ -62,7 +62,9 @@ function _jobLabel(node) {
  * launch snapshot. This is display-only: the engine-qualified job identity is
  * retained for later intents, but no job action is exposed by this contract.
  */
-export function buildVRJobSnapshot(nodes, limit = VR_JOB_SNAPSHOT_LIMIT) {
+export function buildVRJobSnapshot(
+  nodes, limit = VR_JOB_SNAPSHOT_LIMIT, activeJob = null,
+) {
   const boundedLimit = Math.max(0, Math.min(VR_JOB_SNAPSHOT_LIMIT, Number(limit) || 0))
   if (!Array.isArray(nodes) || boundedLimit === 0) return []
 
@@ -70,7 +72,13 @@ export function buildVRJobSnapshot(nodes, limit = VR_JOB_SNAPSHOT_LIMIT) {
     node && typeof node.job_id === 'string' && node.job_id &&
     typeof node.engine === 'string' && node.engine &&
     typeof node.status === 'string' && node.status)
-  const flattened = flattenJobTree(safeNodes)
+  let flattened = flattenJobTree(safeNodes)
+  const activeIndex = flattened.findIndex(({ job }) =>
+    job.engine === activeJob?.engine && job.job_id === activeJob?.id)
+  if (activeIndex > 0) {
+    flattened = [flattened[activeIndex], ...flattened.filter((_, index) =>
+      index !== activeIndex)]
+  }
   return flattened.slice(0, boundedLimit).map(({ job, depth }) => {
     const engine = _asciiText(job.engine, 'unknown', 24).toLowerCase()
     const status = _asciiText(job.status, 'unknown', 32).toLowerCase()
