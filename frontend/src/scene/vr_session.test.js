@@ -12,6 +12,8 @@ function makeHarness({
   native = null,
   nativePollIntervalMs = 0,
   nativeEventPollIntervalMs = 0,
+  nativeJobPollIntervalMs = 0,
+  publishNativeJobs = vi.fn(),
   onNativeEvent = null,
 } = {}) {
   document.body.innerHTML = `
@@ -46,7 +48,8 @@ function makeHarness({
   const showToast = vi.fn()
   const controller = initVRSession({
     renderer, scene, camera, button, xr, native, nativePollIntervalMs,
-    nativeEventPollIntervalMs, onNativeEvent,
+    nativeEventPollIntervalMs, nativeJobPollIntervalMs, publishNativeJobs,
+    onNativeEvent,
     setMenuToggle, showToast,
   })
 
@@ -184,6 +187,31 @@ describe('initVRSession', () => {
       'Frame CPU 8.5 ms / 11.1 ms runtime period.',
     ]])
     await h.controller.exit()
+    vi.useRealTimers()
+  })
+
+  it('publishes live job revisions only while the native companion is active', async () => {
+    vi.useFakeTimers()
+    const native = {
+      status: vi.fn().mockResolvedValue({ available: true, running: false }),
+      launch: vi.fn().mockResolvedValue({ available: true, running: true, pid: 1234 }),
+      stop: vi.fn().mockResolvedValue({ available: true, running: false }),
+    }
+    const publishNativeJobs = vi.fn().mockResolvedValue({ acknowledged: true, sequence: 2 })
+    const h = makeHarness({
+      xr: null, native, nativeJobPollIntervalMs: 10, publishNativeJobs,
+    })
+
+    await h.controller.enter()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(publishNativeJobs).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(25)
+    expect(publishNativeJobs).toHaveBeenCalledTimes(3)
+
+    await h.controller.exit()
+    const callsAfterExit = publishNativeJobs.mock.calls.length
+    await vi.advanceTimersByTimeAsync(50)
+    expect(publishNativeJobs).toHaveBeenCalledTimes(callsAfterExit)
     vi.useRealTimers()
   })
 

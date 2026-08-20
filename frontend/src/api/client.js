@@ -4235,8 +4235,32 @@ export async function sendVRToolPreflightFeedback(body) {
   return _request('POST', '/vr/tool-preflight-feedback', body, { suppressBusy: true })
 }
 
+export async function sendVRJobsFeedback(body) {
+  return _request('POST', '/vr/jobs-feedback', body, { suppressBusy: true })
+}
+
 export async function startSteamVR() {
   return _request('POST', '/vr/runtime/start', undefined, { timeoutMs: 30000 })
+}
+
+/** Read the same canonical, document-scoped unified job list used by the desktop.
+ * Returns null on transport failure so the native viewer can retain its last
+ * complete revision and expose its age instead of replacing it with false emptiness. */
+export async function fetchVRJobSnapshot() {
+  const sourcePath = globalThis.localStorage?.getItem(docKey('nadoc:workspace-path')) || null
+  const nodes = await listSimJobs(sourcePath, false)
+  if (!Array.isArray(nodes)) return null
+  return {
+    jobs_snapshot_total: nodes.length,
+    jobs: buildVRJobSnapshot(nodes),
+  }
+}
+
+/** Publish one successful unified-list refresh to a running native viewer. */
+export async function refreshNativeVRJobs() {
+  const snapshot = await fetchVRJobSnapshot()
+  if (!snapshot) return null
+  return sendVRJobsFeedback(snapshot)
 }
 
 export async function launchNativeVR(body) {
@@ -4249,12 +4273,11 @@ export async function launchNativeVR(body) {
   let jobsSnapshotAvailable = false
   let jobsSnapshotTotal = 0
   try {
-    const sourcePath = globalThis.localStorage?.getItem(docKey('nadoc:workspace-path')) || null
-    const nodes = await listSimJobs(sourcePath, false)
-    if (Array.isArray(nodes)) {
-      jobs = buildVRJobSnapshot(nodes)
+    const snapshot = await fetchVRJobSnapshot()
+    if (snapshot) {
+      jobs = snapshot.jobs
       jobsSnapshotAvailable = true
-      jobsSnapshotTotal = nodes.length
+      jobsSnapshotTotal = snapshot.jobs_snapshot_total
     }
   } catch { /* launch with an explicit empty snapshot */ }
   const jobSnapshotFinishedAt = globalThis.performance?.now?.() ?? Date.now()

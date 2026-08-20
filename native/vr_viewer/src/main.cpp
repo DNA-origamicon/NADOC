@@ -2080,6 +2080,7 @@ class Viewer {
                     std::string toolFeedbackPath = {},
                     std::string planeFeedbackPath = {},
                     std::string preflightFeedbackPath = {},
+                    std::string jobPath = {},
                     nadoc_vr::JobSnapshot jobSnapshot = {},
                     std::string selectionLevel = "default",
                     std::vector<std::string> selectedOwnerTokens = {},
@@ -2089,8 +2090,11 @@ class Viewer {
           toolFeedbackPath_(std::move(toolFeedbackPath)),
           planeFeedbackPath_(std::move(planeFeedbackPath)),
           preflightFeedbackPath_(std::move(preflightFeedbackPath)),
+          jobPath_(std::move(jobPath)),
           jobsSnapshotAvailable_(jobSnapshot.available),
           jobsSnapshotTotal_(jobSnapshot.total),
+          jobSnapshotSequence_(jobSnapshot.sequence),
+          jobSnapshotUpdatedAtMs_(jobSnapshot.updatedAtMs),
           jobs_(std::move(jobSnapshot.rows)),
           selectionLevel_(std::move(selectionLevel)) {
         normalizationCenter_ = sceneData_.normalizationCenter;
@@ -2569,7 +2573,7 @@ class Viewer {
                 : menuPage_ == MenuPage::tool_config
                     ? "VR TOOL SETTINGS DRAFT"
                     : menuPage_ == MenuPage::jobs
-                        ? "SIMULATION JOBS SNAPSHOT"
+                        ? "SIMULATION JOBS LIVE"
                         : "SIMULATION JOB DETAILS";
         const bool jobMenu = menuPage_ == MenuPage::jobs ||
                              menuPage_ == MenuPage::job_detail;
@@ -2605,18 +2609,23 @@ class Viewer {
             const size_t pageCount = std::max<size_t>(1, (jobs_.size() + perPage - 1) / perPage);
             if (jobPage_ >= pageCount) jobPage_ = pageCount - 1;
             std::ostringstream snapshotLabel;
+            const auto nowMs = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::system_clock::now().time_since_epoch()).count());
+            const uint64_t ageSeconds = jobSnapshotUpdatedAtMs_ > 0 &&
+                    nowMs >= jobSnapshotUpdatedAtMs_
+                ? (nowMs - jobSnapshotUpdatedAtMs_) / 1000U : 999U;
+            snapshotLabel << (ageSeconds <= 5U ? "LIVE " : "LINK STALE ");
             if (jobsSnapshotTotal_ > static_cast<int>(jobs_.size())) {
-                snapshotLabel << "SHOWING " << jobs_.size() << " OF "
-                              << jobsSnapshotTotal_ << " - READ ONLY";
-            } else {
-                snapshotLabel << "LAUNCH SNAPSHOT - READ ONLY";
+                snapshotLabel << jobs_.size() << " OF " << jobsSnapshotTotal_ << " ";
             }
+            snapshotLabel << "READ ONLY";
             appendMenuText(shortened(snapshotLabel.str(), 35), -0.285F, 0.265F,
                            0.0032F, {0.72F, 0.78F, 0.88F});
             if (!jobsSnapshotAvailable_) {
-                appendMenuText("JOB LIST UNAVAILABLE AT LAUNCH", -0.260F, 0.120F,
+                appendMenuText("JOB LIST UNAVAILABLE", -0.210F, 0.120F,
                                0.0035F, {0.95F, 0.68F, 0.22F});
-                appendMenuText("RELAUNCH TO RETRY", -0.150F, 0.065F,
+                appendMenuText("KEEP DESKTOP OPEN TO RETRY", -0.235F, 0.065F,
                                0.0038F, {0.65F, 0.70F, 0.78F});
             } else if (jobs_.empty()) {
                 appendMenuText("NO RUNS FOR THIS DESIGN", -0.205F, 0.120F,
@@ -3987,6 +3996,40 @@ class Viewer {
         }
     }
 
+    void pollJobSnapshot() {
+        if (jobPath_.empty() || (++jobSnapshotPollFrame_ % 30U) != 0U) return;
+        try {
+            auto next = nadoc_vr::loadJobSnapshot(jobPath_);
+            if (next.sequence <= jobSnapshotSequence_) return;
+
+            std::string selectedEngine;
+            std::string selectedJobId;
+            if (selectedJobIndex_ < jobs_.size()) {
+                selectedEngine = jobs_[selectedJobIndex_].engine;
+                selectedJobId = jobs_[selectedJobIndex_].jobId;
+            }
+            jobsSnapshotAvailable_ = next.available;
+            jobsSnapshotTotal_ = next.total;
+            jobSnapshotSequence_ = next.sequence;
+            jobSnapshotUpdatedAtMs_ = next.updatedAtMs;
+            jobs_ = std::move(next.rows);
+
+            const auto selected = std::find_if(
+                jobs_.begin(), jobs_.end(), [&](const nadoc_vr::JobSnapshotRow& row) {
+                    return row.engine == selectedEngine && row.jobId == selectedJobId;
+                });
+            if (selected != jobs_.end()) {
+                selectedJobIndex_ = static_cast<size_t>(selected - jobs_.begin());
+            } else {
+                selectedJobIndex_ = 0;
+                if (menuPage_ == MenuPage::job_detail) menuPage_ = MenuPage::jobs;
+            }
+        } catch (const std::exception&) {
+            // Atomic publication makes this rare. Retain the last complete
+            // revision; its visible age tells the user the desktop link is stale.
+        }
+    }
+
     void eventLoop() {
         std::cout << "NADOC VR viewer ready. Trigger: grab; both triggers: resize; "
                      "right trackpad: select; right grip: Expanded Quick View; "
@@ -4004,6 +4047,7 @@ class Viewer {
                 gStopRequested = false;
             }
             if (sessionRunning_) {
+                pollJobSnapshot();
                 renderFrame();
             } else {
                 std::this_thread::sleep_for(std::chrono::milliseconds(20));
@@ -4017,8 +4061,12 @@ class Viewer {
     std::string toolFeedbackPath_;
     std::string planeFeedbackPath_;
     std::string preflightFeedbackPath_;
+    std::string jobPath_;
     bool jobsSnapshotAvailable_ = false;
     int jobsSnapshotTotal_ = 0;
+    uint64_t jobSnapshotSequence_ = 0;
+    uint64_t jobSnapshotUpdatedAtMs_ = 0;
+    uint32_t jobSnapshotPollFrame_ = 0;
     std::vector<nadoc_vr::JobSnapshotRow> jobs_;
     glm::vec3 normalizationCenter_{};
     float normalizationScale_ = 1.0F;
@@ -4196,7 +4244,7 @@ int main(int argc, char** argv) {
     try {
         Viewer viewer(
             loadScene(argv[1]), eventPath, feedbackPath, toolFeedbackPath,
-            planeFeedbackPath, preflightFeedbackPath,
+            planeFeedbackPath, preflightFeedbackPath, jobPath,
             nadoc_vr::loadJobSnapshot(jobPath), selectionLevel,
             std::move(selectedOwnerTokens), std::move(selectedSelectionKind));
         return viewer.run();

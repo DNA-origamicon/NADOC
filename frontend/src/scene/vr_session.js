@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { refreshNativeVRJobs } from '../api/client.js'
 
 const VIEW_SIZE_METERS = 0.55
 const VIEW_DISTANCE_METERS = 0.8
@@ -45,12 +46,15 @@ export function initVRSession({
   native = null,
   nativePollIntervalMs = 1000,
   nativeEventPollIntervalMs = 50,
+  nativeJobPollIntervalMs = 1500,
+  publishNativeJobs = refreshNativeVRJobs,
   onNativeEvent = null,
 } = {}) {
   let session = null
   let nativeActive = false
   let nativePollTimer = null
   let nativeEventTimer = null
+  let nativeJobPollTimer = null
   let lastNativeEventSequence = 0
   let lastNativeSelectSequence = 0
   let lastNativeLevelSequence = 0
@@ -172,6 +176,22 @@ export function initVRSession({
     nativeEventTimer = null
   }
 
+  function _clearNativeJobPoll() {
+    if (nativeJobPollTimer !== null) clearTimeout(nativeJobPollTimer)
+    nativeJobPollTimer = null
+  }
+
+  function _scheduleNativeJobPoll({ immediate = false } = {}) {
+    _clearNativeJobPoll()
+    if (!nativeActive || disposed || nativeJobPollIntervalMs <= 0 ||
+        typeof publishNativeJobs !== 'function') return
+    nativeJobPollTimer = setTimeout(async () => {
+      nativeJobPollTimer = null
+      try { await publishNativeJobs() } catch { /* retain prior revision; age exposes staleness */ }
+      if (!disposed && nativeActive) _scheduleNativeJobPoll()
+    }, immediate ? 0 : nativeJobPollIntervalMs)
+  }
+
   function _scheduleNativeEventPoll() {
     _clearNativeEventPoll()
     if (!nativeActive || disposed || nativeEventPollIntervalMs <= 0 ||
@@ -273,6 +293,7 @@ export function initVRSession({
     if (!active) {
       _clearNativePoll()
       _clearNativeEventPoll()
+      _clearNativeJobPoll()
       if (lastNativeEventSequence > 0) {
         onNativeEvent?.({ sequence: lastNativeEventSequence, type: 'hover', identity: null })
       }
@@ -287,6 +308,7 @@ export function initVRSession({
       lastNativeTransformSequence = 0
       nativeTimingReported = false
       _scheduleNativeEventPoll()
+      _scheduleNativeJobPoll({ immediate: true })
     }
     _setButtonState({ active })
   }
@@ -460,6 +482,7 @@ export function initVRSession({
     disposed = true
     _clearNativePoll()
     _clearNativeEventPoll()
+    _clearNativeJobPoll()
     button?.removeEventListener('click', onClick)
     if (session || nativeActive) void exit()
     else _restoreCamera()

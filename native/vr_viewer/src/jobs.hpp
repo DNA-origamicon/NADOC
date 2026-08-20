@@ -2,6 +2,7 @@
 
 #include <charconv>
 #include <cctype>
+#include <cstdint>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -29,6 +30,8 @@ struct JobSnapshotRow {
 struct JobSnapshot {
     bool available = false;
     int total = 0;
+    uint64_t sequence = 0;
+    uint64_t updatedAtMs = 0;
     std::vector<JobSnapshotRow> rows;
 };
 
@@ -38,6 +41,17 @@ inline int strictJobInteger(const std::string& token, int minimum, int maximum) 
     if (parsed.ec != std::errc{} || parsed.ptr != token.data() + token.size() ||
         value < minimum || value > maximum) {
         throw std::runtime_error("invalid VR job integer");
+    }
+    return value;
+}
+
+inline uint64_t strictJobUnsigned(
+    const std::string& token, uint64_t minimum, uint64_t maximum) {
+    uint64_t value = 0;
+    const auto parsed = std::from_chars(token.data(), token.data() + token.size(), value);
+    if (parsed.ec != std::errc{} || parsed.ptr != token.data() + token.size() ||
+        value < minimum || value > maximum) {
+        throw std::runtime_error("invalid VR job unsigned integer");
     }
     return value;
 }
@@ -92,11 +106,27 @@ inline JobSnapshot loadJobSnapshot(const std::string& path) {
     std::string countToken;
     std::string availableToken;
     std::string totalToken;
+    std::string sequenceToken;
+    std::string updatedAtToken;
     std::string extra;
-    if (!(headerStream >> magic >> versionToken >> countToken >> availableToken >> totalToken) ||
-        headerStream >> extra ||
-        magic != "NADOCVR_JOBS" || strictJobInteger(versionToken, 1, 1) != 1) {
+    if (!(headerStream >> magic >> versionToken) || magic != "NADOCVR_JOBS") {
         throw std::runtime_error("invalid VR job snapshot header");
+    }
+    const int version = strictJobInteger(versionToken, 1, 2);
+    uint64_t sequence = 0;
+    uint64_t updatedAtMs = 0;
+    if (version == 1) {
+        if (!(headerStream >> countToken >> availableToken >> totalToken) ||
+            headerStream >> extra) {
+            throw std::runtime_error("invalid VR job snapshot header");
+        }
+    } else {
+        if (!(headerStream >> sequenceToken >> countToken >> availableToken >> totalToken >>
+              updatedAtToken) || headerStream >> extra) {
+            throw std::runtime_error("invalid VR job snapshot header");
+        }
+        sequence = strictJobUnsigned(sequenceToken, 1, 9'007'199'254'740'991ULL);
+        updatedAtMs = strictJobUnsigned(updatedAtToken, 1, 999'999'999'999'999ULL);
     }
     const int count = strictJobInteger(countToken, 0, 64);
     const bool available = strictJobInteger(availableToken, 0, 1) != 0;
@@ -146,7 +176,7 @@ inline JobSnapshot loadJobSnapshot(const std::string& path) {
             throw std::runtime_error("unexpected VR job snapshot data");
         }
     }
-    return {available, total, std::move(rows)};
+    return {available, total, sequence, updatedAtMs, std::move(rows)};
 }
 
 }  // namespace nadoc_vr

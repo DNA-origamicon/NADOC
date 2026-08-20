@@ -586,6 +586,16 @@ void jobSnapshotParserPreservesIdentityStatusAndRejectsAmbiguity() {
 
     {
         std::ofstream output(path);
+        output << "NADOCVR_JOBS 2 7 1 1 4 1700000001500\n"
+               << "J 0 425 1 0 0 namd running run%2017 - Production "
+                  "NAMD%20-%20running%20-%2042.5%25\n";
+    }
+    const auto live = nadoc_vr::loadJobSnapshot(path.string());
+    require(live.sequence == 7 && live.updatedAtMs == 1'700'000'001'500ULL);
+    require(live.total == 4 && live.rows.size() == 1);
+
+    {
+        std::ofstream output(path);
         output << "NADOCVR_JOBS 1 2 1 2\n"
                << "J 0 0 0 0 0 namd queued duplicate - First waiting\n"
                << "J 0 0 0 0 0 namd queued duplicate - Second waiting\n";

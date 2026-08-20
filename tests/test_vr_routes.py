@@ -15,6 +15,7 @@ from backend.api import routes_vr
 from backend.api.routes_vr import (
     VRFeedbackRequest,
     VRJobSnapshotRow,
+    VRJobsFeedbackRequest,
     VRLaunchRequest,
     VRPlaneFeedbackRequest,
     VRToolPreflightFeedbackRequest,
@@ -26,6 +27,7 @@ from backend.api.routes_vr import (
     _expanded_scene_inputs,
     _cluster_gizmo_handle_centers,
     _require_local,
+    _publish_job_feedback,
     _runtime_timing,
     _selection_cluster,
     _selection_clusters,
@@ -1038,11 +1040,11 @@ def test_native_job_snapshot_is_private_bounded_and_url_safe() -> None:
             archived=False,
         )
     ]
-    path = _write_job_snapshot(rows)
+    path = _write_job_snapshot(rows, updated_at_ms=1_700_000_000_000)
     try:
         lines = path.read_text().splitlines()
         assert lines == [
-            "NADOCVR_JOBS 1 1 1 1",
+            "NADOCVR_JOBS 2 1 1 1 1 1700000000000",
             "J 0 425 1 1 0 namd running run%2017%2Falpha - "
             "Production%20run%2017 NAMD%20-%20running%20-%2042.5%25",
         ]
@@ -1050,11 +1052,49 @@ def test_native_job_snapshot_is_private_bounded_and_url_safe() -> None:
     finally:
         path.unlink(missing_ok=True)
 
-    unavailable = _write_job_snapshot([], available=False)
+    unavailable = _write_job_snapshot(
+        [], available=False, updated_at_ms=1_700_000_000_000
+    )
     try:
-        assert unavailable.read_text() == "NADOCVR_JOBS 1 0 0 0\n"
+        assert unavailable.read_text() == (
+            "NADOCVR_JOBS 2 1 0 0 0 1700000000000\n"
+        )
     finally:
         unavailable.unlink(missing_ok=True)
+
+
+def test_native_job_feedback_atomically_advances_complete_revisions() -> None:
+    path = _write_job_snapshot([], available=False, updated_at_ms=1_700_000_000_000)
+    row = VRJobSnapshotRow(
+        job_id="production",
+        parent_job_id="relax",
+        engine="oxdna",
+        status="running",
+        label="Production",
+        status_text="oxDNA - running - 12.5%",
+        depth=1,
+        progress_permille=125,
+    )
+    try:
+        first = _publish_job_feedback(
+            {"job_path": str(path)},
+            VRJobsFeedbackRequest(jobs_snapshot_total=3, jobs=[row]),
+            now_ms=1_700_000_001_500,
+        )
+        second = _publish_job_feedback(
+            {"job_path": str(path)},
+            VRJobsFeedbackRequest(jobs_snapshot_total=0, jobs=[]),
+            now_ms=1_700_000_003_000,
+        )
+        assert (first, second) == (2, 3)
+        assert path.read_text() == "NADOCVR_JOBS 2 3 0 1 0 1700000003000\n"
+        assert path.stat().st_mode & 0o777 == 0o600
+        assert not path.with_name(f"{path.name}.next").exists()
+    finally:
+        path.unlink(missing_ok=True)
+
+    with pytest.raises(HTTPException, match="not running"):
+        _publish_job_feedback(None, VRJobsFeedbackRequest())
 
 
 def test_scene_snapshot_writer_is_private_gzip_and_round_trips() -> None:

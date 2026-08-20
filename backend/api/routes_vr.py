@@ -49,6 +49,7 @@ _STATE_LOCK = threading.Lock()
 _RUNTIME_LOCK = threading.Lock()
 _FEEDBACK_LOCK = threading.Lock()
 _TOOL_FEEDBACK_LOCK = threading.Lock()
+_JOB_FEEDBACK_LOCK = threading.Lock()
 
 SelectionKind = Literal[
     "none",
@@ -102,6 +103,13 @@ class VRLaunchRequest(BaseModel):
     selected_owner_tokens: list[str] = Field(default_factory=list, max_length=8)
     selected_selection_kind: SelectionKind = "none"
     jobs_snapshot_available: bool = False
+    jobs_snapshot_total: int = Field(default=0, ge=0, le=1_000_000)
+    jobs: list[VRJobSnapshotRow] = Field(default_factory=list, max_length=64)
+
+
+class VRJobsFeedbackRequest(BaseModel):
+    """One successful refresh of the desktop-authoritative unified job list."""
+
     jobs_snapshot_total: int = Field(default=0, ge=0, le=1_000_000)
     jobs: list[VRJobSnapshotRow] = Field(default_factory=list, max_length=64)
 
@@ -3685,37 +3693,102 @@ def vr_tool_preflight_feedback(
 
 
 def _write_job_snapshot(
-    rows: list[VRJobSnapshotRow], *, available: bool = True, total: int | None = None
+    rows: list[VRJobSnapshotRow], *, available: bool = True, total: int | None = None,
+    sequence: int = 1, updated_at_ms: int | None = None,
 ) -> Path:
-    """Write a private, immutable, whitespace-safe native job-list snapshot."""
+    """Write the initial private, whitespace-safe native live-job feed."""
+    if updated_at_ms is None:
+        updated_at_ms = int(time.time() * 1000)
     with tempfile.NamedTemporaryFile(
         mode="w",
         prefix="nadoc-vr-jobs-",
         suffix=".txt",
         delete=False,
     ) as job_file:
-        job_file.write(
-            f"NADOCVR_JOBS 1 {len(rows)} {int(available)} "
-            f"{len(rows) if total is None else total}\n"
-        )
-        for row in rows:
-            fields = (
-                row.depth,
-                row.progress_permille,
-                int(row.viewable),
-                int(row.stale),
-                int(row.archived),
-                quote(row.engine, safe=""),
-                quote(row.status, safe=""),
-                quote(row.job_id, safe=""),
-                quote(row.parent_job_id or "-", safe=""),
-                quote(row.label, safe=""),
-                quote(row.status_text, safe=""),
-            )
-            job_file.write("J " + " ".join(map(str, fields)) + "\n")
+        job_file.write(_job_snapshot_record(
+            rows, available=available, total=total, sequence=sequence,
+            updated_at_ms=updated_at_ms,
+        ))
         job_path = Path(job_file.name)
     job_path.chmod(0o600)
     return job_path
+
+
+def _job_snapshot_record(
+    rows: list[VRJobSnapshotRow], *, available: bool, total: int | None,
+    sequence: int, updated_at_ms: int,
+) -> str:
+    """Serialize one bounded feed revision for atomic publication."""
+    resolved_total = len(rows) if total is None else total
+    if not 1 <= sequence <= 2**53 - 1 or not 0 < updated_at_ms < 10**15:
+        raise ValueError("Invalid VR job feed sequence or timestamp.")
+    if resolved_total < len(rows) or (not available and (rows or resolved_total)):
+        raise ValueError("Invalid VR job feed availability or total.")
+    lines = [
+        f"NADOCVR_JOBS 2 {sequence} {len(rows)} {int(available)} "
+        f"{resolved_total} {updated_at_ms}"
+    ]
+    for row in rows:
+        fields = (
+            row.depth,
+            row.progress_permille,
+            int(row.viewable),
+            int(row.stale),
+            int(row.archived),
+            quote(row.engine, safe=""),
+            quote(row.status, safe=""),
+            quote(row.job_id, safe=""),
+            quote(row.parent_job_id or "-", safe=""),
+            quote(row.label, safe=""),
+            quote(row.status_text, safe=""),
+        )
+        lines.append("J " + " ".join(map(str, fields)))
+    return "\n".join(lines) + "\n"
+
+
+def _publish_job_feedback(
+    state: dict | None, body: VRJobsFeedbackRequest, *, now_ms: int | None = None,
+) -> int:
+    """Atomically replace the running viewer feed with a newer complete record."""
+    if not state or not state.get("job_path"):
+        raise HTTPException(409, detail="Native VR is not running.")
+    if body.jobs_snapshot_total < len(body.jobs):
+        raise HTTPException(422, detail="Invalid VR job snapshot total.")
+    path = Path(state["job_path"])
+    temporary = path.with_name(f"{path.name}.next")
+    with _JOB_FEEDBACK_LOCK:
+        try:
+            header = path.read_text().splitlines()[0].split()
+            if len(header) == 7 and header[:2] == ["NADOCVR_JOBS", "2"]:
+                current_sequence = int(header[2])
+            elif len(header) == 5 and header[:2] == ["NADOCVR_JOBS", "1"]:
+                current_sequence = 0
+            else:
+                raise ValueError("invalid VR job feed header")
+            sequence = current_sequence + 1
+            record = _job_snapshot_record(
+                body.jobs,
+                available=True,
+                total=body.jobs_snapshot_total,
+                sequence=sequence,
+                updated_at_ms=(
+                    now_ms if now_ms is not None else int(time.time() * 1000)
+                ),
+            )
+            temporary.write_text(record)
+            temporary.chmod(0o600)
+            os.replace(temporary, path)
+        except (OSError, ValueError, IndexError) as exc:
+            temporary.unlink(missing_ok=True)
+            raise HTTPException(503, detail="Could not publish VR job status.") from exc
+    return sequence
+
+
+@router.post("/vr/jobs-feedback")
+def vr_jobs_feedback(body: VRJobsFeedbackRequest, request: Request) -> dict:
+    _require_local(request)
+    sequence = _publish_job_feedback(_read_state(), body)
+    return {"acknowledged": True, "sequence": sequence}
 
 
 def _viewer_command(

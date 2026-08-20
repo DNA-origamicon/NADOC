@@ -7,6 +7,7 @@ vi.mock('../state/store.js', () => ({
 import {
   enginesStatus, getMdJob, getMdTrajectory, getSystemResources,
   launchNativeVR, listActiveJobs, listLibraryFiles, listSimJobs,
+  refreshNativeVRJobs,
 } from './client.js'
 import { docKey } from '../shared/doc_id.js'
 
@@ -124,5 +125,34 @@ describe('job JSON GET coalescing', () => {
         label: 'Bundle solve', progress_permille: 1000, viewable: true,
       })],
     }))
+  })
+
+  it('publishes successful unified-list refreshes to the native live feed', async () => {
+    localStorage.setItem(docKey('nadoc:workspace-path'), 'Parts/Bundle.nadoc')
+    let feedbackBody = null
+    global.fetch = vi.fn(async (url, options = {}) => {
+      if (url.includes('/simulate/jobs')) {
+        return { ok: true, status: 200, json: async () => [{
+          job_id: 'run-2', engine: 'oxdna', status: 'running', created_at: 2,
+          design_name: 'Relax', progress_fraction: 0.25,
+        }] }
+      }
+      feedbackBody = JSON.parse(options.body)
+      return { ok: true, status: 200, json: async () => ({
+        acknowledged: true, sequence: 7,
+      }) }
+    })
+
+    await expect(refreshNativeVRJobs()).resolves.toEqual({
+      acknowledged: true, sequence: 7,
+    })
+    expect(global.fetch.mock.calls[1][0]).toBe('/api/vr/jobs-feedback')
+    expect(feedbackBody).toEqual({
+      jobs_snapshot_total: 1,
+      jobs: [expect.objectContaining({
+        job_id: 'run-2', engine: 'oxdna', status: 'running',
+        progress_permille: 250,
+      })],
+    })
   })
 })
