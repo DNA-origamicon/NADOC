@@ -39,6 +39,13 @@ export function initDesignRenderer(scene, storeRef) {
   // the source payload here lets non-rendering consumers (notably PDB export) use
   // exactly the positions currently on screen without coupling to every engine.
   let _activeFemUpdates = null
+  let _activeFemAmp     = 1.0
+  let _activeScalarColors = null   // last applyScalarColors map (flexibility / RMSF)
+  // Which rebuild generation each overlay was painted onto. Only an overlay that was
+  // live on the root a rebuild just replaced may be restored onto its successor — a
+  // frame the user already dismissed with a design edit must stay dismissed.
+  let _femSerial = -1
+  let _scalarSerial = -1
   let _designVisible    = true   // controlled by setDesignVisible(); re-applied after every _rebuild
   // VISIBILITY RULE: design_renderer has ONE scene object — _helixCtrl.root.
   // Extra-base beads+slabs (from buildCrossoverConnections) are children of root,
@@ -71,7 +78,7 @@ export function initDesignRenderer(scene, storeRef) {
   // model.  Purely a display swap — the active design in the store is never mutated.
   let _externalActive   = false
   // Selection halo: 2.1 is 25% smaller than the original 2.8× bead radius.
-  const _glowLayer         = createGlowLayer(scene, 0x3fb950, 2.1)
+  const _glowLayer         = createGlowLayer(scene, 0x3fb950, 2.1, 'selectionGlow')
   // Undefined-bases highlight: red, ~2× the selection glow size
   const _undefinedGlowLayer = createGlowLayer(scene, 0xff3030, 5.6)
   // oxDNA anchor highlight: purple, distinct from the green selection glow — marks the
@@ -730,6 +737,37 @@ export function initDesignRenderer(scene, storeRef) {
       _traverseSetOpacity(_helixCtrl.root, 0.15)
     }
     markOperationTiming('scene-postbuild-complete')
+  }
+
+  /**
+   * Re-apply the display state a DISPLAY-ONLY rebuild just wiped.
+   *
+   * `_rebuild` means "the design changed" to everything downstream: it disposes the
+   * backbone entries every overlay holds and clears every glow layer, and the owners
+   * re-resolve from a `currentGeometry` store subscription. `setExtraNucleotides`
+   * rebuilds WITHOUT any store change — the design is untouched, only injected
+   * display-only nucleotides differ — so none of those subscriptions fire and the
+   * user's whole visualization silently reverts: the structure snaps from its
+   * simulation frame back to NADOC native positions, the flexibility map turns back
+   * into strand colours, and every halo disappears.
+   *
+   * The renderer restores what it owns (simulation positions, scalar colours) and
+   * announces the rebuild so the overlay owners re-resolve with their existing
+   * refresh paths. Positions go first: scalar colours and halos are read off the
+   * entries this moves.
+   */
+  function _restoreDisplayOverlays(renderer) {
+    // `_rebuildSerial - 1` is the generation this rebuild just disposed. An overlay
+    // last painted onto an older one was already dropped by a real design rebuild;
+    // resurrecting it here would put a dismissed simulation frame back on screen.
+    const live = _rebuildSerial - 1
+    if (_activeFemUpdates && _femSerial === live) {
+      renderer.applyFemPositions(_activeFemUpdates, _activeFemAmp)
+    }
+    if (_activeScalarColors && _scalarSerial === live) {
+      renderer.applyScalarColors(_activeScalarColors)
+    }
+    window.dispatchEvent(new CustomEvent('nadoc:display-rebuilt'))
   }
 
   // ── Fix B part 2 — in-place metadata fast path ───────────────────────────
@@ -1443,6 +1481,8 @@ export function initDesignRenderer(scene, storeRef) {
       _activeFemUpdates = Array.isArray(updates)
         ? updates.map(u => ({ ...u, backbone_position: [...u.backbone_position] }))
         : null
+      _activeFemAmp = amp
+      _femSerial = _rebuildSerial
       // Split off crossover extra-base inserts (helix_id "__xb__"): the simulation
       // frame carries their REAL positions, which the helix renderer can't place
       // (no design key). Route them to the extra-base bead/slab instances below.
@@ -1486,6 +1526,8 @@ export function initDesignRenderer(scene, storeRef) {
      * colours are captured and restored by clearScalarColors().
      */
     applyScalarColors(colorByKey) {
+      _activeScalarColors = colorByKey || null
+      _scalarSerial = _rebuildSerial
       _helixCtrl?.applyScalarColors(colorByKey)
       _scalarArcUpdater?.(colorByKey)
       _applyExtraBaseScalarColors(colorByKey)
@@ -1526,6 +1568,8 @@ export function initDesignRenderer(scene, storeRef) {
         // back on under an active atomistic/surface rep — and stays up until the oxDNA
         // overlay's (multi-second) atom build lands, which reads as "NADOC is broken".
         if (!_designVisible && _helixCtrl?.root) _helixCtrl.root.visible = false
+        // Injecting capture strands must be transparent to every other display overlay.
+        _restoreDisplayOverlays(this)
       } else {
         _applyCaptureGlow()   // no geometry to rebuild (setup w/o design) — still sync glow
       }
@@ -1586,6 +1630,8 @@ export function initDesignRenderer(scene, storeRef) {
       }
     },
     clearScalarColors() {
+      _activeScalarColors = null
+      _scalarSerial = -1
       _helixCtrl?.clearScalarColors()
       _scalarArcUpdater?.(null)
       _restoreExtraBaseColors()

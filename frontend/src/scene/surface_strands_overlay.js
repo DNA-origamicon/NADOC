@@ -31,13 +31,22 @@ const DEFAULT_COLOR = 0x00ffff     // cyan — the surface-strand colour (user-c
  * Results arrays keep stable identity, so identity is the right test for them — but _draw
  * builds a FRESH `[]` on every call for the no-strands case, which identity never matches.
  * Empty→empty is therefore compared by emptiness, so a job with no capture strands doesn't
- * trigger a full CG rebuild (and un-hide the CG root) on every displayJob. */
+ * trigger a full CG rebuild (and un-hide the CG root) on every displayJob.
+ *
+ * PREVIEW chains have no stable identity at all — _previewChains rebuilds the array on
+ * every _draw — so identity would re-emit on every redraw. One card edit calls _draw three
+ * times (setHighlight, setShapePreview, update), which cost three full rebuilds of the whole
+ * design. Preview passes a `key` describing everything the chains are derived from; equal
+ * keys mean identical geometry and are a no-op. */
 export function createSurfaceStrandEmitter(onStrands) {
-  let lastChains = null, lastHighlight = null
-  return (chains, highlight) => {
+  let lastChains = null, lastHighlight = null, lastKey = null
+  return (chains, highlight, key = null) => {
     const bothEmpty = !chains?.length && !lastChains?.length && lastChains !== null
-    if ((chains === lastChains || bothEmpty) && highlight === lastHighlight) return false
-    lastChains = chains; lastHighlight = highlight
+    const sameChains = (key != null && lastKey != null)
+      ? key === lastKey
+      : (chains === lastChains || bothEmpty)
+    if (sameChains && highlight === lastHighlight) return false
+    lastChains = chains; lastHighlight = highlight; lastKey = key
     onStrands?.(chains, highlight)
     return true
   }
@@ -110,6 +119,8 @@ export function initSurfaceStrandsOverlay({
   let _results = null   // real simulated strands (world nm bead lists) — set once a job is displayed
   let _highlight = true      // strand beads/chains visible
   let _shapePreview = true   // coverage patch visible
+  let _color = null          // requested strand colour — the caller re-reads it on emit,
+                             // so it belongs to the preview identity (see _previewKey)
   const _emitStrands = createSurfaceStrandEmitter(onStrands)
   _constrainGizmoToPlane()   // default (-y) → in-plane (X,Z) only
 
@@ -184,6 +195,19 @@ export function initSurfaceStrandsOverlay({
     return out
   }
 
+  // Everything _previewChains derives its beads from: the spec fields it reads, the
+  // plane frame, and the anchor centre. Same key ⇒ byte-identical chains ⇒ no rebuild.
+  function _previewKey(spec) {
+    if (!spec) return 'preview:none'
+    const c = _baseCenter
+    return [
+      'preview', spec.shape, spec.sizeNm, spec.densityPerUm2, spec.seed,
+      spec.offsetXNm, spec.offsetYNm, spec.sequence?.length || PREVIEW_BEADS_DEFAULT,
+      _axis, _positionNm, _color,
+      Math.round(c.x * 1e4), Math.round(c.y * 1e4), Math.round(c.z * 1e4),
+    ].join('|')
+  }
+
   function _draw() {
     const spec = _lastSpec
     const inResults = !!(_results && _results.length)
@@ -211,13 +235,15 @@ export function initSurfaceStrandsOverlay({
     // results mode makes every real cap look selected, creates an apparent second strand at
     // each site, and obscures which bead the selection ray actually hit.
     let chains = []
+    let key = null
     if (active) chains = inResults ? _results : (haveSpec ? _previewChains(spec) : [])
+    if (!inResults) key = _previewKey(active && haveSpec ? spec : null)
     const emittedHighlight = !inResults && _highlight
     // setExtraNucleotides is a full renderer rebuild. Plane/patch/setup refreshes can call
     // _draw repeatedly while the SAME simulation-result array is active; rebuilding again
     // after RMSF applies its positions/colors wipes that overlay. Results keep stable array
     // identity, so emit only when chains or effective highlight actually changed.
-    _emitStrands(chains, emittedHighlight)
+    _emitStrands(chains, emittedHighlight, key)
 
     // Centre gizmo — only while setting up (preview) with the coverage shape shown.
     helper.visible = active && !inResults && _lastEnabled && haveSpec && _shapePreview
@@ -259,6 +285,7 @@ export function initSurfaceStrandsOverlay({
   // coverage patch to match.
   function setColor(hex) {
     if (hex == null || hex === '') return
+    _color = String(hex)
     patchMat.color.setHex((typeof hex === 'string') ? new THREE.Color(hex).getHex() : hex)
   }
   function clear() { _lastSpec = null; _lastEnabled = false; _results = null; _draw() }

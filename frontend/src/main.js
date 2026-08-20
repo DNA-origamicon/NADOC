@@ -68,6 +68,7 @@ import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
 import { initCommandPalette }  from './ui/command_palette.js'
 import { initStrandLengthHistogram } from './ui/strand_length_histogram.js'
 import { initMolecularPlacementAudit } from './ui/molecular_placement_audit.js'
+import { initExtraBaseMetricsAudit } from './ui/extra_base_metrics_audit.js'
 import { initHullAudit } from './ui/hull_audit.js'
 import { initOverhangSequencesPanel } from './ui/overhang_sequences_panel.js'
 import { initOverhangDialog } from './ui/overhang_dialog.js'
@@ -1225,8 +1226,8 @@ async function main() {
   const _oxdnaRunElements = () => ({
     field: efieldSetup?.getFieldSpec?.(),
     surface: oxdnaFloorSetup?.getSurfaceSpec?.(),
-    // Phase 1: carried alongside the run elements but not yet injected into the submit
-    // payload (the oxdna_jobs_panel builders still read only surface dir/offset/stiff).
+    // A relaxation BUILDS the capture strands into the system; a production run can only
+    // inherit them from its relaxed parent (oxdna_jobs_panel.captureStrandRunPlan).
     surfaceStrands: oxdnaSurfaceStrandsSetup?.getStrandsSpec?.(),
     anchors: oxdnaAnchorsSetup?.getAnchors?.() || [],
   })
@@ -1235,7 +1236,12 @@ async function main() {
   const _oxdnaApplyConfig = (cfg = {}) => {
     efieldSetup?.applyConfig?.(cfg.field)
     oxdnaFloorSetup?.applyConfig?.(cfg.surface)
-    oxdnaSurfaceStrandsSetup?.applyConfig?.(cfg.surfaceStrands)   // null until Phase 2 persists it
+    // The floor card's applyConfig does not fire its onChange, so the capture-strand
+    // prerequisite gate has to be re-synced by hand — and BEFORE the strands echo, or
+    // a job that ran on a surface comes back with its strands checkbox still disabled
+    // (and setSurfaceEnabled would then force the echoed-on toggle back off).
+    oxdnaSurfaceStrandsSetup?.setSurfaceEnabled?.(oxdnaFloorSetup?.isEnabled?.())
+    oxdnaSurfaceStrandsSetup?.applyConfig?.(cfg.surfaceStrands)
     oxdnaAnchorsSetup?.applyConfig?.(cfg.anchors)
   }
   const oxdnaLive = initOxdnaLive({
@@ -6014,6 +6020,7 @@ async function main() {
     setMenuToggle: _setMenuToggle,
     getColorState: () => store.getState(),
   })
+  initExtraBaseMetricsAudit({ setMenuToggle: _setMenuToggle })
   initHullAudit({
     getState: () => store.getState(),
     subscribe: callback => store.subscribe(callback),

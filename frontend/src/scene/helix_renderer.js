@@ -1175,6 +1175,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     for (const nuc of assignedGeometry) {
       // Extension beads have no base-pair slabs.
       if (nuc.helix_id.startsWith('__ext_')) continue
+      // Slab placement treats base_position as authoritative and every downstream
+      // consumer (_slabCenterAt, pose restore) dereferences it. A nucleotide without
+      // one gets a bead but no slab, rather than throwing out of the whole rebuild.
+      if (!nuc.base_position) continue
       let bnDir  = new THREE.Vector3(...nuc.base_normal)
       let tanDir = new THREE.Vector3(...nuc.axis_tangent)
       const color  = nucSlabColor(nuc, stapleColorMap, customColors, loopSet)

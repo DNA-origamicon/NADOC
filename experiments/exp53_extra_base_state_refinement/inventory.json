@@ -1,0 +1,58 @@
+{
+  "schema": "nadoc.exp53.inventory.v1",
+  "exclude_parts": ["24hb_1xT"],
+  "sources": [
+    {
+      "part": "2hb_1xT",
+      "role": "symmetric-single-exp46",
+      "job": "/media/jojo/Archive/NADOC_archive/29c5b267380f",
+      "lineage": ["/media/jojo/Archive/NADOC_archive/e4a49b2057a5"],
+      "production_ns": 200
+    },
+    {
+      "part": "2hb_1xT",
+      "role": "symmetric-single-long",
+      "job": "/media/jojo/Archive/NADOC_archive/4c0ba3a85587",
+      "lineage": ["/media/jojo/Archive/NADOC_archive/7d5937e569c6"],
+      "production_ns": 800
+    },
+    {
+      "part": "2hb_0-1xT",
+      "role": "asymmetric-single-long",
+      "job": "/media/jojo/Archive/NADOC_archive/c18abcc8bf3c",
+      "lineage": ["/media/jojo/Archive/NADOC_archive/248210e5af50"],
+      "production_ns": 1000
+    },
+    {
+      "part": "2hb_1-0xT",
+      "role": "asymmetric-single-complement-control",
+      "job": "/media/jojo/Archive/NADOC_archive/b102cce11ab5",
+      "production_ns": 0,
+      "enabled": false,
+      "note": "Relaxation only; enable when a production child arrives."
+    },
+    {
+      "part": "2hb_2xT",
+      "role": "symmetric-double-short",
+      "job": "/media/jojo/Archive/NADOC_archive/bfd050d2ce4c",
+      "production_ns": 200
+    },
+    {
+      "part": "2hb_2xT",
+      "role": "symmetric-double-long",
+      "job": "/media/jojo/Archive/NADOC_archive/029a76c6a59f",
+      "lineage": ["/media/jojo/Archive/NADOC_archive/151b6da69fe5"],
+      "production_ns": 1000
+    }
+  ],
+  "extraction": {"target_samples": 4000},
+  "filters": {
+    "global_paired_min": 0.90,
+    "local_bp_min_A": 8.0,
+    "local_bp_max_A": 13.0,
+    "bond_min_A": 1.2,
+    "bond_max_A": 2.2,
+    "pose_rmsd_max_A": 1.5,
+    "min_window_samples": 25
+  }
+}

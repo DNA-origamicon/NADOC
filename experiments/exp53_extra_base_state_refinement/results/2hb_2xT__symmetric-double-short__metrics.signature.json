@@ -1,0 +1,10 @@
+{
+  "dcds": [
+    "/media/jojo/Archive/NADOC_archive/bfd050d2ce4c/package/2hb_2xT_namd_solvated/output/2hb_2xT_01_production_200ns_k0.dcd",
+    "/media/jojo/Archive/NADOC_archive/bfd050d2ce4c/package/2hb_2xT_namd_solvated/output/2hb_2xT_01_production_200ns_k0.cont1.dcd",
+    "/media/jojo/Archive/NADOC_archive/bfd050d2ce4c/package/2hb_2xT_namd_solvated/output/2hb_2xT_01_production_200ns_k0.cont2.dcd"
+  ],
+  "bytes": 1505824828,
+  "mtime_ns": 1785684244703855367,
+  "target_samples": 4000
+}

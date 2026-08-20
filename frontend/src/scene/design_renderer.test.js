@@ -194,3 +194,46 @@ describe('crossover extra-base cluster display', () => {
     expect(functionBody(SRC, '_refreshClusterDisplay')).toContain('_applyXoverClusterAlpha()')
   })
 })
+
+describe('display-only rebuild preserves the active visualization', () => {
+  // setExtraNucleotides (the oxDNA capture-strand injection) is the ONE rebuild that
+  // changes no design. Everything downstream still reads it as "the design changed",
+  // so without an explicit restore each surface-strand keystroke reverted the user's
+  // whole visualization — structure back to NADOC native positions, flexibility map
+  // back to strand colours, every halo gone.
+  it('the injection rebuild is followed by the overlay restore', () => {
+    // setExtraNucleotides is an object-literal method, not a `function` declaration.
+    const start = SRC.indexOf('setExtraNucleotides(nucs')
+    expect(start).toBeGreaterThan(-1)
+    const body = SRC.slice(start, SRC.indexOf('debugCaptureRender()', start))
+    const rebuild = body.indexOf('_rebuild(currentGeometry')
+    const restore = body.indexOf('_restoreDisplayOverlays(this)')
+    expect(rebuild).toBeGreaterThan(-1)
+    expect(restore).toBeGreaterThan(rebuild)   // restore AFTER the rebuild that wiped it
+  })
+
+  it('restores every overlay the renderer itself caches', () => {
+    // Each cache added here must be restored here too, or it silently reverts.
+    const body = functionBody(SRC, '_restoreDisplayOverlays')
+    for (const cache of ['_activeFemUpdates', '_activeScalarColors']) {
+      expect(body, `${cache} is cached but never restored`).toContain(cache)
+    }
+  })
+
+  it('only restores an overlay that was live on the root this rebuild replaced', () => {
+    // A frame the user already dismissed with a real design edit must stay dismissed;
+    // without the generation gate a later strand edit would resurrect it.
+    const body = functionBody(SRC, '_restoreDisplayOverlays')
+    expect(body).toContain('_rebuildSerial - 1')
+    expect(body).toContain('_femSerial === live')
+    expect(body).toContain('_scalarSerial === live')
+  })
+
+  it('announces the rebuild so overlay owners re-resolve their own state', () => {
+    // Glow layers hold entry references into the disposed scene graph. Their owners
+    // (anchor_glow, clash_overlay, selection_manager) re-resolve on this event —
+    // their store subscriptions cannot fire, because the store never changed.
+    expect(functionBody(SRC, '_restoreDisplayOverlays'))
+      .toContain("new CustomEvent('nadoc:display-rebuilt')")
+  })
+})

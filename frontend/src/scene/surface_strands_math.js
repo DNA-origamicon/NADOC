@@ -22,6 +22,10 @@ export const NM2_PER_UM2 = 1e6
 export const BFORM_RISE_NM = 0.334                 // BDNA_RISE_PER_BP
 export const BFORM_TWIST_RAD = 34.3 * Math.PI / 180 // BDNA_TWIST_PER_BP_RAD
 export const BFORM_RADIUS_NM = 1.0                 // HELIX_RADIUS
+// Backbone → base-centroid displacement along base_normal (backend BASE_DISPLACEMENT,
+// the oxDNA reference value).  Every renderer rep that draws base slabs treats
+// `base_position` as authoritative, so injected nucleotides must carry it too.
+export const BASE_DISPLACEMENT_NM = 0.3
 const BFORM_PHASE0 = Math.PI / 2 + BFORM_TWIST_RAD / 2   // native HC FORWARD phase
 
 /**
@@ -187,6 +191,14 @@ export function captureNucleotidesFromChains(chains) {
         // that these physical auxiliary strands belong to the scaffold topology.
         strand_type: 'surface_capture', domain_index: 0, is_surface_capture: true,
         backbone_position: [p[0], p[1], p[2]],
+        // Base centroid, displaced from the backbone along base_normal exactly as
+        // backend geometry does. Omitting it throws in the slab builder, which since
+        // the 2026-08 coordinate unification reads base_position unconditionally.
+        base_position: [
+          p[0] + BASE_DISPLACEMENT_NM * a1[0],
+          p[1] + BASE_DISPLACEMENT_NM * a1[1],
+          p[2] + BASE_DISPLACEMENT_NM * a1[2],
+        ],
         base_normal: [a1[0], a1[1], a1[2]], axis_tangent: [a3[0], a3[1], a3[2]],
         is_five_prime: k === 0, is_three_prime: k === L - 1,
       })

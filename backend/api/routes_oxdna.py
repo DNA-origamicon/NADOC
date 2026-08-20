@@ -317,9 +317,73 @@ class RunRequest(BaseModel):
     surface: Optional[SurfaceElement] = None
     anchors: list[AnchorRef] = Field(default_factory=list)
     anchor_stiff: float = Field(DEFAULT_ANCHOR_STIFF, gt=0.0)
+    # Capture strands are TOPOLOGY built into the relaxed parent (they must be present
+    # through relaxation for the origami to hybridise to them), so a run can only inherit
+    # and re-pin them.  This field is therefore INTENT, not a build request:
+    #   {"enabled": true}                 → assert the parent carries capture beads; 409 if not.
+    #   {"subjectToField": false}         → production-time force choice, overrides the parent's.
+    # Omitted → inherit the parent's strands and its own subjectToField, unchanged.
+    surface_strands: Optional[dict] = Field(None)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+CAPTURE_STRANDS_NOT_BUILT = (
+    "This relaxation was built without surface capture strands, and a production run "
+    "can only inherit them \u2014 they are appended before relaxation so the origami "
+    "hybridises to them as it settles. Start a new relaxation with capture strands "
+    "enabled and run from that."
+)
+
+
+def capture_run_decision(parent_run_config, requested) -> dict:
+    """PURE: what a production run does with its parent's surface capture strands.
+
+    Capture strands are topology, not a production-time force: they are appended to the
+    system BEFORE relaxation so the origami can hybridise to them while it settles (the
+    Phase-2 "build, not overlay" decision).  A run branches off the relaxed parent by
+    copying its topology/conf, so it can only inherit those beads and re-pin their
+    attach-end traps \u2014 never add them to an origami-only structure.
+
+    `requested` is therefore INTENT from the submit card, not a build request:
+      * ``{"enabled": True}`` asserts the parent has capture strands.  If it does not,
+        an ``error`` is returned so the caller refuses the run instead of quietly
+        launching a strand-free one (which is what the UI used to do \u2014 the run
+        started without them and the card's toggle flipped itself off).
+      * ``{"subjectToField": bool}`` is a genuine production-time force choice (whether
+        the uniform field sweeps the capture beads too), so an explicit value overrides
+        whatever the parent was relaxed with.
+
+    Returns ``{spec, trap_particles, n_beads, subject_to_field, error}``.  ``spec`` is
+    the inherited spec stamped with the exclusion this run actually applies, so the card
+    echoes back the RUN's setting rather than the parent's.
+    """
+    spec = (parent_run_config or {}).get("surface_strands") or {}
+    built = spec.get("built") or {}
+    trap_particles = built.get("trap_particles") or []
+    n_beads = int(built.get("n_beads") or 0)
+    req = requested or {}
+
+    if req.get("enabled") and not trap_particles:
+        return {
+            "spec": None,
+            "trap_particles": [],
+            "n_beads": 0,
+            "subject_to_field": True,
+            "error": CAPTURE_STRANDS_NOT_BUILT,
+        }
+
+    subject = spec.get("subjectToField", spec.get("subject_to_field", True))
+    if "subjectToField" in req:
+        subject = bool(req["subjectToField"])
+    return {
+        "spec": {**spec, "subjectToField": subject} if spec else None,
+        "trap_particles": trap_particles,
+        "n_beads": n_beads,
+        "subject_to_field": bool(subject),
+        "error": None,
+    }
 
 
 def _workspace() -> Path:
@@ -1191,14 +1255,12 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
     anchors = [a.model_dump(by_alias=False) for a in body.anchors]
     # Surface capture strands built into the relaxed parent are inherited via the copied
     # topology/conf; re-pin their attach ends so they stay tethered through production too.
-    ss_spec = (parent.run_config or {}).get("surface_strands") or {}
-    cap_built = ss_spec.get("built") or {}
-    cap_particles = cap_built.get("trap_particles") or []
-    cap_n_beads = int(cap_built.get("n_beads") or 0)
-    # "Subject surface strands to the E-field" toggle (default on): when OFF, exclude
-    # the trailing capture-strand beads from the uniform field so a down-field doesn't
-    # press them flat against the plane. Only meaningful with a field AND capture beads.
-    subject_caps = ss_spec.get("subjectToField", ss_spec.get("subject_to_field", True))
+    cap = capture_run_decision(parent.run_config, body.surface_strands)
+    if cap["error"]:
+        raise HTTPException(status_code=409, detail=cap["error"])
+    cap_particles = cap["trap_particles"]
+    cap_n_beads = cap["n_beads"]
+    subject_caps = cap["subject_to_field"]
     field_exclude = (
         cap_n_beads if (field_in and cap_n_beads > 0 and not subject_caps) else 0
     )
@@ -1261,7 +1323,9 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
             "anchors": [
                 a.model_dump(by_alias=True, exclude_none=True) for a in body.anchors
             ],
-            "surface_strands": (parent.run_config or {}).get("surface_strands"),
+            # Inherited spec, but stamped with the exclusion this run actually applied —
+            # otherwise the card echoes back the parent's toggle, not the run's.
+            "surface_strands": cap["spec"],
         },
     )
 
@@ -2612,8 +2676,9 @@ def _job_has_surface(job) -> bool:
 
 def _capture_bead_count(job) -> int:
     """Number of non-design capture particles appended to every oxDNA frame."""
-    built = ((job.run_config or {}).get("surface_strands") or {}).get("built") or {}
-    return int(built.get("n_beads") or 0)
+    from backend.physics.oxdna_surface_strands import capture_bead_count
+
+    return capture_bead_count(job)
 
 
 def _capture_strand_length(job) -> int:

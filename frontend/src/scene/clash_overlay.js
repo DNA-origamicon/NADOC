@@ -47,6 +47,7 @@ export function clashEntriesFor(clashes, backboneEntries) {
 export function initClashOverlay({ store, designRenderer, api = { getClashes } } = {}) {
   let _on = false
   let _lastGeometry = null
+  let _lastClashes = null   // last report's pair list, for repaint-without-refetch
   const _legend     = document.getElementById('clash-legend')
   const _legendText = document.getElementById('clash-legend-text')
 
@@ -58,8 +59,19 @@ export function initClashOverlay({ store, designRenderer, api = { getClashes } }
   }
 
   function clear() {
+    _lastClashes = null
     designRenderer?.clearClashHighlight?.()
     _legend?.classList.remove('visible')
+  }
+
+  /** Re-resolve the LAST report against the current backbone entries — no refetch.
+   *  For a rebuild that did not move anything (the capture-strand injection), the
+   *  report is still valid; only the entry objects it was painted onto are stale. */
+  function _repaint() {
+    if (!_on || !_lastClashes) return
+    const entries = clashEntriesFor(_lastClashes, designRenderer?.getBackboneEntries?.() || [])
+    if (entries.length) designRenderer?.setClashHighlight?.(entries)
+    else designRenderer?.clearClashHighlight?.()
   }
 
   /** Re-fetch the clash report and repaint (no-op while toggled off). */
@@ -70,6 +82,7 @@ export function initClashOverlay({ store, designRenderer, api = { getClashes } }
     const report = await (api?.getClashes ?? getClashes)()
     if (!_on) return   // toggled off during the await
     const clashes = report?.clashes ?? []
+    _lastClashes = clashes
     const entries = clashEntriesFor(clashes, designRenderer?.getBackboneEntries?.() || [])
     if (entries.length) designRenderer?.setClashHighlight?.(entries)
     else designRenderer?.clearClashHighlight?.()
@@ -94,6 +107,11 @@ export function initClashOverlay({ store, designRenderer, api = { getClashes } }
     const geo = store.getState().currentGeometry
     if (_on && geo !== _lastGeometry) { _lastGeometry = geo; refresh() }
   })
+
+  // A DISPLAY-ONLY rebuild (the oxDNA capture-strand injection) replaces the backbone
+  // entries without touching the store or moving a single design nucleotide. Repaint
+  // the standing report rather than re-fetching one per keystroke.
+  window.addEventListener('nadoc:display-rebuilt', () => _repaint())
 
   return { toggle, refresh, clear, isOn }
 }

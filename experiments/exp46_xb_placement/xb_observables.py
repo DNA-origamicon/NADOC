@@ -138,6 +138,12 @@ class ModelSource:
 class JunctionProbe:
     def __init__(self, pm, ins, half_a_helix, axis_window=6):
         self.ins = ins
+        siblings = sorted(
+            (other for other in pm.inserts if other.crossover_id == ins.crossover_id),
+            key=lambda other: other.k,
+        )
+        self.prev_insert = siblings[ins.k - 1] if ins.k > 0 else None
+        self.next_insert = siblings[ins.k + 1] if ins.k + 1 < len(siblings) else None
         self.half_a_helix = half_a_helix
         self.hel_src, self.bp_src, self.dir_src = ins.src
         self.hel_dst, self.bp_dst, self.dir_dst = ins.dst
@@ -273,12 +279,14 @@ class JunctionProbe:
         # ── integrity: the two phosphodiester links this insert bridges, and the
         # base-pair status of the flanking bp on each helix.  A junction whose backbone
         # or flanking pairs have come apart is not reporting an equilibrium pose.
-        o3 = src.nt(self.ins.src, "O3'")
+        o3 = (src.ins(self.prev_insert, "O3'") if self.prev_insert is not None
+              else src.nt(self.ins.src, "O3'"))
         pi = src.ins(self.ins, "P")
         out["bond_src"] = (float(np.linalg.norm(pi - o3))
                            if o3 is not None and pi is not None else float("nan"))
         o3i = src.ins(self.ins, "O3'")
-        pd = src.nt(self.ins.dst, "P")
+        pd = (src.ins(self.next_insert, "P") if self.next_insert is not None
+              else src.nt(self.ins.dst, "P"))
         out["bond_dst"] = (float(np.linalg.norm(pd - o3i))
                            if o3i is not None and pd is not None else float("nan"))
         for tag, key in (("src", self.ins.src), ("dst", self.ins.dst)):
@@ -388,7 +396,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--job", required=True, type=Path)
     ap.add_argument("--stem", default=None)
-    ap.add_argument("--dcd", default=None)
+    ap.add_argument("--dcd", nargs="+", default=None,
+                    help="one or more chronological production DCD pieces")
     ap.add_argument("--stride", type=int, default=20)
     ap.add_argument("--start", type=int, default=0)
     ap.add_argument("--out", type=Path, default=None)
@@ -432,7 +441,10 @@ def main(argv=None):
 
     eq = pkg / "output" / f"{stem}_00_reseed.coor"
     if eq.exists():
-        from backend.core.junction_topology import read_namd_coor
+        # Moved out of junction_topology when shell re-preparation became the
+        # canonical NAMD binary-coordinate owner.  Keep exp46 usable as the shared
+        # extractor for later archived trajectories (exp53).
+        from backend.core.md_shell_reprep import read_namd_coor
         Xe = read_namd_coor(eq)
         static["reseed"] = {}
         for ins, pr in probes:
@@ -444,11 +456,12 @@ def main(argv=None):
         return 0
 
     import MDAnalysis as mda
-    dcd = args.dcd or str(sorted((pkg / "output").glob("*production*.dcd"))[-1])
-    uni = mda.Universe(str(pkg / f"{stem}_hmr.psf"), dcd)
+    dcd = args.dcd or [str(sorted((pkg / "output").glob("*production*.dcd"))[-1])]
+    uni = mda.Universe(str(pkg / f"{stem}_hmr.psf"), *dcd)
     n = len(uni.trajectory)
     idx = list(range(args.start, n, args.stride))
-    print(f"DCD {Path(dcd).name}: {n} frames, stride {args.stride} -> {len(idx)} samples")
+    dcd_label = ", ".join(Path(p).name for p in dcd)
+    print(f"DCD {dcd_label}: {n} frames, stride {args.stride} -> {len(idx)} samples")
 
     joiner = FrameJoiner(uni, pm, design)
     print(f"  DNA fragments: {[len(f) for f in joiner.frags]}  "
@@ -466,7 +479,9 @@ def main(argv=None):
     bp_pairs = np.asarray(bp_pairs)
     print(f"  {len(bp_pairs)} designed base pairs tracked")
 
-    recs = {ins.crossover_id: [] for ins, _ in probes}
+    # A crossover can carry multiple inserts.  Keying only by crossover_id silently
+    # interleaves k0/k1 measurements and doubles the apparent time series for 2xT.
+    recs = {(ins.crossover_id, ins.k): [] for ins, _ in probes}
     frames, paired, boxes = [], [], []
     for ts in uni.trajectory[args.start::args.stride]:
         box = ts.dimensions[:3].astype(float)
@@ -477,16 +492,16 @@ def main(argv=None):
         paired.append(float(np.mean((dd > 8.0) & (dd < 13.0))))
         s = PackageSource(pm, X)
         for ins, pr in probes:
-            recs[ins.crossover_id].append(pr.measure(s))
+            recs[(ins.crossover_id, ins.k)].append(pr.measure(s))
 
-    out = {"stem": stem, "job": str(job), "dcd": str(dcd), "n_frames": n,
+    out = {"stem": stem, "job": str(job), "dcd": dcd, "n_frames": n,
            "stride": args.stride, "start": args.start, "frames": frames,
            "paired_fraction": paired, "boxes": boxes, "n_bp": len(bp_pairs),
            "static": static,
            "inserts": [{"crossover_id": ins.crossover_id, "k": ins.k, "base": ins.base,
                         "src": list(ins.src), "dst": list(ins.dst),
                         "segid": ins.segid, "resid": ins.resid,
-                        "samples": recs[ins.crossover_id]} for ins, _ in probes]}
+                        "samples": recs[(ins.crossover_id, ins.k)]} for ins, _ in probes]}
     path = args.out or (Path(__file__).parent / f"{stem}_xb_traj.json")
     path.write_text(json.dumps(out))
     print("wrote", path)

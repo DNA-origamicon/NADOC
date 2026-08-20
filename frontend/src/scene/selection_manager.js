@@ -4716,13 +4716,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   // ── Re-apply highlights after scene rebuild ──────────────────────────────
 
-  store.subscribe((newState, prevState) => {
-    // Any change that triggers a design_renderer rebuild (geometry, design topology,
-    // strandGroups) invalidates our cached entry references and clears glow.
-    // Re-apply highlights so they survive view transitions and cross-tab syncs.
-    if (newState.currentGeometry === prevState.currentGeometry &&
-        newState.currentDesign   === prevState.currentDesign   &&
-        newState.strandGroups    === prevState.strandGroups) return
+  // Every cached entry reference points into the disposed scene graph after a
+  // design_renderer rebuild, and the glow layer has been cleared. Drop them and let
+  // the canonical projector re-resolve every ref against the fresh entries.
+  function _reresolveAfterRebuild(state) {
     _strandEntries     = []
     _strandConeEntries = []
     _strandArcEntries  = []
@@ -4734,10 +4731,25 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _multiDomainEntries = []
     _multiOverhangEntries = []
     _multiExtensionEntries = []
-    _syncCanonicalHighlights(newState, { geometryChanged: true })
+    _syncCanonicalHighlights(state, { geometryChanged: true })
     // Measurement anchors hold live entries and therefore reset after a rebuild.
     if (_ctrlBeads.length > 0) { _ctrlBeads = []; _notifyCtrlBeadsChange() }
+  }
+
+  store.subscribe((newState, prevState) => {
+    // Any change that triggers a design_renderer rebuild (geometry, design topology,
+    // strandGroups) invalidates our cached entry references and clears glow.
+    // Re-apply highlights so they survive view transitions and cross-tab syncs.
+    if (newState.currentGeometry === prevState.currentGeometry &&
+        newState.currentDesign   === prevState.currentDesign   &&
+        newState.strandGroups    === prevState.strandGroups) return
+    _reresolveAfterRebuild(newState)
   })
+
+  // A DISPLAY-ONLY rebuild (the oxDNA capture-strand injection) invalidates exactly
+  // the same references without touching the store, so the subscription above never
+  // fires and the selection halo would vanish on every surface-strand edit.
+  window.addEventListener('nadoc:display-rebuilt', () => _reresolveAfterRebuild(store.getState()))
 
   // Canonical refs are the source of truth. Keep renderer adapters synchronized for
   // programmatic/controller mutations as well as pointer gestures.

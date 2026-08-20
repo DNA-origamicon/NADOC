@@ -34,6 +34,11 @@ const DEFAULT_IDS = {
 }
 
 const GEN_DEFAULT_LEN = 8   // fallback when the sequence box is empty
+// onChange re-emits the strands into the renderer, which is a FULL design rebuild
+// (hundreds of ms on a real design). Typing "3000" into the density box fires four
+// input events; without coalescing that is four rebuilds and the card feels frozen.
+// Short enough to still read as live, long enough to swallow a burst of keystrokes.
+const CHANGE_DEBOUNCE_MS = 90
 
 export function initOxdnaSurfaceStrandsSetup({ onChange = null, generateSequence = null, ids = null } = {}) {
   const id = { ...DEFAULT_IDS, ...(ids || {}) }
@@ -54,6 +59,7 @@ export function initOxdnaSurfaceStrandsSetup({ onChange = null, generateSequence
 
   let _enabled = false
   let _surfaceOn = false   // hard-surface prerequisite
+  let _changeTimer = null
 
   function _rawFields() {
     return {
@@ -87,8 +93,29 @@ export function initOxdnaSurfaceStrandsSetup({ onChange = null, generateSequence
     if (sizeLbl) sizeLbl.textContent = (shapeSel?.value === 'square') ? 'Width' : 'Diameter'
   }
 
-  function _render() {
-    onChange?.()
+  // The renderer rebuild triggered downstream can throw (a malformed injected
+  // nucleotide, a rep mid-swap). That must never take out the rest of _render: an
+  // exception here used to skip the status line AND the overlay's own update(), so
+  // the card stopped tracking its own fields — every later edit re-threw from the
+  // same stale spec and nothing in the 3D moved again.
+  function _fireChange() {
+    _changeTimer = null
+    try { onChange?.() } catch (err) { console.error('[surface-strands] refresh failed', err) }
+  }
+  function _scheduleChange() {
+    if (_changeTimer) clearTimeout(_changeTimer)
+    _changeTimer = setTimeout(_fireChange, CHANGE_DEBOUNCE_MS)
+  }
+
+  // `immediate` = a discrete action (toggle, new seed, echo-back) where a debounce
+  // would only add lag; typing and dragging coalesce instead.
+  function _render(immediate = false) {
+    if (immediate) {
+      if (_changeTimer) { clearTimeout(_changeTimer); _changeTimer = null }
+      _fireChange()
+    } else {
+      _scheduleChange()
+    }
     _syncSizeLabel()
     if (!_surfaceOn) { _setStatus('Enable the hard surface first — capture strands attach to it.'); return }
     if (!_enabled) { _setStatus('Off — tick "Add surface strands" to disperse capture strands.'); return }
@@ -107,7 +134,7 @@ export function initOxdnaSurfaceStrandsSetup({ onChange = null, generateSequence
     genBtn.disabled = true
     try {
       const seq = await generateSequence(len)
-      if (seq && seqIn) { seqIn.value = seq; _render() }
+      if (seq && seqIn) { seqIn.value = seq; _render(true) }
     } catch { /* best-effort — leave the field as-is on failure */ }
     finally { genBtn.disabled = false }
   }
@@ -116,7 +143,7 @@ export function initOxdnaSurfaceStrandsSetup({ onChange = null, generateSequence
   function _newSeed() {
     if (!seedIn) return
     seedIn.value = String(Math.floor(Math.random() * 1_000_000_000))
-    _render()
+    _render(true)
   }
 
   // ── Inputs ───────────────────────────────────────────────────────────────────
@@ -127,12 +154,13 @@ export function initOxdnaSurfaceStrandsSetup({ onChange = null, generateSequence
       if (highlightChk) highlightChk.checked = true
       if (showshapeChk) showshapeChk.checked = true
     }
-    _syncControlsVisibility(); _render()
+    _syncControlsVisibility(); _render(true)
   })
-  for (const el of [seqIn, endSel, densIn, sizeIn, offxIn, offyIn, seedIn]) el?.addEventListener('input', _render)
-  shapeSel?.addEventListener('change', _render)
-  fieldChk?.addEventListener('change', _render)
-  for (const el of [highlightChk, showshapeChk]) el?.addEventListener('change', _render)
+  for (const el of [seqIn, densIn, sizeIn, offxIn, offyIn, seedIn]) el?.addEventListener('input', () => _render())
+  endSel?.addEventListener('change', () => _render(true))
+  shapeSel?.addEventListener('change', () => _render(true))
+  fieldChk?.addEventListener('change', () => _render(true))
+  for (const el of [highlightChk, showshapeChk]) el?.addEventListener('change', () => _render(true))
   // Colour: wheel and hex text stay in sync; both drive the strand colour.
   colorIn?.addEventListener('input', () => { if (colorHexIn) colorHexIn.value = colorIn.value; _render() })
   colorHexIn?.addEventListener('input', () => {
@@ -141,21 +169,26 @@ export function initOxdnaSurfaceStrandsSetup({ onChange = null, generateSequence
   })
   genBtn?.addEventListener('click', _gen)
   seedNewBtn?.addEventListener('click', _newSeed)
-  _syncControlsVisibility(); _syncSizeLabel()
+  _syncControlsVisibility(); _syncSizeLabel(); _syncGateDisabled()
+
+  // Paint the prerequisite gate onto the checkbox. Called at init too, so the control
+  // never renders as clickable while `_surfaceOn` is still false.
+  function _syncGateDisabled() {
+    if (!enableChk) return
+    enableChk.disabled = !_surfaceOn
+    enableChk.style.cursor = _surfaceOn ? 'pointer' : 'not-allowed'
+  }
 
   // Hard-surface prerequisite gate.  Off → force the strands off and disable the checkbox.
   function setSurfaceEnabled(on) {
     _surfaceOn = !!on
-    if (enableChk) {
-      enableChk.disabled = !_surfaceOn
-      enableChk.style.cursor = _surfaceOn ? 'pointer' : 'not-allowed'
-    }
+    _syncGateDisabled()
     if (!_surfaceOn && _enabled) {
       _enabled = false
       if (enableChk) enableChk.checked = false
       _syncControlsVisibility()
     }
-    _render()
+    _render(true)
   }
 
   // The centre gizmo drag pushes the new in-plane (x, y) offset back into the fields.
@@ -183,11 +216,11 @@ export function initOxdnaSurfaceStrandsSetup({ onChange = null, generateSequence
     // Selecting a job entry defaults the display emphasis OFF (toggle on to highlight for figures).
     if (highlightChk) highlightChk.checked = false
     if (showshapeChk) showshapeChk.checked = false
-    _syncControlsVisibility(); _render()
+    _syncControlsVisibility(); _render(true)
   }
 
   return {
     getStrandsSpec, isEnabled, applyConfig, setSurfaceEnabled, setOffset,
-    getHighlight, getShapePreview, getColor, refresh: _render,
+    getHighlight, getShapePreview, getColor, refresh: () => _render(true),
   }
 }

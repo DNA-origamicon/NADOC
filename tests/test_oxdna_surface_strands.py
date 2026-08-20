@@ -345,6 +345,186 @@ def test_prepare_oxdna_job_builds_capture_strands(tmp_path):
     assert forces_txt.count("type = trap") >= trap_count
 
 
+def test_capture_strands_survive_into_a_production_run(tmp_path):
+    """END-TO-END persistence: strands built into a relaxation must still be pinned in the
+    PRODUCTION run.  A run copies the parent's topology/conf (so the beads come along) and
+    re-pins their attach ends from the parent's recorded trap particles.  Before the run
+    body carried the card's intent at all, enabling capture strands and pressing Run
+    launched a run that simply had none."""
+    from backend.core.oxdna_job import new_oxdna_job
+    from backend.core.oxdna_protocol import build_relaxation_stages
+    from backend.core.oxdna_runner import prepare_oxdna_job
+    from backend.api.crud import _geometry_for_design
+    from backend.api.routes_oxdna import capture_run_decision
+    from backend.physics.oxdna_interface import (
+        _strand_nucleotide_order,
+        read_cm_positions_oxdna,
+        anchor_trap_block,
+    )
+    from backend.physics.oxdna_surface_strands import CAPTURE_TRAP_STIFF
+    from tests.conftest import make_6hb_design
+
+    design = make_6hb_design()
+    geometry = _geometry_for_design(design)
+    n_origami = len(_strand_nucleotide_order(design))
+    specs = build_relaxation_stages(
+        mc_steps=100,
+        md_relax_steps=100,
+        equil_steps=100,
+        backend="CPU",
+        device="0",
+        salt_concentration=0.5,
+        min_bp_retained=0.5,
+        surface_present=True,
+        protein=False,
+    )
+    job = new_oxdna_job(
+        design_name="6hb",
+        stages=[s.to_status() for s in specs],
+        device="0",
+        backend="CPU",
+        salt_concentration=0.5,
+    )
+    strands = {
+        "enabled": True,
+        "sequence": "ACGTACGT",
+        "attachEnd": "5'",
+        "shape": "circle",
+        "sizeNm": 60.0,
+        "densityPerUm2": 4000.0,
+        "seed": 7,
+        "subjectToField": True,
+    }
+    info = prepare_oxdna_job(
+        design,
+        geometry,
+        job,
+        tmp_path,
+        specs,
+        surface={"dir": [0, -1, 0], "offset_nm": 20.0, "stiff": 5.0},
+        surface_strands=strands,
+    )
+    # The relax build records what it made, keyed the way the run reads it.
+    job.run_config = {"surface_strands": {**strands, "built": info["capture"]}}
+    cap_built = info["capture"]
+    assert cap_built["n_beads"] > 0
+
+    # The run's decision inherits exactly those beads and traps.
+    d = capture_run_decision(job.run_config, {"enabled": True})
+    assert d["error"] is None
+    assert d["n_beads"] == cap_built["n_beads"]
+    assert d["trap_particles"] == cap_built["trap_particles"]
+
+    # A run copies the parent's relaxed conf; re-pinning from those particle indices
+    # must produce one covalent-stiff trap per capture strand, all in range.
+    jd = job.job_dir(tmp_path)
+    cm = read_cm_positions_oxdna(jd / "conf.dat")
+    assert len(cm) == n_origami + cap_built["n_beads"]
+    blocks = [
+        anchor_trap_block(p, cm[p], CAPTURE_TRAP_STIFF)
+        for p in d["trap_particles"]
+        if 0 <= p < len(cm)
+    ]
+    assert len(blocks) == cap_built["n_strands"]
+    assert all(b.count("type = trap") == 1 for b in blocks)
+    # Every trap addresses a CAPTURE particle, never an origami one.
+    assert all(p >= n_origami for p in d["trap_particles"])
+
+
+def test_health_check_measures_the_origami_not_the_capture_beads(tmp_path):
+    """The relaxation health gate maps design keys onto configuration LINES, and
+    ``_protein_lead_offset`` infers a leading protein block from ``len(conf) - len(walk)``.
+    Trailing capture beads look exactly like that, so without ``n_trailing_extra`` the gate
+    reads every origami nucleotide off a capture-bead line and measures bonds between
+    unrelated particles.
+
+    Real consequence (job 1d509398c348, 664 capture strands): "574 bond(s) over-stretched,
+    longest 149.434 units vs the 1.006 cliff" — random pairs across a 242-unit box — for a
+    structure whose true worst backbone bond was 0.93 units. The runner killed the relax
+    after 3 escalating retries. HBList retention is index-independent so it read 100% and
+    hid the contradiction; the GEOMETRIC retention in the same result was 0%.
+    """
+    import shutil
+
+    from backend.core.oxdna_job import new_oxdna_job
+    from backend.core.oxdna_protocol import build_relaxation_stages
+    from backend.core.oxdna_runner import prepare_oxdna_job
+    from backend.core.oxdna_health import run_oxdna_health_check
+    from backend.api.crud import _geometry_for_design
+    from backend.physics.oxdna_surface_strands import capture_bead_count
+    from tests.conftest import make_6hb_design
+
+    design = make_6hb_design()
+    specs = build_relaxation_stages(
+        mc_steps=100,
+        md_relax_steps=100,
+        equil_steps=100,
+        backend="CPU",
+        device="0",
+        salt_concentration=0.5,
+        min_bp_retained=0.5,
+        surface_present=True,
+        protein=False,
+    )
+    job = new_oxdna_job(
+        design_name="6hb",
+        stages=[s.to_status() for s in specs],
+        device="0",
+        backend="CPU",
+        salt_concentration=0.5,
+    )
+    info = prepare_oxdna_job(
+        design,
+        _geometry_for_design(design),
+        job,
+        tmp_path,
+        specs,
+        surface={"dir": [0, -1, 0], "offset_nm": 20.0, "stiff": 5.0},
+        surface_strands={
+            "enabled": True,
+            "sequence": "ACGTACGT",
+            "attachEnd": "5'",
+            "shape": "circle",
+            "sizeNm": 60.0,
+            "densityPerUm2": 4000.0,
+            "seed": 7,
+        },
+    )
+    job.run_config = {"surface_strands": {"built": info["capture"]}}
+    n_caps = capture_bead_count(job)
+    assert n_caps == info["capture"]["n_beads"] > 0
+
+    # The seeded build IS the design geometry, so a health check on it must be pristine.
+    jd = job.job_dir(tmp_path)
+    stage = jd / "stage"
+    stage.mkdir()
+    shutil.copy(jd / "conf.dat", stage / "last_conf.dat")
+
+    def check(**kw):
+        return run_oxdna_health_check(
+            design,
+            stage,
+            kind="md_relax",
+            min_bp_retained=0.5,
+            topology_path=jd / "topology.top",
+            dnanalysis_bin=None,  # force the GEOMETRIC retention, not HBList
+            **kw,
+        )
+
+    good = check(n_trailing_extra=n_caps)
+    assert good.n_fene_over == 0, good.reason
+    assert good.max_backbone_fene_units < 1.006
+    assert good.fene_safe is True
+    assert good.bp_retained_fraction > 0.9
+
+    # Without it the same pristine build reads as catastrophically broken — this is the
+    # false alarm that aborted the relax, so it must stay measurably different.
+    bad = check()
+    assert bad.n_fene_over > 0
+    assert bad.max_backbone_fene_units > 10 * good.max_backbone_fene_units
+    assert bad.bp_retained_fraction < good.bp_retained_fraction
+
+
 # ── Headless setup → build → validate (the automation entry + its oracle) ──────────
 def test_headless_setup_build_validate():
     """Automation entry: configure surface strands on a real design, build the oxDNA job
@@ -494,6 +674,72 @@ def test_surface_jobs_disallow_alignment():
     assert not _job_has_surface(_J({"surface": None, "anchors": []}))
     assert not _job_has_surface(_J({}))
     assert not _job_has_surface(_J(None))
+
+
+def test_capture_run_decision_inherits_and_stamps_the_runs_own_exclusion():
+    """A production run can only INHERIT capture strands from its relaxed parent (they are
+    built in before relaxation so the origami hybridises as it settles).  The decision
+    helper resolves what the run gets, and stamps the spec it hands to the child with the
+    field-exclusion THIS run applies — not the parent's, or the submit card echoes back
+    the wrong toggle."""
+    from backend.api.routes_oxdna import capture_run_decision
+
+    parent = {
+        "surface_strands": {
+            "enabled": True,
+            "sequence": "TTTTGCTAGC",
+            "subjectToField": True,
+            "built": {"trap_particles": [100, 110], "n_beads": 20},
+        }
+    }
+    # Omitted request → inherit everything unchanged.
+    d = capture_run_decision(parent, None)
+    assert d["error"] is None
+    assert d["trap_particles"] == [100, 110] and d["n_beads"] == 20
+    assert d["subject_to_field"] is True
+    assert d["spec"]["sequence"] == "TTTTGCTAGC"
+
+    # subjectToField is a production-time force choice: the request overrides the parent.
+    d = capture_run_decision(parent, {"enabled": True, "subjectToField": False})
+    assert d["error"] is None
+    assert d["subject_to_field"] is False
+    assert d["spec"]["subjectToField"] is False  # child echoes the RUN's value
+    assert parent["surface_strands"]["subjectToField"] is True  # parent untouched
+
+
+def test_capture_run_decision_refuses_strands_the_parent_never_built():
+    """Enabling capture strands and pressing Run on an origami-only relaxation used to
+    launch a strand-free run and flip the card's toggle off.  There is no way to add them
+    at production time, so the decision must be an explicit error."""
+    from backend.api.routes_oxdna import capture_run_decision
+
+    for parent in (
+        None,
+        {},
+        {"surface_strands": None},
+        {"surface_strands": {"enabled": True}},
+    ):
+        d = capture_run_decision(parent, {"enabled": True})
+        assert d["error"], f"no error for parent={parent!r}"
+        assert "capture strands" in d["error"]
+        assert d["trap_particles"] == [] and d["n_beads"] == 0
+
+    # Not asking for them on a strand-free parent is an ordinary run, not an error.
+    assert capture_run_decision({}, None)["error"] is None
+    assert capture_run_decision({}, {"enabled": False})["error"] is None
+
+
+def test_run_request_carries_surface_strand_intent():
+    """The consolidated /run body must have somewhere to put the card's capture-strand
+    state at all — it previously composed field/surface/anchors only, so the toggle
+    was silently dropped on every production run."""
+    from backend.api.routes_oxdna import RunRequest
+
+    r = RunRequest(
+        steps=100_000, surface_strands={"enabled": True, "subjectToField": False}
+    )
+    assert r.surface_strands == {"enabled": True, "subjectToField": False}
+    assert RunRequest(steps=100_000).surface_strands is None
 
 
 def test_oracle_catches_a_broken_bond(tmp_path):

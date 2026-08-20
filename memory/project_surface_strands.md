@@ -4,7 +4,124 @@
 UI/overlay/math + pytest/vitest, live-job verified 2026-07-17). Only residuals: (1) `oxdna_design_fingerprint`
 does **not** include capture-strand state → toggling capture strands won't invalidate a cached job
 (Phase-2 item 7, never wired — low impact, staleness only); (2) `validate_capture_build` oracle is
-called from tests only, not the production `append_capture_strands` build path. Do both when convenient.
+called from tests only, not the production `append_capture_strands` build path. Do both when convenient;
+(3) every setup edit costs ONE full `designRenderer._rebuild` (see "Setup card froze" below) — a real
+design (~14k nt) is ~1–3 s per edit. Incremental injection instead of a full rebuild is the fix if it
+ever becomes intolerable.
+
+**Relax killed by a FALSE FENE alarm — FIXED 2026-08-18.** Job `1d509398c348`
+(VoltronCoreScad, 664 capture strands / 13,944 beads, 130 nm patch @ 50,000/µm²) failed
+`2_md_relax` with *"574 bond(s) over-stretched, longest 149.434 units vs the 1.006 cliff"*
+after 3 escalating retries. **The structure was fine** — measured on the rejected
+`last_conf.dat` with the topology's own n3/n5 links and oxDNA backbone sites: 29,207 bonds,
+**0 over the cliff, max 0.9393 units, median 0.7453** (r0 = 0.7564). Nothing to do with the
+hard surface or the strands sitting next to it.
+- ROOT CAUSE: `run_oxdna_health_check` called `read_configuration_full(conf, design)` with no
+  `n_trailing_extra`. `_protein_lead_offset` infers a LEADING protein block from
+  `len(conf) - len(walk)`, so 30,077 − 16,133 = 13,944 → it read every origami nucleotide off a
+  **capture-bead line**. The reported bonds were random pairs in a 242-unit box (mean pair
+  distance ≈ 160 units — hence the ~149 and the constant 574 across all four health samples).
+  This is the SAME bug fixed for the display readers on 2026-07-17/18; the health/relax gate was
+  never included.
+- WHY IT HID: HBList retention is index-independent, so it read 100% while the geometric
+  retention in the very same result was **0%**. Without `dnanalysis` on PATH the job would have
+  failed the bp gate instead, for the same reason.
+- FIX: `run_oxdna_health_check(..., n_trailing_extra=)` threaded into `read_configuration_full`;
+  `oxdna_runner` passes `capture_bead_count(job)`. That helper is now canonical in
+  `backend/physics/oxdna_surface_strands.py` (`routes_oxdna._capture_bead_count` delegates to it) —
+  **use it for every new reader**.
+- VERIFIED on the real failed job: max FENE 149.434 → **0.933** units, 574 → **0** over-cliff,
+  max backbone 126.8 nm/575 clashes → **1.46 nm/0**, geometric retention 0% → **97.3%**.
+  Regression: `test_health_check_measures_the_origami_not_the_capture_beads`.
+- NOTE the build also warned `min_dist_to_origami_nm = 0.10` (clash warning, non-blocking by
+  design). That is a genuine seeding clash at 50,000/µm² with a 12 nm surface position and is
+  worth raising the offset for — but it is NOT what failed this run.
+
+**Production Run silently dropped the capture strands — FIXED 2026-08-18.** Enabling
+"Add surface strands" and pressing **Run** launched a strand-free production run and then flipped
+the card's own toggle off, so the user got neither the strands nor a reason.
+- ROOT CAUSE (two halves): (a) the `prodBtn` handler composed the run body from `field` / `surface` /
+  `anchors` and **never read `el.surfaceStrands`** — `RunRequest` had no field for it either;
+  (b) `_selectJob(childId)` right after launch echoes the child's `run_config` back through
+  `applyConfig`, and with no `surface_strands` on the child that unchecks the box.
+- **Capture strands are TOPOLOGY, not a production-time force.** A run branches off the relaxed
+  parent by copying its topology/conf, so it can only INHERIT the beads and re-pin their traps —
+  it can never add them to an origami-only structure (the Phase-2 "build, not overlay" decision;
+  they must be present through relaxation for the origami to hybridise as it settles). So the fix
+  is emphatically NOT "build them at run time".
+- FIX: pure `oxdna_jobs_panel.captureStrandRunPlan(parentJob, spec)` → `none` / `inherit` / `unbuilt`.
+  `inherit` puts `surface_strands: {enabled, subjectToField}` on the run body (INTENT, not a build
+  request); `unbuilt` shows a modal explaining that capture strands are built before relaxation and
+  **cancels the launch** instead of running without them. Backend: `RunRequest.surface_strands` +
+  pure `routes_oxdna.capture_run_decision(parent_run_config, requested)` → 409 when the parent has
+  no `built.trap_particles`, and `subjectToField` from the REQUEST overrides the parent's (it is a
+  genuine production-time force choice); the child's `run_config.surface_strands` is stamped with
+  the exclusion that run actually applied, so the card echoes the run's setting, not the parent's.
+- ALSO: `oxdna_floor_setup.applyConfig` does not fire its `onChange`, so the strands card's
+  prerequisite gate went stale on every job select — `main._oxdnaApplyConfig` now calls
+  `setSurfaceEnabled(floor.isEnabled())` **before** the strands echo (after it, `setSurfaceEnabled`
+  would force the just-echoed toggle back off). The card also paints its gate at init.
+- Tests: `test_capture_run_decision_*`, `test_run_request_carries_surface_strand_intent`,
+  `test_capture_strands_survive_into_a_production_run` (build → decision → one covalent-stiff trap
+  per strand, all indices ≥ n_origami); `captureStrandRunPlan` unit tests; new
+  `oxdna_surface_strands_setup.test.js` (gate, submit spec, echo-back on/off, debounce, throwing
+  onChange). `just test-smart` FAST 7120 pass; 5766 vitest.
+
+**Every card edit reverted the user's visualization — FIXED 2026-08-18.** With a simulation
+frame displayed, changing any surface-strand setting snapped the structure back to NADOC native
+positions (plus: flexibility map back to strand colours, anchor/selection/clash halos gone).
+- ROOT CAUSE: `setExtraNucleotides` reaches its rebuild through the ordinary `_rebuild`, and a
+  rebuild means "the design changed" to everything downstream — it disposes the backbone entries
+  every overlay holds and clears every glow layer. Owners re-resolve from a `currentGeometry`
+  **store subscription** (`anchor_glow`, `clash_overlay`, `selection_manager` all follow that
+  pattern). The injection rebuild changes NO store state, so not one of those subscriptions fired,
+  and `_rebuild` itself never re-applied `_activeFemUpdates`.
+- FIX: `design_renderer._restoreDisplayOverlays(renderer)`, called right after the injection
+  rebuild. It re-applies what the renderer owns (`_activeFemUpdates` + the new `_activeScalarColors`
+  cache) and then dispatches **`nadoc:display-rebuilt`**; `anchor_glow` and `selection_manager`
+  re-resolve on it with their existing paths, and `clash_overlay` gained `_repaint()` so it
+  re-resolves its STANDING report instead of re-fetching `/design/clashes` per keystroke.
+  `selection_manager`'s rebuild body is now the named `_reresolveAfterRebuild(state)`, shared by
+  the store subscription and the event. `_glowLayer` gained the name `'selectionGlow'` so e2e can
+  find it.
+- GENERATION GATE: `applyFemPositions`/`applyScalarColors` stamp `_rebuildSerial`; the restore
+  only fires when that stamp equals `_rebuildSerial - 1`, i.e. the overlay was live on the root
+  this very rebuild replaced. Without it, a frame the user had already dismissed with a real
+  design edit would be resurrected by the next strand edit. Pinned both ways in e2e.
+- **If you add another display-state cache to design_renderer, restore it here too** —
+  `design_renderer.test.js` asserts every cache named in the closure appears in the restore.
+
+**Setup card froze on open — FIXED 2026-08-18.** The card became inert: enabling strands drew one
+preview, then every later edit (density/size/shape/seed/offset) changed nothing in the 3D and the
+status line stopped updating.
+- ROOT CAUSE: the 2026-08-08 coordinate unification (`4c332526` "remove legacy slab positioning",
+  `8d3d1020`) made `nuc.base_position` MANDATORY in the slab builder. The old
+  `slabCenter(bbPos, bnDir, distance, basePosition = null)` accepted null and fell back to a fixed
+  radial offset; `pairedSlabCenter` spreads it unconditionally. `captureNucleotidesFromChains` never
+  emitted `base_position`, so every injected cap nucleotide threw
+  `TypeError: nuc.base_position is not iterable` out of `buildHelixObjects`.
+- WHY IT LOOKED LIKE A FREEZE (the interesting part): that throw unwound through
+  `setExtraNucleotides → onStrands → _draw → overlay.setHighlight → _refreshStrandsOverlay →
+  onChange() → _render`. `setHighlight` runs BEFORE `update()` in `_refreshStrandsOverlay`, so
+  `_lastSpec` was never replaced — the overlay re-rendered the FIRST spec forever and re-threw, and
+  `_render` aborted before its own `_setStatus`. Nothing downstream of the first line of `_render`
+  ever ran again.
+- FIXES: (a) `captureNucleotidesFromChains` emits `base_position = backbone + BASE_DISPLACEMENT_NM
+  (0.3) × base_normal`, matching `backend/core/geometry.py`; (b) the slab loop skips a nucleotide with
+  no `base_position` instead of throwing (bead yes, slab no); (c) `_render` wraps `onChange` in
+  try/catch so a renderer failure can never freeze the card again; (d) `createSurfaceStrandEmitter`
+  takes a content `key` — preview chains are a fresh array per `_draw`, so identity always missed and
+  ONE card edit cost THREE full design rebuilds (setHighlight + setShapePreview + update); the key
+  includes the requested colour because `main`'s `onStrands` re-reads `getColor()` at emit time;
+  (e) 90 ms debounce on typed/dragged inputs (discrete toggles stay immediate) so typing "3000" is
+  one rebuild, not four.
+- VERIFIED: `frontend/e2e/surface_strands_setup.spec.js` (new) drives the real card in a browser and
+  asserts density/size/shape/sequence-length/seed/offset/colour/highlight each change the RENDERED
+  inventory, `capSlabAxis == surface normal`, and a clean console. 5749 vitest green.
+- **Lesson for anyone injecting synthetic nucleotides:** `setExtraNucleotides` bypasses the backend
+  nucleotide contract, so a new mandatory field in `helix_renderer` breaks it SILENTLY at the type
+  level and LOUDLY at runtime. `backbone_position`, `base_position`, `base_normal`, `axis_tangent`
+  are all required.
 
 **Display bug fixed 2026-08-01 (tech-debt TD-05).** The "Highlight strands" toggle's white halo
 did **not** follow the capture strands during a sim overlay. `design_renderer.refreshAllGlow()` —

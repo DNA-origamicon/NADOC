@@ -1,0 +1,38 @@
+{
+  "schema": "nadoc.exp53.scan.v1",
+  "sources": [
+    {
+      "part": "2hb_2xT",
+      "role": "symmetric-double-short",
+      "job": "/media/jojo/Archive/NADOC_archive/bfd050d2ce4c",
+      "production_ns": 200,
+      "available": true,
+      "stem": "2hb_2xT",
+      "dcds": [
+        "/media/jojo/Archive/NADOC_archive/bfd050d2ce4c/package/2hb_2xT_namd_solvated/output/2hb_2xT_01_production_200ns_k0.dcd",
+        "/media/jojo/Archive/NADOC_archive/bfd050d2ce4c/package/2hb_2xT_namd_solvated/output/2hb_2xT_01_production_200ns_k0.cont1.dcd",
+        "/media/jojo/Archive/NADOC_archive/bfd050d2ce4c/package/2hb_2xT_namd_solvated/output/2hb_2xT_01_production_200ns_k0.cont2.dcd"
+      ],
+      "dcd_bytes": 1505824828,
+      "dcd_mtime_ns": 1785684244703855367,
+      "package": "/media/jojo/Archive/NADOC_archive/bfd050d2ce4c/package/2hb_2xT_namd_solvated"
+    },
+    {
+      "part": "2hb_2xT",
+      "role": "symmetric-double-long",
+      "job": "/media/jojo/Archive/NADOC_archive/029a76c6a59f",
+      "lineage": [
+        "/media/jojo/Archive/NADOC_archive/151b6da69fe5"
+      ],
+      "production_ns": 1000,
+      "available": true,
+      "stem": "2hb_2xT",
+      "dcds": [
+        "/media/jojo/Archive/NADOC_archive/029a76c6a59f/package/2hb_2xT_namd_solvated/output/2hb_2xT_01_production_1000ns_k0.dcd"
+      ],
+      "dcd_bytes": 19724800276,
+      "dcd_mtime_ns": 1786347406097199797,
+      "package": "/media/jojo/Archive/NADOC_archive/029a76c6a59f/package/2hb_2xT_namd_solvated"
+    }
+  ]
+}

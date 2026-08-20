@@ -198,6 +198,14 @@ def get_molecular_placement_audit(measured_positioning: bool = True) -> dict:
     return bundle
 
 
+@router.get("/design/extra-base-metrics-audit")
+def get_extra_base_metrics_audit() -> dict:
+    """Return compact, read-only exp53 state evidence; never touches design state."""
+    from backend.core.extra_base_metrics_audit import build_extra_base_metrics_audit
+
+    return build_extra_base_metrics_audit()
+
+
 @router.get("/design/clashes")
 def get_clashes(
     threshold_nm: float = 0.65,
@@ -397,7 +405,8 @@ def _build_chimerax_surface(design):
     """
     import numpy as np
     from backend.core.surface import (
-        _nuc_key, compute_split_surfaces_from_cloud,
+        _nuc_key,
+        compute_split_surfaces_from_cloud,
     )
 
     if _can_use_surface_cloud(design):
