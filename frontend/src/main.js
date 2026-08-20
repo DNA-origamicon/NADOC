@@ -5900,15 +5900,18 @@ async function main() {
         selectionManager.setSelectionLevel?.(event.level)
         selectionManager.previewVRIdentity?.(button?.dataset.vrHoverIdentity || null)
       } else if (event?.type === 'select') {
-        const result = selectionManager.selectVRIdentity?.(event.identity)
+        const result = selectionManager.selectVRIdentities?.(event.identities ?? [event.identity])
+          ?? selectionManager.selectVRIdentity?.(event.identity)
         api.sendVRFeedback({
           select_sequence: event.sequence,
-          identity: event.identity,
+          identity: result?.identity ?? event.identity,
           accepted: result?.accepted === true,
           selected: result?.selected === true,
           selection_level: selectionManager.getSelectionLevel?.() ?? 'default',
           owner_tokens: result?.ownerTokens ?? [],
           selection_kind: result?.selectionKind ?? 'none',
+          selected_identities: result?.selectedIdentities ?? [],
+          selected_owner_tokens: result?.selectedOwnerTokens ?? [],
         }).catch(() => {})
       } else if (event?.type === 'tool_config') {
         const draft = event.draft

@@ -106,8 +106,12 @@ describe('selection architecture — canonical enforcement', () => {
     expect(select).toContain('_v2HandleArc')
     expect(select).toContain('_selectBaseKey')
     expect(select).toContain('selectionController.getState().primary')
+    expect(select).toContain('function _selectVrIdentities')
+    expect(select).toContain('selectedOwnerTokens')
+    expect(select).toContain('selectionController.replace')
     expect(select).not.toContain('store.setState')
     expect(main).toMatch(/selectVRIdentity[\s\S]*sendVRFeedback/)
+    expect(main).toContain('selected_owner_tokens: result?.selectedOwnerTokens ?? []')
   })
 
   it('keeps the first VR tool shell effect-only and browser-authoritative', () => {

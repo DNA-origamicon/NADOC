@@ -21,6 +21,72 @@ struct PickHit {
     glm::vec3 position{};
 };
 
+inline bool sphereOverlapsSphere(
+    const glm::vec3& selectionCenter, float selectionRadius,
+    const glm::vec3& center, float radius) {
+    const float combined = std::max(selectionRadius, 0.0F) + std::max(radius, 0.0F);
+    return glm::dot(selectionCenter - center, selectionCenter - center)
+        <= combined * combined;
+}
+
+inline glm::vec3 closestPointOnSegment(
+    const glm::vec3& point, const glm::vec3& start, const glm::vec3& end) {
+    const glm::vec3 axis = end - start;
+    const float length2 = glm::dot(axis, axis);
+    if (length2 < 1.0e-12F) return start;
+    return start + axis * glm::clamp(glm::dot(point - start, axis) / length2, 0.0F, 1.0F);
+}
+
+inline bool sphereOverlapsCapsule(
+    const glm::vec3& selectionCenter, float selectionRadius,
+    const glm::vec3& start, const glm::vec3& end, float radius) {
+    return sphereOverlapsSphere(
+        selectionCenter, selectionRadius,
+        closestPointOnSegment(selectionCenter, start, end), radius);
+}
+
+inline bool sphereOverlapsHalfCylinder(
+    const glm::vec3& selectionCenter, float selectionRadius,
+    const glm::vec3& start, const glm::vec3& end, float radius) {
+    const glm::vec3 delta = end - start;
+    const float length = glm::length(delta);
+    if (length < 1.0e-6F || radius <= 0.0F) return false;
+    const glm::vec3 axis = delta / length;
+    const glm::vec3 helper = std::abs(axis.z) < 0.95F
+        ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
+    const glm::vec3 basisX = glm::normalize(glm::cross(helper, axis));
+    const glm::vec3 basisY = glm::cross(axis, basisX);
+    const glm::vec3 offset = selectionCenter - start;
+    const glm::vec3 local(
+        glm::dot(offset, basisX), glm::dot(offset, basisY), glm::dot(offset, axis));
+    glm::vec2 closestRadial;
+    const glm::vec2 radial(local.x, local.y);
+    if (local.x < 0.0F) {
+        closestRadial = {0.0F, glm::clamp(local.y, -radius, radius)};
+    } else if (glm::length(radial) > radius) {
+        closestRadial = glm::normalize(radial) * radius;
+    } else {
+        closestRadial = radial;
+    }
+    const glm::vec3 closest(
+        closestRadial.x, closestRadial.y, glm::clamp(local.z, 0.0F, length));
+    return glm::length(local - closest) <= std::max(selectionRadius, 0.0F);
+}
+
+inline bool sphereOverlapsBox(
+    const glm::vec3& selectionCenter, float selectionRadius,
+    const glm::vec3& center, const glm::vec3& axisX,
+    const glm::vec3& axisY, const glm::vec3& axisZ) {
+    const glm::mat3 basis(axisX, axisY, axisZ);
+    if (std::abs(glm::determinant(basis)) < 1.0e-12F) return false;
+    const glm::vec3 local = glm::inverse(basis) * (selectionCenter - center);
+    const glm::vec3 closestLocal = glm::clamp(
+        local, glm::vec3(-0.5F), glm::vec3(0.5F));
+    const glm::vec3 closestWorld = center + basis * closestLocal;
+    return glm::length(selectionCenter - closestWorld)
+        <= std::max(selectionRadius, 0.0F);
+}
+
 inline std::optional<float> raySphere(
     const Ray& ray, const glm::vec3& center, float radius) {
     const glm::vec3 offset = ray.origin - center;

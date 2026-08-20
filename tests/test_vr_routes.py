@@ -348,6 +348,7 @@ def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -
         "hover_identity": "nuc:s1:0:h1:4:FORWARD:0",
         "select_sequence": 2,
         "select_identity": "nuc:s1:0:h1:3:FORWARD:0",
+        "select_identities": ["nuc:s1:0:h1:3:FORWARD:0"],
         "level_sequence": 3,
         "selection_level": "domain",
         "tool_sequence": 4,
@@ -430,6 +431,7 @@ def test_native_tool_transform_returns_to_nadoc_coordinates(tmp_path) -> None:
         "hover_identity": None,
         "select_sequence": 0,
         "select_identity": None,
+        "select_identities": [],
         "level_sequence": 0,
         "selection_level": "default",
         "tool_sequence": 0,
@@ -649,14 +651,48 @@ def test_native_feedback_writer_is_private_bounded_and_atomic(tmp_path) -> None:
             selection_level="base",
             owner_tokens=["exact", "domain", "strand"],
             selection_kind="base",
+            selected_identities=["nuc:s1:0:h1:3:FORWARD:0"],
         ),
     )
     assert feedback_path.read_text() == (
-        "NADOCVR_FEEDBACK 3 4 1 1 base base nuc:s1:0:h1:3:FORWARD:0 "
-        "3 exact domain strand\n"
+        "NADOCVR_FEEDBACK 5 4 1 1 base base nuc:s1:0:h1:3:FORWARD:0 "
+        "3 exact domain strand 1 nuc:s1:0:h1:3:FORWARD:0 1 exact\n"
     )
     assert feedback_path.stat().st_mode & 0o777 == 0o600
     assert not feedback_path.with_name(f"{feedback_path.name}.next").exists()
+
+    _write_feedback(
+        {"feedback_path": str(feedback_path)},
+        VRFeedbackRequest(
+            select_sequence=5,
+            identity="primitive:legacy",
+            accepted=True,
+            selected=True,
+            selection_level="base",
+            selection_kind="base",
+        ),
+    )
+    assert feedback_path.read_text() == (
+        "NADOCVR_FEEDBACK 5 5 1 1 base base primitive:legacy 0 "
+        "1 primitive:legacy 0\n"
+    )
+
+    _write_feedback(
+        {"feedback_path": str(feedback_path)},
+        VRFeedbackRequest(
+            select_sequence=6,
+            identity="primitive:a",
+            accepted=True,
+            selected=False,
+            selection_level="base",
+            selected_identities=["primitive:a", "primitive:b"],
+            selected_owner_tokens=["owner:a", "owner:b"],
+        ),
+    )
+    assert feedback_path.read_text() == (
+        "NADOCVR_FEEDBACK 5 6 1 0 base none primitive:a 0 "
+        "2 primitive:a primitive:b 2 owner:a owner:b\n"
+    )
 
     with pytest.raises(HTTPException, match="Invalid VR feedback identity"):
         _write_feedback(

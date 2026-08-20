@@ -2487,6 +2487,64 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
   }
 
+  /** Replace canonical selection with the distinct refs touched by a VR Selection Volume. */
+  function _selectVrIdentities(identities = []) {
+    const bounded = [...new Set(
+      identities.filter(identity => typeof identity === 'string' && identity),
+    )].slice(0, 16)
+    if (bounded.length <= 1) {
+      const result = _selectVrIdentity(bounded[0] ?? null)
+      return result ? {
+        ...result,
+        identity: bounded[0],
+        selectedIdentities: result.accepted && result.selected ? [bounded[0]] : [],
+        selectedOwnerTokens: result.accepted && result.selected && result.ownerTokens?.[0]
+          ? [result.ownerTokens[0]] : [],
+      } : null
+    }
+
+    const selections = new Map()
+    // Every overlap is interpreted from the same pre-pull desktop drill state.
+    // Otherwise an earlier hit could mutate Auto/Drill and change the meaning of a
+    // later hit in the same physical Selection Volume.
+    const volumeMode = _mode
+    const volumeStrandId = _strandId
+    for (const identity of bounded) {
+      selectionController.clear()
+      _mode = volumeMode
+      _strandId = volumeStrandId
+      const result = _selectVrIdentity(identity)
+      const ref = selectionController.getState().primary ?? null
+      if (!result?.accepted || !result.selected || !ref) continue
+      const key = JSON.stringify(ref)
+      if (!selections.has(key)) selections.set(key, { identity, ref, result })
+    }
+    selectionController.replace([...selections.values()].map(value => value.ref))
+    if (selections.size === 1) {
+      const only = selections.values().next().value
+      return {
+        ...only.result,
+        identity: only.identity,
+        selected: true,
+        selectedIdentities: [only.identity],
+        selectedOwnerTokens: only.result.ownerTokens?.[0]
+          ? [only.result.ownerTokens[0]] : [],
+      }
+    }
+    return {
+      accepted: selections.size > 0,
+      selected: false,
+      ownerTokens: [],
+      selectionKind: 'none',
+      identity: bounded[0] ?? null,
+      selectionCount: selections.size,
+      selectedIdentities: [...selections.values()].map(value => value.identity),
+      selectedOwnerTokens: [...new Set(
+        [...selections.values()].map(value => value.result.ownerTokens?.[0]).filter(Boolean),
+      )],
+    }
+  }
+
   /** Resolve an action-time native tool target against the browser's current
    * canonical selection. The exact primitive remains transient session metadata;
    * it is never promoted to a persistent Atom/design ref. At least one opaque
@@ -4828,6 +4886,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     /** Level-aware native Select routed through the canonical selection controller. */
     selectVRIdentity(identity) { return _selectVrIdentity(identity) },
+
+    /** Bounded controller Selection Volume routed into canonical multi-selection. */
+    selectVRIdentities(identities) { return _selectVrIdentities(identities) },
 
     /** Read-only canonical target for the browser-authoritative VR tool shell. */
     getPrimarySelectionRef() { return selectionController.getState().primary ?? null },

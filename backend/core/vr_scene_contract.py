@@ -115,7 +115,9 @@ def parse_scene_contract(text: str) -> dict[str, dict[str, ScenePrimitive]]:
                 raise ValueError(f"line {line_number}: malformed tool handle")
             scope_id, identity, kind = fields[1], fields[2], fields[3]
             if (
-                kind not in {"base", "end", "domain", "strand", "atom"}
+                kind not in {
+                    "base", "end", "domain", "strand", "crossover", "atom"
+                }
                 or not scope_id
                 or identity in result[active]
                 or identity in handle_tokens[active]

@@ -213,6 +213,9 @@ export function initVRSession({
             sequence: selectSequence,
             type: 'select',
             identity: event?.select_identity ?? null,
+            identities: Array.isArray(event?.select_identities)
+              ? event.select_identities.filter(identity => typeof identity === 'string').slice(0, 16)
+              : (typeof event?.select_identity === 'string' ? [event.select_identity] : []),
           })
         }
         const levelSequence = Number(event?.level_sequence ?? 0)

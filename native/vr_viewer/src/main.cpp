@@ -167,6 +167,12 @@ struct SceneData {
     float normalizationScale = 1.0F;
 };
 
+struct SelectionVolumeHits {
+    std::vector<nadoc_vr::PickHit> representatives;
+    std::vector<std::string> ownerTokens;
+    std::vector<std::string> directIdentities;
+};
+
 Representation representationFromName(const std::string& name) {
     if (name == "cylinders") return Representation::cylinders;
     if (name == "full") return Representation::full;
@@ -264,6 +270,8 @@ constexpr const char* kLitFragmentSource = R"GLSL(
     uniform sampler2DShadow uShadowMap;
     uniform mat4 uLightViewProjection;
     uniform vec3 uLightDirection;
+    uniform float uAlpha;
+    uniform float uEmissive;
     out vec4 outColor;
 
     float shadowVisibility(vec3 normal) {
@@ -291,7 +299,8 @@ constexpr const char* kLitFragmentSource = R"GLSL(
         vec3 normal = normalize(vNormal);
         float diffuse = max(dot(normal, uLightDirection), 0.0);
         float lighting = 0.20 + 0.90 * diffuse * shadowVisibility(normal);
-        outColor = vec4(vColor * lighting, 1.0);
+        lighting = mix(lighting, 1.0, uEmissive);
+        outColor = vec4(vColor * lighting, uAlpha);
     }
 )GLSL";
 
@@ -623,7 +632,7 @@ SceneData loadScene(const std::string& path) {
                   >> handle.center.x >> handle.center.y >> handle.center.z;
             const bool validKind = handle.kind == "base" || handle.kind == "end"
                 || handle.kind == "domain" || handle.kind == "strand"
-                || handle.kind == "atom";
+                || handle.kind == "crossover" || handle.kind == "atom";
             if (handle.id.empty() || handle.id.size() > 64 ||
                 handle.token.empty() || handle.token.size() > 2048 || !validKind ||
                 !scopeHandleIds[poseIndex][activeIndex]
@@ -987,10 +996,7 @@ class GlScene {
     void setToolPreview(
         const std::vector<std::string>& ownerTokens, const glm::mat4& transform) {
         std::string token;
-        const RepresentationData& source =
-            expanded_ && scene_.hasExpanded
-                ? scene_.expandedRepresentations[static_cast<size_t>(representation_)]
-                : scene_.representations[static_cast<size_t>(representation_)];
+        const RepresentationData& source = currentSource();
         for (const std::string& candidate : ownerTokens) {
             const auto& ownershipRecords = source.toolScopeOwnership.empty()
                 ? source.transformOwnership : source.toolScopeOwnership;
@@ -1067,13 +1073,37 @@ class GlScene {
             scene_.normalizationScale, {0.0F, 0.0F, -kViewDistanceMeters});
     }
 
+    void setSelectionHighlights(
+        const std::vector<std::string>& snapOwnerTokens,
+        const std::vector<std::string>& snapDirectIdentities,
+        const std::vector<std::string>& selectedOwnerTokens,
+        const std::vector<std::string>& selectedDirectIdentities) {
+        const std::unordered_set<std::string> nextSnapTokens(
+            snapOwnerTokens.begin(), snapOwnerTokens.end());
+        const std::unordered_set<std::string> nextSnapIdentities(
+            snapDirectIdentities.begin(), snapDirectIdentities.end());
+        const std::unordered_set<std::string> nextSelectedTokens(
+            selectedOwnerTokens.begin(), selectedOwnerTokens.end());
+        const std::unordered_set<std::string> nextSelectedIdentities(
+            selectedDirectIdentities.begin(), selectedDirectIdentities.end());
+        if (nextSnapTokens == snapHighlightOwnerTokens_ &&
+            nextSnapIdentities == snapHighlightIdentities_ &&
+            nextSelectedTokens == selectedHighlightOwnerTokens_ &&
+            nextSelectedIdentities == selectedHighlightIdentities_) {
+            return;
+        }
+        snapHighlightOwnerTokens_ = nextSnapTokens;
+        snapHighlightIdentities_ = nextSnapIdentities;
+        selectedHighlightOwnerTokens_ = nextSelectedTokens;
+        selectedHighlightIdentities_ = nextSelectedIdentities;
+        setStyle(representation_, coloring_);
+    }
+
     void setStyle(Representation representation, Coloring coloring) {
         representation_ = representation;
         coloring_ = coloring;
-        const RepresentationData& source =
-            expanded_ && scene_.hasExpanded
-                ? scene_.expandedRepresentations[static_cast<size_t>(representation)]
-                : scene_.representations[static_cast<size_t>(representation)];
+        prepareDisplayedSource();
+        const RepresentationData& source = currentSource();
         auto collectWeights = [&](const std::string& token) {
             std::unordered_map<std::string, std::pair<float, float>> result;
             if (token.empty()) return result;
@@ -1125,63 +1155,131 @@ class GlScene {
             return nadoc_vr::weightedTransformVector(
                 result, toolPreviewTransform_, pending);
         };
+        auto matchesOwner = [&](const std::string& identity,
+                                const std::unordered_set<std::string>& tokens) {
+            if (tokens.empty()) return false;
+            const auto aliases = std::find_if(
+                source.ownerAliases.begin(), source.ownerAliases.end(),
+                [&](const nadoc_vr::OwnerAliasEntry& candidate) {
+                    return candidate.identity == identity;
+                });
+            return aliases != source.ownerAliases.end() && std::any_of(
+                aliases->tokens.begin(), aliases->tokens.end(),
+                [&](const std::string& token) { return tokens.contains(token); });
+        };
+        auto glowColor = [&](const std::string& identity) -> std::optional<glm::vec3> {
+            if (selectedHighlightIdentities_.contains(identity) ||
+                matchesOwner(identity, selectedHighlightOwnerTokens_)) {
+                return glm::vec3(0.22F, 1.0F, 0.42F);
+            }
+            if (snapHighlightIdentities_.contains(identity) ||
+                matchesOwner(identity, snapHighlightOwnerTokens_)) {
+                return glm::vec3(1.0F, 0.68F, 0.12F);
+            }
+            return std::nullopt;
+        };
 
         std::vector<Vertex> points;
+        std::vector<Vertex> glowPoints;
         points.reserve(source.points.size());
         for (const StyledPoint& point : source.points) {
-            points.push_back(Vertex{
-                transformPoint(point.position, point.identity, false),
-                point.colors.get(coloring), point.size});
+            const glm::vec3 position = transformPoint(
+                point.position, point.identity, false);
+            points.push_back(Vertex{position, point.colors.get(coloring), point.size});
+            if (const auto color = glowColor(point.identity)) {
+                glowPoints.push_back(Vertex{position, *color, point.size * 1.55F});
+            }
         }
         glBindBuffer(GL_ARRAY_BUFFER, sphereInstanceVbo_);
         glBufferData(GL_ARRAY_BUFFER,
                      static_cast<GLsizeiptr>(points.size() * sizeof(Vertex)),
                      points.data(), GL_DYNAMIC_DRAW);
         sphereCount_ = static_cast<GLsizei>(points.size());
+        glBindBuffer(GL_ARRAY_BUFFER, sphereGlowInstanceVbo_);
+        glBufferData(GL_ARRAY_BUFFER,
+                     static_cast<GLsizeiptr>(glowPoints.size() * sizeof(Vertex)),
+                     glowPoints.data(), GL_DYNAMIC_DRAW);
+        sphereGlowCount_ = static_cast<GLsizei>(glowPoints.size());
 
         std::vector<Cylinder> cylinders;
+        std::vector<Cylinder> glowCylinders;
         cylinders.reserve(source.cylinders.size());
         for (const StyledCylinder& cylinder : source.cylinders) {
+            const glm::vec3 start = transformPoint(
+                cylinder.start, cylinder.identity, false);
+            const glm::vec3 end = transformPoint(
+                cylinder.end, cylinder.identity, true);
             cylinders.push_back(Cylinder{
-                transformPoint(cylinder.start, cylinder.identity, false),
-                transformPoint(cylinder.end, cylinder.identity, true),
-                cylinder.radius, cylinder.colors.get(coloring)});
+                start, end, cylinder.radius, cylinder.colors.get(coloring)});
+            if (const auto color = glowColor(cylinder.identity)) {
+                glowCylinders.push_back(Cylinder{
+                    start, end, cylinder.radius * 1.55F, *color});
+            }
         }
         glBindBuffer(GL_ARRAY_BUFFER, cylinderInstanceVbo_);
         glBufferData(GL_ARRAY_BUFFER,
                      static_cast<GLsizeiptr>(cylinders.size() * sizeof(Cylinder)),
                      cylinders.data(), GL_DYNAMIC_DRAW);
         cylinderCount_ = static_cast<GLsizei>(cylinders.size());
+        glBindBuffer(GL_ARRAY_BUFFER, cylinderGlowInstanceVbo_);
+        glBufferData(GL_ARRAY_BUFFER,
+                     static_cast<GLsizeiptr>(glowCylinders.size() * sizeof(Cylinder)),
+                     glowCylinders.data(), GL_DYNAMIC_DRAW);
+        cylinderGlowCount_ = static_cast<GLsizei>(glowCylinders.size());
 
         std::vector<Cylinder> halfCylinders;
+        std::vector<Cylinder> glowHalfCylinders;
         halfCylinders.reserve(source.halfCylinders.size());
         for (const StyledCylinder& cylinder : source.halfCylinders) {
+            const glm::vec3 start = transformPoint(
+                cylinder.start, cylinder.identity, false);
+            const glm::vec3 end = transformPoint(
+                cylinder.end, cylinder.identity, true);
             halfCylinders.push_back(Cylinder{
-                transformPoint(cylinder.start, cylinder.identity, false),
-                transformPoint(cylinder.end, cylinder.identity, true),
-                cylinder.radius, cylinder.colors.get(coloring)});
+                start, end, cylinder.radius, cylinder.colors.get(coloring)});
+            if (const auto color = glowColor(cylinder.identity)) {
+                glowHalfCylinders.push_back(Cylinder{
+                    start, end, cylinder.radius * 1.55F, *color});
+            }
         }
         glBindBuffer(GL_ARRAY_BUFFER, halfCylinderInstanceVbo_);
         glBufferData(GL_ARRAY_BUFFER,
                      static_cast<GLsizeiptr>(halfCylinders.size() * sizeof(Cylinder)),
                      halfCylinders.data(), GL_DYNAMIC_DRAW);
         halfCylinderCount_ = static_cast<GLsizei>(halfCylinders.size());
+        glBindBuffer(GL_ARRAY_BUFFER, halfCylinderGlowInstanceVbo_);
+        glBufferData(GL_ARRAY_BUFFER,
+                     static_cast<GLsizeiptr>(
+                         glowHalfCylinders.size() * sizeof(Cylinder)),
+                     glowHalfCylinders.data(), GL_DYNAMIC_DRAW);
+        halfCylinderGlowCount_ = static_cast<GLsizei>(glowHalfCylinders.size());
 
         std::vector<Box> boxes;
+        std::vector<Box> glowBoxes;
         boxes.reserve(source.boxes.size());
         for (const StyledBox& box : source.boxes) {
+            const glm::vec3 center = transformPoint(
+                box.center, box.identity, false);
+            const glm::vec3 axisX = transformVector(box.axisX, box.identity);
+            const glm::vec3 axisY = transformVector(box.axisY, box.identity);
+            const glm::vec3 axisZ = transformVector(box.axisZ, box.identity);
             boxes.push_back(Box{
-                transformPoint(box.center, box.identity, false),
-                transformVector(box.axisX, box.identity),
-                transformVector(box.axisY, box.identity),
-                transformVector(box.axisZ, box.identity),
-                box.colors.get(coloring)});
+                center, axisX, axisY, axisZ, box.colors.get(coloring)});
+            if (const auto color = glowColor(box.identity)) {
+                glowBoxes.push_back(Box{
+                    center, axisX * 1.18F, axisY * 1.18F, axisZ * 1.18F, *color});
+            }
         }
         glBindBuffer(GL_ARRAY_BUFFER, boxInstanceVbo_);
         glBufferData(GL_ARRAY_BUFFER,
                      static_cast<GLsizeiptr>(boxes.size() * sizeof(Box)),
                      boxes.data(), GL_DYNAMIC_DRAW);
         boxCount_ = static_cast<GLsizei>(boxes.size());
+        glBindBuffer(GL_ARRAY_BUFFER, boxGlowInstanceVbo_);
+        glBufferData(GL_ARRAY_BUFFER,
+                     static_cast<GLsizeiptr>(glowBoxes.size() * sizeof(Box)),
+                     glowBoxes.data(), GL_DYNAMIC_DRAW);
+        boxGlowCount_ = static_cast<GLsizei>(glowBoxes.size());
 
         glm::vec3 lo(std::numeric_limits<float>::max());
         glm::vec3 hi(std::numeric_limits<float>::lowest());
@@ -1219,10 +1317,17 @@ class GlScene {
 
     [[nodiscard]] Representation representation() const { return representation_; }
     [[nodiscard]] Coloring coloring() const { return coloring_; }
-    [[nodiscard]] bool expanded() const { return expanded_; }
-    void setExpanded(bool expanded) {
-        if (expanded_ == expanded || (expanded && !scene_.hasExpanded)) return;
-        expanded_ = expanded;
+    [[nodiscard]] bool expanded() const { return expansion_.target(); }
+    [[nodiscard]] float expansionAmount() const { return expansion_.value(); }
+    [[nodiscard]] bool toggleExpanded() {
+        if (!scene_.hasExpanded) return false;
+        expansion_.toggle();
+        return true;
+    }
+    void updateExpanded(float elapsedSeconds) {
+        if (!scene_.hasExpanded || !expansion_.update(elapsedSeconds)) return;
+        prepareDisplayedSource();
+        updateDisplayedGeometry();
         setStyle(representation_, coloring_);
     }
 
@@ -1233,10 +1338,7 @@ class GlScene {
         ray.origin = glm::vec3(worldToModel * glm::vec4(worldRay.origin, 1.0F));
         ray.direction = glm::normalize(
             glm::vec3(worldToModel * glm::vec4(worldRay.direction, 0.0F)));
-        const RepresentationData& source =
-            expanded_ && scene_.hasExpanded
-                ? scene_.expandedRepresentations[static_cast<size_t>(representation_)]
-                : scene_.representations[static_cast<size_t>(representation_)];
+        const RepresentationData& source = currentSource();
         std::optional<nadoc_vr::PickHit> nearest;
         auto consider = [&](const std::string& identity, std::optional<float> distance) {
             if (!distance || identity.starts_with("viewer:") || *distance > 10.0F) return;
@@ -1280,15 +1382,137 @@ class GlScene {
         return nearest;
     }
 
+    [[nodiscard]] std::vector<nadoc_vr::PickHit> selectVolume(
+        const glm::vec3& worldCenter, float worldRadius,
+        const glm::mat4& modelTransform) const {
+        const glm::mat4 worldToModel = glm::inverse(modelTransform);
+        const glm::vec3 center = glm::vec3(
+            worldToModel * glm::vec4(worldCenter, 1.0F));
+        const float modelScale = std::max({
+            glm::length(glm::vec3(modelTransform[0])),
+            glm::length(glm::vec3(modelTransform[1])),
+            glm::length(glm::vec3(modelTransform[2])),
+            1.0e-6F,
+        });
+        const float radius = worldRadius / modelScale;
+        const RepresentationData& source = currentSource();
+        std::vector<nadoc_vr::PickHit> hits;
+        auto include = [&](const std::string& identity, bool overlaps,
+                           const glm::vec3& localPosition) {
+            if (!overlaps || identity.starts_with("viewer:")) return;
+            const glm::vec3 position = glm::vec3(
+                modelTransform * glm::vec4(localPosition, 1.0F));
+            hits.push_back({identity, glm::length(position - worldCenter), position});
+        };
+        for (const StyledPoint& point : source.points) {
+            const glm::vec3 position = previewPoint(
+                point.position,
+                committedWeights(source, point.identity).first,
+                previewWeights(source, point.identity).first);
+            include(point.identity, nadoc_vr::sphereOverlapsSphere(
+                center, radius, position, point.size), position);
+        }
+        auto includeCylinders = [&](const std::vector<StyledCylinder>& cylinders,
+                                    bool half) {
+            for (const StyledCylinder& cylinder : cylinders) {
+                const auto committed = committedWeights(source, cylinder.identity);
+                const auto pending = previewWeights(source, cylinder.identity);
+                const glm::vec3 start = previewPoint(
+                    cylinder.start, committed.first, pending.first);
+                const glm::vec3 end = previewPoint(
+                    cylinder.end, committed.second, pending.second);
+                const bool overlaps = half
+                    ? nadoc_vr::sphereOverlapsHalfCylinder(
+                        center, radius, start, end, cylinder.radius)
+                    : nadoc_vr::sphereOverlapsCapsule(
+                        center, radius, start, end, cylinder.radius);
+                include(cylinder.identity, overlaps,
+                        nadoc_vr::closestPointOnSegment(center, start, end));
+            }
+        };
+        includeCylinders(source.cylinders, false);
+        includeCylinders(source.halfCylinders, true);
+        for (const StyledBox& box : source.boxes) {
+            const float committed = committedWeights(source, box.identity).first;
+            const float pending = previewWeights(source, box.identity).first;
+            const glm::vec3 boxCenter = previewPoint(box.center, committed, pending);
+            const glm::vec3 axisX = previewVector(box.axisX, committed, pending);
+            const glm::vec3 axisY = previewVector(box.axisY, committed, pending);
+            const glm::vec3 axisZ = previewVector(box.axisZ, committed, pending);
+            include(box.identity, nadoc_vr::sphereOverlapsBox(
+                center, radius, boxCenter, axisX, axisY, axisZ), boxCenter);
+        }
+        std::sort(hits.begin(), hits.end(), [](const auto& a, const auto& b) {
+            return a.distance < b.distance;
+        });
+        return hits;
+    }
+
+    /** Collapse primitive overlaps through the same canonical filter as desktop.
+     * One representative identity is retained per canonical object for the browser
+     * event, while owner tokens drive whole-object native highlighting. */
+    [[nodiscard]] SelectionVolumeHits resolveSelectionVolumeHits(
+        const std::vector<nadoc_vr::PickHit>& hits,
+        const std::string& selectionLevel,
+        const std::string& selectedSelectionKind,
+        const std::vector<std::string>& selectedOwnerTokens) const {
+        const RepresentationData& source = currentSource();
+        std::vector<std::pair<std::string, std::string>> tokenKinds;
+        tokenKinds.reserve(source.toolHandles.size() + source.ownerHandles.size());
+        for (const ToolHandle& handle : source.toolHandles) {
+            tokenKinds.emplace_back(handle.token, handle.kind);
+        }
+        for (const OwnerHandle& handle : source.ownerHandles) {
+            tokenKinds.emplace_back(handle.token, "cluster");
+        }
+
+        SelectionVolumeHits result;
+        result.representatives.reserve(std::min<size_t>(hits.size(), 16U));
+        std::unordered_set<std::string> seen;
+        size_t identityBytes = 0;
+        for (const nadoc_vr::PickHit& hit : hits) {
+            if (result.representatives.size() == 16U) break;
+            auto token = nadoc_vr::selectionVolumeOwnerToken(
+                source.ownerAliases, tokenKinds, hit.identity, selectionLevel);
+            if (selectionLevel == "default") {
+                const auto strandToken = nadoc_vr::selectionVolumeOwnerToken(
+                    source.ownerAliases, tokenKinds, hit.identity, "strand");
+                const bool drillingSameStrand = strandToken &&
+                    (selectedSelectionKind == "strand" ||
+                     selectedSelectionKind == "base") &&
+                    std::find(
+                        selectedOwnerTokens.begin(), selectedOwnerTokens.end(),
+                        *strandToken) != selectedOwnerTokens.end();
+                if (drillingSameStrand) {
+                    token = nadoc_vr::selectionVolumeOwnerToken(
+                        source.ownerAliases, tokenKinds, hit.identity, "base");
+                    if (!token) {
+                        token = nadoc_vr::selectionVolumeOwnerToken(
+                            source.ownerAliases, tokenKinds, hit.identity, "domain");
+                    }
+                } else {
+                    token = strandToken;
+                }
+            }
+            const std::string& key = token ? *token : hit.identity;
+            if (!seen.insert(key).second ||
+                identityBytes + hit.identity.size() > 2048U) {
+                continue;
+            }
+            identityBytes += hit.identity.size();
+            result.representatives.push_back(hit);
+            if (token) result.ownerTokens.push_back(*token);
+            else result.directIdentities.push_back(hit.identity);
+        }
+        return result;
+    }
+
     [[nodiscard]] std::optional<nadoc_vr::PickHit> anchor(
         const std::string& identity,
         const std::vector<std::string>& ownerTokens,
         const glm::mat4& modelTransform) const {
         if (identity.empty()) return std::nullopt;
-        const RepresentationData& source =
-            expanded_ && scene_.hasExpanded
-                ? scene_.expandedRepresentations[static_cast<size_t>(representation_)]
-                : scene_.representations[static_cast<size_t>(representation_)];
+        const RepresentationData& source = currentSource();
         auto containsIdentity = [&](const std::string& candidate) {
             return std::any_of(source.points.begin(), source.points.end(),
                                [&](const StyledPoint& value) {
@@ -1373,10 +1597,7 @@ class GlScene {
     [[nodiscard]] std::optional<nadoc_vr::BoundsSummary> ownerBounds(
         const std::vector<std::string>& ownerTokens,
         const glm::mat4& modelTransform) const {
-        const RepresentationData& source =
-            expanded_ && scene_.hasExpanded
-                ? scene_.expandedRepresentations[static_cast<size_t>(representation_)]
-                : scene_.representations[static_cast<size_t>(representation_)];
+        const RepresentationData& source = currentSource();
         std::unordered_set<std::string> identities;
         for (const std::string& token : ownerTokens) {
             for (const nadoc_vr::OwnerAliasEntry& entry : source.ownerAliases) {
@@ -1430,10 +1651,7 @@ class GlScene {
     [[nodiscard]] std::optional<glm::vec3> ownerHandle(
         const std::vector<std::string>& ownerTokens,
         const glm::mat4& modelTransform) const {
-        const RepresentationData& source =
-            expanded_ && scene_.hasExpanded
-                ? scene_.expandedRepresentations[static_cast<size_t>(representation_)]
-                : scene_.representations[static_cast<size_t>(representation_)];
+        const RepresentationData& source = currentSource();
         for (const std::string& token : ownerTokens) {
             const auto toolHandle = std::find_if(
                 source.toolHandles.begin(), source.toolHandles.end(),
@@ -1542,21 +1760,31 @@ class GlScene {
         if (sphereMeshVbo_) glDeleteBuffers(1, &sphereMeshVbo_);
         if (sphereIndexVbo_) glDeleteBuffers(1, &sphereIndexVbo_);
         if (sphereInstanceVbo_) glDeleteBuffers(1, &sphereInstanceVbo_);
+        if (sphereGlowInstanceVbo_) glDeleteBuffers(1, &sphereGlowInstanceVbo_);
         if (cylinderInstanceVbo_) glDeleteBuffers(1, &cylinderInstanceVbo_);
+        if (cylinderGlowInstanceVbo_) glDeleteBuffers(1, &cylinderGlowInstanceVbo_);
         if (cylinderMeshVbo_) glDeleteBuffers(1, &cylinderMeshVbo_);
         if (cylinderIndexVbo_) glDeleteBuffers(1, &cylinderIndexVbo_);
         if (halfCylinderInstanceVbo_) glDeleteBuffers(1, &halfCylinderInstanceVbo_);
+        if (halfCylinderGlowInstanceVbo_) {
+            glDeleteBuffers(1, &halfCylinderGlowInstanceVbo_);
+        }
         if (halfCylinderMeshVbo_) glDeleteBuffers(1, &halfCylinderMeshVbo_);
         if (halfCylinderIndexVbo_) glDeleteBuffers(1, &halfCylinderIndexVbo_);
         if (boxInstanceVbo_) glDeleteBuffers(1, &boxInstanceVbo_);
+        if (boxGlowInstanceVbo_) glDeleteBuffers(1, &boxGlowInstanceVbo_);
         if (boxMeshVbo_) glDeleteBuffers(1, &boxMeshVbo_);
         if (boxIndexVbo_) glDeleteBuffers(1, &boxIndexVbo_);
         if (lineVao_) glDeleteVertexArrays(1, &lineVao_);
         if (guideVao_) glDeleteVertexArrays(1, &guideVao_);
         if (sphereVao_) glDeleteVertexArrays(1, &sphereVao_);
+        if (sphereGlowVao_) glDeleteVertexArrays(1, &sphereGlowVao_);
         if (cylinderVao_) glDeleteVertexArrays(1, &cylinderVao_);
+        if (cylinderGlowVao_) glDeleteVertexArrays(1, &cylinderGlowVao_);
         if (halfCylinderVao_) glDeleteVertexArrays(1, &halfCylinderVao_);
+        if (halfCylinderGlowVao_) glDeleteVertexArrays(1, &halfCylinderGlowVao_);
         if (boxVao_) glDeleteVertexArrays(1, &boxVao_);
+        if (boxGlowVao_) glDeleteVertexArrays(1, &boxGlowVao_);
         if (program_) glDeleteProgram(program_);
         if (sphereProgram_) glDeleteProgram(sphereProgram_);
         if (cylinderProgram_) glDeleteProgram(cylinderProgram_);
@@ -1578,6 +1806,8 @@ class GlScene {
             glUseProgram(sphereProgram_);
             glUniformMatrix4fv(sphereViewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
             glUniformMatrix4fv(sphereModel_, 1, GL_FALSE, &modelTransform[0][0]);
+            glUniform1f(sphereAlpha_, 1.0F);
+            glUniform1f(sphereEmissive_, 0.0F);
             applyLightingUniforms(
                 sphereLightViewProjection_, sphereLightDirection_, sphereShadowMap_);
             glBindVertexArray(sphereVao_);
@@ -1589,6 +1819,8 @@ class GlScene {
             glUseProgram(cylinderProgram_);
             glUniformMatrix4fv(cylinderViewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
             glUniformMatrix4fv(cylinderModel_, 1, GL_FALSE, &modelTransform[0][0]);
+            glUniform1f(cylinderAlpha_, 1.0F);
+            glUniform1f(cylinderEmissive_, 0.0F);
             applyLightingUniforms(
                 cylinderLightViewProjection_, cylinderLightDirection_, cylinderShadowMap_);
             glBindVertexArray(cylinderVao_);
@@ -1600,6 +1832,8 @@ class GlScene {
             glUseProgram(cylinderProgram_);
             glUniformMatrix4fv(cylinderViewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
             glUniformMatrix4fv(cylinderModel_, 1, GL_FALSE, &modelTransform[0][0]);
+            glUniform1f(cylinderAlpha_, 1.0F);
+            glUniform1f(cylinderEmissive_, 0.0F);
             applyLightingUniforms(
                 cylinderLightViewProjection_, cylinderLightDirection_, cylinderShadowMap_);
             glBindVertexArray(halfCylinderVao_);
@@ -1612,10 +1846,81 @@ class GlScene {
             glUseProgram(boxProgram_);
             glUniformMatrix4fv(boxViewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
             glUniformMatrix4fv(boxModel_, 1, GL_FALSE, &modelTransform[0][0]);
+            glUniform1f(boxAlpha_, 1.0F);
+            glUniform1f(boxEmissive_, 0.0F);
             applyLightingUniforms(boxLightViewProjection_, boxLightDirection_, boxShadowMap_);
             glBindVertexArray(boxVao_);
             glDrawElementsInstanced(
                 GL_TRIANGLES, boxIndexCount_, GL_UNSIGNED_SHORT, nullptr, boxCount_);
+        }
+
+        if (sphereGlowCount_ > 0 || cylinderGlowCount_ > 0 ||
+            halfCylinderGlowCount_ > 0 || boxGlowCount_ > 0) {
+            glDepthMask(GL_FALSE);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+            if (sphereGlowCount_ > 0) {
+                glUseProgram(sphereProgram_);
+                glUniformMatrix4fv(
+                    sphereViewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
+                glUniformMatrix4fv(sphereModel_, 1, GL_FALSE, &modelTransform[0][0]);
+                glUniform1f(sphereAlpha_, 0.34F);
+                glUniform1f(sphereEmissive_, 1.0F);
+                applyLightingUniforms(
+                    sphereLightViewProjection_, sphereLightDirection_, sphereShadowMap_);
+                glBindVertexArray(sphereGlowVao_);
+                glDrawElementsInstanced(
+                    GL_TRIANGLES, sphereIndexCount_, GL_UNSIGNED_SHORT, nullptr,
+                    sphereGlowCount_);
+            }
+            if (cylinderGlowCount_ > 0) {
+                glUseProgram(cylinderProgram_);
+                glUniformMatrix4fv(
+                    cylinderViewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
+                glUniformMatrix4fv(
+                    cylinderModel_, 1, GL_FALSE, &modelTransform[0][0]);
+                glUniform1f(cylinderAlpha_, 0.34F);
+                glUniform1f(cylinderEmissive_, 1.0F);
+                applyLightingUniforms(
+                    cylinderLightViewProjection_, cylinderLightDirection_,
+                    cylinderShadowMap_);
+                glBindVertexArray(cylinderGlowVao_);
+                glDrawElementsInstanced(
+                    GL_TRIANGLES, cylinderIndexCount_, GL_UNSIGNED_SHORT, nullptr,
+                    cylinderGlowCount_);
+            }
+            if (halfCylinderGlowCount_ > 0) {
+                glUseProgram(cylinderProgram_);
+                glUniformMatrix4fv(
+                    cylinderViewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
+                glUniformMatrix4fv(
+                    cylinderModel_, 1, GL_FALSE, &modelTransform[0][0]);
+                glUniform1f(cylinderAlpha_, 0.34F);
+                glUniform1f(cylinderEmissive_, 1.0F);
+                applyLightingUniforms(
+                    cylinderLightViewProjection_, cylinderLightDirection_,
+                    cylinderShadowMap_);
+                glBindVertexArray(halfCylinderGlowVao_);
+                glDrawElementsInstanced(
+                    GL_TRIANGLES, halfCylinderIndexCount_, GL_UNSIGNED_SHORT, nullptr,
+                    halfCylinderGlowCount_);
+            }
+            if (boxGlowCount_ > 0) {
+                glUseProgram(boxProgram_);
+                glUniformMatrix4fv(
+                    boxViewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
+                glUniformMatrix4fv(boxModel_, 1, GL_FALSE, &modelTransform[0][0]);
+                glUniform1f(boxAlpha_, 0.34F);
+                glUniform1f(boxEmissive_, 1.0F);
+                applyLightingUniforms(
+                    boxLightViewProjection_, boxLightDirection_, boxShadowMap_);
+                glBindVertexArray(boxGlowVao_);
+                glDrawElementsInstanced(
+                    GL_TRIANGLES, boxIndexCount_, GL_UNSIGNED_SHORT, nullptr,
+                    boxGlowCount_);
+            }
+            glDisable(GL_BLEND);
+            glDepthMask(GL_TRUE);
         }
 
         if (!guides.empty()) {
@@ -1636,6 +1941,123 @@ class GlScene {
     }
 
   private:
+    struct ExpandedPairing {
+        std::vector<size_t> points;
+        std::vector<size_t> cylinders;
+        std::vector<size_t> halfCylinders;
+        std::vector<size_t> boxes;
+        std::vector<size_t> ownerHandles;
+        std::vector<size_t> toolHandles;
+    };
+
+    template <typename Value, typename Key>
+    [[nodiscard]] static std::vector<size_t> matchExpandedIndices(
+        const std::vector<Value>& natural, const std::vector<Value>& expanded,
+        Key key, const char* kind) {
+        std::unordered_map<std::string, size_t> expandedByKey;
+        expandedByKey.reserve(expanded.size());
+        for (size_t index = 0; index < expanded.size(); ++index) {
+            expandedByKey.emplace(key(expanded[index]), index);
+        }
+        std::vector<size_t> result;
+        result.reserve(natural.size());
+        for (const Value& value : natural) {
+            const auto found = expandedByKey.find(key(value));
+            if (found == expandedByKey.end()) {
+                throw std::runtime_error(
+                    std::string("Expanded VR pose changes primitive type: ") + kind);
+            }
+            result.push_back(found->second);
+        }
+        if (result.size() != expanded.size()) {
+            throw std::runtime_error(
+                std::string("Expanded VR pose changes primitive count: ") + kind);
+        }
+        return result;
+    }
+
+    void prepareDisplayedSource() {
+        if (displayedSourceValid_ && displayedRepresentation_ == representation_) return;
+        displayedRepresentation_ = representation_;
+        const size_t index = static_cast<size_t>(representation_);
+        displayedSource_ = scene_.representations[index];
+        expandedPairing_ = {};
+        if (scene_.hasExpanded) {
+            const RepresentationData& natural = scene_.representations[index];
+            const RepresentationData& expanded = scene_.expandedRepresentations[index];
+            auto identity = [](const auto& value) { return value.identity; };
+            expandedPairing_.points = matchExpandedIndices(
+                natural.points, expanded.points, identity, "point");
+            expandedPairing_.cylinders = matchExpandedIndices(
+                natural.cylinders, expanded.cylinders, identity, "cylinder");
+            expandedPairing_.halfCylinders = matchExpandedIndices(
+                natural.halfCylinders, expanded.halfCylinders, identity, "half cylinder");
+            expandedPairing_.boxes = matchExpandedIndices(
+                natural.boxes, expanded.boxes, identity, "box");
+            expandedPairing_.ownerHandles = matchExpandedIndices(
+                natural.ownerHandles, expanded.ownerHandles,
+                [](const OwnerHandle& value) { return value.token; }, "owner handle");
+            expandedPairing_.toolHandles = matchExpandedIndices(
+                natural.toolHandles, expanded.toolHandles,
+                [](const ToolHandle& value) { return value.id; }, "tool handle");
+        }
+        displayedSourceValid_ = true;
+        updateDisplayedGeometry();
+    }
+
+    void updateDisplayedGeometry() {
+        if (!scene_.hasExpanded || !displayedSourceValid_) return;
+        const size_t index = static_cast<size_t>(representation_);
+        const RepresentationData& natural = scene_.representations[index];
+        const RepresentationData& expanded = scene_.expandedRepresentations[index];
+        const float amount = expansion_.value();
+        for (size_t i = 0; i < displayedSource_.points.size(); ++i) {
+            const StyledPoint& a = natural.points[i];
+            const StyledPoint& b = expanded.points[expandedPairing_.points[i]];
+            displayedSource_.points[i].position = glm::mix(a.position, b.position, amount);
+            displayedSource_.points[i].size = glm::mix(a.size, b.size, amount);
+        }
+        auto blendCylinders = [&](std::vector<StyledCylinder>& output,
+                                  const std::vector<StyledCylinder>& a,
+                                  const std::vector<StyledCylinder>& b,
+                                  const std::vector<size_t>& pairing) {
+            for (size_t i = 0; i < output.size(); ++i) {
+                const StyledCylinder& target = b[pairing[i]];
+                output[i].start = glm::mix(a[i].start, target.start, amount);
+                output[i].end = glm::mix(a[i].end, target.end, amount);
+                output[i].radius = glm::mix(a[i].radius, target.radius, amount);
+            }
+        };
+        blendCylinders(
+            displayedSource_.cylinders, natural.cylinders, expanded.cylinders,
+            expandedPairing_.cylinders);
+        blendCylinders(
+            displayedSource_.halfCylinders, natural.halfCylinders,
+            expanded.halfCylinders, expandedPairing_.halfCylinders);
+        for (size_t i = 0; i < displayedSource_.boxes.size(); ++i) {
+            const StyledBox& a = natural.boxes[i];
+            const StyledBox& b = expanded.boxes[expandedPairing_.boxes[i]];
+            displayedSource_.boxes[i].center = glm::mix(a.center, b.center, amount);
+            displayedSource_.boxes[i].axisX = glm::mix(a.axisX, b.axisX, amount);
+            displayedSource_.boxes[i].axisY = glm::mix(a.axisY, b.axisY, amount);
+            displayedSource_.boxes[i].axisZ = glm::mix(a.axisZ, b.axisZ, amount);
+        }
+        for (size_t i = 0; i < displayedSource_.ownerHandles.size(); ++i) {
+            displayedSource_.ownerHandles[i].center = glm::mix(
+                natural.ownerHandles[i].center,
+                expanded.ownerHandles[expandedPairing_.ownerHandles[i]].center, amount);
+        }
+        for (size_t i = 0; i < displayedSource_.toolHandles.size(); ++i) {
+            displayedSource_.toolHandles[i].center = glm::mix(
+                natural.toolHandles[i].center,
+                expanded.toolHandles[expandedPairing_.toolHandles[i]].center, amount);
+        }
+    }
+
+    [[nodiscard]] const RepresentationData& currentSource() const {
+        return displayedSource_;
+    }
+
     [[nodiscard]] static std::pair<float, float> layerWeights(
         const RepresentationData& source, const std::string& identity,
         const std::string& token) {
@@ -1725,6 +2147,7 @@ class GlScene {
         }
         toolCommittedToken_.clear();
         toolCommittedTransform_ = glm::mat4(1.0F);
+        displayedSourceValid_ = false;
     }
 
     [[nodiscard]] std::pair<float, float> previewWeights(
@@ -1799,6 +2222,8 @@ class GlScene {
             glGetUniformLocation(sphereProgram_, "uLightViewProjection");
         sphereLightDirection_ = glGetUniformLocation(sphereProgram_, "uLightDirection");
         sphereShadowMap_ = glGetUniformLocation(sphereProgram_, "uShadowMap");
+        sphereAlpha_ = glGetUniformLocation(sphereProgram_, "uAlpha");
+        sphereEmissive_ = glGetUniformLocation(sphereProgram_, "uEmissive");
 
         constexpr float goldenRatio = 1.6180339887498948482F;
         std::vector<glm::vec3> mesh = {
@@ -1847,6 +2272,29 @@ class GlScene {
             glVertexAttribDivisor(attribute, 1);
         }
         glBindVertexArray(0);
+
+        glGenVertexArrays(1, &sphereGlowVao_);
+        glBindVertexArray(sphereGlowVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, sphereMeshVbo_);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), nullptr);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphereIndexVbo_);
+        glGenBuffers(1, &sphereGlowInstanceVbo_);
+        glBindBuffer(GL_ARRAY_BUFFER, sphereGlowInstanceVbo_);
+        glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+                              reinterpret_cast<void*>(offsetof(Vertex, position)));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+                              reinterpret_cast<void*>(offsetof(Vertex, size)));
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+                              reinterpret_cast<void*>(offsetof(Vertex, color)));
+        for (GLuint attribute = 1; attribute <= 3; ++attribute) {
+            glVertexAttribDivisor(attribute, 1);
+        }
+        glBindVertexArray(0);
     }
 
     void uploadCylinders() {
@@ -1857,6 +2305,8 @@ class GlScene {
             glGetUniformLocation(cylinderProgram_, "uLightViewProjection");
         cylinderLightDirection_ = glGetUniformLocation(cylinderProgram_, "uLightDirection");
         cylinderShadowMap_ = glGetUniformLocation(cylinderProgram_, "uShadowMap");
+        cylinderAlpha_ = glGetUniformLocation(cylinderProgram_, "uAlpha");
+        cylinderEmissive_ = glGetUniformLocation(cylinderProgram_, "uEmissive");
 
         constexpr size_t sides = 8;
         constexpr float pi = 3.14159265358979323846F;
@@ -1947,6 +2397,37 @@ class GlScene {
             glVertexAttribDivisor(attribute, 1);
         }
         glBindVertexArray(0);
+
+        glGenVertexArrays(1, &cylinderGlowVao_);
+        glBindVertexArray(cylinderGlowVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, cylinderMeshVbo_);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(CylinderMeshVertex),
+                              reinterpret_cast<void*>(offsetof(CylinderMeshVertex, position)));
+        glEnableVertexAttribArray(5);
+        glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, sizeof(CylinderMeshVertex),
+                              reinterpret_cast<void*>(offsetof(CylinderMeshVertex, normal)));
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cylinderIndexVbo_);
+        glGenBuffers(1, &cylinderGlowInstanceVbo_);
+        glBindBuffer(GL_ARRAY_BUFFER, cylinderGlowInstanceVbo_);
+        glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Cylinder),
+                              reinterpret_cast<void*>(offsetof(Cylinder, start)));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Cylinder),
+                              reinterpret_cast<void*>(offsetof(Cylinder, end)));
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(Cylinder),
+                              reinterpret_cast<void*>(offsetof(Cylinder, radius)));
+        glEnableVertexAttribArray(4);
+        glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Cylinder),
+                              reinterpret_cast<void*>(offsetof(Cylinder, color)));
+        for (GLuint attribute = 1; attribute <= 4; ++attribute) {
+            glVertexAttribDivisor(attribute, 1);
+        }
+        glBindVertexArray(0);
+
     }
 
     void uploadHalfCylinders() {
@@ -2040,6 +2521,36 @@ class GlScene {
             glVertexAttribDivisor(attribute, 1);
         }
         glBindVertexArray(0);
+
+        glGenVertexArrays(1, &halfCylinderGlowVao_);
+        glBindVertexArray(halfCylinderGlowVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, halfCylinderMeshVbo_);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(CylinderMeshVertex),
+                              reinterpret_cast<void*>(offsetof(CylinderMeshVertex, position)));
+        glEnableVertexAttribArray(5);
+        glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, sizeof(CylinderMeshVertex),
+                              reinterpret_cast<void*>(offsetof(CylinderMeshVertex, normal)));
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, halfCylinderIndexVbo_);
+        glGenBuffers(1, &halfCylinderGlowInstanceVbo_);
+        glBindBuffer(GL_ARRAY_BUFFER, halfCylinderGlowInstanceVbo_);
+        glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Cylinder),
+                              reinterpret_cast<void*>(offsetof(Cylinder, start)));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Cylinder),
+                              reinterpret_cast<void*>(offsetof(Cylinder, end)));
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(Cylinder),
+                              reinterpret_cast<void*>(offsetof(Cylinder, radius)));
+        glEnableVertexAttribArray(4);
+        glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Cylinder),
+                              reinterpret_cast<void*>(offsetof(Cylinder, color)));
+        for (GLuint attribute = 1; attribute <= 4; ++attribute) {
+            glVertexAttribDivisor(attribute, 1);
+        }
+        glBindVertexArray(0);
     }
 
     void uploadBoxes() {
@@ -2049,6 +2560,8 @@ class GlScene {
         boxLightViewProjection_ = glGetUniformLocation(boxProgram_, "uLightViewProjection");
         boxLightDirection_ = glGetUniformLocation(boxProgram_, "uLightDirection");
         boxShadowMap_ = glGetUniformLocation(boxProgram_, "uShadowMap");
+        boxAlpha_ = glGetUniformLocation(boxProgram_, "uAlpha");
+        boxEmissive_ = glGetUniformLocation(boxProgram_, "uEmissive");
 
         std::vector<CylinderMeshVertex> vertices;
         std::vector<GLushort> indices;
@@ -2109,6 +2622,27 @@ class GlScene {
             glVertexAttribDivisor(location, 1);
         }
         glBindVertexArray(0);
+
+        glGenVertexArrays(1, &boxGlowVao_);
+        glBindVertexArray(boxGlowVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, boxMeshVbo_);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(CylinderMeshVertex),
+                              reinterpret_cast<void*>(offsetof(CylinderMeshVertex, position)));
+        glEnableVertexAttribArray(5);
+        glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, sizeof(CylinderMeshVertex),
+                              reinterpret_cast<void*>(offsetof(CylinderMeshVertex, normal)));
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, boxIndexVbo_);
+        glGenBuffers(1, &boxGlowInstanceVbo_);
+        glBindBuffer(GL_ARRAY_BUFFER, boxGlowInstanceVbo_);
+        glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
+        for (const auto& [location, offset] : attributes) {
+            glEnableVertexAttribArray(location);
+            glVertexAttribPointer(location, 3, GL_FLOAT, GL_FALSE, sizeof(Box),
+                                  reinterpret_cast<void*>(offset));
+            glVertexAttribDivisor(location, 1);
+        }
+        glBindVertexArray(0);
     }
 
     static void upload(const std::vector<Vertex>& vertices, GLuint& vao, GLuint& vbo,
@@ -2136,13 +2670,21 @@ class GlScene {
 
     GLuint program_ = 0;
     SceneData scene_;
+    RepresentationData displayedSource_;
+    ExpandedPairing expandedPairing_;
+    Representation displayedRepresentation_ = Representation::full;
+    bool displayedSourceValid_ = false;
     Representation representation_ = Representation::full;
     Coloring coloring_ = Coloring::strand;
-    bool expanded_ = false;
+    nadoc_vr::SmoothToggle expansion_;
     std::string toolCommittedToken_;
     glm::mat4 toolCommittedTransform_{1.0F};
     std::string toolPreviewToken_;
     glm::mat4 toolPreviewTransform_{1.0F};
+    std::unordered_set<std::string> snapHighlightOwnerTokens_;
+    std::unordered_set<std::string> snapHighlightIdentities_;
+    std::unordered_set<std::string> selectedHighlightOwnerTokens_;
+    std::unordered_set<std::string> selectedHighlightIdentities_;
     nadoc_vr::TimingWindow previewTiming_{240};
     GLuint lineVao_ = 0;
     GLuint lineVbo_ = 0;
@@ -2153,20 +2695,28 @@ class GlScene {
     GLuint sphereMeshVbo_ = 0;
     GLuint sphereIndexVbo_ = 0;
     GLuint sphereInstanceVbo_ = 0;
+    GLuint sphereGlowVao_ = 0;
+    GLuint sphereGlowInstanceVbo_ = 0;
     GLuint cylinderProgram_ = 0;
     GLuint cylinderVao_ = 0;
     GLuint cylinderMeshVbo_ = 0;
     GLuint cylinderIndexVbo_ = 0;
     GLuint cylinderInstanceVbo_ = 0;
+    GLuint cylinderGlowVao_ = 0;
+    GLuint cylinderGlowInstanceVbo_ = 0;
     GLuint halfCylinderVao_ = 0;
     GLuint halfCylinderMeshVbo_ = 0;
     GLuint halfCylinderIndexVbo_ = 0;
     GLuint halfCylinderInstanceVbo_ = 0;
+    GLuint halfCylinderGlowVao_ = 0;
+    GLuint halfCylinderGlowInstanceVbo_ = 0;
     GLuint boxProgram_ = 0;
     GLuint boxVao_ = 0;
     GLuint boxMeshVbo_ = 0;
     GLuint boxIndexVbo_ = 0;
     GLuint boxInstanceVbo_ = 0;
+    GLuint boxGlowVao_ = 0;
+    GLuint boxGlowInstanceVbo_ = 0;
     GLuint shadowFramebuffer_ = 0;
     GLuint shadowTexture_ = 0;
     GLint viewProjection_ = -1;
@@ -2175,25 +2725,35 @@ class GlScene {
     GLint sphereLightViewProjection_ = -1;
     GLint sphereLightDirection_ = -1;
     GLint sphereShadowMap_ = -1;
+    GLint sphereAlpha_ = -1;
+    GLint sphereEmissive_ = -1;
     GLint cylinderViewProjection_ = -1;
     GLint cylinderModel_ = -1;
     GLint cylinderLightViewProjection_ = -1;
     GLint cylinderLightDirection_ = -1;
     GLint cylinderShadowMap_ = -1;
+    GLint cylinderAlpha_ = -1;
+    GLint cylinderEmissive_ = -1;
     GLint boxViewProjection_ = -1;
     GLint boxModel_ = -1;
     GLint boxLightViewProjection_ = -1;
     GLint boxLightDirection_ = -1;
     GLint boxShadowMap_ = -1;
+    GLint boxAlpha_ = -1;
+    GLint boxEmissive_ = -1;
     GLsizei lineCount_ = 0;
     GLsizei sphereIndexCount_ = 0;
     GLsizei sphereCount_ = 0;
+    GLsizei sphereGlowCount_ = 0;
     GLsizei cylinderIndexCount_ = 0;
     GLsizei cylinderCount_ = 0;
+    GLsizei cylinderGlowCount_ = 0;
     GLsizei halfCylinderIndexCount_ = 0;
     GLsizei halfCylinderCount_ = 0;
+    GLsizei halfCylinderGlowCount_ = 0;
     GLsizei boxIndexCount_ = 0;
     GLsizei boxCount_ = 0;
+    GLsizei boxGlowCount_ = 0;
     glm::vec3 localCenter_{0.0F, 0.0F, -kViewDistanceMeters};
     float localRadius_ = 0.5F;
     glm::mat4 lightViewProjection_{1.0F};
@@ -2248,6 +2808,10 @@ class Viewer {
             selectedIdentity_ = *identity;
             selectedOwnerTokens_ = std::move(selectedOwnerTokens);
             selectedSelectionKind_ = std::move(selectedSelectionKind);
+            committedSelectionIdentities_ = {selectedIdentity_};
+            if (!selectedOwnerTokens_.empty()) {
+                committedSelectionOwnerTokens_ = {selectedOwnerTokens_.front()};
+            }
         }
     }
 
@@ -2286,7 +2850,7 @@ class Viewer {
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
         window_ = glfwCreateWindow(
             720, 180,
-            "NADOC VR — trigger grab · trackpad select · right grip expand · menu options",
+            "NADOC VR — grips move/resize · triggers use Selection Volumes",
             nullptr, nullptr);
         if (!window_) throw std::runtime_error("Could not create the OpenGL companion window");
         glfwMakeContextCurrent(window_);
@@ -2313,14 +2877,14 @@ class Viewer {
     }
 
     void suggestBindings(const char* profile,
-                         const std::array<const char*, 12>& componentPaths) {
+                         const std::array<const char*, 16>& componentPaths) {
         std::vector<XrActionSuggestedBinding> bindings;
         bindings.reserve(componentPaths.size());
         for (size_t hand = 0; hand < handPaths_.size(); ++hand) {
-            const size_t offset = hand * 6U;
-            const std::array<XrAction, 6> actions = {
+            const size_t offset = hand * 8U;
+            const std::array<XrAction, 8> actions = {
                 poseAction_, triggerAction_, menuAction_, gripAction_,
-                selectAction_, hapticAction_};
+                trackpadAction_, trackpadTouchAction_, trackpadAxisAction_, hapticAction_};
             for (size_t component = 0; component < actions.size(); ++component) {
                 if (componentPaths[offset + component]) {
                     bindings.push_back(
@@ -2349,13 +2913,17 @@ class Viewer {
                 "xrCreateActionSet");
 
         poseAction_ = createAction(XR_ACTION_TYPE_POSE_INPUT, "hand_pose", "Hand pose");
-        triggerAction_ = createAction(XR_ACTION_TYPE_FLOAT_INPUT, "grab", "Grab model");
+        triggerAction_ = createAction(XR_ACTION_TYPE_FLOAT_INPUT, "select", "Select");
         menuAction_ = createAction(
             XR_ACTION_TYPE_BOOLEAN_INPUT, "vr_menu", "VR menu");
         gripAction_ = createAction(
-            XR_ACTION_TYPE_BOOLEAN_INPUT, "expanded_view", "Expanded Quick View");
-        selectAction_ = createAction(
-            XR_ACTION_TYPE_BOOLEAN_INPUT, "select_element", "Select element");
+            XR_ACTION_TYPE_BOOLEAN_INPUT, "scene_grab", "Move or resize scene");
+        trackpadAction_ = createAction(
+            XR_ACTION_TYPE_BOOLEAN_INPUT, "trackpad_click", "Quick action");
+        trackpadTouchAction_ = createAction(
+            XR_ACTION_TYPE_BOOLEAN_INPUT, "trackpad_touch", "Resize Selection Volume");
+        trackpadAxisAction_ = createAction(
+            XR_ACTION_TYPE_VECTOR2F_INPUT, "trackpad_axis", "Selection Volume size");
         hapticAction_ = createAction(
             XR_ACTION_TYPE_VIBRATION_OUTPUT, "haptic", "Navigation haptic");
 
@@ -2364,14 +2932,18 @@ class Viewer {
             {"/user/hand/left/input/grip/pose",
              "/user/hand/left/input/trigger/value",
              "/user/hand/left/input/menu/click",
-             nullptr,
-             nullptr,
+             "/user/hand/left/input/squeeze/click",
+             "/user/hand/left/input/trackpad/click",
+             "/user/hand/left/input/trackpad/touch",
+             "/user/hand/left/input/trackpad",
              "/user/hand/left/output/haptic",
              "/user/hand/right/input/grip/pose",
              "/user/hand/right/input/trigger/value",
              "/user/hand/right/input/menu/click",
              "/user/hand/right/input/squeeze/click",
              "/user/hand/right/input/trackpad/click",
+             "/user/hand/right/input/trackpad/touch",
+             "/user/hand/right/input/trackpad",
              "/user/hand/right/output/haptic"});
         suggestBindings(
             "/interaction_profiles/khr/simple_controller",
@@ -2380,9 +2952,13 @@ class Viewer {
              "/user/hand/left/input/menu/click",
              nullptr,
              nullptr,
+             nullptr,
+             nullptr,
              "/user/hand/left/output/haptic",
              "/user/hand/right/input/grip/pose",
              "/user/hand/right/input/select/click",
+             nullptr,
+             nullptr,
              nullptr,
              nullptr,
              nullptr,
@@ -2545,6 +3121,8 @@ class Viewer {
 
         glGenFramebuffers(1, &framebuffer_);
         glScene_ = std::make_unique<GlScene>(std::move(sceneData_));
+        glScene_->setSelectionHighlights(
+            {}, {}, committedSelectionOwnerTokens_, committedSelectionIdentities_);
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_PROGRAM_POINT_SIZE);
         glDisable(GL_CULL_FACE);
@@ -2591,7 +3169,7 @@ class Viewer {
     }
 
     glm::vec3 menuWorld(float x, float y, float z = 0.0F) const {
-        return menuPosition_ + menuOrientation_ * glm::vec3(x, y, z);
+        return menuPlacement_.worldPoint({x, y, z});
     }
 
     void appendMenuText(const std::string& text, float x, float y, float scale,
@@ -2679,6 +3257,12 @@ class Viewer {
     static constexpr std::array<MenuItem, 1> kJobDetailMenuItems = {{
         {"BACK TO JOBS", 0.0F, -0.260F, 0.305F},
     }};
+    static constexpr std::array<MenuItem, 3> kMenuControlItems = {{
+        {"DOCK", -0.20F, -0.505F, 0.12F},
+        {"SIZE -", 0.02F, -0.505F, 0.08F},
+        {"SIZE +", 0.22F, -0.505F, 0.10F},
+    }};
+    static constexpr int kMenuControlHitBase = 100;
 
     void appendMenuGuides() {
         if (!menuOpen_) return;
@@ -2704,9 +3288,10 @@ class Viewer {
         };
         const glm::vec3 border(0.22F, 0.42F, 0.62F);
         line(menuWorld(-0.33F, 0.33F), menuWorld(0.33F, 0.33F), border);
-        line(menuWorld(0.33F, 0.33F), menuWorld(0.33F, -0.455F), border);
-        line(menuWorld(0.33F, -0.455F), menuWorld(-0.33F, -0.455F), border);
-        line(menuWorld(-0.33F, -0.455F), menuWorld(-0.33F, 0.33F), border);
+        line(menuWorld(0.33F, 0.33F), menuWorld(0.33F, -0.545F), border);
+        line(menuWorld(0.33F, -0.545F), menuWorld(-0.33F, -0.545F), border);
+        line(menuWorld(-0.33F, -0.545F), menuWorld(-0.33F, 0.33F), border);
+        line(menuWorld(-0.33F, -0.465F), menuWorld(0.33F, -0.465F), border * 0.7F);
         const std::string title = menuPage_ == MenuPage::options
             ? "VR MENU"
             : menuPage_ == MenuPage::tools
@@ -2722,6 +3307,16 @@ class Viewer {
             title, menuPage_ == MenuPage::options ? -0.105F
                                                  : jobMenu ? -0.300F : -0.235F,
             0.305F, jobMenu ? 0.0042F : 0.006F, {0.65F, 0.88F, 1.0F});
+
+        for (size_t index = 0; index < kMenuControlItems.size(); ++index) {
+            const MenuItem& item = kMenuControlItems[index];
+            glm::vec3 color = static_cast<int>(index) + kMenuControlHitBase == menuHover_
+                ? glm::vec3(1.0F, 0.78F, 0.22F)
+                : glm::vec3(0.65F, 0.70F, 0.78F);
+            const char* label = index == 0U && menuPlacement_.worldDocked()
+                ? "FOLLOW" : item.label;
+            itemBox(item, color, label);
+        }
 
         auto jobColor = [](const nadoc_vr::JobSnapshotRow& row) {
             if (row.stale) return glm::vec3(0.95F, 0.68F, 0.22F);
@@ -3044,13 +3639,14 @@ class Viewer {
     int menuHit(const nadoc_vr::HandPose& hand) const {
         if (!menuOpen_ || !hand.valid) return -1;
         const glm::vec3 direction = hand.orientation * glm::vec3(0, 0, -1);
-        const glm::vec3 normal = menuOrientation_ * glm::vec3(0, 0, 1);
+        const glm::vec3 normal = menuPlacement_.orientation() * glm::vec3(0, 0, 1);
         const float denominator = glm::dot(direction, normal);
         if (std::abs(denominator) < 1.0e-5F) return -1;
-        const float distance = glm::dot(menuPosition_ - hand.position, normal) / denominator;
+        const float distance = glm::dot(
+            menuPlacement_.position() - hand.position, normal) / denominator;
         if (distance <= 0.0F || distance > 5.0F) return -1;
-        const glm::vec3 local = glm::inverse(menuOrientation_)
-                              * (hand.position + direction * distance - menuPosition_);
+        const glm::vec3 local = menuPlacement_.localPoint(
+            hand.position + direction * distance);
         const MenuItem* items = menuPage_ == MenuPage::options
             ? kOptionsMenuItems.data()
             : menuPage_ == MenuPage::tools
@@ -3074,6 +3670,13 @@ class Viewer {
                 return static_cast<int>(index);
             }
         }
+        for (size_t index = 0; index < kMenuControlItems.size(); ++index) {
+            const MenuItem& item = kMenuControlItems[index];
+            if (std::abs(local.x - item.x) <= item.halfWidth &&
+                std::abs(local.y - item.y) <= 0.025F) {
+                return kMenuControlHitBase + static_cast<int>(index);
+            }
+        }
         return -1;
     }
 
@@ -3083,6 +3686,19 @@ class Viewer {
             const int hit = menuHit(hands_[hand]);
             if (hit >= 0 && menuHover_ < 0) menuHover_ = hit;
             if (hit < 0 || !triggerClicked_[hand]) continue;
+            if (hit >= kMenuControlHitBase) {
+                const int control = hit - kMenuControlHitBase;
+                if (control == 0) {
+                    menuPlacement_.toggleDock(hand, hands_);
+                    pulse(hand, 0.50F);
+                } else {
+                    const bool changed = menuPlacement_.adjustScale(
+                        control == 1 ? -1 : 1);
+                    pulse(hand, changed ? 0.40F : 0.15F);
+                }
+                menuHover_ = -1;
+                continue;
+            }
             if (menuPage_ == MenuPage::job_detail) {
                 menuPage_ = MenuPage::jobs;
                 menuHover_ = -1;
@@ -3122,7 +3738,7 @@ class Viewer {
                     planePickSlot_ = hit == 2 ? "a" : "b";
                     activePlanePickSequence_ = 0;
                     planePickIdentity_.clear();
-                    planePickStatus_ = std::string("AIM + TRACKPAD: PLANE ")
+                    planePickStatus_ = std::string("AIM + TRIGGER: PLANE ")
                                      + (hit == 2 ? "A" : "B");
                     menuOpen_ = false;
                     menuHover_ = -1;
@@ -3224,6 +3840,23 @@ class Viewer {
             controllerGuides_.push_back(Vertex{a, color, 1.0F});
             controllerGuides_.push_back(Vertex{b, color, 1.0F});
         };
+        auto circle = [&](const glm::vec3& center, float radius,
+                          int axisA, int axisB, const glm::vec3& color) {
+            constexpr int segments = 24;
+            for (int segment = 0; segment < segments; ++segment) {
+                const float angleA = glm::two_pi<float>()
+                                   * static_cast<float>(segment) / segments;
+                const float angleB = glm::two_pi<float>()
+                                   * static_cast<float>(segment + 1) / segments;
+                glm::vec3 a = center;
+                glm::vec3 b = center;
+                a[axisA] += std::cos(angleA) * radius;
+                a[axisB] += std::sin(angleA) * radius;
+                b[axisA] += std::cos(angleB) * radius;
+                b[axisB] += std::sin(angleB) * radius;
+                line(a, b, color);
+            }
+        };
         for (size_t hand = 0; hand < hands_.size(); ++hand) {
             if (!hands_[hand].valid) continue;
             glm::vec3 color = hand == 0U
@@ -3233,7 +3866,7 @@ class Viewer {
             if (hand == 1U && pendingToolTransform_.dragging()) {
                 color = {1.0F, 0.72F, 0.18F};
             }
-            if (hand == 1U && gripPressed_) color = {0.35F, 0.95F, 1.0F};
+            if (hand == 1U && glScene_->expanded()) color = {0.35F, 0.95F, 1.0F};
             if (manipulator_.mode() == nadoc_vr::ManipulationMode::two_hand) {
                 color = {0.95F, 0.35F, 1.0F};
             }
@@ -3241,28 +3874,23 @@ class Viewer {
             const glm::vec3 forward = hands_[hand].orientation * glm::vec3(0, 0, -1);
             const glm::vec3 right = hands_[hand].orientation * glm::vec3(1, 0, 0);
             const glm::vec3 up = hands_[hand].orientation * glm::vec3(0, 1, 0);
-            const glm::vec3 tip = hand == 1U && sceneHover_ && !menuOpen_
-                ? sceneHover_->position
-                : origin + forward * (menuOpen_ ? 1.2F : 0.18F);
+            const glm::vec3 sphereCenter = selectionVolumeCenter(hand);
+            const glm::vec3 tip = menuOpen_
+                ? origin + forward * 1.2F : sphereCenter;
             line(origin - forward * 0.045F, origin, color * 0.65F);
             line(origin, tip, color);
             line(tip - right * 0.008F, tip + right * 0.008F, color);
             line(tip - up * 0.008F, tip + up * 0.008F, color);
+            const glm::vec3 sphereColor = triggerPartial_[hand]
+                ? glm::mix(color, glm::vec3(1.0F), 0.35F) : color * 0.52F;
+            const float radius = selectionVolumes_[hand].radius();
+            circle(sphereCenter, radius, 0, 1, sphereColor);
+            circle(sphereCenter, radius, 0, 2, sphereColor);
+            circle(sphereCenter, radius, 1, 2, sphereColor);
         }
         if (hands_[0].valid && hands_[1].valid &&
             manipulator_.mode() == nadoc_vr::ManipulationMode::two_hand) {
             line(hands_[0].position, hands_[1].position, {0.95F, 0.35F, 1.0F});
-        }
-        if (sceneHover_ && !menuOpen_) {
-            constexpr float markerRadius = 0.009F;
-            const glm::vec3 center = sceneHover_->position;
-            const glm::vec3 color(0.35F, 0.95F, 1.0F);
-            line(center - glm::vec3(markerRadius, 0, 0),
-                 center + glm::vec3(markerRadius, 0, 0), color);
-            line(center - glm::vec3(0, markerRadius, 0),
-                 center + glm::vec3(0, markerRadius, 0), color);
-            line(center - glm::vec3(0, 0, markerRadius),
-                 center + glm::vec3(0, 0, markerRadius), color);
         }
         const bool deformationTool = toolConfig_.active() &&
             (toolConfig_.mode() == nadoc_vr::ToolMode::twist ||
@@ -3275,51 +3903,58 @@ class Viewer {
             for (size_t slot = 0; slot < planeGuides_.size(); ++slot) {
                 if (!planeGuides_[slot]) continue;
                 const DeformationPlaneGuide& guide = *planeGuides_[slot];
-                const DeformationPlanePose* pose = glScene_->expanded()
-                    ? guide.expanded ? &*guide.expanded : nullptr
-                    : &guide.natural;
-                if (!pose) continue;
-                const glm::vec3 reference = std::abs(pose->normal.y) < 0.90F
+                DeformationPlanePose pose = guide.natural;
+                if (guide.expanded) {
+                    const float amount = glScene_->expansionAmount();
+                    pose.center = glm::mix(
+                        guide.natural.center, guide.expanded->center, amount);
+                    pose.normal = glm::normalize(glm::mix(
+                        guide.natural.normal, guide.expanded->normal, amount));
+                    pose.halfExtent = glm::mix(
+                        guide.natural.halfExtent, guide.expanded->halfExtent, amount);
+                }
+                const glm::vec3 reference = std::abs(pose.normal.y) < 0.90F
                     ? glm::vec3(0, 1, 0) : glm::vec3(1, 0, 0);
                 const glm::vec3 axisU = glm::normalize(glm::cross(
-                    pose->normal, reference));
+                    pose.normal, reference));
                 const glm::vec3 axisV = glm::normalize(glm::cross(
-                    pose->normal, axisU));
+                    pose.normal, axisU));
                 const glm::vec3 color = slot == 0U
                     ? glm::vec3(1.0F, 0.95F, 0.35F)
                     : glm::vec3(1.0F, 0.52F, 0.18F);
-                const glm::vec3 cornerA = pose->center
-                    - axisU * pose->halfExtent - axisV * pose->halfExtent;
-                const glm::vec3 cornerB = pose->center
-                    + axisU * pose->halfExtent - axisV * pose->halfExtent;
-                const glm::vec3 cornerC = pose->center
-                    + axisU * pose->halfExtent + axisV * pose->halfExtent;
-                const glm::vec3 cornerD = pose->center
-                    - axisU * pose->halfExtent + axisV * pose->halfExtent;
+                const glm::vec3 cornerA = pose.center
+                    - axisU * pose.halfExtent - axisV * pose.halfExtent;
+                const glm::vec3 cornerB = pose.center
+                    + axisU * pose.halfExtent - axisV * pose.halfExtent;
+                const glm::vec3 cornerC = pose.center
+                    + axisU * pose.halfExtent + axisV * pose.halfExtent;
+                const glm::vec3 cornerD = pose.center
+                    - axisU * pose.halfExtent + axisV * pose.halfExtent;
                 line(worldPoint(cornerA), worldPoint(cornerB), color);
                 line(worldPoint(cornerB), worldPoint(cornerC), color);
                 line(worldPoint(cornerC), worldPoint(cornerD), color);
                 line(worldPoint(cornerD), worldPoint(cornerA), color);
                 const float marker = glm::clamp(
-                    pose->halfExtent * 0.08F, 0.006F, 0.05F);
-                line(worldPoint(pose->center - axisU * marker),
-                     worldPoint(pose->center + axisU * marker), color);
-                line(worldPoint(pose->center - axisV * marker),
-                     worldPoint(pose->center + axisV * marker), color);
-                line(worldPoint(pose->center),
-                     worldPoint(pose->center + pose->normal * marker * 2.0F), color);
+                    pose.halfExtent * 0.08F, 0.006F, 0.05F);
+                line(worldPoint(pose.center - axisU * marker),
+                     worldPoint(pose.center + axisU * marker), color);
+                line(worldPoint(pose.center - axisV * marker),
+                     worldPoint(pose.center + axisV * marker), color);
+                line(worldPoint(pose.center),
+                     worldPoint(pose.center + pose.normal * marker * 2.0F), color);
             }
         }
         if (!menuOpen_) {
             if (const auto* feedback = currentToolContextFeedback();
                 feedback && feedback->resolved) {
-                const bool expanded = glScene_->expanded();
-                const glm::vec3& facePosition = expanded
-                    ? feedback->expandedFacePosition : feedback->facePosition;
-                const glm::vec3& faceNormal = expanded
-                    ? feedback->expandedFaceNormal : feedback->faceNormal;
-                const glm::vec3& previewOrigin = expanded
-                    ? feedback->expandedPreviewOrigin : feedback->previewOrigin;
+                const float amount = feedback->expandedPoseResolved
+                    ? glScene_->expansionAmount() : 0.0F;
+                const glm::vec3 facePosition = glm::mix(
+                    feedback->facePosition, feedback->expandedFacePosition, amount);
+                const glm::vec3 faceNormal = glm::normalize(glm::mix(
+                    feedback->faceNormal, feedback->expandedFaceNormal, amount));
+                const glm::vec3 previewOrigin = glm::mix(
+                    feedback->previewOrigin, feedback->expandedPreviewOrigin, amount);
                 const glm::vec3 localNormal = glm::normalize(faceNormal);
                 const glm::vec3 reference = std::abs(localNormal.z) < 0.90F
                     ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
@@ -3379,7 +4014,7 @@ class Viewer {
                         line(worldPoint(end + offsetA), worldPoint(end + offsetB),
                              previewColor);
                         if (segment % 4 == 0) {
-                            line(worldPoint(feedback->previewOrigin + offsetA),
+                            line(worldPoint(previewOrigin + offsetA),
                                  worldPoint(end + offsetA), previewColor);
                         }
                     }
@@ -3422,20 +4057,54 @@ class Viewer {
         appendMenuGuides();
     }
 
-    void updateSceneHover() {
+    [[nodiscard]] glm::vec3 selectionVolumeCenter(size_t hand) const {
+        return hands_[hand].position
+             + hands_[hand].orientation * glm::vec3(0.0F, 0.0F, -0.12F);
+    }
+
+    void updateSelectionVolumeCandidates() {
         const std::string previous = sceneHover_ ? sceneHover_->identity : "";
         sceneHover_.reset();
-        if (!menuOpen_ && !menuOpenRequested_ && hands_[1].valid &&
-            !triggerPressed_[0] && !triggerPressed_[1]) {
-            const glm::vec3 direction = hands_[1].orientation * glm::vec3(0, 0, -1);
-            sceneHover_ = glScene_->pick(
-                nadoc_vr::Ray{hands_[1].position, glm::normalize(direction)},
+        for (size_t hand = 0; hand < hands_.size(); ++hand) {
+            snapSelectionHits_[hand].clear();
+            snapSelectionOwnerTokens_[hand].clear();
+            snapSelectionDirectIdentities_[hand].clear();
+            if (menuOpen_ || menuOpenRequested_ || !hands_[hand].valid ||
+                !triggerPartial_[hand] || gripPressed_[hand]) {
+                continue;
+            }
+            const auto overlaps = glScene_->selectVolume(
+                selectionVolumeCenter(hand), selectionVolumes_[hand].radius(),
                 manipulator_.transform());
+            SelectionVolumeHits resolved = glScene_->resolveSelectionVolumeHits(
+                overlaps, selectionLevel_, selectedSelectionKind_, selectedOwnerTokens_);
+            snapSelectionHits_[hand] = std::move(resolved.representatives);
+            snapSelectionOwnerTokens_[hand] = std::move(resolved.ownerTokens);
+            snapSelectionDirectIdentities_[hand] = std::move(resolved.directIdentities);
+            if (!snapSelectionHits_[hand].empty() &&
+                (!sceneHover_ || snapSelectionHits_[hand].front().distance <
+                    sceneHover_->distance)) {
+                sceneHover_ = snapSelectionHits_[hand].front();
+            }
         }
+        std::vector<std::string> snapOwnerTokens;
+        std::vector<std::string> snapDirectIdentities;
+        for (size_t hand = 0; hand < hands_.size(); ++hand) {
+            snapOwnerTokens.insert(
+                snapOwnerTokens.end(), snapSelectionOwnerTokens_[hand].begin(),
+                snapSelectionOwnerTokens_[hand].end());
+            snapDirectIdentities.insert(
+                snapDirectIdentities.end(),
+                snapSelectionDirectIdentities_[hand].begin(),
+                snapSelectionDirectIdentities_[hand].end());
+        }
+        glScene_->setSelectionHighlights(
+            snapOwnerTokens, snapDirectIdentities,
+            committedSelectionOwnerTokens_, committedSelectionIdentities_);
         const std::string current = sceneHover_ ? sceneHover_->identity : "";
         if (current != previous) {
             publishHover(current);
-            if (!current.empty()) std::cout << "VR hover: " << current << '\n';
+            if (!current.empty()) std::cout << "VR Selection Volume snap: " << current << '\n';
         }
     }
 
@@ -3444,8 +4113,24 @@ class Viewer {
         publishEventState();
     }
 
-    void publishSelect(const std::string& identity) {
-        lastSelectIdentity_ = identity;
+    void publishSelect(const std::vector<std::string>& identities) {
+        static constexpr size_t kMaximumSelections = 16;
+        static constexpr size_t kMaximumIdentityBytes = 2048;
+        lastSelectIdentities_.clear();
+        size_t bytes = 0;
+        for (const std::string& identity : identities) {
+            if (identity.empty() ||
+                std::find(lastSelectIdentities_.begin(), lastSelectIdentities_.end(),
+                          identity) != lastSelectIdentities_.end() ||
+                lastSelectIdentities_.size() >= kMaximumSelections ||
+                bytes + identity.size() > kMaximumIdentityBytes) {
+                continue;
+            }
+            lastSelectIdentities_.push_back(identity);
+            bytes += identity.size();
+        }
+        lastSelectIdentity_ = lastSelectIdentities_.empty()
+            ? std::string{} : lastSelectIdentities_.front();
         ++selectSequence_;
         publishEventState();
     }
@@ -3523,6 +4208,12 @@ class Viewer {
         output << ",\"select_sequence\":" << selectSequence_
                << ",\"select_identity\":";
         identity(lastSelectIdentity_);
+        output << ",\"select_identities\":[";
+        for (size_t index = 0; index < lastSelectIdentities_.size(); ++index) {
+            if (index > 0) output << ',';
+            identity(lastSelectIdentities_[index]);
+        }
+        output << ']';
         output << ",\"level_sequence\":" << levelSequence_
                << ",\"selection_level\":\"" << selectionLevel_ << "\"";
         output << ",\"tool_sequence\":" << toolSequence_
@@ -3636,6 +4327,10 @@ class Viewer {
             record, feedbackSequence_, selectSequence_);
         if (!feedback) return;
         feedbackSequence_ = feedback->sequence;
+        committedSelectionIdentities_ = feedback->accepted
+            ? feedback->selectionIdentities : std::vector<std::string>{};
+        committedSelectionOwnerTokens_ = feedback->accepted
+            ? feedback->selectionOwnerTokens : std::vector<std::string>{};
         const std::string previousIdentity = selectedIdentity_;
         const std::vector<std::string> previousOwnerTokens = selectedOwnerTokens_;
         const std::string previousSelectionKind = selectedSelectionKind_;
@@ -3910,11 +4605,12 @@ class Viewer {
             XrActionStateFloat trigger{XR_TYPE_ACTION_STATE_FLOAT};
             checkXr(instance_, xrGetActionStateFloat(session_, &getInfo, &trigger),
                     "xrGetActionStateFloat");
+            triggerValues_[hand] = trigger.isActive ? trigger.currentState : 0.0F;
+            triggerPartial_[hand] = triggerValues_[hand] >= 0.15F;
             const bool wasPressed = triggerPressed_[hand];
-            const float threshold = wasPressed ? 0.40F : 0.55F;
-            triggerPressed_[hand] = trigger.isActive && trigger.currentState >= threshold;
+            const float threshold = wasPressed ? 0.60F : 0.88F;
+            triggerPressed_[hand] = triggerValues_[hand] >= threshold;
             triggerClicked_[hand] = !wasPressed && triggerPressed_[hand];
-            hands_[hand].pressed = triggerPressed_[hand];
 
             getInfo.action = poseAction_;
             XrActionStatePose poseState{XR_TYPE_ACTION_STATE_POSE};
@@ -3927,9 +4623,7 @@ class Viewer {
                 const XrSpaceLocationFlags valid = XR_SPACE_LOCATION_POSITION_VALID_BIT |
                                                    XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
                 if ((location.locationFlags & valid) == valid) {
-                    const bool pressed = hands_[hand].pressed;
                     hands_[hand] = handPoseFromXr(location.pose);
-                    hands_[hand].pressed = pressed;
                 }
             }
 
@@ -3954,35 +4648,59 @@ class Viewer {
                 pulse(hand, 0.45F);
             }
 
-            if (hand == 1U) {
-                getInfo.action = gripAction_;
-                XrActionStateBoolean grip{XR_TYPE_ACTION_STATE_BOOLEAN};
-                checkXr(instance_, xrGetActionStateBoolean(session_, &getInfo, &grip),
-                        "xrGetActionStateBoolean(expanded view)");
-                const bool expanded = grip.isActive && grip.currentState;
-                if (expanded != gripPressed_) {
-                    gripPressed_ = expanded;
-                    glScene_->setExpanded(expanded);
-                    pulse(hand, expanded ? 0.30F : 0.18F);
-                }
+            getInfo.action = gripAction_;
+            XrActionStateBoolean grip{XR_TYPE_ACTION_STATE_BOOLEAN};
+            checkXr(instance_, xrGetActionStateBoolean(session_, &getInfo, &grip),
+                    "xrGetActionStateBoolean(scene grip)");
+            gripPressed_[hand] = grip.isActive && grip.currentState;
+            hands_[hand].pressed = gripPressed_[hand];
 
-                getInfo.action = selectAction_;
-                XrActionStateBoolean select{XR_TYPE_ACTION_STATE_BOOLEAN};
-                checkXr(instance_, xrGetActionStateBoolean(session_, &getInfo, &select),
-                        "xrGetActionStateBoolean(select element)");
-                const bool selectPressed = select.isActive && select.currentState;
-                if (selectPressed && !selectPressed_ && sceneHover_) {
-                    if (planePickSlot_) publishPlanePick(sceneHover_->identity);
-                    else publishSelect(sceneHover_->identity);
-                    pulse(hand, 0.55F);
+            getInfo.action = trackpadAction_;
+            XrActionStateBoolean trackpad{XR_TYPE_ACTION_STATE_BOOLEAN};
+            checkXr(instance_, xrGetActionStateBoolean(session_, &getInfo, &trackpad),
+                    "xrGetActionStateBoolean(trackpad click)");
+            const bool trackpadPressed = trackpad.isActive && trackpad.currentState;
+            const bool trackpadClicked = trackpadPressed && !trackpadPressed_[hand];
+            trackpadPressed_[hand] = trackpadPressed;
+
+            getInfo.action = trackpadTouchAction_;
+            XrActionStateBoolean trackpadTouch{XR_TYPE_ACTION_STATE_BOOLEAN};
+            checkXr(instance_, xrGetActionStateBoolean(
+                session_, &getInfo, &trackpadTouch),
+                "xrGetActionStateBoolean(trackpad touch)");
+            getInfo.action = trackpadAxisAction_;
+            XrActionStateVector2f trackpadAxis{XR_TYPE_ACTION_STATE_VECTOR2F};
+            checkXr(instance_, xrGetActionStateVector2f(
+                session_, &getInfo, &trackpadAxis),
+                "xrGetActionStateVector2f(trackpad axis)");
+            const bool touching = trackpadTouch.isActive && trackpadTouch.currentState &&
+                                  trackpadAxis.isActive;
+            if (touching) {
+                if (!selectionVolumes_[hand].scrolling()) {
+                    selectionVolumes_[hand].beginScroll(trackpadAxis.currentState.y);
+                } else if (selectionVolumes_[hand].updateScroll(
+                               trackpadAxis.currentState.y)) {
+                    trackpadScrolled_[hand] = true;
                 }
-                selectPressed_ = selectPressed;
+            } else {
+                selectionVolumes_[hand].endScroll();
+                if (!trackpadPressed) trackpadScrolled_[hand] = false;
+            }
+
+            if (trackpadClicked && !trackpadScrolled_[hand] && hand == 0U) {
+                publishSelectionLevel(nadoc_vr::nextTabSelectionLevel(selectionLevel_));
+                pulse(hand, 0.40F);
+            } else if (trackpadClicked && !trackpadScrolled_[hand] && hand == 1U &&
+                       glScene_->toggleExpanded()) {
+                pulse(hand, glScene_->expanded() ? 0.40F : 0.24F);
             }
         }
 
+        if (menuOpen_) menuPlacement_.update(hands_);
+
         const nadoc_vr::ManipulationMode previous = manipulator_.mode();
         if (suppressManipulationUntilRelease_ &&
-            std::none_of(triggerPressed_.begin(), triggerPressed_.end(), [](bool pressed) {
+            std::none_of(gripPressed_.begin(), gripPressed_.end(), [](bool pressed) {
                 return pressed;
             })) {
             suppressManipulationUntilRelease_ = false;
@@ -4012,8 +4730,29 @@ class Viewer {
                 if (hands_[hand].valid && hands_[hand].pressed) pulse(hand);
             }
         }
+        const bool menuWasOpen = menuOpen_;
         if (menuOpen_) processMenuInput();
-        updateSceneHover();
+        updateSelectionVolumeCandidates();
+        if (!menuWasOpen && !menuOpen_ && !menuOpenRequested_) {
+            for (size_t hand = 0; hand < hands_.size(); ++hand) {
+                if (!triggerClicked_[hand] || !hands_[hand].valid) continue;
+                if (snapSelectionHits_[hand].empty()) {
+                    pulse(hand, 0.15F);
+                    continue;
+                }
+                if (planePickSlot_) {
+                    publishPlanePick(snapSelectionHits_[hand].front().identity);
+                } else {
+                    std::vector<std::string> identities;
+                    identities.reserve(snapSelectionHits_[hand].size());
+                    for (const auto& hit : snapSelectionHits_[hand]) {
+                        identities.push_back(hit.identity);
+                    }
+                    publishSelect(identities);
+                }
+                pulse(hand, 0.55F);
+            }
+        }
         pollSelectionFeedback();
         pollToolContextFeedback();
         pollPlanePickFeedback();
@@ -4033,10 +4772,12 @@ class Viewer {
         }
         headPosition /= static_cast<float>(viewCount);
         const XrQuaternionf& orientation = views_[0].pose.orientation;
-        menuOrientation_ = glm::normalize(glm::quat(
+        const glm::quat headOrientation = glm::normalize(glm::quat(
             orientation.w, orientation.x, orientation.y, orientation.z));
-        menuPosition_ = headPosition
-                      + menuOrientation_ * glm::vec3(0.0F, 0.04F, -1.00F);
+        const glm::vec3 fallbackPosition = headPosition
+            + headOrientation * glm::vec3(0.0F, 0.04F, -1.00F);
+        menuPlacement_.open(
+            menuHand_, hands_, fallbackPosition, headOrientation);
         menuOpen_ = true;
         menuPage_ = requestedMenuPage_;
         requestedMenuPage_ = MenuPage::options;
@@ -4117,6 +4858,8 @@ class Viewer {
         XrFrameBeginInfo beginInfo{XR_TYPE_FRAME_BEGIN_INFO};
         checkXr(instance_, xrBeginFrame(session_, &beginInfo), "xrBeginFrame");
         syncActions(frameState.predictedDisplayTime);
+        glScene_->updateExpanded(
+            static_cast<float>(frameState.predictedDisplayPeriod) / 1.0e9F);
 
         std::vector<XrCompositionLayerProjectionView> layerViews(views_.size());
         XrCompositionLayerProjection layer{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
@@ -4226,8 +4969,9 @@ class Viewer {
     }
 
     void eventLoop() {
-        std::cout << "NADOC VR viewer ready. Trigger: grab; both triggers: resize; "
-                     "right trackpad: select; right grip: Expanded Quick View; "
+        std::cout << "NADOC VR viewer ready. Grip: move; both grips: resize; "
+                     "trigger: Selection Volume snap/select; right trackpad: Expanded Quick View; "
+                     "left trackpad: cycle selection level; "
                      "menu: options; Escape: exit.\n";
         while (!exitLoop_) {
             glfwPollEvents();
@@ -4270,6 +5014,7 @@ class Viewer {
     std::string publishedHoverIdentity_;
     uint64_t selectSequence_ = 0;
     std::string lastSelectIdentity_;
+    std::vector<std::string> lastSelectIdentities_;
     uint64_t levelSequence_ = 0;
     std::string selectionLevel_ = "default";
     uint64_t toolSequence_ = 0;
@@ -4322,15 +5067,26 @@ class Viewer {
     XrAction triggerAction_ = XR_NULL_HANDLE;
     XrAction menuAction_ = XR_NULL_HANDLE;
     XrAction gripAction_ = XR_NULL_HANDLE;
-    XrAction selectAction_ = XR_NULL_HANDLE;
+    XrAction trackpadAction_ = XR_NULL_HANDLE;
+    XrAction trackpadTouchAction_ = XR_NULL_HANDLE;
+    XrAction trackpadAxisAction_ = XR_NULL_HANDLE;
     XrAction hapticAction_ = XR_NULL_HANDLE;
     std::array<XrPath, 2> handPaths_{XR_NULL_PATH, XR_NULL_PATH};
     std::array<XrSpace, 2> handSpaces_{XR_NULL_HANDLE, XR_NULL_HANDLE};
     std::array<nadoc_vr::HandPose, 2> hands_{};
+    std::array<float, 2> triggerValues_{0.0F, 0.0F};
+    std::array<bool, 2> triggerPartial_{false, false};
     std::array<bool, 2> triggerPressed_{false, false};
     std::array<bool, 2> triggerClicked_{false, false};
-    bool gripPressed_ = false;
-    bool selectPressed_ = false;
+    std::array<bool, 2> gripPressed_{false, false};
+    std::array<bool, 2> trackpadPressed_{false, false};
+    std::array<bool, 2> trackpadScrolled_{false, false};
+    std::array<nadoc_vr::SelectionVolumeControl, 2> selectionVolumes_{};
+    std::array<std::vector<nadoc_vr::PickHit>, 2> snapSelectionHits_{};
+    std::array<std::vector<std::string>, 2> snapSelectionOwnerTokens_{};
+    std::array<std::vector<std::string>, 2> snapSelectionDirectIdentities_{};
+    std::vector<std::string> committedSelectionIdentities_;
+    std::vector<std::string> committedSelectionOwnerTokens_;
     nadoc_vr::SceneManipulator manipulator_;
     std::vector<Vertex> controllerGuides_;
     std::optional<nadoc_vr::PickHit> sceneHover_;
@@ -4342,8 +5098,7 @@ class Viewer {
     int menuHover_ = -1;
     size_t jobPage_ = 0;
     size_t selectedJobIndex_ = 0;
-    glm::vec3 menuPosition_{};
-    glm::quat menuOrientation_{1.0F, 0.0F, 0.0F, 0.0F};
+    nadoc_vr::MenuPlacement menuPlacement_;
     size_t menuHand_ = 0;
     bool recenterRequested_ = false;
     size_t recenterHand_ = 0;

@@ -125,6 +125,8 @@ class VRFeedbackRequest(BaseModel):
     ] = "default"
     owner_tokens: list[str] = Field(default_factory=list, max_length=8)
     selection_kind: SelectionKind = "none"
+    selected_identities: list[str] = Field(default_factory=list, max_length=16)
+    selected_owner_tokens: list[str] = Field(default_factory=list, max_length=16)
 
 
 VRToolContextReason = Literal[
@@ -803,6 +805,23 @@ def _serialize_scene(
                 ).append(position)
                 grouped.setdefault(
                     (selection_token("strand", str(strand_id)), "strand"), []
+                ).append(position)
+            crossover_id = nucleotide.get("crossover_id")
+            if crossover_id is not None:
+                forced = any(
+                    str(getattr(connection, "id", "")) == str(crossover_id)
+                    for connection in getattr(design, "forced_ligations", [])
+                )
+                grouped.setdefault(
+                    (
+                        selection_token(
+                            "crossover",
+                            "forced_ligation" if forced else "crossover",
+                            str(crossover_id),
+                        ),
+                        "crossover",
+                    ),
+                    [],
                 ).append(position)
         return tuple(
             (token, kind, rotation @ np.mean(positions, axis=0))
@@ -3092,6 +3111,7 @@ def _event_payload(state: dict | None) -> dict:
             "hover_identity": None,
             "select_sequence": 0,
             "select_identity": None,
+            "select_identities": [],
             "level_sequence": 0,
             "selection_level": "default",
             "tool_sequence": 0,
@@ -3122,6 +3142,9 @@ def _event_payload(state: dict | None) -> dict:
         hover_identity = event.get("hover_identity")
         select_sequence = int(event.get("select_sequence", 0))
         select_identity = event.get("select_identity")
+        select_identities = event.get(
+            "select_identities", [] if select_identity is None else [select_identity]
+        )
         level_sequence = int(event.get("level_sequence", 0))
         selection_level = event.get("selection_level", "default")
         tool_sequence = int(event.get("tool_sequence", 0))
@@ -3176,6 +3199,26 @@ def _event_payload(state: dict | None) -> dict:
             or ready_sequence < 0
             or any(
                 value is not None and not isinstance(value, str) for value in identities
+            )
+            or not isinstance(select_identities, list)
+            or len(select_identities) > 16
+            or sum(
+                len(value) for value in select_identities if isinstance(value, str)
+            ) > 2048
+            or any(
+                not isinstance(value, str)
+                or not value
+                or len(value) > 2048
+                or any(character.isspace() for character in value)
+                for value in select_identities
+            )
+            or len(set(select_identities)) != len(select_identities)
+            or (
+                select_identity is None and select_identities
+            )
+            or (
+                select_identity is not None and
+                (not select_identities or select_identities[0] != select_identity)
             )
             or selection_level
             not in {"default", "cluster", "strand", "domain", "end", "xover", "base"}
@@ -3278,6 +3321,7 @@ def _event_payload(state: dict | None) -> dict:
             "hover_identity": hover_identity,
             "select_sequence": select_sequence,
             "select_identity": select_identity,
+            "select_identities": select_identities,
             "level_sequence": level_sequence,
             "selection_level": selection_level,
             "tool_sequence": tool_sequence,
@@ -3307,6 +3351,7 @@ def _event_payload(state: dict | None) -> dict:
             "hover_identity": None,
             "select_sequence": 0,
             "select_identity": None,
+            "select_identities": [],
             "level_sequence": 0,
             "selection_level": "default",
             "tool_sequence": 0,
@@ -3349,16 +3394,31 @@ def _write_feedback(state: dict | None, body: VRFeedbackRequest) -> None:
     identity = body.identity or "-"
     owner_tokens = body.owner_tokens if body.selected else []
     selection_kind = body.selection_kind if body.selected else "none"
+    selected_identities = list(body.selected_identities) if body.accepted else []
+    if body.accepted and body.selected and not selected_identities and identity != "-":
+        selected_identities = [identity]
+    selected_owner_tokens = list(body.selected_owner_tokens) if body.accepted else []
+    if body.accepted and body.selected and not selected_owner_tokens and owner_tokens:
+        selected_owner_tokens = [owner_tokens[0]]
     record = (
-        f"NADOCVR_FEEDBACK 3 {body.select_sequence} "
+        f"NADOCVR_FEEDBACK 5 {body.select_sequence} "
         f"{int(body.accepted)} {int(body.selected)} "
         f"{body.selection_level} {selection_kind} {identity} {len(owner_tokens)}"
         + (f" {' '.join(owner_tokens)}" if owner_tokens else "")
+        + f" {len(selected_identities)}"
+        + (f" {' '.join(selected_identities)}" if selected_identities else "")
+        + f" {len(selected_owner_tokens)}"
+        + (f" {' '.join(selected_owner_tokens)}" if selected_owner_tokens else "")
         + "\n"
     )
-    values = [identity, *owner_tokens]
+    values = [identity, *owner_tokens, *selected_identities, *selected_owner_tokens]
     if (
         (body.selected and selection_kind == "none")
+        or (body.selected and identity not in selected_identities)
+        or len(set(selected_identities)) != len(selected_identities)
+        or len(set(selected_owner_tokens)) != len(selected_owner_tokens)
+        or sum(len(value) for value in selected_identities) > 2048
+        or sum(len(value) for value in selected_owner_tokens) > 2048
         or len(record.encode()) > 4096
         or any(
             any(character.isspace() for character in value) or len(value) > 2048

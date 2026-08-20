@@ -14,6 +14,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace nadoc_vr {
@@ -26,6 +27,165 @@ struct HandPose {
 };
 
 inline glm::mat4 poseMatrix(const HandPose& pose);
+
+/** Controller-following menu pose with a reversible world-space dock.
+ *
+ * The menu opens on the controller that requested it. Docking freezes the
+ * current world pose; returning to Follow transfers it to the controller that
+ * pressed the button. Scale is applied by the same world/local conversions used
+ * for drawing and hit testing, keeping the controls aligned at every size.
+ */
+class MenuPlacement {
+  public:
+    static constexpr float kMinimumScale = 0.55F;
+    static constexpr float kMaximumScale = 1.25F;
+    static constexpr float kScaleStep = 0.10F;
+    static constexpr float kDefaultScale = 0.75F;
+
+    void open(
+        size_t hand, const std::array<HandPose, 2>& hands,
+        const glm::vec3& fallbackPosition, const glm::quat& fallbackOrientation) {
+        anchorHand_ = std::min(hand, hands.size() - 1U);
+        worldDocked_ = false;
+        position_ = fallbackPosition;
+        orientation_ = glm::normalize(fallbackOrientation);
+        update(hands);
+    }
+
+    void update(const std::array<HandPose, 2>& hands) {
+        if (worldDocked_ || !hands[anchorHand_].valid) return;
+        const HandPose& hand = hands[anchorHand_];
+        orientation_ = glm::normalize(hand.orientation * kTabletTilt);
+        position_ = hand.position + orientation_ * kControllerOffset;
+    }
+
+    void toggleDock(size_t hand, const std::array<HandPose, 2>& hands) {
+        if (!worldDocked_) {
+            worldDocked_ = true;
+            return;
+        }
+        anchorHand_ = std::min(hand, hands.size() - 1U);
+        worldDocked_ = false;
+        update(hands);
+    }
+
+    [[nodiscard]] bool adjustScale(int direction) {
+        const float next = glm::clamp(
+            scale_ + (direction < 0 ? -kScaleStep : kScaleStep),
+            kMinimumScale, kMaximumScale);
+        if (std::abs(next - scale_) < 1.0e-6F) return false;
+        scale_ = next;
+        return true;
+    }
+
+    [[nodiscard]] glm::vec3 worldPoint(const glm::vec3& local) const {
+        return position_ + orientation_ * (local * scale_);
+    }
+
+    [[nodiscard]] glm::vec3 localPoint(const glm::vec3& world) const {
+        return (glm::inverse(orientation_) * (world - position_)) / scale_;
+    }
+
+    [[nodiscard]] const glm::vec3& position() const { return position_; }
+    [[nodiscard]] const glm::quat& orientation() const { return orientation_; }
+    [[nodiscard]] float scale() const { return scale_; }
+    [[nodiscard]] size_t anchorHand() const { return anchorHand_; }
+    [[nodiscard]] bool worldDocked() const { return worldDocked_; }
+
+  private:
+    // Close enough to feel hand-held, with the top edge tilted away like a
+    // large tablet rather than a floating head-up display.
+    static inline const glm::quat kTabletTilt = glm::angleAxis(
+        glm::radians(-18.0F), glm::vec3(1.0F, 0.0F, 0.0F));
+    static constexpr glm::vec3 kControllerOffset{0.0F, 0.18F, -0.13F};
+
+    glm::vec3 position_{};
+    glm::quat orientation_{1.0F, 0.0F, 0.0F, 0.0F};
+    float scale_ = kDefaultScale;
+    size_t anchorHand_ = 0;
+    bool worldDocked_ = false;
+};
+
+/** Reversible eased 0..1 transition used by Expanded Quick View. */
+class SmoothToggle {
+  public:
+    explicit SmoothToggle(float durationSeconds = 0.24F)
+        : durationSeconds_(std::max(durationSeconds, 1.0e-4F)) {}
+
+    void toggle() { target_ = !target_; }
+    void setTarget(bool target) { target_ = target; }
+
+    [[nodiscard]] bool update(float elapsedSeconds) {
+        if (!std::isfinite(elapsedSeconds) || elapsedSeconds <= 0.0F) return false;
+        const float before = progress_;
+        const float direction = target_ ? 1.0F : -1.0F;
+        progress_ = glm::clamp(
+            progress_ + direction * elapsedSeconds / durationSeconds_, 0.0F, 1.0F);
+        return std::abs(progress_ - before) > 1.0e-6F;
+    }
+
+    [[nodiscard]] float value() const {
+        return progress_ * progress_ * (3.0F - 2.0F * progress_);
+    }
+    [[nodiscard]] bool target() const { return target_; }
+    [[nodiscard]] bool settled() const {
+        return target_ ? progress_ >= 1.0F : progress_ <= 0.0F;
+    }
+
+  private:
+    float durationSeconds_ = 0.24F;
+    float progress_ = 0.0F;
+    bool target_ = false;
+};
+
+inline std::string nextTabSelectionLevel(const std::string& current) {
+    static constexpr std::array<const char*, 6> cycle = {
+        "strand", "domain", "end", "xover", "base", "default",
+    };
+    const auto found = std::find_if(cycle.begin(), cycle.end(), [&](const char* level) {
+        return current == level;
+    });
+    if (found == cycle.end()) return cycle.front();
+    return cycle[(static_cast<size_t>(found - cycle.begin()) + 1U) % cycle.size()];
+}
+
+/** Per-controller Selection Volume radius driven by a vertical trackpad drag. */
+class SelectionVolumeControl {
+  public:
+    static constexpr float kMinimumRadius = 0.008F;
+    static constexpr float kMaximumRadius = 0.180F;
+    static constexpr float kDefaultRadius = 0.025F;
+    static constexpr float kMetersPerTrackpadUnit = 0.080F;
+
+    void beginScroll(float y) {
+        scrolling_ = true;
+        lastY_ = glm::clamp(y, -1.0F, 1.0F);
+    }
+
+    [[nodiscard]] bool updateScroll(float y) {
+        y = glm::clamp(y, -1.0F, 1.0F);
+        if (!scrolling_) {
+            beginScroll(y);
+            return false;
+        }
+        const float next = glm::clamp(
+            radius_ + (y - lastY_) * kMetersPerTrackpadUnit,
+            kMinimumRadius, kMaximumRadius);
+        lastY_ = y;
+        if (std::abs(next - radius_) < 1.0e-5F) return false;
+        radius_ = next;
+        return true;
+    }
+
+    void endScroll() { scrolling_ = false; }
+    [[nodiscard]] float radius() const { return radius_; }
+    [[nodiscard]] bool scrolling() const { return scrolling_; }
+
+  private:
+    float radius_ = kDefaultRadius;
+    float lastY_ = 0.0F;
+    bool scrolling_ = false;
+};
 
 inline glm::vec3 weightedTransformPoint(
     const glm::vec3& point, const glm::mat4& transform, float weight) {
@@ -74,6 +234,8 @@ struct SelectionFeedback {
     std::string selectionKind = "none";
     std::string identity;
     std::vector<std::string> ownerTokens;
+    std::vector<std::string> selectionIdentities;
+    std::vector<std::string> selectionOwnerTokens;
 };
 
 struct ToolContextFeedback {
@@ -142,6 +304,29 @@ struct OwnerAliasEntry {
 
     bool operator==(const OwnerAliasEntry&) const = default;
 };
+
+/** Resolve one primitive to the canonical owner used by the active desktop filter.
+ * Token contents remain opaque; the scene's typed handle table supplies semantics. */
+inline std::optional<std::string> selectionVolumeOwnerToken(
+    const std::vector<OwnerAliasEntry>& aliases,
+    const std::vector<std::pair<std::string, std::string>>& tokenKinds,
+    const std::string& identity, const std::string& selectionLevel) {
+    const std::string targetKind = selectionLevel == "default"
+        ? "strand" : selectionLevel == "xover" ? "crossover" : selectionLevel;
+    const auto owner = std::find_if(
+        aliases.begin(), aliases.end(), [&](const OwnerAliasEntry& candidate) {
+            return candidate.identity == identity;
+        });
+    if (owner == aliases.end()) return std::nullopt;
+    for (const std::string& token : owner->tokens) {
+        const auto typed = std::find_if(
+            tokenKinds.begin(), tokenKinds.end(), [&](const auto& candidate) {
+                return candidate.first == token && candidate.second == targetKind;
+            });
+        if (typed != tokenKinds.end()) return token;
+    }
+    return std::nullopt;
+}
 
 struct BoundsSummary {
     glm::vec3 center{};
@@ -704,12 +889,12 @@ inline std::optional<SelectionFeedback> parseSelectionFeedback(
     std::string trailing;
     if (!(fields >> magic >> version >> result.sequence >> accepted >> selected
                 >> result.level) ||
-        magic != "NADOCVR_FEEDBACK" || (version < 1 || version > 3) ||
+        magic != "NADOCVR_FEEDBACK" || (version < 1 || version > 5) ||
         (accepted != 0 && accepted != 1) || (selected != 0 && selected != 1) ||
         result.sequence <= previousSequence || result.sequence > maximumSequence) {
         return std::nullopt;
     }
-    if (version == 3) {
+    if (version >= 3) {
         if (!(fields >> result.selectionKind >> result.identity)) return std::nullopt;
     } else if (!(fields >> result.identity)) {
         return std::nullopt;
@@ -722,6 +907,50 @@ inline std::optional<SelectionFeedback> parseSelectionFeedback(
             if (!(fields >> token) || token.size() > 2048) return std::nullopt;
         }
     }
+    if (version >= 4) {
+        size_t selectionCount = 0;
+        if (!(fields >> selectionCount) || selectionCount > 16) return std::nullopt;
+        result.selectionIdentities.resize(selectionCount);
+        size_t totalBytes = 0;
+        for (std::string& identity : result.selectionIdentities) {
+            if (!(fields >> identity) || identity.empty() || identity.size() > 2048) {
+                return std::nullopt;
+            }
+            totalBytes += identity.size();
+        }
+        if (totalBytes > 2048) return std::nullopt;
+        std::sort(result.selectionIdentities.begin(), result.selectionIdentities.end());
+        if (std::adjacent_find(
+                result.selectionIdentities.begin(), result.selectionIdentities.end()) !=
+            result.selectionIdentities.end()) {
+            return std::nullopt;
+        }
+    } else if (selected == 1 && result.identity != "-") {
+        result.selectionIdentities = {result.identity};
+    }
+    if (version >= 5) {
+        size_t ownerSelectionCount = 0;
+        if (!(fields >> ownerSelectionCount) || ownerSelectionCount > 16) {
+            return std::nullopt;
+        }
+        result.selectionOwnerTokens.resize(ownerSelectionCount);
+        size_t totalBytes = 0;
+        for (std::string& token : result.selectionOwnerTokens) {
+            if (!(fields >> token) || token.empty() || token.size() > 2048) {
+                return std::nullopt;
+            }
+            totalBytes += token.size();
+        }
+        if (totalBytes > 2048) return std::nullopt;
+        std::sort(result.selectionOwnerTokens.begin(), result.selectionOwnerTokens.end());
+        if (std::adjacent_find(
+                result.selectionOwnerTokens.begin(), result.selectionOwnerTokens.end()) !=
+            result.selectionOwnerTokens.end()) {
+            return std::nullopt;
+        }
+    } else if (selected == 1 && !result.ownerTokens.empty()) {
+        result.selectionOwnerTokens = {result.ownerTokens.front()};
+    }
     if (fields >> trailing) return std::nullopt;
     static constexpr std::array<const char*, 7> levels = {
         "default", "cluster", "strand", "domain", "end", "xover", "base",
@@ -733,7 +962,7 @@ inline std::optional<SelectionFeedback> parseSelectionFeedback(
         "none", "cluster", "strand", "domain", "base", "end", "bond",
         "crossover", "overhang", "extension", "protein",
     };
-    if (version == 3 && std::find(
+    if (version >= 3 && std::find(
             selectionKinds.begin(), selectionKinds.end(), result.selectionKind)
             == selectionKinds.end()) {
         return std::nullopt;

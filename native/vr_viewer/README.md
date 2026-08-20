@@ -43,22 +43,36 @@ oversized, stale, future, or whitespace-bearing alias records.
 If a canonical desktop selection already exists at launch, NADOC passes its opaque
 owner alias plus a bounded kind discriminator as separate process arguments. Kind
 alone cannot select anything: the viewer must resolve the alias against the immutable
-scene ownership table before the green marker or Tools readiness appears, so the
+scene ownership table before the green highlight or Tools readiness appears, so the
 target need not be reselected in VR and an absent owner cannot become a false match.
 
 Controls on the original HTC Vive wands:
 
-- Hold the right grip/squeeze button for Expanded Quick View; releasing it
-  restores natural helix spacing without changing the design.
-- Click the right trackpad while a cyan hit marker is visible to select that
-  element through NADOC's active selection level and canonical selection controller.
-- Hold either trigger to grab, move, and rotate the structure outside a tool
-  preview. During Move/Rotate Preview, right trigger alone moves/rotates the
-  pending Cluster handle while left trigger remains a structure grab.
-- Hold both triggers and change the distance between the controllers to resize
+- Click the right trackpad to toggle Expanded Quick View. Natural and expanded
+  geometry ease between their exact poses instead of snapping; clicking again
+  during the transition reverses it smoothly without changing the design.
+- Each controller carries a wireframe **Selection Volume** 12 cm beyond its tip. Slide a
+  thumb upward or downward on that controller's trackpad to grow or shrink the volume
+  from precision-pick to area-selection size. A partial trigger pull resolves overlaps
+  through the active desktop selection filter and draws an amber additive shell over
+  the complete target geometry. A full pull commits up to 16 nearest distinct canonical
+  targets through NADOC's selection controller. Accepted targets retain a green
+  geometry-shaped glow after the trigger is released. Triggers also press menu buttons
+  while the menu is open.
+- Click the left trackpad to cycle the exact desktop Tab order:
+  Strand, Domain, End, Crossover, Base, then Auto / Drill. Cluster remains menu-only.
+- Hold either grip/squeeze button to grab, move, and rotate the structure outside a
+  tool preview. During Move/Rotate Preview, the right grip alone moves/rotates the
+  pending handle while the left grip remains a structure grab.
+- Hold both grips and change the distance between the controllers to resize
   the structure around their midpoint.
 - Press either application-menu button to open or close the in-headset menu.
-  Point a wand and pull its trigger to select a representation (Cylinders,
+  The menu sits close to the controller that opened it with its top tilted away,
+  like a large hand-held tablet; use the opposite wand to point and select. Choose
+  Dock to leave the panel fixed in the world, or Follow to
+  attach it to the controller that selected the button. Size - and Size + resize
+  the panel while preserving accurate pointing. Point a wand and pull its trigger
+  to select a representation (Cylinders,
   Full, Ball + Stick, or Stick Only), coloring (Strand, Base, Cluster, or CPK),
   selection level (Auto / Drill, Cluster, Strand, Domain, End, Crossover, or Base),
   Recenter, or Close. The active level is green and begins at the desktop's current
@@ -85,7 +99,7 @@ Controls on the original HTC Vive wands:
   of silently widening the edit. Preview draws an
   RGB translation triad at the exact current visual centroid used by NADOC's desktop
   gizmo; its size is derived from owner-wide bounds and stays capped for reach.
-  Right-trigger drags accumulate across re-grabs and Cancel returns the handle exactly
+  Right-grip drags accumulate across re-grabs and Cancel returns the handle exactly
   to its activation position. Scene-v10 endpoint ownership drives the same pending
   pose through native geometry, picking, selection anchors, and shadows: internal
   primitives move rigidly while a boundary bond or crossover leaves its opposite
@@ -105,14 +119,14 @@ Controls on the original HTC Vive wands:
   Preview/Confirm must name the identical snapshot. Changing selection during a
   VR-origin desktop preview cancels and restores it instead of retargeting the gizmo;
   stale transform samples are discarded rather than queued for a later Preview.
-- Cyan and orange pointers identify the left and right controllers. They turn
-  green during a one-hand grab and magenta during a two-hand resize.
-- When neither trigger is held, the right pointer extends to the nearest visible
-  primitive and shows a small cyan hit marker. This read-only stable-identity hover
-  cue does not change NADOC selection. After a trackpad click is accepted by the
-  desktop selection controller, a larger green marker remains on the selected owner;
-  rejected target/level combinations never produce a false green acknowledgement.
-  When a representation has no exact copy of the clicked primitive, the marker uses
+- Cyan and orange stems and Selection Volumes identify the left and right controllers.
+  They turn green during a one-hand grab and magenta during a two-hand resize. Partial
+  trigger pulls brighten the volume and add an inflated emissive shell around the same
+  Strand, Domain, End, Crossover, Base, Auto/Drill, or Cluster geometry the desktop
+  filter would preview, without changing selection. After a full trigger click is
+  accepted by the desktop selection controller, the shell turns green and remains on
+  the selected geometry; rejected target/level combinations never produce false green.
+  When a representation has no exact copy of the clicked primitive, the highlight uses
   the browser-confirmed canonical owner hierarchy (including exact End, Bond, or
   Crossover aliases where available, then Base, Domain, Strand, and Cluster), so
   switching representations does not silently lose canonical selection.

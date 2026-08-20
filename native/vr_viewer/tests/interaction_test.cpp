@@ -14,8 +14,11 @@ namespace {
 
 using nadoc_vr::HandPose;
 using nadoc_vr::ManipulationMode;
+using nadoc_vr::MenuPlacement;
 using nadoc_vr::PendingRigidTransform;
 using nadoc_vr::SceneManipulator;
+using nadoc_vr::SelectionVolumeControl;
+using nadoc_vr::SmoothToggle;
 
 void require(bool condition) {
     if (!condition) std::abort();
@@ -98,6 +101,151 @@ void closeInspectionAllowsTheModelToPassThroughTheHead() {
     const glm::vec3 modelCenter(0, 0, -SceneManipulator::kViewDistanceMeters);
     require(glm::all(glm::epsilonEqual(
         transformedPoint(manipulator.transform(), modelCenter), glm::vec3(0), 1e-5F)));
+}
+
+void menuFollowsItsControllerAndDockingFreezesItsWorldPose() {
+    MenuPlacement menu;
+    std::array<HandPose, 2> hands{};
+    hands[0] = {true, false, {0.1F, 0.2F, -0.3F}, {1, 0, 0, 0}};
+    hands[1] = {true, false, {-0.2F, 0.1F, -0.4F}, {1, 0, 0, 0}};
+    menu.open(0, hands, {0, 0, -1}, {1, 0, 0, 0});
+    const glm::vec3 initial = menu.position();
+
+    hands[0].position += glm::vec3(0.25F, -0.10F, 0.05F);
+    hands[0].orientation = glm::angleAxis(
+        glm::radians(30.0F), glm::vec3(0.0F, 1.0F, 0.0F));
+    menu.update(hands);
+    require(glm::length(menu.position() - initial) > 0.1F);
+    require(glm::dot(
+        menu.orientation() * glm::vec3(0.0F, 1.0F, 0.0F),
+        hands[0].orientation * glm::vec3(0.0F, 0.0F, -1.0F)) > 0.0F);
+
+    menu.toggleDock(1, hands);
+    const glm::vec3 docked = menu.position();
+    hands[0].position += glm::vec3(1.0F);
+    menu.update(hands);
+    require(menu.worldDocked());
+    require(glm::all(glm::epsilonEqual(menu.position(), docked, 1e-5F)));
+
+    menu.toggleDock(1, hands);
+    require(!menu.worldDocked() && menu.anchorHand() == 1U);
+    const glm::vec3 followed = menu.position();
+    hands[1].position.x += 0.2F;
+    menu.update(hands);
+    require(std::abs(menu.position().x - followed.x - 0.2F) < 1e-5F);
+}
+
+void expandedQuickViewEasesAndReversesWithoutSnapping() {
+    SmoothToggle transition(0.20F);
+    require(transition.value() == 0.0F && transition.settled());
+    transition.toggle();
+    require(transition.target() && !transition.settled());
+    require(transition.update(0.05F));
+    const float quarter = transition.value();
+    require(quarter > 0.0F && quarter < 0.25F);
+    require(transition.update(0.05F));
+    const float halfway = transition.value();
+    require(std::abs(halfway - 0.5F) < 1e-5F);
+
+    transition.toggle();
+    require(!transition.target());
+    require(std::abs(transition.value() - halfway) < 1e-5F);
+    require(transition.update(0.05F));
+    require(std::abs(transition.value() - quarter) < 1e-5F);
+    require(transition.update(0.20F));
+    require(transition.value() == 0.0F && transition.settled());
+}
+
+void vrSelectionLevelCycleMatchesDesktopTabOrder() {
+    require(nadoc_vr::nextTabSelectionLevel("default") == "strand");
+    require(nadoc_vr::nextTabSelectionLevel("cluster") == "strand");
+    require(nadoc_vr::nextTabSelectionLevel("strand") == "domain");
+    require(nadoc_vr::nextTabSelectionLevel("domain") == "end");
+    require(nadoc_vr::nextTabSelectionLevel("end") == "xover");
+    require(nadoc_vr::nextTabSelectionLevel("xover") == "base");
+    require(nadoc_vr::nextTabSelectionLevel("base") == "default");
+}
+
+void selectionVolumeScrollResizesPreciselyAndStaysBounded() {
+    SelectionVolumeControl volume;
+    require(std::abs(volume.radius() - SelectionVolumeControl::kDefaultRadius) < 1e-6F);
+    volume.beginScroll(-0.5F);
+    require(volume.updateScroll(0.5F));
+    require(volume.radius() > SelectionVolumeControl::kDefaultRadius);
+    require(volume.updateScroll(-1.0F));
+    require(volume.radius() >= SelectionVolumeControl::kMinimumRadius);
+    volume.endScroll();
+    require(!volume.scrolling());
+
+    volume.beginScroll(-1.0F);
+    (void)volume.updateScroll(1.0F);
+    volume.endScroll();
+    volume.beginScroll(-1.0F);
+    (void)volume.updateScroll(1.0F);
+    require(volume.radius() <= SelectionVolumeControl::kMaximumRadius);
+}
+
+void selectionVolumeOverlapMatchesRenderedPrimitiveVolumes() {
+    require(nadoc_vr::sphereOverlapsSphere(
+        {0.0F, 0.0F, 0.0F}, 0.05F, {0.09F, 0.0F, 0.0F}, 0.04F));
+    require(!nadoc_vr::sphereOverlapsSphere(
+        {0.0F, 0.0F, 0.0F}, 0.04F, {0.09F, 0.0F, 0.0F}, 0.04F));
+    require(nadoc_vr::sphereOverlapsCapsule(
+        {0.5F, 0.08F, 0.0F}, 0.04F,
+        {0.0F, 0.0F, 0.0F}, {1.0F, 0.0F, 0.0F}, 0.05F));
+    require(nadoc_vr::sphereOverlapsBox(
+        {0.55F, 0.0F, 0.0F}, 0.06F, {0.0F, 0.0F, 0.0F},
+        {1.0F, 0.0F, 0.0F}, {0.0F, 1.0F, 0.0F}, {0.0F, 0.0F, 1.0F}));
+
+    // The rendered half-cylinder occupies +basisX only; a precise small sphere
+    // on the absent half must not snap to it.
+    require(!nadoc_vr::sphereOverlapsHalfCylinder(
+        {-0.08F, 0.0F, 0.5F}, 0.02F,
+        {0.0F, 0.0F, 0.0F}, {0.0F, 0.0F, 1.0F}, 0.10F));
+    require(nadoc_vr::sphereOverlapsHalfCylinder(
+        {0.08F, 0.0F, 0.5F}, 0.02F,
+        {0.0F, 0.0F, 0.0F}, {0.0F, 0.0F, 1.0F}, 0.10F));
+}
+
+void selectionVolumeUsesDesktopFilterOwner() {
+    const std::vector<nadoc_vr::OwnerAliasEntry> aliases = {
+        {"primitive:a", {
+            "base:a", "domain:a", "strand:a", "xover:a", "cluster:a"}},
+    };
+    const std::vector<std::pair<std::string, std::string>> kinds = {
+        {"base:a", "base"},
+        {"domain:a", "domain"},
+        {"strand:a", "strand"},
+        {"cluster:a", "cluster"},
+        {"xover:a", "crossover"},
+    };
+    require(nadoc_vr::selectionVolumeOwnerToken(
+        aliases, kinds, "primitive:a", "domain") == "domain:a");
+    require(nadoc_vr::selectionVolumeOwnerToken(
+        aliases, kinds, "primitive:a", "default") == "strand:a");
+    require(nadoc_vr::selectionVolumeOwnerToken(
+        aliases, kinds, "primitive:a", "xover") == "xover:a");
+    require(!nadoc_vr::selectionVolumeOwnerToken(
+        aliases, kinds, "missing", "strand"));
+}
+
+void menuScalingKeepsRenderingAndHitCoordinatesAligned() {
+    MenuPlacement menu;
+    std::array<HandPose, 2> hands{};
+    hands[0] = {true, false, {0.1F, 0.2F, -0.3F}, {1, 0, 0, 0}};
+    menu.open(0, hands, {0, 0, -1}, {1, 0, 0, 0});
+    const glm::vec3 local(0.22F, -0.505F, 0.002F);
+    require(glm::all(glm::epsilonEqual(
+        menu.localPoint(menu.worldPoint(local)), local, 1e-5F)));
+
+    while (menu.adjustScale(-1)) {}
+    require(std::abs(menu.scale() - MenuPlacement::kMinimumScale) < 1e-5F);
+    require(!menu.adjustScale(-1));
+    while (menu.adjustScale(1)) {}
+    require(std::abs(menu.scale() - MenuPlacement::kMaximumScale) < 1e-5F);
+    require(!menu.adjustScale(1));
+    require(glm::all(glm::epsilonEqual(
+        menu.localPoint(menu.worldPoint(local)), local, 1e-5F)));
 }
 
 void pendingToolDragAccumulatesInModelSpaceAndCancelsExactly() {
@@ -289,6 +437,25 @@ void canonicalSelectionFeedbackIsStrictAndSequenced() {
     require(typed && typed->selectionKind == "cluster");
     require(!nadoc_vr::parseSelectionFeedback(
         "NADOCVR_FEEDBACK 3 9 1 1 cluster atom primitive 1 token\n", 8, 9));
+    const auto area = nadoc_vr::parseSelectionFeedback(
+        "NADOCVR_FEEDBACK 4 9 1 0 base none primitive-a 0 3 "
+        "primitive-a primitive-b primitive-c\n", 8, 9);
+    require(area && area->selectionIdentities.size() == 3);
+    require(std::find(
+        area->selectionIdentities.begin(), area->selectionIdentities.end(),
+        "primitive-b") != area->selectionIdentities.end());
+    require(!nadoc_vr::parseSelectionFeedback(
+        "NADOCVR_FEEDBACK 4 10 1 0 base none primitive-a 0 2 same same\n", 9, 10));
+    const auto grouped = nadoc_vr::parseSelectionFeedback(
+        "NADOCVR_FEEDBACK 5 11 1 0 strand none primitive-a 0 2 "
+        "primitive-a primitive-b 2 strand-a strand-b\n", 10, 11);
+    require(grouped && grouped->selectionOwnerTokens.size() == 2);
+    require(std::find(
+        grouped->selectionOwnerTokens.begin(), grouped->selectionOwnerTokens.end(),
+        "strand-b") != grouped->selectionOwnerTokens.end());
+    require(!nadoc_vr::parseSelectionFeedback(
+        "NADOCVR_FEEDBACK 5 12 1 0 strand none primitive-a 0 1 "
+        "primitive-a 2 same same\n", 11, 12));
 }
 
 void toolContextFeedbackIsExactSequencedAndFinite() {
@@ -658,6 +825,13 @@ int main() {
     oneTwoOneTransitionsStayContinuous();
     recenterRestoresUnitScaleInFrontOfHead();
     closeInspectionAllowsTheModelToPassThroughTheHead();
+    menuFollowsItsControllerAndDockingFreezesItsWorldPose();
+    menuScalingKeepsRenderingAndHitCoordinatesAligned();
+    expandedQuickViewEasesAndReversesWithoutSnapping();
+    vrSelectionLevelCycleMatchesDesktopTabOrder();
+    selectionVolumeScrollResizesPreciselyAndStaysBounded();
+    selectionVolumeOverlapMatchesRenderedPrimitiveVolumes();
+    selectionVolumeUsesDesktopFilterOwner();
     pendingToolDragAccumulatesInModelSpaceAndCancelsExactly();
     pendingToolDragRotatesRigidlyWithTheController();
     endpointWeightsMoveOnlyTheOwnedBoundaryEndpoint();
