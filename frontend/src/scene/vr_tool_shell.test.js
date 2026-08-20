@@ -81,6 +81,31 @@ describe('native VR transactional tool shell', () => {
     expect(undo.effect?.type).toBe('undo_requested')
   })
 
+  it('arms attached Move/Rotate Confirm and exact Undo execution', () => {
+    const toolTarget = targetFor({ kind: 'domain', strandId: 's1', domainIndex: 0 })
+    const preview = reduceVRToolShell(initialVRToolShellState, {
+      sequence: 1, mode: 'move_rotate', action: 'preview',
+    }, { toolTarget, targetSnapshotPresent: true }).state
+    const confirm = reduceVRToolShell(preview, {
+      sequence: 2, mode: 'move_rotate', action: 'confirm',
+    }, { toolTarget, targetSnapshotPresent: true, executorAttached: true })
+    expect(confirm.accepted).toBe(true)
+    expect(confirm.reason).toBe('commit_requested')
+    expect(confirm.effect?.type).toBe('commit_requested')
+
+    const retry = reduceVRToolShell(confirm.state, {
+      sequence: 3, mode: 'move_rotate', action: 'confirm',
+    }, { toolTarget, targetSnapshotPresent: true, executorAttached: true })
+    expect(retry.accepted).toBe(true)
+    expect(retry.effect?.type).toBe('commit_requested')
+
+    const undo = reduceVRToolShell(retry.state, {
+      sequence: 4, mode: 'move_rotate', action: 'undo',
+    }, { toolTarget, targetSnapshotPresent: true, undoAvailable: true })
+    expect(undo.accepted).toBe(true)
+    expect(undo.reason).toBe('undo_requested')
+  })
+
   it('accepts exact v12 scopes and never widens unsupported connectivity targets', () => {
     expect(vrToolSupportsSelection('move_rotate', { kind: 'cluster', id: 'c1' })).toBe(true)
     expect(vrToolSupportsSelection('move_rotate', { kind: 'base', key: 'h:1:FORWARD' })).toBe(true)

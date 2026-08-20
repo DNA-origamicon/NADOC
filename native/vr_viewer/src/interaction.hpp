@@ -104,6 +104,18 @@ struct ToolPreflightFeedback {
     std::string reason;
 };
 
+struct ToolExecutionFeedback {
+    uint64_t sequence = 0;
+    uint64_t toolSequence = 0;
+    std::string mode;
+    std::string action;
+    std::string selectionKind = "none";
+    std::string identity;
+    std::string status;
+    std::string reason;
+    std::string featureLogEntryId;
+};
+
 struct PlanePickFeedback {
     uint64_t sequence = 0;
     uint64_t toolConfigSequence = 0;
@@ -468,6 +480,7 @@ class ToolShell {
     }
 
     void activate(ToolMode mode, const std::string& selectionKind) {
+        if (executionPending_) return;
         mode_ = mode;
         previewRequested_ = false;
         status_ = targetStatus(mode, selectionKind);
@@ -479,6 +492,9 @@ class ToolShell {
         const bool directPreview = capability == ToolCapability::direct_preview;
         if (action == ToolAction::activate) {
             activate(mode_, selectionKind);
+        } else if (executionPending_ && action != ToolAction::confirm &&
+                   action != ToolAction::cancel && action != ToolAction::undo) {
+            return;
         } else if (action == ToolAction::preview) {
             if (mode_ == ToolMode::inspect) status_ = "CHOOSE TOOL";
             else if (!hasSelection) status_ = "SELECT TARGET";
@@ -491,14 +507,63 @@ class ToolShell {
                 status_ = "PREVIEW ONLY";
             }
         } else if (action == ToolAction::confirm) {
-            status_ = capability == ToolCapability::configuration_required
-                ? "CONFIG REQUIRED"
-                : previewRequested_ && directPreview ? "CONFIRM STAGED" : "PREVIEW FIRST";
+            if (capability == ToolCapability::configuration_required) {
+                status_ = "CONFIG REQUIRED";
+            } else if (previewRequested_ && directPreview && !executionPending_) {
+                executionPending_ = true;
+                status_ = "COMMITTING";
+            } else {
+                status_ = executionPending_ ? "COMMITTING" : "PREVIEW FIRST";
+            }
         } else if (action == ToolAction::cancel) {
+            if (executionPending_) {
+                status_ = "COMMITTING";
+                return;
+            }
             previewRequested_ = false;
-            status_ = "CANCELLED";
+            status_ = undoAvailable_ ? "COMMITTED" : "CANCELLED";
         } else {
-            status_ = "NO VR COMMIT";
+            if (executionPending_) status_ = "COMMITTING";
+            else if (undoAvailable_) {
+                executionPending_ = true;
+                status_ = "UNDOING";
+            } else status_ = "NO VR COMMIT";
+        }
+    }
+
+    void applyExecutionFeedback(const ToolExecutionFeedback& feedback) {
+        if (feedback.mode != toolModeName(mode_)) return;
+        const bool succeeded = feedback.status == "succeeded";
+        const bool pending = feedback.status == "pending";
+        if (feedback.action == "confirm") {
+            if (pending) {
+                executionPending_ = true;
+                status_ = "COMMITTING";
+            } else if (succeeded) {
+                executionPending_ = false;
+                previewRequested_ = false;
+                undoAvailable_ = true;
+                status_ = "COMMITTED";
+            } else {
+                executionPending_ = false;
+                status_ = feedback.status == "refused" ? "COMMIT REFUSED" : "COMMIT FAILED";
+            }
+        } else if (feedback.action == "undo") {
+            if (pending) {
+                executionPending_ = true;
+                status_ = "UNDOING";
+            } else if (succeeded) {
+                executionPending_ = false;
+                undoAvailable_ = false;
+                status_ = "UNDONE";
+            } else {
+                executionPending_ = false;
+                if (feedback.status == "refused" &&
+                    feedback.reason == "undo_stale_desktop_changed") {
+                    undoAvailable_ = false;
+                }
+                status_ = feedback.status == "refused" ? "UNDO REFUSED" : "UNDO FAILED";
+            }
         }
     }
 
@@ -528,6 +593,8 @@ class ToolShell {
 
     [[nodiscard]] ToolMode mode() const { return mode_; }
     [[nodiscard]] bool previewRequested() const { return previewRequested_; }
+    [[nodiscard]] bool executionPending() const { return executionPending_; }
+    [[nodiscard]] bool undoAvailable() const { return undoAvailable_; }
     [[nodiscard]] const std::string& status() const { return status_; }
 
   private:
@@ -545,6 +612,8 @@ class ToolShell {
 
     ToolMode mode_ = ToolMode::inspect;
     bool previewRequested_ = false;
+    bool executionPending_ = false;
+    bool undoAvailable_ = false;
     std::string status_ = "VIEW ONLY";
 };
 
@@ -676,6 +745,52 @@ inline std::optional<SelectionFeedback> parseSelectionFeedback(
         result.ownerTokens.clear();
         result.selectionKind = "none";
     }
+    return result;
+}
+
+inline std::optional<ToolExecutionFeedback> parseToolExecutionFeedback(
+    const std::string& record, uint64_t previousSequence,
+    uint64_t maximumToolSequence) {
+    std::istringstream fields(record);
+    std::string magic;
+    std::string trailing;
+    int version = 0;
+    ToolExecutionFeedback result;
+    if (!(fields >> magic >> version >> result.sequence >> result.toolSequence
+                 >> result.mode >> result.action >> result.selectionKind
+                 >> result.identity >> result.status >> result.reason
+                 >> result.featureLogEntryId) ||
+        magic != "NADOCVR_TOOL_EXECUTION" || version != 1 ||
+        result.sequence <= previousSequence || result.toolSequence == 0 ||
+        result.toolSequence > maximumToolSequence || result.identity.empty() ||
+        result.identity == "-" || result.identity.size() > 2048 ||
+        fields >> trailing) {
+        return std::nullopt;
+    }
+    static constexpr std::array<const char*, 2> modes = {
+        "move_rotate", "extrude",
+    };
+    static constexpr std::array<const char*, 2> actions = {"confirm", "undo"};
+    static constexpr std::array<const char*, 4> statuses = {
+        "pending", "succeeded", "failed", "refused",
+    };
+    static constexpr std::array<const char*, 10> selectionKinds = {
+        "cluster", "strand", "domain", "base", "end", "bond",
+        "crossover", "overhang", "extension", "protein",
+    };
+    if (std::find(modes.begin(), modes.end(), result.mode) == modes.end() ||
+        std::find(actions.begin(), actions.end(), result.action) == actions.end() ||
+        std::find(statuses.begin(), statuses.end(), result.status) == statuses.end() ||
+        std::find(selectionKinds.begin(), selectionKinds.end(), result.selectionKind)
+            == selectionKinds.end() ||
+        result.reason.empty() || result.reason.size() > 64) {
+        return std::nullopt;
+    }
+    if ((result.status == "succeeded") != (result.featureLogEntryId != "-") ||
+        result.featureLogEntryId.size() > 128) {
+        return std::nullopt;
+    }
+    if (result.featureLogEntryId == "-") result.featureLogEntryId.clear();
     return result;
 }
 

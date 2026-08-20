@@ -1041,6 +1041,25 @@ class GlScene {
         }
     }
 
+    [[nodiscard]] bool acceptToolCommit() {
+        if (toolPreviewToken_.empty()) return false;
+        if (!toolCommittedToken_.empty()) bakeCommittedLayer();
+        toolCommittedToken_ = std::move(toolPreviewToken_);
+        toolCommittedTransform_ = toolPreviewTransform_;
+        toolPreviewToken_.clear();
+        toolPreviewTransform_ = glm::mat4(1.0F);
+        setStyle(representation_, coloring_);
+        return true;
+    }
+
+    [[nodiscard]] bool acceptToolUndo() {
+        if (toolCommittedToken_.empty()) return false;
+        toolCommittedToken_.clear();
+        toolCommittedTransform_ = glm::mat4(1.0F);
+        setStyle(representation_, coloring_);
+        return true;
+    }
+
     [[nodiscard]] glm::mat4 viewSpaceToolTransform(
         const glm::mat4& normalizedTransform) const {
         return nadoc_vr::normalizedToSourceTransform(
@@ -1055,50 +1074,63 @@ class GlScene {
             expanded_ && scene_.hasExpanded
                 ? scene_.expandedRepresentations[static_cast<size_t>(representation)]
                 : scene_.representations[static_cast<size_t>(representation)];
-        std::unordered_map<std::string, std::pair<float, float>> transformWeights;
-        if (!toolPreviewToken_.empty()) {
+        auto collectWeights = [&](const std::string& token) {
+            std::unordered_map<std::string, std::pair<float, float>> result;
+            if (token.empty()) return result;
             const auto& ownershipRecords = source.toolScopeOwnership.empty()
                 ? source.transformOwnership : source.toolScopeOwnership;
             for (const TransformOwnership& ownership : ownershipRecords) {
                 const auto owner = std::find_if(
                     ownership.owners.begin(), ownership.owners.end(),
                     [&](const TransformOwner& candidate) {
-                        return candidate.token == toolPreviewToken_;
+                        return candidate.token == token;
                     });
                 if (owner != ownership.owners.end()) {
-                    transformWeights.emplace(
+                    result.emplace(
                         ownership.identity,
                         std::pair(owner->startWeight, owner->endWeight));
                 }
             }
             for (const nadoc_vr::OwnerAliasEntry& aliases : source.ownerAliases) {
                 if (std::find(
-                        aliases.tokens.begin(), aliases.tokens.end(), toolPreviewToken_)
+                        aliases.tokens.begin(), aliases.tokens.end(), token)
                     != aliases.tokens.end()) {
-                    transformWeights.emplace(
+                    result.emplace(
                         aliases.identity, std::pair(1.0F, 1.0F));
                 }
             }
-        }
-        auto weights = [&](const std::string& identity) {
-            const auto found = transformWeights.find(identity);
-            return found == transformWeights.end()
+            return result;
+        };
+        const auto committedWeights = collectWeights(toolCommittedToken_);
+        const auto pendingWeights = collectWeights(toolPreviewToken_);
+        auto weights = [](const auto& values, const std::string& identity) {
+            const auto found = values.find(identity);
+            return found == values.end()
                 ? std::pair(0.0F, 0.0F) : found->second;
         };
-        auto transformPoint = [&](const glm::vec3& point, float weight) {
+        auto transformPoint = [&](const glm::vec3& point, const std::string& identity,
+                                  bool end) {
+            const auto committed = weights(committedWeights, identity);
+            const auto pending = weights(pendingWeights, identity);
+            glm::vec3 result = nadoc_vr::weightedTransformPoint(
+                point, toolCommittedTransform_, end ? committed.second : committed.first);
             return nadoc_vr::weightedTransformPoint(
-                point, toolPreviewTransform_, weight);
+                result, toolPreviewTransform_, end ? pending.second : pending.first);
         };
-        auto transformVector = [&](const glm::vec3& vector, float weight) {
+        auto transformVector = [&](const glm::vec3& vector, const std::string& identity) {
+            const float committed = weights(committedWeights, identity).first;
+            const float pending = weights(pendingWeights, identity).first;
+            glm::vec3 result = nadoc_vr::weightedTransformVector(
+                vector, toolCommittedTransform_, committed);
             return nadoc_vr::weightedTransformVector(
-                vector, toolPreviewTransform_, weight);
+                result, toolPreviewTransform_, pending);
         };
 
         std::vector<Vertex> points;
         points.reserve(source.points.size());
         for (const StyledPoint& point : source.points) {
             points.push_back(Vertex{
-                transformPoint(point.position, weights(point.identity).first),
+                transformPoint(point.position, point.identity, false),
                 point.colors.get(coloring), point.size});
         }
         glBindBuffer(GL_ARRAY_BUFFER, sphereInstanceVbo_);
@@ -1110,10 +1142,9 @@ class GlScene {
         std::vector<Cylinder> cylinders;
         cylinders.reserve(source.cylinders.size());
         for (const StyledCylinder& cylinder : source.cylinders) {
-            const auto [startWeight, endWeight] = weights(cylinder.identity);
             cylinders.push_back(Cylinder{
-                transformPoint(cylinder.start, startWeight),
-                transformPoint(cylinder.end, endWeight),
+                transformPoint(cylinder.start, cylinder.identity, false),
+                transformPoint(cylinder.end, cylinder.identity, true),
                 cylinder.radius, cylinder.colors.get(coloring)});
         }
         glBindBuffer(GL_ARRAY_BUFFER, cylinderInstanceVbo_);
@@ -1125,10 +1156,9 @@ class GlScene {
         std::vector<Cylinder> halfCylinders;
         halfCylinders.reserve(source.halfCylinders.size());
         for (const StyledCylinder& cylinder : source.halfCylinders) {
-            const auto [startWeight, endWeight] = weights(cylinder.identity);
             halfCylinders.push_back(Cylinder{
-                transformPoint(cylinder.start, startWeight),
-                transformPoint(cylinder.end, endWeight),
+                transformPoint(cylinder.start, cylinder.identity, false),
+                transformPoint(cylinder.end, cylinder.identity, true),
                 cylinder.radius, cylinder.colors.get(coloring)});
         }
         glBindBuffer(GL_ARRAY_BUFFER, halfCylinderInstanceVbo_);
@@ -1140,12 +1170,11 @@ class GlScene {
         std::vector<Box> boxes;
         boxes.reserve(source.boxes.size());
         for (const StyledBox& box : source.boxes) {
-            const float weight = weights(box.identity).first;
             boxes.push_back(Box{
-                transformPoint(box.center, weight),
-                transformVector(box.axisX, weight),
-                transformVector(box.axisY, weight),
-                transformVector(box.axisZ, weight),
+                transformPoint(box.center, box.identity, false),
+                transformVector(box.axisX, box.identity),
+                transformVector(box.axisY, box.identity),
+                transformVector(box.axisZ, box.identity),
                 box.colors.get(coloring)});
         }
         glBindBuffer(GL_ARRAY_BUFFER, boxInstanceVbo_);
@@ -1220,29 +1249,33 @@ class GlScene {
             }
         };
         for (const StyledPoint& point : source.points) {
-            const auto weight = previewWeights(source, point.identity).first;
+            const float committed = committedWeights(source, point.identity).first;
+            const float pending = previewWeights(source, point.identity).first;
             consider(point.identity, nadoc_vr::raySphere(
-                ray, previewPoint(point.position, weight), point.size));
+                ray, previewPoint(point.position, committed, pending), point.size));
         }
         for (const StyledCylinder& cylinder : source.cylinders) {
-            const auto [startWeight, endWeight] = previewWeights(source, cylinder.identity);
+            const auto committed = committedWeights(source, cylinder.identity);
+            const auto pending = previewWeights(source, cylinder.identity);
             consider(cylinder.identity, nadoc_vr::rayCapsule(
-                ray, previewPoint(cylinder.start, startWeight),
-                previewPoint(cylinder.end, endWeight), cylinder.radius));
+                ray, previewPoint(cylinder.start, committed.first, pending.first),
+                previewPoint(cylinder.end, committed.second, pending.second), cylinder.radius));
         }
         for (const StyledCylinder& cylinder : source.halfCylinders) {
-            const auto [startWeight, endWeight] = previewWeights(source, cylinder.identity);
+            const auto committed = committedWeights(source, cylinder.identity);
+            const auto pending = previewWeights(source, cylinder.identity);
             consider(cylinder.identity, nadoc_vr::rayHalfCylinder(
-                ray, previewPoint(cylinder.start, startWeight),
-                previewPoint(cylinder.end, endWeight), cylinder.radius));
+                ray, previewPoint(cylinder.start, committed.first, pending.first),
+                previewPoint(cylinder.end, committed.second, pending.second), cylinder.radius));
         }
         for (const StyledBox& box : source.boxes) {
-            const float weight = previewWeights(source, box.identity).first;
+            const float committed = committedWeights(source, box.identity).first;
+            const float pending = previewWeights(source, box.identity).first;
             consider(box.identity, nadoc_vr::rayBox(
-                ray, previewPoint(box.center, weight),
-                previewVector(box.axisX, weight),
-                previewVector(box.axisY, weight),
-                previewVector(box.axisZ, weight)));
+                ray, previewPoint(box.center, committed, pending),
+                previewVector(box.axisX, committed, pending),
+                previewVector(box.axisY, committed, pending),
+                previewVector(box.axisZ, committed, pending)));
         }
         return nearest;
     }
@@ -1298,6 +1331,7 @@ class GlScene {
                 return result(
                     previewPoint(
                         point.position,
+                        committedWeights(source, point.identity).first,
                         previewWeights(source, point.identity).first),
                     point.size);
             }
@@ -1306,11 +1340,11 @@ class GlScene {
             -> std::optional<nadoc_vr::PickHit> {
             for (const StyledCylinder& cylinder : cylinders) {
                 if (cylinder.identity == resolvedIdentity) {
-                    const auto [startWeight, endWeight] =
-                        previewWeights(source, cylinder.identity);
+                    const auto committed = committedWeights(source, cylinder.identity);
+                    const auto pending = previewWeights(source, cylinder.identity);
                     return result(
-                        (previewPoint(cylinder.start, startWeight)
-                         + previewPoint(cylinder.end, endWeight)) * 0.5F,
+                        (previewPoint(cylinder.start, committed.first, pending.first)
+                         + previewPoint(cylinder.end, committed.second, pending.second)) * 0.5F,
                         cylinder.radius);
                 }
             }
@@ -1320,13 +1354,14 @@ class GlScene {
         if (auto found = cylinderAnchor(source.halfCylinders)) return found;
         for (const StyledBox& box : source.boxes) {
             if (box.identity == resolvedIdentity) {
-                const float weight = previewWeights(source, box.identity).first;
+                const float committed = committedWeights(source, box.identity).first;
+                const float pending = previewWeights(source, box.identity).first;
                 const float radius = 0.5F * std::min({
-                    glm::length(previewVector(box.axisX, weight)),
-                    glm::length(previewVector(box.axisY, weight)),
-                    glm::length(previewVector(box.axisZ, weight)),
+                    glm::length(previewVector(box.axisX, committed, pending)),
+                    glm::length(previewVector(box.axisY, committed, pending)),
+                    glm::length(previewVector(box.axisZ, committed, pending)),
                 });
-                return result(previewPoint(box.center, weight), radius);
+                return result(previewPoint(box.center, committed, pending), radius);
             }
         }
         return std::nullopt;
@@ -1357,13 +1392,21 @@ class GlScene {
         nadoc_vr::BoundsAccumulator bounds;
         for (const StyledPoint& point : source.points) {
             if (identities.contains(point.identity)) {
-                bounds.includePoint(point.position, point.size);
+                bounds.includePoint(previewPoint(
+                    point.position,
+                    committedWeights(source, point.identity).first,
+                    previewWeights(source, point.identity).first), point.size);
             }
         }
         auto includeCylinders = [&](const std::vector<StyledCylinder>& cylinders) {
             for (const StyledCylinder& cylinder : cylinders) {
                 if (identities.contains(cylinder.identity)) {
-                    bounds.includeSegment(cylinder.start, cylinder.end, cylinder.radius);
+                    const auto committed = committedWeights(source, cylinder.identity);
+                    const auto pending = previewWeights(source, cylinder.identity);
+                    bounds.includeSegment(
+                        previewPoint(cylinder.start, committed.first, pending.first),
+                        previewPoint(cylinder.end, committed.second, pending.second),
+                        cylinder.radius);
                 }
             }
         };
@@ -1371,7 +1414,13 @@ class GlScene {
         includeCylinders(source.halfCylinders);
         for (const StyledBox& box : source.boxes) {
             if (identities.contains(box.identity)) {
-                bounds.includeBox(box.center, box.axisX, box.axisY, box.axisZ);
+                const float committed = committedWeights(source, box.identity).first;
+                const float pending = previewWeights(source, box.identity).first;
+                bounds.includeBox(
+                    previewPoint(box.center, committed, pending),
+                    previewVector(box.axisX, committed, pending),
+                    previewVector(box.axisY, committed, pending),
+                    previewVector(box.axisZ, committed, pending));
             }
         }
         return bounds.summary(modelTransform);
@@ -1390,14 +1439,28 @@ class GlScene {
                 source.toolHandles.begin(), source.toolHandles.end(),
                 [&](const ToolHandle& candidate) { return candidate.token == token; });
             if (toolHandle != source.toolHandles.end()) {
+                glm::vec3 center = toolHandle->center;
+                if (toolHandle->token == toolCommittedToken_) {
+                    center = glm::vec3(toolCommittedTransform_ * glm::vec4(center, 1.0F));
+                }
+                if (toolHandle->token == toolPreviewToken_) {
+                    center = glm::vec3(toolPreviewTransform_ * glm::vec4(center, 1.0F));
+                }
                 return glm::vec3(
-                    modelTransform * glm::vec4(toolHandle->center, 1.0F));
+                    modelTransform * glm::vec4(center, 1.0F));
             }
             const auto handle = std::find_if(
                 source.ownerHandles.begin(), source.ownerHandles.end(),
                 [&](const OwnerHandle& candidate) { return candidate.token == token; });
             if (handle != source.ownerHandles.end()) {
-                return glm::vec3(modelTransform * glm::vec4(handle->center, 1.0F));
+                glm::vec3 center = handle->center;
+                if (handle->token == toolCommittedToken_) {
+                    center = glm::vec3(toolCommittedTransform_ * glm::vec4(center, 1.0F));
+                }
+                if (handle->token == toolPreviewToken_) {
+                    center = glm::vec3(toolPreviewTransform_ * glm::vec4(center, 1.0F));
+                }
+                return glm::vec3(modelTransform * glm::vec4(center, 1.0F));
             }
         }
         return std::nullopt;
@@ -1573,9 +1636,10 @@ class GlScene {
     }
 
   private:
-    [[nodiscard]] std::pair<float, float> previewWeights(
-        const RepresentationData& source, const std::string& identity) const {
-        if (toolPreviewToken_.empty()) return {0.0F, 0.0F};
+    [[nodiscard]] static std::pair<float, float> layerWeights(
+        const RepresentationData& source, const std::string& identity,
+        const std::string& token) {
+        if (token.empty()) return {0.0F, 0.0F};
         const auto& ownershipRecords = source.toolScopeOwnership.empty()
             ? source.transformOwnership : source.toolScopeOwnership;
         const auto ownership = std::find_if(
@@ -1587,7 +1651,7 @@ class GlScene {
             const auto owner = std::find_if(
                 ownership->owners.begin(), ownership->owners.end(),
                 [&](const TransformOwner& candidate) {
-                    return candidate.token == toolPreviewToken_;
+                    return candidate.token == token;
                 });
             if (owner != ownership->owners.end()) {
                 return {owner->startWeight, owner->endWeight};
@@ -1597,23 +1661,96 @@ class GlScene {
             source.ownerAliases.begin(), source.ownerAliases.end(),
             [&](const nadoc_vr::OwnerAliasEntry& candidate) {
                 return candidate.identity == identity &&
-                    std::find(candidate.tokens.begin(), candidate.tokens.end(),
-                              toolPreviewToken_) != candidate.tokens.end();
+                    std::find(candidate.tokens.begin(), candidate.tokens.end(), token)
+                        != candidate.tokens.end();
             });
         return aliases == source.ownerAliases.end()
             ? std::pair(0.0F, 0.0F) : std::pair(1.0F, 1.0F);
     }
 
+    void bakeCommittedLayer(RepresentationData& source) {
+        if (toolCommittedToken_.empty()) return;
+        for (StyledPoint& point : source.points) {
+            const float weight = layerWeights(
+                source, point.identity, toolCommittedToken_).first;
+            point.position = nadoc_vr::weightedTransformPoint(
+                point.position, toolCommittedTransform_, weight);
+        }
+        auto bakeCylinders = [&](std::vector<StyledCylinder>& cylinders) {
+            for (StyledCylinder& cylinder : cylinders) {
+                const auto [startWeight, endWeight] = layerWeights(
+                    source, cylinder.identity, toolCommittedToken_);
+                cylinder.start = nadoc_vr::weightedTransformPoint(
+                    cylinder.start, toolCommittedTransform_, startWeight);
+                cylinder.end = nadoc_vr::weightedTransformPoint(
+                    cylinder.end, toolCommittedTransform_, endWeight);
+            }
+        };
+        bakeCylinders(source.cylinders);
+        bakeCylinders(source.halfCylinders);
+        for (StyledBox& box : source.boxes) {
+            const float weight = layerWeights(
+                source, box.identity, toolCommittedToken_).first;
+            box.center = nadoc_vr::weightedTransformPoint(
+                box.center, toolCommittedTransform_, weight);
+            box.axisX = nadoc_vr::weightedTransformVector(
+                box.axisX, toolCommittedTransform_, weight);
+            box.axisY = nadoc_vr::weightedTransformVector(
+                box.axisY, toolCommittedTransform_, weight);
+            box.axisZ = nadoc_vr::weightedTransformVector(
+                box.axisZ, toolCommittedTransform_, weight);
+        }
+        for (OwnerHandle& handle : source.ownerHandles) {
+            if (handle.token == toolCommittedToken_) {
+                handle.center = glm::vec3(
+                    toolCommittedTransform_ * glm::vec4(handle.center, 1.0F));
+            }
+        }
+        for (ToolHandle& handle : source.toolHandles) {
+            if (handle.token == toolCommittedToken_) {
+                handle.center = glm::vec3(
+                    toolCommittedTransform_ * glm::vec4(handle.center, 1.0F));
+            }
+        }
+    }
+
+    void bakeCommittedLayer() {
+        for (RepresentationData& source : scene_.representations) {
+            bakeCommittedLayer(source);
+        }
+        if (scene_.hasExpanded) {
+            for (RepresentationData& source : scene_.expandedRepresentations) {
+                bakeCommittedLayer(source);
+            }
+        }
+        toolCommittedToken_.clear();
+        toolCommittedTransform_ = glm::mat4(1.0F);
+    }
+
+    [[nodiscard]] std::pair<float, float> previewWeights(
+        const RepresentationData& source, const std::string& identity) const {
+        return layerWeights(source, identity, toolPreviewToken_);
+    }
+
+    [[nodiscard]] std::pair<float, float> committedWeights(
+        const RepresentationData& source, const std::string& identity) const {
+        return layerWeights(source, identity, toolCommittedToken_);
+    }
+
     [[nodiscard]] glm::vec3 previewPoint(
-        const glm::vec3& point, float weight) const {
+        const glm::vec3& point, float committedWeight, float pendingWeight) const {
+        const glm::vec3 committed = nadoc_vr::weightedTransformPoint(
+            point, toolCommittedTransform_, committedWeight);
         return nadoc_vr::weightedTransformPoint(
-            point, toolPreviewTransform_, weight);
+            committed, toolPreviewTransform_, pendingWeight);
     }
 
     [[nodiscard]] glm::vec3 previewVector(
-        const glm::vec3& vector, float weight) const {
+        const glm::vec3& vector, float committedWeight, float pendingWeight) const {
+        const glm::vec3 committed = nadoc_vr::weightedTransformVector(
+            vector, toolCommittedTransform_, committedWeight);
         return nadoc_vr::weightedTransformVector(
-            vector, toolPreviewTransform_, weight);
+            committed, toolPreviewTransform_, pendingWeight);
     }
 
     void applyLightingUniforms(
@@ -2002,6 +2139,8 @@ class GlScene {
     Representation representation_ = Representation::full;
     Coloring coloring_ = Coloring::strand;
     bool expanded_ = false;
+    std::string toolCommittedToken_;
+    glm::mat4 toolCommittedTransform_{1.0F};
     std::string toolPreviewToken_;
     glm::mat4 toolPreviewTransform_{1.0F};
     nadoc_vr::TimingWindow previewTiming_{240};
@@ -2080,6 +2219,7 @@ class Viewer {
                     std::string toolFeedbackPath = {},
                     std::string planeFeedbackPath = {},
                     std::string preflightFeedbackPath = {},
+                    std::string toolExecutionFeedbackPath = {},
                     std::string jobPath = {},
                     nadoc_vr::JobSnapshot jobSnapshot = {},
                     std::string selectionLevel = "default",
@@ -2090,6 +2230,7 @@ class Viewer {
           toolFeedbackPath_(std::move(toolFeedbackPath)),
           planeFeedbackPath_(std::move(planeFeedbackPath)),
           preflightFeedbackPath_(std::move(preflightFeedbackPath)),
+          toolExecutionFeedbackPath_(std::move(toolExecutionFeedbackPath)),
           jobPath_(std::move(jobPath)),
           jobsSnapshotAvailable_(jobSnapshot.available),
           jobsSnapshotTotal_(jobSnapshot.total),
@@ -3002,6 +3143,10 @@ class Viewer {
                 continue;
             }
             if (menuPage_ == MenuPage::tools) {
+                if (toolShell_.executionPending()) {
+                    pulse(hand, 0.15F);
+                    continue;
+                }
                 if (hit < 5) {
                     const auto mode = static_cast<nadoc_vr::ToolMode>(hit);
                     const auto capability = nadoc_vr::ToolShell::selectionCapability(
@@ -3519,6 +3664,55 @@ class Viewer {
         }
     }
 
+    void pollToolExecutionFeedback() {
+        if (toolExecutionFeedbackPath_.empty() ||
+            (++toolExecutionFeedbackPollFrame_ % 3U) != 0U || toolSequence_ == 0) {
+            return;
+        }
+        std::ifstream input(
+            toolExecutionFeedbackPath_, std::ios::in | std::ios::binary);
+        if (!input) return;
+        input.seekg(0, std::ios::end);
+        const std::streamoff size = input.tellg();
+        if (size < 0 || size > 4096) return;
+        input.seekg(0);
+        std::string record(static_cast<size_t>(size), '\0');
+        input.read(record.data(), size);
+        const auto feedback = nadoc_vr::parseToolExecutionFeedback(
+            record, toolExecutionFeedbackSequence_, toolSequence_);
+        if (!feedback || feedback->toolSequence != toolSequence_ ||
+            feedback->mode != nadoc_vr::toolModeName(toolShell_.mode()) ||
+            feedback->action != nadoc_vr::toolActionName(lastToolAction_)) {
+            return;
+        }
+        if (feedback->action == "confirm" &&
+            (feedback->selectionKind != lastToolTargetKind_ ||
+             feedback->identity != lastToolTargetIdentity_)) {
+            return;
+        }
+        if (feedback->action == "undo" && feedback->status == "succeeded" &&
+            feedback->featureLogEntryId != committedFeatureLogEntryId_) {
+            return;
+        }
+        toolExecutionFeedbackSequence_ = feedback->sequence;
+        if (feedback->status == "succeeded") {
+            if (feedback->action == "confirm") {
+                if (!glScene_->acceptToolCommit()) return;
+                committedFeatureLogEntryId_ = feedback->featureLogEntryId;
+                pendingToolTransform_.activate();
+                publishToolTransform();
+            } else {
+                if (!glScene_->acceptToolUndo()) return;
+                committedFeatureLogEntryId_.clear();
+            }
+        } else if (feedback->action == "undo" &&
+                   feedback->status == "refused" &&
+                   feedback->reason == "undo_stale_desktop_changed") {
+            committedFeatureLogEntryId_.clear();
+        }
+        toolShell_.applyExecutionFeedback(*feedback);
+    }
+
     [[nodiscard]] const nadoc_vr::ToolContextFeedback*
     currentToolContextFeedback() const {
         if (!toolContextFeedback_ || !toolConfig_.active() ||
@@ -3824,6 +4018,7 @@ class Viewer {
         pollToolContextFeedback();
         pollPlanePickFeedback();
         pollToolPreflightFeedback();
+        pollToolExecutionFeedback();
         updateControllerGuides();
     }
 
@@ -4061,6 +4256,7 @@ class Viewer {
     std::string toolFeedbackPath_;
     std::string planeFeedbackPath_;
     std::string preflightFeedbackPath_;
+    std::string toolExecutionFeedbackPath_;
     std::string jobPath_;
     bool jobsSnapshotAvailable_ = false;
     int jobsSnapshotTotal_ = 0;
@@ -4100,6 +4296,9 @@ class Viewer {
     uint32_t preflightFeedbackPollFrame_ = 0;
     uint64_t preflightFeedbackSequence_ = 0;
     std::optional<nadoc_vr::ToolPreflightFeedback> toolPreflightFeedback_;
+    uint64_t toolExecutionFeedbackSequence_ = 0;
+    uint32_t toolExecutionFeedbackPollFrame_ = 0;
+    std::string committedFeatureLogEntryId_;
     uint64_t planePickSequence_ = 0;
     uint64_t activePlanePickSequence_ = 0;
     uint64_t planePickConfigSequence_ = 0;
@@ -4177,6 +4376,7 @@ int main(int argc, char** argv) {
                      "[--tool-feedback <tool-feedback.txt>] "
                      "[--plane-feedback <plane-feedback.txt>] "
                      "[--preflight-feedback <preflight-feedback.txt>] "
+                     "[--tool-execution-feedback <tool-execution-feedback.txt>] "
                      "[--jobs <jobs.txt>] "
                      "[--selection-level <level>] "
                      "[--selected-owner <token>]... [--selected-kind <kind>]\n";
@@ -4187,6 +4387,7 @@ int main(int argc, char** argv) {
     std::string toolFeedbackPath;
     std::string planeFeedbackPath;
     std::string preflightFeedbackPath;
+    std::string toolExecutionFeedbackPath;
     std::string jobPath;
     std::string selectionLevel = "default";
     std::string selectedSelectionKind = "none";
@@ -4205,6 +4406,9 @@ int main(int argc, char** argv) {
         else if (option == "--tool-feedback") toolFeedbackPath = argv[index + 1];
         else if (option == "--plane-feedback") planeFeedbackPath = argv[index + 1];
         else if (option == "--preflight-feedback") preflightFeedbackPath = argv[index + 1];
+        else if (option == "--tool-execution-feedback") {
+            toolExecutionFeedbackPath = argv[index + 1];
+        }
         else if (option == "--jobs") jobPath = argv[index + 1];
         else if (option == "--selection-level") selectionLevel = argv[index + 1];
         else if (option == "--selected-owner") {
@@ -4244,7 +4448,8 @@ int main(int argc, char** argv) {
     try {
         Viewer viewer(
             loadScene(argv[1]), eventPath, feedbackPath, toolFeedbackPath,
-            planeFeedbackPath, preflightFeedbackPath, jobPath,
+            planeFeedbackPath, preflightFeedbackPath, toolExecutionFeedbackPath,
+            jobPath,
             nadoc_vr::loadJobSnapshot(jobPath), selectionLevel,
             std::move(selectedOwnerTokens), std::move(selectedSelectionKind));
         return viewer.run();

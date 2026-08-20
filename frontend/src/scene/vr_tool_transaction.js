@@ -23,7 +23,9 @@ export function createVRToolTransactionCoordinator({
   let inFlight = false
   let committed = null
 
-  async function commit({ tool, targetKey, execute } = {}) {
+  async function commit({
+    tool, targetKey, targetIdentity = null, targetKind = null, execute,
+  } = {}) {
     if (inFlight) return { accepted: false, reason: 'transaction_busy' }
     if (typeof execute !== 'function' || typeof tool !== 'string' || !tool ||
         typeof targetKey !== 'string' || !targetKey) {
@@ -44,6 +46,8 @@ export function createVRToolTransactionCoordinator({
       committed = {
         tool,
         targetKey,
+        targetIdentity,
+        targetKind,
         featureLogEntryId: entryId,
         targetCount: Number(transaction.target_count) || 0,
       }

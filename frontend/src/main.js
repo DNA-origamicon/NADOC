@@ -17,6 +17,7 @@ import * as THREE from 'three'
 import { initScene }                 from './scene/scene.js'
 import { initVRSession }             from './scene/vr_session.js'
 import { initialVRToolShellState, reduceVRToolShell } from './scene/vr_tool_shell.js'
+import { createVRToolTransactionCoordinator } from './scene/vr_tool_transaction.js'
 import {
   initialVRToolConfigState, reduceVRToolConfig, vrPlaneFeedbackPayload,
 } from './scene/vr_tool_config.js'
@@ -5795,6 +5796,46 @@ async function main() {
 
   let _vrToolShellState = initialVRToolShellState
   let _vrToolConfigState = initialVRToolConfigState
+  let _vrToolExecutionSequence = 0
+  const _vrToolTransaction = createVRToolTransactionCoordinator({
+    getState: store.getState,
+    undoDesign: api.undo,
+  })
+  const _sendVRToolExecution = async (event, status, reason, transaction = null) => {
+    const targetIdentity = transaction?.targetIdentity ?? event.targetIdentity
+    const targetKind = transaction?.targetKind ?? event.targetKind
+    if (!targetIdentity || !targetKind || targetKind === 'none') return Promise.resolve(null)
+    const payload = {
+      execution_sequence: ++_vrToolExecutionSequence,
+      tool_sequence: event.sequence,
+      tool_mode: event.mode,
+      tool_action: event.action,
+      target_identity: targetIdentity,
+      target_kind: targetKind,
+      status,
+      reason,
+      feature_log_entry_id: status === 'succeeded'
+        ? transaction?.featureLogEntryId ?? null : null,
+    }
+    let result
+    try {
+      result = await api.sendVRToolExecutionFeedback(payload)
+    } catch (error) {
+      if (status === 'pending') throw error
+      // A lost response is ambiguous: replay the same idempotent sequence, then
+      // use the server's monotonic cursor to rebase only this terminal verdict.
+      result = await api.sendVRToolExecutionFeedback(payload)
+    }
+    if (result?.published !== false || status === 'pending') return result
+    const current = Number(result?.current_execution_sequence ?? 0)
+    if (Number.isSafeInteger(current)) {
+      _vrToolExecutionSequence = Math.max(_vrToolExecutionSequence, current)
+    }
+    return api.sendVRToolExecutionFeedback({
+      ...payload,
+      execution_sequence: ++_vrToolExecutionSequence,
+    })
+  }
   const _vrToolPreflight = createVRToolPreflightCoordinator({
     sendFeedback: api.sendVRToolPreflightFeedback,
   })
@@ -5921,6 +5962,8 @@ async function main() {
         const result = reduceVRToolShell(_vrToolShellState, event, {
           toolTarget,
           targetSnapshotPresent,
+          executorAttached: event.mode === 'move_rotate',
+          undoAvailable: _vrToolTransaction.snapshot().committed?.tool === event.mode,
         })
         _vrToolShellState = result.state
         const label = event.mode === 'move_rotate'
@@ -5947,7 +5990,7 @@ async function main() {
                   _nucleotideTransformTool.beginVRPreview(result.effect.selectedRef))
             previewStart.then(status => {
               if (status?.accepted) {
-                showToast('VR Move / Rotate preview is mirrored on the desktop; Confirm remains disabled.')
+                showToast('VR Move / Rotate preview is mirrored on the desktop; Confirm commits one undoable edit.')
               } else {
                 showToast(
                   'VR Move / Rotate could not mirror because the desktop tool is already active.',
@@ -5961,9 +6004,35 @@ async function main() {
             showToast(`VR ${label}: preview intent received; the design is unchanged.`)
           }
         } else if (result.effect?.type === 'commit_requested') {
-          showToast(
-            `VR ${label}: confirm is staged; its mutation executor is not attached yet.`,
-          )
+          if (result.effect.tool !== 'move_rotate') {
+            showToast(`VR ${label}: confirm is staged; its mutation executor is not attached yet.`)
+          } else {
+            _sendVRToolExecution(event, 'pending', 'committing').catch(() => {})
+            const execute = result.effect.selectedRef.kind === 'cluster'
+              ? _translateRotateTool.confirmVRPreview
+              : _nucleotideTransformTool.confirmVRPreview
+            _vrToolTransaction.commit({
+              tool: result.effect.tool,
+              targetKey: result.state.targetKey,
+              targetIdentity: event.targetIdentity,
+              targetKind: event.targetKind,
+              execute,
+            }).then(outcome => {
+              const status = outcome.accepted ? 'succeeded'
+                : outcome.reason === 'transaction_busy' ? 'refused' : 'failed'
+              return _sendVRToolExecution(
+                event, status, outcome.reason, outcome.transaction,
+              ).then(() => outcome)
+            }).then(outcome => {
+              showToast(outcome.accepted
+                ? 'VR Move / Rotate committed. Undo now targets exactly this edit.'
+                : `VR Move / Rotate was not committed (${outcome.reason}).`,
+              outcome.accepted ? {} : { severity: 'error' })
+            }).catch(() => showToast(
+              'VR Move / Rotate acknowledgement failed; verify the desktop before retrying.',
+              { severity: 'error' },
+            ))
+          }
         } else if (result.effect?.type === 'cancel_requested') {
           if (result.effect.tool === 'move_rotate') {
             Promise.all([
@@ -5978,7 +6047,26 @@ async function main() {
             showToast(`VR ${label}: preview cancelled.`)
           }
         } else if (result.effect?.type === 'undo_requested') {
-          showToast('VR tools have no committed edit to undo yet.')
+          if (!result.accepted) {
+            showToast('VR tools have no committed edit to undo yet.')
+          } else {
+            _sendVRToolExecution(event, 'pending', 'undoing').catch(() => {})
+            _vrToolTransaction.undo({ tool: result.effect.tool }).then(outcome => {
+              const status = outcome.accepted ? 'succeeded'
+                : outcome.reason === 'undo_stale_desktop_changed' ? 'refused' : 'failed'
+              return _sendVRToolExecution(
+                event, status, outcome.reason, outcome.transaction,
+              ).then(() => outcome)
+            }).then(outcome => {
+              showToast(outcome.accepted
+                ? 'The last VR Move / Rotate edit was undone.'
+                : `VR Undo was refused (${outcome.reason}).`,
+              outcome.accepted ? {} : { severity: 'error' })
+            }).catch(() => showToast(
+              'VR Undo acknowledgement failed; verify the desktop before retrying.',
+              { severity: 'error' },
+            ))
+          }
         }
       } else if (event?.type === 'tool_transform') {
         if (!_nucleotideTransformTool.applyVRPreviewMatrix(event.matrix)) {
@@ -5988,6 +6076,7 @@ async function main() {
         _translateRotateTool.cancelVRPreview().catch(() => {})
         _nucleotideTransformTool.cancelVRPreview()
         _vrToolPreflight.cancel()
+        _vrToolTransaction.clear()
         _vrToolConfigState = initialVRToolConfigState
       } else {
         if (button) button.dataset.vrHoverIdentity = event?.identity ?? ''

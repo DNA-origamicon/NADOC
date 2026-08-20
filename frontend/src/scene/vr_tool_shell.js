@@ -76,6 +76,8 @@ export function vrToolTargetKey(target) {
 export function reduceVRToolShell(state = initialVRToolShellState, intent = {}, {
   toolTarget = null,
   targetSnapshotPresent = false,
+  executorAttached = false,
+  undoAvailable = false,
 } = {}) {
   const sequence = Number(intent.sequence)
   const mode = intent.mode
@@ -125,7 +127,7 @@ export function reduceVRToolShell(state = initialVRToolShellState, intent = {}, 
     return {
       state: { ...base, stage: state.stage, targetKey: state.targetKey ?? null },
       effect: { type: 'undo_requested', tool: mode },
-      accepted: false, reason: 'no_vr_commit',
+      accepted: undoAvailable, reason: undoAvailable ? 'undo_requested' : 'no_vr_commit',
     }
   }
   if (targetSnapshotPresent && !toolTarget) {
@@ -159,15 +161,17 @@ export function reduceVRToolShell(state = initialVRToolShellState, intent = {}, 
       accepted: true, reason: 'preview_requested',
     }
   }
-  if (action === 'confirm' && state.mode === mode && state.stage === 'preview' &&
+  const confirmableStage = state.stage === 'preview' || state.stage === 'confirm_pending'
+  if (action === 'confirm' && state.mode === mode && confirmableStage &&
       targetKey != null && state.targetKey === targetKey) {
     return {
       state: { ...base, stage: 'confirm_pending', targetKey },
       effect: { type: 'commit_requested', tool: mode, selectedRef, toolTarget },
-      accepted: false, reason: 'executor_not_attached',
+      accepted: executorAttached,
+      reason: executorAttached ? 'commit_requested' : 'executor_not_attached',
     }
   }
-  if (action === 'confirm' && state.mode === mode && state.stage === 'preview' &&
+  if (action === 'confirm' && state.mode === mode && confirmableStage &&
       state.targetKey !== targetKey) {
     return {
       state: { ...base, stage: 'armed' }, effect: null,

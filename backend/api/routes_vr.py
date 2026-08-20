@@ -49,6 +49,7 @@ _STATE_LOCK = threading.Lock()
 _RUNTIME_LOCK = threading.Lock()
 _FEEDBACK_LOCK = threading.Lock()
 _TOOL_FEEDBACK_LOCK = threading.Lock()
+_TOOL_EXECUTION_FEEDBACK_LOCK = threading.Lock()
 _JOB_FEEDBACK_LOCK = threading.Lock()
 
 SelectionKind = Literal[
@@ -179,6 +180,20 @@ class VRToolPreflightFeedbackRequest(BaseModel):
     tool_mode: Literal["extrude", "twist", "bend"]
     status: Literal["waiting", "ok", "warn", "block", "error"]
     reason: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9_]+$")
+
+
+class VRToolExecutionFeedbackRequest(BaseModel):
+    """Browser-authoritative acknowledgement for one native tool action."""
+
+    execution_sequence: int = Field(ge=1, le=2**53 - 1)
+    tool_sequence: int = Field(ge=1, le=2**53 - 1)
+    tool_mode: Literal["move_rotate", "extrude"]
+    tool_action: Literal["confirm", "undo"]
+    target_identity: str = Field(min_length=1, max_length=2048)
+    target_kind: SelectionKind
+    status: Literal["pending", "succeeded", "failed", "refused"]
+    reason: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9_]+$")
+    feature_log_entry_id: Optional[str] = Field(default=None, max_length=128)
 
 
 VRPlanePickReason = Literal[
@@ -2869,6 +2884,7 @@ def _cleanup_after_process(
     tool_feedback_path: Path,
     plane_feedback_path: Path,
     preflight_feedback_path: Path,
+    tool_execution_feedback_path: Path,
     job_path: Path,
 ) -> None:
     process.wait()
@@ -2878,6 +2894,7 @@ def _cleanup_after_process(
     tool_feedback_path.unlink(missing_ok=True)
     plane_feedback_path.unlink(missing_ok=True)
     preflight_feedback_path.unlink(missing_ok=True)
+    tool_execution_feedback_path.unlink(missing_ok=True)
     job_path.unlink(missing_ok=True)
     with _STATE_LOCK:
         state = _read_state()
@@ -3692,6 +3709,72 @@ def vr_tool_preflight_feedback(
     }
 
 
+def _write_tool_execution_feedback(
+    state: dict | None, body: VRToolExecutionFeedbackRequest
+) -> tuple[bool, int]:
+    """Atomically publish one sequenced commit/undo acknowledgement."""
+    if not state or not state.get("tool_execution_feedback_path"):
+        raise HTTPException(409, detail="Native VR is not running.")
+    entry_id = body.feature_log_entry_id or "-"
+    if (
+        body.target_kind == "none"
+        or (body.status == "succeeded") != (body.feature_log_entry_id is not None)
+        or any(
+            any(character.isspace() for character in value)
+            for value in (body.target_identity, entry_id)
+        )
+    ):
+        raise HTTPException(422, detail="Invalid VR tool execution feedback.")
+    record = (
+        f"NADOCVR_TOOL_EXECUTION 1 {body.execution_sequence} "
+        f"{body.tool_sequence} {body.tool_mode} {body.tool_action} "
+        f"{body.target_kind} {body.target_identity} {body.status} "
+        f"{body.reason} {entry_id}\n"
+    )
+    if len(record.encode()) > 4096:
+        raise HTTPException(422, detail="Invalid VR tool execution feedback.")
+    path = Path(state["tool_execution_feedback_path"])
+    temporary = path.with_name(f"{path.name}.next")
+    with _TOOL_EXECUTION_FEEDBACK_LOCK:
+        try:
+            try:
+                current_fields = path.read_text().split()
+                current_sequence = (
+                    int(current_fields[2])
+                    if len(current_fields) == 11
+                    and current_fields[:2] == ["NADOCVR_TOOL_EXECUTION", "1"]
+                    else 0
+                )
+            except (OSError, ValueError):
+                current_sequence = 0
+            if body.execution_sequence <= current_sequence:
+                return False, current_sequence
+            temporary.write_text(record)
+            temporary.chmod(0o600)
+            os.replace(temporary, path)
+        except OSError as exc:
+            temporary.unlink(missing_ok=True)
+            raise HTTPException(
+                503, detail="Could not acknowledge VR tool execution."
+            ) from exc
+    return True, body.execution_sequence
+
+
+@router.post("/vr/tool-execution-feedback")
+def vr_tool_execution_feedback(
+    body: VRToolExecutionFeedbackRequest, request: Request
+) -> dict:
+    _require_local(request)
+    published, current_sequence = _write_tool_execution_feedback(_read_state(), body)
+    return {
+        "acknowledged": True,
+        "published": published,
+        "execution_sequence": body.execution_sequence,
+        "current_execution_sequence": current_sequence,
+        "tool_sequence": body.tool_sequence,
+    }
+
+
 def _write_job_snapshot(
     rows: list[VRJobSnapshotRow], *, available: bool = True, total: int | None = None,
     sequence: int = 1, updated_at_ms: int | None = None,
@@ -3798,6 +3881,7 @@ def _viewer_command(
     tool_feedback_path: Path,
     plane_feedback_path: Path,
     preflight_feedback_path: Path,
+    tool_execution_feedback_path: Path,
     job_path: Path,
     body: VRLaunchRequest,
 ) -> list[str]:
@@ -3816,6 +3900,8 @@ def _viewer_command(
         str(plane_feedback_path),
         "--preflight-feedback",
         str(preflight_feedback_path),
+        "--tool-execution-feedback",
+        str(tool_execution_feedback_path),
         "--jobs",
         str(job_path),
     ]
@@ -3991,6 +4077,18 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             )
             preflight_feedback_path = Path(preflight_feedback_file.name)
         preflight_feedback_path.chmod(0o600)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            prefix="nadoc-vr-tool-execution-feedback-",
+            suffix=".txt",
+            delete=False,
+        ) as tool_execution_feedback_file:
+            tool_execution_feedback_file.write(
+                "NADOCVR_TOOL_EXECUTION 1 0 0 move_rotate confirm none - "
+                "refused waiting -\n"
+            )
+            tool_execution_feedback_path = Path(tool_execution_feedback_file.name)
+        tool_execution_feedback_path.chmod(0o600)
         job_path = _write_job_snapshot(
             body.jobs,
             available=body.jobs_snapshot_available,
@@ -4002,7 +4100,8 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             process = subprocess.Popen(
                 _viewer_command(
                     scene_path, event_path, feedback_path, tool_feedback_path,
-                    plane_feedback_path, preflight_feedback_path, job_path, body
+                    plane_feedback_path, preflight_feedback_path,
+                    tool_execution_feedback_path, job_path, body
                 ),
                 cwd=_REPO_ROOT,
                 env=_build_environment(),
@@ -4020,6 +4119,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             tool_feedback_path.unlink(missing_ok=True)
             plane_feedback_path.unlink(missing_ok=True)
             preflight_feedback_path.unlink(missing_ok=True)
+            tool_execution_feedback_path.unlink(missing_ok=True)
             job_path.unlink(missing_ok=True)
             raise HTTPException(
                 503, detail=f"Could not launch VR viewer: {exc}"
@@ -4036,6 +4136,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             tool_feedback_path.unlink(missing_ok=True)
             plane_feedback_path.unlink(missing_ok=True)
             preflight_feedback_path.unlink(missing_ok=True)
+            tool_execution_feedback_path.unlink(missing_ok=True)
             job_path.unlink(missing_ok=True)
             detail = "Native VR viewer exited during startup."
             try:
@@ -4054,6 +4155,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             "tool_feedback_path": str(tool_feedback_path),
             "plane_feedback_path": str(plane_feedback_path),
             "preflight_feedback_path": str(preflight_feedback_path),
+            "tool_execution_feedback_path": str(tool_execution_feedback_path),
             "job_path": str(job_path),
             "started_at": process_started_at,
             "launch_requested_at": launch_requested_at,
@@ -4073,7 +4175,8 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             target=_cleanup_after_process,
             args=(
                 process, scene_path, event_path, feedback_path, tool_feedback_path,
-                plane_feedback_path, preflight_feedback_path, job_path,
+                plane_feedback_path, preflight_feedback_path,
+                tool_execution_feedback_path, job_path,
             ),
             daemon=True,
             name="nadoc-vr-cleanup",

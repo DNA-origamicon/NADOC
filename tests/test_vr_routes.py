@@ -19,6 +19,7 @@ from backend.api.routes_vr import (
     VRLaunchRequest,
     VRPlaneFeedbackRequest,
     VRToolPreflightFeedbackRequest,
+    VRToolExecutionFeedbackRequest,
     VRToolFeedbackRequest,
     VRCamera,
     _bundle_expanded_scene,
@@ -40,6 +41,7 @@ from backend.api.routes_vr import (
     _write_plane_feedback,
     _write_preflight_feedback,
     _write_tool_feedback,
+    _write_tool_execution_feedback,
     _write_scene_snapshot,
 )
 from backend.core.vr_scene_contract import compare_scenes, parse_scene_contract
@@ -970,6 +972,61 @@ def test_native_tool_preflight_feedback_converges_under_every_arrival_order(
         )
 
 
+def test_tool_execution_feedback_is_private_bounded_and_transaction_bound(
+    tmp_path,
+) -> None:
+    feedback_path = tmp_path / "execution.txt"
+    state = {"tool_execution_feedback_path": str(feedback_path)}
+    assert _write_tool_execution_feedback(
+        state,
+        VRToolExecutionFeedbackRequest(
+            execution_sequence=7,
+            tool_sequence=11,
+            tool_mode="move_rotate",
+            tool_action="confirm",
+            target_identity="nuc:s1",
+            target_kind="domain",
+            status="succeeded",
+            reason="committed",
+            feature_log_entry_id="feature:42",
+        ),
+    ) == (True, 7)
+    assert feedback_path.read_text() == (
+        "NADOCVR_TOOL_EXECUTION 1 7 11 move_rotate confirm domain "
+        "nuc:s1 succeeded committed feature:42\n"
+    )
+    assert feedback_path.stat().st_mode & 0o777 == 0o600
+    assert _write_tool_execution_feedback(
+        state,
+        VRToolExecutionFeedbackRequest(
+            execution_sequence=6,
+            tool_sequence=11,
+            tool_mode="move_rotate",
+            tool_action="confirm",
+            target_identity="nuc:s1",
+            target_kind="domain",
+            status="pending",
+            reason="committing",
+        ),
+    ) == (False, 7)
+
+    with pytest.raises(HTTPException, match="execution feedback"):
+        _write_tool_execution_feedback(
+            state,
+            VRToolExecutionFeedbackRequest(
+                execution_sequence=8,
+                tool_sequence=12,
+                tool_mode="move_rotate",
+                tool_action="undo",
+                target_identity="nuc:s1",
+                target_kind="domain",
+                status="failed",
+                reason="undo_failed",
+                feature_log_entry_id="must-not-appear-on-failure",
+            ),
+        )
+
+
 def test_native_launch_passes_initial_selection_as_opaque_arguments(tmp_path) -> None:
     token = _owner_token("domain", "strand:a b", 2)
     command = _viewer_command(
@@ -979,6 +1036,7 @@ def test_native_launch_passes_initial_selection_as_opaque_arguments(tmp_path) ->
         tmp_path / "tool-feedback.txt",
         tmp_path / "plane-feedback.txt",
         tmp_path / "preflight-feedback.txt",
+        tmp_path / "tool-execution-feedback.txt",
         tmp_path / "jobs.txt",
         VRLaunchRequest(
             selection_level="domain",
@@ -992,6 +1050,9 @@ def test_native_launch_passes_initial_selection_as_opaque_arguments(tmp_path) ->
     assert command[command.index("--plane-feedback") + 1].endswith("plane-feedback.txt")
     assert command[command.index("--preflight-feedback") + 1].endswith(
         "preflight-feedback.txt"
+    )
+    assert command[command.index("--tool-execution-feedback") + 1].endswith(
+        "tool-execution-feedback.txt"
     )
     assert command[command.index("--jobs") + 1].endswith("jobs.txt")
 

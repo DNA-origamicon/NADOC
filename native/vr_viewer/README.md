@@ -65,9 +65,9 @@ Controls on the original HTC Vive wands:
   level when VR launches.
 - Select Tools in that panel to open the Phase 5 transaction shell. It exposes
   Inspect, Move/Rotate, Extrude, Twist, and Bend plus Preview, Confirm, Cancel,
-  Undo, and Back. This first shell is visibly marked **READ ONLY**: it emits bounded
-  browser-owned intents and status but cannot yet mutate geometry or create history.
-  Confirm is reported as staged and Undo reports that no VR commit exists.
+  Undo, and Back. Move/Rotate is browser-authoritative and transactional; the
+  parameterized Extrude/Twist/Bend workflows remain visibly read-only until their
+  individual mutation gates pass.
   Move/Rotate directly previews exact Cluster, Strand, Domain, End, and Base
   scopes. End-target Extrude and Cluster/End Twist or Bend are amber and report
   **CONFIG REQUIRED**. Selecting one opens a target-bound draft-settings page:
@@ -92,9 +92,13 @@ Controls on the original HTC Vive wands:
   endpoint fixed. The native companion also publishes the same rigid delta through
   the private event bridge. NADOC converts it from view/snapshot coordinates back to
   nanometres and mirrors it through the desktop Cluster gizmo or exact nucleotide
-  transform adapter from one immutable baseline. This remains preview-only: Confirm
-  is blocked, Cancel or native session exit restores desktop geometry, and no
-  design/history entry is written.
+  transform adapter from one immutable baseline. Confirm locks the tool while the
+  browser commits the exact scope as one feature-log entry. Native keeps the preview
+  visible until a sequenced success/failure acknowledgement arrives, retains a
+  successful transform across representation/Expanded changes, and exposes Undo
+  only for that exact current feature-log tail. A later desktop edit makes the token
+  stale instead of undoing unrelated work. Cancel or native session exit restores an
+  uncommitted preview exactly.
   Every tool button event snapshots the exact acknowledged primitive, canonical kind,
   and bounded opaque owner aliases at controller-click time. The browser rejects a
   delayed event if that snapshot no longer names its current canonical selection, and

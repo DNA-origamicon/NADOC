@@ -4242,6 +4242,10 @@ export async function sendVRToolPreflightFeedback(body) {
   return _request('POST', '/vr/tool-preflight-feedback', body, { suppressBusy: true })
 }
 
+export async function sendVRToolExecutionFeedback(body) {
+  return _request('POST', '/vr/tool-execution-feedback', body, { suppressBusy: true })
+}
+
 export async function sendVRJobsFeedback(body) {
   return _request('POST', '/vr/jobs-feedback', body, { suppressBusy: true })
 }

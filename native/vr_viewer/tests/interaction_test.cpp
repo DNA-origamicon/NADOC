@@ -509,6 +509,23 @@ void toolShellNeverClaimsACommitAndRequiresPreview() {
     require(shell.status() == "READY");
     shell.apply(nadoc_vr::ToolAction::preview, "base");
     require(shell.previewRequested() && shell.status() == "PREVIEW ONLY");
+    shell.apply(nadoc_vr::ToolAction::confirm, "base");
+    require(shell.executionPending() && shell.status() == "COMMITTING");
+    shell.applyExecutionFeedback(nadoc_vr::ToolExecutionFeedback{
+        1, 9, "move_rotate", "confirm", "base", "nuc:s1", "succeeded",
+        "committed", "feature:9",
+    });
+    require(!shell.executionPending() && !shell.previewRequested());
+    require(shell.undoAvailable() && shell.status() == "COMMITTED");
+    shell.apply(nadoc_vr::ToolAction::undo, "base");
+    require(shell.executionPending() && shell.status() == "UNDOING");
+    shell.applyExecutionFeedback(nadoc_vr::ToolExecutionFeedback{
+        2, 10, "move_rotate", "undo", "base", "nuc:s1", "succeeded",
+        "undone", "feature:9",
+    });
+    require(!shell.executionPending() && !shell.undoAvailable());
+    require(shell.status() == "UNDONE");
+    shell.apply(nadoc_vr::ToolAction::preview, "base");
     shell.syncSelection("domain", true);
     require(!shell.previewRequested() && shell.status() == "READY");
     shell.apply(nadoc_vr::ToolAction::preview, "cluster");
@@ -517,6 +534,29 @@ void toolShellNeverClaimsACommitAndRequiresPreview() {
     shell.apply(nadoc_vr::ToolAction::preview, "cluster");
     shell.syncSelection("bond");
     require(!shell.previewRequested() && shell.status() == "UNSUPPORTED TARGET");
+}
+
+void toolExecutionFeedbackIsStrictSequencedAndTransactionBound() {
+    const auto committed = nadoc_vr::parseToolExecutionFeedback(
+        "NADOCVR_TOOL_EXECUTION 1 4 9 move_rotate confirm domain nuc:s1 "
+        "succeeded committed feature:9\n",
+        3, 9);
+    require(committed && committed->sequence == 4 && committed->toolSequence == 9);
+    require(committed->selectionKind == "domain");
+    require(committed->featureLogEntryId == "feature:9");
+    require(!nadoc_vr::parseToolExecutionFeedback(
+        "NADOCVR_TOOL_EXECUTION 1 4 9 move_rotate confirm domain nuc:s1 "
+        "succeeded committed feature:9\n",
+        4, 9));
+    require(!nadoc_vr::parseToolExecutionFeedback(
+        "NADOCVR_TOOL_EXECUTION 1 5 10 move_rotate undo domain nuc:s1 "
+        "succeeded undone -\n",
+        4, 10));
+    const auto refused = nadoc_vr::parseToolExecutionFeedback(
+        "NADOCVR_TOOL_EXECUTION 1 6 10 move_rotate undo domain nuc:s1 "
+        "refused undo_stale_desktop_changed -\n",
+        4, 10);
+    require(refused && refused->featureLogEntryId.empty());
 }
 
 void parameterizedToolDraftsResetOnTargetChangesAndStayBounded() {
@@ -635,6 +675,7 @@ int main() {
     canonicalOwnerFallbackUsesFeedbackSpecificityAndSceneOrder();
     ownerBoundsAreStableAndFollowTheWorldTransform();
     toolShellNeverClaimsACommitAndRequiresPreview();
+    toolExecutionFeedbackIsStrictSequencedAndTransactionBound();
     parameterizedToolDraftsResetOnTargetChangesAndStayBounded();
     jobSnapshotParserPreservesIdentityStatusAndRejectsAmbiguity();
 }
