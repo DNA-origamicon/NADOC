@@ -108,8 +108,8 @@ def test_node_scripts_are_old_python_safe(mod):
     )
     # No 3.7+ stdlib at MODULE scope (would ModuleNotFoundError on the 3.6 node python;
     # `dataclasses` was the live-caught one). Runtime imports inside functions (e.g. the
-    # health wrapper's MDAnalysis via _load_md_health) are exempt — those are the Tier-A
-    # modern-python path, not the bare-node path.
+    # health wrapper's MDAnalysis via _load_md_health) are exempt — that's the separate
+    # modern-python invocation for the WC health step, not the bare-node evaluator path.
     PY37_PLUS = {
         "dataclasses",
         "contextvars",
@@ -205,18 +205,28 @@ def test_frame_parser_matches_namd_metrics_on_real_logs():
 
 
 def test_replay_decision_matches_local_gate_on_real_logs():
+    """No tiers: ``decide`` always requires energy AND WC, so pair the real energy
+    frames with a controlled WC series and confirm the combined decision matches
+    ``md_cutoff.should_early_stop_stage`` — flat WC reduces to energy alone (proving
+    the energy leg is unchanged), a drifting WC always holds regardless of energy
+    (proving the WC leg actually gates)."""
     logs = _find_relax_logs()
     if not logs:
         pytest.skip("no real relaxation logs in workspace/md_jobs")
     for log in logs:
         text = log.read_text(errors="replace")
         frames = ev.parse_namd_log_frames(text)
-        code, _ = ev.decide(text)  # Tier B (energy only)
         if len(frames) < md_cutoff.CutoffParams().min_frames:
-            assert code == 2  # insufficient -> fail safe
-        else:
-            want = 0 if md_cutoff.energy_plateaued(frames) else 1
-            assert code == want, log.name
+            code, _ = ev.decide(text, [0.90] * 30)
+            assert code == 2  # insufficient -> fail safe regardless of WC
+            continue
+        flat_wc = [0.90 + (i % 2) * 0.001 for i in range(len(frames))]
+        code, _ = ev.decide(text, flat_wc)
+        want = 0 if md_cutoff.energy_plateaued(frames) else 1
+        assert code == want, log.name
+        drifting_wc = [0.90 - i * 0.01 for i in range(len(frames))]
+        code, _ = ev.decide(text, drifting_wc)
+        assert code == 1, log.name  # WC never flat -> always HOLD
 
 
 # ── 5. exp36 bank replay (parsed frames -> identical decisions) ─────────────────
@@ -263,42 +273,59 @@ def _write_log(tmp_path, pots):
     return log
 
 
+def _write_wc(tmp_path, values, name="wc.json"):
+    import json
+
+    wc = tmp_path / name
+    wc.write_text(json.dumps(values))
+    return wc
+
+
+_FLAT_WC = [0.90 + (i % 2) * 0.005 for i in range(30)]
+_DRIFTING_WC = [0.90 - i * 0.01 for i in range(30)]
+
+
 def test_cli_exit_skip_on_plateau(tmp_path):
     log = _write_log(tmp_path, [-1_000_000.0 + (i % 2) * 5.0 for i in range(30)])
-    assert ev.main(["--log", str(log)]) == 0
+    wc = _write_wc(tmp_path, _FLAT_WC)
+    assert ev.main(["--log", str(log), "--wc", str(wc)]) == 0
 
 
-def test_cli_exit_hold_when_drifting(tmp_path):
+def test_cli_exit_hold_when_energy_drifts(tmp_path):
     log = _write_log(tmp_path, [-1_000_000.0 + i * 400.0 for i in range(30)])
-    assert ev.main(["--log", str(log)]) == 1
+    wc = _write_wc(tmp_path, _FLAT_WC)  # WC flat: isolates the energy leg
+    assert ev.main(["--log", str(log), "--wc", str(wc)]) == 1
+
+
+def test_cli_exit_hold_when_wc_drifts(tmp_path):
+    log = _write_log(tmp_path, [-1_000_000.0 + (i % 2) * 5.0 for i in range(30)])
+    wc = _write_wc(tmp_path, _DRIFTING_WC)  # energy flat but WC still degrading
+    # No energy-only mode: even a clean energy plateau must HOLD if WC hasn't settled —
+    # the unsafe case a WC-blind evaluator can't see.
+    assert ev.main(["--log", str(log), "--wc", str(wc)]) == 1
 
 
 def test_cli_exit_err_on_insufficient_frames(tmp_path):
     log = _write_log(tmp_path, [-1_000_000.0] * 5)  # < min_frames
-    assert ev.main(["--log", str(log)]) == 2
+    wc = _write_wc(tmp_path, _FLAT_WC)
+    assert ev.main(["--log", str(log), "--wc", str(wc)]) == 2
 
 
 def test_cli_exit_err_on_missing_log(tmp_path):
-    assert ev.main(["--log", str(tmp_path / "nope.log")]) == 2
+    wc = _write_wc(tmp_path, _FLAT_WC)
+    assert ev.main(["--log", str(tmp_path / "nope.log"), "--wc", str(wc)]) == 2
 
 
-def test_cli_tier_a_holds_when_wc_drifts(tmp_path):
-    import json
-
+def test_cli_exit_err_on_missing_wc(tmp_path):
     log = _write_log(tmp_path, [-1_000_000.0 + (i % 2) * 5.0 for i in range(30)])
-    wc = tmp_path / "wc.json"
-    wc.write_text(json.dumps([0.90 - i * 0.01 for i in range(30)]))  # WC degrading
-    # energy flat but WC drifting -> Tier A must HOLD (the unsafe case Tier B can't see)
-    assert ev.main(["--log", str(log), "--wc", str(wc)]) == 1
+    assert ev.main(["--log", str(log), "--wc", str(tmp_path / "nope.json")]) == 2
 
 
-def test_cli_tier_a_skips_when_both_flat(tmp_path):
-    import json
-
+def test_cli_requires_wc(tmp_path):
+    # No energy-only mode: --wc is a required argument, not an optional extra.
     log = _write_log(tmp_path, [-1_000_000.0 + (i % 2) * 5.0 for i in range(30)])
-    wc = tmp_path / "wc.json"
-    wc.write_text(json.dumps([0.90 + (i % 2) * 0.005 for i in range(30)]))
-    assert ev.main(["--log", str(log), "--wc", str(wc)]) == 0
+    with pytest.raises(SystemExit):
+        ev.main(["--log", str(log)])
 
 
 # ── 7. runs standalone (no backend on sys.path) ────────────────────────────────
@@ -312,8 +339,9 @@ def test_runs_as_standalone_script(tmp_path):
     dst = tmp_path / "nadoc_cutoff_eval.py"
     shutil.copy2(ev.__file__, dst)
     log = _write_log(tmp_path, [-1_000_000.0 + (i % 2) * 5.0 for i in range(30)])
+    wc = _write_wc(tmp_path, _FLAT_WC)
     proc = subprocess.run(
-        [sys.executable, str(dst), "--log", str(log)],
+        [sys.executable, str(dst), "--log", str(log), "--wc", str(wc)],
         cwd=tmp_path,
         capture_output=True,
         text=True,

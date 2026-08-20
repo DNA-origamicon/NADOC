@@ -292,8 +292,8 @@ async def _seed_from_parent(conn, job: MdJob, remote: str, plan: list) -> None:
 async def _ensure_mdanalysis(conn: RunpodConnection) -> None:
     """Make ``import MDAnalysis`` work on the pod, or raise.
 
-    Tier A's whole job is to make the ladder affordable, and it does that by SKIPPING
-    chunks. Its fail-safe is to NOT skip — which is right for the science and ruinous
+    Early-stop's whole job is to make the ladder affordable, and it does that by
+    SKIPPING chunks. Its fail-safe is to NOT skip — which is right for the science and ruinous
     for the wallet: the un-accelerated ladder is ~55 h / ~$41, so a missing MDAnalysis
     turns a $8 night into a pod that bills until the kill-switch guillotines it
     mid-ladder, leaving neither a finished relaxation nor the money to retry.
@@ -524,7 +524,6 @@ async def submit_job(
 
     manifest = json.loads((pkg / "manifest.json").read_text())
     early_stop = md_executor._early_stop_on(job, manifest)
-    tier = md_executor._early_stop_tier(job)
 
     # The node live-metrics collector — the SAME script the Alpine path stages, and the
     # only thing that makes a rented run's progress bar move mid-segment. Without it,
@@ -570,16 +569,11 @@ async def submit_job(
     if early_stop:
         # Same three scripts the sbatch stages, uploaded through the same helper — the
         # conn duck-type means the Alpine stager works verbatim over an SSH'd pod.
-        await md_executor._stage_early_stop_evaluator(
-            conn, remote, workspace_dir, job, tier=tier
-        )
-        if tier == "A":
-            # Tier A fails SAFE to HOLD, and "hold" on a rented pod means running the
-            # FULL 9.6M-step ladder at ~$41. A silent import failure here is therefore
-            # a budget event, not a degraded-quality event: prove MDAnalysis is
-            # importable NOW, while we have spent cents, not at chunk 1 of stage 4.
-            # Already proven above for the continuous health collector.
-            pass
+        # Fails SAFE to HOLD, and "hold" on a rented pod means running the FULL
+        # 9.6M-step ladder at ~$41 — a silent MDAnalysis import failure here is a
+        # budget event, not a degraded-quality event, but it's already proven
+        # importable above (_ensure_mdanalysis, for the continuous health collector).
+        await md_executor._stage_early_stop_evaluator(conn, remote, workspace_dir, job)
 
     script = render_chain_script(
         steps=chain_steps_for(job, min_name),
@@ -590,7 +584,6 @@ async def submit_job(
         max_lifetime_s=max_lifetime_s,
         manifest=manifest,
         early_stop_relax=early_stop,
-        early_stop_tier=tier,
         name_stem=job.name_stem,
     )
     # job_dir(), never workspace/md_jobs/<id> — this job is ARCHIVED onto an external

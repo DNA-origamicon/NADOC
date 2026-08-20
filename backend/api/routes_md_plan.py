@@ -132,7 +132,6 @@ FIELD_SCOPE: dict[str, str] = {
     "force_soft": "relaxation",
     "declash": "relaxation",
     "early_stop_relax": "relaxation",
-    "early_stop_tier": "relaxation",
     "allow_ring_pierced_seed": "relaxation",
     "minimize_steps": "relaxation",
     "adaptive_minimization": "relaxation",
@@ -263,7 +262,9 @@ def _design_flags(*, padding_nm: float = 1.2) -> dict:
         ]
         aspect_ratio = None
         if points:
-            extents = [max(p[i] for p in points) - min(p[i] for p in points) for i in range(3)]
+            extents = [
+                max(p[i] for p in points) - min(p[i] for p in points) for i in range(3)
+            ]
             # Match the cheap solvation preview: a 1.2 nm DNA radius plus the selected
             # water padding on both faces keeps a one-dimensional axis finite.
             box_extents = [float(x) + 2.0 * (1.2 + padding_nm) for x in extents]
@@ -290,19 +291,22 @@ def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
     gbis = resolved.protocol == md_presets.IMPLICIT_PROTOCOL
     flags = _design_flags(padding_nm=float(resolved.padding_nm))
     high_aspect_ratio = resolved.relax_preset == md_presets.HIGH_ASPECT_RATIO
-    # Mirrors prepare_mgh_slow_release: 2+xT junctions and free single-stranded tails
-    # turn on declash automatically.  A 1xT junction stays on the standard ladder.
-    declash = bool(
-        resolved.declash or flags["extra_base_declash"] or flags["extensions"]
-    )
+    # Mirrors prepare_mgh_slow_release's RE-AUDIT CONCLUDED resolution: declash runs
+    # ONLY when explicitly requested. An unspecified request (None — every untouched
+    # wizard session) is OFF, same as an explicit False; it no longer auto-detects
+    # from the design. A design whose junctions insert 2+ extra bases (or that
+    # carries extensions) still gets flagged below as an advisory condition on the
+    # Declash control — the information stays, only the silent auto-apply is gone.
+    declash = bool(resolved.declash)
     force_soft = bool(resolved.force_soft)
     gentle_ladder = declash and not force_soft
     # The ladder's base timestep: explicit if chosen, else the historical fast-derived
     # 4/2 fs.  `fast` is now only the NAME for "the base timestep is 4 fs" — mirrors
     # prepare_mgh_slow_release so the preview and the run agree.
+    ladder_pinned = resolved.relax_timestep_fs is not None
     ladder_dt = (
         float(resolved.relax_timestep_fs)
-        if resolved.relax_timestep_fs is not None
+        if ladder_pinned
         else (4.0 if resolved.fast else 2.0)
     )
     fast = (ladder_dt >= 4.0) and not force_soft
@@ -316,6 +320,7 @@ def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
         rigid_bonds=resolved.relax_rigid_bonds,
         hmr=resolved.relax_hmr,
         base_timestep_fs=ladder_dt,
+        timestep_pinned=ladder_pinned,
         # An HMR ladder names the repartitioned PSF; the plan runs before solvation, so
         # this is the name the package WILL have.
         structure_psf=(
@@ -392,6 +397,53 @@ def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
     # Both scopes' integrator objections, stated as conditions so each one lands against
     # the control that caused it (their `source` names the request field).
     conditions = list(conditions) + _integrator_conditions(resolved)
+    # Pinning the ladder timestep ABOVE what this design's gentle/soft tier is measured
+    # stable at (2 fs declash, 1 fs force_soft) is honored, never capped — see
+    # md_protocols.effective_timestep_fs. Surface the risk as a condition instead, same
+    # "warn, never block" rule already applied to production (feedback_namd_4fs_production_only.md).
+    ladder_risk = _p.relax_timestep_risk_warning(
+        gentle=gentle_ladder,
+        soft=force_soft,
+        timestep_fs=ladder_dt,
+        pinned=ladder_pinned,
+    )
+    if ladder_risk:
+        conditions = [
+            *conditions,
+            {
+                "id": "relax_timestep_pinned_above_tier",
+                "kind": "warning",
+                "title": f"{ladder_dt:g} fs is above this design's measured-safe ladder rate",
+                "detail": ladder_risk,
+                "applies_to": "all",
+                "source": "CreateJobRequest.relax_timestep_fs",
+            },
+        ]
+    # Declash no longer auto-applies (RE-AUDIT CONCLUDED, 2026-08-19) — but a design
+    # whose junctions insert 2+ extra bases, or that carries extensions, is exactly
+    # what exp49 measured needing SOME protection at the ladder's default 4 fs + HMR
+    # (RATTLE on the still-unrelieved inserts). Surface it as a condition on the
+    # control, not a silent re-application of the old auto-trigger.
+    if (flags["extra_base_declash"] or flags["extensions"]) and not declash:
+        conditions = [
+            *conditions,
+            {
+                "id": "declash_off_on_a_clash_prone_design",
+                "kind": "warning",
+                "title": "Declash is off on a design with unrelieved extra-base/extension clashes",
+                "detail": (
+                    "This design has a junction inserting 2+ extra bases, or a strand "
+                    "extension — minimisation will NOT exclude those residues from the "
+                    "base-ring restraint, and the ladder runs the standard 4 fs + HMR "
+                    "path. exp49 measured this combination fail RATTLE on a clash-prone "
+                    "design before its inserts are relieved. Turn Declash on if the run "
+                    "is unstable, or if you have not separately verified this design's "
+                    "starting geometry is already clash-free."
+                ),
+                "applies_to": "all",
+                "source": "CreateJobRequest.declash",
+            },
+        ]
     warnings: list[str] = []
     if gbis:
         warnings.append(

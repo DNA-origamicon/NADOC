@@ -3,8 +3,7 @@
  *
  *  1. the run control reads ▶ Run for a local job while a REMOTE run is in flight
  *     (it used to read ＋ Queue, behind a queue that then never drained);
- *  2. "Build despite a linked crossover" is on step 2 for every target;
- *  3. "Remote early-stop test" appears ONLY when the target is not local.
+ *  2. "Build despite a linked crossover" is on step 2 for every target.
  *
  * READ-ONLY (memory/feedback_no_live_server_mutation_for_verify): opens the wizard and
  * cancels. Nothing is created, started, stopped, rented or deleted. Boots on a fresh
@@ -83,15 +82,9 @@ test('audit fixes are live in the app', async ({ page }) => {
     // sanity: are we looking at the RELAXATION settings pane at all?
     onRelaxationPane: has(localLabels, 'Stop settled stages early'),
     ringPiercing: has(localLabels, 'Build despite a ring piercing'),
-    earlyStopTier: has(localLabels, 'Remote early-stop test'),
   }
   R.paneText = (localLabels[0] || '').slice(0, 600)
   await page.screenshot({ path: `${OUT}/fixes_step2_local.png` })
-
-  // NOT asserted here: the Alpine leg. Step 1's readiness gate blocks BOTH Next and the
-  // tab strip without a live Duo session (by design), so `early_stop_tier` appearing for a
-  // remote target is unreachable in-app on a disconnected machine. That half of the rule is
-  // pinned in md_job_wizard_readonly.test.js (`fieldAppliesToTarget`) instead.
 
   await page.locator('button', { hasText: /^(Cancel|Close)$/ }).first().click({ timeout: 10_000 }).catch(() => {})
   await page.waitForTimeout(800)
@@ -121,6 +114,5 @@ test('audit fixes are live in the app', async ({ page }) => {
   expect(R.queue.busy, 'a remote run must not report this machine busy').toBe(false)
   expect(R.anyQueueLabel, 'no local job should be offered ＋ Queue while only remote runs are up').toBe(false)
   expect(R.local.ringPiercing, 'ring-piercing override on step 2').toBe(true)
-  expect(R.local.earlyStopTier, 'remote-only tier hidden for a local run').toBe(false)
   expect(R.console, 'zero console errors').toEqual([])
 })

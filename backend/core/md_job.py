@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from enum import Enum
 from pathlib import Path
 from typing import Optional
@@ -251,12 +251,6 @@ class MdJob:
     # Chunk minimization and stop only after sustained energy convergence. The
     # atom-scaled fixed count remains the hard ceiling. Enabled for new jobs.
     adaptive_minimization: bool = True
-    # Early-stop criterion tier for a REMOTE (Alpine) relaxation.  "B" (default) =
-    # energy(+volume) plateau only, stdlib evaluator, restricted to well-restrained
-    # stages.  "A" = energy AND WC base-pairing (full local parity), which needs an
-    # on-node MDAnalysis health step (numpy/scipy/MDAnalysis on the compute node).
-    # Ignored by the LOCAL runner (which always uses the full multi-criteria path).
-    early_stop_tier: str = "B"
     # Out-of-date detection (mirrors OxdnaJob).  ``design_fingerprint`` is a content
     # hash of the design this run was PREPARED from (set during background prep, after
     # the seed/active design is resolved — see backend.core.oxdna_staleness); a current
@@ -457,7 +451,6 @@ class MdJob:
             "early_stop_relax", False
         )  # pre-existing jobs keep their setting
         data.setdefault("adaptive_minimization", True)
-        data.setdefault("early_stop_tier", "B")
         data.setdefault("failure_kind", None)
         data.setdefault("decision", None)
         data.setdefault("prep_params", None)
@@ -502,6 +495,12 @@ class MdJob:
         data.setdefault("runpod_billing_sessions", [])
         data.setdefault("runpod_final_cost_usd", None)
         data.setdefault("runpod_terminate_after", None)
+        # A retired field (e.g. "early_stop_tier", removed 2026-08-21 — the remote
+        # early-stop path no longer has tiers) still sits in old job.json files on
+        # disk; drop anything the current dataclass no longer declares rather than
+        # crash loading a job saved under a prior schema.
+        known = {f.name for f in fields(cls)}
+        data = {k: v for k, v in data.items() if k in known}
         return cls(**data)
     @classmethod
     def list_jobs(cls, workspace_dir: Path) -> list["MdJob"]:

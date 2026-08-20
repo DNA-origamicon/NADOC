@@ -1,21 +1,23 @@
-"""Tier-A node health step — per-frame WC base-pairing for one relaxation chunk.
+"""Node health step — per-frame WC base-pairing for one relaxation chunk.
 
-The node-side companion to ``remote_cutoff_eval.py`` for the Tier-A (WC-gated)
-in-sbatch early-stop path.  It computes the chunk's ``wc_per_frame`` series (the
-same one the local runner feeds to ``md_cutoff.should_early_stop_stage``) and writes
-it as a JSON list that ``nadoc_cutoff_eval.py --wc`` consumes.
+The node-side companion to ``remote_cutoff_eval.py`` for the in-sbatch early-stop
+path.  It computes the chunk's ``wc_per_frame`` series (the same one the local
+runner feeds to ``md_cutoff.should_early_stop_stage``) and writes it as a JSON list
+that ``nadoc_cutoff_eval.py --wc`` consumes — required on every eligible chunk, no
+energy-only fallback.
 
-Unlike the stdlib-only cutoff evaluator, this REQUIRES numpy + scipy + MDAnalysis on
-the node python — the Tier-A prerequisite.  It runs the ACTUAL
+REQUIRES numpy + scipy + MDAnalysis on the node python.  It runs the ACTUAL
 ``md_health.run_health_check`` (a verbatim copy of ``backend.core.md_health`` is
-staged next to this file), so the remote WC metric is byte-for-byte the local one;
-``run_health_check`` reads only the staged ``{stem}.psf``/``.pdb`` and the freshly
-written ``output/{seg}.dcd`` (all present on the node).
+staged next to this file — as of 2026-08-21 that copy is self-contained, with no
+further ``backend`` import, so its ss-exclusion logic runs correctly standalone; see
+[[project_declash_reaudit]]), so the remote WC metric is byte-for-byte the local
+one; ``run_health_check`` reads only the staged ``{stem}.psf``/``.pdb`` and the
+freshly written ``output/{seg}.dcd`` (all present on the node).
 
 Fails safe: on ANY problem (missing MDAnalysis, no frames yet, read error) it writes
 nothing and exits non-zero, so the sbatch's ``[ -f wc.json ] && cutoff --wc`` gate
-falls through to HOLD — Tier A never skips on energy alone (that is exactly the
-unsafe case Tier A exists to prevent).
+falls through to HOLD — this never skips on energy alone (that is exactly the
+unsafe case the WC step exists to prevent).
 """
 
 # NB: NO `from __future__ import annotations` — see remote_cutoff_eval.py; Alpine's

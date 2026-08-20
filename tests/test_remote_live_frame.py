@@ -13,6 +13,7 @@ about that file never being mistaken for results.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import time
 from pathlib import Path
@@ -154,6 +155,55 @@ def test_missing_scratch_dir_is_rejected(tmp_path):
     job.remote_scratch_dir = None
     with pytest.raises(ValueError, match="scratch"):
         _run(rlf.fetch_live_frame(job, tmp_path, conn=_FakeConn()))
+
+
+def test_stand_in_temp_path_is_never_the_downloaders_part_file():
+    """Regression: the two used to be the same file.
+
+    `cluster_ssh._stream_get` keeps its resumable partial at `<dest>.part`, and
+    DCDWriter opens its temp "wb".  Sharing the path meant one live-frame refresh
+    truncated a multi-gigabyte download to a single frame, after which the next fetch
+    appended real remote bytes onto a foreign head — corrupt, but the right size, so it
+    passed as verified.  Pin the suffix so it can never drift back.
+    """
+    source = inspect.getsource(rlf._write_single_frame_dcd)
+    assert '.name + ".part"' not in source
+    assert '.name + ".live-tmp"' in source
+
+
+def test_live_frame_refuses_while_the_real_trajectory_is_downloading(tmp_path):
+    pkg = _package(tmp_path)
+    job = _Job(tmp_path)
+    (pkg / "output" / "seg0.dcd.part").write_bytes(b"partially downloaded results")
+
+    with pytest.raises(ValueError, match="downloading"):
+        _run(rlf.fetch_live_frame(job, tmp_path, conn=_FakeConn()))
+
+
+def test_download_in_flight_reads_the_partial_first(tmp_path):
+    pkg = _package(tmp_path)
+    job = _Job(tmp_path)
+    dest = pkg / "output" / "seg0.dcd"
+    assert not rlf.download_in_flight(job, dest)
+
+    (pkg / "output" / "seg0.dcd.part").write_bytes(b"x")
+    assert rlf.download_in_flight(job, dest)
+
+
+def test_download_in_flight_believes_a_matching_status(tmp_path):
+    pkg = _package(tmp_path)
+    job = _Job(tmp_path)
+    dest = pkg / "output" / "seg0.dcd"
+    job.download_status = {"state": "downloading", "current_file": "output/seg0.dcd"}
+    assert rlf.download_in_flight(job, dest)
+
+
+def test_download_in_flight_ignores_a_status_for_another_file(tmp_path):
+    pkg = _package(tmp_path)
+    job = _Job(tmp_path)
+    dest = pkg / "output" / "seg0.dcd"
+    job.download_status = {"state": "downloading", "current_file": "output/other.dcd"}
+    assert not rlf.download_in_flight(job, dest)
 
 
 def test_a_real_trajectory_is_never_overwritten(tmp_path):

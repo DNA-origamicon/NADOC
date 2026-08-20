@@ -6,10 +6,21 @@ they are never Watson-Crick base-paired by design, so any geometric ss→partner
 pairing is spurious and would sink the fraction once dynamics starts.
 
 `build_c1_pairs` / `build_wc_pairs` take an `exclude_residues` set (the same
-(chain, resid) keys `md_protocols.identify_unpaired_residues` produces, which the
-declash protocol already excludes from the ENM). `run_health_check` fills it in
-only for declashed / extra-base designs (detected by the `{stem}_build.pdb`
-backup), so fully-duplex designs are byte-identical to before.
+(chain, resid) keys `md_protocols.identify_unpaired_residues` produces).
+`run_health_check` fills it in via `_unpaired_exclusion_set`, which calls
+`identify_unpaired_residues` DIRECTLY off the reference structure's own C1'
+geometry — unconditionally, not gated on whether the run used declash.
+
+2026-08-19: it used to be gated on a declash-specific side effect (the
+`{stem}_build.pdb` backup the declash rebuild leaves behind), on the theory that
+only a declashed package could have unpaired residues worth excluding. That was
+wrong the moment declash stopped auto-engaging ([[project_declash_reaudit]]): a
+non-declash run on an extra-base design has EXACTLY the same unpaired residues —
+declash is a minimisation-stage protocol choice, not a fact about the structure —
+so gating on it fed 100+ genuinely single-stranded residues into the WC/C1' pair
+builders on a real live run, dragging WC health down for pairs that were never
+meant to exist. A fully duplex design still has no such residues, so the fix is a
+no-op there — a plain design is not what these tests are about.
 """
 
 from __future__ import annotations
@@ -33,11 +44,11 @@ def test_residue_key_matches_identify_unpaired_convention():
     assert H._residue_key(atom2) == ("I", "127")
 
 
-# ── gating: exclusion only for declashed / extra-base designs ──────────────────
+# ── unconditional detection: no marker file required ────────────────────────
 
 
-def test_unpaired_exclusion_set_empty_without_declash_marker(tmp_path: Path):
-    # No {stem}_build.pdb backup ⇒ not a declashed design ⇒ empty (zero change).
+def test_unpaired_exclusion_set_empty_on_unparseable_input(tmp_path: Path):
+    # No usable PSF/PDB content ⇒ detection can't run ⇒ empty, not a crash.
     psf = tmp_path / "x.psf"
     pdb = tmp_path / "x.pdb"
     psf.write_text("")
@@ -46,13 +57,49 @@ def test_unpaired_exclusion_set_empty_without_declash_marker(tmp_path: Path):
 
 
 def test_unpaired_exclusion_set_swallows_errors(tmp_path: Path):
-    # Marker present but files are unreadable ⇒ never raise, just return empty.
+    # Garbage files ⇒ never raise, just return empty — no marker file involved.
     pdb = tmp_path / "x.pdb"
     psf = tmp_path / "x.psf"
     pdb.write_text("garbage")
     psf.write_text("garbage")
-    (tmp_path / "x_build.pdb").write_text("garbage")  # declash marker present
     assert H._unpaired_exclusion_set(psf, pdb) == set()
+
+
+# A(THY)/B(ADE) 10.5 Å apart ⇒ paired (within _C1_NO_PARTNER_ANG). D(THY, ssDNA)
+# sits 100 Å away — no cross-segment C1' neighbour within the 11 Å search ball at
+# all, so identify_unpaired_residues finds it unconditionally, straight off the
+# geometry, with no {stem}_build.pdb marker anywhere on disk.
+_ISOLATED_PSF = """PSF
+
+       1 !NTITLE
+ REMARKS test
+
+       3 !NATOM
+       1 A        1        THY  C1'  CN7B   0.000000       12.0107           0
+       2 B        1        ADE  C1'  CN7B   0.000000       12.0107           0
+       3 D        1        THY  C1'  CN7B   0.000000       12.0107           0
+
+       0 !NBOND: bonds
+
+"""
+
+_ISOLATED_PDB = """ATOM      1  C1' THY A   1       0.000   0.000   0.000  1.00  0.00      A
+ATOM      2  C1' ADE B   1      10.500   0.000   0.000  1.00  0.00      B
+ATOM      3  C1' THY D   1     100.000 100.000 100.000  1.00  0.00      D
+END
+"""
+
+
+def test_unpaired_exclusion_set_finds_a_genuinely_isolated_residue_with_no_marker(
+    tmp_path: Path,
+):
+    pytest.importorskip("MDAnalysis")
+    psf = tmp_path / "iso.psf"
+    pdb = tmp_path / "iso.pdb"
+    psf.write_text(_ISOLATED_PSF)
+    pdb.write_text(_ISOLATED_PDB)
+    assert not (tmp_path / "iso_build.pdb").exists()  # no declash marker present
+    assert H._unpaired_exclusion_set(psf, pdb) == {("D", "1")}
 
 
 # ── behavioral: a spurious ss pair is dropped, the real duplex pair restored ───

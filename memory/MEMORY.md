@@ -115,7 +115,8 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 **Multi-resolution / CG bridge:** [multiresolution_roadmap](project_multiresolution_roadmap.md)·**[crossover_parameterization](project_crossover_parameterization.md)** (live DB feeds every mrDNA relax)·[bundle_stiffness_params](project_bundle_stiffness_params.md)·[session_handoff](project_session_handoff.md)
 
 **NAMD production / solvation:** **[periodic_md](project_periodic_md.md)** (governed by [architecture_decisions](architecture_decisions.md))·[btube_benchmark](project_btube_benchmark.md)·[periodic_cell](project_periodic_cell.md)·[namd_solvate](project_namd_solvate.md)·[water_shell_carve](project_water_shell_carve.md)·[3x4sq_md_run](project_3x4sq_md_run.md)·[exp30_18hb_production](project_exp30_18hb_production.md) ·
-**[extra_base_4fs_geometric_fixb](project_extra_base_4fs_geometric_fixb.md)** (winning seed = GEOMETRIC+FixB, not oxDNA position-seed)·**[voltroncore_fullbox_bench](project_voltroncore_fullbox_bench.md)** (>10M-atom PSF needs EXT format)
+**[extra_base_4fs_geometric_fixb](project_extra_base_4fs_geometric_fixb.md)** (winning seed = GEOMETRIC+FixB, not oxDNA position-seed)·**[voltroncore_fullbox_bench](project_voltroncore_fullbox_bench.md)** (>10M-atom PSF needs EXT format) ·
+**[declash_reaudit](project_declash_reaudit.md)** (SHIPPED — declash explicit-only; topology-exact ss-exclusion; Alpine/RunPod early-stop tiers retired, byte-for-byte local parity)
 
 **Atomistic skip-site/GROMACS:** [atomistic_skip_backbone](project_atomistic_skip_backbone.md)·[skip_site_gromacs_fix](project_skip_site_gromacs_fix.md)·[langevin_heating](project_langevin_heating.md)·[gromacs_package_structure](project_gromacs_package_structure.md)·[atomistic_calibration](project_atomistic_calibration.md)·[o3prime_investigation](project_o3prime_investigation.md)·[gromacs_export](project_gromacs_export.md)
 

@@ -5,6 +5,7 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: 7344ec2c-6aa8-4c23-9d37-033f12d43944
+  modified: 2026-08-20T00:35:45.441Z
 ---
 
 `build_wc_pairs` evaluates pairs using ref-relative distances (within ±0.75 Å of reference). When the reference structure is a template-built atomistic CAD model (not MD-relaxed), many "WC pairs" may have H-bond proxy atoms far apart (> 6 Å or even > 8 Å). Those pairs effectively never fail the ref-relative check — their large reference distance is treated as the baseline, so any similar inter-atom distance in simulation is "within 0.75 Å."
@@ -22,3 +23,5 @@ metadata:
 The ~330 pairs with tight reference distances (< 8 Å) still provide signal — structural collapse would increase those distances beyond ref + 0.75 Å.
 
 **Gate policy (2026-06-22):** Acting on the above, the NAMD health gate now treats WC as **advisory, not blocking**. `HealthCheckResult.blocking` / `MdHealthSample.blocking` = True only on a C1' breach or a hard error; a WC-only breach sets `passed=False, blocking=False`. `namd_runner` stops the run only when `not passed and blocking` — a WC-only breach logs a warning and the ladder continues to completion. Frontend shows it as ⚠ (`_isAdvisoryWarning` in md_jobs_panel.js), not a ✗ failure. Motivation: the 2hb_noT run kept hard-failing at the k=0.01 checkpoint on WC 78.4% < 80% despite a healthy backbone. Tests: `tests/test_md_runner_proceeds.py::test_wc_only_breach_warns_and_continues` + `test_c1_breach_still_fails_the_run`.
+
+**Reaffirmed (2026-08-19, [[project_declash_reaudit]]):** A 6hb_2xT relaxation showed WC ref-relative dropping to 70–74% (below the 75% advisory threshold) through the unrestrained MGHH stage, while C1' pairing, energetics, temperature and box volume all stayed healthy. User's call, direct: **WC health is not the metric to judge a run's quality by — do not raise it as a run-quality concern.** Lead with C1' pairing + energetics/box stability; mention WC only as background, never as the headline finding. Do not re-litigate this per-conversation — it is now standing guidance, consistent with the gate already being advisory-only above.

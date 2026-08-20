@@ -130,6 +130,8 @@ async def _write_prep_heartbeat(
             await asyncio.sleep(interval_s)
     except asyncio.CancelledError:
         pass
+
+
 _TRAJ_PROGRESS_PATHS: dict[str, Path] = {}
 
 #: Upper bound on a single production run's length.  These are sanity rails, not a
@@ -184,9 +186,16 @@ class CreateJobRequest(BaseModel):
         "always running the atom-scaled maximum. The configured minimization steps "
         "remain a hard ceiling; missing convergence data fails safe to the ceiling.",
     )
-    declash: bool = Field(
-        False,
-        description="Force the declash protocol (auto-enabled for junctions with two or more crossover extra bases, e.g. 2xT thymines)",
+    declash: Optional[bool] = Field(
+        None,
+        description="Declash protocol: runs ONLY when explicitly requested (True). None "
+        "(the default — every untouched wizard session) is OFF, same as an explicit "
+        "False; it does not auto-detect from the design (RE-AUDIT CONCLUDED, "
+        "2026-08-19). A design whose junctions insert 2+ extra bases (e.g. 2xT "
+        "thymines) or that carries strand extensions is flagged as an advisory "
+        "condition on this control instead of auto-applying declash. True forces the "
+        "declash minimisation/gentle ladder on; it also blocks the early-stop "
+        "accelerator on an Alpine submit, which a declash package refuses.",
     )
     force_soft: bool = Field(
         False,
@@ -206,9 +215,11 @@ class CreateJobRequest(BaseModel):
     relax_timestep_fs: Optional[float] = Field(
         None,
         description="RELAXATION LADDER timestep (fs): 4.0, 2.0 or 1.0. None → derived from "
-        "`fast` (4.0 on, 2.0 off), which is the historical behaviour. Per-stage "
-        "tiers still apply on top: a soft stage runs 1 fs and a gentle stage "
-        "2 fs whatever this says. A new production run starts from this resolved "
+        "`fast` (4.0 on, 2.0 off), which is the historical behaviour and where the "
+        "per-stage soft/gentle tiers (1/2 fs) still apply as a ceiling. An EXPLICIT "
+        "value here is a pin: honored verbatim on every stage, soft/gentle included, "
+        "and returns a warning condition (not a refusal) if that is above the tier's "
+        "measured-safe rate. A new production run starts from this resolved "
         "integrator but may override it.",
     )
     relax_rigid_bonds: Optional[str] = Field(
@@ -446,15 +457,6 @@ class CreateJobRequest(BaseModel):
         "backend/core/md_cutoff.py). Never skips production/qualification "
         "stages. ON by default; the 'full_physics' preset turns it off, "
         "since a stage you intend to publish should not be truncated.",
-    )
-    early_stop_tier: str = Field(
-        "B",
-        description="Remote (Alpine) early-stop criterion tier. 'B' (default) = "
-        "energy(+volume) only, stdlib on-node evaluator, well-restrained "
-        "stages only. 'A' = energy AND WC base-pairing (full local parity) "
-        "via an on-node MDAnalysis health step (numpy/scipy/MDAnalysis must "
-        "be on the node python; fails safe to no-skip otherwise). Ignored "
-        "for local runs.",
     )
     draft: bool = Field(
         False,
@@ -2917,11 +2919,7 @@ async def estimate_md_disk(body: CreateJobRequest) -> dict:
     or vice versa.
     """
     from backend.core.disk_guard import forecast, namd_run_output_bytes
-    from backend.core.md_protocols import (
-        design_has_extensions,
-        design_requires_extra_base_declash,
-        mgh_slow_release_segments,
-    )
+    from backend.core.md_protocols import mgh_slow_release_segments
     from backend.core.md_vram import estimate_profile_from_design
 
     target = Path(body.run_dir).expanduser() if body.run_dir else _workspace()
@@ -2939,12 +2937,10 @@ async def estimate_md_disk(body: CreateJobRequest) -> dict:
         n_atoms = (
             profile["dna_atoms"] + profile["full_water"] * 3 + profile["ion_atoms"]
         )
-        soft = (
-            body.declash
-            or body.force_soft
-            or design_requires_extra_base_declash(design)
-            or design_has_extensions(design)
-        )
+        # Mirrors prepare_mgh_slow_release's RE-AUDIT CONCLUDED resolution: declash
+        # (and therefore the forecast's gentle-tier sizing) applies ONLY when
+        # explicitly requested — an unspecified request is off, not auto-detected.
+        soft = body.force_soft or bool(body.declash)
         # The ladder timestep the RUN will really use — the same tiers prepare applies,
         # with the user's explicit choice as the base.  This used to read `body.fast`
         # alone, so a job with an explicit relax_timestep_fs got a disk forecast and an
@@ -3152,7 +3148,9 @@ def md_run_dir_status(path: Optional[str] = None) -> dict:
             target.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
             return {
-                "ok": False, "path": str(target), "default": True,
+                "ok": False,
+                "path": str(target),
+                "default": True,
                 "detail": f"Could not create NADOC's NAMD jobs folder: {exc}",
             }
     exists = target.exists()
@@ -3245,7 +3243,6 @@ def _spawn_draft_job(body: CreateJobRequest, *, name: str) -> MdJob:
     _apply_runpod_choices(job, body)
     job.early_stop_relax = body.early_stop_relax
     job.adaptive_minimization = body.adaptive_minimization
-    job.early_stop_tier = (body.early_stop_tier or "B").upper()
     job.prep_params = body.model_dump()
     job.prep_params_set = sorted(body.model_fields_set)
     job.status = MdStatus.draft
@@ -3406,7 +3403,6 @@ def _spawn_prep_job(
     _apply_runpod_choices(job, body)
     job.early_stop_relax = body.early_stop_relax
     job.adaptive_minimization = body.adaptive_minimization
-    job.early_stop_tier = (body.early_stop_tier or "B").upper()
     # Capture the request so a later refit can rebuild the job with one knob moved.
     # The explicit-key set rides along so the read-only settings viewer can replay this
     # exact request and reproduce the provenance chips the user saw in the wizard.
@@ -3791,7 +3787,9 @@ def _alpine_progress_is_synced(job: MdJob, *, now: float | None = None) -> bool:
     return 0.0 <= age <= _ALPINE_SYNC_FRESH_S
 
 
-def _decorate_progress_provenance(job: MdJob, payload: dict, *, estimated: bool) -> None:
+def _decorate_progress_provenance(
+    job: MdJob, payload: dict, *, estimated: bool
+) -> None:
     """Name the source of remote progress without conflating freshness with projection.
 
     A freshly retrieved Alpine reading is synced even when it contains an exact step but
@@ -4248,8 +4246,19 @@ async def delete_md_job(job_id: str) -> dict:
 
     ws = _workspace()
     job = _load_job(job_id)
-    if is_running(job_id) or job.status == MdStatus.running:
-        raise HTTPException(400, "Stop the MD job before deleting it")
+    # `preparing` used to fall through this guard: `_prepare_job_bg` runs in a
+    # background thread that keeps writing into the package dir for as long as
+    # solvation takes, so a delete that lands while it's still going races
+    # `shutil.rmtree` against that thread — observed as `shutil.rmtree` itself
+    # failing with "Directory not empty" (files reappearing as it walks), and the
+    # background thread then hitting a spurious FileNotFoundError on a file the
+    # race had just removed out from under it. Same in-flight check the other
+    # job-mutating routes in this file already use (e.g. the production-spawn gate).
+    if is_running(job_id) or job.status in (MdStatus.running, MdStatus.preparing):
+        raise HTTPException(
+            400,
+            "Wait for preparation to finish (or stop the run) before deleting this job",
+        )
     job_dir = job.job_dir(ws)
     # An ARCHIVED job's dir is on the archive drive.  If that drive is not mounted the
     # path simply does not exist — and the old code took that as "nothing to delete",
@@ -4300,7 +4309,9 @@ async def finish_and_download_md_job(job_id: str, body: ArchiveRequest) -> dict:
                 409, "Connect to RunPod to terminate the run and download its output."
             )
         if not job.runpod_pod_id:
-            raise HTTPException(409, "This run has no live RunPod pod to download from.")
+            raise HTTPException(
+                409, "This run has no live RunPod pod to download from."
+            )
         client = session.require()
         try:
             conn = await runpod_executor.open_pod_connection(
@@ -4326,7 +4337,8 @@ async def finish_and_download_md_job(job_id: str, body: ArchiveRequest) -> dict:
             await runpod_supervisor.stop_job(job_id, client=client)
         if not fetched:
             raise HTTPException(
-                502, "RunPod output was not fully verified; it remains on the network volume."
+                502,
+                "RunPod output was not fully verified; it remains on the network volume.",
             )
         job = _load_job(job_id)
         job.runpod_pod_id = None
@@ -5326,7 +5338,6 @@ def _save_draft_settings(job: MdJob, body: CreateJobRequest) -> MdJob:
     job.design_source_path = body.design_source_path or job.design_source_path
     job.early_stop_relax = body.early_stop_relax
     job.adaptive_minimization = body.adaptive_minimization
-    job.early_stop_tier = (body.early_stop_tier or "B").upper()
     _apply_runpod_choices(job, body)
     job.prep_params = body.model_dump()
     job.prep_params_set = sorted(body.model_fields_set)
@@ -6536,7 +6547,9 @@ async def _run_live_frame_refresh(job_id: str) -> None:
             "state": "complete",
             "phase": "complete",
             "percent": 100.0,
-            "message": "Display frame ready" if result.get("newer") else "Stored frame is current",
+            "message": "Display frame ready"
+            if result.get("newer")
+            else "Stored frame is current",
             "result": {"job_id": job_id, **result},
             "updated_at": time.time(),
         }
@@ -6563,8 +6576,11 @@ async def start_md_job_live_frame_refresh(job_id: str) -> dict:
     if task and not task.done():
         return {"ok": True, "already_running": True}
     _LIVE_FRAME_PROGRESS[job_id] = {
-        "state": "running", "phase": "checking", "percent": 0.0,
-        "message": "Starting refresh", "updated_at": time.time(),
+        "state": "running",
+        "phase": "checking",
+        "percent": 0.0,
+        "message": "Starting refresh",
+        "updated_at": time.time(),
     }
     task = asyncio.create_task(_run_live_frame_refresh(job_id))
     _LIVE_FRAME_TASKS[job_id] = task
@@ -6575,7 +6591,10 @@ async def start_md_job_live_frame_refresh(job_id: str) -> dict:
 async def get_md_job_live_frame_refresh_progress(job_id: str) -> dict:
     _load_job(job_id)  # preserve the normal 404 contract
     return _LIVE_FRAME_PROGRESS.get(job_id) or {
-        "state": "idle", "phase": "idle", "percent": 0.0, "message": ""
+        "state": "idle",
+        "phase": "idle",
+        "percent": 0.0,
+        "message": "",
     }
 
 

@@ -45,17 +45,11 @@ LIVE_HEALTH_FILE = "output/live_health.json"
 LIVE_HEALTH_INTERVAL_S = 300
 SETTLE_RETARGET_NAME = "nadoc_settle_retarget.py"
 
-# Tier A only: the node WC health step + the verbatim md_health copy it imports.
+# The node WC health step + the verbatim md_health copy it imports — always staged
+# and run alongside the energy evaluator, so the remote plateau decision is the
+# same energy-AND-WC test the local runner makes (no restraint-scale shortcut).
 EARLY_STOP_HEALTH_NAME = "nadoc_health_eval.py"
 STAGED_MD_HEALTH_NAME = "md_health.py"
-
-# Tier-B default: only stages restrained at ENM k >= this are eligible to skip on
-# the energy(+volume) plateau ALONE.  Below it (k=0.01, and the k=0/MGHH melt with
-# scale=None) base-pairing can keep degrading after the energy flattens (md_cutoff
-# notes; 2hb_noT at k=0.01), so energy-alone would skip unsafely — those stages are
-# always run in full.  Tier A (WC-gated) removes this gate (the WC series holds the
-# fragile stages directly), matching the local multi-criteria path.
-_DEFAULT_EARLY_STOP_MIN_K = 0.1
 
 
 def _stage_base(segment_name: str) -> str:
@@ -93,50 +87,26 @@ def _stage_last_chunk_index(chain: list[str], idx: int) -> int:
     return last
 
 
-def _chain_scales(manifest: dict, chain: list[str]) -> list[float | None]:
-    """ENM restraint (``scale``/k) per chain position, aligned to ``chain``.
-
-    ``chain[0]`` is minimization (no relaxation scale -> None); ``chain[i]`` for
-    ``i>=1`` maps to ``manifest['segments'][i-1]`` (``_segment_chain`` builds the
-    chain in the same order).  A MGHH/k=0 stage carries ``scale=None``.
-    """
-    segs = manifest.get("segments", [])
-    scales: list[float | None] = [None]
-    for seg in segs:
-        s = seg.get("scale")
-        scales.append(None if s is None else float(s))
-    # Pad defensively if the chain is longer than the segment list (shouldn't happen).
-    while len(scales) < len(chain):
-        scales.append(None)
-    return scales
-
-
-def _early_stop_eligible(chain, scales, idx, min_k, tier) -> bool:
+def _early_stop_eligible(chain, idx) -> bool:
     """True if ``chain[idx]`` is a NON-FINAL relaxation chunk whose stage may be
     skipped (the emitter decides eligibility; the node evaluator decides whether the
     plateau actually happened).
 
-    Tier B (energy only): restricted to well-restrained stages (``scale >= min_k``),
-    because energy-alone is unsafe at low restraint.  Tier A adds the WC criterion,
-    which holds fragile/low-k stages directly — so it matches the local path and
-    considers EVERY non-final relaxation chunk (incl. k=0.01 and the k=0/MGHH melt,
-    which the WC series naturally holds)."""
+    No restraint-scale restriction: the node always tests energy AND WC together
+    (``should_early_stop_stage``, same as the local path), and the WC criterion is
+    what holds fragile/low-k stages directly — so every non-final relaxation chunk
+    is eligible, including k=0.01 and the k=0/MGHH melt."""
     if idx == 0:
         return False  # minimization
     if _is_production_segment(chain[idx]):
         return False  # sampling, never skip
     if idx >= _stage_last_chunk_index(chain, idx):
         return False  # last chunk: nothing to bridge
-    if tier == "A":
-        return True  # WC guard handles fragility
-    scale = scales[idx]
-    if scale is None or scale < min_k:
-        return False  # low/zero restraint: unsafe on energy alone
     return True
 
 
 def _bridge_lines(conf: str, remaining: list[str], indent: str) -> list[str]:
-    """The copy-forward bridge (shared by both tiers).  Copies ``conf``'s final
+    """The copy-forward bridge.  Copies ``conf``'s final
     ``{coor,vel,xsc}`` onto every ``remaining`` chunk's expected names — plain
     ``<name>.<ext>`` (what the next stage reads + the skip guard checks) AND
     ``.restart.<ext>`` — exactly like ``namd_runner._alias_skipped_stage_outputs``.
@@ -161,33 +131,28 @@ def _bridge_lines(conf: str, remaining: list[str], indent: str) -> list[str]:
     ]
 
 
-def _early_stop_block(conf, remaining, *, tier, name_stem, health_python) -> list[str]:
+def _early_stop_block(conf, remaining, *, name_stem, health_python) -> list[str]:
     """Emit the node-side evaluate-then-bridge block for one non-final chunk.
 
-    Tier B: run the stdlib evaluator on the chunk's log; on a plateau (exit 0),
-    bridge the remaining chunks.
-
-    Tier A: first run the node WC health step (best-effort — ``|| true``) to write
-    ``output/<conf>.wc.json``, then only bridge if the cutoff evaluator says BOTH
-    energy AND WC plateaued.  A missing/failed health step leaves no ``wc.json`` so
-    the ``[ -f wc.json ] && …`` gate falls through to HOLD (Tier A never skips on
-    energy alone).
+    Matches the local runner exactly: first run the node WC health step
+    (best-effort — ``|| true``) to write ``output/<conf>.wc.json``, then only
+    bridge if the cutoff evaluator says BOTH energy AND WC plateaued.  A
+    missing/failed health step leaves no ``wc.json`` so the
+    ``[ -f wc.json ] && …`` gate falls through to HOLD — this never skips on
+    energy alone.
     """
     # The sbatch redirects each conf's stdout to ``<conf>.log`` in the run cwd (see
     # _exec_line), while coords/DCD land in ``output/`` (the confs write there).
-    lines = [f'if [ -f "{conf}.log" ] && [ -f "output/{conf}.coor" ]; then']
-    if tier == "A":
-        wc = f"output/{conf}.wc.json"
-        lines += [
-            f'  if [ -f "output/{conf}.dcd" ]; then',
-            f'    {health_python} {EARLY_STOP_HEALTH_NAME} --seg "{conf}" '
-            f'--stem "{name_stem}" --out "{wc}" || true',
-            "  fi",
-            f'  if [ -f "{wc}" ] && python3 {EARLY_STOP_EVAL_NAME} '
-            f'--log "{conf}.log" --wc "{wc}"; then',
-        ]
-    else:
-        lines.append(f'  if python3 {EARLY_STOP_EVAL_NAME} --log "{conf}.log"; then')
+    wc = f"output/{conf}.wc.json"
+    lines = [
+        f'if [ -f "{conf}.log" ] && [ -f "output/{conf}.coor" ]; then',
+        f'  if [ -f "output/{conf}.dcd" ]; then',
+        f'    {health_python} {EARLY_STOP_HEALTH_NAME} --seg "{conf}" '
+        f'--stem "{name_stem}" --out "{wc}" || true',
+        "  fi",
+        f'  if [ -f "{wc}" ] && python3 {EARLY_STOP_EVAL_NAME} '
+        f'--log "{conf}.log" --wc "{wc}"; then',
+    ]
     lines += _bridge_lines(conf, remaining, "    ")
     lines += ["  fi", "fi"]
     return lines
@@ -396,14 +361,16 @@ def generate_sbatch(
         early_stop_relax: opt-in in-sbatch relaxation early-stop (the cluster analogue
             of the local ``early_stop_relax`` accelerator).  ``None`` (default) reads
             ``manifest['early_stop_relax']`` — absent -> OFF -> the script is
-            byte-identical to before.  When on, each non-final chunk of a well-
-            restrained relaxation stage gets an evaluate-then-bridge block (see
-            ``_early_stop_block``) so a plateaued stage self-truncates on the node with
-            no Python runner in the loop.  A declash manifest is rejected before this
-            matters; production-only packages carry no eligible chunks (no-op).
+            byte-identical to before.  When on, every non-final relaxation chunk gets
+            an evaluate-then-bridge block (see ``_early_stop_block``) so a plateaued
+            stage self-truncates on the node with no Python runner in the loop — the
+            SAME energy-AND-WC test the local runner applies, no restraint-scale
+            shortcut and no degraded energy-only mode.  A declash manifest is
+            rejected before this matters; production-only packages carry no eligible
+            chunks (no-op).
 
-    Raises ValueError for a declash manifest, an empty segment chain, an unknown
-    partition, or an unsupported ``early_stop_tier``.
+    Raises ValueError for a declash manifest, an empty segment chain, or an
+    unknown partition.
     """
     resume_conf_for = resume_conf_for or {}
     if manifest.get("declash"):
@@ -411,14 +378,10 @@ def generate_sbatch(
 
     if early_stop_relax is None:
         early_stop_relax = bool(manifest.get("early_stop_relax"))
-    # Tier B (default) = energy(+volume), stdlib evaluator, well-restrained stages
-    # only.  Tier A = energy AND WC (full local parity) via an on-node MDAnalysis
-    # health step — needs numpy/scipy/MDAnalysis on the node python (owed live
-    # confirmation); it fails SAFE to HOLD if that python lacks MDAnalysis.
-    tier = str(manifest.get("early_stop_tier") or "B").upper()
-    if early_stop_relax and tier not in ("A", "B"):
-        raise ValueError(f"early_stop_tier {tier!r} must be 'A' or 'B'")
-    early_min_k = float(manifest.get("early_stop_min_k") or _DEFAULT_EARLY_STOP_MIN_K)
+    # An on-node MDAnalysis health step computes the real WC series for every
+    # eligible chunk (needs numpy/scipy/MDAnalysis on the node python); it fails
+    # SAFE to HOLD if that python lacks MDAnalysis or the step otherwise fails —
+    # see _early_stop_block.
     health_python = str(manifest.get("early_stop_health_python") or "python3")
 
     name_stem = manifest.get("name_stem") or "nadoc_md"
@@ -505,7 +468,6 @@ def generate_sbatch(
         "# interrupted one re-runs in full from the previous step's coords). This is",
         "# what makes auto-resubmit-on-TIMEOUT a slowdown, not a lost run.",
     ]
-    scales = _chain_scales(manifest, chain) if early_stop_relax else []
     for i, conf in enumerate(chain):
         resume_conf = resume_conf_for.get(conf)
         run_conf = resume_conf or conf
@@ -536,14 +498,11 @@ def generate_sbatch(
             ]
         # In-sbatch early-stop: after a non-final relaxation chunk, let the node
         # evaluate the plateau and bridge the stage's remaining chunks.
-        if early_stop_relax and _early_stop_eligible(
-            chain, scales, i, early_min_k, tier
-        ):
+        if early_stop_relax and _early_stop_eligible(chain, i):
             last = _stage_last_chunk_index(chain, i)
             lines += _early_stop_block(
                 conf,
                 chain[i + 1 : last + 1],
-                tier=tier,
                 name_stem=name_stem,
                 health_python=health_python,
             )

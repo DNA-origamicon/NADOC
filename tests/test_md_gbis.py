@@ -97,3 +97,76 @@ def test_ion_conc_maps_from_nacl_mM():
         )
         min_conf = next((Path(td) / subdir).glob("*min*.conf")).read_text()
         assert "ionConcentration   0.3" in min_conf
+
+
+def test_crossover_extra_bases_are_topology_exactly_excluded_through_a_real_build():
+    """Both extra bases at a junction land in the ss-exclusion sidecar AND in
+    md_health's exclusion set, through the REAL psfgen path — not a synthetic
+    fixture.  Pure C1'-distance geometry alone misses one of the two (measured:
+    it sits sandwiched near the opposite duplex); topology_ss_exclusion_set
+    places both by their crossover_id tag mapped through the PSF ordinal, so it
+    cannot miss one regardless of 3D proximity."""
+    from backend.core.md_health import (
+        _unpaired_exclusion_set,
+        identify_unpaired_residues,
+        read_topology_ss_sidecar,
+    )
+    from backend.core.models import Crossover, Direction, HalfCrossover
+
+    d = _small_design("gbis_xb")
+    xo = Crossover(
+        id="xo_extra",
+        half_a=HalfCrossover(helix_id=d.helices[0].id, index=6, strand=Direction.FORWARD),
+        half_b=HalfCrossover(helix_id=d.helices[1].id, index=6, strand=Direction.REVERSE),
+        extra_bases="TT",
+    )
+    d = d.model_copy(update={"crossovers": [xo]})
+
+    with tempfile.TemporaryDirectory() as td:
+        jd = Path(td)
+        subdir, stem, segs = prepare_implicit_gbis_namd(d, jd, minimize_steps=120)
+        pkg = jd / subdir
+        psf, pdb = pkg / f"{stem}.psf", pkg / f"{stem}.pdb"
+
+        sidecar = read_topology_ss_sidecar(pkg, stem)
+        assert len(sidecar) == 2  # both TT inserts, by topology
+
+        geometry_only = identify_unpaired_residues(psf, pdb)
+        assert not sidecar <= geometry_only  # confirms geometry alone still misses one
+
+        health_exclusion = _unpaired_exclusion_set(psf, pdb)
+        assert sidecar <= health_exclusion
+
+
+def test_strand_extension_tails_are_topology_exactly_excluded_through_a_real_build():
+    """A 5'/3' terminal ssDNA tail (StrandExtension) lands in the ss-exclusion
+    sidecar through the real psfgen path — matching the crossover-extra-base
+    check above.  A tail near a densely packed bundle can swing within reach of
+    an unrelated neighbour (measured on a real design: 10.72 Å, under the 10.8 Å
+    no-partner cutoff), so this specifically exercises extension_segid_resids's
+    topology-exact (ordinal, not distance) placement."""
+    from backend.core.md_health import _unpaired_exclusion_set, read_topology_ss_sidecar
+    from backend.core.models import StrandExtension
+
+    d = _small_design("gbis_ext")
+    d = d.model_copy(
+        update={
+            "extensions": [
+                StrandExtension(
+                    strand_id=d.strands[0].id, end="three_prime", sequence="TT"
+                )
+            ]
+        }
+    )
+
+    with tempfile.TemporaryDirectory() as td:
+        jd = Path(td)
+        subdir, stem, segs = prepare_implicit_gbis_namd(d, jd, minimize_steps=120)
+        pkg = jd / subdir
+        psf, pdb = pkg / f"{stem}.psf", pkg / f"{stem}.pdb"
+
+        sidecar = read_topology_ss_sidecar(pkg, stem)
+        assert len(sidecar) == 2  # both tail bases
+
+        health_exclusion = _unpaired_exclusion_set(psf, pdb)
+        assert sidecar <= health_exclusion

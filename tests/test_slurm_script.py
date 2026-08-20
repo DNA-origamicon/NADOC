@@ -346,7 +346,7 @@ def test_cpu_job_keeps_infiniband_constraint(alpine):
 # ── in-sbatch relaxation early-stop ────────────────────────────────────────────
 
 
-def _ladder_manifest(early_stop=None, min_k=None, declash=False, production=False):
+def _ladder_manifest(early_stop=None, declash=False, production=False):
     """A realistic mgh_slow_release ladder: 4 stages × (p10,p50,p100), k = 0.5,
     0.1, 0.01, None (MGHH). Mirrors md_protocols.mgh_slow_release_segments naming."""
     stem = "6hb_demo"
@@ -384,8 +384,6 @@ def _ladder_manifest(early_stop=None, min_k=None, declash=False, production=Fals
     }
     if early_stop is not None:
         m["early_stop_relax"] = early_stop
-    if min_k is not None:
-        m["early_stop_min_k"] = min_k
     return m
 
 
@@ -410,24 +408,37 @@ def test_param_overrides_manifest_off(alpine, gpu_resources):
     assert ss.EARLY_STOP_EVAL_NAME not in off
 
 
-def test_early_stop_emits_for_nonfinal_restrained_chunks_only(alpine, gpu_resources):
+def test_early_stop_emits_health_step_and_wc_gate_for_every_nonfinal_chunk(
+    alpine, gpu_resources
+):
+    """No tiers: every non-final relaxation chunk — including the low-restraint
+    k=0.01 stage and the k=0/MGHH melt — gets the real on-node WC health step
+    gating the cutoff evaluator, matching the local runner's energy-AND-WC test
+    exactly (no restraint-scale exception, no energy-only mode)."""
     script = _gen(alpine, gpu_resources, _ladder_manifest(early_stop=True))
-    # eligible: p10 and p50 of the k=0.5 and k=0.1 stages (non-final, k >= 0.1)
-    for stage in ("300K_NPT_ENM_k0p5", "300K_NPT_ENM_k0p1"):
+    for stage_idx, stage in (
+        (1, "300K_NPT_ENM_k0p5"),
+        (2, "300K_NPT_ENM_k0p1"),
+        (3, "300K_NPT_ENM_k0p01"),
+        (4, "300K_NPT_MGHH_only"),
+    ):
         for pct in (10, 50):
+            conf = f"6hb_demo_0{stage_idx}_{stage}_p{pct}"
+            assert f'--log "{conf}.log"' in script
+            wc = f"output/{conf}.wc.json"
             assert (
-                f'--log "6hb_demo_0{"1" if "k0p5" in stage else "2"}_{stage}_p{pct}.log"'
-                in script
+                f'{ss.EARLY_STOP_HEALTH_NAME} --seg "{conf}" --stem "6hb_demo" '
+                f'--out "{wc}" || true' in script
+            )
+            assert (
+                f'if [ -f "{wc}" ] && python3 {ss.EARLY_STOP_EVAL_NAME} '
+                f'--log "{conf}.log" --wc "{wc}"; then' in script
             )
     # NOT the last chunk of a stage (p100 has nothing to bridge)
-    assert '--log "6hb_demo_01_300K_NPT_ENM_k0p5_p100.log"' not in script
-    assert '--log "6hb_demo_02_300K_NPT_ENM_k0p1_p100.log"' not in script
-    # NOT the low-restraint k=0.01 stage (energy-alone unsafe below min_k)
-    assert '--log "6hb_demo_03_300K_NPT_ENM_k0p01_p10.log"' not in script
-    # NOT the MGHH / k=0 melt (scale None) — always run in full
-    assert '--log "6hb_demo_04_300K_NPT_MGHH_only_p10.log"' not in script
+    assert '--out "output/6hb_demo_01_300K_NPT_ENM_k0p5_p100.wc.json"' not in script
+    assert '--out "output/6hb_demo_04_300K_NPT_MGHH_only_p100.wc.json"' not in script
     # NOT minimization
-    assert '--log "6hb_demo_00_min_enm_k0p5.log"' not in script
+    assert "6hb_demo_00_min_enm_k0p5.wc.json" not in script
 
 
 def test_early_stop_bridge_targets_are_dot_safe(alpine, gpu_resources):
@@ -470,67 +481,11 @@ def test_early_stop_never_on_production_segments(alpine, gpu_resources):
     assert '--log "6hb_demo_05_production_20ns_k0_p100.log"' not in script
 
 
-def test_early_stop_min_k_widens_eligibility(alpine, gpu_resources):
-    # min_k=0.01 makes the k=0.01 stage eligible too (its p10/p50 get blocks)
-    script = _gen(alpine, gpu_resources, _ladder_manifest(early_stop=True, min_k=0.01))
-    assert '--log "6hb_demo_03_300K_NPT_ENM_k0p01_p10.log"' in script
-    # MGHH (scale None) still never eligible
-    assert '--log "6hb_demo_04_300K_NPT_MGHH_only_p10.log"' not in script
-
-
-def test_early_stop_invalid_tier_rejected(alpine, gpu_resources):
+def test_early_stop_health_python_override(alpine, gpu_resources):
     m = _ladder_manifest(early_stop=True)
-    m["early_stop_tier"] = "Z"
-    with pytest.raises(ValueError, match="tier"):
-        _gen(alpine, gpu_resources, m)
-
-
-def _tier_a_manifest(**kw):
-    m = _ladder_manifest(early_stop=True, **kw)
-    m["early_stop_tier"] = "A"
-    return m
-
-
-def test_tier_a_emits_health_step_and_wc_gate(alpine, gpu_resources):
-    script = _gen(alpine, gpu_resources, _tier_a_manifest())
-    conf = "6hb_demo_01_300K_NPT_ENM_k0p5_p10"
-    # WC health step produces output/<conf>.wc.json (best-effort, || true)
-    assert (
-        f'{ss.EARLY_STOP_HEALTH_NAME} --seg "{conf}" --stem "6hb_demo" '
-        f'--out "output/{conf}.wc.json" || true' in script
-    )
-    # only bridge when BOTH the wc.json exists AND the cutoff eval (with --wc) says plateau
-    assert (
-        f'if [ -f "output/{conf}.wc.json" ] && python3 {ss.EARLY_STOP_EVAL_NAME} '
-        f'--log "{conf}.log" --wc "output/{conf}.wc.json"; then' in script
-    )
-
-
-def test_tier_a_considers_low_k_and_mghh_chunks(alpine, gpu_resources):
-    # Tier A's WC guard holds fragile stages, so (unlike B) k=0.01 AND the k=0/MGHH
-    # melt's non-final chunks are eligible — the node evaluator holds them via WC.
-    script = _gen(alpine, gpu_resources, _tier_a_manifest())
-    for conf in (
-        "6hb_demo_03_300K_NPT_ENM_k0p01_p10",
-        "6hb_demo_04_300K_NPT_MGHH_only_p10",
-    ):
-        assert f'--out "output/{conf}.wc.json"' in script
-    # still NOT the last chunk of a stage, production, or minimization
-    assert '--out "output/6hb_demo_04_300K_NPT_MGHH_only_p100.wc.json"' not in script
-    assert "6hb_demo_00_min_enm_k0p5.wc.json" not in script
-
-
-def test_tier_a_health_python_override(alpine, gpu_resources):
-    m = _tier_a_manifest()
     m["early_stop_health_python"] = "/curc/sw/anaconda/bin/python"
     script = _gen(alpine, gpu_resources, m)
     assert f"/curc/sw/anaconda/bin/python {ss.EARLY_STOP_HEALTH_NAME}" in script
-
-
-def test_tier_b_default_emits_no_health_step(alpine, gpu_resources):
-    script = _gen(alpine, gpu_resources, _ladder_manifest(early_stop=True))  # tier B
-    assert ss.EARLY_STOP_HEALTH_NAME not in script
-    assert ".wc.json" not in script
 
 
 def test_early_stop_declash_still_rejected(alpine, gpu_resources):

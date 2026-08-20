@@ -34,7 +34,7 @@ from pathlib import Path, PurePosixPath
 
 from backend.core.cluster_config import ClusterProfile, resolve_paths
 from backend.core.md_job import MdJob, MdStatus
-from backend.core import md_protocols
+from backend.core import md_protocols, resume_transfer
 from backend.core.md_protocols import strip_gpu_resident
 from backend.core.slurm_script import (
     EARLY_STOP_EVAL_NAME,
@@ -283,6 +283,8 @@ def stage_plan(package_dir: Path) -> list[tuple[Path, str]]:
             continue
         if p.suffix in _SKIP_SUFFIXES:
             continue
+        if resume_transfer.is_transfer_artifact(p.name):
+            continue
         plan.append((p, rel.as_posix()))
     return plan
 
@@ -308,22 +310,17 @@ def _early_stop_on(job: MdJob, manifest: dict) -> bool:
     return bool(getattr(job, "early_stop_relax", False)) and not manifest.get("declash")
 
 
-def _early_stop_tier(job: MdJob) -> str:
-    t = str(getattr(job, "early_stop_tier", "B") or "B").upper()
-    return t if t in ("A", "B") else "B"
-
-
 async def _stage_early_stop_evaluator(
-    conn, remote_dir: str, workspace_dir: Path, job: MdJob, *, tier: str
+    conn, remote_dir: str, workspace_dir: Path, job: MdJob
 ) -> None:
     """Upload the node early-stop scripts next to the confs.
 
-    Tier B: just the stdlib ``nadoc_cutoff_eval.py`` (the sbatch runs
-    ``python3 nadoc_cutoff_eval.py`` from the run cwd).  Tier A additionally ships
-    ``nadoc_health_eval.py`` + a verbatim ``md_health.py`` (the WC step needs the
-    real ``run_health_check``; it imports numpy/scipy/MDAnalysis on the node).  We
-    ship the exact module sources the tests pin, so the node runs byte-for-byte what
-    was validated offline.
+    Always ships all three: the stdlib ``nadoc_cutoff_eval.py`` cutoff evaluator,
+    ``nadoc_health_eval.py``, and a verbatim ``md_health.py`` (the WC step needs the
+    real ``run_health_check``; it imports numpy/scipy/MDAnalysis on the node) — no
+    energy-only mode, so the node always makes the same energy-AND-WC decision the
+    local runner does.  We ship the exact module sources the tests pin, so the node
+    runs byte-for-byte what was validated offline.
     """
     from backend.core import md_health, remote_cutoff_eval, remote_health_eval
 
@@ -337,9 +334,8 @@ async def _stage_early_stop_evaluator(
         )
 
     await _stage(remote_cutoff_eval, EARLY_STOP_EVAL_NAME)
-    if tier == "A":
-        await _stage(remote_health_eval, EARLY_STOP_HEALTH_NAME)
-        await _stage(md_health, STAGED_MD_HEALTH_NAME)
+    await _stage(remote_health_eval, EARLY_STOP_HEALTH_NAME)
+    await _stage(md_health, STAGED_MD_HEALTH_NAME)
 
 
 async def submit_job(
@@ -394,9 +390,6 @@ async def submit_job(
     # Build the sbatch first — a declash / bad-partition manifest raises here,
     # before we touch the network.
     early_stop = _early_stop_on(job, manifest)
-    es_tier = _early_stop_tier(job)
-    if early_stop:
-        manifest["early_stop_tier"] = es_tier  # generate_sbatch reads this
     sbatch = generate_sbatch(
         manifest,
         profile,
@@ -520,9 +513,7 @@ async def submit_job(
 
     # 1c) stage the node early-stop scripts into project (mirrored to scratch next).
     if early_stop:
-        await _stage_early_stop_evaluator(
-            conn, project_dir, workspace_dir, job, tier=es_tier
-        )
+        await _stage_early_stop_evaluator(conn, project_dir, workspace_dir, job)
 
     # 2) mirror project → scratch (two-filesystem model — jobs MUST run on scratch).
     submit_progress("mirror", "Copying package to Alpine scratch storage…", 0.82)
@@ -843,9 +834,6 @@ async def resume_job(
 
     # 4) regenerate the sbatch (skip done; resume the interrupted one) and submit.
     early_stop = _early_stop_on(job, manifest)
-    es_tier = _early_stop_tier(job)
-    if early_stop:
-        manifest["early_stop_tier"] = es_tier
     sbatch = generate_sbatch(
         manifest,
         profile,
@@ -870,9 +858,7 @@ async def resume_job(
     # Re-stage the evaluator(s) too (resume otherwise uploads only the sbatch/resume
     # conf; the original copies are normally still there, but may have been purged).
     if early_stop:
-        await _stage_early_stop_evaluator(
-            conn, scratch, workspace_dir, job, tier=es_tier
-        )
+        await _stage_early_stop_evaluator(conn, scratch, workspace_dir, job)
     await _put_text(conn, sbatch, f"{scratch}/{_SBATCH_NAME}", workspace_dir, job)
     res = await conn.run(f"cd {_shq(scratch)} && sbatch {_SBATCH_NAME}")
     if res.rc != 0:
@@ -1138,8 +1124,18 @@ def verify_local_download(job: MdJob, workspace_dir: Path) -> bool:
             try:
                 part = Path(str(path) + ".part")
                 # A transport can drop after fsync and before the final atomic rename.
-                # Exact inventory size is sufficient to finish that rename offline.
+                # Exact inventory size finishes that rename offline — but only alongside
+                # a structural check: byte count alone once promoted a trajectory whose
+                # head was a foreign one-frame DCD, and it read as "verified".
                 if not path.exists() and part.is_file() and part.stat().st_size == size:
+                    intact, detail = resume_transfer.validate_partial(part)
+                    if not intact:
+                        status["local_verification_error"] = (
+                            f"Local result {rel} is the right size but not intact: {detail}"
+                        )
+                        job.download_status = status
+                        job.save(workspace_dir)
+                        return False
                     part.replace(path)
                 if not path.is_file() or path.stat().st_size != size:
                     actual = path.stat().st_size if path.is_file() else None
@@ -1159,7 +1155,9 @@ def verify_local_download(job: MdJob, workspace_dir: Path) -> bool:
         try:
             output = package_dir / "output"
             for path in output.rglob("*") if output.is_dir() else ():
-                if path.is_file() and not path.name.endswith(".part"):
+                if path.is_file() and not resume_transfer.is_transfer_artifact(
+                    path.name
+                ):
                     local[path.relative_to(package_dir).as_posix()] = path.stat().st_size
             for pattern in ("*.log", "*.out", "*.err"):
                 for path in package_dir.glob(pattern):
