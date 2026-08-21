@@ -284,6 +284,9 @@ def _begin_runpod_reload_handoff() -> bool:
 async def lifespan(app: FastAPI):
     """Server startup/shutdown hook."""
     _WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
+    from backend.core import alpine_operations
+
+    alpine_operations.configure(_WORKSPACE_DIR)
     # NAMD's portable default lives with every other NADOC job.  Create it eagerly so a
     # fresh checkout has a real download target before the Job Wizard first inspects it.
     (_WORKSPACE_DIR / "md_jobs").mkdir(parents=True, exist_ok=True)

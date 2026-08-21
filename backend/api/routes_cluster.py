@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -39,6 +40,11 @@ _POST_CONNECT_TASKS: set[asyncio.Task] = set()
 
 async def _reconcile_after_connect(mgr) -> None:
     """Best-effort remote-job reconciliation after the connect response is released."""
+    from backend.core import alpine_operations
+
+    op_id = alpine_operations.new_operation_id()
+    started = time.monotonic()
+    alpine_operations.event("post_connect_reconciliation_start", operation_id=op_id)
     try:
         from backend.core import md_executor  # noqa: PLC0415
 
@@ -49,8 +55,21 @@ async def _reconcile_after_connect(mgr) -> None:
         await md_executor.poll_remote_jobs(
             _WORKSPACE_DIR, conn=mgr, recover_incomplete=True
         )
-    except Exception:  # noqa: BLE001
+    except asyncio.CancelledError:
+        alpine_operations.finish(
+            "post_connect_reconciliation", op_id, started, outcome="cancelled"
+        )
+        raise
+    except Exception as exc:  # noqa: BLE001
+        alpine_operations.finish(
+            "post_connect_reconciliation", op_id, started,
+            outcome="error", error=str(exc),
+        )
         logger.exception("post-connect remote poll failed")
+    else:
+        alpine_operations.finish(
+            "post_connect_reconciliation", op_id, started, outcome="success"
+        )
 
 
 def _start_post_connect_reconciliation(mgr) -> None:

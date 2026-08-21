@@ -19,10 +19,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import time
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import PurePosixPath
 from typing import Awaitable, Callable, Optional
+
+from backend.core import alpine_operations
 
 # One connector coroutine signature: (host, user, password, duo_method) -> conn
 Connector = Callable[[str, str, str, str], Awaitable[object]]
@@ -213,7 +217,16 @@ class ClusterConnection:
     ) -> None:
         """Authenticate and store the live connection.  Password is never retained."""
 
+        op_id = alpine_operations.new_operation_id()
+        started = time.monotonic()
+        alpine_operations.event(
+            "connect_start", operation_id=op_id, host=host, user=user,
+            duo_mode="push" if duo_method == "push" else "passcode",
+        )
         if not host or not user:
+            alpine_operations.finish(
+                "connect", op_id, started, outcome="error", error="host and user are required"
+            )
             raise ClusterSSHError("host and user are required")
         connect_fn = connector or _asyncssh_connect
         async with self._lock:
@@ -221,19 +234,37 @@ class ClusterConnection:
             self.host, self.user = host, user
             try:
                 self._conn = await connect_fn(host, user, password, duo_method)
+            except asyncio.CancelledError:
+                self._conn = None
+                self.state = ConnState.DISCONNECTED
+                alpine_operations.finish("connect", op_id, started, outcome="cancelled")
+                raise
             except Exception as exc:  # noqa: BLE001 — surface any handshake failure
                 self._conn = None
                 self.state = ConnState.DISCONNECTED
                 msg = f"connection failed: {exc}"
                 self._record_error(msg)
+                alpine_operations.finish(
+                    "connect", op_id, started, outcome="error",
+                    error=msg, error_kind=self.last_error_kind,
+                )
                 raise ClusterSSHError(msg) from exc
             finally:
                 # Drop the password reference regardless of outcome.
                 password = ""  # noqa: F841
             self.state = ConnState.CONNECTED
             self.last_error = self.last_error_kind = ""  # clear on success
+            alpine_operations.finish(
+                "connect", op_id, started, outcome="success", host=host, user=user
+            )
 
     async def disconnect(self) -> None:
+        op_id = alpine_operations.new_operation_id()
+        started = time.monotonic()
+        alpine_operations.event(
+            "disconnect_start", operation_id=op_id, host=self.host, user=self.user,
+            prior_state=self.state.value,
+        )
         async with self._lock:
             conn = self._conn
             self._conn = None
@@ -245,8 +276,12 @@ class ClusterConnection:
                 res = conn.close()
                 if asyncio.iscoroutine(res):
                     await res
-            except Exception:  # noqa: BLE001 — best-effort teardown
-                pass
+            except Exception as exc:  # noqa: BLE001 — best-effort teardown
+                alpine_operations.finish(
+                    "disconnect", op_id, started, outcome="error", error=str(exc)
+                )
+                return
+        alpine_operations.finish("disconnect", op_id, started, outcome="success")
 
     def is_connected(self) -> bool:
         return self.state == ConnState.CONNECTED and self._conn is not None
@@ -284,19 +319,50 @@ class ClusterConnection:
     async def run(self, cmd: str, timeout: float = 60.0) -> RunResult:
         """Run a remote command → RunResult.  Marks EXPIRED on transport failure."""
 
-        conn = self._require()
+        op_id = alpine_operations.new_operation_id()
+        started = time.monotonic()
+        alpine_operations.event(
+            "command_start", operation_id=op_id, host=self.host, user=self.user,
+            command=cmd, timeout_s=timeout,
+        )
+        try:
+            conn = self._require()
+        except Exception as exc:
+            alpine_operations.finish(
+                "command", op_id, started, outcome="error", command=cmd, error=str(exc)
+            )
+            raise
         try:
             result = await asyncio.wait_for(conn.run(cmd, check=False), timeout=timeout)
+        except asyncio.CancelledError:
+            alpine_operations.finish(
+                "command", op_id, started, outcome="cancelled", command=cmd
+            )
+            raise
         except asyncio.TimeoutError as exc:
+            alpine_operations.finish(
+                "command", op_id, started, outcome="timeout", command=cmd, timeout_s=timeout
+            )
             raise self._fail_transport(
                 f"command timed out after {timeout}s: {cmd}"
             ) from exc
         except Exception as exc:  # noqa: BLE001 — broken pipe / channel loss
+            alpine_operations.finish(
+                "command", op_id, started, outcome="error", command=cmd, error=str(exc)
+            )
             raise self._fail_transport(f"command failed on transport: {exc}") from exc
         rc = getattr(result, "exit_status", getattr(result, "returncode", 0)) or 0
-        return RunResult(
+        run_result = RunResult(
             rc=int(rc), stdout=_as_str(result.stdout), stderr=_as_str(result.stderr)
         )
+        alpine_operations.finish(
+            "command", op_id, started,
+            outcome="success" if run_result.rc == 0 else "remote_error",
+            command=cmd, rc=run_result.rc,
+            stdout_bytes=len(run_result.stdout.encode("utf-8")),
+            stderr_bytes=len(run_result.stderr.encode("utf-8")),
+        )
+        return run_result
 
     async def mkdir_p(self, remote_dir: str) -> None:
         """Recursive remote mkdir (Appendix: recursive mkdir for job dirs)."""
@@ -306,28 +372,92 @@ class ClusterConnection:
     async def sftp_put(self, local_path: str, remote_path: str) -> None:
         """Upload one file, chunked (256 KB, per-chunk flush)."""
 
-        conn = self._require()
+        op_id = alpine_operations.new_operation_id()
+        started = time.monotonic()
+        size = os.path.getsize(local_path) if os.path.exists(local_path) else None
+        alpine_operations.event(
+            "upload_start", operation_id=op_id, local_path=local_path,
+            remote_path=remote_path, bytes=size,
+        )
+        try:
+            conn = self._require()
+        except Exception as exc:
+            alpine_operations.finish(
+                "upload", op_id, started, outcome="error", local_path=local_path,
+                remote_path=remote_path, bytes=size, error=str(exc),
+            )
+            raise
         await self.mkdir_p(str(PurePosixPath(remote_path).parent))
         try:
             async with conn.start_sftp_client() as sftp:
                 await _stream_put(sftp, local_path, remote_path)
+            alpine_operations.finish(
+                "upload", op_id, started, outcome="success", local_path=local_path,
+                remote_path=remote_path, bytes=size,
+            )
+        except asyncio.CancelledError:
+            alpine_operations.finish(
+                "upload", op_id, started, outcome="cancelled", local_path=local_path,
+                remote_path=remote_path, bytes=size,
+            )
+            raise
         except ClusterSSHError:
+            alpine_operations.finish(
+                "upload", op_id, started, outcome="error", local_path=local_path,
+                remote_path=remote_path, bytes=size,
+            )
             raise
         except Exception as exc:  # noqa: BLE001
+            alpine_operations.finish(
+                "upload", op_id, started, outcome="error", local_path=local_path,
+                remote_path=remote_path, bytes=size, error=str(exc),
+            )
             raise self._fail_transport(f"upload failed: {exc}") from exc
 
     async def sftp_get(self, remote_path: str, local_path: str, on_progress=None) -> None:
         """Download one file, chunked."""
 
-        conn = self._require()
+        op_id = alpine_operations.new_operation_id()
+        started = time.monotonic()
+        alpine_operations.event(
+            "download_start", operation_id=op_id, remote_path=remote_path,
+            local_path=local_path,
+        )
+        try:
+            conn = self._require()
+        except Exception as exc:
+            alpine_operations.finish(
+                "download", op_id, started, outcome="error", remote_path=remote_path,
+                local_path=local_path, error=str(exc),
+            )
+            raise
         try:
             async with conn.start_sftp_client() as sftp:
                 await _stream_get(sftp, remote_path, local_path, on_progress=on_progress)
+            size = os.path.getsize(local_path) if os.path.exists(local_path) else None
+            alpine_operations.finish(
+                "download", op_id, started, outcome="success", remote_path=remote_path,
+                local_path=local_path, bytes=size,
+            )
+        except asyncio.CancelledError:
+            alpine_operations.finish(
+                "download", op_id, started, outcome="cancelled", remote_path=remote_path,
+                local_path=local_path,
+            )
+            raise
         except ClusterSSHError:
+            alpine_operations.finish(
+                "download", op_id, started, outcome="error", remote_path=remote_path,
+                local_path=local_path,
+            )
             raise
         except Exception as exc:  # noqa: BLE001
             message = f"download failed: {exc}"
             kind = classify_ssh_error(message)
+            alpine_operations.finish(
+                "download", op_id, started, outcome="error", remote_path=remote_path,
+                local_path=local_path, error=message, error_kind=kind,
+            )
             # A missing remote/local file, permissions problem, full disk, incomplete
             # local write, callback failure, etc. fails this transfer but says nothing
             # about the authenticated SSH transport. Unknown errors are deliberately

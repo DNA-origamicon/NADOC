@@ -7,10 +7,11 @@ we can assert the state machine, credential hygiene, and run/error mapping.
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 
-from backend.core import cluster_ssh, resume_transfer
+from backend.core import alpine_operations, cluster_ssh, resume_transfer
 from backend.core.cluster_ssh import ClusterConnection, ClusterSSHError, ConnState
 from tests.test_resume_transfer import build_dcd, frame_size, header_size
 
@@ -490,3 +491,25 @@ def test_asyncssh_connect_kwargs_are_valid():
         password="pw",
         known_hosts=None,
     )
+
+
+def test_alpine_operations_log_correlates_start_and_finish_without_secrets(tmp_path):
+    log_file = alpine_operations.configure(tmp_path)
+    c = ClusterConnection()
+    fake = _FakeConn()
+    _run(c.connect("alpine.example", "jojo", "topsecret", "654321",
+                   connector=_connector_returning(fake)))
+    _run(c.run("squeue -j 42"))
+    _run(c.disconnect())
+
+    records = [json.loads(line) for line in log_file.read_text().splitlines()]
+    for operation in ("connect", "command", "disconnect"):
+        start = next(r for r in records if r["event"] == f"{operation}_start")
+        finish = next(r for r in records if r["event"] == f"{operation}_finish")
+        assert finish["operation_id"] == start["operation_id"]
+        assert finish["duration_ms"] >= 0
+        assert finish["outcome"] == "success"
+    text = log_file.read_text()
+    assert "squeue -j 42" in text
+    assert "topsecret" not in text
+    assert "654321" not in text
