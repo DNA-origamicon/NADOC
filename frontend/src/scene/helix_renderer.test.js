@@ -208,6 +208,46 @@ describe('instanceAlpha coverage', () => {
   })
 })
 
+describe('overhang cylinder instance lookup', () => {
+  it('builds direct half/full instance maps and getters do not scan domain data', () => {
+    const indexBody = fnBody(HR, '_ensureCylinderDomainIndex')
+    expect(indexBody).toContain('_overhangHalfByInstance = new Map()')
+    expect(indexBody).toContain('_overhangFullByInstance = new Map()')
+
+    for (const [getter, map] of [
+      ['getOverhangCylinderDomainAt(instanceId)', '_overhangHalfByInstance.get(instanceId)'],
+      ['getOverhangFullCylinderDomainAt(instanceId)', '_overhangFullByInstance.get(instanceId)'],
+    ]) {
+      const start = HR.indexOf(getter)
+      const body = HR.slice(start, HR.indexOf('\n    },', start))
+      expect(start, getter).toBeGreaterThan(-1)
+      expect(body).toContain(map)
+      expect(body).not.toContain('.find(')
+    }
+  })
+})
+
+describe('cylinder visibility and glow hot-path indexes', () => {
+  it('indexes assigned nucleotides by domain instead of filtering all geometry per cylinder', () => {
+    const build = fnBody(HR, '_ensureAssignedNucsByDomain')
+    const lookup = fnBody(HR, '_hiddenAlphaForCyl')
+    expect(build).toContain('_assignedNucsByDomain = new Map()')
+    expect(build).toContain('for (const nuc of assignedGeometry)')
+    expect(lookup).toContain('_assignedNucsByDomain.get(')
+    expect(lookup).not.toContain('assignedGeometry.filter(')
+  })
+
+  it('resolves selected domain refs directly to glow entries without sweeping cylinder arrays', () => {
+    const resolve = fnBody(HR, '_refsToCylinderEntries')
+    const write = fnBody(HR, '_writeCylGlow')
+    expect(resolve).toContain('_cylEntriesByDomainRef.get(')
+    expect(resolve).not.toContain('_domainCylData.filter(')
+    expect(resolve).not.toContain('_overhangCylData.filter(')
+    expect(write).toContain('for (const dom of domEntries)')
+    expect(write).not.toContain('.has(dom.cylIdx)')
+  })
+})
+
 describe('slab build tolerates nucleotides without a base site', () => {
   it('skips a nucleotide with no base_position instead of spreading undefined', () => {
     // Injected non-design nucleotides (oxDNA surface capture strands) are built in

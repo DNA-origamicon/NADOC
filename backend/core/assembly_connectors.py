@@ -36,6 +36,14 @@ from backend.core.assembly_fk import (
 )
 
 
+class _ConnectorLocalCache(dict):
+    """Local-frame dict plus per-design live-geometry lookup caches."""
+
+    def __init__(self):
+        super().__init__()
+        self.resolution_by_design: dict[int, dict] = {}
+
+
 def _build_frame_from_normal(
     position: np.ndarray, normal: np.ndarray
 ) -> "np.ndarray | None":
@@ -71,6 +79,7 @@ def _build_frame_from_normal(
 def _resolve_blunt_label_local(
     design: "Design",
     label: str,
+    resolution_cache: dict | None = None,
 ) -> "tuple[np.ndarray, np.ndarray] | None":
     """For a ``blunt:<helix_id>:<bp_spec>`` label, return the bp's CURRENT
     cluster-aware position + outward normal in instance-local coordinates.
@@ -90,7 +99,12 @@ def _resolve_blunt_label_local(
     if len(parts) != 3:
         return None
     _, helix_id, bp_spec = parts
-    helix = next((h for h in (design.helices or []) if h.id == helix_id), None)
+    cache = resolution_cache if resolution_cache is not None else {}
+    helix_by_id = cache.get("helix_by_id")
+    if helix_by_id is None:
+        helix_by_id = {helix.id: helix for helix in (design.helices or [])}
+        cache["helix_by_id"] = helix_by_id
+    helix = helix_by_id.get(helix_id)
     if helix is None:
         return None
 
@@ -100,10 +114,15 @@ def _resolve_blunt_label_local(
         try:
             from backend.core.deformation import deformed_helix_axes
 
-            axes_list = deformed_helix_axes(design)
+            axes_by_id = cache.get("axes_by_id")
+            if axes_by_id is None:
+                axes_by_id = {
+                    axis.get("helix_id"): axis for axis in deformed_helix_axes(design)
+                }
+                cache["axes_by_id"] = axes_by_id
         except Exception:
             return None
-        ax = next((a for a in axes_list if a.get("helix_id") == helix_id), None)
+        ax = axes_by_id.get(helix_id)
         if ax is None:
             return None
         pos = np.array(ax["start" if bp_spec == "start" else "end"], dtype=float)
@@ -127,12 +146,18 @@ def _resolve_blunt_label_local(
         try:
             from backend.core.deformation import deformed_nucleotide_positions
 
-            positions = deformed_nucleotide_positions(helix, design)
+            positions_by_helix = cache.setdefault("positions_by_helix", {})
+            positions_by_bp = positions_by_helix.get(helix_id)
+            if positions_by_bp is None:
+                positions_by_bp = {}
+                for position in deformed_nucleotide_positions(helix, design):
+                    positions_by_bp.setdefault(position.bp_index, position)
+                positions_by_helix[helix_id] = positions_by_bp
         except Exception:
             return None
         # Two NucleotidePosition entries share a bp_index (forward + reverse);
         # the axis-centerline position is the same for both, just take the first.
-        nuc = next((p for p in positions if p.bp_index == target_bp), None)
+        nuc = positions_by_bp.get(target_bp)
         if nuc is None:
             return None
         pos = np.array(nuc.position, dtype=float)
@@ -194,12 +219,13 @@ def _resolve_seam_label_local(
 def _resolve_live_connector_local(
     design: "Design",
     label: str,
+    resolution_cache: dict | None = None,
 ) -> "tuple[np.ndarray, np.ndarray] | None":
     """Live (geometry-derived) local anchor + normal for connector labels that
     must track the part's current geometry: ``blunt:helix:bp`` ends and
     synthesized periodic ``seam0:*`` connectors. Returns ``(pos, normal)`` or
     ``None`` (caller falls back to the stored ``ip.position``)."""
-    live = _resolve_blunt_label_local(design, label)
+    live = _resolve_blunt_label_local(design, label, resolution_cache)
     if live is not None:
         return live
     return _resolve_seam_label_local(design, label)
@@ -209,6 +235,8 @@ def _get_connector_world_frame(
     instance: "PartInstance",
     label: str,
     design: "Optional[Design]" = None,
+    interface_point=None,
+    resolution_cache: dict | None = None,
 ) -> "np.ndarray | None":
     """Full SE3 world frame of a named InterfacePoint on an instance.
 
@@ -226,11 +254,15 @@ def _get_connector_world_frame(
     p_local: "np.ndarray | None" = None
     n_local: "np.ndarray | None" = None
     if design is not None:
-        live = _resolve_live_connector_local(design, label)
+        live = _resolve_live_connector_local(design, label, resolution_cache)
         if live is not None:
             p_local, n_local = live
     if p_local is None:
-        ip = next((p for p in instance.interface_points if p.label == label), None)
+        ip = (
+            interface_point
+            if interface_point is not None
+            else next((p for p in instance.interface_points if p.label == label), None)
+        )
         if ip is None:
             return None
         p_local = np.array([ip.position.x, ip.position.y, ip.position.z], dtype=float)
@@ -246,6 +278,8 @@ def _get_connector_world(
     instance: "PartInstance",
     label: str,
     design: "Optional[Design]" = None,
+    interface_point=None,
+    resolution_cache: dict | None = None,
 ) -> "np.ndarray | None":
     """World-space position of a named InterfacePoint on an instance.
 
@@ -259,11 +293,15 @@ def _get_connector_world(
     """
     p_local: "np.ndarray | None" = None
     if design is not None:
-        live = _resolve_live_connector_local(design, label)
+        live = _resolve_live_connector_local(design, label, resolution_cache)
         if live is not None:
             p_local = live[0]
     if p_local is None:
-        ip = next((p for p in instance.interface_points if p.label == label), None)
+        ip = (
+            interface_point
+            if interface_point is not None
+            else next((p for p in instance.interface_points if p.label == label), None)
+        )
         if ip is None:
             return None
         p_local = np.array([ip.position.x, ip.position.y, ip.position.z], dtype=float)
@@ -276,6 +314,8 @@ def _local_frame_for_label(
     inst: "PartInstance",
     label: str,
     design: "Optional[Design]",
+    interface_point=None,
+    resolution_cache: dict | None = None,
 ) -> "np.ndarray | None":
     """Compute a connector's frame in the instance's LOCAL space.
 
@@ -293,11 +333,15 @@ def _local_frame_for_label(
     p_local: "np.ndarray | None" = None
     n_local: "np.ndarray | None" = None
     if design is not None:
-        live = _resolve_live_connector_local(design, label)
+        live = _resolve_live_connector_local(design, label, resolution_cache)
         if live is not None:
             p_local, n_local = live
     if p_local is None:
-        ip = next((p for p in inst.interface_points if p.label == label), None)
+        ip = (
+            interface_point
+            if interface_point is not None
+            else next((p for p in inst.interface_points if p.label == label), None)
+        )
         if ip is None:
             return None
         p_local = np.array([ip.position.x, ip.position.y, ip.position.z], dtype=float)
@@ -368,7 +412,7 @@ def _build_world_connector_frames(
     # the design (cluster transforms, helix geometry), not on the
     # instance's world transform, so we can share them across instances
     # whose ``design_for(inst)`` returns the same Design object.
-    local_cache: dict[tuple[int, str], "np.ndarray | None"] = {}
+    local_cache: dict[tuple[int, str], "np.ndarray | None"] = _ConnectorLocalCache()
 
     frames_by_conn: dict[tuple[str, str], np.ndarray] = {}
     for inst_id, labels in labels_by_inst.items():
@@ -377,19 +421,34 @@ def _build_world_connector_frames(
             continue
         design = design_for(inst)
         d_key = id(design) if design is not None else 0
+        resolution_cache = local_cache.resolution_by_design.setdefault(d_key, {})
         T = inst.transform.to_array()
+        interface_by_label = None
+
+        def interface_point(label):
+            nonlocal interface_by_label
+            if interface_by_label is None:
+                interface_by_label = {
+                    point.label: point for point in inst.interface_points
+                }
+            return interface_by_label.get(label)
+
         for label in labels:
             ck = (d_key, label)
             if ck in local_cache:
                 F_local = local_cache[ck]
             else:
-                F_local = _local_frame_for_label(inst, label, design)
+                F_local = _local_frame_for_label(
+                    inst, label, design, interface_point(label), resolution_cache
+                )
                 local_cache[ck] = F_local
             if F_local is not None:
                 frames_by_conn[(inst_id, label)] = T @ F_local
                 continue
             # Final fallback: position-only.
-            pos = _get_connector_world(inst, label, design)
+            pos = _get_connector_world(
+                inst, label, design, interface_point(label), resolution_cache
+            )
             if pos is None:
                 continue
             frame = np.eye(4, dtype=float)
@@ -429,7 +488,17 @@ def _refresh_connector_frames_for_instance(
         return
     design = design_for(inst)
     d_key = id(design) if design is not None else 0
+    resolution_by_design = getattr(local_cache, "resolution_by_design", {})
+    resolution_cache = resolution_by_design.setdefault(d_key, {})
     T = inst.transform.to_array()
+    interface_by_label = None
+
+    def interface_point(label):
+        nonlocal interface_by_label
+        if interface_by_label is None:
+            interface_by_label = {point.label: point for point in inst.interface_points}
+        return interface_by_label.get(label)
+
     for label in labels:
         # Local-frame cache hit path: just re-multiply. Cache miss falls
         # through to a one-time _local_frame_for_label + memoize. This
@@ -440,14 +509,20 @@ def _refresh_connector_frames_for_instance(
             if ck in local_cache:
                 F_local = local_cache[ck]
             else:
-                F_local = _local_frame_for_label(inst, label, design)
+                F_local = _local_frame_for_label(
+                    inst, label, design, interface_point(label), resolution_cache
+                )
                 local_cache[ck] = F_local
         else:
-            F_local = _local_frame_for_label(inst, label, design)
+            F_local = _local_frame_for_label(
+                inst, label, design, interface_point(label), resolution_cache
+            )
         if F_local is not None:
             frames_by_conn[(inst_id, label)] = T @ F_local
             continue
-        pos = _get_connector_world(inst, label, design)
+        pos = _get_connector_world(
+            inst, label, design, interface_point(label), resolution_cache
+        )
         if pos is None:
             frames_by_conn.pop((inst_id, label), None)
             continue
@@ -518,6 +593,4 @@ def _enforce_connector_coincidence(
             _fk_expand_rigid_group(
                 assembly, cid, snap_d, snap_vis, [], inst_by_id, joint_index
             )
-            _fk_propagate(
-                assembly, {cid}, snap_d, snap_vis, inst_by_id, joint_index
-            )
+            _fk_propagate(assembly, {cid}, snap_d, snap_vis, inst_by_id, joint_index)

@@ -1457,38 +1457,46 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   root.add(iOverhangFullCylGlow)
   let _cylGlowRefs = []   // [{strandId, domainIndex}] currently glowing
   let _cylEntriesByDomainRef = null
+  let _overhangHalfByInstance = null
+  let _overhangFullByInstance = null
 
   function _ensureCylinderDomainIndex() {
     if (_cylEntriesByDomainRef) return
     _cylEntriesByDomainRef = new Map()
+    _overhangHalfByInstance = new Map()
+    _overhangFullByInstance = new Map()
     for (const [kind, entries] of [['straight', _domainCylData], ['overhang', _overhangCylData]]) {
       for (const entry of entries) {
         const key = `${entry.strandId}:${entry.domainIndex}`
         let indexed = _cylEntriesByDomainRef.get(key)
         if (!indexed) _cylEntriesByDomainRef.set(key, indexed = [])
         indexed.push({ kind, entry })
+        if (kind === 'overhang') {
+          ;(entry.fullCylinder ? _overhangFullByInstance : _overhangHalfByInstance)
+            .set(entry.cylIdx, entry)
+        }
       }
     }
   }
 
-  // Resolve domain refs → sets of cylIdx for the straight + overhang cyl meshes.
-  function _refsToCylIdxSets(domainRefs) {
+  // Resolve domain refs directly to the few cylinder entries that need glow.
+  function _refsToCylinderEntries(domainRefs) {
     _ensureCylinderDomainIndex()
-    const straight = new Set(), overhang = new Set(), overhangFull = new Set()
+    const straight = [], overhang = [], overhangFull = []
+    const seenStraight = new Set(), seenOverhang = new Set(), seenOverhangFull = new Set()
     for (const ref of domainRefs ?? []) {
       for (const { kind, entry } of _cylEntriesByDomainRef.get(`${ref.strandId}:${ref.domainIndex}`) ?? []) {
-        if (kind === 'straight') straight.add(entry.cylIdx)
-        else if (entry.fullCylinder) overhangFull.add(entry.cylIdx)
-        else overhang.add(entry.cylIdx)
+        const target = kind === 'straight' ? straight : entry.fullCylinder ? overhangFull : overhang
+        const seen = kind === 'straight' ? seenStraight : entry.fullCylinder ? seenOverhangFull : seenOverhang
+        if (!seen.has(entry.cylIdx)) { seen.add(entry.cylIdx); target.push(entry) }
       }
     }
     return { straight, overhang, overhangFull }
   }
   // Re-pose glow instances from the live solid-cylinder matrices, inflated.
-  function _writeCylGlow(glowMesh, srcMesh, domEntries, cylIdxSet) {
+  function _writeCylGlow(glowMesh, srcMesh, domEntries) {
     let n = 0
     for (const dom of domEntries) {
-      if (!cylIdxSet.has(dom.cylIdx)) continue
       srcMesh.getMatrixAt(dom.cylIdx, _tMatrix)
       _tMatrix.decompose(_tPos, _cylQ, _tScale)
       _tScale.x *= GLOW_CYL_FACTOR; _tScale.z *= GLOW_CYL_FACTOR
@@ -1500,10 +1508,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   }
   function _refreshCylGlow() {
     if (!_cylGlowRefs.length) return
-    const { straight, overhang, overhangFull } = _refsToCylIdxSets(_cylGlowRefs)
-    _writeCylGlow(iHelixCylGlow, iHelixCylinders, _domainCylData, straight)
-    _writeCylGlow(iOverhangCylGlow, iOverhangCylinders, _overhangCylData.filter(d => !d.fullCylinder), overhang)
-    _writeCylGlow(iOverhangFullCylGlow, iOverhangFullCylinders, _overhangCylData.filter(d => d.fullCylinder), overhangFull)
+    const { straight, overhang, overhangFull } = _refsToCylinderEntries(_cylGlowRefs)
+    _writeCylGlow(iHelixCylGlow, iHelixCylinders, straight)
+    _writeCylGlow(iOverhangCylGlow, iOverhangCylinders, overhang)
+    _writeCylGlow(iOverhangFullCylGlow, iOverhangFullCylinders, overhangFull)
   }
   // Is this domain FULLY cylinder-rendered right now? (every column → 'cylinders')
   function _isDomainCyl(strandId, domainIndex) {
@@ -2800,11 +2808,22 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const _clusterAlphaForCyl = (dom) => _clusterAlphaFor(
     dom && { helix_id: dom.helixId, strand_id: dom.strandId, domain_index: dom.domainIndex })
   const _hiddenAlphaFor = (nuc, copy = nuc?.copy_k ?? 0) => _isNucHidden(nuc, copy) ? 0 : 1
+  let _assignedNucsByDomain = null
+  function _ensureAssignedNucsByDomain() {
+    if (_assignedNucsByDomain) return
+    _assignedNucsByDomain = new Map()
+    for (const nuc of assignedGeometry) {
+      const key = `${nuc.strand_id}:${nuc.domain_index}`
+      let entries = _assignedNucsByDomain.get(key)
+      if (!entries) _assignedNucsByDomain.set(key, entries = [])
+      entries.push(nuc)
+    }
+  }
   function _hiddenAlphaForCyl(dom) {
     // Read source geometry, not backboneEntries: cheap cylinder-only builds
     // intentionally allocate no bead instances, but visibility must still work.
-    const nucs = assignedGeometry.filter(n => n.strand_id === dom.strandId &&
-      n.domain_index === dom.domainIndex)
+    _ensureAssignedNucsByDomain()
+    const nucs = _assignedNucsByDomain.get(`${dom.strandId}:${dom.domainIndex}`) ?? []
     return nucs.length && nucs.every(n => _isNucHidden(n, n.copy_k ?? 0)) ? 0 : 1
   }
 
@@ -3599,8 +3618,14 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     /** Return the _domainCylData entry for a given InstancedMesh instanceId. */
     getCylinderDomainAt(instanceId) { return _domainCylData[instanceId] ?? null },
     /** Return the _overhangCylData entry for a given InstancedMesh instanceId. */
-    getOverhangCylinderDomainAt(instanceId) { return _overhangCylData.find(d => !d.fullCylinder && d.cylIdx === instanceId) ?? null },
-    getOverhangFullCylinderDomainAt(instanceId) { return _overhangCylData.find(d => d.fullCylinder && d.cylIdx === instanceId) ?? null },
+    getOverhangCylinderDomainAt(instanceId) {
+      _ensureCylinderDomainIndex()
+      return _overhangHalfByInstance.get(instanceId) ?? null
+    },
+    getOverhangFullCylinderDomainAt(instanceId) {
+      _ensureCylinderDomainIndex()
+      return _overhangFullByInstance.get(instanceId) ?? null
+    },
     /** The ds-linker bridge cylinder InstancedMesh (full cylinder per __lnk__ helix). */
     getLinkerBridgeCylinderMesh() { return iLinkerBridgeCylinders },
     /** Return {bridgeHelixId, strandId} for a bridge cylinder instanceId. */
@@ -3613,10 +3638,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       // ones — they have a cyl record but the solid cylinder is hidden).
       _cylGlowRefs = (Array.isArray(domainRefs) ? domainRefs : [])
         .filter(r => _isDomainCyl(r.strandId, r.domainIndex))
-      const { straight, overhang, overhangFull } = _refsToCylIdxSets(_cylGlowRefs)
-      _writeCylGlow(iHelixCylGlow, iHelixCylinders, _domainCylData, straight)
-      _writeCylGlow(iOverhangCylGlow, iOverhangCylinders, _overhangCylData.filter(d => !d.fullCylinder), overhang)
-      _writeCylGlow(iOverhangFullCylGlow, iOverhangFullCylinders, _overhangCylData.filter(d => d.fullCylinder), overhangFull)
+      const { straight, overhang, overhangFull } = _refsToCylinderEntries(_cylGlowRefs)
+      _writeCylGlow(iHelixCylGlow, iHelixCylinders, straight)
+      _writeCylGlow(iOverhangCylGlow, iOverhangCylinders, overhang)
+      _writeCylGlow(iOverhangFullCylGlow, iOverhangFullCylinders, overhangFull)
     },
     clearCylinderDomainGlow() {
       _cylGlowRefs = []

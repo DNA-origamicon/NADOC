@@ -1,0 +1,48 @@
+{
+  "fixture": {
+    "helices": 12,
+    "connectorLabels": 48,
+    "endpointLabels": 24,
+    "interiorBpLabels": 24
+  },
+  "audit": {
+    "actualProductionCurrentPath": "_build_world_connector_frames",
+    "realDeformationGeometry": true,
+    "coldIncludesResolutionCacheConstruction": true,
+    "identicalFrameKeys": 48,
+    "identicalFrameFingerprint": "aa0b8a42f98351f1939edd18a86e32b356aa0267c428d2d4bb7745bcb0a93195",
+    "maxAbsoluteFrameDelta": 0.0,
+    "solverCalls": {
+      "before": {
+        "deformedHelixAxes": 24,
+        "deformedNucleotidePositions": 24
+      },
+      "after": {
+        "deformedHelixAxes": 1,
+        "deformedNucleotidePositions": 12
+      }
+    }
+  },
+  "before": {
+    "summary": {
+      "n": 15,
+      "medianMs": 19.502772018313408,
+      "p95Ms": 19.716295995749533,
+      "minMs": 19.433672016020864,
+      "maxMs": 19.716295995749533,
+      "meanMs": 19.512765934147563
+    },
+    "frameFingerprint": "aa0b8a42f98351f1939edd18a86e32b356aa0267c428d2d4bb7745bcb0a93195"
+  },
+  "after": {
+    "summary": {
+      "n": 15,
+      "medianMs": 9.896150004351512,
+      "p95Ms": 9.99249197775498,
+      "minMs": 9.760924003785476,
+      "maxMs": 9.99249197775498,
+      "meanMs": 9.88487099724201
+    },
+    "frameFingerprint": "aa0b8a42f98351f1939edd18a86e32b356aa0267c428d2d4bb7745bcb0a93195"
+  }
+}

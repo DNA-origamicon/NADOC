@@ -1,8 +1,8 @@
 # NADOC responsiveness optimization campaign — August 2026
 
-Status: thirty optimizations complete; awaiting approval for the fourth batch.
+Status: fifty optimizations complete; awaiting approval for the sixth batch.
 
-This campaign has measured thirty changes to editing and visualization responsiveness.
+This campaign has measured fifty changes to editing and visualization responsiveness.
 All figures below are wall-clock milliseconds on this workstation. Browser
 results use Chromium through Playwright's isolated backend (`:8002`) and Vite
 server (`:5175`), never the live development session.
@@ -10,10 +10,12 @@ server (`:5175`), never the live development session.
 ## Measurement protocol
 
 - Pure kernels retain every sample, run a JIT warm-up first, and report median
-  and p95. Legacy and optimized implementations run in the same Node process.
+  and p95. Legacy and optimized implementations run in the same process. Batch
+  five additionally records cold build+query totals, candidate visits, index
+  cardinality, query fingerprints, and independently compared result vectors.
 - The pathview benchmark imports `workspace/VoltronCore.nadoc`, then expands it
   in browser memory to 2,460 strands, 10,920 domains, and 7,992 crossovers.
-  It records 31 synchronous wheel/redraw samples per mode.
+  The fourth-batch audit records 25 synchronous wheel/redraw samples per mode.
 - Browser checks fail on page/console errors. Canvas states retain a full-pixel
   FNV-32 digest and transition count. All five original states, plus the selected
   state, were byte-identical across the viewport, indicator, and selection changes.
@@ -92,6 +94,122 @@ from 1.9 / 2.3 ms to 0.8 / 1.9 ms. Design update stayed flat-to-better at 53.3 /
 65.2 ms to 53.0 / 63.6 ms, so the indexes did not shift redraw cost onto editing.
 All established canvas and pan hashes remained identical and browser errors were empty.
 
+## Fourth batch — completed optimizations 31–40
+
+Batch four removes the remaining full-design scans from selection, crossover
+editing, loop/skip interaction, and several 3D/assembly lookup paths. The
+frontend paired fixture contains 6,000 strands / 24,000 domains, 12,000
+crossover sprites, 19,200 loop/skip markers, and 20,000 cylinder records. Each
+kernel uses 15 paired legacy/current samples and asserts identical nonzero
+checksums. The assembly fixture performs 1,000 queries over 2,000 real
+`InterfacePoint` models.
+
+| # | Process and change | Before median / p95 | After median / p95 | Result |
+|---:|---|---:|---:|---:|
+| 31 | Crossover indicator hit-testing: bin sprite hit circles in world space while retaining legacy first-hit priority | 25.515 / 34.213 ms | 0.771 / 5.887 ms | 97.0% lower; 33.09× |
+| 32 | Selection broadcasts: lazily map element keys to all owning strands instead of rescanning every domain | 7.786 / 10.122 ms | 0.097 / 0.182 ms | 98.8% lower; 80.37× |
+| 33 | Crossover drag resolution: lazily index consecutive domain-transition signatures | 240.503 / 247.238 ms | 0.051 / 0.053 ms | 99.98% lower; 4,756× |
+| 34 | Crossover position validation: reuse the two relevant track indexes for occupied slots and overlap blockers | 55.681 / 57.759 ms | 0.121 / 0.147 ms | 99.8% lower; 461.12× |
+| 35 | Periodic/reference queries: cache active-strand extent and reference-only helix membership with the immutable design index | 11.552 / 11.929 ms | 0.0015 / 0.0015 ms | 99.99% lower; 7,738× |
+| 36 | Loop/skip interaction: lazily index markers by helix/bp and restrict lasso work to intersecting sorted rows | 4.925 / 4.947 ms | 0.047 / 0.080 ms | 99.1% lower; 105.43× |
+| 37 | 3D overhang-cylinder picking: replace instance-array `find` calls with half/full instance-id maps | 62.300 / 64.531 ms | 0.056 / 0.233 ms | 99.91% lower; 1,118.64× |
+| 38 | Assembly manual connector resolution: build an interface-point label map once per touched instance and pass resolved models through frame/position fallbacks | 11.887 / 11.969 ms | 0.070 / 0.109 ms | 99.4% lower; 170.19× |
+| 39 | Whole-strand/component selection: lazily cache each strand's domain element-key expansion | 1.124 / 1.904 ms | 0.395 / 1.447 ms | 64.8% lower; 2.84× |
+| 40 | Visible crossover indicators: enumerate only valid lattice residues, cache neighbor destinations, merge coverage ranges, and binary-search occupancy | 1.076 / 1.796 ms | 0.155 / 0.175 ms | 85.6% lower; 6.93× |
+
+The exact pre-batch commit (`a8f447e3`) was rerun in an isolated worktree rather
+than compared with an older fixture. Against that baseline, design update stayed
+flat-to-better at 56.2 / 69.9 ms to 55.7 / 66.9 ms, ordinary zoomed redraw moved
+from 0.9 / 1.2 ms to 0.7 / 1.0 ms, zoomed periodic redraw moved from 0.8 / 0.9
+ms to 0.7 / 0.8 ms, and full periodic redraw moved from 25.9 / 30.8 ms to 23.9 /
+27.1 ms. Selected redraw remained 0.8 ms median; its p95 moved from 1.9 to 2.1
+ms. All six canvas hashes, transition counts, and the pan-final hash were exactly
+equal, and the browser error log was empty. Selection, crossover-drag, and
+loop/skip indexes are lazy so ordinary design replacement does not pay their
+construction cost.
+
+## Fifth batch — completed optimizations 41–50
+
+Batch five targets pointer/lasso interaction, arc selection, nick editing, 3D
+cylinder visibility, and live assembly connector frames. The frontend fixture
+contains 6,000 strands / 24,000 domains, 12,000 arcs, 16,000 crossovers, 60,000
+assigned nucleotides, and 24,000 cylinder entries. Each row uses 15 paired
+samples. “Before” and “after” consume the same fixture and query objects, and
+the harness compares complete result vectors outside the timed regions.
+
+| # | Process and change | Before median / p95 | After median / p95 | Result |
+|---:|---|---:|---:|---:|
+| 41 | Pointer row resolution: binary-search immutable row bands for `_helixAtWY` and `_hitTest` | 3.748 / 4.672 ms | 0.408 / 0.592 ms | 89.1% lower; 9.19× |
+| 42 | Lasso track ranges: lazily sort domain intervals and use prefix-max rejection for narrow horizontal windows | 2.135 / 2.633 ms | 1.144 / 2.006 ms | 46.4% lower; 1.87× steady-state |
+| 43 | Strand/element lasso: share row-band + track-range candidate enumeration instead of traversing every domain | 22.102 / 23.168 ms | 0.351 / 1.176 ms | 98.4% lower; 62.89× |
+| 44 | Forced-ligation point hits: add bounded curve descriptors to the shared horizontal arc bins | 78.352 / 79.856 ms | 3.381 / 3.460 ms | 95.7% lower; 23.17× |
+| 45 | Arc lasso: reuse cached crossover/forced-ligation descriptors and bins | 181.616 / 184.631 ms | 11.657 / 11.862 ms | 93.6% lower; 15.58× |
+| 46 | Grouped crossover drag: map selected keys directly to all matching crossover records | 28.969 / 29.225 ms | 0.072 / 1.461 ms | 99.75% lower; 403.21× |
+| 47 | Nick tools: reuse track, domain-owner, and strand-terminal indexes for hover/nick/ligation resolution | 907.542 / 912.381 ms | 0.831 / 1.750 ms | 99.91% lower; 1,092× |
+| 48 | Cylinder hidden alpha: index assigned nucleotides by `(strand, domain)` instead of filtering all geometry per cylinder | 94.503 / 95.401 ms | 0.019 / 0.043 ms | 99.98% lower; 5,101× |
+| 49 | Selected cylinder glow: resolve domain refs directly to indexed straight/half/full entries | 0.435 / 1.529 ms | 0.095 / 0.247 ms | 78.2% lower; 4.59× steady-state |
+| 50 | Live blunt connector frames: share helix, deformed-axis, and bp-position resolution per immutable design | 19.503 / 19.716 ms | 9.896 / 9.992 ms | 49.3% lower; 1.97× |
+
+Cold totals were measured rather than inferred. Rows 41, 43–48 all remain
+faster with index construction charged to the first query batch. Row 42 costs
+2.962 ms cold versus 2.074 ms before and crosses break-even on its second
+equivalent lasso batch. Row 49 costs 0.744 ms cold versus 0.408 ms before and
+crosses break-even by the third selection refresh; it also reuses the
+cylinder-domain index already needed by picking and representation checks.
+These two amortization boundaries are retained here instead of hiding build
+cost outside the benchmark.
+
+The real connector benchmark uses 12 actual `Helix` models and 48 live blunt
+labels. It resolves frames through production `_build_world_connector_frames`
+with the real deformation functions. The complete 4×4 frame fingerprint is
+identical, maximum element delta is 0.0, whole-design axis solves fall from 24
+to 1, and per-helix nucleotide solves fall from 24 to 12.
+
+### Anti-gaming and semantic audit
+
+- Every paired frontend row records a query fingerprint, result-vector
+  fingerprint, result count, index cardinality, and before/after candidate
+  visits. A timing result is rejected if any result vector differs.
+- Cold measurements construct the index inside every timed invocation. Steady
+  measurements use the same production-equivalent immutable indexes and make
+  their amortization boundary explicit.
+- Candidate visits fall in all nine frontend rows (for example, lasso 8,400,000
+  → 11,963; arc point hits 24,000,000 → 634,306; nick tools 144,000,000 →
+  247,829). Thus the lower time accompanies less equivalent work, not fewer
+  queries or weaker output checks.
+- An initially implemented binary point-hit search was removed after measurement:
+  on short real-style track buckets it regressed 1.249 ms to 1.982 ms steady and
+  1.208 ms to 3.283 ms cold. Point hits retain the faster legacy-order bucket
+  walk; the interval index is used only for range queries where it wins.
+- The production Playwright fixture is identical before/after: 59 helices,
+  2,460 strands, 10,920 domains, and 7,992 crossovers. All six state hashes and
+  the final pan hash match exactly (`33504fd8`, `92d1d9b6`, `0412e322`,
+  `773d024c`, `37c4e71d`, `c7ed93e4`, pan `70ff283f`), transition counts match,
+  the known empty hover remains empty, and browser errors are empty.
+- Integrated browser timings did not show a hidden broad regression: zoomed
+  plain stayed 0.7 ms median (p95 1.0 → 0.9), selected zoomed improved 0.8 →
+  0.7 ms (p95 1.9 → 1.8), and hover stayed 0.4 ms (p95 0.6 → 0.5). The noisier
+  design-update sample moved 54.6 → 56.2 ms median and 64.7 → 72.7 ms p95; that
+  variance is reported, not presented as a batch-five improvement.
+- Production-source regression tests prevent reintroducing full-array scans in
+  path hit/lasso, arc hit/lasso, cylinder alpha, and cylinder glow. The assembly
+  unit test additionally asserts physical positions for all four resolved labels
+  while proving one axis solve and one per-helix nucleotide solve.
+
+## Campaign-wide summary — optimizations 1–50
+
+All fifty accepted rows have paired output-equivalence evidence in the tables
+above. The campaign progressed from render preparation and assembly FK (1–10),
+through high-rate pointer and shared 3D indexes (11–20), immutable design caches
+and viewport work restriction (21–30), selection/editing lookup removal (31–40),
+to the interaction/visibility/live-frame paths in this fifth batch (41–50).
+Experiments that failed to improve the measured workload are not counted; they
+remain listed under “Rejected experiments.” Because fixtures and units differ,
+individual row times are deliberately not summed into a misleading aggregate.
+The stable end-to-end facts are: production builds pass, all fast backend and
+frontend regressions pass, browser errors remain empty, and established pixel
+digests are unchanged across every integrated audit.
+
 ## Evidence map
 
 - Optimizations 1–3: [paired frontend kernel log](raw/frontend_kernels_paired_final.json)
@@ -121,28 +239,45 @@ All established canvas and pan hashes remained identical and browser errors were
   [paired batch-three frontend log](raw/batch3_frontend_indexes.json)
 - Optimization 26: [paired assembly adjacency log](raw/batch3_assembly_shared_fk_index.json)
 - Integrated third-batch audit: [pathview Playwright log](raw/batch3_final_pathview_playwright.json)
+- Optimizations 31–37 and 39–40:
+  [paired batch-four frontend log](raw/batch4_frontend_indexes.json)
+- Optimization 38: [paired interface-point log](raw/batch4_interface_point_index.json)
+- Integrated fourth-batch audit: [exact pre-change baseline](raw/batch4_pathview_baseline_a8f447e3.json)
+  and [optimized Playwright log](raw/batch4_pathview_playwright.json)
+- Optimizations 41–49, including cold costs and anti-gaming fingerprints:
+  [paired batch-five frontend log](raw/batch5_frontend_indexes.json)
+- Optimization 50: [real-geometry blunt resolution log](raw/batch5_blunt_resolution_cache.json)
+- Integrated fifth-batch audit: [exact pre-change production baseline](raw/batch5_pathview_baseline.json)
+  and [optimized Playwright log](raw/batch5_pathview_playwright.json)
 
 The reproducible harnesses are
 `frontend/scripts/responsiveness-kernel-bench.mjs`,
 `frontend/scripts/responsiveness-batch2-kernel-bench.mjs`,
 `frontend/scripts/responsiveness-batch3-kernel-bench.mjs`,
+`frontend/scripts/responsiveness-batch4-kernel-bench.mjs`,
+`frontend/scripts/responsiveness-batch5-kernel-bench.mjs`,
 `scripts/benchmark_assembly_fk.py`, and
-`scripts/benchmark_assembly_shared_index.py`, plus
+`scripts/benchmark_assembly_shared_index.py`,
+`scripts/benchmark_interface_point_index.py`,
+`scripts/benchmark_blunt_resolution_cache.py`, plus
 `frontend/e2e/responsiveness_pathview_bench.spec.js`.
 
 ## Functional verification
 
-- `just test-smart`: 7,187 passed, 116 skipped (fast suite; 19 seconds).
-- `npm test`: 5,806 passed across 341 frontend test files.
+- `just test-smart`: 7,190 passed, 116 skipped (fast suite; 36 seconds).
+- `npm test`: 5,816 passed across 342 frontend test files.
 - `npm run build`: production Vite build passed.
 - Playwright responsiveness spec: passed against the isolated servers, with no
   browser errors and identical pixel hashes for plain, overhang, periodic,
   zoomed, and selected views.
-- The focused pathview end-lasso/forced-ligation Playwright case passed. An
-  unrelated background mrDNA reconciliation request logged a job-file race, but
-  did not fail the browser case or touch these optimization paths.
-- Focused development checks also passed: 20 atomistic color-resolver tests, 49
-  cluster-entry tests, and 65 assembly connector/FK/kinematics tests.
+- Production-browser indexed-interaction spec: passed real pointer strand-lasso
+  and arc-lasso gestures against `VoltronCore.nadoc`, selected more than ten
+  strands and more than five crossover owners, and verified every emitted owner
+  id exists in the loaded design.
+- Focused development checks also passed: 30 helix-renderer/pathview tests and
+  27 assembly connector tests. Source contracts forbid the optimized frontend
+  paths from falling back to whole-array scans; the connector tests pin both
+  physical frame positions and expensive solver call counts.
 - The repository's slow simulation groups remain deferred by policy because no
   user-opened test session was active; none of the ten changes touches a simulator.
 
@@ -157,27 +292,36 @@ These are deliberately not counted and their production edits were removed:
   immutable-design preparation cache in optimization 25 was retained only after
   both browser median and p95 improved.
 - An overhang-label cache changed 20.5 to 20.3 ms, inside run noise.
+- Binary-searching every point hit on a sorted/prefix-max track index regressed
+  the representative short-bucket workload from 1.249 to 1.982 ms steady and
+  from 1.208 to 3.283 ms cold. The edit was removed; only range lasso queries
+  use the structure retained in optimization 42.
 
 ## Next ten candidates — approval required
 
-1. Index crossover-sprite hit circles, which still scan every visible sprite on
-   each pointer movement.
-2. Map selected element keys directly to owning strands so selection broadcasts
-   do not rescan all strand domains after every click/lasso.
-3. Index consecutive domain transitions for `_findXoverDomains` and crossover
-   drag setup.
-4. Reuse track-domain indexes while validating candidate crossover positions,
-   eliminating the remaining full-design range scans in `_getValidXoverBps`.
-5. Cache reference-only helix membership and active-strand extents per immutable
-   design for periodic and reference rendering passes.
-6. Index loop/skip markers by helix and bp for pointer and lasso hit-testing.
-7. Replace remaining overhang-cylinder instance `find` getters with direct
-   instance-id maps in the 3D renderer.
-8. Build interface-point label maps for repeated assembly connector resolution,
-   especially manual connectors shared across FK and highlight refreshes.
-9. Measure and cache pathview selection-key expansion for large multi-domain
-   strands and component selections.
-10. Profile crossover-indicator generation by visible bp window and skip lattice
-    candidate enumeration outside the viewport before neighbor/occupancy checks.
+1. Restrict loop/skip element-lasso traversal to `_rowBands` intersecting the
+   lasso rather than scanning every displayed helix.
+2. Upgrade arc hit bins from horizontal-only buckets to sparse 2D buckets so
+   tall designs reject unrelated Y rows before Bézier distance tests.
+3. Reuse row bands for gutter-circle hit testing, gutter lasso, and helix reorder
+   insertion instead of repeatedly materializing/scanning all rows.
+4. Index ds-linker bridge geometry by helix and bp during renderer construction;
+   bridge cylinder setup currently filters the full geometry array, then filters
+   each bridge again at both endpoint bps.
+5. Reuse the `(strand, domain)` nucleotide map for MD overhang-rod updates, which
+   still filters all assigned geometry once per overhang cylinder per frame.
+6. Compile representation overrides into per-domain visible ranges so
+   `_isDomainCyl` and `_cylRepVis` do not perform a map lookup for every bp column.
+7. Make alpha refresh dirty-domain-aware, updating only strand/domain entries
+   changed by reference, cluster, hidden-nucleotide, or representation state
+   instead of sweeping all bead/slab/cylinder arrays.
+8. Index scalar/flex recolor targets by nucleotide and domain so interactive
+   color-map changes avoid repeated full backbone/slab traversal.
+9. Cache `principal_seam_connectors(design)` in the same per-design live-frame
+   resolution cache used for blunt labels; multiple seam labels currently
+   recompute the complete seam geometry independently.
+10. Retain interface-point label maps in assembly connector caches across
+    cache-miss refreshes and position fallbacks instead of rebuilding them for
+    each touched instance refresh.
 
-No work on the fourth batch should begin until it is approved.
+No work on the sixth batch should begin until it is approved.
