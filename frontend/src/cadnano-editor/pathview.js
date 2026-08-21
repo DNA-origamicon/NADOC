@@ -22,6 +22,7 @@
 import {
   GUTTER, RULER_H, TOP_PAD, BP_W, LABEL_R,
   CELL_H, PAIR_Y, ROW_H, GROUP_GAP,
+  connectedCellGroups,
 } from './pathview/layout.js'
 
 const EXTEND_BPS = 56
@@ -817,28 +818,7 @@ export function initPathview(canvasEl, containerEl, {
     // Compute cells for each helix
     const cells = _helices.map(h => helixCell(h, isHC))
 
-    // Detect disconnected groups via flood-fill on occupied grid cells.
-    // Two cells are connected if Chebyshev distance ≤ 1 (adjacent row/col).
-    const groupOf = new Int32Array(_helices.length)  // group id per helix
-    groupOf.fill(-1)
-    let gid = 0
-    for (let seed = 0; seed < _helices.length; seed++) {
-      if (groupOf[seed] !== -1) continue
-      const queue = [seed]
-      groupOf[seed] = gid
-      while (queue.length) {
-        const ci = queue.shift()
-        const cr = cells[ci].row, cc = cells[ci].col
-        for (let j = 0; j < _helices.length; j++) {
-          if (groupOf[j] !== -1) continue
-          if (Math.abs(cells[j].row - cr) <= 1 && Math.abs(cells[j].col - cc) <= 1) {
-            groupOf[j] = gid
-            queue.push(j)
-          }
-        }
-      }
-      gid++
-    }
+    const groupOf = connectedCellGroups(cells)
 
     let fwdY = RULER_H + TOP_PAD
     for (let i = 0; i < _helices.length; i++) {
@@ -912,15 +892,12 @@ export function initPathview(canvasEl, containerEl, {
       if (dF > HIT && dR > HIT) continue
       const isFwdTrack = dF <= dR
       const bp = _xToBp(wx)
-      for (let si = 0; si < _design.strands.length; si++) {
-        const strand = _design.strands[si]
-        for (let di = 0; di < strand.domains.length; di++) {
-          const dom = strand.domains[di]
-          if (dom.helix_id !== hid) continue
-          if ((dom.direction === 'FORWARD') !== isFwdTrack) continue
-          const lo = Math.min(dom.start_bp, dom.end_bp)
-          const hi = Math.max(dom.start_bp, dom.end_bp)
+      _ensureStrandIndex()
+      const direction = isFwdTrack ? 'FORWARD' : 'REVERSE'
+      for (const entry of _strandIndexMap.get(`${hid}_${direction}`) ?? []) {
+          const { lo, hi, si, di, dom } = entry
           if (bp < lo || bp > hi) continue
+          const strand = _design.strands[si]
           const isEnd = (bp === lo || bp === hi)
           if (filter) {
             if (!strandPassesScafStapFilter(strand, filter)) return null
@@ -944,7 +921,6 @@ export function initPathview(canvasEl, containerEl, {
             }
           }
           return { strand, strandIdx: si, dom, domainIdx: di, elementType, endWhich }
-        }
       }
       break
     }
@@ -1430,7 +1406,7 @@ export function initPathview(canvasEl, containerEl, {
   // a post-mutation re-render. The index buckets domains by `${helix}_${dir}`
   // so a lookup scans only the handful of domains on that track. Rebuilt only
   // when `_design` changes (reference identity), so pan/zoom redraws reuse it.
-  let _strandIndexMap = null      // Map: `${helixId}_${direction}` → [{lo, hi, si}]
+  let _strandIndexMap = null      // Map: `${helixId}_${direction}` → [{lo, hi, si, di, dom}]
   let _strandIndexDesign = null   // the _design the index was built for
 
   function _ensureStrandIndex() {
@@ -1438,13 +1414,14 @@ export function initPathview(canvasEl, containerEl, {
     const m = new Map()
     const strands = _design?.strands ?? []
     for (let si = 0; si < strands.length; si++) {
-      for (const dom of strands[si].domains) {
+      for (let di = 0; di < strands[si].domains.length; di++) {
+        const dom = strands[si].domains[di]
         const key = `${dom.helix_id}_${dom.direction}`
         let arr = m.get(key)
         if (!arr) m.set(key, arr = [])
         const lo = Math.min(dom.start_bp, dom.end_bp)
         const hi = Math.max(dom.start_bp, dom.end_bp)
-        arr.push({ lo, hi, si })   // si ascending → first match == lowest si (matches old scan)
+        arr.push({ lo, hi, si, di, dom }) // input order preserves the legacy first match
       }
     }
     _strandIndexMap = m
@@ -1627,6 +1604,27 @@ export function initPathview(canvasEl, containerEl, {
     return m
   }
 
+  // Sequence columns, loop/skip compression, and overhang fallbacks depend only
+  // on the immutable design snapshot. Both sequence letters and undefined-base
+  // highlighting consume the same walk, so cache it once instead of rebuilding
+  // thousands of column records on every pan/zoom/drag redraw.
+  let _sequenceRenderCacheDesign = null
+  let _sequenceRenderCache = null
+  function _ensureSequenceRenderCache() {
+    if (_sequenceRenderCacheDesign === _design && _sequenceRenderCache) return _sequenceRenderCache
+    const ovhMap = _overhangSeqMap()
+    const skipMap = skipMapFromHelices(_design?.helices ?? [])
+    const rows = (_design?.strands ?? []).map(strand => ({
+      strand,
+      columns: [...sequenceColumns(strand, skipMap)],
+      hasSequence: !!strand.sequence || strand.domains.some(
+        d => d.overhang_id && ovhMap.has(d.overhang_id)),
+    }))
+    _sequenceRenderCacheDesign = _design
+    _sequenceRenderCache = { ovhMap, rows }
+    return _sequenceRenderCache
+  }
+
   // Resolve the sequence character for a column emitted by `sequenceColumns`.
   // `seqIndex` is the skip/loop-compressed index into strand.sequence; `domCol` is the
   // present-column index within the domain (used only for overhang strands, whose own
@@ -1649,7 +1647,7 @@ export function initPathview(canvasEl, containerEl, {
     if (!_viewTools.sequences || !_design?.strands) return
     // Only draw letters when zoomed in enough to read them
     if (BP_W * _zoom < 6) return
-    const ovhMap = _overhangSeqMap()
+    const { ovhMap, rows } = _ensureSequenceRenderCache()
     const fontSize = Math.min(BP_W * 0.85, CELL_H * 0.65)
     ctx.font = `bold ${fontSize}px Courier New, monospace`
     ctx.textAlign = 'center'
@@ -1663,7 +1661,6 @@ export function initPathview(canvasEl, containerEl, {
     // index into the (skip/loop-compressed) sequence string, so letters stay aligned with
     // the antiparallel strand across deletions (the old geometric index drifted after the
     // first skip).  Deleted columns are simply not yielded → nothing drawn there.
-    const skipMap = skipMapFromHelices(_design.helices)
     // A loop column (nBases === 2) holds TWO inserted nucleotides in one geometric column;
     // draw both, squeezed side-by-side and 5'→3'-ordered along the strand direction (so the
     // reading order is left→right on a FORWARD strand, right→left on a REVERSE one), at a
@@ -1671,11 +1668,10 @@ export function initPathview(canvasEl, containerEl, {
     const loopFontSize = fontSize * 0.66
     const baseFont = ctx.font
     const loopFont = `bold ${loopFontSize}px Courier New, monospace`
-    for (const strand of _design.strands) {
-      const hasSeq = !!strand.sequence
-      const hasOvh = !hasSeq && strand.domains.some(d => d.overhang_id && ovhMap.has(d.overhang_id))
-      if (!hasSeq && !hasOvh) continue
-      for (const col of sequenceColumns(strand, skipMap)) {
+    for (const row of rows) {
+      const { strand } = row
+      if (!row.hasSequence) continue
+      for (const col of row.columns) {
         const info = _rowMap.get(col.helixId)
         if (!info) continue
         const y = col.isFwd ? info.fwdY : info.revY
@@ -1699,7 +1695,7 @@ export function initPathview(canvasEl, containerEl, {
   // ── Draw: undefined base highlights (world-space) ─────────────────────────
   function _drawUndefinedBases() {
     if (!_viewTools.undefinedBases || !_design?.strands) return
-    const ovhMap = _overhangSeqMap()
+    const { ovhMap, rows } = _ensureSequenceRenderCache()
     ctx.fillStyle = CLR_UNDEF_FILL
     ctx.strokeStyle = CLR_UNDEF_BORDER
     ctx.lineWidth = 1 / _zoom
@@ -1707,9 +1703,8 @@ export function initPathview(canvasEl, containerEl, {
     const half = CELL_H / 2
     // Skip-aware (mirrors _drawSequences): only PRESENT columns are candidates; a deleted
     // column is not "undefined", it simply has no nucleotide, so it must not be flagged.
-    const skipMap = skipMapFromHelices(_design.helices)
-    for (const strand of _design.strands) {
-      for (const col of sequenceColumns(strand, skipMap)) {
+    for (const { strand, columns } of rows) {
+      for (const col of columns) {
         const info = _rowMap.get(col.helixId)
         if (!info) continue
         const ch = _seqCharAt(strand, col.seqIndex, col.domCol, col.dom, ovhMap)
@@ -1727,13 +1722,29 @@ export function initPathview(canvasEl, containerEl, {
   // Strand-level selection glow — rebuilt per frame in _draw().
   const CLR_STRAND_GLOW = '#ff3333'
   let _strandSelectedIds = new Set()   // strand IDs that are "whole-strand selected"
+  let _strandSelectionCacheDesign = null
+  let _strandSelectionCacheEnabled = false
+  let _strandSelectionCacheSignature = null
 
   /** Rebuild _strandSelectedIds from _selectedElements when strand filter is on.
    *  Expands to the full crossover-connected component so that strands linked
    *  by registered crossovers all glow together.  */
   function _rebuildStrandSelection() {
+    // Selection changes far less often than pointer-driven redraws. A signature
+    // over the usually tiny selected-key set avoids rescanning every domain on
+    // every wheel/pan/drag frame while remaining correct for in-place Set edits.
+    const enabled = !!_selectFilter.strand
+    const signature = enabled && _selectedElements.size
+      ? Array.from(_selectedElements).join('\u0000')
+      : ''
+    if (_strandSelectionCacheDesign === _design &&
+        _strandSelectionCacheEnabled === enabled &&
+        _strandSelectionCacheSignature === signature) return
+    _strandSelectionCacheDesign = _design
+    _strandSelectionCacheEnabled = enabled
+    _strandSelectionCacheSignature = signature
     _strandSelectedIds = new Set()
-    if (!_selectFilter.strand || !_selectedElements.size || !_design?.strands) return
+    if (!enabled || !_selectedElements.size || !_design?.strands) return
     // Collect directly-selected strand IDs
     const directIds = new Set()
     for (const strand of _design.strands) {
@@ -1901,6 +1912,8 @@ export function initPathview(canvasEl, containerEl, {
     // Build a set of strand-end positions that have an extension arm so end caps
     // can be moved to the arm tip instead of the domain terminus.
     const extEndSet = new Set((_design.extensions ?? []).map(e => `${e.strand_id}:${e.end}`))
+    const ghostShiftX = _ghostPass * _pbPeriod() * BP_W
+    const screenMargin = Math.max(BP_W * _zoom, 16)
     for (let si = 0; si < _design.strands.length; si++) {
       const strand   = _design.strands[si]
       const isRef    = !!strand.is_reference
@@ -1918,12 +1931,20 @@ export function initPathview(canvasEl, containerEl, {
         const sTop = (info.fwdY - CELL_H / 2) * _zoom + _panY
         if ((info.revY + CELL_H / 2) * _zoom + _panY < 0 || sTop > canvasEl.height) continue
 
+        // Canvas clipping hides off-screen domains but still pays all of the
+        // crossover, selection, colour, and cap-geometry work below. Reject by
+        // the transformed horizontal bounds first. Include the periodic mirror
+        // translation and a screen-space margin for glows/end caps.
+        const lo = Math.min(dom.start_bp, dom.end_bp)
+        const hi = Math.max(dom.start_bp, dom.end_bp)
+        const sx1 = (_bpToX(lo) + ghostShiftX) * _zoom + _panX
+        const sx2 = (_bpToX(hi + 1) + ghostShiftX) * _zoom + _panX
+        if (sx2 < -screenMargin || sx1 > canvasEl.width + screenMargin) continue
+
         // Suppress the end cap (square or triangle) and use a half-line wherever
         // an arc attaches — either a registered crossover or a cross-helix
         // domain continuation (coaxial, scaffold routing, forced ligation).
         const dir     = dom.direction
-        const lo      = Math.min(dom.start_bp, dom.end_bp)
-        const hi      = Math.max(dom.start_bp, dom.end_bp)
         const fiveBp  = dir === 'FORWARD' ? lo : hi
         const threeBp = dir === 'FORWARD' ? hi : lo
         const prev = di > 0     ? strand.domains[di - 1] : null
@@ -2203,6 +2224,20 @@ export function initPathview(canvasEl, containerEl, {
       const infoA = _rowMap.get(xo.half_a.helix_id)
       const infoB = _rowMap.get(xo.half_b.helix_id)
       if (!infoA || !infoB) continue
+      const x  = _bpCenterX(xo.half_a.index)
+      const y0 = xo.half_a.strand === 'FORWARD' ? infoA.fwdY : infoA.revY
+      const y1 = xo.half_b.strand === 'FORWARD' ? infoB.fwdY : infoB.revY
+      const isScafXo = infoA.scaffoldFwd ? xo.half_a.strand === 'FORWARD' : xo.half_a.strand === 'REVERSE'
+      const bowDir = _xoverBowDir(xo.half_a.index, isScafXo)
+      const bowAmt = Math.max(BP_W * 0.27, Math.abs(y1 - y0) * 0.07)
+      const ghostShiftX = _ghostPass * _pbPeriod() * BP_W
+      const screenMargin = 16
+      const sx0 = (Math.min(x, x + bowDir * bowAmt) + ghostShiftX) * _zoom + _panX
+      const sx1 = (Math.max(x, x + bowDir * bowAmt) + ghostShiftX) * _zoom + _panX
+      const sy0 = Math.min(y0, y1) * _zoom + _panY
+      const sy1 = Math.max(y0, y1) * _zoom + _panY
+      if (sx1 < -screenMargin || sx0 > canvasEl.width + screenMargin ||
+          sy1 < -screenMargin || sy0 > canvasEl.height + screenMargin) continue
       const sA      = _findStrandIdxAt(xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand)
       const sB      = _findStrandIdxAt(xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand)
       // A crossover is reference geometry when both halves sit on reference strands.
@@ -2228,12 +2263,6 @@ export function initPathview(canvasEl, containerEl, {
         ctx.lineWidth    = baseThick * (hmA ? hmA.thickMul : 1.0)
         ctx.shadowBlur   = 0
       }
-      const x  = _bpCenterX(xo.half_a.index)
-      const y0 = xo.half_a.strand === 'FORWARD' ? infoA.fwdY : infoA.revY
-      const y1 = xo.half_b.strand === 'FORWARD' ? infoB.fwdY : infoB.revY
-      const isScafXo = infoA.scaffoldFwd ? xo.half_a.strand === 'FORWARD' : xo.half_a.strand === 'REVERSE'
-      const bowDir = _xoverBowDir(xo.half_a.index, isScafXo)
-      const bowAmt = Math.max(BP_W * 0.27, Math.abs(y1 - y0) * 0.07)
       const midY   = (y0 + y1) / 2
       if (isRefXo) { ctx.setLineDash([6 / _zoom, 5 / _zoom]); ctx.lineCap = 'butt' }
       ctx.beginPath()
@@ -2533,6 +2562,50 @@ export function initPathview(canvasEl, containerEl, {
   //   forward cell (scaffold on top/FORWARD) → indicator below, in gap under revY
   //   reverse cell (scaffold on bottom/REVERSE) → indicator above, in gap over fwdY
 
+  let _xoverIndicatorIndexDesign = null
+  let _xoverIndicatorIndex = null
+  function _ensureXoverIndicatorIndex() {
+    if (_xoverIndicatorIndexDesign === _design && _xoverIndicatorIndex) return _xoverIndicatorIndex
+
+    // All four structures below depend only on the immutable design snapshot,
+    // not pan/zoom/hover state. Building them per pointer-driven redraw made the
+    // indicator overlay repeatedly traverse every strand and crossover.
+    const occupied = new Set()
+    for (const xo of (_design?.crossovers ?? [])) {
+      occupied.add(`${xo.half_a.helix_id}_${xo.half_a.index}_${xo.half_a.strand}`)
+      occupied.add(`${xo.half_b.helix_id}_${xo.half_b.index}_${xo.half_b.strand}`)
+    }
+    const strandRanges = new Map()
+    const refRanges = new Map()
+    const minDomainBpByHelix = new Map()
+    for (const strand of (_design?.strands ?? [])) {
+      for (const dom of strand.domains) {
+        const key = `${dom.helix_id}_${dom.direction}`
+        const lo = Math.min(dom.start_bp, dom.end_bp)
+        const range = [lo, Math.max(dom.start_bp, dom.end_bp)]
+        let list = strandRanges.get(key)
+        if (!list) { list = []; strandRanges.set(key, list) }
+        list.push(range)
+        if (strand.is_reference) {
+          let rlist = refRanges.get(key)
+          if (!rlist) { rlist = []; refRanges.set(key, rlist) }
+          rlist.push(range)
+        }
+        const cur = minDomainBpByHelix.get(dom.helix_id) ?? Infinity
+        if (lo < cur) minDomainBpByHelix.set(dom.helix_id, lo)
+      }
+    }
+    _xoverIndicatorIndexDesign = _design
+    _xoverIndicatorIndex = {
+      occupied,
+      strandRanges,
+      refRanges,
+      minDomainBpByHelix,
+      junctionSlots: _crossoverJunctionSlots(_design),
+    }
+    return _xoverIndicatorIndex
+  }
+
   function _drawCrossoverIndicators() {
     // No clickable crossover sprites in mirror zones — forced ligation (not lattice
     // crossover) is the seam tool. Return before touching _xoverSprites so the real
@@ -2550,38 +2623,8 @@ export function initPathview(canvasEl, containerEl, {
     const bpL = Math.floor(_xToBp(wLeft)) - 1   // allow negative (ss-scaffold loops)
     const bpR = Math.ceil(_xToBp(wRight)) + 1
 
-    // Track-aware occupied set: "helix_id_bp_DIRECTION"
-    // Staple and scaffold crossovers occupy different tracks at the same bp,
-    // so we track them independently.
-    const occupied = new Set()
-    for (const xo of (_design.crossovers ?? [])) {
-      occupied.add(`${xo.half_a.helix_id}_${xo.half_a.index}_${xo.half_a.strand}`)
-      occupied.add(`${xo.half_b.helix_id}_${xo.half_b.index}_${xo.half_b.strand}`)
-    }
-
-    // Pre-build strand coverage: "helix_id_DIRECTION" → [[lo, hi], ...]
-    // Used to gate indicators — only show where both strand slots are occupied.
-    const strandRanges = new Map()
-    // Reference-strand coverage only. A crossover must never involve reference
-    // geometry, so a sprite is suppressed when EITHER half's slot is covered by a
-    // reference strand — both the half ON a reference strand and the half that
-    // would form a crossover WITH one. Mechanical is_reference filter, mirroring
-    // the per-site reference skip used by every other generative feature.
-    const refRanges = new Map()
-    for (const strand of (_design.strands ?? [])) {
-      for (const dom of strand.domains) {
-        const key   = `${dom.helix_id}_${dom.direction}`
-        const range = [Math.min(dom.start_bp, dom.end_bp), Math.max(dom.start_bp, dom.end_bp)]
-        let list = strandRanges.get(key)
-        if (!list) { list = []; strandRanges.set(key, list) }
-        list.push(range)
-        if (strand.is_reference) {
-          let rlist = refRanges.get(key)
-          if (!rlist) { rlist = []; refRanges.set(key, rlist) }
-          rlist.push(range)
-        }
-      }
-    }
+    const { occupied, strandRanges, refRanges, junctionSlots, minDomainBpByHelix } =
+      _ensureXoverIndicatorIndex()
     const _slotOccupied = (helixId, bp, direction) => {
       const ranges = strandRanges.get(`${helixId}_${direction}`) ?? []
       return ranges.some(([lo, hi]) => lo <= bp && bp <= hi)
@@ -2589,7 +2632,6 @@ export function initPathview(canvasEl, containerEl, {
     // Slots already occupied by a crossover junction (a multi-domain strand's
     // turn). A new crossover must not land here — suppress its sprite. Mirrors
     // the backend rejection in _build_place_crossover.
-    const junctionSlots = _crossoverJunctionSlots(_design)
     const _slotIsJunction = (helixId, bp, direction) =>
       junctionSlots.has(`${helixId}_${bp}_${direction}`)
     const _slotIsReference = (helixId, bp, direction) => {
@@ -2601,16 +2643,6 @@ export function initPathview(canvasEl, containerEl, {
     const cellMap = new Map()
     for (const [hid, info] of _rowMap) {
       cellMap.set(`${info.cell.row}_${info.cell.col}`, { hid, info })
-    }
-
-    // Minimum bp referenced by strand domains per helix (may be < helix.bp_start for ss loops).
-    const minDomainBpByHelix = new Map()
-    for (const strand of (_design.strands ?? [])) {
-      for (const dom of strand.domains) {
-        const lo = Math.min(dom.start_bp, dom.end_bp)
-        const cur = minDomainBpByHelix.get(dom.helix_id) ?? Infinity
-        if (lo < cur) minDomainBpByHelix.set(dom.helix_id, lo)
-      }
     }
 
     const indGap = CELL_H / 2 + 3   // = 9 px from track centre
@@ -3736,7 +3768,22 @@ export function initPathview(canvasEl, containerEl, {
     _drawOverhangNames()
   }
 
+  let _drawFrame = null
+
+  function _scheduleDraw() {
+    if (_drawFrame !== null) return
+    _drawFrame = requestAnimationFrame(() => {
+      _drawFrame = null
+      _draw()
+    })
+  }
+
   function _draw() {
+    // An immediate draw (for example pointerup) supersedes a queued drag frame.
+    if (_drawFrame !== null) {
+      cancelAnimationFrame(_drawFrame)
+      _drawFrame = null
+    }
     _ensureComponents()                // build once per design change (cached)
     _rebuildStrandSelection()          // rebuild strand glow set
     _rebuildHeatmapCache()             // rebuild heat map colours
@@ -4300,7 +4347,7 @@ export function initPathview(canvasEl, containerEl, {
         _forcedLigHoverTarget = null
         canvasEl.style.cursor = 'crosshair'
       }
-      _draw(); return
+      _scheduleDraw(); return
     }
     if (_endDragActive) {
       const { wx } = _c2w(e.offsetX, e.offsetY)
@@ -4308,7 +4355,7 @@ export function initPathview(canvasEl, containerEl, {
       _endDragDeltaBp = Math.max(_endDragMinDelta, Math.min(_endDragMaxDelta, rawDelta))
       if (_endDragDeltaBp !== 0) _showDragTooltip(e.clientX, e.clientY, _endDragDeltaBp)
       else _hideDragTooltip()
-      _draw(); return
+      _scheduleDraw(); return
     }
     if (_domDragActive) {
       const { wx } = _c2w(e.offsetX, e.offsetY)
@@ -4316,7 +4363,7 @@ export function initPathview(canvasEl, containerEl, {
       _domDragDeltaBp = Math.max(_domDragMinDelta, Math.min(_domDragMaxDelta, rawDelta))
       if (_domDragDeltaBp !== 0) _showDragTooltip(e.clientX, e.clientY, _domDragDeltaBp)
       else _hideDragTooltip()
-      _draw(); return
+      _scheduleDraw(); return
     }
     if (_xoverDragActive) {
       const { wx } = _c2w(e.offsetX, e.offsetY)
@@ -4340,7 +4387,7 @@ export function initPathview(canvasEl, containerEl, {
       } else {
         _hideDragTooltip()
       }
-      _draw(); return
+      _scheduleDraw(); return
     }
     if (_helixDragArmed || _helixDragActive) {
       const dx = e.offsetX - _helixDragStartSX, dy = e.offsetY - _helixDragStartSY
@@ -4349,47 +4396,47 @@ export function initPathview(canvasEl, containerEl, {
         _helixDragCursorSY  = e.offsetY
         _helixDragInsertIdx = _gapIndexFromScreenY(e.offsetY)
         canvasEl.style.cursor = 'grabbing'
-        _draw()
+        _scheduleDraw()
       }
       return
     }
     if (_gutterLassoStarted) {
       _gutterLassoSY1 = e.offsetY
       if (Math.abs(e.offsetY - _gutterLassoSY0) > DRAG_THRESHOLD) _gutterLassoActive = true
-      if (_gutterLassoActive) _draw()
+      if (_gutterLassoActive) _scheduleDraw()
       return
     }
     if (_panActive) {
       _panX = _panStartPanX + (e.clientX - _panStartCX)
       _panY = _panStartPanY + (e.clientY - _panStartCY)
       if (Math.hypot(e.clientX - _panStartCX, e.clientY - _panStartCY) > DRAG_THRESHOLD) _rightDragMoved = true
-      _draw(); return
+      _scheduleDraw(); return
     }
     if (_pbNearDragging || _pbFarDragging) {
       const { wx } = _c2w(e.offsetX, e.offsetY)
       const bp = _xToBp(wx)
       if (_pbNearDragging) _pbNearBp = Math.min(_pbFarBp - 1, bp)   // keep near ≤ far-1 (P ≥ 1)
       else                 _pbFarBp  = Math.max(_pbNearBp + 1, bp)  // keep far ≥ near+1
-      _draw(); return
+      _scheduleDraw(); return
     }
     if (_sliceDragging) {
       const { wx } = _c2w(e.offsetX, e.offsetY)
       _updateSliceBp(Math.max(_minBp, Math.min(_totalBp, _xToBp(wx))))
-      _draw(); return
+      _scheduleDraw(); return
     }
     if (_painting) {
       const { wx } = _c2w(e.offsetX, e.offsetY)
       const bp = _xToBp(wx) - _ghostShiftBp   // resolve to REAL bp when painting in a mirror zone
       _paintLo = Math.min(_paintAnchor, bp)
       _paintHi = Math.max(_paintAnchor, bp)
-      _draw(); return
+      _scheduleDraw(); return
     }
     if (_lassoStarted) {
       const { wx, wy } = _c2w(e.offsetX, e.offsetY)
       _lassoWX1 = wx; _lassoWY1 = wy
       const dx = e.offsetX - _lassoSX0, dy = e.offsetY - _lassoSY0
       if (dx * dx + dy * dy > DRAG_THRESHOLD * DRAG_THRESHOLD) _lassoActive = true
-      if (_lassoActive) _draw()
+      if (_lassoActive) _scheduleDraw()
       return
     }
     // Track which helix the cursor is over (for scaffold sprite filtering)
@@ -4397,7 +4444,7 @@ export function initPathview(canvasEl, containerEl, {
       const { wy } = _c2w(e.offsetX, e.offsetY)
       const prev = _hoverHelixId
       _hoverHelixId = _helixAtWY(wy)
-      if (_shiftHeld && _hoverHelixId !== prev) _draw()
+      if (_shiftHeld && _hoverHelixId !== prev) _scheduleDraw()
     }
     // Cursor + hover
     if (_activeTool === 'select' && _helixAtGutter(e.offsetX, e.offsetY)) {
@@ -4438,7 +4485,7 @@ export function initPathview(canvasEl, containerEl, {
       if (hit) {
         const { dom } = hit
         const info    = _rowMap.get(dom.helix_id)
-        if (!info) { _nickHover = null; _draw(); return }
+        if (!info) { _nickHover = null; _scheduleDraw(); return }
         const { wx }  = _c2w(e.offsetX, e.offsetY)
         const shift   = _ghostShiftForWorldX(wx)   // live shift (hover, not a captured drag)
         const col     = _xToBp(wx) - shift          // REAL bp under cursor
@@ -4454,7 +4501,7 @@ export function initPathview(canvasEl, containerEl, {
         _nickHover = null
         if (hadHover) _dbgDetail = []
       }
-      _draw()
+      _scheduleDraw()
     }
   })
 

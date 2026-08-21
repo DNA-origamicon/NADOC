@@ -81,6 +81,15 @@ describe('buildJunctionMapFromXovers', () => {
     const domainMap = buildDomainMapFromDesign(design, specMap)
     expect(buildJunctionMapFromXovers({ ...design, crossovers: [] }, specMap, domainMap).size).toBe(0)
   })
+  it('preserves the first matching crossover when a helix pair repeats', () => {
+    const later = { half_a: { helix_id: 'h2', index: 99, strand: 'REVERSE' },
+      half_b: { helix_id: 'h1', index: 99, strand: 'REVERSE' } }
+    const repeated = { ...design, crossovers: [...design.crossovers, later] }
+    const specMap = buildSpecMap(repeated)
+    const domainMap = buildDomainMapFromDesign(repeated, specMap)
+    expect(buildJunctionMapFromXovers(repeated, specMap, domainMap).get('o1'))
+      .toEqual({ junctionBp: 3, junctionDir: 'FORWARD' })
+  })
 })
 
 describe('buildRootMap', () => {

@@ -72,26 +72,26 @@ const _XB_ZERO = new THREE.Vector3()
  * @param {object} design  current Design
  * @returns {Map<string, Map<number, {x,y,z}>>}
  */
-function _buildExtArcMap(offsets, design) {
+export function buildExtensionArcMap(offsets, design, geometry = store.getState().currentGeometry) {
   const extArcMap = new Map()
   if (!design?.extensions?.length) return extArcMap
 
-  const { currentGeometry } = store.getState()
-  if (!currentGeometry?.length) return extArcMap
+  if (!geometry?.length) return extArcMap
 
   // Index extension nucleotides by extension_id → Map<bp_index, nuc>
   const extNucs = new Map()
-  for (const nuc of currentGeometry) {
+  for (const nuc of geometry) {
     if (!nuc.extension_id) continue
     if (!extNucs.has(nuc.extension_id)) extNucs.set(nuc.extension_id, new Map())
     extNucs.get(nuc.extension_id).set(nuc.bp_index, nuc)
   }
 
+  const strandById = new Map((design.strands ?? []).map(strand => [strand.id, strand]))
   for (const ext of design.extensions) {
     const nucMap = extNucs.get(ext.id)
     if (!nucMap?.size) continue
 
-    const strand = design.strands?.find(s => s.id === ext.strand_id)
+    const strand = strandById.get(ext.strand_id)
     if (!strand) continue
 
     const termDom = ext.end === 'five_prime'
@@ -192,7 +192,7 @@ export function initExpandedSpacing(
     // helix_renderer / design_renderer: backbone beads, axis arrows, slabs, cones
     designRenderer.applyUnfoldOffsets(offsets, t)
     // Extension beads (__ext_ helices — strand overhangs / extended ends)
-    const extArcMap = _buildExtArcMap(offsets, currentDesign)
+    const extArcMap = buildExtensionArcMap(offsets, currentDesign)
     designRenderer.applyUnfoldOffsetsExtensions(extArcMap, t)
     // Crossover arcs (lines between helices)
     getUnfoldView?.()?.applyHelixOffsets(offsets, t)

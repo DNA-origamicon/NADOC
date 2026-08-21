@@ -1,6 +1,25 @@
 import { baseKey } from './base_ref.js'
 import { clusterNucKeysFor } from './cluster_entries.js'
 
+/** Expand prepared visibility selectors over geometry in one linear pass. */
+export function collectVisibilityBaseKeys(geometry, {
+  strands = new Set(), extensionIds = new Set(), domains = new Set(),
+  clusterSelectors = new Set(),
+} = {}) {
+  const out = new Set()
+  const extensionHelixIds = new Set([...extensionIds].map(id => `__ext_${id}`))
+  for (const nuc of geometry ?? []) {
+    const key = baseKey(nuc, nuc.copy_k ?? 0)
+    if (!key) continue
+    if (strands.has(nuc.strand_id) || extensionIds.has(nuc.extension_id) ||
+        extensionHelixIds.has(nuc.helix_id) ||
+        domains.has(`${nuc.strand_id}:${nuc.domain_index}`) ||
+        clusterSelectors.has(`h:${nuc.helix_id}`) ||
+        clusterSelectors.has(`d:${nuc.strand_id}:${nuc.domain_index}`)) out.add(key)
+  }
+  return out
+}
+
 /**
  * One persisted, base-addressed visibility model for the editor. Higher-level
  * objects are expanded to base keys at hide time. It has its own undo stack and
@@ -60,15 +79,9 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
       .filter(ext => strands.has(ext.strand_id)).map(ext => ext.id))
     const domains = new Set(domainRefs.map(d => `${d.strandId}:${d.domainIndex}`))
     const clusterSelectors = clusterNucKeysFor(design(), new Set(clusterIds))
-    for (const nuc of geometry()) {
-      const key = baseKey(nuc, nuc.copy_k ?? 0)
-      if (!key) continue
-      if (strands.has(nuc.strand_id) || extensionIds.has(nuc.extension_id) ||
-          [...extensionIds].some(id => nuc.helix_id === `__ext_${id}`) ||
-          domains.has(`${nuc.strand_id}:${nuc.domain_index}`) ||
-          clusterSelectors.has(`h:${nuc.helix_id}`) ||
-          clusterSelectors.has(`d:${nuc.strand_id}:${nuc.domain_index}`)) out.add(key)
-    }
+    for (const key of collectVisibilityBaseKeys(geometry(), {
+      strands, extensionIds, domains, clusterSelectors,
+    })) out.add(key)
     return out
   }
 

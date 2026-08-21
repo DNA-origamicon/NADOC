@@ -985,6 +985,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   root.add(iCubes)
 
   const backboneEntries = []
+  const strandTypeById = new Map()
   let sphereId = 0, cubeId = 0
 
   if (!_skipBeads) {
@@ -997,11 +998,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iCubes.setMatrixAt(cubeId, _tMatrix)
         iCubes.setColorAt(cubeId, _tColor.setHex(color))
         backboneEntries.push({ instMesh: iCubes, id: cubeId, nuc, pos, defaultColor: color })
+        if (nuc.strand_id && !strandTypeById.has(nuc.strand_id)) strandTypeById.set(nuc.strand_id, nuc.strand_type)
         cubeId++
       } else {
         iSpheres.setMatrixAt(sphereId, _tMatrix)
         iSpheres.setColorAt(sphereId, _tColor.setHex(color))
         backboneEntries.push({ instMesh: iSpheres, id: sphereId, nuc, pos, defaultColor: color })
+        if (nuc.strand_id && !strandTypeById.has(nuc.strand_id)) strandTypeById.set(nuc.strand_id, nuc.strand_type)
         sphereId++
       }
     }
@@ -3688,7 +3691,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       }
       for (const entry of coneEntries) {
         if (entry.strandId === null) continue
-        const isScaffold = backboneEntries.find(e => e.nuc.strand_id === entry.strandId)?.nuc?.strand_type === 'scaffold'
+        const isScaffold = strandTypeById.get(entry.strandId) === 'scaffold'
         if (isScaffold) continue
         const r = (!visible || entry.isCrossHelix) ? 0 : entry.coneRadius
         _setConeXZScale(entry, r)
@@ -3720,7 +3723,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           if (entry.nuc.strand_type !== 'scaffold') _setInstColor(entry, entry.defaultColor)
         }
         for (const entry of coneEntries) {
-          if (backboneEntries.find(e => e.nuc.strand_id === entry.strandId)?.nuc?.strand_type !== 'scaffold') {
+          if (strandTypeById.get(entry.strandId) !== 'scaffold') {
             _setInstColor(entry, entry.defaultColor)
           }
         }
@@ -3734,7 +3737,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           _setInstColor(entry, entry.nuc.strand_id === strandId ? entry.defaultColor : DIM)
         }
         for (const entry of coneEntries) {
-          const isScaff = backboneEntries.find(e => e.nuc.strand_id === entry.strandId)?.nuc?.strand_type === 'scaffold'
+          const isScaff = strandTypeById.get(entry.strandId) === 'scaffold'
           if (isScaff) continue
           _setInstColor(entry, entry.strandId === strandId ? entry.defaultColor : DIM)
         }

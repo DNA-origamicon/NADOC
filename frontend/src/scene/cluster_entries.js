@@ -28,7 +28,7 @@ export function clusterMemberFilter(cluster, design) {
   if (!cluster?.helix_ids?.length) return null
   if (cluster.domain_ids?.length) {
     const domainKeySet = new Set(cluster.domain_ids.map(d => `${d.strand_id}:${d.domain_index}`))
-    const strandMap = new Map((design?.strands ?? []).map(s => [s.id, s]))
+    const strandMap = _strandMapForDesign(design)
     const bridgeHelixIds = new Set()
     for (const dr of cluster.domain_ids) {
       const dom = strandMap.get(dr.strand_id)?.domains?.[dr.domain_index]
@@ -43,18 +43,49 @@ export function clusterMemberFilter(cluster, design) {
   return nuc => helixSet.has(nuc.helix_id)
 }
 
+// Designs are immutable snapshots in the store. Reuse their strand lookup across
+// every cluster predicate/key expansion and let GC reclaim it with the snapshot.
+const _designStrandMapCache = new WeakMap()
+function _strandMapForDesign(design) {
+  if (!design || typeof design !== 'object') return new Map()
+  let strandMap = _designStrandMapCache.get(design)
+  if (!strandMap) {
+    strandMap = new Map((design.strands ?? []).map(strand => [strand.id, strand]))
+    _designStrandMapCache.set(design, strandMap)
+  }
+  return strandMap
+}
+
+// Cluster membership predicates depend only on a design snapshot. Selection,
+// hover, and VR targeting can resolve thousands of nucleotides against the same
+// snapshot; rebuilding every cluster's strand/domain maps for every nucleotide
+// turned that path into O(nucleotides × clusters × strands). Weak keys keep the
+// cache bounded by the immutable design objects already owned by the store.
+const _clusterMembershipCache = new WeakMap()
+
+function _clusterMembership(design) {
+  if (!design || typeof design !== 'object') return []
+  let compiled = _clusterMembershipCache.get(design)
+  if (compiled) return compiled
+  compiled = (design.cluster_transforms ?? []).map(cluster => ({
+    cluster,
+    isMember: clusterMemberFilter(cluster, design),
+  }))
+  _clusterMembershipCache.set(design, compiled)
+  return compiled
+}
+
 /** Resolve the same most-specific Cluster that desktop cluster picking uses.
  * Non-default Clusters win by smallest helix footprint, then the default Cluster,
  * then any containing Cluster. Array order is the deterministic tie-breaker.
  */
 export function clusterIdForNucleotide(nucleotide, design) {
-  const clusters = design?.cluster_transforms ?? []
-  if (!nucleotide || !clusters.length) return null
+  const memberships = _clusterMembership(design)
+  if (!nucleotide || !memberships.length) return null
   let best = null
   let bestSize = Infinity
-  for (const cluster of clusters) {
+  for (const { cluster, isMember } of memberships) {
     if (cluster.is_default) continue
-    const isMember = clusterMemberFilter(cluster, design)
     if (isMember?.(nucleotide)) {
       const size = cluster.helix_ids?.length ?? Infinity
       if (size < bestSize) {
@@ -64,10 +95,10 @@ export function clusterIdForNucleotide(nucleotide, design) {
     }
   }
   if (best) return best.id
-  const fallback = clusters.find(cluster =>
-    cluster.is_default && clusterMemberFilter(cluster, design)?.(nucleotide)) ??
-    clusters.find(cluster => clusterMemberFilter(cluster, design)?.(nucleotide))
-  return fallback?.id ?? null
+  const fallback = memberships.find(({ cluster, isMember }) =>
+    cluster.is_default && isMember?.(nucleotide)) ??
+    memberships.find(({ isMember }) => isMember?.(nucleotide))
+  return fallback?.cluster.id ?? null
 }
 
 /**
@@ -110,9 +141,11 @@ export function clusterNucKeys(cluster, design) {
 
   const strandIds = new Set()   // strands this cluster covers by domain key
   const helixIds  = new Set()   // helices this cluster covers whole
+  // Extensions need their host strand's terminal domain. Resolve those hosts
+  // through one O(strands) index instead of Array.find for every extension.
+  const strandMap = _strandMapForDesign(design)
 
   if (cluster.domain_ids?.length) {
-    const strandMap = new Map((design?.strands ?? []).map(s => [s.id, s]))
     const bridgeHelixIds = new Set()
     for (const d of cluster.domain_ids) {
       const dom = strandMap.get(d.strand_id)?.domains?.[d.domain_index]
@@ -132,7 +165,7 @@ export function clusterNucKeys(cluster, design) {
     if (strandIds.has(ext.strand_id)) {
       keys.add('h:__ext_' + ext.id)
     } else if (helixIds.size) {
-      const strand  = (design?.strands ?? []).find(s => s.id === ext.strand_id)
+      const strand  = strandMap.get(ext.strand_id)
       const termDom = strand && (ext.end === 'five_prime'
         ? strand.domains[0]
         : strand.domains[strand.domains.length - 1])

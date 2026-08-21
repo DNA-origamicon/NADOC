@@ -17,6 +17,36 @@ import {
   C_HIGHLIGHT,
 } from './atom_palette.js'
 
+// A selection descriptor is immutable for the duration of a renderer repaint.
+// Compile its array membership tests once and let the WeakMap release the index
+// with the descriptor. Atomistic models can contain millions of atoms; doing up
+// to five Array.includes/some scans for every atom made selection recolouring
+// scale as O(atoms × selected-items).
+const _selectionIndexes = new WeakMap()
+
+function _selectionIndex(selection) {
+  if (!selection || typeof selection !== 'object') return null
+  let index = _selectionIndexes.get(selection)
+  if (index) return index
+  const domains = new Map()
+  for (const domain of selection.domains ?? []) {
+    const key = `${domain.strandId}\0${domain.helixId}\0${domain.direction}`
+    let intervals = domains.get(key)
+    if (!intervals) domains.set(key, intervals = [])
+    intervals.push([domain.lo, domain.hi])
+  }
+  index = {
+    extensionIds: new Set(selection.extensionIds ?? []),
+    helixIds: new Set(selection.helixIds ?? []),
+    strandIds: new Set(selection.strandIds ?? []),
+    domains,
+    bases: new Set((selection.bases ?? []).map(base =>
+      `${base.helix_id}\0${base.bp_index}\0${base.direction}`)),
+  }
+  _selectionIndexes.set(selection, index)
+  return index
+}
+
 /**
  * Classify an atom given the current selection and return its colour as 0xRRGGBB.
  *
@@ -32,17 +62,13 @@ export function colorForAtom(ctx, atom, selection) {
   const cpk     = ELEMENTS[el]?.color ?? DEFAULT_ELEMENT.color
   const normal  = _normalColor(ctx, atom, cpk)
 
-  if (selection?.extensionIds?.includes(atom.extension_id)) return C_HIGHLIGHT
-  if (selection?.helixIds?.includes(atom.helix_id)) return C_HIGHLIGHT
-  if (selection?.strandIds?.includes(atom.strand_id)) return C_HIGHLIGHT
-  if (selection?.domains?.some(domain =>
-    atom.strand_id === domain.strandId && atom.helix_id === domain.helixId &&
-    atom.direction === domain.direction && atom.bp_index >= domain.lo && atom.bp_index <= domain.hi)) {
-    return C_HIGHLIGHT
-  }
-  if (selection?.bases?.some(base =>
-    atom.helix_id === base.helix_id && atom.bp_index === base.bp_index &&
-    atom.direction === base.direction)) return C_HIGHLIGHT
+  const selected = _selectionIndex(selection)
+  if (selected?.extensionIds.has(atom.extension_id)) return C_HIGHLIGHT
+  if (selected?.helixIds.has(atom.helix_id)) return C_HIGHLIGHT
+  if (selected?.strandIds.has(atom.strand_id)) return C_HIGHLIGHT
+  const intervals = selected?.domains.get(`${atom.strand_id}\0${atom.helix_id}\0${atom.direction}`)
+  if (intervals?.some(([lo, hi]) => atom.bp_index >= lo && atom.bp_index <= hi)) return C_HIGHLIGHT
+  if (selected?.bases.has(`${atom.helix_id}\0${atom.bp_index}\0${atom.direction}`)) return C_HIGHLIGHT
   return normal
 }
 

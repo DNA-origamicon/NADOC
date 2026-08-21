@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { initVisibilityController } from './visibility_controller.js'
+import { collectVisibilityBaseKeys, initVisibilityController } from './visibility_controller.js'
 
 const geometry = [
   { helix_id: 'h1', bp_index: 0, direction: 'FORWARD', strand_id: 's1', domain_index: 0 },
@@ -31,6 +31,10 @@ function setup(visibilityState, onPersist) {
 }
 
 describe('visibility controller', () => {
+  it('matches synthetic extension helices through the prepared selector index', () => {
+    expect(collectVisibilityBaseKeys(geometry, { extensionIds: new Set(['e1']) }))
+      .toEqual(new Set(['__ext_e1:0:FORWARD']))
+  })
   it('expands a strand to individual base keys', () => {
     const { api, designRenderer } = setup()
     api.hide({ strandIds: ['s1'] })

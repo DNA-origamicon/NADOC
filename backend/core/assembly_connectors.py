@@ -467,14 +467,20 @@ def _enforce_connector_coincidence(
     """
     if inst_by_id is None:
         inst_by_id = _build_inst_by_id(assembly)
+    # The post-pass is invoked with every moved instance. Index only joints that
+    # can possibly need a connector snap, instead of rescanning the full joint
+    # list for every visited id (O(visited × joints) on large assemblies).
+    joints_by_child: dict[str, list] = {}
+    for joint in assembly.joints:
+        if (
+            joint.instance_b_id
+            and joint.joint_type in ("rigid", "revolute")
+            and joint.connector_a_label
+            and joint.connector_b_label
+        ):
+            joints_by_child.setdefault(joint.instance_b_id, []).append(joint)
     for cid in list(visited):
-        for j in assembly.joints:
-            if j.instance_b_id != cid:
-                continue
-            if j.joint_type not in ("rigid", "revolute"):
-                continue
-            if not j.connector_a_label or not j.connector_b_label:
-                continue
+        for j in joints_by_child.get(cid, ()):
             if j.instance_a_id in visited:
                 continue  # parent moved too — delta already preserves coincidence
             if not j.instance_a_id:
