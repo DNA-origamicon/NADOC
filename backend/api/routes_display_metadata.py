@@ -45,6 +45,7 @@ from backend.core.models import (
     Design,
     PlateLayout,
     RepresentationOverride,
+    StapleGroup,
     TubeAssignment,
     VisibilityState,
     WellAssignment,
@@ -76,6 +77,27 @@ class RepresentationOverridesSaveRequest(BaseModel):
     """Replace the design's full list of per-region representation overrides."""
 
     overrides: List[RepresentationOverride]
+
+
+class StapleGroupsSaveRequest(BaseModel):
+    groups: List[StapleGroup]
+
+
+@router.put("/design/staple-groups", status_code=200)
+def save_staple_groups(body: StapleGroupsSaveRequest) -> dict:
+    """Persist the Staple groups sidebar state in the active design."""
+    design = design_state.get_or_404()
+    valid_ids = {s.id for s in design.strands}
+    for group in body.groups:
+        unknown = set(group.strand_ids) - valid_ids
+        if unknown:
+            raise HTTPException(404, detail=f"Strand {sorted(unknown)[0]!r} not found.")
+
+    def _apply(d: Design) -> None:
+        d.staple_groups = [group.model_copy(deep=True) for group in body.groups]
+
+    design, report = design_state.mutate_and_validate(_apply)
+    return _design_response(design, report)
 
 
 @router.put("/design/plate-layout", status_code=200)

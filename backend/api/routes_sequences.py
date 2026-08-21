@@ -168,6 +168,83 @@ class _SequenceXlsxRequest(BaseModel):
     strand_order: list[str] = Field(default_factory=list)
 
 
+class _IdtOrderXlsxRequest(BaseModel):
+    strand_names: dict[str, str] = Field(default_factory=dict)
+
+
+@router.post("/design/export/idt-order-xlsx")
+def export_idt_order_xlsx(req: _IdtOrderXlsxRequest) -> Response:
+    """Export the saved Plates & tubes assignments as an IDT order workbook."""
+    from io import BytesIO
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+
+    design = _design_for_export()
+    layout = design.plate_layout
+    if layout is None:
+        from fastapi import HTTPException
+        raise HTTPException(400, "Generate a layout in Plates & tubes before exporting an IDT order.")
+
+    strands = {s.id: s for s in design.strands}
+    fallback_numbers = {
+        s.id: i for i, s in enumerate(
+            (s for s in design.strands if s.strand_type == StrandType.STAPLE and not s.is_reference),
+            start=1,
+        )
+    }
+
+    def _name(strand_id: str) -> str:
+        return req.strand_names.get(strand_id) or f"S{fallback_numbers.get(strand_id, 0)}"
+
+    def _sequence(strand_id: str) -> str:
+        strand = strands.get(strand_id)
+        if strand is None:
+            return ""
+        return strand.sequence or ("N" * strand_nucleotide_count(strand, design))
+
+    wb = Workbook()
+    wb.remove(wb.active)
+    headers = ["Well", "Name", "Sequence"]
+
+    wells_by_plate: dict[int, list] = {p: [] for p in range(layout.plate_count)}
+    for assignment in layout.wells:
+        wells_by_plate.setdefault(assignment.plate, []).append(assignment)
+    for plate in sorted(wells_by_plate):
+        ws = wb.create_sheet(f"Plate {plate + 1}")
+        ws.append(headers)
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+        for assignment in sorted(wells_by_plate[plate], key=lambda w: (w.row, w.col)):
+            well = f"{chr(65 + assignment.row)}{assignment.col + 1}"
+            ws.append([well, _name(assignment.strand_id), _sequence(assignment.strand_id)])
+        ws.freeze_panes = "A2"
+        ws.column_dimensions["A"].width = 10
+        ws.column_dimensions["B"].width = 28
+        ws.column_dimensions["C"].width = 80
+
+    if layout.tubes:
+        ws = wb.create_sheet("Tubes")
+        ws.append(headers)
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+        for assignment in sorted(layout.tubes, key=lambda t: _name(t.strand_id)):
+            ws.append(["", _name(assignment.strand_id), _sequence(assignment.strand_id)])
+        ws.freeze_panes = "A2"
+        ws.column_dimensions["A"].width = 10
+        ws.column_dimensions["B"].width = 28
+        ws.column_dimensions["C"].width = 80
+
+    buf = BytesIO()
+    wb.save(buf)
+    import re
+    design_name = re.sub(r"[^A-Za-z0-9._-]+", "_", design.metadata.name or "design").strip("_") or "design"
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{design_name}_idt_order.xlsx"'},
+    )
+
+
 @router.post("/design/export/sequence-xlsx")
 def export_sequence_xlsx(
     req: _SequenceXlsxRequest | None = Body(default=None),

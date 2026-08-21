@@ -1,5 +1,5 @@
 const TAB_SECTIONS = {
-  properties: ['properties-section', 'extrude-panel', 'deform-panel', 'strand-hist-section', 'groups-panel'],
+  properties: ['properties-section', 'reverse-complement-section', 'extrude-panel', 'deform-panel', 'strand-hist-section', 'groups-panel'],
   visualization: ['representation-modes-section', 'repr-options-section', 'right-view-actions', 'right-multi-view', 'right-multi-overlay'],
   clustering: ['cluster-panel', 'joints-panel'],
   overhangs: ['overhang-panel', 'overhang-connections-section', 'strand-anim-panel'],

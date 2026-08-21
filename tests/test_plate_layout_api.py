@@ -22,7 +22,7 @@ from fastapi.testclient import TestClient
 from backend.api.main import app
 from backend.api import state as design_state
 from backend.api.routes import _demo_design
-from backend.core.models import Design, PlateLayout, TubeAssignment, WellAssignment
+from backend.core.models import Design, PlateLayout, StapleGroup, TubeAssignment, WellAssignment
 
 
 @pytest.fixture(autouse=True)
@@ -61,6 +61,39 @@ def test_missing_plate_layout_loads_as_none():
     d = _demo_design()
     restored = Design.from_json(d.to_json())
     assert restored.plate_layout is None
+
+
+def test_staple_groups_round_trip_through_design_file():
+    design = _demo_design()
+    design.staple_groups = [
+        StapleGroup(id="grp_body", name="Body", color="#74b9ff", strand_ids=["staple_0"])
+    ]
+    restored = Design.from_json(design.to_json())
+    assert restored.staple_groups == design.staple_groups
+
+
+def test_put_staple_groups_persists_sidebar_metadata(client):
+    response = client.put(
+        "/api/design/staple-groups",
+        json={"groups": [{
+            "id": "grp_body", "name": "Body", "color": "#74b9ff",
+            "strand_ids": ["staple_0"],
+        }]},
+    )
+    assert response.status_code == 200
+    saved = response.json()["design"]["staple_groups"]
+    assert saved == [{
+        "id": "grp_body", "name": "Body", "color": "#74b9ff",
+        "strand_ids": ["staple_0"],
+    }]
+
+
+def test_put_staple_groups_rejects_unknown_strands(client):
+    response = client.put(
+        "/api/design/staple-groups",
+        json={"groups": [{"id": "g", "name": "Bad", "strand_ids": ["missing"]}]},
+    )
+    assert response.status_code == 404
 
 
 # ── PUT /design/plate-layout ──────────────────────────────────────────────────

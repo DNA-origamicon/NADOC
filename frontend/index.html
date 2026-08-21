@@ -1442,6 +1442,22 @@
     }
     .danger-btn:hover { background: #2a0a0a; }
 
+    .rc-sequence-box {
+      width: 100%; box-sizing: border-box; min-height: 58px; resize: vertical;
+      background: #0d1117; border: 1px solid #30363d; border-radius: 4px;
+      color: #e6edf3; padding: 6px 8px; font: 12px/1.45 var(--font-mono);
+      letter-spacing: .04em;
+    }
+    .rc-sequence-box:focus { outline: none; border-color: #58a6ff; }
+    .rc-sequence-box[readonly] { color: #79c0ff; cursor: text; }
+    .rc-copy-row { display:flex; align-items:center; gap:8px; margin-top:6px; }
+    .rc-copy-btn {
+      padding:4px 10px; background:#21262d; border:1px solid #30363d;
+      border-radius:4px; color:#c9d1d9; font:11px var(--font-ui); cursor:pointer;
+    }
+    .rc-copy-btn:hover:not(:disabled) { background:#30363d; }
+    .rc-copy-btn:disabled { opacity:.45; cursor:not-allowed; }
+
     /* ── Deformation tool ────────────────────────────────────────── */
     .def-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
     .def-row label { color: #8b949e; width: 130px; flex-shrink: 0; font-size: 12px; }
@@ -3735,6 +3751,7 @@
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-file-export-seq-csv">Export Sequences (CSV)</button>
           <button class="dropdown-item" id="menu-file-export-seq-xlsx">Export Sequences (Excel, overhang bold)</button>
+          <button class="dropdown-item" id="menu-file-export-idt-xlsx">Export IDT Order (Excel)</button>
           <button class="dropdown-item" id="menu-file-export-cadnano">Export caDNAno (.json)</button>
           <button class="dropdown-item" id="menu-file-export-pdb">Export PDB</button>
           <button class="dropdown-item" id="menu-file-export-psf">Export NAMD Topology (.psf)</button>
@@ -7166,6 +7183,24 @@
           <h2>Properties</h2>
           <div id="properties-content">
             <span class="dim">Click a backbone bead to select.</span>
+          </div>
+        </div>
+
+        <div class="panel-section" id="reverse-complement-section">
+          <h2 id="reverse-complement-heading" tabindex="0" role="button" aria-expanded="true"
+              style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>Reverse Complement</span>
+            <span id="reverse-complement-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
+          </h2>
+          <div id="reverse-complement-body" style="margin-top:8px">
+            <label for="reverse-complement-input" class="dim" style="display:block;margin-bottom:5px">Input sequence</label>
+            <textarea id="reverse-complement-input" class="rc-sequence-box" spellcheck="false" autocomplete="off" placeholder="Paste DNA sequence…"></textarea>
+            <label for="reverse-complement-output" class="dim" style="display:block;margin:8px 0 5px">Reverse complement</label>
+            <textarea id="reverse-complement-output" class="rc-sequence-box" readonly spellcheck="false" aria-live="polite" placeholder="Output appears here"></textarea>
+            <div class="rc-copy-row">
+              <button id="reverse-complement-copy" class="rc-copy-btn" type="button" disabled>Copy</button>
+              <span id="reverse-complement-status" class="dim" aria-live="polite"></span>
+            </div>
           </div>
         </div>
 

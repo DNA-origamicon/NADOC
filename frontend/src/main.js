@@ -78,6 +78,7 @@ import { initStrandGroupsPanel } from './ui/strand_groups_panel.js'
 import { initSelectionFilter } from './ui/selection_filter.js'
 import { initSelectionHud } from './ui/selection_hud.js'
 import { initPropertiesPanel } from './ui/properties_panel.js'
+import { initReverseComplement } from './ui/reverse_complement.js'
 import { initOverhangOrientationMenu } from './ui/overhang_orientation_menu.js'
 import { initBluntEndMenus } from './ui/blunt_end_menus.js'
 import { createScriptRunner }  from './ui/script_runner.js'
@@ -3925,6 +3926,7 @@ async function main() {
   }
 
   initPropertiesPanel({ clearSelection: () => selectionManager.clearSelection() })
+  initReverseComplement()
   // Periodic parts surface inside the Polymerize Origami panel's Mate dropdown
   // as "<part> — via periodic boundary" (unified with regular polymerize).
   // Assigned ~1000 ln below at its original definition site; these arrows run at
@@ -5364,6 +5366,23 @@ async function main() {
   // active-tab click. Persists (activeTab, collapsed) to localStorage so the
   // sidebar restores its prior state across reloads.
   initPlatesTab({ api, designRenderer, selectionManager, store })
+
+  // Staple groups used to exist only in frontend state. Persist sidebar edits
+  // back into the design so names/colors/membership survive .nadoc save + reload.
+  let _stapleGroupSaveTimer = null
+  store.subscribe((newState, prevState) => {
+    if (newState.strandGroups === prevState.strandGroups || !newState.currentDesign) return
+    const persisted = (newState.currentDesign.staple_groups ?? []).map(group => ({
+      id: group.id, name: group.name, color: group.color ?? null,
+      strandIds: group.strand_ids ?? [],
+    }))
+    if (JSON.stringify(newState.strandGroups ?? []) === JSON.stringify(persisted)) return
+    clearTimeout(_stapleGroupSaveTimer)
+    _stapleGroupSaveTimer = setTimeout(() => {
+      _stapleGroupSaveTimer = null
+      void api.saveStapleGroups(store.getState().strandGroups)
+    }, 100)
+  })
 
   // ── Sidebar resize handles ───────────────────────────────────────────────────
   initSidebarResize({ getWorkspacePath: () => _workspacePath })

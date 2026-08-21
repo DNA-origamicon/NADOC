@@ -22,6 +22,7 @@
 import { showToast, showPersistentToast, dismissToast } from './toast.js'
 import { docHeaders } from '../shared/doc_id.js'
 import { getStapleColorOrder } from './spreadsheet.js'
+import { buildIdtStrandNames } from './idt_order.js'
 
 /** Last backend error message, or 'unknown'. Pure (reads a plain state object). */
 export function exportErrorMessage(state) {
@@ -223,6 +224,17 @@ export function initExportMenu({ store, api, getPdbVisualization = () => null })
     if (!haveDesign()) return
     const { strandColors, strandOrder } = getStapleColorOrder(store.getState())
     const ok = await api.exportSequenceXlsx(strandColors, strandOrder)
+    if (!ok) showToast('Export failed: ' + exportErrorMessage(store.getState()), { severity: 'error' })
+  })
+
+  // ── Export IDT plate/tube order workbook ──────────────────────────────────────
+  document.getElementById('menu-file-export-idt-xlsx')?.addEventListener('click', async () => {
+    if (!haveDesign()) return
+    const state = store.getState()
+    const names = buildIdtStrandNames(
+      state.currentDesign, state.strandGroups, state.currentDesign.plate_layout,
+    )
+    const ok = await api.exportIdtOrderXlsx(names)
     if (!ok) showToast('Export failed: ' + exportErrorMessage(store.getState()), { severity: 'error' })
   })
 

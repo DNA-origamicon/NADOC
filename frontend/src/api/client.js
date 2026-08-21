@@ -552,6 +552,15 @@ export async function _syncFromDesignResponse(json, { skipGeometry = false, tran
       updates.strandColors = merged
     }
   }
+  if (json.design && Array.isArray(json.design.staple_groups)) {
+    const validIds = new Set((json.design.strands ?? []).map(s => s.id))
+    updates.strandGroups = json.design.staple_groups.map(group => ({
+      id: group.id,
+      name: group.name,
+      color: group.color ?? null,
+      strandIds: (group.strand_ids ?? []).filter(id => validIds.has(id)),
+    }))
+  }
   if (skipGeometry) {
     // Plan B caller (cluster-transform commit) — apply ONLY design +
     // validationReport. Skip loopStrandIds / unligatedCrossoverIds /
@@ -841,6 +850,16 @@ export async function getDesign() {
     validationReport: json.validation,
     loopStrandIds:    json.validation?.loop_strand_ids ?? [],
   }
+  if (json.design && Array.isArray(json.design.staple_groups)) {
+    const validIds = new Set((json.design.strands ?? []).map(s => s.id))
+    updates.strandGroups = json.design.staple_groups.map(group => ({
+      id: group.id,
+      name: group.name,
+      color: group.color ?? null,
+      strandIds: (group.strand_ids ?? []).filter(id => validIds.has(id)),
+    }))
+    updates.strandGroupsHistory = []
+  }
   // Sync unligated crossover marker set from every design fetch — including
   // passive refetches triggered by cross-tab broadcasts. Without this the
   // 3D view would keep stale ⚠ markers after the cadnano editor (or another
@@ -904,6 +923,18 @@ export async function redo() {
 export async function savePlateLayout(layout) {
   const json = await _request('PUT', '/design/plate-layout', layout)
   return _syncFromDesignResponse(json)
+}
+
+/** Persist the named Staple groups sidebar state in the .nadoc design. */
+export async function saveStapleGroups(groups) {
+  const payload = (groups ?? []).map(group => ({
+    id: group.id,
+    name: group.name,
+    color: group.color ?? null,
+    strand_ids: group.strandIds ?? [],
+  }))
+  const json = await _request('PUT', '/design/staple-groups', { groups: payload })
+  return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 
 /**
@@ -1361,6 +1392,29 @@ export async function exportSequenceXlsx(strandColors = {}, strandOrder = []) {
   const cd = r.headers.get('Content-Disposition') || ''
   const match = cd.match(/filename="?([^"]+)"?/)
   const filename = match ? match[1] : 'sequences.xlsx'
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  URL.revokeObjectURL(url)
+  return true
+}
+
+/** Export the saved Plates & tubes layout in IDT's Well/Name/Sequence format. */
+export async function exportIdtOrderXlsx(strandNames = {}) {
+  const r = await fetch(`${BASE}/design/export/idt-order-xlsx`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...docHeaders() },
+    body: JSON.stringify({ strand_names: strandNames }),
+  })
+  if (!r.ok) {
+    const json = await r.json().catch(() => null)
+    store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
+    return false
+  }
+  const blob = await r.blob()
+  const cd = r.headers.get('Content-Disposition') || ''
+  const match = cd.match(/filename="?([^";]+)"?/)
+  const filename = match ? match[1] : 'idt_order.xlsx'
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url; a.download = filename; a.click()

@@ -1123,6 +1123,15 @@ class PlateLayout(BaseModel):
     tubes: List[TubeAssignment] = Field(default_factory=list)
 
 
+class StapleGroup(BaseModel):
+    """A named/color-coded set of staple strands. Display-only metadata."""
+
+    id: str
+    name: str
+    color: Optional[str] = None
+    strand_ids: List[str] = Field(default_factory=list)
+
+
 # ── Per-region representation overrides (display-only annotation) ─────────────
 
 
@@ -2658,6 +2667,7 @@ class Design(BaseModel):
     protein_attachments: List[ProteinAttachment] = Field(default_factory=list)
     tm_settings: TmSettings = Field(default_factory=TmSettings)
     extensions: List[StrandExtension] = Field(default_factory=list)
+    staple_groups: List[StapleGroup] = Field(default_factory=list)
     plate_layout: Optional[PlateLayout] = None  # IDT plate/tube ordering (display-only)
     # Per-region representation overrides: pin a render rep (full / cylinders) onto
     # selected strands or clusters so a focal region can show full detail against a

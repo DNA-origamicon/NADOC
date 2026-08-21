@@ -4,6 +4,7 @@ import { strandLengthNt } from '../scene/strand_length.js'
 import { hexFromInt } from '../scene/color_util.js'
 import { STAPLE_PALETTE } from '../scene/helix_renderer/palette.js'
 import { initPlateView } from './plate_view.js'
+import { buildIdtStrandNames } from './idt_order.js'
 
 export function initPlatesTab({ api, designRenderer, selectionManager, store }) {
   const PLATE_STAPLE_PALETTE = STAPLE_PALETTE
@@ -39,6 +40,7 @@ export function initPlatesTab({ api, designRenderer, selectionManager, store }) 
       const { currentDesign, currentGeometry, strandColors, strandGroups } = store.getState()
       const design = currentDesign
       if (!design) return { records: [], saved: null }
+      const idtNames = buildIdtStrandNames(design, strandGroups, design.plate_layout)
       const helixById = Object.fromEntries((design.helices ?? []).map(h => [h.id, h]))
 
       // Effective per-strand colors (hex ints): strandColors + group overrides.
@@ -99,7 +101,7 @@ export function initPlatesTab({ api, designRenderer, selectionManager, store }) 
           hasMod:     !!mod,
           modName:    mod ? (MOD_NAMES[mod] || mod) : null,
           sequence:   s.sequence || '',
-          name:       `S${stapleIdx}`,
+          name:       idtNames[s.id] || `S${stapleIdx}`,
         })
       }
       return { records, saved: design.plate_layout ?? null }

@@ -126,6 +126,7 @@ describe('showPdbPositionModal', () => {
 const DOM = {
   'menu-file-export-seq-csv': 'div',
   'menu-file-export-seq-xlsx': 'div',
+  'menu-file-export-idt-xlsx': 'div',
   'menu-file-export-cadnano': 'div',
   'menu-file-export-pdb': 'div',
   'menu-file-export-psf': 'div',
@@ -144,6 +145,7 @@ function makeDeps(initialState = {}) {
   const api = {
     exportSequenceCsv: vi.fn().mockResolvedValue(true),
     exportSequenceXlsx: vi.fn().mockResolvedValue(true),
+    exportIdtOrderXlsx: vi.fn().mockResolvedValue(true),
     exportCadnano: vi.fn().mockResolvedValue(true),
     exportSurfaceStl: vi.fn().mockResolvedValue(true),
     exportSurface3mf: vi.fn().mockResolvedValue({ ok: true }),
@@ -201,6 +203,27 @@ describe('initExportMenu', () => {
     click('menu-file-export-seq-xlsx')
     await tick()
     expect(deps.api.exportSequenceXlsx).toHaveBeenCalledWith({}, [])
+  })
+
+  it('IDT export forwards group and overhang-derived strand names', async () => {
+    mountIds(DOM)
+    const deps = makeDeps({
+      currentDesign: {
+        strands: [
+          { id: 'body-1', strand_type: 'staple' },
+          { id: 'body-2', strand_type: 'staple' },
+          { id: 'tag', strand_type: 'staple' },
+        ],
+        overhangs: [{ id: 'oh-tag', strand_id: 'tag', label: 'Handle' }],
+      },
+      strandGroups: [{ name: 'Body', strandIds: ['body-1', 'body-2', 'tag'] }],
+    })
+    initExportMenu(deps)
+    click('menu-file-export-idt-xlsx')
+    await tick()
+    expect(deps.api.exportIdtOrderXlsx).toHaveBeenCalledWith({
+      'body-1': 'Body_1', 'body-2': 'Body_2', tag: 'Handle_1',
+    })
   })
 
   it('PDB / PSF export call the doc-scoped api download methods', async () => {
