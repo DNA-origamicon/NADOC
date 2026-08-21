@@ -145,6 +145,99 @@ void menuFollowsItsControllerAndDockingFreezesItsWorldPose() {
     require(std::abs(menu.position().x - followed.x - 0.2F) < 1e-5F);
 }
 
+void dockedMenuBorderGripMovesOnlyAfterAProximatePress() {
+    MenuPlacement menu;
+    std::array<HandPose, 2> hands{};
+    hands[0] = {true, false, {0, 0, -0.4F}, {1, 0, 0, 0}};
+    menu.open(0, hands, {0, 0, -1}, {1, 0, 0, 0});
+    menu.toggleDock(0, hands);
+    const glm::vec2 minimum(-MenuPlacement::kMenuHalfWidth, -0.545F);
+    const glm::vec2 maximum(MenuPlacement::kMenuHalfWidth, 0.33F);
+
+    hands[1] = {true, true, menu.worldPoint({0, 0, 0}), {1, 0, 0, 0}};
+    require(!menu.nearBorder(hands[1], minimum, maximum));
+    require(!menu.beginDrag(1, hands, minimum, maximum));
+    require(menu.beginDrag(1, hands, minimum, maximum, true));
+    require(menu.worldDocked());
+    hands[1].pressed = false;
+    menu.update(hands);
+
+    hands[1].position = menu.worldPoint({maximum.x, 0.0F, 0.01F});
+    hands[1].pressed = true;
+    require(menu.nearBorder(hands[1], minimum, maximum));
+    require(menu.beginDrag(1, hands, minimum, maximum));
+    const glm::vec3 before = menu.position();
+    hands[1].position += glm::vec3(0.20F, 0.10F, -0.05F);
+    hands[1].orientation = glm::angleAxis(
+        glm::radians(20.0F), glm::vec3(0.0F, 1.0F, 0.0F));
+    menu.update(hands);
+    require(menu.worldDocked() && menu.dragHand() == 1U);
+    require(glm::length(menu.position() - before) > 0.20F);
+
+    hands[1].pressed = false;
+    menu.update(hands);
+    require(!menu.dragHand());
+}
+
+void secondBorderGripTransitionsMenuDragIntoResize() {
+    MenuPlacement menu;
+    std::array<HandPose, 2> hands{};
+    hands[0] = {true, false, {0, 0, -0.4F}, {1, 0, 0, 0}};
+    menu.open(0, hands, {0, 0, -1}, {1, 0, 0, 0});
+    menu.toggleDock(0, hands);
+    const glm::vec2 minimum(-MenuPlacement::kMenuHalfWidth, -0.545F);
+    const glm::vec2 maximum(MenuPlacement::kMenuHalfWidth, 0.33F);
+
+    hands[0] = {true, true, menu.worldPoint({minimum.x, 0, 0}), {1, 0, 0, 0}};
+    hands[1] = {true, true, menu.worldPoint({0, 0, 0}), {1, 0, 0, 0}};
+    require(!menu.beginBorderResize(hands, minimum, maximum));
+    hands[1].pressed = false;
+    require(menu.beginDrag(0, hands, minimum, maximum));
+    require(menu.dragHand() == 0U);
+    hands[1].position = menu.worldPoint({maximum.x, 0, 0});
+    hands[1].pressed = true;
+    require(menu.beginBorderResize(hands, minimum, maximum));
+    require(menu.resizeActive() && !menu.dragHand());
+
+    const float initialScale = menu.scale();
+    const glm::vec3 initialPosition = menu.position();
+    const glm::vec3 initialMidpoint = (hands[0].position + hands[1].position) * 0.5F;
+    hands[0].position = initialMidpoint +
+        (hands[0].position - initialMidpoint) * 1.4F + glm::vec3(0.1F, 0, 0);
+    hands[1].position = initialMidpoint +
+        (hands[1].position - initialMidpoint) * 1.4F + glm::vec3(0.1F, 0, 0);
+    menu.update(hands);
+    require(std::abs(menu.scale() - initialScale * 1.4F) < 1e-5F);
+    require(std::abs(menu.position().x - initialPosition.x - 0.1F) < 1e-5F);
+
+    hands[1].pressed = false;
+    menu.update(hands);
+    require(!menu.resizeActive() && menu.worldDocked());
+}
+
+void desktopMenuBoundsDoubleAreaAndMatchAspect() {
+    const glm::vec2 minimum(-MenuPlacement::kMenuHalfWidth, -0.545F);
+    const glm::vec2 maximum(MenuPlacement::kMenuHalfWidth, 0.33F);
+    const auto desktop = nadoc_vr::aspectScaledMenuBounds(
+        minimum, maximum, 16.0F / 10.0F, 2.0F);
+    const glm::vec2 normalSize = maximum - minimum;
+    const glm::vec2 desktopSize = desktop.maximum - desktop.minimum;
+    require(std::abs(
+        desktopSize.x * desktopSize.y - normalSize.x * normalSize.y * 2.0F) < 1e-5F);
+    require(std::abs(desktopSize.x / desktopSize.y - 1.6F) < 1e-5F);
+    require(glm::all(glm::epsilonEqual(
+        (desktop.minimum + desktop.maximum) * 0.5F,
+        (minimum + maximum) * 0.5F, 1e-5F)));
+
+    MenuPlacement menu;
+    std::array<HandPose, 2> hands{};
+    hands[0] = {true, false, {0, 0, -0.4F}, {1, 0, 0, 0}};
+    menu.open(0, hands, {0, 0, -1}, {1, 0, 0, 0});
+    menu.update(hands, desktopSize.x * 0.5F);
+    const glm::vec3 handInMenu = menu.localPoint(hands[0].position);
+    require(std::abs(handInMenu.x + desktopSize.x * 0.5F) < 1e-5F);
+}
+
 void expandedQuickViewEasesAndReversesWithoutSnapping() {
     SmoothToggle transition(0.20F);
     require(transition.value() == 0.0F && transition.settled());
@@ -965,6 +1058,9 @@ int main() {
     recenterRestoresUnitScaleInFrontOfHead();
     closeInspectionAllowsTheModelToPassThroughTheHead();
     menuFollowsItsControllerAndDockingFreezesItsWorldPose();
+    dockedMenuBorderGripMovesOnlyAfterAProximatePress();
+    secondBorderGripTransitionsMenuDragIntoResize();
+    desktopMenuBoundsDoubleAreaAndMatchAspect();
     menuScalingKeepsRenderingAndHitCoordinatesAligned();
     menuRayPanelHitExistsOnlyInsideTheVisibleTablet();
     expandedQuickViewEasesAndReversesWithoutSnapping();

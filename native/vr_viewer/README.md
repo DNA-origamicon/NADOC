@@ -34,8 +34,11 @@ so its Dashboard remains available before, during, and after a NADOC VR session.
 NADOC also provides its own X11 desktop surface in the controller tablet because
 SteamVR's Linux Desktop overlay can be present but blank. Open the VR menu and
 select Desktop; aim with either controller, fully pull the trigger to click, and
-swipe vertically on either trackpad to scroll. The same Dock/Follow and Size
-controls apply to the desktop tablet.
+swipe vertically on either trackpad to scroll. The Desktop panel opens at twice
+the regular tablet area and uses the live X11 desktop aspect ratio. Grip anywhere
+within 7.5 cm of its surface to grab it directly, or hold both grips within 7.5 cm
+of its border and change the controller spacing to resize it uniformly. The same
+Dock/Follow and Size controls also apply to the desktop tablet.
 MD/FEM visualization overlays are also mirrored into the native model while VR is
 running. Selecting MD Display moves the corresponding VR bases and backbone geometry;
 selecting a Flex Map applies both its mean positions and scalar colors. Clearing the
@@ -73,17 +76,24 @@ Controls on the original HTC Vive wands:
 - Click the left trackpad to cycle the exact desktop Tab order:
   Strand, Domain, End, Crossover, Base, then Auto / Drill. Cluster remains menu-only.
 - Hold either grip/squeeze button to grab, move, and rotate the structure outside a
-  tool preview. During Move/Rotate Preview, the right grip alone moves/rotates the
-  pending handle while the left grip remains a structure grab.
-- Hold both grips and change the distance between the controllers to resize
-  the structure around their midpoint.
+  tool preview. A grip within 7.5 cm of a menu border grabs the panel instead; on the
+  Desktop page the whole surface is a grab target. During Move/Rotate Preview, the
+  right grip alone moves/rotates the pending handle while the left grip remains a
+  structure grab unless it is targeting a panel.
+- Hold both grips and change the distance between the controllers to resize the
+  structure around their midpoint. When both controllers are within 7.5 cm of a
+  menu or Desktop border, the same gesture resizes that panel instead and preserves
+  its aspect ratio. A second border grip transitions an active one-hand panel grab
+  directly into resizing; the captured grips cannot also transform the structure.
 - Press either application-menu button to open or close the in-headset menu.
   The menu sits close to the controller that opened it, with its matching side edge
   aligned to that controller and its top tilted farther away like a large hand-held
   tablet; use either wand to point and select. Choose
   Dock to leave the panel fixed in the world, or Follow to
   attach it to the controller that selected the button. Size - and Size + resize
-  the panel while preserving accurate pointing. The tablet is non-modal: grips,
+  the panel while preserving accurate pointing. Gripping near a border grabs and
+  docks the panel at its current pose; release it to leave the panel fixed, or choose
+  Follow to attach it to a controller again. The tablet is non-modal: grips,
   Selection Volumes, trackpads, and scene tools remain active while it is open.
   A trigger is routed to the menu only while its controller points at a menu control;
   otherwise it continues selecting the scene. Entering a menu control with the ray
@@ -145,7 +155,9 @@ Controls on the original HTC Vive wands:
   VR-origin desktop preview cancels and restores it instead of retargeting the gizmo;
   stale transform samples are discarded rather than queued for a later Preview.
 - Cyan and orange stems and Selection Volumes identify the left and right controllers.
-  They turn green during a one-hand grab and magenta during a two-hand resize. Partial
+  They turn green during a one-hand structure grab and magenta during a two-hand
+  structure resize. A panel border turns orange when it is close enough to grab and
+  remains orange while that panel is moving or resizing. Partial
   trigger pulls brighten the volume and add an inflated emissive shell around the same
   Strand, Domain, End, Crossover, Base, Auto/Drill, or Cluster geometry the desktop
   filter would preview, without changing selection. After a full trigger click is
@@ -162,8 +174,9 @@ Controls on the original HTC Vive wands:
   picking follows its curved wall, flat face, and caps rather than an enclosing full
   capsule, so the missing half cannot steal hits from geometry behind it.
 - Select Desktop in NADOC's controller menu to operate the live workstation
-  desktop without leaving the scene. SteamVR's System-button Dashboard/Desktop
-  remains available as a secondary path.
+  desktop without leaving the scene. Its enlarged panel matches the workstation
+  aspect ratio; grip its surface to move it or use both grips at its border to resize
+  it. SteamVR's System-button Dashboard/Desktop remains available as a secondary path.
 
 Close inspection is intentionally unrestricted: structures may be pulled through
 the headset or enlarged around the viewer. A 2 cm rendering near plane prevents

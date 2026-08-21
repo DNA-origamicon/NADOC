@@ -28,12 +28,13 @@ struct HandPose {
 
 inline glm::mat4 poseMatrix(const HandPose& pose);
 
-/** Controller-following menu pose with a reversible world-space dock.
+/** Controller-following menu pose with reversible world-space manipulation.
  *
  * The menu opens on the controller that requested it. Docking freezes the
- * current world pose; returning to Follow transfers it to the controller that
- * pressed the button. Scale is applied by the same world/local conversions used
- * for drawing and hit testing, keeping the controls aligned at every size.
+ * current world pose; a nearby grip can move it, and two border grips resize it
+ * uniformly. Returning to Follow transfers it to the controller that pressed
+ * the button. Scale is applied by the same world/local conversions used for
+ * drawing and hit testing, keeping the controls aligned at every size.
  */
 class MenuPlacement {
   public:
@@ -42,38 +43,152 @@ class MenuPlacement {
     static constexpr float kScaleStep = 0.10F;
     static constexpr float kDefaultScale = 0.75F;
     static constexpr float kMenuHalfWidth = 0.33F;
+    static constexpr float kBorderGrabDistanceMeters = 0.075F;
 
     void open(
         size_t hand, const std::array<HandPose, 2>& hands,
         const glm::vec3& fallbackPosition, const glm::quat& fallbackOrientation) {
         anchorHand_ = std::min(hand, hands.size() - 1U);
         worldDocked_ = false;
+        dragHand_.reset();
+        resizeActive_ = false;
         position_ = fallbackPosition;
         orientation_ = glm::normalize(fallbackOrientation);
         update(hands);
     }
 
-    void update(const std::array<HandPose, 2>& hands) {
-        if (worldDocked_ || !hands[anchorHand_].valid) return;
+    void update(
+        const std::array<HandPose, 2>& hands,
+        float panelHalfWidth = kMenuHalfWidth) {
+        panelHalfWidth_ = std::max(panelHalfWidth, 1.0e-4F);
+        if (resizeActive_) {
+            if (std::any_of(hands.begin(), hands.end(), [](const HandPose& hand) {
+                    return !hand.valid || !hand.pressed;
+                })) {
+                resizeActive_ = false;
+                return;
+            }
+            const glm::vec3 midpoint = (hands[0].position + hands[1].position) * 0.5F;
+            const float distance = glm::length(hands[1].position - hands[0].position);
+            scale_ = glm::clamp(
+                resizeInitialScale_ * distance / resizeInitialDistance_,
+                kMinimumScale, kMaximumScale);
+            position_ = midpoint + resizePositionFromMidpoint_ *
+                (scale_ / resizeInitialScale_);
+            return;
+        }
+        if (worldDocked_) {
+            if (!dragHand_ || !hands[*dragHand_].valid || !hands[*dragHand_].pressed) {
+                dragHand_.reset();
+                return;
+            }
+            const HandPose& hand = hands[*dragHand_];
+            position_ = hand.position + hand.orientation * dragPositionInHand_;
+            orientation_ = glm::normalize(hand.orientation * dragOrientationInHand_);
+            return;
+        }
+        if (!hands[anchorHand_].valid) return;
         const HandPose& hand = hands[anchorHand_];
         orientation_ = glm::normalize(hand.orientation * kTabletTilt);
         const float centerDirection = anchorHand_ == 0U ? 1.0F : -1.0F;
         position_ = hand.position + orientation_ * (
             kControllerOffset
-            + glm::vec3(centerDirection * kMenuHalfWidth * scale_, 0.0F, 0.0F));
+            + glm::vec3(centerDirection * panelHalfWidth_ * scale_, 0.0F, 0.0F));
     }
 
-    void toggleDock(size_t hand, const std::array<HandPose, 2>& hands) {
+    void toggleDock(
+        size_t hand, const std::array<HandPose, 2>& hands,
+        float panelHalfWidth = kMenuHalfWidth) {
+        dragHand_.reset();
+        resizeActive_ = false;
         if (!worldDocked_) {
             worldDocked_ = true;
             return;
         }
         anchorHand_ = std::min(hand, hands.size() - 1U);
         worldDocked_ = false;
-        update(hands);
+        update(hands, panelHalfWidth);
+    }
+
+    [[nodiscard]] bool nearBorder(
+        const HandPose& hand, const glm::vec2& minimum,
+        const glm::vec2& maximum,
+        float maximumDistanceMeters = kBorderGrabDistanceMeters) const {
+        if (!hand.valid || maximumDistanceMeters <= 0.0F) return false;
+        const glm::vec3 local = localPoint(hand.position);
+        auto segmentDistance = [&](const glm::vec2& first, const glm::vec2& second) {
+            const glm::vec2 point(local.x, local.y);
+            const glm::vec2 edge = second - first;
+            const float denominator = glm::dot(edge, edge);
+            const float parameter = denominator > 0.0F
+                ? glm::clamp(glm::dot(point - first, edge) / denominator, 0.0F, 1.0F)
+                : 0.0F;
+            return glm::length(point - (first + edge * parameter));
+        };
+        const float inPlane = std::min({
+            segmentDistance({minimum.x, minimum.y}, {maximum.x, minimum.y}),
+            segmentDistance({maximum.x, minimum.y}, {maximum.x, maximum.y}),
+            segmentDistance({maximum.x, maximum.y}, {minimum.x, maximum.y}),
+            segmentDistance({minimum.x, maximum.y}, {minimum.x, minimum.y}),
+        });
+        return std::hypot(inPlane, local.z) * scale_ <= maximumDistanceMeters;
+    }
+
+    [[nodiscard]] bool nearPanel(
+        const HandPose& hand, const glm::vec2& minimum,
+        const glm::vec2& maximum,
+        float maximumDistanceMeters = kBorderGrabDistanceMeters) const {
+        if (!hand.valid || maximumDistanceMeters <= 0.0F) return false;
+        const glm::vec3 local = localPoint(hand.position);
+        return local.x >= minimum.x && local.x <= maximum.x &&
+               local.y >= minimum.y && local.y <= maximum.y &&
+               std::abs(local.z) * scale_ <= maximumDistanceMeters;
+    }
+
+    [[nodiscard]] bool beginDrag(
+        size_t hand, const std::array<HandPose, 2>& hands,
+        const glm::vec2& minimum, const glm::vec2& maximum,
+        bool allowPanelInterior = false) {
+        if (dragHand_ || resizeActive_ || hand >= hands.size() ||
+            !hands[hand].pressed ||
+            (!nearBorder(hands[hand], minimum, maximum) &&
+             !(allowPanelInterior && nearPanel(hands[hand], minimum, maximum)))) {
+            return false;
+        }
+        worldDocked_ = true;
+        dragHand_ = hand;
+        dragPositionInHand_ = glm::inverse(hands[hand].orientation) *
+                              (position_ - hands[hand].position);
+        dragOrientationInHand_ = glm::normalize(
+            glm::inverse(hands[hand].orientation) * orientation_);
+        return true;
+    }
+
+    [[nodiscard]] bool beginBorderResize(
+        const std::array<HandPose, 2>& hands,
+        const glm::vec2& minimum, const glm::vec2& maximum) {
+        if (resizeActive_ ||
+            std::any_of(hands.begin(), hands.end(), [](const HandPose& hand) {
+                return !hand.valid || !hand.pressed;
+            }) ||
+            !nearBorder(hands[0], minimum, maximum) ||
+            !nearBorder(hands[1], minimum, maximum)) {
+            return false;
+        }
+        const float distance = glm::length(hands[1].position - hands[0].position);
+        if (distance < 0.04F) return false;
+        worldDocked_ = true;
+        dragHand_.reset();
+        resizeActive_ = true;
+        resizeInitialDistance_ = distance;
+        resizeInitialScale_ = scale_;
+        const glm::vec3 midpoint = (hands[0].position + hands[1].position) * 0.5F;
+        resizePositionFromMidpoint_ = position_ - midpoint;
+        return true;
     }
 
     [[nodiscard]] bool adjustScale(int direction) {
+        if (resizeActive_) return false;
         const float next = glm::clamp(
             scale_ + (direction < 0 ? -kScaleStep : kScaleStep),
             kMinimumScale, kMaximumScale);
@@ -81,7 +196,7 @@ class MenuPlacement {
         if (!worldDocked_) {
             const float centerDirection = anchorHand_ == 0U ? 1.0F : -1.0F;
             position_ += orientation_ * glm::vec3(
-                centerDirection * kMenuHalfWidth * (next - scale_), 0.0F, 0.0F);
+                centerDirection * panelHalfWidth_ * (next - scale_), 0.0F, 0.0F);
         }
         scale_ = next;
         return true;
@@ -118,6 +233,8 @@ class MenuPlacement {
     [[nodiscard]] float scale() const { return scale_; }
     [[nodiscard]] size_t anchorHand() const { return anchorHand_; }
     [[nodiscard]] bool worldDocked() const { return worldDocked_; }
+    [[nodiscard]] std::optional<size_t> dragHand() const { return dragHand_; }
+    [[nodiscard]] bool resizeActive() const { return resizeActive_; }
 
   private:
     // Close enough to feel hand-held, with the top edge tilted farther away like
@@ -132,7 +249,36 @@ class MenuPlacement {
     float scale_ = kDefaultScale;
     size_t anchorHand_ = 0;
     bool worldDocked_ = false;
+    float panelHalfWidth_ = kMenuHalfWidth;
+    std::optional<size_t> dragHand_;
+    glm::vec3 dragPositionInHand_{};
+    glm::quat dragOrientationInHand_{1.0F, 0.0F, 0.0F, 0.0F};
+    bool resizeActive_ = false;
+    float resizeInitialDistance_ = 1.0F;
+    float resizeInitialScale_ = kDefaultScale;
+    glm::vec3 resizePositionFromMidpoint_{};
 };
+
+struct MenuPanelBounds {
+    glm::vec2 minimum{};
+    glm::vec2 maximum{};
+};
+
+/** Resize a panel to a target aspect while multiplying its area around the same
+ * center. This keeps Desktop large without assuming a 16:9 workstation. */
+inline MenuPanelBounds aspectScaledMenuBounds(
+    const glm::vec2& minimum, const glm::vec2& maximum,
+    float aspectRatio, float areaMultiplier) {
+    const glm::vec2 size = glm::max(maximum - minimum, glm::vec2(1.0e-4F));
+    const float safeAspect = glm::clamp(aspectRatio, 0.5F, 4.0F);
+    const float safeMultiplier = std::max(areaMultiplier, 1.0e-4F);
+    const float area = size.x * size.y * safeMultiplier;
+    const float width = std::sqrt(area * safeAspect);
+    const float height = width / safeAspect;
+    const glm::vec2 center = (minimum + maximum) * 0.5F;
+    const glm::vec2 half(width * 0.5F, height * 0.5F);
+    return {center - half, center + half};
+}
 
 /** Reversible eased 0..1 transition used by Expanded Quick View. */
 class SmoothToggle {

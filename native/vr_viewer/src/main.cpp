@@ -2078,6 +2078,13 @@ class GlScene {
             glDepthMask(GL_TRUE);
         }
 
+        renderGuides(viewProjection, guides);
+        glBindVertexArray(0);
+        glUseProgram(0);
+    }
+
+    void renderGuides(
+        const glm::mat4& viewProjection, const std::vector<Vertex>& guides) const {
         if (!guides.empty()) {
             glDisable(GL_DEPTH_TEST);
             glUseProgram(program_);
@@ -3146,6 +3153,12 @@ class DesktopSurface {
     void initialize(Display* display) {
         display_ = display;
         root_ = DefaultRootWindow(display_);
+        XWindowAttributes attributes{};
+        if (XGetWindowAttributes(display_, root_, &attributes) &&
+            attributes.width > 0 && attributes.height > 0) {
+            width_ = attributes.width;
+            height_ = attributes.height;
+        }
         program_ = makeDesktopProgram();
         viewProjection_ = glGetUniformLocation(program_, "uViewProjection");
         textureUniform_ = glGetUniformLocation(program_, "uDesktop");
@@ -3210,6 +3223,12 @@ class DesktopSurface {
     }
 
     void hidePointer() { pointerVisible_ = false; }
+
+    [[nodiscard]] float aspectRatio() const {
+        return width_ > 0 && height_ > 0
+            ? static_cast<float>(width_) / static_cast<float>(height_)
+            : 16.0F / 9.0F;
+    }
 
     void click() { button(1); }
     void scroll(bool upward) { button(upward ? 4U : 5U); }
@@ -3410,7 +3429,7 @@ class Viewer {
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
         window_ = glfwCreateWindow(
             720, 180,
-            "NADOC VR — grips move/resize · triggers use Selection Volumes",
+            "NADOC VR — grip a menu border/Desktop to move · two grips resize",
             nullptr, nullptr);
         if (!window_) throw std::runtime_error("Could not create the OpenGL companion window");
         glfwMakeContextCurrent(window_);
@@ -3830,6 +3849,32 @@ class Viewer {
     static constexpr float kMenuTop = 0.33F;
     static constexpr float kMenuBottom = -0.545F;
 
+    [[nodiscard]] nadoc_vr::MenuPanelBounds menuPanelBounds() const {
+        const nadoc_vr::MenuPanelBounds regular{
+            {-nadoc_vr::MenuPlacement::kMenuHalfWidth, kMenuBottom},
+            {nadoc_vr::MenuPlacement::kMenuHalfWidth, kMenuTop},
+        };
+        return menuPage_ == MenuPage::desktop
+            ? nadoc_vr::aspectScaledMenuBounds(
+                regular.minimum, regular.maximum,
+                desktopSurface_.aspectRatio(), 2.0F)
+            : regular;
+    }
+
+    [[nodiscard]] MenuItem menuControlItem(size_t index) const {
+        MenuItem item = kMenuControlItems.at(index);
+        if (menuPage_ == MenuPage::desktop) {
+            item.y = menuPanelBounds().minimum.y + 0.040F;
+        }
+        return item;
+    }
+
+    [[nodiscard]] MenuItem desktopBackItem() const {
+        MenuItem item = kDesktopMenuItems[0];
+        item.y = menuPanelBounds().minimum.y + 0.100F;
+        return item;
+    }
+
     void appendMenuGuides() {
         if (!menuOpen_) return;
         auto line = [&](const glm::vec3& a, const glm::vec3& b, const glm::vec3& color) {
@@ -3852,18 +3897,29 @@ class Viewer {
                 overrideLabel ? overrideLabel : item.label,
                 left + 0.012F, item.y + 0.012F, 0.0036F, color);
         };
-        const glm::vec3 border(0.22F, 0.42F, 0.62F);
-        constexpr float halfWidth = nadoc_vr::MenuPlacement::kMenuHalfWidth;
-        line(menuWorld(-halfWidth, kMenuTop),
-             menuWorld(halfWidth, kMenuTop), border);
-        line(menuWorld(halfWidth, kMenuTop),
-             menuWorld(halfWidth, kMenuBottom), border);
-        line(menuWorld(halfWidth, kMenuBottom),
-             menuWorld(-halfWidth, kMenuBottom), border);
-        line(menuWorld(-halfWidth, kMenuBottom),
-             menuWorld(-halfWidth, kMenuTop), border);
-        line(menuWorld(-halfWidth, -0.465F),
-             menuWorld(halfWidth, -0.465F), border * 0.7F);
+        const auto bounds = menuPanelBounds();
+        const bool borderGripAvailable = menuPlacement_.dragHand().has_value() ||
+            menuPlacement_.resizeActive() ||
+            std::any_of(hands_.begin(), hands_.end(), [&](const nadoc_vr::HandPose& hand) {
+                return menuPlacement_.nearBorder(hand, bounds.minimum, bounds.maximum) ||
+                       (menuPage_ == MenuPage::desktop &&
+                        menuPlacement_.nearPanel(hand, bounds.minimum, bounds.maximum));
+            });
+        const glm::vec3 border = borderGripAvailable
+            ? glm::vec3(1.0F, 0.62F, 0.18F)
+            : glm::vec3(0.22F, 0.42F, 0.62F);
+        line(menuWorld(bounds.minimum.x, bounds.maximum.y),
+             menuWorld(bounds.maximum.x, bounds.maximum.y), border);
+        line(menuWorld(bounds.maximum.x, bounds.maximum.y),
+             menuWorld(bounds.maximum.x, bounds.minimum.y), border);
+        line(menuWorld(bounds.maximum.x, bounds.minimum.y),
+             menuWorld(bounds.minimum.x, bounds.minimum.y), border);
+        line(menuWorld(bounds.minimum.x, bounds.minimum.y),
+             menuWorld(bounds.minimum.x, bounds.maximum.y), border);
+        const float footerTop = menuPage_ == MenuPage::desktop
+            ? bounds.minimum.y + 0.075F : -0.465F;
+        line(menuWorld(bounds.minimum.x, footerTop),
+             menuWorld(bounds.maximum.x, footerTop), border * 0.7F);
         const std::string title = menuPage_ == MenuPage::options
             ? "VR MENU"
             : menuPage_ == MenuPage::tools
@@ -3877,9 +3933,12 @@ class Viewer {
         const bool jobMenu = menuPage_ == MenuPage::jobs ||
                              menuPage_ == MenuPage::job_detail;
         appendMenuText(
-            title, menuPage_ == MenuPage::options ? -0.105F
-                                                 : jobMenu ? -0.300F : -0.235F,
-            0.305F, jobMenu ? 0.0042F : 0.006F, {0.65F, 0.88F, 1.0F});
+            title,
+            menuPage_ == MenuPage::desktop ? bounds.minimum.x + 0.025F
+                : menuPage_ == MenuPage::options ? -0.105F
+                : jobMenu ? -0.300F : -0.235F,
+            menuPage_ == MenuPage::desktop ? bounds.maximum.y - 0.025F : 0.305F,
+            jobMenu ? 0.0042F : 0.006F, {0.65F, 0.88F, 1.0F});
         if (menuPage_ == MenuPage::options &&
             glScene_->visualizationMode() != "none") {
             std::string display = glScene_->visualizationMode();
@@ -3896,7 +3955,7 @@ class Viewer {
         }
 
         for (size_t index = 0; index < kMenuControlItems.size(); ++index) {
-            const MenuItem& item = kMenuControlItems[index];
+            const MenuItem item = menuControlItem(index);
             glm::vec3 color = static_cast<int>(index) + kMenuControlHitBase == menuHover_
                 ? glm::vec3(1.0F, 0.78F, 0.22F)
                 : glm::vec3(0.65F, 0.70F, 0.78F);
@@ -3906,16 +3965,22 @@ class Viewer {
         }
 
         if (menuPage_ == MenuPage::desktop) {
-            appendMenuText("LIVE X11 DESKTOP", -0.155F, 0.255F,
-                           0.0042F, {0.42F, 0.92F, 1.0F});
-            appendMenuText("AIM + TRIGGER CLICK", -0.150F, -0.185F,
+            appendMenuText("GRIP SURFACE TO MOVE", bounds.minimum.x + 0.025F,
+                           bounds.minimum.y + 0.215F,
+                           0.0034F, {0.92F, 0.72F, 0.38F});
+            appendMenuText("BOTH GRIPS AT BORDER RESIZE", bounds.minimum.x + 0.025F,
+                           bounds.minimum.y + 0.185F,
+                           0.0034F, {0.92F, 0.72F, 0.38F});
+            appendMenuText("AIM + TRIGGER CLICK", bounds.minimum.x + 0.025F,
+                           bounds.minimum.y + 0.155F,
                            0.0034F, {0.72F, 0.80F, 0.92F});
-            appendMenuText("TRACKPAD SWIPE SCROLLS", -0.175F, -0.215F,
+            appendMenuText("TRACKPAD SWIPE SCROLLS", bounds.minimum.x + 0.025F,
+                           bounds.minimum.y + 0.125F,
                            0.0034F, {0.72F, 0.80F, 0.92F});
             const glm::vec3 backColor = menuHover_ == 0
                 ? glm::vec3(1.0F, 0.78F, 0.22F)
                 : glm::vec3(0.65F, 0.70F, 0.78F);
-            itemBox(kDesktopMenuItems[0], backColor);
+            itemBox(desktopBackItem(), backColor);
             return;
         }
 
@@ -4249,28 +4314,21 @@ class Viewer {
     std::optional<glm::vec3> menuRayPanelLocalPoint(
         const nadoc_vr::HandPose& hand) const {
         if (!menuOpen_) return std::nullopt;
+        const auto bounds = menuPanelBounds();
         return menuPlacement_.rayPanelLocalPoint(
             hand,
-            {-nadoc_vr::MenuPlacement::kMenuHalfWidth, kMenuBottom},
-            {nadoc_vr::MenuPlacement::kMenuHalfWidth, kMenuTop});
+            bounds.minimum, bounds.maximum);
     }
-
-    static constexpr float kDesktopLeft = -0.31F;
-    static constexpr float kDesktopRight = 0.31F;
-    static constexpr float kDesktopTop = 0.220F;
-    static constexpr float kDesktopBottom = -0.129F;
 
     std::optional<glm::vec2> desktopPointerUv(
         const nadoc_vr::HandPose& hand) const {
         if (!menuOpen_ || menuPage_ != MenuPage::desktop) return std::nullopt;
         const auto local = menuRayPanelLocalPoint(hand);
-        if (!local || local->x < kDesktopLeft || local->x > kDesktopRight ||
-            local->y < kDesktopBottom || local->y > kDesktopTop) {
-            return std::nullopt;
-        }
+        if (!local) return std::nullopt;
+        const auto bounds = menuPanelBounds();
         return glm::vec2(
-            (local->x - kDesktopLeft) / (kDesktopRight - kDesktopLeft),
-            (kDesktopTop - local->y) / (kDesktopTop - kDesktopBottom));
+            (local->x - bounds.minimum.x) / (bounds.maximum.x - bounds.minimum.x),
+            (bounds.maximum.y - local->y) / (bounds.maximum.y - bounds.minimum.y));
     }
 
     int menuHit(const nadoc_vr::HandPose& hand) const {
@@ -4286,7 +4344,7 @@ class Viewer {
                     : menuPage_ == MenuPage::jobs
                         ? kJobsMenuItems.data()
                         : menuPage_ == MenuPage::job_detail
-                            ? kJobDetailMenuItems.data() : kDesktopMenuItems.data();
+                            ? kJobDetailMenuItems.data() : nullptr;
         const size_t itemCount = menuPage_ == MenuPage::options
             ? kOptionsMenuItems.size()
             : menuPage_ == MenuPage::tools
@@ -4296,16 +4354,17 @@ class Viewer {
                     : menuPage_ == MenuPage::jobs
                         ? kJobsMenuItems.size()
                         : menuPage_ == MenuPage::job_detail
-                            ? kJobDetailMenuItems.size() : kDesktopMenuItems.size();
+                            ? kJobDetailMenuItems.size() : 1U;
         for (size_t index = 0; index < itemCount; ++index) {
-            const MenuItem& item = items[index];
+            const MenuItem item = menuPage_ == MenuPage::desktop
+                ? desktopBackItem() : items[index];
             if (std::abs(local.x - item.x) <= item.halfWidth &&
                 std::abs(local.y - item.y) <= 0.025F) {
                 return static_cast<int>(index);
             }
         }
         for (size_t index = 0; index < kMenuControlItems.size(); ++index) {
-            const MenuItem& item = kMenuControlItems[index];
+            const MenuItem item = menuControlItem(index);
             if (std::abs(local.x - item.x) <= item.halfWidth &&
                 std::abs(local.y - item.y) <= 0.025F) {
                 return kMenuControlHitBase + static_cast<int>(index);
@@ -4330,7 +4389,7 @@ class Viewer {
             }
             menuHoverTargets_[hand] = hoverTarget;
             if (hit >= 0 && menuHover_ < 0) menuHover_ = hit;
-            if (menuPage_ == MenuPage::desktop && desktopPointer) {
+            if (menuPage_ == MenuPage::desktop && desktopPointer && hit < 0) {
                 desktopSurface_.setPointer(*desktopPointer);
                 if (triggerClicked_[hand]) desktopSurface_.click();
                 continue;
@@ -4339,7 +4398,9 @@ class Viewer {
             if (hit >= kMenuControlHitBase) {
                 const int control = hit - kMenuControlHitBase;
                 if (control == 0) {
-                    menuPlacement_.toggleDock(hand, hands_);
+                    const auto bounds = menuPanelBounds();
+                    menuPlacement_.toggleDock(
+                        hand, hands_, (bounds.maximum.x - bounds.minimum.x) * 0.5F);
                 } else {
                     (void)menuPlacement_.adjustScale(control == 1 ? -1 : 1);
                 }
@@ -5248,6 +5309,7 @@ class Viewer {
 
     void syncActions(XrTime displayTime) {
         triggerClicked_.fill(false);
+        gripClicked_.fill(false);
         if (sessionState_ != XR_SESSION_STATE_FOCUSED) return;
         XrActiveActionSet active{actionSet_, XR_NULL_PATH};
         XrActionsSyncInfo syncInfo{XR_TYPE_ACTIONS_SYNC_INFO};
@@ -5311,7 +5373,9 @@ class Viewer {
             XrActionStateBoolean grip{XR_TYPE_ACTION_STATE_BOOLEAN};
             checkXr(instance_, xrGetActionStateBoolean(session_, &getInfo, &grip),
                     "xrGetActionStateBoolean(scene grip)");
+            const bool wasGripPressed = gripPressed_[hand];
             gripPressed_[hand] = grip.isActive && grip.currentState;
+            gripClicked_[hand] = !wasGripPressed && gripPressed_[hand];
             hands_[hand].pressed = gripPressed_[hand];
 
             getInfo.action = trackpadAction_;
@@ -5375,7 +5439,38 @@ class Viewer {
             }
         }
 
-        if (menuOpen_) menuPlacement_.update(hands_);
+        std::array<bool, 2> menuGripTargeted{};
+        if (menuOpen_) {
+            const auto bounds = menuPanelBounds();
+            const float panelHalfWidth = (bounds.maximum.x - bounds.minimum.x) * 0.5F;
+            // Update a followed/grabbed panel before proximity checks so those
+            // checks use the controller poses from this OpenXR frame.
+            menuPlacement_.update(hands_, panelHalfWidth);
+            const bool gripStarted = gripClicked_[0] || gripClicked_[1];
+            if (!menuPlacement_.resizeActive() && gripStarted &&
+                menuPlacement_.beginBorderResize(
+                    hands_, bounds.minimum, bounds.maximum)) {
+                suppressManipulationUntilRelease_ = true;
+                pulse(0, 0.52F);
+                pulse(1, 0.52F);
+            }
+            if (!menuPlacement_.resizeActive() && !menuPlacement_.dragHand()) {
+                for (size_t hand = 0; hand < hands_.size(); ++hand) {
+                    if (gripClicked_[hand] && menuPlacement_.beginDrag(
+                            hand, hands_, bounds.minimum, bounds.maximum,
+                            menuPage_ == MenuPage::desktop)) {
+                        suppressManipulationUntilRelease_ = true;
+                        pulse(hand, 0.48F);
+                        break;
+                    }
+                }
+            }
+            menuPlacement_.update(hands_, panelHalfWidth);
+            if (menuPlacement_.resizeActive()) menuGripTargeted.fill(true);
+            if (menuPlacement_.dragHand()) {
+                menuGripTargeted[*menuPlacement_.dragHand()] = true;
+            }
+        }
 
         const nadoc_vr::ManipulationMode previous = manipulator_.mode();
         if (suppressManipulationUntilRelease_ &&
@@ -5385,11 +5480,18 @@ class Viewer {
             suppressManipulationUntilRelease_ = false;
         }
         auto manipulationHands = hands_;
+        const bool menuGripActive = std::any_of(
+            menuGripTargeted.begin(), menuGripTargeted.end(),
+            [](bool targeted) { return targeted; });
+        if (menuGripActive) {
+            for (nadoc_vr::HandPose& hand : manipulationHands) hand.pressed = false;
+        }
         const bool inputSuppressed = suppressManipulationUntilRelease_;
         const bool rigidToolPreview =
             toolShell_.mode() == nadoc_vr::ToolMode::move_rotate &&
             toolShell_.previewRequested();
         const bool rightToolDrag = rigidToolPreview && !inputSuppressed &&
+                                   !menuGripActive &&
                                    hands_[1].valid && hands_[1].pressed &&
                                    !(hands_[0].valid && hands_[0].pressed);
         const bool toolTransformChanged = pendingToolTransform_.update(
@@ -5511,17 +5613,21 @@ class Viewer {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         const glm::mat4 projection = projectionFromFov(view.fov, kNearMeters, kFarMeters);
         const glm::mat4 viewProjection = projection * viewFromPose(view.pose);
+        const bool desktopMenu = menuOpen_ && menuPage_ == MenuPage::desktop;
         glScene_->render(
-            viewProjection,
-            manipulator_.transform(),
-            controllerGuides_);
-        if (menuOpen_ && menuPage_ == MenuPage::desktop) {
+            viewProjection, manipulator_.transform(),
+            desktopMenu ? std::vector<Vertex>{} : controllerGuides_);
+        if (desktopMenu) {
+            const auto bounds = menuPanelBounds();
             desktopSurface_.render(viewProjection, {{
-                menuWorld(kDesktopLeft, kDesktopTop, 0.004F),
-                menuWorld(kDesktopLeft, kDesktopBottom, 0.004F),
-                menuWorld(kDesktopRight, kDesktopTop, 0.004F),
-                menuWorld(kDesktopRight, kDesktopBottom, 0.004F),
+                menuWorld(bounds.minimum.x, bounds.maximum.y, 0.004F),
+                menuWorld(bounds.minimum.x, bounds.minimum.y, 0.004F),
+                menuWorld(bounds.maximum.x, bounds.maximum.y, 0.004F),
+                menuWorld(bounds.maximum.x, bounds.minimum.y, 0.004F),
             }});
+            // The desktop quad is intentionally always visible over the model;
+            // redraw tablet controls/border afterward so they remain actionable.
+            glScene_->renderGuides(viewProjection, controllerGuides_);
         }
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glFlush();
@@ -5700,6 +5806,8 @@ class Viewer {
 
     void eventLoop() {
         std::cout << "NADOC VR viewer ready. Grip: move; both grips: resize; "
+                     "grip a menu border or Desktop surface: move panel; "
+                     "both grips at a border: resize panel; "
                      "trigger: Selection Volume snap/select; right trackpad: Expanded Quick View; "
                      "left trackpad: cycle selection level; "
                      "menu: options; Escape: exit.\n";
@@ -5821,6 +5929,7 @@ class Viewer {
     std::array<bool, 2> triggerPressed_{false, false};
     std::array<bool, 2> triggerClicked_{false, false};
     std::array<bool, 2> gripPressed_{false, false};
+    std::array<bool, 2> gripClicked_{false, false};
     std::array<bool, 2> trackpadPressed_{false, false};
     std::array<bool, 2> trackpadScrolled_{false, false};
     std::array<bool, 2> desktopTrackpadTouching_{false, false};
