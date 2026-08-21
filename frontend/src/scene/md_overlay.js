@@ -35,6 +35,11 @@ export function initMdOverlay(scene) {
       _mesh.dispose()
       _mesh = null
     }
+    // Keep cache state truthful even for an empty rebuild. Previously clearing
+    // removed the mesh but retained the old non-zero count/radius, so rebuilding
+    // the same mrDNA preview was skipped and only its connection sticks remained.
+    _count = n
+    _radius = radius
     if (n === 0) return
 
     _mat = new THREE.MeshStandardMaterial({
@@ -49,8 +54,6 @@ export function initMdOverlay(scene) {
     _mesh.frustumCulled = false
     _mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
     scene.add(_mesh)
-    _count  = n
-    _radius = radius
   }
 
   return {
@@ -100,5 +103,7 @@ export function initMdOverlay(scene) {
         _count = 0
       }
     },
+
+    mesh: () => _mesh,
   }
 }

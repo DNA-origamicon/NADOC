@@ -25,6 +25,32 @@ export function designLongestDimension(state, fallbackSize = new THREE.Vector3(1
   return Math.max(fallbackSize.x, fallbackSize.y, fallbackSize.z, 1)
 }
 
+export function designGeometryBounds(state) {
+  const box = new THREE.Box3()
+  if (state?.assemblyActive) return box
+  for (const nucleotide of state?.currentGeometry ?? []) {
+    const position = nucleotide.axis_position ?? nucleotide.backbone_position ?? nucleotide.base_position
+    if (!Array.isArray(position) || position.length < 3 || position.some(value => !Number.isFinite(Number(value)))) continue
+    box.expandByPoint(new THREE.Vector3(Number(position[0]), Number(position[1]), Number(position[2])))
+  }
+  return box
+}
+
+/** Painter's order for separately rendered transparent scenes: farthest first. */
+export function overlayRenderOrder(layers, count, camera) {
+  camera.updateMatrixWorld?.(true)
+  const world = new THREE.Vector3()
+  return layers.slice(0, count).map((layer, index) => {
+    const scene = layer.renderScene
+    scene?.updateMatrixWorld?.(true)
+    if (scene) scene.getWorldPosition(world)
+    else world.set(0, 0, 0)
+    const cameraZ = world.clone().applyMatrix4(camera.matrixWorldInverse).z
+    return { index, cameraZ }
+  }).sort((a, b) => a.cameraZ - b.cameraZ || a.index - b.index)
+    .map(entry => entry.index)
+}
+
 function setSceneOpacity(scene, opacity) {
   scene?.traverse?.(obj => {
     const materials = Array.isArray(obj.material) ? obj.material : [obj.material]
@@ -33,9 +59,10 @@ function setSceneOpacity(scene, opacity) {
       material.userData.multiOverlayBaseOpacity ??= material.opacity
       material.transparent = true
       material.opacity = material.userData.multiOverlayBaseOpacity * opacity
-      // Each representation is an independent compositing layer. Leaving depth
-      // writes on would let an opaque first layer erase coincident later layers.
-      material.depthWrite = false
+      // Preserve depth within a representation so separate InstancedMeshes
+      // (notably mrDNA beads + rods) do not painter-sort through one another as
+      // the camera orbits. renderOverlay clears depth between isolated layers.
+      material.depthWrite = true
       material.needsUpdate = true
     }
   })
@@ -51,8 +78,8 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
   let longestDimension = 1
   let savedCamera = null
   const layers = Array.from({ length: 4 }, (_, i) => ({
-    representation: ['full', 'surface', 'vdw', 'hull-prism'][i],
-    coloring: i === 2 ? 'cpk' : 'strand',
+    representation: ['hull-prism', 'cylinders', 'mrdna-fine', 'full'][i],
+    coloring: 'strand',
     opacity: i === 0 ? 1 : 0.65,
     renderScene: null,
   }))
@@ -132,7 +159,11 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
   function fitInitial() {
     const first = layers[0].renderScene
     if (!first) return
-    const box = multiViewContentBounds(first)
+    // Frame the design itself, not layer 1. Otherwise changing the first layer
+    // (e.g. Hull → mrDNA Fine) changes camera distance and makes identical beads
+    // appear to have different radii across overlay combinations.
+    const designBox = designGeometryBounds(store.getState())
+    const box = designBox.isEmpty() ? multiViewContentBounds(first) : designBox
     if (box.isEmpty()) return
     const size = box.getSize(new THREE.Vector3())
     longestDimension = designLongestDimension(store.getState(), size)
@@ -177,9 +208,12 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
     renderer.setViewport(0, 0, width * ratio, height * ratio)
     renderer.setScissorTest(false)
     const oldAutoClear = renderer.autoClear
-    for (let i = 0; i < count; i++) {
-      renderer.autoClear = i === 0
-      renderer.render(layers[i].renderScene ?? scene, camera)
+    const order = overlayRenderOrder(layers, count, camera)
+    for (let drawIndex = 0; drawIndex < order.length; drawIndex++) {
+      renderer.autoClear = drawIndex === 0
+      if (drawIndex > 0) renderer.clearDepth?.()
+      const layerIndex = order[drawIndex]
+      renderer.render(layers[layerIndex].renderScene ?? scene, camera)
     }
     renderer.autoClear = oldAutoClear
   }
@@ -211,7 +245,7 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
       position: camera.position.toArray(), target: controls.target.toArray(), up: camera.up.toArray(),
       fov: camera.fov, near: camera.near, far: camera.far,
     }
-    setRenderFn(renderOverlay); rebuild()
+    setRenderFn(renderOverlay); await rebuild()
   }
 
   const exclusiveMode = event => {
@@ -221,7 +255,75 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
   }
   globalThis.window?.addEventListener('nadoc:comparison-mode', exclusiveMode)
   renderControls()
-  return { activate, getCount: () => count, layers, dispose: () => {
+  async function configure({ count: nextCount = count || 1, representations = [], colorings = [], opacities = [], separation: nextSeparation = separation } = {}) {
+    for (let i = 0; i < layers.length; i++) {
+      if (representations[i]) layers[i].representation = representations[i]
+      if (colorings[i] !== undefined) layers[i].coloring = colorings[i]
+      if (Number.isFinite(Number(opacities[i]))) layers[i].opacity = Math.min(1, Math.max(0, Number(opacities[i])))
+    }
+    separation = Math.min(1, Math.max(0, Number(nextSeparation) || 0))
+    separationInput.value = String(separation)
+    separationRow.querySelector('output').textContent = `${Math.round(separation * 100)}%`
+    await activate(Math.min(4, Math.max(0, Number(nextCount) || 0)))
+    positionLayers()
+    return layers.slice(0, count).map(layer => ({
+      representation: layer.representation, coloring: layer.coloring, opacity: layer.opacity,
+    }))
+  }
+
+  return { activate, configure, getCount: () => count, layers,
+    renderOrder: () => overlayRenderOrder(layers, count, camera),
+    diagnostics: () => layers.slice(0, count).map(layer => {
+      const beads = []
+      const rods = []
+      const oxdna = { backbone: [], base: [], 'base-connector': [], 'backbone-connector': [] }
+      const oxdnaColors = { backbone: new Set(), base: new Set(), 'base-connector': new Set(), 'backbone-connector': new Set() }
+      let geometryHash = 2166136261
+      const hashMatrix = matrix => {
+        for (const value of matrix.elements) {
+          geometryHash ^= Math.round(value * 1e5)
+          geometryHash = Math.imul(geometryHash, 16777619) >>> 0
+        }
+      }
+      layer.renderScene?.traverse?.(object => {
+        const oxPrimitive = object.userData?.oxdnaPrimitive
+        if (object.isInstancedMesh && oxPrimitive && oxdna[oxPrimitive]) {
+          const matrix = new THREE.Matrix4(), position = new THREE.Vector3(), quaternion = new THREE.Quaternion(), scale = new THREE.Vector3()
+          for (let i = 0; i < object.count; i++) {
+            object.getMatrixAt(i, matrix); matrix.decompose(position, quaternion, scale)
+            oxdna[oxPrimitive].push(scale.toArray())
+            if (object.instanceColor) {
+              const color = new THREE.Color(); object.getColorAt(i, color)
+              oxdnaColors[oxPrimitive].add(color.getHex())
+            }
+          }
+        }
+        const material = Array.isArray(object.material) ? object.material[0] : object.material
+        const isMrdnaBlue = material?.color?.getHex?.() === 0x58a6ff
+        const isMrdnaRod = material?.color?.getHex?.() === 0xcdd8ee
+        if (!object.isInstancedMesh || (!object.userData?.mrdnaInputResolution && !isMrdnaBlue && !isMrdnaRod)) return
+        const matrix = new THREE.Matrix4(), position = new THREE.Vector3(), quaternion = new THREE.Quaternion(), scale = new THREE.Vector3()
+        for (let i = 0; i < object.count; i++) {
+          object.getMatrixAt(i, matrix); matrix.decompose(position, quaternion, scale)
+          hashMatrix(matrix)
+          if (isMrdnaRod) rods.push(Math.min(scale.x, scale.z))
+          else beads.push(scale.x)
+        }
+      })
+      return {
+        representation: layer.representation,
+        beadCount: beads.length,
+        minBeadRadius: beads.length ? Math.min(...beads) : null,
+        maxBeadRadius: beads.length ? Math.max(...beads) : null,
+        rodCount: rods.length,
+        minRodRadius: rods.length ? Math.min(...rods) : null,
+        maxRodRadius: rods.length ? Math.max(...rods) : null,
+        oxdna,
+        oxdnaColors: Object.fromEntries(Object.entries(oxdnaColors).map(([key, values]) => [key, [...values]])),
+        geometryHash,
+      }
+    }),
+    dispose: () => {
     globalThis.window?.removeEventListener('nadoc:comparison-mode', exclusiveMode)
     activate(0); viewportControls.remove()
   } }

@@ -14,6 +14,9 @@ const REPRESENTATIONS = [
   ['VDW / Space-fill', 'menu-view-atomistic-vdw'],
   ['Ball & Stick', 'menu-view-atomistic-ballstick'],
   ['Stick', 'menu-view-atomistic-stick'],
+  ['mrDNA Coarse', 'menu-view-mrdna-coarse'],
+  ['mrDNA Fine', 'menu-view-mrdna-fine'],
+  ['oxDNA', 'menu-view-oxdna'],
 ]
 
 function makeSection(document, id, title, body) {

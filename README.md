@@ -120,8 +120,8 @@ Visualization includes a two-, three-, or four-panel Multi-view for comparing
 independent representations and coloring modes with synchronized, panel-local 3D
 navigation, plus a mutually exclusive Multi-overlay mode for compositing up to four
 representations with independent opacity and dimension-scaled separation.
-Both comparison modes can also display the coarse-bead and fine-nucleotide results
-from the currently selected completed mrDNA job.
+Both comparison modes can also preview the current design in mrDNA's unsimulated
+coarse (five base pairs per bead) and fine (one site per base pair) abstractions.
 
 ### Cluster system & animation
 Helices grouped into named clusters; per-cluster deformation ops; feature log

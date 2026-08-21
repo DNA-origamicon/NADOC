@@ -223,6 +223,9 @@ describe('swapToFlatMaterials', () => {
     swapToFlatMaterials(scene)
     // material.color multiplies instanceColor, so anything but white tints it.
     expect(inst.material.color.getHexString()).toBe('ffffff')
+    // Instance colors are a separate shader channel; enabling geometry vertex
+    // colors when no `color` attribute exists would multiply them to black.
+    expect(inst.material.vertexColors).toBe(false)
   })
 
   it('leaves impostor materials alone — their sphere ray-paint is a shader patch', () => {

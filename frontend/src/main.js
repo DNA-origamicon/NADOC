@@ -239,6 +239,7 @@ import { initFlexScale } from './ui/flex_scale.js'
 import { initEngineActivityHeaders } from './ui/engine_activity_headers.js'
 import { initCandoCylinders } from './scene/cando_cylinders.js'
 import { initMrdnaConnections } from './scene/mrdna_connections.js'
+import { initOxdnaInputOverlay } from './scene/oxdna_input_overlay.js'
 import { initOxdnaLive } from './ui/oxdna_live_controller.js'
 import { initMdEngines }   from './ui/md_engines.js'
 import { initEfieldGizmo } from './scene/efield_gizmo.js'
@@ -1296,10 +1297,12 @@ async function main() {
   // bond connections (line segments) with the native NADOC model hidden.
   const mrdnaBeadOverlay = initMdOverlay(scene)
   const mrdnaConnOverlay = initMrdnaConnections(scene)
+  const oxdnaInputOverlay = initOxdnaInputOverlay(scene)
   const mrdnaDisplay = initMrdnaDisplay({
     designRenderer, api,
     beadOverlay:       mrdnaBeadOverlay,
     connectionOverlay: mrdnaConnOverlay,
+    oxdnaInputOverlay,
     setDesignVisible:  (v) => _setDesignGeometryVisible(v),  // hoisted fn decl (defined below)
     flexScale,
   })
@@ -3500,6 +3503,7 @@ async function main() {
   // ── Coloring submenu (Strand / Base / Cluster / Overhang / CPK) ─────────────
   function _setColoringMode(mode) {
     store.setState({ coloringMode: mode })
+    mrdnaDisplay?.setOxdnaColoringMode?.(mode)
     document.getElementById('menu-view-coloring-strand') ?.classList.toggle('is-checked', mode === 'strand')
     document.getElementById('menu-view-coloring-base')   ?.classList.toggle('is-checked', mode === 'base')
     document.getElementById('menu-view-coloring-cluster')?.classList.toggle('is-checked', mode === 'cluster')
@@ -5617,6 +5621,12 @@ async function main() {
   // so a boot-time call would already have thrown). `_currentRepr`/`_lodMode`/
   // `_lastDetailLevel` stay main `let`s (read by the render-loop LOD tick +
   // hull-auto) and are reached via the get/set shims below.
+  let _lastMrdnaRepresentationWarning = null
+  const _warnMrdnaRepresentation = message => {
+    if (!message || message === _lastMrdnaRepresentationWarning) return
+    _lastMrdnaRepresentationWarning = message
+    showToast(message, { severity: 'warn' })
+  }
   const _reprSwitcher = initRepresentationSwitcher({
     store,
     api,
@@ -5637,35 +5647,60 @@ async function main() {
     setLastDetailLevel: (v) => { _lastDetailLevel = v },
     setLodMode: (v) => { _lodMode = v },
     setCurrentRepr: (v) => { _currentRepr = v },
+    beforeRepresentationChange: () => { mrdnaDisplay.stopAndRestore() },
+    applyExternalRepresentation: async representation => {
+      const available = await applyComparisonRepresentation(representation, {
+        setRepresentation: async () => {},
+        mrdnaDisplay,
+        getCurrentGeometry: () => store.getState().currentGeometry,
+        getCurrentDesign: () => store.getState().currentDesign,
+        getColoringMode: () => store.getState().coloringMode,
+        getColorState: () => {
+          const state = store.getState()
+          return {
+            strandColors: state.strandColors,
+            strandGroups: state.strandGroups,
+            loopStrandIds: state.loopStrandIds,
+          }
+        },
+        getHideReferenceGeometry: () => {
+          const state = store.getState()
+          return state.simulationTabActive === true || state.showReferenceGeometry === false
+        },
+        onUnavailable: _warnMrdnaRepresentation,
+      })
+      if (available) _lastMrdnaRepresentationWarning = null
+      return available
+    },
   })
   const _setRepresentation    = _reprSwitcher.setRepresentation
   const _updateReprRadio      = _reprSwitcher.updateReprRadio
   const _syncAssemblyReprMenu = _reprSwitcher.syncAssemblyReprMenu
 
-  let _lastComparisonRepresentationWarning = null
-  const _setComparisonRepresentation = async (representation) => {
-    let warning = null
-    const available = await applyComparisonRepresentation(representation, {
-      setRepresentation: _setRepresentation,
-      mrdnaDisplay,
-      getMrdnaJob: () => mrdnaPanel?.getSelectedJob?.(),
-      onUnavailable: message => { warning = message },
-    })
-    if (available) _lastComparisonRepresentationWarning = null
-    else if (warning && warning !== _lastComparisonRepresentationWarning) {
-      _lastComparisonRepresentationWarning = warning
-      showToast(warning, { severity: 'warn' })
-    }
-    return available
-  }
+  const _setComparisonRepresentation = _setRepresentation
 
-  initMultiView({
+  // oxDNA input geometry follows the same reference-visibility contract as the
+  // native renderer. Rebuild the lightweight instanced preview when entering or
+  // leaving Simulations (or when View → Reference geometry changes) so reference
+  // particles appear/disappear without requiring the user to re-pick oxDNA.
+  store.subscribe((newState, prevState) => {
+    if (_currentRepr !== 'oxdna') return
+    if (newState.simulationTabActive === prevState.simulationTabActive &&
+        newState.showReferenceGeometry === prevState.showReferenceGeometry &&
+        newState.currentDesign === prevState.currentDesign &&
+        newState.strandColors === prevState.strandColors &&
+        newState.strandGroups === prevState.strandGroups &&
+        newState.loopStrandIds === prevState.loopStrandIds) return
+    void _setRepresentation('oxdna')
+  })
+
+  const _multiView = initMultiView({
     document, scene, camera, renderer, canvas, controls, store,
     setRenderFn, resetRenderFn,
     setRepresentation: _setComparisonRepresentation,
     setColoringMode: _setColoringMode,
   })
-  initMultiOverlay({
+  const _multiOverlay = initMultiOverlay({
     document, scene, camera, renderer, canvas, controls, store,
     setRenderFn, resetRenderFn,
     setRepresentation: _setComparisonRepresentation,
@@ -5958,6 +5993,8 @@ async function main() {
       _enterAssemblyMode,
       _exitAssemblyMode,
       forceCrossoverTool,
+      multiOverlay: _multiOverlay,
+      multiView: _multiView,
     })
   }
 

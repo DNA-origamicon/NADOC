@@ -34,7 +34,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from backend.api import state as design_state
 
@@ -47,13 +47,15 @@ router = APIRouter()
 
 
 class PdbVisualizationPosition(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     # Renderer keys can be numeric for imported caDNAno designs and extra-base
     # sentinels use string identifiers. Normalize them when building overrides.
     helix_id: str | int
     bp_index: int | str  # extra crossover bases use the crossover id here
     direction: str | int
     backbone_position: list[float] = Field(min_length=3, max_length=3)
-    copy: int = 0
+    copy_index: int = Field(0, alias="copy")
 
 
 class PdbVisualizationExport(BaseModel):
@@ -71,11 +73,13 @@ class PdbVisualizationSource(BaseModel):
 
 
 class PdbVisualizationColorValue(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     helix_id: str | int
     bp_index: int | str
     direction: str | int
     value: float
-    copy: int = 0
+    copy_index: int = Field(0, alias="copy")
 
 
 class PdbVisualizationColoring(BaseModel):
@@ -116,8 +120,8 @@ def _pdb_visualization_overrides(positions: list[PdbVisualizationPosition]):
             extensions[(helix_id[len("__ext_") :], int(p.bp_index))] = xyz
         else:
             key = (helix_id, int(p.bp_index), _direction(p.direction))
-            if p.copy:
-                key += (p.copy,)
+            if p.copy_index:
+                key += (p.copy_index,)
             regular[key] = xyz
     return regular, crossover, extensions
 
@@ -141,8 +145,8 @@ def _pdb_coloring_values(
             key = (hid, int(p.bp_index), direction)
         else:
             key = (hid, int(p.bp_index), direction)
-            if p.copy:
-                key += (int(p.copy),)
+            if p.copy_index:
+                key += (int(p.copy_index),)
         out[key] = float(p.value)
     return out
 

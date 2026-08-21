@@ -32,10 +32,73 @@ export function installTestApi({
   _enterAssemblyMode,
   _exitAssemblyMode,
   forceCrossoverTool,
+  multiOverlay,
+  multiView,
 }) {
   window.__nadocTest = {
     scene,
     store,
+    multiOverlayDiagnostics: () => multiOverlay?.diagnostics?.() ?? [],
+    multiOverlayRenderOrder: () => multiOverlay?.renderOrder?.() ?? [],
+    /** Final-frame color census: catches colored instance buffers that nevertheless
+     * shade to black in WebGL (a failure object-level diagnostics cannot see). */
+    renderedPixelCensus() {
+      const size = renderer.getDrawingBufferSize(new THREE.Vector2())
+      const width = size.x, height = size.y
+      const target = new THREE.WebGLRenderTarget(width, height)
+      const previousTarget = renderer.getRenderTarget()
+      const previousClear = renderer.getClearColor(new THREE.Color()).clone()
+      const previousAlpha = renderer.getClearAlpha()
+      renderer.setRenderTarget(target)
+      renderer.setClearColor(0x0d1117, 1)
+      renderer.clear(true, true, true)
+      renderer.render(scene, camera)
+      const pixels = new Uint8Array(width * height * 4)
+      renderer.readRenderTargetPixels(target, 0, 0, width, height, pixels)
+      renderer.setRenderTarget(previousTarget)
+      renderer.setClearColor(previousClear, previousAlpha)
+      target.dispose()
+      let visible = 0, colorful = 0, black = 0
+      // Sample the clear color after the renderer's active color-space transform.
+      // A corner is background for the editor camera and is more robust than
+      // assuming literal sRGB bytes for #0d1117.
+      const bgR = pixels[0], bgG = pixels[1], bgB = pixels[2]
+      for (let i = 0; i < pixels.length; i += 4) {
+        const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2], a = pixels[i + 3]
+        if (a < 8) continue
+        if (Math.abs(r - bgR) < 4 && Math.abs(g - bgG) < 4 && Math.abs(b - bgB) < 4) continue
+        visible++
+        if (Math.max(r, g, b) < 12) black++
+        if (Math.max(r, g, b) - Math.min(r, g, b) > 18 && Math.max(r, g, b) > 35) colorful++
+      }
+      return { width, height, visible, colorful, black }
+    },
+    nativeBackboneColorCensus() {
+      const referenceIds = new Set((store.getState().currentDesign?.strands ?? [])
+        .filter(strand => strand.is_reference).map(strand => strand.id))
+      const active = new Set(), reference = new Set()
+      const color = new THREE.Color()
+      for (const entry of designRenderer.getBackboneEntries?.() ?? []) {
+        if (!entry.instMesh?.instanceColor) continue
+        entry.instMesh.getColorAt(entry.id, color)
+        ;(referenceIds.has(entry.nuc?.strand_id) ? reference : active).add(color.getHex())
+      }
+      return { active: [...active], reference: [...reference] }
+    },
+    configureMultiOverlay: options => multiOverlay?.configure?.(options),
+    configureMultiView: options => multiView?.configure?.(options),
+    applyCameraPoseForTest(pose) {
+      camera.position.fromArray(pose.position)
+      controls.target.fromArray(pose.target)
+      if (pose.up) camera.up.fromArray(pose.up)
+      if (Number.isFinite(Number(pose.fov))) camera.fov = Number(pose.fov)
+      camera.updateProjectionMatrix()
+      controls.update()
+    },
+    setCameraPositionForTest(position) {
+      camera.position.fromArray(position)
+      controls.update()
+    },
     /** Automation API for persisted visibility operations. These drive the
      * exact controller used by context menus and the spreadsheet. */
     visibility: {

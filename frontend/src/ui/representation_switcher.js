@@ -1,7 +1,7 @@
 // Unified representation switcher — the core of the View → Representation menu.
 //
-// Owns the seven mutually-exclusive representations (hull-prism / cylinders /
-// beads / full / surface / vdw / ballstick / stick), the radio menu state, the View →
+// Owns the ten mutually-exclusive representations (hull-prism / cylinders /
+// beads / full / surface / vdw / ballstick / stick / mrDNA coarse / mrDNA fine), the radio menu state, the View →
 // Coloring submenu availability matrix, and the F1…F8 hotkey bindings. Exactly
 // one representation is active at a time; switching deactivates the others.
 //
@@ -19,7 +19,7 @@ import { showToast } from './toast.js'
 import { showConfirm } from './primitives/confirm.js'
 import { registerShortcut } from '../input/shortcuts.js'
 
-// All seven representations are mutually exclusive.  Exactly one is active at
+// All representations are mutually exclusive. Exactly one is active at
 // a time; switching to any one deactivates all others.
 //
 // Ordered least → most compute-intensive.  This is also the order shown in the
@@ -43,6 +43,9 @@ const _ALL_REPRS = [
   { id: 'menu-view-atomistic-vdw',      repr: 'vdw'       },
   { id: 'menu-view-atomistic-ballstick',repr: 'ballstick' },
   { id: 'menu-view-atomistic-stick',    repr: 'stick'     },
+  { id: 'menu-view-mrdna-coarse',       repr: 'mrdna-coarse', external: true },
+  { id: 'menu-view-mrdna-fine',         repr: 'mrdna-fine', external: true },
+  { id: 'menu-view-oxdna',              repr: 'oxdna', external: true },
 ]
 
 // Friendly labels for the F-key shortcut descriptions (command palette / help).
@@ -55,6 +58,9 @@ const _REPR_LABELS = {
   vdw:          'VDW / Space-fill',
   ballstick:    'Ball & Stick',
   stick:        'Stick',
+  'mrdna-coarse':'mrDNA Coarse',
+  'mrdna-fine': 'mrDNA Fine',
+  oxdna:         'oxDNA',
 }
 
 // Coloring-mode labels (e.g. for the toast shown when an F-key cycles coloring
@@ -89,6 +95,8 @@ export function initRepresentationSwitcher({
   setLastDetailLevel,
   setLodMode,
   setCurrentRepr,
+  beforeRepresentationChange = () => {},
+  applyExternalRepresentation = async () => false,
 }) {
   function _updateReprRadio(activeRepr) {
     for (const { id, repr } of _ALL_REPRS) {
@@ -171,8 +179,7 @@ export function initRepresentationSwitcher({
   let _appliedRepr = null
 
   async function _setRepresentation(repr) {
-    setCurrentRepr(repr)
-    flexibleArcs?.setRepresentation?.(repr)
+    await beforeRepresentationChange(repr)
     // ── Deactivate any currently active exclusive mode ────────────────────────
     if (!['vdw', 'ballstick', 'stick'].includes(repr) && atomisticRenderer.getMode() !== 'off') {
       atomisticRenderer.setMode('off')
@@ -211,8 +218,14 @@ export function initRepresentationSwitcher({
       const lat = store.getState().currentDesign?.lattice_type
       getJointRenderer()?.setHullScanTick(lat === 'HONEYCOMB' ? 8 : 7)
       getJointRenderer()?.setHullRepr(true)
+    } else if (repr === 'mrdna-coarse' || repr === 'mrdna-fine' || repr === 'oxdna') {
+      if (repr === 'oxdna' && _appliedRepr !== 'oxdna') setColoringMode('base')
+      const available = await applyExternalRepresentation(repr)
+      if (available === false) return false
     }
 
+    setCurrentRepr(repr)
+    flexibleArcs?.setRepresentation?.(repr)
     _appliedRepr = repr
     _updateReprRadio(repr)
     reprOptionSliders(repr)
@@ -221,12 +234,16 @@ export function initRepresentationSwitcher({
     }))
   }
 
-  for (const { id, repr } of _ALL_REPRS) {
+  for (const { id, repr, external } of _ALL_REPRS) {
     document.getElementById(id)?.addEventListener('click', async () => {
       const { currentDesign, assemblyActive, currentAssembly } = store.getState()
 
       // ── Assembly mode: apply repr to all instances ───────────────────────────
       if (assemblyActive) {
+        if (external) {
+          showToast('mrDNA input representations are available for individual designs only.', { severity: 'warn' })
+          return
+        }
         const instances = currentAssembly?.instances ?? []
         if (!instances.length) return
 
@@ -293,7 +310,7 @@ export function initRepresentationSwitcher({
   // assembly-mode, confirm-dialog and disabled logic above is shared (same
   // delegate-to-.click() pattern as the 1–6 routing hotkeys).
   // preventDefault() suppresses the browser's default F-key actions (e.g. F1 help).
-  _ALL_REPRS.forEach(({ id, repr }, i) => {
+  _ALL_REPRS.slice(0, 8).forEach(({ id, repr }, i) => {
     registerShortcut({
       key: `F${i + 1}`, ctrl: false, shift: false, alt: false,
       description: `Representation: ${_REPR_LABELS[repr] ?? repr} (repeat-press cycles coloring)`,

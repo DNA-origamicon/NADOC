@@ -7,6 +7,7 @@ export const MULTI_VIEW_REPRESENTATIONS = [
   ['hull-prism', 'Hull Prism'], ['cylinders', 'Cylinders'], ['beads', 'Beads'], ['full', 'Full'],
   ['surface', 'Surface'], ['vdw', 'VDW / Space-fill'], ['ballstick', 'Ball & Stick'], ['stick', 'Stick'],
   ['mrdna-coarse', 'mrDNA Coarse'], ['mrdna-fine', 'mrDNA Fine'],
+  ['oxdna', 'oxDNA'],
 ]
 
 /** CSS-pixel panel rectangles, measured from bottom-left for WebGL. */
@@ -106,8 +107,8 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
   let syncingControls = false
   let savedControlsEnabled = true
   const panels = Array.from({ length: 4 }, (_, i) => ({
-    representation: ['full', 'ballstick', 'surface', 'cylinders'][i],
-    coloring: i === 1 ? 'cpk' : 'strand', renderScene: null,
+    representation: ['hull-prism', 'cylinders', 'mrdna-fine', 'full'][i],
+    coloring: 'strand', renderScene: null,
     camera: new THREE.PerspectiveCamera(38, 1, 0.01, 10000), controls: null,
   }))
   const buttons = document.createElement('div'); buttons.className = 'mv-layout-buttons'
@@ -300,7 +301,7 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
         savedControlsEnabled = controls.enabled
       }
       controls.enabled = false
-      setRenderFn(renderMulti); rebuild()
+      setRenderFn(renderMulti); await rebuild()
     }
   }
 
@@ -311,7 +312,16 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
     event.detail?.waits?.push(closing)
   }
   globalThis.window?.addEventListener('nadoc:comparison-mode', exclusiveMode)
-  return { activate, getCount: () => count, panels, dispose: () => {
+  async function configure({ count: nextCount = count, representations = [], colorings = [] } = {}) {
+    for (let i = 0; i < panels.length; i++) {
+      if (representations[i]) panels[i].representation = representations[i]
+      if (colorings[i] !== undefined) panels[i].coloring = colorings[i]
+    }
+    await activate(Math.min(4, Math.max(1, Number(nextCount) || 1)))
+    return panels.slice(0, count).map(panel => ({ representation: panel.representation, coloring: panel.coloring }))
+  }
+
+  return { activate, configure, getCount: () => count, panels, dispose: () => {
     globalThis.window?.removeEventListener('nadoc:comparison-mode', exclusiveMode)
     activate(1); viewportGrid.remove()
   } }

@@ -5,6 +5,8 @@ These pin the pure cluster-detection functions extracted from crud.py's
 functions take a Design and return a new Design with cluster_transforms set.
 """
 
+from pathlib import Path
+
 from tests.conftest import (
     make_18hb_routed_design,
     make_6hb_design,
@@ -14,7 +16,9 @@ from tests.conftest import (
 from backend.core.cluster_autodetect import (
     _autodetect_clusters,
     _cluster_bundle_regions,
+    repair_empty_auto_clusters,
 )
+from backend.core.models import Design
 
 
 def test_bundle_regions_splits_disconnected_blocks():
@@ -58,3 +62,20 @@ def test_autodetect_produces_scaffold_and_geometry_clusters():
     names = [ct.name for ct in out.cluster_transforms]
     assert any(n.startswith("Scaffold Cluster") for n in names), names
     assert any(n.startswith("Geometry Cluster") for n in names), names
+
+
+def test_repair_empty_auto_clusters_restores_voltron_membership_without_references():
+    """VoltronCoreArm persisted two auto-cluster shells with no members, which
+    made cluster coloring fall back to strand colors in every representation."""
+    path = Path(__file__).parents[1] / "workspace" / "VoltronCoreArm.nadoc"
+    design = Design.model_validate_json(path.read_text())
+    assert all(not c.helix_ids and not c.domain_ids for c in design.cluster_transforms)
+
+    repaired = repair_empty_auto_clusters(design)
+
+    assert [c.name for c in repaired.cluster_transforms] == [
+        "Scaffold Cluster 1", "Geometry Cluster 1",
+    ]
+    assert [len(c.helix_ids) for c in repaired.cluster_transforms] == [9, 9]
+    reference_ids = design.reference_helix_ids()
+    assert all(not (set(c.helix_ids) & reference_ids) for c in repaired.cluster_transforms)

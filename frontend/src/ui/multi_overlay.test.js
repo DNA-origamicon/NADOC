@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { JSDOM } from 'jsdom'
 import * as THREE from 'three'
-import { designLongestDimension, initMultiOverlay, overlayOffsets } from './multi_overlay.js'
+import { designGeometryBounds, designLongestDimension, initMultiOverlay, overlayOffsets, overlayRenderOrder } from './multi_overlay.js'
 
 describe('multi-overlay', () => {
   beforeEach(() => {
@@ -22,6 +22,26 @@ describe('multi-overlay', () => {
     ] })).toBe(20)
   })
 
+  it('uses stable current-design bounds independently of representation thickness', () => {
+    const box = designGeometryBounds({ currentGeometry: [
+      { axis_position: [-5, 1, 2] }, { backbone_position: [15, 4, 8] },
+    ] })
+    expect(box.getSize(new THREE.Vector3()).toArray()).toEqual([20, 3, 6])
+    expect(designGeometryBounds({ assemblyActive: true, currentGeometry: [{ axis_position: [1, 2, 3] }] }).isEmpty()).toBe(true)
+  })
+
+  it('reverses transparent scene order when viewing separated layers from opposite sides', () => {
+    const layers = [-2, 0, 2].map(x => {
+      const renderScene = new THREE.Scene(); renderScene.position.x = x
+      return { renderScene }
+    })
+    const camera = new THREE.PerspectiveCamera()
+    camera.position.set(10, 0, 0); camera.lookAt(0, 0, 0)
+    expect(overlayRenderOrder(layers, 3, camera)).toEqual([0, 1, 2])
+    camera.position.set(-10, 0, 0); camera.lookAt(0, 0, 0)
+    expect(overlayRenderOrder(layers, 3, camera)).toEqual([2, 1, 0])
+  })
+
   it('creates 1-4 controls and numbered in-viewport layer rows', async () => {
     const canvas = document.getElementById('canvas')
     Object.defineProperties(canvas, { clientWidth: { value: 800 }, clientHeight: { value: 600 } })
@@ -39,10 +59,13 @@ describe('multi-overlay', () => {
     })
     expect(document.querySelectorAll('.mo-count-btn')).toHaveLength(4)
     await api.activate(4)
+    expect(api.layers.map(layer => layer.representation)).toEqual([
+      'hull-prism', 'cylinders', 'mrdna-fine', 'full',
+    ])
     await vi.waitFor(() => expect(document.querySelectorAll('.mo-layer-row[data-ready="true"]')).toHaveLength(4))
     expect(document.querySelectorAll('.mo-representation')).toHaveLength(4)
     expect([...document.querySelector('.mo-representation').options].map(option => option.value))
-      .toEqual(expect.arrayContaining(['mrdna-coarse', 'mrdna-fine']))
+      .toEqual(expect.arrayContaining(['mrdna-coarse', 'mrdna-fine', 'oxdna']))
     expect(document.querySelectorAll('.mo-coloring')).toHaveLength(4)
     expect(document.querySelectorAll('.mo-opacity')).toHaveLength(4)
     const opacity = document.querySelectorAll('.mo-opacity')[1]
