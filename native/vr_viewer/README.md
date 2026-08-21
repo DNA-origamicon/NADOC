@@ -62,9 +62,13 @@ target need not be reselected in VR and an absent owner cannot become a false ma
 
 Controls on the original HTC Vive wands:
 
-- Click the right trackpad to toggle Expanded Quick View. Natural and expanded
-  geometry ease between their exact poses instead of snapping; clicking again
-  during the transition reverses it smoothly without changing the design.
+- Hold the right trackpad to open a world-fixed radial **Tools** menu around that
+  controller's Selection Volume. Its volumetric sectors tilt 45° back from the
+  controller pose for a more readable wrist angle. Move the right controller until the volume enters
+  one of the four depth-bearing sectors (Extrude, Twist, Bend, or Move/Rotate); the
+  sector highlights and gives a light haptic tick. Release the trackpad to activate
+  the highlighted tool, or release in the center/outside the ring to cancel. The old
+  right-trackpad Expanded Quick View toggle is intentionally unbound.
 - Each controller carries a wireframe **Selection Volume** 12 cm beyond its tip. Slide a
   thumb upward or downward on that controller's trackpad to grow or shrink the volume
   from precision-pick to area-selection size. A partial trigger pull resolves overlaps
@@ -117,13 +121,35 @@ Controls on the original HTC Vive wands:
   Undo, and Back. Move/Rotate is browser-authoritative and transactional; the
   parameterized Extrude/Twist/Bend workflows remain visibly read-only until their
   individual mutation gates pass.
+  Choosing Extrude from the radial menu immediately creates a world-docked settings
+  window plus a separate world-docked lattice window centered on the exact
+  browser-resolved cell and laid out as the design's Honeycomb or Square lattice.
+  The picker uses the exact desktop/caDNAno nanometre coordinates; its circles remain
+  one DNA radius (1 nm) after scene and panel scaling. Cell circles now fill the
+  complete grid viewport: edge circles are clipped visually but remain ray-selectable
+  wherever their visible portion intersects the window. Either window can be moved
+  with one grip at its border or uniformly resized with two border grips. Hold the
+  right trigger and paint across cells to add a group; begin a new stroke on a
+  selected cell to erase. Each crossed cell is applied once per held stroke.
+  Free-cell parity matches desktop/cadnano: Forward is blue and Reverse is red;
+  selected cells are amber. A partially exposed classic thumbwheel is attached to
+  the right edge of the Extrude settings window. Trigger-grab and move it vertically
+  to change length in lattice-repeat detents: 7 bp for Honeycomb and 8 bp for Square.
+  A slow release settles back onto the last click without coasting; release a faster
+  flick to retain momentum under provisional exponential damping. Every selected
+  cell previews a helix cylinder emerging normal to the lattice plane, with exact
+  1-nm radius and `length × 0.334 nm` depth. Cyan is outward and amber is inward.
+  Select **Exit** to emit Cancel, clear the lattice draft and thumbwheel motion, and
+  close both Extrude windows. These picks and cylinders are intentionally labeled
+  **VR DRAFT** and do not yet arm Confirm or a design mutation.
   Move/Rotate directly previews exact Cluster, Strand, Domain, End, and Base
   scopes. End-target Extrude and Cluster/End Twist or Bend are amber and report
   **CONFIG REQUIRED**. Selecting one opens a target-bound draft-settings page:
   Extrude exposes length, direction, strand filter, and adjacent-ligation; Twist
   exposes amount and total-degrees/degrees-per-nm units; Bend exposes angle and
-  direction. Exact slice footprint and ordered deformation planes remain visibly
-  **UNRESOLVED**, so these settings cannot arm Preview or change the design yet.
+  direction. The authoritative exact slice footprint and ordered deformation planes
+  remain visibly **UNRESOLVED**, so these settings cannot arm Preview or change the
+  design yet.
   The browser resolves an End against the live nucleotide and the desktop's
   deduplicated physical-face table, including every strand/domain owner,
   overhang identity, deformation state, and crossover/forced-ligation occupancy.

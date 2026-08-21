@@ -215,5 +215,9 @@ export function vrToolFeedbackPayload(sequence, draft, state) {
     occupied: !!context?.connections?.length,
     deformed: context?.deformed === true,
     footprint_resolved: footprintResolved,
+    footprint_lattice_type: footprintResolved
+      ? context.footprint.latticeType : null,
+    footprint_cell: footprintResolved
+      ? [...context.footprint.cells[0]] : null,
   }
 }

@@ -17,6 +17,7 @@ using nadoc_vr::HandPose;
 using nadoc_vr::ManipulationMode;
 using nadoc_vr::MenuPlacement;
 using nadoc_vr::PendingRigidTransform;
+using nadoc_vr::RadialToolMenu;
 using nadoc_vr::SceneManipulator;
 using nadoc_vr::SelectionVolumeControl;
 using nadoc_vr::SmoothToggle;
@@ -143,6 +144,165 @@ void menuFollowsItsControllerAndDockingFreezesItsWorldPose() {
     hands[1].position.x += 0.2F;
     menu.update(hands);
     require(std::abs(menu.position().x - followed.x - 0.2F) < 1e-5F);
+}
+
+void radialToolMenuIsWorldFixedAndUsesExtrudedSectors() {
+    RadialToolMenu menu;
+    HandPose hand{true, false, {0.1F, 0.2F, -0.3F}, {1, 0, 0, 0}};
+    const glm::vec3 center(0.1F, 0.2F, -0.42F);
+    menu.open(hand, center);
+    require(menu.open());
+    const glm::vec3 tiltedUp = menu.orientation() * glm::vec3(0, 1, 0);
+    require(std::abs(tiltedUp.y - std::sqrt(0.5F)) < 1e-5F);
+    require(std::abs(tiltedUp.z + std::sqrt(0.5F)) < 1e-5F);
+    require(!menu.hit(center));
+    require(menu.hit(menu.worldPoint({0.10F, 0.0F, 0.0F})) == 0U);
+    require(menu.hit(menu.worldPoint({0.0F, 0.10F, 0.0F})) == 1U);
+    require(menu.hit(menu.worldPoint({-0.10F, 0.0F, 0.0F})) == 2U);
+    require(menu.hit(menu.worldPoint({0.0F, -0.10F, 0.0F})) == 3U);
+    require(!menu.hit(menu.worldPoint({0.10F, 0.0F, 0.05F})));
+
+    const glm::vec3 fixed = menu.position();
+    hand.position += glm::vec3(1.0F);
+    hand.orientation = glm::angleAxis(
+        glm::radians(80.0F), glm::vec3(0.0F, 1.0F, 0.0F));
+    (void)menu.update(menu.worldPoint({0.0F, 0.10F, 0.0F}));
+    require(glm::all(glm::epsilonEqual(menu.position(), fixed, 1e-6F)));
+    require(menu.hovered() == 1U);
+    menu.close();
+    require(!menu.open() && !menu.hovered());
+}
+
+void extrudeLatticeDraftTogglesParityCodedCells() {
+    nadoc_vr::ExtrudeLatticeDraft draft;
+    const nadoc_vr::LatticeCell forward{0, 0};
+    const nadoc_vr::LatticeCell reverse{0, 1};
+    require(forward.forward() && !reverse.forward());
+    require(draft.toggle(forward));
+    require(draft.toggle(reverse));
+    require(draft.selected(forward) && draft.selected(reverse));
+    require(draft.toggle(forward));
+    require(!draft.selected(forward) && draft.cells().size() == 1U);
+    draft.clear();
+    require(draft.cells().empty());
+}
+
+void partiallyVisibleLatticeCirclesRemainVisibleAndPaintable() {
+    const glm::vec2 minimum(-1.0F, -1.0F);
+    const glm::vec2 maximum(1.0F, 1.0F);
+    require(nadoc_vr::circleIntersectsBounds(
+        {1.20F, 0.0F}, 0.25F, minimum, maximum));
+    require(nadoc_vr::circleIntersectsBounds(
+        {-1.15F, 1.15F}, 0.25F, minimum, maximum));
+    require(!nadoc_vr::circleIntersectsBounds(
+        {-1.25F, 1.25F}, 0.25F, minimum, maximum));
+    require(!nadoc_vr::circleIntersectsBounds(
+        {1.26F, 0.0F}, 0.25F, minimum, maximum));
+    const auto clipped = nadoc_vr::clipLineToBounds(
+        {-1.25F, 0.5F}, {-0.75F, 0.5F}, minimum, maximum);
+    require(clipped.has_value());
+    require(glm::all(glm::epsilonEqual(
+        clipped->first, glm::vec2(-1.0F, 0.5F), 1.0e-6F)));
+    require(glm::all(glm::epsilonEqual(
+        clipped->second, glm::vec2(-0.75F, 0.5F), 1.0e-6F)));
+    require(!nadoc_vr::clipLineToBounds(
+        {-1.25F, 1.20F}, {-0.75F, 1.20F}, minimum, maximum));
+
+    nadoc_vr::ExtrudeLatticeDraft draft;
+    nadoc_vr::LatticePaintStroke stroke;
+    const nadoc_vr::LatticeCell first{0, 0};
+    const nadoc_vr::LatticeCell second{0, 1};
+    require(stroke.update(draft, first, true));
+    require(stroke.selecting() && draft.selected(first));
+    require(stroke.update(draft, second, true));
+    require(draft.selected(second));
+    require(!stroke.update(draft, first, true));
+    require(!stroke.update(draft, std::nullopt, false));
+
+    // Beginning the next stroke on a selected cell consistently paints erase.
+    require(stroke.update(draft, second, true));
+    require(!stroke.selecting() && !draft.selected(second));
+    require(stroke.update(draft, first, true));
+    require(!draft.selected(first));
+}
+
+void thumbwheelDragAndMomentumProduceSignedNotches() {
+    nadoc_vr::ThumbwheelControl wheel;
+    wheel.begin(0.0F);
+    require(wheel.drag(0.030F, 1.0F / 90.0F) == 2);
+    require(wheel.velocity() > 0.0F);
+    wheel.release();
+    const float releaseVelocity = wheel.velocity();
+    int momentumNotches = 0;
+    for (int frame = 0; frame < 180; ++frame) {
+        momentumNotches += wheel.updateMomentum(1.0F / 90.0F);
+    }
+    require(momentumNotches > 0);
+    require(std::abs(wheel.velocity()) < releaseVelocity);
+
+    wheel.reset();
+    wheel.begin(0.040F);
+    require(wheel.drag(0.005F, 1.0F / 90.0F) < 0);
+    require(wheel.velocity() < 0.0F);
+
+    // A deliberate slow click does not accidentally turn into a coast.
+    wheel.reset();
+    wheel.begin(0.0F);
+    require(wheel.drag(
+        nadoc_vr::ThumbwheelControl::kNotchTravel, 0.20F) == 1);
+    wheel.release();
+    require(!wheel.moving());
+    require(std::abs(wheel.phase()) < 1.0e-6F);
+    require(wheel.updateMomentum(1.0F / 90.0F) == 0);
+    wheel.begin(0.0F);
+    require(wheel.drag(0.006F, 0.20F) == 0);
+    require(std::abs(wheel.phase()) > 0.1F);
+    wheel.release();
+    require(std::abs(wheel.phase()) < 1.0e-6F);
+}
+
+void vrLatticeCoordinatesExactlyMatchDesktopCadnanoMath() {
+    using nadoc_vr::LatticeCell;
+    const LatticeCell origin{0, 0};
+    const glm::vec2 honeycombOdd = nadoc_vr::latticeCellOffsetNanometers(
+        {0, 1}, origin, false);
+    require(std::abs(
+        honeycombOdd.x - 1.125F * std::sqrt(3.0F)) < 1e-6F);
+    require(std::abs(honeycombOdd.y - 1.125F) < 1e-6F);
+    require(std::abs(glm::length(honeycombOdd) - 2.25F) < 1e-6F);
+    const glm::vec2 honeycombNegative = nadoc_vr::latticeCellOffsetNanometers(
+        {-1, -1}, {-2, 3}, false);
+    const glm::vec2 desktopNegative(
+        (-1.0F - 3.0F) * 1.125F * std::sqrt(3.0F),
+        (-1.0F * 3.375F + 0.0F) - (-2.0F * 3.375F + 1.125F));
+    require(glm::all(glm::epsilonEqual(
+        honeycombNegative, desktopNegative, 1e-6F)));
+
+    const glm::vec2 square = nadoc_vr::latticeCellOffsetNanometers(
+        {3, -2}, {1, 1}, true);
+    require(glm::all(glm::epsilonEqual(
+        square, glm::vec2(-6.75F, 4.5F), 1e-6F)));
+
+    const float localPerNm = nadoc_vr::latticePanelUnitsPerNanometer(
+        0.0125F, 3.0F, 0.75F);
+    const float localRadius = nadoc_vr::kDnaHelixRadiusNanometers * localPerNm;
+    require(std::abs(localRadius * 0.75F - 0.0125F * 3.0F) < 1e-6F);
+    const float previewLength = nadoc_vr::latticeExtrusionPanelLength(
+        8, 0.0125F, 3.0F, 0.75F);
+    require(std::abs(
+        previewLength * 0.75F -
+        8.0F * nadoc_vr::kDnaBasePairRiseNanometers * 0.0125F * 3.0F) < 1e-6F);
+    require(nadoc_vr::latticeBasePairPeriod(false) == 7);
+    require(nadoc_vr::latticeBasePairPeriod(true) == 8);
+}
+
+void strokeTextFittingNeverExceedsItsBounds() {
+    constexpr size_t characters = 31U;
+    constexpr float available = 0.52F;
+    const float scale = nadoc_vr::fittedStrokeTextScale(
+        characters, 0.004F, available);
+    require(scale > 0.0F && scale < 0.004F);
+    require(nadoc_vr::strokeTextWidth(characters, scale) <= available + 1e-6F);
 }
 
 void dockedMenuBorderGripMovesOnlyAfterAProximatePress() {
@@ -618,10 +778,17 @@ void toolContextFeedbackIsExactSequencedAndFinite() {
     require(glm::all(glm::epsilonEqual(
         resolved->expandedPreviewOrigin, glm::vec3(10, 11, 12), 1e-6F)));
 
-    const auto naturalOnly = nadoc_vr::parseToolContextFeedback(
-        "NADOCVR_TOOL_FEEDBACK 2 8 1 0 0 1 resolved end nuc:end "
-        "1 2 3 0 0 1 4 5 6\n",
+    const auto lattice = nadoc_vr::parseToolContextFeedback(
+        "NADOCVR_TOOL_FEEDBACK 4 8 1 0 0 1 resolved end nuc:end "
+        "SQUARE -2 7 1 2 3 0 0 1 4 5 6 7 8 9 0 1 0 10 11 12\n",
         7, 8);
+    require(lattice && lattice->latticeType == "SQUARE" &&
+            lattice->footprintCell == nadoc_vr::LatticeCell{-2, 7});
+
+    const auto naturalOnly = nadoc_vr::parseToolContextFeedback(
+        "NADOCVR_TOOL_FEEDBACK 2 9 1 0 0 1 resolved end nuc:end "
+        "1 2 3 0 0 1 4 5 6\n",
+        8, 9);
     require(naturalOnly && naturalOnly->resolved &&
             !naturalOnly->expandedPoseResolved);
 
@@ -871,13 +1038,21 @@ void parameterizedToolDraftsResetOnTargetChangesAndStayBounded() {
     require(draft.active() && draft.lengthBp() == 0);
     require(std::string(draft.unresolvedGeometry()) == "FOOTPRINT");
     require(draft.adjustPrimary(1) && draft.lengthBp() == 1);
+    require(draft.adjustExtrudeLengthBp(25) && draft.lengthBp() == 26);
+    require(draft.adjustExtrudeLengthBp(-100) && draft.lengthBp() == 0);
+    require(draft.adjustExtrudeLengthBp(5) && draft.lengthBp() == 5);
+    require(draft.adjustExtrudeLengthDetents(1, 7) && draft.lengthBp() == 7);
+    require(draft.adjustExtrudeLengthDetents(1, 7) && draft.lengthBp() == 14);
+    require(draft.adjustExtrudeLengthBp(1) && draft.lengthBp() == 15);
+    require(draft.adjustExtrudeLengthDetents(-1, 7) && draft.lengthBp() == 14);
+    require(draft.adjustExtrudeLengthDetents(-2, 7) && draft.lengthBp() == 0);
     require(draft.adjustSecondary(1) && draft.directionSign() == -1);
     require(draft.cycleOption() &&
             draft.strandFilter() == nadoc_vr::ToolStrandFilter::scaffold);
     require(draft.toggleFlag() && !draft.ligateAdjacent());
     require(!draft.bind(
         nadoc_vr::ToolMode::extrude, "end:first", "end", {"end-token"}));
-    require(draft.lengthBp() == 1);  // Same target preserves its draft.
+    require(draft.lengthBp() == 0);  // Same target preserves its draft.
 
     require(draft.bind(
         nadoc_vr::ToolMode::extrude, "end:second", "end", {"other-token"}));
@@ -1058,6 +1233,12 @@ int main() {
     recenterRestoresUnitScaleInFrontOfHead();
     closeInspectionAllowsTheModelToPassThroughTheHead();
     menuFollowsItsControllerAndDockingFreezesItsWorldPose();
+    radialToolMenuIsWorldFixedAndUsesExtrudedSectors();
+    extrudeLatticeDraftTogglesParityCodedCells();
+    partiallyVisibleLatticeCirclesRemainVisibleAndPaintable();
+    thumbwheelDragAndMomentumProduceSignedNotches();
+    vrLatticeCoordinatesExactlyMatchDesktopCadnanoMath();
+    strokeTextFittingNeverExceedsItsBounds();
     dockedMenuBorderGripMovesOnlyAfterAProximatePress();
     secondBorderGripTransitionsMenuDragIntoResize();
     desktopMenuBoundsDoubleAreaAndMatchAspect();

@@ -218,6 +218,10 @@ class VRToolFeedbackRequest(BaseModel):
     occupied: bool = False
     deformed: bool = False
     footprint_resolved: bool = False
+    footprint_lattice_type: Optional[Literal["HONEYCOMB", "SQUARE"]] = None
+    footprint_cell: Optional[list[int]] = Field(
+        default=None, min_length=2, max_length=2
+    )
 
 
 class VRToolPreflightFeedbackRequest(BaseModel):
@@ -3585,6 +3589,12 @@ def _write_tool_feedback(state: dict | None, body: VRToolFeedbackRequest) -> Non
         or body.footprint_resolved != (
             body.preview_origin is not None
             and body.expanded_preview_origin is not None
+            and body.footprint_lattice_type is not None
+            and body.footprint_cell is not None
+        )
+        or (
+            body.footprint_cell is not None
+            and any(abs(value) > 1_000_000 for value in body.footprint_cell)
         )
         or (
             not body.resolved
@@ -3601,6 +3611,8 @@ def _write_tool_feedback(state: dict | None, body: VRToolFeedbackRequest) -> Non
                     body.expanded_face_position,
                     body.expanded_face_normal,
                     body.expanded_preview_origin,
+                    body.footprint_lattice_type,
+                    body.footprint_cell,
                 )
             )
         )
@@ -3654,10 +3666,16 @@ def _write_tool_feedback(state: dict | None, body: VRToolFeedbackRequest) -> Non
         )
 
     record = (
-        f"NADOCVR_TOOL_FEEDBACK 3 {body.tool_config_sequence} "
+        f"NADOCVR_TOOL_FEEDBACK 4 {body.tool_config_sequence} "
         f"{int(body.resolved)} {int(body.occupied)} {int(body.deformed)} "
         f"{int(body.footprint_resolved)} "
         f"{body.reason} {body.target_kind} {body.target_identity}"
+        + (
+            f" {body.footprint_lattice_type} {body.footprint_cell[0]} "
+            f"{body.footprint_cell[1]}"
+            if body.footprint_resolved and body.footprint_cell is not None
+            else ""
+        )
         + (" " + " ".join(f"{value:.17g}" for value in values) if values else "")
         + "\n"
     )

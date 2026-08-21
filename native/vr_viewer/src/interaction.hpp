@@ -57,6 +57,17 @@ class MenuPlacement {
         update(hands);
     }
 
+    /** Open already frozen at an explicit world pose.  Tool-created windows use
+     * this so they do not spend one frame following a controller or overlap one
+     * another before their first render. */
+    void openDocked(const glm::vec3& position, const glm::quat& orientation) {
+        position_ = position;
+        orientation_ = glm::normalize(orientation);
+        worldDocked_ = true;
+        dragHand_.reset();
+        resizeActive_ = false;
+    }
+
     void update(
         const std::array<HandPose, 2>& hands,
         float panelHalfWidth = kMenuHalfWidth) {
@@ -259,6 +270,367 @@ class MenuPlacement {
     glm::vec3 resizePositionFromMidpoint_{};
 };
 
+/** Hold-to-open, world-fixed radial tool palette.
+ *
+ * Each target is an annular quarter-cylinder rather than a flat angle test.  A
+ * controller selection-volume center therefore has to enter the visible depth
+ * of a sector before it can highlight.  The menu snapshots its pose on press;
+ * subsequent controller motion never changes that pose.
+ */
+class RadialToolMenu {
+  public:
+    static constexpr size_t kItemCount = 4;
+    static constexpr float kInnerRadius = 0.040F;
+    static constexpr float kOuterRadius = 0.155F;
+    static constexpr float kHalfDepth = 0.035F;
+    static constexpr float kBackwardTiltRadians = glm::quarter_pi<float>();
+
+    void open(const HandPose& hand, const glm::vec3& selectionCenter) {
+        if (!hand.valid) return;
+        position_ = selectionCenter;
+        orientation_ = glm::normalize(
+            hand.orientation * glm::angleAxis(
+                -kBackwardTiltRadians, glm::vec3(1.0F, 0.0F, 0.0F)));
+        open_ = true;
+        hovered_.reset();
+    }
+
+    void close() {
+        open_ = false;
+        hovered_.reset();
+    }
+
+    [[nodiscard]] std::optional<size_t> update(const glm::vec3& selectionCenter) {
+        hovered_ = hit(selectionCenter);
+        return hovered_;
+    }
+
+    [[nodiscard]] std::optional<size_t> hit(const glm::vec3& worldPoint) const {
+        if (!open_) return std::nullopt;
+        const glm::vec3 local = glm::inverse(orientation_) * (worldPoint - position_);
+        const float radial = std::hypot(local.x, local.y);
+        if (radial < kInnerRadius || radial > kOuterRadius ||
+            std::abs(local.z) > kHalfDepth) {
+            return std::nullopt;
+        }
+        float angle = std::atan2(local.y, local.x);
+        if (angle < 0.0F) angle += glm::two_pi<float>();
+        return static_cast<size_t>(std::floor(
+            (angle + glm::quarter_pi<float>()) / glm::half_pi<float>()))
+            % kItemCount;
+    }
+
+    [[nodiscard]] glm::vec3 worldPoint(const glm::vec3& local) const {
+        return position_ + orientation_ * local;
+    }
+    [[nodiscard]] bool open() const { return open_; }
+    [[nodiscard]] const glm::vec3& position() const { return position_; }
+    [[nodiscard]] const glm::quat& orientation() const { return orientation_; }
+    [[nodiscard]] const std::optional<size_t>& hovered() const { return hovered_; }
+
+  private:
+    bool open_ = false;
+    glm::vec3 position_{};
+    glm::quat orientation_{1.0F, 0.0F, 0.0F, 0.0F};
+    std::optional<size_t> hovered_;
+};
+
+struct LatticeCell {
+    int row = 0;
+    int column = 0;
+
+    [[nodiscard]] bool operator==(const LatticeCell&) const = default;
+    [[nodiscard]] bool forward() const { return ((row + column) & 1) == 0; }
+};
+
+inline constexpr float kDnaHelixRadiusNanometers = 1.0F;
+inline constexpr float kDnaBasePairRiseNanometers = 0.334F;
+inline constexpr float kHoneycombLatticeRadiusNanometers = 1.125F;
+inline constexpr float kHoneycombColumnPitchNanometers =
+    kHoneycombLatticeRadiusNanometers * 1.7320508075688772F;
+inline constexpr float kHoneycombRowPitchNanometers =
+    3.0F * kHoneycombLatticeRadiusNanometers;
+inline constexpr float kSquareLatticePitchNanometers = 2.25F;
+
+/** Exact desktop/cadnano lattice displacement from origin to cell, in nm. */
+inline glm::vec2 latticeCellOffsetNanometers(
+    const LatticeCell& cell, const LatticeCell& origin, bool square) {
+    if (square) {
+        return {
+            static_cast<float>(cell.column - origin.column) *
+                kSquareLatticePitchNanometers,
+            static_cast<float>(cell.row - origin.row) *
+                kSquareLatticePitchNanometers,
+        };
+    }
+    auto position = [](const LatticeCell& value) {
+        const int parity = ((value.row + value.column) % 2 + 2) % 2;
+        return glm::vec2(
+            static_cast<float>(value.column) * kHoneycombColumnPitchNanometers,
+            static_cast<float>(value.row) * kHoneycombRowPitchNanometers +
+                (parity != 0 ? kHoneycombLatticeRadiusNanometers : 0.0F));
+    };
+    return position(cell) - position(origin);
+}
+
+/** Convert a model-space nm length to panel-local units while preserving its
+ * world size after both the scene and panel transforms are applied. */
+inline float latticePanelUnitsPerNanometer(
+    float sourceToNormalizedScale, float sceneScale, float panelScale) {
+    if (!std::isfinite(sourceToNormalizedScale) ||
+        !std::isfinite(sceneScale) || !std::isfinite(panelScale) ||
+        sourceToNormalizedScale <= 0.0F || sceneScale <= 0.0F ||
+        panelScale <= 0.0F) {
+        return 0.0F;
+    }
+    return sourceToNormalizedScale * sceneScale / panelScale;
+}
+
+inline float latticeExtrusionPanelLength(
+    int32_t lengthBp, float sourceToNormalizedScale,
+    float sceneScale, float panelScale) {
+    if (lengthBp <= 0) return 0.0F;
+    return static_cast<float>(lengthBp) * kDnaBasePairRiseNanometers *
+        latticePanelUnitsPerNanometer(
+            sourceToNormalizedScale, sceneScale, panelScale);
+}
+
+inline int32_t latticeBasePairPeriod(bool square) {
+    return square ? 8 : 7;
+}
+
+inline float strokeTextWidth(size_t characterCount, float scale) {
+    if (characterCount == 0U || scale <= 0.0F) return 0.0F;
+    return static_cast<float>((characterCount - 1U) * 6U + 5U) * scale;
+}
+
+inline float fittedStrokeTextScale(
+    size_t characterCount, float maximumScale, float availableWidth) {
+    if (characterCount == 0U || maximumScale <= 0.0F || availableWidth <= 0.0F) {
+        return 0.0F;
+    }
+    const float units = static_cast<float>((characterCount - 1U) * 6U + 5U);
+    return std::min(maximumScale, availableWidth / units);
+}
+
+inline bool circleIntersectsBounds(
+    const glm::vec2& center, float radius,
+    const glm::vec2& minimum, const glm::vec2& maximum) {
+    if (!std::isfinite(radius) || radius < 0.0F) return false;
+    const glm::vec2 nearest = glm::clamp(center, minimum, maximum);
+    const glm::vec2 offset = center - nearest;
+    return glm::dot(offset, offset) <= radius * radius;
+}
+
+inline std::optional<std::pair<glm::vec2, glm::vec2>> clipLineToBounds(
+    glm::vec2 first, glm::vec2 second,
+    const glm::vec2& minimum, const glm::vec2& maximum) {
+    const glm::vec2 delta = second - first;
+    float enter = 0.0F;
+    float leave = 1.0F;
+    const std::array<float, 4> p{-delta.x, delta.x, -delta.y, delta.y};
+    const std::array<float, 4> q{
+        first.x - minimum.x, maximum.x - first.x,
+        first.y - minimum.y, maximum.y - first.y};
+    for (size_t edge = 0; edge < p.size(); ++edge) {
+        if (std::abs(p[edge]) < 1.0e-7F) {
+            if (q[edge] < 0.0F) return std::nullopt;
+            continue;
+        }
+        const float amount = q[edge] / p[edge];
+        if (p[edge] < 0.0F) enter = std::max(enter, amount);
+        else leave = std::min(leave, amount);
+        if (enter > leave) return std::nullopt;
+    }
+    return std::pair{first + delta * enter, first + delta * leave};
+}
+
+/** Bounded VR-only extrusion-footprint draft used by the lattice window. */
+class ExtrudeLatticeDraft {
+  public:
+    // A heavily zoomed-out lattice panel can expose several thousand cells.
+    // Keep the draft bounded, but do not silently truncate ordinary paint
+    // strokes at the former 9 x 9 preview limit.
+    static constexpr size_t kMaximumCells = 16'641;
+
+    [[nodiscard]] bool toggle(const LatticeCell& cell) {
+        const auto found = std::lower_bound(
+            cells_.begin(), cells_.end(), cell, less);
+        if (found != cells_.end()) {
+            if (*found == cell) {
+                cells_.erase(found);
+                return true;
+            }
+        }
+        if (cells_.size() >= kMaximumCells) return false;
+        cells_.insert(found, cell);
+        return true;
+    }
+
+    [[nodiscard]] bool setSelected(const LatticeCell& cell, bool selected) {
+        const auto found = std::lower_bound(
+            cells_.begin(), cells_.end(), cell, less);
+        const bool exists = found != cells_.end() && *found == cell;
+        if (selected) {
+            if (exists) return false;
+            if (cells_.size() >= kMaximumCells) return false;
+            cells_.insert(found, cell);
+            return true;
+        }
+        if (!exists) return false;
+        cells_.erase(found);
+        return true;
+    }
+
+    void clear() { cells_.clear(); }
+    [[nodiscard]] bool selected(const LatticeCell& cell) const {
+        const auto found = std::lower_bound(
+            cells_.begin(), cells_.end(), cell, less);
+        return found != cells_.end() && *found == cell;
+    }
+    [[nodiscard]] const std::vector<LatticeCell>& cells() const { return cells_; }
+
+  private:
+    static bool less(const LatticeCell& first, const LatticeCell& second) {
+        return first.row < second.row ||
+               (first.row == second.row && first.column < second.column);
+    }
+
+    std::vector<LatticeCell> cells_;
+};
+
+/** One held-trigger paint stroke. The first cell chooses add versus erase and
+ * each subsequently crossed cell is applied at most once until release. */
+class LatticePaintStroke {
+  public:
+    [[nodiscard]] bool update(
+        ExtrudeLatticeDraft& draft, const std::optional<LatticeCell>& cell,
+        bool triggerPressed) {
+        if (!triggerPressed) {
+            reset();
+            return false;
+        }
+        if (!cell) return false;
+        if (!active_) {
+            active_ = true;
+            selecting_ = !draft.selected(*cell);
+            visited_.clear();
+        }
+        if (std::find(visited_.begin(), visited_.end(), *cell) != visited_.end()) {
+            return false;
+        }
+        visited_.push_back(*cell);
+        return draft.setSelected(*cell, selecting_);
+    }
+
+    void reset() {
+        active_ = false;
+        selecting_ = true;
+        visited_.clear();
+    }
+    [[nodiscard]] bool active() const { return active_; }
+    [[nodiscard]] bool selecting() const { return selecting_; }
+
+  private:
+    bool active_ = false;
+    bool selecting_ = true;
+    std::vector<LatticeCell> visited_;
+};
+
+/** Provisional inertial thumbwheel model. Positive/upward travel increments the
+ * caller's value. Constants are intentionally centralized for headset tuning. */
+class ThumbwheelControl {
+  public:
+    static constexpr float kNotchTravel = 0.014F;
+    static constexpr float kDampingPerSecond = 2.6F;
+    static constexpr float kStopVelocity = 0.012F;
+    static constexpr float kFlickVelocityThreshold = 0.20F;
+    static constexpr float kMaximumVelocity = 1.2F;
+
+    void begin(float localY) {
+        dragging_ = true;
+        lastY_ = localY;
+        velocity_ = 0.0F;
+    }
+
+    [[nodiscard]] int drag(float localY, float elapsedSeconds) {
+        if (!dragging_ || !std::isfinite(localY)) return 0;
+        const float delta = localY - lastY_;
+        lastY_ = localY;
+        if (std::isfinite(elapsedSeconds) && elapsedSeconds > 1.0e-5F) {
+            const float instantaneous = glm::clamp(
+                delta / elapsedSeconds, -kMaximumVelocity, kMaximumVelocity);
+            velocity_ = glm::mix(velocity_, instantaneous, 0.45F);
+        }
+        return consume(delta);
+    }
+
+    void release() {
+        dragging_ = false;
+        if (std::abs(velocity_) < kFlickVelocityThreshold) {
+            velocity_ = 0.0F;
+            settleOnNotch();
+        }
+    }
+
+    [[nodiscard]] int updateMomentum(float elapsedSeconds) {
+        if (dragging_ || !std::isfinite(elapsedSeconds) || elapsedSeconds <= 0.0F) {
+            return 0;
+        }
+        if (std::abs(velocity_) < kStopVelocity) {
+            velocity_ = 0.0F;
+            settleOnNotch();
+            return 0;
+        }
+        const float delta = velocity_ * elapsedSeconds;
+        velocity_ *= std::exp(-kDampingPerSecond * elapsedSeconds);
+        return consume(delta);
+    }
+
+    void reset() {
+        dragging_ = false;
+        lastY_ = 0.0F;
+        velocity_ = 0.0F;
+        accumulatedTravel_ = 0.0F;
+        totalTravel_ = 0.0F;
+    }
+
+    [[nodiscard]] bool dragging() const { return dragging_; }
+    [[nodiscard]] bool moving() const {
+        return dragging_ || std::abs(velocity_) >= kStopVelocity;
+    }
+    [[nodiscard]] float velocity() const { return velocity_; }
+    [[nodiscard]] float phase() const {
+        const float result = std::fmod(totalTravel_ / kNotchTravel, 1.0F);
+        return std::abs(result) < 1.0e-5F ||
+               std::abs(std::abs(result) - 1.0F) < 1.0e-5F
+            ? 0.0F : result;
+    }
+
+  private:
+    void settleOnNotch() {
+        totalTravel_ = std::round(
+            (totalTravel_ - accumulatedTravel_) / kNotchTravel) * kNotchTravel;
+        accumulatedTravel_ = 0.0F;
+    }
+
+    [[nodiscard]] int consume(float delta) {
+        if (!std::isfinite(delta)) return 0;
+        accumulatedTravel_ += delta;
+        totalTravel_ += delta;
+        const int steps = std::clamp(
+            static_cast<int>(accumulatedTravel_ / kNotchTravel), -64, 64);
+        accumulatedTravel_ -= static_cast<float>(steps) * kNotchTravel;
+        return steps;
+    }
+
+    bool dragging_ = false;
+    float lastY_ = 0.0F;
+    float velocity_ = 0.0F;
+    float accumulatedTravel_ = 0.0F;
+    float totalTravel_ = 0.0F;
+};
+
 struct MenuPanelBounds {
     glm::vec2 minimum{};
     glm::vec2 maximum{};
@@ -423,6 +795,8 @@ struct ToolContextFeedback {
     bool occupied = false;
     bool deformed = false;
     bool footprintResolved = false;
+    std::string latticeType = "HONEYCOMB";
+    LatticeCell footprintCell{};
     std::string reason;
     std::string selectionKind = "none";
     std::string identity;
@@ -690,12 +1064,7 @@ class ToolConfigurationDraft {
     [[nodiscard]] bool adjustPrimary(int direction) {
         if (!active_ || direction == 0) return false;
         if (mode_ == ToolMode::extrude) {
-            const int64_t next = static_cast<int64_t>(lengthBp_) + (direction > 0 ? 1 : -1);
-            const int32_t clamped = static_cast<int32_t>(
-                std::clamp<int64_t>(next, 0, kMaximumLengthBp));
-            if (clamped == lengthBp_) return false;
-            lengthBp_ = clamped;
-            return true;
+            return adjustExtrudeLengthBp(direction > 0 ? 1 : -1);
         }
         if (mode_ == ToolMode::twist) {
             const double step = twistAmountMode_ == TwistAmountMode::total_degrees
@@ -715,6 +1084,34 @@ class ToolConfigurationDraft {
             return true;
         }
         return false;
+    }
+
+    [[nodiscard]] bool adjustExtrudeLengthBp(int64_t delta) {
+        if (!active_ || mode_ != ToolMode::extrude || delta == 0) return false;
+        const int64_t next = static_cast<int64_t>(lengthBp_) + delta;
+        const int32_t clamped = static_cast<int32_t>(
+            std::clamp<int64_t>(next, 0, kMaximumLengthBp));
+        if (clamped == lengthBp_) return false;
+        lengthBp_ = clamped;
+        return true;
+    }
+
+    /** Move between lattice-repeat detents. A partial value set by another
+     * control first lands on the adjacent repeat rather than skipping it. */
+    [[nodiscard]] bool adjustExtrudeLengthDetents(
+        int detents, int32_t basePairsPerDetent) {
+        if (!active_ || mode_ != ToolMode::extrude || detents == 0 ||
+            basePairsPerDetent <= 0) return false;
+        const int64_t period = basePairsPerDetent;
+        const int64_t anchor = detents > 0
+            ? static_cast<int64_t>(lengthBp_) / period
+            : (static_cast<int64_t>(lengthBp_) + period - 1) / period;
+        const int64_t target = (anchor + detents) * period;
+        const int32_t clamped = static_cast<int32_t>(
+            std::clamp<int64_t>(target, 0, kMaximumLengthBp));
+        if (clamped == lengthBp_) return false;
+        lengthBp_ = clamped;
+        return true;
     }
 
     [[nodiscard]] bool adjustSecondary(int direction) {
@@ -1214,7 +1611,7 @@ inline std::optional<ToolContextFeedback> parseToolContextFeedback(
     ToolContextFeedback result;
     if (!(fields >> magic >> version >> result.sequence >> resolved >> occupied >> deformed) ||
         magic != "NADOCVR_TOOL_FEEDBACK" ||
-        (version != 1 && version != 2 && version != 3)) {
+        (version != 1 && version != 2 && version != 3 && version != 4)) {
         return std::nullopt;
     }
     if (version >= 2 && !(fields >> footprintResolved)) return std::nullopt;
@@ -1242,6 +1639,15 @@ inline std::optional<ToolContextFeedback> parseToolContextFeedback(
     result.occupied = occupied == 1;
     result.deformed = deformed == 1;
     result.footprintResolved = footprintResolved == 1;
+    if (version >= 4 && result.footprintResolved) {
+        if (!(fields >> result.latticeType >> result.footprintCell.row
+                     >> result.footprintCell.column) ||
+            (result.latticeType != "HONEYCOMB" && result.latticeType != "SQUARE") ||
+            std::abs(result.footprintCell.row) > 1'000'000 ||
+            std::abs(result.footprintCell.column) > 1'000'000) {
+            return std::nullopt;
+        }
+    }
     if (result.resolved) {
         auto readPose = [&](glm::vec3& position, glm::vec3& normal,
                             glm::vec3& origin) {

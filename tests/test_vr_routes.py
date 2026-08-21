@@ -778,19 +778,22 @@ def test_native_tool_feedback_rotates_exact_locator_and_fails_closed(tmp_path) -
             occupied=True,
             deformed=False,
             footprint_resolved=True,
+            footprint_lattice_type="HONEYCOMB",
+            footprint_cell=[2, 3],
         ),
     )
     fields = tool_feedback_path.read_text().split()
     assert fields[:10] == [
-        "NADOCVR_TOOL_FEEDBACK", "3", "7", "1", "1", "0", "1", "resolved",
+        "NADOCVR_TOOL_FEEDBACK", "4", "7", "1", "1", "0", "1", "resolved",
         "end", "nuc:s1:0:h1:3:FORWARD:0",
     ]
-    np.testing.assert_allclose([float(value) for value in fields[10:13]], [3, 2, -1])
-    np.testing.assert_allclose([float(value) for value in fields[13:16]], [0, 0, -1])
-    np.testing.assert_allclose([float(value) for value in fields[16:19]], [4, 3, -2])
-    np.testing.assert_allclose([float(value) for value in fields[19:22]], [7, 6, -5])
-    np.testing.assert_allclose([float(value) for value in fields[22:25]], [0, 1, 0])
-    np.testing.assert_allclose([float(value) for value in fields[25:]], [8, 7, -6])
+    assert fields[10:13] == ["HONEYCOMB", "2", "3"]
+    np.testing.assert_allclose([float(value) for value in fields[13:16]], [3, 2, -1])
+    np.testing.assert_allclose([float(value) for value in fields[16:19]], [0, 0, -1])
+    np.testing.assert_allclose([float(value) for value in fields[19:22]], [4, 3, -2])
+    np.testing.assert_allclose([float(value) for value in fields[22:25]], [7, 6, -5])
+    np.testing.assert_allclose([float(value) for value in fields[25:28]], [0, 1, 0])
+    np.testing.assert_allclose([float(value) for value in fields[28:]], [8, 7, -6])
     assert tool_feedback_path.stat().st_mode & 0o777 == 0o600
 
     _write_tool_feedback(
@@ -804,7 +807,7 @@ def test_native_tool_feedback_rotates_exact_locator_and_fails_closed(tmp_path) -
         ),
     )
     assert tool_feedback_path.read_text() == (
-        "NADOCVR_TOOL_FEEDBACK 3 8 0 0 0 0 no_continuation_face end "
+        "NADOCVR_TOOL_FEEDBACK 4 8 0 0 0 0 no_continuation_face end "
         "nuc:s1:0:h1:3:FORWARD:0\n"
     )
 

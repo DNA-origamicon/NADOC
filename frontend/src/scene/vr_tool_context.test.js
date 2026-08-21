@@ -197,6 +197,8 @@ describe('VR End tool context', () => {
       occupied: true,
       deformed: true,
       footprint_resolved: true,
+      footprint_lattice_type: 'HONEYCOMB',
+      footprint_cell: [2, 3],
     })
     expect(vrToolFeedbackPayload(8, draft, {
       toolContext: null, toolContextReason: 'no_continuation_face',
