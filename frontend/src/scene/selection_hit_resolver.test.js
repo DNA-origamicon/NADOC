@@ -10,6 +10,9 @@ const atomIdentity = (key, name) => encodeURIComponent(`atom-ref:${JSON.stringif
 const atomBondIdentity = (first, second) => encodeURIComponent(
   `atom-bond-ref:${JSON.stringify([first, second])}`,
 )
+const extraBaseIdentity = (key, primitive = 'bead') => encodeURIComponent(
+  `extra-base-ref:${JSON.stringify([key, primitive])}`,
+)
 
 describe('pure selection hit resolution', () => {
   it('resolves regular and forced-ligation arc IDs by live design ownership', () => {
@@ -229,6 +232,42 @@ describe('pure selection hit resolution', () => {
     expect(vrPrimitiveOwner('linker:link:d:ds:a:connector:2', { design })).toEqual({
       kind: 'linker_connection', connectionId: 'link:d', ref: null,
     })
+  })
+
+  it('resolves projected crossover inserts as selectable Base refs', () => {
+    const design = {
+      crossovers: [{ id: 'xo:with:colons', extra_bases: 'AT' }],
+      forced_ligations: [],
+    }
+    expect(vrPrimitiveOwner(
+      extraBaseIdentity('__xb__:xo:with:colons:1', 'slab'), { design },
+    )).toEqual({
+      kind: 'extra_base', connectionId: 'xo:with:colons',
+      connectionSubtype: 'crossover', primitive: 'slab',
+      ref: { kind: 'base', key: '__xb__:xo:with:colons:1' },
+    })
+    expect(vrSelectionAccepted('extra_base', 'base')).toBe(true)
+    expect(vrSelectionAccepted('extra_base', 'default')).toBe(false)
+    expect(vrSelectionAccepted('extra_base', 'strand')).toBe(false)
+    expect(vrPrimitiveOwner(
+      atomIdentity('__xb__:xo:with:colons:0', 'P'), { design },
+    )).toMatchObject({
+      kind: 'extra_base', connectionId: 'xo:with:colons', primitive: 'atom',
+      ref: { kind: 'base', key: '__xb__:xo:with:colons:0' },
+      atomRef: { baseKey: '__xb__:xo:with:colons:0', name: 'P' },
+    })
+    expect(vrPrimitiveOwner(atomBondIdentity(
+      ['h1:3:FORWARD', "O3'"], ['__xb__:xo:with:colons:0', 'P'],
+    ), {
+      design,
+      geometry: [{ helix_id: 'h1', bp_index: 3, direction: 'FORWARD' }],
+    })).toMatchObject({
+      kind: 'extra_base', primitive: 'atom-bond',
+      ref: { kind: 'base', key: '__xb__:xo:with:colons:0' },
+    })
+    expect(vrPrimitiveOwner(
+      extraBaseIdentity('__xb__:xo:with:colons:2'), { design },
+    )).toBeNull()
   })
 
   it('resolves only terminal beads as End refs', () => {

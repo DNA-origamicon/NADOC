@@ -135,12 +135,15 @@ describe('job JSON GET coalescing', () => {
       }) }
     })
     await expect(refreshNativeVRVisualization({
+      representation: 'stick', coloring: 'cpk',
       visualization_mode: 'oxdna_rmsf',
       visualization_points: [{ owner_token: 'base-token', position: [1, 2, 3], color: 9 }],
     })).resolves.toEqual({ acknowledged: true, visualization_sequence: 3 })
     expect(global.fetch).toHaveBeenCalledTimes(1)
     expect(global.fetch.mock.calls[0][0]).toBe('/api/vr/visualization-feedback')
     expect(body).toEqual({
+      representation: 'stick',
+      coloring: 'cpk',
       visualization_mode: 'oxdna_rmsf',
       visualization_points: [{ owner_token: 'base-token', position: [1, 2, 3], color: 9 }],
     })

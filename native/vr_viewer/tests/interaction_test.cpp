@@ -889,12 +889,14 @@ void visualizationSnapshotParserPreservesPositionsColorsAndRejectsDuplicates() {
                       "nadoc-vr-visualization-test.txt";
     {
         std::ofstream output(path);
-        output << "NADOCVR_VISUALIZATION 1 7 namd_rmsf 2\n"
-               << "V %5B%22base%22%2C%22h0%3A4%3AFORWARD%22%5D 1 2 3 12abef\n"
+        output << "NADOCVR_VISUALIZATION 3 7 namd_rmsf ballstick cpk 2\n"
+               << "F %5B%22base%22%2C%22h0%3A4%3AFORWARD%22%5D 1 2 3 12abef "
+                  "1.5 2.5 3.5 0.3 0 0 0 0.06 0 0 0 0.7\n"
                << "V %5B%22base%22%2C%22h0%3A5%3AFORWARD%22%5D -1 0.5 8 -\n";
     }
     const auto snapshot = nadoc_vr::loadVisualizationSnapshot(path.string());
     require(snapshot.sequence == 7 && snapshot.mode == "namd_rmsf");
+    require(snapshot.representation == "ballstick" && snapshot.coloring == "cpk");
     require(snapshot.points.size() == 2 && snapshot.points[0].hasColor);
     require(glm::all(glm::epsilonEqual(
         snapshot.points[0].position, glm::vec3(1, 2, 3), 1.0e-6F)));
@@ -902,10 +904,20 @@ void visualizationSnapshotParserPreservesPositionsColorsAndRejectsDuplicates() {
         snapshot.points[0].color,
         glm::vec3(0x12 / 255.0F, 0xab / 255.0F, 0xef / 255.0F), 1.0e-6F)));
     require(!snapshot.points[1].hasColor);
+    require(snapshot.points[0].hasSlabFrame);
+    require(glm::all(glm::epsilonEqual(
+        snapshot.points[0].slabCenter, glm::vec3(1.5F, 2.5F, 3.5F), 1.0e-6F)));
 
     {
         std::ofstream output(path);
-        output << "NADOCVR_VISUALIZATION 1 8 flex 2\n"
+        output << "NADOCVR_VISUALIZATION 2 8 legacy 0\n";
+    }
+    const auto legacy = nadoc_vr::loadVisualizationSnapshot(path.string());
+    require(legacy.representation.empty() && legacy.coloring.empty());
+
+    {
+        std::ofstream output(path);
+        output << "NADOCVR_VISUALIZATION 1 9 flex 2\n"
                << "V duplicate 1 2 3 -\n"
                << "V duplicate 4 5 6 ffffff\n";
     }
@@ -917,6 +929,31 @@ void visualizationSnapshotParserPreservesPositionsColorsAndRejectsDuplicates() {
     }
     std::filesystem::remove(path);
     require(rejected);
+}
+
+void atomVisualizationOffsetsReplaceCoarseBaseOffsets() {
+    const std::array<nadoc_vr::VisualizationOffsetContribution, 2> values{{
+        {{10.0F, 20.0F, 30.0F}, 1.0F, 0.0F, false},
+        {{1.0F, 2.0F, 3.0F}, 1.0F, 0.0F, true},
+    }};
+    const auto [start, end] = nadoc_vr::aggregateVisualizationOffsets(
+        values.data(), values.size());
+    require(glm::all(glm::epsilonEqual(start, glm::vec3(1, 2, 3), 1.0e-6F)));
+    require(glm::all(glm::epsilonEqual(end, glm::vec3(0), 1.0e-6F)));
+}
+
+void liveSlabConnectorUsesTheDisplayedSlabCorner() {
+    const glm::vec3 center(2.0F, 3.0F, 4.0F);
+    const glm::vec3 axisX(0.0F, 0.30F, 0.0F);
+    const glm::vec3 axisZ(0.0F, 0.0F, 0.70F);
+    require(glm::all(glm::epsilonEqual(
+        nadoc_vr::visualizationSlabConnectionCorner(
+            center, axisX, axisZ, glm::vec3(2.0F, 3.0F, 3.0F)),
+        glm::vec3(2.0F, 3.15F, 3.65F), 1.0e-6F)));
+    require(glm::all(glm::epsilonEqual(
+        nadoc_vr::visualizationSlabConnectionCorner(
+            center, axisX, axisZ, glm::vec3(2.0F, 3.0F, 5.0F)),
+        glm::vec3(2.0F, 3.15F, 4.35F), 1.0e-6F)));
 }
 
 }  // namespace
@@ -957,4 +994,6 @@ int main() {
     parameterizedToolDraftsResetOnTargetChangesAndStayBounded();
     jobSnapshotParserPreservesIdentityStatusAndRejectsAmbiguity();
     visualizationSnapshotParserPreservesPositionsColorsAndRejectsDuplicates();
+    atomVisualizationOffsetsReplaceCoarseBaseOffsets();
+    liveSlabConnectorUsesTheDisplayedSlabCorner();
 }

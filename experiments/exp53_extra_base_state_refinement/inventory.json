@@ -1,7 +1,16 @@
 {
   "schema": "nadoc.exp53.inventory.v1",
-  "exclude_parts": ["24hb_1xT"],
+  "exclude_parts": [],
   "sources": [
+    {
+      "part": "24hb_1xT",
+      "role": "large-bundle-single-long",
+      "job": "/media/jojo/Archive/NADOC_archive/6950d3b79138",
+      "production_ns": 223.6,
+      "local_minimum_image": true,
+      "target_samples": 500,
+      "note": "Large-bundle ensemble for insert position relative to the bridged helices."
+    },
     {
       "part": "2hb_1xT",
       "role": "symmetric-single-exp46",

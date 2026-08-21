@@ -1120,6 +1120,9 @@ async function main() {
   const mdDisplayController = initMdPanel(store, {
     designRenderer, atomisticRenderer,
     onRestoreDesignHeavy: _restoreDesignHeavy,
+    // Lazy because the atom/surface controller is initialized below. Using its
+    // visibility hub keeps beads, slabs and arcs together during a held handoff.
+    setCGVisible: visible => _atomSurface?.setCGVisible?.(visible),
     // Lazy: _atomSurface is assigned further below.  MD sets the atomistic mode itself,
     // so it needs this to pull the live coloring mode + strand palette onto its atoms.
     refreshAtomColors: () => _atomSurface?.refreshAtomColors?.(),
@@ -1706,8 +1709,7 @@ async function main() {
     // the CG stays up until those land (onHeavyApplied).  THREE controllers can drive it,
     // and each is asked whether it can deliver the specific `kind` being built:
     //   oxdnaDisplay — oxDNA relaxed/rmsf/trajectory: atomistic AND surface
-    //   mdViz        — NAMD flex/trajectory: only what md_viz_adapter maps (trajectory
-    //                  atomistic+surface; the flexibility-map heavy routes are unmapped)
+    //   mdViz        — NAMD flex/trajectory: measured atomistic coordinates and surfaces
     //   mdDisplayController — the live "Display MD" stream: atomistic only, never surface
     // Asking without the kind (or forgetting a controller, as this did for both NAMD paths
     // until 2026-08-01) either pays the full design build twice or defers to an overlay
@@ -5887,20 +5889,54 @@ async function main() {
     const activeMode = activeVisualization
       ? `${activeVisualization[1]}_${activeVisualization[0].mode?.() || 'display'}`
       : 'none'
+    // During an atomistic -> Full MD handoff the menu has already changed, but
+    // md_panel deliberately keeps the atom renderer visible until the correct CG
+    // payload is resident. Report the renderer that is actually on screen so a
+    // companion refresh can never pair Full ownership with atom coordinates.
+    const mdRenderedRepr = mdDisplayController.renderedRepresentation?.()
+    const renderedAtomisticMode = atomisticRenderer.getMode?.()
+    const renderedRepr = mdRenderedRepr ?? (
+      ['vdw', 'ballstick', 'stick'].includes(renderedAtomisticMode)
+        ? renderedAtomisticMode : _currentRepr
+    )
+    const representation = renderedRepr === 'vdw' ? 'ballstick' :
+      (['cylinders', 'full', 'ballstick', 'stick'].includes(renderedRepr)
+        ? renderedRepr : 'full')
+    const visualizationAtoms = []
+    if (activeVisualization && ['ballstick', 'stick'].includes(representation)) {
+      atomisticRenderer.visitAtoms?.((atom, position) => {
+        visualizationAtoms.push({
+          atom: {
+            name: atom?.name,
+            base_key: atom?.base_key,
+            scalar_key: atom?.scalar_key,
+            helix_id: atom?.helix_id,
+            bp_index: atom?.bp_index,
+            direction: atom?.direction,
+            copy_k: atom?.copy_k ?? 0,
+          },
+          position: position.toArray(),
+        })
+      })
+    }
     return {
-      representation: ['cylinders', 'full', 'ballstick', 'stick'].includes(_currentRepr)
-        ? _currentRepr : 'full',
+      representation,
       coloring: ['strand', 'base', 'cluster', 'cpk'].includes(store.getState().coloringMode)
         ? store.getState().coloringMode : 'strand',
       ...buildVRVisualizationSnapshot(
         designRenderer.getFemPositions?.(),
         designRenderer.getScalarColors?.(),
         activeMode,
+        {
+          slabFrames: designRenderer.getFemSlabFrames?.(),
+          atoms: visualizationAtoms,
+        },
       ),
     }
   }
 
-  initVRSession({
+  let _vrStyleApply = Promise.resolve()
+  const vrSession = initVRSession({
     renderer,
     scene,
     camera,
@@ -5927,7 +5963,19 @@ async function main() {
     publishNativeJobs: () => api.refreshNativeVRVisualization(_vrCompanionState()),
     onNativeEvent: event => {
       const button = document.getElementById('menu-help-view-vr')
-      if (event?.type === 'selection_level') {
+      if (event?.type === 'style') {
+        // Native menu choices are requests, not local renderer mutations. Route
+        // them through the exact desktop representation state machine (including
+        // live-MD payload handoffs), serialize rapid requests, then publish the
+        // acknowledged desktop state back to the companion.
+        _vrStyleApply = _vrStyleApply.then(async () => {
+          await _setRepresentation(event.representation)
+          _setColoringMode(event.coloring)
+          await vrSession.publishNativeState?.()
+        }).catch(() => {
+          showToast('Could not apply the VR representation on desktop.', { severity: 'error' })
+        })
+      } else if (event?.type === 'selection_level') {
         selectionManager.setSelectionLevel?.(event.level)
         selectionManager.previewVRIdentity?.(button?.dataset.vrHoverIdentity || null)
       } else if (event?.type === 'select') {
@@ -6118,6 +6166,12 @@ async function main() {
       }
     },
   })
+  const _publishVRRepresentation = () => { void vrSession.publishNativeState?.() }
+  // Ordinary representation changes publish immediately. A held live-MD switch
+  // first republishes the still-rendered atomistic state, then this settled event
+  // publishes Full together with its authoritative coarse frame.
+  window.addEventListener('nadoc:representation-change', _publishVRRepresentation)
+  window.addEventListener('nadoc:representation-settled', _publishVRRepresentation)
 
   document.getElementById('menu-help-fjc-sim')?.addEventListener('click', async () => {
     // Lazy-load the modal so the dev bundle stays slim until the user opens it.

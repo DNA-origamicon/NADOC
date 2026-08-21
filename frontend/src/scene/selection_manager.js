@@ -2376,10 +2376,20 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         designRenderer.setPreviewArc(arc.getPositions?.() ?? [])
       }
       return owner
-    } else if ((owner.kind === 'flexible_base' || owner.kind === 'linker_base') &&
+    } else if (((owner.kind === 'extra_base' && _selLevel === 'base') ||
+                owner.kind === 'flexible_base' || owner.kind === 'linker_base') &&
                (_selLevel === 'base' || _selLevel === 'default')) {
       const candidate = _baseCandidates().find(item => item.key === owner.ref.key)
       if (candidate) directGlowEntries = [_baseGlowEntry(candidate)]
+    } else if (owner.kind === 'extra_base' && _selLevel === 'xover') {
+      const arc = getUnfoldView?.()?.getArcEntries?.()
+        ?.find(candidate => candidate.crossover_id === owner.connectionId)
+      if (arc) {
+        _hoverArc = arc
+        _hoverKey = `vr:${identity}`
+        designRenderer.setPreviewArc(arc.getPositions?.() ?? [])
+      }
+      return owner
     }
 
     if (entries.length || directGlowEntries?.length) {
@@ -2454,6 +2464,19 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
           !!_resolveClusterId(representative, state.currentDesign),
       })
       if (arc) _v2HandleArc(arc, backboneEntries, coneEntries)
+    } else if (owner.kind === 'extra_base') {
+      if (_selLevel === 'xover') {
+        arc = getUnfoldView?.()?.getArcEntries?.()
+          ?.find(candidate => candidate.crossover_id === owner.connectionId)
+        accepted = !!arc
+        if (arc) _v2HandleArc(arc, backboneEntries, coneEntries)
+      } else {
+        const candidate = _baseCandidates().find(item => item.key === owner.ref.key)
+        accepted = vrSelectionAccepted(owner.kind, _selLevel, {
+          hasTarget: !!candidate,
+        })
+        if (accepted) _selectBaseKey(owner.ref.key)
+      }
     } else if ((owner.kind === 'flexible_base' || owner.kind === 'linker_base') &&
                vrSelectionAccepted(owner.kind, _selLevel)) {
       accepted = true
@@ -2477,8 +2500,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
           selectedRef.toKey === owner.ref.toKey) ||
          (selectedRef.fromKey === owner.ref.toKey &&
           selectedRef.toKey === owner.ref.fromKey))) ||
-      (selectedRef.kind === 'crossover' && owner.kind === 'crossover' &&
-        selectedRef.id === owner.ref.id)
+      (selectedRef.kind === 'crossover' &&
+        (owner.kind === 'crossover' || owner.kind === 'extra_base') &&
+        selectedRef.id === (owner.kind === 'extra_base' ? owner.connectionId : owner.ref.id))
     )
     const ownerTokens = vrOwnerTokens({ selected, selectedRef, owner, nucleotide, key })
     return {

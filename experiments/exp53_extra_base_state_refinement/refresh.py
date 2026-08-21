@@ -77,14 +77,15 @@ def validate(rows):
 
 
 def extract(cfg, rows, force=False):
-    target = int(cfg["extraction"]["target_samples"])
     for source in rows:
         if not source.get("available"):
             continue
+        target = int(source.get("target_samples", cfg["extraction"]["target_samples"]))
         out = RESULTS / f"{slug(source)}__metrics.json"
         sig = RESULTS / f"{slug(source)}__metrics.signature.json"
         current = {"dcds": source["dcds"], "bytes": source["dcd_bytes"],
-                   "mtime_ns": source["dcd_mtime_ns"], "target_samples": target}
+                   "mtime_ns": source["dcd_mtime_ns"], "target_samples": target,
+                   "local_minimum_image": bool(source.get("local_minimum_image"))}
         if not force and out.exists() and sig.exists() and json.loads(sig.read_text()) == current:
             print(out, "cached")
             continue
@@ -97,6 +98,8 @@ def extract(cfg, rows, force=False):
         cmd = [sys.executable, str(ROOT / "experiments/exp46_xb_placement/xb_observables.py"),
                "--job", source["job"], "--dcd", *source["dcds"], "--stride", str(stride),
                "--out", str(out)]
+        if source.get("local_minimum_image"):
+            cmd.append("--local-minimum-image")
         subprocess.run(cmd, cwd=ROOT, check=True)
         sig.write_text(json.dumps(current, indent=2) + "\n")
         print(out)

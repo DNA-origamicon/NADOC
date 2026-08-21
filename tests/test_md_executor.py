@@ -171,6 +171,28 @@ def _make_prepared_job(workspace: Path) -> MdJob:
     (pkg / "manifest.json").write_text(json.dumps(manifest))
     (pkg / "6hb_demo.psf").write_text("psf")
     (pkg / "6hb_demo.pdb").write_text("pdb")
+    # Alpine early-stop precomputes this from the real topology. Unit executor tests
+    # use a deliberately tiny fake PSF/PDB, so provide the cached-plan seam directly.
+    from backend.core.slurm_script import ALPINE_WC_PLAN_NAME
+
+    (pkg / ALPINE_WC_PLAN_NAME).write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "source": {
+                    "6hb_demo.psf": {
+                        "size": (pkg / "6hb_demo.psf").stat().st_size,
+                        "mtime_ns": (pkg / "6hb_demo.psf").stat().st_mtime_ns,
+                    },
+                    "6hb_demo.pdb": {
+                        "size": (pkg / "6hb_demo.pdb").stat().st_size,
+                        "mtime_ns": (pkg / "6hb_demo.pdb").stat().st_mtime_ns,
+                    },
+                },
+                "pairs": [{"atom_pairs": [[0, 1]], "ref_distances": [3.0]}],
+            }
+        )
+    )
     return job
 
 
@@ -289,23 +311,17 @@ def test_no_early_stop_staging_when_off(tmp_path, alpine, resources):
     assert not any("nadoc_cutoff_eval.py" in r for r in staged)
 
 
-def test_early_stop_on_stages_cutoff_and_health_scripts(tmp_path, alpine, resources):
-    """No tiers: turning early-stop on always stages all three node scripts — the
-    cutoff evaluator AND the real WC health step — so the remote decision matches
-    the local runner's energy-AND-WC test, never falls back to an energy-only
-    mode."""
+def test_early_stop_on_stages_portable_wc_scripts(tmp_path, alpine, resources):
+    """Alpine stages a stdlib-only WC reader plus its precomputed pair plan."""
     job = _make_prepared_job(tmp_path)
     job.early_stop_relax = True
     conn = _submit(job, tmp_path, alpine, resources)
     staged = {r for r in conn.put_contents}
     assert any(r.endswith("/nadoc_cutoff_eval.py") for r in staged)
-    assert any(r.endswith("/nadoc_health_eval.py") for r in staged)
-    assert any(r.endswith("/md_health.py") for r in staged)
-    # the staged md_health is the verbatim backend module (has run_health_check)
-    md_health_text = next(
-        t for r, t in conn.put_contents.items() if r.endswith("/md_health.py")
-    )
-    assert "def run_health_check" in md_health_text
+    assert any(r.endswith("/nadoc_wc_eval.py") for r in staged)
+    assert any(r.endswith("/nadoc_wc_plan.json") for r in staged)
+    assert not any(r.endswith("/nadoc_health_eval.py") for r in staged)
+    assert not any(r.endswith("/md_health.py") for r in staged)
 
 
 # ── NAMD module discovery ─────────────────────────────────────────────────────
@@ -423,6 +439,51 @@ def test_reconcile_completed_fetches_and_marks_done(tmp_path, alpine, resources)
     # scratch→project mirror happened; the listed files were pulled down locally.
     assert conn.mirrors and conn.mirrors[-1][0] == job.remote_scratch_dir
     assert conn.gets
+
+
+def test_reconcile_completed_persists_terminal_stage_progress_before_download(
+    tmp_path, monkeypatch
+):
+    """A reconnect-triggered download can take hours. Publish SLURM completion and
+    the final remote stage listing before entering it so the UI never stays on the last
+    stage observed before logout."""
+    job = _make_prepared_job(tmp_path)
+    job.slurm_job_id = "42"
+    job.remote_scratch_dir = "/scratch/x/" + job.job_id
+    job.status = MdStatus.running
+    job.segments[0].status = "running"
+    job.save(tmp_path)
+    progress = (
+        "output/6hb_demo_01_p100.coor\n6hb_demo_01_p100.log\n"
+        "---NADOC-METRICS---\n---NADOC-HEALTH---\n---NADOC-SIZES---\n7\n21\n"
+    )
+    conn = FakeConn(canned={
+        "squeue": RunResult(0, "", ""),
+        "sacct": RunResult(0, "42|COMPLETED", ""),
+        "---NADOC-METRICS---": RunResult(0, progress, ""),
+    })
+    observed = {}
+
+    async def _fetch(saved_job, workspace_dir, conn=None):
+        persisted = MdJob.load(saved_job.job_id, workspace_dir)
+        observed["slurm_state"] = persisted.slurm_state
+        observed["segment_status"] = persisted.segments[0].status
+        out = saved_job.package_dir(workspace_dir) / "output"
+        out.mkdir(exist_ok=True)
+        for suffix in ("coor", "vel", "xsc"):
+            (out / f"{saved_job.segments[0].name}.{suffix}").write_text("checkpoint")
+        saved_job.download_status = {
+            "state": "verified", "total_bytes": 30, "verified_bytes": 30,
+        }
+        return True
+
+    monkeypatch.setattr(ex, "fetch_outputs", _fetch)
+    monkeypatch.setattr(ex, "_finalize_local_bookkeeping", lambda *_: None)
+    monkeypatch.setattr(ex, "_record_learned_throughput", lambda *_: None)
+    out = _run(ex.reconcile_remote_job(job, tmp_path, conn=conn))
+
+    assert observed == {"slurm_state": "COMPLETED", "segment_status": "done"}
+    assert out.status == MdStatus.completed
 
 
 def test_reconcile_completed_persists_processing_during_final_bookkeeping(
@@ -972,6 +1033,73 @@ def test_poll_remote_jobs_reconciles_active(tmp_path):
     assert MdJob.load(job.job_id, tmp_path).status == MdStatus.running
 
 
+def test_poll_remote_jobs_recovers_completed_unverified_job_on_login(
+    tmp_path, monkeypatch
+):
+    """A legacy/interrupted record can already say completed even though its Alpine
+    result inventory is not verified.  Reconnecting must audit it rather than filtering
+    it out with the ordinary queued/running-only predicate."""
+    job = _make_prepared_job(tmp_path)
+    job.slurm_job_id = "42"
+    job.slurm_state = "COMPLETED"
+    job.status = MdStatus.completed
+    job.download_status = {
+        "state": "interrupted", "total_bytes": 7, "verified_bytes": 0,
+        "files_total": 1, "files_verified": 0,
+    }
+    job.save(tmp_path)
+    called = []
+
+    async def _reconcile(j, ws, conn=None):
+        called.append(j.job_id)
+        j.download_status = {"state": "verified", "total_bytes": 7, "verified_bytes": 7}
+        j.save(ws)
+        return j
+
+    monkeypatch.setattr(ex, "reconcile_remote_job", _reconcile)
+    # Periodic polling stays active-only; the reconnect pass opts into one recovery.
+    assert _run(ex.poll_remote_jobs(tmp_path, conn=FakeConn())) == []
+    touched = _run(
+        ex.poll_remote_jobs(tmp_path, conn=FakeConn(), recover_incomplete=True)
+    )
+    assert touched == [job.job_id]
+    assert called == [job.job_id]
+
+
+def test_concurrent_remote_poll_does_not_duplicate_completion_reconcile(
+    tmp_path, monkeypatch
+):
+    """Connect and the 30 s supervisor can overlap. Only one may own the multi-GB
+    completion download/index pass for a job."""
+    job = _make_prepared_job(tmp_path)
+    job.slurm_job_id = "42"
+    job.status = MdStatus.running
+    job.save(tmp_path)
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    calls = []
+
+    async def _reconcile(j, ws, conn=None):
+        calls.append(j.job_id)
+        entered.set()
+        await release.wait()
+        return j
+
+    monkeypatch.setattr(ex, "reconcile_remote_job", _reconcile)
+
+    async def _scenario():
+        first = asyncio.create_task(ex.poll_remote_jobs(tmp_path, conn=FakeConn()))
+        await entered.wait()
+        second = asyncio.create_task(ex.poll_remote_jobs(tmp_path, conn=FakeConn()))
+        await asyncio.sleep(0)
+        release.set()
+        return await asyncio.gather(first, second)
+
+    results = _run(_scenario())
+    assert calls == [job.job_id]
+    assert results == [[job.job_id], []]
+
+
 def test_poll_remote_jobs_drains_pending_scancel(tmp_path):
     """A Stop issued while disconnected sets pending_scancel; the next CONNECTED poll
     scancels the SLURM job and clears the flag — even though the job is already stopped
@@ -1017,8 +1145,9 @@ def test_cluster_connect_kicks_remote_poll(tmp_path, monkeypatch):
     reconcile_started = asyncio.Event()
     release_reconcile = asyncio.Event()
 
-    async def _spy(ws, conn=None):
+    async def _spy(ws, conn=None, recover_incomplete=False):
         called["ws"] = ws
+        called["recover_incomplete"] = recover_incomplete
         reconcile_started.set()
         await release_reconcile.wait()
         return []
@@ -1032,6 +1161,7 @@ def test_cluster_connect_kicks_remote_poll(tmp_path, monkeypatch):
         assert out == {"state": "connected"}
         await asyncio.wait_for(reconcile_started.wait(), timeout=0.1)
         assert called.get("ws") == tmp_path
+        assert called.get("recover_incomplete") is True
         release_reconcile.set()
         await asyncio.gather(*tuple(routes_cluster._POST_CONNECT_TASKS))
 

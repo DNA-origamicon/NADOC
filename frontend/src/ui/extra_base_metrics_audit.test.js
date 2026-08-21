@@ -51,6 +51,42 @@ describe('extra-base metrics helpers', () => {
     expect(stateCloudSvg({ points: [[.5, -.3, 0, 1]] })).toContain('<circle')
     expect(cpdMarkup(bundle.sources[0].cpd_reference)).toContain('Reactive corner 0/1619')
   })
+
+  it('uses one aligned i/i+1 panel and switches both medoids', () => {
+    const setClusters = vi.fn()
+    const setComparisonRepresentation = vi.fn()
+    const comparisonViewerFactory = vi.fn(() => ({ setClusters, setRepresentation: setComparisonRepresentation, dispose: vi.fn() }))
+    const side = (name, label) => ({
+      side: name, label, ready: true, n_observations: 1000, n_fit_samples: 500,
+      n_crossovers: 20, n_junctions: 20, k: 2, silhouette: .55,
+      clusters: [
+        { population: .75, n_crossovers: 18, center_A: [1, 2, 3], spread_A: 2,
+          medoid: { frame: 100, crossover_id: 'abcdefgh-1', interhelix_A: 25, atoms_A: { "C1'": [1, 2, 3] }, atomistic: { fit_rmsd_A: .4, atoms: [] } } },
+        { population: .25, n_crossovers: 9, center_A: [4, 5, 6], spread_A: 1,
+          medoid: { frame: 200, crossover_id: 'ijklmnop-2', interhelix_A: 26, atoms_A: { "C1'": [4, 5, 6] }, atomistic: { fit_rmsd_A: .5, atoms: [] } } },
+      ],
+    })
+    const pooledBundle = { metric_panels: bundle.metric_panels, sources: [{
+      ...bundle.sources[0], inserts: [], pooled_positions: { ready: true,
+        classification: 'lower reciprocal bp level = i/left; higher = i+1/right',
+        n_unpaired_inserts: 2, max_fit_samples_per_side: 500,
+        sides: [side('i', 'Left crossover · i'), side('i+1', 'Right crossover · i+1')] },
+    }] }
+    const root = document.createElement('div')
+    const viewers = renderExtraBaseMetricsAudit(root, pooledBundle, { comparisonViewerFactory })
+    expect(root.querySelectorAll('.xbma-pool-side')).toHaveLength(0)
+    expect(root.textContent).toContain('1,000 stable positions')
+    expect(root.textContent).not.toContain('Cross-metric ARI')
+    expect(comparisonViewerFactory).toHaveBeenCalledTimes(1)
+    expect(viewers).toHaveLength(1)
+    expect(root.querySelector('[data-comparison-panel]')).not.toBeNull()
+    expect(root.querySelector('.xbma-comparison-readout').textContent).toContain('Aligned C1′ separation')
+    const compareSide = root.querySelector('[data-comparison-side="i+1"]')
+    compareSide.value = '1'; compareSide.dispatchEvent(new Event('change'))
+    expect(setClusters).toHaveBeenCalledWith({ i: 0, 'i+1': 1 })
+    root.querySelector('[data-comparison-representation="atomistic"]').click()
+    expect(setComparisonRepresentation).toHaveBeenCalledWith('atomistic')
+  })
 })
 
 describe('Extra-Base Metrics Audit toggle', () => {

@@ -91,7 +91,12 @@ def _evaluated_new_syntax_annotations(path):
 
 
 @pytest.mark.parametrize(
-    "mod", [ev, __import__("backend.core.remote_health_eval", fromlist=["x"])]
+    "mod",
+    [
+        ev,
+        __import__("backend.core.remote_health_eval", fromlist=["x"]),
+        __import__("backend.core.remote_wc_eval", fromlist=["x"]),
+    ],
 )
 def test_node_scripts_are_old_python_safe(mod):
     import ast

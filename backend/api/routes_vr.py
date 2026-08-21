@@ -91,11 +91,15 @@ class VRJobSnapshotRow(BaseModel):
 
 
 class VRVisualizationPoint(BaseModel):
-    """One browser-rendered base position and optional scalar-map color."""
+    """One live base/atom position and optional exact Full-slab transform."""
 
     owner_token: str = Field(min_length=1, max_length=2048)
     position: list[float] = Field(min_length=3, max_length=3)
     color: Optional[int] = Field(default=None, ge=0, le=0xFFFFFF)
+    slab_center: Optional[list[float]] = Field(default=None, min_length=3, max_length=3)
+    slab_axis_x: Optional[list[float]] = Field(default=None, min_length=3, max_length=3)
+    slab_axis_y: Optional[list[float]] = Field(default=None, min_length=3, max_length=3)
+    slab_axis_z: Optional[list[float]] = Field(default=None, min_length=3, max_length=3)
 
 
 class VRLaunchRequest(BaseModel):
@@ -123,7 +127,7 @@ class VRLaunchRequest(BaseModel):
         default="none", min_length=1, max_length=32, pattern=r"^[a-z0-9_-]+$"
     )
     visualization_points: list[VRVisualizationPoint] = Field(
-        default_factory=list, max_length=200_000
+        default_factory=list, max_length=1_000_000
     )
 
 
@@ -142,16 +146,18 @@ class VRJobsFeedbackRequest(BaseModel):
         default="none", min_length=1, max_length=32, pattern=r"^[a-z0-9_-]+$"
     )
     visualization_points: list[VRVisualizationPoint] = Field(
-        default_factory=list, max_length=200_000
+        default_factory=list, max_length=1_000_000
     )
 
 
 class VRVisualizationFeedbackRequest(BaseModel):
+    representation: Literal["cylinders", "full", "ballstick", "stick"] = "full"
+    coloring: Literal["strand", "base", "cluster", "cpk"] = "strand"
     visualization_mode: str = Field(
         default="none", min_length=1, max_length=32, pattern=r"^[a-z0-9_-]+$"
     )
     visualization_points: list[VRVisualizationPoint] = Field(
-        default_factory=list, max_length=200_000
+        default_factory=list, max_length=1_000_000
     )
 
 
@@ -868,7 +874,10 @@ def _serialize_scene(
             for (token, kind), positions in sorted(grouped.items())
         )
 
-    tool_handles = nucleotide_tool_handles()
+    # Full-view crossover inserts are projection-owned rather than ordinary entries in
+    # ``nucleotides``.  Their Base handles are appended lazily when that projection is
+    # built below, then reused by every later representation (including Stick).
+    tool_handles = list(nucleotide_tool_handles())
     tool_handle_tokens = {
         *(token for token, _ in cluster_handles),
         *(token for token, _, _ in tool_handles),
@@ -899,13 +908,27 @@ def _serialize_scene(
                 declared_owner_tokens.add(token)
 
     def append_tool_handles(
-        handles: tuple[tuple[str, str, np.ndarray], ...] = tool_handles,
+        handles: list[tuple[str, str, np.ndarray]] | tuple[
+            tuple[str, str, np.ndarray], ...
+        ] = tool_handles,
     ) -> None:
         for token, kind, center in handles:
             lines.append(
                 f"J {owner_token_ids[token]} {token} {kind} {nums(*center)}"
             )
             declared_owner_tokens.add(token)
+
+    def append_projected_base_handle(token: str, center: np.ndarray) -> None:
+        """Declare one synthetic Full-view Base pivot exactly at its backbone bead."""
+        if token in tool_handle_tokens:
+            return
+        register_owner_token(token)
+        tool_handle_tokens.add(token)
+        tool_handles.append((token, "base", center))
+        lines.append(
+            f"J {owner_token_ids[token]} {token} base {nums(*center)}"
+        )
+        declared_owner_tokens.add(token)
 
     def emit(
         record_type: str,
@@ -1010,6 +1033,12 @@ def _serialize_scene(
                 nucleotide.get("direction") or "_",
                 int(nucleotide.get("copy_k") or nucleotide.get("ext_k") or 0),
             )
+        )
+
+    def extra_base_identity(base_key_value: str, primitive: str) -> str:
+        """Semantic projected-insert identity understood by desktop VR selection."""
+        return "extra-base-ref:" + json.dumps(
+            [base_key_value, primitive], ensure_ascii=False, separators=(",", ":")
         )
 
     def palette_for_strand(strand_id: str) -> tuple[float, ...]:
@@ -1720,6 +1749,9 @@ def _serialize_scene(
             slab_palette = palette_variant(palette, first_nucleotide, "#0277bd")
             backbone_points = [first]
             backbone_parameters = [0.0]
+            backbone_endpoint_aliases = [
+                nucleotide_owner_tokens(first_nucleotide)
+            ]
             for projection in projections:
                 parameter = float(projection.geometric_index + 1) / float(
                     len(projections) + 1
@@ -1738,9 +1770,11 @@ def _serialize_scene(
                 slab_axis_y = rotation @ projection.slab_axis_y
                 slab_axis_z = rotation @ projection.slab_axis_z
                 slab_corner = rotation @ projection.slab_corner
-                projection_id = f"{connection_kind}:{connection_id}:extra:{projection.geometric_index}"
+                extra_key = f"__xb__:{connection_id}:{projection.sim_k}"
+                extra_token = selection_token("base", extra_key)
+                append_projected_base_handle(extra_token, bead)
                 extra_aliases = owner_tokens(
-                    ("base", f"__xb__:{connection_id}:{projection.sim_k}"),
+                    ("base", extra_key),
                     (
                         "crossover",
                         (
@@ -1753,7 +1787,7 @@ def _serialize_scene(
                 )
                 emit(
                     "P",
-                    f"{projection_id}:bead",
+                    extra_base_identity(extra_key, "bead"),
                     *bead,
                     0.10,
                     *extra_palette,
@@ -1761,7 +1795,7 @@ def _serialize_scene(
                     transform_owners=projection_transform_owners,
                 )
                 box(
-                    f"{projection_id}:slab",
+                    extra_base_identity(extra_key, "slab"),
                     slab_center,
                     slab_axis_x,
                     slab_axis_y,
@@ -1776,7 +1810,7 @@ def _serialize_scene(
                 )
                 emit(
                     "C",
-                    f"{projection_id}:slab-connector",
+                    extra_base_identity(extra_key, "slab-connector"),
                     *bead,
                     *slab_corner,
                     0.025,
@@ -1786,8 +1820,12 @@ def _serialize_scene(
                 )
                 backbone_points.append(bead)
                 backbone_parameters.append(parameter)
+                backbone_endpoint_aliases.append(extra_aliases)
             backbone_points.append(second)
             backbone_parameters.append(1.0)
+            backbone_endpoint_aliases.append(
+                nucleotide_owner_tokens(second_nucleotide)
+            )
             for edge_index, (start, end) in enumerate(
                 zip(backbone_points, backbone_points[1:])
             ):
@@ -1799,6 +1837,10 @@ def _serialize_scene(
                     0.075,
                     *bead_palette,
                     aliases=crossover_aliases,
+                    endpoint_aliases=(
+                        backbone_endpoint_aliases[edge_index],
+                        backbone_endpoint_aliases[edge_index + 1],
+                    ),
                     transform_owners=interpolated_transform_owners(
                         backbone_parameters[edge_index],
                         backbone_parameters[edge_index + 1],
@@ -2160,8 +2202,6 @@ def _serialize_scene(
     from backend.core.atomistic import (
         CPK_COLOR,
         DEFAULT_CPK_COLOR,
-        DEFAULT_VDW_RADIUS,
-        VDW_RADIUS,
     )
 
     strand_colors = _strand_colors(design)
@@ -2298,21 +2338,23 @@ def _serialize_scene(
             )
         )
 
-    def append_atomistic(name: str, include_points: bool, radius: float) -> None:
+    def append_atomistic(
+        name: str, include_points: bool, point_radius: float, bond_radius: float
+    ) -> None:
         nonlocal active_representation
         lines.append(f"R {name}")
         active_representation = name
         declared_owner_tokens.clear()
         lines.extend(f"K {token} {nums(*center)}" for token, center in cluster_handles)
         append_tool_handles()
-        if include_points:
-            append_tool_handles(atom_tool_handles)
+        # Atom handles are needed even in stick-only mode: the live visualization
+        # feed addresses each bond endpoint by its real trajectory atom position.
+        append_tool_handles(atom_tool_handles)
         if include_points:
             for atom_index, (atom, position, palette) in enumerate(
                 zip(atomistic_model.atoms, atom_positions, atom_palettes)
             ):
                 if position is not None:
-                    radius = VDW_RADIUS.get(atom.element, DEFAULT_VDW_RADIUS) * 0.55
                     key = atom_base_key(atom)
                     nucleotide = nucleotide_by_base_key.get(key)
                     aliases = (
@@ -2324,7 +2366,7 @@ def _serialize_scene(
                         "P",
                         atom_primitive_identity(atom_index),
                         *position,
-                        radius,
+                        point_radius,
                         *palette,
                         aliases=aliases,
                         tool_endpoint_tokens=(
@@ -2386,12 +2428,12 @@ def _serialize_scene(
             first_endpoint_aliases = (
                 nucleotide_owner_tokens(nucleotide_by_base_key[first_key])
                 if first_key in nucleotide_by_base_key
-                else ()
+                else owner_tokens(("base", first_key))
             )
             second_endpoint_aliases = (
                 nucleotide_owner_tokens(nucleotide_by_base_key[second_key])
                 if second_key in nucleotide_by_base_key
-                else ()
+                else owner_tokens(("base", second_key))
             )
             bond_aliases = tuple(
                 dict.fromkeys(
@@ -2403,25 +2445,28 @@ def _serialize_scene(
                 atom_bond_primitive_identity(first_index, second_index),
                 *first,
                 *second,
-                radius,
+                bond_radius,
                 *palette,
                 aliases=bond_aliases,
                 endpoint_aliases=(first_endpoint_aliases, second_endpoint_aliases),
                 tool_endpoint_tokens=(
                     (
                         *first_endpoint_aliases,
-                        *((atom_tool_tokens[first_index],) if include_points else ()),
+                        atom_tool_tokens[first_index],
                     ),
                     (
                         *second_endpoint_aliases,
-                        *((atom_tool_tokens[second_index],) if include_points else ()),
+                        atom_tool_tokens[second_index],
                     ),
                 ),
             )
         append_axes(0.05)
 
-    append_atomistic("ballstick", True, 0.035)
-    append_atomistic("stick", False, 0.055)
+    # Match desktop atomistic_renderer/atom_palette.js exactly. Ball-and-stick
+    # uses uniform balls rather than scaled VdW radii; both atomistic modes use
+    # the same bond radius.
+    append_atomistic("ballstick", True, 0.070, 0.025)
+    append_atomistic("stick", False, 0.0, 0.025)
 
     if not lines.has_visible:
         raise HTTPException(
@@ -3175,6 +3220,9 @@ def _event_payload(state: dict | None) -> dict:
             "select_identities": [],
             "level_sequence": 0,
             "selection_level": "default",
+            "style_sequence": 0,
+            "representation": "full",
+            "coloring": "strand",
             "tool_sequence": 0,
             "tool_mode": "inspect",
             "tool_action": "activate",
@@ -3208,6 +3256,9 @@ def _event_payload(state: dict | None) -> dict:
         )
         level_sequence = int(event.get("level_sequence", 0))
         selection_level = event.get("selection_level", "default")
+        style_sequence = int(event.get("style_sequence", 0))
+        representation = event.get("representation", "full")
+        coloring = event.get("coloring", "strand")
         tool_sequence = int(event.get("tool_sequence", 0))
         tool_mode = event.get("tool_mode", "inspect")
         tool_action = event.get("tool_action", "activate")
@@ -3252,6 +3303,7 @@ def _event_payload(state: dict | None) -> dict:
             sequence < 0
             or select_sequence < 0
             or level_sequence < 0
+            or style_sequence < 0
             or tool_sequence < 0
             or tool_config_sequence < 0
             or plane_pick_sequence < 0
@@ -3283,6 +3335,8 @@ def _event_payload(state: dict | None) -> dict:
             )
             or selection_level
             not in {"default", "cluster", "strand", "domain", "end", "xover", "base"}
+            or representation not in {"cylinders", "full", "ballstick", "stick"}
+            or coloring not in {"strand", "base", "cluster", "cpk"}
             or tool_mode not in {"inspect", "move_rotate", "extrude", "twist", "bend"}
             or tool_action not in {"activate", "preview", "confirm", "cancel", "undo"}
             or (
@@ -3385,6 +3439,9 @@ def _event_payload(state: dict | None) -> dict:
             "select_identities": select_identities,
             "level_sequence": level_sequence,
             "selection_level": selection_level,
+            "style_sequence": style_sequence,
+            "representation": representation,
+            "coloring": coloring,
             "tool_sequence": tool_sequence,
             "tool_mode": tool_mode,
             "tool_action": tool_action,
@@ -3415,6 +3472,9 @@ def _event_payload(state: dict | None) -> dict:
             "select_identities": [],
             "level_sequence": 0,
             "selection_level": "default",
+            "style_sequence": 0,
+            "representation": "full",
+            "coloring": "strand",
             "tool_sequence": 0,
             "tool_mode": "inspect",
             "tool_action": "activate",
@@ -3924,7 +3984,8 @@ def _write_job_snapshot(
 
 def _visualization_snapshot_record(
     points: list[VRVisualizationPoint], *, sequence: int, mode: str,
-    view_rotation: np.ndarray,
+    view_rotation: np.ndarray, representation: str = "full",
+    coloring: str = "strand",
 ) -> str:
     """Serialize the live desktop display as a bounded, atomic native feed."""
     if not 1 <= sequence <= 2**53 - 1:
@@ -3932,31 +3993,64 @@ def _visualization_snapshot_record(
     rotation = np.asarray(view_rotation, dtype=float)
     if rotation.shape != (3, 3) or not np.all(np.isfinite(rotation)):
         raise ValueError("Invalid VR visualization view rotation.")
+    if representation not in {"cylinders", "full", "ballstick", "stick"} or coloring not in {
+        "strand", "base", "cluster", "cpk",
+    }:
+        raise ValueError("Invalid VR visualization style.")
     seen: set[str] = set()
-    lines = [f"NADOCVR_VISUALIZATION 1 {sequence} {mode} {len(points)}"]
+    lines = [
+        f"NADOCVR_VISUALIZATION 3 {sequence} {mode} "
+        f"{representation} {coloring} {len(points)}"
+    ]
     for point in points:
         position = np.asarray(point.position, dtype=float)
+        slab_values = (
+            point.slab_center,
+            point.slab_axis_x,
+            point.slab_axis_y,
+            point.slab_axis_z,
+        )
+        has_slab = all(value is not None for value in slab_values)
         if (
             point.owner_token in seen
             or any(character.isspace() for character in point.owner_token)
             or position.shape != (3,)
             or not np.all(np.isfinite(position))
             or np.max(np.abs(position)) > 1e9
+            or (any(value is not None for value in slab_values) and not has_slab)
         ):
             raise ValueError("Invalid VR visualization point.")
         seen.add(point.owner_token)
         transformed = rotation @ position
         color = "-" if point.color is None else f"{point.color:06x}"
-        lines.append(
-            f"V {point.owner_token} "
-            f"{transformed[0]:.7g} {transformed[1]:.7g} {transformed[2]:.7g} "
-            f"{color}"
-        )
+        if has_slab:
+            vectors = [np.asarray(value, dtype=float) for value in slab_values]
+            if any(value.shape != (3,) or not np.all(np.isfinite(value)) for value in vectors):
+                raise ValueError("Invalid VR visualization slab frame.")
+            center = rotation @ vectors[0]
+            axes = [rotation @ value for value in vectors[1:]]
+            values = " ".join(
+                f"{component:.7g}"
+                for vector in (center, *axes)
+                for component in vector
+            )
+            lines.append(
+                f"F {point.owner_token} "
+                f"{transformed[0]:.7g} {transformed[1]:.7g} {transformed[2]:.7g} "
+                f"{color} {values}"
+            )
+        else:
+            lines.append(
+                f"V {point.owner_token} "
+                f"{transformed[0]:.7g} {transformed[1]:.7g} {transformed[2]:.7g} "
+                f"{color}"
+            )
     return "\n".join(lines) + "\n"
 
 
 def _write_visualization_snapshot(
     points: list[VRVisualizationPoint], *, mode: str, view_rotation: np.ndarray,
+    representation: str = "full", coloring: str = "strand",
 ) -> Path:
     with tempfile.NamedTemporaryFile(
         mode="w", prefix="nadoc-vr-visualization-", suffix=".txt", delete=False,
@@ -3964,6 +4058,7 @@ def _write_visualization_snapshot(
         visualization_file.write(
             _visualization_snapshot_record(
                 points, sequence=1, mode=mode, view_rotation=view_rotation,
+                representation=representation, coloring=coloring,
             )
         )
         path = Path(visualization_file.name)
@@ -3983,7 +4078,16 @@ def _publish_visualization_feedback(
         try:
             current_record = path.read_text()
             header = current_record.splitlines()[0].split()
-            if len(header) != 5 or header[:2] != ["NADOCVR_VISUALIZATION", "1"]:
+            legacy_header = (
+                len(header) == 5
+                and header[0] == "NADOCVR_VISUALIZATION"
+                and header[1] in {"1", "2"}
+            )
+            current_header = (
+                len(header) == 7
+                and header[:2] == ["NADOCVR_VISUALIZATION", "3"]
+            )
+            if not legacy_header and not current_header:
                 raise ValueError("invalid VR visualization header")
             current_sequence = int(header[2])
             sequence = current_sequence + 1
@@ -3992,10 +4096,19 @@ def _publish_visualization_feedback(
                 sequence=sequence,
                 mode=body.visualization_mode,
                 view_rotation=np.asarray(state["view_rotation"], dtype=float),
+                representation=body.representation,
+                coloring=body.coloring,
             )
             current_payload = current_record.split("\n", 1)[1]
             next_payload = record.split("\n", 1)[1]
-            if header[3] == body.visualization_mode and current_payload == next_payload:
+            current_style = (
+                (header[4], header[5]) if current_header else ("full", "strand")
+            )
+            if (
+                header[3] == body.visualization_mode
+                and current_style == (body.representation, body.coloring)
+                and current_payload == next_payload
+            ):
                 return current_sequence
             temporary.write_text(record)
             temporary.chmod(0o600)
@@ -4298,6 +4411,8 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
                 '{"sequence":0,"hover_identity":null,'
                 '"select_sequence":0,"select_identity":null,'
                 f'"level_sequence":0,"selection_level":"{body.selection_level}",'
+                f'"style_sequence":0,"representation":"{body.representation}",'
+                f'"coloring":"{body.coloring}",'
                 '"tool_sequence":0,"tool_mode":"inspect",'
                 '"tool_action":"activate","transform_sequence":0,'
                 '"transform_matrix":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],'
@@ -4376,6 +4491,8 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             body.visualization_points,
             mode=body.visualization_mode,
             view_rotation=view_rotation,
+            representation=body.representation,
+            coloring=body.coloring,
         )
 
         log = _LOG_PATH.open("ab")

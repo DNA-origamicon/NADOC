@@ -45,11 +45,14 @@ LIVE_HEALTH_FILE = "output/live_health.json"
 LIVE_HEALTH_INTERVAL_S = 300
 SETTLE_RETARGET_NAME = "nadoc_settle_retarget.py"
 
-# The node WC health step + the verbatim md_health copy it imports — always staged
-# and run alongside the energy evaluator, so the remote plateau decision is the
-# same energy-AND-WC test the local runner makes (no restraint-scale shortcut).
+# RunPod's node WC health step + the verbatim md_health copy it imports. Alpine uses
+# the portable pair-plan evaluator below because its bare Python has no MDAnalysis.
 EARLY_STOP_HEALTH_NAME = "nadoc_health_eval.py"
 STAGED_MD_HEALTH_NAME = "md_health.py"
+# Alpine-specific portable WC path.  Its pair plan is built locally before upload,
+# so both files run under the cluster's dependency-free Python 3.6.
+ALPINE_WC_EVAL_NAME = "nadoc_wc_eval.py"
+ALPINE_WC_PLAN_NAME = "nadoc_wc_plan.json"
 
 
 def _stage_base(segment_name: str) -> str:
@@ -131,11 +134,18 @@ def _bridge_lines(conf: str, remaining: list[str], indent: str) -> list[str]:
     ]
 
 
-def _early_stop_block(conf, remaining, *, name_stem, health_python) -> list[str]:
+def _early_stop_block(
+    conf,
+    remaining,
+    *,
+    name_stem,
+    health_python,
+    portable_wc=False,
+) -> list[str]:
     """Emit the node-side evaluate-then-bridge block for one non-final chunk.
 
-    Matches the local runner exactly: first run the node WC health step
-    (best-effort — ``|| true``) to write ``output/<conf>.wc.json``, then only
+    Matches the local runner exactly: first compute the WC series (best-effort —
+    ``|| true``) into ``output/<conf>.wc.json``, then only
     bridge if the cutoff evaluator says BOTH energy AND WC plateaued.  A
     missing/failed health step leaves no ``wc.json`` so the
     ``[ -f wc.json ] && …`` gate falls through to HOLD — this never skips on
@@ -144,11 +154,23 @@ def _early_stop_block(conf, remaining, *, name_stem, health_python) -> list[str]
     # The sbatch redirects each conf's stdout to ``<conf>.log`` in the run cwd (see
     # _exec_line), while coords/DCD land in ``output/`` (the confs write there).
     wc = f"output/{conf}.wc.json"
+    if portable_wc:
+        health_line = (
+            f'    python3 {ALPINE_WC_EVAL_NAME} '
+            f'--dcd "output/{conf}.dcd" --plan "{ALPINE_WC_PLAN_NAME}" '
+            f'--out "{wc}" || true'
+        )
+    else:
+        # RunPod has a proven modern Python environment and continues to use the
+        # canonical full-health wrapper. Alpine selects the portable branch above.
+        health_line = (
+            f'    {health_python} {EARLY_STOP_HEALTH_NAME} --seg "{conf}" '
+            f'--stem "{name_stem}" --out "{wc}" || true'
+        )
     lines = [
         f'if [ -f "{conf}.log" ] && [ -f "output/{conf}.coor" ]; then',
         f'  if [ -f "output/{conf}.dcd" ]; then',
-        f'    {health_python} {EARLY_STOP_HEALTH_NAME} --seg "{conf}" '
-        f'--stem "{name_stem}" --out "{wc}" || true',
+        health_line,
         "  fi",
         f'  if [ -f "{wc}" ] && python3 {EARLY_STOP_EVAL_NAME} '
         f'--log "{conf}.log" --wc "{wc}"; then',
@@ -378,11 +400,9 @@ def generate_sbatch(
 
     if early_stop_relax is None:
         early_stop_relax = bool(manifest.get("early_stop_relax"))
-    # An on-node MDAnalysis health step computes the real WC series for every
-    # eligible chunk (needs numpy/scipy/MDAnalysis on the node python); it fails
-    # SAFE to HOLD if that python lacks MDAnalysis or the step otherwise fails —
-    # see _early_stop_block.
-    health_python = str(manifest.get("early_stop_health_python") or "python3")
+    # Alpine's WC evaluator is stdlib-only. The pair topology/reference distances
+    # were computed locally and staged as ALPINE_WC_PLAN_NAME before this script runs.
+    health_python = "python3"
 
     name_stem = manifest.get("name_stem") or "nadoc_md"
     job_name = sanitize_job_name(job_name if job_name is not None else name_stem)
@@ -505,6 +525,7 @@ def generate_sbatch(
                 chain[i + 1 : last + 1],
                 name_stem=name_stem,
                 health_python=health_python,
+                portable_wc=True,
             )
     lines.append("")
     lines.append('echo "[NADOC] ladder complete"')

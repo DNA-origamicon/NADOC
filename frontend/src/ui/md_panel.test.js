@@ -417,8 +417,24 @@ describe('rep-switch progress signal', () => {
     expect(seen).toContainEqual(expect.objectContaining({ kind: 'atomistic', building: true }))
   })
 
-  // The reverse direction still refreshes the authoritative coarse payload, but the
-  // current atom frame is synchronously reskinned first (no native-position paint).
+  it('keeps CG visible during an ordinary CG → atomistic payload reload', () => {
+    const c = live()
+    deps.designRenderer.setDesignVisible.mockClear()
+
+    setSceneRepr('ballstick')
+
+    expect(deps.designRenderer.setDesignVisible).not.toHaveBeenCalledWith(false)
+    expect(c.renderedRepresentation()).toBe('full')
+    flushRaf()
+    const atomWs = sockets.at(-1); atomWs.open()
+    atomWs.msg({ type: 'ready', n_frames: 1 })
+    atomWs.msg({ type: 'frame', frame_idx: 0, n_frames: 1, atoms: [] })
+    expect(deps.designRenderer.setDesignVisible).toHaveBeenCalledWith(false)
+    expect(c.renderedRepresentation()).toBe('ballstick')
+  })
+
+  // The reverse direction refreshes the authoritative coarse payload while holding
+  // the atomistic renderer on screen.
   it('announces the wait when atomistic → CG reloads the socket', () => {
     const c = live()
     setSceneRepr('ballstick'); flushRaf()
@@ -429,8 +445,8 @@ describe('rep-switch progress signal', () => {
     expect(c).toBeTruthy()
   })
 
-  it('reskins atomistic → CG from the current MD phosphorus before the next paint', () => {
-    live()
+  it('holds atomistic → CG until the authoritative coarse frame is applied', () => {
+    const c = live()
     setSceneRepr('ballstick'); flushRaf()
     const atomWs = sockets.at(-1); atomWs.open()
     atomWs.msg({
@@ -447,16 +463,36 @@ describe('rep-switch progress signal', () => {
       ],
     })
     deps.designRenderer.applyFemPositions.mockClear()
+    deps.designRenderer.setDesignVisible.mockClear()
+    deps.atomisticRenderer.setMode.mockClear()
 
     setSceneRepr('full')
 
-    expect(deps.designRenderer.applyFemPositions).toHaveBeenCalledTimes(1)
+    expect(deps.designRenderer.applyFemPositions).not.toHaveBeenCalled()
+    expect(deps.designRenderer.setDesignVisible).toHaveBeenCalledWith(false)
+    expect(deps.atomisticRenderer.setMode).toHaveBeenCalledWith('ballstick')
+    expect(c.renderedRepresentation()).toBe('ballstick')
+
+    flushRaf()
+    const cgWs = sockets.at(-1); cgWs.open()
+    cgWs.msg({ type: 'ready', n_frames: 20 })
+    cgWs.msg({
+      type: 'frame', frame_idx: 17, n_frames: 20,
+      positions: [{
+        helix_id: 'h0', bp_index: 3, direction: 'FORWARD',
+        x: 1, y: 2, z: 3, bx: 4, by: 5, bz: 6,
+        nx: 0, ny: 1, nz: 0, tx: 1, ty: 0, tz: 0,
+      }],
+    })
     expect(deps.designRenderer.applyFemPositions).toHaveBeenCalledWith([
       expect.objectContaining({
-        helix_id: 'h0', bp_index: 3, direction: 'FORWARD',
-        backbone_position: [8, 9, 10],
+        backbone_position: [1, 2, 3], base_position: [4, 5, 6],
+        nx: 0, ny: 1, nz: 0, tx: 1, ty: 0, tz: 0,
       }),
     ], 1)
+    expect(deps.atomisticRenderer.setMode).toHaveBeenLastCalledWith('off')
+    expect(deps.designRenderer.setDesignVisible).toHaveBeenLastCalledWith(true)
+    expect(c.renderedRepresentation()).toBe('full')
   })
 
   it('clears it when a frame in the new format lands', () => {

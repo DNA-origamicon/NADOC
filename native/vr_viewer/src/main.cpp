@@ -192,6 +192,26 @@ Coloring coloringFromName(const std::string& name) {
     throw std::runtime_error("Unknown VR coloring: " + name);
 }
 
+const char* representationName(Representation representation) {
+    switch (representation) {
+        case Representation::cylinders: return "cylinders";
+        case Representation::full: return "full";
+        case Representation::ballstick: return "ballstick";
+        case Representation::stick: return "stick";
+    }
+    return "full";
+}
+
+const char* coloringName(Coloring coloring) {
+    switch (coloring) {
+        case Coloring::strand: return "strand";
+        case Coloring::base: return "base";
+        case Coloring::cluster: return "cluster";
+        case Coloring::cpk: return "cpk";
+    }
+    return "strand";
+}
+
 struct Swapchain {
     XrSwapchain handle = XR_NULL_HANDLE;
     int32_t width = 0;
@@ -1049,6 +1069,8 @@ class GlScene {
         visualizationMode_ = snapshot.mode;
         visualizationPositions_.clear();
         visualizationColors_.clear();
+        visualizationSlabFrames_.clear();
+        visualizationAtomTokens_.clear();
         visualizationPositions_.reserve(snapshot.points.size());
         visualizationColors_.reserve(snapshot.points.size());
         for (const auto& point : snapshot.points) {
@@ -1056,8 +1078,26 @@ class GlScene {
             if (point.hasColor) {
                 visualizationColors_.emplace(point.ownerToken, point.color);
             }
+            if (point.hasSlabFrame) {
+                visualizationSlabFrames_.emplace(point.ownerToken, point);
+            }
         }
-        setStyle(representation_, coloring_);
+        for (const RepresentationData& source : scene_.representations) {
+            for (const ToolHandle& handle : source.toolHandles) {
+                if (handle.kind == "atom" &&
+                    visualizationPositions_.contains(handle.token)) {
+                    visualizationAtomTokens_.insert(handle.token);
+                }
+            }
+        }
+        if (!snapshot.representation.empty() && !snapshot.coloring.empty()) {
+            setStyle(
+                representationFromName(snapshot.representation),
+                coloringFromName(snapshot.coloring));
+        } else {
+            // Backward compatibility for an already-running v1/v2 publisher.
+            setStyle(representation_, coloring_);
+        }
     }
 
     [[nodiscard]] const std::string& visualizationMode() const {
@@ -1243,9 +1283,22 @@ class GlScene {
                 [&](const nadoc_vr::OwnerAliasEntry& candidate) {
                     return candidate.identity == identity;
                 });
-            return aliases != source.ownerAliases.end() && std::any_of(
+            if (aliases != source.ownerAliases.end() && std::any_of(
                 aliases->tokens.begin(), aliases->tokens.end(),
-                [&](const std::string& token) { return tokens.contains(token); });
+                [&](const std::string& token) { return tokens.contains(token); })) {
+                return true;
+            }
+            const auto ownership = std::find_if(
+                source.toolScopeOwnership.begin(), source.toolScopeOwnership.end(),
+                [&](const TransformOwnership& candidate) {
+                    return candidate.identity == identity;
+                });
+            return ownership != source.toolScopeOwnership.end() && std::any_of(
+                ownership->owners.begin(), ownership->owners.end(),
+                [&](const TransformOwner& owner) {
+                    return (owner.startWeight > 0.0F || owner.endWeight > 0.0F) &&
+                        tokens.contains(owner.token);
+                });
         };
         auto glowColor = [&](const std::string& identity) -> std::optional<glm::vec3> {
             if (selectedHighlightIdentities_.contains(identity) ||
@@ -1263,6 +1316,10 @@ class GlScene {
         std::vector<Vertex> glowPoints;
         points.reserve(source.points.size());
         for (const StyledPoint& point : source.points) {
+            if (point.identity.starts_with("atom-ref:") &&
+                !hasCompleteVisualizationAtomEndpoints(source, point.identity)) {
+                continue;
+            }
             const glm::vec3 position = transformPoint(
                 point.position, point.identity, false);
             points.push_back(Vertex{
@@ -1289,10 +1346,21 @@ class GlScene {
         std::vector<Cylinder> glowCylinders;
         cylinders.reserve(source.cylinders.size());
         for (const StyledCylinder& cylinder : source.cylinders) {
+            if (cylinder.identity.starts_with("atom-bond-ref:") &&
+                !hasCompleteVisualizationAtomEndpoints(source, cylinder.identity)) {
+                continue;
+            }
             const glm::vec3 start = transformPoint(
                 cylinder.start, cylinder.identity, false);
-            const glm::vec3 end = transformPoint(
+            glm::vec3 end = transformPoint(
                 cylinder.end, cylinder.identity, true);
+            if (cylinder.identity.ends_with(":slab-connector")) {
+                if (const auto frame = displayedVisualizationSlabFrame(
+                        source, cylinder.identity)) {
+                    end = nadoc_vr::visualizationSlabConnectionCorner(
+                        frame->center, frame->axisX, frame->axisZ, start);
+                }
+            }
             cylinders.push_back(Cylinder{
                 start, end, cylinder.radius,
                 visualizationColor(source, cylinder.identity)
@@ -1346,11 +1414,22 @@ class GlScene {
         std::vector<Box> glowBoxes;
         boxes.reserve(source.boxes.size());
         for (const StyledBox& box : source.boxes) {
-            const glm::vec3 center = transformPoint(
-                box.center, box.identity, false);
-            const glm::vec3 axisX = transformVector(box.axisX, box.identity);
-            const glm::vec3 axisY = transformVector(box.axisY, box.identity);
-            const glm::vec3 axisZ = transformVector(box.axisZ, box.identity);
+            glm::vec3 center;
+            glm::vec3 axisX;
+            glm::vec3 axisY;
+            glm::vec3 axisZ;
+            if (const auto frame = displayedVisualizationSlabFrame(
+                    source, box.identity)) {
+                center = frame->center;
+                axisX = frame->axisX;
+                axisY = frame->axisY;
+                axisZ = frame->axisZ;
+            } else {
+                center = transformPoint(box.center, box.identity, false);
+                axisX = transformVector(box.axisX, box.identity);
+                axisY = transformVector(box.axisY, box.identity);
+                axisZ = transformVector(box.axisZ, box.identity);
+            }
             boxes.push_back(Box{
                 center, axisX, axisY, axisZ,
                 visualizationColor(source, box.identity)
@@ -2251,17 +2330,24 @@ class GlScene {
                 return candidate.identity == identity;
             });
         if (ownership != ownershipRecords.end()) {
-            glm::vec3 start{};
-            glm::vec3 end{};
-            bool found = false;
+            std::array<nadoc_vr::VisualizationOffsetContribution, 32>
+                contributions{};
+            size_t contributionCount = 0;
             for (const TransformOwner& owner : ownership->owners) {
                 if (const auto delta = visualizationDelta(source, owner.token)) {
-                    start += *delta * owner.startWeight;
-                    end += *delta * owner.endWeight;
-                    found = true;
+                    if (contributionCount >= contributions.size()) break;
+                    contributions[contributionCount++] = {
+                        *delta,
+                        owner.startWeight,
+                        owner.endWeight,
+                        visualizationAtomTokens_.contains(owner.token),
+                    };
                 }
             }
-            if (found) return {start, end};
+            if (contributionCount > 0) {
+                return nadoc_vr::aggregateVisualizationOffsets(
+                    contributions.data(), contributionCount);
+            }
         }
         const auto aliases = std::find_if(
             source.ownerAliases.begin(), source.ownerAliases.end(),
@@ -2276,6 +2362,29 @@ class GlScene {
             }
         }
         return {};
+    }
+
+    /** Whether every endpoint of an atom primitive has a measured trajectory atom.
+     * The native scene starts from NADOC's design topology; NAMD can legitimately
+     * omit terminal phosphate atoms. Once an atom feed is active, leaving those
+     * unmatched primitives visible would mix reconstructed and measured positions. */
+    [[nodiscard]] bool hasCompleteVisualizationAtomEndpoints(
+        const RepresentationData& source, const std::string& identity) const {
+        if (visualizationAtomTokens_.empty()) return true;
+        const auto ownership = std::find_if(
+            source.toolScopeOwnership.begin(), source.toolScopeOwnership.end(),
+            [&](const TransformOwnership& candidate) {
+                return candidate.identity == identity;
+            });
+        if (ownership == source.toolScopeOwnership.end()) return false;
+        bool start = false;
+        bool end = false;
+        for (const TransformOwner& owner : ownership->owners) {
+            if (!visualizationAtomTokens_.contains(owner.token)) continue;
+            start = start || owner.startWeight > 0.0F;
+            end = end || owner.endWeight > 0.0F;
+        }
+        return start && end;
     }
 
     [[nodiscard]] std::optional<glm::vec3> visualizationColor(
@@ -2310,6 +2419,74 @@ class GlScene {
             weight += ownerWeight;
         }
         return weight > 0.0F ? std::optional<glm::vec3>(total / weight) : std::nullopt;
+    }
+
+    [[nodiscard]] const nadoc_vr::VisualizationPoint* visualizationSlabFrame(
+        const RepresentationData& source, const std::string& identity) const {
+        if (visualizationSlabFrames_.empty()) return nullptr;
+        const auto aliases = std::find_if(
+            source.ownerAliases.begin(), source.ownerAliases.end(),
+            [&](const nadoc_vr::OwnerAliasEntry& candidate) {
+                return candidate.identity == identity;
+            });
+        if (aliases != source.ownerAliases.end()) {
+            for (const std::string& token : aliases->tokens) {
+                const auto frame = visualizationSlabFrames_.find(token);
+                if (frame != visualizationSlabFrames_.end()) return &frame->second;
+            }
+        }
+        const auto& ownershipRecords = source.toolScopeOwnership.empty()
+            ? source.transformOwnership : source.toolScopeOwnership;
+        const auto ownership = std::find_if(
+            ownershipRecords.begin(), ownershipRecords.end(),
+            [&](const TransformOwnership& candidate) {
+                return candidate.identity == identity;
+            });
+        if (ownership != ownershipRecords.end()) {
+            for (const TransformOwner& owner : ownership->owners) {
+                const auto frame = visualizationSlabFrames_.find(owner.token);
+                if (frame != visualizationSlabFrames_.end()) return &frame->second;
+            }
+        }
+        return nullptr;
+    }
+
+    struct DisplayedVisualizationSlabFrame {
+        glm::vec3 center{};
+        glm::vec3 axisX{};
+        glm::vec3 axisY{};
+        glm::vec3 axisZ{};
+    };
+
+    [[nodiscard]] std::optional<DisplayedVisualizationSlabFrame>
+    displayedVisualizationSlabFrame(
+        const RepresentationData& source, const std::string& identity) const {
+        const auto* frame = visualizationSlabFrame(source, identity);
+        if (!frame) return std::nullopt;
+        DisplayedVisualizationSlabFrame displayed{
+            (frame->slabCenter - scene_.normalizationCenter) *
+                scene_.normalizationScale,
+            frame->slabAxisX * scene_.normalizationScale,
+            frame->slabAxisY * scene_.normalizationScale,
+            frame->slabAxisZ * scene_.normalizationScale,
+        };
+        displayed.center.z -= kViewDistanceMeters;
+        const float committed = layerWeights(
+            source, identity, toolCommittedToken_).first;
+        const float pending = layerWeights(
+            source, identity, toolPreviewToken_).first;
+        displayed.center = nadoc_vr::weightedTransformPoint(
+            displayed.center, toolCommittedTransform_, committed);
+        displayed.center = nadoc_vr::weightedTransformPoint(
+            displayed.center, toolPreviewTransform_, pending);
+        for (glm::vec3* axis : {
+                 &displayed.axisX, &displayed.axisY, &displayed.axisZ}) {
+            *axis = nadoc_vr::weightedTransformVector(
+                *axis, toolCommittedTransform_, committed);
+            *axis = nadoc_vr::weightedTransformVector(
+                *axis, toolPreviewTransform_, pending);
+        }
+        return displayed;
     }
 
     [[nodiscard]] std::pair<float, float> previewWeights(
@@ -2858,6 +3035,9 @@ class GlScene {
     std::string visualizationMode_ = "none";
     std::unordered_map<std::string, glm::vec3> visualizationPositions_;
     std::unordered_map<std::string, glm::vec3> visualizationColors_;
+    std::unordered_map<std::string, nadoc_vr::VisualizationPoint>
+        visualizationSlabFrames_;
+    std::unordered_set<std::string> visualizationAtomTokens_;
     std::unordered_set<std::string> snapHighlightOwnerTokens_;
     std::unordered_set<std::string> snapHighlightIdentities_;
     std::unordered_set<std::string> selectedHighlightOwnerTokens_;
@@ -4269,9 +4449,10 @@ class Viewer {
                 continue;
             }
             if (hit < 4) {
-                glScene_->setStyle(static_cast<Representation>(hit), glScene_->coloring());
+                publishStyleRequest(
+                    static_cast<Representation>(hit), glScene_->coloring());
             } else if (hit < 8) {
-                glScene_->setStyle(
+                publishStyleRequest(
                     glScene_->representation(), static_cast<Coloring>(hit - 4));
             } else if (hit < 15) {
                 publishSelectionLevel(kSelectionLevels[hit - 8]);
@@ -4631,6 +4812,18 @@ class Viewer {
         publishEventState();
     }
 
+    void publishStyleRequest(Representation representation, Coloring coloring) {
+        if (glScene_ && representation == glScene_->representation() &&
+            coloring == glScene_->coloring()) return;
+        requestedRepresentation_ = representationName(representation);
+        requestedColoring_ = coloringName(coloring);
+        ++styleSequence_;
+        // Do not mutate GlScene here. Desktop owns asynchronous simulation
+        // representation changes and will acknowledge this request through one
+        // atomic style+geometry visualization revision.
+        publishEventState();
+    }
+
     void publishToolIntent(nadoc_vr::ToolAction action) {
         lastToolAction_ = action;
         // Bind the intent to the acknowledged target visible at controller-click
@@ -4679,6 +4872,9 @@ class Viewer {
         output << ']';
         output << ",\"level_sequence\":" << levelSequence_
                << ",\"selection_level\":\"" << selectionLevel_ << "\"";
+        output << ",\"style_sequence\":" << styleSequence_
+               << ",\"representation\":\"" << requestedRepresentation_
+               << "\",\"coloring\":\"" << requestedColoring_ << "\"";
         output << ",\"tool_sequence\":" << toolSequence_
                << ",\"tool_mode\":\"" << nadoc_vr::toolModeName(toolShell_.mode())
                << "\",\"tool_action\":\""
@@ -5443,10 +5639,6 @@ class Viewer {
             const bool desktopActiveChanged =
                 next.activeEngine != desktopActiveJobEngine_ ||
                 next.activeJobId != desktopActiveJobId_;
-            const bool desktopStyleChanged =
-                !next.representation.empty() && !next.coloring.empty() &&
-                (next.representation != desktopRepresentation_ ||
-                 next.coloring != desktopColoring_);
             jobsSnapshotAvailable_ = next.available;
             jobsSnapshotTotal_ = next.total;
             jobSnapshotSequence_ = next.sequence;
@@ -5459,11 +5651,9 @@ class Viewer {
             }
             jobs_ = std::move(next.rows);
 
-            if (desktopStyleChanged) {
-                glScene_->setStyle(
-                    representationFromName(desktopRepresentation_),
-                    coloringFromName(desktopColoring_));
-            }
+            // Style is presentation state and is applied atomically with the
+            // visualization snapshot. The jobs feed retains these fields only for
+            // backward-compatible metadata; applying them here races the geometry.
 
             const std::string targetEngine = desktopActiveChanged
                 ? desktopActiveJobEngine_ : selectedEngine;
@@ -5495,6 +5685,10 @@ class Viewer {
             visualizationSequence_ = next.sequence;
             visualizationSnapshot_ = std::move(next);
             glScene_->setVisualization(visualizationSnapshot_);
+            if (!visualizationSnapshot_.representation.empty()) {
+                desktopRepresentation_ = visualizationSnapshot_.representation;
+                desktopColoring_ = visualizationSnapshot_.coloring;
+            }
             std::cout << "VR desktop visualization: "
                       << visualizationSnapshot_.mode << " ("
                       << visualizationSnapshot_.points.size() << " positions)\n";
@@ -5562,6 +5756,9 @@ class Viewer {
     std::vector<std::string> lastSelectIdentities_;
     uint64_t levelSequence_ = 0;
     std::string selectionLevel_ = "default";
+    uint64_t styleSequence_ = 0;
+    std::string requestedRepresentation_ = "full";
+    std::string requestedColoring_ = "strand";
     uint64_t toolSequence_ = 0;
     nadoc_vr::ToolAction lastToolAction_ = nadoc_vr::ToolAction::activate;
     std::string lastToolTargetIdentity_;

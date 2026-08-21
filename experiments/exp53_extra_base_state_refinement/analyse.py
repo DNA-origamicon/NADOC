@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from backend.core.occupancy_core import occupancy_clusters  # noqa: E402
+from backend.core.extra_base_position_clusters import pooled_position_clusters  # noqa: E402
 
 
 PANELS = {
@@ -124,12 +125,14 @@ def samples_for_insert(data: dict, insert: dict) -> list[dict]:
 def analyse_dump(data: dict, cfg: dict) -> dict:
     paired = data["paired_fraction"]
     results = []
+    stable_indices = {}
     for insert in data["inserts"]:
         samples = samples_for_insert(data, insert)
         decisions = [valid_sample(s, paired[i], cfg) for i, s in enumerate(samples)]
         mask = [d[0] for d in decisions]
         windows = stable_windows(mask, int(cfg["min_window_samples"]))
         keep = [i for lo, hi in windows for i in range(lo, hi)]
+        stable_indices[(str(insert["crossover_id"]), int(insert["k"]))] = keep
         kept = [samples[i] for i in keep]
         failures = {}
         for _, why in decisions:
@@ -164,10 +167,12 @@ def analyse_dump(data: dict, cfg: dict) -> dict:
             "n_stable_samples": len(keep), "panels": panels,
             "panel_agreement_ari": agreement,
         })
+    pooled = pooled_position_clusters(data, stable_indices)
     return {
-        "schema": "nadoc.exp53.analysis.v1", "stem": data["stem"],
+        "schema": "nadoc.exp53.analysis.v2", "stem": data["stem"],
         "job": data["job"], "dcd": data["dcd"], "stride": data["stride"],
         "n_frames": data["n_frames"], "filters": cfg, "inserts": results,
+        "pooled_positions": pooled,
     }
 
 

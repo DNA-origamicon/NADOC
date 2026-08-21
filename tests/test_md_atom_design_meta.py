@@ -112,7 +112,15 @@ def test_terminus_falls_back_to_cpk_when_the_segid_map_is_unavailable():
 
     rows = build_atom_design_meta(u, _heavy([0, 1]), [("h0", 2, "FORWARD")], model)
 
-    assert rows[0] == {"strand_id": "", "helix_id": "", "bp_index": -1, "direction": ""}
+    assert rows[0] == {
+        "strand_id": "",
+        "helix_id": "",
+        "bp_index": -1,
+        "direction": "",
+        "copy_k": 0,
+        "scalar_key": "",
+        "base_key": "",
+    }
     assert rows[1]["strand_id"] == "scaf"
 
 

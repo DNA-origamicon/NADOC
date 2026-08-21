@@ -55,9 +55,12 @@ export function initVRSession({
   let nativePollTimer = null
   let nativeEventTimer = null
   let nativeJobPollTimer = null
+  let nativePublishQueued = false
+  let nativePublishPromise = null
   let lastNativeEventSequence = 0
   let lastNativeSelectSequence = 0
   let lastNativeLevelSequence = 0
+  let lastNativeStyleSequence = 0
   let lastNativeToolSequence = 0
   let lastNativeToolConfigSequence = 0
   let lastNativePlanePickSequence = 0
@@ -181,13 +184,29 @@ export function initVRSession({
     nativeJobPollTimer = null
   }
 
+  function _publishNativeState() {
+    if (!nativeActive || disposed || typeof publishNativeJobs !== 'function') {
+      return Promise.resolve(false)
+    }
+    nativePublishQueued = true
+    if (nativePublishPromise) return nativePublishPromise
+    nativePublishPromise = (async () => {
+      while (nativePublishQueued && nativeActive && !disposed) {
+        nativePublishQueued = false
+        try { await publishNativeJobs() } catch { /* retain last complete revision */ }
+      }
+      return true
+    })().finally(() => { nativePublishPromise = null })
+    return nativePublishPromise
+  }
+
   function _scheduleNativeJobPoll({ immediate = false } = {}) {
     _clearNativeJobPoll()
     if (!nativeActive || disposed || nativeJobPollIntervalMs <= 0 ||
         typeof publishNativeJobs !== 'function') return
     nativeJobPollTimer = setTimeout(async () => {
       nativeJobPollTimer = null
-      try { await publishNativeJobs() } catch { /* retain prior revision; age exposes staleness */ }
+      await _publishNativeState()
       if (!disposed && nativeActive) _scheduleNativeJobPoll()
     }, immediate ? 0 : nativeJobPollIntervalMs)
   }
@@ -226,6 +245,19 @@ export function initVRSession({
             sequence: levelSequence,
             type: 'selection_level',
             level: event?.selection_level ?? 'default',
+          })
+        }
+        const styleSequence = Number(event?.style_sequence ?? 0)
+        if (Number.isSafeInteger(styleSequence) &&
+            styleSequence > lastNativeStyleSequence &&
+            ['cylinders', 'full', 'ballstick', 'stick'].includes(event?.representation) &&
+            ['strand', 'base', 'cluster', 'cpk'].includes(event?.coloring)) {
+          lastNativeStyleSequence = styleSequence
+          onNativeEvent({
+            sequence: styleSequence,
+            type: 'style',
+            representation: event.representation,
+            coloring: event.coloring,
           })
         }
         const toolSequence = Number(event?.tool_sequence ?? 0)
@@ -305,6 +337,7 @@ export function initVRSession({
       lastNativeEventSequence = 0
       lastNativeSelectSequence = 0
       lastNativeLevelSequence = 0
+      lastNativeStyleSequence = 0
       lastNativeToolSequence = 0
       lastNativeToolConfigSequence = 0
       lastNativePlanePickSequence = 0
@@ -497,6 +530,7 @@ export function initVRSession({
     exit,
     toggle,
     isActive: () => session !== null || nativeActive,
+    publishNativeState: _publishNativeState,
     dispose,
   }
 }

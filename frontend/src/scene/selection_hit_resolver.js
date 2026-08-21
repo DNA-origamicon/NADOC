@@ -1,6 +1,6 @@
 /** Pure hit-metadata → canonical SelectionRef resolution. */
 
-import { atomBaseKey, baseKey } from './base_ref.js'
+import { atomBaseKey, baseKey, parseBaseKey } from './base_ref.js'
 import { selectionRefKey } from './selection_ref.js'
 
 function decodedIdentity(identity) {
@@ -18,6 +18,22 @@ function semanticAtomRef(value) {
     value.every(item => typeof item === 'string' && item)
     ? { baseKey: value[0], name: value[1] }
     : null
+}
+
+function extraBaseOwner(key, design, extra = {}) {
+  const ref = parseBaseKey(key)
+  if (ref?.helix_id !== '__xb__' || !Number.isInteger(ref.k) || ref.k < 0) return null
+  const connections = [
+    ...(design?.crossovers ?? []).map(connection => [connection, 'crossover']),
+    ...(design?.forced_ligations ?? []).map(connection => [connection, 'forced_ligation']),
+  ]
+  const match = connections.find(([connection]) =>
+    String(connection.id) === ref.crossover_id &&
+    ref.k < String(connection.extra_bases ?? '').length)
+  return match ? {
+    kind: 'extra_base', connectionId: match[0].id, connectionSubtype: match[1],
+    ref: { kind: 'base', key }, ...extra,
+  } : null
 }
 
 function nucleotidePrimitiveOwner(nuc) {
@@ -40,15 +56,24 @@ export function vrPrimitiveOwner(identity, { geometry = [], design = null } = {}
   const decoded = decodedIdentity(identity)
   if (!decoded) return null
 
+  const semanticExtra = semanticIdentityPayload(decoded, 'extra-base-ref:')
+  if (Array.isArray(semanticExtra) && semanticExtra.length === 2 &&
+      typeof semanticExtra[0] === 'string') {
+    return extraBaseOwner(semanticExtra[0], design, { primitive: semanticExtra[1] })
+  }
+
   const semanticAtom = semanticAtomRef(semanticIdentityPayload(decoded, 'atom-ref:'))
   if (semanticAtom) {
     const nucleotide = (geometry ?? []).find(candidate =>
       atomBaseKey(candidate) === semanticAtom.baseKey)
-    return nucleotide ? {
+    if (nucleotide) return {
       kind: 'atom', nucleotide,
       ref: { kind: 'base', key: semanticAtom.baseKey },
       atomRef: semanticAtom,
-    } : null
+    }
+    return extraBaseOwner(semanticAtom.baseKey, design, {
+      primitive: 'atom', atomRef: semanticAtom,
+    })
   }
 
   for (const nucleotide of geometry ?? []) {
@@ -83,7 +108,15 @@ export function vrPrimitiveOwner(identity, { geometry = [], design = null } = {}
     if (atomRefs.every(Boolean)) {
       const first = geometryOwners.find(candidate => candidate.key === atomRefs[0].baseKey)
       const second = geometryOwners.find(candidate => candidate.key === atomRefs[1].baseKey)
-      if (!first || !second) return null
+      const firstExtra = first ? null : extraBaseOwner(atomRefs[0].baseKey, design)
+      const secondExtra = second ? null : extraBaseOwner(atomRefs[1].baseKey, design)
+      if ((!first && !firstExtra) || (!second && !secondExtra)) return null
+      if (firstExtra || secondExtra) {
+        const owner = firstExtra ?? secondExtra
+        return {
+          ...owner, primitive: 'atom-bond', atomRefs,
+        }
+      }
       if (first.key === second.key) {
         return {
           kind: 'atom_bond_base', nucleotide: first.nucleotide,
@@ -353,8 +386,8 @@ export function vrSelectionAccepted(ownerKind, level, {
     return ['default', 'strand', 'xover'].includes(level) ||
       (level === 'cluster' && hasCluster)
   }
-  return (ownerKind === 'flexible_base' || ownerKind === 'linker_base') &&
-    level === 'base'
+  if (ownerKind === 'extra_base') return level === 'base'
+  return (ownerKind === 'flexible_base' || ownerKind === 'linker_base') && level === 'base'
 }
 
 export function crossoverRefForArc(arc, design) {

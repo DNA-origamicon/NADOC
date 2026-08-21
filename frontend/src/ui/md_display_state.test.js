@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { WS, targetStreamMode, sceneUsesAtomistic, sceneUsesNativeCg, decideReload, canReapplyFrame, nextLivePollAction, mdReadinessIndicator, shouldForceDisplayReload, sceneUsesHeavy, solventRepMode, restorePlan, zipAtomIdentity, toBondPairs, mdDisplayReadinessFromMeta, atomFrameToCgPositions } from './md_display_state.js'
+import { WS, targetStreamMode, sceneUsesAtomistic, sceneUsesNativeCg, decideReload, canReapplyFrame, nextLivePollAction, mdReadinessIndicator, shouldForceDisplayReload, sceneUsesHeavy, solventRepMode, restorePlan, zipAtomIdentity, toBondPairs, mdDisplayReadinessFromMeta } from './md_display_state.js'
 
 describe('targetStreamMode', () => {
   it('maps atomistic scene reprs to ballstick', () => {
@@ -24,29 +24,6 @@ describe('sceneUsesAtomistic / sceneUsesNativeCg', () => {
     expect(sceneUsesNativeCg('cylinders')).toBe(true)
     expect(sceneUsesNativeCg('vdw')).toBe(false)
     expect(sceneUsesNativeCg('hull-prism')).toBe(false)
-  })
-})
-
-describe('atomFrameToCgPositions', () => {
-  it('maps each identity-stamped phosphorus directly to one CG backbone position', () => {
-    const out = atomFrameToCgPositions({
-      type: 'frame', frame_idx: 17, n_frames: 20, time_ps: 4,
-      atoms: [
-        { element: 'P', helix_id: 'h0', bp_index: 2, direction: 'FORWARD', x: 1, y: 2, z: 3 },
-        { element: 'C', helix_id: 'h0', bp_index: 2, direction: 'FORWARD', x: 9, y: 9, z: 9 },
-        { element: 'P', helix_id: 'h1', bp_index: 7, direction: 'REVERSE', x: 4, y: 5, z: 6 },
-      ],
-    })
-    expect(out).toMatchObject({ frame_idx: 17, n_frames: 20, time_ps: 4 })
-    expect(out.positions).toEqual([
-      { helix_id: 'h0', bp_index: 2, direction: 'FORWARD', copy: 0, x: 1, y: 2, z: 3 },
-      { helix_id: 'h1', bp_index: 7, direction: 'REVERSE', copy: 0, x: 4, y: 5, z: 6 },
-    ])
-  })
-
-  it('returns null rather than applying an empty or identity-less reskin', () => {
-    expect(atomFrameToCgPositions(null)).toBeNull()
-    expect(atomFrameToCgPositions({ atoms: [{ element: 'P', x: 1, y: 2, z: 3 }] })).toBeNull()
   })
 })
 
@@ -285,6 +262,10 @@ describe('zipAtomIdentity', () => {
     helix_idx:  [0, 0, 1],
     dir_idx:    [0, 0, 1],
     bp:         [5, 5, 9],
+    names:      ['P', 'OP1', 'C1\''],
+    copy_k:     [0, 0, 1],
+    scalar_keys: ['', '', ''],
+    base_keys:  ['h0:5:FORWARD', 'h0:5:FORWARD', 'h1:9:REVERSE:1'],
   }
   const frame = () => [
     { serial: 0, element: 'P', x: 0, y: 0, z: 0 },
@@ -298,6 +279,8 @@ describe('zipAtomIdentity', () => {
     expect(atoms.map(a => a.helix_id)).toEqual(['h0', 'h0', 'h1'])
     expect(atoms.map(a => a.direction)).toEqual(['FORWARD', 'FORWARD', 'REVERSE'])
     expect(atoms.map(a => a.bp_index)).toEqual([5, 5, 9])
+    expect(atoms.map(a => a.name)).toEqual(['P', 'OP1', 'C1\''])
+    expect(atoms[2]).toMatchObject({ copy_k: 1, base_key: 'h1:9:REVERSE:1' })
   })
 
   it('mutates in place and keeps the coordinates', () => {

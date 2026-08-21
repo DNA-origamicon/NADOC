@@ -215,6 +215,24 @@ describe('initVRSession', () => {
     vi.useRealTimers()
   })
 
+  it('publishes an event-driven companion revision immediately while native VR is active', async () => {
+    const native = {
+      status: vi.fn().mockResolvedValue({ available: true, running: false }),
+      launch: vi.fn().mockResolvedValue({ available: true, running: true, pid: 1234 }),
+      stop: vi.fn().mockResolvedValue({ available: true, running: false }),
+    }
+    const publishNativeJobs = vi.fn().mockResolvedValue({ acknowledged: true })
+    const h = makeHarness({ xr: null, native, publishNativeJobs })
+
+    await h.controller.enter()
+    await expect(h.controller.publishNativeState()).resolves.toBe(true)
+    expect(publishNativeJobs).toHaveBeenCalledOnce()
+
+    await h.controller.exit()
+    await expect(h.controller.publishNativeState()).resolves.toBe(false)
+    expect(publishNativeJobs).toHaveBeenCalledOnce()
+  })
+
   it('delivers sequenced native events only while the companion is active', async () => {
     vi.useFakeTimers()
     const onNativeEvent = vi.fn()
@@ -231,6 +249,9 @@ describe('initVRSession', () => {
           select_identities: ['nuc:s1', 'nuc:s2'],
           level_sequence: 1,
           selection_level: 'domain',
+          style_sequence: 1,
+          representation: 'ballstick',
+          coloring: 'cpk',
           tool_sequence: 1,
           tool_mode: 'twist',
           tool_action: 'preview',
@@ -262,6 +283,9 @@ describe('initVRSession', () => {
           select_identity: 'nuc:s1',
           level_sequence: 1,
           selection_level: 'domain',
+          style_sequence: 1,
+          representation: 'ballstick',
+          coloring: 'cpk',
           tool_sequence: 1,
           tool_mode: 'twist',
           tool_action: 'preview',
@@ -305,6 +329,9 @@ describe('initVRSession', () => {
         identities: ['nuc:s1', 'nuc:s2'],
       }],
       [{ sequence: 1, type: 'selection_level', level: 'domain' }],
+      [{
+        sequence: 1, type: 'style', representation: 'ballstick', coloring: 'cpk',
+      }],
       [{
         sequence: 1, type: 'tool', mode: 'twist', action: 'preview',
         targetIdentity: 'nuc:s1', targetKind: 'domain',

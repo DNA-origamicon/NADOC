@@ -64,6 +64,19 @@ def _junction_index(design) -> dict:
     return idx
 
 
+def _strand_chain_id(index: int) -> str:
+    """Return the chain id assigned by ``atomistic.build_atomistic_model``.
+
+    Full psfgen packages sort those chain ids lexicographically before assigning
+    ``D000``, ``D001``, ... segment ids.  Design order and package segment order
+    therefore diverge after strand Z (``A, AA, AB, ..., B, ...``).
+    """
+    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    if index < 26:
+        return letters[index]
+    return letters[index // 26 - 1] + letters[index % 26]
+
+
 def build_package_map(design, package_pdb: str | Path) -> PackageMap:
     pm = PackageMap()
     per_seg: dict = {}
@@ -84,7 +97,13 @@ def build_package_map(design, package_pdb: str | Path) -> PackageMap:
     segnames = sorted(per_seg)
     junctions = _junction_index(design)
 
-    for si, strand in enumerate(design.strands):
+    # ``namd_topology._write_segment_pdbs`` sorts atomistic chain ids before
+    # assigning psfgen segment ids.  This is identical to design order for small
+    # fixtures, but is essential for 24hb (76 strands).
+    package_strands = sorted(
+        enumerate(design.strands), key=lambda item: _strand_chain_id(item[0])
+    )
+    for si, (_design_index, strand) in enumerate(package_strands):
         if si >= len(segnames):
             break
         seg = segnames[si]

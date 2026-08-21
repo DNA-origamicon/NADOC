@@ -1,5 +1,6 @@
 /** Help ▸ Extra-Base Metrics Audit — measured states, windows and validation. */
 import { docHeaders } from '../shared/doc_id.js'
+import { createExtraBaseComparisonViewer } from './extra_base_cluster_viewer.js'
 import './extra_base_metrics_audit.css'
 
 const PANEL_ORDER = ['hop_position', 'pose_orientation', 'environment']
@@ -100,13 +101,77 @@ function insertMarkup(insert, labels, stableOnly) {
   </article>`
 }
 
+function comparisonReadout(clusterI, clusterI1) {
+  const c1I = clusterI?.medoid?.atoms_A?.["C1'"]
+  const c1I1 = clusterI1?.medoid?.atoms_A?.["C1'"]
+  if (!c1I || !c1I1) return 'No paired medoid coordinates available'
+  const delta = c1I1.map((value, index) => Number(value) - Number(c1I[index]))
+  const distance = Math.hypot(...delta)
+  return `<strong>Aligned C1′ separation ${num(distance, 2)} Å</strong> · Δ(i→i+1) = (${num(delta[0], 2)}, ${num(delta[1], 2)}, ${num(delta[2], 2)}) Å<br>
+    i frame ${clusterI.medoid.frame?.toLocaleString?.() ?? clusterI.medoid.frame} · i+1 frame ${clusterI1.medoid.frame?.toLocaleString?.() ?? clusterI1.medoid.frame} · positions remain in their measured canonical frames`
+}
+
+function comparisonOptions(side) {
+  return (side?.clusters ?? []).map((cluster, index) => `<option value="${index}">${index === 0 ? 'Most likely' : `Cluster ${index + 1}`} · ${pct(cluster.population)}</option>`).join('')
+}
+
+function comparisonMarkup(pooled) {
+  const sideI = pooled?.sides?.find(side => side.side === 'i')
+  const sideI1 = pooled?.sides?.find(side => side.side === 'i+1')
+  if (!sideI?.ready || !sideI1?.ready) return ''
+  const atomisticReady = [...sideI.clusters, ...sideI1.clusters].every(cluster => cluster.medoid?.atomistic)
+  return `<article class="xbma-comparison" data-comparison-panel>
+    <header><div><strong>Aligned reciprocal extra bases</strong><small>Both medoids share X interhelix · Y helix axis · Z out-of-plane coordinates; no medoid-to-medoid fit is applied.</small>
+      <small>i: ${sideI.n_observations?.toLocaleString?.() ?? sideI.n_observations} stable positions · ${sideI.n_crossovers} sites · k ${sideI.k} · silhouette ${num(sideI.silhouette)} &nbsp;|&nbsp; i+1: ${sideI1.n_observations?.toLocaleString?.() ?? sideI1.n_observations} stable positions · ${sideI1.n_crossovers} sites · k ${sideI1.k} · silhouette ${num(sideI1.silhouette)}</small></div>
+      <div class="xbma-comparison-controls"><label><i>i / left</i><select data-comparison-side="i">${comparisonOptions(sideI)}</select></label>
+        <label><i>i+1 / right</i><select data-comparison-side="i+1">${comparisonOptions(sideI1)}</select></label>
+        <span>Representation</span><button type="button" class="active" data-comparison-representation="schematic">Schematic</button><button type="button" data-comparison-representation="atomistic" ${atomisticReady ? '' : 'disabled'}>Atomistic</button></div></header>
+    <div class="xbma-comparison-view" aria-label="Orbitable aligned i and i+1 extra-base comparison"></div>
+    <div class="xbma-comparison-legend"><span class="side-i">● i / left</span><span class="side-i1">● i+1 / right</span><span>wireframes = per-cluster positional spread</span><span>shared cylinders = mean medoid helix spacing</span></div>
+    <div class="xbma-comparison-readout">${comparisonReadout(sideI.clusters[0], sideI1.clusters[0])}</div>
+  </article>`
+}
+
+function pooledMarkup(pooled) {
+  return `<section class="xbma-pooled-intro"><strong>Reciprocal Holliday-junction position ensembles</strong>
+    <span>${esc(pooled.classification)} · ${pooled.n_unpaired_inserts ?? 0} unpaired inserts excluded · fit capped at ${pooled.max_fit_samples_per_side?.toLocaleString?.() ?? pooled.max_fit_samples_per_side} balanced samples per side</span></section>
+    ${comparisonMarkup(pooled)}`
+}
+
+function mountPooledViewer(root, pooled, comparisonViewerFactory) {
+  if (!comparisonViewerFactory) return []
+  const selected = { i: 0, 'i+1': 0 }
+  const sideI = pooled?.sides?.find(side => side.side === 'i')
+  const sideI1 = pooled?.sides?.find(side => side.side === 'i+1')
+  const comparisonContainer = root.querySelector('.xbma-comparison-view')
+  if (!comparisonContainer || !sideI?.ready || !sideI1?.ready) return []
+  const viewer = comparisonViewerFactory(comparisonContainer, { sideI, sideI1, initialIndices: selected })
+  const update = () => {
+    viewer.setClusters?.({ ...selected })
+    root.querySelector('.xbma-comparison-readout').innerHTML = comparisonReadout(
+      sideI.clusters[selected.i], sideI1.clusters[selected['i+1']],
+    )
+  }
+  root.querySelectorAll('[data-comparison-side]').forEach(select => select.addEventListener('change', () => {
+    selected[select.dataset.comparisonSide] = Number(select.value)
+    update()
+  }))
+  root.querySelectorAll('[data-comparison-representation]').forEach(button => button.addEventListener('click', () => {
+    if (button.disabled) return
+    viewer.setRepresentation?.(button.dataset.comparisonRepresentation)
+    root.querySelectorAll('[data-comparison-representation]').forEach(candidate => candidate.classList.toggle('active', candidate === button))
+  }))
+  return [viewer]
+}
+
 export function renderExtraBaseMetricsAudit(root, bundle, options = {}) {
-  const { sourceIndex = 0, stableOnly = true, panelVisibility = {} } = options
+  const { sourceIndex = 0, stableOnly = true, panelVisibility = {}, comparisonViewerFactory = null } = options
   const source = bundle.sources?.[sourceIndex]
   if (!source) {
     root.innerHTML = '<div class="xbma-empty">No processed extra-base evidence is available. Run exp53 refresh.</div>'
     return
   }
+  const pooled = source.pooled_positions?.ready ? source.pooled_positions : null
   root.innerHTML = `<div class="xbma-source-summary">
       <strong>${esc(source.part)}</strong><span>${esc(source.role)}</span>
       <span>${source.n_frames?.toLocaleString?.() ?? source.n_frames} trajectory frames</span>
@@ -114,11 +179,12 @@ export function renderExtraBaseMetricsAudit(root, bundle, options = {}) {
       <span>${esc(source.job)}</span>
     </div>${cpdMarkup(source.cpd_reference)}<div class="xbma-context"><strong>Trajectory context</strong> ${esc((source.dcd ?? []).join?.(', ') ?? source.dcd)}<br>
       <strong>Integrity filter</strong> ${esc(Object.entries(source.filters ?? {}).map(([key, value]) => `${key}=${value}`).join(' · '))}</div>
-    ${source.inserts.map(insert => insertMarkup(insert, bundle.metric_panels, stableOnly)).join('')}`
+    ${pooled ? pooledMarkup(pooled) : (source.inserts ?? []).map(insert => insertMarkup(insert, bundle.metric_panels, stableOnly)).join('')}`
   for (const name of PANEL_ORDER) {
     const visible = panelVisibility[name] !== false
     root.querySelectorAll(`[data-metric-panel="${name}"]`).forEach(el => { el.hidden = !visible })
   }
+  return mountPooledViewer(root, pooled, comparisonViewerFactory)
 }
 
 function modalMarkup() {
@@ -126,19 +192,19 @@ function modalMarkup() {
   modal.id = 'extra-base-metrics-audit'
   modal.className = 'xbma-modal'
   modal.innerHTML = `<header class="xbma-header"><div><strong>Extra-Base Metrics Audit</strong>
-    <small>Read-only measured states, populations, transitions and stable-window validation.</small></div>
+    <small>Read-only clustered extra-base positions in reciprocal Holliday-junction frames.</small></div>
     <button class="xbma-close">Close</button></header>
     <div class="xbma-controls"><label>Evidence source <select class="xbma-source"></select></label>
       <label><input class="xbma-extra-only" type="checkbox" checked> Extra bases only</label>
-      <label><input class="xbma-stable-only" type="checkbox" checked> Stable windows only</label>
-      <label><input data-panel-toggle="hop_position" type="checkbox" checked> Hop position</label>
-      <label><input data-panel-toggle="pose_orientation" type="checkbox" checked> Pose / orientation</label>
-      <label><input data-panel-toggle="environment" type="checkbox" checked> Environment</label></div>
+      <label class="xbma-legacy-control"><input class="xbma-stable-only" type="checkbox" checked> Stable windows only</label>
+      <label class="xbma-legacy-control"><input data-panel-toggle="hop_position" type="checkbox" checked> Hop position</label>
+      <label class="xbma-legacy-control"><input data-panel-toggle="pose_orientation" type="checkbox" checked> Pose / orientation</label>
+      <label class="xbma-legacy-control"><input data-panel-toggle="environment" type="checkbox" checked> Environment</label></div>
     <main class="xbma-body"></main>`
   return modal
 }
 
-export function initExtraBaseMetricsAudit({ setMenuToggle = () => {}, fetchAudit = async () => {
+export function initExtraBaseMetricsAudit({ setMenuToggle = () => {}, comparisonViewerFactory = createExtraBaseComparisonViewer, fetchAudit = async () => {
   const response = await fetch('/api/design/extra-base-metrics-audit', { headers: docHeaders() })
   if (!response.ok) throw new Error(`Metrics audit request failed (${response.status})`)
   return response.json()
@@ -150,19 +216,29 @@ export function initExtraBaseMetricsAudit({ setMenuToggle = () => {}, fetchAudit
   const sourceSelect = modal.querySelector('.xbma-source')
   let bundle = null
   let open = false
+  let viewers = []
   const panelVisibility = Object.fromEntries(PANEL_ORDER.map(name => [name, true]))
 
+  function disposeViewers() {
+    viewers.forEach(viewer => viewer?.dispose?.())
+    viewers = []
+  }
   function render() {
     if (!bundle) return
-    renderExtraBaseMetricsAudit(body, bundle, {
-      sourceIndex: Number(sourceSelect.value || 0),
+    disposeViewers()
+    const sourceIndex = Number(sourceSelect.value || 0)
+    modal.classList.toggle('has-pooled', Boolean(bundle.sources?.[sourceIndex]?.pooled_positions?.ready))
+    viewers = renderExtraBaseMetricsAudit(body, bundle, {
+      sourceIndex,
       stableOnly: modal.querySelector('.xbma-stable-only').checked,
       panelVisibility,
+      comparisonViewerFactory,
     })
     body.classList.toggle('show-context', !modal.querySelector('.xbma-extra-only').checked)
   }
   function close() {
     open = false
+    disposeViewers()
     modal.classList.remove('visible')
     setMenuToggle('menu-help-extra-base-metrics-audit', false)
   }

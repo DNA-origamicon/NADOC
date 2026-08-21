@@ -754,7 +754,13 @@ export function hasActiveRemoteJob(jobs) {
   // Alpine AND RunPod. It was Alpine-only, which meant the 20 s remote poll never armed for
   // a rented run — so a pod could be provisioning, uploading, or finished, and the panel
   // would sit on whatever it last saw until the user clicked something.
-  return (jobs ?? []).some(j => mdIsRemoteJob(j) && mdJobIsActive(j))
+  // Result transfer/indexing is also live work.  Normally Alpine deliberately keeps the
+  // job's coarse status `running` until those phases finish, but persisted records from an
+  // older backend (or a restart between the two saves) can already be terminal.  Keep the
+  // REST poll armed from the durable download state instead of freezing that edge case.
+  return (jobs ?? []).some(j => mdIsRemoteJob(j) && (
+    mdJobIsActive(j) || ['downloading', 'processing'].includes(j?.download_status?.state)
+  ))
 }
 
 /** Pure: list-row label for a derived (refit/retry) child job — "Refit N", where N
@@ -1643,6 +1649,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // that is when we go get a frame — for the job already selected, or for whichever
     // one gets selected next (_selectJob's tail runs the same refresh).
     if (became) {
+      // Authentication returns before the potentially multi-GB completion reconcile.
+      // Refresh immediately so a run that finished while signed out changes from stale
+      // RUNNING to COMPLETED/downloading as soon as the server publishes that state;
+      // the remote poll remains armed until download + local indexing finish.
+      void _fetchJobs()
       _refreshMdDisplay()
     }
   })
@@ -1836,7 +1847,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // page refresh.
   let _prevJobsSig = null
   function _notifyIfJobsChanged() {
-    const sig = _jobs.map(j => `${j.job_id}:${j.status}`).sort().join('|')
+    // A reconnect can move RUNNING -> SLURM COMPLETED -> downloading without changing
+    // the coarse MdStatus (`running` is retained so interrupted transfers are retried).
+    // Include those phase edges so the visible unified Jobs card wakes immediately too.
+    // Byte counts are intentionally omitted; both panels already poll active transfers.
+    const sig = _jobs.map(j => [
+      j.job_id, j.status, j.slurm_state ?? '', j.download_status?.state ?? '',
+    ].join(':')).sort().join('|')
     if (_prevJobsSig !== null && sig !== _prevJobsSig) {
       window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed'))
     }

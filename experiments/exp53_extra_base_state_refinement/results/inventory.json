@@ -2,6 +2,74 @@
   "schema": "nadoc.exp53.scan.v1",
   "sources": [
     {
+      "part": "24hb_1xT",
+      "role": "large-bundle-single-long",
+      "job": "/media/jojo/Archive/NADOC_archive/6950d3b79138",
+      "production_ns": 223.6,
+      "local_minimum_image": true,
+      "target_samples": 500,
+      "note": "Large-bundle ensemble for insert position relative to the bridged helices.",
+      "available": true,
+      "stem": "24hb_1xT",
+      "dcds": [
+        "/media/jojo/Archive/NADOC_archive/6950d3b79138/package/24hb_1xT_namd_solvated/output/24hb_1xT_01_production_500ns_k0.dcd"
+      ],
+      "dcd_bytes": 181149429020,
+      "dcd_mtime_ns": 1787178054055247676,
+      "package": "/media/jojo/Archive/NADOC_archive/6950d3b79138/package/24hb_1xT_namd_solvated"
+    },
+    {
+      "part": "2hb_1xT",
+      "role": "symmetric-single-exp46",
+      "job": "/media/jojo/Archive/NADOC_archive/29c5b267380f",
+      "lineage": [
+        "/media/jojo/Archive/NADOC_archive/e4a49b2057a5"
+      ],
+      "production_ns": 200,
+      "available": true,
+      "stem": "2hb_1xT",
+      "dcds": [
+        "/media/jojo/Archive/NADOC_archive/29c5b267380f/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_200ns_k0.dcd"
+      ],
+      "dcd_bytes": 5146240276,
+      "dcd_mtime_ns": 1785335299304394689,
+      "package": "/media/jojo/Archive/NADOC_archive/29c5b267380f/package/2hb_1xT_namd_solvated"
+    },
+    {
+      "part": "2hb_1xT",
+      "role": "symmetric-single-long",
+      "job": "/media/jojo/Archive/NADOC_archive/4c0ba3a85587",
+      "lineage": [
+        "/media/jojo/Archive/NADOC_archive/7d5937e569c6"
+      ],
+      "production_ns": 800,
+      "available": true,
+      "stem": "2hb_1xT",
+      "dcds": [
+        "/media/jojo/Archive/NADOC_archive/4c0ba3a85587/package/2hb_1xT_namd_solvated/output/2hb_1xT_01_production_800ns_k0.dcd"
+      ],
+      "dcd_bytes": 30088160276,
+      "dcd_mtime_ns": 1786916593325145557,
+      "package": "/media/jojo/Archive/NADOC_archive/4c0ba3a85587/package/2hb_1xT_namd_solvated"
+    },
+    {
+      "part": "2hb_0-1xT",
+      "role": "asymmetric-single-long",
+      "job": "/media/jojo/Archive/NADOC_archive/c18abcc8bf3c",
+      "lineage": [
+        "/media/jojo/Archive/NADOC_archive/248210e5af50"
+      ],
+      "production_ns": 1000,
+      "available": true,
+      "stem": "2hb_0-1xT",
+      "dcds": [
+        "/media/jojo/Archive/NADOC_archive/c18abcc8bf3c/package/2hb_0-1xT_namd_solvated/output/2hb_0-1xT_01_production_1000ns_k0.dcd"
+      ],
+      "dcd_bytes": 39838400276,
+      "dcd_mtime_ns": 1786823035994004677,
+      "package": "/media/jojo/Archive/NADOC_archive/c18abcc8bf3c/package/2hb_0-1xT_namd_solvated"
+    },
+    {
       "part": "2hb_2xT",
       "role": "symmetric-double-short",
       "job": "/media/jojo/Archive/NADOC_archive/bfd050d2ce4c",

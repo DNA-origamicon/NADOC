@@ -78,9 +78,47 @@ def test_empty_results_are_honestly_not_ready(tmp_path):
     assert result["ready"] is False and result["sources"] == []
 
 
+def test_pooled_source_replaces_per_insert_payload_and_skips_metrics_parse(tmp_path):
+    state = {
+        "job": "/archive/job",
+        "n_frames": 500,
+        "inserts": [{"crossover_id": "large-provenance-entry"}],
+        "pooled_positions": {
+            "ready": True,
+            "classification": "lower reciprocal bp level = i/left",
+            "n_unpaired_inserts": 2,
+            "max_fit_samples_per_side": 2500,
+            "sides": [
+                {
+                    "side": "i",
+                    "ready": True,
+                    "n_observations": 10000,
+                    "clusters": [
+                        {
+                            "rank": 0,
+                            "population": 0.8,
+                            "medoid": {"atoms_A": {"C1'": [1, 2, 3]}},
+                        }
+                    ],
+                }
+            ],
+        },
+    }
+    (tmp_path / "24hb_1xT__large__states.json").write_text(json.dumps(state))
+    # A pooled source must not parse the huge raw metric dump merely to draw legacy
+    # per-insert clouds. Invalid JSON makes that performance contract observable.
+    (tmp_path / "24hb_1xT__large__metrics.json").write_text("not parsed")
+
+    result = build_extra_base_metrics_audit(tmp_path)
+
+    source = result["sources"][0]
+    assert source["inserts"] == []
+    assert source["pooled_positions"]["sides"][0]["clusters"][0]["population"] == 0.8
+
+
 def test_read_only_route_serves_the_registered_evidence():
     response = TestClient(app).get("/api/design/extra-base-metrics-audit")
     assert response.status_code == 200
     body = response.json()
-    assert body["schema"] == "nadoc.extra-base-metrics-audit.v1"
-    assert all(source["part"] != "24hb_1xT" for source in body["sources"])
+    assert body["schema"] == "nadoc.extra-base-metrics-audit.v2"
+    assert body["excluded_parts"] == []

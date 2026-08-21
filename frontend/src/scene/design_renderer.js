@@ -1511,6 +1511,11 @@ export function initDesignRenderer(scene, storeRef) {
       return _activeFemUpdates?.map(u => ({ ...u, backbone_position: [...u.backbone_position] })) ?? null
     },
 
+    /** Exact live Full-representation slab transforms for native VR parity. */
+    getFemSlabFrames() {
+      return _activeFemUpdates ? (_helixCtrl?.getSlabFrames?.() ?? []) : null
+    },
+
     /** Snapshot of active scalar colors for the native VR display bridge. */
     getScalarColors() {
       if (!_activeScalarColors) return null

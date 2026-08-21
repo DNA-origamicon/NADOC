@@ -4301,6 +4301,11 @@ export async function refreshNativeVRJobs(companionState = {}) {
  * so the live VR loop no longer fetches the unified job tree every 1.5 seconds. */
 export async function refreshNativeVRVisualization(companionState = {}) {
   return sendVRVisualizationFeedback({
+    representation: ['cylinders', 'full', 'ballstick', 'stick'].includes(
+      companionState.representation,
+    ) ? companionState.representation : 'full',
+    coloring: ['strand', 'base', 'cluster', 'cpk'].includes(companionState.coloring)
+      ? companionState.coloring : 'strand',
     visualization_mode: typeof companionState.visualization_mode === 'string'
       ? companionState.visualization_mode : 'none',
     visualization_points: Array.isArray(companionState.visualization_points)

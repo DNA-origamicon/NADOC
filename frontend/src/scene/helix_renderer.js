@@ -3041,6 +3041,33 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     coneEntries,
     slabEntries,
 
+    /** Exact live slab transforms for the native-VR visualization bridge.
+     * These are read from the rendered instances after simulation placement, so VR
+     * receives the same center and complete orientation as desktop Full view. */
+    getSlabFrames() {
+      const matrix = new THREE.Matrix4()
+      const center = new THREE.Vector3()
+      const quat = new THREE.Quaternion()
+      const scale = new THREE.Vector3()
+      const axis = new THREE.Vector3()
+      const frames = []
+      for (const slab of slabEntries) {
+        slab.instMesh.getMatrixAt(slab.id, matrix)
+        matrix.decompose(center, quat, scale)
+        const n = slab.nuc
+        const baseKey = `${n.helix_id}:${n.bp_index}:${n.direction}` +
+          ((slab._copy ?? 0) ? `:${slab._copy}` : '')
+        frames.push({
+          base_key: baseKey,
+          center: center.toArray(),
+          axis_x: axis.set(scale.x, 0, 0).applyQuaternion(quat).toArray(),
+          axis_y: axis.set(0, scale.y, 0).applyQuaternion(quat).toArray(),
+          axis_z: axis.set(0, 0, scale.z).applyQuaternion(quat).toArray(),
+        })
+      }
+      return frames
+    },
+
     /** Source instance snapshots for a rigid, single-residue transform preview. */
     residueTransformInfo(target) {
       if (!target || target.helix_id === '__xb__') return null

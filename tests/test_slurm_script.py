@@ -427,7 +427,8 @@ def test_early_stop_emits_health_step_and_wc_gate_for_every_nonfinal_chunk(
             assert f'--log "{conf}.log"' in script
             wc = f"output/{conf}.wc.json"
             assert (
-                f'{ss.EARLY_STOP_HEALTH_NAME} --seg "{conf}" --stem "6hb_demo" '
+                f'python3 {ss.ALPINE_WC_EVAL_NAME} '
+                f'--dcd "output/{conf}.dcd" --plan "{ss.ALPINE_WC_PLAN_NAME}" '
                 f'--out "{wc}" || true' in script
             )
             assert (
@@ -481,11 +482,12 @@ def test_early_stop_never_on_production_segments(alpine, gpu_resources):
     assert '--log "6hb_demo_05_production_20ns_k0_p100.log"' not in script
 
 
-def test_early_stop_health_python_override(alpine, gpu_resources):
+def test_alpine_early_stop_ignores_heavy_health_python_override(alpine, gpu_resources):
     m = _ladder_manifest(early_stop=True)
     m["early_stop_health_python"] = "/curc/sw/anaconda/bin/python"
     script = _gen(alpine, gpu_resources, m)
-    assert f"/curc/sw/anaconda/bin/python {ss.EARLY_STOP_HEALTH_NAME}" in script
+    assert "/curc/sw/anaconda/bin/python" not in script
+    assert f"python3 {ss.ALPINE_WC_EVAL_NAME}" in script
 
 
 def test_early_stop_declash_still_rejected(alpine, gpu_resources):

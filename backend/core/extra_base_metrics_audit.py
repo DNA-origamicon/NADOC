@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-SCHEMA = "nadoc.extra-base-metrics-audit.v1"
+SCHEMA = "nadoc.extra-base-metrics-audit.v2"
 RESULTS_DIR = (
     Path(__file__).resolve().parents[2]
     / "experiments/exp53_extra_base_state_refinement/results"
@@ -74,13 +74,36 @@ def _source_name(path: Path) -> tuple[str, str]:
     return part, role
 
 
+def _compact_pooled_positions(pooled: dict | None) -> dict | None:
+    """Keep only the compact pooled-position contract used by the 3D audit."""
+    if not pooled:
+        return None
+    return {
+        key: pooled.get(key)
+        for key in (
+            "ready",
+            "reason",
+            "classification",
+            "n_unpaired_inserts",
+            "max_fit_samples_per_side",
+            "sides",
+        )
+        if key in pooled
+    }
+
+
 def _state_cloud(
-    root: Path, state_path: Path, insert_index: int, insert: dict
+    root: Path,
+    state_path: Path,
+    insert_index: int,
+    insert: dict,
+    metrics: dict | None = None,
 ) -> dict | None:
     metrics_path = root / state_path.name.replace("__states.json", "__metrics.json")
     if not metrics_path.exists():
         return None
-    metrics = json.loads(metrics_path.read_text())
+    if metrics is None:
+        metrics = json.loads(metrics_path.read_text())
     raw_insert = metrics.get("inserts", [])[insert_index]
     samples = raw_insert.get("samples", [])
     n_frames = len(metrics.get("paired_fraction", []))
@@ -142,10 +165,22 @@ def build_extra_base_metrics_audit(results_dir: Path | None = None) -> dict:
                 continue
             raw = json.loads(path.read_text())
             part, role = _source_name(path)
+            pooled_positions = _compact_pooled_positions(raw.get("pooled_positions"))
+            metrics_path = root / path.name.replace("__states.json", "__metrics.json")
+            # One large-bundle dump can contain hundreds of inserts.  Parse its metric
+            # file once per source; reparsing it for every state cloud scales as
+            # O(inserts * file size) and made the Help audit unusable for 24hb.
+            metrics = None
+            if pooled_positions is None and metrics_path.exists():
+                metrics = json.loads(metrics_path.read_text())
             topology_path = root / path.name.replace("__states.json", "__topology.txt")
             topology_text = topology_path.read_text() if topology_path.exists() else ""
             inserts = []
-            for insert_index, insert in enumerate(raw.get("inserts", [])):
+            # Pooled sources deliberately replace hundreds of per-insert cards.  The
+            # source state file retains those analyses as provenance, while the Help
+            # payload sends only the two i/i+1 ensembles and their physical medoids.
+            raw_inserts = [] if pooled_positions is not None else raw.get("inserts", [])
+            for insert_index, insert in enumerate(raw_inserts):
                 compact_insert = {
                     key: insert.get(key)
                     for key in (
@@ -169,7 +204,7 @@ def build_extra_base_metrics_audit(results_dir: Path | None = None) -> dict:
                     }
                 }
                 compact_insert["state_cloud"] = _state_cloud(
-                    root, path, insert_index, insert
+                    root, path, insert_index, insert, metrics
                 )
                 inserts.append(compact_insert)
             sources.append(
@@ -183,6 +218,7 @@ def build_extra_base_metrics_audit(results_dir: Path | None = None) -> dict:
                     "filters": raw.get("filters", {}),
                     "topology_pass": "piercings=0" in topology_text,
                     "inserts": inserts,
+                    "pooled_positions": pooled_positions,
                     "cpd_reference": CPD_1XT_REFERENCE if part == "2hb_1xT" else None,
                 }
             )
@@ -191,7 +227,7 @@ def build_extra_base_metrics_audit(results_dir: Path | None = None) -> dict:
         "results_dir": str(root),
         "ready": bool(sources),
         "sources": sources,
-        "excluded_parts": ["24hb_1xT"],
+        "excluded_parts": [],
         "metric_panels": {
             "hop_position": "Hop position",
             "pose_orientation": "Pose / orientation",

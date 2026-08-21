@@ -866,6 +866,14 @@ describe('hasActiveRemoteJob (gates the remote-poll timer)', () => {
     expect(hasActiveRemoteJob([])).toBe(false)
     expect(hasActiveRemoteJob(null)).toBe(false)
   })
+  it('stays active while completed Alpine results download or process locally', () => {
+    for (const state of ['downloading', 'processing']) {
+      expect(hasActiveRemoteJob([{
+        status: 'completed', execution_target: 'alpine', slurm_job_id: '9',
+        download_status: { state },
+      }])).toBe(true)
+    }
+  })
 })
 
 describe('mdWatchdogDecision (detail-WS safety net for local jobs)', () => {

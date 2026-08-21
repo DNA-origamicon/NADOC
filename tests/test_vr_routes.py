@@ -129,6 +129,13 @@ def _semantic_atom_bond_id(first: tuple[str, str], second: tuple[str, str]) -> s
     return quote(f"atom-bond-ref:{payload}", safe="-_.:~")
 
 
+def _semantic_extra_base_id(base_key: str, primitive: str) -> str:
+    payload = json.dumps(
+        (base_key, primitive), ensure_ascii=False, separators=(",", ":")
+    )
+    return quote(f"extra-base-ref:{payload}", safe="-_.:~")
+
+
 def test_native_vr_routes_are_workstation_only() -> None:
     _require_local(_request("127.0.0.1", "http://localhost:5173"))
     with pytest.raises(HTTPException, match="localhost"):
@@ -342,6 +349,7 @@ def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -
         '{"sequence":7,"hover_identity":"nuc:s1:0:h1:4:FORWARD:0",'
         '"select_sequence":2,"select_identity":"nuc:s1:0:h1:3:FORWARD:0",'
         '"level_sequence":3,"selection_level":"domain",'
+        '"style_sequence":5,"representation":"ballstick","coloring":"cpk",'
         '"tool_sequence":4,"tool_mode":"twist","tool_action":"preview",'
         '"tool_target_identity":"nuc:s1:0:h1:3:FORWARD:0",'
         '"tool_target_kind":"domain",'
@@ -355,6 +363,9 @@ def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -
         "select_identities": ["nuc:s1:0:h1:3:FORWARD:0"],
         "level_sequence": 3,
         "selection_level": "domain",
+        "style_sequence": 5,
+        "representation": "ballstick",
+        "coloring": "cpk",
         "tool_sequence": 4,
         "tool_mode": "twist",
         "tool_action": "preview",
@@ -379,6 +390,14 @@ def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -
         '{"sequence":8,"tool_sequence":5,"tool_mode":"delete","tool_action":"confirm"}'
     )
     assert _event_payload({"event_path": str(event_path)})["sequence"] == 0
+
+    for invalid_style in (
+        {"representation": "surface", "coloring": "strand"},
+        {"representation": "full", "coloring": "source"},
+        {"style_sequence": -1, "representation": "full", "coloring": "strand"},
+    ):
+        event_path.write_text(json.dumps({"sequence": 8, **invalid_style}))
+        assert _event_payload({"event_path": str(event_path)})["sequence"] == 0
 
     for invalid_target in (
         {
@@ -438,6 +457,9 @@ def test_native_tool_transform_returns_to_nadoc_coordinates(tmp_path) -> None:
         "select_identities": [],
         "level_sequence": 0,
         "selection_level": "default",
+        "style_sequence": 0,
+        "representation": "full",
+        "coloring": "strand",
         "tool_sequence": 0,
         "tool_mode": "inspect",
         "tool_action": "activate",
@@ -1244,31 +1266,49 @@ def test_native_job_feedback_atomically_advances_complete_revisions() -> None:
 def test_native_visualization_feed_rotates_positions_and_skips_duplicates() -> None:
     token = _owner_token("base", "h0:4:FORWARD")
     point = VRVisualizationPoint(
-        owner_token=token, position=[1.0, 2.0, 3.0], color=0x12ABEF,
+        owner_token=token,
+        position=[1.0, 2.0, 3.0],
+        color=0x12ABEF,
+        slab_center=[1.5, 2.5, 3.5],
+        slab_axis_x=[0.3, 0.0, 0.0],
+        slab_axis_y=[0.0, 0.06, 0.0],
+        slab_axis_z=[0.0, 0.0, 0.7],
     )
     rotation = np.array([[0, 1, 0], [-1, 0, 0], [0, 0, 1]], dtype=float)
     path = _write_visualization_snapshot(
         [point], mode="namd_display", view_rotation=rotation,
+        representation="ballstick", coloring="cpk",
     )
     state = {"visualization_path": str(path), "view_rotation": rotation.tolist()}
     body = VRVisualizationFeedbackRequest(
+        representation="ballstick", coloring="cpk",
         visualization_mode="namd_display", visualization_points=[point],
     )
     try:
         assert path.read_text() == (
-            f"NADOCVR_VISUALIZATION 1 1 namd_display 1\n"
-            f"V {token} 2 -1 3 12abef\n"
+            f"NADOCVR_VISUALIZATION 3 1 namd_display ballstick cpk 1\n"
+            f"F {token} 2 -1 3 12abef 2.5 -1.5 3.5 0 -0.3 0 0.06 0 0 0 0 0.7\n"
         )
         assert _publish_visualization_feedback(state, body) == 1
+        # A style-only transition is a real visualization revision even though
+        # the owner positions are byte-for-byte identical.
+        style_only = body.model_copy(update={
+            "representation": "full", "coloring": "strand",
+        })
+        assert _publish_visualization_feedback(state, style_only) == 2
+        assert path.read_text().startswith(
+            "NADOCVR_VISUALIZATION 3 2 namd_display full strand 1\n"
+        )
         changed = VRVisualizationFeedbackRequest(
+            representation="full", coloring="strand",
             visualization_mode="oxdna_rmsf",
             visualization_points=[point.model_copy(update={"color": 0xFF0088})],
         )
-        assert _publish_visualization_feedback(state, changed) == 2
+        assert _publish_visualization_feedback(state, changed) == 3
         assert path.read_text().startswith(
-            "NADOCVR_VISUALIZATION 1 2 oxdna_rmsf 1\n"
+            "NADOCVR_VISUALIZATION 3 3 oxdna_rmsf full strand 1\n"
         )
-        assert path.read_text().endswith("ff0088\n")
+        assert " 3 ff0088 " in path.read_text()
     finally:
         path.unlink(missing_ok=True)
 
@@ -1542,7 +1582,10 @@ def test_scene_snapshot_preserves_color_connectivity_and_camera_orientation() ->
     first_bond = next(record for record in sections["ballstick"] if record[0] == "C")
     assert len(first_bond) == 20
     first_atom = next(record for record in sections["ballstick"] if record[0] == "P")
-    assert float(first_atom[4]) == pytest.approx(0.17 * 0.55)
+    assert float(first_atom[4]) == pytest.approx(0.070)
+    assert float(first_bond[7]) == pytest.approx(0.025)
+    first_stick_bond = next(record for record in sections["stick"] if record[0] == "C")
+    assert float(first_stick_bond[7]) == pytest.approx(0.025)
 
     reversed_bond_text = _serialize_scene(
         design,
@@ -2382,11 +2425,28 @@ def test_full_snapshot_projects_crossover_extra_base_beads_slabs_and_chain() -> 
             ("h2", "REVERSE", 2.0),
         )
     ]
+    atom_keys = (
+        ("h1", 0, "FORWARD", None, None, "DA", 0.0),
+        (None, 0, "", "xo-extra", 0, "DA", 2 / 3),
+        (None, 0, "", "xo-extra", 1, "DT", 4 / 3),
+        ("h2", 0, "REVERSE", None, None, "DT", 2.0),
+    )
+    atoms = [
+        SimpleNamespace(
+            name="P", x=x, y=0.0, z=0.0, strand_id="s1",
+            helix_id=helix_id, bp_index=bp, direction=direction,
+            crossover_id=crossover_id, extra_base_k=extra_k,
+            residue=residue, element="P",
+        )
+        for helix_id, bp, direction, crossover_id, extra_k, residue, x in atom_keys
+    ]
     text = _serialize_scene(
         design,
         nucleotides,
         [],
-        atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
+        atomistic_model=SimpleNamespace(
+            atoms=atoms, bonds=[(0, 1), (1, 2), (2, 3)]
+        ),
     )
     full = _scene_sections(text)["full"]
     points = [record for record in full if record[0] == "P"]
@@ -2416,10 +2476,13 @@ def test_full_snapshot_projects_crossover_extra_base_beads_slabs_and_chain() -> 
         > 1.0
         for record in full
     )
-    scene = parse_scene_contract(text)["full"]
-    first_insert = scene["crossover:xo-extra:extra:0:bead"]
+    parsed_scene = parse_scene_contract(text)
+    scene = parsed_scene["full"]
+    first_key = "__xb__:xo-extra:0"
+    second_key = "__xb__:xo-extra:1"
+    first_insert = scene[_semantic_extra_base_id(first_key, "bead")]
     assert set(first_insert.owner_aliases) == {
-        _owner_token("base", "__xb__:xo-extra:0"),
+        _owner_token("base", first_key),
         _owner_token("crossover", "crossover", "xo-extra"),
     }
     c1 = _owner_token("cluster", "c1")
@@ -2433,6 +2496,55 @@ def test_full_snapshot_projects_crossover_extra_base_beads_slabs_and_chain() -> 
         (c1, 1.0, pytest.approx(2 / 3)),
         (c2, 0.0, pytest.approx(1 / 3)),
     )
+    assert scene[_owner_token("base", first_key)].record_type == "J"
+    assert scene[_owner_token("base", second_key)].record_type == "J"
+    first_scopes = {
+        token: (start, end)
+        for token, start, end in first_edge.tool_scope_owners
+    }
+    assert first_scopes[_owner_token("base", "h1:0:FORWARD")] == (1.0, 0.0)
+    assert first_scopes[_owner_token("base", first_key)] == (0.0, 1.0)
+
+    middle_edge = scene["crossover:xo-extra:extra-backbone:1"]
+    middle_scopes = {
+        token: (start, end)
+        for token, start, end in middle_edge.tool_scope_owners
+    }
+    assert middle_scopes[_owner_token("base", first_key)] == (1.0, 0.0)
+    assert middle_scopes[_owner_token("base", second_key)] == (0.0, 1.0)
+
+    last_edge = scene["crossover:xo-extra:extra-backbone:2"]
+    last_scopes = {
+        token: (start, end)
+        for token, start, end in last_edge.tool_scope_owners
+    }
+    assert last_scopes[_owner_token("base", second_key)] == (1.0, 0.0)
+    assert last_scopes[_owner_token("base", "h2:0:REVERSE")] == (0.0, 1.0)
+
+    # Atomistic bonds use the same Base endpoints, so every live visualization feed
+    # displaces regular↔insert and insert↔insert connectivity in Ball-and-stick/Stick.
+    atomistic_chain = [
+        ("h1:0:FORWARD", first_key),
+        (first_key, second_key),
+        (second_key, "h2:0:REVERSE"),
+    ]
+    for representation in ("ballstick", "stick"):
+        for start_key, end_key in atomistic_chain:
+            start_token = _owner_token("base", start_key)
+            end_token = _owner_token("base", end_key)
+            edge = next(
+                primitive
+                for primitive in parsed_scene[representation].values()
+                if primitive.record_type == "C"
+                and {start_token, end_token}.issubset(primitive.owner_aliases)
+            )
+            scopes = {
+                token: (start, end)
+                for token, start, end in edge.tool_scope_owners
+            }
+            assert {scopes[start_token], scopes[end_token]} == {
+                (1.0, 0.0), (0.0, 1.0)
+            }
 
 
 def test_full_snapshot_uses_desktop_extension_modification_marker() -> None:

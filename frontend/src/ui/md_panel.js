@@ -35,7 +35,6 @@ import {
   decideReload,
   nextLivePollAction,
   restorePlan,
-  atomFrameToCgPositions,
   zipAtomIdentity,
   toBondPairs,
 } from './md_display_state.js'
@@ -95,6 +94,7 @@ function _activeSceneRepresentation() {
 
 export function initMdPanel(store, { designRenderer, atomisticRenderer,
                                      onRestoreDesignHeavy, refreshAtomColors,
+                                     setCGVisible = null,
                                      onSolventBlob = null }) {
   // Binary solvent frames go straight back out to whoever owns the overlay; this
   // panel only owns the socket.
@@ -197,6 +197,12 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
   let _displayVisible = true
   let _lastFrameMsg = null
   let _sceneRepr = _activeSceneRepresentation()
+  let _displayedSceneRepr = _sceneRepr
+  // Atomistic -> CG is a two-payload handoff. Keep the already-correct atomistic
+  // frame visible until an authoritative `nadoc` frame has been applied to the
+  // hidden CG renderer; never manufacture a partial CG pose from atom coordinates.
+  let _pendingCgSwap = false
+  let _pendingAtomisticSwap = false
 
   // ── Panel collapse ────────────────────────────────────────────────────────
   heading.addEventListener('click', () => {
@@ -525,7 +531,8 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
   function _setShowNadoc(v) {
     _showNadoc = v
     if (showNadocChk) showNadocChk.checked = v
-    designRenderer?.setDesignVisible(v)
+    if (typeof setCGVisible === 'function') setCGVisible(v)
+    else designRenderer?.setDesignVisible(v)
   }
 
   // Stop an MD display and revert to the design's equilibrium pose — WITHOUT ever
@@ -535,6 +542,9 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
   // Display MD / flexibility map / trajectory (mirrors the mdViz flex/traj stop path).
   function _restoreDesign() {
     _stopLiveBar()
+    _pendingCgSwap = false
+    _pendingAtomisticSwap = false
+    _displayedSceneRepr = _sceneRepr
     _setSwitchBusy(false, null)   // a stop mid-switch must not strand the toast
     designRenderer?.applyFemPositions(null)   // always drop MD-displaced CG positions
     const { showNativeCg, rebuildHeavy } = restorePlan(_sceneRepr)
@@ -655,11 +665,34 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
           nPositions: msg.positions?.length ?? msg.atoms?.length ?? 0,
         }, eventJobId)
       }
-      // The rep switch is over the moment a frame in the NEW wire format is on screen.
-      _setSwitchBusy(false, null)
       if (_displayVisible) {
         const applyStarted = performance.now()
         _applyFrame(msg)
+        if (_pendingCgSwap && _repr === 'nadoc' && Array.isArray(msg.positions)) {
+          // The correct Full/beads/cylinders pose is now resident while hidden.
+          // Swap renderers in this same task so no equilibrium or partially-mapped
+          // CG geometry can reach either the desktop paint or the VR snapshot.
+          atomisticRenderer?.setMode?.('off')
+          _setShowNadoc(true)
+          _pendingCgSwap = false
+          _displayedSceneRepr = _sceneRepr
+          window.dispatchEvent(new CustomEvent('nadoc:representation-settled', {
+            detail: { representation: _sceneRepr, frameIdx: msg.frame_idx },
+          }))
+        } else if (
+          _pendingAtomisticSwap && _repr === 'ballstick' && Array.isArray(msg.atoms)
+        ) {
+          // _applyFrame has installed the authoritative atom coordinates and hidden
+          // CG. Only now acknowledge the atomistic representation to native VR.
+          _pendingAtomisticSwap = false
+          _displayedSceneRepr = _sceneRepr
+          window.dispatchEvent(new CustomEvent('nadoc:representation-settled', {
+            detail: { representation: _sceneRepr, frameIdx: msg.frame_idx },
+          }))
+        }
+        // The rep switch is over only after the new payload has been applied and
+        // any held renderer handoff above is complete.
+        _setSwitchBusy(false, null)
         _emitMdProcess('frame-applied', {
           frameIdx: msg.frame_idx,
           nPositions: msg.positions?.length ?? msg.atoms?.length ?? 0,
@@ -704,6 +737,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
           backbone_position: [p.x, p.y, p.z],
           base_position: p.bx === undefined ? undefined : [p.bx, p.by, p.bz],
           nx: p.nx, ny: p.ny, nz: p.nz,
+          tx: p.tx, ty: p.ty, tz: p.tz,
         })),
         _amp
       )
@@ -948,42 +982,59 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
   }
 
   window.addEventListener('nadoc:representation-change', evt => {
-    const switchStarted = performance.now()
     const previousMode = _repr
-    const previousFrame = _lastFrameMsg
+    const previousSceneRepr = _sceneRepr
     _sceneRepr = evt.detail?.representation ?? _activeSceneRepresentation()
-    if (!_autoDisplayActive) return
+    if (!_autoDisplayActive) {
+      _pendingCgSwap = false
+      _pendingAtomisticSwap = false
+      _displayedSceneRepr = _sceneRepr
+      return
+    }
     const nextMode = _targetStreamMode()
     const modeChanged = _repr !== nextMode
     _repr = nextMode
     if (_sceneUsesNativeCg() || _sceneUsesAtomistic()) {
-      // Atomistic → Full/beads/cylinders can be reskinned synchronously from the
-      // phosphorus atoms already on screen. The representation switcher enabled the
-      // CG renderer earlier in this same task; applying before the next animation
-      // frame means authored/native coordinates are never painted between reps.
+      // The representation switcher has already enabled CG and disabled atoms in
+      // this task. Undo that provisional swap until the authoritative coarse frame
+      // arrives. A phosphorus-only atom->CG conversion omits base centers, slab
+      // frames and terminal residues, which was the incorrect one-paint pose that
+      // native VR could capture permanently.
       if (modeChanged && previousMode === 'ballstick' && nextMode === 'nadoc') {
-        const mapped = atomFrameToCgPositions(previousFrame)
-        if (mapped) {
-          _lastFrameMsg = mapped
-          _reapplyCachedFrame()
-          _emitMdProcess('representation-reskinned', {
-            from: previousMode,
-            to: nextMode,
-            frameIdx: mapped.frame_idx,
-            nPositions: mapped.positions.length,
-            durationMs: performance.now() - switchStarted,
-          }, _jobId)
+        _pendingCgSwap = true
+        _pendingAtomisticSwap = false
+        atomisticRenderer?.setMode?.(
+          previousSceneRepr === 'vdw' ? 'vdw'
+            : (previousSceneRepr === 'stick' ? 'stick' : 'ballstick'),
+        )
+        _setShowNadoc(false)
+        _emitMdProcess('representation-held', {
+          from: previousMode, to: nextMode, reason: 'awaiting-authoritative-frame',
+        }, _jobId)
+      } else if (modeChanged && previousMode === 'nadoc' && nextMode === 'ballstick') {
+        if (_pendingCgSwap) {
+          // Quick switch-back: the authoritative atom frame never left the screen.
+          _pendingCgSwap = false
+          _pendingAtomisticSwap = false
+          _displayedSceneRepr = _sceneRepr
+          _setShowNadoc(false)
+        } else {
+          // Ordinary CG->atomistic: keep the authoritative CG representation as
+          // the acknowledged desktop/VR mode until the atom payload lands.
+          _pendingAtomisticSwap = true
         }
+      } else if (!modeChanged) {
+        _displayedSceneRepr = _sceneRepr
       }
       requestAnimationFrame(() => {
         if (modeChanged && _configPath) {
-          // Keep the directly-mapped frame as the visible fallback while the socket
-          // refreshes it. Other direction changes retain the prior CG geometry.
-          if (!(previousMode === 'ballstick' && nextMode === 'nadoc')) _lastFrameMsg = null
+          // While atomistic remains the rendered fallback, keep its frame marked
+          // active so the VR bridge continues publishing the exact visible atoms
+          // during a slow PSF/coarse reload. The incoming nadoc frame replaces it.
+          if (!_pendingCgSwap && !_pendingAtomisticSwap) _lastFrameMsg = null
           _latestOnReady = true
-          // Both directions reload the authoritative wire payload. CG→atomistic keeps
-          // the simulated CG until atoms land; atomistic→CG keeps the synchronous
-          // phosphorus-derived reskin until the full coarse frame lands.
+          // Both directions reload the authoritative wire payload. Each keeps the
+          // currently displayed representation until the target payload lands.
           _setSwitchBusy(true, _sceneUsesAtomistic() ? 'atomistic' : 'cg')
           _openWebSocket()
           return
@@ -1140,6 +1191,8 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
 
     stopAndRestore() {
       _lastFrameMsg = null
+      _pendingCgSwap = false
+      _pendingAtomisticSwap = false
       _latestOnReady = false
       _latestOnceOnReady = false
       _setPlaying(false)
@@ -1181,6 +1234,11 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
       return this.isActive()
         ? { frame: (_lastFrameMsg.frame_idx ?? 0) + 1, total: _lastFrameMsg.n_frames ?? _nFrames }
         : null
+    },
+
+    /** Representation whose authoritative live payload is actually visible. */
+    renderedRepresentation() {
+      return _autoDisplayActive && _displayVisible ? _displayedSceneRepr : null
     },
   }
 }
