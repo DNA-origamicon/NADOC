@@ -30,6 +30,7 @@ import numpy as np
 from backend.core.models import Design, Mat4x4, PartInstance  # noqa: F401  (quoted annotations)
 from backend.core.assembly_fk import (
     _build_inst_by_id,
+    _build_fk_joint_index,
     _fk_expand_rigid_group,
     _fk_propagate,
 )
@@ -456,7 +457,11 @@ def _refresh_connector_frames_for_instance(
 
 
 def _enforce_connector_coincidence(
-    assembly, visited: set, inst_by_id: dict | None = None
+    assembly,
+    visited: set,
+    inst_by_id: dict | None = None,
+    joint_index: tuple[dict, dict] | None = None,
+    joints_by_child: dict[str, list] | None = None,
 ) -> None:
     """
     Post-pass: for every rigid/revolute joint where instance_b moved but instance_a
@@ -467,18 +472,21 @@ def _enforce_connector_coincidence(
     """
     if inst_by_id is None:
         inst_by_id = _build_inst_by_id(assembly)
+    if joint_index is None:
+        joint_index = _build_fk_joint_index(assembly)
     # The post-pass is invoked with every moved instance. Index only joints that
     # can possibly need a connector snap, instead of rescanning the full joint
     # list for every visited id (O(visited × joints) on large assemblies).
-    joints_by_child: dict[str, list] = {}
-    for joint in assembly.joints:
-        if (
-            joint.instance_b_id
-            and joint.joint_type in ("rigid", "revolute")
-            and joint.connector_a_label
-            and joint.connector_b_label
-        ):
-            joints_by_child.setdefault(joint.instance_b_id, []).append(joint)
+    if joints_by_child is None:
+        joints_by_child = {}
+        for joint in assembly.joints:
+            if (
+                joint.instance_b_id
+                and joint.joint_type in ("rigid", "revolute")
+                and joint.connector_a_label
+                and joint.connector_b_label
+            ):
+                joints_by_child.setdefault(joint.instance_b_id, []).append(joint)
     for cid in list(visited):
         for j in joints_by_child.get(cid, ()):
             if j.instance_a_id in visited:
@@ -507,5 +515,9 @@ def _enforce_connector_coincidence(
             j.axis_origin = ca.tolist()
             # Propagate snap down inst_b's kinematic subtree
             snap_vis: set = {cid}
-            _fk_expand_rigid_group(assembly, cid, snap_d, snap_vis, [], inst_by_id)
-            _fk_propagate(assembly, {cid}, snap_d, snap_vis, inst_by_id)
+            _fk_expand_rigid_group(
+                assembly, cid, snap_d, snap_vis, [], inst_by_id, joint_index
+            )
+            _fk_propagate(
+                assembly, {cid}, snap_d, snap_vis, inst_by_id, joint_index
+            )

@@ -244,3 +244,27 @@ describe('slab connector colour parity', () => {
     expect(dirty).toContain('iSlabConnectors')
   })
 })
+
+describe('cluster transforms keep the complete slab frame rigid', () => {
+  const captureStart = HR.indexOf('\n    captureClusterBase(')
+  const applyStart = HR.indexOf('\n    applyClusterTransform(', captureStart)
+  const commitStart = HR.indexOf('\n    commitClusterPositions(', applyStart)
+  const captureBody = HR.slice(captureStart, applyStart)
+  const applyBody = HR.slice(applyStart, commitStart)
+  const commitBody = HR.slice(commitStart, HR.indexOf('\n    applyBridgeNucsUpdate(', commitStart))
+
+  it('snapshots and transforms the rendered slab center instead of re-solving from stale geometry', () => {
+    expect(captureBody).toContain('slab.instMesh.getMatrixAt(slab.id, _tMatrix)')
+    expect(captureBody).toContain('center: renderedCenter')
+    expect(applyBody).toContain('_clusterV.copy(baseData.center)')
+    expect(applyBody).toContain('slab.center.set(')
+    expect(applyBody).not.toContain('const center_ = _slabCenterAt(slab')
+  })
+
+  it('commits every position/orientation field needed to reconstruct that slab frame', () => {
+    expect(commitBody).toContain('entry.nuc.backbone_position')
+    expect(commitBody).toContain('slab.nuc.base_position')
+    expect(commitBody).toContain('slab.nuc.base_normal')
+    expect(commitBody).toContain('slab.nuc.axis_tangent')
+  })
+})

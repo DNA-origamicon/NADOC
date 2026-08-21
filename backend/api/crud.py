@@ -8500,19 +8500,24 @@ def revert_to_before_feature(index: int, sub_index: int | None = None) -> dict:
     # overhang overlays WITHOUT this entry (and without every entry after it).
     # Same user-facing contract as snapshot revert; Ctrl-Z restores.
     if entry.feature_type in ("deformation", "cluster_op", "overhang_rotation"):
-        truncated = design.copy_with(feature_log=log[:index])
+        # Start from the no-features state while the COMPLETE log is still
+        # present.  `_seek_feature_log(..., -2)` uses that log to discover
+        # which cluster/overhang overlays must be reset.  Truncating first
+        # loses the only record that a cluster ever moved, so reverting the
+        # first cluster_op removed the row but left its live transform intact.
+        empty_state = _seek_feature_log(design, -2)
+        truncated = empty_state.copy_with(feature_log=log[:index])
         if log[:index]:
             restored = _seek_feature_log(truncated, -1)
         else:
-            # Truncated to an empty log → no features active. _seek_feature_log's
-            # empty-log fast path skips the overlay rebuild, leaving the now-
-            # removed deformation in place, so seek to the -2 (no-features) state
-            # which clears the deformation / cluster / overhang overlays, then
-            # pin the cursor to -1 to match snapshot-revert-to-F0 semantics.
-            restored = _seek_feature_log(truncated, -2).copy_with(feature_log_cursor=-1)
+            # `empty_state` already cleared every overlay using the original
+            # history. Pin the cursor to the snapshot-revert F0 convention.
+            restored = truncated.copy_with(
+                feature_log_cursor=-1, feature_log_sub_cursor=None
+            )
         design_state.set_design(restored)
         report = validate_design(restored)
-        return _design_response_with_geometry(restored, report)
+        return _design_replace_response(design, restored, report)
 
     # Pull pre-state bytes from whichever payload type this is.
     if isinstance(entry, _SnapshotLogEntry):

@@ -3294,7 +3294,14 @@ export async function revertToBeforeFeature(index, subIndex = null) {
     ? `/design/features/${index}/revert`
     : `/design/features/${index}/revert?sub_index=${subIndex}`
   const json = await _request('POST', path)
-  const result = await _syncFromDesignResponse(json)
+  // Delta-only entries (notably move/rotate) can revert without changing
+  // topology. Route those responses through the same in-place renderer paths
+  // as delete, seek, edit, undo, and redo; a plain design sync deliberately
+  // does not touch the instance matrices.
+  let result
+  if (json?.diff_kind === 'cluster_only')       result = await _syncClusterOnlyDiff(json)
+  else if (json?.diff_kind === 'positions_only') result = await _syncPositionsOnlyDiff(json)
+  else                                          result = await _syncFromDesignResponse(json)
   _clearStaleSelections()
   return result
 }

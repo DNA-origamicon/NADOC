@@ -1,8 +1,8 @@
 # NADOC responsiveness optimization campaign — August 2026
 
-Status: twenty optimizations complete; awaiting approval for the third batch.
+Status: thirty optimizations complete; awaiting approval for the fourth batch.
 
-This campaign has measured twenty changes to editing and visualization responsiveness.
+This campaign has measured thirty changes to editing and visualization responsiveness.
 All figures below are wall-clock milliseconds on this workstation. Browser
 results use Chromium through Playwright's isolated backend (`:8002`) and Vite
 server (`:5175`), never the live development session.
@@ -65,6 +65,33 @@ completion hash, reported no browser errors, and left the hovered strand empty a
 the benchmark's known empty coordinate. Pointer dispatch itself fell from 659.1
 ms to 0.1 ms per 20-event burst because rendering no longer blocks every event.
 
+## Third batch — completed optimizations 21–30
+
+Batch three moved more design-derived work to immutable-snapshot indexes. The
+frontend fixture contains 6,000 strands / 24,000 domains, with feature-specific
+large crossover, geometry, extension, and selection sets. Each kernel uses 15
+paired legacy/current samples and asserts identical checksums. Assembly uses 500
+independent connector mates (1,000 instances), also with matching final transforms.
+
+| # | Process and change | Before median / p95 | After median / p95 | Result |
+|---:|---|---:|---:|---:|
+| 21 | Coaxial arc preparation: cache descriptors, index forced-ligation transitions, and viewport-cull arcs | 27.729 / 28.422 ms | 1.502 / 1.685 ms | 94.6% lower; 18.46× |
+| 22 | Pathview extensions: cache host-strand entries per design and horizontally cull arms | 0.386 / 0.805 ms | 0.0040 / 0.0059 ms | 99.0% lower; 95.7× |
+| 23 | End/domain drag setup: index selected element resolution and track-local crossover/domain blockers | resolution: 27.131 / 27.229 ms; blockers: 28.539 / 55.965 ms | resolution: 0.043 / 0.102 ms; blockers: 0.032 / 0.034 ms | 99.8% / 99.9% lower; 624× / 901× |
+| 24 | 3D renderer lookups: reuse nucleotide-identity, slab-copy, and cylinder-domain maps | 129.734 / 131.966 ms | 0.487 / 0.724 ms | 99.6% lower; 266.5× |
+| 25 | Heatmap preparation: retain the prepared map per design instead of recomputing each redraw | browser: 31.700 / 34.200 ms | browser: 30.700 / 32.300 ms | 3.2% median and 5.6% p95 lower; preparation removed in paired kernel |
+| 26 | Assembly connector snaps: share one FK joint adjacency through all residual subtree propagations | 127.488 / 135.458 ms | 11.177 / 11.623 ms | 91.2% lower; 11.41× |
+| 27 | Visibility queries: index base keys by strand when geometry changes | 71.305 / 141.138 ms | 0.034 / 0.085 ms | 99.95% lower; 2,117× |
+| 28 | Pathview lasso: visit only intersecting helix/track domain buckets | 0.141 / 0.464 ms | 0.0083 / 0.0128 ms | 94.1% lower; 17.07× |
+| 29 | Crossover arc hit-testing: precompute geometry and bin candidates horizontally | 12.916 / 13.693 ms | 0.102 / 0.107 ms | 99.2% lower; 127.0× |
+| 30 | Pathview design comparison/paint lookup: use helix-id maps instead of repeated `find` calls | 72.560 / 73.026 ms | 0.147 / 0.156 ms | 99.8% lower; 493.3× |
+
+The integrated large-design browser audit improved ordinary zoomed redraw from
+1.8 / 2.0 ms to 0.8 / 1.4 ms (median / p95), while selected zoomed redraw moved
+from 1.9 / 2.3 ms to 0.8 / 1.9 ms. Design update stayed flat-to-better at 53.3 /
+65.2 ms to 53.0 / 63.6 ms, so the indexes did not shift redraw cost onto editing.
+All established canvas and pan hashes remained identical and browser errors were empty.
+
 ## Evidence map
 
 - Optimizations 1–3: [paired frontend kernel log](raw/frontend_kernels_paired_final.json)
@@ -90,23 +117,32 @@ ms to 0.1 ms per 20-event burst because rendering no longer blocks every event.
 - Optimization 13: [pan baseline](raw/batch2_03_pan_baseline.json),
   [first coalesced result](raw/batch2_03_pan_raf.json), and
   [final browser audit](raw/batch2_final_pathview_playwright.json)
+- Optimizations 21–25 and 27–30:
+  [paired batch-three frontend log](raw/batch3_frontend_indexes.json)
+- Optimization 26: [paired assembly adjacency log](raw/batch3_assembly_shared_fk_index.json)
+- Integrated third-batch audit: [pathview Playwright log](raw/batch3_final_pathview_playwright.json)
 
 The reproducible harnesses are
 `frontend/scripts/responsiveness-kernel-bench.mjs`,
 `frontend/scripts/responsiveness-batch2-kernel-bench.mjs`,
+`frontend/scripts/responsiveness-batch3-kernel-bench.mjs`,
 `scripts/benchmark_assembly_fk.py`, and
+`scripts/benchmark_assembly_shared_index.py`, plus
 `frontend/e2e/responsiveness_pathview_bench.spec.js`.
 
 ## Functional verification
 
-- `just test-smart`: 7,186 passed, 116 skipped (fast suite; 30 seconds).
-- `npm test`: 5,805 passed across 341 frontend test files.
+- `just test-smart`: 7,187 passed, 116 skipped (fast suite; 19 seconds).
+- `npm test`: 5,806 passed across 341 frontend test files.
 - `npm run build`: production Vite build passed.
 - Playwright responsiveness spec: passed against the isolated servers, with no
   browser errors and identical pixel hashes for plain, overhang, periodic,
   zoomed, and selected views.
+- The focused pathview end-lasso/forced-ligation Playwright case passed. An
+  unrelated background mrDNA reconciliation request logged a job-file race, but
+  did not fail the browser case or touch these optimization paths.
 - Focused development checks also passed: 20 atomistic color-resolver tests, 49
-  cluster-entry tests, and 40 assembly FK/kinematics tests.
+  cluster-entry tests, and 65 assembly connector/FK/kinematics tests.
 - The repository's slow simulation groups remain deferred by policy because no
   user-opened test session was active; none of the ten changes touches a simulator.
 
@@ -116,31 +152,32 @@ These are deliberately not counted and their production edits were removed:
 
 - Replacing FK array queues with `deque` did not improve the star topology
   (58.896 ms list versus 59.019 ms deque for revolute); raw logs are retained.
-- A pathview heatmap cache changed the median only from 30.9 to 30.5 ms while
-  worsening p95 from 32.4 to 34.5 ms.
+- An earlier per-frame pathview heatmap experiment changed the median only from
+  30.9 to 30.5 ms while worsening p95 from 32.4 to 34.5 ms. The refined
+  immutable-design preparation cache in optimization 25 was retained only after
+  both browser median and p95 improved.
 - An overhang-label cache changed 20.5 to 20.3 ms, inside run noise.
 
 ## Next ten candidates — approval required
 
-1. Cache and viewport-cull coaxial and forced-ligation arc descriptors, with
-   periodic-seam pixel fixtures covering every routing branch.
-2. Index extension host strands and cull off-screen extension geometry in the
-   pathview `_drawExtensions` pass.
-3. Compile drag-start blocker, endpoint, and crossover indexes so multi-end and
-   domain drags do not rescan the full design before movement begins.
-4. Replace the remaining nucleotide/slab/domain `find` calls in the 3D helix
-   renderer with lifecycle-scoped identity and address maps.
-5. Re-profile heatmap preprocessing on a heatmap-heavy, non-overlapping design;
-   keep column-length caching only if the paired p95 also improves.
-6. Share assembly joint adjacency and child indexes across FK and connector
-   operations within one immutable assembly request.
-7. Add a geometry-by-strand/base-key index to the visibility controller for
-   repeated `isStrandShown` and visibility re-application calls.
-8. Reuse the pathview interval index for lasso selection, which currently walks
-   every strand twice after a drag completes.
-9. Index crossover, forced-ligation, and loop/skip hit shapes into screen/world
-   bins instead of scanning all arcs on hover and click.
-10. Build one helix-id map for pathview editing setup and design replacement,
-    removing repeated `design.helices.find` calls from paint/reorder paths.
+1. Index crossover-sprite hit circles, which still scan every visible sprite on
+   each pointer movement.
+2. Map selected element keys directly to owning strands so selection broadcasts
+   do not rescan all strand domains after every click/lasso.
+3. Index consecutive domain transitions for `_findXoverDomains` and crossover
+   drag setup.
+4. Reuse track-domain indexes while validating candidate crossover positions,
+   eliminating the remaining full-design range scans in `_getValidXoverBps`.
+5. Cache reference-only helix membership and active-strand extents per immutable
+   design for periodic and reference rendering passes.
+6. Index loop/skip markers by helix and bp for pointer and lasso hit-testing.
+7. Replace remaining overhang-cylinder instance `find` getters with direct
+   instance-id maps in the 3D renderer.
+8. Build interface-point label maps for repeated assembly connector resolution,
+   especially manual connectors shared across FK and highlight refreshes.
+9. Measure and cache pathview selection-key expansion for large multi-domain
+   strands and component selections.
+10. Profile crossover-indicator generation by visible bp window and skip lattice
+    candidate enumeration outside the viewport before neighbor/occupancy checks.
 
-No work on the third batch should begin until it is approved.
+No work on the fourth batch should begin until it is approved.

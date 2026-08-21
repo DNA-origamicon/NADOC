@@ -281,6 +281,10 @@ export function initMrdnaDisplay({
   /** Restore everything (deform + beads) — used when leaving the tab / job. */
   function stopAndRestore() {
     _cancelLoad()
+    // A design mutation asks every simulation panel to tear down.  When mrDNA is
+    // inactive, restoring would revert native beads/slabs that mrDNA never moved
+    // (notably the just-applied cluster transform).
+    if (_mode === null) return
     _clearVisuals()
   }
 

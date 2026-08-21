@@ -31,6 +31,7 @@ import numpy as np
 from backend.core.models import GearRelation, Mat4x4
 from backend.core.assembly_fk import (
     _build_inst_by_id,
+    _build_fk_joint_index,
     _fk_expand_rigid_group,
     _fk_propagate,
 )
@@ -314,9 +315,16 @@ def _apply_revolute_value_to_gear_endpoint(
     try:
         delta = new_T @ np.linalg.inv(old_T)
         visited = {old_seed_id}
-        _fk_expand_rigid_group(assembly, old_seed_id, delta, visited, [], inst_by_id)
-        _fk_propagate(assembly, visited.copy(), delta, visited, inst_by_id)
-        _enforce_connector_coincidence(assembly, visited, inst_by_id)
+        joint_index = _build_fk_joint_index(assembly)
+        _fk_expand_rigid_group(
+            assembly, old_seed_id, delta, visited, [], inst_by_id, joint_index
+        )
+        _fk_propagate(
+            assembly, visited.copy(), delta, visited, inst_by_id, joint_index
+        )
+        _enforce_connector_coincidence(
+            assembly, visited, inst_by_id, joint_index=joint_index
+        )
     except np.linalg.LinAlgError:
         pass
     return True

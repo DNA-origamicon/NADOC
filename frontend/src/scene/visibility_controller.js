@@ -20,6 +20,19 @@ export function collectVisibilityBaseKeys(geometry, {
   return out
 }
 
+export function buildVisibilityGeometryIndex(geometry) {
+  const baseKeysByStrand = new Map()
+  for (const nuc of geometry ?? []) {
+    if (!nuc.strand_id) continue
+    const key = baseKey(nuc, nuc.copy_k ?? 0)
+    if (!key) continue
+    let keys = baseKeysByStrand.get(nuc.strand_id)
+    if (!keys) baseKeysByStrand.set(nuc.strand_id, keys = [])
+    keys.push(key)
+  }
+  return { baseKeysByStrand }
+}
+
 /**
  * One persisted, base-addressed visibility model for the editor. Higher-level
  * objects are expanded to base keys at hide time. It has its own undo stack and
@@ -35,6 +48,7 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
   let pendingPersists = 0
   let currentDesignRef = null
   let currentGeometryRef = null
+  let currentGeometryIndex = buildVisibilityGeometryIndex([])
 
   const geometry = () => store.getState().currentGeometry ?? []
   const design = () => store.getState().currentDesign
@@ -125,16 +139,18 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
   }
 
   function isStrandShown(strandId) {
-    const keys = geometry().filter(n => n.strand_id === strandId)
-      .map(n => baseKey(n, n.copy_k ?? 0)).filter(Boolean)
+    const keys = currentGeometryIndex.baseKeysByStrand.get(strandId) ?? []
     const all = new Set(hidden)
-    for (const key of _keysFor({ clusterIds: [...hiddenClusters] })) all.add(key)
+    if (hiddenClusters.size) {
+      for (const key of _keysFor({ clusterIds: [...hiddenClusters] })) all.add(key)
+    }
     for (const key of shown) all.delete(key)
     return keys.length === 0 || keys.some(k => !all.has(k))
   }
 
   currentDesignRef = design()
   currentGeometryRef = geometry()
+  currentGeometryIndex = buildVisibilityGeometryIndex(currentGeometryRef)
   // Render immediately, but main.js's sidebar/atom-surface consumers are
   // declared later in startup and must not be notified while in their TDZ.
   _hydrate(currentDesignRef?.visibility_state, { notify: false })
@@ -143,6 +159,7 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
     const geometryChanged = next.currentGeometry !== currentGeometryRef
     currentDesignRef = next.currentDesign
     currentGeometryRef = next.currentGeometry
+    if (geometryChanged) currentGeometryIndex = buildVisibilityGeometryIndex(currentGeometryRef)
     if (designChanged && pendingPersists === 0) _hydrate(currentDesignRef?.visibility_state)
     else if (geometryChanged) {
       _apply({ persist: false })

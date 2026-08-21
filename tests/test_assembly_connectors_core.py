@@ -15,6 +15,7 @@ provably identical: both compute np.array(values, dtype=float).reshape(4, 4)).
 
 import numpy as np
 import pytest
+import backend.core.assembly_connectors as assembly_connectors_module
 
 from backend.core.assembly_connectors import (
     _build_connector_frames,
@@ -407,3 +408,24 @@ def test_enforce_propagates_snap_to_rigid_subtree_child():
     np.testing.assert_allclose(
         c.transform.to_array()[:3, 3], [4.0, 0.0, 0.0], atol=1e-9
     )
+
+
+def test_enforce_builds_fk_adjacency_once_for_multiple_snaps(monkeypatch):
+    parents = [_instance([_ip("CA", (0.0, 0.0, 0.0))]) for _ in range(3)]
+    children = [
+        _instance([_ip("CB", (0.0, 0.0, 0.0))], transform=_translation(i + 1, 0, 0))
+        for i in range(3)
+    ]
+    joints = [_mate(a, "CA", b, "CB") for a, b in zip(parents, children)]
+    asm = _Asm([*parents, *children], joints)
+    calls = 0
+    real_builder = assembly_connectors_module._build_fk_joint_index
+
+    def counted_builder(assembly):
+        nonlocal calls
+        calls += 1
+        return real_builder(assembly)
+
+    monkeypatch.setattr(assembly_connectors_module, "_build_fk_joint_index", counted_builder)
+    _enforce_connector_coincidence(asm, visited={child.id for child in children})
+    assert calls == 1

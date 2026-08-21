@@ -201,6 +201,21 @@ describe('initMrdnaDisplay controller', () => {
     expect(setDesignVisible).toHaveBeenLastCalledWith(true)    // restored on teardown
   })
 
+  it('stopAndRestore is a no-op while inactive so it cannot revert native geometry', () => {
+    const { designRenderer, beadOverlay, connectionOverlay, setDesignVisible, api } = makeDeps()
+    const c = initMrdnaDisplay({ designRenderer, api, beadOverlay, connectionOverlay, setDesignVisible })
+    expect(c.mode()).toBeNull()
+
+    c.stopAndRestore()
+
+    expect(designRenderer.applyFemPositions).not.toHaveBeenCalled()
+    expect(designRenderer.clearScalarColors).not.toHaveBeenCalled()
+    expect(designRenderer.clearExternalGeometry).not.toHaveBeenCalled()
+    expect(beadOverlay.update).not.toHaveBeenCalled()
+    expect(connectionOverlay.clear).not.toHaveBeenCalled()
+    expect(setDesignVisible).not.toHaveBeenCalled()
+  })
+
   it('showDeform returns not-ready when the response is empty', async () => {
     const { designRenderer, beadOverlay } = makeDeps()
     const api = {
