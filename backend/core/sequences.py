@@ -194,6 +194,18 @@ def _active_scaffold(design: Design) -> Strand | None:
     return None
 
 
+def _sequenced_scaffolds(design: Design) -> list[Strand]:
+    """Sequenced scaffolds that may supply complementary bases.
+
+    Reference geometry is excluded as an automatic-assignment *target*, but it
+    remains valid read-only pairing context for active strands designed against
+    it.  Prefer active scaffolds when coverage overlaps, then let reference
+    scaffolds fill positions not covered by an active scaffold.
+    """
+    scaffolds = [s for s in design.scaffolds() if s.sequence is not None]
+    return sorted(scaffolds, key=lambda s: s.is_reference)
+
+
 def _resolve_scaffold_strand(design: Design, strand_id: str | None) -> Strand:
     """Return the scaffold strand to assign a sequence to.
 
@@ -357,24 +369,25 @@ def build_scaffold_base_map(design: Design) -> dict[tuple[str, int, str], list[s
       - Normal (delta=0): one-element list.
       - Loop (delta=+1): two-element list.
     """
-    scaffold = _active_scaffold(design)
-    if scaffold is None or scaffold.sequence is None:
+    scaffolds = _sequenced_scaffolds(design)
+    if not scaffolds:
         return {}
 
     ls_map = _build_loop_skip_map(design)
     base_map: dict[tuple[str, int, str], list[str]] = {}
-    seq_iter = iter(scaffold.sequence)
-
-    for domain in scaffold.domains:
-        h = domain.helix_id
-        d_val = domain.direction.value
-        for bp in domain_bp_range(domain):
-            delta = ls_map.get((h, bp), 0)
-            if delta <= -1:
-                continue  # skip -- no nucleotide
-            n_copies = delta + 1
-            bases_at_bp = [next(seq_iter, "N") for _ in range(n_copies)]
-            base_map[(h, bp, d_val)] = bases_at_bp
+    for scaffold in scaffolds:
+        seq_iter = iter(scaffold.sequence or "")
+        for domain in scaffold.domains:
+            h = domain.helix_id
+            d_val = domain.direction.value
+            for bp in domain_bp_range(domain):
+                delta = ls_map.get((h, bp), 0)
+                if delta <= -1:
+                    continue  # skip -- no nucleotide
+                n_copies = delta + 1
+                bases_at_bp = [next(seq_iter, "N") for _ in range(n_copies)]
+                # Active scaffolds are visited first and win any overlap.
+                base_map.setdefault((h, bp, d_val), bases_at_bp)
 
     return base_map
 
@@ -566,10 +579,10 @@ def assign_staple_sequences(design: Design) -> Design:
     ValueError
         If no scaffold strand is found or it has no sequence.
     """
-    scaffold = _active_scaffold(design)
-    if scaffold is None:
-        raise ValueError("No scaffold strand found in the design.")
-    if scaffold.sequence is None:
+    scaffolds = _sequenced_scaffolds(design)
+    if not scaffolds:
+        if not design.scaffolds():
+            raise ValueError("No scaffold strand found in the design.")
         raise ValueError(
             "Scaffold has no sequence. Call assign_scaffold_sequence() first."
         )
@@ -739,8 +752,7 @@ def reassign_strands(design: Design, strand_ids: set[str] | list[str]) -> Design
     wanted = set(strand_ids)
     if not wanted:
         return design
-    scaffold = _active_scaffold(design)
-    if scaffold is None or not scaffold.sequence:
+    if not _sequenced_scaffolds(design):
         return design
     try:
         re_derived = assign_staple_sequences(design)
@@ -769,8 +781,7 @@ def reassign_if_sequenced(design: Design) -> Design:
     (``binds_overhang_id``) only becomes the reverse-complement of its overhang
     once this runs, and the oxDNA / atomistic exporters read ``strand.sequence``.
     """
-    scaffold = _active_scaffold(design)
-    if scaffold is None or not scaffold.sequence:
+    if not _sequenced_scaffolds(design):
         return design
     try:
         return assign_staple_sequences(design)

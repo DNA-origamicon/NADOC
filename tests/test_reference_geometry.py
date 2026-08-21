@@ -288,6 +288,27 @@ def test_assign_staple_sequences_preserves_reference_strand():
     assert set(other.sequence) <= set("ATGCN")
 
 
+def test_active_staples_derive_from_reference_scaffold():
+    d = _bundle()
+    d, *_ = assign_scaffold_sequence(d, "M13mp18")
+    scaffold = next(s for s in d.strands if s.is_scaffold)
+    d = d.copy_with(
+        strands=[
+            s.model_copy(update={"is_reference": True})
+            if s.id == scaffold.id
+            else s.model_copy(update={"sequence": None})
+            for s in d.strands
+        ]
+    )
+
+    out = assign_staple_sequences(d)
+
+    assert next(s for s in out.strands if s.id == scaffold.id).sequence == scaffold.sequence
+    active_staples = [s for s in out.strands if not s.is_scaffold and not s.is_reference]
+    assert active_staples
+    assert any(s.sequence and set(s.sequence) != {"N"} for s in active_staples)
+
+
 # ── Validation excludes reference strands ────────────────────────────────────────
 
 
