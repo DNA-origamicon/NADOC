@@ -3627,10 +3627,13 @@ async function main() {
   // _resetForNewDesign, and any other place that calls slicePlane.hide/show directly.
 
   // ── Selection filter toggles ──────────────────────────────────────────────────
-  // Hide the slice plane when the deform tool opens.
+  // Tool-driven navigation mirrors Move/Rotate: Bend/Twist owns a Properties
+  // card, so activating either deformation tool reveals that tab even when the
+  // user launched it from a menu, a blunt end, or the feature log.
   // Slice plane: cross-section geometry is only valid on the undeformed model.
   store.subscribe((newState, prevState) => {
     if (newState.deformToolActive && !prevState.deformToolActive) {
+      rightSidebar?.open?.('properties')
       if (slicePlane.isVisible()) {
         slicePlane.hide()
         crossSectionMinimap.clearSlice()
