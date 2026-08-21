@@ -421,6 +421,62 @@ def test_prepare_writes_anchor_restraints_end_to_end(tmp_path, monkeypatch):
     assert manifest["files"]["anchors"] == "restraints_anchors.pdb"
 
 
+def test_prepare_excludes_both_extra_bases_topology_exactly(tmp_path, monkeypatch):
+    """The default (require_full_topology=False, what an ordinary un-seeded run uses —
+    routes_md.py only forces True for a BLADE/vacuum seed) legacy export_pdb path gets
+    the SAME topology-exact ss-exclusion sidecar as the psfgen path.
+
+    Companion to test_md_gbis.py's real-build check (which proves the sort_chains=True
+    / psfgen path): this proves sort_chains=False / export_pdb, the path an ordinary
+    "6hb_2xT"-style run actually takes."""
+    import backend.core.namd_solvate as ns
+    from backend.core.lattice import make_bundle_design
+    from backend.core.md_health import (
+        _unpaired_exclusion_set,
+        identify_unpaired_residues,
+        read_topology_ss_sidecar,
+    )
+    from backend.core.md_protocols import prepare_mgh_slow_release
+    from backend.core.models import Crossover, Direction, HalfCrossover
+
+    monkeypatch.setattr(ns, "_gmx_solvate", _fake_solvate)
+
+    design = make_bundle_design([(0, 0), (0, 1)], length_bp=21, plane="XY")
+    xo = Crossover(
+        id="xo_extra",
+        half_a=HalfCrossover(
+            helix_id=design.helices[0].id, index=6, strand=Direction.FORWARD
+        ),
+        half_b=HalfCrossover(
+            helix_id=design.helices[1].id, index=6, strand=Direction.REVERSE
+        ),
+        extra_bases="TT",
+    )
+    design = design.model_copy(update={"crossovers": [xo]})
+
+    job_dir = tmp_path / "job"
+    job_dir.mkdir()
+    _sub, stem, _segs = prepare_mgh_slow_release(
+        design,
+        job_dir,
+        ion_conc_mM=0.0,
+        mg_conc_mM=0.0,
+        salt_mode="custom",
+        fast=False,
+        minimize_steps=120,
+    )
+    pkg = next((job_dir / "package").iterdir())
+    psf, pdb = pkg / f"{stem}.psf", pkg / f"{stem}.pdb"
+
+    sidecar = read_topology_ss_sidecar(pkg, stem)
+    assert len(sidecar) == 2  # both TT inserts, by topology, sort_chains=False path
+
+    geometry_only = identify_unpaired_residues(psf, pdb)
+    assert not sidecar <= geometry_only  # geometry alone still misses one
+
+    assert sidecar <= _unpaired_exclusion_set(psf, pdb)
+
+
 def _pdb_residue_sequence(pdb_text: str):
     """(chain_char, resid) per residue in file order (contiguity walk)."""
     seq = []

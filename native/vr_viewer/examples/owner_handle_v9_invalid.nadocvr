@@ -1,0 +1,7 @@
+NADOCVR 9 full strand
+R full
+P point 0 0 0 0.1 1 0 0 1 0 0 1 0 0 1 0 0
+K %5B%22cluster%22%2C%22c1%22%5D 0.2 0.3 0.4
+E full
+P point 0.5 0 0 0.1 1 0 0 1 0 0 1 0 0 1 0 0
+K %5B%22cluster%22%2C%22different%22%5D 0.7 0.3 0.4

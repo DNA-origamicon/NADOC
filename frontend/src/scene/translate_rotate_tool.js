@@ -1,3 +1,4 @@
+import * as THREE from 'three'
 import { quatToEulerDeg } from './rotation_math.js'
 import { showToast } from '../ui/toast.js'
 import { showOpProgress, hideOpProgress } from '../ui/op_progress.js'
@@ -122,6 +123,146 @@ export function initTranslateRotateTool(deps) {
   const _rebakeHelixAxesForClusterDelta = rebakeHelixAxesForClusterDelta
   const _reemitClusterBridges = reemitClusterBridges
   const _refreshClusterOverlays = refreshClusterOverlays
+
+  let _vrPreview = null
+  let _vrQueuedMatrix = null
+  let _vrStarting = null
+  let _vrCancelling = null
+
+  function _applyVRPreviewMatrix(matrixValues) {
+    if (!Array.isArray(matrixValues) || matrixValues.length !== 16 ||
+        !matrixValues.every(Number.isFinite)) return false
+    if (!_vrPreview) {
+      // A transform can legitimately arrive in the same poll while async gizmo
+      // attachment is starting. Outside that narrow window it belongs to an old
+      // or cancelled native target and must never seed the next Preview.
+      if (_vrStarting) _vrQueuedMatrix = [...matrixValues]
+      return false
+    }
+    const delta = new THREE.Matrix4().fromArray(matrixValues)
+    const deltaRotation = new THREE.Quaternion().setFromRotationMatrix(delta).normalize()
+    const targetPosition = _vrPreview.basePosition.clone().applyMatrix4(delta)
+    const targetRotation = deltaRotation.multiply(_vrPreview.baseRotation.clone()).normalize()
+    const translation = targetPosition.sub(_vrPreview.pivot).toArray()
+    clusterGizmo.setTransform(translation, targetRotation.toArray())
+    return true
+  }
+
+  async function _beginVRPreview(clusterId) {
+    if (_vrPreview?.clusterId === clusterId) return { accepted: true }
+    if (_vrStarting) return _vrStarting
+    if (getActive()) return { accepted: false, reason: 'desktop_tool_active' }
+    const cluster = store.getState().currentDesign?.cluster_transforms?.find(
+      candidate => candidate.id === clusterId)
+    if (!cluster) return { accepted: false, reason: 'cluster_missing' }
+    _vrStarting = (async () => {
+      await _activateTranslateRotateTool(clusterId)
+      const current = store.getState().currentDesign?.cluster_transforms?.find(
+        candidate => candidate.id === clusterId)
+      const pending = clusterGizmo.getPendingTransform(clusterId)
+      const baseline = pending ?? current
+      if (!baseline) return { accepted: false, reason: 'cluster_missing' }
+      const pivot = new THREE.Vector3(...baseline.pivot)
+      const translation = new THREE.Vector3(...baseline.translation)
+      _vrPreview = {
+        clusterId,
+        pivot,
+        basePosition: pivot.clone().add(translation),
+        baseRotation: new THREE.Quaternion(...baseline.rotation).normalize(),
+      }
+      if (_vrQueuedMatrix) {
+        const queued = _vrQueuedMatrix
+        _vrQueuedMatrix = null
+        _applyVRPreviewMatrix(queued)
+      }
+      return { accepted: true }
+    })()
+    try {
+      return await _vrStarting
+    } finally {
+      _vrStarting = null
+    }
+  }
+
+  async function _cancelVRPreview() {
+    if (_vrCancelling) return _vrCancelling
+    _vrQueuedMatrix = null
+    if (_vrStarting) await _vrStarting
+    if (!_vrPreview) return false
+    _vrPreview = null
+    _vrCancelling = (async () => {
+      await _cancelTranslateRotateTool()
+      return true
+    })()
+    try {
+      return await _vrCancelling
+    } finally {
+      _vrCancelling = null
+    }
+  }
+
+  async function _confirmVRPreview() {
+    if (_vrStarting) await _vrStarting
+    if (!_vrPreview) {
+      return { accepted: false, reason: 'preview_required', result: null }
+    }
+    if (!getClusterDirty()) {
+      return { accepted: false, reason: 'no_change', result: null }
+    }
+    const clusterId = _vrPreview.clusterId
+    const beforeEntryId = store.getState().currentDesign?.feature_log?.at(-1)?.id ?? null
+    _vrPreview = null
+    try {
+      await _confirmTranslateRotateTool()
+    } catch (error) {
+      clusterGizmo.discardPendingTransforms?.()
+      clusterGizmo.detach()
+      _removeToolPickListeners()
+      setActive(false)
+      setClusterDirty(false)
+      await _restoreTransformPreviewFromStore()
+      return {
+        accepted: false,
+        reason: 'request_failed',
+        result: null,
+        error,
+      }
+    }
+    const featureLogEntryId =
+      store.getState().currentDesign?.feature_log?.at(-1)?.id ?? null
+    if (!featureLogEntryId || featureLogEntryId === beforeEntryId) {
+      return { accepted: false, reason: 'transaction_unresolved', result: null }
+    }
+    return {
+      accepted: true,
+      reason: 'committed',
+      result: {
+        vr_transaction: {
+          kind: 'move_rotate',
+          feature_log_entry_id: featureLogEntryId,
+          target_count: 1,
+          cluster_id: clusterId,
+        },
+      },
+    }
+  }
+
+  /** VR preview owns the desktop gizmo as one immutable-target transaction.
+   * Any canonical selection change must cancel/restore it; the ordinary desktop
+   * selection bridge must never retarget the in-flight transform. */
+  async function _consumeSelectionChangeDuringVRPreview(newState) {
+    if (_vrCancelling) {
+      await _vrCancelling
+      return true
+    }
+    if (_vrStarting) await _vrStarting
+    if (!_vrPreview) return false
+    const primary = canonicalSelection(newState).primary
+    if (primary?.kind !== 'cluster' || primary.id !== _vrPreview.clusterId) {
+      await _cancelVRPreview()
+    }
+    return true
+  }
 
   async function _onToolPickPointerDown(e) {
     if (e.button != null && e.button !== 0) return
@@ -311,6 +452,10 @@ export function initTranslateRotateTool(deps) {
 
   async function _confirmTranslateRotateTool() {
     if (!getActive()) return
+    if (_vrPreview) {
+      showToast('VR Move / Rotate is preview-only; use Cancel to restore the design.')
+      return
+    }
     setActive(false)
     _confirmBtn.style.display = 'none'
     if (_mrPanel) _mrPanel.style.display = 'none'
@@ -492,6 +637,8 @@ export function initTranslateRotateTool(deps) {
 
   async function _cancelTranslateRotateTool() {
     if (!getActive()) return
+    _vrPreview = null
+    _vrQueuedMatrix = null
     const hadLocalPreview = getClusterDirty()
     setActive(false)
     _confirmBtn.style.display = 'none'
@@ -583,6 +730,7 @@ export function initTranslateRotateTool(deps) {
   // subscribers so subscription order is explicit.
   async function _handleSelectionChange(newState, prevState) {
     if (newState.selection === prevState.selection) return
+    if (await _consumeSelectionChangeDuringVRPreview(newState)) return
     if (selectedClusterIds(newState).length !== 1) return
     const { action, clusterId } = decideSelectionAction({
       newSel:          canonicalSelection(newState).primary,
@@ -608,6 +756,7 @@ export function initTranslateRotateTool(deps) {
   // leaving a group or landing on a different cluster); 0 → leave it to _handleSelectionChange.
   async function _handleMultiClusterSelectionChange(newState, prevState) {
     if (newState.selection === prevState.selection) return
+    if (await _consumeSelectionChangeDuringVRPreview(newState)) return
     if (!getActive()) return
     if (newState.assemblyActive || newState.cadnanoActive || newState.unfoldActive) return
     const clusters = newState.currentDesign?.cluster_transforms ?? []
@@ -732,5 +881,9 @@ export function initTranslateRotateTool(deps) {
     handleMultiClusterSelectionChange: _handleMultiClusterSelectionChange,
     removeToolPickListeners: _removeToolPickListeners,
     hideConfirmBtn: () => { _confirmBtn.style.display = 'none' },
+    beginVRPreview: _beginVRPreview,
+    applyVRPreviewMatrix: _applyVRPreviewMatrix,
+    confirmVRPreview: _confirmVRPreview,
+    cancelVRPreview: _cancelVRPreview,
   }
 }

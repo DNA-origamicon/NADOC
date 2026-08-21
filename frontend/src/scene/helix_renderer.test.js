@@ -208,6 +208,60 @@ describe('instanceAlpha coverage', () => {
   })
 })
 
+describe('overhang cylinder instance lookup', () => {
+  it('builds direct half/full instance maps and getters do not scan domain data', () => {
+    const indexBody = fnBody(HR, '_ensureCylinderDomainIndex')
+    expect(indexBody).toContain('_overhangHalfByInstance = new Map()')
+    expect(indexBody).toContain('_overhangFullByInstance = new Map()')
+
+    for (const [getter, map] of [
+      ['getOverhangCylinderDomainAt(instanceId)', '_overhangHalfByInstance.get(instanceId)'],
+      ['getOverhangFullCylinderDomainAt(instanceId)', '_overhangFullByInstance.get(instanceId)'],
+    ]) {
+      const start = HR.indexOf(getter)
+      const body = HR.slice(start, HR.indexOf('\n    },', start))
+      expect(start, getter).toBeGreaterThan(-1)
+      expect(body).toContain(map)
+      expect(body).not.toContain('.find(')
+    }
+  })
+})
+
+describe('cylinder visibility and glow hot-path indexes', () => {
+  it('indexes assigned nucleotides by domain instead of filtering all geometry per cylinder', () => {
+    const build = fnBody(HR, '_ensureAssignedNucsByDomain')
+    const lookup = fnBody(HR, '_hiddenAlphaForCyl')
+    expect(build).toContain('_assignedNucsByDomain = new Map()')
+    expect(build).toContain('for (const nuc of assignedGeometry)')
+    expect(lookup).toContain('_assignedNucsByDomain.get(')
+    expect(lookup).not.toContain('assignedGeometry.filter(')
+  })
+
+  it('resolves selected domain refs directly to glow entries without sweeping cylinder arrays', () => {
+    const resolve = fnBody(HR, '_refsToCylinderEntries')
+    const write = fnBody(HR, '_writeCylGlow')
+    expect(resolve).toContain('_cylEntriesByDomainRef.get(')
+    expect(resolve).not.toContain('_domainCylData.filter(')
+    expect(resolve).not.toContain('_overhangCylData.filter(')
+    expect(write).toContain('for (const dom of domEntries)')
+    expect(write).not.toContain('.has(dom.cylIdx)')
+  })
+})
+
+describe('slab build tolerates nucleotides without a base site', () => {
+  it('skips a nucleotide with no base_position instead of spreading undefined', () => {
+    // Injected non-design nucleotides (oxDNA surface capture strands) are built in
+    // the frontend, so nothing guarantees the backend's full nucleotide record. Before
+    // this guard `new THREE.Vector3(...nuc.base_position)` threw out of the entire
+    // rebuild, and the exception unwound through the setup card's onChange — which
+    // then stopped tracking its own fields, so the 3D froze on a stale spec.
+    const start = HR.indexOf("// Extension beads have no base-pair slabs.")
+    expect(start).toBeGreaterThan(-1)
+    const region = HR.slice(start, HR.indexOf('new THREE.Vector3(...nuc.base_normal)', start))
+    expect(region).toContain('if (!nuc.base_position) continue')
+  })
+})
+
 describe('slab connector colour parity', () => {
   it('the shared recolour path updates a slab connector with its slab', () => {
     const body = fnBody(HR, '_setInstColor')
@@ -228,5 +282,29 @@ describe('slab connector colour parity', () => {
     expect(body).toContain('recolor(slab.connectorMesh, slab.connectorId, hex)')
     const dirty = fnBody(HR, '_flagScalarColorMeshes')
     expect(dirty).toContain('iSlabConnectors')
+  })
+})
+
+describe('cluster transforms keep the complete slab frame rigid', () => {
+  const captureStart = HR.indexOf('\n    captureClusterBase(')
+  const applyStart = HR.indexOf('\n    applyClusterTransform(', captureStart)
+  const commitStart = HR.indexOf('\n    commitClusterPositions(', applyStart)
+  const captureBody = HR.slice(captureStart, applyStart)
+  const applyBody = HR.slice(applyStart, commitStart)
+  const commitBody = HR.slice(commitStart, HR.indexOf('\n    applyBridgeNucsUpdate(', commitStart))
+
+  it('snapshots and transforms the rendered slab center instead of re-solving from stale geometry', () => {
+    expect(captureBody).toContain('slab.instMesh.getMatrixAt(slab.id, _tMatrix)')
+    expect(captureBody).toContain('center: renderedCenter')
+    expect(applyBody).toContain('_clusterV.copy(baseData.center)')
+    expect(applyBody).toContain('slab.center.set(')
+    expect(applyBody).not.toContain('const center_ = _slabCenterAt(slab')
+  })
+
+  it('commits every position/orientation field needed to reconstruct that slab frame', () => {
+    expect(commitBody).toContain('entry.nuc.backbone_position')
+    expect(commitBody).toContain('slab.nuc.base_position')
+    expect(commitBody).toContain('slab.nuc.base_normal')
+    expect(commitBody).toContain('slab.nuc.axis_tangent')
   })
 })

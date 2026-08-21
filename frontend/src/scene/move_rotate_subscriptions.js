@@ -59,7 +59,6 @@ export function initMoveRotateSubscriptions({
   store.subscribe((newState, previousState) => {
     translateRotateTool.handleMultiClusterSelectionChange(newState, previousState)
   })
-
   store.subscribe((newState, previousState) => {
     if (
       newState.deformToolActive
@@ -90,5 +89,9 @@ export function initMoveRotateSubscriptions({
       return
     }
     clusterGlowLayer.setEntries(clusterBackboneEntries(cluster, newState.currentDesign))
+  })
+
+  store.subscribe((newState, previousState) => {
+    nucleotideTransformTool.handleSelectionChange?.(newState, previousState)
   })
 }

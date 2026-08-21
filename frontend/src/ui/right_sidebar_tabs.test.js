@@ -19,6 +19,7 @@ describe('right sidebar tabs', () => {
         <div id="right-tab-content-overhangs"></div>
         <div class="panel-section" id="properties-section"></div>
         <div class="panel-section" id="extrude-panel"></div>
+        <div class="panel-section" id="deform-panel"></div>
         <div class="panel-section" id="strand-hist-section"></div>
         <div class="panel-section" id="groups-panel"></div>
         <div class="panel-section" id="repr-options-section"></div>
@@ -40,6 +41,7 @@ describe('right sidebar tabs', () => {
     const tabs = initRightSidebarTabs({ document, storage })
     expect(document.getElementById('measurements-section')).toBeNull()
     expect(document.querySelector('#right-tab-content-properties #extrude-panel')).toBeTruthy()
+    expect(document.querySelector('#right-tab-content-properties #deform-panel')).toBeTruthy()
     expect(document.querySelector('#right-tab-content-clustering #joints-panel')).toBeTruthy()
     expect(document.querySelector('#right-tab-content-overhangs #strand-anim-panel')).toBeTruthy()
     expect(document.querySelector('#right-tab-content-visualization #right-view-actions #reset-btn')).toBeTruthy()

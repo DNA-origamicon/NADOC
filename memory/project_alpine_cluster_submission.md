@@ -5,6 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 909b50d7-8696-47a9-979c-fb67ba2f41ec
+  modified: 2026-08-20T04:18:38.929Z
 ---
 
 Add a remote execution backend so a prepared NADOC MD (NAMD) job can be submitted
@@ -63,7 +64,18 @@ present for Duo 2FA** to validate end-to-end. Auth cannot be fully headless
   the "Resume model (2026-07-03 pivot)" block below before touching resume logic. Live-validation of
   the actual Resume round-trip still needs a real short-walltime timeout + Duo.
 - [x] **Ensemble production replicas** (2026-07-07) — see "Ensemble production" block below.
-- [x] **In-sbatch relaxation early-stop (Tier B + Tier A)** (2026-07-07) — see "In-sbatch early-stop" block below.
+- [x] **In-sbatch relaxation early-stop** (2026-07-07, detail archived) — **retired the Tier A/B split
+  entirely (2026-08-21)**, see [[project_declash_reaudit]]'s early-stop section. No more restraint-scale
+  eligibility gate and no energy-only mode: every non-final relaxation chunk on Alpine/RunPod now gets
+  the real on-node WC health step + the same `should_early_stop_stage` (energy AND WC) test the local
+  runner uses — byte-for-byte parity, not an approximation. Also fixed in the same pass: the staged
+  `md_health.py` copy's `identify_unpaired_residues`/sidecar helpers were moved INTO `md_health.py` from
+  `md_protocols` (a cross-module import that silently failed standalone on the node, returning an empty
+  ss-exclusion set every time — caught by `_unpaired_exclusion_set`'s own `except Exception: return set()`,
+  so it never crashed, just silently used the wrong candidate pool). `MdJob.load()` now drops any
+  dataclass field the current schema no longer declares (`tests/test_md_job_schema_evolution.py`) — the
+  first-ever MdJob field REMOVAL, needed so `early_stop_tier` still on old job.json files (including the
+  real archived `bb8654eef459` / 24hb_2xT) doesn't crash loading.
 
 ## Key architecture decisions (read before Phase 1)
 

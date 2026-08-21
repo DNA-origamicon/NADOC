@@ -1,6 +1,27 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { mergeLibraryDiskUsage, readLibraryCache, writeLibraryCache } from './library_panel.js'
+import { readFileSync } from 'node:fs'
+import {
+  hasLargeSimulationData,
+  mergeLibraryDiskUsage,
+  readLibraryCache,
+  writeLibraryCache,
+} from './library_panel.js'
+
+describe('hasLargeSimulationData', () => {
+  const halfGb = 0.5 * 1024 ** 3
+
+  it('only flags NAMD/oxDNA data strictly larger than 0.5 GB', () => {
+    expect(hasLargeSimulationData(halfGb - 1)).toBe(false)
+    expect(hasLargeSimulationData(halfGb)).toBe(false)
+    expect(hasLargeSimulationData(halfGb + 1)).toBe(true)
+  })
+
+  it('uses a selector specific enough to beat the later accessibility size rule', () => {
+    const html = readFileSync(`${process.cwd()}/index.html`, 'utf8')
+    expect(html).toContain('.lib-row-size.lib-row-size-sim')
+  })
+})
 
 describe('mergeLibraryDiskUsage', () => {
   it('enriches parts without changing assemblies or folders', () => {

@@ -18,6 +18,7 @@ Nothing here does design/topology work — pure I/O plumbing.
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import PurePosixPath
@@ -34,6 +35,8 @@ Connector = Callable[[str, str, str, str], Awaitable[object]]
 # HTTP/WebSocket work gets a turn between SFTP chunks.
 _SFTP_CHUNK = 1024 * 1024
 _CHUNK_TIMEOUT_S = 300
+
+logger = logging.getLogger(__name__)
 
 
 class ConnState(str, Enum):
@@ -370,26 +373,104 @@ async def _stream_put(sftp, local_path: str, remote_path: str) -> None:
                 await asyncio.sleep(0)
 
 
+async def _tail_matches(
+    sftp, remote_path: str, part_path: str, start: int, end: int
+) -> bool:
+    """Does ``part_path[start:end]`` equal the same range of the remote file?
+
+    The cheap proof that a partial really is a prefix of *this* remote file.  Costs one
+    mebibyte against transfers measured in hundreds of gigabytes.
+    """
+    want = end - start
+    if want <= 0:
+        return True
+    with open(part_path, "rb") as fh:
+        fh.seek(start)
+        local = fh.read(want)
+    if len(local) != want:
+        return False
+    remote = bytearray()
+    async with sftp.open(remote_path, "rb") as rf:
+        await rf.seek(start)
+        while len(remote) < want:
+            chunk = await asyncio.wait_for(
+                rf.read(min(_SFTP_CHUNK, want - len(remote))), timeout=_CHUNK_TIMEOUT_S
+            )
+            if not chunk:
+                break
+            remote.extend(chunk)
+            await asyncio.sleep(0)
+    return bytes(remote) == local
+
+
 async def _stream_get(sftp, remote_path: str, local_path: str, on_progress=None) -> None:
+    """Download one file to ``local_path``, resuming a verified ``.part`` if present.
+
+    Appending to a partial is a trust decision, not a size comparison — see
+    ``resume_transfer``.  A partial that fails either check is *quarantined*, never
+    deleted: a corrupt head is often repairable, and silently discarding tens of
+    gigabytes is the failure this whole path exists to prevent.
+    """
+
     import os
 
+    from backend.core import resume_transfer  # noqa: PLC0415 — keep transport importable
+
     os.makedirs(os.path.dirname(local_path) or ".", exist_ok=True)
-    remote_size = int((await sftp.stat(remote_path)).size)
+    attrs = await sftp.stat(remote_path)
+    remote_size = int(attrs.size)
+    remote_mtime = getattr(attrs, "mtime", None)
     part_path = local_path + ".part"
-    # Older NADOC downloads wrote directly to the final path. Adopt a short file as the
-    # resumable partial instead of throwing away gigabytes already transferred.
-    if os.path.exists(local_path):
-        local_size = os.path.getsize(local_path)
-        if local_size == remote_size:
-            return
-        if local_size < remote_size and not os.path.exists(part_path):
-            os.replace(local_path, part_path)
-    offset = os.path.getsize(part_path) if os.path.exists(part_path) else 0
-    if offset > remote_size:
-        os.unlink(part_path)
+    if os.path.exists(local_path) and os.path.getsize(local_path) == remote_size:
+        resume_transfer.clear_sidecar(part_path)
+        return
+
+    part_size = os.path.getsize(part_path) if os.path.exists(part_path) else 0
+    plan = resume_transfer.plan_resume(
+        part_size=part_size,
+        remote_path=remote_path,
+        remote_size=remote_size,
+        remote_mtime=remote_mtime,
+        sidecar=resume_transfer.read_sidecar(part_path),
+    )
+    offset, reject_reason = plan.offset, "" if plan.offset else plan.reason
+    # Structural check FIRST: it is the only one that can see a corrupt *head*, which is
+    # precisely how a stand-in writer sharing this path used to poison a download while
+    # leaving the tail — and therefore the size and the tail check — perfectly plausible.
+    if offset:
+        ok, detail = resume_transfer.validate_partial(part_path)
+        if not ok:
+            offset, reject_reason = 0, f"structural check failed: {detail}"
+    if offset and plan.verify_from < offset:
+        if not await _tail_matches(
+            sftp, remote_path, part_path, plan.verify_from, offset
+        ):
+            offset, reject_reason = 0, "last mebibyte does not match the remote file"
+
+    if part_size and not offset:
+        rejected = part_path + ".rejected"
+        logger.error(
+            "REFUSING to resume %s (%d bytes): %s — quarantined at %s",
+            part_path,
+            part_size,
+            reject_reason,
+            rejected,
+        )
+        os.replace(part_path, rejected)
+        resume_transfer.clear_sidecar(part_path)
+    if offset > remote_size:  # defensive; plan_resume already rules this out
         offset = 0
+
     if on_progress:
         on_progress(offset, remote_size)
+    resume_transfer.write_sidecar(
+        part_path,
+        remote_path=remote_path,
+        remote_size=remote_size,
+        remote_mtime=remote_mtime,
+        offset=offset,
+    )
+    checkpoint = offset
     async with sftp.open(remote_path, "rb") as rf:
         if offset:
             # AsyncSSH's SFTPClientFile.seek() is asynchronous.  Failing to await it
@@ -407,6 +488,19 @@ async def _stream_get(sftp, remote_path: str, local_path: str, on_progress=None)
                 offset += len(chunk)
                 if on_progress:
                     on_progress(offset, remote_size)
+                # Checkpoint on a fixed byte interval so an abrupt kill (uvicorn reload,
+                # power loss) costs at most this much rather than the whole write buffer.
+                if offset - checkpoint >= resume_transfer.CHECKPOINT_BYTES:
+                    fh.flush()
+                    os.fsync(fh.fileno())
+                    resume_transfer.write_sidecar(
+                        part_path,
+                        remote_path=remote_path,
+                        remote_size=remote_size,
+                        remote_mtime=remote_mtime,
+                        offset=offset,
+                    )
+                    checkpoint = offset
                 # AsyncSSH may satisfy sequential reads immediately from its buffered
                 # packet queue. An explicit yield prevents a multi-GB transfer from
                 # monopolising uvloop and freezing unrelated API requests.
@@ -414,11 +508,28 @@ async def _stream_get(sftp, remote_path: str, local_path: str, on_progress=None)
             fh.flush()
             os.fsync(fh.fileno())
     if os.path.getsize(part_path) != remote_size:
+        resume_transfer.write_sidecar(
+            part_path,
+            remote_path=remote_path,
+            remote_size=remote_size,
+            remote_mtime=remote_mtime,
+            offset=os.path.getsize(part_path),
+        )
         raise OSError(
             f"incomplete download for {remote_path}: "
             f"{os.path.getsize(part_path)}/{remote_size} bytes"
         )
+    complete, detail = resume_transfer.validate_partial(part_path)
+    if not complete:
+        # Right size, wrong bytes — the exact state that used to pass as "verified".
+        rejected = part_path + ".rejected"
+        os.replace(part_path, rejected)
+        resume_transfer.clear_sidecar(part_path)
+        raise OSError(
+            f"corrupt download for {remote_path}: {detail} — quarantined at {rejected}"
+        )
     os.replace(part_path, local_path)
+    resume_transfer.clear_sidecar(part_path)
 
 
 # ── module singleton (one live connection per backend session) ─────────────────────

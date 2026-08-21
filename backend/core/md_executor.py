@@ -34,7 +34,7 @@ from pathlib import Path, PurePosixPath
 
 from backend.core.cluster_config import ClusterProfile, resolve_paths
 from backend.core.md_job import MdJob, MdStatus
-from backend.core import md_protocols
+from backend.core import md_protocols, resume_transfer
 from backend.core.md_protocols import strip_gpu_resident
 from backend.core.slurm_script import (
     EARLY_STOP_EVAL_NAME,
@@ -44,6 +44,8 @@ from backend.core.slurm_script import (
     SETTLE_RETARGET_NAME,
     EARLY_STOP_HEALTH_NAME,
     STAGED_MD_HEALTH_NAME,
+    ALPINE_WC_EVAL_NAME,
+    ALPINE_WC_PLAN_NAME,
     generate_sbatch,
     is_gpu_target,
 )
@@ -283,6 +285,8 @@ def stage_plan(package_dir: Path) -> list[tuple[Path, str]]:
             continue
         if p.suffix in _SKIP_SUFFIXES:
             continue
+        if resume_transfer.is_transfer_artifact(p.name):
+            continue
         plan.append((p, rel.as_posix()))
     return plan
 
@@ -308,22 +312,17 @@ def _early_stop_on(job: MdJob, manifest: dict) -> bool:
     return bool(getattr(job, "early_stop_relax", False)) and not manifest.get("declash")
 
 
-def _early_stop_tier(job: MdJob) -> str:
-    t = str(getattr(job, "early_stop_tier", "B") or "B").upper()
-    return t if t in ("A", "B") else "B"
-
-
 async def _stage_early_stop_evaluator(
-    conn, remote_dir: str, workspace_dir: Path, job: MdJob, *, tier: str
+    conn, remote_dir: str, workspace_dir: Path, job: MdJob
 ) -> None:
-    """Upload the node early-stop scripts next to the confs.
+    """Upload RunPod's MDAnalysis-backed early-stop scripts next to the confs.
 
-    Tier B: just the stdlib ``nadoc_cutoff_eval.py`` (the sbatch runs
-    ``python3 nadoc_cutoff_eval.py`` from the run cwd).  Tier A additionally ships
-    ``nadoc_health_eval.py`` + a verbatim ``md_health.py`` (the WC step needs the
-    real ``run_health_check``; it imports numpy/scipy/MDAnalysis on the node).  We
-    ship the exact module sources the tests pin, so the node runs byte-for-byte what
-    was validated offline.
+    RunPod ships all three: the stdlib ``nadoc_cutoff_eval.py`` cutoff evaluator,
+    ``nadoc_health_eval.py``, and a verbatim ``md_health.py`` (the WC step needs the
+    real ``run_health_check``; it imports numpy/scipy/MDAnalysis on the pod) — no
+    energy-only mode, so the node always makes the same energy-AND-WC decision the
+    local runner does.  We ship the exact module sources the tests pin, so the node
+    runs byte-for-byte what was validated offline.
     """
     from backend.core import md_health, remote_cutoff_eval, remote_health_eval
 
@@ -337,9 +336,50 @@ async def _stage_early_stop_evaluator(
         )
 
     await _stage(remote_cutoff_eval, EARLY_STOP_EVAL_NAME)
-    if tier == "A":
-        await _stage(remote_health_eval, EARLY_STOP_HEALTH_NAME)
-        await _stage(md_health, STAGED_MD_HEALTH_NAME)
+    await _stage(remote_health_eval, EARLY_STOP_HEALTH_NAME)
+    await _stage(md_health, STAGED_MD_HEALTH_NAME)
+
+
+async def _prepare_alpine_wc_plan(package_dir: Path, name_stem: str) -> Path:
+    """Build/cache the dependency-free Alpine WC plan off the event loop."""
+    from backend.core import remote_wc_eval  # noqa: PLC0415
+
+    try:
+        return await asyncio.to_thread(
+            remote_wc_eval.ensure_plan,
+            package_dir,
+            name_stem,
+            ALPINE_WC_PLAN_NAME,
+        )
+    except Exception as exc:  # noqa: BLE001 — turn a hidden no-skip into a hard preflight
+        raise RuntimeError(
+            "Could not prepare Alpine relaxation skip acceleration: the local "
+            f"Watson-Crick pair plan failed ({exc})."
+        ) from exc
+
+
+async def _stage_alpine_early_stop_evaluator(
+    conn,
+    remote_dir: str,
+    workspace_dir: Path,
+    job: MdJob,
+    plan_path: Path,
+) -> None:
+    """Stage the stdlib-only Alpine cutoff + WC evaluator and precomputed plan."""
+    from backend.core import remote_cutoff_eval, remote_wc_eval  # noqa: PLC0415
+
+    for module, remote_name in (
+        (remote_cutoff_eval, EARLY_STOP_EVAL_NAME),
+        (remote_wc_eval, ALPINE_WC_EVAL_NAME),
+    ):
+        await _put_text(
+            conn,
+            Path(module.__file__).read_text(),
+            f"{remote_dir}/{remote_name}",
+            workspace_dir,
+            job,
+        )
+    await conn.sftp_put(str(plan_path), f"{remote_dir}/{ALPINE_WC_PLAN_NAME}")
 
 
 async def submit_job(
@@ -394,9 +434,11 @@ async def submit_job(
     # Build the sbatch first — a declash / bad-partition manifest raises here,
     # before we touch the network.
     early_stop = _early_stop_on(job, manifest)
-    es_tier = _early_stop_tier(job)
-    if early_stop:
-        manifest["early_stop_tier"] = es_tier  # generate_sbatch reads this
+    alpine_wc_plan = (
+        await _prepare_alpine_wc_plan(package_dir, job.name_stem or job.design_name)
+        if early_stop
+        else None
+    )
     sbatch = generate_sbatch(
         manifest,
         profile,
@@ -520,8 +562,8 @@ async def submit_job(
 
     # 1c) stage the node early-stop scripts into project (mirrored to scratch next).
     if early_stop:
-        await _stage_early_stop_evaluator(
-            conn, project_dir, workspace_dir, job, tier=es_tier
+        await _stage_alpine_early_stop_evaluator(
+            conn, project_dir, workspace_dir, job, alpine_wc_plan
         )
 
     # 2) mirror project → scratch (two-filesystem model — jobs MUST run on scratch).
@@ -843,9 +885,11 @@ async def resume_job(
 
     # 4) regenerate the sbatch (skip done; resume the interrupted one) and submit.
     early_stop = _early_stop_on(job, manifest)
-    es_tier = _early_stop_tier(job)
-    if early_stop:
-        manifest["early_stop_tier"] = es_tier
+    alpine_wc_plan = (
+        await _prepare_alpine_wc_plan(package_dir, job.name_stem or job.design_name)
+        if early_stop
+        else None
+    )
     sbatch = generate_sbatch(
         manifest,
         profile,
@@ -870,8 +914,8 @@ async def resume_job(
     # Re-stage the evaluator(s) too (resume otherwise uploads only the sbatch/resume
     # conf; the original copies are normally still there, but may have been purged).
     if early_stop:
-        await _stage_early_stop_evaluator(
-            conn, scratch, workspace_dir, job, tier=es_tier
+        await _stage_alpine_early_stop_evaluator(
+            conn, scratch, workspace_dir, job, alpine_wc_plan
         )
     await _put_text(conn, sbatch, f"{scratch}/{_SBATCH_NAME}", workspace_dir, job)
     res = await conn.run(f"cd {_shq(scratch)} && sbatch {_SBATCH_NAME}")
@@ -1138,8 +1182,18 @@ def verify_local_download(job: MdJob, workspace_dir: Path) -> bool:
             try:
                 part = Path(str(path) + ".part")
                 # A transport can drop after fsync and before the final atomic rename.
-                # Exact inventory size is sufficient to finish that rename offline.
+                # Exact inventory size finishes that rename offline — but only alongside
+                # a structural check: byte count alone once promoted a trajectory whose
+                # head was a foreign one-frame DCD, and it read as "verified".
                 if not path.exists() and part.is_file() and part.stat().st_size == size:
+                    intact, detail = resume_transfer.validate_partial(part)
+                    if not intact:
+                        status["local_verification_error"] = (
+                            f"Local result {rel} is the right size but not intact: {detail}"
+                        )
+                        job.download_status = status
+                        job.save(workspace_dir)
+                        return False
                     part.replace(path)
                 if not path.is_file() or path.stat().st_size != size:
                     actual = path.stat().st_size if path.is_file() else None
@@ -1159,7 +1213,9 @@ def verify_local_download(job: MdJob, workspace_dir: Path) -> bool:
         try:
             output = package_dir / "output"
             for path in output.rglob("*") if output.is_dir() else ():
-                if path.is_file() and not path.name.endswith(".part"):
+                if path.is_file() and not resume_transfer.is_transfer_artifact(
+                    path.name
+                ):
                     local[path.relative_to(package_dir).as_posix()] = path.stat().st_size
             for pattern in ("*.log", "*.out", "*.err"):
                 for path in package_dir.glob(pattern):
@@ -1298,7 +1354,10 @@ async def reconcile_remote_job(job: MdJob, workspace_dir: Path, *, conn=None) ->
     conn = conn or _default_conn()
     raw, bucket = await poll_status(job, conn=conn)
     prev_state = job.slurm_state
-    job.slurm_state = raw or job.slurm_state
+    # poll_status deliberately treats a job absent from both squeue and aged-out sacct
+    # as completed. Publish that inferred terminal state rather than retaining a stale
+    # RUNNING badge through the entire result download.
+    job.slurm_state = raw or ("COMPLETED" if bucket == "completed" else job.slurm_state)
     new_status = bucket_to_md_status(bucket)
 
     if bucket in ("pending", "running"):
@@ -1321,7 +1380,26 @@ async def reconcile_remote_job(job: MdJob, workspace_dir: Path, *, conn=None) ->
             job.save(workspace_dir)
         return job
 
-    # Terminal — pull results back (restart files for a resume; logs to diagnose).
+    # Terminal — publish scheduler + final stage progress *before* the potentially
+    # multi-hour mirror/download. A user reconnecting after completion must immediately
+    # see that Alpine is done, every remotely-finished relax stage filled in, and the
+    # progress bar repurposed for result transfer instead of the last pre-logout step.
+    try:
+        await poll_remote_progress(job, conn=conn)
+    except Exception as exc:  # noqa: BLE001 — final listing is advisory
+        logger.warning("[%s] terminal remote progress poll failed: %s", job.job_id, exc)
+    job.download_status = {
+        "state": "downloading",
+        "total_bytes": None,
+        "verified_bytes": 0,
+        "transferred_bytes": 0,
+        "files_total": None,
+        "files_verified": 0,
+        "current_file": None,
+    }
+    job.save(workspace_dir)
+
+    # Pull results back (restart files for a resume; logs to diagnose).
     try:
         await fetch_outputs(job, workspace_dir, conn=conn)
     except Exception as exc:  # noqa: BLE001
@@ -1464,7 +1542,39 @@ async def resume_local_processing_jobs(workspace_dir: Path) -> list[str]:
     return finished
 
 
-async def poll_remote_jobs(workspace_dir: Path, *, conn=None) -> list[str]:
+_REMOTE_RECONCILE_LOCKS: dict[str, asyncio.Lock] = {}
+
+
+def _needs_remote_reconcile(job: MdJob, *, recover_incomplete: bool = False) -> bool:
+    """Whether a connected supervisor/login pass should inspect this Alpine job.
+
+    Ordinary periodic passes follow only scheduler-owned queued/running jobs. A fresh
+    login additionally gets one recovery attempt for a job already marked completed
+    (or a resumable timeout) whose persisted transfer was interrupted. This covers a
+    backend/browser restart during download without turning a permanently bad remote
+    file into an unbounded 30-second retry loop.
+    """
+    if not job.slurm_job_id:
+        return False
+    transfer_state = (job.download_status or {}).get("state")
+    if transfer_state in {"verified", "processing"}:
+        return False
+    if is_remote_active(job.status):
+        return True
+    if not recover_incomplete or transfer_state not in {"downloading", "interrupted"}:
+        return False
+    if job.status == MdStatus.completed:
+        return True
+    return (
+        job.status == MdStatus.paused
+        and job.resumable
+        and is_timeout_state(job.slurm_state or "")
+    )
+
+
+async def poll_remote_jobs(
+    workspace_dir: Path, *, conn=None, recover_incomplete: bool = False
+) -> list[str]:
     """Supervisor pass: reconcile every active (queued/running) Alpine job.
 
     Only runs when the session is connected — a disconnected/expired session leaves
@@ -1497,11 +1607,29 @@ async def poll_remote_jobs(workspace_dir: Path, *, conn=None) -> list[str]:
             job.save(workspace_dir)
             touched.append(job.job_id)
             continue  # already stopped locally — nothing else to reconcile
-        if not is_remote_active(job.status) or not job.slurm_job_id:
+        if not _needs_remote_reconcile(job, recover_incomplete=recover_incomplete):
+            continue
+        # cluster/connect starts a pass immediately while the 30 s supervisor may
+        # already be in one. Never queue a second multi-GB fetch/finalization behind the
+        # first: once the first releases, the waiting caller's in-memory job is stale and
+        # can reset verified progress or overwrite completed bookkeeping.
+        lock_key = str(job.job_dir(workspace_dir).resolve())
+        reconcile_lock = _REMOTE_RECONCILE_LOCKS.setdefault(
+            lock_key, asyncio.Lock()
+        )
+        if reconcile_lock.locked():
             continue
         try:
-            await reconcile_remote_job(job, workspace_dir, conn=conn)
-            touched.append(job.job_id)
+            async with reconcile_lock:
+                # Reload after taking ownership. Another request may have updated the
+                # record between list_jobs() and this point.
+                latest = MdJob.load(job.job_id, workspace_dir)
+                if not _needs_remote_reconcile(
+                    latest, recover_incomplete=recover_incomplete
+                ):
+                    continue
+                await reconcile_remote_job(latest, workspace_dir, conn=conn)
+                touched.append(job.job_id)
         except Exception:  # noqa: BLE001 — one job must not kill the pass
             logger.exception("[%s] remote reconcile failed", job.job_id)
     return touched

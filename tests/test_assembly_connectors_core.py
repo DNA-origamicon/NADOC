@@ -13,8 +13,12 @@ surface (the only edit in the lift was _mat4_from_model(x) -> x.to_array(),
 provably identical: both compute np.array(values, dtype=float).reshape(4, 4)).
 """
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
+
+import backend.core.assembly_connectors as assembly_connectors_module
 
 from backend.core.assembly_connectors import (
     _build_connector_frames,
@@ -33,6 +37,7 @@ from backend.core.models import (
     AssemblyJoint,
     ConnectionType,
     Design,
+    Helix,
     InterfacePoint,
     Mat4x4,
     PartInstance,
@@ -175,6 +180,24 @@ def test_local_frame_for_label_unknown_returns_none():
     assert _local_frame_for_label(inst, "missing", None) is None
 
 
+def test_supplied_interface_point_bypasses_linear_label_scan():
+    point = _ip("target", (2.0, 3.0, 4.0))
+    inst = _instance([point], transform=_translation(10.0, 20.0, 30.0))
+
+    class _NoIteration(list):
+        def __iter__(self):
+            raise AssertionError("interface-point list was scanned")
+
+    inst.interface_points = _NoIteration([point])
+    world = _get_connector_world(inst, "target", None, point)
+    frame = _get_connector_world_frame(inst, "target", None, point)
+    local = _local_frame_for_label(inst, "target", None, point)
+
+    np.testing.assert_allclose(world, [12.0, 23.0, 34.0], atol=1e-9)
+    np.testing.assert_allclose(frame[:3, 3], world, atol=1e-9)
+    np.testing.assert_allclose(local[:3, 3], [2.0, 3.0, 4.0], atol=1e-9)
+
+
 # ── _build_world_connector_frames + caching ────────────────────────────────────
 
 
@@ -198,6 +221,67 @@ def test_build_world_connector_frames_keys_and_positions():
 def test_build_world_connector_frames_skips_missing_instance():
     frames, _ = _build_world_connector_frames({}, {"ghost": {"C1"}}, lambda i: None)
     assert frames == {}
+
+
+def test_build_world_connector_frames_shares_live_geometry_resolution(monkeypatch):
+    """Multiple blunt labels pay each whole-design/whole-helix solve once.
+
+    This exercises the production frame builder, not the cache helper in
+    isolation, and also pins the resolved positions so a cache that merely
+    skips work without returning equivalent geometry cannot pass.
+    """
+    helix = Helix(
+        id="h0",
+        axis_start={"x": 0.0, "y": 0.0, "z": 0.0},
+        axis_end={"x": 0.0, "y": 0.0, "z": 8.0},
+        length_bp=8,
+    )
+    design = Design(helices=[helix])
+    labels = ["blunt:h0:start", "blunt:h0:end", "blunt:h0:bp2", "blunt:h0:bp3"]
+    inst = _instance([_ip(label, (99.0, 99.0, 99.0)) for label in labels])
+    calls = {"axes": 0, "positions": 0}
+
+    def fake_axes(actual_design):
+        assert actual_design is design
+        calls["axes"] += 1
+        return [{"helix_id": "h0", "start": [1.0, 2.0, 3.0], "end": [1.0, 2.0, 11.0]}]
+
+    def fake_positions(actual_helix, actual_design):
+        assert actual_helix is helix
+        assert actual_design is design
+        calls["positions"] += 1
+        return [
+            SimpleNamespace(
+                bp_index=2, position=[4.0, 5.0, 6.0], axis_tangent=[0.0, 0.0, 1.0]
+            ),
+            # The real function returns two strands at each bp. First-match
+            # semantics must remain stable when the bp map is built.
+            SimpleNamespace(
+                bp_index=2, position=[40.0, 50.0, 60.0], axis_tangent=[0.0, 0.0, -1.0]
+            ),
+            SimpleNamespace(
+                bp_index=3, position=[7.0, 8.0, 9.0], axis_tangent=[0.0, 0.0, 1.0]
+            ),
+        ]
+
+    monkeypatch.setattr("backend.core.deformation.deformed_helix_axes", fake_axes)
+    monkeypatch.setattr(
+        "backend.core.deformation.deformed_nucleotide_positions", fake_positions
+    )
+
+    frames, _ = _build_world_connector_frames(
+        {inst.id: inst}, {inst.id: set(labels)}, lambda _inst: design
+    )
+
+    assert calls == {"axes": 1, "positions": 1}
+    expected = {
+        "blunt:h0:start": [1.0, 2.0, 3.0],
+        "blunt:h0:end": [1.0, 2.0, 11.0],
+        "blunt:h0:bp2": [4.0, 5.0, 6.0],
+        "blunt:h0:bp3": [7.0, 8.0, 9.0],
+    }
+    for label, position in expected.items():
+        np.testing.assert_allclose(frames[(inst.id, label)][:3, 3], position, atol=1e-9)
 
 
 # ── _build_connector_frames (collects labels from joints) ──────────────────────
@@ -407,3 +491,26 @@ def test_enforce_propagates_snap_to_rigid_subtree_child():
     np.testing.assert_allclose(
         c.transform.to_array()[:3, 3], [4.0, 0.0, 0.0], atol=1e-9
     )
+
+
+def test_enforce_builds_fk_adjacency_once_for_multiple_snaps(monkeypatch):
+    parents = [_instance([_ip("CA", (0.0, 0.0, 0.0))]) for _ in range(3)]
+    children = [
+        _instance([_ip("CB", (0.0, 0.0, 0.0))], transform=_translation(i + 1, 0, 0))
+        for i in range(3)
+    ]
+    joints = [_mate(a, "CA", b, "CB") for a, b in zip(parents, children)]
+    asm = _Asm([*parents, *children], joints)
+    calls = 0
+    real_builder = assembly_connectors_module._build_fk_joint_index
+
+    def counted_builder(assembly):
+        nonlocal calls
+        calls += 1
+        return real_builder(assembly)
+
+    monkeypatch.setattr(
+        assembly_connectors_module, "_build_fk_joint_index", counted_builder
+    )
+    _enforce_connector_coincidence(asm, visited={child.id for child in children})
+    assert calls == 1

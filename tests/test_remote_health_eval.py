@@ -1,6 +1,6 @@
-"""Offline pins for the Tier-A node WC health step (remote_health_eval.py).
+"""Offline pins for the node WC health step (remote_health_eval.py).
 
-Tier A needs numpy/scipy/MDAnalysis on the node.  MDAnalysis IS installed in the dev
+The node python needs numpy/scipy/MDAnalysis.  MDAnalysis IS installed in the dev
 env, and there are real relaxation packages under workspace/md_jobs, so we can run the
 ACTUAL node path here (minus the cluster) end-to-end: produce output/<seg>.wc.json from
 a real chunk DCD, confirm it matches md_health.run_health_check, and feed it to the
@@ -69,11 +69,11 @@ def test_health_eval_writes_wc_json_matching_run_health_check(tmp_path):
     ref = md_health.run_health_check(pkg, seg, stem)
     assert wc == [float(x) for x in (ref.wc_per_frame or [])]
 
-    # the stdlib cutoff evaluator must accept the produced wc.json (Tier A gate)
+    # the stdlib cutoff evaluator must accept the produced wc.json
     log = (pkg / f"{seg}.log").read_text(errors="replace")
     code, diag = remote_cutoff_eval.decide(log, wc)
     assert code in (0, 1, 2)
-    assert diag.get("tier") in ("A", None)  # A when enough frames
+    assert "wc_plateaued" in diag or diag.get("reason") == "insufficient_frames"
 
 
 def test_health_eval_missing_dcd_fails_safe(tmp_path):

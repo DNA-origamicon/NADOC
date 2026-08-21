@@ -45,6 +45,7 @@ function makeDeps(overrides = {}) {
     getActiveJoint: vi.fn(() => null),
     beginConstrainedRotation: vi.fn(),
     attach: vi.fn(),
+    setTransform: vi.fn(),
     setConstraint: vi.fn(),
     getPendingTransform: vi.fn(() => ({ translation: [1, 0, 0], rotation: [0, 0, 0, 1] })),
     clearPendingTransform: vi.fn(),
@@ -113,6 +114,10 @@ describe('initTranslateRotateTool — API + init side effects', () => {
     expect(typeof t.rotateJoint).toBe('function')
     expect(typeof t.removeToolPickListeners).toBe('function')
     expect(typeof t.hideConfirmBtn).toBe('function')
+    expect(typeof t.beginVRPreview).toBe('function')
+    expect(typeof t.applyVRPreviewMatrix).toBe('function')
+    expect(typeof t.confirmVRPreview).toBe('function')
+    expect(typeof t.cancelVRPreview).toBe('function')
   })
 
   it('creates the floating ✓ confirm button (hidden) and appends it to the body', () => {
@@ -141,6 +146,127 @@ describe('initTranslateRotateTool — API + init side effects', () => {
     expect(ctx.active).toBe(true)
     // active → handler confirms (deactivates)
     await spec.handler()
+    expect(ctx.active).toBe(false)
+  })
+})
+
+describe('initTranslateRotateTool — native VR preview adapter', () => {
+  function vrContext() {
+    const ctx = makeDeps({ state: { currentDesign: { cluster_transforms: [
+      {
+        id: 'C1', pivot: [10, 0, 0], translation: [1, 0, 0],
+        rotation: [0, 0, 0, 1], helix_ids: [2],
+      },
+    ], cluster_joints: [] } } })
+    ctx.clusterGizmo.getPendingTransform.mockReturnValue({
+      pivot: [10, 0, 0], translation: [1, 0, 0], rotation: [0, 0, 0, 1],
+    })
+    return ctx
+  }
+
+  it('maps an immutable NADOC delta to the desktop gizmo and restores on cancel', async () => {
+    const ctx = vrContext()
+    const tool = initTranslateRotateTool(ctx.deps)
+    const matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 2, 3, 4, 1]
+
+    const starting = tool.beginVRPreview('C1')
+    expect(tool.applyVRPreviewMatrix(matrix)).toBe(false) // queued during async attach
+    await expect(starting).resolves.toEqual({ accepted: true })
+    expect(ctx.clusterGizmo.setTransform).toHaveBeenCalledWith(
+      [3, 3, 4], [0, 0, 0, 1],
+    )
+    ctx.deps.setClusterDirty(true)
+    await expect(tool.cancelVRPreview()).resolves.toBe(true)
+    expect(ctx.clusterGizmo.discardPendingTransforms).toHaveBeenCalled()
+    expect(ctx.clusterGizmo.detach).toHaveBeenCalled()
+    expect(ctx.active).toBe(false)
+
+    ctx.clusterGizmo.setTransform.mockClear()
+    expect(tool.applyVRPreviewMatrix(matrix)).toBe(false)
+    await tool.beginVRPreview('C1')
+    expect(ctx.clusterGizmo.setTransform).not.toHaveBeenCalled()
+    await tool.cancelVRPreview()
+  })
+
+  it('refuses to attach over an existing desktop tool and blocks preview commit', async () => {
+    const ctx = vrContext()
+    const tool = initTranslateRotateTool(ctx.deps)
+    await tool.activate('C1')
+    await expect(tool.beginVRPreview('C1')).resolves.toEqual({
+      accepted: false, reason: 'desktop_tool_active',
+    })
+
+    await tool.cancel()
+    await tool.beginVRPreview('C1')
+    await tool.confirm()
+    expect(ctx.active).toBe(true)
+    expect(ctx.clusterGizmo.commitPendingTransforms).not.toHaveBeenCalled()
+    expect(toastCalls.at(-1)?.[0]).toContain('preview-only')
+  })
+
+  it('cancels and restores instead of retargeting when selection changes mid-preview', async () => {
+    const ctx = vrContext()
+    ctx.store.setState({
+      selection: {
+        context: 'design', level: 'cluster',
+        items: [{ kind: 'cluster', id: 'C1' }],
+        primary: { kind: 'cluster', id: 'C1' },
+      },
+    })
+    const tool = initTranslateRotateTool(ctx.deps)
+    await tool.beginVRPreview('C1')
+    const previous = ctx.store.getState()
+    ctx.store.setState({
+      selection: {
+        context: 'design', level: 'cluster',
+        items: [{ kind: 'cluster', id: 'C2' }],
+        primary: { kind: 'cluster', id: 'C2' },
+      },
+      activeClusterId: 'C2',
+    })
+    const next = ctx.store.getState()
+
+    await Promise.all([
+      tool.handleSelectionChange(next, previous),
+      tool.handleMultiClusterSelectionChange(next, previous),
+    ])
+
+    expect(ctx.clusterGizmo.discardPendingTransforms).toHaveBeenCalledOnce()
+    expect(ctx.clusterGizmo.detach).toHaveBeenCalledOnce()
+    expect(ctx.clusterGizmo.attach).not.toHaveBeenCalledWith(
+      'C2', expect.anything(), expect.anything(), expect.anything(),
+    )
+    expect(ctx.active).toBe(false)
+  })
+
+  it('commits one dirty VR Cluster preview and captures its feature-log identity', async () => {
+    const ctx = vrContext()
+    const tool = initTranslateRotateTool(ctx.deps)
+    await tool.beginVRPreview('C1')
+    ctx.deps.setClusterDirty(true)
+    ctx.clusterGizmo.commitPendingTransforms.mockImplementation(async () => {
+      const currentDesign = ctx.store.getState().currentDesign
+      ctx.store.setState({
+        currentDesign: {
+          ...currentDesign,
+          feature_log: [{ id: 'vr-cluster-move-1', op_kind: 'cluster_op' }],
+        },
+      })
+      return { clusterIds: ['C1'] }
+    })
+
+    await expect(tool.confirmVRPreview()).resolves.toEqual({
+      accepted: true,
+      reason: 'committed',
+      result: {
+        vr_transaction: {
+          kind: 'move_rotate', feature_log_entry_id: 'vr-cluster-move-1',
+          target_count: 1, cluster_id: 'C1',
+        },
+      },
+    })
+    expect(ctx.clusterGizmo.commitPendingTransforms).toHaveBeenCalledWith({ log: true })
+    expect(ctx.clusterGizmo.detach).toHaveBeenCalled()
     expect(ctx.active).toBe(false)
   })
 })

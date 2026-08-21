@@ -914,6 +914,71 @@ def _find_same_cell_helix(
     return None
 
 
+def bundle_continuation_conflicts(
+    existing_design: Design,
+    cells: List[Tuple[int, int]],
+    length_bp: int,
+    plane: str = "XY",
+    offset_nm: float = 0.0,
+) -> list[tuple[int, int, str]]:
+    """Return existing-helix interval overlaps for a continuation request.
+
+    Boundary contact is allowed so an outward continuation can ligate at the
+    selected face. The 0.4-bp end strip matches the desktop slice-plane guard;
+    this backend oracle prevents a reversed End preview from committing through
+    the existing helix body when the request bypasses that UI.
+    """
+    if abs(length_bp) < 1:
+        raise ValueError(f"length_bp magnitude must be >= 1, got {length_bp}")
+    if not cells:
+        raise ValueError("cells list must not be empty")
+    if plane not in {"XY", "XZ", "YZ"}:
+        raise ValueError(f"plane must be one of ['XY', 'XZ', 'YZ'], got {plane!r}")
+    if not math.isfinite(offset_nm):
+        raise ValueError("offset_nm must be finite")
+
+    normalized: list[tuple[int, int]] = []
+    for cell in cells:
+        if (
+            not isinstance(cell, (list, tuple))
+            or len(cell) != 2
+            or any(isinstance(value, bool) or not isinstance(value, int) for value in cell)
+        ):
+            raise ValueError("each cell must be an integer (row, col) pair")
+        normalized.append((cell[0], cell[1]))
+    if len(set(normalized)) != len(normalized):
+        raise ValueError("cells must not contain duplicates")
+
+    component = {"XY": "z", "XZ": "y", "YZ": "x"}[plane]
+    end_nm = offset_nm + length_bp * BDNA_RISE_PER_BP
+    epsilon = BDNA_RISE_PER_BP * 0.4
+    requested_low = min(offset_nm, end_nm) + epsilon
+    requested_high = max(offset_nm, end_nm) - epsilon
+    if requested_high <= requested_low:
+        return []
+
+    conflicts: list[tuple[int, int, str]] = []
+    for row, col in normalized:
+        base_id = f"h_{plane}_{row}_{col}"
+        for helix in existing_design.helices:
+            same_cell = helix.grid_pos == (row, col) or helix.grid_pos == [row, col]
+            if not same_cell and not (
+                helix.id == base_id or helix.id.startswith(base_id + "_")
+            ):
+                continue
+            helix_low = min(
+                getattr(helix.axis_start, component),
+                getattr(helix.axis_end, component),
+            )
+            helix_high = max(
+                getattr(helix.axis_start, component),
+                getattr(helix.axis_end, component),
+            )
+            if requested_low < helix_high and requested_high > helix_low:
+                conflicts.append((row, col, helix.id))
+    return conflicts
+
+
 def make_bundle_continuation(
     existing_design: Design,
     cells: List[Tuple[int, int]],

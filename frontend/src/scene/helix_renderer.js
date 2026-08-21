@@ -985,6 +985,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   root.add(iCubes)
 
   const backboneEntries = []
+  const strandTypeById = new Map()
   let sphereId = 0, cubeId = 0
 
   if (!_skipBeads) {
@@ -997,11 +998,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iCubes.setMatrixAt(cubeId, _tMatrix)
         iCubes.setColorAt(cubeId, _tColor.setHex(color))
         backboneEntries.push({ instMesh: iCubes, id: cubeId, nuc, pos, defaultColor: color })
+        if (nuc.strand_id && !strandTypeById.has(nuc.strand_id)) strandTypeById.set(nuc.strand_id, nuc.strand_type)
         cubeId++
       } else {
         iSpheres.setMatrixAt(sphereId, _tMatrix)
         iSpheres.setColorAt(sphereId, _tColor.setHex(color))
         backboneEntries.push({ instMesh: iSpheres, id: sphereId, nuc, pos, defaultColor: color })
+        if (nuc.strand_id && !strandTypeById.has(nuc.strand_id)) strandTypeById.set(nuc.strand_id, nuc.strand_type)
         sphereId++
       }
     }
@@ -1175,6 +1178,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     for (const nuc of assignedGeometry) {
       // Extension beads have no base-pair slabs.
       if (nuc.helix_id.startsWith('__ext_')) continue
+      // Slab placement treats base_position as authoritative and every downstream
+      // consumer (_slabCenterAt, pose restore) dereferences it. A nucleotide without
+      // one gets a bead but no slab, rather than throwing out of the whole rebuild.
+      if (!nuc.base_position) continue
       let bnDir  = new THREE.Vector3(...nuc.base_normal)
       let tanDir = new THREE.Vector3(...nuc.axis_tangent)
       const color  = nucSlabColor(nuc, stapleColorMap, customColors, loopSet)
@@ -1449,23 +1456,47 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   iOverhangFullCylGlow.name = 'overhangFullCylGlow'
   root.add(iOverhangFullCylGlow)
   let _cylGlowRefs = []   // [{strandId, domainIndex}] currently glowing
+  let _cylEntriesByDomainRef = null
+  let _overhangHalfByInstance = null
+  let _overhangFullByInstance = null
 
-  // Resolve domain refs → sets of cylIdx for the straight + overhang cyl meshes.
-  function _refsToCylIdxSets(domainRefs) {
-    const want = new Set((domainRefs ?? []).map(r => `${r.strandId}:${r.domainIndex}`))
-    const straight = new Set(), overhang = new Set(), overhangFull = new Set()
-    for (const d of _domainCylData)   if (want.has(`${d.strandId}:${d.domainIndex}`)) straight.add(d.cylIdx)
-    for (const d of _overhangCylData) if (want.has(`${d.strandId}:${d.domainIndex}`)) {
-      if (d.fullCylinder) overhangFull.add(d.cylIdx)
-      else overhang.add(d.cylIdx)
+  function _ensureCylinderDomainIndex() {
+    if (_cylEntriesByDomainRef) return
+    _cylEntriesByDomainRef = new Map()
+    _overhangHalfByInstance = new Map()
+    _overhangFullByInstance = new Map()
+    for (const [kind, entries] of [['straight', _domainCylData], ['overhang', _overhangCylData]]) {
+      for (const entry of entries) {
+        const key = `${entry.strandId}:${entry.domainIndex}`
+        let indexed = _cylEntriesByDomainRef.get(key)
+        if (!indexed) _cylEntriesByDomainRef.set(key, indexed = [])
+        indexed.push({ kind, entry })
+        if (kind === 'overhang') {
+          ;(entry.fullCylinder ? _overhangFullByInstance : _overhangHalfByInstance)
+            .set(entry.cylIdx, entry)
+        }
+      }
+    }
+  }
+
+  // Resolve domain refs directly to the few cylinder entries that need glow.
+  function _refsToCylinderEntries(domainRefs) {
+    _ensureCylinderDomainIndex()
+    const straight = [], overhang = [], overhangFull = []
+    const seenStraight = new Set(), seenOverhang = new Set(), seenOverhangFull = new Set()
+    for (const ref of domainRefs ?? []) {
+      for (const { kind, entry } of _cylEntriesByDomainRef.get(`${ref.strandId}:${ref.domainIndex}`) ?? []) {
+        const target = kind === 'straight' ? straight : entry.fullCylinder ? overhangFull : overhang
+        const seen = kind === 'straight' ? seenStraight : entry.fullCylinder ? seenOverhangFull : seenOverhang
+        if (!seen.has(entry.cylIdx)) { seen.add(entry.cylIdx); target.push(entry) }
+      }
     }
     return { straight, overhang, overhangFull }
   }
   // Re-pose glow instances from the live solid-cylinder matrices, inflated.
-  function _writeCylGlow(glowMesh, srcMesh, domEntries, cylIdxSet) {
+  function _writeCylGlow(glowMesh, srcMesh, domEntries) {
     let n = 0
     for (const dom of domEntries) {
-      if (!cylIdxSet.has(dom.cylIdx)) continue
       srcMesh.getMatrixAt(dom.cylIdx, _tMatrix)
       _tMatrix.decompose(_tPos, _cylQ, _tScale)
       _tScale.x *= GLOW_CYL_FACTOR; _tScale.z *= GLOW_CYL_FACTOR
@@ -1477,15 +1508,15 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   }
   function _refreshCylGlow() {
     if (!_cylGlowRefs.length) return
-    const { straight, overhang, overhangFull } = _refsToCylIdxSets(_cylGlowRefs)
-    _writeCylGlow(iHelixCylGlow, iHelixCylinders, _domainCylData, straight)
-    _writeCylGlow(iOverhangCylGlow, iOverhangCylinders, _overhangCylData.filter(d => !d.fullCylinder), overhang)
-    _writeCylGlow(iOverhangFullCylGlow, iOverhangFullCylinders, _overhangCylData.filter(d => d.fullCylinder), overhangFull)
+    const { straight, overhang, overhangFull } = _refsToCylinderEntries(_cylGlowRefs)
+    _writeCylGlow(iHelixCylGlow, iHelixCylinders, straight)
+    _writeCylGlow(iOverhangCylGlow, iOverhangCylinders, overhang)
+    _writeCylGlow(iOverhangFullCylGlow, iOverhangFullCylinders, overhangFull)
   }
   // Is this domain FULLY cylinder-rendered right now? (every column → 'cylinders')
   function _isDomainCyl(strandId, domainIndex) {
-    const dom = _domainCylData.find(d => d.strandId === strandId && d.domainIndex === domainIndex)
-             ?? _overhangCylData.find(d => d.strandId === strandId && d.domainIndex === domainIndex)
+    _ensureCylinderDomainIndex()
+    const dom = _cylEntriesByDomainRef.get(`${strandId}:${domainIndex}`)?.[0]?.entry
     if (!dom) return false
     const baseCyl = _detailLevel === 2
     for (let bp = dom.bp_lo; bp <= dom.bp_hi; bp++) {
@@ -1966,7 +1997,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   }
 
   function highlightBackbone(nuc, color, scale = 1) {
-    const entry = backboneEntries.find(e => e.nuc === nuc)
+    const entry = _nucToEntry.get(nuc)
     if (!entry) return
     _setInstColor(entry, color)
     _setBeadScale(entry, scale)
@@ -2023,7 +2054,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     const bp0 = byBp.get(0)?.['FORWARD']
     if (!bp0) return
     highlightBackbone(bp0, C.highlight_red, 2.0)
-    const se = slabEntries.find(e => e.nuc === bp0)
+    const se = _slabByNuc.get(bp0)
     if (se) _setInstColor(se, C.highlight_yellow)
     const spike = new THREE.ArrowHelper(
       new THREE.Vector3(...bp0.base_normal),
@@ -2179,6 +2210,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // key string → slab entry (for surgical per-bead overrides, e.g. overhang
   // unzip animation that moves only a handful of beads each frame).
   const _keyToSlab = new Map()
+  const _copyKeyToSlab = new Map()
+  const _slabByNuc = new Map()
   const _copySeenSlab = new Map()
   for (const slab of slabEntries) {
     const n = slab.nuc
@@ -2189,6 +2222,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     const ci = _copySeenSlab.get(sk) ?? 0
     _copySeenSlab.set(sk, ci + 1)
     slab._copy = ci
+    _slabByNuc.set(n, slab)
+    _copyKeyToSlab.set(`${sk}:${ci}`, slab)
   }
   // key string → connector cones touching that bead (from OR to), so a surgical
   // per-bead move (setBeadOverrides) can recompose only the affected cones.
@@ -2773,11 +2808,22 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const _clusterAlphaForCyl = (dom) => _clusterAlphaFor(
     dom && { helix_id: dom.helixId, strand_id: dom.strandId, domain_index: dom.domainIndex })
   const _hiddenAlphaFor = (nuc, copy = nuc?.copy_k ?? 0) => _isNucHidden(nuc, copy) ? 0 : 1
+  let _assignedNucsByDomain = null
+  function _ensureAssignedNucsByDomain() {
+    if (_assignedNucsByDomain) return
+    _assignedNucsByDomain = new Map()
+    for (const nuc of assignedGeometry) {
+      const key = `${nuc.strand_id}:${nuc.domain_index}`
+      let entries = _assignedNucsByDomain.get(key)
+      if (!entries) _assignedNucsByDomain.set(key, entries = [])
+      entries.push(nuc)
+    }
+  }
   function _hiddenAlphaForCyl(dom) {
     // Read source geometry, not backboneEntries: cheap cylinder-only builds
     // intentionally allocate no bead instances, but visibility must still work.
-    const nucs = assignedGeometry.filter(n => n.strand_id === dom.strandId &&
-      n.domain_index === dom.domainIndex)
+    _ensureAssignedNucsByDomain()
+    const nucs = _assignedNucsByDomain.get(`${dom.strandId}:${dom.domainIndex}`) ?? []
     return nucs.length && nucs.every(n => _isNucHidden(n, n.copy_k ?? 0)) ? 0 : 1
   }
 
@@ -3037,12 +3083,39 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     coneEntries,
     slabEntries,
 
+    /** Exact live slab transforms for the native-VR visualization bridge.
+     * These are read from the rendered instances after simulation placement, so VR
+     * receives the same center and complete orientation as desktop Full view. */
+    getSlabFrames() {
+      const matrix = new THREE.Matrix4()
+      const center = new THREE.Vector3()
+      const quat = new THREE.Quaternion()
+      const scale = new THREE.Vector3()
+      const axis = new THREE.Vector3()
+      const frames = []
+      for (const slab of slabEntries) {
+        slab.instMesh.getMatrixAt(slab.id, matrix)
+        matrix.decompose(center, quat, scale)
+        const n = slab.nuc
+        const baseKey = `${n.helix_id}:${n.bp_index}:${n.direction}` +
+          ((slab._copy ?? 0) ? `:${slab._copy}` : '')
+        frames.push({
+          base_key: baseKey,
+          center: center.toArray(),
+          axis_x: axis.set(scale.x, 0, 0).applyQuaternion(quat).toArray(),
+          axis_y: axis.set(0, scale.y, 0).applyQuaternion(quat).toArray(),
+          axis_z: axis.set(0, 0, scale.z).applyQuaternion(quat).toArray(),
+        })
+      }
+      return frames
+    },
+
     /** Source instance snapshots for a rigid, single-residue transform preview. */
     residueTransformInfo(target) {
       if (!target || target.helix_id === '__xb__') return null
       const key = `${target.helix_id}:${target.bp_index}:${target.direction}:${target.copy ?? 0}`
       const bead = _copyKeyToEntry.get(key)
-      const slab = slabEntries.find(s => s.nuc === bead?.nuc && (s._copy ?? 0) === (target.copy ?? 0))
+      const slab = _copyKeyToSlab.get(key)
       if (!bead) return null
       const beadMatrix = new THREE.Matrix4()
       bead.instMesh.getMatrixAt(bead.id, beadMatrix)
@@ -3545,8 +3618,14 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     /** Return the _domainCylData entry for a given InstancedMesh instanceId. */
     getCylinderDomainAt(instanceId) { return _domainCylData[instanceId] ?? null },
     /** Return the _overhangCylData entry for a given InstancedMesh instanceId. */
-    getOverhangCylinderDomainAt(instanceId) { return _overhangCylData.find(d => !d.fullCylinder && d.cylIdx === instanceId) ?? null },
-    getOverhangFullCylinderDomainAt(instanceId) { return _overhangCylData.find(d => d.fullCylinder && d.cylIdx === instanceId) ?? null },
+    getOverhangCylinderDomainAt(instanceId) {
+      _ensureCylinderDomainIndex()
+      return _overhangHalfByInstance.get(instanceId) ?? null
+    },
+    getOverhangFullCylinderDomainAt(instanceId) {
+      _ensureCylinderDomainIndex()
+      return _overhangFullByInstance.get(instanceId) ?? null
+    },
     /** The ds-linker bridge cylinder InstancedMesh (full cylinder per __lnk__ helix). */
     getLinkerBridgeCylinderMesh() { return iLinkerBridgeCylinders },
     /** Return {bridgeHelixId, strandId} for a bridge cylinder instanceId. */
@@ -3559,10 +3638,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       // ones — they have a cyl record but the solid cylinder is hidden).
       _cylGlowRefs = (Array.isArray(domainRefs) ? domainRefs : [])
         .filter(r => _isDomainCyl(r.strandId, r.domainIndex))
-      const { straight, overhang, overhangFull } = _refsToCylIdxSets(_cylGlowRefs)
-      _writeCylGlow(iHelixCylGlow, iHelixCylinders, _domainCylData, straight)
-      _writeCylGlow(iOverhangCylGlow, iOverhangCylinders, _overhangCylData.filter(d => !d.fullCylinder), overhang)
-      _writeCylGlow(iOverhangFullCylGlow, iOverhangFullCylinders, _overhangCylData.filter(d => d.fullCylinder), overhangFull)
+      const { straight, overhang, overhangFull } = _refsToCylinderEntries(_cylGlowRefs)
+      _writeCylGlow(iHelixCylGlow, iHelixCylinders, straight)
+      _writeCylGlow(iOverhangCylGlow, iOverhangCylinders, overhang)
+      _writeCylGlow(iOverhangFullCylGlow, iOverhangFullCylinders, overhangFull)
     },
     clearCylinderDomainGlow() {
       _cylGlowRefs = []
@@ -3657,7 +3736,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       }
       for (const entry of coneEntries) {
         if (entry.strandId === null) continue
-        const isScaffold = backboneEntries.find(e => e.nuc.strand_id === entry.strandId)?.nuc?.strand_type === 'scaffold'
+        const isScaffold = strandTypeById.get(entry.strandId) === 'scaffold'
         if (isScaffold) continue
         const r = (!visible || entry.isCrossHelix) ? 0 : entry.coneRadius
         _setConeXZScale(entry, r)
@@ -3689,7 +3768,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           if (entry.nuc.strand_type !== 'scaffold') _setInstColor(entry, entry.defaultColor)
         }
         for (const entry of coneEntries) {
-          if (backboneEntries.find(e => e.nuc.strand_id === entry.strandId)?.nuc?.strand_type !== 'scaffold') {
+          if (strandTypeById.get(entry.strandId) !== 'scaffold') {
             _setInstColor(entry, entry.defaultColor)
           }
         }
@@ -3703,7 +3782,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           _setInstColor(entry, entry.nuc.strand_id === strandId ? entry.defaultColor : DIM)
         }
         for (const entry of coneEntries) {
-          const isScaff = backboneEntries.find(e => e.nuc.strand_id === entry.strandId)?.nuc?.strand_type === 'scaffold'
+          const isScaff = strandTypeById.get(entry.strandId) === 'scaffold'
           if (isScaff) continue
           _setInstColor(entry, entry.strandId === strandId ? entry.defaultColor : DIM)
         }
@@ -5153,7 +5232,22 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       for (const slab of slabEntries) {
         if (!helixSet.has(slab.nuc.helix_id)) continue
         if (domainKeySet && !domainKeySet.has(`${slab.nuc.strand_id}:${slab.nuc.domain_index}`)) continue
-        _cbSlabs.set(slab.nuc, { bnDir: slab.bnDir.clone(), quat: slab.quat.clone() })
+        // Snapshot the ACTUAL rendered center. Re-solving it later from
+        // nuc.base_position is invalid during a Plan-B preview because those
+        // authoritative arrays intentionally remain unchanged until Apply.
+        slab.instMesh.getMatrixAt(slab.id, _tMatrix)
+        const renderedCenter = new THREE.Vector3().setFromMatrixPosition(_tMatrix)
+        _cbSlabs.set(slab.nuc, {
+          center: renderedCenter,
+          bnDir: slab.bnDir.clone(),
+          quat: slab.quat.clone(),
+          basePos: slab.nuc.base_position
+            ? new THREE.Vector3(...slab.nuc.base_position)
+            : null,
+          axisTangent: slab.nuc.axis_tangent
+            ? new THREE.Vector3(...slab.nuc.axis_tangent)
+            : null,
+        })
       }
       // Helix-level axis snapshot (aStart/aEnd + curved-tube transforms). aStart/aEnd
       // are still consumed by overhang half-cylinder math; for partial-coverage clusters
@@ -5309,7 +5403,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       }
       iCones.instanceMatrix.needsUpdate = true
 
-      // 3. Slabs — rotate the frame and recompute the center from the live bead position.
+      // 3. Slabs — rigidly transform the rendered center and frame. Deriving
+      //    the center from nuc.base_position here leaves slabs behind because
+      //    currentGeometry is deliberately not mutated during preview.
       for (const slab of slabEntries) {
         if (!helixSet.has(slab.nuc.helix_id)) continue
         if (domainKeySet && !domainKeySet.has(`${slab.nuc.strand_id}:${slab.nuc.domain_index}`)) continue
@@ -5324,9 +5420,27 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         // arrow.aStart/aEnd are written back in step 4).
         slab.bnDir.copy(_clusterV)
         slab.quat.copy(_clusterQ)
-        _slabAxisDir.set(...slab.nuc.axis_tangent).normalize()
-        const center_ = _slabCenterAt(slab, _slabAxisDir, null, null, _slabCenterD)
-        _tMatrix.compose(center_, _clusterQ, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+        _clusterV.copy(baseData.center).sub(centerVec).applyQuaternion(incrRotQuat)
+        slab.center.set(
+          _clusterV.x + dummyPosVec.x,
+          _clusterV.y + dummyPosVec.y,
+          _clusterV.z + dummyPosVec.z,
+        )
+        if (baseData.basePos) {
+          if (!slab.liveBasePos) slab.liveBasePos = new THREE.Vector3()
+          _clusterV.copy(baseData.basePos).sub(centerVec).applyQuaternion(incrRotQuat)
+          slab.liveBasePos.set(
+            _clusterV.x + dummyPosVec.x,
+            _clusterV.y + dummyPosVec.y,
+            _clusterV.z + dummyPosVec.z,
+          )
+        }
+        if (baseData.axisTangent) {
+          if (!slab.liveAxisTangent) slab.liveAxisTangent = new THREE.Vector3()
+          slab.liveAxisTangent.copy(baseData.axisTangent).applyQuaternion(incrRotQuat)
+        }
+        _tMatrix.compose(slab.center, _clusterQ,
+          _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
         iSlabs.setMatrixAt(slab.id, _tMatrix)
       }
       iSlabs.instanceMatrix.needsUpdate = true
@@ -5509,10 +5623,21 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       for (const slab of slabEntries) {
         if (!helixSet.has(slab.nuc.helix_id)) continue
         if (slab.nuc.helix_id.startsWith('__ext_')) continue
-        if (!slab.nuc.base_normal) continue
-        slab.nuc.base_normal[0] = slab.bnDir.x
-        slab.nuc.base_normal[1] = slab.bnDir.y
-        slab.nuc.base_normal[2] = slab.bnDir.z
+        if (slab.nuc.base_normal) {
+          slab.nuc.base_normal[0] = slab.bnDir.x
+          slab.nuc.base_normal[1] = slab.bnDir.y
+          slab.nuc.base_normal[2] = slab.bnDir.z
+        }
+        if (slab.liveBasePos && slab.nuc.base_position) {
+          slab.nuc.base_position[0] = slab.liveBasePos.x
+          slab.nuc.base_position[1] = slab.liveBasePos.y
+          slab.nuc.base_position[2] = slab.liveBasePos.z
+        }
+        if (slab.liveAxisTangent && slab.nuc.axis_tangent) {
+          slab.nuc.axis_tangent[0] = slab.liveAxisTangent.x
+          slab.nuc.axis_tangent[1] = slab.liveAxisTangent.y
+          slab.nuc.axis_tangent[2] = slab.liveAxisTangent.z
+        }
       }
     },
 

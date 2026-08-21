@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   GUTTER, RULER_H, TOP_PAD, BP_W, LABEL_R,
-  CELL_H, PAIR_Y, ROW_H, GROUP_GAP,
+  CELL_H, PAIR_Y, ROW_H, GROUP_GAP, connectedCellGroups,
 } from './layout.js'
 
 // These constants were lifted verbatim out of pathview.js (TD-03/TD-14) so the
@@ -30,5 +30,20 @@ describe('pathview layout constants', () => {
 
   it('fits both track cells plus a gap inside one row', () => {
     expect(ROW_H).toBeGreaterThan(CELL_H + PAIR_Y)
+  })
+})
+
+describe('connectedCellGroups', () => {
+  it('matches Chebyshev connectivity and first-seen component ordering', () => {
+    expect([...connectedCellGroups([
+      { row: 10, col: 10 }, { row: 0, col: 0 }, { row: 1, col: 1 },
+      { row: 11, col: 9 }, { row: 30, col: 30 },
+    ])]).toEqual([0, 1, 1, 0, 2])
+  })
+
+  it('groups duplicate coordinates without losing either helix', () => {
+    expect([...connectedCellGroups([
+      { row: 2, col: 3 }, { row: 2, col: 3 }, { row: 3, col: 4 },
+    ])]).toEqual([0, 0, 0])
   })
 })

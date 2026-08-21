@@ -1953,4 +1953,49 @@ Symptom the user reported: "can't delete the chain-simulator's completed oxDNA j
   "suite passed". Break the pin on purpose; `set -o pipefail`; find the artefact the pipeline
   actually consumes. [detail](LESSONS_archive.md#h16)
 
+- **L15** — 💾 **Two writers sharing one temp path silently destroyed a 168 GiB result download,
+  repeatedly, for days.** Job `6950d3b79138` (24hb_1xT, 181,149,429,020-byte production DCD on Alpine
+  scratch) was reported at "3 % downloaded" after several attempts that had each reached tens of GB.
+
+  **Mechanism.** `cluster_ssh._stream_get` resumes into `<local_path>.part`.
+  `remote_live_frame._write_single_frame_dcd` wrote its NAMD-checkpoint→one-frame-DCD stand-in to
+  `dest.with_name(dest.name + ".part")` — byte-for-byte the same path — and MDAnalysis' `DCDWriter`
+  opens its target `"wb"`. A live-frame refresh mid-download therefore *truncated* the partial to
+  ~16.2 MB. This was deterministic, not a race: both reuse guards in `fetch_live_frame`
+  (`not force and dest.is_file() and …`, and the `remote_step <= previous_step` check) require
+  `dest.is_file()`, which is false while a download is in flight because only `<dest>.part` exists.
+  So every refresh fell straight through to the writer.
+
+  **Why it then went corrupt rather than merely slow.** After the stomp, `tmp.replace(dest)` left a
+  16.2 MB `.dcd` and no `.part`. The next fetch hit `_stream_get`'s "adopt a short local file as the
+  resumable partial" branch — a legacy migration that assumes a short local file is a *prefix* of the
+  remote one — renamed the stand-in to `.part`, and appended remote bytes from offset 16,200,448.
+  The only completion test was `local.stat().st_size != expected` (`md_executor`), which a
+  corrupt-but-right-length file passes, so the finished download would have been marked `verified`.
+
+  **Forensics that pinned it.** Walking FORTRAN record markers from byte 0: header(84) / titles(244,
+  `ntitle=3`, all-zero — the MDAnalysis signature, not NAMD's ASCII titles) / natom(4) / cell(48) /
+  x,y,z(5,400,004 each) all clean, then a length/trailer mismatch at exactly
+  **16,200,448 = 356 header + 16,200,092 frame**. NSET=1 in the header. Everything past that offset
+  is genuine remote data at the *correct* offset, because `_stream_get` always seeks to the local
+  file size.
+
+  **Repair.** Because the stand-in is exactly one header + one frame, the corrupt region and its
+  replacement are the same length — so the fix is an in-place overwrite of `remote[0:head]` at offset
+  0, not a rewrite of the file. `scripts/repair_dcd_partial.py` refuses unless the first bad boundary
+  sits exactly at `header_size + frame_size`, then re-validates. Recovered 83.8 GB (46 %) of this job.
+
+  **Fix.** Stand-in temp suffix is now `.live-tmp` (pinned by a source-inspecting test);
+  `remote_live_frame.download_in_flight()` refuses a snapshot while a partial or a matching
+  `download_status.current_file` exists; `backend/core/resume_transfer.py` gates every resume on
+  three independent checks — a sidecar (remote path/size/mtime identity), a 1 MiB tail re-read
+  byte-compared against the remote, and a sampled DCD frame-boundary walk (the *only* one that can
+  see a corrupt head); checkpoint fsync + sidecar every 64 MiB; and a partial that fails any check is
+  **quarantined to `.part.rejected`, never deleted**.
+
+  **Generalisable rule.** A `.part`/`.tmp` suffix is a *namespace*, and any second writer in it is a
+  data-loss bug. And for a resumable transfer, byte count is not integrity: verify the prefix, and
+  when you distrust a partial, quarantine it — silent deletion is the failure you were trying to
+  prevent.
+
 > **Detail.** Full entries live in [LESSONS_archive.md](LESSONS_archive.md). Open only the entry that matches your symptom.

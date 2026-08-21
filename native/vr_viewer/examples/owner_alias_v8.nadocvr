@@ -1,0 +1,8 @@
+NADOCVR 8 full strand
+# Natural and Expanded poses retain identical canonical owner aliases.
+R full
+P base:one 0 0 0 .1 1 0 0 1 0 0 1 0 0 1 0 0
+A base:one 3 %5B%22base%22%2C%22h%3A1%3A0%3AFORWARD%22%5D %5B%22domain%22%2C%22s%3A1%22%2C0%5D %5B%22strand%22%2C%22s%3A1%22%5D
+E full
+P base:one 1 0 0 .1 1 0 0 1 0 0 1 0 0 1 0 0
+A base:one 3 %5B%22base%22%2C%22h%3A1%3A0%3AFORWARD%22%5D %5B%22domain%22%2C%22s%3A1%22%2C0%5D %5B%22strand%22%2C%22s%3A1%22%5D

@@ -721,6 +721,110 @@ def test_the_fast_preset_stops_settled_stages_and_the_literature_one_does_not(cl
     assert "early_stop_off" in lit and "early_stop" not in lit
 
 
+def test_declash_none_is_off_not_auto_detected(client, monkeypatch):
+    """RE-AUDIT CONCLUDED (2026-08-19): a manual wizard run of 6hb_2xT left the Declash
+    control untouched, expecting that to mean off. It didn't — untouched meant
+    "auto-detect", which silently re-engaged declash's gentle-tier minimisation-ENM
+    exclusion underneath the wizard's OWN unconditional 4 fs/HMR ladder pin, exactly
+    the unstable combination declash exists to keep apart. declash is now
+    explicit-only: unspecified (None) must resolve to OFF even on a design that would
+    have auto-triggered it under the old rule, full stop — not just "False overrides
+    auto-detection" (which left None still auto-detecting)."""
+    from backend.api import routes_md_plan
+
+    monkeypatch.setattr(
+        routes_md_plan, "_design_flags",
+        lambda **_: {"known": True, "extra_bases": True, "extra_base_declash": True,
+                     "extensions": False, "aspect_ratio": 1.0},
+    )
+    # Untouched (None), even on a design the OLD rule would have auto-triggered on.
+    untouched = _plan(client)
+    assert untouched["declash"] is False
+    untouched_ladder = [r for r in untouched["stages"] if r["role"] == "ladder"]
+    # Only the ladder's own universal "soft start" segment (the first one whose
+    # solute atoms actually move, unrelated to declash; see
+    # mgh_slow_release_segments) stays gentle — same as any ordinary design.
+    assert sum(1 for r in untouched_ladder if r["gentle"]) == 1
+
+    # The information is not lost — it surfaces as an advisory on the control itself.
+    cond = next(
+        c for c in untouched["conditions"]
+        if c["id"] == "declash_off_on_a_clash_prone_design"
+    )
+    assert cond["kind"] == "warning"
+    assert cond["source"] == "CreateJobRequest.declash"
+
+    # Explicit False resolves identically to untouched (both OFF) and carries the
+    # SAME advisory — it states an objective fact about the design (2+ extra bases at
+    # a junction), not a verdict on whether leaving declash off was deliberate, so it
+    # does not matter which way declash ended up off.
+    forced_off = _plan(client, declash=False)
+    assert forced_off["declash"] is False
+    assert "declash_off_on_a_clash_prone_design" in {
+        c["id"] for c in forced_off["conditions"]
+    }
+
+    # Explicit True still forces it on, and drops the advisory (declash is no longer
+    # off, so there is nothing to warn about).
+    forced_on = _plan(client, declash=True)
+    assert forced_on["declash"] is True
+    assert "declash_off_on_a_clash_prone_design" not in {
+        c["id"] for c in forced_on["conditions"]
+    }
+    forced_on_ladder = [r for r in forced_on["stages"] if r["role"] == "ladder"]
+    assert sum(1 for r in forced_on_ladder if r["gentle"]) == len(forced_on_ladder)
+
+
+def test_declash_advisory_is_silent_on_an_ordinary_design(client, monkeypatch):
+    """No junction inserts extra bases, no extensions — nothing to warn about, whether
+    declash is left off (the now-only sensible default) or forced on by hand."""
+    from backend.api import routes_md_plan
+
+    monkeypatch.setattr(
+        routes_md_plan, "_design_flags",
+        lambda **_: {"known": True, "extra_bases": False, "extra_base_declash": False,
+                     "extensions": False, "aspect_ratio": 1.0},
+    )
+    plan = _plan(client)
+    assert plan["declash"] is False
+    assert "declash_off_on_a_clash_prone_design" not in {
+        c["id"] for c in plan["conditions"]
+    }
+
+
+def test_pinned_4fs_on_a_declash_ladder_is_honored_and_warned_not_capped(client):
+    """The wizard's Ladder-timestep control used to be silently capped back to 2 fs on
+    every stage of a declash design, with no indication anything had been overridden.
+    A pin now reaches every stage, and the risk shows up as a warning condition on the
+    control that caused it, per 'warn, never block' (feedback_namd_4fs_production_only.md)."""
+    plan = _plan(client, declash=True, relax_timestep_fs=4.0)
+    ladder = [r for r in plan["stages"] if r["role"] == "ladder"]
+    assert ladder and all(r["timestep_fs"] == 4.0 for r in ladder)
+
+    cond = next(
+        c for c in plan["conditions"] if c["id"] == "relax_timestep_pinned_above_tier"
+    )
+    assert cond["kind"] == "warning"
+    assert cond["source"] == "CreateJobRequest.relax_timestep_fs"
+
+    # At/below the tier's own measured-safe rate: honored, no risk condition raised.
+    quiet = _plan(client, declash=True, relax_timestep_fs=2.0)
+    assert "relax_timestep_pinned_above_tier" not in {
+        c["id"] for c in quiet["conditions"]
+    }
+    quiet_ladder = [r for r in quiet["stages"] if r["role"] == "ladder"]
+    assert quiet_ladder and all(r["timestep_fs"] == 2.0 for r in quiet_ladder)
+
+    # Not pinned at all (auto fast=True derives 4 fs, then declash silently caps it as
+    # before) — the existing, deliberately-unfixed defect this leaves untouched.
+    auto = _plan(client, declash=True)
+    assert "relax_timestep_pinned_above_tier" not in {
+        c["id"] for c in auto["conditions"]
+    }
+    auto_ladder = [r for r in auto["stages"] if r["role"] == "ladder"]
+    assert auto_ladder and all(r["timestep_fs"] == 2.0 for r in auto_ladder)
+
+
 def test_an_unknown_kind_is_rejected(client):
     r = client.post("/api/md/protocol-plan", json={"kind": "nonsense"})
     assert r.status_code == 400
@@ -905,14 +1009,19 @@ def test_the_production_integrator_axes_reach_the_previewed_conf(client, parent_
     values while the job ran the chosen ones.
     """
     plan = _prod_plan(
-        client, parent_job, production_timestep_fs=2.0,
-        production_rigid_bonds="none", production_hmr=True,
+        client,
+        parent_job,
+        production_timestep_fs=2.0,
+        production_rigid_bonds="none",
+        production_hmr=True,
     )
     run = plan["stages"][plan["run_stage_index"]]
     assert run["params"]["timestep"] == "2"
     assert run["params"]["rigidbonds"] == "none"
     assert plan["production_request"]["production_hmr"] == {
-        "value": True, "provenance": "user", "reason": ""
+        "value": True,
+        "provenance": "user",
+        "reason": "",
     }
 
 
@@ -1085,9 +1194,7 @@ def test_a_chained_plan_reads_its_chemistry_from_the_ROOT_relaxation(
     assert inh["parent_length_ns"] == 200.0
 
 
-def test_a_continuation_is_unrestrained_by_default(
-    client, chain_parent
-):
+def test_a_continuation_is_unrestrained_by_default(client, chain_parent):
     """Continuation is opt-in; the ordinary production default remains unrestrained."""
     req = _prod_plan(client, chain_parent)["production_request"]
     assert req["enm_restraints"]["value"] == "off"
@@ -1308,13 +1415,21 @@ def test_the_chunking_deviation_reports_the_real_split():
     assert f"{len(P.LADDER_CHUNK_PCTS)} chunks" in d["ours"]
 
 
-def test_the_declash_trigger_is_flagged_for_re_audit():
-    """The gentle tier was set by a 25 ps probe and costs a doubled ladder; the note has
-    to survive refactors, because the arithmetic bug and the trigger must be settled
-    together."""
+def test_the_declash_auto_trigger_conclusion_is_recorded():
+    """The re-audit this note tracked concluded 2026-08-19: a manual wizard run showed
+    the OLD auto-trigger silently re-engaging declash's gentle tier underneath the
+    wizard's own unconditional 4 fs/HMR ladder pin — exactly the unstable combination
+    declash existed to keep apart. declash is now explicit-only (see
+    test_declash_none_is_off_not_auto_detected); this pins that the conclusion, and
+    the exp49 evidence lineage that led to it, survive refactors."""
     src = inspect.getsource(P.prepare_mgh_slow_release)
-    assert "MARKED FOR RE-AUDIT" in src
+    assert "RE-AUDIT CONCLUDED" in src
     assert "exp49" in src
+    # The arithmetic bug the old comment flagged (a declash ladder keeps `fast=True`
+    # while every segment carries `gentle`, so 4 fs-sized step counts run at 2 fs) is
+    # unrelated to WHEN declash engages and is not fixed by this — still live whenever
+    # declash is explicitly turned on. Pinned by its own test:
+    # test_declash_stages_run_half_their_intended_length.
 
 
 # ── Per-stage overrides: every parameter of every stage is editable ───────────

@@ -219,13 +219,17 @@ def test_md_rmsf_payload_carries_copy_for_loop_bases(monkeypatch):
     def _fake_ctx(*a, **k):
         return fake_ctx
 
-    def _fake_frame(ctx, gidx, with_c1p=False, with_termini=False):
+    def _fake_frame(
+        ctx, gidx, with_c1p=False, with_termini=False, with_base_centers=False
+    ):
         # distinct, frame-varying positions per nucleotide; unit +z normals
         base = np.arange(n, dtype=float)[:, None] * np.array([1.0, 0.5, 0.25])
         p_nm = base + gidx * 0.01
         normals = np.tile([0.0, 0.0, 1.0], (n, 1))
         empty = np.zeros((0, 3))
         if with_termini:
+            if with_base_centers:
+                return p_nm, normals, p_nm + normals * 0.3, empty, empty
             return p_nm, normals, empty, empty
         return p_nm, normals
 
@@ -238,6 +242,8 @@ def test_md_rmsf_payload_carries_copy_for_loop_bases(monkeypatch):
     assert len(positions) == n  # every nucleotide, incl. loop copy
     # Every payload entry exposes `copy`; the loop copy carries copy==1.
     assert all("copy" in p for p in positions)
+    assert all("base_position" in p for p in positions)
+    assert all(all(axis in p for axis in ("tx", "ty", "tz")) for p in positions)
     loop = [
         p
         for p in positions

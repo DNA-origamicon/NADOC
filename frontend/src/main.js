@@ -15,6 +15,15 @@
 
 import * as THREE from 'three'
 import { initScene }                 from './scene/scene.js'
+import { initVRSession }             from './scene/vr_session.js'
+import { buildVRVisualizationSnapshot } from './scene/vr_visualization_snapshot.js'
+import { initialVRToolShellState, reduceVRToolShell } from './scene/vr_tool_shell.js'
+import { createVRToolTransactionCoordinator } from './scene/vr_tool_transaction.js'
+import {
+  initialVRToolConfigState, reduceVRToolConfig, vrPlaneFeedbackPayload,
+} from './scene/vr_tool_config.js'
+import { vrToolFeedbackPayload } from './scene/vr_tool_context.js'
+import { createVRToolPreflightCoordinator } from './scene/vr_tool_preflight_coordinator.js'
 import { createGlowLayer }           from './scene/glow_layer.js'
 import { initDesignRenderer }        from './scene/design_renderer.js'
 import { deferrableContextMenu }      from './scene/right_click_menu.js'
@@ -61,6 +70,7 @@ import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
 import { initCommandPalette }  from './ui/command_palette.js'
 import { initStrandLengthHistogram } from './ui/strand_length_histogram.js'
 import { initMolecularPlacementAudit } from './ui/molecular_placement_audit.js'
+import { initExtraBaseMetricsAudit } from './ui/extra_base_metrics_audit.js'
 import { initHullAudit } from './ui/hull_audit.js'
 import { initOverhangSequencesPanel } from './ui/overhang_sequences_panel.js'
 import { initOverhangDialog } from './ui/overhang_dialog.js'
@@ -617,6 +627,14 @@ async function main() {
     getRegionBallstickRenderer: () => _atomSurface.getRegionBallstickRenderer(),
     getRegionStickRenderer: () => _atomSurface.getRegionStickRenderer(),
     getRegionSurfaceRenderer:   () => _atomSurface.getRegionSurfaceRenderer(),
+    getDomainEndTable: () => {
+      const state = store.getState()
+      const displayOnlyPose = state.cadnanoActive || state.unfoldActive ||
+        state.deformVisuActive === false
+      return displayOnlyPose
+        ? bluntEnds?.getVRToolEndTable?.() ?? []
+        : bluntEnds?.getEndTable?.() ?? []
+    },
     onDrillLevel: selectionFilter.reflectDrillLevel,
     onNick: async ({ helixId, bpIndex, direction }) => {
       _clearStapleChecks()
@@ -1103,6 +1121,9 @@ async function main() {
   const mdDisplayController = initMdPanel(store, {
     designRenderer, atomisticRenderer,
     onRestoreDesignHeavy: _restoreDesignHeavy,
+    // Lazy because the atom/surface controller is initialized below. Using its
+    // visibility hub keeps beads, slabs and arcs together during a held handoff.
+    setCGVisible: visible => _atomSurface?.setCGVisible?.(visible),
     // Lazy: _atomSurface is assigned further below.  MD sets the atomistic mode itself,
     // so it needs this to pull the live coloring mode + strand palette onto its atoms.
     refreshAtomColors: () => _atomSurface?.refreshAtomColors?.(),
@@ -1211,8 +1232,8 @@ async function main() {
   const _oxdnaRunElements = () => ({
     field: efieldSetup?.getFieldSpec?.(),
     surface: oxdnaFloorSetup?.getSurfaceSpec?.(),
-    // Phase 1: carried alongside the run elements but not yet injected into the submit
-    // payload (the oxdna_jobs_panel builders still read only surface dir/offset/stiff).
+    // A relaxation BUILDS the capture strands into the system; a production run can only
+    // inherit them from its relaxed parent (oxdna_jobs_panel.captureStrandRunPlan).
     surfaceStrands: oxdnaSurfaceStrandsSetup?.getStrandsSpec?.(),
     anchors: oxdnaAnchorsSetup?.getAnchors?.() || [],
   })
@@ -1221,7 +1242,12 @@ async function main() {
   const _oxdnaApplyConfig = (cfg = {}) => {
     efieldSetup?.applyConfig?.(cfg.field)
     oxdnaFloorSetup?.applyConfig?.(cfg.surface)
-    oxdnaSurfaceStrandsSetup?.applyConfig?.(cfg.surfaceStrands)   // null until Phase 2 persists it
+    // The floor card's applyConfig does not fire its onChange, so the capture-strand
+    // prerequisite gate has to be re-synced by hand — and BEFORE the strands echo, or
+    // a job that ran on a surface comes back with its strands checkbox still disabled
+    // (and setSurfaceEnabled would then force the echoed-on toggle back off).
+    oxdnaSurfaceStrandsSetup?.setSurfaceEnabled?.(oxdnaFloorSetup?.isEnabled?.())
+    oxdnaSurfaceStrandsSetup?.applyConfig?.(cfg.surfaceStrands)
     oxdnaAnchorsSetup?.applyConfig?.(cfg.anchors)
   }
   const oxdnaLive = initOxdnaLive({
@@ -1686,8 +1712,7 @@ async function main() {
     // the CG stays up until those land (onHeavyApplied).  THREE controllers can drive it,
     // and each is asked whether it can deliver the specific `kind` being built:
     //   oxdnaDisplay — oxDNA relaxed/rmsf/trajectory: atomistic AND surface
-    //   mdViz        — NAMD flex/trajectory: only what md_viz_adapter maps (trajectory
-    //                  atomistic+surface; the flexibility-map heavy routes are unmapped)
+    //   mdViz        — NAMD flex/trajectory: measured atomistic coordinates and surfaces
     //   mdDisplayController — the live "Display MD" stream: atomistic only, never surface
     // Asking without the kind (or forgetting a controller, as this did for both NAMD paths
     // until 2026-08-01) either pays the full design build twice or defers to an overlay
@@ -3606,10 +3631,13 @@ async function main() {
   // _resetForNewDesign, and any other place that calls slicePlane.hide/show directly.
 
   // ── Selection filter toggles ──────────────────────────────────────────────────
-  // Hide the slice plane when the deform tool opens.
+  // Tool-driven navigation mirrors Move/Rotate: Bend/Twist owns a Properties
+  // card, so activating either deformation tool reveals that tab even when the
+  // user launched it from a menu, a blunt end, or the feature log.
   // Slice plane: cross-section geometry is only valid on the undeformed model.
   store.subscribe((newState, prevState) => {
     if (newState.deformToolActive && !prevState.deformToolActive) {
+      rightSidebar?.open?.('properties')
       if (slicePlane.isVisible()) {
         slicePlane.hide()
         crossSectionMinimap.clearSlice()
@@ -5784,6 +5812,405 @@ async function main() {
   document.getElementById('help-modal-close')?.addEventListener('click', () => helpModal.classList.remove('visible'))
   helpModal?.addEventListener('click', e => { if (e.target === helpModal) helpModal.classList.remove('visible') })
 
+  document.getElementById('menu-help-open-steamvr')?.addEventListener('click', async event => {
+    const button = event.currentTarget
+    button.disabled = true
+    let status
+    try {
+      status = await api.startSteamVR()
+    } catch {
+      showToast(api.lastErrorMessage() || 'SteamVR did not start.', { severity: 'error' })
+      return
+    } finally {
+      button.disabled = false
+    }
+    if (!status?.steamvr_running) {
+      showToast(api.lastErrorMessage() || 'SteamVR did not start.', { severity: 'error' })
+      return
+    }
+    if (!status.dashboard_running) {
+      showToast('SteamVR started, but its Dashboard is still loading. Try the Vive System button shortly.')
+      return
+    }
+    if (!status.desktop_overlay_running) {
+      showToast('SteamVR is ready, but its desktop helper is still loading. NADOC VR’s Menu → Desktop remains available.')
+      return
+    }
+    showToast('SteamVR is ready. In NADOC VR, open the controller menu and select Desktop for the live interactive desktop.')
+  })
+
+  let _vrToolShellState = initialVRToolShellState
+  let _vrToolConfigState = initialVRToolConfigState
+  let _vrToolExecutionSequence = 0
+  const _vrToolTransaction = createVRToolTransactionCoordinator({
+    getState: store.getState,
+    undoDesign: api.undo,
+  })
+  const _sendVRToolExecution = async (event, status, reason, transaction = null) => {
+    const targetIdentity = transaction?.targetIdentity ?? event.targetIdentity
+    const targetKind = transaction?.targetKind ?? event.targetKind
+    if (!targetIdentity || !targetKind || targetKind === 'none') return Promise.resolve(null)
+    const payload = {
+      execution_sequence: ++_vrToolExecutionSequence,
+      tool_sequence: event.sequence,
+      tool_mode: event.mode,
+      tool_action: event.action,
+      target_identity: targetIdentity,
+      target_kind: targetKind,
+      status,
+      reason,
+      feature_log_entry_id: status === 'succeeded'
+        ? transaction?.featureLogEntryId ?? null : null,
+    }
+    let result
+    try {
+      result = await api.sendVRToolExecutionFeedback(payload)
+    } catch (error) {
+      if (status === 'pending') throw error
+      // A lost response is ambiguous: replay the same idempotent sequence, then
+      // use the server's monotonic cursor to rebase only this terminal verdict.
+      result = await api.sendVRToolExecutionFeedback(payload)
+    }
+    if (result?.published !== false || status === 'pending') return result
+    const current = Number(result?.current_execution_sequence ?? 0)
+    if (Number.isSafeInteger(current)) {
+      _vrToolExecutionSequence = Math.max(_vrToolExecutionSequence, current)
+    }
+    return api.sendVRToolExecutionFeedback({
+      ...payload,
+      execution_sequence: ++_vrToolExecutionSequence,
+    })
+  }
+  const _vrToolPreflight = createVRToolPreflightCoordinator({
+    sendFeedback: api.sendVRToolPreflightFeedback,
+  })
+  const _requestVRToolPreflight = (
+    sequence, draft, { waitingReason = null } = {},
+  ) => {
+    if (!draft) return
+    const targetSnapshotPresent = draft.target_kind !== 'none' ||
+      !!draft.target_identity || !!draft.target_owner_tokens?.length
+    const toolTarget = targetSnapshotPresent
+      ? selectionManager.resolveVRToolTargetSnapshot?.({
+          identity: draft.target_identity,
+          selectionKind: draft.target_kind,
+          ownerTokens: draft.target_owner_tokens,
+        }) ?? null
+      : null
+    const { currentDesign, currentGeometry } = store.getState()
+    _vrToolPreflight.request(sequence, draft, {
+      toolTarget, design: currentDesign, geometry: currentGeometry, api,
+    }, { waitingReason }).catch(() => {})
+  }
+  store.subscribe((newState, prevState) => {
+    const designChanged = newState.currentDesign !== prevState.currentDesign
+    const geometryChanged = newState.currentGeometry !== prevState.currentGeometry
+    if ((!designChanged && !geometryChanged) || !_vrToolConfigState.draft) return
+    _requestVRToolPreflight(
+      _vrToolConfigState.sequence,
+      _vrToolConfigState.draft,
+      { waitingReason: designChanged ? 'design_changed' : 'geometry_changed' },
+    )
+  })
+  const _vrCompanionState = () => {
+    const visualizations = [
+      [mdDisplayController, 'namd'], [mdViz, 'namd'],
+      [oxdnaDisplay, 'oxdna'], [lammpsDisplay, 'lammps'],
+      [snupiDisplay, 'snupi'], [bladeDisplay, 'blade'],
+      [candoDisplay, 'cando'], [mrdnaDisplay, 'mrdna'],
+    ]
+    const activeVisualization = visualizations.find(([controller]) => {
+      const mode = controller?.mode?.()
+      return controller?.isActive?.() || controller?.deformActive?.() ||
+        (mode != null && mode !== 'off')
+    })
+    const activeMode = activeVisualization
+      ? `${activeVisualization[1]}_${activeVisualization[0].mode?.() || 'display'}`
+      : 'none'
+    // During an atomistic -> Full MD handoff the menu has already changed, but
+    // md_panel deliberately keeps the atom renderer visible until the correct CG
+    // payload is resident. Report the renderer that is actually on screen so a
+    // companion refresh can never pair Full ownership with atom coordinates.
+    const mdRenderedRepr = mdDisplayController.renderedRepresentation?.()
+    const renderedAtomisticMode = atomisticRenderer.getMode?.()
+    const renderedRepr = mdRenderedRepr ?? (
+      ['vdw', 'ballstick', 'stick'].includes(renderedAtomisticMode)
+        ? renderedAtomisticMode : _currentRepr
+    )
+    const representation = renderedRepr === 'vdw' ? 'ballstick' :
+      (['cylinders', 'full', 'ballstick', 'stick'].includes(renderedRepr)
+        ? renderedRepr : 'full')
+    const visualizationAtoms = []
+    if (activeVisualization && ['ballstick', 'stick'].includes(representation)) {
+      atomisticRenderer.visitAtoms?.((atom, position) => {
+        visualizationAtoms.push({
+          atom: {
+            name: atom?.name,
+            base_key: atom?.base_key,
+            scalar_key: atom?.scalar_key,
+            helix_id: atom?.helix_id,
+            bp_index: atom?.bp_index,
+            direction: atom?.direction,
+            copy_k: atom?.copy_k ?? 0,
+          },
+          position: position.toArray(),
+        })
+      })
+    }
+    return {
+      representation,
+      coloring: ['strand', 'base', 'cluster', 'cpk'].includes(store.getState().coloringMode)
+        ? store.getState().coloringMode : 'strand',
+      ...buildVRVisualizationSnapshot(
+        designRenderer.getFemPositions?.(),
+        designRenderer.getScalarColors?.(),
+        activeMode,
+        {
+          slabFrames: designRenderer.getFemSlabFrames?.(),
+          atoms: visualizationAtoms,
+        },
+      ),
+    }
+  }
+
+  let _vrStyleApply = Promise.resolve()
+  const vrSession = initVRSession({
+    renderer,
+    scene,
+    camera,
+    button: document.getElementById('menu-help-view-vr'),
+    getRenderCamera,
+    setMenuToggle: _setMenuToggle,
+    showToast,
+    native: {
+      status: api.getVRStatus,
+      event: api.getVREvent,
+      launch: () => api.launchNativeVR({
+        ..._vrCompanionState(),
+        camera: captureCurrentCamera(),
+        measured_positioning: isNewPositioningOn(),
+        assembly_active: store.getState().assemblyActive,
+        show_periodic_seam_arcs: store.getState().showPeriodicSeamArcs === true,
+        selection_level: selectionManager.getSelectionLevel?.() ?? 'default',
+        selected_owner_tokens: selectionManager.getVRInitialSelectionOwnerTokens?.() ?? [],
+        selected_selection_kind: selectionManager.getVRInitialSelectionKind?.() ?? 'none',
+      }),
+      stop: api.stopNativeVR,
+      errorMessage: api.lastErrorMessage,
+    },
+    publishNativeJobs: () => api.refreshNativeVRVisualization(_vrCompanionState()),
+    onNativeEvent: event => {
+      const button = document.getElementById('menu-help-view-vr')
+      if (event?.type === 'style') {
+        // Native menu choices are requests, not local renderer mutations. Route
+        // them through the exact desktop representation state machine (including
+        // live-MD payload handoffs), serialize rapid requests, then publish the
+        // acknowledged desktop state back to the companion.
+        _vrStyleApply = _vrStyleApply.then(async () => {
+          await _setRepresentation(event.representation)
+          _setColoringMode(event.coloring)
+          await vrSession.publishNativeState?.()
+        }).catch(() => {
+          showToast('Could not apply the VR representation on desktop.', { severity: 'error' })
+        })
+      } else if (event?.type === 'selection_level') {
+        selectionManager.setSelectionLevel?.(event.level)
+        selectionManager.previewVRIdentity?.(button?.dataset.vrHoverIdentity || null)
+      } else if (event?.type === 'select') {
+        const result = selectionManager.selectVRIdentities?.(event.identities ?? [event.identity])
+          ?? selectionManager.selectVRIdentity?.(event.identity)
+        api.sendVRFeedback({
+          select_sequence: event.sequence,
+          identity: result?.identity ?? event.identity,
+          accepted: result?.accepted === true,
+          selected: result?.selected === true,
+          selection_level: selectionManager.getSelectionLevel?.() ?? 'default',
+          owner_tokens: result?.ownerTokens ?? [],
+          selection_kind: result?.selectionKind ?? 'none',
+          selected_identities: result?.selectedIdentities ?? [],
+          selected_owner_tokens: result?.selectedOwnerTokens ?? [],
+        }).catch(() => {})
+      } else if (event?.type === 'tool_config') {
+        const draft = event.draft
+        const targetSnapshotPresent = draft?.target_kind !== 'none' ||
+          !!draft?.target_identity || !!draft?.target_owner_tokens?.length
+        const toolTarget = targetSnapshotPresent
+          ? selectionManager.resolveVRToolTargetSnapshot?.({
+              identity: draft.target_identity,
+              selectionKind: draft.target_kind,
+              ownerTokens: draft.target_owner_tokens,
+            }) ?? null
+          : null
+        const result = reduceVRToolConfig(_vrToolConfigState, event, {
+          toolTarget,
+          targetSnapshotPresent,
+        })
+        _vrToolConfigState = result.state
+        if (result.accepted && draft?.target_kind === 'end') {
+          const feedback = vrToolFeedbackPayload(event.sequence, draft, result.state)
+          if (feedback) api.sendVRToolFeedback(feedback).catch(() => {})
+        }
+        _requestVRToolPreflight(event.sequence, draft)
+      } else if (event?.type === 'plane_pick') {
+        const draft = _vrToolConfigState.draft
+        const targetSnapshotPresent = draft?.target_kind !== 'none' ||
+          !!draft?.target_identity || !!draft?.target_owner_tokens?.length
+        const toolTarget = targetSnapshotPresent
+          ? selectionManager.resolveVRToolTargetSnapshot?.({
+              identity: draft?.target_identity,
+              selectionKind: draft?.target_kind,
+              ownerTokens: draft?.target_owner_tokens,
+            }) ?? null
+          : null
+        const pick = toolTarget
+          ? selectionManager.resolveVRDeformationPlanePick?.(event.identity) ?? null
+          : null
+        const feedback = vrPlaneFeedbackPayload(event, _vrToolConfigState, {
+          toolTarget, planePick: pick,
+        })
+        if (feedback) api.sendVRPlaneFeedback(feedback).catch(() => {})
+      } else if (event?.type === 'tool') {
+        const targetSnapshotPresent = event.targetKind !== 'none' ||
+          !!event.targetIdentity || !!event.targetOwnerTokens?.length
+        const toolTarget = targetSnapshotPresent
+          ? selectionManager.resolveVRToolTargetSnapshot?.({
+              identity: event.targetIdentity,
+              selectionKind: event.targetKind,
+              ownerTokens: event.targetOwnerTokens,
+            }) ?? null
+          : null
+        const result = reduceVRToolShell(_vrToolShellState, event, {
+          toolTarget,
+          targetSnapshotPresent,
+          executorAttached: event.mode === 'move_rotate',
+          undoAvailable: _vrToolTransaction.snapshot().committed?.tool === event.mode,
+        })
+        _vrToolShellState = result.state
+        const label = event.mode === 'move_rotate'
+          ? 'Move / Rotate'
+          : `${event.mode?.[0]?.toUpperCase() ?? ''}${event.mode?.slice(1) ?? ''}`
+        if (result.reason === 'configuration_required') {
+          const remaining = event.mode === 'extrude'
+            ? 'the settings page is available; exact slice-footprint placement is still unresolved'
+            : 'the settings page is available; ordered plane placement is still unresolved'
+          showToast(`VR ${label}: target recognized; ${remaining}.`)
+        } else if (result.reason === 'unsupported_selection') {
+          showToast(`VR ${label}: this target has no exact tool contract and was not widened.`)
+        } else if (result.reason === 'stale_target' ||
+            result.reason === 'target_changed_preview_required') {
+          showToast(`VR ${label}: the target changed; select it again and restart Preview.`)
+        } else if (result.reason === 'waiting_selection' ||
+            result.reason === 'selection_required') {
+          showToast(`VR ${label}: select a canonical target first.`)
+        } else if (result.effect?.type === 'preview_requested') {
+          if (result.effect.tool === 'move_rotate') {
+            const previewStart = result.effect.selectedRef.kind === 'cluster'
+              ? _translateRotateTool.beginVRPreview(result.effect.selectedRef.id)
+              : Promise.resolve(
+                  _nucleotideTransformTool.beginVRPreview(result.effect.selectedRef))
+            previewStart.then(status => {
+              if (status?.accepted) {
+                showToast('VR Move / Rotate preview is mirrored on the desktop; Confirm commits one undoable edit.')
+              } else {
+                showToast(
+                  'VR Move / Rotate could not mirror because the desktop tool is already active.',
+                  { severity: 'error' },
+                )
+              }
+            }).catch(() => showToast(
+              'VR Move / Rotate desktop preview failed to start.', { severity: 'error' },
+            ))
+          } else {
+            showToast(`VR ${label}: preview intent received; the design is unchanged.`)
+          }
+        } else if (result.effect?.type === 'commit_requested') {
+          if (result.effect.tool !== 'move_rotate') {
+            showToast(`VR ${label}: confirm is staged; its mutation executor is not attached yet.`)
+          } else {
+            _sendVRToolExecution(event, 'pending', 'committing').catch(() => {})
+            const execute = result.effect.selectedRef.kind === 'cluster'
+              ? _translateRotateTool.confirmVRPreview
+              : _nucleotideTransformTool.confirmVRPreview
+            _vrToolTransaction.commit({
+              tool: result.effect.tool,
+              targetKey: result.state.targetKey,
+              targetIdentity: event.targetIdentity,
+              targetKind: event.targetKind,
+              execute,
+            }).then(outcome => {
+              const status = outcome.accepted ? 'succeeded'
+                : outcome.reason === 'transaction_busy' ? 'refused' : 'failed'
+              return _sendVRToolExecution(
+                event, status, outcome.reason, outcome.transaction,
+              ).then(() => outcome)
+            }).then(outcome => {
+              showToast(outcome.accepted
+                ? 'VR Move / Rotate committed. Undo now targets exactly this edit.'
+                : `VR Move / Rotate was not committed (${outcome.reason}).`,
+              outcome.accepted ? {} : { severity: 'error' })
+            }).catch(() => showToast(
+              'VR Move / Rotate acknowledgement failed; verify the desktop before retrying.',
+              { severity: 'error' },
+            ))
+          }
+        } else if (result.effect?.type === 'cancel_requested') {
+          if (result.effect.tool === 'move_rotate') {
+            Promise.all([
+              _translateRotateTool.cancelVRPreview(),
+              Promise.resolve(_nucleotideTransformTool.cancelVRPreview()),
+            ]).then(() => {
+              showToast('VR Move / Rotate preview cancelled and desktop geometry restored.')
+            }).catch(() => showToast(
+              'VR Move / Rotate desktop restore failed.', { severity: 'error' },
+            ))
+          } else {
+            showToast(`VR ${label}: preview cancelled.`)
+          }
+        } else if (result.effect?.type === 'undo_requested') {
+          if (!result.accepted) {
+            showToast('VR tools have no committed edit to undo yet.')
+          } else {
+            _sendVRToolExecution(event, 'pending', 'undoing').catch(() => {})
+            _vrToolTransaction.undo({ tool: result.effect.tool }).then(outcome => {
+              const status = outcome.accepted ? 'succeeded'
+                : outcome.reason === 'undo_stale_desktop_changed' ? 'refused' : 'failed'
+              return _sendVRToolExecution(
+                event, status, outcome.reason, outcome.transaction,
+              ).then(() => outcome)
+            }).then(outcome => {
+              showToast(outcome.accepted
+                ? 'The last VR Move / Rotate edit was undone.'
+                : `VR Undo was refused (${outcome.reason}).`,
+              outcome.accepted ? {} : { severity: 'error' })
+            }).catch(() => showToast(
+              'VR Undo acknowledgement failed; verify the desktop before retrying.',
+              { severity: 'error' },
+            ))
+          }
+        }
+      } else if (event?.type === 'tool_transform') {
+        if (!_nucleotideTransformTool.applyVRPreviewMatrix(event.matrix)) {
+          _translateRotateTool.applyVRPreviewMatrix(event.matrix)
+        }
+      } else if (event?.type === 'native_session_end') {
+        _translateRotateTool.cancelVRPreview().catch(() => {})
+        _nucleotideTransformTool.cancelVRPreview()
+        _vrToolPreflight.cancel()
+        _vrToolTransaction.clear()
+        _vrToolConfigState = initialVRToolConfigState
+      } else {
+        if (button) button.dataset.vrHoverIdentity = event?.identity ?? ''
+        selectionManager.previewVRIdentity?.(event?.identity ?? null)
+      }
+    },
+  })
+  const _publishVRRepresentation = () => { void vrSession.publishNativeState?.() }
+  // Ordinary representation changes publish immediately. A held live-MD switch
+  // first republishes the still-rendered atomistic state, then this settled event
+  // publishes Full together with its authoritative coarse frame.
+  window.addEventListener('nadoc:representation-change', _publishVRRepresentation)
+  window.addEventListener('nadoc:representation-settled', _publishVRRepresentation)
+
   document.getElementById('menu-help-fjc-sim')?.addEventListener('click', async () => {
     // Lazy-load the modal so the dev bundle stays slim until the user opens it.
     const { showLinkerConfigModal } = await import('./ui/linker_config_modal.js')
@@ -5808,6 +6235,7 @@ async function main() {
     setMenuToggle: _setMenuToggle,
     getColorState: () => store.getState(),
   })
+  initExtraBaseMetricsAudit({ setMenuToggle: _setMenuToggle })
   initHullAudit({
     getState: () => store.getState(),
     subscribe: callback => store.subscribe(callback),

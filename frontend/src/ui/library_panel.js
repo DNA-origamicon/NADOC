@@ -15,6 +15,11 @@ import { visibleWorkspaceEntries } from './sim_folders.js'
 
 const _JOB_POLL_MS = 4000   // welcome-screen activity-spinner refresh cadence
 const _LIBRARY_CACHE_KEY = 'nadoc:library-files:v1'
+const _LARGE_SIM_DATA_BYTES = 0.5 * 1024 ** 3
+
+export function hasLargeSimulationData(simBytes) {
+  return Number(simBytes) > _LARGE_SIM_DATA_BYTES
+}
 
 export function readLibraryCache(storage = localStorage) {
   try {
@@ -404,7 +409,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     sizeEl.textContent = diskBytes ? formatBytes(diskBytes) : ''
     const simBytes = file.sim_bytes ?? 0
     if (simBytes > 0) {
-      sizeEl.classList.add('lib-row-size-sim')   // highlight designs carrying sim data
+      if (hasLargeSimulationData(simBytes)) sizeEl.classList.add('lib-row-size-sim')
       sizeEl.title = `File ${formatBytes(file.size_bytes ?? 0)} + simulation data ${formatBytes(simBytes)}`
     } else if (diskBytes) {
       sizeEl.title = `File ${formatBytes(diskBytes)}`

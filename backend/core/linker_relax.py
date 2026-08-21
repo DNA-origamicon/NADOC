@@ -816,8 +816,17 @@ def _oh_attach_nuc(oh_nucs: list[dict], attach: str) -> dict | None:
     return max(oh_nucs, key=lambda n: abs((n.get("bp_index") or 0) - tip_bp))
 
 
-def _anchor_pos_and_normal(nucs: list[dict], conn, ovhg_id: str, is_a_side: bool):
-    """Returns (pos, base_normal) for the linker anchor on this side:
+def linker_anchor_nucleotide(
+    nucs: list[dict], conn, ovhg_id: str, is_a_side: bool
+) -> dict | None:
+    """Return the authoritative nucleotide used as a linker anchor.
+
+    The resolution mirrors frontend ``resolveLinkerAttachAnchor``. Keeping the
+    chosen nucleotide available (rather than returning only its position) lets
+    read-only projection clients reuse its axis/base frame without independently
+    reimplementing topology lookup.
+
+    The anchor is:
        the COMPLEMENT nuc on the OH's helix at the OH's `attach`-end bp.
 
     Per the user-facing rule:
@@ -867,6 +876,12 @@ def _anchor_pos_and_normal(nucs: list[dict], conn, ovhg_id: str, is_a_side: bool
         # itself (OH backbone, not complement) — keeps the anchor on the
         # right structural end even when complement geometry is missing.
         chosen = attach_nuc
+    return chosen
+
+
+def _anchor_pos_and_normal(nucs: list[dict], conn, ovhg_id: str, is_a_side: bool):
+    """Return ``(backbone position, base normal)`` for one linker anchor."""
+    chosen = linker_anchor_nucleotide(nucs, conn, ovhg_id, is_a_side)
     if chosen is None:
         return None, None
 

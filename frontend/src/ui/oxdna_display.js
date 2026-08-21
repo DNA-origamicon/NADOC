@@ -70,10 +70,13 @@ export function rmsfColorMap(resp, loBound, hiBound, cmap = 'viridis') {
   const updates = []
   const colorByKey = {}
   for (const p of resp.positions) {
-    updates.push({
+    const update = {
       helix_id: p.helix_id, bp_index: p.bp_index, direction: p.direction, copy: p.copy ?? 0,
       backbone_position: p.backbone_position, nx: p.nx, ny: p.ny, nz: p.nz,
-    })
+    }
+    if (Array.isArray(p.base_position)) update.base_position = p.base_position
+    if (p.tx !== undefined) { update.tx = p.tx; update.ty = p.ty; update.tz = p.tz }
+    updates.push(update)
     const t = span > 1e-9 ? (p.rmsf - lo) / span : 0.0   // colormapHex clamps to [0,1]
     const hex = colormapHex(cmap, t)
     // 4-part key → each loop copy's bead/slab/cone; 3-part alias (copy 0 only) keeps
@@ -1012,10 +1015,8 @@ export function initOxdnaDisplay({
     if (!_active || !_jobId) return
     const kind = _repKind()
     if (kind === 'cg') return
-    // No route for this (mode, kind) — e.g. a NAMD flexibility map in a heavy rep, which
-    // md_viz_adapter deliberately leaves unmapped.  This used to call an undefined api
-    // method, throw, and get swallowed by the blanket catch below: the user silently got
-    // the DESIGN's equilibrium atoms with no RMSF colouring and no explanation.  Say so.
+    // Keep the capability guard explicit: an engine/mode added without its matching
+    // heavy endpoint must never silently leave the design's equilibrium atoms on screen.
     if (!_canDeliverHeavy(kind)) {
       onHeavyStatus?.({ building: false, kind, mode: _mode, unsupported: true })
       return

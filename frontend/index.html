@@ -2307,8 +2307,9 @@
       min-width: 56px;
       font-variant-numeric: tabular-nums;
     }
-    /* Designs carrying simulation data on disk stand out so they're easy to spot. */
-    .lib-row-size-sim { color: #d29922; }
+    /* Large NAMD/oxDNA footprints use the same orange as job cluster tags. */
+    .lib-row-size.lib-row-size-sim,
+    .lib-tree-row:hover .lib-row-size.lib-row-size-sim { color: #e3b341; }
     .lib-tree-row:hover .lib-row-size { color: #8b949e; }
     .lib-row-actions {
       display: none;
@@ -3895,11 +3896,14 @@
           <button class="dropdown-item" id="menu-help-about-file">About this file…</button>
           <button class="dropdown-item" id="menu-help-md-engines">MD Engines (install / status)…</button>
           <button class="dropdown-item" id="menu-help-hotkeys">Keyboard Shortcuts…</button>
+          <button class="dropdown-item" id="menu-help-open-steamvr" title="Start SteamVR. In a NADOC VR session, choose Desktop in the controller menu for the live interactive workstation view.">Open SteamVR / Desktop…</button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-help-view-vr" aria-pressed="false" title="View the current 3D scene in an immersive VR headset."><span class="vr-menu-label">View in VR</span><span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item" id="menu-help-fjc-sim">FJC sim…</button>
           <button class="dropdown-item" id="menu-help-strand-anim">Strand Animations Testing…</button>
           <button class="dropdown-item" id="menu-create-seam">Create Seam</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item dropdown-item--toggleable" id="menu-help-molecular-placement-audit" title="Compare current and diagnostic candidate molecular placements in a read-only four-panel view.">Molecular Placement Audit<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-help-extra-base-metrics-audit" title="Review measured extra-base states, stable windows, populations, transitions, and cross-metric validation.">Extra-Base Metrics Audit<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-help-hull-audit" title="Compare the current Hull Prism with the topology-preserving dsDNA occupancy candidate.">Hull Audit<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-help-overlay-mode" title="Show the full representation together with the atomistic ball-and-stick representation.">Overlay Mode<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-help-new-positioning" title="Show the full and atomistic representations at their MD-measured positions instead of the legacy build geometry. Display only.">New Positioning<span class="menu-toggle-pill"></span></button>

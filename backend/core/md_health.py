@@ -300,7 +300,7 @@ def build_c1_pairs(
     (~12+ Å) regardless of atom-index ordering or PSF segment layout.
 
     ``exclude_residues`` is a set of ``(chain, resid)`` keys (as produced by
-    ``md_protocols.identify_unpaired_residues``) for deliberately single-stranded
+    ``identify_unpaired_residues``) for deliberately single-stranded
     residues — crossover extra bases and other designed ssDNA.  Candidates that
     touch one are skipped so these bases never contribute a (weak, floppy) pair
     that then "fails" during dynamics and depresses the health fraction.
@@ -446,7 +446,7 @@ def build_wc_pairs(
     be re-evaluated with the next-shortest candidate.
 
     ``exclude_residues`` is a set of ``(chain, resid)`` keys (as produced by
-    ``md_protocols.identify_unpaired_residues``) for deliberately single-stranded
+    ``identify_unpaired_residues``) for deliberately single-stranded
     residues — crossover extra bases and other designed ssDNA.  These are never
     Watson-Crick base-paired in the design, so an occasional geometric ss→partner
     pairing (e.g. an inserted T that lands near a real A across the gap) is a
@@ -862,6 +862,83 @@ def append_health_jsonl(
         fh.write(json.dumps(record) + "\n")
 
 
+# ── Single-strand detection ──────────────────────────────────────────────────
+#
+# Lives here (not md_protocols, where the topology-exact ss_exclusion_set builder
+# and its callers live) because THIS module is also staged standalone to remote
+# compute nodes for the early-stop WC step (see remote_health_eval.py) — a
+# cross-module import back into md_protocols there would silently fail (that
+# module pulls in the full Design/pydantic dependency graph, never staged).
+
+_C1_NO_PARTNER_ANG = 10.8  # C1'-C1' beyond this (no cross-seg partner) ⇒ unpaired
+
+
+def identify_unpaired_residues(
+    psf_path: Path, pdb_path: Path, *, full_segid: bool = False
+) -> set[tuple[str, str]]:
+    """Return (chain_id, resid) of DNA residues with no Watson-Crick partner.
+
+    A residue is "unpaired" (single-stranded) if its C1' atom has no
+    cross-segment C1' neighbour within _C1_NO_PARTNER_ANG Å — i.e. it is not
+    part of a duplex.  Chain id is taken as the last character of the PSF segid
+    (DNAA→A … DNAI→I), matching the PDB chain column.
+
+    ``full_segid=True`` returns the FULL segid (e.g. "D01C") instead of its last
+    character — the key format ``write_hmr_psf(heavy_residues=…)`` and
+    ``namd_topology.extra_base_segid_resids`` match against the PSF's NATOM segid
+    token, where last-char keys would alias many segids.
+    """
+    import MDAnalysis as mda  # noqa: PLC0415
+
+    u = mda.Universe(str(psf_path), str(pdb_path))
+    c1 = u.select_atoms("name C1' C1X")
+    if not len(c1):
+        return set()
+    pos = c1.positions
+    seg = c1.segids
+    resid = c1.resids
+    tree = cKDTree(pos)
+    ss: set[tuple[str, str]] = set()
+    for k in range(len(pos)):
+        nbrs = [
+            m
+            for m in tree.query_ball_point(pos[k], 11.0)
+            if m != k and seg[m] != seg[k]
+        ]
+        mind = min((float(np.linalg.norm(pos[k] - pos[m])) for m in nbrs), default=99.0)
+        if mind > _C1_NO_PARTNER_ANG:
+            chain = str(seg[k]) if full_segid else str(seg[k])[-1]
+            ss.add((chain, str(int(resid[k]))))
+    return ss
+
+
+_SS_EXCLUSION_SIDECAR_SUFFIX = "_ss_exclusion.json"
+
+
+def _ss_exclusion_sidecar_path(package_dir: Path, name_stem: str) -> Path:
+    return package_dir / f"{name_stem}{_SS_EXCLUSION_SIDECAR_SUFFIX}"
+
+
+def read_topology_ss_sidecar(package_dir: Path, name_stem: str) -> set[tuple[str, str]]:
+    """Read back the topology-exact leg ``md_protocols.topology_ss_exclusion_set``
+    persisted at package-build time.
+
+    Empty (never raises) if the package predates this sidecar or the file is
+    unreadable — callers union this with a fresh ``identify_unpaired_residues``
+    call, so an empty return degrades to pre-sidecar (geometry-only) behaviour,
+    not a crash.  Reads only stdlib ``json``/``Path`` — safe to call from a remote
+    node's staged copy of this module, same as ``identify_unpaired_residues``.
+    """
+    path = _ss_exclusion_sidecar_path(package_dir, name_stem)
+    if not path.exists():
+        return set()
+    try:
+        data = json.loads(path.read_text())
+        return {tuple(x) for x in data.get("topology_last_char", [])}
+    except Exception:
+        return set()
+
+
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
 
@@ -875,7 +952,7 @@ def _select_c1(u: Any) -> Any:
 
 
 def _residue_key(atom: Any) -> tuple[str, str]:
-    """(chain, resid) key matching md_protocols.identify_unpaired_residues.
+    """(chain, resid) key matching identify_unpaired_residues.
 
     Chain = last character of the PSF segid (DNAA→A … DNAI→I), resid = str(int).
     """
@@ -885,20 +962,49 @@ def _residue_key(atom: Any) -> tuple[str, str]:
 def _unpaired_exclusion_set(psf: Path, pdb: Path) -> set[tuple[str, str]]:
     """Deliberately single-stranded residues to exclude from health pairs.
 
-    Only computed for declashed / extra-base designs (detected by the
-    ``{stem}_build.pdb`` backup the declash rebuild leaves behind); a fully
-    duplex design has no such marker, so this returns an empty set and health
-    scoring is byte-identical to before.  Reuses the SAME ss detection that the
-    declash protocol excludes from the ENM, so the metric judges exactly the
-    residues that are actually restrained/expected to pair.
-    """
-    build_backup = pdb.with_name(f"{pdb.stem}_build.pdb")
-    if not build_backup.exists():
-        return set()
-    try:
-        from backend.core.md_protocols import identify_unpaired_residues  # noqa: PLC0415
+    Two legs, unioned:
 
-        return identify_unpaired_residues(psf, pdb)
+    1. **Topology-exact** — read back from ``{stem}_ss_exclusion.json``, a sidecar
+       ``md_protocols.topology_ss_exclusion_set`` persists at package-build time
+       (when the ``AtomisticModel`` is available to place crossover extra bases /
+       strand-extension tails by their explicit ``crossover_id`` / ``extension_id``
+       tag, mapped through the PSF's residue ORDINAL — never by 3D distance).  A
+       package built before this existed has no sidecar, so this leg is empty for
+       it (falls through to leg 2 alone, matching pre-sidecar behaviour).
+    2. **Geometric** — ``identify_unpaired_residues``: any residue whose C1' has no
+       cross-segment neighbour within reach.  The only way to find NATIVE ssDNA
+       (scaffold loops with no explicit topology tag), and the fallback for any
+       package with no sidecar.
+
+    2026-08-19: originally geometry-only, itself a fix for a worse bug — this
+    function used to gate on whether a declash package happened to leave its
+    rebuild marker (``{stem}_build.pdb``) behind, so every non-declash run (the
+    default since [[project_declash_reaudit]]) got an exclusion set that was
+    unconditionally empty. Fixing THAT surfaced a second, subtler problem: pure
+    C1'-distance geometry itself misses a residue that is genuinely single-stranded
+    by design but happens to sit close enough to an UNRELATED neighbour to read as
+    "paired" — measured on real designs, not hypothetical. A minimal 2-helix,
+    2-extra-base repro (matching a "2xT"-style junction) missed 1 of 2 extra bases,
+    sandwiched near the opposite duplex. A real single-base extension tail near a
+    packed multi-helix bundle measured 10.72 Å to its nearest (unrelated)
+    cross-chain C1' — under the 10.8 Å no-partner cutoff by 0.08 Å. Extra bases and
+    extensions carry an explicit tag in the model that built the package, so the
+    topology-exact leg above can never miss one regardless of 3D proximity; native
+    ssDNA has no such tag, so geometry is still the only way to find it — hence the
+    union, not a replacement.
+
+    2026-08-21: ``identify_unpaired_residues``/``read_topology_ss_sidecar`` used to
+    live in ``md_protocols`` and be imported here lazily — which worked in-app but
+    silently failed on a remote compute node, where only THIS file (not
+    ``md_protocols`` or the rest of ``backend``) is staged standalone for the
+    early-stop WC step ([[project_declash_reaudit]]): the caught ``ImportError``
+    made this return empty on the node, every time, regardless of the fix above.
+    Moving both functions into this module closes that gap — there is nothing left
+    to import.
+    """
+    try:
+        topology = read_topology_ss_sidecar(psf.parent, psf.stem)
+        return topology | identify_unpaired_residues(psf, pdb)
     except Exception:
         return set()
 

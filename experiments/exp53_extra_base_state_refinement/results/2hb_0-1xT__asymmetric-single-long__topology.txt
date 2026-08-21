@@ -1,0 +1,4 @@
+$ /home/jojo/Work/NADOC/.venv/bin/python3 /home/jojo/Work/NADOC/scripts/check_ring_piercing_frame.py /media/jojo/Archive/NADOC_archive/c18abcc8bf3c/package/2hb_0-1xT_namd_solvated/2hb_0-1xT_hmr.psf /media/jojo/Archive/NADOC_archive/c18abcc8bf3c/package/2hb_0-1xT_namd_solvated/2hb_0-1xT.pdb --quiet
+OK  2hb_0-1xT.pdb                                  piercings=0
+
+0 frame(s) carry a threaded ring

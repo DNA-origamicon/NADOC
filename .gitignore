@@ -161,6 +161,10 @@ experiments/*/results/*.pdb
 experiments/*/results/*.dcd
 experiments/*/results/*.psf
 
+# The 24hb extra-base evidence is regenerated from the Archive-mounted 181 GB DCD.
+# Keep the local audit bundle available to the app without adding ~400 MB to Git.
+experiments/exp53_extra_base_state_refinement/results/24hb_1xT__*
+
 # ── exp31+ skip-twist / autorefine / MD-validation run packages ──────────────
 # The per-experiment `ws/` (and `ws_<variant>/`) working dirs hold generated
 # oxDNA/NAMD job trees — multi-GB trajectory.dat sets, never pushed.  Matches the

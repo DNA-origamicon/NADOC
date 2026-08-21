@@ -929,6 +929,14 @@ class SegmentSpec:
     #: nothing like as gentle as 1 fs with flexible bonds, which cost 2x for protection
     #: that was never needed.
     gentle: bool = False
+    #: True for the ladder's OWN universal soft-start segment (set by
+    #: ``mgh_slow_release_segments``'s ``first_free.gentle = True``, NOT by a caller's
+    #: ``gentle=True``) — a strained-build protection present on EVERY standard ladder,
+    #: distinct from the declash/force_soft gentle TIER that ``gentle`` alone also marks.
+    #: Exists so ``effective_timestep_fs`` can tell them apart: a PINNED timestep bypasses
+    #: the declash tier's cap on purpose, but must not also silently bypass this one —
+    #: that would touch every ordinary design's default, not just ones that need declash.
+    soft_start: bool = False
     #: Integrator timestep this segment will actually run at.  Recorded because the
     #: TIME axis of every per-segment diagnostic is derived from it — the box-settle
     #: report read ``getattr(spec, "timestep_fs", 0) or 2.0`` from a field that did not
@@ -1690,32 +1698,92 @@ def psf_atom_count(psf_path: Path) -> Optional[int]:
 
 
 def effective_timestep_fs(
-    spec: "SegmentSpec", fast: bool, base_timestep_fs: Optional[float] = None
+    spec: "SegmentSpec",
+    fast: bool,
+    base_timestep_fs: Optional[float] = None,
+    *,
+    pinned: bool = False,
 ) -> float:
     """The timestep a segment will ACTUALLY run at (pure).
 
-    Three tiers, and each is a CEILING rather than a fixed value: ``soft`` (flexible bonds)
-    caps at 1 fs, ``gentle`` caps at 2 fs and never takes the fast path, and everything else
-    runs the ladder's own base timestep.  One source of truth so the conf and the manifest
-    cannot disagree — the box-settle report derives its time axis from the recorded value,
-    and a wrong one silently halves or doubles every "flat after 300 ps" verdict.
+    Three tiers, and each is normally a CEILING rather than a fixed value: ``soft``
+    (flexible bonds) caps at 1 fs, ``gentle`` caps at 2 fs and never takes the fast path,
+    and everything else runs the ladder's own base timestep.  One source of truth so the
+    conf and the manifest cannot disagree — the box-settle report derives its time axis
+    from the recorded value, and a wrong one silently halves or doubles every "flat after
+    300 ps" verdict.
 
     A ceiling, not a fixed value, because the tiers exist to SLOW a stage that needs it.
     Reading them as fixed values silently RAISED a user's explicit 1 fs request to 2 fs
     while the step count stayed sized for 1 fs — so the stage ran twice its intended
     simulated time, and the control appeared to do nothing.
+
+    ``pinned`` — True when ``base_timestep_fs`` came from an EXPLICIT wizard request (the
+    Ladder timestep control), not the historical ``fast``-derived default.  A pinned
+    request is honored verbatim on every segment, including a declash/force_soft
+    design's soft/gentle ones: those ceilings exist to protect an AUTO-derived ladder
+    from stacking an unvalidated timestep onto a design known to need the gentler
+    integrator, and must not silently overrule a choice the user made on purpose — same
+    "warn, never block" rule already applied to production (see
+    feedback_namd_4fs_production_only.md). The runner's instability rescue
+    (``soften_stability_confs``) still recovers a segment that genuinely can't hold the
+    pinned rate, so honoring it costs at most a retry, never a silent, invisible downgrade.
+
+    The ONE exception is ``spec.soft_start`` — the ladder's OWN universal first-segment
+    protection, present on every STANDARD design (declash or not; see
+    ``mgh_slow_release_segments``). Bypassing that too would mean every relaxation job's
+    plain default, not just a design that actually needs declash, quietly starts
+    attempting 4 fs on its very first dynamics after minimisation. A pin still overrides
+    it if the request is LOWER than 2 fs (a user asking to go slower always wins), just
+    never higher.
     """
     # `base_timestep_fs` is the ladder's own base, passed by whoever built it.  None means
     # "no explicit choice" and reproduces the historical fixed-value behaviour exactly, so
     # every caller that predates the ladder-timestep control is unchanged.  It is NOT read
     # off `spec.timestep_fs`: that field is an OUTPUT, stamped with this function's result.
     base = None if base_timestep_fs is None else float(base_timestep_fs)
+    if pinned and base is not None and not spec.soft_start:
+        return base
     if spec.soft:
         return 1.0 if base is None else min(1.0, base)
     if spec.gentle:
         return 2.0 if base is None else min(2.0, base)
     tier = 4.0 if fast else 2.0
     return tier if base is None else min(tier, base)
+
+
+def relax_timestep_risk_warning(
+    *, gentle: bool, soft: bool, timestep_fs: Optional[float], pinned: bool
+) -> Optional[str]:
+    """Pure: the risk note for a PINNED ladder timestep above its tier's measured-safe
+    ceiling, or ``None`` when nothing is at risk.
+
+    ``gentle`` (declash) is measured stable through 2 fs rigid bonds (exp49); ``soft``
+    (force_soft) is measured stable at 1 fs flexible bonds. Both tiers exist because this
+    design's residual clashes were shown to crash the standard integrator BEFORE the
+    ladder has relieved them — unlike production, which only ever starts from an already-
+    relaxed structure. Advisory only: never used to override the pin.
+    """
+    if not pinned or timestep_fs is None:
+        return None
+    dt = float(timestep_fs)
+    if soft and dt > 1.0:
+        return (
+            f"{dt:g} fs on the force-soft ladder: this tier exists because the design's "
+            "residual single-stranded contacts were measured to crash rigid-bond RATTLE "
+            "before the ladder relieves them, so it normally runs flexible bonds at 1 fs. "
+            "Running it faster is untested here — if a stage blows up, the runner's "
+            "instability rescue softens the rest of the ladder to 1 fs and retries."
+        )
+    if gentle and dt > 2.0:
+        return (
+            f"{dt:g} fs on the gentle (declash) ladder: this design's extra-base/extension "
+            "clashes were measured stable at 2 fs with rigid bonds; 4 fs adds HMR, which "
+            "lightens C5' on the still-unrelieved inserted bases and can fail RATTLE before "
+            "the ladder has a chance to declash them. If a stage blows up, the runner's "
+            "instability rescue softens the rest of the ladder and retries."
+        )
+    return None
 
 
 def _segment_conf(
@@ -1736,6 +1804,9 @@ def _segment_conf(
     #: The ladder's base timestep, so a tier CAPS it instead of replacing it.  None keeps
     #: the historical fixed-tier behaviour.
     base_timestep_fs: Optional[float] = None,
+    #: True when `base_timestep_fs` is an EXPLICIT wizard pin, not the fast-derived
+    #: default — see `effective_timestep_fs`. Honors it on every tier instead of capping.
+    pinned: bool = False,
     colvars_file: Optional[str] = None,
     anchors_file: Optional[str] = None,
     field: Optional[dict] = None,
@@ -1759,7 +1830,7 @@ def _segment_conf(
     # Vacuum runs the same standard-CUDA path as GBIS: there is no periodic cell, so
     # GPUresident's cell-density bookkeeping has nothing to work with.
     fast = fast and not spec.soft and not spec.gentle and not gbis and not vacuum
-    timestep = effective_timestep_fs(spec, fast, base_timestep_fs)
+    timestep = effective_timestep_fs(spec, fast, base_timestep_fs, pinned=pinned)
     # The timestep supplies DEFAULTS for the other two axes; it no longer dictates them.
     # `spec.soft` still means "1 fs, flexible" as a TIER, but an explicit rigid_bonds/hmr
     # on the request overrides what that tier would have implied — exp51 measured 1 fs +
@@ -2010,10 +2081,10 @@ def _min_conf(
 # Chunked minimisation: the original {minimize_steps}-step heuristic remains the hard
 # ceiling. Missing callback data deliberately prevents early stopping.
 set nadoc_min_max {minimize_steps}
-set nadoc_min_min {int(adaptive['minimum_steps'])}
-set nadoc_min_chunk {int(adaptive['chunk_steps'])}
-set nadoc_min_required {int(adaptive['stable_chunks'])}
-set nadoc_min_delta {float(adaptive['energy_delta']):.9g}
+set nadoc_min_min {int(adaptive["minimum_steps"])}
+set nadoc_min_chunk {int(adaptive["chunk_steps"])}
+set nadoc_min_required {int(adaptive["stable_chunks"])}
+set nadoc_min_delta {float(adaptive["energy_delta"]):.9g}
 set nadoc_min_energy ""
 proc nadoc_min_callback {{labels values}} {{
     global nadoc_min_energy
@@ -2106,7 +2177,9 @@ def upgrade_minimization_conf_adaptive(
     )
     if not block:  # defensive: never damage a runnable legacy config
         return False
-    conf_path.write_text(text[: command.start()] + block.group(0) + text[command.end() :])
+    conf_path.write_text(
+        text[: command.start()] + block.group(0) + text[command.end() :]
+    )
     return True
 
 
@@ -2515,47 +2588,68 @@ def write_aksimentiev_enm_files(
 # none + 1 fs) because residual single-stranded contacts crash rigid-bond RATTLE.
 
 _DECLASH_BUILD_PDB_SUFFIX = "_build.pdb"  # backup of the original (clashed) build PDB
-_C1_NO_PARTNER_ANG = 10.8  # C1'-C1' beyond this (no cross-seg partner) ⇒ unpaired
 
 
-def identify_unpaired_residues(
-    psf_path: Path, pdb_path: Path, *, full_segid: bool = False
+def topology_ss_exclusion_set(
+    model: "AtomisticModel",  # noqa: F821
+    psf_path: Path,
+    pdb_path: Path,
+    *,
+    sort_chains: bool,
 ) -> set[tuple[str, str]]:
-    """Return (chain_id, resid) of DNA residues with no Watson-Crick partner.
+    """The full single-stranded exclusion set: topology-exact + geometric.
 
-    A residue is "unpaired" (single-stranded) if its C1' atom has no
-    cross-segment C1' neighbour within _C1_NO_PARTNER_ANG Å — i.e. it is not
-    part of a duplex.  Chain id is taken as the last character of the PSF segid
-    (DNAA→A … DNAI→I), matching the PDB chain column.
+    ``identify_unpaired_residues`` alone MISSES a residue that is genuinely
+    single-stranded by design but happens to sit close enough to an unrelated
+    neighbour to read as "paired" — measured on real designs, not hypothetical:
 
-    ``full_segid=True`` returns the FULL segid (e.g. "D01C") instead of its last
-    character — the key format ``write_hmr_psf(heavy_residues=…)`` and
-    ``extra_base_segid_resids`` match against the PSF's NATOM segid token, where
-    last-char keys would alias many segids.
+    - A crossover extra base sandwiched at a junction (in a minimal 2-helix,
+      2-extra-base repro matching a "2xT"-style design, one of the two extra
+      bases was missed — its C1' landed near the neighbouring duplex, exactly
+      the failure mode ``namd_topology.extra_base_segid_resids``'s docstring
+      already warned about).
+    - A strand-extension tail near a densely packed multi-helix bundle (a real
+      single-base 5′ tail measured 10.72 Å to the nearest unrelated cross-chain
+      C1' — under the 10.8 Å cutoff by 0.08 Å).
+
+    Extra bases and extensions carry an explicit per-atom tag in the
+    ``AtomisticModel`` (``crossover_id`` / ``extension_id``) — no geometry needed —
+    so ``extra_base_segid_resids`` / ``extension_segid_resids`` place them by PSF
+    ordinal instead, and can never miss one regardless of 3D proximity.  Native
+    ssDNA (scaffold loops with no explicit tag) has no such marker, so
+    ``identify_unpaired_residues``'s C1'-distance geometry is still the only way to
+    find it — kept as the third, unioned leg.  ``sort_chains`` must match how the
+    package's PDB was built (``True`` for the psfgen path, ``False`` for
+    ``export_pdb`` — see ``namd_topology.built_pdb_residue_keys``).
+
+    SIDE EFFECT: persists the topology-exact leg to ``{name_stem}_ss_exclusion.json``
+    next to the PSF, so a later health check — which has only the PSF/PDB on disk,
+    never the ``AtomisticModel`` — can recover it via
+    ``md_health.read_topology_ss_sidecar`` and union it with a fresh geometric pass
+    instead of falling back to geometry alone.  ``identify_unpaired_residues`` and
+    the sidecar helpers live in ``md_health`` (not here) because that module is
+    ALSO staged standalone to remote compute nodes for the early-stop WC step — a
+    cross-module import back into this file (which pulls in the full Design/
+    pydantic dependency graph) would silently fail there.
     """
-    import MDAnalysis as mda  # noqa: PLC0415
-    from scipy.spatial import cKDTree  # noqa: PLC0415
+    from backend.core.md_health import (  # noqa: PLC0415
+        _ss_exclusion_sidecar_path,
+        identify_unpaired_residues,
+    )
+    from backend.core.namd_topology import (  # noqa: PLC0415
+        extension_segid_resids,
+        extra_base_segid_resids,
+    )
 
-    u = mda.Universe(str(psf_path), str(pdb_path))
-    c1 = u.select_atoms("name C1' C1X")
-    if not len(c1):
-        return set()
-    pos = c1.positions
-    seg = c1.segids
-    resid = c1.resids
-    tree = cKDTree(pos)
-    ss: set[tuple[str, str]] = set()
-    for k in range(len(pos)):
-        nbrs = [
-            m
-            for m in tree.query_ball_point(pos[k], 11.0)
-            if m != k and seg[m] != seg[k]
-        ]
-        mind = min((float(np.linalg.norm(pos[k] - pos[m])) for m in nbrs), default=99.0)
-        if mind > _C1_NO_PARTNER_ANG:
-            chain = str(seg[k]) if full_segid else str(seg[k])[-1]
-            ss.add((chain, str(int(resid[k]))))
-    return ss
+    topology_full_segid = extra_base_segid_resids(
+        model, psf_path, sort_chains=sort_chains
+    ) | extension_segid_resids(model, psf_path, sort_chains=sort_chains)
+    topology_last_char = {(seg[-1], resid) for seg, resid in topology_full_segid}
+    _ss_exclusion_sidecar_path(psf_path.parent, psf_path.stem).write_text(
+        json.dumps({"topology_last_char": sorted(topology_last_char)})
+    )
+    geometric = identify_unpaired_residues(psf_path, pdb_path)
+    return topology_last_char | geometric
 
 
 def write_declashed_pdb(coor_path: Path, src_pdb: Path, dst_pdb: Path) -> int:
@@ -2819,7 +2913,18 @@ def rebuild_declashed_references(
     pdb_path.replace(build_pdb)  # preserve original clashed build
     n_atoms = write_declashed_pdb(min_coor, build_pdb, pdb_path)
 
-    ss = identify_unpaired_residues(psf_path, pdb_path)
+    # Union the persisted topology-exact leg (extra bases / extensions, written by
+    # topology_ss_exclusion_set at build time — no AtomisticModel available here to
+    # recompute it) with a fresh geometric pass over the just-declashed coordinates
+    # (native ssDNA has no topology tag, so geometry is still how it's found).
+    from backend.core.md_health import (  # noqa: PLC0415
+        identify_unpaired_residues,
+        read_topology_ss_sidecar,
+    )
+
+    ss = read_topology_ss_sidecar(package_dir, name_stem) | identify_unpaired_residues(
+        psf_path, pdb_path
+    )
     enm_report = write_aksimentiev_enm_files(
         pdb_path,
         package_dir,
@@ -3060,7 +3165,9 @@ def minimize_steps_for_atoms(n_atoms: int, floor: int = MIN_STEPS_FLOOR) -> int:
     return _round_up_to_cycle(max(int(floor), int(n_atoms) // MIN_STEPS_PER_ATOMS))
 
 
-def adaptive_minimization_parameters(n_atoms: int, max_steps: int) -> dict[str, float | int]:
+def adaptive_minimization_parameters(
+    n_atoms: int, max_steps: int
+) -> dict[str, float | int]:
     """Return conservative, cycle-aligned controls for adaptive minimisation."""
     maximum = _round_up_to_cycle(max_steps)
     minimum = min(
@@ -3259,6 +3366,7 @@ def mgh_slow_release_segments(
     )
     if first_free is not None and not soft and not gentle:
         first_free.gentle = True
+        first_free.soft_start = True
 
     return min_name, segments
 
@@ -3328,7 +3436,10 @@ def prepare_mgh_slow_release(
     atomistic_model=None,
     solute_coords=None,
     progress=None,
-    declash: bool = False,
+    #: None = auto-detect from the design (the historical behaviour); True/False force
+    #: it on/off outright, overriding auto-detection entirely — see the resolution
+    #: below.  The wizard's Declash toggle is the user-facing form of this.
+    declash: Optional[bool] = None,
     force_soft: bool = False,
     high_aspect_ratio: bool = False,
     fast: bool = False,
@@ -3499,16 +3610,35 @@ def prepare_mgh_slow_release(
     # minimisation moves DNA heavy atoms ~1.2 Å RMSD and restraining back to the build
     # pose would stand against the minimiser for the whole stage.
     write_restraints_pdb(pdb_path, package_dir / SOLUTE_RESTRAINT_PDB)
-    # Exclude single-stranded crossover extra bases from the LADDER ENM so they relax to
-    # their true conformation rather than being pinned into a stretched backbone bond.
-    # Without this, an oxDNA-SEEDED FAST (4 fs) ladder restrains the seeded inserts and the
-    # minimiser stretches ~14 C4'-C5' bonds to ~2 A — enough to trip a 4 fs RATTLE step.
-    # (The un-seeded declash path hid this behind its soft 1 fs integrator; ss inserts
-    # should never be ENM-pinned there either, so the exclusion is correct for both.)
+    # Exclude single-stranded crossover extra bases AND strand-extension tails from
+    # the LADDER ENM so they relax to their true conformation rather than being
+    # pinned into a stretched backbone bond.  Without this, an oxDNA-SEEDED FAST
+    # (4 fs) ladder restrains the seeded inserts and the minimiser stretches ~14
+    # C4'-C5' bonds to ~2 A — enough to trip a 4 fs RATTLE step.  (The un-seeded
+    # declash path hid this behind its soft 1 fs integrator; ss inserts should
+    # never be ENM-pinned there either, so the exclusion is correct for both.)
+    #
+    # topology_ss_exclusion_set, not bare identify_unpaired_residues: pure
+    # C1'-distance geometry misses a residue that sits close to an UNRELATED
+    # neighbour by 3D coincidence — measured, not hypothetical: a junction extra
+    # base sandwiched near the opposite duplex, and an extension tail near a
+    # packed bundle (10.72 Å, under the 10.8 Å cutoff by 0.08 Å).  Extra bases and
+    # extensions carry an explicit topology tag, so mapping them by PSF ordinal
+    # (extra_base_segid_resids / extension_segid_resids) can never miss one
+    # regardless of 3D proximity.  The model is rebuilt fresh from ``design``
+    # rather than reusing the ``atomistic_model`` parameter (often None, and when
+    # supplied, only its COORDINATES differ — e.g. an oxDNA seed): chain_id /
+    # seq_num / tag assignment is purely topological and position-independent, so
+    # a plain rebuild always matches the package's residue order.
     _ladder_enm_exclude: "set[tuple[str, str]]" = set()
-    if design_has_extra_bases(design) or declash:
-        _ladder_enm_exclude = identify_unpaired_residues(
-            package_dir / f"{name_stem}.psf", pdb_path
+    if design_has_extra_bases(design) or design_has_extensions(design) or declash:
+        from backend.core.atomistic import build_atomistic_model  # noqa: PLC0415
+
+        _ladder_enm_exclude = topology_ss_exclusion_set(
+            build_atomistic_model(design),
+            package_dir / f"{name_stem}.psf",
+            pdb_path,
+            sort_chains=require_full_topology,
         )
     enm_report = write_aksimentiev_enm_files(
         pdb_path,
@@ -3571,50 +3701,39 @@ def prepare_mgh_slow_release(
 
     # Declash: minimise against an ss-excluded ENM so inserted single-stranded
     # bases relax out of clash.  References are rebuilt from the declashed coords
-    # by the runner after minimisation (rebuild_declashed_references).  Enabled
-    # automatically whenever one junction inserts more than one extra base, or the
-    # design carries strand extensions (free ssDNA tails seeded on a geometric arc);
-    # the explicit flag can force it on otherwise.  A 1xT junction uses the standard
-    # ladder because its current geometric seed no longer requires declashing.
+    # by the runner after minimisation (rebuild_declashed_references).
     #
-    # ``pre_declashed`` OVERRIDES the extra-base auto-enable: an oxDNA-SEEDED structure
-    # (build_namd_seed) already has its extra bases at relaxed, non-clashing
-    # positions with healthy backbone bonds, so the soft declash ladder — and the
-    # 1 fs / no-HMR / no-fast penalty it forces — is unnecessary.  Seeding is
-    # precisely what lets an extra-base design run the 4 fs fast ladder (the
-    # geometric-guess build could not: its stacked sugars minimised into a ~3.1 A
-    # C4'-C5' bond that is fatal to a 4 fs RATTLE step). See the 24hb 4 fs
-    # investigation + backend/core/oxdna_seed.py.
-    # ── MARKED FOR RE-AUDIT (2026-08-03) ──────────────────────────────────────
-    # Is this auto-enable still needed, and is it still sized right?  Three reasons to
-    # doubt it, none yet measured:
+    # ── RE-AUDIT CONCLUDED (2026-08-19, was "MARKED FOR RE-AUDIT" 2026-08-03) ──
+    # This used to auto-enable whenever a junction inserted 2+ extra bases, or the
+    # design carried extensions — the evidence was exp49 (2026-07-30), a 25 ps probe
+    # at the ladder's stiffest restraint scale only. The user ran the real test this
+    # comment always said was owed: a manual wizard run of 6hb_2xT with the Declash
+    # toggle left UNTOUCHED. Because untouched still meant "auto-detect", it silently
+    # re-engaged declash's gentle-tier minimisation-ENM exclusion — but the wizard's
+    # OWN separate ladder-timestep default (4 fs + HMR + rigid, unconditional since
+    # the pin fix) ran on top of it, which is precisely the unstable combination the
+    # gentle tier existed to keep apart from a not-yet-declashed structure. The run
+    # did not crash (clean NAMD exit, stable energetics throughout), so the auto-
+    # trigger cost real wall-clock for a protection nobody asked for and that fought
+    # the wizard's own other default.
     #
-    #   * The evidence that set the tier is exp49 (2026-07-30), a 25 ps probe on ideal
-    #     builds carrying 2 / 24 / 60 inserted bases.  25 ps is a very short window in
-    #     which to conclude a 19.2 ns ladder needs protection.
-    #   * The build path it protects against has moved since: oxDNA seeding
-    #     (``pre_declashed``) already suppresses the extra-base trigger, and the geometric
-    #     + Fix B extra-base build was adopted precisely to stop shipping clashed inserts.
-    #   * It is not free and it is currently WRONG: a declash ladder keeps ``fast=True``
-    #     while every segment carries ``gentle``, so step counts sized for 4 fs run at
-    #     2 fs and each rung simulates 2.4 ns instead of 4.8 (pinned by
-    #     tests/test_md_protocol_plan.py::test_declash_stages_run_half_their_intended_length).
-    #     Whatever the audit concludes, that arithmetic has to be settled with it — fixing
-    #     the ns while keeping the trigger doubles every declash relaxation.
-    #
-    # The audit wants a real arm: one design with inserted bases relaxed with and without
-    # the gentle tier, full ladder, compared on C1' pairing and RMSD-vs-design — not
-    # another short probe.  The measured 1xT placement work now justifies exempting
-    # single-base junctions; longer insertion runs remain conservative pending that audit.
-    declash = (
-        declash
-        or (design_requires_extra_base_declash(design) and not pre_declashed)
-        or design_has_extensions(design)
-    )
+    # Verdict: auto-detection is retired. ``declash`` now runs ONLY when the caller
+    # asks for it explicitly (``True``) — an unspecified request (``None``, every
+    # pre-toggle caller and every untouched wizard session) is OFF, full stop, same
+    # as an explicit ``False``. A design whose junctions insert 2+ extra bases still
+    # gets flagged — as an advisory condition on the wizard's Declash control
+    # (routes_md_plan._relaxation_plan), never as a silent behaviour change — so the
+    # information exp49 established is not lost, only no longer acted on by default.
+    # ``pre_declashed`` (oxDNA-seeded builds) and ``design_has_extensions`` are
+    # unchanged; they feed that advisory, not this resolution.
+    declash = bool(declash)
     declash_enm_file: Optional[str] = None
     n_unpaired = 0
     if declash:
-        ss = identify_unpaired_residues(package_dir / f"{name_stem}.psf", pdb_path)
+        # declash=True always satisfies the ladder-ENM gate above, so
+        # _ladder_enm_exclude already holds the same topology+geometric union —
+        # reuse it instead of a second, redundant identify_unpaired_residues pass.
+        ss = _ladder_enm_exclude
         n_unpaired = len(ss)
         write_aksimentiev_enm_files(
             pdb_path,
@@ -3668,6 +3787,10 @@ def prepare_mgh_slow_release(
         if relax_timestep_fs is not None
         else (4.0 if fast else 2.0)
     )
+    # Distinct from "ladder_dt happens to be 4.0/2.0" — this is specifically "the user
+    # chose it", so soft/gentle segments honor it instead of silently capping it. See
+    # effective_timestep_fs's `pinned` doc.
+    ladder_pinned = relax_timestep_fs is not None
     # `fast` is now only "the ladder's base timestep is 4 fs".  Keeping it in sync means the
     # manifest, the segment tiers and effective_timestep_fs all agree with the confs.
     fast = fast or ladder_dt >= 4.0
@@ -3748,7 +3871,9 @@ def prepare_mgh_slow_release(
     # FIRST, so the manifest (and every diagnostic that derives a time axis from it)
     # agrees with the conf that was written.
     for spec in segments:
-        spec.timestep_fs = effective_timestep_fs(spec, fast, ladder_dt)
+        spec.timestep_fs = effective_timestep_fs(
+            spec, fast, ladder_dt, pinned=ladder_pinned
+        )
     for idx, spec in enumerate(segments, start=1):
         (package_dir / f"{spec.name}.conf").write_text(
             _segment_conf(
@@ -3763,6 +3888,7 @@ def prepare_mgh_slow_release(
                 rigid_bonds=relax_rigid_bonds,
                 hmr=relax_hmr,
                 base_timestep_fs=ladder_dt,
+                pinned=ladder_pinned,
                 anchors_file=anchors_file,
                 field=field,
                 capture_vel_force=capture_vel_force,
@@ -3770,9 +3896,7 @@ def prepare_mgh_slow_release(
                 force_resident=_resident_override,
                 overrides=overrides_for_stage(stage_overrides, idx),
                 npt_margin_ang=(
-                    HIGH_ASPECT_NPT_MARGIN_ANG
-                    if high_aspect_ratio
-                    else NPT_MARGIN_ANG
+                    HIGH_ASPECT_NPT_MARGIN_ANG if high_aspect_ratio else NPT_MARGIN_ANG
                 ),
             )
         )
@@ -3800,6 +3924,7 @@ def prepare_mgh_slow_release(
             "extra_bonds_file": s.extra_bonds_file,
             "soft": s.soft,
             "gentle": s.gentle,
+            "soft_start": s.soft_start,
             "timestep_fs": s.timestep_fs,
             "fixed_atoms_file": s.fixed_atoms_file,
             "restraint_ref_file": s.restraint_ref_file,
@@ -3955,6 +4080,13 @@ def prepare_mgh_slow_release(
         # from `fast` and guess which tier applied. An untouched production run starts
         # from these values, but its own request always wins.
         "relax_integrator": ladder_choice.as_dict(),
+        # Advisory only — never used to override the pin; see relax_timestep_risk_warning.
+        "relax_timestep_warning": relax_timestep_risk_warning(
+            gentle=gentle_ladder,
+            soft=force_soft,
+            timestep_fs=ladder_dt,
+            pinned=ladder_pinned,
+        ),
         # The Advanced-card GPU-resident choice, so a later PRODUCTION run inherits it
         # instead of hard-coding resident on (which ignored both the size gate and the
         # user's selection).
@@ -4128,6 +4260,12 @@ def segments_from_manifest(manifest_path: Path) -> tuple[str, list[SegmentSpec]]
             # segment as soft=True; that stays honoured verbatim so a resumed job keeps
             # running exactly the integrator it started with.
             gentle=s.get("gentle", False),
+            # A manifest written before this field existed has no way to tell "declash
+            # gentle" from "universal soft-start gentle" apart; default False rather than
+            # guess — an old package resuming under a NEW pinned request is a narrow
+            # enough edge that failing safe (no bypass-of-cap protection reinstated) beats
+            # a guess that could be wrong in either direction.
+            soft_start=s.get("soft_start", False),
             # Default 2.0 so a manifest written before this field existed still resumes;
             # it was the effective value on every non-fast ladder anyway.
             timestep_fs=s.get("timestep_fs", 2.0),

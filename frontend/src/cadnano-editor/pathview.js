@@ -22,6 +22,7 @@
 import {
   GUTTER, RULER_H, TOP_PAD, BP_W, LABEL_R,
   CELL_H, PAIR_Y, ROW_H, GROUP_GAP,
+  connectedCellGroups,
 } from './pathview/layout.js'
 
 const EXTEND_BPS = 56
@@ -369,12 +370,14 @@ export function initPathview(canvasEl, containerEl, {
   // (backend recomputes per-response).
   let _unligatedCrossoverIds = new Set()
   let _rowMap  = new Map()   // helix.id → { fwdY, revY, scaffoldFwd, cell, idx }
+  let _rowBands = []         // sorted [{lo, hi, hid, info}] for pointer row lookup
   let _helixById = new Map() // helix.id → helix; rebuilt in _rebuildLayout. O(1) lookups
                              // in the hot crossover-draw loops (was O(helices) _helices.find).
   let _totalBp = 0   // max bp end across all helices
   let _minBp   = 0   // min bp_start across all helices (may be negative)
   let _fitDone = false
   let _nativeOrientation = true   // cadnano native: helix order top-to-bottom as-is
+  let _layoutRevision = 0
 
   // ── Selection state ───────────────────────────────────────────────────────────
   // Each element (domain body, individual end cap, crossover arc) is selected
@@ -398,15 +401,10 @@ export function initPathview(canvasEl, containerEl, {
 
   /** True if the domain transition (domA→domB) matches a forced ligation record. */
   function _isForcedLigTransition(domA, domB) {
-    for (const fl of (_design?.forced_ligations ?? [])) {
-      if (fl.three_prime_helix_id === domA.helix_id
-          && fl.three_prime_bp === domA.end_bp
-          && fl.three_prime_direction === domA.direction
-          && fl.five_prime_helix_id === domB.helix_id
-          && fl.five_prime_bp === domB.start_bp
-          && fl.five_prime_direction === domB.direction) return true
-    }
-    return false
+    _ensureStrandIndex()
+    return _forcedLigTransitionKeys.has(_forcedLigTransitionKey(
+      domA.helix_id, domA.end_bp, domA.direction,
+      domB.helix_id, domB.start_bp, domB.direction))
   }
 
   // Compute the element key from a _hitTest result.
@@ -418,13 +416,8 @@ export function initPathview(canvasEl, containerEl, {
 
   /** Return all element keys (line + end) for every domain in *strand*. */
   function _strandElementKeys(strand) {
-    const keys = []
-    for (const dom of strand.domains) {
-      keys.push(_domainLineKey(dom))
-      keys.push(_domainEndKey(dom, '5p'))
-      keys.push(_domainEndKey(dom, '3p'))
-    }
-    return keys
+    _ensureSelectionOwnerIndex()
+    return _domainElementKeysByStrand.get(strand.id) ?? []
   }
 
   /**
@@ -433,17 +426,21 @@ export function initPathview(canvasEl, containerEl, {
    */
   function _hitTestLoopSkip(wx, wy) {
     if (!_design?.helices?.length) return null
-    for (const helix of _design.helices) {
-      if (!helix.loop_skips?.length) continue
-      const info = _rowMap.get(helix.id)
-      if (!info) continue
-      for (const ls of helix.loop_skips) {
+    _ensureLoopSkipIndex()
+    const helixId = _helixAtWY(wy)
+    const info = helixId && _rowMap.get(helixId)
+    const markers = helixId && _loopSkipsByHelixBp.get(helixId)
+    if (!info || !markers) return null
+    const bp = _xToBp(wx)
+    for (let candidateBp = bp - 1; candidateBp <= bp + 1; candidateBp++) {
+      const ls = markers.get(candidateBp)
+      if (ls) {
         const cx = _bpCenterX(ls.bp_index)
         const midY = (info.fwdY + info.revY) / 2
         const r = Math.min(BP_W, CELL_H) * 0.45
         if (Math.abs(wx - cx) <= r && Math.abs(wy - midY) <= r) {
-          return { helixId: helix.id, bpIndex: ls.bp_index, delta: ls.delta,
-                   key: _loopSkipKey(helix.id, ls.bp_index, ls.delta) }
+          return { helixId, bpIndex: ls.bp_index, delta: ls.delta,
+                   key: _loopSkipKey(helixId, ls.bp_index, ls.delta) }
         }
       }
     }
@@ -452,28 +449,10 @@ export function initPathview(canvasEl, containerEl, {
 
   function _notifySelectionChange() {
     if (!_design?.strands) { onSelectionChange([]); return }
+    _ensureSelectionOwnerIndex()
     const strandIds = new Set()
-    for (const strand of _design.strands) {
-      for (const dom of strand.domains) {
-        if (_selectedElements.has(_domainLineKey(dom)) ||
-            _selectedElements.has(_domainEndKey(dom, '5p')) ||
-            _selectedElements.has(_domainEndKey(dom, '3p'))) {
-          strandIds.add(strand.id)
-          break
-        }
-      }
-    }
-    for (const xo of (_design.crossovers ?? [])) {
-      if (_selectedElements.has(_xoverKey(xo))) {
-        const sA = _findStrandIdxAt(xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand)
-        if (sA >= 0) strandIds.add(_design.strands[sA].id)
-      }
-    }
-    for (const fl of (_design.forced_ligations ?? [])) {
-      if (_selectedElements.has(_forcedLigKey(fl))) {
-        const sIdx = _findStrandIdxAt(fl.three_prime_helix_id, fl.three_prime_bp, fl.three_prime_direction)
-        if (sIdx >= 0) strandIds.add(_design.strands[sIdx].id)
-      }
+    for (const key of _selectedElements) {
+      for (const owner of _elementOwnerByKey.get(key) ?? []) strandIds.add(owner)
     }
     const expanded = new Set()
     for (const sid of strandIds) {
@@ -484,6 +463,16 @@ export function initPathview(canvasEl, containerEl, {
 
   // ── Crossover sprite hit areas (rebuilt each frame in _drawCrossoverIndicators) ──
   let _xoverSprites = []   // [{ hid, bp, targetHid, cx, indY, halfAStrand, halfBStrand }]
+  const _XOVER_SPRITE_BUCKET = 16
+  let _xoverSpriteBins = new Map()
+  function _recordXoverSprite(sprite) {
+    sprite._order = _xoverSprites.length
+    _xoverSprites.push(sprite)
+    const key = `${Math.floor(sprite.cx / _XOVER_SPRITE_BUCKET)}:${Math.floor(sprite.indY / _XOVER_SPRITE_BUCKET)}`
+    let bucket = _xoverSpriteBins.get(key)
+    if (!bucket) _xoverSpriteBins.set(key, bucket = [])
+    bucket.push(sprite)
+  }
 
   // ── Pan/zoom ──────────────────────────────────────────────────────────────────
   let _zoom = 1, _panX = 0, _panY = 0
@@ -609,15 +598,19 @@ export function initPathview(canvasEl, containerEl, {
 
   // ── Coordinate helpers ────────────────────────────────────────────────────────
 
-  // Return the helix ID whose row band contains world-space Y, or null.
-  function _helixAtWY(wy) {
-    const half = ROW_H / 2
-    for (const [hid, info] of _rowMap) {
-      const midY = (info.fwdY + info.revY) / 2
-      if (wy >= midY - half && wy <= midY + half) return hid
+  // Return the first row band containing world-space Y. Lower-bound on `hi`
+  // preserves the legacy first-row result at a shared inclusive boundary.
+  function _rowAtWY(wy) {
+    let lo = 0, hi = _rowBands.length - 1, found = _rowBands.length
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1
+      if (_rowBands[mid].hi >= wy) { found = mid; hi = mid - 1 }
+      else lo = mid + 1
     }
-    return null
+    const band = _rowBands[found]
+    return band && band.lo <= wy ? band : null
   }
+  function _helixAtWY(wy) { return _rowAtWY(wy)?.hid ?? null }
 
   function _c2w(cx, cy) {
     return { wx: (cx - _panX) / _zoom, wy: (cy - _panY) / _zoom }
@@ -685,17 +678,8 @@ export function initPathview(canvasEl, containerEl, {
    *  Used for slider defaults + auto-shift. Excludes is_reference ALWAYS — distinct
    *  from _totalBp/_minBp which are helix-based and include reference strands. */
   function _activeStrandExtent() {
-    let lo = Infinity, hi = -Infinity
-    for (const s of (_design?.strands ?? [])) {
-      if (s.is_reference) continue
-      for (const d of s.domains) {
-        const a = Math.min(d.start_bp, d.end_bp)
-        const b = Math.max(d.start_bp, d.end_bp)
-        if (a < lo) lo = a
-        if (b > hi) hi = b
-      }
-    }
-    return isFinite(lo) ? { lo, hi } : null
+    _ensureStrandIndex()
+    return _activeStrandExtentCached
   }
 
   /** Set of helix IDs carrying ONLY reference strands (≥1 reference domain, 0
@@ -703,13 +687,8 @@ export function initPathview(canvasEl, containerEl, {
    *  helix's loop/skip markers as reference geometry (a mixed helix is NOT
    *  reference — its loop/skips affect the active strand too). */
   function _referenceOnlyHelixIds() {
-    const ref = new Set(), active = new Set()
-    for (const s of (_design?.strands ?? [])) {
-      const target = s.is_reference ? ref : active
-      for (const d of s.domains) target.add(d.helix_id)
-    }
-    for (const hid of active) ref.delete(hid)
-    return ref
+    _ensureStrandIndex()
+    return _referenceOnlyHelixIdsCached
   }
 
   /** bp shift to add to a mirrored display position to reach the REAL bp:
@@ -803,6 +782,7 @@ export function initPathview(canvasEl, containerEl, {
   // ── Layout ────────────────────────────────────────────────────────────────────
 
   function _rebuildLayout() {
+    _layoutRevision++
     _helices = sortedHelices(_design)
     // Stable label index per helix — based on native (top-to-bottom) order so that
     // gutter labels reflect the helix's identity, not its current display position.
@@ -811,34 +791,14 @@ export function initPathview(canvasEl, containerEl, {
     // so that the pathview matches the slice view's Y-up arrangement.
     if (!_nativeOrientation) _helices.reverse()
     _rowMap  = new Map()
+    _rowBands = []
     _helixById = new Map(_helices.map(h => [h.id, h]))   // O(1) id→helix for hot draw loops
     const isHC = _design?.lattice_type === 'HONEYCOMB'
 
     // Compute cells for each helix
     const cells = _helices.map(h => helixCell(h, isHC))
 
-    // Detect disconnected groups via flood-fill on occupied grid cells.
-    // Two cells are connected if Chebyshev distance ≤ 1 (adjacent row/col).
-    const groupOf = new Int32Array(_helices.length)  // group id per helix
-    groupOf.fill(-1)
-    let gid = 0
-    for (let seed = 0; seed < _helices.length; seed++) {
-      if (groupOf[seed] !== -1) continue
-      const queue = [seed]
-      groupOf[seed] = gid
-      while (queue.length) {
-        const ci = queue.shift()
-        const cr = cells[ci].row, cc = cells[ci].col
-        for (let j = 0; j < _helices.length; j++) {
-          if (groupOf[j] !== -1) continue
-          if (Math.abs(cells[j].row - cr) <= 1 && Math.abs(cells[j].col - cc) <= 1) {
-            groupOf[j] = gid
-            queue.push(j)
-          }
-        }
-      }
-      gid++
-    }
+    const groupOf = connectedCellGroups(cells)
 
     let fwdY = RULER_H + TOP_PAD
     for (let i = 0; i < _helices.length; i++) {
@@ -854,6 +814,11 @@ export function initPathview(canvasEl, containerEl, {
       })
       fwdY += ROW_H
     }
+    const rowHalf = ROW_H / 2
+    _rowBands = [..._rowMap].map(([hid, info]) => {
+      const midY = (info.fwdY + info.revY) / 2
+      return { lo: midY - rowHalf, hi: midY + rowHalf, hid, info }
+    })
     _totalBp = _helices.length === 0 ? 0
       : Math.max(..._helices.map(h => h.bp_start + h.length_bp))
     _minBp   = _helices.length === 0 ? 0
@@ -906,49 +871,41 @@ export function initPathview(canvasEl, containerEl, {
     // mirror zone resolves to the REAL strand (no-op when the boundary is off).
     const { wx, wy } = _screenToRealWorld(cx, cy)
     const HIT = PAIR_Y / 2
-    for (const [hid, info] of _rowMap) {
-      const dF = Math.abs(wy - info.fwdY)
-      const dR = Math.abs(wy - info.revY)
-      if (dF > HIT && dR > HIT) continue
-      const isFwdTrack = dF <= dR
-      const bp = _xToBp(wx)
-      for (let si = 0; si < _design.strands.length; si++) {
-        const strand = _design.strands[si]
-        for (let di = 0; di < strand.domains.length; di++) {
-          const dom = strand.domains[di]
-          if (dom.helix_id !== hid) continue
-          if ((dom.direction === 'FORWARD') !== isFwdTrack) continue
-          const lo = Math.min(dom.start_bp, dom.end_bp)
-          const hi = Math.max(dom.start_bp, dom.end_bp)
-          if (bp < lo || bp > hi) continue
-          const isEnd = (bp === lo || bp === hi)
-          if (filter) {
-            if (!strandPassesScafStapFilter(strand, filter)) return null
-            if ( isEnd && !filter.ends) return null
-            if (!isEnd && !filter.line) return null
-          }
-          const elementType = isEnd ? 'end' : 'line'
-          const isFwd = dom.direction === 'FORWARD'
-          let endWhich = null
-          if (isEnd) {
-            if (strand.domains.length === 1 && lo === hi) {
-              // 1-nt strand: the bead is BOTH 5′ and 3′ → pick the end that can
-              // actually be resized (free extension side), so a stub pinned by a
-              // crossover on one side stays resizable on the other.
-              endWhich = oneNtResizableEnd(
-                { helix_id: dom.helix_id, direction: dom.direction, bp_index: bp, strand_id: strand.id },
-                _design.strands,
-              )
-            } else {
-              endWhich = (isFwd && bp === lo) || (!isFwd && bp === hi) ? '5p' : '3p'
-            }
-          }
-          return { strand, strandIdx: si, dom, domainIdx: di, elementType, endWhich }
-        }
-      }
-      break
+    const row = _rowAtWY(wy)
+    if (!row) return null
+    const { hid, info } = row
+    const dF = Math.abs(wy - info.fwdY)
+    const dR = Math.abs(wy - info.revY)
+    if (dF > HIT && dR > HIT) return null
+    const bp = _xToBp(wx)
+    const direction = dF <= dR ? 'FORWARD' : 'REVERSE'
+    const entry = _firstTrackEntryAtBp(hid, direction, bp)
+    if (!entry) return null
+    const { lo, hi, si, di, dom } = entry
+    const strand = _design.strands[si]
+    const isEnd = (bp === lo || bp === hi)
+    if (filter) {
+      if (!strandPassesScafStapFilter(strand, filter)) return null
+      if ( isEnd && !filter.ends) return null
+      if (!isEnd && !filter.line) return null
     }
-    return null
+    const elementType = isEnd ? 'end' : 'line'
+    const isFwd = dom.direction === 'FORWARD'
+    let endWhich = null
+    if (isEnd) {
+      if (strand.domains.length === 1 && lo === hi) {
+        // 1-nt strand: the bead is BOTH 5′ and 3′ → pick the end that can
+        // actually be resized (free extension side), so a stub pinned by a
+        // crossover on one side stays resizable on the other.
+        endWhich = oneNtResizableEnd(
+          { helix_id: dom.helix_id, direction: dom.direction, bp_index: bp, strand_id: strand.id },
+          _design.strands,
+        )
+      } else {
+        endWhich = (isFwd && bp === lo) || (!isFwd && bp === hi) ? '5p' : '3p'
+      }
+    }
+    return { strand, strandIdx: si, dom, domainIdx: di, elementType, endWhich }
   }
 
   /**
@@ -956,25 +913,45 @@ export function initPathview(canvasEl, containerEl, {
    * whose visual extent intersects the current lasso world rect and pass the filter.
    * No component expansion — each element is captured independently.
    */
+  function _lassoDomainEntries(lx0, lx1, ly0, ly1) {
+    _ensureStrandIndex()
+    const hits = []
+    // Row bands and sorted per-track intervals make a small viewport lasso
+    // proportional to the geometry it can actually touch. Keep the exact
+    // world-space rejection checks below so boundary behavior is unchanged.
+    let firstRow = 0, lastRow = _rowBands.length - 1, rowStart = _rowBands.length
+    while (firstRow <= lastRow) {
+      const mid = (firstRow + lastRow) >> 1
+      if (_rowBands[mid].hi > ly0) { rowStart = mid; lastRow = mid - 1 }
+      else firstRow = mid + 1
+    }
+    const leftCell = (lx0 - GUTTER) / BP_W
+    const rightCell = (lx1 - GUTTER) / BP_W
+    for (let ri = rowStart; ri < _rowBands.length && _rowBands[ri].lo < ly1; ri++) {
+      const { hid: helixId, info } = _rowBands[ri]
+      for (const [direction, y] of [['FORWARD', info.fwdY], ['REVERSE', info.revY]]) {
+        if (y + CELL_H / 2 <= ly0 || y - CELL_H / 2 >= ly1) continue
+        for (const entry of _trackEntriesOverlappingCells(
+          helixId, direction, leftCell, rightCell)) {
+          if (_bpToX(entry.hi + 1) <= lx0 || _bpToX(entry.lo) >= lx1) continue
+          hits.push(entry)
+        }
+      }
+    }
+    return hits
+  }
+
   function _hitTestLassoElements() {
     const result = new Set()
     const lx0 = Math.min(_lassoWX0, _lassoWX1), lx1 = Math.max(_lassoWX0, _lassoWX1)
     const ly0 = Math.min(_lassoWY0, _lassoWY1), ly1 = Math.max(_lassoWY0, _lassoWY1)
 
-    for (const strand of (_design?.strands ?? [])) {
+    for (const indexed of _lassoDomainEntries(lx0, lx1, ly0, ly1)) {
+      const { strand, dom, di, lo, hi } = indexed
       if (!strandPassesScafStapFilter(strand, _selectFilter)) continue
       const doms = strand.domains
-      for (let di = 0; di < doms.length; di++) {
-        const dom = doms[di]
-        const info = _rowMap.get(dom.helix_id)
-        if (!info) continue
-        const lo   = Math.min(dom.start_bp, dom.end_bp)
-        const hi   = Math.max(dom.start_bp, dom.end_bp)
-        const isFwd = dom.direction === 'FORWARD'
-        const dxL  = _bpToX(lo), dxR = _bpToX(hi + 1)
-        const dyC  = isFwd ? info.fwdY : info.revY
-        // Quick reject — entire domain outside lasso
-        if (dxR <= lx0 || dxL >= lx1 || dyC + CELL_H / 2 <= ly0 || dyC - CELL_H / 2 >= ly1) continue
+      const isFwd = dom.direction === 'FORWARD'
+      const dxL  = _bpToX(lo), dxR = _bpToX(hi + 1)
 
         // Only strand-level terminals are selectable as ends, not internal
         // domain junctions (e.g. after a forced ligation merges two strands).
@@ -1002,71 +979,47 @@ export function initPathview(canvasEl, containerEl, {
           if (_selectFilter.line && lx1 > _bpToX(lo + 1) && lx0 < _bpToX(hi))
             result.add(_domainLineKey(dom))
         }
-      }
     }
 
     // Crossover arcs
     if (_selectFilter.xover) {
-      for (const xo of (_design?.crossovers ?? [])) {
-        const infoA = _rowMap.get(xo.half_a.helix_id)
-        const infoB = _rowMap.get(xo.half_b.helix_id)
-        if (!infoA || !infoB) continue
-        const x      = _bpCenterX(xo.half_a.index)
-        const y0     = xo.half_a.strand === 'FORWARD' ? infoA.fwdY : infoA.revY
-        const y1     = xo.half_b.strand === 'FORWARD' ? infoB.fwdY : infoB.revY
-        const bowAmt = Math.max(BP_W * 0.27, Math.abs(y1 - y0) * 0.07)
-        const isScafXo = infoA.scaffoldFwd ? xo.half_a.strand === 'FORWARD' : xo.half_a.strand === 'REVERSE'
-        if (isScafXo && !_selectFilter.scaf) continue
-        if (!isScafXo && !_selectFilter.stap) continue
-        const bowDir = _xoverBowDir(xo.half_a.index, isScafXo)
-        const axMin  = Math.min(x, x + bowDir * bowAmt) - BP_W * 0.5
-        const axMax  = Math.max(x, x + bowDir * bowAmt) + BP_W * 0.5
-        const ayMin  = Math.min(y0, y1), ayMax = Math.max(y0, y1)
-        if (axMax <= lx0 || axMin >= lx1 || ayMax <= ly0 || ayMin >= ly1) continue
-        result.add(_xoverKey(xo))
+      _ensureXoverArcHitIndex()
+      const candidates = new Set()
+      const firstBucket = Math.floor(lx0 / _ARC_HIT_BUCKET_W)
+      const lastBucket = Math.floor(lx1 / _ARC_HIT_BUCKET_W)
+      for (let bucket = firstBucket; bucket <= lastBucket; bucket++) {
+        for (const descriptor of _xoverArcHitBins.get(bucket) ?? []) candidates.add(descriptor)
       }
-      // Forced ligation arcs — same geometry as strand-transition arcs
-      for (const fl of (_design?.forced_ligations ?? [])) {
-        const infoA = _rowMap.get(fl.three_prime_helix_id)
-        const infoB = _rowMap.get(fl.five_prime_helix_id)
-        if (!infoA || !infoB) continue
-        const xA   = _bpCenterX(fl.three_prime_bp)
-        const xB   = _bpCenterX(fl.five_prime_bp)
-        const yA   = fl.three_prime_direction === 'FORWARD' ? infoA.fwdY : infoA.revY
-        const yB   = fl.five_prime_direction  === 'FORWARD' ? infoB.fwdY : infoB.revY
-        // Match the renderer: through-boundary routes as two seam arcs; PB-off periodic-
-        // seam FLs render as two short stubs at each end (clickable along the stub line).
-        const segs = _pbSeamFLAsStubs(fl)
-          ? _pbSeamFLStubs(fl, xA, yA, xB, yB)
-          : _pbSeamFLThroughBoundary(fl)
-          ? _pbSeamFLArcs(fl, xA, yA, xB, yB)
-          : [{ x0: xA, y0: yA, x1: xB, y1: yB,
-               cx: (xA + xB) / 2 + Math.max(BP_W * 0.27, Math.abs(yB - yA) * 0.07), cy: (yA + yB) / 2 }]
-        let flHit = false
-        for (const a of segs) {
-          const axMin = Math.min(a.x0, a.x1, a.cx) - BP_W * 0.5
-          const axMax = Math.max(a.x0, a.x1, a.cx) + BP_W * 0.5
-          const ayMin = Math.min(a.y0, a.y1), ayMax = Math.max(a.y0, a.y1)
-          if (!(axMax <= lx0 || axMin >= lx1 || ayMax <= ly0 || ayMin >= ly1)) { flHit = true; break }
+      for (const descriptor of candidates) {
+        if (descriptor.xo) {
+          if (descriptor.isScafXo && !_selectFilter.scaf) continue
+          if (!descriptor.isScafXo && !_selectFilter.stap) continue
         }
-        if (flHit) result.add(_forcedLigKey(fl))
+        if (descriptor.lassoXMax <= lx0 || descriptor.lassoXMin >= lx1 ||
+            descriptor.lassoYMax <= ly0 || descriptor.lassoYMin >= ly1) continue
+        const intersects = descriptor.segments.some(segment =>
+          segment.lassoXMax > lx0 && segment.lassoXMin < lx1 &&
+          segment.lassoYMax > ly0 && segment.lassoYMin < ly1)
+        if (!intersects) continue
+        result.add(descriptor.xo ? _xoverKey(descriptor.xo) : _forcedLigKey(descriptor.fl))
       }
     }
 
     // Loop/skip markers
     if (_selectFilter.loop || _selectFilter.skip) {
-      for (const helix of (_design?.helices ?? [])) {
-        if (!helix.loop_skips?.length) continue
-        const info = _rowMap.get(helix.id)
-        if (!info) continue
-        for (const ls of helix.loop_skips) {
+      _ensureLoopSkipIndex()
+      for (const [helixId, info] of _rowMap) {
+        const midY = (info.fwdY + info.revY) / 2
+        const r = Math.min(BP_W, CELL_H) * 0.35
+        if (midY + r <= ly0 || midY - r >= ly1) continue
+        for (const ls of _loopSkipsByHelix.get(helixId) ?? []) {
           if (ls.delta > 0 && !_selectFilter.loop) continue
           if (ls.delta < 0 && !_selectFilter.skip) continue
           const cx = _bpCenterX(ls.bp_index)
-          const midY = (info.fwdY + info.revY) / 2
-          const r = Math.min(BP_W, CELL_H) * 0.35
+          if (cx - r >= lx1) break
+          if (cx + r <= lx0) continue
           if (cx + r > lx0 && cx - r < lx1 && midY + r > ly0 && midY - r < ly1) {
-            result.add(_loopSkipKey(helix.id, ls.bp_index, ls.delta))
+            result.add(_loopSkipKey(helixId, ls.bp_index, ls.delta))
           }
         }
       }
@@ -1083,20 +1036,9 @@ export function initPathview(canvasEl, containerEl, {
     const result = new Set()
     const lx0 = Math.min(_lassoWX0, _lassoWX1), lx1 = Math.max(_lassoWX0, _lassoWX1)
     const ly0 = Math.min(_lassoWY0, _lassoWY1), ly1 = Math.max(_lassoWY0, _lassoWY1)
-    for (const strand of (_design?.strands ?? [])) {
+    for (const { strand } of _lassoDomainEntries(lx0, lx1, ly0, ly1)) {
       if (strand.strand_type === 'scaffold') continue
-      for (const dom of strand.domains) {
-        const info = _rowMap.get(dom.helix_id)
-        if (!info) continue
-        const lo   = Math.min(dom.start_bp, dom.end_bp)
-        const hi   = Math.max(dom.start_bp, dom.end_bp)
-        const isFwd = dom.direction === 'FORWARD'
-        const dxL  = _bpToX(lo), dxR = _bpToX(hi + 1)
-        const dyC  = isFwd ? info.fwdY : info.revY
-        if (dxR <= lx0 || dxL >= lx1 || dyC + CELL_H / 2 <= ly0 || dyC - CELL_H / 2 >= ly1) continue
-        result.add(strand.id)
-        break   // one domain hit is enough — no need to check the rest of this strand
-      }
+      result.add(strand.id)
     }
     return result
   }
@@ -1107,6 +1049,88 @@ export function initPathview(canvasEl, containerEl, {
   // miss on the actual stroked curve.
   const _ARC_HIT_TOLERANCE = BP_W * 0.5
   const _ARC_HIT_TOL_SQ    = _ARC_HIT_TOLERANCE * _ARC_HIT_TOLERANCE
+  const _ARC_HIT_BUCKET_W  = BP_W * 8
+  let _xoverArcHitDesign = null
+  let _xoverArcHitLayoutRevision = -1
+  let _xoverArcHitPbSignature = ''
+  let _xoverArcHitBins = new Map()
+
+  function _ensureXoverArcHitIndex() {
+    const pbSignature = `${_pbActive}:${_pbNearBp}:${_pbFarBp}`
+    if (_xoverArcHitDesign === _design &&
+        _xoverArcHitLayoutRevision === _layoutRevision &&
+        _xoverArcHitPbSignature === pbSignature) return
+    const bins = new Map()
+    const tol = _ARC_HIT_TOLERANCE
+    const addDescriptor = descriptor => {
+      descriptor.xMin = Math.min(...descriptor.segments.map(segment => segment.xMin))
+      descriptor.xMax = Math.max(...descriptor.segments.map(segment => segment.xMax))
+      descriptor.yMin = Math.min(...descriptor.segments.map(segment => segment.yMin))
+      descriptor.yMax = Math.max(...descriptor.segments.map(segment => segment.yMax))
+      descriptor.lassoXMin = Math.min(...descriptor.segments.map(segment => segment.lassoXMin))
+      descriptor.lassoXMax = Math.max(...descriptor.segments.map(segment => segment.lassoXMax))
+      descriptor.lassoYMin = Math.min(...descriptor.segments.map(segment => segment.lassoYMin))
+      descriptor.lassoYMax = Math.max(...descriptor.segments.map(segment => segment.lassoYMax))
+      const first = Math.floor(descriptor.xMin / _ARC_HIT_BUCKET_W)
+      const last = Math.floor(descriptor.xMax / _ARC_HIT_BUCKET_W)
+      for (let bucket = first; bucket <= last; bucket++) {
+        let entries = bins.get(bucket)
+        if (!entries) bins.set(bucket, entries = [])
+        entries.push(descriptor)
+      }
+    }
+    const boundedSegment = segment => ({
+      ...segment,
+      xMin: Math.min(segment.x0, segment.x1, segment.cx) - tol,
+      xMax: Math.max(segment.x0, segment.x1, segment.cx) + tol,
+      yMin: Math.min(segment.y0, segment.y1) - tol,
+      yMax: Math.max(segment.y0, segment.y1) + tol,
+      // Lasso historically expanded only horizontal arc bounds. Keep those
+      // exact selection edges while point hits retain tolerance in both axes.
+      lassoXMin: Math.min(segment.x0, segment.x1, segment.cx) - tol,
+      lassoXMax: Math.max(segment.x0, segment.x1, segment.cx) + tol,
+      lassoYMin: Math.min(segment.y0, segment.y1),
+      lassoYMax: Math.max(segment.y0, segment.y1),
+    })
+    for (const xo of _design?.crossovers ?? []) {
+      const infoA = _rowMap.get(xo.half_a.helix_id)
+      const infoB = _rowMap.get(xo.half_b.helix_id)
+      if (!infoA || !infoB) continue
+      const isScafXo = infoA.scaffoldFwd
+        ? xo.half_a.strand === 'FORWARD' : xo.half_a.strand === 'REVERSE'
+      const x = _bpCenterX(xo.half_a.index)
+      const y0 = xo.half_a.strand === 'FORWARD' ? infoA.fwdY : infoA.revY
+      const y1 = xo.half_b.strand === 'FORWARD' ? infoB.fwdY : infoB.revY
+      const cx = x + _xoverBowDir(xo.half_a.index, isScafXo) *
+        Math.max(BP_W * 0.27, Math.abs(y1 - y0) * 0.07)
+      addDescriptor({ xo, isScafXo, segments: [boundedSegment({
+        x0: x, y0, cx, cy: (y0 + y1) / 2, x1: x, y1,
+      })] })
+    }
+    for (const fl of _design?.forced_ligations ?? []) {
+      const infoA = _rowMap.get(fl.three_prime_helix_id)
+      const infoB = _rowMap.get(fl.five_prime_helix_id)
+      if (!infoA || !infoB) continue
+      const xA = _bpCenterX(fl.three_prime_bp)
+      const xB = _bpCenterX(fl.five_prime_bp)
+      const yA = fl.three_prime_direction === 'FORWARD' ? infoA.fwdY : infoA.revY
+      const yB = fl.five_prime_direction === 'FORWARD' ? infoB.fwdY : infoB.revY
+      const segments = _pbSeamFLAsStubs(fl)
+        ? _pbSeamFLStubs(fl, xA, yA, xB, yB)
+        : _pbSeamFLThroughBoundary(fl)
+        ? _pbSeamFLArcs(fl, xA, yA, xB, yB)
+        : (() => {
+            const bowAmt = Math.max(BP_W * 0.27, Math.abs(yB - yA) * 0.07)
+            return [{ x0: xA, y0: yA, x1: xB, y1: yB,
+              cx: (xA + xB) / 2 + bowAmt, cy: (yA + yB) / 2 }]
+          })()
+      addDescriptor({ fl, segments: segments.map(boundedSegment) })
+    }
+    _xoverArcHitBins = bins
+    _xoverArcHitDesign = _design
+    _xoverArcHitLayoutRevision = _layoutRevision
+    _xoverArcHitPbSignature = pbSignature
+  }
 
   // Sample-and-segment min squared distance from (wx, wy) to a quadratic
   // Bezier. Treats the curve as a `samples`-segment polyline (24 segments
@@ -1153,60 +1177,24 @@ export function initPathview(canvasEl, containerEl, {
     if (!_selectFilter.xover) return null
     let best = null
     let bestDistSq = _ARC_HIT_TOL_SQ
-    const tol = _ARC_HIT_TOLERANCE
-
-    // ── Crossover arcs ──────────────────────────────────────────────────────
-    for (const xo of (_design?.crossovers ?? [])) {
-      const infoA = _rowMap.get(xo.half_a.helix_id)
-      const infoB = _rowMap.get(xo.half_b.helix_id)
-      if (!infoA || !infoB) continue
-      const isScafXo = infoA.scaffoldFwd ? xo.half_a.strand === 'FORWARD' : xo.half_a.strand === 'REVERSE'
-      if (isScafXo && !_selectFilter.scaf) continue
-      if (!isScafXo && !_selectFilter.stap) continue
-      const x   = _bpCenterX(xo.half_a.index)
-      const y0  = xo.half_a.strand === 'FORWARD' ? infoA.fwdY : infoA.revY
-      const y1  = xo.half_b.strand === 'FORWARD' ? infoB.fwdY : infoB.revY
-      const bowDir = _xoverBowDir(xo.half_a.index, isScafXo)
-      const bowAmt = Math.max(BP_W * 0.27, Math.abs(y1 - y0) * 0.07)
-      const cx = x + bowDir * bowAmt
-      const cy = (y0 + y1) / 2
-      // Cheap AABB pre-filter (expanded by tolerance).
-      const xMin = Math.min(x, cx) - tol
-      const xMax = Math.max(x, cx) + tol
-      const yMin = Math.min(y0, y1) - tol
-      const yMax = Math.max(y0, y1) + tol
-      if (wx < xMin || wx > xMax || wy < yMin || wy > yMax) continue
-      // Precise check against the sampled Bezier.
-      const dSq = _quadBezierMinDistSq(wx, wy, x, y0, cx, cy, x, y1)
-      if (dSq < bestDistSq) { bestDistSq = dSq; best = { xo } }
-    }
-
-    // ── Forced ligation arcs ───────────────────────────────────────────────
-    for (const fl of (_design?.forced_ligations ?? [])) {
-      const infoA = _rowMap.get(fl.three_prime_helix_id)
-      const infoB = _rowMap.get(fl.five_prime_helix_id)
-      if (!infoA || !infoB) continue
-      const xA   = _bpCenterX(fl.three_prime_bp)
-      const xB   = _bpCenterX(fl.five_prime_bp)
-      const yA   = fl.three_prime_direction === 'FORWARD' ? infoA.fwdY : infoA.revY
-      const yB   = fl.five_prime_direction  === 'FORWARD' ? infoB.fwdY : infoB.revY
-      // Match the renderer: a seam FL routed through the boundary is two short arcs to
-      // each endpoint's mirror image; with PB off + is_periodic_seam, two short stubs at
-      // each end. Either case → hit-test against the segs (not the long straight arc).
-      const segs = _pbSeamFLAsStubs(fl)
-        ? _pbSeamFLStubs(fl, xA, yA, xB, yB)
-        : _pbSeamFLThroughBoundary(fl)
-        ? _pbSeamFLArcs(fl, xA, yA, xB, yB)
-        : (() => { const bowAmt = Math.max(BP_W * 0.27, Math.abs(yB - yA) * 0.07)
-                   return [{ x0: xA, y0: yA, x1: xB, y1: yB, cx: (xA + xB) / 2 + bowAmt, cy: (yA + yB) / 2 }] })()
-      for (const a of segs) {
-        const xMin = Math.min(a.x0, a.x1, a.cx) - tol
-        const xMax = Math.max(a.x0, a.x1, a.cx) + tol
-        const yMin = Math.min(a.y0, a.y1) - tol
-        const yMax = Math.max(a.y0, a.y1) + tol
-        if (wx < xMin || wx > xMax || wy < yMin || wy > yMax) continue
-        const dSq = _quadBezierMinDistSq(wx, wy, a.x0, a.y0, a.cx, a.cy, a.x1, a.y1)
-        if (dSq < bestDistSq) { bestDistSq = dSq; best = { fl } }
+    _ensureXoverArcHitIndex()
+    const bucket = Math.floor(wx / _ARC_HIT_BUCKET_W)
+    for (const descriptor of _xoverArcHitBins.get(bucket) ?? []) {
+      if (descriptor.xo) {
+        if (descriptor.isScafXo && !_selectFilter.scaf) continue
+        if (!descriptor.isScafXo && !_selectFilter.stap) continue
+      }
+      if (wx < descriptor.xMin || wx > descriptor.xMax ||
+          wy < descriptor.yMin || wy > descriptor.yMax) continue
+      for (const segment of descriptor.segments) {
+        if (wx < segment.xMin || wx > segment.xMax ||
+            wy < segment.yMin || wy > segment.yMax) continue
+        const dSq = _quadBezierMinDistSq(
+          wx, wy, segment.x0, segment.y0, segment.cx, segment.cy, segment.x1, segment.y1)
+        if (dSq < bestDistSq) {
+          bestDistSq = dSq
+          best = descriptor.xo ? { xo: descriptor.xo } : { fl: descriptor.fl }
+        }
       }
     }
 
@@ -1246,25 +1234,8 @@ export function initPathview(canvasEl, containerEl, {
    */
   function _needsNick(helixId, nickBp, direction) {
     if (!_design?.strands) return false
-    for (const strand of _design.strands) {
-      for (const dom of strand.domains) {
-        if (dom.helix_id !== helixId || dom.direction !== direction) continue
-        const lo = Math.min(dom.start_bp, dom.end_bp)
-        const hi = Math.max(dom.start_bp, dom.end_bp)
-        if (nickBp < lo || nickBp > hi) continue
-        // Domain covers nickBp. A valid nick requires at least one bp on each side
-        // of the split — i.e. the domain must not start or end exactly at nickBp.
-        //
-        // FORWARD: 3' end = hi, 5' end = lo.
-        //   Skip if hi == nickBp (3' already here) or lo == nickBp (5' at nick
-        //   point — would produce a lone 1-bp left fragment).
-        // REVERSE: 3' end = lo, 5' end = hi.
-        //   Skip if lo == nickBp (3' already here) or hi == nickBp (5' at nick
-        //   point — nothing to the right to form the right fragment).
-        return lo !== nickBp && hi !== nickBp
-      }
-    }
-    return false  // no domain covers this position — nothing to nick
+    const entry = _firstTrackEntryAtBp(helixId, direction, nickBp)
+    return !!entry && entry.lo !== nickBp && entry.hi !== nickBp
   }
 
   /**
@@ -1283,12 +1254,10 @@ export function initPathview(canvasEl, containerEl, {
     const hi = Math.max(dom.start_bp, dom.end_bp)
     let hiClamp = hi - 1
     if (dom.direction === 'FORWARD') {
-      const strand = (_design?.strands ?? []).find(s => s.domains.some(d =>
-        d.helix_id === dom.helix_id && d.direction === dom.direction &&
-        Math.min(d.start_bp, d.end_bp) === lo && Math.max(d.start_bp, d.end_bp) === hi))
-      const di = strand ? strand.domains.findIndex(d =>
-        d.helix_id === dom.helix_id && d.direction === dom.direction &&
-        Math.min(d.start_bp, d.end_bp) === lo && Math.max(d.start_bp, d.end_bp) === hi) : -1
+      _ensureStrandIndex()
+      const entry = _strandEntryByDomain.get(dom)
+      const strand = entry?.strand
+      const di = entry?.di ?? -1
       const nxt = di >= 0 ? strand.domains[di + 1] : null
       if (nxt && nxt.helix_id === dom.helix_id && nxt.direction === 'FORWARD' &&
           Math.min(nxt.start_bp, nxt.end_bp) === hi + 1) {
@@ -1320,18 +1289,9 @@ export function initPathview(canvasEl, containerEl, {
     const helixId = dom.helix_id
     const dir     = dom.direction
 
-    // Collect all strand-terminal 3' and 5' ends on this helix+direction.
-    const threeEnds = []  // bp values of 3' strand termini
-    const fiveEnds  = []  // bp values of 5' strand termini
-    for (const s of _design.strands) {
-      if (!s.domains.length) continue
-      const last  = s.domains[s.domains.length - 1]
-      if (last.helix_id === helixId && last.direction === dir)
-        threeEnds.push(last.end_bp)
-      const first = s.domains[0]
-      if (first.helix_id === helixId && first.direction === dir)
-        fiveEnds.push(first.start_bp)
-    }
+    _ensureNickTerminalIndex()
+    const { three: threeEnds = [], five: fiveEnds = [] } =
+      _nickTerminalsByTrack.get(`${helixId}_${dir}`) ?? {}
 
     // Find pairs where |3'bp - 5'bp| === 1 (adjacent on the helix).
     const candidates = []
@@ -1430,37 +1390,274 @@ export function initPathview(canvasEl, containerEl, {
   // a post-mutation re-render. The index buckets domains by `${helix}_${dir}`
   // so a lookup scans only the handful of domains on that track. Rebuilt only
   // when `_design` changes (reference identity), so pan/zoom redraws reuse it.
-  let _strandIndexMap = null      // Map: `${helixId}_${direction}` → [{lo, hi, si}]
+  let _strandIndexMap = null      // Map: `${helixId}_${direction}` → [{lo, hi, si, di, dom}]
+  let _strandTrackSearch = new Map() // sorted interval buckets + prefix max-hi
   let _strandIndexDesign = null   // the _design the index was built for
+  let _strandEntryByDomain = new WeakMap()
+  let _strandById = new Map()
+  let _extensionHostEntries = []
+  let _forcedLigTransitionKeys = new Set()
+  let _elementOwnerByKey = new Map()
+  let _domainOwnerByKey = new Map()
+  let _domainElementKeysByStrand = new Map()
+  let _xoverKeysByOwnerStrand = new Map()
+  let _xoversByKey = new Map()
+  let _xoverDomainTransitions = new Map()
+  let _loopSkipsByHelix = new Map()
+  let _loopSkipsByHelixBp = new Map()
+  let _activeStrandExtentCached = null
+  let _referenceOnlyHelixIdsCached = new Set()
+  let _selectionOwnerIndexDesign = null
+  let _xoverDomainTransitionIndexDesign = null
+  let _loopSkipIndexDesign = null
+  let _nickTerminalIndexDesign = null
+  let _nickTerminalsByTrack = new Map()
+  let _endEntryByKey = null
+  let _lineEntryByKey = null
+  let _xoverPositionsByTrack = null
+  let _dragIndexDesign = null
+
+  const _forcedLigTransitionKey = (aHelix, aBp, aDir, bHelix, bBp, bDir) =>
+    `${aHelix}\0${aBp}\0${aDir}\0${bHelix}\0${bBp}\0${bDir}`
+  const _xoverDomainTransitionKey = (aHelix, aBp, aDir, bHelix, bBp, bDir) =>
+    `${aHelix}\0${aBp}\0${aDir}\0${bHelix}\0${bBp}\0${bDir}`
 
   function _ensureStrandIndex() {
     if (_strandIndexDesign === _design && _strandIndexMap) return
     const m = new Map()
     const strands = _design?.strands ?? []
+    const strandById = new Map()
+    const strandIndexById = new Map()
+    const strandEntryByDomain = new WeakMap()
+    const refHelixIds = new Set(), activeHelixIds = new Set()
+    let activeLo = Infinity, activeHi = -Infinity
+    let entryOrder = 0
     for (let si = 0; si < strands.length; si++) {
-      for (const dom of strands[si].domains) {
+      const strand = strands[si]
+      strandById.set(strand.id, strand)
+      strandIndexById.set(strand.id, si)
+      for (let di = 0; di < strands[si].domains.length; di++) {
+        const dom = strands[si].domains[di]
         const key = `${dom.helix_id}_${dom.direction}`
         let arr = m.get(key)
         if (!arr) m.set(key, arr = [])
         const lo = Math.min(dom.start_bp, dom.end_bp)
         const hi = Math.max(dom.start_bp, dom.end_bp)
-        arr.push({ lo, hi, si })   // si ascending → first match == lowest si (matches old scan)
+        const entry = { lo, hi, si, di, dom, strand, order: entryOrder++ }
+        arr.push(entry) // input order preserves the legacy first match
+        strandEntryByDomain.set(dom, entry)
+        ;(strand.is_reference ? refHelixIds : activeHelixIds).add(dom.helix_id)
+        if (!strand.is_reference) {
+          if (lo < activeLo) activeLo = lo
+          if (hi > activeHi) activeHi = hi
+        }
       }
     }
+    const forcedLigTransitionKeys = new Set()
+    for (const fl of _design?.forced_ligations ?? []) {
+      forcedLigTransitionKeys.add(_forcedLigTransitionKey(
+        fl.three_prime_helix_id, fl.three_prime_bp, fl.three_prime_direction,
+        fl.five_prime_helix_id, fl.five_prime_bp, fl.five_prime_direction))
+    }
+    for (const hid of activeHelixIds) refHelixIds.delete(hid)
     _strandIndexMap = m
+    _strandTrackSearch = new Map()
+    _strandEntryByDomain = strandEntryByDomain
+    _strandById = strandById
+    _extensionHostEntries = (_design?.extensions ?? []).flatMap(ext => {
+      const strand = strandById.get(ext.strand_id)
+      if (!strand) return []
+      return [{ ext, strand, idx: strandIndexById.get(ext.strand_id) }]
+    })
+    _forcedLigTransitionKeys = forcedLigTransitionKeys
+    _activeStrandExtentCached = isFinite(activeLo) ? { lo: activeLo, hi: activeHi } : null
+    _referenceOnlyHelixIdsCached = refHelixIds
+    _selectionOwnerIndexDesign = null
+    _xoverDomainTransitionIndexDesign = null
+    _loopSkipIndexDesign = null
+    _nickTerminalIndexDesign = null
+    _dragIndexDesign = null
+    _endEntryByKey = null
+    _lineEntryByKey = null
+    _xoverPositionsByTrack = null
     _strandIndexDesign = _design
+  }
+
+  function _firstTrackEntryAtBp(helixId, direction, bp) {
+    _ensureStrandIndex()
+    // Point hits usually inspect a short track bucket. Its legacy-order linear
+    // walk is faster than building/searching an interval tree and naturally
+    // preserves first-match semantics for overlapping reference geometry.
+    for (const entry of _strandIndexMap.get(`${helixId}_${direction}`) ?? []) {
+      if (entry.lo <= bp && bp <= entry.hi) return entry
+    }
+    return null
+  }
+
+  function _trackEntriesOverlappingCells(helixId, direction, leftCell, rightCell) {
+    _ensureStrandIndex()
+    const key = `${helixId}_${direction}`
+    let search = _strandTrackSearch.get(key)
+    if (!search) {
+      const entries = [...(_strandIndexMap.get(key) ?? [])]
+        .sort((a, b) => a.lo - b.lo || a.order - b.order)
+      const prefixMaxHi = new Array(entries.length)
+      let maxHi = -Infinity
+      for (let i = 0; i < entries.length; i++) {
+        maxHi = Math.max(maxHi, entries[i].hi)
+        prefixMaxHi[i] = maxHi
+      }
+      search = { entries, prefixMaxHi }
+      _strandTrackSearch.set(key, search)
+    }
+    if (!search?.entries.length) return []
+    const { entries, prefixMaxHi } = search
+    let lo = 0, hi = entries.length - 1, right = -1
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1
+      if (entries[mid].lo < rightCell) { right = mid; lo = mid + 1 }
+      else hi = mid - 1
+    }
+    const hits = []
+    for (let i = right; i >= 0 && prefixMaxHi[i] + 1 > leftCell; i--) {
+      if (entries[i].hi + 1 > leftCell) hits.push(entries[i])
+    }
+    return hits
+  }
+
+  function _ensureSelectionOwnerIndex() {
+    _ensureStrandIndex()
+    if (_selectionOwnerIndexDesign === _design) return
+    const elementOwnerByKey = new Map(), domainOwnerByKey = new Map()
+    const domainElementKeysByStrand = new Map(), xoverKeysByOwnerStrand = new Map()
+    const xoversByKey = new Map()
+    const addOwner = (index, key, owner) => {
+      let owners = index.get(key)
+      if (!owners) index.set(key, owners = new Set())
+      owners.add(owner)
+    }
+    for (const strand of _design?.strands ?? []) {
+      const strandKeys = []
+      for (const dom of strand.domains) {
+        for (const key of [_domainLineKey(dom), _domainEndKey(dom, '5p'), _domainEndKey(dom, '3p')]) {
+          addOwner(elementOwnerByKey, key, strand.id)
+          addOwner(domainOwnerByKey, key, strand.id)
+          strandKeys.push(key)
+        }
+      }
+      domainElementKeysByStrand.set(strand.id, strandKeys)
+    }
+    const ownerAt = (helixId, bp, direction) => {
+      return _firstTrackEntryAtBp(helixId, direction, bp)?.strand.id ?? null
+    }
+    for (const xo of _design?.crossovers ?? []) {
+      const key = _xoverKey(xo)
+      let keyedXovers = xoversByKey.get(key)
+      if (!keyedXovers) xoversByKey.set(key, keyedXovers = [])
+      keyedXovers.push(xo)
+      const owner = ownerAt(xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand)
+      if (!owner) continue
+      addOwner(elementOwnerByKey, key, owner)
+      let keys = xoverKeysByOwnerStrand.get(owner)
+      if (!keys) xoverKeysByOwnerStrand.set(owner, keys = [])
+      keys.push(key)
+    }
+    for (const fl of _design?.forced_ligations ?? []) {
+      const owner = ownerAt(
+        fl.three_prime_helix_id, fl.three_prime_bp, fl.three_prime_direction)
+      if (owner) addOwner(elementOwnerByKey, _forcedLigKey(fl), owner)
+    }
+    _elementOwnerByKey = elementOwnerByKey
+    _domainOwnerByKey = domainOwnerByKey
+    _domainElementKeysByStrand = domainElementKeysByStrand
+    _xoverKeysByOwnerStrand = xoverKeysByOwnerStrand
+    _xoversByKey = xoversByKey
+    _selectionOwnerIndexDesign = _design
+  }
+
+  function _ensureXoverDomainTransitionIndex() {
+    _ensureStrandIndex()
+    if (_xoverDomainTransitionIndexDesign === _design) return
+    const transitions = new Map()
+    for (const strand of _design?.strands ?? []) {
+      for (let di = 0; di < strand.domains.length - 1; di++) {
+        const dom = strand.domains[di], next = strand.domains[di + 1]
+        const key = _xoverDomainTransitionKey(
+          dom.helix_id, dom.end_bp, dom.direction,
+          next.helix_id, next.start_bp, next.direction)
+        if (!transitions.has(key)) {
+          transitions.set(key, { strand, domIdx: di, d0: dom, d1: next })
+        }
+      }
+    }
+    _xoverDomainTransitions = transitions
+    _xoverDomainTransitionIndexDesign = _design
+  }
+
+  function _ensureLoopSkipIndex() {
+    _ensureStrandIndex()
+    if (_loopSkipIndexDesign === _design) return
+    const byHelix = new Map(), byHelixBp = new Map()
+    for (const helix of _design?.helices ?? []) {
+      if (!helix.loop_skips?.length) continue
+      const sorted = [...helix.loop_skips].sort((a, b) => a.bp_index - b.bp_index)
+      byHelix.set(helix.id, sorted)
+      byHelixBp.set(helix.id, new Map(sorted.map(marker => [marker.bp_index, marker])))
+    }
+    _loopSkipsByHelix = byHelix
+    _loopSkipsByHelixBp = byHelixBp
+    _loopSkipIndexDesign = _design
+  }
+
+  function _ensureNickTerminalIndex() {
+    _ensureStrandIndex()
+    if (_nickTerminalIndexDesign === _design) return
+    const terminals = new Map()
+    const bucketFor = (helixId, direction) => {
+      const key = `${helixId}_${direction}`
+      let bucket = terminals.get(key)
+      if (!bucket) terminals.set(key, bucket = { three: [], five: [] })
+      return bucket
+    }
+    for (const strand of _design?.strands ?? []) {
+      if (!strand.domains.length) continue
+      const first = strand.domains[0], last = strand.domains[strand.domains.length - 1]
+      bucketFor(last.helix_id, last.direction).three.push(last.end_bp)
+      bucketFor(first.helix_id, first.direction).five.push(first.start_bp)
+    }
+    _nickTerminalsByTrack = terminals
+    _nickTerminalIndexDesign = _design
+  }
+
+  function _ensureDragIndex() {
+    _ensureStrandIndex()
+    if (_dragIndexDesign === _design) return
+    const endEntryByKey = new Map()
+    const lineEntryByKey = new Map()
+    for (const entries of _strandIndexMap.values()) for (const entry of entries) {
+      const lineKey = _domainLineKey(entry.dom)
+      if (!lineEntryByKey.has(lineKey)) lineEntryByKey.set(lineKey, entry)
+      for (const end of ['5p', '3p']) {
+        const endKey = _domainEndKey(entry.dom, end)
+        if (!endEntryByKey.has(endKey)) endEntryByKey.set(endKey, entry)
+      }
+    }
+    const xoverPositionsByTrack = new Map()
+    for (const xo of _design?.crossovers ?? []) for (const half of [xo.half_a, xo.half_b]) {
+      const key = `${half.helix_id}_${half.strand}`
+      let positions = xoverPositionsByTrack.get(key)
+      if (!positions) xoverPositionsByTrack.set(key, positions = new Set())
+      positions.add(half.index)
+    }
+    _endEntryByKey = endEntryByKey
+    _lineEntryByKey = lineEntryByKey
+    _xoverPositionsByTrack = xoverPositionsByTrack
+    _dragIndexDesign = _design
   }
 
   function _findStrandIdxAt(helixId, bp, direction) {
     if (!_design?.strands) return -1
-    _ensureStrandIndex()
-    const arr = _strandIndexMap.get(`${helixId}_${direction}`)
-    if (!arr) return -1
-    for (let i = 0; i < arr.length; i++) {
-      const e = arr[i]
-      if (e.lo <= bp && bp <= e.hi) return e.si
-    }
-    return -1
+    return _firstTrackEntryAtBp(helixId, direction, bp)?.si ?? -1
   }
 
   // Build per-frame helpers: colorOf (direct strand color) and isXoverSlot
@@ -1469,11 +1666,13 @@ export function initPathview(canvasEl, containerEl, {
   function _buildComponents() {
     const strands = _design?.strands ?? []
     ensureStapleColors(_design)   // pin each staple's colour by id so edits don't reshuffle the palette
-    const linkerMembers = new Map()
+    const membersByStrand = new Map(strands.map(strand => [strand.id, [strand.id]]))
     for (const conn of (_design?.overhang_connections ?? [])) {
       if (conn.linker_type !== 'ss') continue
       const ids = [`__lnk__${conn.id}__a`, `__lnk__${conn.id}__b`]
-      for (const id of ids) linkerMembers.set(id, ids)
+      for (const id of ids) {
+        membersByStrand.set(id, ids)
+      }
     }
 
     // Crossover slot set — "helixId_bp_direction" for every registered half.
@@ -1489,7 +1688,7 @@ export function initPathview(canvasEl, containerEl, {
       // ss overhang linkers are stored as two complement strands plus one
       // connection record. Expand either side to both sides so clicking one
       // linker domain highlights the whole logical linker in cadnano and 3D.
-      membersOf:   (strandId) => new Set(linkerMembers.get(strandId) ?? [strandId]),
+      membersOf:   (strandId) => membersByStrand.get(strandId) ?? [strandId],
       isXoverSlot: (hid, bp, dir) => xoverSlots.has(`${hid}_${bp}_${dir}`),
     }
   }
@@ -1528,15 +1727,25 @@ export function initPathview(canvasEl, containerEl, {
   }
   // Per-frame cache: strand index → { color, thickMul }
   let _heatmapCache = new Map()
+  let _heatmapCacheDesign = null
+  let _preparedHeatmapCache = new Map()
   function _rebuildHeatmapCache() {
-    _heatmapCache = new Map()
-    if (!_viewTools.lengthHeatmap || !_design?.strands) return
-    for (let si = 0; si < _design.strands.length; si++) {
-      const strand = _design.strands[si]
-      if (strand.strand_type === 'scaffold') continue   // scaffold keeps its own colour
-      const nt = strandNtCount(strand)
-      _heatmapCache.set(si, { color: _lengthHeatmapColor(nt), thickMul: _lengthHeatmapThickMul(nt) })
+    if (!_viewTools.lengthHeatmap || !_design?.strands) {
+      _heatmapCache = new Map()
+      return
     }
+    if (_heatmapCacheDesign !== _design) {
+      const prepared = new Map()
+      for (let si = 0; si < _design.strands.length; si++) {
+        const strand = _design.strands[si]
+        if (strand.strand_type === 'scaffold') continue
+        const nt = strandNtCount(strand)
+        prepared.set(si, { color: _lengthHeatmapColor(nt), thickMul: _lengthHeatmapThickMul(nt) })
+      }
+      _preparedHeatmapCache = prepared
+      _heatmapCacheDesign = _design
+    }
+    _heatmapCache = _preparedHeatmapCache
   }
 
   // ── Heat map legend (screen-space overlay, right-centre of canvas) ────────
@@ -1627,6 +1836,27 @@ export function initPathview(canvasEl, containerEl, {
     return m
   }
 
+  // Sequence columns, loop/skip compression, and overhang fallbacks depend only
+  // on the immutable design snapshot. Both sequence letters and undefined-base
+  // highlighting consume the same walk, so cache it once instead of rebuilding
+  // thousands of column records on every pan/zoom/drag redraw.
+  let _sequenceRenderCacheDesign = null
+  let _sequenceRenderCache = null
+  function _ensureSequenceRenderCache() {
+    if (_sequenceRenderCacheDesign === _design && _sequenceRenderCache) return _sequenceRenderCache
+    const ovhMap = _overhangSeqMap()
+    const skipMap = skipMapFromHelices(_design?.helices ?? [])
+    const rows = (_design?.strands ?? []).map(strand => ({
+      strand,
+      columns: [...sequenceColumns(strand, skipMap)],
+      hasSequence: !!strand.sequence || strand.domains.some(
+        d => d.overhang_id && ovhMap.has(d.overhang_id)),
+    }))
+    _sequenceRenderCacheDesign = _design
+    _sequenceRenderCache = { ovhMap, rows }
+    return _sequenceRenderCache
+  }
+
   // Resolve the sequence character for a column emitted by `sequenceColumns`.
   // `seqIndex` is the skip/loop-compressed index into strand.sequence; `domCol` is the
   // present-column index within the domain (used only for overhang strands, whose own
@@ -1649,7 +1879,7 @@ export function initPathview(canvasEl, containerEl, {
     if (!_viewTools.sequences || !_design?.strands) return
     // Only draw letters when zoomed in enough to read them
     if (BP_W * _zoom < 6) return
-    const ovhMap = _overhangSeqMap()
+    const { ovhMap, rows } = _ensureSequenceRenderCache()
     const fontSize = Math.min(BP_W * 0.85, CELL_H * 0.65)
     ctx.font = `bold ${fontSize}px Courier New, monospace`
     ctx.textAlign = 'center'
@@ -1663,7 +1893,6 @@ export function initPathview(canvasEl, containerEl, {
     // index into the (skip/loop-compressed) sequence string, so letters stay aligned with
     // the antiparallel strand across deletions (the old geometric index drifted after the
     // first skip).  Deleted columns are simply not yielded → nothing drawn there.
-    const skipMap = skipMapFromHelices(_design.helices)
     // A loop column (nBases === 2) holds TWO inserted nucleotides in one geometric column;
     // draw both, squeezed side-by-side and 5'→3'-ordered along the strand direction (so the
     // reading order is left→right on a FORWARD strand, right→left on a REVERSE one), at a
@@ -1671,11 +1900,10 @@ export function initPathview(canvasEl, containerEl, {
     const loopFontSize = fontSize * 0.66
     const baseFont = ctx.font
     const loopFont = `bold ${loopFontSize}px Courier New, monospace`
-    for (const strand of _design.strands) {
-      const hasSeq = !!strand.sequence
-      const hasOvh = !hasSeq && strand.domains.some(d => d.overhang_id && ovhMap.has(d.overhang_id))
-      if (!hasSeq && !hasOvh) continue
-      for (const col of sequenceColumns(strand, skipMap)) {
+    for (const row of rows) {
+      const { strand } = row
+      if (!row.hasSequence) continue
+      for (const col of row.columns) {
         const info = _rowMap.get(col.helixId)
         if (!info) continue
         const y = col.isFwd ? info.fwdY : info.revY
@@ -1699,7 +1927,7 @@ export function initPathview(canvasEl, containerEl, {
   // ── Draw: undefined base highlights (world-space) ─────────────────────────
   function _drawUndefinedBases() {
     if (!_viewTools.undefinedBases || !_design?.strands) return
-    const ovhMap = _overhangSeqMap()
+    const { ovhMap, rows } = _ensureSequenceRenderCache()
     ctx.fillStyle = CLR_UNDEF_FILL
     ctx.strokeStyle = CLR_UNDEF_BORDER
     ctx.lineWidth = 1 / _zoom
@@ -1707,9 +1935,8 @@ export function initPathview(canvasEl, containerEl, {
     const half = CELL_H / 2
     // Skip-aware (mirrors _drawSequences): only PRESENT columns are candidates; a deleted
     // column is not "undefined", it simply has no nucleotide, so it must not be flagged.
-    const skipMap = skipMapFromHelices(_design.helices)
-    for (const strand of _design.strands) {
-      for (const col of sequenceColumns(strand, skipMap)) {
+    for (const { strand, columns } of rows) {
+      for (const col of columns) {
         const info = _rowMap.get(col.helixId)
         if (!info) continue
         const ch = _seqCharAt(strand, col.seqIndex, col.domCol, col.dom, ovhMap)
@@ -1727,24 +1954,34 @@ export function initPathview(canvasEl, containerEl, {
   // Strand-level selection glow — rebuilt per frame in _draw().
   const CLR_STRAND_GLOW = '#ff3333'
   let _strandSelectedIds = new Set()   // strand IDs that are "whole-strand selected"
+  let _strandSelectionCacheDesign = null
+  let _strandSelectionCacheEnabled = false
+  let _strandSelectionCacheSignature = null
 
   /** Rebuild _strandSelectedIds from _selectedElements when strand filter is on.
    *  Expands to the full crossover-connected component so that strands linked
    *  by registered crossovers all glow together.  */
   function _rebuildStrandSelection() {
+    // Selection changes far less often than pointer-driven redraws. A signature
+    // over the usually tiny selected-key set avoids rescanning every domain on
+    // every wheel/pan/drag frame while remaining correct for in-place Set edits.
+    const enabled = !!_selectFilter.strand
+    const signature = enabled && _selectedElements.size
+      ? Array.from(_selectedElements).join('\u0000')
+      : ''
+    if (_strandSelectionCacheDesign === _design &&
+        _strandSelectionCacheEnabled === enabled &&
+        _strandSelectionCacheSignature === signature) return
+    _strandSelectionCacheDesign = _design
+    _strandSelectionCacheEnabled = enabled
+    _strandSelectionCacheSignature = signature
     _strandSelectedIds = new Set()
-    if (!_selectFilter.strand || !_selectedElements.size || !_design?.strands) return
+    if (!enabled || !_selectedElements.size || !_design?.strands) return
     // Collect directly-selected strand IDs
+    _ensureSelectionOwnerIndex()
     const directIds = new Set()
-    for (const strand of _design.strands) {
-      for (const dom of strand.domains) {
-        if (_selectedElements.has(_domainLineKey(dom)) ||
-            _selectedElements.has(_domainEndKey(dom, '5p')) ||
-            _selectedElements.has(_domainEndKey(dom, '3p'))) {
-          directIds.add(strand.id)
-          break
-        }
-      }
+    for (const key of _selectedElements) {
+      for (const owner of _domainOwnerByKey.get(key) ?? []) directIds.add(owner)
     }
     // Expand each directly-selected strand to its full crossover component
     for (const sid of directIds) {
@@ -1901,6 +2138,8 @@ export function initPathview(canvasEl, containerEl, {
     // Build a set of strand-end positions that have an extension arm so end caps
     // can be moved to the arm tip instead of the domain terminus.
     const extEndSet = new Set((_design.extensions ?? []).map(e => `${e.strand_id}:${e.end}`))
+    const ghostShiftX = _ghostPass * _pbPeriod() * BP_W
+    const screenMargin = Math.max(BP_W * _zoom, 16)
     for (let si = 0; si < _design.strands.length; si++) {
       const strand   = _design.strands[si]
       const isRef    = !!strand.is_reference
@@ -1918,12 +2157,20 @@ export function initPathview(canvasEl, containerEl, {
         const sTop = (info.fwdY - CELL_H / 2) * _zoom + _panY
         if ((info.revY + CELL_H / 2) * _zoom + _panY < 0 || sTop > canvasEl.height) continue
 
+        // Canvas clipping hides off-screen domains but still pays all of the
+        // crossover, selection, colour, and cap-geometry work below. Reject by
+        // the transformed horizontal bounds first. Include the periodic mirror
+        // translation and a screen-space margin for glows/end caps.
+        const lo = Math.min(dom.start_bp, dom.end_bp)
+        const hi = Math.max(dom.start_bp, dom.end_bp)
+        const sx1 = (_bpToX(lo) + ghostShiftX) * _zoom + _panX
+        const sx2 = (_bpToX(hi + 1) + ghostShiftX) * _zoom + _panX
+        if (sx2 < -screenMargin || sx1 > canvasEl.width + screenMargin) continue
+
         // Suppress the end cap (square or triangle) and use a half-line wherever
         // an arc attaches — either a registered crossover or a cross-helix
         // domain continuation (coaxial, scaffold routing, forced ligation).
         const dir     = dom.direction
-        const lo      = Math.min(dom.start_bp, dom.end_bp)
-        const hi      = Math.max(dom.start_bp, dom.end_bp)
         const fiveBp  = dir === 'FORWARD' ? lo : hi
         const threeBp = dir === 'FORWARD' ? hi : lo
         const prev = di > 0     ? strand.domains[di - 1] : null
@@ -1962,7 +2209,7 @@ export function initPathview(canvasEl, containerEl, {
 
   function _drawExtensions() {
     if (!_design?.extensions?.length || !_design?.strands) return
-    const strandMap = new Map(_design.strands.map((s, i) => [s.id, { strand: s, idx: i }]))
+    _ensureStrandIndex()
     const lineW = CELL_H * 0.20
     const dotR  = CELL_H * 0.30
     const sqSz  = Math.min(BP_W, CELL_H) * 0.80
@@ -1971,10 +2218,7 @@ export function initPathview(canvasEl, containerEl, {
     ctx.save()
     ctx.lineCap = 'round'
 
-    for (const ext of _design.extensions) {
-      const entry = strandMap.get(ext.strand_id)
-      if (!entry) continue
-      const { strand, idx } = entry
+    for (const { ext, strand, idx } of _extensionHostEntries) {
       const isRef = !!strand.is_reference
       if (isRef && (_ghostPass !== 0 || _viewTools.referenceGeometry === false)) continue
       const _extDash = isRef ? [5 / _zoom, 3.5 / _zoom] : null
@@ -2012,6 +2256,11 @@ export function initPathview(canvasEl, containerEl, {
       else if (isFwd  && ext.end === 'three_prime') { fx = ax + dx; fy = ay - dy }
       else if (!isFwd && ext.end === 'five_prime')  { fx = ax + dx; fy = ay + dy }
       else                                           { fx = ax - dx; fy = ay + dy }
+
+      const ghostShiftX = _ghostPass * _pbPeriod() * BP_W
+      const sx0 = (Math.min(ax, fx) + ghostShiftX) * _zoom + _panX
+      const sx1 = (Math.max(ax, fx) + ghostShiftX) * _zoom + _panX
+      if (sx1 < -16 || sx0 > canvasEl.width + 16) continue
 
       // Arm unit vector and perpendicular (used for end cap and sequence positioning)
       const ux  = (fx - ax) / EXT_LEN_PX
@@ -2112,16 +2361,52 @@ export function initPathview(canvasEl, containerEl, {
   // consecutive bp (coaxial ligation), draw a connecting arc so the user sees
   // that the strand is continuous.
 
+  let _coaxialArcDesign = null
+  let _coaxialArcLayoutRevision = -1
+  let _coaxialArcGroups = []
+
+  function _ensureCoaxialArcIndex() {
+    if (_coaxialArcDesign === _design && _coaxialArcLayoutRevision === _layoutRevision) return
+    const groups = []
+    for (let si = 0; si < (_design?.strands?.length ?? 0); si++) {
+      const strand = _design.strands[si]
+      const arcs = []
+      for (let di = 0; di < strand.domains.length - 1; di++) {
+        const domA = strand.domains[di]
+        const domB = strand.domains[di + 1]
+        if (domA.helix_id === domB.helix_id) continue
+        if (_components.isXoverSlot(domA.helix_id, domA.end_bp, domA.direction)) continue
+        if (_isForcedLigTransition(domA, domB)) continue
+        const infoA = _rowMap.get(domA.helix_id)
+        const infoB = _rowMap.get(domB.helix_id)
+        if (!infoA || !infoB) continue
+        const xA = _bpCenterX(domA.end_bp)
+        const xB = _bpCenterX(domB.start_bp)
+        const yA = domA.direction === 'FORWARD' ? infoA.fwdY : infoA.revY
+        const yB = domB.direction === 'FORWARD' ? infoB.fwdY : infoB.revY
+        arcs.push({
+          xA, xB, yA, yB,
+          cx: (xA + xB) / 2 + Math.max(BP_W * 0.27, Math.abs(yB - yA) * 0.07),
+          cy: (yA + yB) / 2,
+        })
+      }
+      if (arcs.length) groups.push({ si, strand, arcs })
+    }
+    _coaxialArcGroups = groups
+    _coaxialArcDesign = _design
+    _coaxialArcLayoutRevision = _layoutRevision
+  }
+
   function _drawCoaxialArcs() {
     if (!_design?.strands) return
+    _ensureCoaxialArcIndex()
     const baseThick = CELL_H * 0.20
     ctx.save()
     ctx.lineCap  = 'round'
     ctx.lineJoin = 'round'
     ctx.lineWidth = baseThick
     ctx.shadowBlur = 0
-    for (let si = 0; si < _design.strands.length; si++) {
-      const strand = _design.strands[si]
+    for (const { si, strand, arcs } of _coaxialArcGroups) {
       const isRef  = !!strand.is_reference
       if (isRef && (_ghostPass !== 0 || _viewTools.referenceGeometry === false)) continue
       const strandGlow = _strandSelectedIds.has(strand.id)
@@ -2134,31 +2419,18 @@ export function initPathview(canvasEl, containerEl, {
       ctx.lineCap = isRef ? 'butt' : 'round'
       if (strandGlow) { ctx.shadowColor = CLR_STRAND_GLOW; ctx.shadowBlur = 10 / _zoom }
       else            { ctx.shadowBlur = 0 }
-      for (let di = 0; di < strand.domains.length - 1; di++) {
-        const domA = strand.domains[di]
-        const domB = strand.domains[di + 1]
-        if (domA.helix_id === domB.helix_id) continue  // same helix — no arc needed
-        // Skip if this transition is a registered crossover — _drawCrossoverArcs handles those.
-        if (_components.isXoverSlot(domA.helix_id, domA.end_bp, domA.direction)) continue
-        // Skip if this transition is a forced ligation — _drawCrossoverArcs handles those too.
-        if (_isForcedLigTransition(domA, domB)) continue
-        const infoA = _rowMap.get(domA.helix_id)
-        const infoB = _rowMap.get(domB.helix_id)
-        if (!infoA || !infoB) continue
-        // Arc from 3' end of domA to 5' end of domB — use each domain's
-        // own direction for its Y track (overhangs may be antiparallel).
-        // Handles coaxial adjacency (bp ±1), forced ligation (any bp), and overhangs.
-        const isFwdA = domA.direction === 'FORWARD'
-        const xA = _bpCenterX(domA.end_bp)
-        const xB = _bpCenterX(domB.start_bp)
-        const yA = isFwdA                          ? infoA.fwdY : infoA.revY
-        const yB = domB.direction === 'FORWARD'    ? infoB.fwdY : infoB.revY
-        const midX = (xA + xB) / 2
-        const midY = (yA + yB) / 2
-        const bowAmt = Math.max(BP_W * 0.27, Math.abs(yB - yA) * 0.07)
+      const ghostShiftX = _ghostPass * _pbPeriod() * BP_W
+      for (const arc of arcs) {
+        const { xA, xB, yA, yB, cx, cy } = arc
+        const sx0 = (Math.min(xA, xB, cx) + ghostShiftX) * _zoom + _panX
+        const sx1 = (Math.max(xA, xB, cx) + ghostShiftX) * _zoom + _panX
+        const sy0 = Math.min(yA, yB, cy) * _zoom + _panY
+        const sy1 = Math.max(yA, yB, cy) * _zoom + _panY
+        if (sx1 < -16 || sx0 > canvasEl.width + 16 ||
+            sy1 < -16 || sy0 > canvasEl.height + 16) continue
         ctx.beginPath()
         ctx.moveTo(xA, yA)
-        ctx.quadraticCurveTo(midX + bowAmt, midY, xB, yB)
+        ctx.quadraticCurveTo(cx, cy, xB, yB)
         ctx.stroke()
       }
     }
@@ -2203,6 +2475,20 @@ export function initPathview(canvasEl, containerEl, {
       const infoA = _rowMap.get(xo.half_a.helix_id)
       const infoB = _rowMap.get(xo.half_b.helix_id)
       if (!infoA || !infoB) continue
+      const x  = _bpCenterX(xo.half_a.index)
+      const y0 = xo.half_a.strand === 'FORWARD' ? infoA.fwdY : infoA.revY
+      const y1 = xo.half_b.strand === 'FORWARD' ? infoB.fwdY : infoB.revY
+      const isScafXo = infoA.scaffoldFwd ? xo.half_a.strand === 'FORWARD' : xo.half_a.strand === 'REVERSE'
+      const bowDir = _xoverBowDir(xo.half_a.index, isScafXo)
+      const bowAmt = Math.max(BP_W * 0.27, Math.abs(y1 - y0) * 0.07)
+      const ghostShiftX = _ghostPass * _pbPeriod() * BP_W
+      const screenMargin = 16
+      const sx0 = (Math.min(x, x + bowDir * bowAmt) + ghostShiftX) * _zoom + _panX
+      const sx1 = (Math.max(x, x + bowDir * bowAmt) + ghostShiftX) * _zoom + _panX
+      const sy0 = Math.min(y0, y1) * _zoom + _panY
+      const sy1 = Math.max(y0, y1) * _zoom + _panY
+      if (sx1 < -screenMargin || sx0 > canvasEl.width + screenMargin ||
+          sy1 < -screenMargin || sy0 > canvasEl.height + screenMargin) continue
       const sA      = _findStrandIdxAt(xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand)
       const sB      = _findStrandIdxAt(xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand)
       // A crossover is reference geometry when both halves sit on reference strands.
@@ -2228,12 +2514,6 @@ export function initPathview(canvasEl, containerEl, {
         ctx.lineWidth    = baseThick * (hmA ? hmA.thickMul : 1.0)
         ctx.shadowBlur   = 0
       }
-      const x  = _bpCenterX(xo.half_a.index)
-      const y0 = xo.half_a.strand === 'FORWARD' ? infoA.fwdY : infoA.revY
-      const y1 = xo.half_b.strand === 'FORWARD' ? infoB.fwdY : infoB.revY
-      const isScafXo = infoA.scaffoldFwd ? xo.half_a.strand === 'FORWARD' : xo.half_a.strand === 'REVERSE'
-      const bowDir = _xoverBowDir(xo.half_a.index, isScafXo)
-      const bowAmt = Math.max(BP_W * 0.27, Math.abs(y1 - y0) * 0.07)
       const midY   = (y0 + y1) / 2
       if (isRefXo) { ctx.setLineDash([6 / _zoom, 5 / _zoom]); ctx.lineCap = 'butt' }
       ctx.beginPath()
@@ -2533,12 +2813,117 @@ export function initPathview(canvasEl, containerEl, {
   //   forward cell (scaffold on top/FORWARD) → indicator below, in gap under revY
   //   reverse cell (scaffold on bottom/REVERSE) → indicator above, in gap over fwdY
 
+  let _xoverIndicatorIndexDesign = null
+  let _xoverIndicatorIndex = null
+  let _xoverIndicatorLayoutRevision = -1
+  let _xoverIndicatorLayout = null
+  function _mergeBpRanges(ranges) {
+    if (ranges.length < 2) return ranges
+    ranges.sort((a, b) => a[0] - b[0] || a[1] - b[1])
+    const merged = [ranges[0].slice()]
+    for (let i = 1; i < ranges.length; i++) {
+      const current = ranges[i], last = merged[merged.length - 1]
+      if (current[0] <= last[1] + 1) last[1] = Math.max(last[1], current[1])
+      else merged.push(current.slice())
+    }
+    return merged
+  }
+  function _bpInRanges(ranges, bp) {
+    let lo = 0, hi = ranges.length - 1
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1
+      const range = ranges[mid]
+      if (bp < range[0]) hi = mid - 1
+      else if (bp > range[1]) lo = mid + 1
+      else return true
+    }
+    return false
+  }
+  function _ensureXoverIndicatorIndex() {
+    if (_xoverIndicatorIndexDesign === _design && _xoverIndicatorIndex) return _xoverIndicatorIndex
+
+    // All four structures below depend only on the immutable design snapshot,
+    // not pan/zoom/hover state. Building them per pointer-driven redraw made the
+    // indicator overlay repeatedly traverse every strand and crossover.
+    const occupied = new Set()
+    for (const xo of (_design?.crossovers ?? [])) {
+      occupied.add(`${xo.half_a.helix_id}_${xo.half_a.index}_${xo.half_a.strand}`)
+      occupied.add(`${xo.half_b.helix_id}_${xo.half_b.index}_${xo.half_b.strand}`)
+    }
+    const strandRanges = new Map()
+    const refRanges = new Map()
+    const minDomainBpByHelix = new Map()
+    for (const strand of (_design?.strands ?? [])) {
+      for (const dom of strand.domains) {
+        const key = `${dom.helix_id}_${dom.direction}`
+        const lo = Math.min(dom.start_bp, dom.end_bp)
+        const range = [lo, Math.max(dom.start_bp, dom.end_bp)]
+        let list = strandRanges.get(key)
+        if (!list) { list = []; strandRanges.set(key, list) }
+        list.push(range)
+        if (strand.is_reference) {
+          let rlist = refRanges.get(key)
+          if (!rlist) { rlist = []; refRanges.set(key, rlist) }
+          rlist.push(range)
+        }
+        const cur = minDomainBpByHelix.get(dom.helix_id) ?? Infinity
+        if (lo < cur) minDomainBpByHelix.set(dom.helix_id, lo)
+      }
+    }
+    for (const [key, ranges] of strandRanges) strandRanges.set(key, _mergeBpRanges(ranges))
+    for (const [key, ranges] of refRanges) refRanges.set(key, _mergeBpRanges(ranges))
+    _xoverIndicatorIndexDesign = _design
+    _xoverIndicatorIndex = {
+      occupied,
+      strandRanges,
+      refRanges,
+      minDomainBpByHelix,
+      junctionSlots: _crossoverJunctionSlots(_design),
+    }
+    return _xoverIndicatorIndex
+  }
+
+  function _ensureXoverIndicatorLayout(isHC) {
+    if (_xoverIndicatorLayoutRevision === _layoutRevision && _xoverIndicatorLayout) {
+      return _xoverIndicatorLayout
+    }
+    const period = isHC ? HC_XOVER_PERIOD : SQ_XOVER_PERIOD
+    const cellMap = new Map()
+    for (const [hid, info] of _rowMap) {
+      cellMap.set(`${info.cell.row}_${info.cell.col}`, { hid, info })
+    }
+    const sitesByHelix = new Map()
+    for (const [hid, info] of _rowMap) {
+      const staple = [], scaffold = []
+      for (let residue = 0; residue < period; residue++) {
+        for (const [sites, neighborFn] of [
+          [staple, _xoverNeighborCell],
+          [scaffold, _xoverNeighborCellScaffold],
+        ]) {
+          const cell = neighborFn(info.cell.row, info.cell.col, residue, isHC)
+          const target = cell && cellMap.get(`${cell[0]}_${cell[1]}`)
+          if (target) sites.push({ residue, target })
+        }
+      }
+      sitesByHelix.set(hid, { staple, scaffold })
+    }
+    _xoverIndicatorLayoutRevision = _layoutRevision
+    _xoverIndicatorLayout = { period, sitesByHelix }
+    return _xoverIndicatorLayout
+  }
+
+  function _firstBpWithResidue(start, residue, period) {
+    const mod = ((start % period) + period) % period
+    return start + ((residue - mod + period) % period)
+  }
+
   function _drawCrossoverIndicators() {
     // No clickable crossover sprites in mirror zones — forced ligation (not lattice
     // crossover) is the seam tool. Return before touching _xoverSprites so the real
     // pass (drawn last) owns the hit areas.
     if (_ghostPass !== 0) return
     _xoverSprites = []   // rebuild hit areas each frame
+    _xoverSpriteBins = new Map()
     if (!_design?.helices?.length) return
     if (_zoom < 0.55) return              // too far out — hide entirely
     const simplified = _zoom < 1       // far out — plain blue dots, no text/glow
@@ -2550,68 +2935,23 @@ export function initPathview(canvasEl, containerEl, {
     const bpL = Math.floor(_xToBp(wLeft)) - 1   // allow negative (ss-scaffold loops)
     const bpR = Math.ceil(_xToBp(wRight)) + 1
 
-    // Track-aware occupied set: "helix_id_bp_DIRECTION"
-    // Staple and scaffold crossovers occupy different tracks at the same bp,
-    // so we track them independently.
-    const occupied = new Set()
-    for (const xo of (_design.crossovers ?? [])) {
-      occupied.add(`${xo.half_a.helix_id}_${xo.half_a.index}_${xo.half_a.strand}`)
-      occupied.add(`${xo.half_b.helix_id}_${xo.half_b.index}_${xo.half_b.strand}`)
-    }
-
-    // Pre-build strand coverage: "helix_id_DIRECTION" → [[lo, hi], ...]
-    // Used to gate indicators — only show where both strand slots are occupied.
-    const strandRanges = new Map()
-    // Reference-strand coverage only. A crossover must never involve reference
-    // geometry, so a sprite is suppressed when EITHER half's slot is covered by a
-    // reference strand — both the half ON a reference strand and the half that
-    // would form a crossover WITH one. Mechanical is_reference filter, mirroring
-    // the per-site reference skip used by every other generative feature.
-    const refRanges = new Map()
-    for (const strand of (_design.strands ?? [])) {
-      for (const dom of strand.domains) {
-        const key   = `${dom.helix_id}_${dom.direction}`
-        const range = [Math.min(dom.start_bp, dom.end_bp), Math.max(dom.start_bp, dom.end_bp)]
-        let list = strandRanges.get(key)
-        if (!list) { list = []; strandRanges.set(key, list) }
-        list.push(range)
-        if (strand.is_reference) {
-          let rlist = refRanges.get(key)
-          if (!rlist) { rlist = []; refRanges.set(key, rlist) }
-          rlist.push(range)
-        }
-      }
-    }
+    const { occupied, strandRanges, refRanges, junctionSlots, minDomainBpByHelix } =
+      _ensureXoverIndicatorIndex()
     const _slotOccupied = (helixId, bp, direction) => {
       const ranges = strandRanges.get(`${helixId}_${direction}`) ?? []
-      return ranges.some(([lo, hi]) => lo <= bp && bp <= hi)
+      return _bpInRanges(ranges, bp)
     }
     // Slots already occupied by a crossover junction (a multi-domain strand's
     // turn). A new crossover must not land here — suppress its sprite. Mirrors
     // the backend rejection in _build_place_crossover.
-    const junctionSlots = _crossoverJunctionSlots(_design)
     const _slotIsJunction = (helixId, bp, direction) =>
       junctionSlots.has(`${helixId}_${bp}_${direction}`)
     const _slotIsReference = (helixId, bp, direction) => {
       const ranges = refRanges.get(`${helixId}_${direction}`) ?? []
-      return ranges.some(([lo, hi]) => lo <= bp && bp <= hi)
+      return _bpInRanges(ranges, bp)
     }
 
-    // cell key "row_col" → { hid, info }
-    const cellMap = new Map()
-    for (const [hid, info] of _rowMap) {
-      cellMap.set(`${info.cell.row}_${info.cell.col}`, { hid, info })
-    }
-
-    // Minimum bp referenced by strand domains per helix (may be < helix.bp_start for ss loops).
-    const minDomainBpByHelix = new Map()
-    for (const strand of (_design.strands ?? [])) {
-      for (const dom of strand.domains) {
-        const lo = Math.min(dom.start_bp, dom.end_bp)
-        const cur = minDomainBpByHelix.get(dom.helix_id) ?? Infinity
-        if (lo < cur) minDomainBpByHelix.set(dom.helix_id, lo)
-      }
-    }
+    const { period, sitesByHelix } = _ensureXoverIndicatorLayout(isHC)
 
     const indGap = CELL_H / 2 + 3   // = 9 px from track centre
     const fs = Math.max(4, XOVER_R * 1.5)
@@ -2651,11 +2991,9 @@ export function initPathview(canvasEl, containerEl, {
         const hMinBp = minDomainBpByHelix.get(_hoverHelixId) ?? hHelix.bp_start
         const hBpStart = Math.max(bpL, hMinBp)
         const hBpEnd   = Math.min(bpR, hHelix.bp_start + hHelix.length_bp - 1)
-        for (let bp = hBpStart; bp <= hBpEnd; bp++) {
-          const nb = _xoverNeighborCellScaffold(hInfo.cell.row, hInfo.cell.col, bp, isHC)
-          if (nb) {
-            const t = cellMap.get(`${nb[0]}_${nb[1]}`)
-            if (t) _scafNeighborHids.add(t.hid)
+        for (const site of sitesByHelix.get(_hoverHelixId)?.scaffold ?? []) {
+          if (_firstBpWithResidue(hBpStart, site.residue, period) <= hBpEnd) {
+            _scafNeighborHids.add(site.target.hid)
           }
         }
       }
@@ -2667,7 +3005,7 @@ export function initPathview(canvasEl, containerEl, {
     ctx.font         = `bold ${fs}px sans-serif`
 
     for (const [hid, info] of _rowMap) {
-      const { cell, scaffoldFwd, fwdY, revY } = info
+      const { scaffoldFwd, fwdY, revY } = info
       const helix = _helixById.get(hid)
       if (!helix) continue
 
@@ -2675,17 +3013,35 @@ export function initPathview(canvasEl, containerEl, {
       const bpStart = Math.max(bpL, helixMinBp)
       const bpEnd   = Math.min(bpR, helix.bp_start + helix.length_bp - 1)
 
-      for (let bp = bpStart; bp <= bpEnd; bp++) {
+      const candidates = []
+      const sites = sitesByHelix.get(hid)
+      for (const site of sites?.staple ?? []) {
+        for (let bp = _firstBpWithResidue(bpStart, site.residue, period);
+             bp <= bpEnd; bp += period) {
+          candidates.push({ bp, target: site.target, isScaffold: false })
+        }
+      }
+      if (_shiftHeld && _hoverHelixId != null &&
+          (hid === _hoverHelixId || _scafNeighborHids.has(hid))) {
+        for (const site of sites?.scaffold ?? []) {
+          for (let bp = _firstBpWithResidue(bpStart, site.residue, period);
+               bp <= bpEnd; bp += period) {
+            candidates.push({ bp, target: site.target, isScaffold: true })
+          }
+        }
+      }
+      // Preserve the legacy painter/hit priority: increasing bp, staple before
+      // scaffold at the same column.
+      candidates.sort((a, b) => a.bp - b.bp || Number(a.isScaffold) - Number(b.isScaffold))
+
+      for (const { bp, target, isScaffold } of candidates) {
         const cx = _bpCenterX(bp)
 
         const stapIndY = scaffoldFwd ? revY + indGap : fwdY - indGap
         const scafIndY = scaffoldFwd ? fwdY - indGap : revY + indGap
 
         // ── Staple indicator (non-scaffold side) — always visible ─────────────
-        const stapNb = _xoverNeighborCell(cell.row, cell.col, bp, isHC)
-        if (stapNb) {
-          const target = cellMap.get(`${stapNb[0]}_${stapNb[1]}`)
-          if (target) {
+        if (!isScaffold) {
             const stapA = scaffoldFwd ? 'REVERSE' : 'FORWARD'
             const stapB = scaffoldFwd ? 'FORWARD' : 'REVERSE'
             // The crossover connects toward the bp its bow points at (bp+bowDir);
@@ -2701,12 +3057,12 @@ export function initPathview(canvasEl, containerEl, {
                 !_slotIsJunction(target.hid, bp, stapB) &&
                 !_slotIsReference(hid, bp, stapA) &&
                 !_slotIsReference(target.hid, bp, stapB)) {
-              _xoverSprites.push({ hid, bp, targetHid: target.hid, cx, indY: stapIndY, halfAStrand: stapA, halfBStrand: stapB, isScaffold: false })
+              _recordXoverSprite({ hid, bp, targetHid: target.hid, cx, indY: stapIndY, halfAStrand: stapA, halfBStrand: stapB, isScaffold: false })
               // Show the destination helix's identity number (label), matching the
               // gutter; falls back to array index only when no label is frozen.
               _drawSprite(cx, stapIndY, target.info.label ?? target.info.idx, false)
             }
-          }
+          continue
         }
 
         // ── Scaffold indicator (scaffold side) — visible only while Shift held ─
@@ -2714,10 +3070,6 @@ export function initPathview(canvasEl, containerEl, {
         // overwhelming the view on large designs.
         if (_shiftHeld && _hoverHelixId != null &&
             (hid === _hoverHelixId || _scafNeighborHids.has(hid))) {
-          const scafNb = _xoverNeighborCellScaffold(cell.row, cell.col, bp, isHC)
-          if (scafNb) {
-            const target = cellMap.get(`${scafNb[0]}_${scafNb[1]}`)
-            if (target) {
               const scafA = scaffoldFwd ? 'FORWARD' : 'REVERSE'
               const scafB = scaffoldFwd ? 'REVERSE' : 'FORWARD'
               const scafReq = bp + _xoverBowDir(bp, true)
@@ -2730,11 +3082,9 @@ export function initPathview(canvasEl, containerEl, {
                   !_slotIsJunction(target.hid, bp, scafB) &&
                   !_slotIsReference(hid, bp, scafA) &&
                   !_slotIsReference(target.hid, bp, scafB)) {
-                _xoverSprites.push({ hid, bp, targetHid: target.hid, cx, indY: scafIndY, halfAStrand: scafA, halfBStrand: scafB, isScaffold: true })
+                _recordXoverSprite({ hid, bp, targetHid: target.hid, cx, indY: scafIndY, halfAStrand: scafA, halfBStrand: scafB, isScaffold: true })
                 _drawSprite(cx, scafIndY, target.info.label ?? target.info.idx, true)
               }
-            }
-          }
         }
       }
     }
@@ -2746,83 +3096,65 @@ export function initPathview(canvasEl, containerEl, {
   function _hitTestCrossoverSprite(screenX, screenY) {
     const { wx, wy } = _c2w(screenX, screenY)
     const hitR = (XOVER_R + 4) / _zoom
-    for (const sp of _xoverSprites) {
-      const dx = wx - sp.cx, dy = wy - sp.indY
-      if (dx * dx + dy * dy <= hitR * hitR) return sp
+    const bx0 = Math.floor((wx - hitR) / _XOVER_SPRITE_BUCKET)
+    const bx1 = Math.floor((wx + hitR) / _XOVER_SPRITE_BUCKET)
+    const by0 = Math.floor((wy - hitR) / _XOVER_SPRITE_BUCKET)
+    const by1 = Math.floor((wy + hitR) / _XOVER_SPRITE_BUCKET)
+    let first = null
+    for (let bx = bx0; bx <= bx1; bx++) for (let by = by0; by <= by1; by++) {
+      for (const sp of _xoverSpriteBins.get(`${bx}:${by}`) ?? []) {
+        const dx = wx - sp.cx, dy = wy - sp.indY
+        if (dx * dx + dy * dy <= hitR * hitR && (!first || sp._order < first._order)) first = sp
+      }
     }
-    return null
+    return first
   }
 
   // ── End-drag helpers ──────────────────────────────────────────────────────────
 
   // Build entry list from all `end:` keys in _selectedElements.
   function _resolveEndDragEntries() {
+    _ensureDragIndex()
     const entries = []
     for (const key of _selectedElements) {
       if (!key.startsWith('end:')) continue
       const parsed = parseEndKey(key)
       if (!parsed) continue
       const { helix_id, bp, direction } = parsed
-      for (const strand of (_design?.strands ?? [])) {
-        let found = false
-        for (const dom of strand.domains) {
-          if (dom.helix_id !== helix_id || dom.direction !== direction) continue
-          const lo    = Math.min(dom.start_bp, dom.end_bp)
-          const hi    = Math.max(dom.start_bp, dom.end_bp)
-          if (bp !== lo && bp !== hi) continue
-          const isFwd = direction === 'FORWARD'
-          // 1-nt strand: both ends coincide at `bp`, so bp-position can't tell them
-          // apart (it always reads 5′). Pick the resizable end instead so a stub
-          // pinned by a crossover on its 5′ side is dragged from its free 3′ side.
-          const end = (strand.domains.length === 1 && lo === hi)
-            ? oneNtResizableEnd({ helix_id, direction, bp_index: bp, strand_id: strand.id }, _design.strands)
-            : ((isFwd ? bp === lo : bp === hi) ? '5p' : '3p')
-          const helix = _design.helices.find(h => h.id === helix_id)
-          entries.push({
-            strandId: strand.id,
-            helixId:  helix_id,
-            end,
-            origBp:   bp,
-            direction,
-            domLo:    lo,
-            domHi:    hi,
-            info:     _rowMap.get(helix_id),
-          })
-          found = true; break
-        }
-        if (found) break
-      }
+      const indexed = _endEntryByKey.get(key)
+      if (!indexed) continue
+      const { strand, dom, lo, hi } = indexed
+      const isFwd = direction === 'FORWARD'
+      // 1-nt strand: both ends coincide at `bp`, so bp-position can't tell them
+      // apart (it always reads 5′). Pick the resizable end instead so a stub
+      // pinned by a crossover on its 5′ side is dragged from its free 3′ side.
+      const end = (strand.domains.length === 1 && lo === hi)
+        ? oneNtResizableEnd({ helix_id, direction, bp_index: bp, strand_id: strand.id }, _design.strands)
+        : ((isFwd ? bp === lo : bp === hi) ? '5p' : '3p')
+      entries.push({
+        strandId: strand.id, helixId: helix_id, end, origBp: bp, direction,
+        domLo: lo, domHi: hi, info: _rowMap.get(dom.helix_id),
+      })
     }
     return entries
   }
 
   // Compute shared [minDelta, maxDelta] across all entries.
   function _computeEndDragLimits(entries) {
+    _ensureDragIndex()
     let minDelta = -Infinity, maxDelta = +Infinity
 
     // Helper: crossover positions on a specific helix+direction
     const xoverPositions = (helixId, direction) => {
-      const positions = new Set()
-      for (const xo of (_design?.crossovers ?? [])) {
-        for (const half of [xo.half_a, xo.half_b]) {
-          if (half.helix_id === helixId && half.strand === direction)
-            positions.add(half.index)
-        }
-      }
-      return positions
+      return _xoverPositionsByTrack.get(`${helixId}_${direction}`) ?? new Set()
     }
 
     // Helper: other domain endpoints on the same helix+direction (excluding this domain)
     const otherEndpoints = (helixId, direction, domLo, domHi) => {
       const pts = []
-      for (const strand of (_design?.strands ?? [])) {
-        for (const dom of strand.domains) {
-          if (dom.helix_id !== helixId || dom.direction !== direction) continue
-          const lo = Math.min(dom.start_bp, dom.end_bp)
-          const hi = Math.max(dom.start_bp, dom.end_bp)
-          if (lo === domLo && hi === domHi) continue   // same domain — skip
-          pts.push(lo, hi)
-        }
+      for (const entry of _strandIndexMap.get(`${helixId}_${direction}`) ?? []) {
+        if (entry.lo === domLo && entry.hi === domHi) continue
+        pts.push(entry.lo, entry.hi)
       }
       return pts
     }
@@ -2834,7 +3166,7 @@ export function initPathview(canvasEl, containerEl, {
     // crossover / strand boundary. Treating the run as one lets a terminal resize
     // move THROUGH the split; the backend re-classifies the overhang afterward.
     const collinearRun = (strandId, helixId, direction, domLo, domHi) => {
-      const strand = (_design?.strands ?? []).find(s => s.id === strandId)
+      const strand = _strandById.get(strandId)
       if (!strand) return { runLo: domLo, runHi: domHi }
       const doms = strand.domains
       const idx = doms.findIndex(d =>
@@ -2951,33 +3283,20 @@ export function initPathview(canvasEl, containerEl, {
 
   // Build domain-drag entries from all `line:` keys in _selectedElements.
   function _resolveDomainDragEntries() {
+    _ensureDragIndex()
     const entries = []
     for (const key of _selectedElements) {
       if (!key.startsWith('line:')) continue
       const parsed = parseLineKey(key)
       if (!parsed) continue
       const { helix_id, lo, hi, direction } = parsed
-      let found = false
-      for (const strand of (_design?.strands ?? [])) {
-        for (let di = 0; di < strand.domains.length; di++) {
-          const dom = strand.domains[di]
-          if (dom.helix_id !== helix_id || dom.direction !== direction) continue
-          const dLo = Math.min(dom.start_bp, dom.end_bp)
-          const dHi = Math.max(dom.start_bp, dom.end_bp)
-          if (dLo !== lo || dHi !== hi) continue
-          entries.push({
-            strandId:    strand.id,
-            domainIndex: di,
-            helixId:     helix_id,
-            direction,
-            domLo:       lo,
-            domHi:       hi,
-            info:        _rowMap.get(helix_id),
-          })
-          found = true; break
-        }
-        if (found) break
-      }
+      const indexed = _lineEntryByKey.get(key)
+      if (!indexed) continue
+      entries.push({
+        strandId: indexed.strand.id, domainIndex: indexed.di,
+        helixId: helix_id, direction, domLo: lo, domHi: hi,
+        info: _rowMap.get(helix_id),
+      })
     }
     return entries
   }
@@ -2993,17 +3312,11 @@ export function initPathview(canvasEl, containerEl, {
   //     by the same shared delta so they can never collide with us.
   //   - Helix bp 0 floor: minDelta ≥ -domLo. Backend auto-grows on the upper end.
   function _computeDomainDragLimits(entries) {
+    _ensureDragIndex()
     let minDelta = -Infinity, maxDelta = +Infinity
 
     const xoverPositions = (helixId, direction) => {
-      const positions = new Set()
-      for (const xo of (_design?.crossovers ?? [])) {
-        for (const half of [xo.half_a, xo.half_b]) {
-          if (half.helix_id === helixId && half.strand === direction)
-            positions.add(half.index)
-        }
-      }
-      return positions
+      return _xoverPositionsByTrack.get(`${helixId}_${direction}`) ?? new Set()
     }
 
     // Set of (strand_id, domain_index) keys identifying co-selected domains —
@@ -3014,14 +3327,10 @@ export function initPathview(canvasEl, containerEl, {
     const otherEndpoints = (helixId, direction, domLo, domHi) => {
       const lefts = []   // endpoints with hi < domLo
       const rights = []  // endpoints with lo > domHi
-      for (const strand of (_design?.strands ?? [])) {
-        for (let di = 0; di < strand.domains.length; di++) {
-          const dom = strand.domains[di]
-          if (dom.helix_id !== helixId || dom.direction !== direction) continue
-          if (coSelected.has(`${strand.id}\x00${di}`)) continue   // co-moving — skip
-          const lo = Math.min(dom.start_bp, dom.end_bp)
-          const hi = Math.max(dom.start_bp, dom.end_bp)
-          if (lo === domLo && hi === domHi) continue   // same domain — skip
+      for (const entry of _strandIndexMap.get(`${helixId}_${direction}`) ?? []) {
+          if (coSelected.has(`${entry.strand.id}\x00${entry.di}`)) continue
+          const { lo, hi } = entry
+          if (lo === domLo && hi === domHi) continue
           if (hi < domLo) lefts.push(hi)
           else if (lo > domHi) rights.push(lo)
           else {
@@ -3030,7 +3339,6 @@ export function initPathview(canvasEl, containerEl, {
             lefts.push(domLo)   // forces minDelta = 0
             rights.push(domHi)  // forces maxDelta = 0
           }
-        }
       }
       return { lefts, rights }
     }
@@ -3095,18 +3403,12 @@ export function initPathview(canvasEl, containerEl, {
    * Returns { strand, domIdx, d0, d1 } or null.
    */
   function _findXoverDomains(xover) {
-    const oldIdx = xover.half_a.index
+    _ensureXoverDomainTransitionIndex()
     for (const [ha, hb] of [[xover.half_a, xover.half_b], [xover.half_b, xover.half_a]]) {
-      for (const strand of (_design?.strands ?? [])) {
-        for (let di = 0; di < strand.domains.length - 1; di++) {
-          const d0 = strand.domains[di]
-          const d1 = strand.domains[di + 1]
-          if (d0.helix_id === ha.helix_id && d0.direction === ha.strand && d0.end_bp === oldIdx &&
-              d1.helix_id === hb.helix_id && d1.direction === hb.strand && d1.start_bp === oldIdx) {
-            return { strand, domIdx: di, d0, d1 }
-          }
-        }
-      }
+      const match = _xoverDomainTransitions.get(_xoverDomainTransitionKey(
+        ha.helix_id, ha.index, ha.strand,
+        hb.helix_id, hb.index, hb.strand))
+      if (match) return match
     }
     return null
   }
@@ -3133,6 +3435,7 @@ export function initPathview(canvasEl, containerEl, {
    * within [minBp, maxBp], excluding positions occupied by other crossovers.
    */
   function _getValidXoverBps(xover, minBp, maxBp, origBowDir, isScaf) {
+    _ensureDragIndex()
     const isHC = _design?.lattice_type === 'HONEYCOMB'
     const infoA = _rowMap.get(xover.half_a.helix_id)
     const infoB = _rowMap.get(xover.half_b.helix_id)
@@ -3156,26 +3459,23 @@ export function initPathview(canvasEl, containerEl, {
 
     const neighborFn = isScaf ? _xoverNeighborCellScaffold : _xoverNeighborCell
 
-    // Occupied crossover positions (excluding the one being dragged)
-    const xoverOccupied = new Set()
-    for (const xo of (_design?.crossovers ?? [])) {
-      if (xo.id === xover.id) continue
-      xoverOccupied.add(`${xo.half_a.helix_id}_${xo.half_a.index}_${xo.half_a.strand}`)
-      xoverOccupied.add(`${xo.half_b.helix_id}_${xo.half_b.index}_${xo.half_b.strand}`)
-    }
+    // Occupied crossover positions on only the two relevant tracks. Copy the
+    // small buckets so the dragged crossover's current slot can be removed.
+    const trackA = `${xover.half_a.helix_id}_${xover.half_a.strand}`
+    const trackB = `${xover.half_b.helix_id}_${xover.half_b.strand}`
+    const occupiedA = new Set(_xoverPositionsByTrack.get(trackA) ?? [])
+    const occupiedB = new Set(_xoverPositionsByTrack.get(trackB) ?? [])
+    occupiedA.delete(xover.half_a.index)
+    occupiedB.delete(xover.half_b.index)
 
     // Other domain ranges on each helix+direction (excluding the two dragged domains)
     const doms = _findXoverDomains(xover)
     const d0 = doms?.d0, d1 = doms?.d1, xoStrand = doms?.strand, xoDomIdx = doms?.domIdx
     const otherRangesOn = (helixId, direction, excludeDomIdx) => {
       const ranges = []
-      for (const s of (_design?.strands ?? [])) {
-        for (let dj = 0; dj < s.domains.length; dj++) {
-          if (s.id === xoStrand?.id && dj === excludeDomIdx) continue
-          const dom = s.domains[dj]
-          if (dom.helix_id !== helixId || dom.direction !== direction) continue
-          ranges.push([Math.min(dom.start_bp, dom.end_bp), Math.max(dom.start_bp, dom.end_bp)])
-        }
+      for (const entry of _strandIndexMap.get(`${helixId}_${direction}`) ?? []) {
+        if (entry.strand.id === xoStrand?.id && entry.di === excludeDomIdx) continue
+        ranges.push([entry.lo, entry.hi])
       }
       return ranges
     }
@@ -3189,8 +3489,7 @@ export function initPathview(canvasEl, containerEl, {
       const nb = neighborFn(cellA.row, cellA.col, bp, isHC)
       if (!nb || nb[0] !== targetRow || nb[1] !== targetCol) continue
       // Check not occupied by another crossover
-      if (xoverOccupied.has(`${xover.half_a.helix_id}_${bp}_${xover.half_a.strand}`)) continue
-      if (xoverOccupied.has(`${xover.half_b.helix_id}_${bp}_${xover.half_b.strand}`)) continue
+      if (occupiedA.has(bp) || occupiedB.has(bp)) continue
       // Check resized domains would not overlap other domains
       if (d0) {
         const newLo = Math.min(d0.start_bp, bp), newHi = Math.max(d0.start_bp, bp)
@@ -3736,7 +4035,22 @@ export function initPathview(canvasEl, containerEl, {
     _drawOverhangNames()
   }
 
+  let _drawFrame = null
+
+  function _scheduleDraw() {
+    if (_drawFrame !== null) return
+    _drawFrame = requestAnimationFrame(() => {
+      _drawFrame = null
+      _draw()
+    })
+  }
+
   function _draw() {
+    // An immediate draw (for example pointerup) supersedes a queued drag frame.
+    if (_drawFrame !== null) {
+      cancelAnimationFrame(_drawFrame)
+      _drawFrame = null
+    }
     _ensureComponents()                // build once per design change (cached)
     _rebuildStrandSelection()          // rebuild strand glow set
     _rebuildHeatmapCache()             // rebuild heat map colours
@@ -3999,8 +4313,9 @@ export function initPathview(canvasEl, containerEl, {
           const dragAll = selXoKeys.has(clickedKey) && selXoKeys.size > 1
           const xoversToDrag = []
           if (dragAll) {
-            for (const dxo of (_design?.crossovers ?? [])) {
-              if (selXoKeys.has(_xoverKey(dxo))) xoversToDrag.push(dxo)
+            _ensureSelectionOwnerIndex()
+            for (const key of selXoKeys) {
+              xoversToDrag.push(...(_xoversByKey.get(key) ?? []))
             }
           } else {
             xoversToDrag.push(xo)
@@ -4258,7 +4573,7 @@ export function initPathview(canvasEl, containerEl, {
         _paintHi         = bp
         _paintIsScaffold = isScaffold
         _paintDirection  = direction
-        _paintH          = _design.helices.find(h => h.id === hid) ?? null
+        _paintH          = _helixById.get(hid) ?? null
         _draw()
         break
       }
@@ -4300,7 +4615,7 @@ export function initPathview(canvasEl, containerEl, {
         _forcedLigHoverTarget = null
         canvasEl.style.cursor = 'crosshair'
       }
-      _draw(); return
+      _scheduleDraw(); return
     }
     if (_endDragActive) {
       const { wx } = _c2w(e.offsetX, e.offsetY)
@@ -4308,7 +4623,7 @@ export function initPathview(canvasEl, containerEl, {
       _endDragDeltaBp = Math.max(_endDragMinDelta, Math.min(_endDragMaxDelta, rawDelta))
       if (_endDragDeltaBp !== 0) _showDragTooltip(e.clientX, e.clientY, _endDragDeltaBp)
       else _hideDragTooltip()
-      _draw(); return
+      _scheduleDraw(); return
     }
     if (_domDragActive) {
       const { wx } = _c2w(e.offsetX, e.offsetY)
@@ -4316,7 +4631,7 @@ export function initPathview(canvasEl, containerEl, {
       _domDragDeltaBp = Math.max(_domDragMinDelta, Math.min(_domDragMaxDelta, rawDelta))
       if (_domDragDeltaBp !== 0) _showDragTooltip(e.clientX, e.clientY, _domDragDeltaBp)
       else _hideDragTooltip()
-      _draw(); return
+      _scheduleDraw(); return
     }
     if (_xoverDragActive) {
       const { wx } = _c2w(e.offsetX, e.offsetY)
@@ -4340,7 +4655,7 @@ export function initPathview(canvasEl, containerEl, {
       } else {
         _hideDragTooltip()
       }
-      _draw(); return
+      _scheduleDraw(); return
     }
     if (_helixDragArmed || _helixDragActive) {
       const dx = e.offsetX - _helixDragStartSX, dy = e.offsetY - _helixDragStartSY
@@ -4349,47 +4664,47 @@ export function initPathview(canvasEl, containerEl, {
         _helixDragCursorSY  = e.offsetY
         _helixDragInsertIdx = _gapIndexFromScreenY(e.offsetY)
         canvasEl.style.cursor = 'grabbing'
-        _draw()
+        _scheduleDraw()
       }
       return
     }
     if (_gutterLassoStarted) {
       _gutterLassoSY1 = e.offsetY
       if (Math.abs(e.offsetY - _gutterLassoSY0) > DRAG_THRESHOLD) _gutterLassoActive = true
-      if (_gutterLassoActive) _draw()
+      if (_gutterLassoActive) _scheduleDraw()
       return
     }
     if (_panActive) {
       _panX = _panStartPanX + (e.clientX - _panStartCX)
       _panY = _panStartPanY + (e.clientY - _panStartCY)
       if (Math.hypot(e.clientX - _panStartCX, e.clientY - _panStartCY) > DRAG_THRESHOLD) _rightDragMoved = true
-      _draw(); return
+      _scheduleDraw(); return
     }
     if (_pbNearDragging || _pbFarDragging) {
       const { wx } = _c2w(e.offsetX, e.offsetY)
       const bp = _xToBp(wx)
       if (_pbNearDragging) _pbNearBp = Math.min(_pbFarBp - 1, bp)   // keep near ≤ far-1 (P ≥ 1)
       else                 _pbFarBp  = Math.max(_pbNearBp + 1, bp)  // keep far ≥ near+1
-      _draw(); return
+      _scheduleDraw(); return
     }
     if (_sliceDragging) {
       const { wx } = _c2w(e.offsetX, e.offsetY)
       _updateSliceBp(Math.max(_minBp, Math.min(_totalBp, _xToBp(wx))))
-      _draw(); return
+      _scheduleDraw(); return
     }
     if (_painting) {
       const { wx } = _c2w(e.offsetX, e.offsetY)
       const bp = _xToBp(wx) - _ghostShiftBp   // resolve to REAL bp when painting in a mirror zone
       _paintLo = Math.min(_paintAnchor, bp)
       _paintHi = Math.max(_paintAnchor, bp)
-      _draw(); return
+      _scheduleDraw(); return
     }
     if (_lassoStarted) {
       const { wx, wy } = _c2w(e.offsetX, e.offsetY)
       _lassoWX1 = wx; _lassoWY1 = wy
       const dx = e.offsetX - _lassoSX0, dy = e.offsetY - _lassoSY0
       if (dx * dx + dy * dy > DRAG_THRESHOLD * DRAG_THRESHOLD) _lassoActive = true
-      if (_lassoActive) _draw()
+      if (_lassoActive) _scheduleDraw()
       return
     }
     // Track which helix the cursor is over (for scaffold sprite filtering)
@@ -4397,7 +4712,7 @@ export function initPathview(canvasEl, containerEl, {
       const { wy } = _c2w(e.offsetX, e.offsetY)
       const prev = _hoverHelixId
       _hoverHelixId = _helixAtWY(wy)
-      if (_shiftHeld && _hoverHelixId !== prev) _draw()
+      if (_shiftHeld && _hoverHelixId !== prev) _scheduleDraw()
     }
     // Cursor + hover
     if (_activeTool === 'select' && _helixAtGutter(e.offsetX, e.offsetY)) {
@@ -4438,7 +4753,7 @@ export function initPathview(canvasEl, containerEl, {
       if (hit) {
         const { dom } = hit
         const info    = _rowMap.get(dom.helix_id)
-        if (!info) { _nickHover = null; _draw(); return }
+        if (!info) { _nickHover = null; _scheduleDraw(); return }
         const { wx }  = _c2w(e.offsetX, e.offsetY)
         const shift   = _ghostShiftForWorldX(wx)   // live shift (hover, not a captured drag)
         const col     = _xToBp(wx) - shift          // REAL bp under cursor
@@ -4454,7 +4769,7 @@ export function initPathview(canvasEl, containerEl, {
         _nickHover = null
         if (hadHover) _dbgDetail = []
       }
-      _draw()
+      _scheduleDraw()
     }
   })
 
@@ -4585,22 +4900,14 @@ export function initPathview(canvasEl, containerEl, {
           const lx0 = Math.min(_lassoWX0, _lassoWX1), lx1 = Math.max(_lassoWX0, _lassoWX1)
           const ly0 = Math.min(_lassoWY0, _lassoWY1), ly1 = Math.max(_lassoWY0, _lassoWY1)
           const strandIds = new Set()
-          for (const strand of (_design?.strands ?? [])) {
+          for (const { strand } of _lassoDomainEntries(lx0, lx1, ly0, ly1)) {
             if (!strandPassesScafStapFilter(strand, _selectFilter)) continue
-            for (const dom of strand.domains) {
-              const info = _rowMap.get(dom.helix_id)
-              if (!info) continue
-              const lo = Math.min(dom.start_bp, dom.end_bp), hi = Math.max(dom.start_bp, dom.end_bp)
-              const dyC = dom.direction === 'FORWARD' ? info.fwdY : info.revY
-              if (_bpToX(hi + 1) > lx0 && _bpToX(lo) < lx1 && dyC + CELL_H / 2 > ly0 && dyC - CELL_H / 2 < ly1) {
-                strandIds.add(strand.id); break
-              }
-            }
+            strandIds.add(strand.id)
           }
           const keys = new Set()
-          for (const strand of (_design?.strands ?? [])) {
-            if (!strandIds.has(strand.id)) continue
-            for (const k of _strandElementKeys(strand)) keys.add(k)
+          _ensureSelectionOwnerIndex()
+          for (const strandId of strandIds) {
+            for (const k of _domainElementKeysByStrand.get(strandId) ?? []) keys.add(k)
           }
           if (_lassoCtrl) { for (const k of keys) _selectedElements.add(k) }
           else            { _selectedElements = keys }
@@ -4863,22 +5170,19 @@ export function initPathview(canvasEl, containerEl, {
     setSelection(strandIds) {
       _selectedElements = new Set()
       if (!strandIds?.length || !_design) { _draw(); return }
+      _ensureSelectionOwnerIndex()
       const idSet = new Set()
       for (const sid of strandIds) {
         for (const memberId of _components.membersOf(sid)) idSet.add(memberId)
       }
-      for (const strand of _design.strands) {
-        if (!idSet.has(strand.id)) continue
-        for (const dom of strand.domains) {
-          _selectedElements.add(_domainLineKey(dom))
-          _selectedElements.add(_domainEndKey(dom, '5p'))
-          _selectedElements.add(_domainEndKey(dom, '3p'))
+      for (const strandId of idSet) {
+        for (const key of _domainElementKeysByStrand.get(strandId) ?? []) {
+          _selectedElements.add(key)
         }
       }
-      for (const xo of (_design.crossovers ?? [])) {
-        const sA = _findStrandIdxAt(xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand)
-        if (sA >= 0 && idSet.has(_design.strands[sA].id)) {
-          _selectedElements.add(_xoverKey(xo))
+      for (const strandId of idSet) {
+        for (const key of _xoverKeysByOwnerStrand.get(strandId) ?? []) {
+          _selectedElements.add(key)
         }
       }
       _draw()
@@ -4906,15 +5210,17 @@ export function initPathview(canvasEl, containerEl, {
       // Log strand endpoints on every helix that changed — helps trace nicks.
       if (_design && design) {
         const changedHelixIds = new Set()
+        const oldHelixById = new Map(_design.helices.map(helix => [helix.id, helix]))
         for (const h of design.helices) {
-          const old = _design.helices.find(oh => oh.id === h.id)
+          const old = oldHelixById.get(h.id)
           if (!old || old.length_bp !== h.length_bp || old.bp_start !== h.bp_start)
             changedHelixIds.add(h.id)
         }
         if (DBG && changedHelixIds.size > 0) {
+          const nextHelixById = new Map(design.helices.map(helix => [helix.id, helix]))
           console.group(`%c[DESIGN UPDATE] ${changedHelixIds.size} helix(es) changed`, 'color:cyan;font-weight:bold')
           for (const hid of changedHelixIds) {
-            const h = design.helices.find(x => x.id === hid)
+            const h = nextHelixById.get(hid)
             console.log(`  helix ${hid}  bp_start=${h.bp_start}  length_bp=${h.length_bp}  → bp ${h.bp_start}..${h.bp_start + h.length_bp - 1}`)
             const domains = []
             for (const s of design.strands) {

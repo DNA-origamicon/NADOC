@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { bondRefForCone, coneForBondRef, crossoverRefForArc, endRefForEntry } from './selection_hit_resolver.js'
+import {
+  bondRefForCone, coneForBondRef, crossoverRefForArc, endRefForEntry, vrPrimitiveOwner,
+  vrDeformationPlanePick, vrInitialSelectionOwnerTokens, vrOwnerTokens,
+  vrSelectionAccepted, vrToolTargetSnapshot,
+} from './selection_hit_resolver.js'
 
 const nuc = (bp, extra = {}) => ({ helix_id: 'h1', bp_index: bp, direction: 'FORWARD', ...extra })
+const atomIdentity = (key, name) => encodeURIComponent(`atom-ref:${JSON.stringify([key, name])}`)
+const atomBondIdentity = (first, second) => encodeURIComponent(
+  `atom-bond-ref:${JSON.stringify([first, second])}`,
+)
+const extraBaseIdentity = (key, primitive = 'bead') => encodeURIComponent(
+  `extra-base-ref:${JSON.stringify([key, primitive])}`,
+)
 
 describe('pure selection hit resolution', () => {
   it('resolves regular and forced-ligation arc IDs by live design ownership', () => {
@@ -11,6 +22,252 @@ describe('pure selection hit resolution', () => {
     expect(crossoverRefForArc({ crossover_id: 'f1' }, design))
       .toEqual({ kind: 'crossover', id: 'f1', subtype: 'forced_ligation' })
     expect(crossoverRefForArc({ crossover_id: 'gone' }, design)).toBeNull()
+  })
+
+  it('binds a tool target to its exact transient primitive and current canonical ref', () => {
+    const nucleotide = {
+      strand_id: 's1', domain_index: 0, helix_id: 'h1', bp_index: 7,
+      direction: 'FORWARD',
+    }
+    const selectedRef = { kind: 'base', key: 'h1:7:FORWARD' }
+    const ownerTokens = vrInitialSelectionOwnerTokens(selectedRef)
+    const target = vrToolTargetSnapshot({
+      identity: atomIdentity('h1:7:FORWARD', "C1'"),
+      selectionKind: 'base', ownerTokens, selectedRef,
+      geometry: [nucleotide],
+    })
+    expect(target).toMatchObject({
+      identity: atomIdentity('h1:7:FORWARD', "C1'"),
+      selectionKind: 'base', selectedRef,
+      primitiveKind: 'atom',
+      primitiveRef: selectedRef,
+      atomRef: { baseKey: 'h1:7:FORWARD', name: "C1'" },
+    })
+    // An individual atom remains action/session metadata beneath the stable Base.
+    expect(target.selectedRef.kind).toBe('base')
+  })
+
+  it('rejects delayed tool targets after canonical selection or scene identity changes', () => {
+    const nucleotide = {
+      strand_id: 's1', domain_index: 0, helix_id: 'h1', bp_index: 7,
+      direction: 'FORWARD',
+    }
+    const selectedRef = { kind: 'base', key: 'h1:7:FORWARD' }
+    const snapshot = {
+      identity: atomIdentity('h1:7:FORWARD', "C1'"), selectionKind: 'base',
+      ownerTokens: vrInitialSelectionOwnerTokens(selectedRef), selectedRef,
+      geometry: [nucleotide],
+    }
+    expect(vrToolTargetSnapshot({
+      ...snapshot, selectedRef: { kind: 'base', key: 'h1:8:FORWARD' },
+    })).toBeNull()
+    expect(vrToolTargetSnapshot({ ...snapshot, selectionKind: 'domain' })).toBeNull()
+    expect(vrToolTargetSnapshot({ ...snapshot, geometry: [] })).toBeNull()
+  })
+
+  it('resolves native nucleotide identities by live candidate, including colon IDs', () => {
+    const nucleotide = {
+      strand_id: 'strand:a', domain_index: 2, helix_id: 'helix:b', bp_index: 7,
+      direction: 'REVERSE', copy_k: 1,
+    }
+    const owner = vrPrimitiveOwner(
+      'nuc:strand:a:2:helix:b:7:REVERSE:1:slab',
+      { geometry: [nucleotide] },
+    )
+    expect(owner).toEqual({
+      kind: 'nucleotide', nucleotide,
+      ref: { kind: 'base', key: 'helix:b:7:REVERSE:1' },
+    })
+    expect(vrPrimitiveOwner(
+      'atom:12:base:helix:b:7:REVERSE:1:C', { geometry: [nucleotide] },
+    )).toEqual({
+      kind: 'atom', nucleotide,
+      ref: { kind: 'base', key: 'helix:b:7:REVERSE:1' },
+    })
+  })
+
+  it('resolves v11 semantic atoms and bonds without draw indices', () => {
+    const first = {
+      strand_id: 'strand:a', domain_index: 0, helix_id: 'helix:b', bp_index: 3,
+      direction: 'FORWARD',
+    }
+    const second = { ...first, bp_index: 4 }
+    expect(vrPrimitiveOwner(
+      atomIdentity('helix:b:3:FORWARD', "C1'"), { geometry: [first, second] },
+    )).toMatchObject({
+      kind: 'atom', nucleotide: first,
+      atomRef: { baseKey: 'helix:b:3:FORWARD', name: "C1'" },
+    })
+    expect(vrPrimitiveOwner(
+      atomBondIdentity(
+        ['helix:b:3:FORWARD', "O3'"], ['helix:b:4:FORWARD', 'P'],
+      ),
+      { geometry: [first, second] },
+    )).toMatchObject({
+      kind: 'atom_bond',
+      atomRefs: [
+        { baseKey: 'helix:b:3:FORWARD', name: "O3'" },
+        { baseKey: 'helix:b:4:FORWARD', name: 'P' },
+      ],
+    })
+  })
+
+  it('resolves coarse and atomistic backbone bonds without index ownership', () => {
+    const first = {
+      strand_id: 'strand:a', domain_index: 0, helix_id: 'helix:b', bp_index: 3,
+      direction: 'FORWARD',
+    }
+    const second = { ...first, bp_index: 4 }
+    expect(vrPrimitiveOwner(
+      'backbone:nuc:strand:a:0:helix:b:3:FORWARD:0~nuc:strand:a:0:helix:b:4:FORWARD:0',
+      { geometry: [first, second] },
+    )).toEqual({
+      kind: 'backbone_bond', fromNucleotide: first, toNucleotide: second,
+      ref: {
+        kind: 'bond', fromKey: 'helix:b:3:FORWARD', toKey: 'helix:b:4:FORWARD',
+        strandId: 'strand:a',
+      },
+    })
+    expect(vrPrimitiveOwner(
+      'atom-bond:bases:helix:b:3:FORWARD~helix:b:4:FORWARD:atoms:10-20',
+      { geometry: [first, second] },
+    )?.kind).toBe('atom_bond')
+    expect(vrPrimitiveOwner(
+      'atom-bond:bases:helix:b:3:FORWARD~helix:b:3:FORWARD:atoms:10-11',
+      { geometry: [first, second] },
+    )).toEqual({
+      kind: 'atom_bond_base', nucleotide: first,
+      ref: { kind: 'base', key: 'helix:b:3:FORWARD' },
+    })
+  })
+
+  it('accepts only exact physical nucleotide cross-sections for VR deformation planes', () => {
+    const first = {
+      strand_id: 's1', domain_index: 0, helix_id: 'h1', bp_index: 3,
+      direction: 'FORWARD',
+    }
+    const second = { ...first, bp_index: 4 }
+    const design = { helices: [{ id: 'h1', bp_start: 0, length_bp: 12 }] }
+    const context = { geometry: [first, second], design }
+    expect(vrDeformationPlanePick(
+      'nuc:s1:0:h1:3:FORWARD:0:slab', context,
+    )).toEqual({ resolved: true, reason: 'resolved', bp: 3, helixId: 'h1' })
+    expect(vrDeformationPlanePick(
+      atomIdentity('h1:4:FORWARD', "C1'"), context,
+    )).toEqual({ resolved: true, reason: 'resolved', bp: 4, helixId: 'h1' })
+    expect(vrDeformationPlanePick(
+      'backbone:nuc:s1:0:h1:3:FORWARD:0~nuc:s1:0:h1:4:FORWARD:0', context,
+    )).toEqual({ resolved: false, reason: 'ambiguous_primitive' })
+  })
+
+  it('rejects synthetic, copied, stale, and coarse VR plane picks', () => {
+    const physical = {
+      strand_id: 's1', domain_index: 0, helix_id: 'h1', bp_index: 3,
+      direction: 'FORWARD',
+    }
+    const design = {
+      helices: [{ id: 'h1', bp_start: 0, length_bp: 5 }],
+      strands: [{ id: 's1', domains: [{ helix_id: 'h1' }] }],
+    }
+    expect(vrDeformationPlanePick(
+      'segment:h1:s1:0:axis', { geometry: [physical], design },
+    )).toEqual({ resolved: false, reason: 'ambiguous_primitive' })
+    const copied = { ...physical, copy_k: 1 }
+    expect(vrDeformationPlanePick(
+      'nuc:s1:0:h1:3:FORWARD:1:bead', { geometry: [copied], design },
+    )).toEqual({ resolved: false, reason: 'synthetic_not_supported' })
+    const stale = { ...physical, bp_index: 9 }
+    expect(vrDeformationPlanePick(
+      'nuc:s1:0:h1:9:FORWARD:0:bead', { geometry: [stale], design },
+    )).toEqual({ resolved: false, reason: 'out_of_range' })
+  })
+
+  it('resolves crossover, forced-ligation, warning, and domain primitives', () => {
+    const design = {
+      crossovers: [{ id: 'xo:a' }],
+      forced_ligations: [{ id: 'fl:b' }],
+      strands: [{ id: 'strand:c', domains: [{ helix_id: 'helix:d' }] }],
+    }
+    expect(vrPrimitiveOwner('crossover:xo:a:direct', { design })?.ref).toEqual(
+      { kind: 'crossover', id: 'xo:a', subtype: 'crossover' },
+    )
+    expect(vrPrimitiveOwner('warning:xo:a:outline:0', { design })?.ref).toEqual(
+      { kind: 'crossover', id: 'xo:a', subtype: 'crossover' },
+    )
+    expect(vrPrimitiveOwner('ligation:fl:b:direct', { design })?.ref).toEqual(
+      { kind: 'crossover', id: 'fl:b', subtype: 'forced_ligation' },
+    )
+    expect(vrPrimitiveOwner(
+      'segment:helix:d:strand:c:0:3:9:axis', { design },
+    )?.ref).toEqual({ kind: 'domain', strandId: 'strand:c', domainIndex: 0 })
+  })
+
+  it('resolves flexible and ss-linker base owners without parsing connection IDs', () => {
+    const design = {
+      strands: [{ id: 'strand:a', domains: [{ helix_id: 'helix:b' }] }],
+      flexible_connections: [{
+        id: 'flex:c',
+        segment_bead_keys: [{
+          strand_id: 'strand:a', domain_index: 0, bp_index: 8, direction: 'REVERSE',
+        }],
+      }],
+      overhang_connections: [{ id: 'link:d' }],
+    }
+    expect(vrPrimitiveOwner('flex:flex:c:slab:0', { design })).toEqual({
+      kind: 'flexible_base', connectionId: 'flex:c',
+      ref: { kind: 'base', key: 'helix:b:8:REVERSE' },
+    })
+    expect(vrPrimitiveOwner('linker:link:d:ss:bead:3', { design })).toEqual({
+      kind: 'linker_base', connectionId: 'link:d',
+      ref: { kind: 'base', key: '__lnk__link:d:3:FORWARD' },
+    })
+    expect(vrPrimitiveOwner('flex:flex:c:backbone:12:near:0', { design })).toEqual({
+      kind: 'flexible_base', connectionId: 'flex:c',
+      ref: { kind: 'base', key: 'helix:b:8:REVERSE' },
+    })
+    expect(vrPrimitiveOwner('linker:link:d:ss:backbone:9:near:3', { design })).toEqual({
+      kind: 'linker_base', connectionId: 'link:d',
+      ref: { kind: 'base', key: '__lnk__link:d:3:FORWARD' },
+    })
+    expect(vrPrimitiveOwner('linker:link:d:ds:a:connector:2', { design })).toEqual({
+      kind: 'linker_connection', connectionId: 'link:d', ref: null,
+    })
+  })
+
+  it('resolves projected crossover inserts as selectable Base refs', () => {
+    const design = {
+      crossovers: [{ id: 'xo:with:colons', extra_bases: 'AT' }],
+      forced_ligations: [],
+    }
+    expect(vrPrimitiveOwner(
+      extraBaseIdentity('__xb__:xo:with:colons:1', 'slab'), { design },
+    )).toEqual({
+      kind: 'extra_base', connectionId: 'xo:with:colons',
+      connectionSubtype: 'crossover', primitive: 'slab',
+      ref: { kind: 'base', key: '__xb__:xo:with:colons:1' },
+    })
+    expect(vrSelectionAccepted('extra_base', 'base')).toBe(true)
+    expect(vrSelectionAccepted('extra_base', 'default')).toBe(false)
+    expect(vrSelectionAccepted('extra_base', 'strand')).toBe(false)
+    expect(vrPrimitiveOwner(
+      atomIdentity('__xb__:xo:with:colons:0', 'P'), { design },
+    )).toMatchObject({
+      kind: 'extra_base', connectionId: 'xo:with:colons', primitive: 'atom',
+      ref: { kind: 'base', key: '__xb__:xo:with:colons:0' },
+      atomRef: { baseKey: '__xb__:xo:with:colons:0', name: 'P' },
+    })
+    expect(vrPrimitiveOwner(atomBondIdentity(
+      ['h1:3:FORWARD', "O3'"], ['__xb__:xo:with:colons:0', 'P'],
+    ), {
+      design,
+      geometry: [{ helix_id: 'h1', bp_index: 3, direction: 'FORWARD' }],
+    })).toMatchObject({
+      kind: 'extra_base', primitive: 'atom-bond',
+      ref: { kind: 'base', key: '__xb__:xo:with:colons:0' },
+    })
+    expect(vrPrimitiveOwner(
+      extraBaseIdentity('__xb__:xo:with:colons:2'), { design },
+    )).toBeNull()
   })
 
   it('resolves only terminal beads as End refs', () => {
@@ -34,5 +291,108 @@ describe('pure selection hit resolution', () => {
     expect(coneForBondRef([other, reversed, match], ref)).toBe(match)
     expect(coneForBondRef([match], { ...ref, strandId: undefined })).toBe(match)
     expect(coneForBondRef([reversed], ref)).toBeNull()
+  })
+
+  it('orders exact and coarse owner aliases without delimiter ambiguity', () => {
+    const nucleotide = {
+      strand_id: 'strand:a b', domain_index: 2, helix_id: 'h:1', bp_index: 7,
+      direction: 'FORWARD',
+    }
+    const tokens = vrOwnerTokens({
+      selected: true,
+      selectedRef: { kind: 'base', key: 'h:1:7:FORWARD' },
+      owner: { ref: { kind: 'base', key: 'h:1:7:FORWARD' } },
+      nucleotide,
+      key: 'h:1:7:FORWARD',
+    })
+    expect(tokens.map(decodeURIComponent)).toEqual([
+      '["base","h:1:7:FORWARD"]',
+      '["domain","strand:a b",2]',
+      '["strand","strand:a b"]',
+    ])
+    expect(tokens.every(token => !/\s/.test(token))).toBe(true)
+    expect(vrOwnerTokens({ selected: false, selectedRef: { kind: 'strand', id: 's' } }))
+      .toEqual([])
+  })
+
+  it('encodes a pre-existing canonical selection for native launch', () => {
+    expect(vrInitialSelectionOwnerTokens({
+      kind: 'domain', strandId: 'strand:a b', domainIndex: 2,
+    }).map(decodeURIComponent)).toEqual(['["domain","strand:a b",2]'])
+    expect(vrInitialSelectionOwnerTokens(null)).toEqual([])
+  })
+
+  it('locks the native owner × canonical selection-level acceptance matrix', () => {
+    const levels = ['default', 'cluster', 'strand', 'domain', 'end', 'xover', 'base']
+    const accepted = (kind, facts = {}) => levels.filter(level =>
+      vrSelectionAccepted(kind, level, facts))
+
+    expect(accepted('nucleotide', { isTerminal: true, hasCluster: true }))
+      .toEqual(['default', 'cluster', 'strand', 'domain', 'end', 'base'])
+    expect(accepted('atom', { hasCluster: true }))
+      .toEqual(['default', 'cluster', 'strand', 'domain', 'base'])
+    expect(accepted('domain', { hasCluster: true }))
+      .toEqual(['default', 'cluster', 'strand', 'domain', 'base'])
+    expect(accepted('backbone_bond', { hasCluster: true }))
+      .toEqual(['default', 'cluster', 'strand'])
+    expect(accepted('atom_bond', { hasCluster: false }))
+      .toEqual(['default', 'strand'])
+    expect(accepted('crossover', { hasCluster: true }))
+      .toEqual(['default', 'cluster', 'strand', 'xover'])
+    expect(accepted('flexible_base')).toEqual(['base'])
+    expect(accepted('linker_base')).toEqual(['base'])
+    expect(accepted('linker_connection')).toEqual([])
+    expect(accepted('nucleotide', { hasTarget: false, isTerminal: true,
+      hasCluster: true })).toEqual([])
+  })
+
+  it('covers primitive ownership and accepted levels across every VR representation', () => {
+    const first = {
+      strand_id: 'strand:a', domain_index: 0, helix_id: 'helix:b', bp_index: 3,
+      direction: 'FORWARD', is_five_prime: true,
+    }
+    const second = { ...first, bp_index: 4, is_five_prime: false }
+    const design = {
+      crossovers: [{ id: 'xo:c' }],
+      forced_ligations: [],
+      strands: [{ id: 'strand:a', domains: [{ helix_id: 'helix:b' }] }],
+      flexible_connections: [{
+        id: 'flex:d',
+        segment_bead_keys: [{
+          strand_id: 'strand:a', domain_index: 0, bp_index: 3, direction: 'FORWARD',
+        }],
+      }],
+    }
+    const context = { geometry: [first, second], design }
+    const cases = [
+      ['full', 'nucleotide',
+        'nuc:strand:a:0:helix:b:3:FORWARD:0:backbone',
+        { isTerminal: true }, ['default', 'strand', 'domain', 'end', 'base']],
+      ['full', 'backbone_bond',
+        'backbone:nuc:strand:a:0:helix:b:3:FORWARD:0~nuc:strand:a:0:helix:b:4:FORWARD:0',
+        {}, ['default', 'strand']],
+      ['full', 'crossover', 'crossover:xo:c:direct',
+        {}, ['default', 'strand', 'xover']],
+      ['full', 'flexible_base', 'flex:flex:d:bead:0', {}, ['base']],
+      ['cylinders', 'domain', 'segment:helix:b:strand:a:0:3:4:coarse',
+        {}, ['default', 'strand', 'domain', 'base']],
+      ['ballstick', 'atom', 'atom:8:base:helix:b:4:FORWARD:C',
+        {}, ['default', 'strand', 'domain', 'base']],
+      ['ballstick', 'atom_bond',
+        'atom-bond:bases:helix:b:3:FORWARD~helix:b:4:FORWARD:atoms:8-9',
+        {}, ['default', 'strand']],
+      ['stick', 'atom_bond',
+        'atom-bond:bases:helix:b:3:FORWARD~helix:b:4:FORWARD:atoms:8-9',
+        {}, ['default', 'strand']],
+    ]
+    const levels = ['default', 'cluster', 'strand', 'domain', 'end', 'xover', 'base']
+    for (const [representation, expectedKind, identity, facts, expectedLevels] of cases) {
+      const owner = vrPrimitiveOwner(identity, context)
+      expect(owner?.kind, `${representation}: ${identity}`).toBe(expectedKind)
+      expect(
+        levels.filter(level => vrSelectionAccepted(owner?.kind, level, facts)),
+        `${representation}: ${expectedKind}`,
+      ).toEqual(expectedLevels)
+    }
   })
 })

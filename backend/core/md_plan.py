@@ -223,6 +223,10 @@ class PlanContext:
     hmr: Optional[bool] = None
     #: The ladder's base timestep, so the preview's tiers CAP it rather than replace it.
     base_timestep_fs: Optional[float] = None
+    #: True when `base_timestep_fs` is an EXPLICIT wizard pin rather than the
+    #: fast-derived default — honors it on soft/gentle tiers instead of capping.  See
+    #: `md_protocols.effective_timestep_fs`.
+    timestep_pinned: bool = False
     anchors_file: Optional[str] = None
     field: Optional[dict] = None
     gbis: bool = False
@@ -263,6 +267,7 @@ def stage_parameters(
                 rigid_bonds=ctx.rigid_bonds,
                 hmr=ctx.hmr,
                 base_timestep_fs=ctx.base_timestep_fs,
+                pinned=ctx.timestep_pinned,
                 anchors_file=ctx.anchors_file,
                 field=ctx.field,
                 gbis=ctx.gbis,
@@ -682,7 +687,10 @@ def relaxation_stages(
                 # said 1 fs.  The "one source of truth" the docstring promises only holds if
                 # both callers pass the same arguments.
                 timestep_fs=_p.effective_timestep_fs(
-                    spec, ctx.fast and not ctx.gbis and not ctx.vacuum, ladder_dt
+                    spec,
+                    ctx.fast and not ctx.gbis and not ctx.vacuum,
+                    ladder_dt,
+                    pinned=ctx.timestep_pinned,
                 ),
                 params=params,
                 prev_params=prev_params,

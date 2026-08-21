@@ -49,6 +49,7 @@ import {
   runConfigForJob, healthForDisplay, runElements, runIndicatorTags, runRowLabel, runChildTitle,
   jobHasFailure, errorLogText, jobOutOfDate, jobSelectionSignature,
   trajectoryFrameEstimate, relaxIndexMap, relaxRowLabel,
+  captureStrandRunPlan,
 } from './oxdna_jobs_panel.js'
 
 describe('relaxIndexMap / relaxRowLabel (root job naming)', () => {
@@ -1338,5 +1339,33 @@ describe('initOxdnaJobsPanel — permanently-open section (no per-engine collaps
     const n0 = api.listOxdnaJobs.mock.calls.length
     await vi.advanceTimersByTimeAsync(4500)
     expect(api.listOxdnaJobs.mock.calls.length).toBe(n0)             // no poll scheduled (gate off)
+  })
+})
+
+describe('captureStrandRunPlan', () => {
+  const withCaps = (nBeads) => ({
+    run_config: { surface_strands: { enabled: true, built: { n_beads: nBeads } } },
+  })
+
+  it('inherits the parent capture beads when the card asks for strands', () => {
+    expect(captureStrandRunPlan(withCaps(948), { enabled: true }))
+      .toEqual({ mode: 'inherit', nBeads: 948 })
+  })
+
+  it('is "none" when the card is off, whatever the parent has', () => {
+    expect(captureStrandRunPlan(withCaps(948), null).mode).toBe('none')
+    expect(captureStrandRunPlan(withCaps(948), { enabled: false }).mode).toBe('none')
+  })
+
+  // The run used to launch anyway, strand-free, and the echo-back then flipped the
+  // card's toggle off — the user got neither the strands nor a reason.
+  it('is "unbuilt" when the card asks for strands the relaxation never built', () => {
+    for (const parent of [null, {}, { run_config: {} },
+      { run_config: { surface_strands: null } },
+      { run_config: { surface_strands: { enabled: true } } },        // spec but no build
+      { run_config: { surface_strands: { enabled: true, built: { n_beads: 0 } } } }]) {
+      expect(captureStrandRunPlan(parent, { enabled: true }).mode,
+        JSON.stringify(parent)).toBe('unbuilt')
+    }
   })
 })

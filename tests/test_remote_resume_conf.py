@@ -77,15 +77,16 @@ class TestResumeConf:
         assert "run                116000" in out
         assert "run                120000" not in out
 
-    def test_keeps_writing_the_SAME_dcd_so_tier_a_can_still_judge(self):
+    def test_keeps_writing_the_SAME_dcd_so_early_stop_can_still_judge(self):
         """Deliberately unlike md_protocols.build_remote_resume_conf, which writes a
         .cont<k>.dcd to preserve the partial.
 
-        Tier-A early-stop reads its WC base-pairing series off output/<seg>.dcd. If the
-        continuation went elsewhere, that series would hold only the few PRE-shrink
-        frames, fall under the evaluator's window, and report HOLD forever — the segment
-        would silently lose its ability to bridge. The discarded frames are the box
-        equilibrating at a cell NAMD has just declared invalid; nobody wants them.
+        Early-stop's node health step reads its WC base-pairing series off
+        output/<seg>.dcd. If the continuation went elsewhere, that series would hold
+        only the few PRE-shrink frames, fall under the evaluator's window, and report
+        HOLD forever — the segment would silently lose its ability to bridge. The
+        discarded frames are the box equilibrating at a cell NAMD has just declared
+        invalid; nobody wants them.
         """
         out = build_resume_conf(CONF, "s_01_p10", 4000, 120_000)
         assert "dcdFile            output/s_01_p10.dcd" in out

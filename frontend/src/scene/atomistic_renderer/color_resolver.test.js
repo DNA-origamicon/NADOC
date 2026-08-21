@@ -121,3 +121,27 @@ describe('resolveAtomColor — crossover extra bases and extension tails', () =>
     expect(resolveAtomColor(ctxFor('base', base), atom(), null, false)).toBe(0x00ff00)
   })
 })
+
+describe('resolveAtomColor — compiled selection membership', () => {
+  const ctx = { colorMode: 'cpk', strandColors: new Map(), baseColors: new Map(), scalarColors: null }
+  const selection = {
+    extensionIds: ['ext-hit'], helixIds: ['helix-hit'], strandIds: ['strand-hit'],
+    domains: [{ strandId: 'domain-strand', helixId: 'domain-helix', direction: 'FORWARD', lo: 4, hi: 9 }],
+    bases: [{ helix_id: 'base-helix', bp_index: 12, direction: 'REVERSE' }],
+  }
+
+  it.each([
+    { extension_id: 'ext-hit' },
+    { helix_id: 'helix-hit' },
+    { strand_id: 'strand-hit' },
+    { strand_id: 'domain-strand', helix_id: 'domain-helix', direction: 'FORWARD', bp_index: 7 },
+    { helix_id: 'base-helix', bp_index: 12, direction: 'REVERSE' },
+  ])('highlights indexed match $extension_id$helix_id$strand_id', patch => {
+    expect(resolveAtomColor(ctx, atom(patch), selection, true)).toBe(C_HIGHLIGHT)
+  })
+
+  it('does not accept a near miss in the same domain bucket', () => {
+    expect(resolveAtomColor(ctx, atom({ strand_id: 'domain-strand', helix_id: 'domain-helix',
+      direction: 'FORWARD', bp_index: 10 }), selection, true)).toBe(ELEMENTS.C.color)
+  })
+})

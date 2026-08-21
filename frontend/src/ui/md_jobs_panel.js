@@ -189,9 +189,17 @@ const _ts = () => new Date().toISOString().slice(11, 23)
 
 // ── Pure job-filtering helpers (exported for testing) ─────────────────────────
 
-/** Normalise a workspace path for comparison: forward slashes, no trailing `/`. */
+/**
+ * Normalise a workspace path for comparison.
+ *
+ * Library/open responses may identify the same file as `workspace/foo.nadoc`, while
+ * simulation jobs historically persisted the workspace-relative `foo.nadoc`. Treat
+ * those spellings as identical so reopening a design cannot hide its archived jobs.
+ */
 export function normalizeWorkspacePath(path) {
-  return path ? String(path).replace(/\\/g, '/').replace(/\/+$/, '') : ''
+  return path
+    ? String(path).replace(/\\/g, '/').replace(/^\.\//, '').replace(/^workspace\//, '').replace(/\/+$/, '')
+    : ''
 }
 
 /**
@@ -497,13 +505,19 @@ export function mdRunControl(selectedJob, {
         title: 'Uploading the package to Alpine, then sbatch.',
       }
     }
-    // SLURM is already terminal while NADOC pulls and indexes the result tree. The
-    // persisted job deliberately remains `running` so the supervisor will retry an
-    // interrupted transfer, but offering "Stop Run" at this point is false: there is
-    // no cluster process left to stop. Represent the real local transfer phase instead.
+    // The cluster side is already terminal while NADOC pulls and indexes the result
+    // tree — true whether it got there by finishing, by a walltime TIMEOUT, or by a
+    // manual Terminate-and-download (which scancels BEFORE it ever sets this state;
+    // see finish_and_download_md_job). The persisted job deliberately remains
+    // `running` so the supervisor will retry an interrupted transfer, but offering
+    // "Pause run" at this point is false: there is no cluster process left to pause.
+    // This used to also require `slurm_state === 'COMPLETED'`, which made a job that
+    // TIMED OUT fall through to the generic active-job branch below and offer to
+    // "Pause" a run Alpine had already killed — for a several-hundred-GB trajectory
+    // that download can run for hours, during which the button must not lie.
+    // Represent the real local transfer phase instead.
     const downloadState = selectedJob.download_status?.state
-    if (selectedJob.slurm_state === 'COMPLETED'
-        && ['downloading', 'processing'].includes(downloadState)) {
+    if (['downloading', 'processing'].includes(downloadState)) {
       const processing = downloadState === 'processing'
       return {
         action: RUN_ACTION.PREPARING,
@@ -511,8 +525,8 @@ export function mdRunControl(selectedJob, {
         disabled: true,
         spinner: true,
         title: processing
-          ? 'The completed Alpine results are being indexed locally.'
-          : 'The completed Alpine results are being downloaded and verified locally.',
+          ? 'The Alpine results are being indexed locally.'
+          : 'The Alpine run has ended on the cluster — its results are being downloaded and verified locally.',
       }
     }
     if (selectedJob.resumable) {
@@ -740,7 +754,13 @@ export function hasActiveRemoteJob(jobs) {
   // Alpine AND RunPod. It was Alpine-only, which meant the 20 s remote poll never armed for
   // a rented run — so a pod could be provisioning, uploading, or finished, and the panel
   // would sit on whatever it last saw until the user clicked something.
-  return (jobs ?? []).some(j => mdIsRemoteJob(j) && mdJobIsActive(j))
+  // Result transfer/indexing is also live work.  Normally Alpine deliberately keeps the
+  // job's coarse status `running` until those phases finish, but persisted records from an
+  // older backend (or a restart between the two saves) can already be terminal.  Keep the
+  // REST poll armed from the durable download state instead of freezing that edge case.
+  return (jobs ?? []).some(j => mdIsRemoteJob(j) && (
+    mdJobIsActive(j) || ['downloading', 'processing'].includes(j?.download_status?.state)
+  ))
 }
 
 /** Pure: list-row label for a derived (refit/retry) child job — "Refit N", where N
@@ -1629,6 +1649,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // that is when we go get a frame — for the job already selected, or for whichever
     // one gets selected next (_selectJob's tail runs the same refresh).
     if (became) {
+      // Authentication returns before the potentially multi-GB completion reconcile.
+      // Refresh immediately so a run that finished while signed out changes from stale
+      // RUNNING to COMPLETED/downloading as soon as the server publishes that state;
+      // the remote poll remains armed until download + local indexing finish.
+      void _fetchJobs()
       _refreshMdDisplay()
     }
   })
@@ -1822,7 +1847,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // page refresh.
   let _prevJobsSig = null
   function _notifyIfJobsChanged() {
-    const sig = _jobs.map(j => `${j.job_id}:${j.status}`).sort().join('|')
+    // A reconnect can move RUNNING -> SLURM COMPLETED -> downloading without changing
+    // the coarse MdStatus (`running` is retained so interrupted transfers are retried).
+    // Include those phase edges so the visible unified Jobs card wakes immediately too.
+    // Byte counts are intentionally omitted; both panels already poll active transfers.
+    const sig = _jobs.map(j => [
+      j.job_id, j.status, j.slurm_state ?? '', j.download_status?.state ?? '',
+    ].join(':')).sort().join('|')
     if (_prevJobsSig !== null && sig !== _prevJobsSig) {
       window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed'))
     }

@@ -3,6 +3,7 @@ import {
   clusterAlphaForNuc,
   clusterAlphaKeys,
   clusterBackboneEntries,
+  clusterIdForNucleotide,
   clusterDisplaySignature,
   clusterMemberFilter,
   clusterNucKeys,
@@ -80,6 +81,34 @@ describe('clusterMemberFilter', () => {
     const cluster = { helix_ids: ['h1', 'h2'], domain_ids: [{ strand_id: 's1', domain_index: 1 }] }
     const f = clusterMemberFilter(cluster, design)
     expect(clusterBackboneEntries(cluster, design, entries)).toEqual(entries.filter(e => f(e.nuc)))
+  })
+})
+
+describe('clusterIdForNucleotide', () => {
+  it('prefers the smallest non-default containing Cluster', () => {
+    const design = {
+      cluster_transforms: [
+        { id: 'default', is_default: true, helix_ids: ['h1', 'h2', 'h3'] },
+        { id: 'wide', helix_ids: ['h1', 'h2'] },
+        { id: 'exact', helix_ids: ['h1'] },
+      ],
+    }
+    expect(clusterIdForNucleotide(entries[0].nuc, design)).toBe('exact')
+  })
+
+  it('falls back to the default Cluster and respects mixed-domain membership', () => {
+    const design = {
+      strands: [{ id: 's1', domains: [{ helix_id: 'h1' }, { helix_id: 'h2' }] }],
+      cluster_transforms: [
+        { id: 'mixed', helix_ids: ['h1', 'h2'], domain_ids: [
+          { strand_id: 's1', domain_index: 1 },
+        ] },
+        { id: 'default', is_default: true, helix_ids: ['h1', 'h2', 'h3'] },
+      ],
+    }
+    expect(clusterIdForNucleotide(entries[1].nuc, design)).toBe('mixed')
+    expect(clusterIdForNucleotide(entries[2].nuc, design)).toBe('default')
+    expect(clusterIdForNucleotide({ helix_id: 'gone' }, design)).toBeNull()
   })
 })
 

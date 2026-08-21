@@ -178,6 +178,35 @@ def test_geometry_for_design_five_prime_extension_tip_is_cube():
     assert not real_terminal["is_five_prime"]
 
 
+def test_extension_geometry_carries_atomistic_five_to_three_base_identity():
+    ext5 = StrandExtension(strand_id="s0", end="five_prime", sequence="AC")
+    ext3 = StrandExtension(strand_id="s0", end="three_prime", sequence="GT")
+    design = _single_helix_design(extensions=[ext5, ext3])
+    nucleotides = _geometry_for_design(design)
+
+    def bases(extension) -> list[str]:
+        return [
+            nucleotide["nucleobase"]
+            for nucleotide in sorted(
+                (
+                    item
+                    for item in nucleotides
+                    if item.get("extension_id") == extension.id
+                    and not item.get("is_modification")
+                ),
+                key=lambda item: item["bp_index"],
+            )
+        ]
+
+    # bp/ext_k grows root -> tip. Chemical 5′→3′ therefore reverses only at 5′.
+    assert bases(ext5) == ["C", "A"]
+    assert bases(ext3) == ["G", "T"]
+
+    compact = _compact_geometry_from_nucleotides(nucleotides)
+    assert compact[f"__ext_{ext5.id}"]["FORWARD"]["base"] == ["C", "A"]
+    assert compact[f"__ext_{ext3.id}"]["FORWARD"]["base"] == ["G", "T"]
+
+
 # ── Compaction / positions kernel (service push #48) ─────────────────────────
 
 

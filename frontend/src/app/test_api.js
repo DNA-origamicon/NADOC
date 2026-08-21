@@ -190,6 +190,7 @@ export function installTestApi({
       return capturePosesGif({ renderer, scene, camera, controls, poses, ...opts })
     },
     getAtomisticRenderer: () => atomisticRenderer,
+    getDesignRenderer: () => designRenderer,
     isCGVisible: () => !!(designRenderer.getHelixCtrl()?.root?.visible),
     /** Live rendered crossover-insert geometry for Full/atomistic registration probes.
      * Reads InstancedMesh matrices on both sides; source placement/API coordinates are

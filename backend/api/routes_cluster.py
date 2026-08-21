@@ -42,7 +42,13 @@ async def _reconcile_after_connect(mgr) -> None:
     try:
         from backend.core import md_executor  # noqa: PLC0415
 
-        await md_executor.poll_remote_jobs(_WORKSPACE_DIR, conn=mgr)
+        # Login is the recovery boundary for work that finished while NADOC had no
+        # session. Besides ordinary queued/running records, audit a terminal record
+        # whose prior result transfer was interrupted; the periodic supervisor keeps
+        # its narrower active-only scan to avoid retrying a permanent file error forever.
+        await md_executor.poll_remote_jobs(
+            _WORKSPACE_DIR, conn=mgr, recover_incomplete=True
+        )
     except Exception:  # noqa: BLE001
         logger.exception("post-connect remote poll failed")
 

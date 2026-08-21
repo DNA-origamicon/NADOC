@@ -399,22 +399,12 @@ describe('a production child', () => {
 
 describe('fieldAppliesToTarget', () => {
   const local = { key: 'threads', localOnly: true }
-  const remote = { key: 'early_stop_tier', remoteOnly: true }
   const plain = { key: 'padding_nm' }
 
   it('local-only hardware is hidden on a cluster run', () => {
     expect(fieldAppliesToTarget(local, 'local')).toBe(true)
     expect(fieldAppliesToTarget(local, 'alpine')).toBe(false)
     expect(fieldAppliesToTarget(local, 'runpod')).toBe(false)
-  })
-
-  it('remote-only settings are hidden on a local run — the mirror of the same law', () => {
-    // `early_stop_tier` picks which test a NODE uses to call a stage settled. It had no
-    // control at all, so every cluster run silently used the weaker tier B while the
-    // identical local run used both criteria.
-    expect(fieldAppliesToTarget(remote, 'local')).toBe(false)
-    expect(fieldAppliesToTarget(remote, 'alpine')).toBe(true)
-    expect(fieldAppliesToTarget(remote, 'runpod')).toBe(true)
   })
 
   it('an ordinary setting applies everywhere', () => {

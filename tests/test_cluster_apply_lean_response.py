@@ -16,6 +16,8 @@ Plan: /home/joshua/.claude/plans/we-are-updating-some-adaptive-chipmunk.md
 
 from __future__ import annotations
 
+import math
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -233,6 +235,65 @@ def test_commit_appends_cluster_op_to_feature_log(cluster_id):
     assert last["feature_type"] == "cluster_op"
     assert last["cluster_id"] == cluster_id
     assert last["translation"] == pytest.approx([1.0, 2.0, 3.0])
+
+
+def test_feature_log_revert_clears_first_cluster_op_and_restores_geometry(cluster_id):
+    """Reverting F1 must use the still-present history to discover that the
+    cluster needs resetting before the entry is truncated from the log."""
+    before_geometry = client.get("/api/design/geometry").json()["nucleotides"]
+    before_by_key = {
+        (n["helix_id"], n["bp_index"], n["direction"]): n["backbone_position"]
+        for n in before_geometry
+    }
+
+    angle = math.radians(30.0)
+    r = client.patch(
+        f"/api/design/cluster/{cluster_id}",
+        json={
+            "translation": [3.0, -2.0, 5.0],
+            "rotation": [
+                0.0,
+                0.0,
+                math.sin(angle / 2.0),
+                math.cos(angle / 2.0),
+            ],
+            "pivot": [1.0, 1.0, 0.0],
+            "commit": True,
+            "log": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+
+    moved_geometry = client.get("/api/design/geometry").json()["nucleotides"]
+    moved_by_key = {
+        (n["helix_id"], n["bp_index"], n["direction"]): n["backbone_position"]
+        for n in moved_geometry
+    }
+    cluster_helix = next(
+        c for c in design_state.get_or_404().cluster_transforms if c.id == cluster_id
+    ).helix_ids[0]
+    measured_keys = [key for key in before_by_key if key[0] == cluster_helix]
+    assert measured_keys
+    assert any(
+        moved_by_key[key] != pytest.approx(before_by_key[key]) for key in measured_keys
+    )
+
+    r = client.post("/api/design/features/0/revert")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body.get("diff_kind") == "cluster_only"
+    assert body["design"]["feature_log"] == []
+    ct = next(c for c in body["design"]["cluster_transforms"] if c["id"] == cluster_id)
+    assert ct["translation"] == pytest.approx([0.0, 0.0, 0.0])
+    assert ct["rotation"] == pytest.approx([0.0, 0.0, 0.0, 1.0])
+
+    restored_geometry = client.get("/api/design/geometry").json()["nucleotides"]
+    restored_by_key = {
+        (n["helix_id"], n["bp_index"], n["direction"]): n["backbone_position"]
+        for n in restored_geometry
+    }
+    for key in measured_keys:
+        assert restored_by_key[key] == pytest.approx(before_by_key[key])
 
 
 # ── Slider seek — same Plan-B fast paths as undo/redo ─────────────────────────

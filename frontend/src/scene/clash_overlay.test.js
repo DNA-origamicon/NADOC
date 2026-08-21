@@ -96,6 +96,28 @@ describe('initClashOverlay', () => {
     expect(document.getElementById('clash-legend-text').textContent).toBe('1 clash')
   })
 
+  // A display-only rebuild (the oxDNA capture-strand injection) replaces the backbone
+  // entries the glow was painted onto but moves no design nucleotide, so the standing
+  // report is still valid — repaint it rather than re-fetching one per keystroke.
+  it('repaints the standing report on a display-only rebuild without re-fetching', async () => {
+    const { designRenderer, store, api } = makeDeps()
+    const overlay = initClashOverlay({ store, designRenderer, api })
+    overlay.toggle(); await Promise.resolve(); await Promise.resolve()
+    api.getClashes.mockClear(); designRenderer.setClashHighlight.mockClear()
+    window.dispatchEvent(new CustomEvent('nadoc:display-rebuilt'))
+    expect(api.getClashes).not.toHaveBeenCalled()
+    expect(designRenderer.setClashHighlight).toHaveBeenCalledTimes(1)
+    expect(designRenderer.setClashHighlight.mock.calls[0][0]).toHaveLength(2)
+  })
+
+  it('a display-only rebuild is a no-op while the overlay is off', async () => {
+    const { designRenderer, store, api } = makeDeps()
+    initClashOverlay({ store, designRenderer, api })
+    window.dispatchEvent(new CustomEvent('nadoc:display-rebuilt'))
+    expect(api.getClashes).not.toHaveBeenCalled()
+    expect(designRenderer.setClashHighlight).not.toHaveBeenCalled()
+  })
+
   it('toggle off → clears highlight + hides badge', async () => {
     const { designRenderer, store, api } = makeDeps()
     const overlay = initClashOverlay({ store, designRenderer, api })

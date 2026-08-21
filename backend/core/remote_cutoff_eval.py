@@ -9,22 +9,25 @@ decide whether that stage has plateaued and its remaining chunks can be skipped.
 
 **CRITICAL — stdlib only.**  A copy of THIS FILE is staged into the job package and
 executed on the compute node as ``python3 nadoc_cutoff_eval.py`` with NO NADOC
-package on ``sys.path`` and (Tier B) NO third-party deps.  Therefore it must import
-nothing from ``backend`` and (for the Tier-B energy path) nothing outside the
-standard library.  The pure decision functions below are VENDORED VERBATIM from
-``backend.core.md_cutoff`` and the frame parser from ``backend.core.namd_metrics``;
-``tests/test_remote_cutoff_eval.py`` pins that the vendored copies stay in lockstep
-with the originals (same thresholds, same decisions on the same data).
+package on ``sys.path`` and NO third-party deps — the WC series it consumes is
+precomputed elsewhere (by the MDAnalysis-dependent ``nadoc_health_eval.py`` step)
+and handed to this script as a plain JSON file, so this evaluator itself never
+needs anything beyond the standard library.  The pure decision functions below are
+VENDORED VERBATIM from ``backend.core.md_cutoff`` and the frame parser from
+``backend.core.namd_metrics``; ``tests/test_remote_cutoff_eval.py`` pins that the
+vendored copies stay in lockstep with the originals (same thresholds, same
+decisions on the same data).
 
 Exit-code contract (consumed by the sbatch ``if python3 …; then bridge; fi``):
   0  -> PLATEAU: skip the stage's remaining chunks (bridge the restart chain).
   1  -> HOLD:    not plateaued; run the remaining chunks normally.
   2  -> HOLD:    insufficient data / parse or usage error (fail safe = run).
 
-Tier B (default): energy(+volume) plateau only, from the chunk's NAMD ``.log``.
-Tier A (``--wc <json>``): additionally requires the WC base-pairing series (a JSON
-list of per-frame fractions produced by an MDAnalysis health step) to be flat —
-matching the local multi-criteria ``should_early_stop_stage`` exactly.
+No energy-only mode: ``--wc <json>`` is required, and a chunk only skips once BOTH
+the energy(+volume) series AND the WC base-pairing series (a JSON list of
+per-frame fractions produced by the node health step) are flat — exactly
+``should_early_stop_stage``, matching the local runner's decision precisely, on
+every eligible chunk, with no restraint-scale exception.
 """
 
 # NB: NO `from __future__ import annotations` — Alpine compute nodes run an OLD
@@ -168,21 +171,17 @@ _EXIT_HOLD = 1  # not plateaued -> run remaining chunks
 _EXIT_ERR = 2  # insufficient data / error -> fail safe (run)
 
 
-def decide(log_text, wc_per_frame=None, params=CutoffParams()):
-    """(exit_code, diagnostics) for one chunk.  Tier B (wc None) = energy only;
-    Tier A (wc list) = energy AND WC, i.e. ``should_early_stop_stage``."""
+def decide(log_text, wc_per_frame, params=CutoffParams()):
+    """(exit_code, diagnostics) for one chunk — energy AND WC, i.e.
+    ``should_early_stop_stage``.  Matches the local runner exactly: there is no
+    energy-only mode, so a chunk can only skip once BOTH series are flat."""
     frames = parse_namd_log_frames(log_text)
     if len(frames) < params.min_frames:
         return _EXIT_ERR, {
             "reason": "insufficient_frames",
             "n_energy_frames": len(frames),
         }
-    if wc_per_frame is None:
-        e = energy_plateaued(frames, params)
-        diag = {"tier": "B", "n_energy_frames": len(frames), "energy_plateaued": e}
-        return (_EXIT_SKIP if e else _EXIT_HOLD), diag
     decision, diag = should_early_stop_stage(frames, wc_per_frame, params)
-    diag["tier"] = "A"
     return (_EXIT_SKIP if decision else _EXIT_HOLD), diag
 
 
@@ -192,9 +191,7 @@ def main(argv=None):
     )
     ap.add_argument("--log", required=True, help="chunk NAMD .log path")
     ap.add_argument(
-        "--wc",
-        default=None,
-        help="Tier A: JSON file with a list of per-frame WC fractions",
+        "--wc", required=True, help="JSON file with a list of per-frame WC fractions"
     )
     args = ap.parse_args(argv)
 
@@ -205,17 +202,15 @@ def main(argv=None):
         print(f"[nadoc-cutoff] cannot read log {args.log}: {exc}", file=sys.stderr)
         return _EXIT_ERR
 
-    wc = None
-    if args.wc:
-        try:
-            with open(args.wc, encoding="utf-8") as fh:
-                loaded = json.load(fh)
-            wc = [float(x) for x in loaded]
-        except (OSError, ValueError, TypeError) as exc:
-            # Tier A requested but WC unreadable -> fail safe (hold), do not skip
-            # on energy alone (that's exactly the unsafe case Tier A exists to avoid).
-            print(f"[nadoc-cutoff] cannot read wc {args.wc}: {exc}", file=sys.stderr)
-            return _EXIT_ERR
+    try:
+        with open(args.wc, encoding="utf-8") as fh:
+            loaded = json.load(fh)
+        wc = [float(x) for x in loaded]
+    except (OSError, ValueError, TypeError) as exc:
+        # WC unreadable -> fail safe (hold), never skip on energy alone (that's
+        # exactly the unsafe case the WC criterion exists to prevent).
+        print(f"[nadoc-cutoff] cannot read wc {args.wc}: {exc}", file=sys.stderr)
+        return _EXIT_ERR
 
     code, diag = decide(log_text, wc)
     print(f"[nadoc-cutoff] {json.dumps(diag)}", file=sys.stderr)

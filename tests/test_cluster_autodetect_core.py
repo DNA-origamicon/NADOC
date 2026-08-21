@@ -7,6 +7,8 @@ functions take a Design and return a new Design with cluster_transforms set.
 
 from pathlib import Path
 
+import pytest
+
 from tests.conftest import (
     make_18hb_routed_design,
     make_6hb_design,
@@ -68,6 +70,8 @@ def test_repair_empty_auto_clusters_restores_voltron_membership_without_referenc
     """VoltronCoreArm persisted two auto-cluster shells with no members, which
     made cluster coloring fall back to strand colors in every representation."""
     path = Path(__file__).parents[1] / "workspace" / "VoltronCoreArm.nadoc"
+    if not path.exists():
+        pytest.skip("optional workspace/VoltronCoreArm.nadoc fixture is unavailable")
     design = Design.model_validate_json(path.read_text())
     assert all(not c.helix_ids and not c.domain_ids for c in design.cluster_transforms)
 

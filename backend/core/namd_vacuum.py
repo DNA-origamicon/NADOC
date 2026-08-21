@@ -60,8 +60,8 @@ from backend.core.md_protocols import (
     _segment_conf,
     design_has_extra_bases,
     design_has_extensions,
-    identify_unpaired_residues,
     minimize_steps_for_atoms,
+    topology_ss_exclusion_set,
     write_aksimentiev_enm_files,
     write_restraints_pdb,
 )
@@ -170,9 +170,21 @@ def build_namd_vacuum_package(
     if progress is not None:
         progress("enm", None, "Building elastic-network restraints…")
     write_restraints_pdb(pdb_path, package_dir / "restraints_dna_heavy.pdb")
+    # topology_ss_exclusion_set, not bare identify_unpaired_residues — pure
+    # C1'-distance geometry can miss a residue that sits close to an UNRELATED
+    # neighbour by 3D coincidence (measured: a junction extra base, and an
+    # extension tail near a packed bundle at 10.72 Å, under the 10.8 Å cutoff).
+    # See topology_ss_exclusion_set's docstring for the measured repro.
     exclude = None
     if design_has_extra_bases(design) or design_has_extensions(design):
-        exclude = identify_unpaired_residues(package_dir / f"{name_stem}.psf", pdb_path)
+        from backend.core.atomistic import build_atomistic_model  # noqa: PLC0415
+
+        exclude = topology_ss_exclusion_set(
+            atomistic_model or build_atomistic_model(design, include_proteins=True),
+            package_dir / f"{name_stem}.psf",
+            pdb_path,
+            sort_chains=True,
+        )
     enm_report = write_aksimentiev_enm_files(
         pdb_path,
         package_dir,
@@ -437,7 +449,7 @@ def prepare_vacuum_enrgmd_namd(
     padding_nm: float = 1.2,  # noqa: ARG001 — no box
     fast: bool = False,  # noqa: ARG001 — standard CUDA, no GPUresident
     seed: int = 42,  # noqa: ARG001 — nothing random to place
-    declash: bool = False,  # noqa: ARG001 — the ladder is soft throughout
+    declash: Optional[bool] = None,  # noqa: ARG001 — the ladder is soft throughout
     gpu_resident_mode: str = "auto",  # noqa: ARG001
     production_timestep_fs: float = 4.0,  # noqa: ARG001
     devices: str = "0",  # noqa: ARG001

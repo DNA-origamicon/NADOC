@@ -202,6 +202,11 @@ describe('normalizeWorkspacePath', () => {
     expect(normalizeWorkspacePath('foo/bar/')).toBe('foo/bar')
     expect(normalizeWorkspacePath('foo/bar///')).toBe('foo/bar')
   })
+
+  it('treats library workspace prefixes as workspace-relative paths', () => {
+    expect(normalizeWorkspacePath('workspace/2hb_2xT.nadoc')).toBe('2hb_2xT.nadoc')
+    expect(normalizeWorkspacePath('./workspace/2hb_2xT.nadoc')).toBe('2hb_2xT.nadoc')
+  })
 })
 
 describe('filterJobsForPart', () => {
@@ -211,6 +216,11 @@ describe('filterJobsForPart', () => {
     { job_id: 'c', design_source_path: null },
     { job_id: 'd', design_source_path: '18hb.nadoc' },
   ]
+
+  it('shows a persisted bare-path job when the open design has a library prefix', () => {
+    expect(filterJobsForPart(jobs, 'workspace/18hb.nadoc', false).map(j => j.job_id))
+      .toEqual(['a', 'd'])
+  })
 
   it('shows only jobs matching the active part path', () => {
     const out = filterJobsForPart(jobs, '18hb.nadoc', false)
@@ -597,6 +607,18 @@ describe('mdRunControl on Alpine (the ☁ button in the Cluster card folded in h
       .toMatchObject({ label: 'Processing results…', disabled: true, spinner: true })
   })
 
+  it('a TIMED-OUT job fetching its checkpoint reports the transfer too, not Pause run', () => {
+    // Regression: this used to require slurm_state === 'COMPLETED', so a job Alpine had
+    // already killed on a walltime TIMEOUT fell through to the generic active-job branch
+    // and offered "■ Pause run" for a cluster process that no longer existed — for the
+    // entire multi-hour download of a large trajectory.
+    const timedOut = { job_id: 'j1', status: 'running', execution_target: 'alpine',
+      slurm_job_id: '42', slurm_state: 'TIMEOUT', download_status: { state: 'downloading' } }
+    expect(mdRunControl(timedOut, connected)).toMatchObject({
+      action: 'preparing', label: 'Downloading results…', disabled: true, spinner: true,
+    })
+  })
+
   it('a LOCAL job preparing is untouched — it still stops', () => {
     expect(mdRunControl({ status: 'preparing', execution_target: 'local' }, connected))
       .toMatchObject({ action: 'stop', label: '■ Pause run' })
@@ -843,6 +865,14 @@ describe('hasActiveRemoteJob (gates the remote-poll timer)', () => {
     expect(hasActiveRemoteJob([{ status: 'queued', execution_target: 'alpine' }])).toBe(false)  // awaiting submit
     expect(hasActiveRemoteJob([])).toBe(false)
     expect(hasActiveRemoteJob(null)).toBe(false)
+  })
+  it('stays active while completed Alpine results download or process locally', () => {
+    for (const state of ['downloading', 'processing']) {
+      expect(hasActiveRemoteJob([{
+        status: 'completed', execution_target: 'alpine', slurm_job_id: '9',
+        download_status: { state },
+      }])).toBe(true)
+    }
   })
 })
 

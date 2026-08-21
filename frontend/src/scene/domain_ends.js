@@ -182,12 +182,13 @@ function _domainEndPoseCadnano(rec, rowMap, spacing, midX) {
   const y = -row * spacing + _cadnanoTrackOffset(rec.strandType, rec.scaffoldDir)
   const z = rec.diskBp * BDNA_RISE_PER_BP
   const diskPos = new THREE.Vector3(midX, y, z)
+  const endPos = new THREE.Vector3(midX, y, rec.bp * BDNA_RISE_PER_BP)
   const labelPos = new THREE.Vector3(
     midX,
     y,
     z + rec.openSide * CADNANO_LABEL_GAP_BP * BDNA_RISE_PER_BP,
   )
-  return { diskPos, labelPos }
+  return { diskPos, endPos, labelPos }
 }
 
 function _applyDomainEndPose(end, pose) {
@@ -197,12 +198,13 @@ function _applyDomainEndPose(end, pose) {
     end.ringMesh.quaternion.copy(pose.quat)
     end.hitMesh.quaternion.copy(pose.quat)
   }
+  if (pose.endPos) end.endPos.copy(pose.endPos)
   if (end.labelSprite) end.labelSprite.position.copy(pose.labelPos)
 }
 
 // ── Detection (pure — no Three.js) ────────────────────────────────────────────
 
-function _computeDomainEnds(design) {
+export function _computeDomainEnds(design) {
   const helices  = design.helices ?? []
   const hmap     = new Map(helices.map(h => [h.id, h]))
   const labelMap = new Map(helices.map((h, i) => [h.id, h.label ?? i]))
@@ -284,8 +286,21 @@ function _computeDomainEnds(design) {
         if (st === 'staple' && scaf.has(diskBp)) continue  // scaffold on open side
 
         const key      = `${d.helix_id}:${diskBp}`
+        const owner = {
+          strandId: strand.id,
+          domainIndex: di,
+          direction: dir,
+          strandType: st,
+          overhangId: ovhgId,
+        }
         const existing = results.get(key)
         if (existing) {
+          if (!existing.owners.some(candidate =>
+            candidate.strandId === owner.strandId &&
+            candidate.domainIndex === owner.domainIndex &&
+            candidate.direction === owner.direction)) {
+            existing.owners.push(owner)
+          }
           if (ovhgId && !existing.overhangId) {
             existing.overhangId = ovhgId
             existing.transformKey = ovhgId
@@ -315,6 +330,10 @@ function _computeDomainEnds(design) {
           // skipping every blunt end on a partially-moved helix.
           strandId:     strand.id,
           domainIndex:  di,
+          // A rendered ring is one physical face and may cap more than one strand.
+          // Retain every exact strand-domain owner so VR/tool adapters never infer
+          // ownership from whichever strand happened to win face deduplication.
+          owners:       [owner],
         })
       }
     }
@@ -438,6 +457,7 @@ export function initDomainEnds(scene, camera, canvas, {
         baseLabelPos: pose.labelPos.clone(),
         baseQuat:     pose.quat.clone(),
         endPos:       pose.endPos.clone(),
+        baseEndPos:   pose.endPos.clone(),
         _cbPos: null, _cbLabelPos: null, _cbQuat: null,
       })
     }
@@ -682,6 +702,13 @@ export function initDomainEnds(scene, camera, canvas, {
           sp.z + (end.basePos.z - sp.z) * t,
         )
         end.hitMesh.position.copy(end.ringMesh.position)
+        const tEnd = physLen > 1 ? (end.bp - end.bpStart) / (physLen - 1) : 0
+        const spEnd = sa.start.clone().lerp(sa.end, tEnd)
+        end.endPos.set(
+          spEnd.x + (end.baseEndPos.x - spEnd.x) * t,
+          spEnd.y + (end.baseEndPos.y - spEnd.y) * t,
+          spEnd.z + (end.baseEndPos.z - spEnd.z) * t,
+        )
         if (!end.labelSprite) continue
         // Label straight pos = sp + openSide * straightDir
         const straightDir = sa.end.clone().sub(sa.start).normalize()
@@ -724,6 +751,18 @@ export function initDomainEnds(scene, camera, canvas, {
         }
         end.ringMesh.position.set(bx + ox, by + oy, bz + oz)
         end.hitMesh.position.set(bx + ox, by + oy, bz + oz)
+        let ex = end.baseEndPos.x, ey = end.baseEndPos.y, ez = end.baseEndPos.z
+        if (straightAxesMap) {
+          const sa = straightAxesMap.get(end.helixId)
+          if (sa) {
+            const dLen = sa.start.distanceTo(sa.end)
+            const physLen = Math.max(1, Math.round(dLen / BDNA_RISE_PER_BP) + 1)
+            const tEnd = physLen > 1 ? (end.bp - end.bpStart) / (physLen - 1) : 0
+            const spEnd = sa.start.clone().lerp(sa.end, tEnd)
+            ex = spEnd.x; ey = spEnd.y; ez = spEnd.z
+          }
+        }
+        end.endPos.set(ex + ox, ey + oy, ez + oz)
         if (end.labelSprite && end.baseLabelPos) {
           const lox = end.baseLabelPos.x - end.basePos.x
           const loy = end.baseLabelPos.y - end.basePos.y
@@ -743,6 +782,7 @@ export function initDomainEnds(scene, camera, canvas, {
         end.hitMesh.position.copy(end.basePos)
         end.ringMesh.quaternion.copy(end.baseQuat)
         end.hitMesh.quaternion.copy(end.baseQuat)
+        end.endPos.copy(end.baseEndPos)
         end.labelSprite?.position.copy(end.baseLabelPos)
       }
     },
@@ -765,6 +805,7 @@ export function initDomainEnds(scene, camera, canvas, {
         if (!_matches(end, keySet, domainKeySet)) continue
         _cbEnds.set(end, {
           pos:      end.ringMesh.position.clone(),
+          endPos:   end.endPos.clone(),
           labelPos: end.labelSprite ? end.labelSprite.position.clone() : null,
           quat:     end.ringMesh.quaternion.clone(),
         })
@@ -791,6 +832,8 @@ export function initDomainEnds(scene, camera, canvas, {
         const nz = _clusterV.z + dummyPosVec.z
         end.ringMesh.position.set(nx, ny, nz)
         end.hitMesh.position.set(nx, ny, nz)
+        _clusterV.copy(snap.endPos).sub(centerVec).applyQuaternion(incrRotQuat)
+        end.endPos.copy(_clusterV).add(dummyPosVec)
         _clusterQ.multiplyQuaternions(incrRotQuat, snap.quat)
         end.ringMesh.quaternion.copy(_clusterQ)
         end.hitMesh.quaternion.copy(_clusterQ)
@@ -818,11 +861,42 @@ export function initDomainEnds(scene, camera, canvas, {
         transformKey: e.transformKey,
         overhangId:   e.overhangId,
         strandType:   e.strandType,
+        owners:       e.owners.map(owner => ({ ...owner })),
         plane:        e.plane,
         offsetNm:     e.offsetNm,
         ringPos3d:    e.ringMesh.position.toArray(),
+        faceNormal3d: new THREE.Vector3(0, 0, 1)
+          .applyQuaternion(e.ringMesh.quaternion).multiplyScalar(e.openSide)
+          .normalize().toArray(),
         labelPos3d:   e.labelSprite?.position.toArray() ?? null,
         endPos3d:     e.endPos.toArray(),
+      }))
+    },
+
+    /** Canonical 3-D rows for native VR tool adapters. Display-only cadnano/
+     * unfold/deform-view lerps must not move a locator away from the immutable
+     * native scene snapshot. Committed geometry rebuilds refresh these bases. */
+    getVRToolEndTable() {
+      return _ends.map(e => ({
+        helixId:      e.helixId,
+        helixLabel:   e.helixLabel,
+        bp:           e.bp,
+        diskBp:       e.diskBp,
+        openSide:     e.openSide,
+        direction:    e.direction,
+        scaffoldDir:  e.scaffoldDir,
+        transformKey: e.transformKey,
+        overhangId:   e.overhangId,
+        strandType:   e.strandType,
+        owners:       e.owners.map(owner => ({ ...owner })),
+        plane:        e.plane,
+        offsetNm:     e.offsetNm,
+        ringPos3d:    e.basePos.toArray(),
+        faceNormal3d: new THREE.Vector3(0, 0, 1)
+          .applyQuaternion(e.baseQuat).multiplyScalar(e.openSide)
+          .normalize().toArray(),
+        labelPos3d:   e.baseLabelPos?.toArray() ?? null,
+        endPos3d:     e.baseEndPos.toArray(),
       }))
     },
 

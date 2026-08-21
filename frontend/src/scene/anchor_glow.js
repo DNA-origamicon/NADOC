@@ -242,6 +242,11 @@ export function initAnchorGlow({ designRenderer, store, atomisticRenderer = null
     if (geo !== _lastGeometry) { _lastGeometry = geo; refresh() }
   })
 
+  // A DISPLAY-ONLY rebuild (the oxDNA capture-strand injection) replaces the backbone
+  // entries without touching the store, so the subscription above never fires and the
+  // halo would vanish on every surface-strand edit.
+  window.addEventListener('nadoc:display-rebuilt', () => refresh())
+
   // Entering/leaving an atomistic rep, and the atom fetch landing, both change which
   // halo we can draw. Listening to `nadoc:representation-change` would be too early —
   // it fires before the async atom load resolves, when the atom count is still 0 — so

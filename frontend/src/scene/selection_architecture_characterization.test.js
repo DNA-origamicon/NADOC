@@ -9,6 +9,7 @@ const read = relative => readFileSync(path.resolve(HERE, relative), 'utf8')
 const manager = read('./selection_manager.js')
 const controller = read('./selection_controller.js')
 const selectionRefs = read('./selection_ref.js')
+const vrToolShell = read('./vr_tool_shell.js')
 const store = read('../state/store.js')
 const main = read('../main.js')
 
@@ -85,6 +86,43 @@ describe('selection architecture — canonical enforcement', () => {
     expect(manager).toMatch(/let _ctrlBeads\s*=\s*\[\]/)
     expect(manager).toContain('getCtrlBeads()')
     expect(manager).toContain('selectedEndRefs(store.getState())')
+  })
+
+  it('keeps native VR hover renderer-only until an explicit click intent exists', () => {
+    const preview = manager.slice(
+      manager.indexOf('function _previewVrIdentity'),
+      manager.indexOf('function _selectVrIdentity'),
+    )
+    expect(preview).toContain('designRenderer.setPreviewGlow')
+    expect(preview).toContain('designRenderer.setPreviewArc')
+    expect(preview).not.toContain('selectionController')
+    expect(preview).not.toContain('store.setState')
+
+    const select = manager.slice(
+      manager.indexOf('function _selectVrIdentity'),
+      manager.indexOf('// Unified backbone-bead-level hit handler'),
+    )
+    expect(select).toContain('_v2HandleBead')
+    expect(select).toContain('_v2HandleArc')
+    expect(select).toContain('_selectBaseKey')
+    expect(select).toContain('selectionController.getState().primary')
+    expect(select).toContain('function _selectVrIdentities')
+    expect(select).toContain('selectedOwnerTokens')
+    expect(select).toContain('selectionController.replace')
+    expect(select).toMatch(/bounded\.length === 0[\s\S]*?_clearAll\(\)/)
+    expect(select).not.toContain('store.setState')
+    expect(main).toMatch(/selectVRIdentity[\s\S]*sendVRFeedback/)
+    expect(main).toContain('selected_owner_tokens: result?.selectedOwnerTokens ?? []')
+  })
+
+  it('keeps the first VR tool shell effect-only and browser-authoritative', () => {
+    expect(vrToolShell).toContain("type: 'preview_requested'")
+    expect(vrToolShell).toContain("type: 'commit_requested'")
+    expect(vrToolShell).toContain("type: 'cancel_requested'")
+    expect(vrToolShell).toContain("type: 'undo_requested'")
+    expect(vrToolShell).not.toContain('store.setState')
+    expect(vrToolShell).not.toMatch(/api\.|fetch\(/)
+    expect(main).toMatch(/event\?\.type === 'tool'[\s\S]*reduceVRToolShell/)
   })
 
   it('enforces the explicit design/assembly selection boundary', () => {

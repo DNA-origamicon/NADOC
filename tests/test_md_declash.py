@@ -85,6 +85,27 @@ def test_standard_segment_uses_rigid_bonds_and_2fs():
     assert "timestep           2" in conf
 
 
+def test_pinned_4fs_reaches_the_gentle_segment_conf_not_just_the_pure_helper():
+    """`_segment_conf` re-derives the timestep itself (its own `effective_timestep_fs`
+    call) rather than trusting a pre-stamped spec — so the pin has to reach THIS call
+    too, or the manifest would say 4 fs while the conf NAMD actually runs said 2 fs."""
+    _, declash = M.mgh_slow_release_segments("t", gentle=True)
+    capped = M._segment_conf(
+        declash[0], "t", (80.0, 80.0, 200.0), True, fast=True, base_timestep_fs=4.0
+    )
+    assert "timestep           2" in capped
+    pinned = M._segment_conf(
+        declash[0],
+        "t",
+        (80.0, 80.0, 200.0),
+        True,
+        fast=True,
+        base_timestep_fs=4.0,
+        pinned=True,
+    )
+    assert "timestep           4" in pinned
+
+
 def test_segments_soft_flag_propagates():
     _, soft_segs = M.mgh_slow_release_segments("t", soft=True)
     _, hard_segs = M.mgh_slow_release_segments("t", soft=False)
@@ -96,6 +117,10 @@ def test_segments_soft_flag_propagates():
     free = [s for s in hard_segs if s.restraint_ref_file is None]
     assert free and free[0].gentle
     assert not any(s.gentle for s in free[1:])
+    # `soft_start` marks WHY it is gentle — the ladder's own universal protection, not a
+    # declash tier — so a pinned timestep can tell the two apart (see effective_timestep_fs).
+    assert free[0].soft_start
+    assert not any(s.soft_start for s in free[1:])
 
 
 def test_declash_gets_the_gentle_tier_not_the_flexible_one():
@@ -108,6 +133,114 @@ def test_declash_gets_the_gentle_tier_not_the_flexible_one():
     assert all(s.soft for s in forced)
     assert M.effective_timestep_fs(declash[0], fast=True) == 2.0
     assert M.effective_timestep_fs(forced[0], fast=True) == 1.0
+    # A declash design's gentle segments are the TIER a pin is meant to bypass, not the
+    # ladder's own soft-start protection — none of them carry soft_start.
+    assert not any(s.soft_start for s in declash)
+
+
+def test_pinned_timestep_still_protects_the_universal_soft_start_segment():
+    """A pin bypasses the DECLASH gentle tier on purpose (that is the whole point of
+    honoring an explicit user choice) but must not ALSO silently bypass the ordinary
+    ladder's own first-segment protection — that would touch every relaxation job's
+    plain default, not just designs that actually need declash."""
+    _, hard_segs = M.mgh_slow_release_segments("t", soft=False)
+    free = [s for s in hard_segs if s.restraint_ref_file is None]
+    soft_start = free[0]
+    assert soft_start.soft_start
+
+    # Capped at 2 fs whether or not the pin is set...
+    assert M.effective_timestep_fs(soft_start, fast=True, base_timestep_fs=4.0) == 2.0
+    assert (
+        M.effective_timestep_fs(
+            soft_start, fast=True, base_timestep_fs=4.0, pinned=True
+        )
+        == 2.0
+    )
+    # ...but a pin asking to go SLOWER than 2 fs still applies — the exemption only
+    # blocks going faster than the segment's own protection, never a deliberate slowdown.
+    assert (
+        M.effective_timestep_fs(
+            soft_start, fast=True, base_timestep_fs=1.0, pinned=True
+        )
+        == 1.0
+    )
+
+    # A declash gentle segment (not soft_start) DOES get bypassed by the pin — this is
+    # the behavior the pin exists for.
+    _, declash = M.mgh_slow_release_segments("t", gentle=True)
+    assert (
+        M.effective_timestep_fs(
+            declash[0], fast=True, base_timestep_fs=4.0, pinned=True
+        )
+        == 4.0
+    )
+
+
+def test_pinned_timestep_is_honored_on_gentle_and_soft_tiers_not_capped():
+    """The wizard's explicit Ladder-timestep pin used to be silently capped back down to
+    2/1 fs on a declash/force_soft design — the user set 4 fs, every stage ran 2 fs, with
+    no warning. `pinned=True` must make the tier a no-op ceiling."""
+    _, declash = M.mgh_slow_release_segments("t", gentle=True)
+    _, forced = M.mgh_slow_release_segments("t", soft=True)
+    assert M.effective_timestep_fs(declash[0], fast=True, base_timestep_fs=4.0) == 2.0
+    assert (
+        M.effective_timestep_fs(
+            declash[0], fast=True, base_timestep_fs=4.0, pinned=True
+        )
+        == 4.0
+    )
+    assert M.effective_timestep_fs(forced[0], fast=True, base_timestep_fs=4.0) == 1.0
+    assert (
+        M.effective_timestep_fs(forced[0], fast=True, base_timestep_fs=4.0, pinned=True)
+        == 4.0
+    )
+    # A pin BELOW the tier's own ceiling still applies normally either way.
+    assert (
+        M.effective_timestep_fs(
+            declash[0], fast=True, base_timestep_fs=1.0, pinned=True
+        )
+        == 1.0
+    )
+
+
+def test_relax_timestep_risk_warning_only_fires_for_a_pin_above_the_tier():
+    # Not pinned → no warning, however high the base timestep (auto-derived values
+    # never exceed the tier ceiling in the first place).
+    assert (
+        M.relax_timestep_risk_warning(
+            gentle=True, soft=False, timestep_fs=4.0, pinned=False
+        )
+        is None
+    )
+    # Pinned but at/below the tier's measured-safe ceiling → no warning.
+    assert (
+        M.relax_timestep_risk_warning(
+            gentle=True, soft=False, timestep_fs=2.0, pinned=True
+        )
+        is None
+    )
+    assert (
+        M.relax_timestep_risk_warning(
+            gentle=False, soft=True, timestep_fs=1.0, pinned=True
+        )
+        is None
+    )
+    # Pinned above the ceiling → a warning naming the actual dt.
+    gentle_warning = M.relax_timestep_risk_warning(
+        gentle=True, soft=False, timestep_fs=4.0, pinned=True
+    )
+    assert gentle_warning and "4 fs" in gentle_warning
+    soft_warning = M.relax_timestep_risk_warning(
+        gentle=False, soft=True, timestep_fs=2.0, pinned=True
+    )
+    assert soft_warning and "2 fs" in soft_warning
+    # Neither tier engaged (the standard ladder) → nothing to warn about.
+    assert (
+        M.relax_timestep_risk_warning(
+            gentle=False, soft=False, timestep_fs=4.0, pinned=True
+        )
+        is None
+    )
 
 
 def test_min_conf_enm_override():

@@ -18,8 +18,9 @@ export function buildSpecMap(design) {
 // visits the same helix on two separate domains (findIndex returns first match).
 export function buildDomainMapFromDesign(design, specMap) {
   const map = new Map()
+  const strandById = new Map((design?.strands ?? []).map(strand => [strand.id, strand]))
   for (const spec of specMap.values()) {
-    const strand = design.strands?.find(s => s.id === spec.strand_id)
+    const strand = strandById.get(spec.strand_id)
     if (!strand) continue
     const domIdx = strand.domains.findIndex(d => d.overhang_id === spec.id)
     if (domIdx < 0) continue
@@ -32,10 +33,11 @@ export function buildDomainMapFromDesign(design, specMap) {
 // authoritative index emitted by the backend. Independent of d.overhang_id scan.
 export function buildDomainMapFromGeom(design, backboneEntries) {
   const map = new Map()
+  const strandById = new Map((design?.strands ?? []).map(strand => [strand.id, strand]))
   for (const entry of backboneEntries) {
     const id = entry.nuc.overhang_id
     if (!id || map.has(id)) continue
-    const strand = design?.strands?.find(s => s.id === entry.nuc.strand_id)
+    const strand = strandById.get(entry.nuc.strand_id)
     if (!strand) continue
     const domIdx = entry.nuc.domain_index
     const domain = strand.domains[domIdx]
@@ -49,6 +51,15 @@ export function buildDomainMapFromGeom(design, backboneEntries) {
 // including those for inline overhangs created before overhang detection ran.
 export function buildJunctionMapFromXovers(design, specMap, domainMap) {
   const map = new Map()
+  const pairKey = (a, b) => a < b ? `${a}\0${b}` : `${b}\0${a}`
+  const firstXoverByHelixPair = new Map()
+  for (const xover of design?.crossovers ?? []) {
+    const a = xover.half_a?.helix_id
+    const b = xover.half_b?.helix_id
+    if (a == null || b == null) continue
+    const key = pairKey(a, b)
+    if (!firstXoverByHelixPair.has(key)) firstXoverByHelixPair.set(key, xover)
+  }
   for (const [id, spec] of specMap) {
     const domEntry = domainMap.get(id)
     if (!domEntry) continue
@@ -56,10 +67,7 @@ export function buildJunctionMapFromXovers(design, specMap, domainMap) {
     const parentDomIdx = domIdx === 0 ? 1 : domIdx - 1
     if (parentDomIdx < 0 || parentDomIdx >= strand.domains.length) continue
     const parentDom = strand.domains[parentDomIdx]
-    const xover = design.crossovers?.find(x =>
-      (x.half_a?.helix_id === spec.helix_id && x.half_b?.helix_id === parentDom.helix_id) ||
-      (x.half_b?.helix_id === spec.helix_id && x.half_a?.helix_id === parentDom.helix_id)
-    )
+    const xover = firstXoverByHelixPair.get(pairKey(spec.helix_id, parentDom.helix_id))
     if (!xover) continue
     const side = xover.half_a?.helix_id === spec.helix_id ? xover.half_a : xover.half_b
     map.set(id, { junctionBp: side.index, junctionDir: side.strand })

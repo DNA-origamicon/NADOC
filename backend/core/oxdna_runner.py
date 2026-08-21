@@ -54,6 +54,7 @@ from backend.core.oxdna_protocol import (
     print_conf_interval,
     render_stage_input,
 )
+from backend.physics.oxdna_surface_strands import capture_bead_count
 from backend.physics.oxdna_interface import (
     surface_anchor_forces_text,
     write_configuration,
@@ -1778,6 +1779,10 @@ async def run_job(
             topology_path=topo,
             dnanalysis_bin=None if is_hybrid else find_dnanalysis(),
             salt_concentration=spec.salt_concentration,
+            # Surface capture strands are appended AFTER the design walk; without this
+            # the reader mistakes them for a leading protein block and every geometric
+            # metric is computed on the wrong particles (see run_oxdna_health_check).
+            n_trailing_extra=capture_bead_count(job),
         )
         steps_per_s = spec.steps / elapsed
         sample = _health_sample(spec.name, spec.kind, res, steps_per_s)

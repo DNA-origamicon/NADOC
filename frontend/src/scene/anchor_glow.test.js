@@ -113,6 +113,18 @@ describe('initAnchorGlow', () => {
     store._fireGeometry([{ changed: true }])     // new geometry array → rebuild
     expect(designRenderer.setAnchorGlow).toHaveBeenCalledTimes(1)
   })
+
+  // The oxDNA capture-strand injection rebuilds the scene without touching the store,
+  // so the geometry subscription never fires and the halo would vanish on every
+  // surface-strand edit. design_renderer announces that rebuild instead.
+  it('re-resolves on a display-only rebuild (no store change)', () => {
+    const { designRenderer, store } = makeDeps([])
+    const glow = initAnchorGlow({ designRenderer, store })
+    glow.setAnchors([{ kind: 'overhang', id: 'ov9' }])
+    designRenderer.setAnchorGlow.mockClear()
+    window.dispatchEvent(new CustomEvent('nadoc:display-rebuilt'))
+    expect(designRenderer.setAnchorGlow).toHaveBeenCalledTimes(1)
+  })
 })
 
 // ── snake_case scopes (API / headless / saved manifests) ──────────────────────

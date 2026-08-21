@@ -574,6 +574,9 @@ _NO_DESIGN_IDENT = {
     "helix_id": "",
     "bp_index": -1,
     "direction": "",
+    "copy_k": 0,
+    "scalar_key": "",
+    "base_key": "",
 }
 
 
@@ -590,6 +593,9 @@ def atom_design_ident(key: tuple, strand_id: str = "") -> dict:
     bp = key[1] if len(key) > 1 and isinstance(key[1], (int, np.integer)) else -1
     direction = key[2] if len(key) > 2 and isinstance(key[2], str) else ""
     copy = int(key[3]) if len(key) > 3 else 0
+    base_key = f"{key[0]}:{key[1]}:{key[2]}"
+    if not synthetic and copy:
+        base_key += f":{copy}"
     return {
         "strand_id": strand_id or "",
         "helix_id": str(key[0]),
@@ -599,6 +605,7 @@ def atom_design_ident(key: tuple, strand_id: str = "") -> dict:
         "direction": direction,
         "copy_k": copy,
         "scalar_key": f"{key[0]}:{key[1]}:{key[2]}:{copy}" if synthetic else "",
+        "base_key": base_key,
     }
 
 

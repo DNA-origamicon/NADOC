@@ -81,6 +81,12 @@ describe('pure helpers', () => {
     expect(nodeNeedsPolling(oxNode({ status: 'preparing' }))).toBe(true)
     expect(nodeNeedsPolling(oxNode({ status: 'completed' }))).toBe(false)
   })
+  it('nodeNeedsPolling follows remote download/indexing even with a terminal coarse status', () => {
+    expect(nodeNeedsPolling(mdNode({ status: 'completed', execution_target: 'alpine',
+      download_status: { state: 'downloading' } }))).toBe(true)
+    expect(nodeNeedsPolling(mdNode({ status: 'completed', execution_target: 'alpine',
+      download_status: { state: 'processing' } }))).toBe(true)
+  })
   it('nodeIsActive tracks the shared status vocab', () => {
     expect(nodeIsActive(lmNode({ status: 'running' }))).toBe(true)
     expect(nodeIsActive(oxNode({ status: 'completed' }))).toBe(false)
@@ -470,6 +476,34 @@ describe('unified list + master card', () => {
     expect(api.listSimJobs.mock.calls.length).toBeGreaterThan(before)
     // and the newly-running child is now in the list (2 oxDNA rows on the oxDNA tab).
     expect(document.querySelectorAll('#simulate-jobs-list [data-job-id]').length).toBe(2)
+  })
+
+  it('Alpine login immediately refreshes the visible master for a remotely-finished job', async () => {
+    mount()
+    const stale = mdNode({ status: 'running', execution_target: 'alpine',
+      slurm_job_id: '42', slurm_state: 'RUNNING' })
+    const { sim, api } = make([stale])
+    sim.setActiveEngine('namd')
+    window.dispatchEvent(new CustomEvent('nadoc:left-tab-change', {
+      detail: { activeTab: 'dynamics', collapsed: false },
+    }))
+    for (let i = 0; i < 5; i++) await Promise.resolve()
+    const before = api.listSimJobs.mock.calls.length
+    api.listSimJobs.mockResolvedValue([{
+      ...stale, slurm_state: 'COMPLETED',
+      download_status: { state: 'downloading', total_bytes: 1000, transferred_bytes: 250 },
+    }])
+
+    window.dispatchEvent(new CustomEvent('nadoc:cluster-state-change', {
+      detail: { state: 'connected' },
+    }))
+    for (let i = 0; i < 5; i++) await Promise.resolve()
+
+    expect(api.listSimJobs.mock.calls.length).toBeGreaterThan(before)
+    sim.selectJob('md1')
+    expect(document.getElementById('simulate-jobs-status').textContent)
+      .toContain('Downloading results from Alpine')
+    expect(document.querySelector('#simulate-jobs-progress .bar').style.width).toBe('25%')
   })
 
   it('keeps the last good job list when a transfer-time refresh transiently fails', async () => {

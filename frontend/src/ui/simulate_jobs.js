@@ -82,6 +82,7 @@ export function nodeIsActive(node) {
  *  master Stop button, where "queued" genuinely should read as pending. */
 export function nodeNeedsPolling(node) {
   if (node?.remote_submit_progress) return true
+  if (['downloading', 'processing'].includes(node?.download_status?.state)) return true
   if (!nodeIsActive(node)) return false
   if (node?.status !== 'queued') return true
   return !!(node?.slurm_job_id || node?.runpod_pod_id)
@@ -1075,6 +1076,13 @@ export function initSimulateJobs({
   // node, so a launch made while the master is idle would otherwise not surface until a
   // manual refresh. _fetch() picks up the new job AND re-arms the poll from there.
   window.addEventListener('nadoc:sim-jobs-changed', () => _fetch())
+  // Cluster authentication completes before the backend's post-login reconciliation:
+  // that background pass may discover that an Alpine run finished while NADOC was
+  // disconnected and immediately start a large result download.  Wake this visible
+  // master card at login rather than waiting for an engine-panel poll or a tab switch.
+  window.addEventListener('nadoc:cluster-state-change', (e) => {
+    if (_dynamicsActive && e.detail?.state === 'connected') void _fetch()
+  })
 
   // ── engine scope: filter to the active tab + "Show all job types" toggle ───
   function _engineTabName() {

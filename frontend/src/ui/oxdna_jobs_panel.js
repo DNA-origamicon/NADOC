@@ -405,6 +405,34 @@ export function runConfigForJob(job) {
   }
 }
 
+/**
+ * Pure: what a production run can do with the capture-strand card.
+ *
+ * Capture strands are TOPOLOGY, not a production-time force — the Phase-2 decision was
+ * "build, not overlay": they are appended to the system before relaxation so the origami
+ * can actually hybridise to them while it settles. A production run branches off an
+ * already-relaxed parent by copying its topology/conf, so it can only ever INHERIT the
+ * strands the parent was built with, and re-pin their attach-end traps. It cannot add
+ * them to an origami-only structure.
+ *
+ * So the card's toggle means two different things depending on the parent, and silently
+ * dropping it (what the run body used to do) is the worst of the three:
+ *   'none'    — the user does not want capture strands.
+ *   'inherit' — the parent carries `nBeads` capture beads; the run keeps them.
+ *   'unbuilt' — the user wants them but this relaxation has none. The run must refuse
+ *               and say so, not launch a strand-free run and flip the toggle off.
+ *
+ * @param {object} parentJob      the relaxed job the run branches from
+ * @param {object|null} strandsSpec  the card's current surfaceStrandsSpec
+ */
+export function captureStrandRunPlan(parentJob, strandsSpec) {
+  const built = ((parentJob?.run_config || {}).surface_strands || {}).built || {}
+  const nBeads = Number(built.n_beads) || 0
+  if (!strandsSpec?.enabled) return { mode: 'none', nBeads }
+  if (nBeads > 0) return { mode: 'inherit', nBeads }
+  return { mode: 'unbuilt', nBeads: 0 }
+}
+
 /** Pure: hover title for an E-field child sub-item (its field params). */
 export function fieldChildTitle(job) {
   const e = job?.efield || {}
@@ -1572,7 +1600,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // only shown when a field has been applied to the *current* job.
   function _clearRunCards() {
     if (alignToggle) { alignToggle.disabled = false; alignToggle.title = '' }
-    applyRunConfig?.({ advanced: null, field: null, surface: null, anchors: [] }, null)
+    applyRunConfig?.({ advanced: null, field: null, surface: null, surfaceStrands: null, anchors: [] }, null)
   }
 
   // ── Trajectory-density hint (Advanced card) ────────────────────────────────
@@ -2007,6 +2035,34 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       }
     }
     if (el.anchors?.length) body.anchors = el.anchors
+    // Capture strands can only be INHERITED from the relaxed parent (they are built
+    // into the system before relaxation so the origami hybridises to them as it
+    // settles). Refuse rather than launch a run that quietly has none.
+    const capPlan = captureStrandRunPlan(_selectedJob(), el.surfaceStrands)
+    if (capPlan.mode === 'unbuilt') {
+      await showConfirm({
+        title: 'This relaxation has no capture strands',
+        message:
+          'Surface capture strands are built into the system before relaxation, so the '
+          + 'origami can hybridise to them while it settles — a production run branches '
+          + 'off the relaxed structure and can only inherit them.\n\n'
+          + 'The selected relaxation was built without them. Start a NEW relaxation with '
+          + '"Add surface strands" enabled, then run from that.',
+        confirmLabel: 'OK',
+        cancelLabel: '',
+      })
+      _setProdStatus('Run cancelled — relax with capture strands first.', _C.err)
+      return
+    }
+    if (capPlan.mode === 'inherit') {
+      // Intent, not a build request: the backend re-pins the inherited beads and
+      // rejects the run if the parent turns out not to have any. `subjectToField` is a
+      // production-time force decision, so the LIVE card wins over the parent's value.
+      body.surface_strands = {
+        enabled: true,
+        subjectToField: el.surfaceStrands.subjectToField !== false,
+      }
+    }
     // A field with no anchors drifts the whole structure (COM drift) — the E-field
     // card shows a warning notice, but the run is allowed (no longer blocked here).
 
@@ -2017,7 +2073,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
 
     prodBtn.disabled = true
     if (runBtn) runBtn.disabled = true     // grey out both immediately on press
-    const what = [body.field && 'field', body.surface && 'surface', body.anchors && 'anchors'].filter(Boolean).join(' + ') || 'production'
+    const what = [body.field && 'field', body.surface && 'surface', body.anchors && 'anchors',
+      body.surface_strands && `${capPlan.nBeads} capture beads`].filter(Boolean).join(' + ') || 'production'
     _setProdStatus(`Starting run (${what})…`, _C.accent)
     // The consolidated run branches a CHILD job from the relaxed parent (success =
     // the child dict carries a job_id; it starts queued/running in the background).

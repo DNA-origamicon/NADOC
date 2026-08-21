@@ -40,8 +40,6 @@ from typing import Optional, Sequence
 # can't sweep `_p100`), and a second copy would drift out of lockstep with the tests
 # that pin it.
 from backend.core.slurm_script import (
-    _DEFAULT_EARLY_STOP_MIN_K,
-    _chain_scales,
     _early_stop_block,
     _early_stop_eligible,
     _stage_last_chunk_index,
@@ -367,10 +365,8 @@ def render_chain_script(
     stall_timeout_s: int = STALL_TIMEOUT_S,
     max_lifetime_s: Optional[int] = None,
     watchdog_poll_s: int = WATCHDOG_POLL_S,
-    manifest: Optional[dict] = None,
+    manifest: Optional[dict] = None,  # noqa: ARG001 — kept for caller signature parity
     early_stop_relax: bool = False,
-    early_stop_tier: str = "B",
-    early_stop_min_k: Optional[float] = None,
     name_stem: str = "",
     health_python: str = "python3",
     live_metrics_s: int = LIVE_METRICS_INTERVAL_S,
@@ -410,18 +406,19 @@ def render_chain_script(
       finds the bridged file. The idempotent-resume trick and the early-stop trick are
       the same trick.
 
-      **Tier matters, and Tier B cannot pay for this run.** Tier B (stdlib, energy+volume
-      plateau) may only skip stages restrained at ENM ``k >= min_k`` (0.1), because below
-      that base-pairing keeps degrading after the energy flattens — so k=0.01 and the
-      k=0/MGHH melt always run in FULL. That caps Tier B at 5.28M steps (~$22.7): over
-      budget even in its best case. Tier A adds the WC base-pairing series (an on-pod
-      MDAnalysis health step), which holds the fragile stages directly and therefore makes
-      EVERY relaxation chunk eligible — that is where exp36's measured 4.9x comes from.
+      No tiers, no restraint-scale cap: every non-final relaxation chunk gets the on-pod
+      MDAnalysis health step (the real WC base-pairing series) alongside the energy
+      evaluator, and only skips once BOTH plateau — the same ``should_early_stop_stage``
+      decision the local runner makes. Energy-alone would have to stop at k=0.01/MGHH
+      (base-pairing keeps degrading after energy flattens there), capping the achievable
+      skip well below budget; the WC criterion holds those fragile stages directly and
+      makes EVERY chunk eligible instead — that breadth is where exp36's measured 4.9x
+      comes from.
 
-      Tier A **fails safe to HOLD**: no ``wc.json`` (MDAnalysis missing, health step
-      failed, no frames yet) => no skip => the full ladder runs. Safe for the science,
-      *expensive* on a rented pod — so confirm MDAnalysis imports on the pod before
-      trusting Tier A to bring a run inside budget.
+      **Fails safe to HOLD**: no ``wc.json`` (MDAnalysis missing, health step failed, no
+      frames yet) => no skip => the full ladder runs. Safe for the science, *expensive*
+      on a rented pod — so confirm MDAnalysis imports on the pod before trusting this to
+      bring a run inside budget.
     """
     q = shlex.quote
     lines: list[str] = [
@@ -566,20 +563,7 @@ def render_chain_script(
         "",
     ]
 
-    tier = (early_stop_tier or "B").upper()
-    if early_stop_relax and tier not in ("A", "B"):
-        raise ValueError(f"early_stop_tier {tier!r} must be 'A' or 'B'")
-    min_k = (
-        _DEFAULT_EARLY_STOP_MIN_K
-        if early_stop_min_k is None
-        else float(early_stop_min_k)
-    )
-
     chain = [s.name for s in steps]
-    # Scales come from the manifest, positionally aligned to the chain (chain[0] is the
-    # minimisation -> None). No manifest => no scales => nothing is eligible, which is
-    # the fail-safe direction: run everything.
-    scales = _chain_scales(manifest, chain) if (early_stop_relax and manifest) else []
 
     for i, step in enumerate(steps):
         kind = "minimization" if step.is_minimization else "segment"
@@ -597,12 +581,11 @@ def render_chain_script(
                 'restraints_settle.pdb || echo "WARNING: settle-restraint retarget failed; using build pose"',
                 "fi",
             ]
-        if scales and _early_stop_eligible(chain, scales, i, min_k, tier):
+        if early_stop_relax and _early_stop_eligible(chain, i):
             last = _stage_last_chunk_index(chain, i)
             lines += _early_stop_block(
                 step.name,
                 chain[i + 1 : last + 1],
-                tier=tier,
                 name_stem=name_stem,
                 health_python=health_python,
             )

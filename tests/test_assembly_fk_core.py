@@ -10,6 +10,7 @@ import numpy as np
 
 from backend.core.assembly_fk import (
     _build_inst_by_id,
+    _build_fk_joint_index,
     _fk_apply_to_joint,
     _fk_expand_rigid_group,
     _fk_propagate,
@@ -63,6 +64,16 @@ def test_build_inst_by_id_maps_every_instance():
     by_id = _build_inst_by_id(asm)
     assert by_id == {"a": a, "b": b}
     assert by_id["a"] is a  # identity, not a copy — FK mutates in place
+
+
+def test_build_fk_joint_index_separates_rigid_and_directed_edges():
+    rigid = AssemblyJoint(joint_type="rigid", instance_a_id="a", instance_b_id="b")
+    hinge = AssemblyJoint(joint_type="revolute", instance_a_id="b", instance_b_id="c")
+    rigid_by_instance, children_by_parent = _build_fk_joint_index(
+        Assembly(joints=[rigid, hinge])
+    )
+    assert rigid_by_instance == {"a": [rigid], "b": [rigid]}
+    assert children_by_parent == {"b": [hinge]}
 
 
 # ── _fk_apply_to_joint ────────────────────────────────────────────────────────

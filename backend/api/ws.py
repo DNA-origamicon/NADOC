@@ -323,7 +323,8 @@ async def md_run_ws(websocket: WebSocket) -> None:
                           "total_ns": float|null, "dt_ps": float|null,
                           "nstxout_comp": int|null,
                           "atom_ident": {strands, helices, dirs, strand_idx, helix_idx,
-                                         dir_idx, bp}|null}
+                                         dir_idx, bp, names, copy_k, scalar_keys,
+                                         base_keys}|null}
         (ballstick only) atom_ident is the STATIC per-heavy-atom design identity, in
         interned parallel arrays — sent once here, not per frame, because the frames
         are hundreds of thousands of atoms.  The client zips it onto each frame's
@@ -972,9 +973,20 @@ async def md_run_ws(websocket: WebSocket) -> None:
             )
 
             try:
-                result["atom_ident"] = intern_atom_design_meta(
-                    build_atom_design_meta(u, dna_heavy, p_order, model, cm, seg2chain)
+                atom_ident_rows = build_atom_design_meta(
+                    u, dna_heavy, p_order, model, cm, seg2chain
                 )
+                result["atom_ident"] = intern_atom_design_meta(atom_ident_rows)
+                result["atom_ident"]["names"] = [str(a.name) for a in dna_heavy]
+                result["atom_ident"]["copy_k"] = [
+                    int(row.get("copy_k", 0) or 0) for row in atom_ident_rows
+                ]
+                result["atom_ident"]["scalar_keys"] = [
+                    str(row.get("scalar_key", "") or "") for row in atom_ident_rows
+                ]
+                result["atom_ident"]["base_keys"] = [
+                    str(row.get("base_key", "") or "") for row in atom_ident_rows
+                ]
                 logs.append(
                     f"Atom ident: {len(result['atom_ident']['strands'])} strands "
                     f"over {len(dna_heavy)} heavy atoms"
@@ -986,6 +998,12 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     f"Atom ident: unavailable ({type(exc).__name__}: {exc}) "
                     "— atoms will render CPK"
                 )
+
+            from backend.core.md_trajectory import _install_direct_heavy_layout
+
+            result["direct_heavy_layout"] = _install_direct_heavy_layout(
+                u, dna_heavy, dna_p_sel
+            )
 
         _mark("load complete")
         return result
@@ -1294,6 +1312,9 @@ async def md_run_ws(websocket: WebSocket) -> None:
                         tentry["ny"] = float(tnorm[j, 1])
                         tentry["nz"] = float(tnorm[j, 2])
                     positions.append(tentry)
+            from backend.core.md_trajectory import _add_mean_axis_tangents
+
+            _add_mean_axis_tangents(positions)
             return {
                 "type": "frame",
                 "frame_idx": frame_idx,
@@ -1388,64 +1409,20 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     else:
                         p_pre = p_box + T_dyn
 
-                    # Residue-local reconstruction: heavy atom = corrected P +
-                    # minimum-image(raw atom - raw P).  Use residue ix because it
-                    # is stable inside this MDAnalysis Universe.
-                    p_raw_by_res = {
-                        int(a.residue.ix): p_raw[i] for i, a in enumerate(dna_p)
-                    }
-                    p_pre_by_res = {
-                        int(a.residue.ix): p_pre[i] for i, a in enumerate(dna_p)
-                    }
-                    p_res_by_key: dict[tuple[str, int], int] = {}
-                    p_resids_by_seg: dict[str, list[int]] = {}
-                    for a in dna_p:
-                        segid = str(
-                            getattr(a.residue, "segid", "") or getattr(a, "segid", "")
-                        )
-                        resid = int(a.residue.resid)
-                        p_res_by_key[(segid, resid)] = int(a.residue.ix)
-                        p_resids_by_seg.setdefault(segid, []).append(resid)
-                    for segid in p_resids_by_seg:
-                        p_resids_by_seg[segid].sort()
+                    # Preserve the trajectory's complete heavy-atom frame. PBC repair
+                    # changes only whole-residue / whole-segment periodic images; the
+                    # phosphate trace selects those images but never reconstructs atom
+                    # coordinates or residue geometry.
+                    from backend.core.md_trajectory import _direct_heavy_pre_positions
 
-                    def _anchor_residue_ix(atom) -> int | None:
-                        res_ix = int(atom.residue.ix)
-                        if res_ix in p_raw_by_res:
-                            return res_ix
-                        segid = str(
-                            getattr(atom.residue, "segid", "")
-                            or getattr(atom, "segid", "")
+                    layout = _ctx.get("direct_heavy_layout")
+                    pos_pre = (
+                        _direct_heavy_pre_positions(
+                            pos_raw, p_pre, box_nm, T_dyn, layout
                         )
-                        resid = int(atom.residue.resid)
-                        # Terminal residues may not have a P atom.  Anchor them
-                        # to the nearest residue with a P in the same segment.
-                        for delta_resid in (1, -1, 2, -2):
-                            near = p_res_by_key.get((segid, resid + delta_resid))
-                            if near is not None:
-                                return near
-                        candidates = p_resids_by_seg.get(segid)
-                        if candidates:
-                            nearest_resid = min(
-                                candidates, key=lambda r: abs(r - resid)
-                            )
-                            return p_res_by_key.get((segid, nearest_resid))
-                        return None
-
-                    pos_pre = pos_nm.copy()
-                    for i, a in enumerate(ag):
-                        res_ix = _anchor_residue_ix(a)
-                        if res_ix is None:
-                            continue
-                        p0 = p_raw_by_res.get(res_ix)
-                        pc = p_pre_by_res.get(res_ix)
-                        if p0 is None or pc is None:
-                            continue
-                        delta = pos_raw[i] - p0
-                        for d in range(3):
-                            if box_nm[d] > 0:
-                                delta[d] -= _np.round(delta[d] / box_nm[d]) * box_nm[d]
-                        pos_pre[i] = pc + delta
+                        if layout is not None
+                        else pos_raw + T_dyn
+                    )
 
 
                 # Use the same rigid-body Kabsch alignment as the P-bead path so

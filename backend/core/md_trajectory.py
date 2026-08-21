@@ -12,9 +12,9 @@ path). That WebSocket remains the reference implementation for the live display;
 **keep the math here in sync with it.** Kept as a separate (duplicated) reader so
 this never touches the validated live-display code path.
 
-CG only (per-nucleotide backbone + normal). NAMD heavy reps (atomistic/surface) are
-a later phase — MD all-atom topology does not match the design's atomistic serial
-order, so it needs its own mapping.
+The module also serves NAMD heavy-atom trajectory and flexibility-map views. Those
+paths retain the trajectory topology's sparse serial space and measured coordinates;
+they do not rebuild atoms from the design's idealized atomistic model.
 """
 
 from __future__ import annotations
@@ -93,7 +93,7 @@ def _build_md_nadoc_ctx(
     # per-frame extractors already reconstruct DNA positions from the RAW (wrapped)
     # coordinates — the bead path via the vectorised ``_unwrap_min_image`` + the
     # design-equilibrium minimum-image correction, and the heavy-atom path via
-    # residue-local ``minimum_image(atom − its P)``.  The only thing the global unwrap
+    # whole-residue/segment lattice shifts.  The only thing the global unwrap
     # affected was the P→C1' base-normal vector for a nucleotide split across a
     # periodic boundary, which ``_extract_md_nadoc_frame`` now handles with a direct
     # minimum-image on that 2-atom vector.  (Equivalence to the unwrapped path is
@@ -130,13 +130,29 @@ def _build_md_nadoc_ctx(
 
     dna_p_sel = u.select_atoms("name P and resname " + " ".join(_GRO_DNA_RESNAMES))
     c1p_list: list[int] = []
+    purine_ring = {"N9", "C8", "N7", "C5", "C6", "N1", "C2", "N3", "C4"}
+    pyrimidine_ring = {"N1", "C2", "N3", "C4", "C5", "C6"}
+    base_ring_idx: list[np.ndarray] = []
     for p_atom in dna_p_sel:
-        c1p_atoms = p_atom.residue.atoms.select_atoms("name C1'")
+        residue_atoms = p_atom.residue.atoms
+        c1p_atoms = residue_atoms.select_atoms("name C1'")
         c1p_list.append(int(c1p_atoms[0].index) if len(c1p_atoms) > 0 else -1)
+        ring_names = (
+            purine_ring
+            if str(p_atom.resname) in {"DA", "DG", "ADE", "GUA"}
+            else pyrimidine_ring
+        )
+        base_ring_idx.append(
+            np.asarray(
+                [int(atom.index) for atom in residue_atoms if str(atom.name) in ring_names],
+                dtype=np.int64,
+            )
+        )
     c1p_idx = np.array(c1p_list, dtype=np.int64)
 
     heavy_idx = None
     atom_meta = None
+    direct_heavy_layout = None
     if with_atoms:
         # DNA heavy atoms (no hydrogens, no solvent) — same selection + element
         # derivation as ws.py _load_sync ballstick setup.
@@ -180,10 +196,17 @@ def _build_md_nadoc_ctx(
             {
                 "serial": int(a.index),
                 "element": _element(a),
+                "name": str(a.name),
                 **(ident[i] if ident else {}),
             }
             for i, a in enumerate(dna_heavy)
         ]
+        direct_heavy_layout = _install_direct_heavy_layout(
+            u,
+            dna_heavy,
+            dna_p_sel,
+            atom_meta,
+        )
 
     # 5'-terminal nucleotides (one per strand) have NO phosphate — pdb2gmx strips the
     # 5' P — so they are absent from the P-indexed p_order and go un-positioned/un-coloured
@@ -213,8 +236,10 @@ def _build_md_nadoc_ctx(
         "eq_centroid": eq_centroid,
         "eq_centered": eq_centered,
         "c1p_idx": c1p_idx,
+        "base_ring_idx": base_ring_idx,
         "heavy_idx": heavy_idx,
         "atom_meta": atom_meta,
+        "direct_heavy_layout": direct_heavy_layout,
         "R_prev": None,
         "prev_frame_idx": -999,
         "n_dna_p": n_dna_p,
@@ -223,8 +248,154 @@ def _build_md_nadoc_ctx(
     }
 
 
+def _install_direct_heavy_layout(u, heavy_ag, dna_p, atom_meta=None) -> dict:
+    """Precompute the topology-only tables for direct all-atom PBC placement.
+
+    Every trajectory atom keeps its recorded coordinate.  At display time we apply
+    only whole-residue and whole-segment lattice translations, followed by the one
+    global Kabsch transform.  No atom is regenerated from a phosphate, residue stamp,
+    or other coarse abstraction.
+    """
+    heavy_res = np.asarray(heavy_ag.resindices, dtype=np.int64)
+    residue_ids: list[int] = []
+    residue_at: dict[int, int] = {}
+    heavy_res_group = np.empty(len(heavy_ag), dtype=np.int64)
+    residue_anchor_rows: list[int] = []
+    residue_segment_ids: list[str] = []
+    segment_at: dict[str, int] = {}
+
+    for row, atom in enumerate(heavy_ag):
+        residue_id = int(heavy_res[row])
+        group = residue_at.get(residue_id)
+        if group is None:
+            group = len(residue_ids)
+            residue_at[residue_id] = group
+            residue_ids.append(residue_id)
+            residue_anchor_rows.append(row)
+            segid = str(getattr(atom.residue, "segid", "") or getattr(atom, "segid", ""))
+            residue_segment_ids.append(segid)
+        heavy_res_group[row] = group
+        if str(getattr(atom, "name", "")) == "P":
+            residue_anchor_rows[group] = row
+
+    for segid in residue_segment_ids:
+        if segid not in segment_at:
+            segment_at[segid] = len(segment_at)
+    residue_segment_group = np.asarray(
+        [segment_at[segid] for segid in residue_segment_ids], dtype=np.int64
+    )
+    heavy_segment_group = residue_segment_group[heavy_res_group]
+
+    heavy_row_by_global = {
+        int(atom_index): row for row, atom_index in enumerate(np.asarray(heavy_ag.indices))
+    }
+    p_heavy_rows = np.asarray(
+        [heavy_row_by_global.get(int(atom.index), -1) for atom in dna_p], dtype=np.int64
+    )
+    p_segment_group = np.asarray(
+        [
+            heavy_segment_group[row] if row >= 0 else -1
+            for row in p_heavy_rows
+        ],
+        dtype=np.int64,
+    )
+    layout = {
+        "heavy_res_group": heavy_res_group,
+        "residue_anchor_rows": np.asarray(residue_anchor_rows, dtype=np.int64),
+        "residue_segment_ids": np.asarray(residue_segment_ids, dtype=object),
+        "heavy_segment_group": heavy_segment_group,
+        "p_heavy_rows": p_heavy_rows,
+        "p_segment_group": p_segment_group,
+        "n_segments": len(segment_at),
+    }
+    if atom_meta is not None:
+        for row, meta in enumerate(atom_meta):
+            meta["segment_group"] = int(heavy_segment_group[row])
+    return layout
+
+
+def _direct_heavy_pre_positions(
+    pos_raw: np.ndarray,
+    p_pre: np.ndarray,
+    box_nm: np.ndarray,
+    translation: np.ndarray,
+    layout: dict,
+) -> np.ndarray:
+    """Place recorded heavy-atom coordinates into one periodic image.
+
+    The only per-residue operation is an integer box translation chosen from a real
+    atom in that residue.  A second integer translation moves each complete DNA
+    segment beside the already-reassembled phosphate trace.  Consequently all
+    intra-residue vectors remain bit-for-bit those recorded in the trajectory.
+    """
+    from backend.core.atomistic_to_nadoc import _unwrap_min_image
+
+    raw = np.asarray(pos_raw, dtype=float)
+    box = np.asarray(box_nm, dtype=float)
+    anchors = raw[layout["residue_anchor_rows"]]
+    unwrapped = _unwrap_min_image(anchors, box, layout["residue_segment_ids"])
+    residue_shift = unwrapped - anchors
+    placed = raw + residue_shift[layout["heavy_res_group"]] + np.asarray(translation)
+
+    p_rows = layout["p_heavy_rows"]
+    p_segments = layout["p_segment_group"]
+    valid = (p_rows >= 0) & (p_segments >= 0)
+    for segment in range(int(layout.get("n_segments", 0))):
+        rows = np.flatnonzero(valid & (p_segments == segment))
+        if not len(rows):
+            continue
+        delta = np.median(p_pre[rows] - placed[p_rows[rows]], axis=0)
+        lattice = np.zeros(3, dtype=float)
+        good = box > 0
+        lattice[good] = np.round(delta[good] / box[good]) * box[good]
+        placed[layout["heavy_segment_group"] == segment] += lattice
+    return placed
+
+
+def _add_mean_axis_tangents(positions: list[dict]) -> None:
+    """Attach a live helix tangent to ordinary per-nucleotide display rows.
+
+    The tangent is the central difference of adjacent base-pair midpoints.  It is
+    derived entirely from the displayed simulation positions, so a bent or folded
+    helix never falls back to the native design axis when orienting Full slabs.
+    """
+    columns: dict[str, dict[int, list[np.ndarray]]] = {}
+    for row in positions:
+        helix = row.get("helix_id")
+        bp = row.get("bp_index")
+        if not isinstance(helix, str) or helix.startswith("__") or not isinstance(bp, int):
+            continue
+        point = row.get("backbone_position")
+        if point is None and all(axis in row for axis in ("x", "y", "z")):
+            point = [row["x"], row["y"], row["z"]]
+        if point is None:
+            continue
+        columns.setdefault(helix, {}).setdefault(bp, []).append(np.asarray(point, float))
+
+    tangents: dict[tuple[str, int], np.ndarray] = {}
+    for helix, by_bp in columns.items():
+        bps = sorted(by_bp)
+        centers = {bp: np.mean(by_bp[bp], axis=0) for bp in bps}
+        for index, bp in enumerate(bps):
+            lo = bps[max(0, index - 1)]
+            hi = bps[min(len(bps) - 1, index + 1)]
+            tangent = centers[hi] - centers[lo]
+            norm = float(np.linalg.norm(tangent))
+            if norm > 1e-9:
+                tangents[(helix, bp)] = tangent / norm
+
+    for row in positions:
+        tangent = tangents.get((row.get("helix_id"), row.get("bp_index")))
+        if tangent is not None:
+            row["tx"], row["ty"], row["tz"] = map(float, tangent)
+
+
 def _extract_md_nadoc_frame(
-    ctx: dict, frame_idx: int, with_c1p: bool = False, with_termini: bool = False
+    ctx: dict,
+    frame_idx: int,
+    with_c1p: bool = False,
+    with_termini: bool = False,
+    with_base_centers: bool = False,
 ):
     """Per-frame DNA P-atom positions (nm, NADOC frame) + base normals for one DCD
     frame. Ported from ws.py ``_seek_sync`` (nadoc path). Returns ``(p_nm, normals)``
@@ -234,7 +405,11 @@ def _extract_md_nadoc_frame(
     (nm, same NADOC frame as ``p_nm``) as a third element — the sugar-ring anchor used
     as a native Watson-Crick base-pairing proxy (C1'…C1' distance) by
     :func:`md_metric_series`.  It is the P position plus the (min-imaged, Kabsch-rotated)
-    P→C1' vector already computed for the base normal, so it costs nothing extra."""
+    P→C1' vector already computed for the base normal, so it costs nothing extra.
+
+    ``with_base_centers=True`` adds the aligned centroid of each residue's measured
+    base-ring atoms. It is used by Full slabs so their center is reconstructed from
+    live geometry instead of translating an equilibrium offset from the phosphate."""
     from backend.core.atomistic_to_nadoc import (
         _GRO_DNA_RESNAMES,
         _unwrap_min_image,
@@ -372,6 +547,22 @@ def _extract_md_nadoc_frame(
         norms = np.where(norms > 1e-6, norms, 1.0)
         normals = dn / norms
 
+    base_centers = None
+    if with_base_centers:
+        base_centers = np.full((len(p_order), 3), np.nan, dtype=float)
+        for i, atom_indices in enumerate(ctx.get("base_ring_idx") or []):
+            if i >= len(p_raw) or len(atom_indices) < 5:
+                continue
+            ring_raw = u.atoms[atom_indices].positions / 10.0
+            delta = ring_raw.mean(axis=0) - p_raw[i]
+            if dims is not None and dims[0] > 0:
+                box_nm = dims[:3] / 10.0
+                good = box_nm > 0
+                delta[good] -= np.round(delta[good] / box_nm[good]) * box_nm[good]
+            if R_align is not None:
+                delta = delta @ R_align.T
+            base_centers[i] = p_nm[i] + delta
+
     # 5'-terminal nucleotides via their O5' atom, placed off the aligned 3'-neighbour P.
     if with_termini:
         from backend.core.atomistic_to_nadoc import recover_termini
@@ -380,60 +571,20 @@ def _extract_md_nadoc_frame(
         term_pos, term_norm = recover_termini(
             u, ctx.get("term_specs") or [], p_raw, p_nm, R_align, _box
         )
+        out = [p_nm, normals]
         if with_c1p:
-            return p_nm, normals, c1p_nm, term_pos, term_norm
-        return p_nm, normals, term_pos, term_norm
+            out.append(c1p_nm)
+        if with_base_centers:
+            out.append(base_centers)
+        out.extend((term_pos, term_norm))
+        return tuple(out)
 
+    out = [p_nm, normals]
     if with_c1p:
-        return p_nm, normals, c1p_nm
-    return p_nm, normals
-
-
-def _build_heavy_anchor_rows(heavy_ag, dna_p) -> "np.ndarray":
-    """For each heavy atom, the ROW in ``dna_p`` whose P anchors its residue-local
-    reconstruction (-1 when none can be found).
-
-    Pure topology — residue index first, then a nearby resid in the same segment (a 5'
-    terminal residue has no P of its own; psfgen strips it), then the nearest resid in
-    that segment. Identical every frame, so it is built once per context.
-
-    Ties resolve LAST-wins, matching the dict-comprehension this replaced: a residue
-    carrying more than one P must keep addressing the same one as before.
-    """
-    p_row_by_res: dict[int, int] = {}
-    p_row_by_key: dict[tuple[str, int], int] = {}
-    p_resids_by_seg: dict[str, list[int]] = {}
-    for row, a in enumerate(dna_p):
-        res_ix = int(a.residue.ix)
-        segid = str(getattr(a.residue, "segid", "") or getattr(a, "segid", ""))
-        resid = int(a.residue.resid)
-        p_row_by_res[res_ix] = row
-        p_row_by_key[(segid, resid)] = row
-        p_resids_by_seg.setdefault(segid, []).append(resid)
-    for segid in p_resids_by_seg:
-        p_resids_by_seg[segid].sort()
-
-    def _row_for(atom) -> int:
-        row = p_row_by_res.get(int(atom.residue.ix))
-        if row is not None:
-            return row
-        segid = str(getattr(atom.residue, "segid", "") or getattr(atom, "segid", ""))
-        resid = int(atom.residue.resid)
-        for delta_resid in (1, -1, 2, -2):
-            near = p_row_by_key.get((segid, resid + delta_resid))
-            if near is not None:
-                return near
-        candidates = p_resids_by_seg.get(segid)
-        if candidates:
-            nearest = min(candidates, key=lambda r: abs(r - resid))
-            near = p_row_by_key.get((segid, nearest))
-            if near is not None:
-                return near
-        return -1
-
-    return np.fromiter(
-        (_row_for(a) for a in heavy_ag), dtype=np.int64, count=len(heavy_ag)
-    )
+        out.append(c1p_nm)
+    if with_base_centers:
+        out.append(base_centers)
+    return tuple(out)
 
 
 def _extract_md_atoms_frame(
@@ -441,10 +592,10 @@ def _extract_md_atoms_frame(
 ) -> list[dict]:
     """DNA heavy-atom coordinates (nm, NADOC frame) for one DCD frame, as
     ``[{serial, element, strand_id, helix_id, bp_index, direction, x, y, z}, …]``.
-    Ported from ws.py ``_seek_sync`` (ballstick
-    path): residue-local reconstruction of each heavy atom relative to its corrected
-    P atom, then the same Kabsch alignment as the bead path so the all-atom and CG
-    views coincide. Requires a ctx built with ``with_atoms=True``.
+    The trajectory's full heavy-atom coordinates are placed by integer periodic-image
+    shifts of whole residues/segments, then receive the same global Kabsch alignment as
+    the bead path. No atom is reconstructed from a phosphate or ideal residue frame.
+    Requires a ctx built with ``with_atoms=True``.
 
     Pass ``frame_out`` (an empty dict) to also receive this frame's DISPLAY AFFINE
     and the raw/pre heavy-atom positions it was applied to — what the solvent and
@@ -508,30 +659,16 @@ def _extract_md_atoms_frame(
                 T_dyn = eq_centroid - c_box if eq_centroid is not None else T
                 p_pre = p_box + T_dyn
 
-            # Residue-local reconstruction: heavy atom = corrected P +
-            # minimum-image(raw atom − raw P), anchored to each residue's P.
-            #
-            # Which P anchors which heavy atom is a TOPOLOGY question (residue ix, segid,
-            # resid) — identical for every frame of the run. Resolving it per frame meant
-            # ~302 k MDAnalysis `.residue` lookups each time, which profiling showed was
-            # the bulk of a 2.25 s frame. Build it ONCE per context and reuse.
-            anchor_rows = ctx.get("_heavy_anchor_rows")
-            if anchor_rows is None:
-                anchor_rows = _build_heavy_anchor_rows(ag, dna_p)
-                ctx["_heavy_anchor_rows"] = anchor_rows
-
-            pos_pre = pos_nm.copy()
-            have = anchor_rows >= 0
-            if have.any():
-                rows = anchor_rows[have]
-                # Vectorized min-image: one array op instead of 3 scalar np.round calls
-                # per atom (906 k of them per frame on a 300 k-atom system).
-                delta = pos_raw[have] - p_raw[rows]
-                box = np.asarray(box_nm, dtype=float)
-                good = box > 0
-                if good.any():
-                    delta[:, good] -= np.round(delta[:, good] / box[good]) * box[good]
-                pos_pre[have] = p_pre[rows] + delta
+            # Direct all-atom placement: preserve every recorded atom coordinate and
+            # change periodic image only by whole-residue / whole-segment box vectors.
+            # Phosphates select the segment image and the global Kabsch pose; they never
+            # regenerate atom coordinates or residue geometry.
+            layout = ctx.get("direct_heavy_layout")
+            pos_pre = (
+                _direct_heavy_pre_positions(pos_raw, p_pre, box_nm, T_dyn, layout)
+                if layout is not None
+                else pos_raw + T_dyn
+            )
 
             mob_c = None
             R_align = None
@@ -579,12 +716,14 @@ def _extract_md_atoms_frame(
         {
             "serial": m["serial"],
             "element": m["element"],
+            "name": m.get("name", ""),
             "strand_id": m.get("strand_id", ""),
             "helix_id": m.get("helix_id", ""),
             "bp_index": m.get("bp_index", -1),
             "direction": m.get("direction", ""),
             "copy_k": m.get("copy_k", 0),
             "scalar_key": m.get("scalar_key", ""),
+            "base_key": m.get("base_key", ""),
             "x": float(pos_nm[i, 0]),
             "y": float(pos_nm[i, 1]),
             "z": float(pos_nm[i, 2]),
@@ -1110,13 +1249,14 @@ def md_rmsf(
     written segment (the user's flex-map gating is "all segments"), Kabsch-aligns
     each frame to the design equilibrium (rigid-body motion removed, identical math
     to the live Display-MD path via ``_extract_md_nadoc_frame``), and computes per
-    nucleotide the mean backbone-bead position, the mean base normal (a1), and the
-    RMSF = sqrt(mean_f |p_f - mean|^2).
+    nucleotide the mean backbone-bead position, measured mean base-ring centroid,
+    mean base normal (a1), live helix tangent, and the RMSF =
+    sqrt(mean_f |p_f - mean|^2).
 
     Returns the SAME payload shape as ``GET /oxdna/jobs/{id}/rmsf`` so the frontend
     flexibility-map code (rmsfColorMap / displayRmsf) consumes it unchanged:
     ``{ready, n_frames, positions:[{helix_id, bp_index, direction, backbone_position,
-    nx, ny, nz, rmsf}], min_rmsf, max_rmsf, mean_rmsf}``.
+    base_position, nx, ny, nz, tx, ty, tz, rmsf}], min_rmsf, max_rmsf, mean_rmsf}``.
 
     Frames are sampled evenly to at most ``max_frames`` to bound the per-frame Kabsch
     cost; each sampled frame is aligned independently (the sequential rotation-flip
@@ -1151,14 +1291,16 @@ def md_rmsf(
     sum_pos = np.zeros((n_keys, 3))
     sum_sq = np.zeros(n_keys)  # Σ_f |p_f|^2
     sum_norm = np.zeros((n_keys, 3))
+    sum_base = np.zeros((n_keys, 3))
+    count_base = np.zeros(n_keys, dtype=np.int64)
     sum_tpos = np.zeros((n_term, 3))
     sum_tsq = np.zeros(n_term)
     sum_tnorm = np.zeros((n_term, 3))
     have_norm = False
     used = 0
     for gidx in idxs:
-        p_nm, normals, tpos, tnorm = _extract_md_nadoc_frame(
-            ctx, gidx, with_termini=True
+        p_nm, normals, base_centers, tpos, tnorm = _extract_md_nadoc_frame(
+            ctx, gidx, with_termini=True, with_base_centers=True
         )
         if p_nm is None or len(p_nm) != n_keys:
             continue
@@ -1167,6 +1309,10 @@ def md_rmsf(
         if normals is not None and len(normals) == n_keys:
             sum_norm += normals
             have_norm = True
+        if base_centers is not None and len(base_centers) == n_keys:
+            valid_base = np.isfinite(base_centers).all(axis=1)
+            sum_base[valid_base] += base_centers[valid_base]
+            count_base[valid_base] += 1
         if n_term and tpos is not None and len(tpos) == n_term:
             sum_tpos += tpos
             sum_tsq += np.einsum("ij,ij->i", tpos, tpos)
@@ -1197,23 +1343,24 @@ def md_rmsf(
     for i, key in enumerate(p_order):
         hid, bp, direction = key[0], key[1], key[2]
         copy = key[3] if len(key) > 3 else 0  # loop-insertion copy index (0 = base)
-        positions.append(
-            {
-                "helix_id": hid,
-                "bp_index": bp,
-                "direction": direction,
-                "copy": copy,
-                "backbone_position": [
-                    float(mean_pos[i, 0]),
-                    float(mean_pos[i, 1]),
-                    float(mean_pos[i, 2]),
-                ],
-                "nx": float(mean_norm[i, 0]),
-                "ny": float(mean_norm[i, 1]),
-                "nz": float(mean_norm[i, 2]),
-                "rmsf": float(rmsf[i]),
-            }
-        )
+        position = {
+            "helix_id": hid,
+            "bp_index": bp,
+            "direction": direction,
+            "copy": copy,
+            "backbone_position": [
+                float(mean_pos[i, 0]),
+                float(mean_pos[i, 1]),
+                float(mean_pos[i, 2]),
+            ],
+            "nx": float(mean_norm[i, 0]),
+            "ny": float(mean_norm[i, 1]),
+            "nz": float(mean_norm[i, 2]),
+            "rmsf": float(rmsf[i]),
+        }
+        if count_base[i] > 0:
+            position["base_position"] = (sum_base[i] / count_base[i]).tolist()
+        positions.append(position)
 
     # Append the recovered 5'-terminal nucleotides (same payload shape, real keys).
     rmsf_all = rmsf
@@ -1246,6 +1393,7 @@ def md_rmsf(
             )
         rmsf_all = np.concatenate([rmsf, rmsf_t]) if len(rmsf_t) else rmsf
 
+    _add_mean_axis_tangents(positions)
     return {
         "ready": True,
         "n_frames": used,

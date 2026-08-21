@@ -299,6 +299,52 @@ def built_pdb_residue_keys(
     return keys
 
 
+def _tagged_segid_resids(
+    model: AtomisticModel, psf_path: Path, tag_attr: str, *, sort_chains: bool = True
+) -> set[tuple[str, str]]:
+    """``(segid, resid)`` of every psfgen'd DNA residue carrying a per-atom ``tag_attr``.
+
+    Shared ordinal bridge for :func:`extra_base_segid_resids` (``crossover_id``) and
+    :func:`extension_segid_resids` (``extension_id``) — see either for the rationale.
+    """
+    atoms_by_chain: dict[str, list[Atom]] = {}
+    for a in model.atoms:
+        atoms_by_chain.setdefault(a.chain_id, []).append(a)
+    chain_order = sorted(atoms_by_chain) if sort_chains else list(atoms_by_chain)
+    tagged_ordinals: set[int] = set()
+    ordinal = 0
+    for chain_id in chain_order:
+        by_res: dict[int, list[Atom]] = {}
+        for a in atoms_by_chain[chain_id]:
+            by_res.setdefault(a.seq_num, []).append(a)
+        for seq in sorted(by_res):
+            if any(getattr(x, tag_attr, None) is not None for x in by_res[seq]):
+                tagged_ordinals.add(ordinal)
+            ordinal += 1
+    if not tagged_ordinals:
+        return set()
+
+    _DNA = {"THY", "ADE", "CYT", "GUA", "DA", "DT", "DC", "DG"}
+    seg_res: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    in_atoms = False
+    for line in Path(psf_path).read_text().splitlines():
+        if "!NATOM" in line:
+            in_atoms = True
+            continue
+        if "!NBOND" in line:
+            break
+        if not in_atoms:
+            continue
+        t = line.split()
+        if len(t) >= 8 and t[0].isdigit() and t[3] in _DNA:
+            key = (t[1], t[2])
+            if key not in seen:
+                seen.add(key)
+                seg_res.append(key)
+    return {seg_res[o] for o in tagged_ordinals if o < len(seg_res)}
+
+
 def extra_base_segid_resids(
     model: AtomisticModel, psf_path: Path, *, sort_chains: bool = True
 ) -> set[tuple[str, str]]:
@@ -320,42 +366,27 @@ def extra_base_segid_resids(
     so their masses are scaled UP instead, slowing the modes below the 4 fs limit
     (equilibrium-exact).  Returns an empty set when the design has no extra bases.
     """
-    atoms_by_chain: dict[str, list[Atom]] = {}
-    for a in model.atoms:
-        atoms_by_chain.setdefault(a.chain_id, []).append(a)
-    chain_order = sorted(atoms_by_chain) if sort_chains else list(atoms_by_chain)
-    xb_ordinals: set[int] = set()
-    ordinal = 0
-    for chain_id in chain_order:
-        by_res: dict[int, list[Atom]] = {}
-        for a in atoms_by_chain[chain_id]:
-            by_res.setdefault(a.seq_num, []).append(a)
-        for seq in sorted(by_res):
-            if any(getattr(x, "crossover_id", None) is not None for x in by_res[seq]):
-                xb_ordinals.add(ordinal)
-            ordinal += 1
-    if not xb_ordinals:
-        return set()
+    return _tagged_segid_resids(
+        model, psf_path, "crossover_id", sort_chains=sort_chains
+    )
 
-    _DNA = {"THY", "ADE", "CYT", "GUA", "DA", "DT", "DC", "DG"}
-    seg_res: list[tuple[str, str]] = []
-    seen: set[tuple[str, str]] = set()
-    in_atoms = False
-    for line in Path(psf_path).read_text().splitlines():
-        if "!NATOM" in line:
-            in_atoms = True
-            continue
-        if "!NBOND" in line:
-            break
-        if not in_atoms:
-            continue
-        t = line.split()
-        if len(t) >= 8 and t[0].isdigit() and t[3] in _DNA:
-            key = (t[1], t[2])
-            if key not in seen:
-                seen.add(key)
-                seg_res.append(key)
-    return {seg_res[o] for o in xb_ordinals if o < len(seg_res)}
+
+def extension_segid_resids(
+    model: AtomisticModel, psf_path: Path, *, sort_chains: bool = True
+) -> set[tuple[str, str]]:
+    """``(segid, resid)`` of every strand-extension tail residue in a psfgen'd PSF.
+
+    Mirrors :func:`extra_base_segid_resids`, keyed on the model's per-atom
+    ``extension_id`` tag instead of ``crossover_id``. The same geometric blind spot
+    applies: a tail near a densely packed bundle can swing within reach of an
+    UNRELATED neighbouring helix's C1' — close enough that pure C1'-distance
+    single-strand detection (``identify_unpaired_residues``) reads it as paired, even
+    though it has no actual Watson-Crick partner. Confirmed on a real single-base 5′
+    tail: 10.72 Å to the nearest (unrelated) cross-chain C1', under the 10.8 Å cutoff
+    by 0.08 Å. ``sort_chains`` must match the package's chain order (True for the
+    psfgen / equilibrium-aware path).
+    """
+    return _tagged_segid_resids(model, psf_path, "extension_id", sort_chains=sort_chains)
 
 
 _ATOMS_KEYS = ("atoms", "atom_names", "atomNames")

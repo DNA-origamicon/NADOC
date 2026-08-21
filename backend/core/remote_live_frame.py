@@ -121,6 +121,21 @@ def is_live_stand_in(job, segment_name: str, package_dir: Path | None = None) ->
     return live.get("segment") == segment_name
 
 
+def download_in_flight(job, dest: Path) -> bool:
+    """Is a real results download currently claiming ``dest``?
+
+    Checked before writing a stand-in frame there.  The ``.part`` file is authoritative;
+    ``download_status`` is a corroborating hint that can go stale across a crash.
+    """
+    if Path(str(dest) + ".part").exists():
+        return True
+    status = getattr(job, "download_status", None) or {}
+    if status.get("state") != "downloading":
+        return False
+    current = status.get("current_file")
+    return bool(current) and str(current).endswith(dest.name)
+
+
 def clear_live_frame(
     job, segment_name: str | None = None, package_dir: Path | None = None
 ) -> None:
@@ -227,9 +242,14 @@ def _write_single_frame_dcd(
         reader.ts.dimensions = dimensions
     dest.parent.mkdir(parents=True, exist_ok=True)
     # Write beside the target and rename: the display polls every 15 s and must
-    # never open a half-written DCD.  `format` is explicit because MDAnalysis infers
-    # it from the extension, and the temp name's is ".part".
-    tmp = dest.with_name(dest.name + ".part")
+    # never open a half-written DCD.
+    #
+    # ⚠️ This suffix must NEVER be ".part".  That is `cluster_ssh._stream_get`'s
+    # resumable-download partial for this exact file, and DCDWriter opens its temp "wb":
+    # a refresh mid-download truncated a multi-gigabyte partial to one frame, and the
+    # next fetch appended real remote bytes onto that foreign head — a corrupt trajectory
+    # that still matched the expected size and so passed as "verified".
+    tmp = dest.with_name(dest.name + ".live-tmp")
     # WriterBase only needs an object exposing `.ts`; avoid Universe.empty(), whose
     # millions of placeholder Atom objects would recreate much of the work removed above.
     class _Frame:
@@ -268,6 +288,14 @@ async def fetch_live_frame(
 
     package_dir = job.package_dir(workspace_dir)
     dest = package_dir / "output" / f"{segment}.dcd"
+    # Even with the temp paths separated, a stand-in must not land on `dest` while the
+    # real trajectory is being fetched: `_stream_get` would then see a short file where
+    # it expects its own partial.  The partial's existence is the precise signal.
+    if download_in_flight(job, dest):
+        raise ValueError(
+            "The real trajectory for this job is downloading. A live snapshot would "
+            "collide with it, so it is unavailable until the download finishes."
+        )
 
     # A real fetched trajectory outranks anything this module can produce.
     if dest.is_file() and not is_live_stand_in(job, segment, package_dir):

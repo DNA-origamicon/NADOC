@@ -4,6 +4,7 @@ import {
   surfaceStrandPlacements, surfaceStrandsSpec, NM2_PER_UM2, MIN_SPACING_NM,
   captureStrandLocalBeads, BFORM_RISE_NM, BFORM_RADIUS_NM,
   captureNucleotidesFromChains,
+  BASE_DISPLACEMENT_NM,
 } from './surface_strands_math.js'
 
 describe('mulberry32', () => {
@@ -145,6 +146,22 @@ describe('captureNucleotidesFromChains', () => {
   it('is empty for empty/invalid input', () => {
     expect(captureNucleotidesFromChains([])).toEqual([])
     expect(captureNucleotidesFromChains(null)).toEqual([])
+  })
+  // The slab builder reads nuc.base_position unconditionally. Omitting it threw out
+  // of the whole rebuild, which froze the setup card on its last renderable spec.
+  it('carries base_position, displaced from the backbone along base_normal', () => {
+    for (const n of captureNucleotidesFromChains(chains)) {
+      expect(n.base_position).toHaveLength(3)
+      for (let i = 0; i < 3; i++) {
+        expect(n.base_position[i]).toBeCloseTo(
+          n.backbone_position[i] + BASE_DISPLACEMENT_NM * n.base_normal[i], 9)
+      }
+    }
+  })
+  it('honours a supplied frame when placing the base site', () => {
+    const framed = [[{ p: [1, 2, 3], a1: [0, 0, 1], a3: [0, 1, 0] }]]
+    const [n] = captureNucleotidesFromChains(framed)
+    expect(n.base_position).toEqual([1, 2, 3 + BASE_DISPLACEMENT_NM])
   })
 })
 

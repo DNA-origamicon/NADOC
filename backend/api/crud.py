@@ -1224,9 +1224,21 @@ def add_circle_segment(body: CircleSegmentRequest) -> dict:
 def _build_extrude_continuation(d: Design, body: "BundleContinuationRequest"):
     """Pure builder + cluster-membership report for a bundle-continuation extrude."""
     from backend.core.cluster_reconcile import MutationReport
-    from backend.core.lattice import make_bundle_continuation, ligate_new_strands
+    from backend.core.lattice import (
+        bundle_continuation_conflicts,
+        ligate_new_strands,
+        make_bundle_continuation,
+    )
 
     cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
+    conflicts = bundle_continuation_conflicts(
+        d, cells, body.length_bp, body.plane, body.offset_nm
+    )
+    if conflicts:
+        cells_text = ", ".join(
+            f"({row}, {col})/{helix_id}" for row, col, helix_id in conflicts
+        )
+        raise ValueError(f"Continuation overlaps existing DNA at {cells_text}.")
     updated = make_bundle_continuation(
         d,
         cells,
@@ -1242,6 +1254,47 @@ def _build_extrude_continuation(d: Design, body: "BundleContinuationRequest"):
         if new_ids:
             updated = ligate_new_strands(updated, new_ids)
     return updated, MutationReport(new_helix_origins=_origins_by_grid_pos(d, updated))
+
+
+def _continuation_validation_summary(before: Design, after: Design) -> dict:
+    before_helices = {helix.id: helix for helix in before.helices}
+    after_helices = {helix.id: helix for helix in after.helices}
+    before_strands = {strand.id: strand for strand in before.strands}
+    after_strands = {strand.id: strand for strand in after.strands}
+    return {
+        "status": "ok",
+        "message": "",
+        "new_helix_ids": sorted(set(after_helices) - set(before_helices)),
+        "extended_helix_ids": sorted(
+            helix_id
+            for helix_id in set(before_helices) & set(after_helices)
+            if after_helices[helix_id] != before_helices[helix_id]
+        ),
+        "new_strand_ids": sorted(set(after_strands) - set(before_strands)),
+        "affected_strand_ids": sorted(
+            strand_id
+            for strand_id in set(before_strands) | set(after_strands)
+            if before_strands.get(strand_id) != after_strands.get(strand_id)
+        ),
+    }
+
+
+@router.post("/design/bundle-continuation/validate", status_code=200)
+def validate_bundle_continuation(body: BundleContinuationRequest) -> dict:
+    """Dry-run the exact continuation builder without state/history mutation."""
+    design = design_state.get_or_404()
+    try:
+        updated, _ = _build_extrude_continuation(design, body)
+    except ValueError as exc:
+        return {
+            "status": "block",
+            "message": str(exc),
+            "new_helix_ids": [],
+            "extended_helix_ids": [],
+            "new_strand_ids": [],
+            "affected_strand_ids": [],
+        }
+    return _continuation_validation_summary(design, updated)
 
 
 @router.post("/design/bundle-continuation", status_code=201)
@@ -8453,19 +8506,24 @@ def revert_to_before_feature(index: int, sub_index: int | None = None) -> dict:
     # overhang overlays WITHOUT this entry (and without every entry after it).
     # Same user-facing contract as snapshot revert; Ctrl-Z restores.
     if entry.feature_type in ("deformation", "cluster_op", "overhang_rotation"):
-        truncated = design.copy_with(feature_log=log[:index])
+        # Start from the no-features state while the COMPLETE log is still
+        # present.  `_seek_feature_log(..., -2)` uses that log to discover
+        # which cluster/overhang overlays must be reset.  Truncating first
+        # loses the only record that a cluster ever moved, so reverting the
+        # first cluster_op removed the row but left its live transform intact.
+        empty_state = _seek_feature_log(design, -2)
+        truncated = empty_state.copy_with(feature_log=log[:index])
         if log[:index]:
             restored = _seek_feature_log(truncated, -1)
         else:
-            # Truncated to an empty log → no features active. _seek_feature_log's
-            # empty-log fast path skips the overlay rebuild, leaving the now-
-            # removed deformation in place, so seek to the -2 (no-features) state
-            # which clears the deformation / cluster / overhang overlays, then
-            # pin the cursor to -1 to match snapshot-revert-to-F0 semantics.
-            restored = _seek_feature_log(truncated, -2).copy_with(feature_log_cursor=-1)
+            # `empty_state` already cleared every overlay using the original
+            # history. Pin the cursor to the snapshot-revert F0 convention.
+            restored = truncated.copy_with(
+                feature_log_cursor=-1, feature_log_sub_cursor=None
+            )
         design_state.set_design(restored)
         report = validate_design(restored)
-        return _design_response_with_geometry(restored, report)
+        return _design_replace_response(design, restored, report)
 
     # Pull pre-state bytes from whichever payload type this is.
     if isinstance(entry, _SnapshotLogEntry):

@@ -26,6 +26,7 @@ import { showOpProgress, hideOpProgress } from '../ui/op_progress.js'
 import { notifyRequestFailure, notifyRequestSuccess, pokeProbe } from '../shared/connection_monitor.js'
 import { docHeaders, docHeadersFor, docKey, docKeyFor } from '../shared/doc_id.js'
 import { activeOperationTiming, beginOperationTiming, finishOperationAfterRender, markOperationTiming, whenOperationIdle } from '../perf/operation_timing.js'
+import { buildVRJobSnapshot, VR_JOB_SNAPSHOT_LIMIT } from '../scene/vr_job_snapshot.js'
 
 const BASE = '/api'
 
@@ -256,6 +257,7 @@ function _busyHeaderForPath(method, path) {
   if (path.startsWith('/design/extrude'))                          return 'Extruding'
   if (path.startsWith('/design/load') || path.startsWith('/design/import')) return 'Loading Design'
   if (path.startsWith('/design/geometry'))                       return 'Loading Design Geometry'
+  if (path === '/vr/launch')                                     return 'Starting SteamVR'
   return 'Working…'
 }
 
@@ -1154,6 +1156,18 @@ export async function addBundleContinuation({ cells, lengthBp, plane = 'XY', off
     ligate_adjacent: ligateAdjacent,
   })
   return _syncFromDesignResponse(json)
+}
+
+/** Dry-run the exact continuation builder; never updates the design/store. */
+export async function validateBundleContinuation({ cells, lengthBp, plane = 'XY', offsetNm = 0, strandFilter = 'both', ligateAdjacent = true }) {
+  return _request('POST', '/design/bundle-continuation/validate', {
+    cells,
+    length_bp: lengthBp,
+    plane,
+    offset_nm: offsetNm,
+    strand_filter: strandFilter,
+    ligate_adjacent: ligateAdjacent,
+  })
 }
 
 export async function createDesign(name = 'Untitled', latticeType = 'HONEYCOMB') {
@@ -3094,6 +3108,13 @@ export async function putNucleotideTransform(body) {
   return _syncFromDesignResponse(json, { skipGeometry: json?.geometry_unchanged === true })
 }
 
+/** Persist an exact Base/End/Domain/Strand transform scope atomically. Every
+ * residue pose is committed under one feature-log entry and one undo step. */
+export async function putNucleotideTransforms(transforms) {
+  const json = await _request('PUT', '/design/nucleotide-transforms', { transforms })
+  return _syncFromDesignResponse(json, { skipGeometry: json?.geometry_unchanged === true })
+}
+
 export async function deleteNucleotideTransform(transformId) {
   const json = await _request('DELETE', `/design/nucleotide-transform/${transformId}`)
   return _syncFromDesignResponse(json, { skipGeometry: json?.geometry_unchanged === true })
@@ -3273,7 +3294,14 @@ export async function revertToBeforeFeature(index, subIndex = null) {
     ? `/design/features/${index}/revert`
     : `/design/features/${index}/revert?sub_index=${subIndex}`
   const json = await _request('POST', path)
-  const result = await _syncFromDesignResponse(json)
+  // Delta-only entries (notably move/rotate) can revert without changing
+  // topology. Route those responses through the same in-place renderer paths
+  // as delete, seek, edit, undo, and redo; a plain design sync deliberately
+  // does not touch the instance matrices.
+  let result
+  if (json?.diff_kind === 'cluster_only')       result = await _syncClusterOnlyDiff(json)
+  else if (json?.diff_kind === 'positions_only') result = await _syncPositionsOnlyDiff(json)
+  else                                          result = await _syncFromDesignResponse(json)
   _clearStaleSelections()
   return result
 }
@@ -4192,6 +4220,124 @@ export async function getSystemResources(devices = '0') {
   } finally {
     if (_systemResourcesInflight.get(key) === request) _systemResourcesInflight.delete(key)
   }
+}
+
+/** Local native-OpenXR companion used when the browser has no immersive WebXR
+ * bridge (notably stock Firefox/Chromium on Linux). These endpoints are
+ * localhost-only and never mutate the active design. */
+export async function getVRStatus() {
+  return _request('GET', '/vr/status', undefined, { suppressBusy: true })
+}
+
+export async function getVREvent() {
+  return _request('GET', '/vr/event', undefined, { suppressBusy: true })
+}
+
+export async function sendVRFeedback(body) {
+  return _request('POST', '/vr/feedback', body, { suppressBusy: true })
+}
+
+export async function sendVRToolFeedback(body) {
+  return _request('POST', '/vr/tool-feedback', body, { suppressBusy: true })
+}
+
+export async function sendVRPlaneFeedback(body) {
+  return _request('POST', '/vr/plane-feedback', body, { suppressBusy: true })
+}
+
+export async function sendVRToolPreflightFeedback(body) {
+  return _request('POST', '/vr/tool-preflight-feedback', body, { suppressBusy: true })
+}
+
+export async function sendVRToolExecutionFeedback(body) {
+  return _request('POST', '/vr/tool-execution-feedback', body, { suppressBusy: true })
+}
+
+export async function sendVRJobsFeedback(body) {
+  return _request('POST', '/vr/jobs-feedback', body, { suppressBusy: true })
+}
+
+export async function sendVRVisualizationFeedback(body) {
+  return _request('POST', '/vr/visualization-feedback', body, { suppressBusy: true })
+}
+
+export async function startSteamVR() {
+  return _request('POST', '/vr/runtime/start', undefined, { timeoutMs: 30000 })
+}
+
+/** Read the same canonical, document-scoped unified job list used by the desktop.
+ * Returns null on transport failure so the native viewer can retain its last
+ * complete revision and expose its age instead of replacing it with false emptiness. */
+export async function fetchVRJobSnapshot(companionState = {}) {
+  const sourcePath = globalThis.localStorage?.getItem(docKey('nadoc:workspace-path')) || null
+  const nodes = await listSimJobs(sourcePath, false)
+  if (!Array.isArray(nodes)) return null
+  const requestedActive = {
+    engine: companionState.active_job_engine ?? null,
+    id: companionState.active_job_id ?? null,
+  }
+  const jobs = buildVRJobSnapshot(nodes, VR_JOB_SNAPSHOT_LIMIT, requestedActive)
+  const active = jobs.some(row =>
+    row.engine === requestedActive.engine && row.job_id === requestedActive.id)
+    ? requestedActive : { engine: null, id: null }
+  return {
+    jobs_snapshot_total: nodes.length,
+    jobs,
+    active_job_engine: active.engine,
+    active_job_id: active.id,
+    representation: ['cylinders', 'full', 'ballstick', 'stick'].includes(
+      companionState.representation,
+    ) ? companionState.representation : 'full',
+    coloring: ['strand', 'base', 'cluster', 'cpk'].includes(companionState.coloring)
+      ? companionState.coloring : 'strand',
+    visualization_mode: typeof companionState.visualization_mode === 'string'
+      ? companionState.visualization_mode : 'none',
+    visualization_points: Array.isArray(companionState.visualization_points)
+      ? companionState.visualization_points : [],
+  }
+}
+
+/** Publish one successful unified-list refresh to a running native viewer. */
+export async function refreshNativeVRJobs(companionState = {}) {
+  const snapshot = await fetchVRJobSnapshot(companionState)
+  if (!snapshot) return null
+  return sendVRJobsFeedback(snapshot)
+}
+
+/** Publish only the active desktop visualization. Native job navigation is archived,
+ * so the live VR loop no longer fetches the unified job tree every 1.5 seconds. */
+export async function refreshNativeVRVisualization(companionState = {}) {
+  return sendVRVisualizationFeedback({
+    representation: ['cylinders', 'full', 'ballstick', 'stick'].includes(
+      companionState.representation,
+    ) ? companionState.representation : 'full',
+    coloring: ['strand', 'base', 'cluster', 'cpk'].includes(companionState.coloring)
+      ? companionState.coloring : 'strand',
+    visualization_mode: typeof companionState.visualization_mode === 'string'
+      ? companionState.visualization_mode : 'none',
+    visualization_points: Array.isArray(companionState.visualization_points)
+      ? companionState.visualization_points : [],
+  })
+}
+
+export async function launchNativeVR(body) {
+  // Native job navigation is archived while the hybrid UI focuses on display.
+  // Launch immediately with only the current visualization overlay.
+  const browserRequestedAtMs = Date.now()
+  return _request('POST', '/vr/launch', {
+    ...body,
+    browser_requested_at_ms: browserRequestedAtMs,
+    job_snapshot_ms: 0,
+    jobs_snapshot_available: false,
+    jobs_snapshot_total: 0,
+    jobs: [],
+    active_job_engine: null,
+    active_job_id: null,
+  }, { timeoutMs: 120000 })
+}
+
+export async function stopNativeVR() {
+  return _request('POST', '/vr/stop', undefined, { suppressBusy: true })
 }
 
 /** Recommended NAMD Advanced settings for the active design on THIS machine

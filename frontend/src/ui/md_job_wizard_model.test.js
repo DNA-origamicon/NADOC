@@ -26,8 +26,10 @@ import {
   paramLabel,
   paramRows,
   partNameFor,
+  pinnedLadderIntegrator,
   planPayload,
   presetSummary,
+  touchedAfterSettingField,
   productionColumns,
   productionComparison,
   productionField,
@@ -480,6 +482,81 @@ describe('presetSummary', () => {
   it('carries the unavailable reason rather than hiding the option', () => {
     const s = presetSummary({ id: 'gbis', available: false, unavailable_reason: 'needs a CPU build' }, plan())
     expect(s).toMatchObject({ available: false, unavailableReason: 'needs a CPU build' })
+  })
+})
+
+describe('pinnedLadderIntegrator', () => {
+  it('pins the displayed 4 fs default on a completely untouched wizard', () => {
+    // This is the bug: `fast` defaults True server-side, so the dropdown shows 4 fs with
+    // NOTHING touched. Without this, that default never reached the request, so a
+    // declash design's tab-3 preview (and the job it created) silently ran the backend's
+    // auto-capped 2 fs while the control kept displaying 4.
+    expect(pinnedLadderIntegrator({})).toEqual({
+      relax_timestep_fs: 4, relax_rigid_bonds: 'all', relax_hmr: true,
+    })
+  })
+
+  it('resolves the SAME on the very first call, before any plan has ever loaded', () => {
+    // No `plan` argument exists at all — this must not depend on one. The old
+    // closure-based attempt read `plan.request.fast.value`, which does not exist yet on
+    // the first request; treating that as "fast is off" would have pinned 2 fs and
+    // gotten it echoed back as the resolved value on every call after, self-reinforcing.
+    expect(pinnedLadderIntegrator({}).relax_timestep_fs).toBe(4)
+  })
+
+  it('follows an explicitly touched `fast: false` down to the 2 fs tier', () => {
+    expect(pinnedLadderIntegrator({ fast: false })).toEqual({
+      relax_timestep_fs: 2, relax_rigid_bonds: 'all', relax_hmr: false,
+    })
+  })
+
+  it('never overwrites an explicit user choice on any of the three axes', () => {
+    expect(pinnedLadderIntegrator({ relax_timestep_fs: 1 })).toEqual({
+      relax_rigid_bonds: 'none', relax_hmr: false,
+    })
+    expect(pinnedLadderIntegrator({
+      relax_timestep_fs: 4, relax_rigid_bonds: 'none', relax_hmr: false,
+    })).toEqual({})
+  })
+
+  it('derives rigid bonds / HMR from an explicit timestep the same way the fields do', () => {
+    expect(pinnedLadderIntegrator({ relax_timestep_fs: 2 })).toEqual({
+      relax_rigid_bonds: 'all', relax_hmr: false,
+    })
+  })
+})
+
+describe('touchedAfterSettingField', () => {
+  it('plainly sets any ordinary field', () => {
+    expect(touchedAfterSettingField({}, 'padding_nm', 1.5)).toEqual({ padding_nm: 1.5 })
+    expect(touchedAfterSettingField({ padding_nm: 1.0 }, 'fast', true))
+      .toEqual({ padding_nm: 1.0, fast: true })
+  })
+
+  it('setting declash ALSO clears the three dependent integrator axes', () => {
+    // A 2 fs / rigidBonds-none choice made while declash was on must not go on being
+    // sent after the user forces it off — it has to re-resolve for the new state.
+    const touched = {
+      declash: true, relax_timestep_fs: 2, relax_rigid_bonds: 'none', relax_hmr: false,
+      padding_nm: 1.5,   // unrelated field: untouched by the clear
+    }
+    expect(touchedAfterSettingField(touched, 'declash', false)).toEqual({
+      declash: false, padding_nm: 1.5,
+    })
+  })
+
+  it('clears the dependent axes even if declash is being set for the first time', () => {
+    expect(touchedAfterSettingField(
+      { relax_timestep_fs: 2 }, 'declash', true,
+    )).toEqual({ declash: true })
+  })
+
+  it('setting one of the dependent axes itself does not clear its siblings', () => {
+    // Only the declash control triggers the reset — editing relax_timestep_fs by hand
+    // is an ordinary, independent choice.
+    expect(touchedAfterSettingField(
+      { relax_rigid_bonds: 'all', relax_hmr: true }, 'relax_timestep_fs', 4,
+    )).toEqual({ relax_rigid_bonds: 'all', relax_hmr: true, relax_timestep_fs: 4 })
   })
 })
 

@@ -607,3 +607,18 @@ def append_capture_strands(
         "min_dist_to_origami_nm": build.min_dist_to_origami_nm,
         "box_nm_grown": box_grown,
     }
+
+
+def capture_bead_count(job) -> int:
+    """Number of NON-design capture particles appended to every frame of *job*.
+
+    Capture strands are appended AFTER the design's nucleotide walk, so every reader
+    that maps design keys onto configuration lines has to be told how many trailing
+    particles to ignore — otherwise ``_protein_lead_offset`` reads the difference as a
+    LEADING protein block and shifts every origami nucleotide onto a capture-bead line.
+    This is the single source of that count; pass it as ``n_trailing_extra``.
+    """
+    built = ((getattr(job, "run_config", None) or {}).get("surface_strands") or {}).get(
+        "built"
+    ) or {}
+    return int(built.get("n_beads") or 0)

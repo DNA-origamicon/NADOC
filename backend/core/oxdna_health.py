@@ -4838,6 +4838,7 @@ def run_oxdna_health_check(
     dnanalysis_bin: str | None = None,
     salt_concentration: float = 0.5,
     temperature: str = "296K",
+    n_trailing_extra: int = 0,
 ) -> OxdnaHealthResult:
     """Evaluate a finished stage's health from its ``last_conf.dat`` + ``energy.dat``.
 
@@ -4849,6 +4850,16 @@ def run_oxdna_health_check(
     ground-truth energy-based H-bond count) when ``dnanalysis_bin`` +
     ``topology_path`` are available, falling back to the geometric proxy
     (``base_pair_retention``) otherwise.
+
+    ``n_trailing_extra`` is the number of NON-design particles appended after the DNA
+    walk — surface capture strands.  It must be passed or every geometric metric here
+    is measured on the wrong particles: ``_protein_lead_offset`` infers a LEADING
+    protein block from ``len(conf) - len(walk)``, so trailing capture beads make it
+    skip that many lines and read the origami off capture-bead coordinates.  On a real
+    664-strand job that reported 574 backbone bonds "over-stretched" at 149.4 units
+    (random pairs in a 242-unit box) for a structure whose true worst bond was 0.93 —
+    and the runner killed the relax over it.  HBList retention is index-independent, so
+    it stayed at 100% and hid the contradiction.
     """
     res = OxdnaHealthResult()
     conf = stage_dir / "last_conf.dat"
@@ -4859,7 +4870,9 @@ def run_oxdna_health_check(
         return res
 
     try:
-        full_map = read_configuration_full(conf, design)
+        full_map = read_configuration_full(
+            conf, design, n_trailing_extra=n_trailing_extra
+        )
     except Exception as exc:  # noqa: BLE001
         res.passed = False
         res.error = f"failed to read {conf.name}: {exc}"

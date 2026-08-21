@@ -31,7 +31,7 @@ import * as api from '../api/client.js'
 import { ensureLoaded as _ensureFjcLookup } from './ssdna_fjc.js'
 import { deferrableContextMenu } from './right_click_menu.js'
 import { showConfirm } from '../ui/primitives/confirm.js'
-import { clusterMemberFilter } from './cluster_entries.js'
+import { clusterIdForNucleotide, clusterMemberFilter } from './cluster_entries.js'
 import { strandsToSegments, clustersToSegments, domainsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './representation_overrides.js'
 import { normalizeLevel, hoverPreviewTarget, lassoCaptureType, extensionSelectionEntries, extensionContextIds } from './selection_level.js'
 import { buildStrandMenuItems } from '../ui/strand_menu_items.js'
@@ -42,9 +42,16 @@ import {
 } from './base_pick.js'
 import { flexAnchorKey } from './flexible_arcs.js'
 import { selectedCrossoverRefs, selectedEndRefs } from './selection_model.js'
-import { bondRefForCone, coneForBondRef, crossoverRefForArc, endRefForEntry } from './selection_hit_resolver.js'
+import {
+  bondRefForCone, coneForBondRef, crossoverRefForArc, endRefForEntry, vrPrimitiveOwner,
+  vrDeformationPlanePick, vrInitialSelectionOwnerTokens, vrOwnerTokens,
+  vrSelectionAccepted, vrToolTargetSnapshot,
+} from './selection_hit_resolver.js'
 import { selectionHighlightDescriptor } from './selection_highlight_model.js'
 import { referenceStrandInteractionHidden } from './reference_navigation.js'
+import { resolveVREndToolContext } from './vr_tool_context.js'
+import { resolveVRDeformationScope } from './vr_tool_execution_plan.js'
+import { getVRDeformationPlaneFrames } from './deformation_editor.js'
 
 // Kick off the FJC lookup fetch at module load so the linker-config modal
 // opens instantly with the per-bin histograms already cached.
@@ -1662,7 +1669,7 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
  * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldAssignSequence?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onEditStrandSequence, onHideSelection, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getAtomisticRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionStickRenderer, getRegionSurfaceRenderer, onDrillLevel, selectionController } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onEditStrandSequence, onHideSelection, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, getDomainEndTable, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getAtomisticRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionStickRenderer, getRegionSurfaceRenderer, onDrillLevel, selectionController } = opts
   if (!selectionController) throw new TypeError('selection manager requires the canonical selection controller')
   _onEditStrandSequence = onEditStrandSequence ?? null
   _onHideSelection = onHideSelection ?? null
@@ -1712,22 +1719,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // (all-helices) cluster, then any containing cluster. Mirrors the bridge/
   // exclusive membership split via clusterMemberFilter (shared with the gizmo).
   function _resolveClusterId(nuc, design) {
-    const cts = design?.cluster_transforms ?? []
-    if (!cts.length) return null
-    let best = null, bestSize = Infinity
-    for (const c of cts) {
-      if (c.is_default) continue
-      const f = clusterMemberFilter(c, design)
-      if (f && f(nuc)) {
-        const size = c.helix_ids?.length ?? Infinity
-        if (size < bestSize) { best = c; bestSize = size }
-      }
-    }
-    if (best) return best.id
-    const def = cts.find(c => c.is_default && clusterMemberFilter(c, design)?.(nuc))
-    if (def) return def.id
-    const any = cts.find(c => clusterMemberFilter(c, design)?.(nuc))
-    return any?.id ?? null
+    return clusterIdForNucleotide(nuc, design)
   }
 
   function _clusterEntries(clusterId, design, backboneEntries) {
@@ -2324,6 +2316,296 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       _hoverArc = target.arc; _hoverBead = null; _hoverCone = null; _hoverKey = null
       designRenderer.clearPreviewGlow()
       designRenderer.setPreviewArc(target.arc.getPositions?.() ?? [])
+    }
+  }
+
+  /** Project a native-VR stable identity into the existing yellow desktop preview.
+   * This is renderer-only transient state: canonical selection remains untouched. */
+  function _previewVrIdentity(identity) {
+    const state = store.getState()
+    const owner = vrPrimitiveOwner(identity, {
+      geometry: state.currentGeometry,
+      design: state.currentDesign,
+    })
+    _clearHoverPreview()
+    if (!owner) return null
+
+    const backboneEntries = designRenderer.getBackboneEntries()
+    let entries = []
+    let directGlowEntries = null
+    if (owner.kind === 'atom' || owner.kind === 'atom_bond_base') {
+      if (_selLevel === 'base' || _selLevel === 'default') {
+        directGlowEntries = getAtomisticRenderer?.()
+          ?.selectionAtomEntries?.([owner.nucleotide], { scale: 1.35 }) ?? []
+      }
+    } else if (owner.kind === 'nucleotide') {
+      const entry = backboneEntries.find(candidate => candidate.nuc === owner.nucleotide)
+        ?? backboneEntries.find(candidate =>
+          baseKey(candidate.nuc, candidate._copy) === owner.ref.key)
+      if (!entry) return owner
+      if (_selLevel === 'base') entries = [entry]
+      else if (_selLevel === 'end') {
+        if (entry.nuc.is_five_prime || entry.nuc.is_three_prime) entries = [entry]
+      } else if (_selLevel === 'strand' || _selLevel === 'domain' || _selLevel === 'cluster') {
+        entries = _previewSetForLevel(entry)?.beads ?? []
+      } else if (_selLevel === 'default') {
+        entries = backboneEntries.filter(item => item.nuc.strand_id === entry.nuc.strand_id)
+      }
+    } else if (owner.kind === 'backbone_bond' || owner.kind === 'atom_bond') {
+      const fromEntry = backboneEntries.find(candidate =>
+        baseKey(candidate.nuc, candidate._copy) === owner.ref.fromKey)
+      if (fromEntry && (_selLevel === 'default' || _selLevel === 'strand' ||
+          _selLevel === 'cluster')) {
+        entries = _selLevel === 'default'
+          ? backboneEntries.filter(item => item.nuc.strand_id === fromEntry.nuc.strand_id)
+          : (_previewSetForLevel(fromEntry)?.beads ?? [])
+      }
+    } else if (owner.kind === 'domain') {
+      if (!['base', 'end', 'xover'].includes(_selLevel)) {
+        entries = backboneEntries.filter(entry =>
+          entry.nuc.strand_id === owner.ref.strandId &&
+          (entry.nuc.domain_index ?? 0) === owner.ref.domainIndex)
+      }
+    } else if (owner.kind === 'crossover' &&
+               (_selLevel === 'xover' || _selLevel === 'default')) {
+      const arc = getUnfoldView?.()?.getArcEntries?.()
+        ?.find(candidate => candidate.crossover_id === owner.ref.id)
+      if (arc) {
+        _hoverArc = arc
+        _hoverKey = `vr:${identity}`
+        designRenderer.setPreviewArc(arc.getPositions?.() ?? [])
+      }
+      return owner
+    } else if (((owner.kind === 'extra_base' && _selLevel === 'base') ||
+                owner.kind === 'flexible_base' || owner.kind === 'linker_base') &&
+               (_selLevel === 'base' || _selLevel === 'default')) {
+      const candidate = _baseCandidates().find(item => item.key === owner.ref.key)
+      if (candidate) directGlowEntries = [_baseGlowEntry(candidate)]
+    } else if (owner.kind === 'extra_base' && _selLevel === 'xover') {
+      const arc = getUnfoldView?.()?.getArcEntries?.()
+        ?.find(candidate => candidate.crossover_id === owner.connectionId)
+      if (arc) {
+        _hoverArc = arc
+        _hoverKey = `vr:${identity}`
+        designRenderer.setPreviewArc(arc.getPositions?.() ?? [])
+      }
+      return owner
+    }
+
+    if (entries.length || directGlowEntries?.length) {
+      _hoverKey = `vr:${identity}`
+      designRenderer.setPreviewGlow(directGlowEntries ?? entries.map(entry => ({
+          pos: _instWorld(entry.instMesh, entry.id, new THREE.Vector3()),
+        })))
+    }
+    return owner
+  }
+
+  /** Route a native Select event through the same level-aware handlers as mouse hits. */
+  function _selectVrIdentity(identity) {
+    const state = store.getState()
+    const owner = vrPrimitiveOwner(identity, {
+      geometry: state.currentGeometry,
+      design: state.currentDesign,
+    })
+    if (!owner) return null
+    const backboneEntries = designRenderer.getBackboneEntries()
+    const coneEntries = designRenderer.getConeEntries()
+    let entry = null
+    let arc = null
+    let accepted = false
+
+    if (owner.kind === 'nucleotide' || owner.kind === 'atom' ||
+        owner.kind === 'atom_bond_base') {
+      entry = backboneEntries.find(candidate => candidate.nuc === owner.nucleotide)
+        ?? backboneEntries.find(candidate =>
+          baseKey(candidate.nuc, candidate._copy) === owner.ref.key)
+      accepted = vrSelectionAccepted(owner.kind, _selLevel, {
+        hasTarget: !!entry,
+        isTerminal: !!entry && (entry.nuc.is_five_prime || entry.nuc.is_three_prime),
+        hasCluster: !!entry && !!_resolveClusterId(entry.nuc, state.currentDesign),
+      })
+      if (entry) _v2HandleBead(entry, backboneEntries, coneEntries)
+    } else if (owner.kind === 'backbone_bond' || owner.kind === 'atom_bond') {
+      const reversedRef = {
+        ...owner.ref,
+        fromKey: owner.ref.toKey,
+        toKey: owner.ref.fromKey,
+      }
+      const cone = coneForBondRef(coneEntries, owner.ref)
+        ?? coneForBondRef(coneEntries, reversedRef)
+      const representative = cone?.fromNuc ?? owner.fromNucleotide
+      accepted = vrSelectionAccepted(owner.kind, _selLevel, {
+        hasTarget: !!cone,
+        hasCluster: !!cone && !!representative &&
+          !!_resolveClusterId(representative, state.currentDesign),
+      })
+      if (cone) {
+        _v2HandleCone(
+          cone, cone.strandId ?? owner.ref.strandId, backboneEntries, coneEntries)
+      }
+    } else if (owner.kind === 'domain') {
+      entry = backboneEntries.find(candidate =>
+        candidate.nuc.strand_id === owner.ref.strandId &&
+        (candidate.nuc.domain_index ?? 0) === owner.ref.domainIndex)
+      accepted = vrSelectionAccepted(owner.kind, _selLevel, {
+        hasTarget: !!entry,
+        isTerminal: !!entry && (entry.nuc.is_five_prime || entry.nuc.is_three_prime),
+        hasCluster: !!entry && !!_resolveClusterId(entry.nuc, state.currentDesign),
+      })
+      if (entry) _v2HandleBead(entry, backboneEntries, coneEntries)
+    } else if (owner.kind === 'crossover') {
+      arc = getUnfoldView?.()?.getArcEntries?.()
+        ?.find(candidate => candidate.crossover_id === owner.ref.id)
+      const representative = arc?.fromNuc ?? arc?.toNuc
+      accepted = vrSelectionAccepted(owner.kind, _selLevel, {
+        hasTarget: !!arc,
+        hasCluster: !!arc && !!representative &&
+          !!_resolveClusterId(representative, state.currentDesign),
+      })
+      if (arc) _v2HandleArc(arc, backboneEntries, coneEntries)
+    } else if (owner.kind === 'extra_base') {
+      if (_selLevel === 'xover') {
+        arc = getUnfoldView?.()?.getArcEntries?.()
+          ?.find(candidate => candidate.crossover_id === owner.connectionId)
+        accepted = !!arc
+        if (arc) _v2HandleArc(arc, backboneEntries, coneEntries)
+      } else {
+        const candidate = _baseCandidates().find(item => item.key === owner.ref.key)
+        accepted = vrSelectionAccepted(owner.kind, _selLevel, {
+          hasTarget: !!candidate,
+        })
+        if (accepted) _selectBaseKey(owner.ref.key)
+      }
+    } else if ((owner.kind === 'flexible_base' || owner.kind === 'linker_base') &&
+               vrSelectionAccepted(owner.kind, _selLevel)) {
+      accepted = true
+      _selectBaseKey(owner.ref.key)
+    }
+
+    const selectedRef = selectionController.getState().primary
+    const nucleotide = owner.nucleotide ?? owner.fromNucleotide ??
+      entry?.nuc ?? arc?.fromNuc ?? arc?.toNuc
+    const key = owner.ref?.key ?? (entry ? baseKey(entry.nuc, entry._copy) : null)
+    const selected = accepted && !!selectedRef && (
+      (selectedRef.kind === 'strand' && selectedRef.id === nucleotide?.strand_id) ||
+      (selectedRef.kind === 'domain' && selectedRef.strandId === nucleotide?.strand_id &&
+        selectedRef.domainIndex === (nucleotide?.domain_index ?? 0)) ||
+      (selectedRef.kind === 'cluster' && selectedRef.id ===
+        _resolveClusterId(nucleotide, state.currentDesign)) ||
+      ((selectedRef.kind === 'base' || selectedRef.kind === 'end') &&
+        selectedRef.key === key) ||
+      (selectedRef.kind === 'bond' && owner.ref?.kind === 'bond' &&
+        ((selectedRef.fromKey === owner.ref.fromKey &&
+          selectedRef.toKey === owner.ref.toKey) ||
+         (selectedRef.fromKey === owner.ref.toKey &&
+          selectedRef.toKey === owner.ref.fromKey))) ||
+      (selectedRef.kind === 'crossover' &&
+        (owner.kind === 'crossover' || owner.kind === 'extra_base') &&
+        selectedRef.id === (owner.kind === 'extra_base' ? owner.connectionId : owner.ref.id))
+    )
+    const ownerTokens = vrOwnerTokens({ selected, selectedRef, owner, nucleotide, key })
+    return {
+      owner, accepted, selected, ownerTokens,
+      selectionKind: selected ? selectedRef.kind : 'none',
+    }
+  }
+
+  /** Replace canonical selection with the distinct refs touched by a VR Selection Volume. */
+  function _selectVrIdentities(identities = []) {
+    const bounded = [...new Set(
+      identities.filter(identity => typeof identity === 'string' && identity),
+    )].slice(0, 16)
+    if (bounded.length === 0) {
+      _clearAll()
+      return {
+        owner: null,
+        accepted: true,
+        selected: false,
+        ownerTokens: [],
+        selectionKind: 'none',
+        identity: null,
+        selectionCount: 0,
+        selectedIdentities: [],
+        selectedOwnerTokens: [],
+      }
+    }
+    if (bounded.length === 1) {
+      const result = _selectVrIdentity(bounded[0])
+      return result ? {
+        ...result,
+        identity: bounded[0],
+        selectedIdentities: result.accepted && result.selected ? [bounded[0]] : [],
+        selectedOwnerTokens: result.accepted && result.selected && result.ownerTokens?.[0]
+          ? [result.ownerTokens[0]] : [],
+      } : null
+    }
+
+    const selections = new Map()
+    // Every overlap is interpreted from the same pre-pull desktop drill state.
+    // Otherwise an earlier hit could mutate Auto/Drill and change the meaning of a
+    // later hit in the same physical Selection Volume.
+    const volumeMode = _mode
+    const volumeStrandId = _strandId
+    for (const identity of bounded) {
+      selectionController.clear()
+      _mode = volumeMode
+      _strandId = volumeStrandId
+      const result = _selectVrIdentity(identity)
+      const ref = selectionController.getState().primary ?? null
+      if (!result?.accepted || !result.selected || !ref) continue
+      const key = JSON.stringify(ref)
+      if (!selections.has(key)) selections.set(key, { identity, ref, result })
+    }
+    selectionController.replace([...selections.values()].map(value => value.ref))
+    if (selections.size === 1) {
+      const only = selections.values().next().value
+      return {
+        ...only.result,
+        identity: only.identity,
+        selected: true,
+        selectedIdentities: [only.identity],
+        selectedOwnerTokens: only.result.ownerTokens?.[0]
+          ? [only.result.ownerTokens[0]] : [],
+      }
+    }
+    return {
+      accepted: selections.size > 0,
+      selected: false,
+      ownerTokens: [],
+      selectionKind: 'none',
+      identity: bounded[0] ?? null,
+      selectionCount: selections.size,
+      selectedIdentities: [...selections.values()].map(value => value.identity),
+      selectedOwnerTokens: [...new Set(
+        [...selections.values()].map(value => value.result.ownerTokens?.[0]).filter(Boolean),
+      )],
+    }
+  }
+
+  /** Resolve an action-time native tool target against the browser's current
+   * canonical selection. The exact primitive remains transient session metadata;
+   * it is never promoted to a persistent Atom/design ref. At least one opaque
+   * owner alias must still name the current canonical ref, preventing a delayed
+   * tool event from acting on a newer selection of the same kind. */
+  function _resolveVRToolTargetSnapshot({ identity, selectionKind, ownerTokens } = {}) {
+    const selectedRef = selectionController.getState().primary ?? null
+    const state = store.getState()
+    const target = vrToolTargetSnapshot({
+      identity, selectionKind, ownerTokens, selectedRef,
+      geometry: state.currentGeometry,
+      design: state.currentDesign,
+    })
+    if (!target || selectedRef?.kind !== 'end') return target
+    const resolution = resolveVREndToolContext(selectedRef, {
+      geometry: state.currentGeometry,
+      design: state.currentDesign,
+      domainEnds: getDomainEndTable?.() ?? [],
+    })
+    return {
+      ...target,
+      toolContext: resolution.context,
+      toolContextReason: resolution.reason,
     }
   }
 
@@ -4530,13 +4812,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   // ── Re-apply highlights after scene rebuild ──────────────────────────────
 
-  store.subscribe((newState, prevState) => {
-    // Any change that triggers a design_renderer rebuild (geometry, design topology,
-    // strandGroups) invalidates our cached entry references and clears glow.
-    // Re-apply highlights so they survive view transitions and cross-tab syncs.
-    if (newState.currentGeometry === prevState.currentGeometry &&
-        newState.currentDesign   === prevState.currentDesign   &&
-        newState.strandGroups    === prevState.strandGroups) return
+  // Every cached entry reference points into the disposed scene graph after a
+  // design_renderer rebuild, and the glow layer has been cleared. Drop them and let
+  // the canonical projector re-resolve every ref against the fresh entries.
+  function _reresolveAfterRebuild(state) {
     _strandEntries     = []
     _strandConeEntries = []
     _strandArcEntries  = []
@@ -4548,10 +4827,25 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _multiDomainEntries = []
     _multiOverhangEntries = []
     _multiExtensionEntries = []
-    _syncCanonicalHighlights(newState, { geometryChanged: true })
+    _syncCanonicalHighlights(state, { geometryChanged: true })
     // Measurement anchors hold live entries and therefore reset after a rebuild.
     if (_ctrlBeads.length > 0) { _ctrlBeads = []; _notifyCtrlBeadsChange() }
+  }
+
+  store.subscribe((newState, prevState) => {
+    // Any change that triggers a design_renderer rebuild (geometry, design topology,
+    // strandGroups) invalidates our cached entry references and clears glow.
+    // Re-apply highlights so they survive view transitions and cross-tab syncs.
+    if (newState.currentGeometry === prevState.currentGeometry &&
+        newState.currentDesign   === prevState.currentDesign   &&
+        newState.strandGroups    === prevState.strandGroups) return
+    _reresolveAfterRebuild(newState)
   })
+
+  // A DISPLAY-ONLY rebuild (the oxDNA capture-strand injection) invalidates exactly
+  // the same references without touching the store, so the subscription above never
+  // fires and the selection halo would vanish on every surface-strand edit.
+  window.addEventListener('nadoc:display-rebuilt', () => _reresolveAfterRebuild(store.getState()))
 
   // Canonical refs are the source of truth. Keep renderer adapters synchronized for
   // programmatic/controller mutations as well as pointer gestures.
@@ -4624,6 +4918,54 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     /** The active selectionLevel ('default'|'cluster'|'strand'|'domain'|'end'|'xover'). */
     getSelectionLevel() { return _selLevel },
+
+    /** Read-only native-VR hover projection; never dispatches a selection intent. */
+    previewVRIdentity(identity) { return _previewVrIdentity(identity) },
+
+    /** Level-aware native Select routed through the canonical selection controller. */
+    selectVRIdentity(identity) { return _selectVrIdentity(identity) },
+
+    /** Bounded controller Selection Volume routed into canonical multi-selection. */
+    selectVRIdentities(identities) { return _selectVrIdentities(identities) },
+
+    /** Read-only canonical target for the browser-authoritative VR tool shell. */
+    getPrimarySelectionRef() { return selectionController.getState().primary ?? null },
+
+    /** Validate the immutable target snapshot attached to one native tool intent. */
+    resolveVRToolTargetSnapshot(snapshot) { return _resolveVRToolTargetSnapshot(snapshot) },
+
+    /** Resolve a model hit to one exact global bp without changing selection. */
+    resolveVRDeformationPlanePick(identity) {
+      const state = store.getState()
+      const pick = vrDeformationPlanePick(identity, {
+        geometry: state.currentGeometry,
+        design: state.currentDesign,
+      })
+      if (!pick.resolved) return pick
+      const selectedRef = selectionController.getState().primary ?? null
+      const scope = resolveVRDeformationScope(selectedRef, {
+        design: state.currentDesign,
+        geometry: state.currentGeometry,
+      })
+      if (!scope.resolved) {
+        return { resolved: false, reason: 'plane_frame_unavailable' }
+      }
+      const frames = getVRDeformationPlaneFrames(pick.bp, scope.clusterIds)
+      return frames ? { ...pick, frame: frames.natural, expandedFrame: frames.expanded }
+        : { resolved: false, reason: 'plane_frame_unavailable' }
+    },
+
+    /** Opaque canonical owner aliases used to seed a native viewer launched after
+     *  the desktop selection was made. No renderer identity crosses this boundary. */
+    getVRInitialSelectionOwnerTokens() {
+      return vrInitialSelectionOwnerTokens(selectionController.getState().primary)
+    },
+
+    /** Canonical kind accompanies opaque aliases only so the native tool shell can
+     *  enforce capability; it is never sufficient to identify or mutate a target. */
+    getVRInitialSelectionKind() {
+      return selectionController.getState().primary?.kind ?? 'none'
+    },
 
     /** Clear committed selection and its projected renderer state. */
     clearSelection() { _clearAll() },

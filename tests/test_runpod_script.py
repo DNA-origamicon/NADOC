@@ -513,8 +513,9 @@ class TestRelaxationEarlyStop:
     would pass any text assertion and cost $30.
     """
 
-    # Two stages x three chunks. Stage 01 is well-restrained (k=0.5, Tier-B eligible);
-    # stage 02 is the fragile low-restraint one (k=0.01) that ONLY Tier A may skip.
+    # Two stages x three chunks. Stage 01 is well-restrained (k=0.5); stage 02 is the
+    # fragile low-restraint one (k=0.01) — both equally eligible now (no tiers, no
+    # restraint-scale gate; the WC criterion holds the fragile stage directly).
     STEPS = [
         ChainStep("m", is_minimization=True),
         ChainStep("s_01_k0p5_p10"),
@@ -541,7 +542,7 @@ class TestRelaxationEarlyStop:
         """Records every conf it is invoked for, and writes the full checkpoint set.
 
         `ran.txt` is the oracle: a bridged chunk must NEVER appear in it. Writes .dcd
-        too, because Tier A's health step is gated on the trajectory existing.
+        too, because the node health step is gated on the trajectory existing.
         """
         p = tmp_path / "fake_namd"
         p.write_text(
@@ -567,14 +568,14 @@ class TestRelaxationEarlyStop:
         cut = tmp_path / "nadoc_cutoff_eval.py"
         cut.write_text(f"import sys\nsys.exit({0 if plateau else 1})\n")
         health = tmp_path / "nadoc_health_eval.py"
-        # Mirrors the real one: writes the wc.json Tier A gates on.
+        # Mirrors the real one: writes the wc.json the cutoff evaluator gates on.
         health.write_text(
             "import sys\n"
             "out = sys.argv[sys.argv.index('--out') + 1]\n"
             "open(out, 'w').write('[0.98, 0.98, 0.98]')\n"
         )
 
-    def _run(self, tmp_path, *, plateau, tier, **kw):
+    def _run(self, tmp_path, *, plateau, **kw):
         self._fake_evaluators(tmp_path, plateau=plateau)
         script = tmp_path / "chain.sh"
         script.write_text(
@@ -585,7 +586,6 @@ class TestRelaxationEarlyStop:
                 threads=2,
                 manifest=self.MANIFEST,
                 early_stop_relax=True,
-                early_stop_tier=tier,
                 name_stem="s",
                 **kw,
             )
@@ -605,14 +605,17 @@ class TestRelaxationEarlyStop:
         )
         return proc, ran
 
-    def test_tier_a_plateau_bridges_and_the_skipped_chunks_never_run(self, tmp_path):
-        """THE test. A plateau at _p10 must mean _p50 and _p100 are never executed.
+    def test_plateau_bridges_and_the_skipped_chunks_never_run(self, tmp_path):
+        """THE test. A plateau at _p10 must mean _p50 and _p100 are never executed —
+        for BOTH stages, including the low-restraint k=0.01 one. No tiers: there is
+        no restraint-scale gate any more, so the WC-gated evaluator alone decides
+        every non-final chunk, matching the local runner exactly.
 
         This is the whole $33 of savings. It works only because the bridge writes the
         skipped chunks' .coor, which `run_step`'s idempotent skip-guard then trips on
         — the resume trick and the early-stop trick are the same trick.
         """
-        proc, ran = self._run(tmp_path, plateau=True, tier="A")
+        proc, ran = self._run(tmp_path, plateau=True)
         assert proc.returncode == 0, proc.stdout + proc.stderr
         assert (tmp_path / "nadoc_status").read_text().strip() == "completed"
 
@@ -630,27 +633,9 @@ class TestRelaxationEarlyStop:
 
     def test_hold_runs_every_chunk(self, tmp_path):
         """Fail-safe: no plateau => nothing is skipped. Correct, and expensive."""
-        proc, ran = self._run(tmp_path, plateau=False, tier="A")
+        proc, ran = self._run(tmp_path, plateau=False)
         assert proc.returncode == 0, proc.stdout + proc.stderr
         assert ran == [s.name for s in self.STEPS], ran
-
-    def test_tier_b_refuses_to_skip_the_low_restraint_stage(self, tmp_path):
-        """Tier B may skip k=0.5 but NEVER k=0.01.
-
-        Below k=0.1 base-pairing keeps degrading after the energy flattens, so an
-        energy-only plateau there would bridge away a stage that had not actually
-        finished relaxing. This gate is why Tier B cannot pay for the 3x6x400 run:
-        it structurally cannot touch half the ladder.
-        """
-        proc, ran = self._run(tmp_path, plateau=True, tier="B")
-        assert proc.returncode == 0, proc.stdout + proc.stderr
-        assert ran == [
-            "m",
-            "s_01_k0p5_p10",  # plateaued -> bridged
-            "s_02_k0p01_p10",
-            "s_02_k0p01_p50",
-            "s_02_k0p01_p100",  # never eligible
-        ], ran
 
     def test_off_by_default_emits_no_evaluator_call(self):
         """A job that didn't opt in must render the exact script it rendered before."""
@@ -663,29 +648,17 @@ class TestRelaxationEarlyStop:
         )
         assert "nadoc_cutoff_eval.py" not in s
 
-    def test_no_manifest_means_no_skipping(self):
-        """Fail-safe: without scales we cannot judge restraint, so we run everything."""
+    def test_early_stop_needs_no_manifest(self):
+        """Eligibility is purely name-based (chunk suffix / production pattern), not
+        restraint-scale — so it works identically with no manifest at all."""
         s = render_chain_script(
             steps=self.STEPS,
             remote_dir="/w",
             namd_bin="/n",
             threads=2,
             early_stop_relax=True,
-            early_stop_tier="A",
         )
-        assert "nadoc_cutoff_eval.py" not in s
-
-    def test_rejects_an_unknown_tier(self):
-        with pytest.raises(ValueError, match="must be 'A' or 'B'"):
-            render_chain_script(
-                steps=self.STEPS,
-                remote_dir="/w",
-                namd_bin="/n",
-                threads=2,
-                manifest=self.MANIFEST,
-                early_stop_relax=True,
-                early_stop_tier="Z",
-            )
+        assert "nadoc_cutoff_eval.py" in s
 
 
 class TestLiveMetricsCollector:

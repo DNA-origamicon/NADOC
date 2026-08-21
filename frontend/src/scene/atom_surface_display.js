@@ -620,9 +620,8 @@ export function initAtomSurfaceDisplay({
     window.addEventListener(_evt, (e) => {
       const kind = e.detail?.kind
       if (!(kind in _BUSY_TEXT)) return
-      // The overlay has no route for this (mode, kind) — a NAMD flexibility map in a
-      // heavy rep, which md_viz_adapter leaves unmapped.  It used to fail silently and
-      // leave the DESIGN's equilibrium structure on screen looking like a result.
+      // An overlay without a route must never silently leave the design's equilibrium
+      // structure on screen looking like a simulation result.
       if (e.detail.unsupported) {
         dismissToast()
         showToast(

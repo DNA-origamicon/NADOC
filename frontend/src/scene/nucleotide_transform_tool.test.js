@@ -2,9 +2,12 @@ import { describe, it, expect } from 'vitest'
 import * as THREE from 'three'
 import { vi } from 'vitest'
 
-vi.mock('../api/client.js', () => ({ putNucleotideTransform: vi.fn() }))
+vi.mock('../api/client.js', () => ({
+  putNucleotideTransform: vi.fn(),
+  putNucleotideTransforms: vi.fn(),
+}))
 
-import { putNucleotideTransform } from '../api/client.js'
+import { putNucleotideTransform, putNucleotideTransforms } from '../api/client.js'
 import { abstractPreviewUpdate, abstractResidueInfo, initNucleotideTransformTool, transformBodyForTarget, transformTargetsForSelection } from './nucleotide_transform_tool.js'
 
 describe('transformTargetsForSelection', () => {
@@ -32,6 +35,9 @@ describe('transformTargetsForSelection', () => {
       { kind: 'base', key: 'h1:1:FORWARD' }, { kind: 'base', key: 'h2:1:REVERSE' },
     ] } }))
       .toHaveLength(2)
+    expect(transformTargetsForSelection({ selection: { items: [
+      { kind: 'end', key: 'h1:1:FORWARD' },
+    ] } })).toHaveLength(1)
     expect(transformTargetsForSelection({
       currentGeometry: geometry, selection: { items: [{ kind: 'cluster', id: 'c1' }] },
     })).toEqual([])
@@ -46,6 +52,18 @@ describe('transformTargetsForSelection', () => {
     })
     expect(targets.map(t => `${t.helix_id}:${t.bp_index}:${t.direction}`))
       .toEqual(['h2:1:REVERSE', 'h1:1:FORWARD', 'h1:2:FORWARD'])
+  })
+
+  it('can constrain a VR session to one exact ref without widening to co-selection', () => {
+    const targets = transformTargetsForSelection({
+      currentGeometry: geometry,
+      selection: { items: [
+        { kind: 'strand', id: 's1' },
+        { kind: 'base', key: 'h2:1:REVERSE' },
+      ] },
+    }, { kind: 'domain', strandId: 's1', domainIndex: 0 })
+    expect(targets.map(t => `${t.helix_id}:${t.bp_index}:${t.direction}`))
+      .toEqual(['h1:1:FORWARD'])
   })
 })
 
@@ -174,5 +192,94 @@ describe('atomistic transform commit', () => {
     await committing
     expect(atomisticRenderer.applyResidueMatrix).not.toHaveBeenCalled()
     expect(obsoleteExplicitRefresh).not.toHaveBeenCalled()
+  })
+
+  it('mirrors an exact reversible VR Domain preview and restores on selection change', () => {
+    document.body.innerHTML = '<div id="mode-indicator"></div>'
+    const selectedRef = { kind: 'domain', strandId: 's1', domainIndex: 0 }
+    let state = {
+      currentGeometry: [
+        { helix_id: 'h1', bp_index: 1, direction: 'FORWARD', strand_id: 's1', domain_index: 0 },
+        { helix_id: 'h1', bp_index: 2, direction: 'FORWARD', strand_id: 's1', domain_index: 1 },
+      ],
+      selection: { items: [selectedRef], primary: selectedRef },
+    }
+    const store = { getState: () => state }
+    const atomisticRenderer = {
+      residueInfo: vi.fn(target => ({
+        centroid: new THREE.Vector3(target.bp_index, 0, 0),
+      })),
+      applyResidueMatrix: vi.fn(),
+    }
+    const tool = initNucleotideTransformTool({
+      store, scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(),
+      canvas: document.createElement('canvas'), controls: { enabled: true },
+      designRenderer: {}, atomisticRenderer,
+    })
+
+    expect(tool.beginVRPreview(selectedRef)).toEqual({ accepted: true })
+    expect(tool.debugState()).toMatchObject({
+      vrPreview: true, exactSessionRef: selectedRef,
+    })
+    expect(atomisticRenderer.residueInfo).toHaveBeenCalledTimes(2)
+    const matrix = new THREE.Matrix4().makeTranslation(1, 2, 3)
+    expect(tool.applyVRPreviewMatrix(matrix.toArray())).toBe(true)
+    expect(atomisticRenderer.applyResidueMatrix).toHaveBeenLastCalledWith(
+      expect.objectContaining({ bp_index: 1 }),
+      expect.any(THREE.Matrix4),
+    )
+
+    const previousState = state
+    const nextRef = { kind: 'base', key: 'h1:2:FORWARD' }
+    state = { ...state, selection: { items: [nextRef], primary: nextRef } }
+    expect(tool.handleSelectionChange(state, previousState)).toBe(true)
+    expect(tool.isVRPreviewActive()).toBe(false)
+    const restored = atomisticRenderer.applyResidueMatrix.mock.calls.at(-1)[1]
+    expect(restored.equals(new THREE.Matrix4())).toBe(true)
+  })
+
+  it('commits an exact VR Domain scope through one atomic persistence call', async () => {
+    document.body.innerHTML = '<div id="mode-indicator"></div>'
+    const selectedRef = { kind: 'domain', strandId: 's1', domainIndex: 0 }
+    const state = {
+      currentGeometry: [
+        { helix_id: 'h1', bp_index: 1, direction: 'FORWARD', strand_id: 's1', domain_index: 0 },
+        { helix_id: 'h1', bp_index: 2, direction: 'FORWARD', strand_id: 's1', domain_index: 0 },
+      ],
+      selection: { items: [selectedRef], primary: selectedRef },
+    }
+    const atomisticRenderer = {
+      residueInfo: vi.fn(target => ({
+        centroid: new THREE.Vector3(target.bp_index, 0, 0),
+      })),
+      applyResidueMatrix: vi.fn(),
+    }
+    putNucleotideTransforms.mockResolvedValueOnce({
+      design: { feature_log: [{ id: 'vr-move-1' }] },
+      vr_transaction: {
+        kind: 'move_rotate', feature_log_entry_id: 'vr-move-1', target_count: 2,
+      },
+    })
+    const tool = initNucleotideTransformTool({
+      store: { getState: () => state }, scene: new THREE.Scene(),
+      camera: new THREE.PerspectiveCamera(), canvas: document.createElement('canvas'),
+      controls: { enabled: true }, designRenderer: {}, atomisticRenderer,
+    })
+    const singleCallsBefore = putNucleotideTransform.mock.calls.length
+
+    expect(tool.beginVRPreview(selectedRef)).toEqual({ accepted: true })
+    expect(tool.applyVRPreviewMatrix(
+      new THREE.Matrix4().makeTranslation(1, 2, 3).toArray(),
+    )).toBe(true)
+    const committed = await tool.confirmVRPreview()
+
+    expect(committed).toMatchObject({
+      accepted: true, reason: 'committed', targetCount: 2,
+      result: { vr_transaction: { feature_log_entry_id: 'vr-move-1' } },
+    })
+    expect(putNucleotideTransforms).toHaveBeenCalledTimes(1)
+    expect(putNucleotideTransforms.mock.calls[0][0]).toHaveLength(2)
+    expect(putNucleotideTransform).toHaveBeenCalledTimes(singleCallsBefore)
+    expect(tool.isVRPreviewActive()).toBe(false)
   })
 })

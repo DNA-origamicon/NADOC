@@ -650,9 +650,10 @@ async def _nosleep(_):
     return None
 
 
-class TestTierAEarlyStopGate:
-    """Tier-A early-stop is what makes a big ladder affordable — so its failure mode is
-    a BUDGET failure, not a quality failure.
+class TestEarlyStopGate:
+    """Early-stop is what makes a big ladder affordable — so its failure mode is a
+    BUDGET failure, not a quality failure. No tiers: turning it on always requires
+    the real WC health step (energy AND WC, matching the local runner exactly).
 
     The evaluator fails safe to HOLD (never skip) when it can't measure base-pairing.
     That is right for the science and ruinous for the wallet: HOLD means the full
@@ -660,7 +661,7 @@ class TestTierAEarlyStopGate:
     MDAnalysis must REFUSE to start, not quietly run the expensive path.
     """
 
-    def _tier_a_job(self, tmp_path):
+    def _early_stop_job(self, tmp_path):
         """A job with a real CHUNKED stage — the only shape early-stop can act on.
 
         A stage is a set of `_pNN` chunks sharing a base name. A single-chunk stage has
@@ -669,7 +670,6 @@ class TestTierAEarlyStopGate:
         """
         job = _job(tmp_path)
         job.early_stop_relax = True
-        job.early_stop_tier = "A"
         job.segments = [
             MdSegmentStatus(
                 name=f"d_01_k0p5_p{p}", stage="relax", percent=float(p), steps=100
@@ -687,7 +687,7 @@ class TestTierAEarlyStopGate:
         return job
 
     def test_stages_the_evaluators_and_enables_early_stop_in_the_script(self, tmp_path):
-        job = self._tier_a_job(tmp_path)
+        job = self._early_stop_job(tmp_path)
         conn = _conn(
             {"setsid": (0, "7\n", ""), "import MDAnalysis": (0, "2.7.0\n", "")}
         )
@@ -698,11 +698,11 @@ class TestTierAEarlyStopGate:
         )
         script = (job.job_dir(tmp_path) / rx.CHAIN_SCRIPT).read_text()
         assert "nadoc_cutoff_eval.py" in script
-        assert "nadoc_health_eval.py" in script, "Tier A must run the WC health step"
+        assert "nadoc_health_eval.py" in script, "early-stop must always run the WC health step"
 
     def test_refuses_to_launch_when_the_pod_cannot_import_mdanalysis(self, tmp_path):
         """The $33 test. A silent fallthrough here bills the full ladder."""
-        job = self._tier_a_job(tmp_path)
+        job = self._early_stop_job(tmp_path)
         conn = _conn(
             {
                 "import MDAnalysis": (
@@ -722,7 +722,7 @@ class TestTierAEarlyStopGate:
 
     def test_installs_mdanalysis_when_the_image_lacks_it(self, tmp_path):
         """The pytorch image ships numpy+scipy but not MDAnalysis; a ~30 s pip fixes it."""
-        job = self._tier_a_job(tmp_path)
+        job = self._early_stop_job(tmp_path)
         calls = {"n": 0}
 
         class _Conn(RunpodConnection):

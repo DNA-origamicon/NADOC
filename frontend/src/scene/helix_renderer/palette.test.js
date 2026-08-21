@@ -12,6 +12,7 @@ import {
   buildStapleColorMap,
   buildClusterColorLookup,
   buildClusterLookup,
+  buildNucLetterMap,
   STAPLE_PALETTE,
   _resetStapleColorPins,
 } from './palette.js'
@@ -27,6 +28,47 @@ function geomFor(strands) {
 }
 
 beforeEach(() => _resetStapleColorPins())
+
+describe('buildNucLetterMap', () => {
+  it('keeps extension sequence independent from the core strand sequence', () => {
+    const core0 = { strand_id: 's', domain_index: 0, helix_id: 'h', bp_index: 0, direction: 'FORWARD' }
+    const core1 = { strand_id: 's', domain_index: 0, helix_id: 'h', bp_index: 1, direction: 'FORWARD' }
+    const ext5Root = { strand_id: 's', extension_id: 'e5', helix_id: '__ext_e5', bp_index: 0, direction: 'FORWARD', nucleobase: 'T' }
+    const ext5Tip = { strand_id: 's', extension_id: 'e5', helix_id: '__ext_e5', bp_index: 1, direction: 'FORWARD', nucleobase: 'A' }
+    const ext3Root = { strand_id: 's', extension_id: 'e3', helix_id: '__ext_e3', bp_index: 0, direction: 'FORWARD', nucleobase: 'G' }
+    const ext3Tip = { strand_id: 's', extension_id: 'e3', helix_id: '__ext_e3', bp_index: 1, direction: 'FORWARD', nucleobase: 'C' }
+    const letters = buildNucLetterMap(
+      { strands: [{ id: 's', sequence: 'CG' }], extensions: [] },
+      [core0, core1, ext5Root, ext5Tip, ext3Root, ext3Tip],
+    )
+    expect([core0, core1, ext5Root, ext5Tip, ext3Root, ext3Tip].map(n => letters.get(n)))
+      .toEqual(['C', 'G', 'T', 'A', 'G', 'C'])
+  })
+
+  it('threads reverse loop copies in 5′→3′ order and falls back to overhang sequence', () => {
+    const bp6 = { strand_id: 's', domain_index: 0, helix_id: 'h', bp_index: 6, direction: 'REVERSE' }
+    const copy0 = { strand_id: 's', domain_index: 0, helix_id: 'h', bp_index: 5, direction: 'REVERSE' }
+    const copy1 = { strand_id: 's', domain_index: 0, helix_id: 'h', bp_index: 5, direction: 'REVERSE' }
+    const bp4 = { strand_id: 's', domain_index: 0, helix_id: 'h', bp_index: 4, direction: 'REVERSE' }
+    const oh0 = { strand_id: 'oh', domain_index: 0, overhang_id: 'o', helix_id: 'ho', bp_index: 0, direction: 'FORWARD' }
+    const oh1 = { strand_id: 'oh', domain_index: 0, overhang_id: 'o', helix_id: 'ho', bp_index: 1, direction: 'FORWARD' }
+    const letters = buildNucLetterMap(
+      {
+        strands: [{ id: 's', sequence: 'ATCG' }, { id: 'oh', sequence: null }],
+        overhangs: [{
+          id: 'o', sequence: 'AT',
+          sub_domains: [
+            { start_bp_offset: 0, length_bp: 1, sequence_override: 'G' },
+            { start_bp_offset: 1, length_bp: 1, sequence_override: 'C' },
+          ],
+        }],
+      },
+      [bp6, copy0, copy1, bp4, oh0, oh1],
+    )
+    expect([bp6, copy1, copy0, bp4, oh0, oh1].map(n => letters.get(n)))
+      .toEqual(['A', 'T', 'C', 'G', 'G', 'C'])
+  })
+})
 
 describe('buildStapleColorMap', () => {
   it('first encounter: staple slot = its index in design.strands (initial-load parity)', () => {

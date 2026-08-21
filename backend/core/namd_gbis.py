@@ -36,11 +36,10 @@ from backend.core.md_protocols import (
     _segment_conf,
     design_has_extra_bases,
     design_has_extensions,
-    design_requires_extra_base_declash,
-    identify_unpaired_residues,
     mgh_slow_release_segments,
     namd_efield_vector,
     psf_atom_count,
+    topology_ss_exclusion_set,
     write_aksimentiev_enm_files,
     write_anchor_restraints_pdb,
     write_restraints_pdb,
@@ -67,7 +66,7 @@ def build_namd_gbis_package(
     seed: int = 42,  # noqa: ARG001 — kept for signature parity with the solvate prep
     atomistic_model=None,
     progress=None,
-    declash: bool = False,
+    declash: Optional[bool] = None,
     force_soft: bool = False,
     anchors: Optional[list] = None,
     anchor_atoms: Optional[list] = None,
@@ -136,9 +135,22 @@ def build_namd_gbis_package(
     # Extra bases remain single-stranded even when a 1xT junction does not require
     # declash.  Keep every such residue (and extension tail) out of the ordinary ENM
     # so the standard ladder can relax it instead of pinning its seed geometry.
+    #
+    # topology_ss_exclusion_set, not bare identify_unpaired_residues — pure
+    # C1'-distance geometry can miss a residue that sits close to an UNRELATED
+    # neighbour by 3D coincidence (measured: a junction extra base, and an
+    # extension tail near a packed bundle at 10.72 Å, under the 10.8 Å cutoff).
+    # See topology_ss_exclusion_set's docstring for the measured repro.
     exclude = None
     if design_has_extra_bases(design) or design_has_extensions(design):
-        exclude = identify_unpaired_residues(package_dir / f"{name_stem}.psf", pdb_path)
+        from backend.core.atomistic import build_atomistic_model  # noqa: PLC0415
+
+        exclude = topology_ss_exclusion_set(
+            atomistic_model or build_atomistic_model(design, include_proteins=True),
+            package_dir / f"{name_stem}.psf",
+            pdb_path,
+            sort_chains=True,
+        )
     enm_report = write_aksimentiev_enm_files(
         pdb_path,
         package_dir,
@@ -185,19 +197,24 @@ def build_namd_gbis_package(
             anchors,
         )
 
-    # 5. Declash (auto for junctions with 2+ inserted bases, or designs carrying
-    #    strand-extension ssDNA tails): minimise against an ss-excluded ENM so the
-    #    inserted bases / tails relax out of clash.  A 1xT junction uses the standard
-    #    ladder; it remains excluded from the ordinary ENM above.
-    declash = (
-        declash
-        or design_requires_extra_base_declash(design)
-        or design_has_extensions(design)
-    )
+    # 5. Declash: minimise against an ss-excluded ENM so inserted bases / extension
+    #    tails relax out of clash.  Runs ONLY when explicitly requested (mirrors
+    #    prepare_mgh_slow_release's RE-AUDIT CONCLUDED resolution) — an unspecified
+    #    request (None) is OFF, same as an explicit False. A design whose junctions
+    #    would benefit is flagged as an advisory condition on the wizard's Declash
+    #    control, never auto-applied here.
+    declash = bool(declash)
     declash_enm_file: Optional[str] = None
     n_unpaired = 0
     if declash:
-        ss = identify_unpaired_residues(package_dir / f"{name_stem}.psf", pdb_path)
+        from backend.core.atomistic import build_atomistic_model  # noqa: PLC0415
+
+        ss = topology_ss_exclusion_set(
+            atomistic_model or build_atomistic_model(design, include_proteins=True),
+            package_dir / f"{name_stem}.psf",
+            pdb_path,
+            sort_chains=True,
+        )
         n_unpaired = len(ss)
         write_aksimentiev_enm_files(
             pdb_path,
@@ -372,7 +389,7 @@ def prepare_implicit_gbis_namd(
     minimize_steps: int = 4_800,
     atomistic_model=None,
     progress=None,
-    declash: bool = False,
+    declash: Optional[bool] = None,
     force_soft: bool = False,
     anchors: Optional[list] = None,
     anchor_atoms: Optional[list] = None,

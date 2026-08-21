@@ -1,0 +1,23 @@
+NADOCVR 12 ballstick cpk
+R ballstick
+K cluster-token 0 0 0
+J b base-token base 0 0 0
+J a atom-token atom -0.5 0 0
+D c cluster-token
+P atom-a -0.5 0 0 .15 1 0 0 1 0 0 1 0 0 1 0 0
+A atom-a 1 b
+T atom-a 1 c 1 1
+W atom-a 3 c 1 1 b 1 1 a 1 1
+C boundary-bond -0.5 0 0 .5 0 0 .05 1 1 1 1 1 1 1 1 1 1 1 1
+W boundary-bond 3 c 1 0 b 1 0 a 1 0
+E ballstick
+K cluster-token 1 0 0
+J b base-token base 1 0 0
+J a atom-token atom .5 0 0
+D c cluster-token
+P atom-a .5 0 0 .15 1 0 0 1 0 0 1 0 0 1 0 0
+A atom-a 1 b
+T atom-a 1 c 1 1
+W atom-a 3 c 1 1 b 1 1 a 1 1
+C boundary-bond .5 0 0 1.5 0 0 .05 1 1 1 1 1 1 1 1 1 1 1 1
+W boundary-bond 3 c 1 0 b 1 0 a 1 0

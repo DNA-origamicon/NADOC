@@ -38,12 +38,14 @@ import {
   makeDebounce,
   paramLabel,
   paramRows,
+  pinnedLadderIntegrator,
   presetSummary,
   productionColumns,
   productionField,
   productionPayload,
   planPayload,
   pushUndo,
+  touchedAfterSettingField,
   productionParents,
   clearStageOverrides,
   normaliseOverrideInput,
@@ -113,6 +115,26 @@ const FIELDS = [
   { key: 'adaptive_minimization', label: 'Stop minimisation when converged', type: 'checkbox',
     fallback: () => true,
     help: 'Enabled by default. Runs minimisation in chunks and stops only after three consecutive low-improvement windows. The atom-scaled step count remains a hard maximum, and missing energy data runs to that maximum. Turn this off to force every scheduled minimisation step.' },
+  // ── Declash re-audit CONCLUDED (2026-08-19) ──
+  // Runs ONLY when explicitly ticked — unticked (the untouched default) is OFF, full
+  // stop, same as an explicit False; it no longer auto-detects from the design. A
+  // design whose junctions insert 2+ extra bases (or that carries extensions) still
+  // gets flagged, but as an advisory condition on this control (see
+  // routes_md_plan._relaxation_plan), never a silent auto-apply. Since the resolved
+  // plan value is now False whenever untouched, this shows unticked by default with
+  // no `fallback` needed, exactly like every other plain boolean field.
+  //
+  // Touching it also clears the three integrator axes below (see setField) so they
+  // re-resolve for the NEW state rather than carrying forward a choice made under
+  // the old one.
+  { key: 'declash', label: 'Declash (extra-base clash protection)', type: 'checkbox',
+    help: 'Off by default, always — declash no longer auto-engages, even on a design '
+        + 'whose junctions insert 2+ extra bases (a condition on this control flags '
+        + 'that case instead). Tick it to minimise against an ss-excluded ENM (so those '
+        + 'unpaired residues relax out of clash) and hold the ladder to a gentler tier. '
+        + 'Leaving it off also lets the early-stop accelerator apply on an Alpine '
+        + 'submit, which a declash package refuses (its reference rebuild cannot run '
+        + 'in a bare sbatch).' },
   // ── The three integrator axes, separated (exp51, 2026-08-05) ──
   // These used to be one dial: "Fast relaxation (HMR + 4 fs)" bundled a timestep with a
   // mass set, and rigidBonds was never exposed at all. exp51 measured the combinations
@@ -143,15 +165,6 @@ const FIELDS = [
   // Explicit override for the permanent ring-piercing seed gate. Off by default.
   { key: 'allow_ring_pierced_seed', label: 'Build despite a ring piercing', type: 'checkbox',
     help: 'Allows preparation when a covalent bond is threaded through a nucleotide ring. This defect cannot relax away and can dominate the trajectory. Leave this off unless you have inspected the warning and deliberately want to simulate it.' },
-  // Remote runs judge "settled" on the NODE, with whatever python that node has — so the
-  // criterion is a genuine choice there and not one anywhere else. It had no control at
-  // all, which meant every cluster run silently used the weaker tier B while the identical
-  // local run used the full one: the same protocol truncating its ladder on two different
-  // tests depending only on where it happened to run.
-  { key: 'early_stop_tier', label: 'Remote early-stop test', type: 'select', remoteOnly: true,
-    options: [{ value: 'B', label: 'Energy only' },
-              { value: 'A', label: 'Energy and base pairing' }],
-    help: 'Chooses how a remote run decides that a relaxation stage has settled. Energy-only has no additional software requirements. Energy and base pairing is more informative but requires the analysis libraries installed on the compute node. Used only when early stopping is enabled.' },
   { key: 'gpu_resident', label: 'GPU-resident mode', type: 'select',
     options: [{ value: 'auto', label: 'Auto (decide from the atom count)' },
               { value: 'on', label: 'On' }, { value: 'off', label: 'Off' }],
@@ -176,12 +189,9 @@ const FIELD_BY_KEY = new Map(FIELDS.map(f => [f.key, f]))
  *
  *  ONE rule for both places it is applied — whether the control is drawn (step 2) and
  *  whether the value is sent (submit). Two copies would let a hidden control's stale value
- *  ride along in the payload, which is exactly what `localOnly` was written to prevent.
- *  `remoteOnly` is its mirror, added for `early_stop_tier`: which test a node uses to call
- *  a stage settled is a real choice on a cluster and meaningless on this computer. */
+ *  ride along in the payload, which is exactly what `localOnly` was written to prevent. */
 export function fieldAppliesToTarget(field, target = 'local') {
   if (field?.localOnly && target !== 'local') return false
-  if (field?.remoteOnly && target === 'local') return false
   return true
 }
 
@@ -444,7 +454,9 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     }
     mounts.status.textContent = 'Working out what this will run…'
     try {
-      const next = await api.fetchProtocolPlan(planPayload(state))
+      const next = await api.fetchProtocolPlan(
+        planPayload({ ...state, touched: { ...ladderPin(), ...state.touched } })
+      )
       plan = next || null
       // The API client returns null on a non-OK response rather than throwing, so an
       // un-surfaced failure would leave the table silently blank — which is exactly the
@@ -508,6 +520,12 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     return field?.fallback ? field.fallback(plan, effectiveValue) : v
   }
 
+  /** Wizard-local wrapper for the pure `pinnedLadderIntegrator`: a no-op in production
+   *  mode, where `relax_timestep_fs` and its siblings do not apply. */
+  function ladderPin() {
+    return state.mode === 'production' ? {} : pinnedLadderIntegrator(state.touched)
+  }
+
   /** The descriptor for a field key, from whichever list this mode renders. */
   function fieldDef(key) {
     return (state.mode === 'production' ? PRODUCTION_FIELD_DEFS : FIELDS)
@@ -523,7 +541,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
   function setField(key, value) {
     if (readOnly) return
     record()
-    state.touched[key] = value
+    state.touched = touchedAfterSettingField(state.touched, key, value)
     if (key === 'gpu_resident') runpodResidentDefaulted = false
     if (key === 'gpu_fallback_policy') {
       try { localStorage.setItem(GPU_FALLBACK_KEY, String(value)) } catch { /* private mode */ }
@@ -1677,7 +1695,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
         // local hardware on a cluster allocation, or a node-side criterion on a run that
         // never leaves this computer.
         const touched = Object.fromEntries(
-          Object.entries(state.touched).filter(([k]) =>
+          Object.entries({ ...ladderPin(), ...state.touched }).filter(([k]) =>
             !isForced(k) && fieldAppliesToTarget(FIELD_BY_KEY.get(k), state.target)))
         const request = {
           ...wizardPayload({

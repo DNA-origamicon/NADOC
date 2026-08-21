@@ -348,7 +348,7 @@ export const WIZARD_FIELDS = [
   'threads', 'devices', 'salt_mode', 'mg_conc_mM', 'ion_conc_mM', 'padding_nm',
   'box_mode', 'minimize_steps', 'adaptive_minimization', 'fast',
   'gpu_fallback_policy', 'gpu_resident', 'early_stop_relax',
-  'early_stop_tier', 'allow_ring_pierced_seed',
+  'allow_ring_pierced_seed',
   'force_soft', 'declash',
   // The three integrator axes, separated (exp51). null on any of them means "auto",
   // which the backend resolves from that run's timestep.
@@ -362,7 +362,6 @@ export const DEFAULT_FIELD_SCOPES = {
   relax_preset: 'relaxation', relax_timestep_fs: 'relaxation',
   relax_rigid_bonds: 'relaxation', relax_hmr: 'relaxation', fast: 'relaxation',
   force_soft: 'relaxation', declash: 'relaxation', early_stop_relax: 'relaxation',
-  early_stop_tier: 'relaxation',
   minimize_steps: 'relaxation', adaptive_minimization: 'relaxation', protocol: 'relaxation',
   gpu_resident: 'relaxation', gpu_fallback_policy: 'relaxation',
   threads: 'relaxation', devices: 'relaxation',
@@ -382,6 +381,70 @@ export function fieldAlert(conds) {
   if (conds.some(c => c.kind === 'blocking')) return 'blocking'
   if (conds.some(c => c.kind === 'warning')) return 'warning'
   return null
+}
+
+/**
+ * Pure: the relaxation ladder's three integrator axes, resolved to what will actually be
+ * SENT with the request — not merely displayed — so an untouched wizard's shown default
+ * and the job it creates can never disagree. Returns only the keys `touched` does not
+ * already carry, so an explicit user choice is never overwritten.
+ *
+ * `wizardPayload` sends ONLY touched fields, but `relax_timestep_fs` DISPLAYS a resolved
+ * default (4 fs whenever `fast` is on) via its own control `fallback` in md_job_wizard.js.
+ * The backend now honors an explicit `relax_timestep_fs` verbatim on every stage — soft
+ * and gentle tiers included — instead of silently capping it, so an untouched control
+ * used to be harmless (auto and pinned both landed on the same capped result) and is now
+ * a real divergence: the display says 4 fs, the created job ran 2. Sending the displayed
+ * default as a real value keeps them in agreement; the risk condition this can trigger
+ * still fires (see the backend's `relax_timestep_risk_warning`), it just no longer needs
+ * a wasted click to reach it — "warn, never block"
+ * (feedback_namd_4fs_production_only.md).
+ *
+ * `relax_rigid_bonds`/`relax_hmr` travel WITH the timestep even when it alone is
+ * untouched: both mirror their own control `fallback` (kept in sync by hand — they
+ * encode a fixed physical relationship, not a UI preference: RATTLE needs rigid bonds
+ * above 1 fs, HMR is only load-bearing at 4 fs), and `_segment_conf` derives a
+ * gentle/soft segment's actual HMR from the SEGMENT's own (already-forced-off) `fast`
+ * flag, never from the pinned timestep — so pinning `dt` alone would leave a 4 fs ladder
+ * silently running WITHOUT HMR on a declash design, worse than either the old capped
+ * 2 fs or the 4 fs + HMR combination the wizard is actually showing.
+ *
+ * The timestep default mirrors `CreateJobRequest.fast`'s own server default (True)
+ * directly rather than reading a plan response: on the very FIRST request, before any
+ * plan has ever loaded, there is no resolved `fast` to read, and treating "no plan yet"
+ * as "fast is off" would pin 2 fs, get it echoed straight back as the RESOLVED value on
+ * the next call, and never self-correct.
+ */
+export function pinnedLadderIntegrator(touched = {}) {
+  const has = (key) => Object.prototype.hasOwnProperty.call(touched, key)
+  const dt = has('relax_timestep_fs')
+    ? Number(touched.relax_timestep_fs)
+    : (has('fast') ? !!touched.fast : true) ? 4 : 2
+  const out = {}
+  if (!has('relax_timestep_fs')) out.relax_timestep_fs = dt
+  if (!has('relax_rigid_bonds')) out.relax_rigid_bonds = dt <= 1 ? 'none' : 'all'
+  if (!has('relax_hmr')) out.relax_hmr = dt >= 4
+  return out
+}
+
+/** Fields whose displayed default derives FROM `declash` (indirectly, via
+ *  `pinnedLadderIntegrator`'s own logic being timestep-driven — see its doc) closely
+ *  enough that a stale choice made under the OLD declash state reads as a leftover
+ *  under the new one. Forcing declash on/off is a big enough decision that these
+ *  three re-resolve for the new state instead of carrying a prior choice forward —
+ *  e.g. a 2 fs / rigidBonds-none pin made while declash was on must not go on being
+ *  sent after the user forces it off. */
+const DECLASH_DEPENDENT_FIELDS = ['relax_timestep_fs', 'relax_rigid_bonds', 'relax_hmr']
+
+/** Pure: `state.touched` after one field is set by hand — plain "set the key" for
+ *  every field except `declash`, which ALSO clears its three dependent integrator
+ *  axes (see DECLASH_DEPENDENT_FIELDS) so they re-derive for the state just chosen. */
+export function touchedAfterSettingField(touched = {}, key, value) {
+  const next = { ...touched, [key]: value }
+  if (key === 'declash') {
+    for (const dep of DECLASH_DEPENDENT_FIELDS) delete next[dep]
+  }
+  return next
 }
 
 /**

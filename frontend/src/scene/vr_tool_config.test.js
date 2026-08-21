@@ -1,0 +1,243 @@
+import { describe, expect, it } from 'vitest'
+
+import {
+  initialVRToolConfigState,
+  normalizeVRToolConfig,
+  reduceVRToolConfig,
+  vrPlaneFeedbackPayload,
+  vrToolConfigMissing,
+} from './vr_tool_config.js'
+
+const target = {
+  target_identity: 'nuc:s1:0:h1:3:FORWARD:0',
+  target_kind: 'end',
+  target_owner_tokens: ['end-token'],
+}
+
+describe('native VR tool configuration drafts', () => {
+  it('keeps extrusion footprint unresolved instead of inferring geometry', () => {
+    const draft = normalizeVRToolConfig({
+      mode: 'extrude', ...target,
+      length_bp: 42,
+      direction_sign: 1,
+      strand_filter: 'both',
+      ligate_adjacent: true,
+      footprint_state: 'unresolved',
+    })
+    expect(draft).not.toBeNull()
+    expect(vrToolConfigMissing(draft)).toEqual(['footprint'])
+  })
+
+  it('requires two ordered deformation planes without inventing anchors', () => {
+    const draft = normalizeVRToolConfig({
+      mode: 'twist', ...target,
+      plane_a_bp: null,
+      plane_b_bp: null,
+      amount_mode: 'total_degrees',
+      amount: 90,
+    })
+    expect(vrToolConfigMissing(draft)).toEqual(['plane_a', 'plane_b'])
+    expect(vrToolConfigMissing({ ...draft, plane_a_bp: 12, plane_b_bp: 12 }))
+      .toEqual(['ordered_planes'])
+    expect(vrToolConfigMissing({ ...draft, plane_a_bp: 12, plane_b_bp: 24 }))
+      .toEqual([])
+  })
+
+  it('accepts desktop bend ranges and rejects non-finite or unbounded values', () => {
+    const bend = {
+      mode: 'bend', ...target,
+      plane_a_bp: -4,
+      plane_b_bp: 15,
+      angle_deg: 360,
+      direction_deg: 0,
+    }
+    expect(normalizeVRToolConfig(bend)).toEqual(bend)
+    expect(normalizeVRToolConfig({ ...bend, angle_deg: NaN })).toBeNull()
+    expect(normalizeVRToolConfig({ ...bend, direction_deg: 361 })).toBeNull()
+    expect(normalizeVRToolConfig({ ...bend, plane_b_bp: 2 ** 31 })).toBeNull()
+  })
+
+  it('binds drafts to a complete canonical target snapshot', () => {
+    const draft = {
+      mode: 'extrude', ...target,
+      length_bp: 1,
+      direction_sign: -1,
+      strand_filter: 'staples',
+      ligate_adjacent: false,
+      footprint_state: 'unresolved',
+    }
+    expect(normalizeVRToolConfig({ ...draft, target_owner_tokens: [] })).toBeNull()
+    expect(normalizeVRToolConfig({
+      ...draft,
+      target_identity: null,
+      target_kind: 'none',
+      target_owner_tokens: [],
+    })).not.toBeNull()
+  })
+
+  it('reduces only strictly increasing, valid draft sequences', () => {
+    const draft = {
+      mode: 'bend', ...target,
+      plane_a_bp: null,
+      plane_b_bp: null,
+      angle_deg: 0,
+      direction_deg: 0,
+    }
+    const accepted = reduceVRToolConfig(initialVRToolConfigState, {
+      sequence: 4, draft,
+    }, {
+      targetSnapshotPresent: true,
+      toolTarget: {
+        identity: target.target_identity,
+        selectionKind: target.target_kind,
+        ownerTokens: target.target_owner_tokens,
+        toolContext: { kind: 'continuation_end', helixId: 'h1' },
+        toolContextReason: 'resolved',
+      },
+    })
+    expect(accepted.accepted).toBe(true)
+    expect(accepted.reason).toBe('incomplete')
+    expect(reduceVRToolConfig(accepted.state, { sequence: 4, draft }).state)
+      .toBe(accepted.state)
+    expect(reduceVRToolConfig(accepted.state, {
+      sequence: 5, draft: { ...draft, angle_deg: Infinity },
+    }).state).toBe(accepted.state)
+    const cleared = reduceVRToolConfig(accepted.state, { sequence: 6, draft: null })
+    expect(cleared).toEqual({
+      state: {
+        sequence: 6, draft: null, toolContext: null, toolContextReason: null,
+      },
+      accepted: true, reason: 'cleared',
+    })
+  })
+
+  it('binds an exact resolved End context and rejects stale or mismatched targets', () => {
+    const draft = {
+      mode: 'extrude', ...target,
+      length_bp: 12, direction_sign: 1, strand_filter: 'both',
+      ligate_adjacent: true, footprint_state: 'unresolved',
+    }
+    const toolTarget = {
+      identity: target.target_identity,
+      selectionKind: 'end',
+      ownerTokens: ['end-token'],
+      toolContext: { kind: 'continuation_end', helixId: 'h1', continuationBp: 4 },
+      toolContextReason: 'resolved',
+    }
+    const accepted = reduceVRToolConfig(initialVRToolConfigState, {
+      sequence: 1, draft,
+    }, { toolTarget, targetSnapshotPresent: true })
+    expect(accepted.state.toolContext).toEqual(toolTarget.toolContext)
+    expect(accepted.state.toolContextReason).toBe('resolved')
+    expect(accepted.reason).toBe('incomplete')
+
+    expect(reduceVRToolConfig(initialVRToolConfigState, {
+      sequence: 1, draft,
+    }, { toolTarget: null, targetSnapshotPresent: true }).reason).toBe('stale_target')
+    expect(reduceVRToolConfig(initialVRToolConfigState, {
+      sequence: 1, draft,
+    }, {
+      toolTarget: { ...toolTarget, identity: 'other' }, targetSnapshotPresent: true,
+    }).reason).toBe('target_mismatch')
+  })
+
+  it('retains a failure reason when an exact End has no continuation face', () => {
+    const draft = {
+      mode: 'bend', ...target,
+      plane_a_bp: null, plane_b_bp: null, angle_deg: 0, direction_deg: 0,
+    }
+    const result = reduceVRToolConfig(initialVRToolConfigState, {
+      sequence: 1, draft,
+    }, {
+      targetSnapshotPresent: true,
+      toolTarget: {
+        identity: target.target_identity,
+        selectionKind: 'end',
+        ownerTokens: ['end-token'],
+        toolContext: null,
+        toolContextReason: 'no_continuation_face',
+      },
+    })
+    expect(result.accepted).toBe(true)
+    expect(result.reason).toBe('geometry_context_required')
+    expect(result.state.toolContextReason).toBe('no_continuation_face')
+  })
+
+  it('builds target-bound deformation plane acknowledgements and fails stale picks closed', () => {
+    const draft = {
+      mode: 'twist', ...target,
+      plane_a_bp: null, plane_b_bp: null,
+      amount_mode: 'total_degrees', amount: 90,
+    }
+    const state = { sequence: 7, draft }
+    const toolTarget = {
+      identity: target.target_identity,
+      selectionKind: target.target_kind,
+      ownerTokens: target.target_owner_tokens,
+    }
+    expect(vrPlaneFeedbackPayload({
+      sequence: 3, toolConfigSequence: 7, slot: 'a', identity: 'nuc:pick',
+    }, state, {
+      toolTarget,
+      planePick: {
+        resolved: true, reason: 'resolved', bp: 12, helixId: 'h1',
+        frame: { center: [1, 2, 3], normal: [0, 0, 1], halfExtentNm: 8 },
+        expandedFrame: { center: [4, 5, 6], normal: [0, 0, 1], halfExtentNm: 8 },
+      },
+    })).toEqual({
+      plane_pick_sequence: 3,
+      tool_config_sequence: 7,
+      target_identity: target.target_identity,
+      target_kind: 'end',
+      picked_identity: 'nuc:pick',
+      plane_slot: 'a',
+      resolved: true,
+      reason: 'resolved',
+      plane_bp: 12,
+      plane_center: [1, 2, 3],
+      plane_normal: [0, 0, 1],
+      plane_half_extent_nm: 8,
+      expanded_plane_center: [4, 5, 6],
+      expanded_plane_normal: [0, 0, 1],
+      expanded_plane_half_extent_nm: 8,
+    })
+    expect(vrPlaneFeedbackPayload({
+      sequence: 4, toolConfigSequence: 7, slot: 'b', identity: 'segment:coarse',
+    }, state, {
+      toolTarget,
+      planePick: { resolved: false, reason: 'ambiguous_primitive' },
+    })?.reason).toBe('ambiguous_primitive')
+    expect(vrPlaneFeedbackPayload({
+      sequence: 5, toolConfigSequence: 7, slot: 'b', identity: 'nuc:pick',
+    }, state, {
+      toolTarget,
+      planePick: {
+        resolved: true, reason: 'resolved', bp: 12,
+        frame: { center: [0, 0, 0], normal: [0, 0, 1], halfExtentNm: 8 },
+      },
+    })?.reason).toBe('plane_frame_unavailable')
+    expect(vrPlaneFeedbackPayload({
+      sequence: 6, toolConfigSequence: 7, slot: 'b', identity: 'nuc:pick',
+    }, state, {
+      toolTarget,
+      planePick: {
+        resolved: true, reason: 'resolved', bp: 12,
+        frame: { center: [0, 0, 0], normal: [0, 0, 0], halfExtentNm: 8 },
+        expandedFrame: { center: [0, 0, 0], normal: [0, 0, 1], halfExtentNm: 8 },
+      },
+    })?.reason).toBe('plane_frame_unavailable')
+    expect(vrPlaneFeedbackPayload({
+      sequence: 7, toolConfigSequence: 7, slot: 'b', identity: 'nuc:pick',
+    }, state, { toolTarget: null })?.reason).toBe('stale_target')
+    expect(vrPlaneFeedbackPayload({
+      sequence: 8, toolConfigSequence: 6, slot: 'a', identity: 'nuc:pick',
+    }, state, {
+      toolTarget,
+      planePick: {
+        resolved: true, bp: 12,
+        frame: { center: [0, 0, 0], normal: [0, 0, 1], halfExtentNm: 8 },
+        expandedFrame: { center: [1, 0, 0], normal: [0, 0, 1], halfExtentNm: 8 },
+      },
+    })).toBeNull()
+  })
+})

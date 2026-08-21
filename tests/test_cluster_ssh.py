@@ -10,8 +10,9 @@ import asyncio
 
 import pytest
 
-from backend.core import cluster_ssh
+from backend.core import cluster_ssh, resume_transfer
 from backend.core.cluster_ssh import ClusterConnection, ClusterSSHError, ConnState
+from tests.test_resume_transfer import build_dcd, frame_size, header_size
 
 
 class _FakeRunResult:
@@ -93,18 +94,104 @@ class _FakeSftp:
 
 def test_stream_get_resumes_partial_atomically(tmp_path):
     data = b"abcdefghijklmnop"
-    target = tmp_path / "large.dcd"
+    target = tmp_path / "large.bin"
     broken = _FakeSftp(data, fail_after=8)
     with pytest.raises(BrokenPipeError):
-        _run(cluster_ssh._stream_get(broken, "/remote/large.dcd", str(target)))
+        _run(cluster_ssh._stream_get(broken, "/remote/large.bin", str(target)))
     assert not target.exists()  # an incomplete file never masquerades as final
-    assert (tmp_path / "large.dcd.part").read_bytes() == data[:8]
+    assert (tmp_path / "large.bin.part").read_bytes() == data[:8]
 
     resumed = _FakeSftp(data)
-    _run(cluster_ssh._stream_get(resumed, "/remote/large.dcd", str(target)))
-    assert resumed.open_offsets == [8]
+    _run(cluster_ssh._stream_get(resumed, "/remote/large.bin", str(target)))
+    # Two opens now: the first re-reads the partial's tail (the whole 8 bytes here,
+    # being far under the verify window) to prove it really is a prefix of this remote
+    # file; the second is the append itself.
+    assert resumed.open_offsets == [0, 8]
     assert target.read_bytes() == data
-    assert not (tmp_path / "large.dcd.part").exists()
+    assert not (tmp_path / "large.bin.part").exists()
+
+
+def test_stream_get_writes_a_resume_sidecar(tmp_path):
+    data = b"abcdefghijklmnop"
+    target = tmp_path / "large.bin"
+    broken = _FakeSftp(data, fail_after=8)
+    with pytest.raises(BrokenPipeError):
+        _run(cluster_ssh._stream_get(broken, "/remote/large.bin", str(target)))
+
+    side = resume_transfer.read_sidecar(str(target) + ".part")
+    assert side["remote_path"] == "/remote/large.bin"
+    assert side["remote_size"] == len(data)
+
+
+def test_stream_get_clears_the_sidecar_once_complete(tmp_path):
+    data = b"abcdefghijklmnop"
+    target = tmp_path / "large.bin"
+    _run(cluster_ssh._stream_get(_FakeSftp(data), "/remote/large.bin", str(target)))
+    assert resume_transfer.read_sidecar(str(target) + ".part") is None
+
+
+def test_stream_get_quarantines_a_partial_whose_tail_is_not_the_remote(tmp_path):
+    """A partial built from some other file must never be appended to."""
+    data = b"abcdefghijklmnop"
+    target = tmp_path / "large.bin"
+    part = tmp_path / "large.bin.part"
+    part.write_bytes(b"ZZZZZZZZ")  # right length, wrong bytes
+
+    _run(cluster_ssh._stream_get(_FakeSftp(data), "/remote/large.bin", str(target)))
+
+    assert target.read_bytes() == data  # restarted from zero and got it right
+    assert (tmp_path / "large.bin.part.rejected").read_bytes() == b"ZZZZZZZZ"
+
+
+def test_stream_get_quarantines_a_dcd_partial_with_a_foreign_head(tmp_path):
+    """The production failure: a stand-in one-frame DCD, then real remote bytes.
+
+    The tail matches the remote perfectly, so only the structural check can refuse it.
+    Quarantine, never delete — a corrupt head is often repairable and the partial can
+    represent many hours of transfer.
+    """
+    real = build_dcd(6, 5)
+    stand_in = build_dcd(6, 1, n_titles=3, fill=500)
+    poisoned = stand_in + real[len(stand_in) : len(stand_in) + 2 * frame_size(6)]
+
+    target = tmp_path / "traj.dcd"
+    part = tmp_path / "traj.dcd.part"
+    part.write_bytes(poisoned)
+
+    _run(cluster_ssh._stream_get(_FakeSftp(real), "/remote/traj.dcd", str(target)))
+
+    assert target.read_bytes() == real
+    assert (tmp_path / "traj.dcd.part.rejected").read_bytes() == poisoned
+
+
+def test_stream_get_resumes_a_structurally_sound_dcd_partial(tmp_path):
+    """The whole point: a genuine prefix is appended to, not re-downloaded."""
+    real = build_dcd(6, 5)
+    cut = header_size() + 2 * frame_size(6)
+    target = tmp_path / "traj.dcd"
+    (tmp_path / "traj.dcd.part").write_bytes(real[:cut])
+
+    sftp = _FakeSftp(real)
+    _run(cluster_ssh._stream_get(sftp, "/remote/traj.dcd", str(target)))
+
+    assert target.read_bytes() == real
+    assert not (tmp_path / "traj.dcd.part.rejected").exists()
+    assert cut in sftp.open_offsets  # it really resumed rather than restarting
+
+
+def test_stream_get_refuses_a_complete_but_corrupt_download(tmp_path):
+    """Right size, wrong bytes — the state that used to be reported as verified."""
+    real = build_dcd(6, 5)
+    stand_in = build_dcd(6, 1, n_titles=3, fill=500)
+    poisoned = stand_in + real[len(stand_in) :]
+    assert len(poisoned) == len(real)
+
+    target = tmp_path / "traj.dcd"
+    with pytest.raises(OSError, match="corrupt download"):
+        _run(cluster_ssh._stream_get(_FakeSftp(poisoned), "/remote/traj.dcd", str(target)))
+
+    assert not target.exists()
+    assert (tmp_path / "traj.dcd.part.rejected").exists()
 
 
 def test_stream_get_yields_between_chunks_for_api_fairness(tmp_path, monkeypatch):
@@ -115,8 +202,8 @@ def test_stream_get_yields_between_chunks_for_api_fairness(tmp_path, monkeypatch
 
     monkeypatch.setattr(cluster_ssh.asyncio, "sleep", fair_yield)
     data = b"abcdefghijklmnop"
-    target = tmp_path / "fair.dcd"
-    _run(cluster_ssh._stream_get(_FakeSftp(data), "/remote/fair.dcd", str(target)))
+    target = tmp_path / "fair.bin"
+    _run(cluster_ssh._stream_get(_FakeSftp(data), "/remote/fair.bin", str(target)))
 
     assert target.read_bytes() == data
     assert yields == [0, 0, 0, 0]

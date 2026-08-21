@@ -13,7 +13,10 @@ function harness() {
     },
     clusterGlowLayer: { clear: vi.fn(), setEntries: vi.fn() },
     isTranslateRotateActive: () => true,
-    nucleotideTransformTool: { canActivate: vi.fn(() => true), activate: vi.fn() },
+    nucleotideTransformTool: {
+      canActivate: vi.fn(() => true), activate: vi.fn(),
+      handleSelectionChange: vi.fn(),
+    },
     quatToEulerDeg: vi.fn(() => [10, 20, 30]),
     refreshCurrentSelection: vi.fn(),
     setPivotOptions: vi.fn(),
@@ -74,5 +77,14 @@ describe('initMoveRotateSubscriptions', () => {
       design.cluster_transforms[0], design,
     )
     expect(deps.clusterGlowLayer.setEntries).toHaveBeenCalledWith(['entry'])
+  })
+
+  it('lets a VR nucleotide preview restore itself on canonical selection change', () => {
+    const { deps, subscribers } = harness()
+    const previousState = { selection: { items: [{ kind: 'domain' }] } }
+    const newState = { selection: { items: [{ kind: 'base' }] } }
+    subscribers[7](newState, previousState)
+    expect(deps.nucleotideTransformTool.handleSelectionChange)
+      .toHaveBeenCalledWith(newState, previousState)
   })
 })
