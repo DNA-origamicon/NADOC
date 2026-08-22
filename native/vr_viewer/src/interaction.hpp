@@ -1,5 +1,7 @@
 #pragma once
 
+#include "scene_placement.hpp"
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -1860,18 +1862,22 @@ class SceneManipulator {
         mode_ = ManipulationMode::none;
     }
 
-    void placeInView(const glm::vec3& headPosition, const glm::quat& headOrientation) {
+    void placeInView(
+        const glm::vec3& headPosition, const glm::quat& headOrientation,
+        const SceneViewPlacement& placement = {}) {
         const glm::quat orientation = glm::normalize(headOrientation);
         const glm::vec3 target = headPosition
-                               + orientation * glm::vec3(0.0F, 0.0F, -kViewDistanceMeters);
+                               + orientation * glm::vec3(
+                                   0.0F, 0.0F, -placement.distanceMeters);
         // The fixture is authored for a camera at the LOCAL origin facing -Z.
         // Carry that presentation frame with the initial HMD pose so a rotated
         // dummy does not receive an otherwise centered but edge-on structure.
         transform_ = glm::translate(glm::mat4(1.0F), target)
                    * glm::toMat4(orientation)
-                   * glm::scale(glm::mat4(1.0F), glm::vec3(kInitialViewScale))
+                   * glm::toMat4(scenePlacementOrientation(placement))
+                   * glm::scale(glm::mat4(1.0F), glm::vec3(placement.scale))
                    * glm::translate(glm::mat4(1.0F), -kDefaultModelCenter);
-        scale_ = kInitialViewScale;
+        scale_ = placement.scale;
         mode_ = ManipulationMode::none;
     }
 

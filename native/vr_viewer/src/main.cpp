@@ -33,6 +33,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <charconv>
 #include <cmath>
 #include <cctype>
 #include <csignal>
@@ -61,8 +62,21 @@ constexpr float kViewSizeMeters = 0.60F;
 constexpr float kViewDistanceMeters = 1.30F;
 constexpr float kNearMeters = 0.02F;
 constexpr float kFarMeters = 100.0F;
+constexpr int32_t kMirrorDiagnosticSize = 64;
+constexpr uint64_t kMirrorDiagnosticIntervalFrames = 30U;
 
 std::atomic_bool gStopRequested{false};
+
+std::optional<float> parseFiniteFloat(const std::string& value) {
+    float parsed = 0.0F;
+    const auto result = std::from_chars(
+        value.data(), value.data() + value.size(), parsed);
+    if (result.ec != std::errc{} || result.ptr != value.data() + value.size() ||
+        !std::isfinite(parsed)) {
+        return std::nullopt;
+    }
+    return parsed;
+}
 
 struct Vertex {
     glm::vec3 position{};
@@ -3364,7 +3378,9 @@ class Viewer {
                     nadoc_vr::SpectatorMirrorEye mirrorEye =
                         nadoc_vr::SpectatorMirrorEye::off,
                     bool referenceGrid = false,
-                    bool placeSceneInView = false)
+                    bool placeSceneInView = false,
+                    nadoc_vr::SceneViewPlacement sceneViewPlacement = {},
+                    std::string mirrorDiagnosticsPath = {})
         : sceneData_(std::move(scene)), eventPath_(std::move(eventPath)),
           feedbackPath_(std::move(feedbackPath)),
           toolFeedbackPath_(std::move(toolFeedbackPath)),
@@ -3384,9 +3400,26 @@ class Viewer {
           desktopRepresentation_(jobSnapshot.representation),
           desktopColoring_(jobSnapshot.coloring),
           mirrorEye_(mirrorEye), referenceGrid_(referenceGrid),
+          initialScenePlacementEnabled_(placeSceneInView),
           initialScenePlacementRequested_(placeSceneInView),
+          sceneViewPlacement_(sceneViewPlacement),
+          mirrorDiagnosticsPath_(std::move(mirrorDiagnosticsPath)),
           jobs_(std::move(jobSnapshot.rows)),
           selectionLevel_(std::move(selectionLevel)) {
+        if (initialScenePlacementRequested_ &&
+            sceneViewPlacement_.view == nadoc_vr::ScenePlacementView::mirror &&
+            mirrorEye_ == nadoc_vr::SpectatorMirrorEye::off) {
+            throw std::invalid_argument(
+                "mirror-targeted scene placement requires a mirrored eye");
+        }
+        if (!mirrorDiagnosticsPath_.empty()) {
+            mirrorDiagnosticsOutput_.open(
+                mirrorDiagnosticsPath_, std::ios::out | std::ios::trunc);
+            if (!mirrorDiagnosticsOutput_) {
+                throw std::runtime_error(
+                    "Could not open mirror diagnostics " + mirrorDiagnosticsPath_);
+            }
+        }
         if (!witnessPath.empty()) {
             std::ifstream input(witnessPath);
             if (!input) {
@@ -3439,6 +3472,13 @@ class Viewer {
             if (swapchain.handle != XR_NULL_HANDLE) xrDestroySwapchain(swapchain.handle);
         }
         if (framebuffer_) glDeleteFramebuffers(1, &framebuffer_);
+        if (mirrorDiagnosticsTexture_) glDeleteTextures(1, &mirrorDiagnosticsTexture_);
+        if (mirrorDiagnosticsDepthStencil_) {
+            glDeleteRenderbuffers(1, &mirrorDiagnosticsDepthStencil_);
+        }
+        if (mirrorDiagnosticsFramebuffer_) {
+            glDeleteFramebuffers(1, &mirrorDiagnosticsFramebuffer_);
+        }
         for (XrSpace handSpace : handSpaces_) {
             if (handSpace != XR_NULL_HANDLE) xrDestroySpace(handSpace);
         }
@@ -3457,6 +3497,7 @@ class Viewer {
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        glfwWindowHint(GLFW_STENCIL_BITS, 8);
         const bool mirrorEnabled = mirrorEye_ != nadoc_vr::SpectatorMirrorEye::off;
         std::string title = nadoc_vr::spectatorMirrorWindowTitle(mirrorEye_);
         if (referenceGrid_) title += " — ROOM GRID ACTIVE";
@@ -3726,11 +3767,38 @@ class Viewer {
                 "xrEnumerateSwapchainImages");
             glGenRenderbuffers(1, &swapchain.depth);
             glBindRenderbuffer(GL_RENDERBUFFER, swapchain.depth);
-            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24,
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8,
                                   swapchain.width, swapchain.height);
         }
 
         glGenFramebuffers(1, &framebuffer_);
+        if (mirrorEye_ != nadoc_vr::SpectatorMirrorEye::off) {
+            glGenTextures(1, &mirrorDiagnosticsTexture_);
+            glBindTexture(GL_TEXTURE_2D, mirrorDiagnosticsTexture_);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexImage2D(
+                GL_TEXTURE_2D, 0, GL_RGBA8,
+                kMirrorDiagnosticSize, kMirrorDiagnosticSize,
+                0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            glGenFramebuffers(1, &mirrorDiagnosticsFramebuffer_);
+            glBindFramebuffer(GL_FRAMEBUFFER, mirrorDiagnosticsFramebuffer_);
+            glFramebufferTexture2D(
+                GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                mirrorDiagnosticsTexture_, 0);
+            glGenRenderbuffers(1, &mirrorDiagnosticsDepthStencil_);
+            glBindRenderbuffer(GL_RENDERBUFFER, mirrorDiagnosticsDepthStencil_);
+            glRenderbufferStorage(
+                GL_RENDERBUFFER, GL_DEPTH24_STENCIL8,
+                kMirrorDiagnosticSize, kMirrorDiagnosticSize);
+            glFramebufferRenderbuffer(
+                GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER,
+                mirrorDiagnosticsDepthStencil_);
+            if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+                throw std::runtime_error("Mirror diagnostic framebuffer is incomplete");
+            }
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
         glScene_ = std::make_unique<GlScene>(std::move(sceneData_));
         glScene_->setVisualization(visualizationSnapshot_);
         glScene_->setSelectionHighlights(
@@ -6498,25 +6566,96 @@ class Viewer {
         updateControllerGuides();
     }
 
-    void applyInitialScenePlacement(uint32_t viewCount) {
+    void applyInitialScenePlacement(uint32_t viewCount, bool fullyTracked) {
         if (!initialScenePlacementRequested_ || viewCount == 0) return;
-        glm::vec3 headPosition{};
-        for (uint32_t i = 0; i < viewCount; ++i) {
-            headPosition += glm::vec3(
-                views_[i].pose.position.x,
-                views_[i].pose.position.y,
-                views_[i].pose.position.z);
+        if (!fullyTracked) {
+            initialPlacementGate_.observe(false, false, 0.0F, 0.0F);
+            initialPlacementCandidateInitialized_ = false;
+            return;
         }
-        headPosition /= static_cast<float>(viewCount);
-        const XrQuaternionf& orientation = views_[0].pose.orientation;
+        glm::vec3 headPosition{};
+        nadoc_vr::ScenePlacementView targetView = sceneViewPlacement_.view;
+        if (targetView == nadoc_vr::ScenePlacementView::mirror) {
+            targetView = mirrorEye_ == nadoc_vr::SpectatorMirrorEye::right
+                ? nadoc_vr::ScenePlacementView::right
+                : nadoc_vr::ScenePlacementView::left;
+        }
+        uint32_t orientationView = 0U;
+        if (targetView == nadoc_vr::ScenePlacementView::head) {
+            for (uint32_t i = 0; i < viewCount; ++i) {
+                headPosition += glm::vec3(
+                    views_[i].pose.position.x,
+                    views_[i].pose.position.y,
+                    views_[i].pose.position.z);
+            }
+            headPosition /= static_cast<float>(viewCount);
+        } else {
+            orientationView = targetView == nadoc_vr::ScenePlacementView::right
+                ? 1U : 0U;
+            if (orientationView >= viewCount) return;
+            headPosition = glm::vec3(
+                views_[orientationView].pose.position.x,
+                views_[orientationView].pose.position.y,
+                views_[orientationView].pose.position.z);
+        }
+        const XrQuaternionf& orientation =
+            views_[orientationView].pose.orientation;
+        const glm::quat headOrientation = glm::normalize(glm::quat(
+            orientation.w, orientation.x, orientation.y, orientation.z));
+        float translationMeters = 0.0F;
+        float rotationDegrees = 0.0F;
+        if (initialPlacementCandidateInitialized_) {
+            translationMeters = glm::length(
+                headPosition - initialPlacementCandidatePosition_);
+            const float orientationDot = glm::clamp(
+                std::abs(glm::dot(
+                    headOrientation, initialPlacementCandidateOrientation_)),
+                0.0F, 1.0F);
+            rotationDegrees = glm::degrees(2.0F * std::acos(orientationDot));
+        }
+        const bool stable = initialPlacementGate_.observe(
+            true, initialPlacementCandidateInitialized_,
+            translationMeters, rotationDegrees);
+        initialPlacementCandidatePosition_ = headPosition;
+        initialPlacementCandidateOrientation_ = headOrientation;
+        initialPlacementCandidateInitialized_ = true;
+        if (!stable) return;
         manipulator_.placeInView(
-            headPosition,
-            {orientation.w, orientation.x, orientation.y, orientation.z});
+            headPosition, headOrientation, sceneViewPlacement_);
+        initialScenePlacementApplied_ = true;
         initialScenePlacementRequested_ = false;
         updateControllerGuides();
-        std::cout << "NADOC VR initial scene placement: centered 1.30 m "
-                     "along the tracked HMD gaze at 2x presentation scale"
+        std::cout << "ScryWrite placement applied: view="
+                  << nadoc_vr::scenePlacementViewName(sceneViewPlacement_.view)
+                  << " orientation="
+                  << nadoc_vr::scenePlacementOrientationName(
+                         sceneViewPlacement_.orientation)
+                  << " distance_m=" << sceneViewPlacement_.distanceMeters
+                  << " scale=" << sceneViewPlacement_.scale
+                  << " yaw=" << sceneViewPlacement_.yawDegrees
+                  << " pitch=" << sceneViewPlacement_.pitchDegrees
+                  << " roll=" << sceneViewPlacement_.rollDegrees
+                  << " stable_samples=" << initialPlacementGate_.stableSamples
                   << std::endl;
+    }
+
+    [[nodiscard]] bool spectatorClassificationEnabled() const {
+        return mirrorEye_ != nadoc_vr::SpectatorMirrorEye::off;
+    }
+
+    void setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass renderClass) const {
+        if (!spectatorClassificationEnabled()) return;
+        glEnable(GL_STENCIL_TEST);
+        glStencilMask(0xFFU);
+        glStencilFunc(
+            GL_ALWAYS, static_cast<GLint>(renderClass), 0xFFU);
+        glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+    }
+
+    void finishSpectatorClassification() const {
+        if (!spectatorClassificationEnabled()) return;
+        glStencilMask(0xFFU);
+        glDisable(GL_STENCIL_TEST);
     }
 
     bool renderView(uint32_t index, const XrView& view,
@@ -6534,24 +6673,41 @@ class Viewer {
         glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
                                swapchain.images[imageIndex].image, 0);
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER,
-                                  swapchain.depth);
+        glFramebufferRenderbuffer(
+            GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER,
+            swapchain.depth);
         if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
             throw std::runtime_error("OpenXR framebuffer is incomplete");
         }
         glViewport(0, 0, swapchain.width, swapchain.height);
         glClearColor(0.015F, 0.025F, 0.045F, 1.0F);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        GLbitfield clearMask = GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT;
+        if (spectatorClassificationEnabled()) {
+            glStencilMask(0xFFU);
+            glClearStencil(static_cast<GLint>(
+                nadoc_vr::SpectatorRenderClass::background));
+            clearMask |= GL_STENCIL_BUFFER_BIT;
+        }
+        glClear(clearMask);
         const glm::mat4 projection = projectionFromFov(view.fov, kNearMeters, kFarMeters);
         const glm::mat4 viewProjection = projection * viewFromPose(view.pose);
         const bool desktopMenu = menuOpen_ && menuPage_ == MenuPage::desktop;
+        setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::design);
         glScene_->render(
             viewProjection, manipulator_.transform(),
-            desktopMenu ? std::vector<Vertex>{} : controllerGuides_);
+            spectatorClassificationEnabled() || desktopMenu
+                ? std::vector<Vertex>{} : controllerGuides_);
+        if (spectatorClassificationEnabled() && !desktopMenu) {
+            setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
+            glScene_->renderGuides(viewProjection, controllerGuides_);
+        }
         if (referenceGrid_) {
+            setSpectatorRenderClass(
+                nadoc_vr::SpectatorRenderClass::reference_grid);
             glScene_->renderGuides(viewProjection, referenceGridGuides_);
         }
         if (desktopMenu) {
+            setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
             const auto bounds = menuPanelBounds();
             desktopSurface_.render(viewProjection, {{
                 menuWorld(bounds.minimum.x, bounds.maximum.y, 0.004F),
@@ -6564,10 +6720,12 @@ class Viewer {
             glScene_->renderGuides(viewProjection, controllerGuides_);
         }
         if (witness_) {
+            setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
             witnessSurface_.renderPanel(
                 viewProjection, witnessObserverPosition_, witnessObserverOrientation_);
         }
         presentSpectatorMirror(index, view, swapchain.width, swapchain.height);
+        finishSpectatorClassification();
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glFlush();
 
@@ -6651,10 +6809,204 @@ class Viewer {
             telemetry.yawDegrees = glm::degrees(std::atan2(forward.x, -forward.z));
             telemetry.pitchDegrees = glm::degrees(std::asin(glm::clamp(
                 forward.y, -1.0F, 1.0F)));
+            telemetry.pixelSample = mirrorPixelSampleSequence_;
+            telemetry.pixelStatus = mirrorPixelAssessment_.status;
+            telemetry.coverageStatus = mirrorCoverageAssessment_.status;
+            telemetry.placementApplied = initialScenePlacementApplied_;
+            if (initialScenePlacementApplied_) {
+                telemetry.placementOrientation =
+                    nadoc_vr::scenePlacementOrientationName(
+                        sceneViewPlacement_.orientation);
+                std::transform(
+                    telemetry.placementOrientation.begin(),
+                    telemetry.placementOrientation.end(),
+                    telemetry.placementOrientation.begin(),
+                    [](unsigned char character) {
+                        return static_cast<char>(std::toupper(character));
+                    });
+            }
+            telemetry.nonBlackFraction = mirrorPixelAssessment_.nonBlackFraction;
+            telemetry.changedFraction = mirrorPixelAssessment_.changedFraction;
             const std::string title = nadoc_vr::spectatorMirrorTelemetryTitle(
                 mirrorEye_, referenceGrid_, telemetry);
             glfwSetWindowTitle(window_, title.c_str());
         }
+    }
+
+    void sampleSpectatorPixels(
+        const XrView& view, bool submittedEye,
+        const nadoc_vr::SpectatorMirrorViewport& viewport,
+        GLuint classificationFramebuffer,
+        const nadoc_vr::SpectatorMirrorViewport& classificationViewport) {
+        if (!mirrorDiagnosticsFramebuffer_ ||
+            mirrorFrameSequence_ % kMirrorDiagnosticIntervalFrames != 0U) {
+            return;
+        }
+        const auto sampleStarted = std::chrono::steady_clock::now();
+
+        std::vector<uint8_t> pixels(
+            static_cast<size_t>(kMirrorDiagnosticSize) * kMirrorDiagnosticSize * 4U);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        glReadBuffer(GL_BACK);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, mirrorDiagnosticsFramebuffer_);
+        glBlitFramebuffer(
+            viewport.x, viewport.y,
+            viewport.x + viewport.width, viewport.y + viewport.height,
+            0, 0, kMirrorDiagnosticSize, kMirrorDiagnosticSize,
+            GL_COLOR_BUFFER_BIT, GL_LINEAR);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, mirrorDiagnosticsFramebuffer_);
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        glReadPixels(
+            0, 0, kMirrorDiagnosticSize, kMirrorDiagnosticSize,
+            GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+
+        std::vector<uint8_t> renderClasses(
+            static_cast<size_t>(kMirrorDiagnosticSize) * kMirrorDiagnosticSize);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, classificationFramebuffer);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, mirrorDiagnosticsFramebuffer_);
+        glBlitFramebuffer(
+            classificationViewport.x, classificationViewport.y,
+            classificationViewport.x + classificationViewport.width,
+            classificationViewport.y + classificationViewport.height,
+            0, 0, kMirrorDiagnosticSize, kMirrorDiagnosticSize,
+            GL_STENCIL_BUFFER_BIT, GL_NEAREST);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, mirrorDiagnosticsFramebuffer_);
+        glReadPixels(
+            0, 0, kMirrorDiagnosticSize, kMirrorDiagnosticSize,
+            GL_STENCIL_INDEX, GL_UNSIGNED_BYTE, renderClasses.data());
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glReadBuffer(GL_BACK);
+
+        const glm::vec3 position(
+            view.pose.position.x, view.pose.position.y, view.pose.position.z);
+        const glm::quat orientation = glm::normalize(glm::quat(
+            view.pose.orientation.w, view.pose.orientation.x,
+            view.pose.orientation.y, view.pose.orientation.z));
+        const bool comparable = mirrorPixelPoseInitialized_ &&
+                                submittedEye == previousMirrorPixelSubmittedEye_;
+        float translationMeters = 0.0F;
+        float rotationDegrees = 0.0F;
+        if (comparable) {
+            translationMeters = glm::length(position - previousMirrorPixelPosition_);
+            const float orientationDot = glm::clamp(
+                std::abs(glm::dot(orientation, previousMirrorPixelOrientation_)),
+                0.0F, 1.0F);
+            rotationDegrees = glm::degrees(2.0F * std::acos(orientationDot));
+        }
+        const std::vector<uint8_t>* previous = comparable
+            ? &previousMirrorPixels_ : nullptr;
+        mirrorPixelAssessment_ = nadoc_vr::assessSpectatorPixels(
+            pixels, previous, translationMeters, rotationDegrees);
+        mirrorCoverageAssessment_ =
+            nadoc_vr::assessSpectatorCoverage(renderClasses);
+        ++mirrorPixelSampleSequence_;
+        const double sampleCpuMilliseconds =
+            std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - sampleStarted).count();
+
+        const bool unhealthy =
+            mirrorPixelAssessment_.status == nadoc_vr::SpectatorPixelStatus::black ||
+            mirrorPixelAssessment_.status ==
+                nadoc_vr::SpectatorPixelStatus::frozen_suspected ||
+            mirrorCoverageAssessment_.status ==
+                nadoc_vr::SpectatorCoverageStatus::grid_only ||
+            mirrorCoverageAssessment_.status ==
+                nadoc_vr::SpectatorCoverageStatus::no_tags;
+        const bool statusChanged =
+            mirrorPixelAssessment_.status != lastLoggedMirrorPixelStatus_ ||
+            mirrorCoverageAssessment_.status != lastLoggedMirrorCoverageStatus_;
+        if (statusChanged || mirrorPixelSampleSequence_ == 1U ||
+            (unhealthy &&
+             mirrorFrameSequence_ >= lastMirrorPixelWarningFrame_ + 90U)) {
+            if (unhealthy) lastMirrorPixelWarningFrame_ = mirrorFrameSequence_;
+            lastLoggedMirrorPixelStatus_ = mirrorPixelAssessment_.status;
+            lastLoggedMirrorCoverageStatus_ = mirrorCoverageAssessment_.status;
+            std::cout << "NADOC VR mirror pixels P" << mirrorPixelSampleSequence_
+                      << ": " << nadoc_vr::spectatorPixelStatusName(
+                             mirrorPixelAssessment_.status)
+                      << " source=" << (submittedEye ? "SUBMITTED" : "FALLBACK")
+                      << " F=" << mirrorFrameSequence_
+                      << " nonblack=" << mirrorPixelAssessment_.nonBlackFraction
+                      << " changed=" << mirrorPixelAssessment_.changedFraction
+                      << " coverage=" << nadoc_vr::spectatorCoverageStatusName(
+                             mirrorCoverageAssessment_.status)
+                      << " design=" << mirrorCoverageAssessment_.designFraction
+                      << " grid=" << mirrorCoverageAssessment_.gridFraction
+                      << " overlay=" << mirrorCoverageAssessment_.overlayFraction
+                      << " pose_d=" << translationMeters
+                      << " pose_a=" << rotationDegrees
+                      << " cpu_ms=" << sampleCpuMilliseconds << std::endl;
+        }
+
+        if (mirrorDiagnosticsOutput_) {
+            const auto timestampMilliseconds =
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::system_clock::now().time_since_epoch()).count();
+            mirrorDiagnosticsOutput_
+                << "{\"sample\":" << mirrorPixelSampleSequence_
+                << ",\"frame\":" << mirrorFrameSequence_
+                << ",\"timestamp_ms\":" << timestampMilliseconds
+                << ",\"openxr_predicted_display_time\":"
+                << currentPredictedDisplayTime_
+                << ",\"source\":\""
+                << (submittedEye ? "submitted" : "spectator_fallback")
+                << "\",\"status\":\""
+                << nadoc_vr::spectatorPixelStatusName(mirrorPixelAssessment_.status)
+                << "\",\"signature\":" << mirrorPixelAssessment_.signature
+                << ",\"mean_luminance\":" << mirrorPixelAssessment_.meanLuminance
+                << ",\"nonblack_fraction\":"
+                << mirrorPixelAssessment_.nonBlackFraction
+                << ",\"changed_fraction\":"
+                << mirrorPixelAssessment_.changedFraction
+                << ",\"classification_status\":\""
+                << nadoc_vr::spectatorCoverageStatusName(
+                       mirrorCoverageAssessment_.status)
+                << "\",\"design_pixels\":"
+                << mirrorCoverageAssessment_.designPixels
+                << ",\"grid_pixels\":" << mirrorCoverageAssessment_.gridPixels
+                << ",\"overlay_pixels\":"
+                << mirrorCoverageAssessment_.overlayPixels
+                << ",\"unknown_class_pixels\":"
+                << mirrorCoverageAssessment_.unknownPixels
+                << ",\"design_fraction\":"
+                << mirrorCoverageAssessment_.designFraction
+                << ",\"grid_fraction\":"
+                << mirrorCoverageAssessment_.gridFraction
+                << ",\"overlay_fraction\":"
+                << mirrorCoverageAssessment_.overlayFraction
+                << ",\"pose_translation_m\":" << translationMeters
+                << ",\"pose_rotation_deg\":" << rotationDegrees
+                << ",\"readback_cpu_ms\":" << sampleCpuMilliseconds
+                << ",\"pose_moved\":"
+                << (mirrorPixelAssessment_.poseMoved ? "true" : "false")
+                << ",\"room_grid\":" << (referenceGrid_ ? "true" : "false")
+                << ",\"placement_enabled\":"
+                << (initialScenePlacementEnabled_ ? "true" : "false")
+                << ",\"placement_applied\":"
+                << (initialScenePlacementApplied_ ? "true" : "false")
+                << ",\"placement_view\":\""
+                << nadoc_vr::scenePlacementViewName(sceneViewPlacement_.view)
+                << "\",\"placement_orientation\":\""
+                << nadoc_vr::scenePlacementOrientationName(
+                       sceneViewPlacement_.orientation)
+                << "\",\"placement_distance_m\":"
+                << sceneViewPlacement_.distanceMeters
+                << ",\"placement_scale\":" << sceneViewPlacement_.scale
+                << ",\"placement_yaw_deg\":"
+                << sceneViewPlacement_.yawDegrees
+                << ",\"placement_pitch_deg\":"
+                << sceneViewPlacement_.pitchDegrees
+                << ",\"placement_roll_deg\":"
+                << sceneViewPlacement_.rollDegrees
+                << "}\n";
+            mirrorDiagnosticsOutput_.flush();
+        }
+
+        previousMirrorPixels_ = std::move(pixels);
+        previousMirrorPixelPosition_ = position;
+        previousMirrorPixelOrientation_ = orientation;
+        previousMirrorPixelSubmittedEye_ = submittedEye;
+        mirrorPixelPoseInitialized_ = true;
     }
 
     void finishSpectatorPresentation(
@@ -6709,6 +7061,9 @@ class Viewer {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glClearColor(previousClearColor[0], previousClearColor[1],
                      previousClearColor[2], previousClearColor[3]);
+        sampleSpectatorPixels(
+            view, true, viewport, framebuffer_,
+            {0, 0, sourceWidth, sourceHeight});
         finishSpectatorPresentation(viewport);
     }
 
@@ -6729,19 +7084,29 @@ class Viewer {
         glDisable(GL_SCISSOR_TEST);
         glViewport(0, 0, destinationWidth, destinationHeight);
         glClearColor(0.0F, 0.0F, 0.0F, 1.0F);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glStencilMask(0xFFU);
+        glClearStencil(static_cast<GLint>(
+            nadoc_vr::SpectatorRenderClass::background));
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
         glViewport(viewport.x, viewport.y, viewport.width, viewport.height);
         const glm::mat4 projection = projectionFromFov(
             view.fov, kNearMeters, kFarMeters);
         const glm::mat4 viewProjection = projection * viewFromPose(view.pose);
         const bool desktopMenu = menuOpen_ && menuPage_ == MenuPage::desktop;
+        setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::design);
         glScene_->render(
-            viewProjection, manipulator_.transform(),
-            desktopMenu ? std::vector<Vertex>{} : controllerGuides_);
+            viewProjection, manipulator_.transform(), {});
+        if (!desktopMenu) {
+            setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
+            glScene_->renderGuides(viewProjection, controllerGuides_);
+        }
         if (referenceGrid_) {
+            setSpectatorRenderClass(
+                nadoc_vr::SpectatorRenderClass::reference_grid);
             glScene_->renderGuides(viewProjection, referenceGridGuides_);
         }
         if (desktopMenu) {
+            setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
             const auto bounds = menuPanelBounds();
             desktopSurface_.render(viewProjection, {{
                 menuWorld(bounds.minimum.x, bounds.maximum.y, 0.004F),
@@ -6752,9 +7117,12 @@ class Viewer {
             glScene_->renderGuides(viewProjection, controllerGuides_);
         }
         if (witness_) {
+            setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
             witnessSurface_.renderPanel(
                 viewProjection, witnessObserverPosition_, witnessObserverOrientation_);
         }
+        sampleSpectatorPixels(view, false, viewport, 0, viewport);
+        finishSpectatorClassification();
         finishSpectatorPresentation(viewport);
     }
 
@@ -6794,6 +7162,7 @@ class Viewer {
         XrFrameWaitInfo waitInfo{XR_TYPE_FRAME_WAIT_INFO};
         XrFrameState frameState{XR_TYPE_FRAME_STATE};
         checkXr(instance_, xrWaitFrame(session_, &waitInfo, &frameState), "xrWaitFrame");
+        currentPredictedDisplayTime_ = frameState.predictedDisplayTime;
         const auto frameStarted = std::chrono::steady_clock::now();
         XrFrameBeginInfo beginInfo{XR_TYPE_FRAME_BEGIN_INFO};
         checkXr(instance_, xrBeginFrame(session_, &beginInfo), "xrBeginFrame");
@@ -6821,13 +7190,21 @@ class Viewer {
                 session_, &locateInfo, &viewState, static_cast<uint32_t>(views_.size()),
                 &viewCount, views_.data()), "xrLocateViews");
             currentViewStateFlags_ = viewState.viewStateFlags;
-            const XrViewStateFlags valid = XR_VIEW_STATE_POSITION_VALID_BIT |
-                                           XR_VIEW_STATE_ORIENTATION_VALID_BIT;
             const bool completeViewSet = viewCount == views_.size();
-            const bool validViewSet =
-                completeViewSet && (viewState.viewStateFlags & valid) == valid;
+            const bool positionValid = completeViewSet &&
+                (viewState.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) != 0;
+            const bool orientationValid = completeViewSet &&
+                (viewState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) != 0;
+            const bool positionTracked = completeViewSet &&
+                (viewState.viewStateFlags & XR_VIEW_STATE_POSITION_TRACKED_BIT) != 0;
+            const bool orientationTracked = completeViewSet &&
+                (viewState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_TRACKED_BIT) != 0;
+            const bool validViewSet = positionValid && orientationValid;
             if (completeViewSet) {
-                if (validViewSet) applyInitialScenePlacement(viewCount);
+                applyInitialScenePlacement(
+                    viewCount, nadoc_vr::spectatorPoseReadyForPlacement(
+                        positionValid, orientationValid,
+                        positionTracked, orientationTracked));
                 witnessObserverPosition_ = {};
                 for (uint32_t index = 0; index < viewCount; ++index) {
                     witnessObserverPosition_ += glm::vec3(
@@ -7066,7 +7443,16 @@ class Viewer {
     std::string desktopColoring_;
     nadoc_vr::SpectatorMirrorEye mirrorEye_ = nadoc_vr::SpectatorMirrorEye::off;
     bool referenceGrid_ = false;
+    bool initialScenePlacementEnabled_ = false;
     bool initialScenePlacementRequested_ = false;
+    bool initialScenePlacementApplied_ = false;
+    nadoc_vr::SceneViewPlacement sceneViewPlacement_;
+    nadoc_vr::SpectatorPlacementGate initialPlacementGate_;
+    glm::vec3 initialPlacementCandidatePosition_{};
+    glm::quat initialPlacementCandidateOrientation_{1.0F, 0.0F, 0.0F, 0.0F};
+    bool initialPlacementCandidateInitialized_ = false;
+    std::string mirrorDiagnosticsPath_;
+    std::ofstream mirrorDiagnosticsOutput_;
     std::vector<nadoc_vr::JobSnapshotRow> jobs_;
     glm::vec3 normalizationCenter_{};
     float normalizationScale_ = 1.0F;
@@ -7102,9 +7488,26 @@ class Viewer {
     bool lastMirrorPoseTracked_ = false;
     bool mirrorSourceInitialized_ = false;
     bool lastMirrorSubmittedEye_ = false;
+    GLuint mirrorDiagnosticsFramebuffer_ = 0;
+    GLuint mirrorDiagnosticsTexture_ = 0;
+    GLuint mirrorDiagnosticsDepthStencil_ = 0;
+    uint64_t mirrorPixelSampleSequence_ = 0;
+    uint64_t lastMirrorPixelWarningFrame_ = 0;
+    nadoc_vr::SpectatorPixelAssessment mirrorPixelAssessment_;
+    nadoc_vr::SpectatorCoverageAssessment mirrorCoverageAssessment_;
+    nadoc_vr::SpectatorPixelStatus lastLoggedMirrorPixelStatus_ =
+        nadoc_vr::SpectatorPixelStatus::unavailable;
+    nadoc_vr::SpectatorCoverageStatus lastLoggedMirrorCoverageStatus_ =
+        nadoc_vr::SpectatorCoverageStatus::unavailable;
+    std::vector<uint8_t> previousMirrorPixels_;
+    glm::vec3 previousMirrorPixelPosition_{};
+    glm::quat previousMirrorPixelOrientation_{1.0F, 0.0F, 0.0F, 0.0F};
+    bool mirrorPixelPoseInitialized_ = false;
+    bool previousMirrorPixelSubmittedEye_ = false;
     double firstFrameAtMilliseconds_ = 0.0;
     double firstFrameCpuMilliseconds_ = 0.0;
     double displayPeriodMilliseconds_ = 0.0;
+    XrTime currentPredictedDisplayTime_ = 0;
     nadoc_vr::TimingWindow previewFrameTiming_{240};
     uint64_t feedbackSequence_ = 0;
     uint32_t feedbackPollFrame_ = 0;
@@ -7252,6 +7655,12 @@ int main(int argc, char** argv) {
                      "[--mirror-eye <off|left|right>] "
                      "[--reference-grid <off|room>] "
                      "[--place-scene-in-view <off|on>] "
+                     "[--scene-view <head|mirror|left|right>] "
+                     "[--scene-orientation <front|back|left|right|top|bottom|isometric>] "
+                     "[--scene-distance <meters>] [--scene-scale <factor>] "
+                     "[--scene-yaw <degrees>] [--scene-pitch <degrees>] "
+                     "[--scene-roll <degrees>] "
+                     "[--mirror-diagnostics <trace.jsonl>] "
                      "[--scrywrite-witness <script.scry>]\n";
         return 2;
     }
@@ -7264,9 +7673,11 @@ int main(int argc, char** argv) {
     std::string jobPath;
     std::string visualizationPath;
     std::string witnessPath;
+    std::string mirrorDiagnosticsPath;
     nadoc_vr::SpectatorMirrorEye mirrorEye = nadoc_vr::SpectatorMirrorEye::off;
     bool referenceGrid = false;
     bool placeSceneInView = false;
+    nadoc_vr::SceneViewPlacement sceneViewPlacement;
     std::string selectionLevel = "default";
     std::string selectedSelectionKind = "none";
     std::vector<std::string> selectedOwnerTokens;
@@ -7290,6 +7701,9 @@ int main(int argc, char** argv) {
         else if (option == "--jobs") jobPath = argv[index + 1];
         else if (option == "--visualization") visualizationPath = argv[index + 1];
         else if (option == "--scrywrite-witness") witnessPath = argv[index + 1];
+        else if (option == "--mirror-diagnostics") {
+            mirrorDiagnosticsPath = argv[index + 1];
+        }
         else if (option == "--mirror-eye") {
             const auto parsed = nadoc_vr::parseSpectatorMirrorEye(argv[index + 1]);
             if (!parsed) {
@@ -7314,6 +7728,45 @@ int main(int argc, char** argv) {
             }
             placeSceneInView = mode == "on";
         }
+        else if (option == "--scene-view") {
+            const auto parsed = nadoc_vr::parseScenePlacementView(argv[index + 1]);
+            if (!parsed) {
+                std::cerr << "NADOC VR error: scene view must be head, mirror, left, or right\n";
+                return 2;
+            }
+            sceneViewPlacement.view = *parsed;
+        }
+        else if (option == "--scene-orientation") {
+            const auto parsed = nadoc_vr::parseScenePlacementOrientation(
+                argv[index + 1]);
+            if (!parsed) {
+                std::cerr << "NADOC VR error: scene orientation must be front, back, "
+                             "left, right, top, bottom, or isometric\n";
+                return 2;
+            }
+            sceneViewPlacement.orientation = *parsed;
+        }
+        else if (option == "--scene-distance" || option == "--scene-scale" ||
+                 option == "--scene-yaw" || option == "--scene-pitch" ||
+                 option == "--scene-roll") {
+            const auto parsed = parseFiniteFloat(argv[index + 1]);
+            if (!parsed) {
+                std::cerr << "NADOC VR error: invalid numeric value for "
+                          << option << '\n';
+                return 2;
+            }
+            if (option == "--scene-distance") {
+                sceneViewPlacement.distanceMeters = *parsed;
+            } else if (option == "--scene-scale") {
+                sceneViewPlacement.scale = *parsed;
+            } else if (option == "--scene-yaw") {
+                sceneViewPlacement.yawDegrees = *parsed;
+            } else if (option == "--scene-pitch") {
+                sceneViewPlacement.pitchDegrees = *parsed;
+            } else {
+                sceneViewPlacement.rollDegrees = *parsed;
+            }
+        }
         else if (option == "--selection-level") selectionLevel = argv[index + 1];
         else if (option == "--selected-owner") {
             const std::string token(argv[index + 1]);
@@ -7335,6 +7788,11 @@ int main(int argc, char** argv) {
     if (std::find(validSelectionLevels.begin(), validSelectionLevels.end(), selectionLevel)
         == validSelectionLevels.end()) {
         std::cerr << "NADOC VR error: invalid selection level " << selectionLevel << '\n';
+        return 2;
+    }
+    if (!nadoc_vr::validSceneViewPlacement(sceneViewPlacement)) {
+        std::cerr << "NADOC VR error: placement distance must be 0.20-10 m, scale "
+                     "0.05-20, and orientation offsets finite within +/-360 degrees\n";
         return 2;
     }
     const std::array<std::string, 11> validSelectionKinds = {
@@ -7362,7 +7820,9 @@ int main(int argc, char** argv) {
             nadoc_vr::loadJobSnapshot(jobPath), visualizationPath,
             nadoc_vr::loadVisualizationSnapshot(visualizationPath), selectionLevel,
             std::move(selectedOwnerTokens), std::move(selectedSelectionKind),
-            witnessPath, mirrorEye, referenceGrid, placeSceneInView);
+            witnessPath, mirrorEye, referenceGrid, placeSceneInView,
+            sceneViewPlacement,
+            mirrorDiagnosticsPath);
         return viewer.run();
     } catch (const std::exception& error) {
         std::cerr << "NADOC VR error: " << error.what() << '\n';

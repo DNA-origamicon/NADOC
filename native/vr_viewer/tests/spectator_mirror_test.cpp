@@ -51,23 +51,49 @@ int main() {
     telemetry.poseTracked = true;
     telemetry.x = 0.125F;
     telemetry.yawDegrees = -45.0F;
+    telemetry.pixelSample = 7;
+    telemetry.pixelStatus = nadoc_vr::SpectatorPixelStatus::frozen_suspected;
+    telemetry.coverageStatus = nadoc_vr::SpectatorCoverageStatus::grid_only;
+    telemetry.placementApplied = true;
+    telemetry.placementOrientation = "TOP";
     const auto title = nadoc_vr::spectatorMirrorTelemetryTitle(
         SpectatorMirrorEye::left, true, telemetry);
     require(title.find("F123 M4") != std::string::npos &&
                 title.find("SPECTATOR FALLBACK") != std::string::npos &&
                 title.find("TRACKED") != std::string::npos &&
-                title.find("ROOM GRID") != std::string::npos,
+                title.find("GRID ONLY | O TOP | PX FROZEN?") != std::string::npos &&
+                title.find("| GRID") != std::string::npos,
             "live title should expose frame, motion, tracking, and diagnostic mode");
     telemetry.submittedEye = true;
     const auto submittedTitle = nadoc_vr::spectatorMirrorTelemetryTitle(
         SpectatorMirrorEye::right, false, telemetry);
     require(submittedTitle.find("HMD RIGHT | SUBMITTED") != std::string::npos &&
+                submittedTitle.find(
+                    "SUBMITTED | GRID ONLY | O TOP | PX FROZEN? | TRACKED") !=
+                    std::string::npos &&
+                submittedTitle.find("YP -45.0 0.0 | F123 M4") != std::string::npos &&
                 submittedTitle.find("ROOM GRID") == std::string::npos,
-            "submitted title should distinguish actual eye copy from fallback");
+            "submitted title should prioritize source, pixel status, tracking, and orientation");
     require(nadoc_vr::spectatorMirrorHeartbeatHigh(0) &&
                 !nadoc_vr::spectatorMirrorHeartbeatHigh(15) &&
                 nadoc_vr::spectatorMirrorHeartbeatHigh(30),
             "desktop-only heartbeat should alternate every fifteen frames");
+    require(!nadoc_vr::spectatorPoseReadyForPlacement(true, true, false, false) &&
+                !nadoc_vr::spectatorPoseReadyForPlacement(true, true, true, false) &&
+                nadoc_vr::spectatorPoseReadyForPlacement(true, true, true, true),
+            "one-shot placement must wait for a fully tracked pose");
+    nadoc_vr::SpectatorPlacementGate placementGate;
+    require(!placementGate.observe(false, false, 0.0F, 0.0F),
+            "an untracked startup pose must not advance placement");
+    for (int sample = 0; sample < 14; ++sample) {
+        require(!placementGate.observe(
+                    true, sample > 0, 0.001F, 0.1F),
+                "placement must wait for a stable tracked window");
+    }
+    require(placementGate.observe(true, true, 0.001F, 0.1F),
+            "fifteen stable tracked poses should release placement");
+    require(!placementGate.observe(true, true, 0.50F, 0.1F),
+            "a large startup discontinuity must reset the placement gate");
 
     std::cout << "NADOC VR spectator mirror tests passed\n";
     return 0;

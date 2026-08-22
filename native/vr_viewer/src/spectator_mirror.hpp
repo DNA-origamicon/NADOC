@@ -1,5 +1,7 @@
 #pragma once
 
+#include "spectator_diagnostics.hpp"
+
 #include <algorithm>
 #include <cstdint>
 #include <optional>
@@ -29,6 +31,13 @@ struct SpectatorMirrorTelemetry {
     float z = 0.0F;
     float yawDegrees = 0.0F;
     float pitchDegrees = 0.0F;
+    uint64_t pixelSample = 0;
+    SpectatorPixelStatus pixelStatus = SpectatorPixelStatus::unavailable;
+    SpectatorCoverageStatus coverageStatus = SpectatorCoverageStatus::unavailable;
+    bool placementApplied = false;
+    std::string placementOrientation;
+    float nonBlackFraction = 0.0F;
+    float changedFraction = 0.0F;
 };
 
 inline std::optional<SpectatorMirrorEye> parseSpectatorMirrorEye(
@@ -93,20 +102,60 @@ inline bool spectatorMirrorHeartbeatHigh(uint64_t frame) {
     return ((frame / 15U) % 2U) == 0U;
 }
 
+inline bool spectatorPoseReadyForPlacement(
+    bool positionValid, bool orientationValid,
+    bool positionTracked, bool orientationTracked) {
+    return positionValid && orientationValid &&
+           positionTracked && orientationTracked;
+}
+
+struct SpectatorPlacementGate {
+    uint32_t stableSamples = 0U;
+
+    bool observe(bool fullyTracked, bool hasPrevious,
+                 float translationMeters, float rotationDegrees) {
+        constexpr uint32_t kRequiredStableSamples = 15U;
+        constexpr float kMaximumStepMeters = 0.05F;
+        constexpr float kMaximumStepDegrees = 5.0F;
+        if (!fullyTracked) {
+            stableSamples = 0U;
+            return false;
+        }
+        if (!hasPrevious || translationMeters > kMaximumStepMeters ||
+            rotationDegrees > kMaximumStepDegrees) {
+            stableSamples = 1U;
+        } else if (stableSamples < kRequiredStableSamples) {
+            ++stableSamples;
+        }
+        return stableSamples >= kRequiredStableSamples;
+    }
+};
+
 inline std::string spectatorMirrorTelemetryTitle(
     SpectatorMirrorEye eye, bool roomGrid,
     const SpectatorMirrorTelemetry& telemetry) {
     std::ostringstream title;
     title << "NADOC HMD "
           << (eye == SpectatorMirrorEye::right ? "RIGHT" : "LEFT")
-          << " | " << (telemetry.submittedEye ? "SUBMITTED" : "SPECTATOR FALLBACK")
-          << " | F" << telemetry.frame << " M" << telemetry.motion << " | ";
+          << " | " << (telemetry.submittedEye ? "SUBMITTED" : "SPECTATOR FALLBACK");
+    if (telemetry.coverageStatus != SpectatorCoverageStatus::unavailable) {
+        title << " | " << spectatorCoverageStatusName(telemetry.coverageStatus);
+    }
+    if (telemetry.placementApplied && !telemetry.placementOrientation.empty()) {
+        title << " | O " << telemetry.placementOrientation;
+    }
+    // Keep the highest-value failure cue near the front: desktop title bars often
+    // truncate the pose tail on the default 960 px companion window.
+    if (telemetry.pixelStatus != SpectatorPixelStatus::unavailable) {
+        title << " | PX " << spectatorPixelStatusName(telemetry.pixelStatus);
+    }
+    title << " | ";
     if (!telemetry.poseValid) title << "POSE INVALID";
     else title << (telemetry.poseTracked ? "TRACKED" : "VALID NOT TRACKED");
-    title << std::fixed << std::setprecision(2)
-          << " | XYZ " << telemetry.x << ' ' << telemetry.y << ' ' << telemetry.z
-          << " | YP " << telemetry.yawDegrees << ' ' << telemetry.pitchDegrees;
-    if (roomGrid) title << " | ROOM GRID";
+    title << std::fixed << std::setprecision(1)
+          << " | YP " << telemetry.yawDegrees << ' ' << telemetry.pitchDegrees
+          << " | F" << telemetry.frame << " M" << telemetry.motion;
+    if (roomGrid) title << " | GRID";
     return title.str();
 }
 

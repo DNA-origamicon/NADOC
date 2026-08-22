@@ -282,12 +282,34 @@ renders a clearly labeled `SPECTATOR FALLBACK` directly to the desktop. Normal b
 launches default to the left eye; direct CLI launches use
 `--mirror-eye off|left|right`.
 
-The title carries local frame/motion counters, tracking state, XYZ, yaw/pitch, source,
-eye, and grid state; an alternating corner square gives a pixel-visible heartbeat.
+The title prioritizes source, periodic pixel-liveness status, tracking, yaw/pitch,
+local frame/motion counters, eye, and grid state; full position remains in the trace.
+An alternating corner square gives a pixel-visible heartbeat.
 Only `SUBMITTED` is the actual application eye image. The fallback is intentionally a
 second render because no submitted image exists in the suppressed state.
 
+The mirror downsamples its eye viewport to 64×64 every 30 frames and correlates color
+signature/luminance/change with pose delta, local frame, wall time, source, and OpenXR
+predicted display time. Optional JSONL makes this trace persistent. Black is detected
+independently; invariant pixels are `STABLE` while pose is still and only `FROZEN?`
+when pose moved; materially different samples are `CHANGING`, never `OK`. The actual
+eye render target also receives visible-layer stencil classes for design, room grid,
+and overlays. The same 64×64 sample reports independent class coverage, making a
+grid-only frame explicit without relying on palette assumptions. This remains a
+coarse presence diagnostic: the wrong design object can pass, thin geometry can be
+lost during sampling, raster noise can mask useful invariance, and no compositor
+acknowledgement is available.
+
 The POC does not show lens-warped compositor output or SteamVR overlays and does not
-yet expose live eye/split selection, recording, or OpenXR submission IDs. Its local
-frame heartbeat must not be mistaken for compositor correlation. See
+yet expose live eye/split selection, recording, depth/per-object IDs, or OpenXR submission
+IDs. Its local frame/predicted-time trace must not be mistaken for compositor
+correlation. See
 `docs/scrywrite_desktop_mirror.md` for operation and the dummy-headset validation.
+
+View-relative fixture placement is an explicit configuration rather than an inferred
+world transform. `just scrywrite-frame` selects a target (`mirror`, binocular `head`,
+`left`, or `right`), a named model orientation, distance, scale, and optional local
+yaw/pitch/roll. Placement consumes only a 15-sample stable fully tracked window and
+persists the complete contract in diagnostic JSONL. This makes the pose reproducible
+without carrying headset coordinates between runs; see
+`docs/scrywrite_scene_framing.md`.

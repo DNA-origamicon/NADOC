@@ -132,11 +132,13 @@ environment issue without a source change.
 - Physical-dummy mirror POC: normal browser launches select the physical left eye.
   While OpenXR accepts rendering, the GLFW window copies that undistorted swapchain
   image before release. When the runtime reports `shouldRender=false`, it switches to
-  a labeled live pose/FOV rerender. The title reports source, local frame/motion,
-  tracking, XYZ, and yaw/pitch; a colored corner heartbeat exposes presentation
-  liveness. It remains observational until OpenXR submission correlation.
-- Highest-priority remaining work is production scene-model reuse, real framebuffer
-  color/depth/object-ID capture, and one browser-correlated Move/Rotate transaction.
+  a labeled live pose/FOV rerender. The title reports source, render class,
+  liveness, tracking, yaw/pitch, and local frame/motion; full XYZ remains in JSONL.
+  A colored corner heartbeat exposes presentation liveness. It remains observational
+  until OpenXR submission correlation.
+- Highest-priority remaining work is production scene-model reuse, depth/per-object-ID
+  capture beyond the implemented design-vs-grid classes, and one browser-correlated Move/Rotate
+  transaction. HMD color/liveness sampling is now implemented but remains diagnostic.
 
 ## Physical-HMD desktop mirror POC (2026-08-21)
 
@@ -166,6 +168,26 @@ environment issue without a source change.
 - Disabling SteamVR's **Pause VR when headset is idle** kept a clean physical-HMD
   session in `SUBMITTED` beyond the former five-second cutoff. The diagnostic launch
   now supports `--place-scene-in-view on` (`just vr-hmd-mirror` defaults it on): the
-  first tracked HMD pose centers the fixture 1.30 m down gaze, carries its authored
+  first stable 15-sample tracked window centers the fixture 1.30 m down gaze, carries its authored
   presentation orientation with the head, and applies 2× scale. A retained submitted
   left-eye capture visibly contains the asymmetric chiral origami and room grid.
+- User physically confirmed that the desktop mirror follows headset motion and that
+  the `SUBMITTED` grid/origami image is present through the headset lenses. After the
+  dummy was leveled, live pitch was approximately −0.6 degrees. The implemented trace adds
+  64×64 eye-viewport samples every 30 mirror frames: black detection, pose-conditioned
+  `STABLE`/`FROZEN?`/`CHANGING`, `PX` title state, and optional JSONL correlating local frame,
+  wall time, OpenXR predicted display time, source, signature/luminance/change, and
+  pose delta. Same-pass stencil classification now distinguishes design, reference
+  grid, and overlays: a 74-sample mutation stayed `GRID ONLY` with zero design while
+  a 276-sample framed run stayed `DESIGN+GRID` with up to 2.44% design coverage.
+  It remains vulnerable to wrong-design false passes, raster-noise false changes,
+  downsampling loss, and the absence of compositor acknowledgement. Startup fixture
+  placement now waits for 15 stable fully tracked poses after a transient tracked
+  SteamVR pose exposed premature placement.
+- Reproducible view framing is now a one-command contract: `just scrywrite-frame`
+  targets the mirrored eye with `front`, 1.30 m, and 2× defaults. The first three
+  optional arguments select named orientation, target view (`mirror`/`head`/left/right),
+  and mirror eye. Seven presets plus bounded local yaw/pitch/roll cover refinements;
+  the title reports `O <PRESET>`, the console records application, and every mirror
+  JSONL sample persists all placement parameters and applied state. Paired live
+  front/top runs produced distinct color signatures while retaining `DESIGN+GRID`.

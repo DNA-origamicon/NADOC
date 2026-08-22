@@ -1,8 +1,8 @@
 # ScryWrite physical-HMD desktop mirror
 
-Status: proof of concept implemented 2026-08-21. Live runtime-pause fallback and
-pose/frame telemetry are verified; same-direction movement still needs the final
-physical dummy/headset observation.
+Status: proof of concept implemented and physically confirmed 2026-08-21 for the
+left submitted eye, same-direction tracked motion, room grid, and framed asymmetric
+origami. Pixel-liveness diagnostics are implemented with bounded claims below.
 
 ## Room reference grid
 
@@ -37,12 +37,58 @@ The GLFW companion window has two deliberately distinct sources:
 
 Neither mode is the scripted ScryWrite actor camera, lens-warped compositor output,
 a SteamVR Dashboard overlay, or a camera feed through the headset. The title exposes
-the selected eye, source, frame counter (`F`), detected motion counter (`M`), tracking
-state, position (`XYZ`), yaw/pitch (`YP`), and room-grid state. A small lower-left
-square alternates green/orange every 15 frames as a visible liveness heartbeat.
+the selected eye, source, pixel state, tracking state, yaw/pitch (`YP`), frame counter
+(`F`), detected motion counter (`M`), and room-grid state. World position remains in
+the diagnostic trace rather than competing for the limited desktop title width. A
+small lower-left square alternates green/orange every 15 frames as a visible liveness
+heartbeat.
 
 Both paths preserve the eye aspect ratio with black letterbox/pillarbox bars. They
 do not inject input, change the HMD pose, or publish design events.
+
+## Pixel liveness, render classes, and correlation trace
+
+Every 30 mirror frames, ScryWrite downsamples the eye viewport—not its black bars or
+desktop heartbeat—to 64×64 RGBA and evaluates:
+
+- mean luminance and fraction above a small black threshold;
+- a color signature and fraction materially changed from the prior sample;
+- translation/rotation of the sampled HMD pose; and
+- whether the source was `submitted` or `spectator_fallback`.
+
+The same rendered eye pass carries an eight-bit stencil classification that is not
+derived from visible color: background `0`, design geometry `1`, reference grid `2`,
+and controllers/panels/other overlays `3`. Later visible layers replace earlier tags,
+so the sampled classes describe what survives on screen. The stencil is downsampled
+with nearest-neighbor sampling to the same 64×64 diagnostic. Four samples are required
+before design or grid presence is called meaningful.
+
+The title reports `DESIGN+GRID`, `DESIGN ONLY`, `GRID ONLY`, or `NO TAGS` immediately
+after the source. `GRID ONLY` is the explicit failure signal for the false-positive
+case where the cage keeps an otherwise missing design frame nonblack. `DESIGN` means
+only that design-class fragments occupy samples; it does not identify the expected
+origami or prove topology, handedness, depth, readability, or correct placement.
+
+The title places `PX BASELINE`, `PX CHANGING`, `PX STABLE`, `PX BLACK`, or
+`PX FROZEN?` after the render class so both cues survive ordinary title-bar truncation.
+`CHANGING` claims only that sampled application-eye pixels
+materially differ; it does not claim that the design, view, or compositor output is
+correct. `STABLE` is healthy ambiguity for an unmoving headset. `FROZEN?`
+requires meaningful tracked pose motion with fewer than 0.2% materially changed
+sample pixels; the question mark is intentional because symmetry, empty space, or
+downsampling can still create a false positive. `BLACK` is independent of pose.
+
+Pass `--mirror-diagnostics <trace.jsonl>` to persist one JSON object per sample with
+local frame, wall-clock milliseconds, OpenXR predicted display time, source,
+signature, luminance/change statistics, pose deltas, class status, design/grid/overlay
+counts and fractions, unknown tag count, synchronous readback CPU time, and the full
+view-relative placement contract plus applied state.
+`just vr-hmd-mirror` writes
+`/tmp/scrywrite_mirror_diagnostics.jsonl` by default. This is application-side frame
+correlation, not proof that the compositor scanned out a frame. In 276 samples from
+the classified live build, combined color/stencil readback averaged 0.44 ms and
+peaked at 1.45 ms. Production capture should use asynchronous pixel-buffer readback
+rather than putting even that occasional stall on the render thread.
 
 ## How to run the POC
 
@@ -53,16 +99,18 @@ Escape ends the native VR session, matching the previous companion-window behavi
 For a fixture-only launch:
 
 ```bash
-just vr-hmd-mirror
-# Override the eye or scene:
-just vr-hmd-mirror EYE=right SCENE=path/to/scene.nadocvr
+just scrywrite-frame
+# Named orientation or exact right-eye target:
+just scrywrite-frame top
+just scrywrite-frame front right right
 ```
 
-This fixture command defaults `PLACE=on`. On the first valid tracked view it centers
-the model 1.30 m down the HMD gaze ray, rotates the fixture's authored presentation
-frame with the initial headset orientation, and uses 2× presentation scale. Override
-with `PLACE=off` when testing saved world placement. The corresponding native option
-is `--place-scene-in-view off|on`; ordinary NADOC browser launches leave it off.
+The zero-argument command targets its mirrored left eye. After 15 consecutive fully
+tracked, non-discontinuous views it centers the model 1.30 m down that eye's gaze ray,
+uses the `front` authored frame, and applies 2× presentation scale. Named front/back,
+left/right, top/bottom, and isometric orientations avoid quaternion work. Exact
+parameters and direct CLI equivalents are in `docs/scrywrite_scene_framing.md`.
+`just vr-hmd-mirror` remains available for saved-world-placement diagnostics.
 
 Witness Mode also mirrors the physical observer by default:
 
@@ -79,13 +127,17 @@ browser launch request defaults to a left-eye mirror with the reference grid off
 1. Prop the headset at head height and launch **View in VR** with a visibly asymmetric
    design such as `Chiral_test.nadoc`.
 2. Confirm the desktop title says `NADOC HMD LEFT` and the design is upright. `F`
-   must keep increasing and the lower-left heartbeat must alternate.
+   must keep increasing, the lower-left heartbeat must alternate, and `PX` must not
+   report `BLACK`. A framed design with the diagnostic grid must say `DESIGN+GRID`,
+   not `GRID ONLY`.
 3. For a diagnostic launch, confirm multiple colored cage faces are visible even if
    the design is out of frame. Slowly yaw and pitch the dummy/headset. The grid and
    desktop view must move in the same direction, `XYZ`/`YP` and then `M` must change,
    and the view must not switch to the scripted actor or freeze on an old frame.
    `SUBMITTED` is expected while the runtime accepts headset frames;
    `SPECTATOR FALLBACK` is expected when the dummy triggers runtime suppression.
+   After deliberate movement, `PX` should normally report `CHANGING`, not
+   `FROZEN?`; this is a liveness observation, not a correctness verdict.
 4. Open the controller menu and confirm the same menu appears on the desktop mirror.
 5. If running Witness Mode, confirm the physical-eye view includes the actor monitor;
    moving the physical headset changes the outer view while the scripted actor image
@@ -122,13 +174,19 @@ After disabling SteamVR's **Pause VR when headset is idle**, a clean session rem
 head-relative placement then put the 3D asymmetric chiral-origami fixture in the
 submitted eye image; its retained capture is
 [`docs/generated/scrywrite/hmd_chiral_origami_submitted_poc.png`](generated/scrywrite/hmd_chiral_origami_submitted_poc.png).
-The desktop capture proves placement in the submitted application eye. Seeing the
-same object and grid through the physical lenses remains the human acceptance step.
+The user confirmed that the same object and grid were present through the physical
+lenses, and previously confirmed same-direction desktop motion. After leveling the
+dummy, telemetry reported pitch near −0.6 degrees while remaining `SUBMITTED` and
+`TRACKED`. The retained instrumented capture is
+[`docs/generated/scrywrite/hmd_level_submitted_pixel_diagnostics_poc.png`](generated/scrywrite/hmd_level_submitted_pixel_diagnostics_poc.png).
 
-Automation cannot yet prove that a particular GPU/runtime accepts the live blit or
-that the human-visible desktop and headset images have the expected orientation.
-That remains `MV-SCRYWITNESS`. The POC also has no live eye selector, recording,
-timestamp overlay, or OpenXR submission ID. The `F`/heartbeat liveness signal is local
-to the companion presentation, not proof of compositor acceptance. Before using
-mirror pixels as an automated oracle, add submission correlation plus real
-color/depth/object-ID capture and a black/invariant-frame detector.
+The physical observation validates this machine/configuration at that moment; it is
+not portable automated proof. Stencil classes now prevent grid-only color from being
+mistaken for design presence: a `PLACE=off` live mutation produced 74/74 `GRID ONLY`
+samples with zero design samples, while the centered run produced 276/276
+`DESIGN+GRID` samples and up to 2.44% design coverage. Temporal noise can still
+disguise a useful-content freeze, and the coarse design class can still pass for the
+wrong or malformed object. The POC also has no live eye selector, recording,
+per-object ID/depth capture, or OpenXR submission ID. Its predicted-display-time
+trace and `F`/heartbeat remain local application evidence, not compositor acceptance.
+The next gate is exact expected-object identity plus depth/occlusion evidence.

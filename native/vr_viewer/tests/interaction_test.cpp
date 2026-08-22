@@ -19,6 +19,9 @@ using nadoc_vr::MenuPlacement;
 using nadoc_vr::PendingRigidTransform;
 using nadoc_vr::RadialToolMenu;
 using nadoc_vr::SceneManipulator;
+using nadoc_vr::ScenePlacementOrientation;
+using nadoc_vr::ScenePlacementView;
+using nadoc_vr::SceneViewPlacement;
 using nadoc_vr::SelectionVolumeControl;
 using nadoc_vr::SmoothToggle;
 
@@ -109,6 +112,43 @@ void initialPlacementCarriesTheFixturePresentationWithTheHead() {
         1e-5F)));
     require(std::abs(
         manipulator.scale() - SceneManipulator::kInitialViewScale) < 1e-5F);
+}
+
+void namedPlacementPresetsAndOverridesAreDeterministic() {
+    require(nadoc_vr::parseScenePlacementView("mirror") ==
+            ScenePlacementView::mirror);
+    require(nadoc_vr::parseScenePlacementView("right") ==
+            ScenePlacementView::right);
+    require(!nadoc_vr::parseScenePlacementView("actor"));
+    require(nadoc_vr::parseScenePlacementOrientation("authored") ==
+            ScenePlacementOrientation::front);
+    require(nadoc_vr::parseScenePlacementOrientation("top") ==
+            ScenePlacementOrientation::top);
+    require(!nadoc_vr::parseScenePlacementOrientation("mystery"));
+
+    SceneViewPlacement placement;
+    placement.view = ScenePlacementView::left;
+    placement.orientation = ScenePlacementOrientation::back;
+    placement.distanceMeters = 2.0F;
+    placement.scale = 3.0F;
+    require(nadoc_vr::validSceneViewPlacement(placement));
+    SceneManipulator manipulator;
+    manipulator.placeInView({0, 0, 0}, {1, 0, 0, 0}, placement);
+    const glm::vec3 modelCenter(0, 0, -SceneManipulator::kViewDistanceMeters);
+    require(glm::all(glm::epsilonEqual(
+        transformedPoint(manipulator.transform(), modelCenter),
+        glm::vec3(0, 0, -2.0F), 1e-5F)));
+    require(glm::all(glm::epsilonEqual(
+        transformedPoint(
+            manipulator.transform(), modelCenter + glm::vec3(1, 0, 0)),
+        glm::vec3(-3.0F, 0, -2.0F), 1e-5F)));
+    require(std::abs(manipulator.scale() - 3.0F) < 1e-5F);
+
+    placement.distanceMeters = 0.10F;
+    require(!nadoc_vr::validSceneViewPlacement(placement));
+    placement.distanceMeters = 1.30F;
+    placement.rollDegrees = 361.0F;
+    require(!nadoc_vr::validSceneViewPlacement(placement));
 }
 
 void closeInspectionAllowsTheModelToPassThroughTheHead() {
@@ -1251,6 +1291,7 @@ int main() {
     oneTwoOneTransitionsStayContinuous();
     recenterRestoresUnitScaleInFrontOfHead();
     initialPlacementCarriesTheFixturePresentationWithTheHead();
+    namedPlacementPresetsAndOverridesAreDeterministic();
     closeInspectionAllowsTheModelToPassThroughTheHead();
     menuFollowsItsControllerAndDockingFreezesItsWorldPose();
     radialToolMenuIsWorldFixedAndUsesExtrudedSectors();

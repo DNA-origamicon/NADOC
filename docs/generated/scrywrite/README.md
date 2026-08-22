@@ -26,6 +26,22 @@ just scrywrite-evidence
   real `SUBMITTED` left-eye capture after SteamVR idle pausing was disabled. The
   asymmetric 3D fixture is centered 1.30 m along the initial HMD gaze, carried into
   the HMD presentation frame, and shown at 2× scale among the room-grid references.
+- [`hmd_level_submitted_pixel_diagnostics_poc.png`](hmd_level_submitted_pixel_diagnostics_poc.png)
+  retains the leveled-dummy run with the window title visibly reporting `SUBMITTED`,
+  `TRACKED`, near-level pitch, and `PX CHANGING`. It is still an application-eye capture,
+  not compositor scanout evidence.
+- [`hmd_grid_only_classification_poc.png`](hmd_grid_only_classification_poc.png)
+  is the deliberate `PLACE=off` mutation: the grid remains visibly changing while
+  the same-pass stencil diagnostic correctly reports `GRID ONLY` and zero design
+  coverage.
+- [`hmd_design_grid_classification_poc.png`](hmd_design_grid_classification_poc.png)
+  is the paired centered run: the asymmetric origami is visible and the title reports
+  `DESIGN+GRID`. This proves coarse design-class coverage, not expected-object identity.
+- [`hmd_quick_frame_front_poc.png`](hmd_quick_frame_front_poc.png) and
+  [`hmd_quick_frame_top_poc.png`](hmd_quick_frame_top_poc.png) are paired live
+  submitted-eye runs from `just scrywrite-frame` and `just scrywrite-frame top`.
+  They retain visibly different front/top model orientations while preserving the
+  same target-view, distance, scale, and `DESIGN+GRID` classification contract.
 
 The exporter reads the real natural Full scene primitives and uses the viewer's
 normalization and placement plus the Witness script's pose. It is a pose/geometry

@@ -63,10 +63,29 @@ liveness heartbeat. It is read-only and never includes runtime lens warp/overlay
 For the checked fixture launch use `just vr-hmd-mirror`; see
 `docs/scrywrite_desktop_mirror.md` for the dummy validation.
 
+For reproducible view-relative framing, use `just scrywrite-frame`. Its first three
+optional arguments are orientation, target view, and mirrored eye; for example,
+`just scrywrite-frame top` or `just scrywrite-frame front right right`. It waits for a
+stable tracked window and records every placement parameter in mirror JSONL. See
+`docs/scrywrite_scene_framing.md` for the compact workflow and bounded claims.
+
 `just vr-hmd-mirror` defaults `PLACE=on`, which centers and presentation-orients the
-fixture from the first valid HMD pose at a 1.30 m viewing distance and 2× scale. Set
+fixture after 15 consecutive fully tracked, non-discontinuous HMD poses at a 1.30 m
+viewing distance and 2× scale. Set
 `PLACE=off` to preserve the scene's world placement. Direct launches use
 `--place-scene-in-view off|on`; the default is `off`.
+
+The mirror samples its viewport at 64×64 every 30 frames. Same-pass stencil tags
+separate visible design, reference-grid, and overlay samples; the title reports
+`DESIGN+GRID`, `DESIGN ONLY`, `GRID ONLY`, or `NO TAGS`. This is coarse category
+presence, not expected-object correctness. `PX BLACK` flags nearly
+empty color, `PX STABLE` permits stationary identical output, `PX FROZEN?` flags
+invariant pixels only when tracked pose moved, and `PX CHANGING` reports only
+material pixel change—not scene correctness. Persist the application-side correlation trace with
+`--mirror-diagnostics <trace.jsonl>`; `just vr-hmd-mirror` defaults to
+`/tmp/scrywrite_mirror_diagnostics.jsonl`. The trace includes local frame, wall time,
+OpenXR predicted display time, source, color statistics, class counts/fractions, and
+pose delta—not a compositor acknowledgement.
 
 Add `--reference-grid room` when scene placement or headset direction is uncertain.
 It draws a 5 m cage at OpenXR LOCAL origin with 0.5 m spacing and colored cardinal
