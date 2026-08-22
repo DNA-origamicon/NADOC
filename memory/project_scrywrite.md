@@ -191,3 +191,42 @@ environment issue without a source change.
   the title reports `O <PRESET>`, the console records application, and every mirror
   JSONL sample persists all placement parameters and applied state. Paired live
   front/top runs produced distinct color signatures while retaining `DESIGN+GRID`.
+
+## Live menu positioning validation (2026-08-21)
+
+- Witness v1 now supports `touch_menu <hand> <left|right|top|bottom>`, which resolves
+  a controller position from the current production panel bounds rather than from
+  authored world coordinates. `expect placement following|docked` and
+  `expect menu_moved <meters>` expose the real `MenuPlacement` state and displacement.
+- The canonical menu witness now opens Options, grip-drags its right border into a
+  world-docked pose by at least 0.20 m, resets the ray origin away from the panel,
+  then opens Tools and activates Move/Rotate with the existing independent hover,
+  tool, and status assertions.
+- A connected physical SteamVR/Vive run stayed in `SUBMITTED EYE`, passed the complete
+  open/position/interact chain at ScryWrite frame 942, and reported a tracked physical
+  observer pose. This validates application-side menu behavior on this runtime; it
+  does not close the separate wearer-only legibility, stereo, comfort, or reach debt.
+
+## Layered menu debugging and fault oracles (2026-08-21)
+
+- `MenuLayoutAudit` is wired into production menu rendering. It uses the same fitted
+  stroke geometry as drawing and exposes `expect layout valid`; the focused fault
+  suite catches long-label overflow, below-floor fitted text, control overflow,
+  undersized/misaligned/overlapping hit regions, and invalid geometry.
+- `expect framing valid` projects the four actual panel corners into the scripted
+  72-degree 16:9 actor camera. This was added after the first real actor-eye PNG
+  revealed the lower menu was clipped; the corrected capture pose frames the complete
+  tablet and excludes witness-only frustum/status overlays from its own image.
+- Witness `snapshot` writes a real 960×540 OpenGL actor-eye PNG, a tolerant 32×18
+  luminance fingerprint, and semantic JSON. The canonical trace retains five
+  baselines: Options open, Tools hover, Tools open, Move/Rotate hover, and active.
+  Playwright validates their ordered menu/hover/tool/status/layout sequence and
+  attaches all images/state records under tracing.
+- Live assertions distinguish `display submitted` from spectator fallback and require
+  `tracking tracked` plus `overlay visible`. The final bounded run passed all five
+  visual baselines and application assertions at frame 284 on the active Vive.
+- `scripts/vr_diagnostics.sh` wraps loader-matched OpenXR core validation and API dump,
+  Nsight Systems OpenGL/OS-runtime profiling, and an availability-gated RenderDoc
+  workflow. Core validation passed the complete trace with no errors; API dump kept
+  the frame-284 pass; Nsight emitted an 18 MB `.qdstrm` (this install lacks its report
+  importer and kernel CPU sampling); RenderDoc is not installed and is not claimed.

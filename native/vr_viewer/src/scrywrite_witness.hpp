@@ -14,6 +14,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace nadoc_vr::scrywrite {
@@ -24,8 +25,11 @@ inline constexpr uint64_t kMaximumWitnessFrames = 1'000'000;
 
 enum class WitnessButton { menu, trigger, grip };
 enum class WitnessCommandKind {
-    head, pose, button, step, aim_menu,
+    head, pose, button, step, aim_menu, touch_menu, snapshot,
     expect_menu, expect_hover, expect_tool, expect_status,
+    expect_menu_placement, expect_menu_moved, expect_layout,
+    expect_display, expect_tracking, expect_overlay,
+    expect_framing,
 };
 
 struct WitnessHeadPose {
@@ -42,15 +46,55 @@ struct WitnessInput {
 };
 
 struct WitnessObservation {
+    WitnessObservation(
+        std::string menuValue = "closed",
+        std::string hoverValue = "none",
+        std::string toolValue = "none",
+        std::string statusValue = "none",
+        std::string menuPlacementValue = "closed",
+        glm::vec3 menuPositionValue = {},
+        std::string layoutValue = "pending",
+        std::string layoutDetailValue = {},
+        std::string displayValue = "pending",
+        std::string trackingValue = "pending",
+        std::string overlayValue = "pending",
+        std::string framingValue = "pending")
+        : menu(std::move(menuValue)), hover(std::move(hoverValue)),
+          tool(std::move(toolValue)), status(std::move(statusValue)),
+          menuPlacement(std::move(menuPlacementValue)),
+          menuPosition(menuPositionValue), layout(std::move(layoutValue)),
+          layoutDetail(std::move(layoutDetailValue)),
+          display(std::move(displayValue)), tracking(std::move(trackingValue)),
+          overlay(std::move(overlayValue)), framing(std::move(framingValue)) {}
+
     std::string menu = "closed";
     std::string hover = "none";
     std::string tool = "none";
     std::string status = "none";
+    std::string menuPlacement = "closed";
+    glm::vec3 menuPosition{};
+    std::string layout = "pending";
+    std::string layoutDetail;
+    std::string display = "pending";
+    std::string tracking = "pending";
+    std::string overlay = "pending";
+    std::string framing = "pending";
 };
 
 struct WitnessAim {
     size_t hand = 0;
     std::string label;
+    size_t line = 0;
+};
+
+struct WitnessMenuTouch {
+    size_t hand = 0;
+    std::string edge;
+    size_t line = 0;
+};
+
+struct WitnessSnapshot {
+    std::string name;
     size_t line = 0;
 };
 
@@ -76,6 +120,7 @@ struct WitnessCommand {
     glm::vec3 position{};
     glm::quat orientation{1.0F, 0.0F, 0.0F, 0.0F};
     std::string value;
+    float minimumDistance = 0.0F;
 };
 
 class WitnessReplay {
@@ -89,6 +134,7 @@ class WitnessReplay {
     void advance(const WitnessObservation& observation) {
         if (failed_ || finished_) return;
         if (paused_ && !singleStepRequested_) return;
+        if (pendingSnapshot_) return;
         singleStepRequested_ = false;
         ++frame_;
         if (waitingFrames_ > 0) {
@@ -116,6 +162,13 @@ class WitnessReplay {
                     return;
                 case WitnessCommandKind::aim_menu:
                     pendingAim_ = WitnessAim{command.hand, command.value, command.line};
+                    return;
+                case WitnessCommandKind::touch_menu:
+                    pendingMenuTouch_ = WitnessMenuTouch{
+                        command.hand, command.value, command.line};
+                    return;
+                case WitnessCommandKind::snapshot:
+                    pendingSnapshot_ = WitnessSnapshot{command.value, command.line};
                     return;
                 case WitnessCommandKind::expect_menu:
                     if (canonical(observation.menu) != command.value) {
@@ -145,6 +198,64 @@ class WitnessReplay {
                         return;
                     }
                     break;
+                case WitnessCommandKind::expect_menu_placement:
+                    if (canonical(observation.menuPlacement) != command.value) {
+                        fail(command.line, "expected menu placement " + command.value +
+                             ", got " + canonical(observation.menuPlacement));
+                        return;
+                    }
+                    break;
+                case WitnessCommandKind::expect_menu_moved:
+                    if (!menuPositionBaseline_) {
+                        fail(command.line, "expect menu_moved requires touch_menu first");
+                        return;
+                    }
+                    if (const float distance = glm::length(
+                            observation.menuPosition - *menuPositionBaseline_);
+                        !std::isfinite(distance) || distance < command.minimumDistance) {
+                        fail(command.line, "expected menu to move at least " +
+                             std::to_string(command.minimumDistance) + " m, got " +
+                             std::to_string(distance) + " m");
+                        return;
+                    }
+                    break;
+                case WitnessCommandKind::expect_layout:
+                    if (canonical(observation.layout) != command.value) {
+                        fail(command.line, "expected layout " + command.value +
+                             ", got " + canonical(observation.layout) +
+                             (observation.layoutDetail.empty()
+                                  ? "" : " (" + observation.layoutDetail + ")"));
+                        return;
+                    }
+                    break;
+                case WitnessCommandKind::expect_display:
+                    if (canonical(observation.display) != command.value) {
+                        fail(command.line, "expected display " + command.value +
+                             ", got " + canonical(observation.display));
+                        return;
+                    }
+                    break;
+                case WitnessCommandKind::expect_tracking:
+                    if (canonical(observation.tracking) != command.value) {
+                        fail(command.line, "expected tracking " + command.value +
+                             ", got " + canonical(observation.tracking));
+                        return;
+                    }
+                    break;
+                case WitnessCommandKind::expect_overlay:
+                    if (canonical(observation.overlay) != command.value) {
+                        fail(command.line, "expected overlay " + command.value +
+                             ", got " + canonical(observation.overlay));
+                        return;
+                    }
+                    break;
+                case WitnessCommandKind::expect_framing:
+                    if (canonical(observation.framing) != command.value) {
+                        fail(command.line, "expected framing " + command.value +
+                             ", got " + canonical(observation.framing));
+                        return;
+                    }
+                    break;
             }
         }
         finished_ = true;
@@ -161,6 +272,12 @@ class WitnessReplay {
     [[nodiscard]] const std::string& currentCommand() const { return currentCommand_; }
     [[nodiscard]] const std::string& error() const { return error_; }
     [[nodiscard]] const std::optional<WitnessAim>& pendingAim() const { return pendingAim_; }
+    [[nodiscard]] const std::optional<WitnessMenuTouch>& pendingMenuTouch() const {
+        return pendingMenuTouch_;
+    }
+    [[nodiscard]] const std::optional<WitnessSnapshot>& pendingSnapshot() const {
+        return pendingSnapshot_;
+    }
 
     void resolveAim(const glm::quat& orientation) {
         if (!pendingAim_) return;
@@ -172,6 +289,27 @@ class WitnessReplay {
         if (!pendingAim_) return;
         fail(pendingAim_->line, reason);
         pendingAim_.reset();
+    }
+
+    void resolveMenuTouch(const glm::vec3& position, const glm::vec3& menuPosition) {
+        if (!pendingMenuTouch_) return;
+        input_.hands[pendingMenuTouch_->hand].position = position;
+        menuPositionBaseline_ = menuPosition;
+        pendingMenuTouch_.reset();
+    }
+
+    void rejectMenuTouch(const std::string& reason) {
+        if (!pendingMenuTouch_) return;
+        fail(pendingMenuTouch_->line, reason);
+        pendingMenuTouch_.reset();
+    }
+
+    void resolveSnapshot() { pendingSnapshot_.reset(); }
+
+    void rejectSnapshot(const std::string& reason) {
+        if (!pendingSnapshot_) return;
+        fail(pendingSnapshot_->line, reason);
+        pendingSnapshot_.reset();
     }
 
     void togglePaused() { paused_ = !paused_; }
@@ -333,17 +471,72 @@ class WitnessReplay {
                 command.kind = WitnessCommandKind::aim_menu;
                 command.hand = hand(fields[1], line);
                 command.value = canonical(fields[2]);
+            } else if (fields[0] == "touch_menu") {
+                if (fields.size() != 3) {
+                    parseFail(line, "touch_menu requires <hand> <left|right|top|bottom>");
+                }
+                command.kind = WitnessCommandKind::touch_menu;
+                command.hand = hand(fields[1], line);
+                command.value = canonical(fields[2]);
+                if (command.value != "left" && command.value != "right" &&
+                    command.value != "top" && command.value != "bottom") {
+                    parseFail(line, "touch_menu edge must be left, right, top, or bottom");
+                }
+            } else if (fields[0] == "snapshot") {
+                if (fields.size() != 2) parseFail(line, "snapshot requires a name");
+                if (fields[1].empty() || fields[1].size() > 64U ||
+                    !std::all_of(fields[1].begin(), fields[1].end(), [](unsigned char value) {
+                        return std::islower(value) || std::isdigit(value) ||
+                               value == '_' || value == '-';
+                    })) {
+                    parseFail(line,
+                        "snapshot name must use 1-64 lowercase letters, digits, _ or -");
+                }
+                command.kind = WitnessCommandKind::snapshot;
+                command.value = fields[1];
             } else if (fields[0] == "expect") {
                 if (fields.size() != 3 ||
                     (fields[1] != "menu" && fields[1] != "hover" &&
-                     fields[1] != "tool" && fields[1] != "status")) {
-                    parseFail(line, "expect requires <menu|hover|tool|status> <value>");
+                     fields[1] != "tool" && fields[1] != "status" &&
+                     fields[1] != "placement" && fields[1] != "menu_moved" &&
+                     fields[1] != "layout" && fields[1] != "display" &&
+                     fields[1] != "tracking" && fields[1] != "overlay" &&
+                     fields[1] != "framing")) {
+                    parseFail(line,
+                        "expect requires <menu|hover|tool|status|placement|menu_moved|layout|display|tracking|overlay|framing> <value>");
                 }
                 if (fields[1] == "menu") command.kind = WitnessCommandKind::expect_menu;
                 else if (fields[1] == "hover") command.kind = WitnessCommandKind::expect_hover;
                 else if (fields[1] == "tool") command.kind = WitnessCommandKind::expect_tool;
-                else command.kind = WitnessCommandKind::expect_status;
-                command.value = canonical(fields[2]);
+                else if (fields[1] == "status") command.kind = WitnessCommandKind::expect_status;
+                else if (fields[1] == "placement") {
+                    command.kind = WitnessCommandKind::expect_menu_placement;
+                    command.value = canonical(fields[2]);
+                    if (command.value != "following" && command.value != "docked") {
+                        parseFail(line, "menu placement must be following or docked");
+                    }
+                } else if (fields[1] == "menu_moved") {
+                    command.kind = WitnessCommandKind::expect_menu_moved;
+                    command.minimumDistance = number(fields[2], line);
+                    if (command.minimumDistance <= 0.0F || command.minimumDistance > 5.0F) {
+                        parseFail(line, "menu_moved distance must be greater than 0 and at most 5 m");
+                    }
+                } else if (fields[1] == "layout") {
+                    command.kind = WitnessCommandKind::expect_layout;
+                    command.value = canonical(fields[2]);
+                } else if (fields[1] == "display") {
+                    command.kind = WitnessCommandKind::expect_display;
+                } else if (fields[1] == "tracking") {
+                    command.kind = WitnessCommandKind::expect_tracking;
+                } else if (fields[1] == "overlay") {
+                    command.kind = WitnessCommandKind::expect_overlay;
+                } else {
+                    command.kind = WitnessCommandKind::expect_framing;
+                }
+                if (fields[1] != "placement" && fields[1] != "menu_moved" &&
+                    fields[1] != "layout") {
+                    command.value = canonical(fields[2]);
+                }
             } else {
                 parseFail(line, "unknown witness command: " + fields[0]);
             }
@@ -377,6 +570,9 @@ class WitnessReplay {
     std::string currentCommand_ = "starting";
     std::string error_;
     std::optional<WitnessAim> pendingAim_;
+    std::optional<WitnessMenuTouch> pendingMenuTouch_;
+    std::optional<WitnessSnapshot> pendingSnapshot_;
+    std::optional<glm::vec3> menuPositionBaseline_;
     bool failed_ = false;
     bool finished_ = false;
     bool paused_ = false;
@@ -408,6 +604,39 @@ inline std::optional<glm::quat> witnessAimOrientation(
     glm::vec3 up(0.0F, 1.0F, 0.0F);
     if (std::abs(glm::dot(direction, up)) > 0.98F) up = {1.0F, 0.0F, 0.0F};
     return glm::quatLookAt(direction, up);
+}
+
+inline std::optional<glm::vec3> witnessMenuTouchPosition(
+    const MenuPlacement& placement, const glm::vec2& minimum,
+    const glm::vec2& maximum, const std::string& edge) {
+    const glm::vec2 midpoint = (minimum + maximum) * 0.5F;
+    if (edge == "left") return placement.worldPoint({minimum.x, midpoint.y, 0.0F});
+    if (edge == "right") return placement.worldPoint({maximum.x, midpoint.y, 0.0F});
+    if (edge == "top") return placement.worldPoint({midpoint.x, maximum.y, 0.0F});
+    if (edge == "bottom") return placement.worldPoint({midpoint.x, minimum.y, 0.0F});
+    return std::nullopt;
+}
+
+inline void resolveWitnessMenuTouch(
+    WitnessReplay& replay, const MenuPlacement& placement,
+    const glm::vec2& minimum, const glm::vec2& maximum, bool menuOpen) {
+    if (!replay.pendingMenuTouch()) return;
+    const auto touch = *replay.pendingMenuTouch();
+    if (!menuOpen) {
+        replay.rejectMenuTouch("touch_menu requires an open menu");
+        return;
+    }
+    if (!replay.input().hands[touch.hand].valid) {
+        replay.rejectMenuTouch("touch_menu requires a valid scripted hand pose");
+        return;
+    }
+    const auto position = witnessMenuTouchPosition(
+        placement, minimum, maximum, touch.edge);
+    if (!position) {
+        replay.rejectMenuTouch("unknown menu edge: " + touch.edge);
+        return;
+    }
+    replay.resolveMenuTouch(*position, placement.position());
 }
 
 inline std::vector<WitnessGuideLine> witnessHeadFrustum(const WitnessHeadPose& head) {

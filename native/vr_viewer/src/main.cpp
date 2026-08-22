@@ -17,10 +17,12 @@
 
 #include "interaction.hpp"
 #include "jobs.hpp"
+#include "menu_layout.hpp"
 #include "picking.hpp"
 #include "reference_grid.hpp"
 #include "scrywrite_witness.hpp"
 #include "scrywrite_witness_surface.hpp"
+#include "scrywrite_visual.hpp"
 #include "spectator_mirror.hpp"
 #include "visualization.hpp"
 
@@ -41,6 +43,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <dlfcn.h>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -3380,7 +3383,10 @@ class Viewer {
                     bool referenceGrid = false,
                     bool placeSceneInView = false,
                     nadoc_vr::SceneViewPlacement sceneViewPlacement = {},
-                    std::string mirrorDiagnosticsPath = {})
+                    std::string mirrorDiagnosticsPath = {},
+                    std::string witnessCaptureDirectory = {},
+                    std::string witnessVisualExpectationDirectory = {},
+                    bool exitOnWitnessComplete = false)
         : sceneData_(std::move(scene)), eventPath_(std::move(eventPath)),
           feedbackPath_(std::move(feedbackPath)),
           toolFeedbackPath_(std::move(toolFeedbackPath)),
@@ -3404,6 +3410,10 @@ class Viewer {
           initialScenePlacementRequested_(placeSceneInView),
           sceneViewPlacement_(sceneViewPlacement),
           mirrorDiagnosticsPath_(std::move(mirrorDiagnosticsPath)),
+          witnessCaptureDirectory_(std::move(witnessCaptureDirectory)),
+          witnessVisualExpectationDirectory_(
+              std::move(witnessVisualExpectationDirectory)),
+          exitOnWitnessComplete_(exitOnWitnessComplete),
           jobs_(std::move(jobSnapshot.rows)),
           selectionLevel_(std::move(selectionLevel)) {
         if (initialScenePlacementRequested_ &&
@@ -3865,8 +3875,12 @@ class Viewer {
 
     void appendMenuText(const std::string& text, float x, float y, float scale,
                         const glm::vec3& color) {
-        appendPlacedTextFitted(
-            menuPlacement_, menuPanelBounds(), text, x, y, scale, color);
+        const auto placement = menuLayoutAudit_.fitAndAddText(
+            "panel:" + text, text, x, y, scale, menuPanelBounds());
+        if (placement.scale <= 0.0F) return;
+        appendPlacedText(
+            menuPlacement_, text, placement.left, placement.top,
+            placement.scale, color);
     }
 
     void appendPlacedText(
@@ -4086,6 +4100,20 @@ class Viewer {
             witnessMenuEntries(), menuHover_);
     }
 
+    [[nodiscard]] std::string witnessMenuFramingStatus() const {
+        if (!witness_ || !menuOpen_) return "closed";
+        const auto bounds = menuPanelBounds();
+        const std::array<glm::vec3, 4> corners{{
+            menuPlacement_.worldPoint({bounds.minimum.x, bounds.minimum.y, 0.0F}),
+            menuPlacement_.worldPoint({bounds.minimum.x, bounds.maximum.y, 0.0F}),
+            menuPlacement_.worldPoint({bounds.maximum.x, bounds.minimum.y, 0.0F}),
+            menuPlacement_.worldPoint({bounds.maximum.x, bounds.maximum.y, 0.0F}),
+        }};
+        const auto& head = witness_->input().head;
+        return nadoc_vr::assessActorEyePanelFraming(
+            corners, head.position, head.orientation).status();
+    }
+
     void resolveWitnessAim() {
         if (!witness_ || !witness_->pendingAim()) return;
         const auto aim = *witness_->pendingAim();
@@ -4128,6 +4156,8 @@ class Viewer {
     }
 
     void appendMenuGuides() {
+        menuLayoutAudit_.reset(menuPanelBounds());
+        menuLayoutAudited_ = menuOpen_;
         if (!menuOpen_) return;
         auto line = [&](const glm::vec3& a, const glm::vec3& b, const glm::vec3& color) {
             controllerGuides_.push_back(Vertex{a, color, 1.0F});
@@ -4137,6 +4167,15 @@ class Viewer {
                            const char* overrideLabel = nullptr) {
             const float left = item.x - item.halfWidth;
             const float right = item.x + item.halfWidth;
+            const std::string label = overrideLabel ? overrideLabel : item.label;
+            const nadoc_vr::MenuPanelBounds visualBounds{
+                {left, item.y - 0.023F}, {right, item.y + 0.023F},
+            };
+            const nadoc_vr::MenuPanelBounds hitBounds{
+                {left, item.y - 0.025F}, {right, item.y + 0.025F},
+            };
+            const std::string owner = "control:" + label;
+            menuLayoutAudit_.addControl(owner, visualBounds, hitBounds);
             line(menuWorld(left, item.y + 0.023F),
                  menuWorld(right, item.y + 0.023F), color * 0.7F);
             line(menuWorld(right, item.y + 0.023F),
@@ -4145,9 +4184,14 @@ class Viewer {
                  menuWorld(left, item.y - 0.023F), color * 0.7F);
             line(menuWorld(left, item.y - 0.023F),
                  menuWorld(left, item.y + 0.023F), color * 0.7F);
-            appendMenuText(
-                overrideLabel ? overrideLabel : item.label,
-                left + 0.012F, item.y + 0.012F, 0.0036F, color);
+            const auto textPlacement = menuLayoutAudit_.fitAndAddText(
+                owner + ".label", label, left + 0.012F, item.y + 0.012F,
+                0.0036F, visualBounds);
+            if (textPlacement.scale > 0.0F) {
+                appendPlacedText(
+                    menuPlacement_, label, textPlacement.left, textPlacement.top,
+                    textPlacement.scale, color);
+            }
         };
         const auto bounds = menuPanelBounds();
         const bool borderGripAvailable = menuPlacement_.dragHand().has_value() ||
@@ -5623,6 +5667,7 @@ class Viewer {
         appendLatticeGuides();
         appendMenuGuides();
         appendThumbwheelGuides();
+        witnessActorGuideCount_ = controllerGuides_.size();
         if (witness_) {
             const auto& head = witness_->input().head;
             const glm::vec3 color = witness_->failed()
@@ -6228,8 +6273,28 @@ class Viewer {
             witness_->advance({
                 menuPageName(), witnessHoverName(),
                 nadoc_vr::toolModeName(toolShell_.mode()), toolShell_.status(),
+                menuOpen_ ? (menuPlacement_.worldDocked() ? "docked" : "following")
+                          : "closed",
+                menuPlacement_.position(),
+                !menuOpen_ ? "closed"
+                    : menuLayoutAudited_ ? menuLayoutAudit_.status() : "pending",
+                menuLayoutAudited_ ? menuLayoutAudit_.summary() : "layout not rendered yet",
+                mirrorSourceInitialized_
+                    ? (lastMirrorSubmittedEye_ ? "submitted" : "fallback")
+                    : "pending",
+                mirrorPoseInitialized_
+                    ? (lastMirrorPoseTracked_ ? "tracked" : "valid")
+                    : "pending",
+                mirrorPixelSampleSequence_ == 0U
+                    ? "pending"
+                    : mirrorCoverageAssessment_.overlayFraction >= 0.001F
+                        ? "visible" : "missing",
+                witnessMenuFramingStatus(),
             });
             resolveWitnessAim();
+            const auto bounds = menuPanelBounds();
+            nadoc_vr::scrywrite::resolveWitnessMenuTouch(
+                *witness_, menuPlacement_, bounds.minimum, bounds.maximum, menuOpen_);
             if (witness_->failed() && !witnessFailureReported_) {
                 std::cerr << "ScryWrite Witness " << witness_->status() << '\n';
                 witnessFailureReported_ = true;
@@ -6237,6 +6302,7 @@ class Viewer {
                 std::cout << "ScryWrite Witness PASSED at frame "
                           << witness_->frame() << '\n';
                 witnessCompletionReported_ = true;
+                if (exitOnWitnessComplete_) exitLoop_ = true;
             }
         }
 
@@ -7139,9 +7205,13 @@ class Viewer {
         const glm::mat4 viewProjection = projection * glm::inverse(headTransform);
         witnessSurface_.beginCapture();
         const bool desktopMenu = menuOpen_ && menuPage_ == MenuPage::desktop;
+        const std::vector<Vertex> actorGuides(
+            controllerGuides_.begin(),
+            controllerGuides_.begin() + static_cast<std::ptrdiff_t>(
+                std::min(witnessActorGuideCount_, controllerGuides_.size())));
         glScene_->render(
             viewProjection, manipulator_.transform(),
-            desktopMenu ? std::vector<Vertex>{} : controllerGuides_);
+            desktopMenu ? std::vector<Vertex>{} : actorGuides);
         if (referenceGrid_) {
             glScene_->renderGuides(viewProjection, referenceGridGuides_);
         }
@@ -7153,7 +7223,56 @@ class Viewer {
                 menuWorld(bounds.maximum.x, bounds.maximum.y, 0.004F),
                 menuWorld(bounds.maximum.x, bounds.minimum.y, 0.004F),
             }});
-            glScene_->renderGuides(viewProjection, controllerGuides_);
+            glScene_->renderGuides(viewProjection, actorGuides);
+        }
+        if (witness_->pendingSnapshot()) {
+            const std::string name = witness_->pendingSnapshot()->name;
+            if (witnessCaptureDirectory_.empty()) {
+                witness_->rejectSnapshot(
+                    "snapshot requires --witness-captures <directory>");
+            } else {
+                try {
+                    const auto pixels = witnessSurface_.readRgb();
+                    const std::optional<std::filesystem::path> expectations =
+                        witnessVisualExpectationDirectory_.empty()
+                            ? std::nullopt
+                            : std::optional<std::filesystem::path>(
+                                  witnessVisualExpectationDirectory_);
+                    const nadoc_vr::scrywrite::ActorEyeSnapshotMetadata metadata{
+                        name,
+                        witness_->frame(),
+                        witness_->currentLine(),
+                        witness_->currentCommand(),
+                        menuPageName(),
+                        witnessHoverName(),
+                        nadoc_vr::toolModeName(toolShell_.mode()),
+                        toolShell_.status(),
+                        menuLayoutAudited_ ? menuLayoutAudit_.status() : "pending",
+                        menuLayoutAudited_ ? menuLayoutAudit_.summary()
+                                           : "layout not rendered yet",
+                    };
+                    const auto result = nadoc_vr::scrywrite::writeActorEyeCapture(
+                        witnessCaptureDirectory_, name, pixels,
+                        nadoc_vr::scrywrite::WitnessSurface::kWidth,
+                        nadoc_vr::scrywrite::WitnessSurface::kHeight,
+                        expectations, metadata);
+                    if (result.comparison && !result.comparison->passed) {
+                        std::ostringstream error;
+                        error << "visual regression failed for " << name
+                              << ": mean_abs="
+                              << result.comparison->meanAbsoluteDifference
+                              << ", changed_cells="
+                              << result.comparison->changedCellFraction;
+                        witness_->rejectSnapshot(error.str());
+                    } else {
+                        std::cout << "ScryWrite actor-eye snapshot "
+                                  << result.pngPath << '\n';
+                        witness_->resolveSnapshot();
+                    }
+                } catch (const std::exception& error) {
+                    witness_->rejectSnapshot(error.what());
+                }
+            }
         }
         witnessSurface_.endCapture();
     }
@@ -7452,6 +7571,9 @@ class Viewer {
     glm::quat initialPlacementCandidateOrientation_{1.0F, 0.0F, 0.0F, 0.0F};
     bool initialPlacementCandidateInitialized_ = false;
     std::string mirrorDiagnosticsPath_;
+    std::string witnessCaptureDirectory_;
+    std::string witnessVisualExpectationDirectory_;
+    bool exitOnWitnessComplete_ = false;
     std::ofstream mirrorDiagnosticsOutput_;
     std::vector<nadoc_vr::JobSnapshotRow> jobs_;
     glm::vec3 normalizationCenter_{};
@@ -7571,6 +7693,9 @@ class Viewer {
     std::vector<std::string> committedSelectionOwnerTokens_;
     nadoc_vr::SceneManipulator manipulator_;
     std::vector<Vertex> controllerGuides_;
+    size_t witnessActorGuideCount_ = 0;
+    nadoc_vr::MenuLayoutAudit menuLayoutAudit_;
+    bool menuLayoutAudited_ = false;
     std::vector<Vertex> referenceGridGuides_;
     std::optional<nadoc_vr::scrywrite::WitnessReplay> witness_;
     nadoc_vr::scrywrite::WitnessSurface witnessSurface_;
@@ -7661,7 +7786,10 @@ int main(int argc, char** argv) {
                      "[--scene-yaw <degrees>] [--scene-pitch <degrees>] "
                      "[--scene-roll <degrees>] "
                      "[--mirror-diagnostics <trace.jsonl>] "
-                     "[--scrywrite-witness <script.scry>]\n";
+                     "[--scrywrite-witness <script.scry>] "
+                     "[--witness-captures <directory>] "
+                     "[--witness-visual-expect <directory>] "
+                     "[--witness-exit <on|off>]\n";
         return 2;
     }
     std::string eventPath;
@@ -7674,6 +7802,9 @@ int main(int argc, char** argv) {
     std::string visualizationPath;
     std::string witnessPath;
     std::string mirrorDiagnosticsPath;
+    std::string witnessCaptureDirectory;
+    std::string witnessVisualExpectationDirectory;
+    bool exitOnWitnessComplete = false;
     nadoc_vr::SpectatorMirrorEye mirrorEye = nadoc_vr::SpectatorMirrorEye::off;
     bool referenceGrid = false;
     bool placeSceneInView = false;
@@ -7701,6 +7832,20 @@ int main(int argc, char** argv) {
         else if (option == "--jobs") jobPath = argv[index + 1];
         else if (option == "--visualization") visualizationPath = argv[index + 1];
         else if (option == "--scrywrite-witness") witnessPath = argv[index + 1];
+        else if (option == "--witness-captures") {
+            witnessCaptureDirectory = argv[index + 1];
+        }
+        else if (option == "--witness-visual-expect") {
+            witnessVisualExpectationDirectory = argv[index + 1];
+        }
+        else if (option == "--witness-exit") {
+            const std::string mode(argv[index + 1]);
+            if (mode != "on" && mode != "off") {
+                std::cerr << "NADOC VR error: witness exit must be on or off\n";
+                return 2;
+            }
+            exitOnWitnessComplete = mode == "on";
+        }
         else if (option == "--mirror-diagnostics") {
             mirrorDiagnosticsPath = argv[index + 1];
         }
@@ -7810,6 +7955,16 @@ int main(int argc, char** argv) {
                      "to prevent scripted design mutation\n";
         return 2;
     }
+    if ((!witnessCaptureDirectory.empty() ||
+         !witnessVisualExpectationDirectory.empty()) && witnessPath.empty()) {
+        std::cerr << "NADOC VR error: witness captures require --scrywrite-witness\n";
+        return 2;
+    }
+    if (!witnessVisualExpectationDirectory.empty() &&
+        witnessCaptureDirectory.empty()) {
+        std::cerr << "NADOC VR error: visual expectations require --witness-captures\n";
+        return 2;
+    }
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
     try {
@@ -7822,7 +7977,8 @@ int main(int argc, char** argv) {
             std::move(selectedOwnerTokens), std::move(selectedSelectionKind),
             witnessPath, mirrorEye, referenceGrid, placeSceneInView,
             sceneViewPlacement,
-            mirrorDiagnosticsPath);
+            mirrorDiagnosticsPath, witnessCaptureDirectory,
+            witnessVisualExpectationDirectory, exitOnWitnessComplete);
         return viewer.run();
     } catch (const std::exception& error) {
         std::cerr << "NADOC VR error: " << error.what() << '\n';

@@ -42,6 +42,10 @@ if(BUILD_TESTING)
   target_include_directories(nadoc-vr-interaction-test PRIVATE src)
   target_compile_options(nadoc-vr-interaction-test PRIVATE -Wall -Wextra -Wpedantic)
   add_test(NAME nadoc-vr-interaction COMMAND nadoc-vr-interaction-test)
+  add_executable(nadoc-vr-menu-layout-test tests/menu_layout_test.cpp)
+  target_include_directories(nadoc-vr-menu-layout-test PRIVATE src)
+  target_compile_options(nadoc-vr-menu-layout-test PRIVATE -Wall -Wextra -Wpedantic)
+  add_test(NAME nadoc-vr-menu-layout-unit COMMAND nadoc-vr-menu-layout-test)
   add_executable(nadoc-vr-scrywrite-test tests/scrywrite_test.cpp)
   target_include_directories(nadoc-vr-scrywrite-test PRIVATE src)
   target_compile_options(nadoc-vr-scrywrite-test PRIVATE -Wall -Wextra -Wpedantic)
@@ -50,6 +54,11 @@ if(BUILD_TESTING)
   target_include_directories(nadoc-vr-scrywrite-witness-test PRIVATE src)
   target_compile_options(nadoc-vr-scrywrite-witness-test PRIVATE -Wall -Wextra -Wpedantic)
   add_test(NAME nadoc-vr-scrywrite-witness-unit COMMAND nadoc-vr-scrywrite-witness-test)
+  add_executable(nadoc-vr-scrywrite-visual-test tests/scrywrite_visual_test.cpp)
+  target_include_directories(nadoc-vr-scrywrite-visual-test PRIVATE src)
+  target_link_libraries(nadoc-vr-scrywrite-visual-test PRIVATE ZLIB::ZLIB)
+  target_compile_options(nadoc-vr-scrywrite-visual-test PRIVATE -Wall -Wextra -Wpedantic)
+  add_test(NAME nadoc-vr-scrywrite-visual-unit COMMAND nadoc-vr-scrywrite-visual-test)
   add_executable(nadoc-vr-scrywrite-evidence-test tests/scrywrite_evidence_test.cpp)
   target_include_directories(nadoc-vr-scrywrite-evidence-test PRIVATE src)
   target_compile_options(nadoc-vr-scrywrite-evidence-test PRIVATE -Wall -Wextra -Wpedantic)
@@ -79,6 +88,16 @@ if(BUILD_TESTING)
     NAME nadoc-vr-scrywrite-witness-script
     COMMAND nadoc-vr-viewer --validate-witness
       ${CMAKE_CURRENT_SOURCE_DIR}/examples/scrywrite_witness_menu.scry
+  )
+  add_test(
+    NAME nadoc-vr-scrywrite-witness-capture-script
+    COMMAND nadoc-vr-viewer --validate-witness
+      ${CMAKE_CURRENT_SOURCE_DIR}/examples/scrywrite_witness_menu_capture.scry
+  )
+  add_test(
+    NAME nadoc-vr-scrywrite-witness-headset-menu-script
+    COMMAND nadoc-vr-viewer --validate-witness
+      ${CMAKE_CURRENT_SOURCE_DIR}/examples/scrywrite_witness_headset_menu.scry
   )
   add_test(
     NAME nadoc-vr-scrywrite-poc

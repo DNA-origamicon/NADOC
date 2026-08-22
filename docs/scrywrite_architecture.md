@@ -214,9 +214,13 @@ The native viewer accepts `--scrywrite-witness <script.scry>`. In this explicit 
   menu button advances one replay frame while paused.
 
 Witness scripts use the bounded `SCRYWRITE_WITNESS 1` format. Commands are `head`,
-`pose`, `button`, explicit-frame `step`, `aim_menu`, and
-`expect menu|hover|tool|status`. Failure or completion neutralizes every scripted
-button. Validate
+`pose`, `button`, explicit-frame `step`, `aim_menu`, semantic
+`touch_menu <hand> <left|right|top|bottom>`, named `snapshot`, and
+`expect menu|hover|tool|status|placement|menu_moved|layout|framing|display|tracking|overlay`.
+`touch_menu` resolves against
+the current live panel bounds and records its starting world position; the placement
+assertions can then prove a grip interaction docked and displaced that same panel.
+Failure or completion neutralizes every scripted button. Validate
 without OpenXR using:
 
 ```bash
@@ -228,7 +232,7 @@ Run the shipped visual scenario against any valid snapshot using:
 
 ```bash
 just scrywrite-witness
-# Or: just scrywrite-witness SCENE=scene.nadocvr SCRIPT=path/to/test.scry
+# Or: just scrywrite-witness scene.nadocvr path/to/test.scry
 ```
 
 Witness Mode fails startup if an event-output path is also supplied. It suppresses
@@ -241,6 +245,48 @@ semantic expectation failure/pausing, the canonical scenario, viewer compilation
 and all existing native regressions. The actual Vive appearance is deliberately
 recorded as manual validation debt: panel scale, stereo orientation, legibility, and
 comfort cannot be established without wearing the headset.
+
+Live validation on 2026-08-21 exercised the complete canonical chain on the connected
+SteamVR/Vive runtime: open Options, resolve the right panel border, grip-drag the panel
+at least `0.20 m` into a docked world pose, leave the panel plane, semantically hover
+and click Tools and Move/Rotate, and observe `move_rotate` / `select_target`. The
+runtime remained `SUBMITTED EYE` and the final replay passed at ScryWrite frame 942.
+
+## Layered menu-debugging contract
+
+Menu debugging deliberately uses several oracles instead of treating a desktop
+screenshot as proof:
+
+1. `MenuLayoutAudit` shares the production stroke-width/fitting calculations and
+   records text bounds, owning regions, visual controls, and ray-hit regions. It
+   rejects overflow, unreadably shrunken fitting, off-panel controls, undersized
+   targets, hitbox mismatch, and overlapping hitboxes.
+2. The actor-frustum oracle projects all four live panel corners and rejects panels
+   behind or clipped by the deterministic 72-degree, 16:9 actor camera.
+3. `snapshot` reads the real OpenGL actor-eye framebuffer into PNG, a tolerant 32×18
+   luminance fingerprint, and semantic JSON metadata. Five stored menu-state
+   fingerprints cover Options open/Tools hover/Tools open/Move-Rotate hover/active.
+4. `frontend/scrywrite/witness_artifacts.spec.js` orders those artifacts by replay
+   frame, checks semantic transitions and valid layout, and attaches every image and
+   state record to a Playwright trace. `just scrywrite-menu-trace` runs this chain.
+5. Live provenance assertions independently require a runtime-submitted mirrored
+   eye, tracked HMD pose, and visible overlay. The OpenXR validation/API-dump and
+   Nsight/RenderDoc wrappers live in `scripts/vr_diagnostics.sh`.
+
+The focused fault suite proves each deterministic oracle with an intentional defect:
+long-title overflow, text below its scale floor, control overflow, undersized or
+misaligned hit targets, overlapping hit targets, clipped/behind panel placement,
+and a large visual occluder. These checks establish application geometry and captured
+composition. They still do not establish stereo fusion, wearer legibility, reach,
+comfort, compositor overlays/lens warp, or physical interaction quality.
+
+Final live validation on 2026-08-21 used the connected Vive/SteamVR runtime. The
+five-state trace passed stored visual baselines, layout, framing, submitted-eye,
+tracking, overlay, hover, tool, and status assertions at frame 284. The loader-matched
+OpenXR core-validation layer completed the same trace without a validation error;
+API dump retained the pass, and Nsight Systems captured an 18 MB OpenGL/OS-runtime
+stream. RenderDoc was not installed, so frame-debugger execution remains an explicit
+tool-availability boundary rather than an implied result.
 
 ## Headset-free visual evidence
 

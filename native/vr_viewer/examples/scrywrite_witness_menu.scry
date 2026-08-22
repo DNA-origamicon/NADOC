@@ -11,6 +11,22 @@ step 2
 button right menu up
 step 90
 expect menu options
+expect layout valid
+
+# Grip the live tablet border and move it 27 cm into a world-docked pose.
+touch_menu left right
+step 30
+button left grip down
+step 2
+pose left 0.08 1.39 -0.60 1 0 0 0
+step 30
+button left grip up
+step 30
+expect placement docked
+expect menu_moved 0.20
+# Leave the panel plane before ray-targeting its controls.
+pose left -0.24 1.28 -0.24 1 0 0 0
+step 30
 
 # Aim the ghost left controller using the semantic menu label, then click it.
 aim_menu left tools
@@ -21,6 +37,7 @@ step 2
 button left trigger up
 step 90
 expect menu tools
+expect layout valid
 
 # Demonstrate exact live-menu targeting on Move/Rotate.
 aim_menu left move_rotate

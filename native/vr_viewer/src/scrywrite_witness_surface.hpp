@@ -8,6 +8,7 @@
 #include <array>
 #include <cstddef>
 #include <stdexcept>
+#include <vector>
 
 namespace nadoc_vr::scrywrite {
 
@@ -86,6 +87,17 @@ class WitnessSurface {
         glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(previousFramebuffer_));
         glViewport(previousViewport_[0], previousViewport_[1],
                    previousViewport_[2], previousViewport_[3]);
+    }
+
+    [[nodiscard]] std::vector<uint8_t> readRgb() const {
+        std::vector<uint8_t> pixels(
+            static_cast<size_t>(kWidth) * kHeight * 3U);
+        GLint previousAlignment = 4;
+        glGetIntegerv(GL_PACK_ALIGNMENT, &previousAlignment);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadPixels(0, 0, kWidth, kHeight, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+        glPixelStorei(GL_PACK_ALIGNMENT, previousAlignment);
+        return pixels;
     }
 
     void renderPanel(

@@ -40,7 +40,7 @@ and the explicit Witness Mode script:
 
 ```bash
 just scrywrite-witness
-# Or: just scrywrite-witness SCENE=scene.nadocvr SCRIPT=path/to/test.scry
+# Or: just scrywrite-witness scene.nadocvr path/to/test.scry
 ```
 
 Your physical headset remains the free observer camera. Cyan/orange ghost controllers
@@ -51,6 +51,17 @@ physical right menu button to single-step while paused. Witness Mode refuses an 
 output path and blocks haptics and X11 clicks, so the visual replay cannot publish a
 design mutation. Check a script without starting OpenXR using
 `nadoc-vr-viewer --validate-witness <script>`.
+
+For the checked menu-debugging timeline, run `just scrywrite-menu-trace`. It opens the
+real Options menu, captures open/hover/navigation/activation states from the
+deterministic 960×540 actor-eye framebuffer, compares tolerant 32×18 luminance
+fingerprints, exits when the witness passes, and has Playwright attach each PNG and
+its semantic JSON state. `expect layout valid` checks renderer-native text/control
+bounds; `expect framing valid`, `display submitted`, `tracking tracked`, and
+`overlay visible` keep a clipped panel or spectator fallback from becoming a false
+visual pass. `snapshot <safe_name>` requires `--witness-captures <directory>`;
+`--witness-visual-expect <directory>` enables baseline comparison and
+`--witness-exit on` makes live diagnostic jobs bounded.
 
 The GLFW companion window can mirror the physical HMD eye with `--mirror-eye left`
 or `--mirror-eye right`; `off` disables it. Normal NADOC **View in VR** launches
@@ -112,8 +123,17 @@ Ubuntu development packages:
 
 ```bash
 sudo apt install build-essential cmake ninja-build libopenxr-dev \
-  libopenxr-loader1 libglfw3-dev libglm-dev libgl1-mesa-dev libx11-dev
+  libopenxr-loader1 libglfw3-dev libglm-dev libgl1-mesa-dev libx11-dev \
+  openxr-layer-corevalidation openxr-layer-apidump
 ```
+
+`scripts/vr_diagnostics.sh check` reports the locally usable runtime, explicit API
+layers, Nsight Systems, and RenderDoc. Its `validation` and `api-dump` modes enable
+one explicit OpenXR layer around an arbitrary viewer command while removing Conda's
+conflicting library path. `nsys` records OpenGL/OS-runtime activity; `renderdoc`
+starts a frame capture when `renderdoccmd` is installed and otherwise fails clearly.
+Set `NADOC_XR_DIAGNOSTIC_OUTPUT` to choose the log/capture path. API dumps are written
+only to the log because even the bounded 284-frame menu trace is roughly 4 MB.
 
 The backend selects SteamVR's `steamxr_linux64.json` automatically when it
 launches the viewer. Help → Open SteamVR / Desktop starts SteamVR independently,

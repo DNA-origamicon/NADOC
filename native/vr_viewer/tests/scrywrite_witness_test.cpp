@@ -60,6 +60,74 @@ int main() {
     require(stateReplay.finished() && !stateReplay.failed(),
             "live tool and status observations should be assertable");
 
+    std::istringstream layoutSource(
+        "SCRYWRITE_WITNESS 1\n"
+        "expect layout valid\n");
+    auto layoutReplay = nadoc_vr::scrywrite::WitnessReplay::load(layoutSource);
+    layoutReplay.advance({
+        "options", "none", "none", "none", "following", {},
+        "text_overflow", "text_overflow[title] text escapes its owning bounds",
+    });
+    require(layoutReplay.failed(), "menu layout assertions should fail semantically");
+    require(layoutReplay.error().find("text_overflow[title]") != std::string::npos,
+            "layout failures should retain the renderer-native diagnostic");
+
+    std::istringstream liveDisplaySource(
+        "SCRYWRITE_WITNESS 1\n"
+        "expect display submitted\n"
+        "expect tracking tracked\n"
+        "expect overlay visible\n"
+        "expect framing valid\n");
+    auto liveDisplayReplay =
+        nadoc_vr::scrywrite::WitnessReplay::load(liveDisplaySource);
+    liveDisplayReplay.advance({
+        "options", "none", "none", "none", "following", {}, "valid", "",
+        "submitted", "tracked", "visible", "valid",
+    });
+    require(liveDisplayReplay.finished() && !liveDisplayReplay.failed(),
+            "submitted-eye, tracking, and overlay provenance should be assertable");
+
+    std::istringstream fallbackSource(
+        "SCRYWRITE_WITNESS 1\n"
+        "expect display submitted\n");
+    auto fallbackReplay = nadoc_vr::scrywrite::WitnessReplay::load(fallbackSource);
+    fallbackReplay.advance({
+        "options", "none", "none", "none", "following", {}, "valid", "",
+        "fallback", "tracked", "visible",
+    });
+    require(fallbackReplay.failed() &&
+                fallbackReplay.error().find("got fallback") != std::string::npos,
+            "a spectator fallback should not masquerade as a submitted eye");
+
+    std::istringstream snapshotSource(
+        "SCRYWRITE_WITNESS 1\n"
+        "snapshot options_open\n"
+        "expect menu options\n");
+    auto snapshotReplay = nadoc_vr::scrywrite::WitnessReplay::load(snapshotSource);
+    snapshotReplay.advance({"options"});
+    require(snapshotReplay.pendingSnapshot().has_value() &&
+                snapshotReplay.pendingSnapshot()->name == "options_open",
+            "named actor-eye snapshots should pause replay until captured");
+    snapshotReplay.advance({"closed"});
+    require(!snapshotReplay.finished(),
+            "a pending snapshot should prevent later assertions from advancing");
+    snapshotReplay.resolveSnapshot();
+    snapshotReplay.advance({"options"});
+    require(snapshotReplay.finished() && !snapshotReplay.failed(),
+            "replay should continue after a successful actor-eye capture");
+
+    bool unsafeSnapshotRejected = false;
+    try {
+        std::istringstream unsafe(
+            "SCRYWRITE_WITNESS 1\n"
+            "snapshot ../escape\n");
+        (void)nadoc_vr::scrywrite::WitnessReplay::load(unsafe);
+    } catch (const std::exception&) {
+        unsafeSnapshotRejected = true;
+    }
+    require(unsafeSnapshotRejected,
+            "snapshot names should not permit path traversal");
+
     std::istringstream heldFailureSource(
         "SCRYWRITE_WITNESS 1\n"
         "button right trigger down\n"
@@ -69,6 +137,48 @@ int main() {
     require(heldFailure.failed(), "held-input assertion mismatch should fail");
     require(!heldFailure.input().triggerPressed[1],
             "failed replay must neutralize held scripted input");
+
+    std::istringstream placementSource(
+        "SCRYWRITE_WITNESS 1\n"
+        "pose left -0.2 1.2 -0.3 1 0 0 0\n"
+        "touch_menu left right\n"
+        "expect placement docked\n"
+        "expect menu_moved 0.20\n");
+    auto placementReplay = nadoc_vr::scrywrite::WitnessReplay::load(placementSource);
+    placementReplay.advance({"options", "none", "none", "none", "following", {}});
+    require(placementReplay.pendingMenuTouch().has_value(),
+            "semantic menu-edge touch should be requested");
+    nadoc_vr::MenuPlacement placement;
+    std::array<nadoc_vr::HandPose, 2> placementHands{};
+    placementHands[1] = {true, false, {0.2F, 1.2F, -0.3F}, {1, 0, 0, 0}};
+    placement.open(1, placementHands, {0, 1.2F, -1}, {1, 0, 0, 0});
+    const glm::vec2 menuMinimum(-nadoc_vr::MenuPlacement::kMenuHalfWidth, -0.545F);
+    const glm::vec2 menuMaximum(nadoc_vr::MenuPlacement::kMenuHalfWidth, 0.33F);
+    nadoc_vr::scrywrite::resolveWitnessMenuTouch(
+        placementReplay, placement, menuMinimum, menuMaximum, true);
+    require(!placementReplay.pendingMenuTouch(),
+            "live menu placement should resolve the semantic edge");
+    require(glm::length(
+        placementReplay.input().hands[0].position -
+        placement.worldPoint({menuMaximum.x, -0.1075F, 0.0F})) < 1.0e-6F,
+        "touch_menu should put the requested hand on the live menu border");
+    placementReplay.advance({
+        "options", "none", "none", "none", "docked",
+        placement.position() + glm::vec3(0.25F, 0.0F, 0.0F),
+    });
+    require(placementReplay.finished() && !placementReplay.failed(),
+            "docked and displaced live menu should satisfy placement assertions");
+
+    std::istringstream missingMenuSource(
+        "SCRYWRITE_WITNESS 1\n"
+        "pose left -0.2 1.2 -0.3 1 0 0 0\n"
+        "touch_menu left top\n");
+    auto missingMenu = nadoc_vr::scrywrite::WitnessReplay::load(missingMenuSource);
+    missingMenu.advance({});
+    nadoc_vr::scrywrite::resolveWitnessMenuTouch(
+        missingMenu, placement, menuMinimum, menuMaximum, false);
+    require(missingMenu.failed() && missingMenu.error().find("open menu") != std::string::npos,
+            "touch_menu should fail closed when no live menu exists");
 
     const std::vector<nadoc_vr::scrywrite::WitnessMenuEntry> entries = {
         {"MOVE ROTATE", 1, {0.0F, 1.0F, -1.0F}},

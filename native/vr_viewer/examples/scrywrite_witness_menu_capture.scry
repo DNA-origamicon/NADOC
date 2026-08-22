@@ -1,0 +1,42 @@
+SCRYWRITE_WITNESS 1
+# Deterministic actor pose: open the real Options menu and capture the same
+# actor-eye framebuffer displayed on the in-world witness monitor.
+head 0 1.60 0 1 0 0 0
+pose right 0.28 1.72 -0.60 1 0 0 0
+pose left -0.24 1.28 -0.24 1 0 0 0
+step 90
+button right menu down
+step 2
+button right menu up
+step 30
+expect menu options
+expect layout valid
+expect display submitted
+expect tracking tracked
+expect overlay visible
+expect framing valid
+snapshot options_open
+
+aim_menu left tools
+step 30
+expect hover tools
+snapshot options_tools_hover
+button left trigger down
+step 2
+button left trigger up
+step 30
+expect menu tools
+expect layout valid
+snapshot tools_open
+
+aim_menu left move_rotate
+step 30
+expect hover move_rotate
+snapshot tools_move_rotate_hover
+button left trigger down
+step 2
+button left trigger up
+step 60
+expect tool move_rotate
+expect status select_target
+snapshot move_rotate_active
