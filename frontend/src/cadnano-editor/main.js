@@ -2442,10 +2442,24 @@ initLigationDebug()
   // ── Plates and tubes panel (96-well plate layout + IDT tube list) ───────────
   const platesPanelEl = document.getElementById('cadnano-plates-panel')
   let _platesView = null
+  let _platesSig = null
+  const _plateLayoutSig = layout => JSON.stringify(layout ?? null)
+  let _renderedPlateLayoutSig = _plateLayoutSig(null)
+  const _sig = (d) => d ? JSON.stringify([
+    d.id,
+    (d.strands ?? []).filter(s => s.strand_type === 'staple' && !s.is_reference)
+      .map(s => `${s.id}:${s.color || ''}:${s.domains?.length ?? 0}`),
+    (d.extensions ?? []).map(e => `${e.strand_id}:${e.modification || ''}`),
+  ]) : 'null'
   function _refreshPlates() {
     if (!_platesView) return
     const design = editorStore.getState().design
-    if (!design) { _platesView.setData([], null); return }
+    if (!design) {
+      _platesView.setData([], null)
+      _platesSig = _sig(null)
+      _renderedPlateLayoutSig = _plateLayoutSig(null)
+      return
+    }
     ensureStapleColors(design)
     const helixById = Object.fromEntries((design.helices ?? []).map(h => [h.id, h]))
     const modOf = new Map()
@@ -2479,6 +2493,8 @@ initLigationDebug()
       })
     }
     _platesView.setData(records, design.plate_layout ?? null)
+    _platesSig = _sig(design)
+    _renderedPlateLayoutSig = _plateLayoutSig(design.plate_layout)
   }
 
   // Tab strip click → swap which left-side panel is visible.
@@ -2493,7 +2509,10 @@ initLigationDebug()
         toolbarEl: document.getElementById('cn-plate-toolbar'),
         getTubesContainer: () => document.getElementById('cn-plate-tubes'),
         enableGroupMode: false,                 // no group system in the cadnano editor
-        onSaveLayout: (layout) => { savePlateLayout(layout) },
+        onSaveLayout: (layout) => {
+          _renderedPlateLayoutSig = _plateLayoutSig(layout)
+          savePlateLayout(layout)
+        },
         onStrandClick: (sid) => {
           // Highlight the strand in the pathview + the spreadsheet (which
           // autoscrolls to the row). Empty well clears the selection.
@@ -2513,21 +2532,14 @@ initLigationDebug()
     for (const b of tabBtns) {
       b.addEventListener('click', () => _setActiveTab(b.dataset.tab))
     }
-    // Refresh the plate while it's visible when the design's staples/extensions
-    // change — but NOT on our own plate_layout saves (they'd reset the view).
-    let _platesSig = null
-    const _sig = (d) => d ? JSON.stringify([
-      d.id,
-      (d.strands ?? []).filter(s => s.strand_type === 'staple' && !s.is_reference)
-        .map(s => `${s.id}:${s.color || ''}:${s.domains?.length ?? 0}`),
-      (d.extensions ?? []).map(e => `${e.strand_id}:${e.modification || ''}`),
-    ]) : 'null'
+    // Refresh for topology changes and EXTERNAL layout changes (undo/redo or
+    // the other editor), but not for our own save response.
     editorStore.subscribe((state, prev) => {
       if (state.design === prev.design) return
       if (!platesPanelEl?.classList.contains('is-active')) return
       const sig = _sig(state.design)
-      if (sig === _platesSig) return
-      _platesSig = sig
+      const layoutSig = _plateLayoutSig(state.design?.plate_layout)
+      if (sig === _platesSig && layoutSig === _renderedPlateLayoutSig) return
       _refreshPlates()
     })
   }

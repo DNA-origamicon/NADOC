@@ -75,4 +75,52 @@ describe('initPlatesTab', () => {
     expect(selectionManager.selectStrand).toHaveBeenCalledWith('strand-7')
     expect(selectionManager.clearSelection).toHaveBeenCalledOnce()
   })
+
+  it('ignores its own layout save but refreshes layout-only undo and redo', () => {
+    let subscriber
+    let state = {
+      currentDesign: {
+        id: 'd1', helices: [{ id: 'h1' }], extensions: [], plate_layout: null,
+        strands: [{
+          id: 'staple-1', strand_type: 'staple', sequence: 'ACGT',
+          domains: [{ helix_id: 'h1', start_bp: 0, end_bp: 3 }],
+        }],
+      },
+      currentGeometry: [{ strand_id: 'staple-1' }],
+      strandColors: {}, strandGroups: [],
+    }
+    const api = { savePlateLayout: vi.fn() }
+    initPlatesTab({
+      api,
+      designRenderer: { getHelixCtrl: () => null },
+      selectionManager: {},
+      store: {
+        getState: () => state,
+        subscribe: handler => { subscriber = handler },
+      },
+    })
+    subscriber(state)
+    const callsAfterInitialRender = mocks.plateView.setData.mock.calls.length
+    const tubed = {
+      orientation: '8x12', plate_count: 1, wells: [],
+      tubes: [{ strand_id: 'staple-1', reason: 'manual' }],
+    }
+    const options = mocks.initPlateView.mock.calls[0][1]
+
+    // The local view already applied this layout before saving it. Its response
+    // must not reset the view.
+    options.onSaveLayout(tubed)
+    state = { ...state, currentDesign: { ...state.currentDesign, plate_layout: tubed } }
+    subscriber(state)
+    expect(mocks.plateView.setData).toHaveBeenCalledTimes(callsAfterInitialRender)
+
+    // Undo and redo are layout-only design changes, but each must repaint.
+    state = { ...state, currentDesign: { ...state.currentDesign, plate_layout: null } }
+    subscriber(state)
+    expect(mocks.plateView.setData).toHaveBeenLastCalledWith(expect.any(Array), null)
+    state = { ...state, currentDesign: { ...state.currentDesign, plate_layout: tubed } }
+    subscriber(state)
+    expect(mocks.plateView.setData).toHaveBeenLastCalledWith(expect.any(Array), tubed)
+    expect(api.savePlateLayout).toHaveBeenCalledWith(tubed)
+  })
 })

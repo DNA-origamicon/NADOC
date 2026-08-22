@@ -1108,10 +1108,10 @@ class WellAssignment(BaseModel):
 
 class TubeAssignment(BaseModel):
     """A staple segregated out of the plate into an individual tube, because it
-    carries a modification, exceeds 60 nt, or both."""
+    carries a modification, exceeds 60 nt, both, or was moved there manually."""
 
     strand_id: str
-    reason: Literal["modification", "long", "both"]
+    reason: Literal["modification", "long", "both", "manual"]
 
 
 class PlateLayout(BaseModel):

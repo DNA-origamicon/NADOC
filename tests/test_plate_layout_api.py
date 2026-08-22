@@ -117,6 +117,46 @@ def test_put_plate_layout_happy_path(client):
     assert got["tubes"] == []
 
 
+def test_put_plate_layout_accepts_manual_tube_transfer(client):
+    body = {
+        "orientation": "8x12",
+        "plate_count": 1,
+        "wells": [],
+        "tubes": [{"strand_id": "staple_0", "reason": "manual"}],
+    }
+    response = client.put("/api/design/plate-layout", json=body)
+    assert response.status_code == 200
+    assert response.json()["design"]["plate_layout"]["tubes"] == body["tubes"]
+
+
+def test_well_and_tube_transfers_each_undo_and_redo(client):
+    plated = {
+        "orientation": "8x12",
+        "plate_count": 1,
+        "wells": [{"strand_id": "staple_0", "plate": 0, "row": 0, "col": 0}],
+        "tubes": [],
+    }
+    tubed = {
+        "orientation": "8x12",
+        "plate_count": 1,
+        "wells": [],
+        "tubes": [{"strand_id": "staple_0", "reason": "manual"}],
+    }
+
+    assert client.put("/api/design/plate-layout", json=plated).status_code == 200
+    design_state.clear_history()  # establish the test's starting layout
+
+    # Send to tubes -> undo to its well -> redo to its tube.
+    assert client.put("/api/design/plate-layout", json=tubed).status_code == 200
+    assert client.post("/api/design/undo").json()["design"]["plate_layout"] == plated
+    assert client.post("/api/design/redo").json()["design"]["plate_layout"] == tubed
+
+    # Send back to plates -> undo to its tube -> redo to its well.
+    assert client.put("/api/design/plate-layout", json=plated).status_code == 200
+    assert client.post("/api/design/undo").json()["design"]["plate_layout"] == tubed
+    assert client.post("/api/design/redo").json()["design"]["plate_layout"] == plated
+
+
 def test_put_plate_layout_unknown_strand_404(client):
     body = {
         "orientation": "8x12",

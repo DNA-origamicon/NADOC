@@ -669,6 +669,57 @@
   margin: var(--space-1) 0;
 }
 
+/* Shared Plates & tubes panel (3D + cadnano editors). The header stays put while
+   the order rows scroll inside a visibly bounded list. */
+.plate-tubes-panel {
+  flex: 0 1 42%;
+  min-height: 88px;
+  max-height: 42%;
+  overflow: hidden;
+  padding: var(--space-2);
+  border-top: var(--border-thin) solid var(--color-border-default);
+  background: var(--color-bg-canvas);
+  color: var(--color-text-secondary);
+}
+
+.plate-tubes-box {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+  border: var(--border-thin) solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+}
+
+.plate-tubes-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-bottom: var(--border-thin) solid var(--color-border-default);
+}
+
+.plate-tubes-header span { margin-left: auto; }
+
+.plate-tubes-scroll {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.plate-tubes-scroll thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-bg-surface);
+}
+
+.plate-tubes-scroll tbody tr { cursor: context-menu; }
+.plate-tubes-scroll tbody tr:hover { background: var(--color-bg-raised); }
+
 /* ════════════════════════════════════════════════════════════════════
    Toast / notifications
    ════════════════════════════════════════════════════════════════════ */

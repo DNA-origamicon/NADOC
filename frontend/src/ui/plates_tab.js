@@ -14,6 +14,11 @@ export function initPlatesTab({ api, designRenderer, selectionManager, store }) 
   const tubesEl   = document.getElementById('plate-tubes')
   const paneEl    = document.getElementById('tab-content-plates')
   if (canvasEl && wrapEl && paneEl) {
+    const _layoutSig = layout => JSON.stringify(layout ?? null)
+    // Tracks what plate_view already renders. A response to our own save has
+    // this same signature and must not reset pan/zoom; undo/redo has a different
+    // signature and must refresh even though strand topology did not change.
+    let _renderedLayoutSig = _layoutSig(null)
     const MOD_NAMES = {
       cy3: 'Cy3', cy5: 'Cy5', fam: 'FAM', tamra: 'TAMRA', bhq1: 'BHQ-1',
       bhq2: 'BHQ-2', atto488: 'ATTO488', atto550: 'ATTO550', biotin: 'Biotin',
@@ -27,7 +32,10 @@ export function initPlatesTab({ api, designRenderer, selectionManager, store }) 
       toolbarEl,
       getTubesContainer: () => tubesEl,
       enableGroupMode: true,
-      onSaveLayout: (layout) => { api.savePlateLayout(layout) },
+      onSaveLayout: (layout) => {
+        _renderedLayoutSig = _layoutSig(layout)
+        api.savePlateLayout(layout)
+      },
       onStrandClick: (sid) => {
         // Select the canonical strand ref; all linked views follow it. Empty well clears.
         if (sid) selectionManager.selectStrand(sid)
@@ -122,6 +130,7 @@ export function initPlatesTab({ api, designRenderer, selectionManager, store }) 
     function _refresh() {
       const { records, saved } = _buildRecords()
       plateView.setData(records, saved)
+      _renderedLayoutSig = _layoutSig(saved)
     }
 
     // Refresh + re-fit the plates whenever the tab becomes visible.
@@ -137,7 +146,8 @@ export function initPlatesTab({ api, designRenderer, selectionManager, store }) 
     store.subscribe((s) => {
       if (paneEl.hasAttribute('hidden')) return
       const sig = _inputsSig(s.currentDesign, s.strandColors, s.strandGroups)
-      if (sig === _lastSig) return
+      const layoutSig = _layoutSig(s.currentDesign?.plate_layout)
+      if (sig === _lastSig && layoutSig === _renderedLayoutSig) return
       _lastSig = sig
       _refresh()
     })

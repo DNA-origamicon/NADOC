@@ -63,7 +63,7 @@ class PlateWellItem(BaseModel):
 
 class PlateTubeItem(BaseModel):
     strand_id: str
-    reason: Literal["modification", "long", "both"]
+    reason: Literal["modification", "long", "both", "manual"]
 
 
 class PlateLayoutSaveRequest(BaseModel):

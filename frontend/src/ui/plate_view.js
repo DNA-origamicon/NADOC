@@ -22,12 +22,16 @@
  *   }) → {
  *     setData(strands, savedLayout), autoFill(),
  *     setOrientation('8x12'|'12x8'), setSelectionMode('staple'|'color'|'group'),
+ *     sendToTubes(strandId), sendToPlates(strandId), getLayout(),
  *     resetView(), destroy(),
  *   }
  *
  * layout shape (sent to onSaveLayout / accepted by setData):
  *   { orientation, plate_count, wells: [{strand_id,plate,row,col}], tubes: [{strand_id,reason}] }
  */
+
+import { createContextMenu } from './primitives/context_menu.js'
+import { deferrableContextMenu } from '../scene/right_click_menu.js'
 
 // ── Layout constants (world units; px at zoom=1) ─────────────────────────────
 const WELL_PITCH = 30
@@ -80,8 +84,11 @@ export function initPlateView(canvasEl, opts = {}) {
 
   // Plated layout: strandId → global linear well index (plate*96 + within).
   let _wellOf = new Map()
-  // Tube layout: strandId → reason ('modification'|'long'|'both').
+  // Tube layout: strandId → reason ('modification'|'long'|'both'|'manual').
   let _tubes  = new Map()
+  // Remember the most recent well while a strand is in a tube so an immediate
+  // round trip restores the physical layout when that well is still available.
+  let _returnWellOf = new Map()
 
   let _mode = 'staple'              // 'staple' | 'color' | 'group'
   let _selected = new Set()         // selected strandIds (highlight)
@@ -90,6 +97,7 @@ export function initPlateView(canvasEl, opts = {}) {
   let _zoom = 1, _panX = 0, _panY = 0
   let _panActive = false
   let _panStartCX = 0, _panStartCY = 0, _panStartPanX = 0, _panStartPanY = 0
+  let _rightDown = null
   // Once the user pans/zooms we stop auto-fitting on resize, so a sidebar-width
   // animation (or container resize) re-fits the plates until they take control.
   let _userAdjusted = false
@@ -100,6 +108,7 @@ export function initPlateView(canvasEl, opts = {}) {
 
   let _tooltipEl = null
   let _resizeObs = null
+  let _contextMenu = null
 
   // ── Orientation helpers ──────────────────────────────────────────────────────
   // Orientation is purely a DISPLAY rotation: the physical well address (row A–H,
@@ -130,6 +139,11 @@ export function initPlateView(canvasEl, opts = {}) {
     const plate = Math.floor(idx / PER_PLATE)
     const { r, c } = _withinToRC(idx % PER_PLATE)
     return { plate, r, c }
+  }
+
+  function _occupantAt(well) {
+    if (well == null) return null
+    return [..._wellOf].find(([, idx]) => idx === well)?.[0] ?? null
   }
 
   // ── Geometry: world coords of a plate's wells area ───────────────────────────
@@ -300,6 +314,14 @@ export function initPlateView(canvasEl, opts = {}) {
     return { tubes, plated }
   }
 
+  function _tubeReason(rec) {
+    const longOligo = rec?.lengthNt > TUBE_LEN_THRESHOLD
+    if (rec?.hasMod && longOligo) return 'both'
+    if (rec?.hasMod) return 'modification'
+    if (longOligo) return 'long'
+    return 'manual'
+  }
+
   function autoFill() {
     const { tubes, plated } = _segregate()
     plated.sort((a, b) => {
@@ -312,6 +334,7 @@ export function initPlateView(canvasEl, opts = {}) {
     _wellOf = new Map()
     plated.forEach((s, i) => _wellOf.set(s.strandId, i))
     _tubes = new Map(tubes.map(t => [t.s.strandId, t.reason]))
+    _returnWellOf.clear()
     _plateCount = Math.max(1, Math.ceil(plated.length / PER_PLATE))
     _selected.clear()
     _renderTubes()
@@ -322,16 +345,71 @@ export function initPlateView(canvasEl, opts = {}) {
 
   // ── Manual moves ───────────────────────────────────────────────────────────────
   function _resolveUnit(strandId) {
-    if (!strandId) return []
+    return _resolveUnitIn(_wellOf, strandId)
+  }
+
+  function _resolveUnitIn(source, strandId) {
+    if (!strandId || !source.has(strandId)) return []
     if (_mode === 'staple') return [strandId]
     const rec = _byId.get(strandId)
     if (!rec) return [strandId]
     const key = _mode === 'color' ? 'color' : 'groupId'
     const val = rec[key]
-    // Only plated members move; keep ascending well order.
-    return [..._wellOf.keys()]
+    // Only members at the source location move; keep stable design order.
+    return [...source.keys()]
       .filter(sid => (_byId.get(sid)?.[key]) === val)
-      .sort((a, b) => _wellOf.get(a) - _wellOf.get(b))
+      .sort((a, b) => _strands.findIndex(s => s.strandId === a) - _strands.findIndex(s => s.strandId === b))
+  }
+
+  function _recomputePlateCount() {
+    let hi = -1
+    for (const idx of _wellOf.values()) hi = Math.max(hi, idx)
+    _plateCount = Math.max(1, Math.floor(Math.max(0, hi) / PER_PLATE) + 1)
+  }
+
+  function _finishTransfer(unit) {
+    _selected = new Set(unit)
+    _recomputePlateCount()
+    _renderTubes()
+    _syncToolbar()
+    _draw()
+    _save()
+    return unit
+  }
+
+  /** Move the current staple/color/group unit from wells into tubes. */
+  function sendToTubes(strandId) {
+    const unit = _resolveUnitIn(_wellOf, strandId)
+    if (!unit.length) return []
+    for (const sid of unit) {
+      const oldWell = _wellOf.get(sid)
+      if (oldWell == null) continue
+      _returnWellOf.set(sid, oldWell)
+      _wellOf.delete(sid)
+      _tubes.set(sid, _tubeReason(_byId.get(sid)))
+    }
+    return _finishTransfer(unit)
+  }
+
+  /** Move the current staple/color/group unit from tubes into open wells. */
+  function sendToPlates(strandId) {
+    const unit = _resolveUnitIn(_tubes, strandId)
+    if (!unit.length) return []
+    const occupied = new Set(_wellOf.values())
+    let firstFree = 0
+    const takeFirstFree = () => {
+      while (occupied.has(firstFree)) firstFree += 1
+      return firstFree
+    }
+    for (const sid of unit) {
+      let dest = _returnWellOf.get(sid)
+      if (!Number.isInteger(dest) || dest < 0 || occupied.has(dest)) dest = takeFirstFree()
+      _wellOf.set(sid, dest)
+      _tubes.delete(sid)
+      _returnWellOf.delete(sid)
+      occupied.add(dest)
+    }
+    return _finishTransfer(unit)
   }
 
   function _moveUnit(unit, fromWell, toWell) {
@@ -377,6 +455,7 @@ export function initPlateView(canvasEl, opts = {}) {
   function _onPointerDown(ev) {
     const { cx, cy } = _evtCss(ev)
     if (ev.button === 1 || ev.button === 2) {        // pan
+      if (ev.button === 2) _rightDown = { cx, cy }
       _panActive = true
       _panStartCX = cx; _panStartCY = cy; _panStartPanX = _panX; _panStartPanY = _panY
       canvasEl.setPointerCapture(ev.pointerId); ev.preventDefault()
@@ -385,7 +464,7 @@ export function initPlateView(canvasEl, opts = {}) {
     if (ev.button !== 0) return
     const { wx, wy } = _cssToWorld(cx, cy)
     const well = _worldToWell(wx, wy)
-    const sid = well != null ? [..._wellOf].find(([, idx]) => idx === well)?.[0] ?? null : null
+    const sid = _occupantAt(well)
     if (sid) {
       _selected = new Set(_resolveUnit(sid))
       onStrandClick?.(sid)
@@ -418,7 +497,7 @@ export function initPlateView(canvasEl, opts = {}) {
     // Hover tooltip
     const { wx, wy } = _cssToWorld(cx, cy)
     const well = _worldToWell(wx, wy)
-    const sid = well != null ? [..._wellOf].find(([, idx]) => idx === well)?.[0] ?? null : null
+    const sid = _occupantAt(well)
     if (sid) {
       const rec = _byId.get(sid)
       const { plate, r, c } = _idxToPRC(well)
@@ -436,7 +515,7 @@ export function initPlateView(canvasEl, opts = {}) {
       let changed
       if (_mode === 'staple') {
         // Move/swap a single staple.
-        const occupantId = [..._wellOf].find(([, idx]) => idx === _dropWell)?.[0] ?? null
+        const occupantId = _occupantAt(_dropWell)
         if (occupantId && occupantId !== _ldown.strandId) {
           const a = _wellOf.get(_ldown.strandId)
           _wellOf.set(_ldown.strandId, _dropWell)
@@ -447,8 +526,7 @@ export function initPlateView(canvasEl, opts = {}) {
           changed = true
         }
         if (changed) {
-          let hi = 0; for (const idx of _wellOf.values()) hi = Math.max(hi, idx)
-          _plateCount = Math.max(1, Math.floor(hi / PER_PLATE) + 1)
+          _recomputePlateCount()
         }
       } else {
         changed = _moveUnit(unit, _ldown.well, _dropWell)
@@ -461,7 +539,40 @@ export function initPlateView(canvasEl, opts = {}) {
   }
 
   function _onPointerLeave() { if (!_panActive && !_ldown) _hideTooltip() }
-  function _onContextMenu(ev) { ev.preventDefault() }
+
+  function _openTransferMenu(clientX, clientY, item) {
+    _contextMenu?.close()
+    _contextMenu = createContextMenu({
+      x: clientX,
+      y: clientY,
+      items: [{
+        label: item.location === 'well' ? 'Send to tubes' : 'Send to plates',
+        onClick: () => item.location === 'well'
+          ? sendToTubes(item.strandId)
+          : sendToPlates(item.strandId),
+      }],
+      onClose: () => { _contextMenu = null },
+    })
+  }
+
+  function _onContextMenu(ev) {
+    const { cx, cy } = _evtCss(ev)
+    if (_rightDown && Math.hypot(cx - _rightDown.cx, cy - _rightDown.cy) > DRAG_THRESHOLD) {
+      _rightDown = null
+      return
+    }
+    _rightDown = null
+    const { wx, wy } = _cssToWorld(cx, cy)
+    const sid = _occupantAt(_worldToWell(wx, wy))
+    if (!sid) return
+    _hideTooltip()
+    _selected = new Set(_resolveUnitIn(_wellOf, sid))
+    onStrandClick?.(sid)
+    _draw()
+    _openTransferMenu(ev.clientX, ev.clientY, { location: 'well', strandId: sid })
+  }
+
+  const _contextMenuHandler = deferrableContextMenu(canvasEl, _onContextMenu)
 
   function _onWheel(ev) {
     ev.preventDefault()
@@ -497,26 +608,27 @@ export function initPlateView(canvasEl, opts = {}) {
   function _renderTubes() {
     const host = getTubesContainer?.()
     if (!host) return
+    host.classList.add('plate-tubes-panel')
     const rows = [..._tubes.entries()]
       .map(([sid, reason]) => ({ rec: _byId.get(sid), reason }))
       .filter(x => x.rec)
       .sort((a, b) => (a.rec.name || a.rec.strandId).localeCompare(b.rec.name || b.rec.strandId))
 
     if (rows.length === 0) {
-      host.innerHTML = '<div style="padding:8px;color:#7a8fa0;font-size:12px">'
-        + 'No tubes — every staple fits in the plate.</div>'
+      host.innerHTML = '<div class="plate-tubes-box"><div style="padding:8px;color:#7a8fa0;font-size:12px">'
+        + 'No tubes — every staple fits in the plate.</div></div>'
       return
     }
 
-    const reasonText = { modification: 'modified', long: '>60 nt', both: 'modified, >60 nt' }
-    const head = `<div style="display:flex;align-items:center;gap:8px;padding:6px 4px">
+    const reasonText = { modification: 'modified', long: '>60 nt', both: 'modified, >60 nt', manual: 'manual' }
+    const head = `<div class="plate-tubes-header">
         <strong style="font-size:12px">Tubes (${rows.length})</strong>
         <button data-act="copy-all" style="font-size:11px;padding:2px 8px;cursor:pointer">Copy all (TSV)</button>
         <span style="font-size:11px;color:#7a8fa0">order at 250 nmol + HPLC</span>
       </div>`
     const body = rows.map(({ rec, reason }) => {
       const seq = rec.sequence || ''
-      return `<tr>
+      return `<tr data-strand-id="${_esc(rec.strandId)}" data-color="${_esc(rec.color || '')}" data-group-id="${_esc(rec.groupId || '')}">
         <td style="padding:3px 6px">${_esc(rec.name || rec.strandId)}</td>
         <td style="padding:3px 6px;font-family:monospace;font-size:11px;word-break:break-all">${_esc(seq)}</td>
         <td style="padding:3px 6px;text-align:right">${rec.lengthNt}</td>
@@ -527,13 +639,13 @@ export function initPlateView(canvasEl, opts = {}) {
         <td style="padding:3px 6px"><button data-copy="${_esc(seq)}" style="font-size:11px;cursor:pointer">⧉</button></td>
       </tr>`
     }).join('')
-    host.innerHTML = head + `<table style="width:100%;border-collapse:collapse;font-size:12px">
+    host.innerHTML = `<div class="plate-tubes-box">${head}<div class="plate-tubes-scroll"><table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead><tr style="text-align:left;border-bottom:1px solid #d0d7de;color:#57606a">
           <th style="padding:3px 6px">Name</th><th style="padding:3px 6px">Sequence</th>
           <th style="padding:3px 6px">Len</th><th style="padding:3px 6px">Mod</th>
           <th style="padding:3px 6px">Reason</th><th style="padding:3px 6px">Scale</th>
           <th style="padding:3px 6px">Purif.</th><th></th></tr></thead>
-        <tbody>${body}</tbody></table>`
+        <tbody>${body}</tbody></table></div></div>`
 
     host.querySelector('[data-act="copy-all"]')?.addEventListener('click', () => {
       const tsv = rows.map(({ rec }) =>
@@ -542,6 +654,17 @@ export function initPlateView(canvasEl, opts = {}) {
     })
     host.querySelectorAll('[data-copy]').forEach(btn =>
       btn.addEventListener('click', () => navigator.clipboard?.writeText(btn.getAttribute('data-copy'))))
+    host.querySelectorAll('[data-strand-id]').forEach(row => {
+      row.addEventListener('contextmenu', ev => {
+        ev.preventDefault()
+        ev.stopPropagation()
+        const sid = row.getAttribute('data-strand-id')
+        _selected = new Set(_resolveUnitIn(_tubes, sid))
+        onStrandClick?.(sid)
+        _draw()
+        _openTransferMenu(ev.clientX, ev.clientY, { location: 'tube', strandId: sid })
+      })
+    })
   }
 
   function _esc(s) {
@@ -551,11 +674,14 @@ export function initPlateView(canvasEl, opts = {}) {
   // ── Save ──────────────────────────────────────────────────────────────────────
   function _serialize() {
     const wells = []
-    for (const [sid, idx] of _wellOf) {
+    const placed = [..._wellOf.entries()].sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
+    for (const [sid, idx] of placed) {
       const { plate, r, c } = _idxToPRC(idx)
       wells.push({ strand_id: sid, plate, row: r, col: c })
     }
-    const tubes = [..._tubes.entries()].map(([sid, reason]) => ({ strand_id: sid, reason }))
+    const tubes = [..._tubes.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([sid, reason]) => ({ strand_id: sid, reason }))
     return { orientation: _orientation, plate_count: _plateCount, wells, tubes }
   }
   function _save() { onSaveLayout?.(_serialize()) }
@@ -630,6 +756,7 @@ export function initPlateView(canvasEl, opts = {}) {
 
   // ── Public methods ────────────────────────────────────────────────────────────
   function setData(strands, savedLayout) {
+    _contextMenu?.close()
     _strands = Array.isArray(strands) ? strands.slice() : []
     _byId = new Map(_strands.map(s => [s.strandId, s]))
     const ids = new Set(_byId.keys())
@@ -649,6 +776,7 @@ export function initPlateView(canvasEl, opts = {}) {
     } else {
       _wellOf = new Map(); _tubes = new Map(); _plateCount = 1
     }
+    _returnWellOf.clear()
     _selected.clear()
     _syncToolbar()
     _renderTubes()
@@ -679,7 +807,7 @@ export function initPlateView(canvasEl, opts = {}) {
   canvasEl.addEventListener('pointermove',  _onPointerMove)
   canvasEl.addEventListener('pointerup',    _onPointerUp)
   canvasEl.addEventListener('pointerleave', _onPointerLeave)
-  canvasEl.addEventListener('contextmenu',  _onContextMenu)
+  canvasEl.addEventListener('contextmenu',  _contextMenuHandler)
   canvasEl.addEventListener('wheel',        _onWheel, { passive: false })
   if (wrapEl && typeof ResizeObserver !== 'undefined') {
     _resizeObs = new ResizeObserver(() => {
@@ -699,15 +827,19 @@ export function initPlateView(canvasEl, opts = {}) {
     autoFill,
     setOrientation,
     setSelectionMode,
+    sendToTubes,
+    sendToPlates,
+    getLayout: _serialize,
     resetView,
     destroy() {
       canvasEl.removeEventListener('pointerdown',  _onPointerDown)
       canvasEl.removeEventListener('pointermove',  _onPointerMove)
       canvasEl.removeEventListener('pointerup',    _onPointerUp)
       canvasEl.removeEventListener('pointerleave', _onPointerLeave)
-      canvasEl.removeEventListener('contextmenu',  _onContextMenu)
+      canvasEl.removeEventListener('contextmenu',  _contextMenuHandler)
       canvasEl.removeEventListener('wheel',        _onWheel)
       _resizeObs?.disconnect?.(); _resizeObs = null
+      _contextMenu?.close(); _contextMenu = null
       _hideTooltip()
       if (_tooltipEl) { _tooltipEl.remove(); _tooltipEl = null }
     },
