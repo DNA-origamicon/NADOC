@@ -103,6 +103,21 @@ describe('buildStrandMenuItems — reference toggle', () => {
     items.find(i => i.label === 'Make Active').onClick()
     expect(h.onSetReference).toHaveBeenCalledWith(['a'], false)
   })
+
+  it('offers both bulk actions when active and reference strands are selected', () => {
+    const h = ALL()
+    const items = buildStrandMenuItems({
+      strandIds: ['active', 'reference'],
+      allReference: false,
+      anyReference: true,
+    }, h)
+    expect(labels(items)).toEqual(expect.arrayContaining(['Make Reference', 'Make Active']))
+
+    items.find(i => i.label === 'Make Reference').onClick()
+    items.find(i => i.label === 'Make Active').onClick()
+    expect(h.onSetReference).toHaveBeenNthCalledWith(1, ['active', 'reference'], true)
+    expect(h.onSetReference).toHaveBeenNthCalledWith(2, ['active', 'reference'], false)
+  })
 })
 
 describe('buildStrandMenuItems — separators', () => {

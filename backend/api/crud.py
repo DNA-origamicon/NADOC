@@ -5929,8 +5929,8 @@ def patch_strands_reference(body: BulkReferenceRequest) -> dict:
     Reference strands are ignored by all generative features (bend/twist, sequence
     assignment, scaffold routing, autostaple/break/merge, auto-crossover) and excluded
     from exports/validation, while staying visible (rendered translucent) and manually
-    editable.  Returns geometry because toggling reference changes the bend/twist freeze,
-    so nucleotide positions move.
+    editable. Reference status is metadata only: toggling it never changes positions,
+    deformations, or cluster membership.
     """
     design = design_state.get_or_404()
     id_set = set(body.strand_ids)
@@ -5945,24 +5945,6 @@ def patch_strands_reference(body: BulkReferenceRequest) -> dict:
     ]
     updated = design.model_copy(update={"strands": new_strands})
 
-    # Reference geometry is excluded from clusters: prune reference-only helices
-    # and reference strands' domain refs from every cluster so it's a fixed backdrop
-    # (immune to cluster joints/drags and not counted in cluster calculations).
-    ref_strand_ids = {s.id for s in new_strands if s.is_reference}
-    ref_helix_ids = updated.reference_helix_ids()
-    if ref_helix_ids or ref_strand_ids:
-        pruned = []
-        for c in updated.cluster_transforms:
-            new_hids = [h for h in c.helix_ids if h not in ref_helix_ids]
-            new_drs = [dr for dr in c.domain_ids if dr.strand_id not in ref_strand_ids]
-            if len(new_hids) != len(c.helix_ids) or len(new_drs) != len(c.domain_ids):
-                pruned.append(
-                    c.model_copy(update={"helix_ids": new_hids, "domain_ids": new_drs})
-                )
-            else:
-                pruned.append(c)
-        updated = updated.model_copy(update={"cluster_transforms": pruned})
-
     n = len(id_set)
     verb = "Mark" if body.is_reference else "Clear"
     label = f"{verb} reference · {n} strand{'s' if n != 1 else ''}"
@@ -5972,33 +5954,8 @@ def patch_strands_reference(body: BulkReferenceRequest) -> dict:
         params=body.model_dump(mode="json"),
         fn=lambda _d: updated,
     )
-    # Reference classification can only move nucleotides on helices occupied by
-    # the toggled strands (their deformation freeze changes).  Returning the full
-    # Voltron-scale geometry here used to block both server work and JSON.parse for
-    # seconds. Virtual linker axes are never deformed, so their classification is
-    # visual-only and needs no geometry payload.
-    changed_helix_ids = sorted(
-        {
-            domain.helix_id
-            for strand in new_strands
-            if strand.id in id_set
-            for domain in strand.domains
-            if not domain.helix_id.startswith("__lnk__")
-            and "::__lnk__" not in domain.helix_id
-        }
-    )
-    if changed_helix_ids:
-        payload = _design_response_with_geometry(
-            updated,
-            report,
-            changed_helix_ids=changed_helix_ids,
-            compact_deformed=True,
-            partial_axes=True,
-            preserve_feature_log_id=_entry.id,
-        )
-    else:
-        payload = _design_response(updated, report, preserve_feature_log_id=_entry.id)
-        payload["geometry_unchanged"] = True
+    payload = _design_response(updated, report, preserve_feature_log_id=_entry.id)
+    payload["geometry_unchanged"] = True
     return ORJSONResponse(payload)
 
 

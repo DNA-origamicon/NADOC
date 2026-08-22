@@ -342,10 +342,10 @@ def test_validator_skips_reference_sequence_length_check():
     assert not any(staple.id in r.message and not r.passed for r in report.results)
 
 
-# ── Deformation freeze ──────────────────────────────────────────────────────────
+# ── Geometry invariance ─────────────────────────────────────────────────────────
 
 
-def test_reference_nucleotides_frozen_under_bend():
+def test_reference_status_does_not_change_deformed_nucleotides():
     d = _bundle()
     staple = next(s for s in d.strands if s.strand_type == StrandType.STAPLE)
     helix_id = staple.domains[0].helix_id
@@ -374,34 +374,20 @@ def test_reference_nucleotides_frozen_under_bend():
     straight = nucleotide_positions_arrays(helix)
     deformed = deformed_nucleotide_arrays(helix, d)
 
-    # mask = nucleotides belonging to the (reference) staple on this helix
-    from backend.core.deformation import _reference_nuc_mask
-
-    mask = _reference_nuc_mask(straight, helix, d)
-    assert mask.any(), "reference staple should cover some nucleotides on its helix"
-
-    # Without reference, the SAME nucleotides move under the bend.
+    # Clearing the classification must produce bit-for-bit-equivalent geometry.
     d_noref = d.copy_with(
         strands=[s.model_copy(update={"is_reference": False}) for s in d.strands]
     )
     deformed_noref = deformed_nucleotide_arrays(helix, d_noref)
-    moved = ~np.isclose(deformed_noref["positions"], straight["positions"]).all(axis=1)
-    assert (mask & moved).any(), (
-        "bend should move some of the reference nucleotides when not frozen"
-    )
-
-    # With reference, those nucleotides keep their straight positions.
-    np.testing.assert_allclose(
-        deformed["positions"][mask],
-        straight["positions"][mask],
-        atol=1e-9,
-    )
+    assert not np.allclose(deformed["positions"], straight["positions"])
+    for key in ("positions", "base_positions", "base_normals", "axis_tangents"):
+        np.testing.assert_allclose(deformed[key], deformed_noref[key], atol=1e-12)
 
 
 # ── PATCH /design/strands/reference route ────────────────────────────────────────
 
 
-def test_patch_strands_reference_route_round_trips_with_geometry():
+def test_patch_strands_reference_route_round_trips_without_geometry_change():
     d = _bundle()
     staple = next(s for s in d.strands if s.strand_type == StrandType.STAPLE)
     design_state.set_design(d)
@@ -413,12 +399,9 @@ def test_patch_strands_reference_route_round_trips_with_geometry():
     body = r.json()
     out_strand = next(s for s in body["design"]["strands"] if s["id"] == staple.id)
     assert out_strand["is_reference"] is True
-    # Route returns only affected-helix geometry (the freeze can move positions),
-    # avoiding a full-design Voltron-scale recompute and JSON payload.
-    assert body["partial_geometry"] is True
-    assert body["changed_helix_ids"]
-    assert body.get("nucleotides_compact"), "reference route must return geometry"
-    assert body["feature_log_payloads_partial"] is True
+    assert body["geometry_unchanged"] is True
+    assert "nucleotides" not in body
+    assert "nucleotides_compact" not in body
     # Clearing it works too.
     r2 = client.patch(
         "/api/design/strands/reference",
@@ -483,7 +466,7 @@ def _with_full_cluster(d):
     )
 
 
-def test_marking_all_strands_reference_prunes_clusters():
+def test_marking_all_strands_reference_preserves_clusters():
     d = _with_full_cluster(_bundle())
     design_state.set_design(d)
     ids = [s.id for s in d.strands]
@@ -491,10 +474,9 @@ def test_marking_all_strands_reference_prunes_clusters():
         "/api/design/strands/reference", json={"strand_ids": ids, "is_reference": True}
     )
     assert r.status_code == 200, r.text
-    for c in r.json()["design"]["cluster_transforms"]:
-        assert c["helix_ids"] == [], (
-            "every helix became reference-only → pruned from clusters"
-        )
+    assert r.json()["design"]["cluster_transforms"] == [
+        c.model_dump(mode="json") for c in d.cluster_transforms
+    ]
 
 
 def test_partial_reference_keeps_shared_helices_in_clusters():
@@ -510,7 +492,7 @@ def test_partial_reference_keeps_shared_helices_in_clusters():
     assert r.json()["design"]["cluster_transforms"][0]["helix_ids"]
 
 
-def test_reconcile_drops_reference_only_helices():
+def test_reconcile_preserves_membership_when_reference_status_changes():
     from backend.core.cluster_reconcile import reconcile_cluster_membership
 
     before = _with_full_cluster(_bundle())
@@ -518,7 +500,7 @@ def test_reconcile_drops_reference_only_helices():
         strands=[s.model_copy(update={"is_reference": True}) for s in before.strands]
     )
     out = reconcile_cluster_membership(before, after, None)
-    assert out.cluster_transforms[0].helix_ids == []
+    assert out.cluster_transforms[0].helix_ids == before.cluster_transforms[0].helix_ids
 
 
 def test_sequence_csv_export_omits_reference_strand():

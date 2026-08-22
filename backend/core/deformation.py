@@ -256,11 +256,10 @@ def _arm_helices_for(design: "Design", ref_helix_id: str) -> list["Helix"]:
     the nick Z) which shifts the bundle centroid and displaces overhang nucleotide
     positions when deformations are applied.
     """
-    # Exclude overhang helices (centroid skew) AND reference-only helices —
-    # reference geometry must not enter cluster/deformation calculations.
-    overhang_helix_ids = {
-        o.helix_id for o in design.overhangs
-    } | design.reference_helix_ids()
+    # Exclude overhang helices (centroid skew). Reference status is deliberately
+    # absent here: changing an activity flag must never change geometry or the
+    # deformation frame used by neighbouring helices.
+    overhang_helix_ids = {o.helix_id for o in design.overhangs}
     ref = design.find_helix(ref_helix_id)
     if ref is None:
         return [h for h in design.helices if h.id not in overhang_helix_ids]
@@ -673,38 +672,6 @@ def _arm_filter_cluster(
     if non_default:
         return non_default[0]
     return clusters[0] if clusters else None
-
-
-def _reference_nuc_mask(arrs: dict, helix: "Helix", design: "Design") -> np.ndarray:
-    """Boolean mask (length M) — True for nucleotides on *helix* that belong to a
-    reference strand's domain.
-
-    Matched by bp-range + direction, exactly like the domain-level cluster mask in
-    ``_apply_cluster_transforms_domain_aware``.  Reference geometry is frozen under
-    bend/twist: callers restore the straight (pre-deformation) values for these rows.
-
-    NOTE (known v1 limitation): on a helix carrying BOTH active and reference
-    strands, the axis still bends (driven by the active strands) while the reference
-    beads stay straight, so they visually detach from the bent axis stick.  A helix
-    whose strands are ALL reference keeps a straight axis (see ``deformed_helix_axes``).
-    """
-    M = len(arrs["bp_indices"])
-    mask = np.zeros(M, dtype=bool)
-    for strand in design.strands:
-        if not strand.is_reference:
-            continue
-        for dom in strand.domains:
-            if dom.helix_id != helix.id:
-                continue
-            lo = min(dom.start_bp, dom.end_bp)
-            hi = max(dom.start_bp, dom.end_bp)
-            dir_int = 0 if dom.direction == Direction.FORWARD else 1
-            mask |= (
-                (arrs["bp_indices"] >= lo)
-                & (arrs["bp_indices"] <= hi)
-                & (arrs["directions"] == dir_int)
-            )
-    return mask
 
 
 # Arrays that a rigid transform must move.  The last of each group is the HELICAL SITE
@@ -1716,14 +1683,6 @@ def deformed_nucleotide_arrays(
         result["radial_hats"] = radial_d
         result["azimuths"] = arrs["azimuths"]
 
-    # Reference geometry is frozen under bend/twist: restore the straight
-    # (pre-deformation) values from `arrs` for reference-strand nucleotides.
-    # Done BEFORE cluster transforms so manual cluster moves still apply.
-    ref_mask = _reference_nuc_mask(arrs, helix, design)
-    if ref_mask.any():
-        for _k in _xf_keys_present(result):
-            result[_k][ref_mask] = arrs[_k][ref_mask]
-
     if clusters:
         result = _apply_cluster_transforms_domain_aware(result, clusters, helix, design)
 
@@ -1993,24 +1952,9 @@ def deformed_nucleotide_positions(
     arm_min_bp_start = min((h.bp_start for h in arm_helices), default=0)
 
     orig_nucs = nucleotide_positions(helix)
-    # Reference geometry is frozen under bend/twist: emit the straight nucleotide
-    # for reference-strand slots (cluster transforms below still apply).
-    ref_keys = {
-        (bp, dom.direction)
-        for s in design.strands
-        if s.is_reference
-        for dom in s.domains
-        if dom.helix_id == helix.id
-        for bp in range(
-            min(dom.start_bp, dom.end_bp), max(dom.start_bp, dom.end_bp) + 1
-        )
-    }
     result: list[NucleotidePosition] = []
 
     for nuc in orig_nucs:
-        if (nuc.bp_index, nuc.direction) in ref_keys:
-            result.append(nuc)  # straight, undeformed
-            continue
         p = nuc.bp_index
 
         # Original helix axis point at this bp (straight).
@@ -2686,20 +2630,7 @@ def deformed_helix_axes(design: "Design") -> list[dict]:
         h = effective_helix_for_geometry(h, design)
         clusters = _clusters_for_helix(design, h.id)
 
-        # A helix whose strands are ALL reference (and no active strand touches
-        # it) keeps a straight axis so its frozen reference beads stay attached.
-        # A bare helix (no strands) still deforms normally.
-        has_ref_on_h = any(
-            s.is_reference and any(d.helix_id == h.id for d in s.domains)
-            for s in design.strands
-        )
-        has_active_on_h = any(
-            (not s.is_reference) and any(d.helix_id == h.id for d in s.domains)
-            for s in design.strands
-        )
-        helix_is_reference_only = has_ref_on_h and not has_active_on_h
-
-        if not _ops_affecting_helix(design, h.id) or helix_is_reference_only:
+        if not _ops_affecting_helix(design, h.id):
             # No op covers this helix — use the straight axis, apply cluster
             # rigid transforms only. Skips the centroid-dependent frame math
             # that would otherwise translate this helix by a per-cluster

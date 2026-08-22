@@ -1075,12 +1075,15 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       getSequenceOverlay?.()?.applyUnfoldOffsets(offsets, _currentT, _straightPosMap, _xbArcMap)
     }
 
-    // Re-apply selection highlight — selection_manager fires before this
-    // subscription (it subscribes earlier) so arc colors need reapplying here.
-    const selected = new Set(selectedStrandIds(newState))
-    if (selected.size) {
+    // Re-apply the single-strand arc highlight — selection_manager fires before
+    // this subscription, so its cached arc wrappers belong to the old buffers.
+    // Multi-selection intentionally leaves arc colours alone (it uses glow and
+    // scale for selection); repainting every selected arc white here made a
+    // reference/active switch look as though it had destroyed strand colours.
+    const selected = selectedStrandIds(newState)
+    if (selected.length === 1) {
       for (const e of _arcMeta) {
-        if (selected.has(e.strandId)) _setArcColor(e, 0xffffff)
+        if (e.strandId === selected[0]) _setArcColor(e, 0xff4444)
       }
     }
   })

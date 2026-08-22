@@ -774,8 +774,9 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], ove
       : singleEffectiveIds
     const allRef = refEffIds.length > 0 &&
       refEffIds.every(id => design?.strands?.find(s => s.id === id)?.is_reference)
+    const anyRef = refEffIds.some(id => design?.strands?.find(s => s.id === id)?.is_reference)
     const shared = buildStrandMenuItems(
-      { strandIds: refEffIds, strandType: _stype, allReference: allRef },
+      { strandIds: refEffIds, strandType: _stype, allReference: allRef, anyReference: anyRef },
       {
         onSetReference: (ids, makeRef) => api.patchStrandsReference(ids, makeRef),
         onConvertToBinder: async () => {
@@ -1073,15 +1074,19 @@ function _showMultiMenu(x, y, strandIds, designRenderer) {
     const design = store.getState().currentDesign
     const allRef = strandIds.length > 0 &&
       strandIds.every(id => design?.strands?.find(s => s.id === id)?.is_reference)
-    const ids = strandIds.slice()
-    menu.appendChild(_menuItem(
-      allRef ? 'Make Active' : 'Make Reference',
-      () => { api.patchStrandsReference(ids, !allRef) },
-      { title: 'Reference geometry is an inactive backdrop: ignored by all automatic '
-             + 'features (bend/twist, sequence assignment, scaffold routing, autostaple, '
-             + 'crossovers) and excluded from exports/validation, but still visible '
-             + '(translucent) and manually editable.' },
-    ))
+    const anyRef = strandIds.some(id =>
+      design?.strands?.find(s => s.id === id)?.is_reference)
+    const shared = buildStrandMenuItems(
+      {
+        strandIds: strandIds.slice(),
+        allReference: allRef,
+        anyReference: anyRef,
+      },
+      { onSetReference: (ids, makeRef) => api.patchStrandsReference(ids, makeRef) },
+    )
+    for (const item of shared) {
+      menu.appendChild(_menuItem(item.label, item.onClick, { title: item.title }))
+    }
     menu.appendChild(_menuSep())
   }
 

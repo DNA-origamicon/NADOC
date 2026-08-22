@@ -1584,9 +1584,10 @@ function _showStrandCtxMenu(strand, clientX, clientY) {
     : [strand.id]
   const allRef = sel.length > 0 &&
     sel.every(id => design?.strands?.find(s => s.id === id)?.is_reference)
+  const anyRef = sel.some(id => design?.strands?.find(s => s.id === id)?.is_reference)
 
   const items = buildStrandMenuItems(
-    { strandIds: sel, strandType: strand.strand_type, allReference: allRef },
+    { strandIds: sel, strandType: strand.strand_type, allReference: allRef, anyReference: anyRef },
     {
       onSetReference: (ids, makeRef) => patchStrandsReference(ids, makeRef),
       onConvertToBinder: (id) => convertStrandToBinder(id),

@@ -20,6 +20,13 @@ import { resolve } from 'node:path'
 
 const SRC = readFileSync(resolve(process.cwd(), 'src/scene/unfold_view.js'), 'utf8')
 
+describe('arc selection restoration', () => {
+  it('does not repaint multi-selected crossover arcs white after a rebuild', () => {
+    expect(SRC).toMatch(/if \(selected\.length === 1\)/)
+    expect(SRC).not.toMatch(/selected\.has\(e\.strandId\).*0xffffff/)
+  })
+})
+
 describe('arc colour buffer is RGBA', () => {
   it('allocates 4 floats per vertex', () => {
     expect(SRC).toMatch(/const colors\s*=\s*new Float32Array\(vertCount \* 4\)/)

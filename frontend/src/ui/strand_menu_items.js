@@ -21,6 +21,7 @@
  * @param {string[]} ctx.strandIds      — the strands the menu acts on (≥1)
  * @param {string}  [ctx.strandType]    — 'scaffold' | 'staple' | 'oh_binder' | 'linker'
  * @param {boolean} [ctx.allReference]  — every selected strand is reference geometry
+ * @param {boolean} [ctx.anyReference]  — at least one selected strand is reference geometry
  * @param {object}  handlers            — omit one to hide its item
  * @param {(ids: string[], makeReference: boolean) => void} [handlers.onSetReference]
  * @param {(id: string) => void} [handlers.onConvertToBinder]
@@ -41,14 +42,19 @@ export function buildStrandMenuItems(ctx = {}, handlers = {}) {
   if (!ids.length) return items
 
   if (handlers.onSetReference) {
-    items.push({
-      label: ctx.allReference ? 'Make Active' : 'Make Reference',
+    const referenceItem = (makeReference) => ({
+      label: makeReference ? 'Make Reference' : 'Make Active',
       title: 'Reference geometry is an inactive backdrop: ignored by all automatic '
            + 'features (bend/twist, sequence assignment, scaffold routing, autostaple, '
            + 'crossovers) and excluded from exports/validation, but still visible '
            + '(translucent) and manually editable. Use it to build off an existing part.',
-      onClick: () => handlers.onSetReference(ids, !ctx.allReference),
+      onClick: () => handlers.onSetReference(ids, makeReference),
     })
+    if (ctx.anyReference && !ctx.allReference) {
+      items.push(referenceItem(true), referenceItem(false))
+    } else {
+      items.push(referenceItem(!ctx.allReference))
+    }
   }
 
   // Scaffold ⇄ OH-binder conversions are single-strand only: each relinks ONE
