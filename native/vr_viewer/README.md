@@ -21,6 +21,74 @@ Validate a snapshot without starting OpenXR:
 native/vr_viewer/build/nadoc-vr-viewer --validate scene.nadocvr
 ```
 
+Run the headless ScryWrite troubleshooting proof of concept:
+
+```bash
+just test-scrywrite
+```
+
+ScryWrite drives the viewer's real interaction state and rigid-preview core from a
+versioned deterministic script, emits a JSON trace, and is wrapped by a Playwright
+fixture. The example scenario is
+`examples/scrywrite_move_rotate.scry`; the architecture and automation limits are
+recorded in [`docs/scrywrite_architecture.md`](../../docs/scrywrite_architecture.md).
+This proof does not start OpenXR, validate scene identities, render stereo images, or
+perform a browser-authoritative design mutation.
+
+To observe a ScryWrite replay inside the real headset, launch the viewer with a scene
+and the explicit Witness Mode script:
+
+```bash
+just scrywrite-witness
+# Or: just scrywrite-witness SCENE=scene.nadocvr SCRIPT=path/to/test.scry
+```
+
+Your physical headset remains the free observer camera. Cyan/orange ghost controllers
+perform the script, a cyan scripted-head frustum marks its view, and a head-following
+monitor shows the actor-eye render. A missing menu/control or hover mismatch pauses
+with a red failure marker. Press the physical left menu button to pause/resume or the
+physical right menu button to single-step while paused. Witness Mode refuses an event
+output path and blocks haptics and X11 clicks, so the visual replay cannot publish a
+design mutation. Check a script without starting OpenXR using
+`nadoc-vr-viewer --validate-witness <script>`.
+
+The GLFW companion window can mirror the physical HMD eye with `--mirror-eye left`
+or `--mirror-eye right`; `off` disables it. Normal NADOC **View in VR** launches
+default to the left eye. `SUBMITTED` is the actual undistorted app eye copied before
+OpenXR release. If the runtime suppresses headset rendering, `SPECTATOR FALLBACK`
+rerenders from the latest located eye pose/FOV so an unworn dummy remains observable.
+The resizable window preserves aspect with black bars. Its title reports source,
+frame/motion counters, tracking and pose; a lower-left colored square pulses as a
+liveness heartbeat. It is read-only and never includes runtime lens warp/overlays.
+For the checked fixture launch use `just vr-hmd-mirror`; see
+`docs/scrywrite_desktop_mirror.md` for the dummy validation.
+
+`just vr-hmd-mirror` defaults `PLACE=on`, which centers and presentation-orients the
+fixture from the first valid HMD pose at a 1.30 m viewing distance and 2× scale. Set
+`PLACE=off` to preserve the scene's world placement. Direct launches use
+`--place-scene-in-view off|on`; the default is `off`.
+
+Add `--reference-grid room` when scene placement or headset direction is uncertain.
+It draws a 5 m cage at OpenXR LOCAL origin with 0.5 m spacing and colored cardinal
+faces (+X red/−X cyan, +Y green/−Y magenta, +Z blue/−Z yellow). It is a depth-free
+diagnostic guide, never design geometry. `off` disables it.
+
+When a headset is unavailable, export the scripted actor's POV, a top-down pose map,
+and strict projection evidence from the canonical asymmetric perspective fixture:
+
+```bash
+just scrywrite-evidence
+# Or override SCENE=... SCRIPT=... EXPECT=... OUTPUT=...
+```
+
+The retained example is in
+[`docs/generated/scrywrite`](../../docs/generated/scrywrite/README.md). This export
+uses the same scene normalization and scripted pose, but is a deterministic software
+projection rather than a capture of the live OpenGL stereo renderer.
+The default fixture is derived from `workspace/Chiral_test.nadoc`. The exporter says
+`not_evaluated` without `--expect`; a checked threshold failure retains artifacts
+and exits nonzero.
+
 Ubuntu development packages:
 
 ```bash

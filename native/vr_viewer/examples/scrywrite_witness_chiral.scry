@@ -1,0 +1,6 @@
+SCRYWRITE_WITNESS 1
+# Capture the initial pose. Scene normalization centers the diagnostic at z=-1.30 m.
+head 0 0 0 1 0 0 0
+pose left -0.24 -0.18 -0.28 1 0 0 0
+pose right 0.24 -0.18 -0.28 1 0 0 0
+step 1

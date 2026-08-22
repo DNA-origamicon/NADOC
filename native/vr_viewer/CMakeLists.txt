@@ -25,7 +25,16 @@ target_compile_options(nadoc-vr-viewer PRIVATE
   -Wall -Wextra -Wpedantic -Wno-missing-field-initializers
 )
 
-install(TARGETS nadoc-vr-viewer RUNTIME DESTINATION bin)
+add_executable(nadoc-vr-scrywrite src/scrywrite_main.cpp)
+target_include_directories(nadoc-vr-scrywrite PRIVATE src)
+target_compile_options(nadoc-vr-scrywrite PRIVATE -Wall -Wextra -Wpedantic)
+
+add_executable(nadoc-vr-scrywrite-export src/scrywrite_export_main.cpp)
+target_include_directories(nadoc-vr-scrywrite-export PRIVATE src)
+target_compile_options(nadoc-vr-scrywrite-export PRIVATE -Wall -Wextra -Wpedantic)
+
+install(TARGETS nadoc-vr-viewer nadoc-vr-scrywrite nadoc-vr-scrywrite-export
+        RUNTIME DESTINATION bin)
 
 include(CTest)
 if(BUILD_TESTING)
@@ -33,9 +42,58 @@ if(BUILD_TESTING)
   target_include_directories(nadoc-vr-interaction-test PRIVATE src)
   target_compile_options(nadoc-vr-interaction-test PRIVATE -Wall -Wextra -Wpedantic)
   add_test(NAME nadoc-vr-interaction COMMAND nadoc-vr-interaction-test)
+  add_executable(nadoc-vr-scrywrite-test tests/scrywrite_test.cpp)
+  target_include_directories(nadoc-vr-scrywrite-test PRIVATE src)
+  target_compile_options(nadoc-vr-scrywrite-test PRIVATE -Wall -Wextra -Wpedantic)
+  add_test(NAME nadoc-vr-scrywrite-unit COMMAND nadoc-vr-scrywrite-test)
+  add_executable(nadoc-vr-scrywrite-witness-test tests/scrywrite_witness_test.cpp)
+  target_include_directories(nadoc-vr-scrywrite-witness-test PRIVATE src)
+  target_compile_options(nadoc-vr-scrywrite-witness-test PRIVATE -Wall -Wextra -Wpedantic)
+  add_test(NAME nadoc-vr-scrywrite-witness-unit COMMAND nadoc-vr-scrywrite-witness-test)
+  add_executable(nadoc-vr-scrywrite-evidence-test tests/scrywrite_evidence_test.cpp)
+  target_include_directories(nadoc-vr-scrywrite-evidence-test PRIVATE src)
+  target_compile_options(nadoc-vr-scrywrite-evidence-test PRIVATE -Wall -Wextra -Wpedantic)
+  add_test(NAME nadoc-vr-scrywrite-evidence-unit COMMAND nadoc-vr-scrywrite-evidence-test)
+  add_executable(nadoc-vr-spectator-mirror-test tests/spectator_mirror_test.cpp)
+  target_include_directories(nadoc-vr-spectator-mirror-test PRIVATE src)
+  target_compile_options(nadoc-vr-spectator-mirror-test PRIVATE -Wall -Wextra -Wpedantic)
+  add_test(NAME nadoc-vr-spectator-mirror-unit COMMAND nadoc-vr-spectator-mirror-test)
+  add_executable(nadoc-vr-reference-grid-test tests/reference_grid_test.cpp)
+  target_include_directories(nadoc-vr-reference-grid-test PRIVATE src)
+  target_compile_options(nadoc-vr-reference-grid-test PRIVATE -Wall -Wextra -Wpedantic)
+  add_test(NAME nadoc-vr-reference-grid-unit COMMAND nadoc-vr-reference-grid-test)
+  add_test(
+    NAME nadoc-vr-scrywrite-evidence-export
+    COMMAND nadoc-vr-scrywrite-export
+      ${CMAKE_CURRENT_SOURCE_DIR}/examples/scrywrite_chiral_perspective.nadocvr
+      ${CMAKE_CURRENT_SOURCE_DIR}/examples/scrywrite_witness_chiral.scry
+      ${CMAKE_CURRENT_BINARY_DIR}/scrywrite_chiral_perspective
+      --expect
+      ${CMAKE_CURRENT_SOURCE_DIR}/examples/scrywrite_chiral_perspective.scry-evidence
+  )
+  add_test(
+    NAME nadoc-vr-scrywrite-witness-script
+    COMMAND nadoc-vr-viewer --validate-witness
+      ${CMAKE_CURRENT_SOURCE_DIR}/examples/scrywrite_witness_menu.scry
+  )
+  add_test(
+    NAME nadoc-vr-scrywrite-poc
+    COMMAND nadoc-vr-scrywrite
+      ${CMAKE_CURRENT_SOURCE_DIR}/examples/scrywrite_move_rotate.scry
+  )
   add_test(
     NAME nadoc-vr-scene-v6
     COMMAND nadoc-vr-viewer --validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/triangle.nadocvr
+  )
+  add_test(
+    NAME nadoc-vr-scene-scrywrite-origami
+    COMMAND nadoc-vr-viewer --validate
+      ${CMAKE_CURRENT_SOURCE_DIR}/examples/scrywrite_simple_origami.nadocvr
+  )
+  add_test(
+    NAME nadoc-vr-scene-scrywrite-chiral
+    COMMAND nadoc-vr-viewer --validate
+      ${CMAKE_CURRENT_SOURCE_DIR}/examples/scrywrite_chiral_perspective.nadocvr
   )
   add_test(
     NAME nadoc-vr-scene-v8

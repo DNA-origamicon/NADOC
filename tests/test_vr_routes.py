@@ -1137,6 +1137,8 @@ def test_native_launch_passes_initial_selection_as_opaque_arguments(tmp_path) ->
     assert command[command.index("--visualization") + 1].endswith(
         "visualization.txt"
     )
+    assert command[command.index("--mirror-eye") + 1] == "left"
+    assert command[command.index("--reference-grid") + 1] == "off"
 
     with pytest.raises(HTTPException, match="initial VR selection"):
         routes_vr.launch_vr(

@@ -111,6 +111,8 @@ class VRLaunchRequest(BaseModel):
     representation: Literal["cylinders", "full", "ballstick", "stick"] = "full"
     coloring: Literal["strand", "base", "cluster", "cpk"] = "strand"
     show_periodic_seam_arcs: bool = False
+    mirror_eye: Literal["off", "left", "right"] = "left"
+    reference_grid: Literal["off", "room"] = "off"
     selection_level: Literal[
         "default", "cluster", "strand", "domain", "end", "xover", "base"
     ] = "default"
@@ -3046,6 +3048,8 @@ def _status_payload() -> dict:
         "available": True,
         "pid": int(state["pid"]),
         "started_at": state.get("started_at"),
+        "mirror_eye": state.get("mirror_eye", "off"),
+        "reference_grid": state.get("reference_grid", "off"),
         "timing": _runtime_timing(state, _event_payload(state)),
         "log_path": str(_LOG_PATH),
         **_runtime_payload(),
@@ -4298,6 +4302,10 @@ def _viewer_command(
         str(job_path),
         "--visualization",
         str(visualization_path),
+        "--mirror-eye",
+        body.mirror_eye,
+        "--reference-grid",
+        body.reference_grid,
     ]
     for token in body.selected_owner_tokens:
         command.extend(["--selected-owner", token])
@@ -4591,6 +4599,8 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             "snapshot_ready_at": snapshot_ready_at,
             "process_started_at": process_started_at,
             "view_rotation": view_rotation.tolist(),
+            "mirror_eye": body.mirror_eye,
+            "reference_grid": body.reference_grid,
         }
         _write_state(state)
         threading.Thread(

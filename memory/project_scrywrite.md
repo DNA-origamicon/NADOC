@@ -1,0 +1,171 @@
+---
+type: project
+status: active
+authority: canonical
+review_after: 2026-09-21
+---
+
+# ScryWrite VR troubleshooting
+
+## Mission
+
+Give NADOC's custom Linux C++ OpenXR viewer a Playwright-style troubleshooting
+surface: deterministic controller/head input, semantic locators, auto-waiting
+assertions, combined browser/native traces, stereo evidence, and tiered CI/headset
+execution. ScryWrite is a gray-box application driver; it is not a competing design
+model or a replacement OpenXR runtime.
+
+Detailed research, sources, architecture, script contract, metrics, and phase scope:
+[`docs/scrywrite_architecture.md`](../docs/scrywrite_architecture.md).
+Adversarial findings, remediations, and explicitly unproven claims:
+[`docs/scrywrite_adversarial_audit.md`](../docs/scrywrite_adversarial_audit.md).
+Physical-HMD mirror contract and dummy validation:
+[`docs/scrywrite_desktop_mirror.md`](../docs/scrywrite_desktop_mirror.md).
+
+## Binding decisions
+
+1. Reuse Playwright Test as the outer runner and artifact/reporting system. Add a
+   `scrywrite` fixture; do not build a second scheduler.
+2. Production remains OpenXR-driven. Deterministic test input enters only through an
+   explicit test adapter/entry point and must be impossible to enable accidentally.
+3. Locate by stable v12 semantic primitive/owner/tool-scope identities and roles, not
+   draw indices or pixels.
+4. The browser/backend remain authoritative for mutations. Native scripted feedback
+   is a state-machine test, never evidence of a persisted design edit.
+5. Use explicit virtual frame steps and observable-state waits, never timing sleeps.
+6. Keep all control/trace formats bounded, versioned, private where live, and strict
+   about malformed, non-finite, stale, or future input.
+7. Separate fast logic, deterministic render, OpenXR-runtime, and physical-headset
+   gates. Never claim haptics, comfort, reach, or legibility from simulation.
+8. Preserve the current numeric scene oracle (`1e-6 nm`, `1e-5°`) and add visual
+   evidence as a separate gate rather than loosening geometry tolerances.
+
+## POC acceptance
+
+- A standalone headless native CLI consumes a `SCRYWRITE 1` script.
+- It drives real `ToolShell`, `PendingRigidTransform`, and `HandPose` code.
+- The representative scenario covers Cluster selection, Move/Rotate Preview,
+  controller drag, exact Cancel, Confirm acknowledgement, retained committed pose,
+  exact Undo, and semantic assertions.
+- Every command emits deterministic JSON state; a failed assertion reports its exact
+  script line and preserves the trace prefix.
+- Native CTest and a Playwright fixture both execute the same scenario.
+- No OpenXR runtime, headset, live server, or user design is touched.
+
+## Next after POC
+
+Extract a narrow production/test input and frame-source interface from `main.cpp`,
+then connect the fixture over a private live socket. The first live end-to-end gate is
+Move/Rotate Cancel/Confirm/Undo against an isolated Playwright design copy. Add scene
+identity validation and ray-picking before advertising general semantic locators.
+Rendered stereo capture, Monado, and real-Vive observation follow only after that
+transaction path is deterministic.
+
+## POC implementation (2026-08-21)
+
+- `native/vr_viewer/src/scrywrite.hpp` implements the bounded v1 script parser,
+  virtual frames, real interaction-core driving, assertions, coverage summary, and
+  deterministic JSON trace.
+- `native/vr_viewer/src/scrywrite_main.cpp` is the standalone stdin/file CLI.
+- `native/vr_viewer/examples/scrywrite_move_rotate.scry` is the canonical shared
+  Cancel/Confirm/Undo scenario.
+- Native unit/CLI CTests and `frontend/scrywrite/poc.spec.js` execute the proof;
+  Playwright attaches the JSON trace.
+- `just test-scrywrite` is the focused verification entry point.
+
+Evidence: all 14 native viewer tests passed with the documented system toolchain, the
+Playwright POC passed, and all 5,846 frontend unit tests passed. The first broad native
+link attempt found Conda's linker through `PATH`; selecting `/usr/bin` resolved that
+environment issue without a source change.
+
+## Witness Mode implementation (2026-08-21)
+
+- `--scrywrite-witness` runs an explicit live OpenXR observer session. Physical HMD
+  views remain untouched; only application hand/button samples are scripted.
+- The viewer draws ghost hands/rays and the actor head frustum, and renders the
+  scripted actor camera into a head-following in-VR monitor.
+- `aim_menu` resolves labels against the currently active real menu; `expect hover`
+  verifies the independent production hit-test. Missing controls and mismatches pause
+  visibly at the failing line.
+- Physical left-menu toggles pause; physical right-menu single-steps while paused.
+- Safety is fail-closed: Witness Mode refuses `--events`, suppresses haptics, and
+  blocks X11 desktop clicks. It cannot publish a browser design mutation.
+- Canonical scenario: `examples/scrywrite_witness_menu.scry`. Parser-only check:
+  `nadoc-vr-viewer --validate-witness <script>`.
+- Automated evidence: 19/19 native tests passed. Physical Vive appearance remains
+  unverified and is tracked as MV-SCRYWITNESS.
+
+## Headset-free evidence export (2026-08-21)
+
+- `nadoc-vr-scrywrite-export` consumes a natural Full `.nadocvr` scene and a
+  `SCRYWRITE_WITNESS 1` script, reuses the viewer's normalization/placement, and
+  deterministically exports actor POV and X-Z plan SVGs plus JSON metrics.
+- `frontend/scrywrite/render_evidence.mjs` rasterizes the SVGs with Playwright so the
+  checked evidence can be viewed as PNG without OpenXR or a headset.
+- The original yawed six-helix tile is retained as historical POC output. The
+  canonical fixture and its strict thresholds are now the `scrywrite_chiral_*`
+  example files described in the audit tranche below; regenerate with
+  `just scrywrite-evidence`.
+- This is a deterministic geometry/pose diagnostic, not a capture of the OpenGL
+  stereo renderer. Physical stereo orientation, comfort, and legibility remain
+  MV-SCRYWITNESS.
+- Verification after adding the exporter: 19/19 native CTests, all six focused
+  ScryWrite CTests, and the Playwright ScryWrite scenario passed.
+
+## Adversarial audit tranche (2026-08-21)
+
+- The former `visible_primitives > 0` success condition was disproved: a 55-degree
+  wrong-facing actor could return success with a virtually blank PNG. Evidence v2
+  now distinguishes in-front, in-frame, fully-contained, clipped, readable, and
+  projected-bounds metrics. PASS requires a strict checked-in expectation manifest;
+  unchecked exports are `not_evaluated`, and checked failures exit nonzero.
+- The default perspective fixture is now a rigid diagnostic derivative of
+  `workspace/Chiral_test.nadoc`, preserving its asymmetric 12-axis long/short-arm
+  silhouette and adding four colored endpoint markers. It is not a hull-render or
+  topology oracle. The canonical result is 16/16 fully in frame/readable, zero
+  clipped, `0.024265` projected-bounds fraction, and zero gaze error; a 55-degree
+  mutation fails.
+- Witness scripts can independently assert live `tool` and `status`; the canonical
+  menu flow now verifies `move_rotate` / `select_target`. Failure and completion
+  neutralize held test buttons. The frustum guide now matches the 72-degree vertical,
+  16:9 actor camera.
+- Physical-dummy mirror POC: normal browser launches select the physical left eye.
+  While OpenXR accepts rendering, the GLFW window copies that undistorted swapchain
+  image before release. When the runtime reports `shouldRender=false`, it switches to
+  a labeled live pose/FOV rerender. The title reports source, local frame/motion,
+  tracking, XYZ, and yaw/pitch; a colored corner heartbeat exposes presentation
+  liveness. It remains observational until OpenXR submission correlation.
+- Highest-priority remaining work is production scene-model reuse, real framebuffer
+  color/depth/object-ID capture, and one browser-correlated Move/Rotate transaction.
+
+## Physical-HMD desktop mirror POC (2026-08-21)
+
+- `native/vr_viewer/src/spectator_mirror.hpp` owns strict eye selection, aspect-fit,
+  title telemetry, and heartbeat behavior. `main.cpp` blits the selected eye before
+  swapchain release in `SUBMITTED` mode or rerenders its latest located pose/FOV in
+  `SPECTATOR FALLBACK` mode when the runtime suppresses HMD rendering.
+- Browser/API launches default `mirror_eye` to `left`; direct CLI launches remain
+  off unless `--mirror-eye off|left|right` is supplied. `just vr-hmd-mirror` launches
+  the chiral fixture, and `just scrywrite-witness` now includes the physical mirror.
+- `SUBMITTED` is the eye-specific app image. `SPECTATOR FALLBACK` is a diagnostic
+  rerender because there is no current submitted image. Neither is compositor lens
+  warp, SteamVR overlays, the headset camera, or the scripted actor POV.
+- Automated checks cover parser/view selection/aspect fit/title, backend argument
+  propagation, native compilation, and surrounding regressions. Dummy/headset visual
+  confirmation is still manual validation debt.
+- The first physical attempt stayed black while the headset moved. A root-composited
+  window capture proved it contained the VR clear color, not a transparent window,
+  but the fixture was outside the eye frustum. `--reference-grid room` now renders a
+  5 m, 0.5 m-spaced six-face cage at OpenXR LOCAL origin regardless of controller
+  focus: +X red/−X cyan, +Y green/−Y magenta, +Z blue/−Z yellow. A live desktop
+  capture visibly contains the cage. `just vr-hmd-mirror` and Witness enable it by
+  default; normal app launches keep it off. Telemetry showed the previous freeze was
+  SteamVR returning `shouldRender=false` after frame one. The fallback subsequently
+  advanced from F1185 to F1950 while tracked and visibly rendered the cage/heartbeat.
+  User confirmation of deliberate same-direction physical motion is still required.
+- Disabling SteamVR's **Pause VR when headset is idle** kept a clean physical-HMD
+  session in `SUBMITTED` beyond the former five-second cutoff. The diagnostic launch
+  now supports `--place-scene-in-view on` (`just vr-hmd-mirror` defaults it on): the
+  first tracked HMD pose centers the fixture 1.30 m down gaze, carries its authored
+  presentation orientation with the head, and applies 2× scale. A retained submitted
+  left-eye capture visibly contains the asymmetric chiral origami and room grid.

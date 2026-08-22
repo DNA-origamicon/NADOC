@@ -1860,11 +1860,27 @@ class SceneManipulator {
         mode_ = ManipulationMode::none;
     }
 
+    void placeInView(const glm::vec3& headPosition, const glm::quat& headOrientation) {
+        const glm::quat orientation = glm::normalize(headOrientation);
+        const glm::vec3 target = headPosition
+                               + orientation * glm::vec3(0.0F, 0.0F, -kViewDistanceMeters);
+        // The fixture is authored for a camera at the LOCAL origin facing -Z.
+        // Carry that presentation frame with the initial HMD pose so a rotated
+        // dummy does not receive an otherwise centered but edge-on structure.
+        transform_ = glm::translate(glm::mat4(1.0F), target)
+                   * glm::toMat4(orientation)
+                   * glm::scale(glm::mat4(1.0F), glm::vec3(kInitialViewScale))
+                   * glm::translate(glm::mat4(1.0F), -kDefaultModelCenter);
+        scale_ = kInitialViewScale;
+        mode_ = ManipulationMode::none;
+    }
+
     [[nodiscard]] const glm::mat4& transform() const { return transform_; }
     [[nodiscard]] float scale() const { return scale_; }
     [[nodiscard]] ManipulationMode mode() const { return mode_; }
 
     static constexpr float kViewDistanceMeters = 1.30F;
+    static constexpr float kInitialViewScale = 2.0F;
 
   private:
     void apply(const std::array<HandPose, 2>& hands) {

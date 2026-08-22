@@ -1,0 +1,43 @@
+SCRYWRITE 1
+# Select a stable semantic target and enter the real native Move/Rotate shell.
+select cluster cluster:c1
+expect selected cluster cluster:c1
+tool move_rotate
+expect status READY
+
+# A first drag is cancelled and must return exactly to the activation pose.
+preview
+expect status PREVIEW_ONLY
+pose right 0 0 -0.5 1 0 0 0
+grip right down
+step
+pose right 0.08 0 -0.5 1 0 0 0
+step
+expect pending_translation 0.08 0 0 0.00001
+cancel
+expect pending_identity true
+expect status CANCELLED
+
+# A second drag is acknowledged, retained as the effective transform, then undone.
+grip right up
+step
+preview
+pose right 0 0 -0.5 1 0 0 0
+grip right down
+step
+pose right 0.05 0 -0.5 1 0 0 0
+step
+expect pending_translation 0.05 0 0 0.00001
+confirm
+expect status COMMITTING
+expect execution_pending true
+feedback confirm succeeded committed feature:1
+expect status COMMITTED
+expect undo_available true
+expect effective_translation 0.05 0 0 0.00001
+undo
+expect status UNDOING
+feedback undo succeeded undone feature:1
+expect status UNDONE
+expect undo_available false
+expect effective_identity true

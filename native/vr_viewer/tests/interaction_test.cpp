@@ -92,6 +92,25 @@ void recenterRestoresUnitScaleInFrontOfHead() {
     require(std::abs(manipulator.scale() - 1.0F) < 1e-5F);
 }
 
+void initialPlacementCarriesTheFixturePresentationWithTheHead() {
+    SceneManipulator manipulator;
+    const glm::quat turn = glm::angleAxis(glm::radians(90.0F), glm::vec3(0, 1, 0));
+    manipulator.placeInView({1, 2, 3}, turn);
+    const glm::vec3 modelCenter(0, 0, -SceneManipulator::kViewDistanceMeters);
+    const glm::vec3 expectedCenter = glm::vec3(1, 2, 3)
+                                  + turn * glm::vec3(
+                                      0, 0, -SceneManipulator::kViewDistanceMeters);
+    require(glm::all(glm::epsilonEqual(
+        transformedPoint(manipulator.transform(), modelCenter),
+        expectedCenter, 1e-5F)));
+    require(glm::all(glm::epsilonEqual(
+        transformedPoint(manipulator.transform(), modelCenter + glm::vec3(1, 0, 0)),
+        expectedCenter + turn * glm::vec3(SceneManipulator::kInitialViewScale, 0, 0),
+        1e-5F)));
+    require(std::abs(
+        manipulator.scale() - SceneManipulator::kInitialViewScale) < 1e-5F);
+}
+
 void closeInspectionAllowsTheModelToPassThroughTheHead() {
     SceneManipulator manipulator;
     std::array<HandPose, 2> hands{};
@@ -1231,6 +1250,7 @@ int main() {
     twoHandGrabScalesAroundMidpointWithoutJumping();
     oneTwoOneTransitionsStayContinuous();
     recenterRestoresUnitScaleInFrontOfHead();
+    initialPlacementCarriesTheFixturePresentationWithTheHead();
     closeInspectionAllowsTheModelToPassThroughTheHead();
     menuFollowsItsControllerAndDockingFreezesItsWorldPose();
     radialToolMenuIsWorldFixedAndUsesExtrudedSectors();

@@ -1,0 +1,8 @@
+SCRYWRITE_EVIDENCE 1
+total_primitives 16
+min_in_frame_fraction 1
+min_fully_in_frame_fraction 1
+max_clipped_primitives 0
+min_readable_fraction 1
+min_projected_bounds_fraction 0.02
+max_gaze_error_degrees 1

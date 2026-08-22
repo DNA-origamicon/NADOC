@@ -68,7 +68,7 @@ counts** (102 = 92+2+8, then GENERATED 1 / VALIDATED 9, then "90 pending rows" �
 and 9 already-VALIDATED rows plus 1 FAILING row were still sitting in the PENDING index, so the queue
 over-reported the work left. Counts below are derived from the actual index, not hand-maintained.
 
-- **PENDING (genuinely open): 82.** The index now holds 83 rows: 82 pending + MV-5 (generated, see below).
+- **PENDING (genuinely open): 83.** The index now holds 84 rows: 83 pending + MV-5 (generated, see below).
   *(Was 84/85 — `MV-PHOTO-1`/`MV-PHOTO-2` struck 2026-07-30, see "Retired" below.)*
 - **GENERATED (block written, not yet run): 1** — MV-5.
 - **VALIDATED: 12** — **MV-ALPINE-GPU (2026-08-07, user-confirmed in app — all pass)** — the whole
@@ -160,7 +160,7 @@ MV-RSZ, the 3D overhang-resize-through-boundary fix, was pushed PENDING this ses
 
 ## PENDING queue — index (ordered; first row = next loop processes this)
 
-**82 pending rows** + MV-5 (generated). Reconciled 2026-08-08: MV-8 was promoted to ISSUE-23;
+**83 pending rows** + MV-5 (generated). Reconciled 2026-08-08: MV-8 was promoted to ISSUE-23;
 MV-22 through MV-27 were obsolete intermediate Simulate-panel slices and were consolidated into
 MV-28/MV-30; the second MV-32 was renumbered MV-37. Full rows are in the archive's `## PENDING queue`
 section — open only the one being processed.
@@ -180,6 +180,7 @@ section — open only the one being processed.
 - **MV-MRDNA-SEED** — mrDNA fine-stage relaxation → GROMACS MD seed (end-to-end) — the new POST /api/design/export/g…
 - **MV-SCAFMENU** — Unified scaffold context menu (in-app) — load a design with a scaffold that has both dsDNA and…
 - **MV-MRSEL** — Selection-driven Move/Rotate + revamped panel (in-app) — load a cluster-bearing design (Exampl…
+- **MV-SCRYWITNESS** — ScryWrite live VR Witness Mode — run the canonical witness-menu script against `native/vr_viewer/examples/triangle.nadocvr` on the Vive; confirm the physical HMD stays freely observer-controlled, the ghost controllers and corrected 72-degree/16:9 scripted-head frustum face the expected direction, the head-following actor-eye monitor is upright and binocularly comfortable, Options → Tools → Move Rotate is visible and highlighted in sequence, left-menu pause/resume and right-menu single-step work, and a deliberately wrong `expect hover` freezes with a legible red failure marker and no held scripted button. Automated replay/state/hit checks plus the strict `Chiral_test`-derived projection export cover deterministic pose and framing, but cannot establish live pixels, stereo orientation, physical scale, legibility, or comfort. The desktop physical-eye mirror POC visibly receives the six-color LOCAL-space room cage. SteamVR's dummy/unworn `shouldRender=false` freeze is now handled by a visibly labeled `SPECTATOR FALLBACK`; its local frame counter and corner heartbeat advance and its pose remains `TRACKED`. Physical motion is not hand-confirmed: verify upright same-direction dummy yaw/pitch against the grid, corresponding `XYZ`/`YP` and `M` changes, correct left/right behavior, menu/Witness-panel inclusion, and aspect-preserving resize per `docs/scrywrite_desktop_mirror.md`. OpenXR submission correlation and side-by-side capture are not implemented.
 - **MV-CONNLINK** — Duplex / ds-linker as a MOVABLE LINK in a constrained drag (in-app) — load workspace/2x2_OH_te…
 - **MV-CONNTETHER** — Connected overhangs constrain a regular cluster's move ("Constrained (tethers)") (in-app) — lo…
 - **MV-DUPMENU** — Duplex overhang right-click routes orientation to the gizmo; standalone keeps the panel (in-ap…

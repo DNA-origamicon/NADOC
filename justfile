@@ -93,6 +93,33 @@ test-affected *ARGS:
 test-frontend:
     cd frontend && npm test
 
+# Build and run the headless native + Playwright ScryWrite proof of concept.
+test-scrywrite:
+    env -u CFLAGS -u CXXFLAGS -u CPPFLAGS -u LDFLAGS CC=/usr/bin/gcc CXX=/usr/bin/g++ cmake -S native/vr_viewer -B native/vr_viewer/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+    env PATH=/usr/bin:/bin cmake --build native/vr_viewer/build --target nadoc-vr-viewer nadoc-vr-scrywrite nadoc-vr-scrywrite-export nadoc-vr-scrywrite-test nadoc-vr-scrywrite-witness-test nadoc-vr-scrywrite-evidence-test nadoc-vr-spectator-mirror-test nadoc-vr-reference-grid-test
+    env PATH=/usr/bin:/bin ctest --test-dir native/vr_viewer/build --output-on-failure -R '^(nadoc-vr-scrywrite|nadoc-vr-spectator-mirror|nadoc-vr-reference-grid)'
+    cd frontend && npm run test:scrywrite
+
+# Launch the safe live VR observer replay. Override SCENE/SCRIPT as needed.
+scrywrite-witness SCENE="native/vr_viewer/examples/triangle.nadocvr" SCRIPT="native/vr_viewer/examples/scrywrite_witness_menu.scry" EYE="left" GRID="room":
+    env -u CFLAGS -u CXXFLAGS -u CPPFLAGS -u LDFLAGS CC=/usr/bin/gcc CXX=/usr/bin/g++ cmake -S native/vr_viewer -B native/vr_viewer/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+    env PATH=/usr/bin:/bin cmake --build native/vr_viewer/build --target nadoc-vr-viewer
+    env XR_RUNTIME_JSON="$HOME/.local/share/Steam/steamapps/common/SteamVR/steamxr_linux64.json" native/vr_viewer/build/nadoc-vr-viewer {{SCENE}} --mirror-eye {{EYE}} --reference-grid {{GRID}} --scrywrite-witness {{SCRIPT}}
+
+# Launch a local fixture with a read-only desktop mirror of the physical HMD eye.
+vr-hmd-mirror SCENE="native/vr_viewer/examples/scrywrite_chiral_perspective.nadocvr" EYE="left" GRID="room" PLACE="on":
+    env -u CFLAGS -u CXXFLAGS -u CPPFLAGS -u LDFLAGS CC=/usr/bin/gcc CXX=/usr/bin/g++ cmake -S native/vr_viewer -B native/vr_viewer/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+    env PATH=/usr/bin:/bin cmake --build native/vr_viewer/build --target nadoc-vr-viewer
+    env XR_RUNTIME_JSON="$HOME/.local/share/Steam/steamapps/common/SteamVR/steamxr_linux64.json" native/vr_viewer/build/nadoc-vr-viewer {{SCENE}} --mirror-eye {{EYE}} --reference-grid {{GRID}} --place-scene-in-view {{PLACE}}
+
+# Export headset-free POV, top-down orientation, and numeric evidence artifacts.
+scrywrite-evidence SCENE="native/vr_viewer/examples/scrywrite_chiral_perspective.nadocvr" SCRIPT="native/vr_viewer/examples/scrywrite_witness_chiral.scry" EXPECT="native/vr_viewer/examples/scrywrite_chiral_perspective.scry-evidence" OUTPUT="docs/generated/scrywrite/chiral_perspective":
+    env -u CFLAGS -u CXXFLAGS -u CPPFLAGS -u LDFLAGS CC=/usr/bin/gcc CXX=/usr/bin/g++ cmake -S native/vr_viewer -B native/vr_viewer/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+    env PATH=/usr/bin:/bin cmake --build native/vr_viewer/build --target nadoc-vr-scrywrite-export
+    mkdir -p docs/generated/scrywrite
+    native/vr_viewer/build/nadoc-vr-scrywrite-export {{SCENE}} {{SCRIPT}} {{OUTPUT}} --expect {{EXPECT}}
+    node frontend/scrywrite/render_evidence.mjs {{OUTPUT}}
+
 # Tight loop: Vitest in watch mode — re-runs affected tests on save (sub-second)
 test-frontend-watch:
     cd frontend && npx vitest

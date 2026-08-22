@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+<rect width="1280" height="720" fill="#07101d"/>
+<text x="32" y="46" fill="#dcf7ff" font-family="monospace" font-size="24">SCRYWRITE ACTOR POV</text>
+<text x="32" y="76" fill="#74d9f5" font-family="monospace" font-size="16">native/vr_viewer/examples/scrywrite_simple_origami.nadocvr | FOV 72 DEG | 16 PRIMITIVES VISIBLE</text>
+<line x1="680.094" y1="339.690" x2="684.969" y2="343.892" stroke="rgb(255,199,51)" stroke-width="3.099" stroke-linecap="round"/>
+<line x1="535.944" y1="364.321" x2="711.834" y2="334.267" stroke="rgb(51,184,255)" stroke-width="6.750" stroke-linecap="round"/>
+<line x1="690.028" y1="348.251" x2="695.281" y2="352.779" stroke="rgb(87,255,140)" stroke-width="3.217" stroke-linecap="round"/>
+<line x1="538.401" y1="369.492" x2="717.163" y2="338.268" stroke="rgb(71,209,255)" stroke-width="6.880" stroke-linecap="round"/>
+<line x1="633.557" y1="352.871" x2="637.810" y2="357.579" stroke="rgb(87,255,140)" stroke-width="3.280" stroke-linecap="round"/>
+<line x1="540.961" y1="374.880" x2="722.689" y2="342.417" stroke="rgb(89,230,255)" stroke-width="7.014" stroke-linecap="round"/>
+<line x1="574.831" y1="357.676" x2="577.998" y2="362.576" stroke="rgb(87,255,140)" stroke-width="3.346" stroke-linecap="round"/>
+<line x1="543.630" y1="380.498" x2="728.420" y2="346.721" stroke="rgb(255,158,56)" stroke-width="7.154" stroke-linecap="round"/>
+<line x1="546.417" y1="386.362" x2="734.370" y2="351.189" stroke="rgb(255,128,46)" stroke-width="7.300" stroke-linecap="round"/>
+<line x1="646.836" y1="367.570" x2="651.631" y2="372.877" stroke="rgb(255,199,51)" stroke-width="3.483" stroke-linecap="round"/>
+<line x1="549.327" y1="392.489" x2="740.552" y2="355.831" stroke="rgb(255,97,41)" stroke-width="7.452" stroke-linecap="round"/>
+<line x1="584.728" y1="372.986" x2="588.308" y2="378.523" stroke="rgb(255,199,51)" stroke-width="3.557" stroke-linecap="round"/>
+<circle cx="535.944" cy="364.321" r="4.755" fill="rgb(242,242,255)" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="711.834" cy="334.267" r="4.188" fill="rgb(242,242,255)" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="549.327" cy="392.489" r="5.286" fill="rgb(242,242,255)" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="740.552" cy="355.831" r="4.594" fill="rgb(242,242,255)" stroke="#ffffff" stroke-width="1.5"/>
+<path d="M620 360h40 M640 340v40" stroke="#42f5d7" stroke-width="2" opacity="0.8"/>
+<rect x="18" y="18" width="1244" height="684" rx="18" fill="none" stroke="#1a6074" stroke-width="2"/>
+<text x="32" y="684" fill="#8da8b7" font-family="monospace" font-size="15">HEAD FORWARD = [0.000, -0.447, -0.894] | TARGET ERROR 0.000 DEG</text>
+</svg>

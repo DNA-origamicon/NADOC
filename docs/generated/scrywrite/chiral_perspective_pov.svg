@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+<rect width="1280" height="720" fill="#07101d"/>
+<text x="32" y="46" fill="#dcf7ff" font-family="monospace" font-size="24">SCRYWRITE ACTOR POV</text>
+<text x="32" y="76" fill="#74d9f5" font-family="monospace" font-size="16">native/vr_viewer/examples/scrywrite_chiral_perspective.nadocvr | FOV 72 DEG | 16/16 PRIMITIVES IN FRAME</text>
+<line x1="586.821" y1="364.906" x2="605.661" y2="345.033" stroke="rgb(217,117,166)" stroke-width="7.511" stroke-linecap="round"/>
+<line x1="588.801" y1="378.027" x2="608.013" y2="359.137" stroke="rgb(217,138,140)" stroke-width="7.584" stroke-linecap="round"/>
+<line x1="573.609" y1="364.972" x2="591.523" y2="344.814" stroke="rgb(217,97,191)" stroke-width="7.616" stroke-linecap="round"/>
+<line x1="575.489" y1="378.271" x2="593.762" y2="359.124" stroke="rgb(217,77,217)" stroke-width="7.692" stroke-linecap="round"/>
+<line x1="616.586" y1="390.572" x2="732.877" y2="295.541" stroke="rgb(102,168,214)" stroke-width="8.539" stroke-linecap="round"/>
+<line x1="618.828" y1="403.828" x2="737.839" y2="313.987" stroke="rgb(89,177,224)" stroke-width="8.635" stroke-linecap="round"/>
+<line x1="603.874" y1="390.979" x2="716.195" y2="294.259" stroke="rgb(115,159,204)" stroke-width="8.676" stroke-linecap="round"/>
+<line x1="606.025" y1="404.417" x2="721.021" y2="313.059" stroke="rgb(77,186,235)" stroke-width="8.774" stroke-linecap="round"/>
+<line x1="590.818" y1="391.396" x2="698.836" y2="292.926" stroke="rgb(128,150,194)" stroke-width="8.816" stroke-linecap="round"/>
+<line x1="592.873" y1="405.022" x2="703.509" y2="312.093" stroke="rgb(64,195,245)" stroke-width="8.918" stroke-linecap="round"/>
+<line x1="577.405" y1="391.826" x2="680.759" y2="291.537" stroke="rgb(140,142,184)" stroke-width="8.961" stroke-linecap="round"/>
+<line x1="579.359" y1="405.643" x2="685.262" y2="311.086" stroke="rgb(51,204,255)" stroke-width="9.067" stroke-linecap="round"/>
+<circle cx="579.359" cy="405.643" r="6.152" fill="rgb(255,51,51)" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="680.759" cy="291.537" r="9.227" fill="rgb(255,230,26)" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="575.489" cy="378.271" r="6.034" fill="rgb(51,255,89)" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="605.661" cy="345.033" r="6.427" fill="rgb(204,89,255)" stroke="#ffffff" stroke-width="1.5"/>
+<path d="M620 360h40 M640 340v40" stroke="#42f5d7" stroke-width="2" opacity="0.8"/>
+<rect x="18" y="18" width="1244" height="684" rx="18" fill="none" stroke="#1a6074" stroke-width="2"/>
+<text x="32" y="684" fill="#8da8b7" font-family="monospace" font-size="15">SCRIPTED ACTOR FORWARD = [0.000, 0.000, -1.000] | TARGET ERROR 0.000 DEG</text>
+</svg>

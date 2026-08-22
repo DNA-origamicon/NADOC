@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="800" viewBox="0 0 1000 800">
+<rect width="1000" height="800" fill="#09131d"/>
+<text x="30" y="42" fill="#dcf7ff" font-family="monospace" font-size="24">SCRYWRITE TOP-DOWN ORIENTATION</text>
+<line x1="207.143" y1="90.000" x2="207.143" y2="710.000" stroke="#163041" stroke-width="1"/>
+<line x1="353.571" y1="90.000" x2="353.571" y2="710.000" stroke="#163041" stroke-width="1"/>
+<line x1="500.000" y1="90.000" x2="500.000" y2="710.000" stroke="#163041" stroke-width="1"/>
+<line x1="646.429" y1="90.000" x2="646.429" y2="710.000" stroke="#163041" stroke-width="1"/>
+<line x1="792.857" y1="90.000" x2="792.857" y2="710.000" stroke="#163041" stroke-width="1"/>
+<line x1="90.000" y1="90.000" x2="910.000" y2="90.000" stroke="#163041" stroke-width="1"/>
+<line x1="90.000" y1="167.500" x2="910.000" y2="167.500" stroke="#163041" stroke-width="1"/>
+<line x1="90.000" y1="245.000" x2="910.000" y2="245.000" stroke="#163041" stroke-width="1"/>
+<line x1="90.000" y1="322.500" x2="910.000" y2="322.500" stroke="#163041" stroke-width="1"/>
+<line x1="90.000" y1="400.000" x2="910.000" y2="400.000" stroke="#163041" stroke-width="1"/>
+<line x1="90.000" y1="477.500" x2="910.000" y2="477.500" stroke="#163041" stroke-width="1"/>
+<line x1="90.000" y1="555.000" x2="910.000" y2="555.000" stroke="#163041" stroke-width="1"/>
+<line x1="90.000" y1="632.500" x2="910.000" y2="632.500" stroke="#163041" stroke-width="1"/>
+<line x1="90.000" y1="710.000" x2="910.000" y2="710.000" stroke="#163041" stroke-width="1"/>
+<line x1="390.888" y1="160.631" x2="553.504" y2="322.500" stroke="rgb(51,204,255)" stroke-width="5" stroke-linecap="round"/>
+<line x1="414.034" y1="154.117" x2="576.650" y2="315.986" stroke="rgb(64,195,245)" stroke-width="5" stroke-linecap="round"/>
+<line x1="437.181" y1="147.603" x2="599.797" y2="309.472" stroke="rgb(77,186,235)" stroke-width="5" stroke-linecap="round"/>
+<line x1="460.328" y1="141.089" x2="622.944" y2="302.959" stroke="rgb(89,177,224)" stroke-width="5" stroke-linecap="round"/>
+<line x1="455.717" y1="136.500" x2="618.333" y2="298.369" stroke="rgb(102,168,214)" stroke-width="5" stroke-linecap="round"/>
+<line x1="432.571" y1="143.014" x2="595.187" y2="304.883" stroke="rgb(115,159,204)" stroke-width="5" stroke-linecap="round"/>
+<line x1="409.423" y1="149.528" x2="572.039" y2="311.397" stroke="rgb(128,150,194)" stroke-width="5" stroke-linecap="round"/>
+<line x1="386.277" y1="156.041" x2="548.893" y2="317.911" stroke="rgb(140,142,184)" stroke-width="5" stroke-linecap="round"/>
+<line x1="381.667" y1="151.452" x2="422.320" y2="191.919" stroke="rgb(217,77,217)" stroke-width="5" stroke-linecap="round"/>
+<line x1="377.056" y1="146.863" x2="417.710" y2="187.330" stroke="rgb(217,97,191)" stroke-width="5" stroke-linecap="round"/>
+<line x1="400.203" y1="140.349" x2="440.857" y2="180.816" stroke="rgb(217,117,166)" stroke-width="5" stroke-linecap="round"/>
+<line x1="404.813" y1="144.938" x2="445.468" y2="185.406" stroke="rgb(217,138,140)" stroke-width="5" stroke-linecap="round"/>
+<circle cx="390.888" cy="160.631" r="8" fill="rgb(255,51,51)" stroke="#ffffff" stroke-width="2"/>
+<circle cx="548.893" cy="317.911" r="8" fill="rgb(255,230,26)" stroke="#ffffff" stroke-width="2"/>
+<circle cx="381.667" cy="151.452" r="8" fill="rgb(51,255,89)" stroke="#ffffff" stroke-width="2"/>
+<circle cx="440.857" cy="180.816" r="8" fill="rgb(204,89,255)" stroke="#ffffff" stroke-width="2"/>
+<polygon points="444.674,126.319 632.961,299.915 554.773,323.671 366.486,150.075 " fill="none" stroke="#ffe36e" stroke-width="3" stroke-dasharray="10 7"/>
+<circle cx="500.000" cy="632.500" r="15" fill="#1fe0ff" stroke="#ffffff" stroke-width="3"/>
+<line x1="500.000" y1="632.500" x2="500.000" y2="545.700" stroke="#1fe0ff" stroke-width="7" marker-end="url(#arrow)"/>
+<circle cx="359.429" cy="545.700" r="10" fill="#33bfff" stroke="#ffffff" stroke-width="2"/>
+<circle cx="640.571" cy="545.700" r="10" fill="#ff8b2c" stroke="#ffffff" stroke-width="2"/>
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#1fe0ff"/></marker></defs>
+<text x="30" y="748" fill="#1fe0ff" font-family="monospace" font-size="17">SCRIPTED ACTOR YAW 0.000 / PITCH 0.000 DEG</text>
+<text x="500" y="748" fill="#ffe36e" font-family="monospace" font-size="17">STRUCTURE LONG AXIS YAW 150.142 DEG</text>
+<text x="30" y="775" fill="#8da8b7" font-family="monospace" font-size="14">TOP DOWN: X HORIZONTAL, FORWARD -Z TOWARD TOP</text>
+<text x="600" y="775" fill="#ffe36e" font-family="monospace" font-size="14">RELATIVE AXIS YAW -29.858 DEG</text>
+</svg>

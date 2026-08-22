@@ -130,7 +130,7 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 
 **Automation / jobs infra:** [staleness_diagnostics](project_staleness_diagnostics.md)·[job_activity_spinner](project_job_activity_spinner.md)·[job_disk_usage](project_job_disk_usage.md)·[job_archive](project_job_archive.md)·[runpod_submission](project_runpod_submission.md)·[af25/26 log sync](project_af25_af26_job_log_sync.md)
 
-**Dev infra:** [dev_server_shutdown_hang](project_dev_server_shutdown_hang.md)·[nadoc_overview](project_nadoc_overview.md)·**[context_economy_split](project_context_economy_split.md)** (head/archive rule)·[steamvr_drm_lease_fix](project_steamvr_drm_lease_fix.md) (Vive HDMI-0 DRM lease, automatic in routes_vr.py)
+**Dev infra:** **[scrywrite](project_scrywrite.md)** (VR troubleshooting driver)·[dev_server_shutdown_hang](project_dev_server_shutdown_hang.md)·[nadoc_overview](project_nadoc_overview.md)·**[context_economy_split](project_context_economy_split.md)** (head/archive rule)·[steamvr_drm_lease_fix](project_steamvr_drm_lease_fix.md) (Vive HDMI-0 DRM lease, automatic in routes_vr.py)
 
 **Imports / validation:** [sq_importer_fix](project_sq_importer_fix.md)·[crossover_distance_script](project_crossover_distance_script.md)·[clash_detector](project_clash_detector.md)·[corner_primitive](project_corner_primitive.md)
 

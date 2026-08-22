@@ -18,6 +18,10 @@
 #include "interaction.hpp"
 #include "jobs.hpp"
 #include "picking.hpp"
+#include "reference_grid.hpp"
+#include "scrywrite_witness.hpp"
+#include "scrywrite_witness_surface.hpp"
+#include "spectator_mirror.hpp"
 #include "visualization.hpp"
 
 #include <glm/glm.hpp>
@@ -1044,6 +1048,16 @@ std::array<uint8_t, 7> glyph(char value) {
         case 'W': return {17, 17, 17, 21, 21, 21, 10};
         case 'X': return {17, 17, 10, 4, 10, 17, 17};
         case 'Y': return {17, 17, 10, 4, 4, 4, 4};
+        case '0': return {14, 17, 19, 21, 25, 17, 14};
+        case '1': return {4, 12, 4, 4, 4, 4, 14};
+        case '2': return {14, 17, 1, 2, 4, 8, 31};
+        case '3': return {30, 1, 1, 14, 1, 1, 30};
+        case '4': return {2, 6, 10, 18, 31, 2, 2};
+        case '5': return {31, 16, 16, 30, 1, 1, 30};
+        case '6': return {14, 16, 16, 30, 17, 17, 14};
+        case '7': return {31, 1, 2, 4, 8, 8, 8};
+        case '8': return {14, 17, 17, 14, 17, 17, 14};
+        case '9': return {14, 17, 17, 15, 1, 1, 14};
         case '+': return {0, 4, 4, 31, 4, 4, 0};
         default: return {};
     }
@@ -3345,7 +3359,12 @@ class Viewer {
                     nadoc_vr::VisualizationSnapshot visualizationSnapshot = {},
                     std::string selectionLevel = "default",
                     std::vector<std::string> selectedOwnerTokens = {},
-                    std::string selectedSelectionKind = "none")
+                    std::string selectedSelectionKind = "none",
+                    std::string witnessPath = {},
+                    nadoc_vr::SpectatorMirrorEye mirrorEye =
+                        nadoc_vr::SpectatorMirrorEye::off,
+                    bool referenceGrid = false,
+                    bool placeSceneInView = false)
         : sceneData_(std::move(scene)), eventPath_(std::move(eventPath)),
           feedbackPath_(std::move(feedbackPath)),
           toolFeedbackPath_(std::move(toolFeedbackPath)),
@@ -3364,8 +3383,19 @@ class Viewer {
           desktopActiveJobId_(jobSnapshot.activeJobId),
           desktopRepresentation_(jobSnapshot.representation),
           desktopColoring_(jobSnapshot.coloring),
+          mirrorEye_(mirrorEye), referenceGrid_(referenceGrid),
+          initialScenePlacementRequested_(placeSceneInView),
           jobs_(std::move(jobSnapshot.rows)),
           selectionLevel_(std::move(selectionLevel)) {
+        if (!witnessPath.empty()) {
+            std::ifstream input(witnessPath);
+            if (!input) {
+                throw std::runtime_error("Could not open ScryWrite witness script " +
+                                         witnessPath);
+            }
+            witness_.emplace(nadoc_vr::scrywrite::WitnessReplay::load(input));
+            std::cout << "ScryWrite Witness Mode: " << witnessPath << '\n';
+        }
         normalizationCenter_ = sceneData_.normalizationCenter;
         normalizationScale_ = sceneData_.normalizationScale;
         const RepresentationData& initial = sceneData_.representations[
@@ -3401,6 +3431,7 @@ class Viewer {
     }
 
     ~Viewer() {
+        witnessSurface_.shutdown();
         desktopSurface_.shutdown();
         glScene_.reset();
         for (Swapchain& swapchain : swapchains_) {
@@ -3426,10 +3457,12 @@ class Viewer {
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        const bool mirrorEnabled = mirrorEye_ != nadoc_vr::SpectatorMirrorEye::off;
+        std::string title = nadoc_vr::spectatorMirrorWindowTitle(mirrorEye_);
+        if (referenceGrid_) title += " — ROOM GRID ACTIVE";
         window_ = glfwCreateWindow(
-            720, 180,
-            "NADOC VR — grip a menu border/Desktop to move · two grips resize",
-            nullptr, nullptr);
+            mirrorEnabled ? 960 : 720, mirrorEnabled ? 540 : 180,
+            title.c_str(), nullptr, nullptr);
         if (!window_) throw std::runtime_error("Could not create the OpenGL companion window");
         glfwMakeContextCurrent(window_);
         glfwSwapInterval(0);
@@ -3702,7 +3735,16 @@ class Viewer {
         glScene_->setVisualization(visualizationSnapshot_);
         glScene_->setSelectionHighlights(
             {}, {}, committedSelectionOwnerTokens_, committedSelectionIdentities_);
+        if (referenceGrid_) {
+            const auto grid = nadoc_vr::buildRoomReferenceGrid();
+            referenceGridGuides_.reserve(grid.size() * 2U);
+            for (const auto& segment : grid) {
+                referenceGridGuides_.push_back(Vertex{segment.first, segment.color, 1.0F});
+                referenceGridGuides_.push_back(Vertex{segment.second, segment.color, 1.0F});
+            }
+        }
         desktopSurface_.initialize(glfwGetX11Display());
+        if (witness_) witnessSurface_.initialize(makeDesktopProgram());
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_PROGRAM_POINT_SIZE);
         glDisable(GL_CULL_FACE);
@@ -3734,6 +3776,7 @@ class Viewer {
     }
 
     void pulse(size_t hand, float amplitude = 0.35F) {
+        if (witness_) return;
         XrHapticActionInfo info{XR_TYPE_HAPTIC_ACTION_INFO};
         info.action = hapticAction_;
         info.subactionPath = handPaths_[hand];
@@ -3928,6 +3971,92 @@ class Viewer {
         MenuItem item = kDesktopMenuItems[0];
         item.y = menuPanelBounds().minimum.y + 0.100F;
         return item;
+    }
+
+    [[nodiscard]] const char* menuPageName() const {
+        if (!menuOpen_) return "closed";
+        switch (menuPage_) {
+            case MenuPage::options: return "options";
+            case MenuPage::tools: return "tools";
+            case MenuPage::tool_config: return "tool_config";
+            case MenuPage::jobs: return "jobs";
+            case MenuPage::job_detail: return "job_detail";
+            case MenuPage::desktop: return "desktop";
+        }
+        return "closed";
+    }
+
+    [[nodiscard]] std::vector<nadoc_vr::scrywrite::WitnessMenuEntry>
+    witnessMenuEntries() const {
+        std::vector<nadoc_vr::scrywrite::WitnessMenuEntry> entries;
+        if (!menuOpen_) return entries;
+        auto append = [&](const auto& items, int hitBase = 0) {
+            for (size_t index = 0; index < items.size(); ++index) {
+                const MenuItem item = items[index];
+                entries.push_back({
+                    item.label, hitBase + static_cast<int>(index),
+                    menuPlacement_.worldPoint({item.x, item.y, 0.0F}),
+                });
+            }
+        };
+        if (menuPage_ == MenuPage::options) append(kOptionsMenuItems);
+        else if (menuPage_ == MenuPage::tools) append(kToolMenuItems);
+        else if (menuPage_ == MenuPage::tool_config) append(kToolConfigMenuItems);
+        else if (menuPage_ == MenuPage::jobs) append(kJobsMenuItems);
+        else if (menuPage_ == MenuPage::job_detail) append(kJobDetailMenuItems);
+        else append(std::array<MenuItem, 1>{desktopBackItem()});
+        std::array<MenuItem, kMenuControlItems.size()> controls{};
+        for (size_t index = 0; index < controls.size(); ++index) {
+            controls[index] = menuControlItem(index);
+        }
+        append(controls, kMenuControlHitBase);
+        return entries;
+    }
+
+    [[nodiscard]] std::string witnessHoverName() const {
+        return nadoc_vr::scrywrite::witnessHoverLabel(
+            witnessMenuEntries(), menuHover_);
+    }
+
+    void resolveWitnessAim() {
+        if (!witness_ || !witness_->pendingAim()) return;
+        const auto aim = *witness_->pendingAim();
+        const auto item = nadoc_vr::scrywrite::findWitnessMenuEntry(
+            witnessMenuEntries(), aim.label);
+        if (!item) {
+            witness_->rejectAim("menu control not present: " + aim.label);
+            return;
+        }
+        const auto& hand = witness_->input().hands[aim.hand];
+        if (!hand.valid) {
+            witness_->rejectAim("aim_menu requires a valid scripted hand pose");
+            return;
+        }
+        const auto orientation = nadoc_vr::scrywrite::witnessAimOrientation(
+            hand.position, item->worldPosition);
+        if (!orientation) {
+            witness_->rejectAim("scripted hand is coincident with menu control");
+            return;
+        }
+        witness_->resolveAim(*orientation);
+    }
+
+    void toggleMenu(size_t hand) {
+        radialToolMenu_.close();
+        menuHand_ = hand;
+        if (menuOpen_) {
+            menuOpen_ = false;
+            menuHover_ = -1;
+            suppressManipulationUntilRelease_ = true;
+        } else if (planePickSlot_) {
+            clearPlanePick();
+            requestedMenuPage_ = MenuPage::tool_config;
+            menuOpenRequested_ = true;
+        } else {
+            requestedMenuPage_ = MenuPage::options;
+            menuOpenRequested_ = true;
+        }
+        pulse(hand, 0.45F);
     }
 
     void appendMenuGuides() {
@@ -5031,7 +5160,7 @@ class Viewer {
             if (hit >= 0 && menuHover_ < 0) menuHover_ = hit;
             if (menuPage_ == MenuPage::desktop && desktopPointer && hit < 0) {
                 desktopSurface_.setPointer(*desktopPointer);
-                if (triggerClicked_[hand]) desktopSurface_.click();
+                if (triggerClicked_[hand] && !witness_) desktopSurface_.click();
                 continue;
             }
             if (hit < 0 || !triggerClicked_[hand]) continue;
@@ -5426,6 +5555,29 @@ class Viewer {
         appendLatticeGuides();
         appendMenuGuides();
         appendThumbwheelGuides();
+        if (witness_) {
+            const auto& head = witness_->input().head;
+            const glm::vec3 color = witness_->failed()
+                ? glm::vec3(1.0F, 0.18F, 0.12F)
+                : witness_->finished()
+                    ? glm::vec3(0.25F, 1.0F, 0.42F)
+                    : glm::vec3(0.20F, 0.95F, 1.0F);
+            const auto frustum = nadoc_vr::scrywrite::witnessHeadFrustum(head);
+            for (size_t index = 0; index < frustum.size(); ++index) {
+                line(frustum[index].first, frustum[index].second,
+                     index % 2 == 0 ? color * 0.65F : color);
+            }
+            witnessStatusPlacement_.openDocked(
+                head.position + head.orientation * glm::vec3(-0.18F, 0.16F, -0.55F),
+                head.orientation);
+            const char* state = witness_->failed() ? "FAILED"
+                : witness_->finished() ? "PASSED"
+                : witness_->paused() ? "PAUSED" : "RUNNING";
+            appendPlacedText(
+                witnessStatusPlacement_, std::string("SCRYWRITE ") + state +
+                    " L" + std::to_string(witness_->currentLine()),
+                0.0F, 0.0F, 0.006F, color, 0.002F);
+        }
     }
 
     [[nodiscard]] glm::vec3 selectionVolumeCenter(size_t hand) const {
@@ -6004,6 +6156,22 @@ class Viewer {
         syncInfo.activeActionSets = &active;
         checkXr(instance_, xrSyncActions(session_, &syncInfo), "xrSyncActions");
 
+        if (witness_) {
+            witness_->advance({
+                menuPageName(), witnessHoverName(),
+                nadoc_vr::toolModeName(toolShell_.mode()), toolShell_.status(),
+            });
+            resolveWitnessAim();
+            if (witness_->failed() && !witnessFailureReported_) {
+                std::cerr << "ScryWrite Witness " << witness_->status() << '\n';
+                witnessFailureReported_ = true;
+            } else if (witness_->finished() && !witnessCompletionReported_) {
+                std::cout << "ScryWrite Witness PASSED at frame "
+                          << witness_->frame() << '\n';
+                witnessCompletionReported_ = true;
+            }
+        }
+
         for (size_t hand = 0; hand < hands_.size(); ++hand) {
             hands_[hand].valid = false;
             XrActionStateGetInfo getInfo{XR_TYPE_ACTION_STATE_GET_INFO};
@@ -6014,6 +6182,9 @@ class Viewer {
             checkXr(instance_, xrGetActionStateFloat(session_, &getInfo, &trigger),
                     "xrGetActionStateFloat");
             triggerValues_[hand] = trigger.isActive ? trigger.currentState : 0.0F;
+            if (witness_) {
+                triggerValues_[hand] = witness_->input().triggerPressed[hand] ? 1.0F : 0.0F;
+            }
             triggerPartial_[hand] = triggerValues_[hand] >= 0.15F;
             const bool wasPressed = triggerPressed_[hand];
             const float threshold = wasPressed ? 0.60F : 0.88F;
@@ -6034,28 +6205,25 @@ class Viewer {
                     hands_[hand] = handPoseFromXr(location.pose);
                 }
             }
+            if (witness_) hands_[hand] = witness_->input().hands[hand];
 
             getInfo.action = menuAction_;
             XrActionStateBoolean menu{XR_TYPE_ACTION_STATE_BOOLEAN};
             checkXr(instance_, xrGetActionStateBoolean(session_, &getInfo, &menu),
                     "xrGetActionStateBoolean");
-            if (menu.isActive && menu.changedSinceLastSync && menu.currentState) {
-                radialToolMenu_.close();
-                menuHand_ = hand;
-                if (menuOpen_) {
-                    menuOpen_ = false;
-                    menuHover_ = -1;
-                    suppressManipulationUntilRelease_ = true;
-                } else if (planePickSlot_) {
-                    clearPlanePick();
-                    requestedMenuPage_ = MenuPage::tool_config;
-                    menuOpenRequested_ = true;
-                } else {
-                    requestedMenuPage_ = MenuPage::options;
-                    menuOpenRequested_ = true;
+            const bool physicalMenuClicked =
+                menu.isActive && menu.changedSinceLastSync && menu.currentState;
+            bool menuClicked = physicalMenuClicked;
+            if (witness_) {
+                if (physicalMenuClicked) {
+                    if (hand == 0U) witness_->togglePaused();
+                    else witness_->requestSingleStep();
                 }
-                pulse(hand, 0.45F);
+                const bool pressed = witness_->input().menuPressed[hand];
+                menuClicked = pressed && !witnessMenuPressed_[hand];
+                witnessMenuPressed_[hand] = pressed;
             }
+            if (menuClicked) toggleMenu(hand);
 
             getInfo.action = gripAction_;
             XrActionStateBoolean grip{XR_TYPE_ACTION_STATE_BOOLEAN};
@@ -6063,6 +6231,7 @@ class Viewer {
                     "xrGetActionStateBoolean(scene grip)");
             const bool wasGripPressed = gripPressed_[hand];
             gripPressed_[hand] = grip.isActive && grip.currentState;
+            if (witness_) gripPressed_[hand] = witness_->input().gripPressed[hand];
             gripClicked_[hand] = !wasGripPressed && gripPressed_[hand];
             hands_[hand].pressed = gripPressed_[hand];
 
@@ -6070,7 +6239,7 @@ class Viewer {
             XrActionStateBoolean trackpad{XR_TYPE_ACTION_STATE_BOOLEAN};
             checkXr(instance_, xrGetActionStateBoolean(session_, &getInfo, &trackpad),
                     "xrGetActionStateBoolean(trackpad click)");
-            const bool trackpadPressed = trackpad.isActive && trackpad.currentState;
+            const bool trackpadPressed = !witness_ && trackpad.isActive && trackpad.currentState;
             const bool wasTrackpadPressed = trackpadPressed_[hand];
             const bool trackpadClicked = trackpadPressed && !wasTrackpadPressed;
             const bool trackpadReleased = !trackpadPressed && wasTrackpadPressed;
@@ -6086,7 +6255,7 @@ class Viewer {
             checkXr(instance_, xrGetActionStateVector2f(
                 session_, &getInfo, &trackpadAxis),
                 "xrGetActionStateVector2f(trackpad axis)");
-            const bool touching = trackpadTouch.isActive && trackpadTouch.currentState &&
+            const bool touching = !witness_ && trackpadTouch.isActive && trackpadTouch.currentState &&
                                   trackpadAxis.isActive;
             const bool desktopActive = menuOpen_ && menuPage_ == MenuPage::desktop;
             if (touching && desktopActive) {
@@ -6329,6 +6498,27 @@ class Viewer {
         updateControllerGuides();
     }
 
+    void applyInitialScenePlacement(uint32_t viewCount) {
+        if (!initialScenePlacementRequested_ || viewCount == 0) return;
+        glm::vec3 headPosition{};
+        for (uint32_t i = 0; i < viewCount; ++i) {
+            headPosition += glm::vec3(
+                views_[i].pose.position.x,
+                views_[i].pose.position.y,
+                views_[i].pose.position.z);
+        }
+        headPosition /= static_cast<float>(viewCount);
+        const XrQuaternionf& orientation = views_[0].pose.orientation;
+        manipulator_.placeInView(
+            headPosition,
+            {orientation.w, orientation.x, orientation.y, orientation.z});
+        initialScenePlacementRequested_ = false;
+        updateControllerGuides();
+        std::cout << "NADOC VR initial scene placement: centered 1.30 m "
+                     "along the tracked HMD gaze at 2x presentation scale"
+                  << std::endl;
+    }
+
     bool renderView(uint32_t index, const XrView& view,
                     XrCompositionLayerProjectionView& layerView) {
         Swapchain& swapchain = swapchains_[index];
@@ -6358,6 +6548,9 @@ class Viewer {
         glScene_->render(
             viewProjection, manipulator_.transform(),
             desktopMenu ? std::vector<Vertex>{} : controllerGuides_);
+        if (referenceGrid_) {
+            glScene_->renderGuides(viewProjection, referenceGridGuides_);
+        }
         if (desktopMenu) {
             const auto bounds = menuPanelBounds();
             desktopSurface_.render(viewProjection, {{
@@ -6370,6 +6563,11 @@ class Viewer {
             // redraw tablet controls/border afterward so they remain actionable.
             glScene_->renderGuides(viewProjection, controllerGuides_);
         }
+        if (witness_) {
+            witnessSurface_.renderPanel(
+                viewProjection, witnessObserverPosition_, witnessObserverOrientation_);
+        }
+        presentSpectatorMirror(index, view, swapchain.width, swapchain.height);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glFlush();
 
@@ -6384,6 +6582,212 @@ class Viewer {
         layerView.subImage.imageRect.offset = {0, 0};
         layerView.subImage.imageRect.extent = {swapchain.width, swapchain.height};
         return true;
+    }
+
+    void updateSpectatorTelemetry(const XrView& view, bool submittedEye) {
+        ++mirrorFrameSequence_;
+        const glm::vec3 position(
+            view.pose.position.x, view.pose.position.y, view.pose.position.z);
+        const glm::quat orientation = glm::normalize(glm::quat(
+            view.pose.orientation.w, view.pose.orientation.x,
+            view.pose.orientation.y, view.pose.orientation.z));
+        const XrViewStateFlags validFlags = XR_VIEW_STATE_POSITION_VALID_BIT |
+                                            XR_VIEW_STATE_ORIENTATION_VALID_BIT;
+        const XrViewStateFlags trackedFlags = XR_VIEW_STATE_POSITION_TRACKED_BIT |
+                                              XR_VIEW_STATE_ORIENTATION_TRACKED_BIT;
+        const bool poseValid = (currentViewStateFlags_ & validFlags) == validFlags;
+        const bool poseTracked = (currentViewStateFlags_ & trackedFlags) == trackedFlags;
+        if (!mirrorSourceInitialized_ || submittedEye != lastMirrorSubmittedEye_) {
+            mirrorSourceInitialized_ = true;
+            lastMirrorSubmittedEye_ = submittedEye;
+            std::cout << "NADOC VR mirror source: "
+                      << (submittedEye
+                              ? "SUBMITTED EYE (runtime accepted HMD rendering)"
+                              : "SPECTATOR FALLBACK (runtime suppressed HMD rendering)")
+                      << std::endl;
+        }
+        if (!mirrorPoseInitialized_) {
+            mirrorPoseInitialized_ = true;
+            lastMirrorMotionPosition_ = position;
+            lastMirrorMotionOrientation_ = orientation;
+            lastMirrorPoseTracked_ = poseTracked;
+            std::cout << "NADOC VR mirror pose: "
+                      << (poseTracked ? "TRACKED" : "VALID BUT NOT TRACKED")
+                      << " XYZ=" << position.x << ',' << position.y << ',' << position.z
+                      << '\n';
+        } else {
+            const float positionDelta = glm::length(position - lastMirrorMotionPosition_);
+            const float orientationDot = glm::clamp(
+                std::abs(glm::dot(orientation, lastMirrorMotionOrientation_)),
+                0.0F, 1.0F);
+            const float angleDeltaDegrees = glm::degrees(2.0F * std::acos(orientationDot));
+            const bool moved = positionDelta >= 0.005F || angleDeltaDegrees >= 0.5F;
+            const bool trackingChanged = poseTracked != lastMirrorPoseTracked_;
+            if ((moved || trackingChanged) &&
+                mirrorFrameSequence_ >= lastMirrorMotionLogFrame_ + 15U) {
+                ++mirrorMotionSequence_;
+                lastMirrorMotionLogFrame_ = mirrorFrameSequence_;
+                lastMirrorMotionPosition_ = position;
+                lastMirrorMotionOrientation_ = orientation;
+                lastMirrorPoseTracked_ = poseTracked;
+                std::cout << "NADOC VR mirror motion M" << mirrorMotionSequence_
+                          << ": " << (poseTracked ? "TRACKED" : "NOT TRACKED")
+                          << " d=" << positionDelta << " m, a="
+                          << angleDeltaDegrees << " deg, XYZ="
+                          << position.x << ',' << position.y << ',' << position.z << '\n';
+            }
+        }
+        if (mirrorFrameSequence_ == 1U || mirrorFrameSequence_ % 15U == 0U) {
+            const glm::vec3 forward = orientation * glm::vec3(0.0F, 0.0F, -1.0F);
+            nadoc_vr::SpectatorMirrorTelemetry telemetry;
+            telemetry.frame = mirrorFrameSequence_;
+            telemetry.motion = mirrorMotionSequence_;
+            telemetry.poseValid = poseValid;
+            telemetry.poseTracked = poseTracked;
+            telemetry.submittedEye = submittedEye;
+            telemetry.x = position.x;
+            telemetry.y = position.y;
+            telemetry.z = position.z;
+            telemetry.yawDegrees = glm::degrees(std::atan2(forward.x, -forward.z));
+            telemetry.pitchDegrees = glm::degrees(std::asin(glm::clamp(
+                forward.y, -1.0F, 1.0F)));
+            const std::string title = nadoc_vr::spectatorMirrorTelemetryTitle(
+                mirrorEye_, referenceGrid_, telemetry);
+            glfwSetWindowTitle(window_, title.c_str());
+        }
+    }
+
+    void finishSpectatorPresentation(
+        const nadoc_vr::SpectatorMirrorViewport& viewport) {
+        const GLboolean scissorEnabled = glIsEnabled(GL_SCISSOR_TEST);
+        std::array<GLint, 4> previousScissor{};
+        std::array<GLfloat, 4> previousClearColor{};
+        glGetIntegerv(GL_SCISSOR_BOX, previousScissor.data());
+        glGetFloatv(GL_COLOR_CLEAR_VALUE, previousClearColor.data());
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(viewport.x + 12, viewport.y + 12, 18, 18);
+        if (nadoc_vr::spectatorMirrorHeartbeatHigh(mirrorFrameSequence_)) {
+            glClearColor(0.18F, 1.0F, 0.30F, 1.0F);
+        } else {
+            glClearColor(1.0F, 0.22F, 0.08F, 1.0F);
+        }
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(previousScissor[0], previousScissor[1],
+                  previousScissor[2], previousScissor[3]);
+        if (scissorEnabled != GL_TRUE) glDisable(GL_SCISSOR_TEST);
+        glClearColor(previousClearColor[0], previousClearColor[1],
+                     previousClearColor[2], previousClearColor[3]);
+        glfwSwapBuffers(window_);
+    }
+
+    void presentSpectatorMirror(
+        uint32_t viewIndex, const XrView& view,
+        int32_t sourceWidth, int32_t sourceHeight) {
+        const auto selected = nadoc_vr::spectatorMirrorViewIndex(
+            mirrorEye_, static_cast<uint32_t>(swapchains_.size()));
+        if (!selected || *selected != viewIndex) return;
+        updateSpectatorTelemetry(view, true);
+        int destinationWidth = 0;
+        int destinationHeight = 0;
+        glfwGetFramebufferSize(window_, &destinationWidth, &destinationHeight);
+        const auto viewport = nadoc_vr::fitSpectatorMirrorViewport(
+            sourceWidth, sourceHeight, destinationWidth, destinationHeight);
+        if (viewport.width <= 0 || viewport.height <= 0) return;
+
+        std::array<GLfloat, 4> previousClearColor{};
+        glGetFloatv(GL_COLOR_CLEAR_VALUE, previousClearColor.data());
+        glDisable(GL_SCISSOR_TEST);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer_);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        glClearColor(0.0F, 0.0F, 0.0F, 1.0F);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glBlitFramebuffer(
+            0, 0, sourceWidth, sourceHeight,
+            viewport.x, viewport.y,
+            viewport.x + viewport.width, viewport.y + viewport.height,
+            GL_COLOR_BUFFER_BIT, GL_LINEAR);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glClearColor(previousClearColor[0], previousClearColor[1],
+                     previousClearColor[2], previousClearColor[3]);
+        finishSpectatorPresentation(viewport);
+    }
+
+    void renderSpectatorFallback(uint32_t viewIndex, const XrView& view) {
+        const auto selected = nadoc_vr::spectatorMirrorViewIndex(
+            mirrorEye_, static_cast<uint32_t>(swapchains_.size()));
+        if (!selected || *selected != viewIndex) return;
+        int destinationWidth = 0;
+        int destinationHeight = 0;
+        glfwGetFramebufferSize(window_, &destinationWidth, &destinationHeight);
+        const Swapchain& source = swapchains_[viewIndex];
+        const auto viewport = nadoc_vr::fitSpectatorMirrorViewport(
+            source.width, source.height, destinationWidth, destinationHeight);
+        if (viewport.width <= 0 || viewport.height <= 0) return;
+
+        updateSpectatorTelemetry(view, false);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDisable(GL_SCISSOR_TEST);
+        glViewport(0, 0, destinationWidth, destinationHeight);
+        glClearColor(0.0F, 0.0F, 0.0F, 1.0F);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glViewport(viewport.x, viewport.y, viewport.width, viewport.height);
+        const glm::mat4 projection = projectionFromFov(
+            view.fov, kNearMeters, kFarMeters);
+        const glm::mat4 viewProjection = projection * viewFromPose(view.pose);
+        const bool desktopMenu = menuOpen_ && menuPage_ == MenuPage::desktop;
+        glScene_->render(
+            viewProjection, manipulator_.transform(),
+            desktopMenu ? std::vector<Vertex>{} : controllerGuides_);
+        if (referenceGrid_) {
+            glScene_->renderGuides(viewProjection, referenceGridGuides_);
+        }
+        if (desktopMenu) {
+            const auto bounds = menuPanelBounds();
+            desktopSurface_.render(viewProjection, {{
+                menuWorld(bounds.minimum.x, bounds.maximum.y, 0.004F),
+                menuWorld(bounds.minimum.x, bounds.minimum.y, 0.004F),
+                menuWorld(bounds.maximum.x, bounds.maximum.y, 0.004F),
+                menuWorld(bounds.maximum.x, bounds.minimum.y, 0.004F),
+            }});
+            glScene_->renderGuides(viewProjection, controllerGuides_);
+        }
+        if (witness_) {
+            witnessSurface_.renderPanel(
+                viewProjection, witnessObserverPosition_, witnessObserverOrientation_);
+        }
+        finishSpectatorPresentation(viewport);
+    }
+
+    void captureWitnessView() {
+        if (!witness_) return;
+        const auto& head = witness_->input().head;
+        const glm::mat4 headTransform = glm::translate(glm::mat4(1.0F), head.position)
+                                      * glm::toMat4(head.orientation);
+        const glm::mat4 projection = glm::perspective(
+            glm::radians(72.0F),
+            static_cast<float>(nadoc_vr::scrywrite::WitnessSurface::kWidth) /
+                nadoc_vr::scrywrite::WitnessSurface::kHeight,
+            kNearMeters, kFarMeters);
+        const glm::mat4 viewProjection = projection * glm::inverse(headTransform);
+        witnessSurface_.beginCapture();
+        const bool desktopMenu = menuOpen_ && menuPage_ == MenuPage::desktop;
+        glScene_->render(
+            viewProjection, manipulator_.transform(),
+            desktopMenu ? std::vector<Vertex>{} : controllerGuides_);
+        if (referenceGrid_) {
+            glScene_->renderGuides(viewProjection, referenceGridGuides_);
+        }
+        if (desktopMenu) {
+            const auto bounds = menuPanelBounds();
+            desktopSurface_.render(viewProjection, {{
+                menuWorld(bounds.minimum.x, bounds.maximum.y, 0.004F),
+                menuWorld(bounds.minimum.x, bounds.minimum.y, 0.004F),
+                menuWorld(bounds.maximum.x, bounds.maximum.y, 0.004F),
+                menuWorld(bounds.maximum.x, bounds.minimum.y, 0.004F),
+            }});
+            glScene_->renderGuides(viewProjection, controllerGuides_);
+        }
+        witnessSurface_.endCapture();
     }
 
     void renderFrame() {
@@ -6404,7 +6808,9 @@ class Viewer {
             reinterpret_cast<const XrCompositionLayerBaseHeader*>(&layer)};
         uint32_t layerCount = 0;
 
-        if (frameState.shouldRender) {
+        const bool spectatorRequested =
+            mirrorEye_ != nadoc_vr::SpectatorMirrorEye::off;
+        if (frameState.shouldRender || spectatorRequested) {
             XrViewLocateInfo locateInfo{XR_TYPE_VIEW_LOCATE_INFO};
             locateInfo.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
             locateInfo.displayTime = frameState.predictedDisplayTime;
@@ -6414,21 +6820,69 @@ class Viewer {
             checkXr(instance_, xrLocateViews(
                 session_, &locateInfo, &viewState, static_cast<uint32_t>(views_.size()),
                 &viewCount, views_.data()), "xrLocateViews");
+            currentViewStateFlags_ = viewState.viewStateFlags;
             const XrViewStateFlags valid = XR_VIEW_STATE_POSITION_VALID_BIT |
                                            XR_VIEW_STATE_ORIENTATION_VALID_BIT;
-            if ((viewState.viewStateFlags & valid) == valid && viewCount == views_.size()) {
-                applyPendingMenu(viewCount);
-                applyPendingRecenter(viewCount);
+            const bool completeViewSet = viewCount == views_.size();
+            const bool validViewSet =
+                completeViewSet && (viewState.viewStateFlags & valid) == valid;
+            if (completeViewSet) {
+                if (validViewSet) applyInitialScenePlacement(viewCount);
+                witnessObserverPosition_ = {};
+                for (uint32_t index = 0; index < viewCount; ++index) {
+                    witnessObserverPosition_ += glm::vec3(
+                        views_[index].pose.position.x,
+                        views_[index].pose.position.y,
+                        views_[index].pose.position.z);
+                }
+                witnessObserverPosition_ /= static_cast<float>(viewCount);
+                witnessObserverOrientation_ = glm::normalize(glm::quat(
+                    views_[0].pose.orientation.w, views_[0].pose.orientation.x,
+                    views_[0].pose.orientation.y, views_[0].pose.orientation.z));
                 const XrQuaternionf& head = views_[0].pose.orientation;
                 const glm::quat headOrientation(head.w, head.x, head.y, head.z);
                 const glm::vec3 keyDirection = headOrientation * glm::normalize(
                     glm::vec3(-0.577F, 0.577F, 0.577F));
-                glScene_->renderShadowMap(manipulator_.transform(), keyDirection);
-                for (uint32_t i = 0; i < viewCount; ++i) renderView(i, views_[i], layerViews[i]);
-                layer.space = space_;
-                layer.viewCount = viewCount;
-                layer.views = layerViews.data();
-                layerCount = 1;
+                if (frameState.shouldRender && validViewSet) {
+                    applyPendingMenu(viewCount);
+                    applyPendingRecenter(viewCount);
+                    if (witness_) {
+                        const glm::vec3 actorKeyDirection =
+                            witness_->input().head.orientation * glm::normalize(
+                                glm::vec3(-0.577F, 0.577F, 0.577F));
+                        glScene_->renderShadowMap(
+                            manipulator_.transform(), actorKeyDirection);
+                        captureWitnessView();
+                    }
+                    glScene_->renderShadowMap(manipulator_.transform(), keyDirection);
+                    for (uint32_t i = 0; i < viewCount; ++i) {
+                        renderView(i, views_[i], layerViews[i]);
+                    }
+                    layer.space = space_;
+                    layer.viewCount = viewCount;
+                    layer.views = layerViews.data();
+                    layerCount = 1;
+                } else if (spectatorRequested) {
+                    // Some runtimes stop requesting submitted frames when their
+                    // proximity sensor considers a propped-up HMD unworn. They
+                    // can still provide a live tracked eye pose. Draw that pose
+                    // straight to the desktop and label it as a fallback so this
+                    // is never confused with the actual submitted-eye image.
+                    if (witness_) {
+                        const glm::vec3 actorKeyDirection =
+                            witness_->input().head.orientation * glm::normalize(
+                                glm::vec3(-0.577F, 0.577F, 0.577F));
+                        glScene_->renderShadowMap(
+                            manipulator_.transform(), actorKeyDirection);
+                        captureWitnessView();
+                    }
+                    glScene_->renderShadowMap(manipulator_.transform(), keyDirection);
+                    const auto selected = nadoc_vr::spectatorMirrorViewIndex(
+                        mirrorEye_, viewCount);
+                    if (selected) {
+                        renderSpectatorFallback(*selected, views_[*selected]);
+                    }
+                }
             }
         }
 
@@ -6552,6 +7006,21 @@ class Viewer {
                      "trigger: Selection Volume snap/select; hold right trackpad: radial tools; "
                      "left trackpad: cycle selection level; "
                      "menu: options; Escape: exit.\n";
+        if (mirrorEye_ != nadoc_vr::SpectatorMirrorEye::off) {
+            std::cout << "NADOC VR desktop spectator: physical HMD "
+                      << nadoc_vr::spectatorMirrorEyeName(mirrorEye_)
+                      << " eye; submitted-eye copy when accepted, labeled live-pose "
+                         "fallback when suppressed. Closing the mirror window ends VR.\n";
+        }
+        if (referenceGrid_) {
+            std::cout << "NADOC VR room grid: 5 m cage centered on LOCAL origin; "
+                         "+X red, -X cyan, +Y green, -Y magenta, +Z blue, -Z yellow.\n";
+        }
+        if (witness_) {
+            std::cout << "ScryWrite Witness controls: physical left menu pauses/resumes; "
+                         "physical right menu single-steps while paused. Scripted input "
+                         "cannot publish design events.\n";
+        }
         while (!exitLoop_) {
             glfwPollEvents();
             pollXrEvents();
@@ -6595,6 +7064,9 @@ class Viewer {
     std::string desktopActiveJobId_;
     std::string desktopRepresentation_;
     std::string desktopColoring_;
+    nadoc_vr::SpectatorMirrorEye mirrorEye_ = nadoc_vr::SpectatorMirrorEye::off;
+    bool referenceGrid_ = false;
+    bool initialScenePlacementRequested_ = false;
     std::vector<nadoc_vr::JobSnapshotRow> jobs_;
     glm::vec3 normalizationCenter_{};
     float normalizationScale_ = 1.0F;
@@ -6620,6 +7092,16 @@ class Viewer {
     uint64_t transformSequence_ = 0;
     glm::mat4 lastToolTransform_{1.0F};
     uint64_t readySequence_ = 0;
+    uint64_t mirrorFrameSequence_ = 0;
+    uint64_t mirrorMotionSequence_ = 0;
+    uint64_t lastMirrorMotionLogFrame_ = 0;
+    XrViewStateFlags currentViewStateFlags_ = 0;
+    glm::vec3 lastMirrorMotionPosition_{};
+    glm::quat lastMirrorMotionOrientation_{1.0F, 0.0F, 0.0F, 0.0F};
+    bool mirrorPoseInitialized_ = false;
+    bool lastMirrorPoseTracked_ = false;
+    bool mirrorSourceInitialized_ = false;
+    bool lastMirrorSubmittedEye_ = false;
     double firstFrameAtMilliseconds_ = 0.0;
     double firstFrameCpuMilliseconds_ = 0.0;
     double displayPeriodMilliseconds_ = 0.0;
@@ -6686,6 +7168,15 @@ class Viewer {
     std::vector<std::string> committedSelectionOwnerTokens_;
     nadoc_vr::SceneManipulator manipulator_;
     std::vector<Vertex> controllerGuides_;
+    std::vector<Vertex> referenceGridGuides_;
+    std::optional<nadoc_vr::scrywrite::WitnessReplay> witness_;
+    nadoc_vr::scrywrite::WitnessSurface witnessSurface_;
+    nadoc_vr::MenuPlacement witnessStatusPlacement_;
+    std::array<bool, 2> witnessMenuPressed_{};
+    glm::vec3 witnessObserverPosition_{};
+    glm::quat witnessObserverOrientation_{1.0F, 0.0F, 0.0F, 0.0F};
+    bool witnessFailureReported_ = false;
+    bool witnessCompletionReported_ = false;
     std::optional<nadoc_vr::PickHit> sceneHover_;
     nadoc_vr::RadialToolMenu radialToolMenu_;
     bool latticeOpen_ = false;
@@ -6725,6 +7216,18 @@ class Viewer {
 }  // namespace
 
 int main(int argc, char** argv) {
+    if (argc == 3 && std::string(argv[1]) == "--validate-witness") {
+        try {
+            std::ifstream input(argv[2]);
+            if (!input) throw std::runtime_error("could not open witness script");
+            (void)nadoc_vr::scrywrite::WitnessReplay::load(input);
+            std::cout << "ScryWrite witness script is valid\n";
+            return 0;
+        } catch (const std::exception& error) {
+            std::cerr << "ScryWrite witness error: " << error.what() << '\n';
+            return 1;
+        }
+    }
     if (argc == 3 && std::string(argv[1]) == "--validate") {
         try {
             loadScene(argv[2]);
@@ -6736,7 +7239,7 @@ int main(int argc, char** argv) {
         }
     }
     if (argc < 2) {
-        std::cerr << "Usage: nadoc-vr-viewer [--validate] <scene.nadocvr> "
+        std::cerr << "Usage: nadoc-vr-viewer [--validate|--validate-witness] <file> "
                      "[--events <event.json>] [--feedback <feedback.txt>] "
                      "[--tool-feedback <tool-feedback.txt>] "
                      "[--plane-feedback <plane-feedback.txt>] "
@@ -6745,7 +7248,11 @@ int main(int argc, char** argv) {
                      "[--jobs <jobs.txt>] "
                      "[--visualization <visualization.txt>] "
                      "[--selection-level <level>] "
-                     "[--selected-owner <token>]... [--selected-kind <kind>]\n";
+                     "[--selected-owner <token>]... [--selected-kind <kind>] "
+                     "[--mirror-eye <off|left|right>] "
+                     "[--reference-grid <off|room>] "
+                     "[--place-scene-in-view <off|on>] "
+                     "[--scrywrite-witness <script.scry>]\n";
         return 2;
     }
     std::string eventPath;
@@ -6756,6 +7263,10 @@ int main(int argc, char** argv) {
     std::string toolExecutionFeedbackPath;
     std::string jobPath;
     std::string visualizationPath;
+    std::string witnessPath;
+    nadoc_vr::SpectatorMirrorEye mirrorEye = nadoc_vr::SpectatorMirrorEye::off;
+    bool referenceGrid = false;
+    bool placeSceneInView = false;
     std::string selectionLevel = "default";
     std::string selectedSelectionKind = "none";
     std::vector<std::string> selectedOwnerTokens;
@@ -6778,6 +7289,31 @@ int main(int argc, char** argv) {
         }
         else if (option == "--jobs") jobPath = argv[index + 1];
         else if (option == "--visualization") visualizationPath = argv[index + 1];
+        else if (option == "--scrywrite-witness") witnessPath = argv[index + 1];
+        else if (option == "--mirror-eye") {
+            const auto parsed = nadoc_vr::parseSpectatorMirrorEye(argv[index + 1]);
+            if (!parsed) {
+                std::cerr << "NADOC VR error: mirror eye must be off, left, or right\n";
+                return 2;
+            }
+            mirrorEye = *parsed;
+        }
+        else if (option == "--reference-grid") {
+            const std::string mode(argv[index + 1]);
+            if (mode != "off" && mode != "room") {
+                std::cerr << "NADOC VR error: reference grid must be off or room\n";
+                return 2;
+            }
+            referenceGrid = mode == "room";
+        }
+        else if (option == "--place-scene-in-view") {
+            const std::string mode(argv[index + 1]);
+            if (mode != "off" && mode != "on") {
+                std::cerr << "NADOC VR error: place scene in view must be off or on\n";
+                return 2;
+            }
+            placeSceneInView = mode == "on";
+        }
         else if (option == "--selection-level") selectionLevel = argv[index + 1];
         else if (option == "--selected-owner") {
             const std::string token(argv[index + 1]);
@@ -6811,6 +7347,11 @@ int main(int argc, char** argv) {
         std::cerr << "NADOC VR error: invalid selected owner kind\n";
         return 2;
     }
+    if (!witnessPath.empty() && !eventPath.empty()) {
+        std::cerr << "NADOC VR error: ScryWrite Witness Mode refuses an event output "
+                     "to prevent scripted design mutation\n";
+        return 2;
+    }
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
     try {
@@ -6820,7 +7361,8 @@ int main(int argc, char** argv) {
             jobPath,
             nadoc_vr::loadJobSnapshot(jobPath), visualizationPath,
             nadoc_vr::loadVisualizationSnapshot(visualizationPath), selectionLevel,
-            std::move(selectedOwnerTokens), std::move(selectedSelectionKind));
+            std::move(selectedOwnerTokens), std::move(selectedSelectionKind),
+            witnessPath, mirrorEye, referenceGrid, placeSceneInView);
         return viewer.run();
     } catch (const std::exception& error) {
         std::cerr << "NADOC VR error: " << error.what() << '\n';

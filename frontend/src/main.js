@@ -6010,6 +6010,8 @@ async function main() {
         measured_positioning: isNewPositioningOn(),
         assembly_active: store.getState().assemblyActive,
         show_periodic_seam_arcs: store.getState().showPeriodicSeamArcs === true,
+        mirror_eye: 'left',
+        reference_grid: 'off',
         selection_level: selectionManager.getSelectionLevel?.() ?? 'default',
         selected_owner_tokens: selectionManager.getVRInitialSelectionOwnerTokens?.() ?? [],
         selected_selection_kind: selectionManager.getVRInitialSelectionKind?.() ?? 'none',

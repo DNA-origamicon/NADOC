@@ -400,7 +400,7 @@ export function initVRSession({
     }
     _setNativeActive(true)
     _scheduleNativePoll()
-    showToast('VR started. Trigger: grab · right trackpad: select · both triggers: resize · menu: options.')
+    showToast('VR started. The desktop window mirrors the physical HMD left eye. Trigger: grab · right trackpad: select · both triggers: resize · menu: options.')
     return true
   }
 

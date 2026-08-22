@@ -1,0 +1,34 @@
+SCRYWRITE_WITNESS 1
+# Give the observer time to settle the headset before the ghost begins.
+head 0 1.60 0 1 0 0 0
+pose right 0.28 1.24 -0.34 1 0 0 0
+pose left -0.24 1.28 -0.24 1 0 0 0
+step 270
+
+# Open the real controller tablet and verify the expected page exists.
+button right menu down
+step 2
+button right menu up
+step 90
+expect menu options
+
+# Aim the ghost left controller using the semantic menu label, then click it.
+aim_menu left tools
+step 90
+expect hover tools
+button left trigger down
+step 2
+button left trigger up
+step 90
+expect menu tools
+
+# Demonstrate exact live-menu targeting on Move/Rotate.
+aim_menu left move_rotate
+step 90
+expect hover move_rotate
+button left trigger down
+step 2
+button left trigger up
+step 180
+expect tool move_rotate
+expect status select_target

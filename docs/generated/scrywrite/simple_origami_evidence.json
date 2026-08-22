@@ -1,0 +1,11 @@
+{
+  "schema": "scrywrite.evidence.v1",
+  "scene": "native/vr_viewer/examples/scrywrite_simple_origami.nadocvr",
+  "geometry": {"points": 4, "segments": 12, "visible_primitives": 16},
+  "headset_yaw_degrees": 0.000000,
+  "headset_pitch_degrees": -26.564701,
+  "origami_long_axis_yaw_degrees": 67.530724,
+  "relative_axis_yaw_degrees": 67.530724,
+  "gaze_to_target_error_degrees": 0.000000,
+  "target_distance_meters": 1.453444
+}

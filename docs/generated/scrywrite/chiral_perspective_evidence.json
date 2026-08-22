@@ -1,0 +1,12 @@
+{
+  "schema": "scrywrite.evidence.v2",
+  "scene": "native/vr_viewer/examples/scrywrite_chiral_perspective.nadocvr",
+  "geometry": {"points": 4, "segments": 12, "total_primitives": 16, "in_front_primitives": 16, "in_frame_primitives": 16, "fully_in_frame_primitives": 16, "clipped_primitives": 0, "readable_primitives": 16, "in_frame_fraction": 1.000000, "fully_in_frame_fraction": 1.000000, "readable_fraction": 1.000000, "projected_bounds_fraction": 0.024265},
+  "scripted_actor_yaw_degrees": 0.000000,
+  "scripted_actor_pitch_degrees": 0.000000,
+  "structure_long_axis_yaw_degrees": 150.141632,
+  "relative_axis_yaw_degrees": -29.858368,
+  "gaze_to_target_error_degrees": 0.000000,
+  "target_distance_meters": 1.300000,
+  "validation": {"status": "passed", "failures": []}
+}
