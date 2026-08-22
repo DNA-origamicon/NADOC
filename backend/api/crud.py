@@ -5221,7 +5221,14 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
             params=params,
             fn=lambda _d: updated,
         )
-        return _design_response(updated, report)
+        payload = _design_response(updated, report)
+        # A label is display metadata only.  In particular, it cannot move a
+        # nucleotide or alter an axis.  Advertising that fact prevents the 3D
+        # client from following this PATCH with a full /design/geometry fetch
+        # and scene rebuild (tens of seconds on VoltronCoreArm).
+        if not sequence_was_set and body.rotation is None:
+            payload["geometry_unchanged"] = True
+        return payload
 
     # Append rotation to feature log when rotation was changed.
     if body.rotation is not None:

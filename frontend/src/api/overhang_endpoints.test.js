@@ -68,4 +68,29 @@ describe('overhang sequence endpoints', () => {
     ])
     expect(calls.some(url => url.includes('/design/geometry'))).toBe(false)
   })
+
+  it('does not fetch or replace geometry for a label-only edit', async () => {
+    const geometry = store.getState().currentGeometry
+    const axes = store.getState().currentHelixAxes
+    const calls = []
+    global.fetch = vi.fn(async (url) => {
+      calls.push(url)
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: async () => ({
+          design: { id: 'after', helices: [], strands: [], overhangs: [{ id: 'oh1', label: 'Handle' }] },
+          validation: { loop_strand_ids: [] },
+          geometry_unchanged: true,
+        }),
+      }
+    })
+
+    await patchOverhang('oh1', { label: 'Handle' })
+
+    expect(calls).toEqual(['/api/design/overhang/oh1'])
+    expect(store.getState().currentGeometry).toBe(geometry)
+    expect(store.getState().currentHelixAxes).toBe(axes)
+  })
 })

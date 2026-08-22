@@ -67,6 +67,26 @@ describe('initCrossTabSync', () => {
       .toBeLessThan(deps.api.getGeometry.mock.invocationCallOrder[0])
   })
 
+  it('skips geometry refresh when the sibling mutation is metadata-only', async () => {
+    const { deps, message } = harness()
+    await message({ type: 'design-changed', geometry_unchanged: true, source: 'editor-2' })
+    expect(deps.api.getDesign).toHaveBeenCalledWith({ metadataOnly: true })
+    expect(deps.api.getGeometry).not.toHaveBeenCalled()
+    expect(deps.syncBadge.syncLog.mock.calls[0][1]).toBe('BC-SYNC-START')
+    expect(deps.syncBadge.syncLog.mock.calls.at(-1)[1]).toBe('BC-SYNC-END')
+  })
+
+  it('fetches only changed helices for a reference-classification mutation', async () => {
+    const { deps, message } = harness()
+    await message({
+      type: 'design-changed', source: 'editor-2', metadata_only: true,
+      changed_helix_ids: ['h7', 'h9'],
+    })
+    expect(deps.api.getDesign).toHaveBeenCalledWith({ metadataOnly: true })
+    expect(deps.api.getGeometry).toHaveBeenCalledWith(['h7', 'h9'])
+    expect(deps.syncBadge.syncLog.mock.calls[0][2]).toContain('partial-geometry(2)')
+  })
+
   it('owns editor discovery and removes departed editors', async () => {
     const { message } = harness()
     await message({

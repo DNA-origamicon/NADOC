@@ -37,7 +37,7 @@ function _pushSyncLog(entry) {
 
 /** Apply a design response to the editor store, dropping it if a newer response
  *  has already been applied (out-of-order/stale → would clobber). Returns json. */
-function _applyDesignResponse(json, { emit = false, source = '' } = {}) {
+function _applyDesignResponse(json, { emit = false, source = '', crossTabMetadataOnly = false } = {}) {
   if (!json?.design) return json
   const rev = (typeof json.revision === 'number') ? json.revision : null
   if (rev !== null && rev < _lastAppliedRev) {
@@ -48,7 +48,13 @@ function _applyDesignResponse(json, { emit = false, source = '' } = {}) {
   }
   if (rev !== null) _lastAppliedRev = rev
   editorStore.setState({ design: json.design })
-  if (emit) nadocBroadcast.emit('design-changed')
+  if (emit) {
+    nadocBroadcast.emit('design-changed', {
+      geometry_unchanged: json.geometry_unchanged === true,
+      changed_helix_ids: json.partial_geometry ? (json.changed_helix_ids ?? null) : null,
+      metadata_only: crossTabMetadataOnly,
+    })
+  }
   _pushSyncLog({ decision: 'APPLY', source, rev, lastRev: _lastAppliedRev,
                  strands: json.design.strands?.length, flog: json.design.feature_log?.length })
   return json
@@ -138,9 +144,9 @@ export async function fetchDesign() {
  * Perform a mutation, update the editor store, and notify other tabs.
  * `mutationFn` receives `_request` and should return the response JSON.
  */
-export async function mutate(mutationFn) {
+export async function mutate(mutationFn, { crossTabMetadataOnly = false } = {}) {
   const json = await mutationFn(_request)
-  _applyDesignResponse(json, { emit: true, source: 'mutate' })
+  _applyDesignResponse(json, { emit: true, source: 'mutate', crossTabMetadataOnly })
   _absorbAuxFields(json)
   return json
 }
@@ -437,8 +443,12 @@ export async function patchStrandsColor(strandIds, color) {
  * excluded from exports; still visible + editable). Atomic, one undo step.
  */
 export async function patchStrandsReference(strandIds, isReference) {
-  return mutate(req =>
-    req('PATCH', '/design/strands/reference', { strand_ids: strandIds, is_reference: isReference })
+  return mutate(
+    req => req('PATCH', '/design/strands/reference', {
+      strand_ids: strandIds,
+      is_reference: isReference,
+    }),
+    { crossTabMetadataOnly: true },
   )
 }
 

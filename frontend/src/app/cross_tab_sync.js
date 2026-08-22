@@ -129,12 +129,26 @@ export function initCrossTabSync({
       if (!broadcast.isSameDoc(data)) return
       lifecycleSync.markSameDocActivity()
       if (store.getState().assemblyActive) return
+      const geometryUnchanged = data.geometry_unchanged === true
+      const changedHelixIds = Array.isArray(data.changed_helix_ids)
+        ? data.changed_helix_ids.filter(Boolean)
+        : []
+      const metadataOnly = geometryUnchanged || data.metadata_only === true
+      const startedAt = performance.now()
+      const mode = geometryUnchanged
+        ? 'design-only'
+        : changedHelixIds.length ? `design+partial-geometry(${changedHelixIds.length})` : 'design+geometry'
+      syncBadge.syncLog('info', 'BC-SYNC-START', `${mode} source=${source?.slice(0, 8) ?? '?'}`)
+      console.info(`[cross-tab-sync] start ${mode}`, { source })
       lifecycleSync.setReloadingFromSSE(true)
       try {
-        await api.getDesign()
-        await api.getGeometry()
+        await api.getDesign({ metadataOnly })
+        if (!geometryUnchanged) await api.getGeometry(changedHelixIds.length ? changedHelixIds : null)
       } finally {
         lifecycleSync.setReloadingFromSSE(false)
+        const elapsedMs = Math.round(performance.now() - startedAt)
+        syncBadge.syncLog('info', 'BC-SYNC-END', `${mode} ${elapsedMs}ms`)
+        console.info(`[cross-tab-sync] end ${mode} ${elapsedMs}ms`, { source })
       }
     }
     if (type === 'selection-changed') {

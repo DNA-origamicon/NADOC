@@ -29,7 +29,9 @@ export async function patchOverhang(overhangId, { sequence, label, rotation, def
   // Connection setup always caps the sequence to the live backing-domain length
   // before setting deferReassign.  It therefore changes bases only; the atomic
   // connection-version Apply that follows performs the one required geometry sync.
-  return _syncFromDesignResponse(json, { skipGeometry: !!deferReassign })
+  return _syncFromDesignResponse(json, {
+    skipGeometry: !!deferReassign || json?.geometry_unchanged === true,
+  })
 }
 
 export async function patchOverhangRotationsBatch(ops) {

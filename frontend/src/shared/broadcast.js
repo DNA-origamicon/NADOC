@@ -7,7 +7,9 @@
  * backend (which is the single source of truth).
  *
  * Message format:
- *   { type: "design-changed", source: <tab-uuid>, version: <optional int> }
+ *   { type: "design-changed", source: <tab-uuid>, version: <optional int>,
+ *     geometry_unchanged: <optional bool>, changed_helix_ids: <optional string[]>,
+ *     metadata_only: <optional bool> }
  *
  * The `source` field is a UUID generated once per page load.  Recipients
  * ignore messages where source === ownId to prevent echo loops.

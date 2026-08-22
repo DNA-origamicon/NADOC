@@ -17,9 +17,21 @@ import { nadocBroadcast } from '../shared/broadcast.js'
 // other browser tabs re-fetch, AND in-PAGE (window event) so the oxDNA/MD job panels
 // re-evaluate their out-of-date markers immediately — incl. a feature-log seek, which
 // is how a stale job is brought back in sync (the panels' poll is paused off-tab).
-function _signalDesignChanged() {
-  nadocBroadcast.emit('design-changed')
-  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('nadoc:design-changed'))
+function _signalDesignChanged({
+  geometryUnchanged = false,
+  changedHelixIds = null,
+  metadataOnly = false,
+} = {}) {
+  nadocBroadcast.emit('design-changed', {
+    geometry_unchanged: geometryUnchanged,
+    changed_helix_ids: changedHelixIds,
+    metadata_only: metadataOnly,
+  })
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nadoc:design-changed', {
+      detail: { geometry_unchanged: geometryUnchanged },
+    }))
+  }
 }
 import { showToast } from '../ui/toast.js'
 import { showOpProgress, hideOpProgress } from '../ui/op_progress.js'
@@ -507,7 +519,11 @@ export function _mergeFeatureLogPayloads(incoming, previous) {
   return incoming
 }
 
-export async function _syncFromDesignResponse(json, { skipGeometry = false, transient = false } = {}) {
+export async function _syncFromDesignResponse(json, {
+  skipGeometry = false,
+  transient = false,
+  crossTabMetadataOnly = false,
+} = {}) {
   if (!json) return null
   if (_isStaleDesignResponse(json)) return json   // superseded by a newer response → skip (rapid-edit race)
   if (json.feature_log_payloads_partial && json.design) {
@@ -576,7 +592,10 @@ export async function _syncFromDesignResponse(json, { skipGeometry = false, tran
     if (json.design)     minimalUpdates.currentDesign     = json.design
     if (json.validation) minimalUpdates.validationReport  = json.validation
     store.setState(minimalUpdates)
-    if (json.design) _signalDesignChanged()
+    if (json.design) _signalDesignChanged({
+      geometryUnchanged: true,
+      metadataOnly: crossTabMetadataOnly,
+    })
     if (json.design) persistDesign()
     _designSyncTransient = false
     return json
@@ -719,7 +738,11 @@ export async function _syncFromDesignResponse(json, { skipGeometry = false, tran
     }
   }
   // Notify other tabs (cadnano editor, second 3D windows) that the design changed.
-  if (json.design) _signalDesignChanged()
+  if (json.design) _signalDesignChanged({
+    geometryUnchanged: skipGeometry,
+    changedHelixIds: json.partial_geometry ? (json.changed_helix_ids ?? null) : null,
+    metadataOnly: crossTabMetadataOnly,
+  })
   // Persist design to localStorage for session recovery on refresh/restart.
   if (json.design) persistDesign()
   if (json.design) _clearStaleSelections()
@@ -842,9 +865,23 @@ export function _syncFromAssemblyResponse(json) {
 
 // ── Design ────────────────────────────────────────────────────────────────────
 
-export async function getDesign() {
+export async function getDesign({ metadataOnly = false } = {}) {
   const json = await _request('GET', '/design')
   if (!json) return null
+  if (metadataOnly) {
+    // A sibling tab told us its mutation cannot affect geometry/topology-derived
+    // renderer state (for example, an overhang label rename).  Keep the existing
+    // loop/highlight/color references intact: replacing them with equivalent new
+    // arrays/Sets would defeat design_renderer's visual-only fast path and rebuild
+    // the whole VoltronCoreArm scene.
+    store.setState({
+      currentDesign: json.design,
+      validationReport: json.validation,
+    })
+    _clearStaleSelections()
+    persistDesign()
+    return json
+  }
   const updates = {
     currentDesign:    json.design,
     validationReport: json.validation,
@@ -2156,7 +2193,13 @@ export async function patchStrandsColor(strandIds, color) {
 export async function patchStrandsReference(strandIds, isReference) {
   const json = await _request('PATCH', '/design/strands/reference',
     { strand_ids: strandIds, is_reference: isReference })
-  return _syncFromDesignResponse(json, { skipGeometry: json?.geometry_unchanged === true })
+  return _syncFromDesignResponse(json, {
+    skipGeometry: json?.geometry_unchanged === true,
+    // is_reference and the possible cluster-membership pruning are handled by
+    // in-place renderer classification/pose updates. Preserve sibling tabs'
+    // loop/color references so they do not rebuild before partial geometry lands.
+    crossTabMetadataOnly: true,
+  })
 }
 
 /**
