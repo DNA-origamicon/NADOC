@@ -2541,6 +2541,8 @@ export const startOxdnaJob       = (id)          => _oxdnaJSON('POST', `/oxdna/j
 export const appendOxdnaProduction = (id, body)  => _oxdnaJSON('POST', `/oxdna/jobs/${id}/production`, body)
 export const appendOxdnaField    = (id, body)    => _oxdnaJSON('POST', `/oxdna/jobs/${id}/field`, body)
 export const appendOxdnaRun      = (id, body)    => _oxdnaJSON('POST', `/oxdna/jobs/${id}/run`, body)
+export const startOxdnaSurfaceDeposition = (id, body) =>
+  _oxdnaJSON('POST', `/oxdna/jobs/${id}/surface-deposition`, body)
 export const previewOxdnaFieldAnchors = (id, body) => _oxdnaJSON('POST', `/oxdna/jobs/${id}/field/anchor-preview`, body)
 export const stopOxdnaJob        = (id)          => _oxdnaJSON('POST', `/oxdna/jobs/${id}/stop`)
 export const deleteOxdnaJob      = (id)          => _oxdnaJSON('DELETE', `/oxdna/jobs/${id}`)

@@ -210,6 +210,37 @@ the "oxDNA missing" warning should be gone.
 
 ---
 
+## Surface deposition
+
+Surface deposition is available from **Dynamics → Anchors** when the hard surface is
+enabled. Structure anchors are fixed traps used during ordinary force experiments;
+surface anchors are a separate designation used to bring selected nucleotides into
+contact with the hard plane.
+
+The deposition run is staged:
+
+1. A gentle approach starts the structure moving toward the plane.
+2. The full approach applies a normal attraction to surface anchors. If they do not
+   arrive together, NADOC automatically continues in short adaptive windows: anchors
+   already within the capture gap receive a soft normal-only restraint, while only the
+   remaining anchors continue to feel the ramped attraction.
+3. Settle replaces attraction with soft normal-only restraints at the plane.
+4. Equilibration retains those restraints while the anchors remain free to translate
+   within the plane.
+
+The hard-floor repulsion excludes the designated surface-anchor beads, preventing it
+from competing with their attraction. Contact is gated before settle; a run fails
+clearly if the configured window/force limits are exhausted. The defaults use a
+1.0 nm capture gap, a 0.75 nm settle gate, 50,000-step adaptive windows, a 20 pN
+force ceiling, and surface-restraint stiffness 1.0 oxDNA units. These parameters are
+available through the surface-deposition API for unusually large or compliant designs.
+
+After obtaining a good deposited frame, surface anchors can be copied into Structure
+Anchors before a subsequent electric-field run. Structure anchors then hold those same
+elements fixed; the surface deposition designation remains independently editable.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Cause / fix |
@@ -223,4 +254,6 @@ the "oxDNA missing" warning should be gone.
 | Protein job fails / "DNANM not available" | The mainline binary doesn't support proteins. Build the fork (`scripts/build-anm-oxdna.sh`) and set `$OXDNA_ANM_BIN`. |
 | `scripts/build-anm-oxdna.sh`: "patch does not apply" | The upstream checkout drifted from the shipped patch. Inspect `scripts/anm-oxdna-cuda13.patch`. |
 | Health check shows no H-bond count | `DNAnalysis` not found. It builds with `make … DNAnalysis`; ensure it sits next to the oxDNA binary, or set `$DNANALYSIS_BIN`. |
+| Surface deposition never reaches settle | Inspect the reported remaining-anchor count and maximum gap. The runner automatically captures arrivals and ramps the remaining anchors up to the configured ceiling; increase the window count or force ceiling only if the structure remains healthy. |
+| Deposited anchors stretch nearby backbone bonds | Use the surface-specific normal restraint (default stiffness `1.0`), not the generic immobile structure-anchor stiffness. Restart settle from the last healthy approach checkpoint if an older run used stiff traps. |
 | Override ignored | `$OXDNA_BIN` must point at an **executable** file (or PATH-resolvable name). A bad path is silently skipped and resolution falls through. |

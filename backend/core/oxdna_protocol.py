@@ -493,6 +493,55 @@ def build_run_stage(
     )
 
 
+def build_surface_deposition_stages(
+    *,
+    backend: str = "CUDA",
+    device: str = "0",
+    salt_concentration: float = 0.5,
+    approach_steps: int = 1_000_000,
+    settle_steps: int = 500_000,
+    equil_steps: int = 250_000,
+    steps_per_frame: int = DEFAULT_STEPS_PER_FRAME,
+) -> list[OxdnaStageSpec]:
+    """Safe surface deposition: gentle approach, contact restraint, then equilibration."""
+    common = dict(
+        sim_type="MD", backend=backend, device=device,
+        salt_concentration=salt_concentration, external_forces=True,
+        absolute_forces=True, dt=0.002, max_backbone_force=5.0,
+        max_backbone_force_far=10.0, min_bp_retained=0.0,
+        print_conf_interval_override=steps_per_frame,
+    )
+    gentle_steps = max(1_000, approach_steps // 4)
+    full_steps = max(1_000, approach_steps - gentle_steps)
+    return [
+        OxdnaStageSpec(
+            name="1_surface_gentle", kind="deposition_gentle",
+            steps=gentle_steps, forces_file="deposition_gentle_forces.txt",
+            forces_meta={"surface_deposition": "gentle"}, **common,
+        ),
+        OxdnaStageSpec(
+            name="2_surface_approach", kind="deposition_approach",
+            steps=full_steps, forces_file="deposition_approach_forces.txt",
+            forces_meta={"surface_deposition": "approach"}, **common,
+        ),
+        OxdnaStageSpec(
+            name="3_surface_settle", kind="deposition_settle",
+            steps=settle_steps, forces_file="deposition_settle_forces.txt",
+            forces_meta={
+                "surface_deposition": "settle",
+                "materialize_contact_traps": True,
+                "anchor_stiff": 1.0,
+            },
+            **common,
+        ),
+        OxdnaStageSpec(
+            name="4_surface_equil", kind="deposition_equil",
+            steps=equil_steps, forces_file="deposition_settle_forces.txt",
+            forces_meta={"surface_deposition": "equil"}, **common,
+        ),
+    ]
+
+
 def expected_energy_lines(spec: OxdnaStageSpec) -> int:
     """How many energy.dat lines a completed stage should produce (~progress denom)."""
     print_energy_every = max(1, spec.steps // 100)

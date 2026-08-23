@@ -401,6 +401,7 @@ export function runConfigForJob(job) {
     surface:   rc.surface ?? null,
     surfaceStrands: rc.surface_strands ?? null,
     anchors:   rc.anchors ?? [],
+    surfaceAnchors: rc.surface_anchors ?? [],
     prodSteps: rc.steps ?? stepOf('production') ?? null,
   }
 }
@@ -494,6 +495,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   const statusEl      = document.getElementById('oxdna-jobs-status')
   const runBtn        = document.getElementById('oxdna-jobs-run-btn')
   const prodBtn       = document.getElementById('oxdna-jobs-prod-btn')
+  const depositionBtn = document.getElementById('oxdna-surface-deposition-run')
   const prodStepsInput = document.getElementById('oxdna-jobs-prod-steps')
   const prodSpfInput   = document.getElementById('oxdna-jobs-prod-steps-per-frame')
   const prodFramesHint = document.getElementById('oxdna-jobs-prod-frames-hint')
@@ -1858,6 +1860,15 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (prodActive) _setBtnSpinner(prodBtn, true, prodLabel, 'Running…')
       else { prodBtn.dataset.spinning = '0'; prodBtn.textContent = prodLabel }  // repaint idle label directly
     }
+    if (depositionBtn) {
+      const el = getRunElements?.() || {}
+      const enabled = prodReady && !!el.surface?.enabled && !!el.surfaceAnchors?.length
+      depositionBtn.disabled = !enabled
+      depositionBtn.style.cursor = enabled ? 'pointer' : 'not-allowed'
+      depositionBtn.style.background = enabled ? '#1a4a1a' : '#122117'
+      depositionBtn.style.borderColor = enabled ? '#3fb950' : '#30363d'
+      depositionBtn.style.color = enabled ? '#3fb950' : '#484f58'
+    }
     _updateAutorefineButton()   // gate by lattice + availability + in-flight autorefine
 
     if (prodBtn) {
@@ -2089,6 +2100,39 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     } else {
       _setProdStatus(api.lastErrorMessage?.() || 'Failed to start run (see console)', _C.err)
       prodBtn.disabled = false
+    }
+  })
+
+  depositionBtn?.addEventListener('click', async () => {
+    if (!_selectedId || depositionBtn.disabled) return
+    if (!(await _ensureJobCurrent('a surface deposition run'))) return
+    if (!(await confirmNoConcurrentJob({
+      excludeJobId: _selectedId,
+      usesGpu: (_selectedJob()?.backend || 'CUDA') === 'CUDA',
+    }))) return
+    const el = getRunElements?.() || {}
+    if (!el.surface?.enabled || !el.surfaceAnchors?.length) return
+    oxdnaLive?.stop()
+    depositionBtn.disabled = true
+    depositionBtn.textContent = 'Starting deposition…'
+    const r = await api.startOxdnaSurfaceDeposition(_selectedId, {
+      surface: {
+        dir: el.surface.dir,
+        offset_nm: el.surface.offsetNm,
+        position_nm: el.surface.positionNm,
+        stiff: el.surface.stiff,
+      },
+      surface_anchors: el.surfaceAnchors,
+      steps_per_frame: _stepsPerFrame(),
+    })
+    depositionBtn.textContent = 'Run surface deposition'
+    if (r?.job_id) {
+      showToast('Surface deposition started', 'ok')
+      await _fetchJobs()
+      await _selectJob(r.job_id)
+    } else {
+      showToast(api.lastErrorMessage?.() || 'Failed to start surface deposition', 'err')
+      _updateButtons(_selectedJob())
     }
   })
 
@@ -2750,6 +2794,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
 
   return {
     refresh: _fetchJobs, getSelectedJob: _selectedJob, ensureJobCurrent: _ensureJobCurrent,
+    refreshControls: () => _updateButtons(_selectedJob()),
     restoreSubmittedDesign: async (jobId) => {
       const job = _jobs.find(j => j.job_id === jobId)
       return job ? restoreSubmittedDesign({ job, rollFn: api.rollOxdnaJobDesign, refetch: _fetchJobs }) : false

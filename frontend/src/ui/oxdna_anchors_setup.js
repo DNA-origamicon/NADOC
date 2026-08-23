@@ -75,6 +75,18 @@ const _DEFAULT_IDS = {
   // atoms: <id>  — opt-in; see the Hold-atoms column note above.
 }
 
+/** Grey and disable an anchor subsection without discarding its authored set. */
+export function setAnchorSectionEnabled(section, enabled) {
+  if (!section) return
+  const on = !!enabled
+  section.style.opacity = on ? '1' : '.45'
+  section.style.pointerEvents = on ? '' : 'none'
+  section.setAttribute('aria-disabled', String(!on))
+  for (const control of section.querySelectorAll('button, input, select')) {
+    control.disabled = !on
+  }
+}
+
 export function initOxdnaAnchorsSetup({ getSelection = null, onChange = null, ids = {}, engine = 'oxdna' } = {}) {
   const id = { ..._DEFAULT_IDS, ...ids }
   const toggle = document.getElementById(id.toggle)

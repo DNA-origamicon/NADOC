@@ -4277,6 +4277,7 @@
                   <span id="oxdna-anchors-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Anchors</span>
                 </div>
                 <div id="oxdna-anchors-body" class="ox-card__body" style="display:none">
+                  <div style="font-size:var(--text-xs);color:#c9d1d9;font-weight:600;margin-bottom:5px">Structure Anchors</div>
                   <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">Fixed strands held in place during the run (tethers / clamps).</div>
                   <div style="display:flex;align-items:center;gap:5px">
                     <button id="oxdna-anchors-add" style="flex:1;font-size:var(--text-xs);padding:4px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer">Add selection as anchor</button>
@@ -4287,6 +4288,25 @@
                     <input type="checkbox" id="oxdna-anchors-glow" checked> Highlight all anchors
                   </label>
                   <div id="oxdna-anchors-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
+
+                  <div id="oxdna-surface-anchors-section" aria-disabled="true" style="border-top:1px solid #21262d;margin-top:9px;padding-top:8px;opacity:.45">
+                    <div style="font-size:var(--text-xs);color:#c9d1d9;font-weight:600;margin-bottom:5px">Surface Anchors</div>
+                    <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">Selected strands designated for attachment to the hard surface.</div>
+                    <div style="display:flex;align-items:center;gap:5px">
+                      <button id="oxdna-surface-anchors-add" style="flex:1;font-size:var(--text-xs);padding:4px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer">Add selection as anchor</button>
+                      <button id="oxdna-surface-anchors-clear" style="font-size:var(--text-xs);padding:4px 8px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Clear</button>
+                    </div>
+                    <div id="oxdna-surface-anchors-list" style="max-height:110px;overflow-y:auto;border:1px solid #21262d;border-radius:3px;background:#010409;padding:3px;margin-top:5px"></div>
+                    <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;margin-top:6px">
+                      <input type="checkbox" id="oxdna-surface-anchors-glow" checked> Highlight all anchors
+                    </label>
+                    <div id="oxdna-surface-anchors-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
+                    <button id="oxdna-surface-deposition-run" disabled
+                            title="Gently pull the selected surface anchors to the hard surface, restrain their reached contact positions, then equilibrate"
+                            style="width:100%;font-size:var(--text-xs);padding:5px;margin-top:6px;background:#122117;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;font-weight:600">
+                      Run surface deposition
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -4324,8 +4344,9 @@
                   </div>
                   <div id="oxdna-floor-ready" style="font-size:var(--text-xs);color:#8b949e;margin-top:6px;min-height:14px"></div>
 
-                  <!-- ── Surface capture strands (oxDNA only; Phase 1 UI — build lands in Phase 2) ── -->
-                  <div id="oxdna-surfstrand-wrap" style="border-top:1px solid #21262d;margin-top:9px;padding-top:8px">
+                  <!-- Archived, inert UI retained for a possible future revival. Content in a
+                       template is not part of the live DOM and cannot initialize the feature. -->
+                  <template id="archive-oxdna-surface-strands-ui">
                     <div style="font-size:11px;color:#6a737d;margin-bottom:6px;line-height:1.35">Disperse ssDNA capture strands (complementary to the origami overhangs) across the surface so the origami hybridises and immobilises.</div>
                     <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;margin-bottom:6px">
                       <input type="checkbox" id="oxdna-surfstrand-enable"> Add surface strands
@@ -4389,7 +4410,7 @@
                       </div>
                     </div>
                     <div id="oxdna-surfstrand-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:6px;min-height:14px"></div>
-                  </div>
+                  </template>
                 </div>
               </div>
 

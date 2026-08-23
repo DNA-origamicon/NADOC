@@ -114,7 +114,16 @@ export function initOxdnaFloorSetup({ onChange = null, setSurfaceGrid = null, ge
 
   // ── Inputs ───────────────────────────────────────────────────────────────────
   enableChk?.addEventListener('change', () => {
-    _enabled = !!enableChk.checked; _syncControlsVisibility(); _renderStatus()
+    const turningOn = !_enabled && !!enableChk.checked
+    _enabled = !!enableChk.checked
+    // Re-resolve contact from the currently visible representation. This prevents a
+    // stale absolute coordinate from a previous job/representation being reused when
+    // the surface is enabled for a newly displayed relaxed frame.
+    if (turningOn) {
+      const contact = floorContactCoordinate(axisSel?.value || '-y', _bounds())
+      if (contact != null) _setAbsolutePosition(contact)
+    }
+    _syncControlsVisibility(); _renderStatus()
   })
   axisSel?.addEventListener('change', () => {
     const contact = floorContactCoordinate(axisSel.value, _bounds())

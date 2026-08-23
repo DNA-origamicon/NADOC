@@ -186,6 +186,16 @@ export function initOxdnaInputOverlay(scene) {
 
   return {
     update, clear, dispose: clear, group: () => group,
+    bounds() {
+      if (!currentFrames.length) return null
+      const box = new THREE.Box3()
+      for (const frame of currentFrames) {
+        const sites = frameSites(frame)
+        box.expandByPoint(sites.backbone)
+        box.expandByPoint(sites.base)
+      }
+      return box.isEmpty() ? null : { min: box.min.toArray(), max: box.max.toArray() }
+    },
     setColoringMode(mode) {
       coloringMode = ['strand', 'base', 'cluster', 'overhang-only'].includes(mode) ? mode : 'strand'
       applyColors()

@@ -259,7 +259,7 @@ import { initOxdnaFloorSetup } from './ui/oxdna_floor_setup.js'
 import { initOxdnaSurfaceStrandsSetup } from './ui/oxdna_surface_strands_setup.js'
 import { initSurfaceStrandsOverlay } from './scene/surface_strands_overlay.js'
 import { captureNucleotidesFromChains } from './scene/surface_strands_math.js'
-import { initOxdnaAnchorsSetup } from './ui/oxdna_anchors_setup.js'
+import { initOxdnaAnchorsSetup, setAnchorSectionEnabled } from './ui/oxdna_anchors_setup.js'
 import { initPhotoMode }      from './scene/photo_mode.js'
 import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
 import { getSectionCollapsed, setSectionCollapsed } from './ui/section_collapse_state.js'
@@ -1186,6 +1186,21 @@ async function main() {
     getAtomisticRenderer: () => atomisticRenderer,
     getSurfaceRenderer:   () => surfaceRenderer,   // const declared ~1918 (resolved lazily)
     getCurrentRepr:       () => _currentRepr,       // let declared ~2976 (resolved lazily)
+    // The oxDNA representation is a standalone overlay; route simulation frames to it
+    // instead of deforming the native renderer hidden underneath it.
+    applyOxdnaFrame: (updates) => {
+      const state = store.getState()
+      const args = [
+        state.currentGeometry, state.currentDesign, state.coloringMode,
+        state.simulationTabActive === true || state.showReferenceGeometry === false,
+        { strandColors: state.strandColors, strandGroups: state.strandGroups,
+          loopStrandIds: state.loopStrandIds },
+      ]
+      const result = updates
+        ? mrdnaDisplay?.showOxdnaSimulationPreview?.(args[0], args[1], updates, ...args.slice(2))
+        : mrdnaDisplay?.showOxdnaInputPreview?.(...args)
+      return result?.ok === true
+    },
     // Toggle-off / job-switch: rebuild the atomistic + surface meshes from the
     // live design so they drop the oxDNA overlay (mirrors the animation player's
     // stop handler).
@@ -1237,6 +1252,7 @@ async function main() {
     // inherit them from its relaxed parent (oxdna_jobs_panel.captureStrandRunPlan).
     surfaceStrands: oxdnaSurfaceStrandsSetup?.getStrandsSpec?.(),
     anchors: oxdnaAnchorsSetup?.getAnchors?.() || [],
+    surfaceAnchors: oxdnaSurfaceAnchorsSetup?.getAnchors?.() || [],
   })
   // Echo a run's conditions back into the oxDNA cards (used by both the panel's
   // click-a-job handler and the Chain Simulations click-a-queued-stage handler).
@@ -1250,6 +1266,7 @@ async function main() {
     oxdnaSurfaceStrandsSetup?.setSurfaceEnabled?.(oxdnaFloorSetup?.isEnabled?.())
     oxdnaSurfaceStrandsSetup?.applyConfig?.(cfg.surfaceStrands)
     oxdnaAnchorsSetup?.applyConfig?.(cfg.anchors)
+    oxdnaSurfaceAnchorsSetup?.applyConfig?.(cfg.surfaceAnchors || cfg.surface_anchors)
   }
   const oxdnaLive = initOxdnaLive({
     oxdnaDisplay,
@@ -1400,6 +1417,8 @@ async function main() {
     // (`initOccupancyControls`), and listing only the first left the MD scope picker with
     // chips but no halo — you could not see in the 3D view what you had picked.
     anchorGlow.setAnchors([...(_anchorsByEngine[engine] || []),
+                           ...(engine === 'oxdna' && oxdnaFloorSetup?.isEnabled?.()
+                             ? (_anchorsByEngine['oxdna-surface'] || []) : []),
                            ...(_anchorsByEngine.occupancy || []),
                            ...(_anchorsByEngine['md-occupancy'] || [])])
   }
@@ -1428,6 +1447,10 @@ async function main() {
 
   // Design bounding box (nm) — the surface plane + capture-strand overlay share it.
   const _oxdnaStructureBounds = () => {
+    // Standalone oxDNA frames can be translated/rotated relative to the hidden
+    // native renderer. Position the surface against what is actually visible.
+    const overlayBounds = mrdnaDisplay?.oxdnaBounds?.()
+    if (_currentRepr === 'oxdna' && overlayBounds) return overlayBounds
     const box = new THREE.Box3()
     for (const entry of designRenderer.getBackboneEntries?.() || []) {
       // EXCLUDE the injected capture strands (strand_id 'cap<i>') — they render through
@@ -1463,6 +1486,8 @@ async function main() {
     onChange: () => {
       oxdnaLive?.onElementsChanged?.()
       oxdnaSurfaceStrandsSetup?.setSurfaceEnabled?.(oxdnaFloorSetup?.isEnabled?.())
+      _syncSurfaceAnchorsGate()
+      oxdnaPanel?.refreshControls?.()
     },
   })
   // Surface capture strands — sub-section of the Hard-surface card (immobilization).
@@ -1489,6 +1514,27 @@ async function main() {
     // engines); this callback only recomposes a running live session.
     onChange: () => oxdnaLive?.onElementsChanged?.(),
   })
+  // Surface anchors are authored separately from fixed structure anchors, but use the
+  // same selection resolver, row focus and purple-halo behaviour. Their simulation
+  // contract lands separately; for now this is deliberately a UI-only designation.
+  const oxdnaSurfaceAnchorsSetup = initOxdnaAnchorsSetup({
+    engine: 'oxdna-surface',
+    getSelection: _anchorSelectionState,
+    onChange: () => oxdnaPanel?.refreshControls?.(),
+    ids: {
+      toggle: 'oxdna-anchors-toggle', arrow: 'oxdna-anchors-arrow', body: 'oxdna-anchors-body',
+      add: 'oxdna-surface-anchors-add', clear: 'oxdna-surface-anchors-clear',
+      list: 'oxdna-surface-anchors-list', status: 'oxdna-surface-anchors-status',
+      glow: 'oxdna-surface-anchors-glow',
+    },
+  })
+  function _syncSurfaceAnchorsGate() {
+    const enabled = !!oxdnaFloorSetup?.isEnabled?.()
+    const section = document.getElementById('oxdna-surface-anchors-section')
+    setAnchorSectionEnabled(section, enabled)
+    _refreshAnchorGlow()
+  }
+  _syncSurfaceAnchorsGate()
   // Leaving the Dynamics tab drops the field gizmo (forces_card) — clear the anchor
   // halo too so it never lingers in other tabs, and put it back on return (the anchors
   // survive the tab switch, so the halo must too).
@@ -1747,7 +1793,7 @@ async function main() {
           crossoverExtraAtomCount++
         }
       })
-      return {
+  return {
         url: location.href,
         design: st.currentDesign ? {
           id: st.currentDesign.id,

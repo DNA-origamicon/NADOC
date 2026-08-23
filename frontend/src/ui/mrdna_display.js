@@ -20,7 +20,7 @@
 
 import { deviationColorMap, rmsfColorMap, strainColorMap } from './oxdna_display.js'
 import { buildMrdnaInputPreview } from './mrdna_input_preview.js'
-import { buildOxdnaInputPreview } from './oxdna_input_preview.js'
+import { applySimulationToOxdnaFrames, buildOxdnaInputPreview } from './oxdna_input_preview.js'
 import { activeDesignGeometry } from './oxdna_input_preview.js'
 
 /**
@@ -308,6 +308,19 @@ export function initMrdnaDisplay({
     return { ok: true, ..._stats }
   }
 
+  function showOxdnaSimulationPreview(geometry, design, updates, coloringMode = 'base', hideReference = true, colorState = {}) {
+    _cancelLoad()
+    const preview = buildOxdnaInputPreview(activeDesignGeometry(geometry, design, hideReference))
+    if (!preview.points.length || !oxdnaInputOverlay) return { ok: false, reason: 'not-ready' }
+    const frames = applySimulationToOxdnaFrames(preview.frames, updates)
+    _clearVisuals()
+    oxdnaInputOverlay.update(frames, preview.edges, coloringMode, design, colorState)
+    _nativeVisible(false)
+    _mode = 'simulation-oxdna'
+    _stats = { kind: _mode, n: frames.length, edges: preview.edges.length }
+    return { ok: true, ..._stats }
+  }
+
   function hideBeads() {
     _cancelLoad()
     if (_beadsJobId === null) return
@@ -333,6 +346,8 @@ export function initMrdnaDisplay({
     showBeads,
     showInputPreview,
     showOxdnaInputPreview,
+    showOxdnaSimulationPreview,
+    oxdnaBounds: () => oxdnaInputOverlay?.bounds?.() ?? null,
     setOxdnaColoringMode: mode => oxdnaInputOverlay?.setColoringMode?.(mode),
     hideBeads,
     stopAndRestore,

@@ -20,6 +20,18 @@ function primitive(group, name) {
 }
 
 describe('oxDNA paper-style input overlay', () => {
+  it('reports bounds from the live oxDNA sites used for surface placement', () => {
+    const scene = new THREE.Scene(), overlay = initOxdnaInputOverlay(scene)
+    overlay.update([frames[0]], [])
+    const bounds = overlay.bounds()
+    expect(bounds.min[0]).toBeCloseTo(-0.34 * OXDNA_LENGTH_NM, 6)
+    expect(bounds.max[0]).toBeCloseTo(0.34 * OXDNA_LENGTH_NM, 6)
+    expect(bounds.min[1]).toBeCloseTo(0, 6)
+    expect(bounds.max[1]).toBeCloseTo(0.3408 * OXDNA_LENGTH_NM, 6)
+    overlay.clear()
+    expect(overlay.bounds()).toBeNull()
+  })
+
   it('builds every canonical primitive with oxView sizes, positions, orientation, and colors', () => {
     const scene = new THREE.Scene(), overlay = initOxdnaInputOverlay(scene)
     overlay.update(frames, [[0, 1]], 'base', design)

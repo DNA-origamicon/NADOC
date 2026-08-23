@@ -1354,7 +1354,7 @@ def test_production_rmsf_ignores_trailing_surface_capture_particles(
         trailing_extra_strand_length=1,
     )
     cap_index = composite["keys"].index(["cap0", 1_000_000, "FORWARD"])
-    cap_x = [frame[cap_index * 6] for frame in composite["frames"]]
+    cap_x = [frame[cap_index * 9] for frame in composite["frames"]]
     assert len(set(cap_x)) > 1
 
 
@@ -2810,7 +2810,7 @@ def test_composite_trajectory(design, geometry, tmp_path):
     assert r["n_frames"] == 6  # seed t=0 + 2 + 3
     M = r["n_nucleotides"]
     assert M > 0 and len(r["keys"]) == M
-    assert all(len(f) == 6 * M for f in r["frames"])  # 6 floats (bb xyz + a1) per key
+    assert all(len(f) == 9 * M for f in r["frames"])  # bb xyz + complete a1/a3 frame
     assert [s["kind"] for s in r["stages"]] == ["equil", "production"]
     assert len(r["markers"]) == 1  # one transition equil→production
     assert r["markers"][0]["frame"] == 3 and r["markers"][0]["kind"] == "production"
@@ -4406,9 +4406,15 @@ def test_oxdna_http_lifecycle(monkeypatch, tmp_path):
         "bp_index",
         "direction",
         "backbone_position",
+        "cm_position",
+        "base_position",
+        "exact_sites",
         "nx",
         "ny",
         "nz",
+        "tx",
+        "ty",
+        "tz",
     } <= set(p0)
 
     # Health endpoint returns per-stage records.
@@ -5586,7 +5592,7 @@ def test_composite_trajectory_downsamples_across_stages(tmp_path, design, geomet
     assert out["n_frames"] == 10
     assert [s["n_frames"] for s in out["stages"]] == [5, 5]
     assert len(out["frames"]) == 10
-    assert all(len(f) == out["n_nucleotides"] * 6 for f in out["frames"])
+    assert all(len(f) == out["n_nucleotides"] * 9 for f in out["frames"])
     # one boundary marker, at the first frame of stage 2
     assert len(out["markers"]) == 1
     assert out["markers"][0]["frame"] == 5

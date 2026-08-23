@@ -46,6 +46,7 @@ from backend.core.oxdna_protocol import (
     build_production_stage,
     build_relaxation_stages,
     build_run_stage,
+    build_surface_deposition_stages,
     DEFAULT_STEPS_PER_FRAME,
 )
 from backend.core.oxdna_runner import (
@@ -72,12 +73,14 @@ from backend.physics.oxdna_interface import (
     designed_pair_complementarity,
     max_crossover_backbone_stretch,
     oxdna_backbone_site,
+    oxdna_base_site,
     pn_to_oxdna_force,
     read_configuration_unwrapped,
     resolve_anchor_particles,
     write_configuration,
     write_field_forces,
     write_run_forces,
+    write_surface_deposition_approach_forces,
 )
 from backend.core.constants import NM_TO_OXDNA
 
@@ -324,6 +327,24 @@ class RunRequest(BaseModel):
     #   {"subjectToField": false}         → production-time force choice, overrides the parent's.
     # Omitted → inherit the parent's strands and its own subjectToField, unchanged.
     surface_strands: Optional[dict] = Field(None)
+
+
+class SurfaceDepositionRequest(BaseModel):
+    surface: SurfaceElement
+    surface_anchors: list[AnchorRef] = Field(min_length=1)
+    # Calibrated on surface_test: 2.5 pN remained 2.49 nm off-plane after 100k
+    # steps, while 5 pN reached 0.15 nm without damaging the duplex.
+    approach_force_pn: float = Field(5.0, gt=0.0, le=20.0)
+    max_approach_force_pn: float = Field(20.0, gt=0.0, le=50.0)
+    approach_window_steps: int = Field(50_000, ge=1000, le=5_000_000)
+    max_approach_windows: int = Field(8, ge=0, le=32)
+    capture_gap_nm: float = Field(1.0, gt=0.0, le=5.0)
+    contact_gap_nm: float = Field(0.75, gt=0.0, le=5.0)
+    approach_steps: int = Field(1_000_000, ge=1000, le=200_000_000)
+    settle_steps: int = Field(500_000, ge=1000, le=200_000_000)
+    equil_steps: int = Field(250_000, ge=1000, le=200_000_000)
+    steps_per_frame: int = Field(DEFAULT_STEPS_PER_FRAME, ge=1, le=200_000_000)
+    anchor_stiff: float = Field(1.0, gt=0.0, le=100.0)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1011,11 +1032,92 @@ async def start_oxdna_job(job_id: str) -> dict:
     specs = load_stage_specs(job.job_dir(_workspace()))
     if not specs:
         raise HTTPException(500, "stages_spec.json missing; cannot resume this job.")
+    if (job.run_config or {}).get("kind") == "surface_deposition" and (
+        "surface approach did not reach contact" in (job.error or "")
+    ):
+        try:
+            specs = _prepare_surface_approach_retry(job, specs, _workspace())
+        except (KeyError, OSError, ValueError) as exc:
+            raise HTTPException(400, f"Cannot extend surface approach: {exc}") from exc
     job.status = OxdnaStatus.running
     job.error = None
     job.save(_workspace())
     start_job(job, _workspace(), specs)
     return {"ok": True, "job_id": job_id, "status": "running"}
+
+
+def _prepare_surface_approach_retry(job, specs, workspace_dir: Path):
+    """Extend and, after a plateau, ramp a completed deposition approach stage.
+
+    Contact failure is a safe stage-boundary condition, not a corrupt checkpoint.
+    Resuming from the completed approach output preserves all prior dynamics. The
+    normal-only plane attraction stays constant with distance and can be increased
+    conservatively on later retries without projecting distant anchors.
+    """
+    import json
+    from dataclasses import asdict
+
+    approach_idx = next(
+        (i for i, spec in enumerate(specs) if spec.kind == "deposition_approach"), None
+    )
+    if approach_idx is None:
+        raise ValueError("surface approach stage is missing")
+    jd = job.job_dir(workspace_dir)
+    checkpoint = jd / specs[approach_idx].name / "last_conf.dat"
+    if not checkpoint.exists() or checkpoint.stat().st_size == 0:
+        raise ValueError("surface approach checkpoint is missing")
+    design = _load_snapshot_design(jd)
+    if design is None:
+        raise ValueError("surface deposition design snapshot is missing")
+    rc = job.run_config or {}
+    wall = rc.get("surface")
+    anchors = rc.get("surface_anchors") or []
+    base_force_pn = float(rc.get("approach_force_pn", 5.0))
+    prior_retries = int(rc.get("approach_retry_count", 0))
+    # A continuation exists because the constant-force approach plateaued, so raise
+    # the cap immediately. Repeating the same attraction cannot change its mechanical
+    # equilibrium. Later continuations ramp once more, never beyond 20 pN per anchor.
+    force_pn = min(
+        float(rc.get("max_approach_force_pn", 20.0)),
+        base_force_pn * (2 ** (prior_retries + 1)),
+    )
+    info = write_surface_deposition_approach_forces(
+        jd / "deposition_approach_forces.txt",
+        design,
+        checkpoint,
+        wall=wall,
+        anchors=anchors,
+        force_pn=force_pn,
+        capture_contacted=True,
+        capture_gap_nm=float(rc.get("capture_gap_nm", 1.0)),
+        capture_stiff=float(rc.get("surface_anchor_stiff", 1.0)),
+    )
+
+    approach = specs[approach_idx]
+    old_total = int(approach.steps)
+    # Reclassify contact frequently.  A long continuation lets an anchor that has
+    # reached the plane leave again before the next force file is materialised.
+    chunk = int(rc.get("approach_retry_chunk_steps") or min(old_total, 50_000))
+    rc["approach_retry_chunk_steps"] = chunk
+    rc["approach_retry_count"] = prior_retries + 1
+    rc["approach_retry_force_pn"] = force_pn
+    rc["approach_retry_max_gap_nm"] = info["max_initial_gap_nm"]
+    rc["approach_retry_captured"] = info["n_captured"]
+    rc["approach_retry_remaining"] = len(info["remaining_particles"])
+    # Preserve the original energy cadence so resume accounting credits the already
+    # completed attempt correctly after the total budget grows.
+    if approach.print_energy_every_override is None:
+        approach.print_energy_every_override = max(1, old_total // 100)
+    approach.steps = old_total + chunk
+    job.stages[approach_idx].steps = approach.steps
+    for idx in range(approach_idx, len(job.stages)):
+        job.stages[idx].status = "pending"
+        job.stages[idx].started_at = None
+    job.current_stage_idx = approach_idx
+    (jd / "stages_spec.json").write_text(
+        json.dumps([asdict(spec) for spec in specs], indent=2), encoding="utf-8"
+    )
+    return specs
 
 
 @router.post("/oxdna/jobs/{job_id}/production")
@@ -1390,6 +1492,143 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
     child.status = OxdnaStatus.queued
     child.save(ws)
     start_job(child, ws, [stage])
+    return child.to_dict()
+
+
+@router.post("/oxdna/jobs/{job_id}/surface-deposition")
+async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) -> dict:
+    """Branch a relaxed job into force-ramp → contact-restraint → equilibration stages."""
+    parent = _load_job(job_id)
+    if body.max_approach_force_pn < body.approach_force_pn:
+        raise HTTPException(400, "max_approach_force_pn must be >= approach_force_pn")
+    if is_running(job_id) or parent.status != OxdnaStatus.completed:
+        raise HTTPException(400, "Surface deposition requires a completed oxDNA job.")
+    _assert_job_current(parent)
+    if find_oxdna() is None:
+        raise HTTPException(400, "oxDNA binary not found.")
+    ws = _workspace()
+    pjd = parent.job_dir(ws)
+    design = _load_snapshot_design(pjd)
+    relaxed_conf, _stage = _latest_relaxed_conf(parent, ws)
+    if design is None or relaxed_conf is None:
+        raise HTTPException(400, "The selected job has no relaxed structure to deposit.")
+
+    wall = {
+        "dir": list(body.surface.dir),
+        "offset_nm": body.surface.offset_nm,
+        "position_nm": body.surface.position_nm,
+        "stiff": body.surface.stiff,
+    }
+    anchors = [a.model_dump(by_alias=False, exclude_none=True) for a in body.surface_anchors]
+    stages = build_surface_deposition_stages(
+        backend=parent.backend,
+        device=parent.device,
+        salt_concentration=parent.salt_concentration,
+        approach_steps=body.approach_steps,
+        settle_steps=body.settle_steps,
+        equil_steps=body.equil_steps,
+        steps_per_frame=body.steps_per_frame,
+    )
+    stages[2].forces_meta.update({
+        "wall": wall, "anchors": anchors, "anchor_stiff": body.anchor_stiff,
+        "max_contact_gap_nm": body.contact_gap_nm,
+    })
+    child = new_oxdna_job(
+        design_name=f"{parent.design_name} · surface deposition",
+        stages=[s.to_status() for s in stages],
+        n_nucleotides=parent.n_nucleotides,
+        device=parent.device,
+        backend=parent.backend,
+        salt_concentration=parent.salt_concentration,
+        design_source_path=parent.design_source_path,
+        parent_job_id=parent.job_id,
+        design_fingerprint=parent.design_fingerprint,
+        feature_log_position=parent.feature_log_position,
+        run_config={
+            "kind": "surface_deposition",
+            "surface": wall,
+            "surface_anchors": [
+                a.model_dump(by_alias=True, exclude_none=True) for a in body.surface_anchors
+            ],
+            "approach_force_pn": body.approach_force_pn,
+            "max_approach_force_pn": body.max_approach_force_pn,
+            "approach_retry_chunk_steps": body.approach_window_steps,
+            "max_approach_windows": body.max_approach_windows,
+            "capture_gap_nm": body.capture_gap_nm,
+            "contact_gap_nm": body.contact_gap_nm,
+            "surface_anchor_stiff": body.anchor_stiff,
+        },
+        max_relax_retries=0,
+    )
+    cjd = child.job_dir(ws)
+    cjd.mkdir(parents=True, exist_ok=True)
+    shutil.copy(pjd / "topology.top", cjd / "topology.top")
+    shutil.copy(pjd / "design.json", cjd / "design.json")
+    # The card's absolute surface coordinate belongs to the displayed frame. Free
+    # relaxation jobs are displayed Kabsch-aligned to the design even though their
+    # saved configurations have diffused/tumbled. Align the deposition seed into
+    # that same frame so the selected plane is physically where the user put it.
+    from backend.physics.oxdna_interface import (
+        place_configuration_against_surface,
+        read_configuration_unwrapped,
+        write_configuration_from_full_map,
+    )
+    if not _job_has_surface(parent):
+        aligned = read_configuration_unwrapped(
+            relaxed_conf, design, _design_ref_conf(pjd, design), align=True,
+            copies=True, include_extra_bases=True, include_extensions=True,
+        )
+        write_configuration_from_full_map(cjd / "conf.dat", relaxed_conf, design, aligned)
+    else:
+        shutil.copy(relaxed_conf, cjd / "conf.dat")
+    try:
+        parent_wall = (parent.run_config or {}).get("surface") or {}
+        parent_dir = parent_wall.get("dir") or []
+        same_surface_plane = (
+            len(parent_dir) == 3
+            and parent_wall.get("position_nm") is not None
+            and wall.get("position_nm") is not None
+            and all(abs(float(parent_dir[i]) - float(wall["dir"][i])) < 1e-6 for i in range(3))
+            and abs(float(parent_wall["position_nm"]) - float(wall["position_nm"])) < 1e-6
+        )
+        placement_info = place_configuration_against_surface(
+            cjd / "conf.dat", design, wall=wall, anchors=anchors,
+            # A surface-relaxed parent is already positioned relative to its wall.
+            # Preserve that placement and only validate it; free parents or a changed
+            # plane are placed using the extent of the entire structure.
+            translate=not same_surface_plane,
+        )
+        write_surface_deposition_approach_forces(
+            cjd / "deposition_gentle_forces.txt",
+            design,
+            cjd / "conf.dat",
+            wall=wall,
+            anchors=anchors,
+            force_pn=body.approach_force_pn * 0.2,
+        )
+        info = write_surface_deposition_approach_forces(
+            cjd / "deposition_approach_forces.txt",
+            design,
+            cjd / "conf.dat",
+            wall=wall,
+            anchors=anchors,
+            force_pn=body.approach_force_pn,
+        )
+    except ValueError as exc:
+        shutil.rmtree(cjd, ignore_errors=True)
+        raise HTTPException(400, str(exc))
+    child.n_nucleotides = info["n_total"]
+    child.run_config["n_surface_anchor_particles"] = info["n_anchored"]
+    child.run_config["surface_anchor_keys"] = info["anchor_keys"]
+    child.run_config["surface_placement"] = placement_info
+    import json
+    from dataclasses import asdict
+    (cjd / "stages_spec.json").write_text(
+        json.dumps([asdict(stage) for stage in stages], indent=2), encoding="utf-8"
+    )
+    child.status = OxdnaStatus.queued
+    child.save(ws)
+    start_job(child, ws, stages)
     return child.to_dict()
 
 
@@ -2888,8 +3127,9 @@ async def get_oxdna_display(job_id: str, align: bool = True) -> dict:
         proteins = [
             {"attachment_id": aid, "transform": M} for aid, M in transforms.items()
         ]
-    # Render the true backbone site, not the oxDNA centre of mass — the CM sits
-    # inward of the backbone, so rendering it collapses the apparent duplex.
+    # Reconstruct BOTH physical interaction sites and carry the COMPLETE simulated
+    # orientation. Using live a1 with the design's old tangent produced a hybrid frame
+    # and wildly rotated slabs after deposition/bending.
     positions = [
         {
             "helix_id": key[0],
@@ -2901,9 +3141,15 @@ async def get_oxdna_display(job_id: str, align: bool = True) -> dict:
             "backbone_position": oxdna_backbone_site(
                 v["backbone_position"], v["a1"], v["a3"]
             ).tolist(),
+            "cm_position": [float(x) for x in v["backbone_position"]],
+            "base_position": oxdna_base_site(v["backbone_position"], v["a1"]).tolist(),
+            "exact_sites": True,
             "nx": float(v["a1"][0]),
             "ny": float(v["a1"][1]),
             "nz": float(v["a1"][2]),
+            "tx": float(v["a3"][0]),
+            "ty": float(v["a3"][1]),
+            "tz": float(v["a3"][2]),
         }
         for key, v in full_map.items()
     ]

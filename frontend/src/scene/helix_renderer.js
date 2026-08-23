@@ -370,6 +370,16 @@ export function translatedBasePosition(
   return out.copy(basePosition).add(liveBead).sub(equilibriumBead)
 }
 
+/** Convert oxDNA's hydrogen-bond interaction site (CM + 0.4*a1) to the visual
+ * nucleotide/base centre used by oxView-style glyphs and atomistic stamping
+ * (CM + 0.34*a1). Coordinates are in nm. */
+export function oxdnaBaseCenterFromInteractionSite(
+  interactionSite, a1, out = new THREE.Vector3(),
+) {
+  _physDir.copy(a1).normalize()
+  return out.copy(interactionSite).addScaledVector(_physDir, -0.06 * 0.8518)
+}
+
 /**
  * N3-side attachment corner for a rendered slab.
  *
@@ -4087,7 +4097,12 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         const key = `${n.helix_id}:${n.bp_index}:${n.direction}`
         const upd = normalMap?.get(`${key}:${entry._copy ?? 0}`)
         liveBaseMap.set(key, upd?.base_position
-          ? new THREE.Vector3(...upd.base_position)
+          ? (upd.exact_sites && upd.nx !== undefined
+            ? oxdnaBaseCenterFromInteractionSite(
+              new THREE.Vector3(...upd.base_position),
+              new THREE.Vector3(upd.nx, upd.ny, upd.nz),
+            )
+            : new THREE.Vector3(...upd.base_position))
           : translatedBasePosition(
             _tPos.set(...n.base_position),
             _slabBaseS.set(...n.backbone_position),
@@ -4120,6 +4135,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
             _slabTanS.crossVectors(_slabAxisDir, _slabBnS).normalize()  // tangential
             _slabBasis.makeBasis(_slabTanS, _slabAxisDir, _slabBnS)
             _slabQuatS.setFromRotationMatrix(_slabBasis)
+            // liveBaseMap converts oxDNA's interaction site to its visual base center.
+            // Always finish through the canonical slab abstraction: it places paired
+            // faces in a shared plane and extends each base body toward its live
+            // backbone. Bypassing it put both slabs at the central H-bond sites and
+            // made paired 0.70-nm bodies overlap.
             const center = _slabCenterAt(
               slab, _slabAxisDir, liveBaseMap, null, _slabCenterD, _slabBnS,
             )

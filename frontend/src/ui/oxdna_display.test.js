@@ -19,6 +19,21 @@ describe('framesToUpdates', () => {
     const updates = framesToUpdates([['h0', 5, 'REVERSE', 2]], [7, 8, 9, 0, 1, 0])
     expect(updates[0].copy).toBe(2)
   })
+
+  it('carries the complete simulated a1/a3 frame and reconstructs the base site', () => {
+    const [u] = framesToUpdates([['h0', 0, 'FORWARD']], [
+      1, 2, 3,  1, 0, 0,  0, 0, 1,
+    ])
+    expect({ nx: u.nx, ny: u.ny, nz: u.nz, tx: u.tx, ty: u.ty, tz: u.tz })
+      .toEqual({ nx: 1, ny: 0, nz: 0, tx: 0, ty: 0, tz: 1 })
+    expect(u.base_position[0]).toBeCloseTo(1 + 0.74 * 0.8518, 12)
+    expect(u.base_position[1]).toBeCloseTo(2 - 0.3408 * 0.8518, 12)
+    expect(u.base_position[2]).toBeCloseTo(3, 12)
+    expect(u.cm_position[0]).toBeCloseTo(1 + 0.34 * 0.8518, 12)
+    expect(u.cm_position[1]).toBeCloseTo(2 - 0.3408 * 0.8518, 12)
+    expect(u.cm_position[2]).toBeCloseTo(3, 12)
+    expect(u.exact_sites).toBe(true)
+  })
   it('returns [] for bad input', () => {
     expect(framesToUpdates(null, [])).toEqual([])
     expect(framesToUpdates([], null)).toEqual([])
@@ -45,6 +60,17 @@ describe('toFemUpdates', () => {
       { helix_id: 'h0', bp_index: 3, direction: 'FORWARD', copy: 0,
         backbone_position: [1, 2, 3], nx: 0.1, ny: 0.2, nz: 0.3 },
     ])
+  })
+
+  it('passes simulated CM, base site, and a3 through without reconstruction fallback', () => {
+    const p = { helix_id: 'h0', bp_index: 1, direction: 'FORWARD',
+      backbone_position: [1, 2, 3], cm_position: [1.1, 2.1, 3.1],
+      base_position: [1.2, 2.2, 3.2], exact_sites: true,
+      nx: 1, ny: 0, nz: 0, tx: 0, ty: 0, tz: 1 }
+    expect(toFemUpdates({ ready: true, positions: [p] })[0]).toMatchObject({
+      cm_position: p.cm_position, base_position: p.base_position,
+      exact_sites: true, tx: 0, ty: 0, tz: 1,
+    })
   })
 
   it('carries a loop-copy index through to the update (defaults 0)', () => {
@@ -355,6 +381,24 @@ describe('initOxdnaDisplay controller', () => {
     expect(onFrame).toHaveBeenCalledWith(resp.positions)
     ctrl.stopAndRestore()
     expect(onFrame).toHaveBeenLastCalledWith(null)
+  })
+
+  it('routes frames to the standalone oxDNA representation and restores it on stop', async () => {
+    const resp = { ready: true, stage_name: 's', positions: [{
+      helix_id: 'h0', bp_index: 0, direction: 'FORWARD', copy: 0,
+      backbone_position: [0, 0, 0], cm_position: [0.2, 0, 0],
+      nx: 1, ny: 0, nz: 0, tx: 0, ty: 0, tz: 1,
+    }] }
+    const deps = makeDeps(resp)
+    const applyOxdnaFrame = vi.fn(() => true)
+    const ctrl = initOxdnaDisplay({ ...deps, getCurrentRepr: () => 'oxdna', applyOxdnaFrame })
+    await ctrl.displayJob('job1')
+    expect(applyOxdnaFrame).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ cm_position: [0.2, 0, 0], tx: 0, ty: 0, tz: 1 }),
+    ]))
+    expect(deps.designRenderer.applyFemPositions).not.toHaveBeenCalled()
+    ctrl.stopAndRestore()
+    expect(applyOxdnaFrame).toHaveBeenLastCalledWith(null)
   })
 
   it('does not activate when there is no relaxed frame', async () => {

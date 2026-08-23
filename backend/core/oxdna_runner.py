@@ -57,6 +57,8 @@ from backend.core.oxdna_protocol import (
 from backend.physics.oxdna_surface_strands import capture_bead_count
 from backend.physics.oxdna_interface import (
     surface_anchor_forces_text,
+    write_surface_deposition_approach_forces,
+    write_surface_deposition_settle_forces,
     write_configuration,
     write_mutual_traps,
     write_topology,
@@ -77,6 +79,7 @@ class _RunningHandle:
 
 _RUNNING: dict[str, _RunningHandle] = {}
 _ACTIVE_PIDS: dict[str, int] = {}
+_STOP_MARKER = ".stop_requested"
 
 
 def is_running(job_id: str) -> bool:
@@ -1619,6 +1622,29 @@ async def run_job(
             job.stages[idx].completed_steps = 0
 
         input_path = stage_dir / "input.txt"
+        # The settle target is intentionally the configuration actually reached by the
+        # approach stage. Materialise it only at the stage boundary; projecting selected
+        # beads onto the plane before dynamics would create overstretched backbones.
+        contact_forces = jd / (spec.forces_file or "deposition_settle_forces.txt")
+        if (spec.forces_meta and spec.forces_meta.get("materialize_contact_traps")
+                and not contact_forces.exists()):
+            try:
+                write_surface_deposition_settle_forces(
+                    contact_forces,
+                    design,
+                    conf,
+                    wall=spec.forces_meta["wall"],
+                    anchors=spec.forces_meta["anchors"],
+                    anchor_stiff=float(spec.forces_meta.get("anchor_stiff", 1.0)),
+                    max_contact_gap_nm=float(
+                        spec.forces_meta.get("max_contact_gap_nm", 0.75)
+                    ),
+                )
+            except (KeyError, ValueError) as exc:
+                job.status = OxdnaStatus.failed
+                job.error = f"cannot prepare surface-contact restraints: {exc}"
+                job.save(workspace_dir)
+                return
         # Relax stages use the default mutual-trap forces.txt; a field stage points
         # spec.forces_file at its own field_forces_N.txt (uniform force + anchors).
         forces = (
@@ -1683,6 +1709,15 @@ async def run_job(
             on_spawn=_persist_pid,
         )
         elapsed = max(1e-6, time.time() - t0)
+
+        stop_marker = jd / _STOP_MARKER
+        if stop_marker.exists():
+            stop_marker.unlink(missing_ok=True)
+            job.stages[idx].status = "stopped"
+            job.status = OxdnaStatus.stopped
+            job.oxdna_pid = None
+            job.save(workspace_dir)
+            return
 
         if asyncio.current_task().cancelled():
             if pid:
@@ -1919,6 +1954,78 @@ async def run_job(
             job.save(workspace_dir)
             return
 
+        # Surface contact is asynchronous: on a large origami some anchors arrive
+        # while others are still several nanometres away.  Gate every completed
+        # approach window, retain arrivals with normal-only traps, and continue from
+        # the checkpoint with a bounded force ramp on only the remaining anchors.
+        if spec.kind == "deposition_approach":
+            rcfg = job.run_config or {}
+            contact_forces = jd / "deposition_settle_forces.txt"
+            contact_forces.unlink(missing_ok=True)
+            try:
+                write_surface_deposition_settle_forces(
+                    contact_forces,
+                    design,
+                    stage_dir / "last_conf.dat",
+                    wall=rcfg["surface"],
+                    anchors=rcfg.get("surface_anchors") or [],
+                    anchor_stiff=float(rcfg.get("surface_anchor_stiff", 1.0)),
+                    max_contact_gap_nm=float(rcfg.get("contact_gap_nm", 0.75)),
+                )
+            except (KeyError, ValueError) as exc:
+                retry = int(rcfg.get("approach_retry_count", 0))
+                max_windows = int(rcfg.get("max_approach_windows", 8))
+                if retry >= max_windows:
+                    job.stages[idx].status = "failed"
+                    job.status = OxdnaStatus.failed
+                    job.error = f"cannot prepare surface-contact restraints: {exc}"
+                    job.save(workspace_dir)
+                    return
+                base_force = float(rcfg.get("approach_force_pn", 5.0))
+                force_ceiling = float(rcfg.get("max_approach_force_pn", 20.0))
+                force_pn = min(force_ceiling, base_force * (2 ** (retry + 1)))
+                info = write_surface_deposition_approach_forces(
+                    jd / "deposition_approach_forces.txt",
+                    design,
+                    stage_dir / "last_conf.dat",
+                    wall=rcfg["surface"],
+                    anchors=rcfg.get("surface_anchors") or [],
+                    force_pn=force_pn,
+                    capture_contacted=True,
+                    capture_gap_nm=float(rcfg.get("capture_gap_nm", 1.0)),
+                    capture_stiff=float(rcfg.get("surface_anchor_stiff", 1.0)),
+                )
+                window = int(rcfg.get("approach_retry_chunk_steps", 50_000))
+                total_spec = specs[idx]
+                specs[idx] = replace(
+                    total_spec,
+                    steps=total_spec.steps + window,
+                    print_energy_every_override=(
+                        total_spec.print_energy_every_override
+                        or max(1, total_spec.steps // 100)
+                    ),
+                )
+                job.stages[idx].steps = specs[idx].steps
+                job.stages[idx].status = "pending"
+                job.stages[idx].started_at = None
+                job.current_stage_idx = idx
+                rcfg["approach_retry_count"] = retry + 1
+                rcfg["approach_retry_force_pn"] = force_pn
+                rcfg["approach_retry_max_gap_nm"] = info["max_initial_gap_nm"]
+                rcfg["approach_retry_captured"] = info["n_captured"]
+                rcfg["approach_retry_remaining"] = len(info["remaining_particles"])
+                job.run_config = rcfg
+                _persist_specs(job, workspace_dir, specs)
+                job.save(workspace_dir)
+                start_idx = idx
+                logger.info(
+                    "[%s] surface contact incomplete (%s) -> adaptive window %d/%d; "
+                    "%d captured, %d remaining, force %.3g pN",
+                    job.job_id, exc, retry + 1, max_windows,
+                    info["n_captured"], len(info["remaining_particles"]), force_pn,
+                )
+                continue
+
         job.stages[idx].status = "done"
         job.current_stage_idx = idx + 1
         job.save(workspace_dir)
@@ -1938,6 +2045,7 @@ def start_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]) -
     """Launch run_job in a background thread. Idempotent if already running."""
     if is_running(job.job_id):
         return
+    (job.job_dir(workspace_dir) / _STOP_MARKER).unlink(missing_ok=True)
 
     def _thread_main() -> None:
         loop = asyncio.new_event_loop()
@@ -1990,11 +2098,21 @@ def stop_job(job_id: str, workspace_dir: Path) -> bool:
     kills it, and marks the job stopped so it stays controllable."""
     handle = _RUNNING.get(job_id)
     if handle and handle.thread.is_alive():
+        try:
+            live_job = OxdnaJob.load(job_id, workspace_dir)
+            (live_job.job_dir(workspace_dir) / _STOP_MARKER).touch()
+        except Exception:  # noqa: BLE001
+            pass
         pid = _ACTIVE_PIDS.get(job_id)
         if pid:
             _kill_process_group(pid)
         if handle.loop is not None and handle.task is not None:
-            handle.loop.call_soon_threadsafe(handle.task.cancel)
+            try:
+                handle.loop.call_soon_threadsafe(handle.task.cancel)
+            except RuntimeError:
+                # The stop marker can make the runner finish while SIGTERM is being
+                # delivered; a concurrently closed loop already achieved the stop.
+                pass
         return True
 
     # Orphan fallback: no live runner thread, but a detached process may persist.
@@ -2009,6 +2127,7 @@ def stop_job(job_id: str, workspace_dir: Path) -> bool:
         pid = job.oxdna_pid
     if pid is None:
         return False
+    (job.job_dir(workspace_dir) / _STOP_MARKER).touch()
     _kill_process_group(pid)
     job.status = OxdnaStatus.stopped
     job.oxdna_pid = None

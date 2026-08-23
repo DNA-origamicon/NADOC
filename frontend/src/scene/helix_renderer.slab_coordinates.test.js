@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import {
   SLAB_BEAD_CENTER_PENETRATION,
   pairedSlabCenter,
+  oxdnaBaseCenterFromInteractionSite,
   slabConnectionCorner,
   slabQuaternion,
   translatedBasePosition,
@@ -39,6 +40,40 @@ describe('base slab coordinate abstraction', () => {
 
     expect(translatedBasePosition(base, equilibriumBead, liveBead).toArray())
       .toEqual([6, -1, 5])
+  })
+
+  it('maps oxDNA interaction sites to the same CM+0.34*a1 center as its base glyph', () => {
+    const cm = new THREE.Vector3(2, 3, 4)
+    const a1 = new THREE.Vector3(2, 0, 0) // helper must normalize simulator axes defensively
+    const interaction = cm.clone().add(new THREE.Vector3(0.4 * 0.8518, 0, 0))
+    const center = oxdnaBaseCenterFromInteractionSite(interaction, a1)
+
+    expect(center.x).toBeCloseTo(cm.x + 0.34 * 0.8518, 12)
+    expect(center.y).toBeCloseTo(cm.y, 12)
+    expect(center.z).toBeCloseTo(cm.z, 12)
+  })
+
+  it('runs oxDNA visual centers through the slab contact abstraction', () => {
+    const tangent = new THREE.Vector3(0, 0, 1)
+    const fNormal = new THREE.Vector3(1, 0, 0)
+    const rNormal = new THREE.Vector3(-1, 0, 0)
+    const fCm = new THREE.Vector3(-0.5, 0, 0)
+    const rCm = new THREE.Vector3(0.5, 0, 0)
+    const fBase = oxdnaBaseCenterFromInteractionSite(
+      fCm.clone().addScaledVector(fNormal, 0.4 * 0.8518), fNormal,
+    )
+    const rBase = oxdnaBaseCenterFromInteractionSite(
+      rCm.clone().addScaledVector(rNormal, 0.4 * 0.8518), rNormal,
+    )
+    const fBead = new THREE.Vector3(-0.8, 0, 0)
+    const rBead = new THREE.Vector3(0.8, 0, 0)
+    const fCenter = pairedSlabCenter(fBead, fBase, rBase, tangent, fNormal)
+    const rCenter = pairedSlabCenter(rBead, rBase, fBase, tangent, rNormal)
+
+    // Direct visual centers are only ~0.42 nm apart and would overlap 0.70-nm slabs.
+    expect(fBase.distanceTo(rBase)).toBeLessThan(0.7)
+    expect(fCenter.distanceTo(rCenter)).toBeCloseTo(0.94, 12)
+    expect(fCenter.distanceTo(rCenter) - 0.7).toBeCloseTo(0.24, 12)
   })
 
   it('does not invent an offset when bead and base positions coincide', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { activeDesignGeometry, buildOxdnaInputPreview, nadocToOxdnaFrames, oxdnaFramesToNadoc } from './oxdna_input_preview.js'
+import { activeDesignGeometry, applySimulationToOxdnaFrames, buildOxdnaInputPreview, nadocToOxdnaFrames, oxdnaFramesToNadoc } from './oxdna_input_preview.js'
 
 const geometry = [
   { helix_id: 'h0', bp_index: 10, direction: 'FORWARD', copy: 0, strand_id: 's0', domain_index: 0,
@@ -45,5 +45,18 @@ describe('oxDNA input preview mapping', () => {
     expect(activeDesignGeometry(mixed, design)).toEqual(geometry)
     expect(activeDesignGeometry(mixed, design, false)).toEqual(mixed)
     expect(activeDesignGeometry(mixed, null)).toEqual(mixed)
+  })
+
+  it('replaces matching preview frames with simulated oxDNA centres and axes', () => {
+    const frames = nadocToOxdnaFrames(geometry)
+    const updated = applySimulationToOxdnaFrames(frames, [{
+      helix_id: 'h0', bp_index: 10, direction: 'FORWARD', copy: 0,
+      cm_position: [9, 8, 7], nx: 0, ny: 1, nz: 0, tx: 0, ty: 0, tz: 1,
+    }])
+    expect(updated[0].r).toEqual([9, 8, 7])
+    expect(updated[0].a1).toEqual([0, 1, 0])
+    expect(updated[0].a3).toEqual([0, 0, 1])
+    expect(updated[0].strand_id).toBe('s0')
+    expect(updated[1]).toBe(frames[1])
   })
 })

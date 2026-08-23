@@ -1718,6 +1718,40 @@ def read_configuration_full(
     return result
 
 
+def write_configuration_from_full_map(
+    path: str | Path,
+    source_conf: str | Path,
+    design: Design,
+    full_map: dict[tuple, dict],
+) -> None:
+    """Write a complete oxDNA configuration from a keyed CM+a1+a3 map.
+
+    The source box is retained, while velocities/angular momenta are reset (the next
+    MD stage refreshes velocities). ``full_map`` must use copy-aware topology keys.
+    This is used to place a branched run in the same aligned world frame the user saw
+    when choosing absolute surfaces.
+    """
+    source_lines = Path(source_conf).read_text(encoding="utf-8").splitlines()
+    box_line = next((line for line in source_lines if line.startswith("b ")), None)
+    if box_line is None:
+        raise ValueError("source oxDNA configuration has no box header")
+    order = _strand_nucleotide_order(design)
+    rows = ["t = 0", box_line, "E = 0 0 0"]
+    zero = "0 0 0"
+    for key in order:
+        rec = full_map.get(key)
+        if rec is None:
+            rec = full_map.get(key[:3])
+        if rec is None:
+            raise ValueError(f"aligned configuration is missing particle {key}")
+        pos = np.asarray(rec["backbone_position"], dtype=float) * NM_TO_OXDNA
+        a1 = np.asarray(rec["a1"], dtype=float)
+        a3 = np.asarray(rec["a3"], dtype=float)
+        fmt = lambda v: " ".join(f"{float(x):.12g}" for x in v)
+        rows.append(f"{fmt(pos)}  {fmt(a1)}  {fmt(a3)}  {zero}  {zero}")
+    Path(path).write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+
 def configuration_full_from_particles(
     particles,
     design: Design,
@@ -1780,6 +1814,11 @@ def oxdna_backbone_site(
     slabs.  This puts the rendered backbone where the real phosphate is."""
     a2 = np.cross(a3, a1)
     return cm_nm + (_POS_MM_BACK1 * a1 + _POS_MM_BACK2 * a2) * OXDNA_LENGTH_UNIT
+
+
+def oxdna_base_site(cm_nm: np.ndarray, a1: np.ndarray) -> np.ndarray:
+    """oxDNA hydrogen-bond/base interaction site in nm from the simulated CM+a1."""
+    return np.asarray(cm_nm, dtype=float) + 0.4 * OXDNA_LENGTH_UNIT * np.asarray(a1, dtype=float)
 
 
 def oxdna_backbone_sites(
@@ -2661,6 +2700,10 @@ OXDNA_FORCE_PN: float = 48.63  # 1 oxDNA simulation force unit ≈ 48.63 pN
 # staying MD-stable at the field stage's dt (dt·√stiff≈0.16 ≪ 2).  Empirically
 # verified on 1hb_efield_test: drift 0.35 nm @5 → 0.027 nm @1000, run still completes.
 DEFAULT_ANCHOR_STIFF: float = 1000.0
+# Surface contacts are not immobile laboratory anchors.  A modest normal spring is
+# sufficient to retain contact after the approach and avoids transmitting the very
+# large forces from DEFAULT_ANCHOR_STIFF into the backbone while the origami settles.
+DEFAULT_SURFACE_ANCHOR_STIFF: float = 1.0
 
 
 def pn_to_oxdna_force(pn: float) -> float:
@@ -2835,8 +2878,83 @@ def read_cm_positions_oxdna(conf_path: str | Path) -> list[list[float]]:
     return out
 
 
+def place_configuration_against_surface(
+    conf_path: str | Path,
+    design: Design,
+    *,
+    wall: dict,
+    anchors: list[dict],
+    translate: bool = True,
+    clearance_nm: float = 0.05,
+    penetration_tolerance_nm: float = 0.01,
+) -> dict:
+    """Place a whole configuration on the allowed side of a hard surface.
+
+    Free structures are translated rigidly until their closest nucleotide has a small
+    positive clearance. Existing surface-relaxed structures can be validated without
+    translation. Anchor positions never determine the translation: a flexible,
+    non-coplanar anchor group may span tens of nanometres and centring it would drive
+    much of the structure through the wall.
+    """
+    particles, _ = resolve_anchor_particles(design, anchors)
+    if not particles:
+        raise ValueError("Surface deposition requires at least one resolved surface anchor.")
+    conf_path = Path(conf_path)
+    lines = conf_path.read_text(encoding="utf-8").splitlines()
+    if len(lines) < 4:
+        raise ValueError("Surface deposition configuration has no nucleotide positions.")
+    cm = read_cm_positions_oxdna(conf_path)
+    valid = [p for p in particles if p < len(cm)]
+    if not valid:
+        raise ValueError("Surface anchors do not map to this oxDNA configuration.")
+    direction = _normalize3(wall.get("dir"))
+    absolute_nm = wall.get("position_nm")
+    if absolute_nm is not None:
+        position = wall_position_from_absolute(direction, float(absolute_nm))
+    else:
+        position, _ = wall_position_from_extent(
+            cm, direction, float(wall.get("offset_nm", 0.0)) * NM_TO_OXDNA
+        )
+    all_gaps = [sum(direction[i] * point[i] for i in range(3)) + position for point in cm]
+    anchor_gaps = [all_gaps[p] for p in valid]
+    min_gap_before = min(all_gaps)
+    shift_distance = (
+        float(clearance_nm) * NM_TO_OXDNA - min_gap_before if translate else 0.0
+    )
+    shift = [shift_distance * component for component in direction]
+    output = lines[:3]
+    for line in lines[3:]:
+        fields = line.split()
+        if len(fields) >= 3:
+            for i in range(3):
+                fields[i] = f"{float(fields[i]) + shift[i]:.15g}"
+            output.append(" ".join(fields))
+        else:
+            output.append(line)
+    conf_path.write_text("\n".join(output) + "\n", encoding="utf-8")
+    min_gap_after = min_gap_before + shift_distance
+    max_penetration_nm = max(0.0, -min_gap_after) / NM_TO_OXDNA
+    if max_penetration_nm > float(penetration_tolerance_nm):
+        raise ValueError(
+            "surface deposition seed intersects the hard floor "
+            f"(maximum penetration {max_penetration_nm:.3f} nm)"
+        )
+    return {
+        "translation_oxdna": shift,
+        "translation_nm": [value / NM_TO_OXDNA for value in shift],
+        "translated": bool(translate),
+        "minimum_clearance_before_nm": min_gap_before / NM_TO_OXDNA,
+        "minimum_clearance_after_nm": min_gap_after / NM_TO_OXDNA,
+        "max_penetration_after_nm": max_penetration_nm,
+        "anchor_gap_min_nm": min(anchor_gaps) / NM_TO_OXDNA,
+        "anchor_gap_max_nm": max(anchor_gaps) / NM_TO_OXDNA,
+        "anchor_normal_span_nm": (max(anchor_gaps) - min(anchor_gaps)) / NM_TO_OXDNA,
+    }
+
+
 def field_string_block(
-    field_oxdna: float, field_dir, *, n_particles: int | None = None
+    field_oxdna: float, field_dir, *, n_particles: int | None = None,
+    particle_indices: list[int] | None = None,
 ) -> str:
     """An oxDNA ``string`` force (constant ``field_oxdna`` along ``field_dir``).
     A uniform electric field acts equally on each (uniformly-charged) backbone bead.
@@ -2855,7 +2973,9 @@ def field_string_block(
     cap), so a long list is safe.  Anchored nucleotides still feel the field but
     their high-stiffness traps hold them immobile regardless."""
     dx, dy, dz = _normalize3(field_dir)
-    if n_particles is None:
+    if particle_indices is not None:
+        particle = ",".join(str(int(i)) for i in sorted(set(particle_indices)))
+    elif n_particles is None:
         particle = "-1"
     else:
         particle = ",".join(str(i) for i in range(int(n_particles)))
@@ -2870,6 +2990,172 @@ def field_string_block(
     )
 
 
+def write_surface_deposition_approach_forces(
+    path: str | Path,
+    design: Design,
+    conf_path: str | Path,
+    *,
+    wall: dict,
+    anchors: list[dict],
+    force_pn: float = 0.25,
+    capture_contacted: bool = False,
+    capture_gap_nm: float = 1.0,
+    capture_stiff: float = 1.0,
+) -> dict:
+    """Write a wall plus normal-only plane attraction on selected anchor beads.
+
+    oxDNA's attraction plane applies a constant ``force_pn`` toward the plane on
+    its allowed side and a harmonic restoring force after crossing it. Unlike a
+    point trap it leaves both tangential degrees of freedom unconstrained, allowing
+    a large origami to slide and rotate while depositing.
+    """
+    particles, anchor_keys = resolve_anchor_particles(design, anchors)
+    if not particles:
+        raise ValueError("Surface deposition requires at least one resolved surface anchor.")
+    cm = read_cm_positions_oxdna(conf_path)
+    stiff = float(wall.get("stiff", 0.0))
+    if stiff <= 0:
+        raise ValueError("Surface deposition requires a surface stiffness > 0.")
+    direction = _normalize3(wall.get("dir"))
+    absolute_nm = wall.get("position_nm")
+    if absolute_nm is not None:
+        position = wall_position_from_absolute(direction, float(absolute_nm))
+    else:
+        position, _ = wall_position_from_extent(
+            cm, direction, float(wall.get("offset_nm", 0.0)) * NM_TO_OXDNA
+        )
+    force_oxdna = pn_to_oxdna_force(force_pn)
+    anchor_set = set(particles)
+    floor_particles = [i for i in range(len(cm)) if i not in anchor_set]
+    blocks = []
+    if floor_particles:
+        blocks.append(repulsion_plane_block(
+            stiff, direction, position, particle_indices=floor_particles,
+        ))
+    valid_particles = [particle for particle in particles if particle < len(cm)]
+    if not valid_particles:
+        raise ValueError("Surface anchors do not map to this oxDNA configuration.")
+    signed_gaps = {
+        particle: sum(direction[i] * cm[particle][i] for i in range(3)) + position
+        for particle in valid_particles
+    }
+    capture_limit = float(capture_gap_nm) * NM_TO_OXDNA
+    captured = (
+        [p for p in valid_particles if abs(signed_gaps[p]) <= capture_limit]
+        if capture_contacted else []
+    )
+    remaining = [p for p in valid_particles if p not in set(captured)]
+    for particle in captured:
+        gap = signed_gaps[particle]
+        target = [cm[particle][i] - gap * direction[i] for i in range(3)]
+        blocks.append(surface_normal_trap_block(
+            particle, target, direction, capture_stiff,
+        ))
+    if remaining:
+        blocks.append(attraction_plane_block(
+            force_oxdna, direction, position, particle_indices=remaining,
+        ))
+    initial_gaps = [abs(signed_gaps[p]) / NM_TO_OXDNA for p in valid_particles]
+    Path(path).write_text("\n".join(blocks), encoding="utf-8")
+    return {
+        "n_anchored": len(particles),
+        "n_total": len(cm),
+        "anchor_particles": particles,
+        "anchor_keys": [list(k[:3]) for k in anchor_keys],
+        "force_pn": float(force_pn),
+        "n_captured": len(captured),
+        "captured_particles": captured,
+        "remaining_particles": remaining,
+        "wall_position": position,
+        "max_initial_gap_nm": max(initial_gaps, default=0.0),
+    }
+
+
+def write_surface_deposition_settle_forces(
+    path: str | Path,
+    design: Design,
+    conf_path: str | Path,
+    *,
+    wall: dict,
+    anchors: list[dict],
+    anchor_stiff: float = DEFAULT_SURFACE_ANCHOR_STIFF,
+    max_contact_gap_nm: float = 0.75,
+) -> dict:
+    """Constrain contacted anchors to surface height and retain the wall.
+
+    The approach must first bring every selected CM within ``max_contact_gap_nm``;
+    otherwise fail instead of capturing a distant anchor. The remaining small normal
+    gap is projected away, then a low-dimensional restraint acts only along the plane
+    normal; both tangential coordinates remain free throughout settle and equilibration.
+    """
+    particles, anchor_keys = resolve_anchor_particles(design, anchors)
+    if not particles:
+        raise ValueError("Surface deposition requires at least one resolved surface anchor.")
+    cm = read_cm_positions_oxdna(conf_path)
+    direction = _normalize3(wall.get("dir"))
+    absolute_nm = wall.get("position_nm")
+    if absolute_nm is not None:
+        position = wall_position_from_absolute(direction, float(absolute_nm))
+    else:
+        position, _ = wall_position_from_extent(
+            cm, direction, float(wall.get("offset_nm", 0.0)) * NM_TO_OXDNA
+        )
+    gaps = {
+        p: sum(direction[i] * cm[p][i] for i in range(3)) + position
+        for p in particles if p < len(cm)
+    }
+    max_gap_units = float(max_contact_gap_nm) * NM_TO_OXDNA
+    too_far = {p: gap for p, gap in gaps.items() if abs(gap) > max_gap_units}
+    if too_far:
+        worst = max(abs(gap) for gap in too_far.values()) / NM_TO_OXDNA
+        raise ValueError(
+            f"surface approach did not reach contact (maximum anchor-plane gap "
+            f"{worst:.3f} nm; allowed {max_contact_gap_nm:.3f} nm)"
+        )
+    anchor_set = set(gaps)
+    floor_particles = [i for i in range(len(cm)) if i not in anchor_set]
+    blocks = []
+    if floor_particles:
+        blocks.append(repulsion_plane_block(
+            float(wall.get("stiff", 0.0)), direction, position,
+            particle_indices=floor_particles,
+        ))
+    for p, gap in gaps.items():
+        target = [cm[p][i] - gap * direction[i] for i in range(3)]
+        blocks.append(surface_normal_trap_block(
+            p, target, direction, anchor_stiff,
+        ))
+    Path(path).write_text("\n".join(blocks), encoding="utf-8")
+    return {
+        "n_anchored": len(gaps), "n_total": len(cm),
+        "anchor_particles": list(gaps),
+        "anchor_keys": [list(k[:3]) for k in anchor_keys],
+        "max_contact_gap_nm": max((abs(g) for g in gaps.values()), default=0.0) / NM_TO_OXDNA,
+        "wall": {"dir": direction, "position": position, "stiff": float(wall.get("stiff", 0.0))},
+    }
+
+
+def _configuration_box_oxdna(conf_path: str | Path) -> list[float]:
+    """Read the orthorhombic oxDNA box lengths from a configuration header."""
+    for line in Path(conf_path).read_text(encoding="utf-8").splitlines():
+        if line.startswith("b "):
+            vals = line.split("=", 1)[-1].split()
+            if len(vals) >= 3:
+                return [float(vals[0]), float(vals[1]), float(vals[2])]
+    return [0.0, 0.0, 0.0]
+
+
+def _plane_period_oxdna(direction, box) -> float:
+    """Period between equivalent images of an axis-aligned plane."""
+    axis = max(range(3), key=lambda i: abs(float(direction[i])))
+    return abs(float(box[axis]))
+
+
+def _nearest_periodic_gap(gap: float, period: float) -> float:
+    """Signed distance scalar to the nearest periodic image of a plane."""
+    return float(gap) - round(float(gap) / period) * period if period > 0 else float(gap)
+
+
 def anchor_trap_block(particle: int, pos0, stiff: float) -> str:
     """A static harmonic ``trap`` pinning ``particle`` to ``pos0`` (oxDNA units).
     ``rate = 0`` → the trap does not move; ``dir`` is the (unused) move direction."""
@@ -2882,6 +3168,37 @@ def anchor_trap_block(particle: int, pos0, stiff: float) -> str:
         f"stiff = {stiff:.6g}\n"
         "rate = 0\n"
         "dir = 1,0,0\n"
+        "}\n"
+    )
+
+
+def surface_normal_trap_block(
+    particle: int, pos0, plane_dir, stiff: float,
+) -> str:
+    """A static low-dimensional trap constraining only surface height.
+
+    Hard surfaces in the UI are axis-aligned. The two tangential visibility flags
+    stay off, so a deposited anchor can diffuse across the plane instead of freezing
+    the arbitrary lateral coordinates of its first contact frame.
+    """
+    direction = _normalize3(plane_dir)
+    axis = max(range(3), key=lambda i: abs(direction[i]))
+    if abs(direction[axis]) < 1.0 - 1e-6 or any(
+        abs(direction[i]) > 1e-6 for i in range(3) if i != axis
+    ):
+        raise ValueError("Surface-normal restraints require an axis-aligned hard surface.")
+    visibility = [0, 0, 0]
+    visibility[axis] = 1
+    x, y, z = float(pos0[0]), float(pos0[1]), float(pos0[2])
+    return (
+        "{\n"
+        "type = lowdim_trap\n"
+        f"particle = {int(particle)}\n"
+        f"pos0 = {x:.6g},{y:.6g},{z:.6g}\n"
+        f"stiff = {float(stiff):.6g}\n"
+        "rate = 0\n"
+        "dir = 1,0,0\n"
+        f"visibility = {visibility[0]},{visibility[1]},{visibility[2]}\n"
         "}\n"
     )
 
@@ -2930,19 +3247,45 @@ def write_field_forces(
     }
 
 
-def repulsion_plane_block(stiff: float, plane_dir, position: float) -> str:
+def repulsion_plane_block(
+    stiff: float, plane_dir, position: float, *,
+    particle_indices: list[int] | None = None,
+) -> str:
     """An oxDNA ``repulsion_plane`` external force — a one-sided hard wall.
 
     The plane is ``dir·r + position = 0``; particles are confined to the half-space
     where ``dir·r + position >= 0`` (the side ``dir`` points toward).  A particle that
     crosses to the forbidden side feels ``F = -stiff·(dir·r + position)·dir`` pushing
     it back; zero force on the allowed side.  ``particle = -1`` applies it to every
-    nucleotide, so the whole structure rests on the surface."""
+    nucleotide. An explicit list can exclude surface-anchor particles from the
+    wall while retaining it for the rest of the structure."""
     dx, dy, dz = _normalize3(plane_dir)
+    particle = (
+        "-1" if particle_indices is None
+        else ",".join(str(int(i)) for i in sorted(set(particle_indices)))
+    )
     return (
         "{\n"
         "type = repulsion_plane\n"
-        "particle = -1\n"
+        f"particle = {particle}\n"
+        f"stiff = {float(stiff):.6g}\n"
+        f"dir = {dx:.6g},{dy:.6g},{dz:.6g}\n"
+        f"position = {float(position):.6g}\n"
+        "}\n"
+    )
+
+
+def attraction_plane_block(
+    stiff: float, plane_dir, position: float, *, particle_indices: list[int],
+) -> str:
+    """An oxDNA ``attraction_plane`` targeting selected particles at the same
+    ``dir·r + position = 0`` plane used by :func:`repulsion_plane_block`."""
+    dx, dy, dz = _normalize3(plane_dir)
+    particle = ",".join(str(int(i)) for i in sorted(set(particle_indices)))
+    return (
+        "{\n"
+        "type = attraction_plane\n"
+        f"particle = {particle}\n"
         f"stiff = {float(stiff):.6g}\n"
         f"dir = {dx:.6g},{dy:.6g},{dz:.6g}\n"
         f"position = {float(position):.6g}\n"

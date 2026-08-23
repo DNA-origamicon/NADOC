@@ -83,6 +83,135 @@ def test_absolute_wall_position_is_independent_of_structure_extent():
     assert wall_position_from_absolute([0, 9, 0], -7.5) == pytest.approx(expected)
 
 
+def test_deposition_approach_pulls_only_selected_beads_toward_wall(design, geometry, tmp_path):
+    from backend.physics.oxdna_interface import (
+        resolve_anchor_particles,
+        write_configuration,
+        write_surface_deposition_approach_forces,
+    )
+    conf = tmp_path / "conf.dat"
+    out = tmp_path / "approach.txt"
+    write_configuration(design, geometry, conf)
+    anchor = {"kind": "domain", "strand_id": design.strands[0].id, "domain_index": 0}
+    particles, _ = resolve_anchor_particles(design, [anchor])
+    info = write_surface_deposition_approach_forces(
+        out, design, conf,
+        wall={"dir": [0, 1, 0], "offset_nm": 0, "stiff": 5},
+        anchors=[anchor], force_pn=0.25,
+    )
+    text = out.read_text()
+    assert "type = repulsion_plane" in text
+    assert "type = trap" not in text
+    assert "type = attraction_plane" in text
+    assert "type = string" not in text
+    floor_particles = text.split("type = repulsion_plane", 1)[1].split("}", 1)[0]
+    for particle in particles:
+        assert str(particle) not in floor_particles.split("particle = ", 1)[1].splitlines()[0].split(",")
+    attraction_particles = text.split("type = attraction_plane", 1)[1].split("particle = ", 1)[1].splitlines()[0]
+    assert set(attraction_particles.split(",")) == {str(particle) for particle in particles}
+    assert info["n_anchored"] == len(particles) > 0
+
+
+def test_deposition_placement_is_rigid_and_keeps_whole_structure_above_floor(design, geometry, tmp_path):
+    from backend.core.constants import NM_TO_OXDNA
+    from backend.physics.oxdna_interface import (
+        place_configuration_against_surface,
+        read_cm_positions_oxdna,
+        resolve_anchor_particles,
+        write_configuration,
+    )
+
+    conf = tmp_path / "conf.dat"
+    write_configuration(design, geometry, conf)
+    anchor = {"kind": "base", "helix_id": geometry[0]["helix_id"],
+              "bp": geometry[0]["bp_index"], "direction": geometry[0]["direction"]}
+    particles, _ = resolve_anchor_particles(design, [anchor])
+    before = read_cm_positions_oxdna(conf)
+    plane_nm = min(point[1] for point in before) / NM_TO_OXDNA + 4.0
+    info = place_configuration_against_surface(
+        conf, design,
+        wall={"dir": [0, 1, 0], "position_nm": plane_nm, "stiff": 5},
+        anchors=[anchor],
+    )
+    after = read_cm_positions_oxdna(conf)
+
+    assert min(point[1] for point in after) / NM_TO_OXDNA == pytest.approx(plane_nm + 0.05)
+    assert info["minimum_clearance_before_nm"] == pytest.approx(-4.0)
+    assert info["minimum_clearance_after_nm"] == pytest.approx(0.05)
+    assert info["max_penetration_after_nm"] == 0
+    shift = [after[0][i] - before[0][i] for i in range(3)]
+    for particle in range(len(before)):
+        assert [after[particle][i] - before[particle][i] for i in range(3)] == pytest.approx(shift)
+
+
+def test_existing_surface_placement_is_preserved_and_penetration_rejected(design, geometry, tmp_path):
+    from backend.core.constants import NM_TO_OXDNA
+    from backend.physics.oxdna_interface import (
+        place_configuration_against_surface, read_cm_positions_oxdna, write_configuration,
+    )
+    conf = tmp_path / "conf.dat"
+    write_configuration(design, geometry, conf)
+    before = read_cm_positions_oxdna(conf)
+    anchor = {"kind": "base", "helix_id": geometry[0]["helix_id"],
+              "bp": geometry[0]["bp_index"], "direction": geometry[0]["direction"]}
+    plane_nm = min(point[1] for point in before) / NM_TO_OXDNA + 1.0
+
+    with pytest.raises(ValueError, match="intersects the hard floor"):
+        place_configuration_against_surface(
+            conf, design,
+            wall={"dir": [0, 1, 0], "position_nm": plane_nm, "stiff": 5},
+            anchors=[anchor], translate=False,
+        )
+    after = read_cm_positions_oxdna(conf)
+    for particle in range(len(before)):
+        assert after[particle] == pytest.approx(before[particle])
+
+
+def test_deposition_settle_requires_contact_and_projects_trap_to_exact_plane(design, geometry, tmp_path):
+    from backend.core.constants import NM_TO_OXDNA
+    from backend.physics.oxdna_interface import (
+        read_cm_positions_oxdna, resolve_anchor_particles, write_configuration,
+        write_surface_deposition_settle_forces,
+    )
+    conf, out = tmp_path / "conf.dat", tmp_path / "settle.txt"
+    write_configuration(design, geometry, conf)
+    anchor = {"kind": "base", "helix_id": geometry[0]["helix_id"],
+              "bp": geometry[0]["bp_index"], "direction": geometry[0]["direction"]}
+    particles, _ = resolve_anchor_particles(design, [anchor])
+    cm = read_cm_positions_oxdna(conf)
+    plane_nm = cm[particles[0]][1] / NM_TO_OXDNA - 0.2
+    info = write_surface_deposition_settle_forces(
+        out, design, conf,
+        wall={"dir": [0, 1, 0], "position_nm": plane_nm, "stiff": 5},
+        anchors=[anchor],
+    )
+    text = out.read_text()
+    assert "type = lowdim_trap" in text
+    assert "visibility = 0,1,0" in text
+    assert "type = trap\n" not in text
+    assert "stiff = 1" in text
+    import re
+    trap_y = float(re.search(r"pos0 = [^,]+,([^,]+),", text).group(1))
+    assert trap_y / NM_TO_OXDNA == pytest.approx(plane_nm, abs=1e-5)
+    assert info["max_contact_gap_nm"] == pytest.approx(0.2)
+    floor_line = text.split("type = repulsion_plane", 1)[1].split("particle = ", 1)[1].splitlines()[0]
+    assert str(particles[0]) not in floor_line.split(",")
+    with pytest.raises(ValueError, match="did not reach contact"):
+        write_surface_deposition_settle_forces(
+            out, design, conf,
+            wall={"dir": [0, 1, 0], "position_nm": plane_nm - 2, "stiff": 5},
+            anchors=[anchor],
+        )
+
+
+def test_surface_contact_gap_uses_nearest_periodic_plane_image():
+    from backend.physics.oxdna_interface import _nearest_periodic_gap
+
+    assert _nearest_periodic_gap(128.784, 50.0) == pytest.approx(-21.216)
+    assert _nearest_periodic_gap(50.2, 50.0) == pytest.approx(0.2)
+    assert _nearest_periodic_gap(-49.8, 50.0) == pytest.approx(0.2)
+
+
 # ── Composed external-forces writer ───────────────────────────────────────────
 
 
@@ -307,6 +436,57 @@ def test_run_surface_only_branches_child(design, monkeypatch, tmp_path):
     forces = (child.job_dir(tmp_path) / "run_forces.txt").read_text()
     assert "type = repulsion_plane" in forces
     assert "type = string" not in forces  # no field requested
+
+
+def test_surface_deposition_creates_staged_child(design, monkeypatch, tmp_path):
+    client, _ = _run_client(monkeypatch, tmp_path)
+    parent = _completed_parent(tmp_path, design)
+    anchor = {"kind": "domain", "strandId": design.strands[0].id, "domainIndex": 0}
+    r = client.post(
+        f"/api/oxdna/jobs/{parent.job_id}/surface-deposition",
+        json={
+            "surface": {"dir": [0, 1, 0], "position_nm": -10, "stiff": 5},
+            "surface_anchors": [anchor],
+        },
+    )
+    assert r.status_code == 200, r.text
+    from backend.core.oxdna_job import OxdnaJob
+    child = OxdnaJob.load(r.json()["job_id"], tmp_path)
+    assert child.parent_job_id == parent.job_id
+    assert child.run_config["kind"] == "surface_deposition"
+    assert [s.kind for s in child.stages] == [
+        "deposition_gentle", "deposition_approach", "deposition_settle", "deposition_equil"
+    ]
+    jd = child.job_dir(tmp_path)
+    approach = (jd / "deposition_approach_forces.txt").read_text()
+    assert "type = attraction_plane" in approach and "type = trap" not in approach
+    import json
+    specs = json.loads((jd / "stages_spec.json").read_text())
+    assert specs[2]["forces_meta"]["materialize_contact_traps"] is True
+    assert specs[2]["forces_meta"]["anchor_stiff"] == pytest.approx(1.0)
+    assert child.run_config["approach_retry_chunk_steps"] == 50_000
+    assert child.run_config["max_approach_windows"] == 8
+    assert child.run_config["capture_gap_nm"] == pytest.approx(1.0)
+    assert child.run_config["contact_gap_nm"] == pytest.approx(0.75)
+
+
+def test_surface_deposition_rejects_force_ceiling_below_initial_force(
+    design, monkeypatch, tmp_path
+):
+    client, _ = _run_client(monkeypatch, tmp_path)
+    parent = _completed_parent(tmp_path, design)
+    anchor = {"kind": "domain", "strandId": design.strands[0].id, "domainIndex": 0}
+    r = client.post(
+        f"/api/oxdna/jobs/{parent.job_id}/surface-deposition",
+        json={
+            "surface": {"dir": [0, 1, 0], "position_nm": -10, "stiff": 5},
+            "surface_anchors": [anchor],
+            "approach_force_pn": 10,
+            "max_approach_force_pn": 5,
+        },
+    )
+    assert r.status_code == 400
+    assert "must be >=" in r.text
 
 
 def _completed_surface_parent(tmp_path, design, *, subject_to_field):

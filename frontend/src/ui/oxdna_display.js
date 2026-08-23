@@ -36,14 +36,18 @@ export function toFemUpdates(displayResponse) {
   if (!displayResponse || !displayResponse.ready || !Array.isArray(displayResponse.positions)) {
     return []
   }
-  return displayResponse.positions.map((p) => ({
-    helix_id:          p.helix_id,
-    bp_index:          p.bp_index,
-    direction:         p.direction,
-    copy:              p.copy ?? 0,   // loop-copy index → addresses the exact loop bead
-    backbone_position: p.backbone_position,
-    nx: p.nx, ny: p.ny, nz: p.nz,
-  }))
+  return displayResponse.positions.map((p) => {
+    const out = {
+      helix_id: p.helix_id, bp_index: p.bp_index, direction: p.direction,
+      copy: p.copy ?? 0, backbone_position: p.backbone_position,
+      nx: p.nx, ny: p.ny, nz: p.nz,
+    }
+    if (Array.isArray(p.cm_position)) out.cm_position = p.cm_position
+    if (Array.isArray(p.base_position)) out.base_position = p.base_position
+    if (p.exact_sites === true) out.exact_sites = true
+    if (p.tx !== undefined) { out.tx = p.tx; out.ty = p.ty; out.tz = p.tz }
+    return out
+  })
 }
 
 /** Pure: viridis colour for t∈[0,1] as a 0xRRGGBB int (rigid→flexible ramp).
@@ -213,21 +217,55 @@ export function strainColorMap(resp, loBound, hiBound, cmap = 'coolwarm', { dsOn
 /**
  * Pure: turn one composite-trajectory frame (flat float list) + the shared key
  * list into applyFemPositions updates.  keys = [[helix,bp,dir], …]; frame holds
- * 6 floats per key (backbone x,y,z then a1 nx,ny,nz).  Kept pure for testing.
+ * Current frames hold 9 floats per key (backbone site, a1, a3). Legacy cached frames
+ * with 6 floats (backbone+a1) remain readable, but cannot reconstruct live slab axes.
  */
 export function framesToUpdates(keys, frame) {
   if (!Array.isArray(keys) || !Array.isArray(frame)) return []
+  const stride = keys.length && frame.length >= keys.length * 9 ? 9 : 6
   const updates = []
   for (let j = 0; j < keys.length; j++) {
-    const o = j * 6
-    updates.push({
+    const o = j * stride
+    const update = {
       helix_id: keys[j][0], bp_index: keys[j][1], direction: keys[j][2],
       copy: keys[j][3] ?? 0,   // 4th key element = loop-copy index (absent → 0)
       backbone_position: [frame[o], frame[o + 1], frame[o + 2]],
       nx: frame[o + 3], ny: frame[o + 4], nz: frame[o + 5],
-    })
+    }
+    if (stride === 9) {
+      update.tx = frame[o + 6]; update.ty = frame[o + 7]; update.tz = frame[o + 8]
+      update.base_position = oxdnaBaseSiteFromBackbone(update)
+      update.cm_position = oxdnaCmFromBackbone(update)
+      update.exact_sites = true
+    }
+    updates.push(update)
   }
   return updates
+}
+
+/** Invert oxDNA's backbone-site offset to recover the rigid-body centre. */
+export function oxdnaCmFromBackbone(p) {
+  const ux = p.nx, uy = p.ny, uz = p.nz
+  const vx = p.tx, vy = p.ty, vz = p.tz
+  const a2 = [vy * uz - vz * uy, vz * ux - vx * uz, vx * uy - vy * ux]
+  return p.backbone_position.map((value, i) =>
+    value + (0.34 * [ux, uy, uz][i] - 0.3408 * a2[i]) * 0.8518)
+}
+
+/** Reconstruct oxDNA's base interaction site from backbone-site + a1/a3. */
+export function oxdnaBaseSiteFromBackbone(p) {
+  const ux = p.nx, uy = p.ny, uz = p.nz
+  const vx = p.tx, vy = p.ty, vz = p.tz
+  // a2 = a3 × a1; base - backbone = (0.74*a1 - 0.3408*a2) * 0.8518 nm.
+  const a2x = vy * uz - vz * uy
+  const a2y = vz * ux - vx * uz
+  const a2z = vx * uy - vy * ux
+  const bb = p.backbone_position
+  return [
+    bb[0] + (0.74 * ux - 0.3408 * a2x) * 0.8518,
+    bb[1] + (0.74 * uy - 0.3408 * a2y) * 0.8518,
+    bb[2] + (0.74 * uz - 0.3408 * a2z) * 0.8518,
+  ]
 }
 
 /** Build { [attachmentId]: number[16] } (row-major 4×4) from a /display response's
@@ -345,6 +383,7 @@ export function initOxdnaDisplay({
   designRenderer, api, proteinRenderer = null,
   getAtomisticRenderer = null, getSurfaceRenderer = null,
   getCurrentRepr = null, onRestoreDesignHeavy = null, onHeavyStatus = null,
+  applyOxdnaFrame = null,
   onFrame = null,
   // Called from stopAndRestore() so the occupancy overlay drops its ghost copies at the
   // same moment the real model reverts — otherwise turning the view off leaves the
@@ -370,7 +409,8 @@ export function initOxdnaDisplay({
   let _lastCgUpdates = null
   const _applyFem = (updates) => {
     _lastCgUpdates = updates
-    designRenderer?.applyFemPositions(updates)
+    const handledByOxdna = getCurrentRepr?.() === 'oxdna' && applyOxdnaFrame?.(updates) === true
+    if (!handledByOxdna) designRenderer?.applyFemPositions(updates)
     onFrame?.(updates)
   }
   let _active = false

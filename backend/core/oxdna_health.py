@@ -2805,7 +2805,7 @@ def _aligned_downsampled_frames(
     # Kabsch fit as floppy outliers), but the seed frame IS a displayed frame and must
     # carry them — design_ref.dat has real rows for every one of them.  Without this the
     # first frame of every trajectory drew all extra bases + extension tails at the world
-    # origin (missing key → six zeros in _flatten_cg_frame), which snapped away at frame 1.
+    # origin (missing key → an all-zero record in _flatten_cg_frame), which snapped away at frame 1.
     ref_display = read_configuration_full(
         reference_conf_path,
         design,
@@ -3039,7 +3039,7 @@ def _flatten_cg_frame(frame: dict, key_list) -> list:
     Vectorized: gather every key's cm/a1/a3 into ``(N, 3)`` arrays and compute the
     backbone sites in one batched call, instead of a per-nucleotide ``np.cross`` (whose
     numpy dispatch overhead was the single biggest cost of the composite build).  A
-    missing key stays all-zeros — cm/a1/a3 default to 0 → backbone site 0 → six zeros,
+    missing key stays all-zeros — cm/a1/a3 default to 0 → backbone site 0 → nine zeros,
     identical to the old per-key fallback."""
     from backend.physics.oxdna_interface import oxdna_backbone_sites
 
@@ -3054,9 +3054,10 @@ def _flatten_cg_frame(frame: dict, key_list) -> list:
         cm[i] = v["backbone_position"]
         a1[i] = v["a1"]
         a3[i] = v["a3"]
-    out = np.zeros((n, 6))
+    out = np.zeros((n, 9))
     out[:, 0:3] = oxdna_backbone_sites(cm, a1, a3)
     out[:, 3:6] = a1
+    out[:, 6:9] = a3
     return out.reshape(-1).tolist()
 
 

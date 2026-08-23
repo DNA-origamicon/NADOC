@@ -89,6 +89,31 @@ export function buildOxdnaInputPreview(geometry) {
   }
 }
 
+/** Overlay simulated rigid-body coordinates onto the topology/metadata frames built
+ * from the design. Updates use the same nucleotide identity as applyFemPositions. */
+export function applySimulationToOxdnaFrames(frames, updates) {
+  if (!Array.isArray(frames)) return []
+  const byKey = new Map((updates ?? []).map(update => [keyOf(update), update]))
+  return frames.map(frame => {
+    const update = byKey.get(frame.key)
+    if (!update) return frame
+    const a1 = unit([update.nx, update.ny, update.nz])
+    const a3 = unit([update.tx, update.ty, update.tz])
+    let r = vector3(update.cm_position)
+    const backbone = vector3(update.backbone_position)
+    if (!r && backbone && a1 && a3) {
+      const a2 = [
+        a3[1] * a1[2] - a3[2] * a1[1],
+        a3[2] * a1[0] - a3[0] * a1[2],
+        a3[0] * a1[1] - a3[1] * a1[0],
+      ]
+      r = backbone.map((value, i) => value + (0.34 * a1[i] - 0.3408 * a2[i]) * 0.8518)
+    }
+    if (!r || !a1 || !a3) return frame
+    return { ...frame, r, a1, a3 }
+  })
+}
+
 /** Simulation/export representations never include inactive reference strands. */
 export function activeDesignGeometry(geometry, design, hideReference = true) {
   if (!Array.isArray(geometry)) return []

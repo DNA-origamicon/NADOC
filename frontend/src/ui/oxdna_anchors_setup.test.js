@@ -1,5 +1,23 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { initOxdnaAnchorsSetup } from './oxdna_anchors_setup.js'
+import { initOxdnaAnchorsSetup, setAnchorSectionEnabled } from './oxdna_anchors_setup.js'
+
+describe('setAnchorSectionEnabled', () => {
+  it('greys and disables every surface-anchor control until its surface is on', () => {
+    document.body.innerHTML = '<section id="surface"><button></button><input><select></select></section>'
+    const section = document.getElementById('surface')
+    setAnchorSectionEnabled(section, false)
+    expect(section.getAttribute('aria-disabled')).toBe('true')
+    expect(section.style.opacity).toBe('0.45')
+    expect(section.style.pointerEvents).toBe('none')
+    expect([...section.querySelectorAll('button,input,select')].every(el => el.disabled)).toBe(true)
+
+    setAnchorSectionEnabled(section, true)
+    expect(section.getAttribute('aria-disabled')).toBe('false')
+    expect(section.style.opacity).toBe('1')
+    expect(section.style.pointerEvents).toBe('')
+    expect([...section.querySelectorAll('button,input,select')].every(el => !el.disabled)).toBe(true)
+  })
+})
 import { createMockStore } from '../test-helpers/mock_store.js'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 
