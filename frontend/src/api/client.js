@@ -2637,8 +2637,37 @@ export const getOxdnaOccupancyProgress = (id) =>
  *  no stride — the slow view). Scope must match whatever getOxdnaTrajectoryMeta was given. */
 export const getOxdnaTrajectory = (id, opts) => {
   const { align, signal, scope } = _vizOpts(opts, 'getOxdnaTrajectory')
-  return _oxdnaJSON('GET', `/oxdna/jobs/${id}/trajectory?align=${align}&scope=${scope}`,
-                    undefined, { signal })
+  return _oxdnaTrajectoryBin(id, { align, signal, scope })
+}
+
+async function _oxdnaTrajectoryBin(id, { align, signal, scope }) {
+  const r = await fetch(`${BASE}/oxdna/jobs/${id}/trajectory?align=${align}&scope=${scope}&transport=bin`, {
+    headers: { ...docHeaders() }, signal,
+  }).catch(err => err?.name === 'AbortError' ? null : Promise.reject(err))
+  if (!r?.ok) return null
+  const expected = Number(r.headers?.get?.('X-NADOC-Uncompressed-Length'))
+  let buf
+  if (r.body && Number.isSafeInteger(expected) && expected > 0) {
+    const bytes = new Uint8Array(expected)
+    const reader = r.body.getReader()
+    let loaded = 0
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (loaded + value.byteLength > bytes.byteLength) return null
+      bytes.set(value, loaded)
+      loaded += value.byteLength
+      window.dispatchEvent(new CustomEvent('nadoc:oxdna-trajectory-transfer', {
+        detail: { jobId: id, loaded, total: expected },
+      }))
+    }
+    if (loaded !== expected) return null
+    buf = bytes.buffer
+  } else {
+    buf = await r.arrayBuffer()
+  }
+  const { decodeOxdnaTrajectoryBin } = await import('../ui/oxdna_trajectory_bin.js')
+  return decodeOxdnaTrajectoryBin(buf)
 }
 /** Frame count + stage markers only (no coordinates) — sizes the trajectory slider fast.
  *  Pass the SAME scope as getOxdnaTrajectory or the slider length won't match the payload. */

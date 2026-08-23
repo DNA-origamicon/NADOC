@@ -7,6 +7,7 @@ import { initFlexScale } from './flex_scale.js'
 vi.mock('../api/client.js', () => ({
   oxdnaAvailable: vi.fn().mockResolvedValue({ available: false }),
   listOxdnaJobs: vi.fn(),
+  startOxdnaJob: vi.fn().mockResolvedValue({ ok: true }),
   deleteOxdnaJob: vi.fn().mockResolvedValue({ ok: true, deleted: ['j1'] }),
   getOxdnaProgress: vi.fn().mockResolvedValue({ overall: 1, stage_fraction: 0 }),
   getOxdnaRmsd: vi.fn().mockResolvedValue({ ready: true, mean: 2.31, max: 2.53, n_frames: 10 }),
@@ -45,6 +46,7 @@ import {
   productionState, jobListStatus, formatEta, seedReady, initOxdnaJobsPanel,
   jobIsActive, isRelaxRunning, isProductionRunning, makeSpinner,
   productionRunCount, hasTrajectory, isResumable, startButtonLabel, flexConfidenceText,
+  isProductionResumable, isRelaxResumable,
   resumeNote, flattenJobTree, descendantIds, fieldChildTitle, deleteConfirmMessage, samplingState,
   runConfigForJob, healthForDisplay, runElements, runIndicatorTags, runRowLabel, runChildTitle,
   jobHasFailure, errorLogText, jobOutOfDate, jobSelectionSignature,
@@ -734,7 +736,7 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     'oxdna-jobs-export-btn': 'button',
     'oxdna-jobs-seed-btn': 'button', 'oxdna-jobs-seed-status': 'div',
     'oxdna-jobs-traj-toggle': 'input', 'oxdna-jobs-traj-full-toggle': 'input',
-    'oxdna-jobs-traj-status': 'div',
+    'oxdna-jobs-traj-status': 'div', 'oxdna-jobs-traj-load-progress': 'div',
     'oxdna-jobs-traj-controls': 'div', 'oxdna-jobs-traj-play': 'button',
     'oxdna-jobs-traj-slider': 'input', 'oxdna-jobs-traj-markers': 'div', 'oxdna-jobs-traj-label': 'div',
     // workspace colour-scale widget (middle-right)
@@ -1064,6 +1066,28 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     expect($('oxdna-jobs-traj-controls').style.display).not.toBe('none')
   })
 
+  it('shows byte-level transfer progress while a full trajectory downloads', async () => {
+    let finish
+    const disp = fakeDisplay()
+    disp.loadTrajectory = vi.fn(() => new Promise(resolve => { finish = resolve }))
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jt', design_source_path: 'A.nadoc', status: 'completed',
+      created_at: 1, current_stage_idx: 3, stages: relaxStages({ kind: 'production', status: 'done' }) }])
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', oxdnaDisplay: disp })
+    await selectFirstJob(panel)
+    $('oxdna-jobs-traj-full-toggle').checked = true
+    $('oxdna-jobs-traj-full-toggle').dispatchEvent(new Event('change'))
+    await flush()
+
+    window.dispatchEvent(new CustomEvent('nadoc:oxdna-trajectory-transfer', {
+      detail: { jobId: 'jt', loaded: 300, total: 400 },
+    }))
+    expect($('oxdna-jobs-traj-status').textContent).toContain('75%')
+    expect($('oxdna-jobs-traj-load-progress').textContent).toContain('Transferring and decoding… 75%')
+
+    finish({ ok: true, n_frames: 1, markers: [], stages: [] })
+    await flush()
+  })
+
   it('a LAMMPS run shows in the SAME viz card — the radios drive the LAMMPS loader', async () => {
     const oxdnaDisplay = fakeDisplay()
     const lammps = fakeLammpsDisplay()
@@ -1137,14 +1161,49 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     expect($('flex-scale-max').value).toBe('1.40')
   })
 
-  it('a stopped (killed) job selected → the primary Relax control reads "Resume"', async () => {
+  it('an interrupted relaxation is resumed from the Relax control', async () => {
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jKilled', design_source_path: 'A.nadoc', status: 'stopped',
-      created_at: 1, current_stage_idx: 1, stages: relaxStages({ kind: 'production', status: 'running', steps: 5000 }) }])
+      created_at: 1, current_stage_idx: 1,
+      stages: [{ kind: 'mc', status: 'done' }, { kind: 'md_relax', status: 'running' }, { kind: 'equil', status: 'pending' }] }])
     const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
     await selectFirstJob(panel)
     const run = $('oxdna-jobs-run-btn')
     expect(run.textContent).toContain('Resume')
     expect(run.dataset.runAction).toBe('resume')
+    expect($('oxdna-jobs-prod-btn').textContent).toBe('Full Sim')
+  })
+
+  it('an interrupted full run is resumed from Full Sim, not Relax', async () => {
+    const job = { job_id: 'jRun2', design_source_path: 'voltronCoreArm.nadoc', status: 'stopped',
+      created_at: 1, current_stage_idx: 3,
+      stages: relaxStages({ kind: 'production', status: 'running', steps: 5000 }) }
+    api.listOxdnaJobs.mockResolvedValue([job])
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'voltronCoreArm.nadoc' })
+    await selectFirstJob(panel)
+
+    expect($('oxdna-jobs-run-btn').textContent).toContain('Relax')
+    expect($('oxdna-jobs-run-btn').dataset.runAction).toBe('run')
+    expect($('oxdna-jobs-prod-btn').textContent).toContain('Resume Run')
+    expect(isProductionResumable(job)).toBe(true)
+    expect(isRelaxResumable(job)).toBe(false)
+
+    $('oxdna-jobs-prod-btn').click()
+    await flush()
+    expect(api.startOxdnaJob).toHaveBeenCalledWith('jRun2')
+  })
+
+  it('a completed full run stays production done and offers a new Full Sim', async () => {
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jRun2', design_source_path: 'voltronCoreArm.nadoc',
+      status: 'completed', created_at: 1, current_stage_idx: 4,
+      stages: relaxStages({ kind: 'production', status: 'done', steps: 5000 }) }])
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'voltronCoreArm.nadoc' })
+    await selectFirstJob(panel)
+
+    const badge = $('oxdna-jobs-list').querySelector('[title="Production done"]')
+    expect(badge?.textContent).toBe('■')
+    expect(badge?.style.color).toBe('rgb(74, 158, 255)')
+    expect($('oxdna-jobs-prod-btn').textContent).toBe('Full Sim')
+    expect($('oxdna-jobs-prod-btn').disabled).toBe(false)
   })
 
   it('flexibility map unlocks mid-run + flags the map preliminary while production runs', async () => {

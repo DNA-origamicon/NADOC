@@ -27,6 +27,8 @@ oxDNA output is Physical-layer only; it never mutates Design topology.
 from __future__ import annotations
 
 import logging
+import json
+import struct
 import shutil
 import asyncio
 import threading
@@ -2219,8 +2221,9 @@ _SPARSE_FRAME_CAP = 200
 
 @router.get("/oxdna/jobs/{job_id}/trajectory")
 async def get_oxdna_trajectory(
-    job_id: str, request: Request, align: bool = True, scope: str = "lineage"
-) -> dict:
+    job_id: str, request: Request, align: bool = True, scope: str = "lineage",
+    transport: str = "json",
+):
     """Composite scrub-able trajectory for the WHOLE lineage: every stage of the
     selected job AND all of its ancestors (relax → field1 → field2 → …), each
     frame PBC-unwrapped + Kabsch-aligned to the design reference, downsampled,
@@ -2251,7 +2254,12 @@ async def get_oxdna_trajectory(
     def _prog(done: int, total: int) -> None:
         if cancelled.is_set():
             raise _TrajectoryCancelled()
-        _TRAJ_PROGRESS[job_id] = {"done": done, "total": total}
+        _TRAJ_PROGRESS[job_id] = {"done": done, "total": total, "phase": "aligning"}
+
+    def _phase_prog(phase: str, done: int, total: int) -> None:
+        if cancelled.is_set():
+            raise _TrajectoryCancelled()
+        _TRAJ_PROGRESS[job_id] = {"done": done, "total": total, "phase": phase}
 
     _TRAJ_PROGRESS[job_id] = {"done": 0, "total": 0}
     try:
@@ -2266,6 +2274,8 @@ async def get_oxdna_trajectory(
                 align,
                 _capture_bead_count(job),
                 _capture_strand_length(job),
+                _phase_prog,
+                transport == "bin",
             )
         )
         while not task.done():
@@ -2288,6 +2298,26 @@ async def get_oxdna_trajectory(
     finally:
         cancelled.set()
         _TRAJ_PROGRESS.pop(job_id, None)
+    if transport == "bin" and result["n_frames"] > 0:
+        frames = result.pop("frames")
+        header = json.dumps(
+            {"ready": True, **result}, separators=(",", ":"), ensure_ascii=True
+        ).encode("utf-8")
+        prefix = b"NADOTR1\0" + struct.pack("<I", len(header)) + header
+        pad = b"\0" * ((-len(prefix)) % 4)
+        content = b"".join((prefix, pad, memoryview(frames).cast("B")))
+        return Response(
+            content=content,
+            media_type="application/octet-stream",
+            headers={
+                "X-NADOC-Trajectory": "float32-v1",
+                "X-NADOC-Uncompressed-Length": str(len(content)),
+                # Float32 trajectory data compressed by only ~6% on VoltronCoreArm,
+                # while gzip added a long single-core phase before the local browser
+                # could finish. An explicit encoding makes GZipMiddleware stand down.
+                "Content-Encoding": "identity",
+            },
+        )
     return {"ready": result["n_frames"] > 0, **result}
 
 

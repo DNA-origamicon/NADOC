@@ -312,6 +312,17 @@ export function isResumable(job) {
   return ['stopped', 'failed'].includes(job?.status)
 }
 
+/** The interrupted stage owns its resume control: relaxation stages resume from
+ *  Relax, while an interrupted production stage resumes from Full Sim. */
+export function isProductionResumable(job) {
+  if (!isResumable(job)) return false
+  return job?.stages?.[job.current_stage_idx]?.kind === 'production'
+}
+
+export function isRelaxResumable(job) {
+  return isResumable(job) && !isProductionResumable(job)
+}
+
 /** Pure: label for the start/resume button. A never-run `queued` job reads
  *  "Start"; an interrupted (`stopped`/`failed`) job reads "Resume". */
 export function startButtonLabel(job) {
@@ -1331,7 +1342,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     return runControlState(_selectedJob(), {
       verb: 'Relax',
       isActive: isRelaxRunning,
-      isResumable,
+      isResumable: isRelaxResumable,
       busy: _launching,
     })
   }
@@ -1831,7 +1842,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     // Production is allowed whenever the job is completed — the first run starts
     // from the relaxed structure, later runs CONTINUE from the previous run's
     // last frame (each is its own stage).
-    const prodReady = job?.status === 'completed'
+    const prodResume = isProductionResumable(job)
+    const prodReady = job?.status === 'completed' || prodResume
     const hasRun = productionRunCount(job) > 0
     // A live session owns the one bead overlay — lock the relaxed-display / flex /
     // trajectory toggles while it runs so a click can't fight it (the user must
@@ -1855,7 +1867,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
         (rc.action === RUN_ACTION.RUN && prodRunning)
       runBtn.dataset.runAction = rc.action
     }
-    const prodLabel = 'Full Sim'
+    const prodLabel = prodResume ? '↻ Resume Run' : 'Full Sim'
     if (prodBtn) {
       if (prodActive) _setBtnSpinner(prodBtn, true, prodLabel, 'Running…')
       else { prodBtn.dataset.spinning = '0'; prodBtn.textContent = prodLabel }  // repaint idle label directly
@@ -2023,6 +2035,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
 
   prodBtn?.addEventListener('click', async () => {
     if (!_selectedId || prodBtn.disabled) return
+    if (isProductionResumable(_selectedJob())) return _resumeSelected()
     if (!(await _ensureJobCurrent('a production run'))) return
     if (!(await confirmNoConcurrentJob({
       excludeJobId: _selectedId,
@@ -2307,6 +2320,12 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     _renderTrajStatus()
     _renderFlexStatus()
   })
+  window.addEventListener('nadoc:oxdna-trajectory-transfer', (e) => {
+    const d = e.detail || {}
+    if (!_trajBusy || d.jobId !== _selectedId || !(d.total > 0)) return
+    trajPlayer.setLoading({ done: d.loaded, total: d.total, phase: 'transferring' })
+    _setTrajStatus(`Transferring and decoding trajectory… ${Math.round(100 * d.loaded / d.total)}%`, _C.accent)
+  })
   // scope: 'lineage' = sparse (whole ancestor chain, strided to ~200 frames — the fast
   // view) | 'job' = full (this job's own stages only, every frame written, no stride).
   async function _refreshTraj(scope = 'lineage') {
@@ -2319,13 +2338,21 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     // Poll the backend build for accurate frames-processed progress (the align pass
     // over a large structure runs for seconds) and render it into the status line.
     const jobId = _selectedId
+    let sawBackendProgress = false
     const poll = setInterval(async () => {
       if (!_trajBusy) return
       const p = await api.getOxdnaTrajectoryProgress(jobId).catch(() => null)
       if (_trajBusy && p?.active && p.total > 0) {
+        sawBackendProgress = true
         trajPlayer.setLoading(p)
         const pct = Math.round((100 * p.done) / p.total)
-        _setTrajStatus(`Loading trajectory… ${pct}% (${p.done}/${p.total} frames)`, _C.accent)
+        const phase = p.phase === 'preprocessing' ? 'Preprocessing'
+          : p.phase === 'packing' ? 'Packing frames'
+          : 'Aligning frames'
+        _setTrajStatus(`${phase}… ${pct}%`, _C.accent)
+      } else if (_trajBusy && sawBackendProgress && p && !p.active) {
+        trajPlayer.setLoading({ done: 0, total: 0, phase: 'transferring' })
+        _setTrajStatus('Transferring and decoding trajectory…', _C.accent)
       }
     }, 250)
     let r

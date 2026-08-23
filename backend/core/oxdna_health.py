@@ -2745,6 +2745,8 @@ def _aligned_downsampled_frames(
     align: bool = True,
     n_trailing_extra: int = 0,
     trailing_extra_strand_length: int = 0,
+    phase_progress=None,
+    frame_transform=None,
 ):
     """Shared core for the composite trajectory: per stage, downsample to a ≤
     ``max_frames`` budget FIRST (cheap header count → stride), then PBC-unwrap +
@@ -2773,7 +2775,9 @@ def _aligned_downsampled_frames(
         int(n_trailing_extra),
         int(trailing_extra_strand_length),
     )
-    hit = _ALIGNED_CACHE.get(cache_key)
+    # Packed trajectory frames are already compact and cheap to retain in their final
+    # ndarray. Do not populate the multi-GB dictionary caches on that path.
+    hit = _ALIGNED_CACHE.get(cache_key) if frame_transform is None else None
     if hit is not None:
         try:
             _ALIGNED_CACHE.move_to_end(
@@ -2830,8 +2834,14 @@ def _aligned_downsampled_frames(
             _capture_particle_key(i, trailing_extra_strand_length)
             for i in range(int(n_trailing_extra))
         )
+    _transform = (
+        (lambda fr: _flatten_cg_frame_array(fr, key_list))
+        if frame_transform is not None else None
+    )
 
     def _store(result):
+        if frame_transform is not None:
+            return result
         _ALIGNED_CACHE[cache_key] = result
         try:
             while len(_ALIGNED_CACHE) > _ALIGNED_CACHE_MAX:
@@ -2860,7 +2870,13 @@ def _aligned_downsampled_frames(
     # no coordinate parse), decide the per-stage stride, then parse + align ONLY the frames
     # that survive it.  The seed configuration is still prepended at position 0 of the first
     # non-empty stage so it remains a stride candidate exactly as before.
-    raw_counts = [count_trajectory_frames(item[2]) for item in stages]
+    raw_counts = []
+    if phase_progress:
+        phase_progress("preprocessing", 0, len(stages))
+    for i, item in enumerate(stages):
+        raw_counts.append(count_trajectory_frames(item[2]))
+        if phase_progress:
+            phase_progress("preprocessing", i + 1, len(stages))
     first_nonempty = next((i for i, c in enumerate(raw_counts) if c > 0), None)
     if first_nonempty is None:
         return key_list, [], [], []
@@ -2927,6 +2943,7 @@ def _aligned_downsampled_frames(
         # to THIS job get parsed + aligned — the load's heavy work.
         tsig = _traj_file_sig(path)
         aligned = {}
+        capture_first = {}
         missing = []
         for idx in needed:
             frame_key = (
@@ -2938,7 +2955,10 @@ def _aligned_downsampled_frames(
                 int(trailing_extra_strand_length),
                 idx,
             )
-            hit = _frame_cache_get(frame_key) if ref_sig is not None else None
+            hit = (
+                _frame_cache_get(frame_key)
+                if ref_sig is not None and frame_transform is None else None
+            )
             if hit is not None:
                 aligned[idx] = hit
                 done += 1
@@ -2947,20 +2967,10 @@ def _aligned_downsampled_frames(
             else:
                 missing.append(idx)
         if missing:
-            parsed = read_trajectory_frames_at(
-                path,
-                design,
-                missing,
-                copies=copies,
-                n_trailing_extra=n_trailing_extra,
-                trailing_extra_strand_length=trailing_extra_strand_length,
-            )
             box = _parse_box_nm(path)
             do_align = box is not None and np.all(box > 0)
-            for (
-                idx,
-                fr,
-            ) in parsed.items():  # the per-frame align is the load's heavy work
+            def _align_frame(idx, fr):
+                nonlocal done
                 af = (
                     unwrap_align_to_reference(
                         fr, ref, design, box, plan=_plan_for(fr), align=align
@@ -2968,8 +2978,13 @@ def _aligned_downsampled_frames(
                     if do_align
                     else fr
                 )
-                aligned[idx] = af
-                if ref_sig is not None:
+                if idx == 0 and frame_transform is not None:
+                    capture_first.update({
+                        k: v for k, v in af.items()
+                        if isinstance(k[0], str) and k[0].startswith("cap")
+                    })
+                aligned[idx] = _transform(af) if _transform is not None else af
+                if ref_sig is not None and frame_transform is None:
                     _frame_cache_put(
                         (
                             tsig,
@@ -2985,6 +3000,18 @@ def _aligned_downsampled_frames(
                 done += 1
                 if progress:
                     progress(done, total_kept)
+            # Align each parsed frame immediately. The old dict-return path retained
+            # every raw frame until a multi-GB file had been fully scanned, doubling
+            # peak memory for full-resolution trajectories.
+            read_trajectory_frames_at(
+                path,
+                design,
+                missing,
+                copies=copies,
+                n_trailing_extra=n_trailing_extra,
+                trailing_extra_strand_length=trailing_extra_strand_length,
+                on_frame=_align_frame,
+            )
 
         stage_frames: list[dict] = []
         for p in picked:
@@ -2995,7 +3022,7 @@ def _aligned_downsampled_frames(
                 # (Extra bases + extension tails DO exist in design_ref.dat — they come
                 # from ref_display, at their design-pose positions.)
                 seed = dict(ref_display)
-                first = aligned.get(0) or {}
+                first = capture_first if frame_transform is not None else (aligned.get(0) or {})
                 seed.update(
                     {
                         k: v
@@ -3003,7 +3030,7 @@ def _aligned_downsampled_frames(
                         if isinstance(k[0], str) and k[0].startswith("cap")
                     }
                 )
-                stage_frames.append(seed)
+                stage_frames.append(_transform(seed) if _transform is not None else seed)
                 continue
             fr = aligned.get((p - 1) if seed_here else p)
             if fr is not None:  # a malformed / half-written frame drops out (as before)
@@ -3032,7 +3059,7 @@ def _aligned_downsampled_frames(
     return _store((key_list, ordered_frames, out_stages, markers))
 
 
-def _flatten_cg_frame(frame: dict, key_list) -> list:
+def _flatten_cg_frame_array(frame: dict, key_list):
     """Flatten one full per-nucleotide frame dict to the compact CG float list
     (backbone site x,y,z + a1 nx,ny,nz per key).
 
@@ -3058,7 +3085,13 @@ def _flatten_cg_frame(frame: dict, key_list) -> list:
     out[:, 0:3] = oxdna_backbone_sites(cm, a1, a3)
     out[:, 3:6] = a1
     out[:, 6:9] = a3
-    return out.reshape(-1).tolist()
+    return out.astype(np.float32, copy=False).reshape(-1)
+
+
+def _flatten_cg_frame(frame: dict, key_list) -> list:
+    # oxDNA's text input is written at six decimal places. Keeping additional binary
+    # noise after alignment only bloats the legacy JSON payload and browser parsing.
+    return np.round(_flatten_cg_frame_array(frame, key_list), decimals=6).tolist()
 
 
 def composite_trajectory(
@@ -3070,6 +3103,8 @@ def composite_trajectory(
     align: bool = True,
     n_trailing_extra: int = 0,
     trailing_extra_strand_length: int = 0,
+    phase_progress=None,
+    packed: bool = False,
 ) -> dict:
     """Build the composite scrub-able trajectory for the View-trajectory player.
 
@@ -3105,6 +3140,8 @@ def composite_trajectory(
         align=align,
         n_trailing_extra=n_trailing_extra,
         trailing_extra_strand_length=trailing_extra_strand_length,
+        phase_progress=phase_progress,
+        frame_transform=True if packed else None,
     )
     if not ordered:
         return {
@@ -3115,7 +3152,20 @@ def composite_trajectory(
             "stages": [],
             "markers": [],
         }
-    out_frames = [_flatten_cg_frame(fr, key_list) for fr in ordered]
+    out_frames = (
+        np.empty((len(ordered), len(key_list) * 9), dtype=np.float32)
+        if packed else []
+    )
+    if phase_progress:
+        phase_progress("packing", 0, len(ordered))
+    for i, fr in enumerate(ordered):
+        flat = fr if packed else _flatten_cg_frame(fr, key_list)
+        if packed:
+            out_frames[i] = flat
+        else:
+            out_frames.append(flat)
+        if phase_progress:
+            phase_progress("packing", i + 1, len(ordered))
     return {
         "n_frames": len(out_frames),
         "n_nucleotides": len(key_list),

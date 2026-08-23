@@ -124,9 +124,32 @@ describe('getOxdnaOccupancy option passthrough', () => {
 describe('_vizOpts defaults scope even with no options object', () => {
   it('never puts the literal scope=undefined on the wire', async () => {
     let url = null
-    global.fetch = async (u) => { url = u; return { ok: true, status: 200, json: async () => ({}) } }
+    global.fetch = async (u) => { url = u; return { ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(0) } }
     await getOxdnaTrajectory('J1')
     expect(url).toMatch(/scope=lineage/)
     expect(url).not.toMatch(/undefined/)
+  })
+
+  it('streams the binary trajectory into a preallocated buffer with byte progress', async () => {
+    const header = new TextEncoder().encode(JSON.stringify({
+      ready: true, n_frames: 1, n_nucleotides: 1, keys: [['h', 0, 'F']], markers: [], stages: [],
+    }))
+    const off = (12 + header.length + 3) & ~3
+    const buf = new ArrayBuffer(off + 9 * 4)
+    new Uint8Array(buf, 0, 8).set(new TextEncoder().encode('NADOTR1\0'))
+    new DataView(buf).setUint32(8, header.length, true)
+    new Uint8Array(buf, 12, header.length).set(header)
+    new Float32Array(buf, off, 9).set([1, 2, 3, 1, 0, 0, 0, 0, 1])
+    const src = new Uint8Array(buf)
+    const progress = []
+    window.addEventListener('nadoc:oxdna-trajectory-transfer', e => progress.push(e.detail), { once: true })
+    global.fetch = async () => new Response(new ReadableStream({
+      start(c) { c.enqueue(src.subarray(0, 20)); c.enqueue(src.subarray(20)); c.close() },
+    }), { headers: { 'X-NADOC-Uncompressed-Length': String(buf.byteLength) } })
+
+    const r = await getOxdnaTrajectory('J1')
+    expect(r.frames[0]).toBeInstanceOf(Float32Array)
+    expect(r.frames[0][2]).toBe(3)
+    expect(progress[0]).toMatchObject({ jobId: 'J1', loaded: 20, total: buf.byteLength })
   })
 })

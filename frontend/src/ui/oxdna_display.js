@@ -221,7 +221,7 @@ export function strainColorMap(resp, loBound, hiBound, cmap = 'coolwarm', { dsOn
  * with 6 floats (backbone+a1) remain readable, but cannot reconstruct live slab axes.
  */
 export function framesToUpdates(keys, frame) {
-  if (!Array.isArray(keys) || !Array.isArray(frame)) return []
+  if (!Array.isArray(keys) || (!Array.isArray(frame) && !ArrayBuffer.isView(frame))) return []
   const stride = keys.length && frame.length >= keys.length * 9 ? 9 : 6
   const updates = []
   for (let j = 0; j < keys.length; j++) {

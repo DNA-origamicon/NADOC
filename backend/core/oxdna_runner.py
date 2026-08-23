@@ -2150,14 +2150,16 @@ def reconcile_oxdna_status(
     This inspects the stage outputs on disk: a stage whose ``energy.dat`` reached
     its expected line count AND has a ``last_conf.dat`` physically finished, so we
     mark it ``done``.  If every stage finished → ``completed``; if the active
-    stage was interrupted mid-run → ``stopped`` (resumable from there).  No-op for
-    any job that isn't an orphaned ``running`` one.  Idempotent.
+    stage was interrupted mid-run → ``stopped`` (resumable from there). A stopped
+    job is reconsidered because a detached process can finish after an earlier
+    reconciliation classified it. Idempotent.
     """
-    if job.status != OxdnaStatus.running:
+    if job.status not in (OxdnaStatus.running, OxdnaStatus.stopped):
         return job
-    if is_running(job.job_id):
+    was_running = job.status == OxdnaStatus.running
+    if was_running and is_running(job.job_id):
         return job  # a live runner owns it — leave it alone
-    if _external_oxdna_running(job, workspace_dir):
+    if was_running and _external_oxdna_running(job, workspace_dir):
         return job  # orphaned but still alive on disk/GPU — keep it running
     if specs is None:
         specs = load_stage_specs(job.job_dir(workspace_dir))
@@ -2173,6 +2175,18 @@ def reconcile_oxdna_status(
         complete = (sdir / "last_conf.dat").exists() and _stage_energy_lines(
             sdir
         ) >= expected
+        if not complete and job.status == OxdnaStatus.stopped:
+            # A resumed attempt's energy.dat covers only its remaining steps;
+            # energy.rN.dat files hold the work banked before interruption.
+            try:
+                log_tail = (sdir / "oxdna.log").read_text(errors="replace")[-64_000:]
+            except OSError:
+                log_tail = ""
+            complete = (
+                (sdir / "last_conf.dat").exists()
+                and "END OF THE SIMULATION, everything went OK!" in log_tail
+                and stage_completed_steps(sdir, specs[idx]) >= specs[idx].steps
+            )
         if complete and st.status != "failed":
             st.status = "done"
         else:
@@ -2183,7 +2197,7 @@ def reconcile_oxdna_status(
         job.status = OxdnaStatus.completed
         job.current_stage_idx = len(job.stages)
         job.error = None
-    elif interrupted:
+    elif interrupted and was_running:
         # The runner died partway through a stage that never finished on disk.
         job.status = OxdnaStatus.stopped
         job.current_stage_idx = next(

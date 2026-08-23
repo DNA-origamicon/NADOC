@@ -106,9 +106,14 @@ export function initOxdnaTrajectoryPlayer({
       loadProgressEl.replaceChildren(track, readout)
     }
     fill.style.width = `${pct}%`
+    const phase = progress.phase || 'aligning'
+    const phaseLabel = phase === 'preprocessing' ? 'Preprocessing trajectory'
+      : phase === 'packing' ? 'Packing frames'
+      : phase === 'transferring' ? 'Transferring and decoding'
+      : 'Aligning frames'
     readout.textContent = total
-      ? `Loading frame ${Math.min(done, total).toLocaleString()} of ${total.toLocaleString()}`
-      : 'Preparing trajectory frames…'
+      ? `${phaseLabel}… ${Math.round(pct)}%`
+      : `${phaseLabel}…`
   }
 
   // ◂ / ▸ — step exactly one frame. Scrubbing a 200-frame slider moves several frames

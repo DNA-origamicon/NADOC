@@ -2404,6 +2404,7 @@ def read_trajectory_frames_at(
     copies: bool = False,
     n_trailing_extra: int = 0,
     trailing_extra_strand_length: int = 0,
+    on_frame=None,
 ) -> dict[int, dict[tuple, dict]]:
     """Parse ONLY the frames at ``indices`` (0-based positions in the sequence of
     ``t = …`` headers), streaming the file so unwanted frames are never held in memory
@@ -2419,6 +2420,13 @@ def read_trajectory_frames_at(
     order = _strand_nucleotide_order(design)
     want = {int(i) for i in indices}
     out: dict[int, dict] = {}
+    def emit(idx, frame):
+        if not frame:
+            return
+        if on_frame is not None:
+            on_frame(idx, frame)
+        else:
+            out[idx] = frame
     if not want:
         return out
     header_idx = -1
@@ -2435,8 +2443,7 @@ def read_trajectory_frames_at(
                         n_trailing_extra=n_trailing_extra,
                         trailing_extra_strand_length=trailing_extra_strand_length,
                     )
-                    if m:
-                        out[cur_idx] = m
+                    emit(cur_idx, m)
                     buf = None
                 header_idx += 1
                 if header_idx in want:
@@ -2452,8 +2459,7 @@ def read_trajectory_frames_at(
                 n_trailing_extra=n_trailing_extra,
                 trailing_extra_strand_length=trailing_extra_strand_length,
             )
-            if m:
-                out[cur_idx] = m
+            emit(cur_idx, m)
     return out
 
 

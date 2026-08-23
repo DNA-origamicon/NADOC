@@ -3483,6 +3483,23 @@ def test_oxdna_trajectory_walks_full_lineage(monkeypatch, tmp_path, design, geom
     labels = [m["label"] for m in body["markers"]]
     assert labels == ["→ field 1", "→ field 2"]
 
+    packed = TestClient(app).get(
+        f"/api/oxdna/jobs/{field2.job_id}/trajectory?transport=bin"
+    )
+    assert packed.status_code == 200
+    assert packed.headers["content-type"] == "application/octet-stream"
+    assert packed.headers["content-encoding"] == "identity"
+    assert int(packed.headers["x-nadoc-uncompressed-length"]) == len(packed.content)
+    assert packed.content[:8] == b"NADOTR1\0"
+    header_n = int.from_bytes(packed.content[8:12], "little")
+    packed_meta = json.loads(packed.content[12 : 12 + header_n])
+    assert packed_meta["n_frames"] == body["n_frames"]
+    assert packed_meta["keys"] == body["keys"]
+    data_offset = (12 + header_n + 3) & ~3
+    packed_frames = np.frombuffer(packed.content, dtype="<f4", offset=data_offset)
+    assert packed_frames.size == body["n_frames"] * len(body["frames"][0])
+    assert np.allclose(packed_frames[: len(body["frames"][0])], body["frames"][0], atol=1e-6)
+
 
 # ── PBC unwrap for display ────────────────────────────────────────────────────
 
@@ -4618,6 +4635,47 @@ def test_reconcile_interrupted_midstage_to_stopped(tmp_path):
     out = reconcile_oxdna_status(OxdnaJob.load(job.job_id, tmp_path), tmp_path)
     assert out.status == OxdnaStatus.stopped
     assert out.stages[-1].status != "done"
+
+
+def test_reconcile_promotes_stopped_resume_that_finished_full_budget(tmp_path):
+    """A detached resume may finish after startup reconciliation already wrote
+    stopped. Archived + current attempts reaching the budget must become done."""
+    from dataclasses import asdict
+    from backend.core.oxdna_protocol import build_production_stage
+    from backend.core.oxdna_runner import reconcile_oxdna_status
+
+    spec = build_production_stage(steps=1000)
+    job = new_oxdna_job("resumed", [spec.to_status()])
+    job.status = OxdnaStatus.stopped
+    job.stages[0].status = "running"
+    job.stages[0].resumed = True
+    job.stages[0].completed_steps = 600
+    job.save(tmp_path)
+    jd = job.job_dir(tmp_path)
+    (jd / "stages_spec.json").write_text(json.dumps([asdict(spec)]))
+    sd = job.stage_dir(tmp_path, spec.name)
+    sd.mkdir(parents=True, exist_ok=True)
+    # Default cadence is 10 steps: 60 archived + 40 resumed = all 1,000 steps.
+    (sd / "energy.r1.dat").write_text("\n".join(str(i) for i in range(61)) + "\n")
+    (sd / "energy.dat").write_text("\n".join(str(i) for i in range(41)) + "\n")
+    (sd / "last_conf.dat").write_text("t = 1000\nb = 1 1 1\nE = 0 0 0\n")
+    (sd / "oxdna.log").write_text("INFO: END OF THE SIMULATION, everything went OK!\n")
+
+    out = reconcile_oxdna_status(OxdnaJob.load(job.job_id, tmp_path), tmp_path)
+    assert out.status == OxdnaStatus.completed
+    assert out.stages[0].status == "done"
+    assert out.current_stage_idx == 1
+
+
+def test_reconcile_keeps_genuinely_partial_stopped_resume_resumable(tmp_path):
+    job = _write_detached_job(tmp_path, production=True, production_complete=False)
+    job.status = OxdnaStatus.stopped
+    job.save(tmp_path)
+    from backend.core.oxdna_runner import reconcile_oxdna_status
+
+    out = reconcile_oxdna_status(OxdnaJob.load(job.job_id, tmp_path), tmp_path)
+    assert out.status == OxdnaStatus.stopped
+    assert out.stages[-1].status == "running"
 
 
 def test_reconcile_keeps_running_when_process_still_alive(monkeypatch, tmp_path):
@@ -5756,12 +5814,14 @@ def test_composite_trajectory_reports_progress(tmp_path, design, geometry):
     _write_traj(design, geometry, s1, n_frames=8)
 
     calls: list[tuple] = []
+    phases: list[tuple] = []
     out = composite_trajectory(
         design,
         [("relax", "mc", str(s0)), ("prod", "production", str(s1))],
         str(ref),
         max_frames=10,
         progress=lambda d, t: calls.append((d, t)),
+        phase_progress=lambda phase, d, t: phases.append((phase, d, t)),
     )
     total = out["n_frames"]
     assert calls[0] == (0, total)
@@ -5769,6 +5829,39 @@ def test_composite_trajectory_reports_progress(tmp_path, design, geometry):
     dones = [d for d, _ in calls]
     assert dones == sorted(dones)  # monotonic non-decreasing
     assert all(t == total for _, t in calls)  # constant denominator
+    assert phases[0] == ("preprocessing", 0, 2)
+    assert ("preprocessing", 2, 2) in phases
+    assert phases[-1] == ("packing", total, total)
+
+
+def test_packed_composite_matches_json_without_dictionary_cache(
+    tmp_path, design, geometry
+):
+    """The binary viewer path changes representation only, never trajectory content."""
+    import numpy as np
+    import backend.core.oxdna_health as health
+    from backend.core.oxdna_health import composite_trajectory
+
+    ref = tmp_path / "ref.dat"
+    write_configuration(design, geometry, ref, box_nm=80.0)
+    traj = tmp_path / "trajectory.dat"
+    _write_traj(design, geometry, traj, n_frames=5)
+    stages = [("production", "production", str(traj))]
+
+    legacy = composite_trajectory(design, stages, str(ref), max_frames=0)
+    health._ALIGNED_CACHE = None
+    health._FRAME_CACHE = None
+    health._FRAME_CACHE_NT = 0
+    packed = composite_trajectory(design, stages, str(ref), max_frames=0, packed=True)
+
+    assert packed["keys"] == legacy["keys"]
+    assert packed["markers"] == legacy["markers"]
+    assert packed["stages"] == legacy["stages"]
+    assert packed["frames"].dtype == np.float32
+    assert packed["frames"].shape == (legacy["n_frames"], len(legacy["frames"][0]))
+    assert np.allclose(packed["frames"], np.asarray(legacy["frames"]), atol=1e-6)
+    assert health._ALIGNED_CACHE is not None and len(health._ALIGNED_CACHE) == 0
+    assert health._FRAME_CACHE is None or len(health._FRAME_CACHE) == 0
 
 
 def test_oxdna_trajectory_progress_endpoint_idle(monkeypatch, tmp_path):

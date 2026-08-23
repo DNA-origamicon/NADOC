@@ -77,7 +77,7 @@ describe('initOxdnaTrajectoryPlayer', () => {
     player.setLoading({ done: 17, total: 80 })
     expect(loadProgressEl.style.display).not.toBe('none')
     expect(loadProgressEl.querySelector('[data-trajectory-load-fill]').style.width).toBe('21.25%')
-    expect(loadProgressEl.textContent).toContain('Loading frame 17 of 80')
+    expect(loadProgressEl.textContent).toContain('Aligning frames… 21%')
     player.setLoading(null)
     expect(loadProgressEl.style.display).toBe('none')
   })
