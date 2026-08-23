@@ -4289,7 +4289,20 @@
                   </label>
                   <div id="oxdna-anchors-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
 
-                  <div id="oxdna-surface-anchors-section" aria-disabled="true" style="border-top:1px solid #21262d;margin-top:9px;padding-top:8px;opacity:.45">
+                  <div id="oxdna-anchor-transfer-controls" style="display:grid;grid-template-columns:1fr;gap:5px;border-top:1px solid #21262d;margin-top:8px;padding-top:8px">
+                    <button id="oxdna-anchors-to-surface"
+                            title="Move every structure anchor into Surface Anchors"
+                            style="font-size:11px;padding:4px;background:#161b22;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">
+                      Send all to surface anchors
+                    </button>
+                    <button id="oxdna-anchors-to-structure"
+                            title="Move every surface anchor into Structure Anchors for a subsequent run"
+                            style="font-size:11px;padding:4px;background:#161b22;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">
+                      Send all to structure anchors
+                    </button>
+                  </div>
+
+                  <div id="oxdna-surface-anchors-section" aria-disabled="true" style="margin-top:9px;opacity:.45">
                     <div style="font-size:var(--text-xs);color:#c9d1d9;font-weight:600;margin-bottom:5px">Surface Anchors</div>
                     <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">Selected strands designated for attachment to the hard surface.</div>
                     <div style="display:flex;align-items:center;gap:5px">

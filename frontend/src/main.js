@@ -259,7 +259,9 @@ import { initOxdnaFloorSetup } from './ui/oxdna_floor_setup.js'
 import { initOxdnaSurfaceStrandsSetup } from './ui/oxdna_surface_strands_setup.js'
 import { initSurfaceStrandsOverlay } from './scene/surface_strands_overlay.js'
 import { captureNucleotidesFromChains } from './scene/surface_strands_math.js'
-import { initOxdnaAnchorsSetup, setAnchorSectionEnabled } from './ui/oxdna_anchors_setup.js'
+import {
+  initOxdnaAnchorsSetup, initAnchorTransferControls, setAnchorSectionEnabled,
+} from './ui/oxdna_anchors_setup.js'
 import { initPhotoMode }      from './scene/photo_mode.js'
 import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
 import { getSectionCollapsed, setSectionCollapsed } from './ui/section_collapse_state.js'
@@ -1528,10 +1530,15 @@ async function main() {
       glow: 'oxdna-surface-anchors-glow',
     },
   })
+  const oxdnaAnchorTransfers = initAnchorTransferControls({
+    structure: oxdnaAnchorsSetup,
+    surface: oxdnaSurfaceAnchorsSetup,
+  })
   function _syncSurfaceAnchorsGate() {
     const enabled = !!oxdnaFloorSetup?.isEnabled?.()
     const section = document.getElementById('oxdna-surface-anchors-section')
     setAnchorSectionEnabled(section, enabled)
+    oxdnaAnchorTransfers.setSurfaceEnabled(enabled)
     _refreshAnchorGlow()
   }
   _syncSurfaceAnchorsGate()

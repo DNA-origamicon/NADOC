@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { initOxdnaAnchorsSetup, setAnchorSectionEnabled } from './oxdna_anchors_setup.js'
+import {
+  initOxdnaAnchorsSetup, initAnchorTransferControls, setAnchorSectionEnabled,
+} from './oxdna_anchors_setup.js'
 
 describe('setAnchorSectionEnabled', () => {
   it('greys and disables every surface-anchor control until its surface is on', () => {
@@ -16,6 +18,40 @@ describe('setAnchorSectionEnabled', () => {
     expect(section.style.opacity).toBe('1')
     expect(section.style.pointerEvents).toBe('')
     expect([...section.querySelectorAll('button,input,select')].every(el => !el.disabled)).toBe(true)
+  })
+})
+
+describe('initAnchorTransferControls', () => {
+  it('moves all anchors in either direction, merging and deduplicating the destination', () => {
+    document.body.innerHTML = `
+      <div id="s-toggle"></div><span id="s-arrow"></span><div id="s-body"></div>
+      <button id="s-add"></button><button id="s-clear"></button><div id="s-list"></div><div id="s-status"></div>
+      <div id="f-toggle"></div><span id="f-arrow"></span><div id="f-body"></div>
+      <button id="f-add"></button><button id="f-clear"></button><div id="f-list"></div><div id="f-status"></div>
+      <button id="to-surface"></button><button id="to-structure"></button>`
+    const make = prefix => initOxdnaAnchorsSetup({ ids: {
+      toggle: `${prefix}-toggle`, arrow: `${prefix}-arrow`, body: `${prefix}-body`,
+      add: `${prefix}-add`, clear: `${prefix}-clear`, list: `${prefix}-list`,
+      status: `${prefix}-status`,
+    } })
+    const structure = make('s'); const surface = make('f')
+    structure.applyConfig([{ kind: 'overhang', id: 'a' }, { kind: 'overhang', id: 'b' }])
+    surface.applyConfig([{ kind: 'overhang', id: 'b' }, { kind: 'overhang', id: 'c' }])
+    const controls = initAnchorTransferControls({
+      structure, surface, toSurfaceId: 'to-surface', toStructureId: 'to-structure',
+    })
+
+    document.getElementById('to-surface').click()
+    expect(structure.getAnchors()).toEqual([])
+    expect(surface.getAnchors().map(a => a.id)).toEqual(['b', 'c', 'a'])
+
+    document.getElementById('to-structure').click()
+    expect(surface.getAnchors()).toEqual([])
+    expect(structure.getAnchors().map(a => a.id)).toEqual(['b', 'c', 'a'])
+
+    controls.setSurfaceEnabled(false)
+    expect(document.getElementById('to-surface').disabled).toBe(true)
+    document.body.innerHTML = ''
   })
 })
 import { createMockStore } from '../test-helpers/mock_store.js'

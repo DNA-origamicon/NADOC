@@ -87,6 +87,41 @@ export function setAnchorSectionEnabled(section, enabled) {
   }
 }
 
+/** Bind the two bulk move buttons between the oxDNA structure/surface anchor sets. */
+export function initAnchorTransferControls({
+  structure, surface,
+  toSurfaceId = 'oxdna-anchors-to-surface',
+  toStructureId = 'oxdna-anchors-to-structure',
+} = {}) {
+  const toSurface = document.getElementById(toSurfaceId)
+  const toStructure = document.getElementById(toStructureId)
+  let surfaceEnabled = true
+
+  const move = (source, target) => {
+    const incoming = source?.getAnchors?.() || []
+    if (!incoming.length) return 0
+    // applyConfig deduplicates descriptors, so existing destination anchors survive.
+    target?.applyConfig?.([...(target?.getAnchors?.() || []), ...incoming])
+    source?.clear?.()
+    return incoming.length
+  }
+  toSurface?.addEventListener('click', () => {
+    if (surfaceEnabled) move(structure, surface)
+  })
+  toStructure?.addEventListener('click', () => move(surface, structure))
+
+  const refresh = () => {
+    if (toSurface) {
+      toSurface.disabled = !surfaceEnabled
+      toSurface.style.opacity = surfaceEnabled ? '1' : '.45'
+      toSurface.style.cursor = surfaceEnabled ? 'pointer' : 'not-allowed'
+    }
+  }
+  const setSurfaceEnabled = (enabled) => { surfaceEnabled = !!enabled; refresh() }
+  refresh()
+  return { move, setSurfaceEnabled }
+}
+
 export function initOxdnaAnchorsSetup({ getSelection = null, onChange = null, ids = {}, engine = 'oxdna' } = {}) {
   const id = { ..._DEFAULT_IDS, ...ids }
   const toggle = document.getElementById(id.toggle)
