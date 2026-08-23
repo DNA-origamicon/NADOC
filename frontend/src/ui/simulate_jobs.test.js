@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('./oxdna_jobs_panel.js', () => ({
   relaxIndexMap: (jobs) => new Map((jobs || []).map((j, i) => [j.job_id, i + 1])),
   relaxRowLabel: (j, n) => (n ? `relax ${n}` : j.design_name || 'design'),
+  runIndicatorTags: () => '',
   runRowLabel: (j, i) => `Run ${i}`,
   runChildTitle: () => 'child run',
 }))

@@ -321,6 +321,9 @@ class RunRequest(BaseModel):
     field: Optional[FieldElement] = None
     surface: Optional[SurfaceElement] = None
     anchors: list[AnchorRef] = Field(default_factory=list)
+    # Kept distinct in the manifest so selecting a continuation restores these
+    # into the Surface Anchors card. Both anchor lists become identical oxDNA traps.
+    surface_anchors: list[AnchorRef] = Field(default_factory=list)
     anchor_stiff: float = Field(DEFAULT_ANCHOR_STIFF, gt=0.0)
     # Capture strands are TOPOLOGY built into the relaxed parent (they must be present
     # through relaxation for the origami to hybridise to them), so a run can only inherit
@@ -1269,7 +1272,6 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
         },
     )
 
-    import json
     from dataclasses import asdict
 
     cjd = child.job_dir(ws)
@@ -1356,7 +1358,15 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
             "position_nm": body.surface.position_nm,
             "stiff": body.surface.stiff,
         }
-    anchors = [a.model_dump(by_alias=False) for a in body.anchors]
+    ordinary_anchors = [a.model_dump(by_alias=False) for a in body.anchors]
+    surface_anchors = [a.model_dump(by_alias=False) for a in body.surface_anchors]
+    anchors = []
+    seen_anchors = set()
+    for anchor in [*ordinary_anchors, *surface_anchors]:
+        key = json.dumps(anchor, sort_keys=True)
+        if key not in seen_anchors:
+            seen_anchors.add(key)
+            anchors.append(anchor)
     # Surface capture strands built into the relaxed parent are inherited via the copied
     # topology/conf; re-pin their attach ends so they stay tethered through production too.
     cap = capture_run_decision(parent.run_config, body.surface_strands)
@@ -1427,13 +1437,16 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
             "anchors": [
                 a.model_dump(by_alias=True, exclude_none=True) for a in body.anchors
             ],
+            "surface_anchors": [
+                a.model_dump(by_alias=True, exclude_none=True)
+                for a in body.surface_anchors
+            ],
             # Inherited spec, but stamped with the exclusion this run actually applied —
             # otherwise the card echoes back the parent's toggle, not the run's.
             "surface_strands": cap["spec"],
         },
     )
 
-    import json
     from dataclasses import asdict
 
     cjd = child.job_dir(ws)

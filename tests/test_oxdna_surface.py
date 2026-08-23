@@ -438,6 +438,33 @@ def test_run_surface_only_branches_child(design, monkeypatch, tmp_path):
     assert "type = string" not in forces  # no field requested
 
 
+def test_run_preserves_surface_anchor_provenance(design, monkeypatch, tmp_path):
+    client, _ = _run_client(monkeypatch, tmp_path)
+    parent = _completed_parent(tmp_path, design)
+    anchor = {
+        "kind": "domain",
+        "strandId": design.strands[0].id,
+        "domainIndex": 0,
+    }
+    r = client.post(
+        f"/api/oxdna/jobs/{parent.job_id}/run",
+        json={
+            "steps": 1000,
+            "surface": {"dir": [0, 1, 0], "offset_nm": 1.0, "stiff": 5.0},
+            "surface_anchors": [anchor],
+        },
+    )
+    assert r.status_code == 200, r.text
+    from backend.core.oxdna_job import OxdnaJob
+
+    child = OxdnaJob.load(r.json()["job_id"], tmp_path)
+    assert child.run_config["anchors"] == []
+    assert child.run_config["surface_anchors"] == [anchor]
+    forces = (child.job_dir(tmp_path) / "run_forces.txt").read_text()
+    assert "type = repulsion_plane" in forces
+    assert "type = trap" in forces
+
+
 def test_surface_deposition_creates_staged_child(design, monkeypatch, tmp_path):
     client, _ = _run_client(monkeypatch, tmp_path)
     parent = _completed_parent(tmp_path, design)

@@ -462,16 +462,32 @@ export function runElements(job) {
   const field = !!cfg.field
   const surface = !!cfg.surface
   const anchors = (Array.isArray(cfg.anchors) && cfg.anchors.length > 0) ||
+                  (Array.isArray(cfg.surfaceAnchors) && cfg.surfaceAnchors.length > 0) ||
                   (job?.efield?.n_anchored > 0)
-  return { anchors, surface, field }
+  const surfaceDeposition = job?.run_config?.kind === 'surface_deposition'
+  return { anchors, surface, field, surfaceDeposition }
 }
 
-/** Pure: bracketed indicator tags for a run's added elements, in the order
- *  [A]nchors · [H]ard surface · [E]-field (e.g. "[A][H][E]").  Empty string for a
- *  plain production run. */
+/** Pure: bracketed indicator tags for a run's added elements. Surface-deposition
+ *  protocol jobs use the more specific [SD] instead of the generic [H]. */
 export function runIndicatorTags(job) {
   const el = runElements(job)
-  return (el.anchors ? '[A]' : '') + (el.surface ? '[H]' : '') + (el.field ? '[E]' : '')
+  return (el.anchors ? '[A]' : '')
+    + (el.surfaceDeposition ? '[SD]' : (el.surface ? '[H]' : ''))
+    + (el.field ? '[E]' : '')
+}
+
+/** Pure: all positional anchors enabled for a production continuation. Surface
+ * deposition keeps its anchors in a separate card, but the run API accepts one
+ * combined anchor list. Deduplicate in case the same base appears in both cards. */
+export function productionRunAnchors(elements = {}) {
+  const out = []
+  const seen = new Set()
+  for (const anchor of [...(elements.anchors || []), ...(elements.surfaceAnchors || [])]) {
+    const key = JSON.stringify(anchor)
+    if (!seen.has(key)) { seen.add(key); out.push(anchor) }
+  }
+  return out
 }
 
 /** Pure: list-row label for a run child — "Run N" plus its element indicators.
@@ -486,9 +502,11 @@ export function runChildTitle(job) {
   const el = runElements(job)
   if (el.field) return fieldChildTitle(job)
   const parts = []
-  if (el.surface) parts.push('hard surface')
+  if (el.surfaceDeposition) parts.push('surface deposition')
+  else if (el.surface) parts.push('hard surface')
   if (el.anchors) {
-    const n = job?.efield?.n_anchored || runConfigForJob(job).anchors?.length || 0
+    const cfg = runConfigForJob(job)
+    const n = job?.efield?.n_anchored || cfg.anchors?.length || cfg.surfaceAnchors?.length || 0
     parts.push(n ? `${n} anchored` : 'anchored')
   }
   return parts.length ? `Production run · ${parts.join(' · ')}` : 'Production run'
@@ -1424,6 +1442,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (el.surfaceStrands?.enabled) body.surface_strands = el.surfaceStrands
     }
     if (el.anchors?.length) body.anchors = el.anchors
+    if (el.surfaceAnchors?.length) body.surface_anchors = el.surfaceAnchors
     try {
       const fc = await api.estimateOxdnaDisk(body)
       if (!(await confirmDiskSpaceOk(fc))) {
@@ -1484,7 +1503,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       sizeBytes: (job) => job.size_bytes ?? null,
       formatTime: formatJobTime,
       formatSize: formatBytes,
-      rowSig: (j) => `${j.job_id}:${j.status}:${productionState(j)}:${j.out_of_date ? 1 : 0}:${j.archived ? 1 : 0}:${j.size_bytes ?? ''}`,
+      rowSig: (j) => `${j.job_id}:${j.status}:${productionState(j)}:${runIndicatorTags(j)}:${j.out_of_date ? 1 : 0}:${j.archived ? 1 : 0}:${j.size_bytes ?? ''}`,
       colors: { dim: _C.dim, warn: _C.warn },
     }
   }
@@ -2059,6 +2078,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       }
     }
     if (el.anchors?.length) body.anchors = el.anchors
+    if (el.surfaceAnchors?.length) body.surface_anchors = el.surfaceAnchors
     // Capture strands can only be INHERITED from the relaxed parent (they are built
     // into the system before relaxation so the origami hybridises to them as it
     // settles). Refuse rather than launch a run that quietly has none.
@@ -2097,7 +2117,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
 
     prodBtn.disabled = true
     if (runBtn) runBtn.disabled = true     // grey out both immediately on press
-    const what = [body.field && 'field', body.surface && 'surface', body.anchors && 'anchors',
+    const what = [body.field && 'field', body.surface && 'surface',
+      productionRunAnchors(el).length && 'anchors',
       body.surface_strands && `${capPlan.nBeads} capture beads`].filter(Boolean).join(' + ') || 'production'
     _setProdStatus(`Starting run (${what})…`, _C.accent)
     // The consolidated run branches a CHILD job from the relaxed parent (success =

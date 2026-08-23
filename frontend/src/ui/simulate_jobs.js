@@ -28,7 +28,7 @@ import { getRunDir, mountDirectoryButton } from './run_location.js'
 import { renderJobList } from './jobs_panel_render.js'
 import { createContextMenu } from './primitives/context_menu.js'
 import { runControlState, RUN_ACTION } from './job_run_control.js'
-import { relaxIndexMap, relaxRowLabel, runRowLabel, runChildTitle } from './oxdna_jobs_panel.js'
+import { relaxIndexMap, relaxRowLabel, runIndicatorTags, runRowLabel, runChildTitle } from './oxdna_jobs_panel.js'
 import { jobDisplayName as mrdnaDisplayName } from './mrdna_jobs_panel.js'
 import { jobDisplayName as candoDisplayName } from './cando_jobs_panel.js'
 import { jobDisplayName as snupiDisplayName } from './snupi_jobs_panel.js'
@@ -625,7 +625,7 @@ export function initSimulateJobs({
       sizeLabel: (n, total) => n.engine === 'namd' && n.dcd_size_bytes != null && total != null
         ? `${formatBytes(n.dcd_size_bytes)} DCD / ${formatBytes(total)} total`
         : (total ? formatBytes(total) : ''),
-      rowSig: (n) => `${n.engine}:${n.job_id}:${n.status}:${n.production_state}:${n.out_of_date ? 1 : 0}:${n.archived ? 1 : 0}:${n.size_bytes ?? ''}:${n.dcd_size_bytes ?? ''}`,
+      rowSig: (n) => `${n.engine}:${n.job_id}:${n.status}:${n.production_state}:${n.engine === 'oxdna' ? runIndicatorTags(n) : ''}:${n.out_of_date ? 1 : 0}:${n.archived ? 1 : 0}:${n.size_bytes ?? ''}:${n.dcd_size_bytes ?? ''}`,
       colors: { dim: _C.dim, warn: _C.warn },
     }
   }

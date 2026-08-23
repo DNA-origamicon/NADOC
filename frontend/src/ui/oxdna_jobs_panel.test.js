@@ -48,7 +48,7 @@ import {
   productionRunCount, hasTrajectory, isResumable, startButtonLabel, flexConfidenceText,
   isProductionResumable, isRelaxResumable,
   resumeNote, flattenJobTree, descendantIds, fieldChildTitle, deleteConfirmMessage, samplingState,
-  runConfigForJob, healthForDisplay, runElements, runIndicatorTags, runRowLabel, runChildTitle,
+  runConfigForJob, healthForDisplay, productionRunAnchors, runElements, runIndicatorTags, runRowLabel, runChildTitle,
   jobHasFailure, errorLogText, jobOutOfDate, jobSelectionSignature,
   trajectoryFrameEstimate, relaxIndexMap, relaxRowLabel,
   captureStrandRunPlan,
@@ -337,18 +337,20 @@ describe('runElements / runIndicatorTags / runRowLabel (run job-name indicators)
   const fieldJob = { parent_job_id: 'p', run_config: { kind: 'run', field: { field_pN: 3, dir: [1, 0, 0] }, anchors: [{ kind: 'overhang', id: 'o1' }] } }
   const surfaceOnly = { parent_job_id: 'p', run_config: { kind: 'run', surface: { dir: [0, 1, 0], offset_nm: 2, stiff: 5 } } }
   const anchorsOnly = { parent_job_id: 'p', run_config: { kind: 'run', anchors: [{ kind: 'cluster', id: 'c1' }] } }
+  const deposition = { parent_job_id: 'p', run_config: { kind: 'surface_deposition', surface: { dir: [0, 1, 0], offset_nm: 2, stiff: 5 }, surface_anchors: [{ kind: 'base', helixId: 'h1', bp: 2, direction: 'FORWARD' }] } }
   const plain = { parent_job_id: 'p', run_config: { kind: 'run' } }
 
   it('detects which elements a run added', () => {
-    expect(runElements(fieldJob)).toEqual({ anchors: true, surface: false, field: true })
-    expect(runElements(surfaceOnly)).toEqual({ anchors: false, surface: true, field: false })
-    expect(runElements(anchorsOnly)).toEqual({ anchors: true, surface: false, field: false })
-    expect(runElements(plain)).toEqual({ anchors: false, surface: false, field: false })
+    expect(runElements(fieldJob)).toEqual({ anchors: true, surface: false, field: true, surfaceDeposition: false })
+    expect(runElements(surfaceOnly)).toEqual({ anchors: false, surface: true, field: false, surfaceDeposition: false })
+    expect(runElements(anchorsOnly)).toEqual({ anchors: true, surface: false, field: false, surfaceDeposition: false })
+    expect(runElements(deposition)).toEqual({ anchors: true, surface: true, field: false, surfaceDeposition: true })
+    expect(runElements(plain)).toEqual({ anchors: false, surface: false, field: false, surfaceDeposition: false })
   })
 
   it('falls back to efield.n_anchored for old field children without run_config anchors', () => {
     const old = { parent_job_id: 'p', efield: { force_pN: 4, dir: [0, 0, 1], n_anchored: 8 }, stages: [{ kind: 'field' }] }
-    expect(runElements(old)).toEqual({ anchors: true, surface: false, field: true })
+    expect(runElements(old)).toEqual({ anchors: true, surface: false, field: true, surfaceDeposition: false })
   })
 
   it('orders indicator tags [A][H][E]', () => {
@@ -357,11 +359,13 @@ describe('runElements / runIndicatorTags / runRowLabel (run job-name indicators)
     expect(runIndicatorTags(surfaceOnly)).toBe('[H]')
     expect(runIndicatorTags(anchorsOnly)).toBe('[A]')
     expect(runIndicatorTags(fieldJob)).toBe('[A][E]')
+    expect(runIndicatorTags(deposition)).toBe('[A][SD]')
     expect(runIndicatorTags(plain)).toBe('')
   })
 
   it('builds a "Run N" row label with indicators (no lightning bolt)', () => {
     expect(runRowLabel(fieldJob, 2)).toBe('Run 2 [A][E]')
+    expect(runRowLabel(deposition, 2)).toBe('Run 2 [A][SD]')
     expect(runRowLabel(plain, 1)).toBe('Run 1')
     expect(runRowLabel(fieldJob, 3)).not.toContain('⚡')
   })
@@ -370,8 +374,24 @@ describe('runElements / runIndicatorTags / runRowLabel (run job-name indicators)
     const f = { parent_job_id: 'p', efield: { force_pN: 3, dir: [1, 0, 0], n_anchored: 5 }, run_config: { kind: 'run', field: { field_pN: 3, dir: [1, 0, 0] }, anchors: [{ kind: 'overhang' }] } }
     expect(runChildTitle(f)).toMatch(/^E-field /)
     expect(runChildTitle(surfaceOnly)).toBe('Production run · hard surface')
+    expect(runChildTitle(deposition)).toBe('Production run · surface deposition · 1 anchored')
     expect(runChildTitle(anchorsOnly)).toBe('Production run · 1 anchored')
     expect(runChildTitle(plain)).toBe('Production run')
+  })
+})
+
+describe('productionRunAnchors', () => {
+  const ordinary = { kind: 'base', helixId: 'h1', bp: 4, direction: 'FORWARD' }
+  const surface = { kind: 'base', helixId: 'h2', bp: 8, direction: 'REVERSE' }
+
+  it('carries surface-deposition anchors into a Full Sim continuation', () => {
+    expect(productionRunAnchors({ anchors: [], surfaceAnchors: [surface] })).toEqual([surface])
+  })
+
+  it('combines both anchor cards without applying duplicate traps', () => {
+    expect(productionRunAnchors({
+      anchors: [ordinary, surface], surfaceAnchors: [surface],
+    })).toEqual([ordinary, surface])
   })
 })
 
