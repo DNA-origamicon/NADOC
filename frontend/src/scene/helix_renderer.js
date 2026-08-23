@@ -298,6 +298,9 @@ function _installInstanceAlpha(mesh) {
 
 // ── Slab helpers ──────────────────────────────────────────────────────────────
 
+// Keep this in sync with DUPLEX_AXIS_MAX_BASE_SEPARATION_NM in oxdna_health.py.
+const DUPLEX_AXIS_MAX_BASE_SEPARATION_NM = 2.0
+
 export function slabQuaternion(bnDir, tanDir) {
   // base_normal is the measured cross-strand vector and may contain an axial
   // component (the two base centroids can be axially staggered).  makeBasis
@@ -333,7 +336,7 @@ export function pairedSlabCenter(
 ) {
   out.copy(basePos)
 
-  if (mateBasePos) {
+  if (mateBasePos && basePos.distanceTo(mateBasePos) <= DUPLEX_AXIS_MAX_BASE_SEPARATION_NM) {
     const ownAxial = out.dot(axisTangent)
     const mateAxial = mateBasePos.dot(axisTangent)
     out.addScaledVector(axisTangent, (mateAxial - ownAxial) * 0.5)

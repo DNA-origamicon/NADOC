@@ -120,6 +120,19 @@ describe('base slab coordinate abstraction', () => {
     expect(rCenter.x).toBeCloseTo(rBead.x - 0.35 + SLAB_BEAD_CENTER_PENETRATION, 12)
   })
 
+  it('keeps a melted strand slab with its own backbone instead of a distant mate', () => {
+    const tangent = new THREE.Vector3(0, 0, 1)
+    const base = new THREE.Vector3(0, 0, 0)
+    const bead = new THREE.Vector3(-0.7, 0, 0)
+    const distantMate = new THREE.Vector3(0, 0, 20)
+    const center = pairedSlabCenter(
+      bead, base, distantMate, tangent, new THREE.Vector3(1, 0, 0),
+    )
+
+    expect(center.z).toBeCloseTo(0, 12)
+    expect(center.distanceTo(bead)).toBeLessThan(0.7)
+  })
+
   it('puts every largest-face corner of the real h_XY_0_1:0 pair on two shared planes', () => {
     // Exact measured-positioning payload from workspace/2hbx1.nadoc.
     const tangent = new THREE.Vector3(0, 0, 1)
