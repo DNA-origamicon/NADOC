@@ -79,7 +79,14 @@
       min-width: 160px;
       z-index: 100;
       box-shadow: var(--shadow-md);
+      max-width: calc(100vw - 8px);
+      box-sizing: border-box;
+      /* A top-level menu must not be a scroll container: CSS overflow-y:auto
+         also computes overflow-x:auto and clips absolutely-positioned flyouts. */
+      max-height: none;
+      overflow: visible;
     }
+    .dropdown.dropdown--align-right { left: auto; right: 0; }
     .menu-item:hover .dropdown,
     .menu-item:focus-within > .dropdown,
     .menu-item.a11y-open > .dropdown {
@@ -147,7 +154,10 @@
       min-width: 180px;
       z-index: 101;
       box-shadow: var(--shadow-md);
+      max-width: calc(100vw - 8px);
+      box-sizing: border-box;
     }
+    .submenu.submenu--open-left { left: auto; right: 100%; }
     .submenu-item:hover > .submenu,
     .submenu-item:focus-within > .submenu,
     .submenu-item.a11y-open > .submenu {
@@ -393,8 +403,8 @@
       padding: 2px 6px 3px;
     }
     .sf-label {
-      font-size: 10px;
-      color: #8b949e;
+      font-size: 11px;
+      color: #c9d1d9;
       text-transform: uppercase;
       letter-spacing: 0.04em;
       white-space: nowrap;
@@ -1644,19 +1654,19 @@
       flex-direction: column;
       align-items: center;
       gap: 1px;
-      background: #0d1117;
-      border: 1px solid #21262d;
+      background: #21262d;
+      border: 1px solid #6e7681;
       border-radius: 3px;
       cursor: pointer;
       padding: 3px 5px 2px;
-      color: #2d3f50;
+      color: #e6edf3;
       transition: color 0.1s, border-color 0.1s, background 0.1s;
       font-family: inherit;
       line-height: 1;
     }
-    .sf-btn:hover:not(.active) { color: #8b949e; border-color: #30363d; }
+    .sf-btn:hover:not(.active) { color: #ffffff; border-color: #8c959f; background: #30363d; }
     .sf-btn svg { width: 16px; height: auto; }
-    .sf-btn .sf-label-text { font-size: 9px; text-transform: uppercase; letter-spacing: 0.03em; }
+    .sf-btn .sf-label-text { font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; }
     .sf-btn.active[data-key="scaf"]   { color: #29b6f6; border-color: #1565c0; background: rgba(41,182,246,0.08); }
     .sf-btn.active[data-key="stap"]   { color: #ef5350; border-color: #b71c1c; background: rgba(239,83,80,0.08); }
     .sf-btn.active[data-key="ends"]   { color: #79c0ff; border-color: #388bfd; background: rgba(56,139,253,0.08); }
@@ -1673,6 +1683,15 @@
     .sf-btn.active[data-key="ovhg"]   { color: #aa88ff; border-color: #664488; background: rgba(170,136,255,0.08); }
     .sf-btn.active[data-key="clust"]  { color: #ffd479; border-color: #b8860b; background: rgba(255,212,121,0.08); }
     .sf-btn.active[data-key="default"] { color: #8b949e; border-color: #484f58; background: rgba(139,148,158,0.08); }
+    .sf-btn.active {
+      border-color: currentColor !important;
+      background: color-mix(in srgb, currentColor 14%, #21262d) !important;
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 55%, transparent);
+    }
+    .sf-btn:focus-visible {
+      outline: 2px solid #58a6ff;
+      outline-offset: 2px;
+    }
     /* The collapsed trigger wears the colour of whatever it is reporting. */
     .sf-trigger[data-key="strand"]  { color: #c9d1d9; }
     .sf-trigger[data-key="line"]    { color: #a0b8c8; }
@@ -1952,66 +1971,7 @@
     }
     #autoscaffold-box .as-actions button:hover { opacity: 0.85; }
 
-    /* ── GROMACS export background job toast ────────────────────── */
-    #gromacs-job-toast {
-      display: none;
-      position: fixed;
-      top: 44px;
-      right: 12px;
-      width: 260px;
-      background: #161b22;
-      border: 1px solid #30363d;
-      border-radius: 8px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.55);
-      z-index: 200;
-      overflow: hidden;
-    }
-    #gromacs-job-toast.visible { display: block; }
-    #gromacs-job-toast-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 8px 10px 8px 14px;
-      font-size: var(--text-xs);
-      font-weight: 700;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: #8b949e;
-      border-bottom: 1px solid #21262d;
-    }
-    #gromacs-job-dismiss {
-      background: none;
-      border: none;
-      color: #6e7681;
-      cursor: pointer;
-      font-size: 16px;
-      line-height: 1;
-      padding: 0 2px;
-    }
-    #gromacs-job-dismiss:hover { color: #c9d1d9; }
-    #gromacs-job-bar-track {
-      position: relative;
-      height: 3px;
-      background: #21262d;
-      overflow: hidden;
-    }
-    #gromacs-job-bar-fill {
-      position: absolute;
-      height: 100%;
-      width: 35%;
-      background: #1f6feb;
-      animation: gromacs-indeterminate 1.4s ease-in-out infinite;
-    }
-    #gromacs-job-toast.done #gromacs-job-bar-fill {
-      width: 100%;
-      animation: none;
-      background: #2ea043;
-    }
-    #gromacs-job-toast.error #gromacs-job-bar-fill {
-      width: 100%;
-      animation: none;
-      background: #f85149;
-    }
+    /* Shared indeterminate bar used by simulation preparation cards. */
     @keyframes gromacs-indeterminate {
       0%   { left: -35%; }
       100% { left: 100%; }
@@ -2020,28 +1980,6 @@
       from { background-position: 0 0; }
       to   { background-position: 32px 0; }
     }
-    #gromacs-job-label {
-      padding: 7px 14px 8px;
-      font-size: 11px;
-      color: #c9d1d9;
-    }
-    #gromacs-job-download {
-      display: none;
-      width: 100%;
-      padding: 7px 14px;
-      background: #238636;
-      border: none;
-      border-top: 1px solid #2ea043;
-      color: #fff;
-      font-family: var(--font-ui);
-      font-size: 11px;
-      cursor: pointer;
-      text-align: left;
-      box-sizing: border-box;
-    }
-    #gromacs-job-toast.done #gromacs-job-download { display: block; }
-    #gromacs-job-download:hover { background: #2ea043; }
-
     /* ── Help / Hotkeys modal ────────────────────────────────────── */
     #help-modal {
       display: none;
@@ -3127,17 +3065,6 @@
     </div>
   </div>
 
-  <!-- GROMACS export background job toast -->
-  <div id="gromacs-job-toast">
-    <div id="gromacs-job-toast-header">
-      <span>GROMACS Export</span>
-      <button id="gromacs-job-dismiss" title="Dismiss">×</button>
-    </div>
-    <div id="gromacs-job-bar-track"><div id="gromacs-job-bar-fill"></div></div>
-    <div id="gromacs-job-label">Building package…</div>
-    <button id="gromacs-job-download">↓ Download ZIP</button>
-  </div>
-
   <!-- Assign-scaffold-sequence picker -->
   <!-- Assign Scaffold Sequence modal body. Outer modal chrome is built by
        createModal() in main.js on first open. -->
@@ -3739,27 +3666,48 @@
           <button class="dropdown-item" id="menu-file-save-as">Save As…</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-file-close-session" style="color:#f85149">Close Session</button>
+        </div>
+      </div>
+
+      <div class="menu-item" id="menu-item-import">
+        <button>Import</button>
+        <div class="dropdown">
+          <button class="dropdown-item" id="menu-file-upload">Import Native Part or Assembly…</button>
+          <button class="dropdown-item" id="menu-file-package-import">Import NADOC + Simulations…</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-          <button class="dropdown-item" id="menu-file-upload">Upload to Server…</button>
-          <button class="dropdown-item" id="menu-file-download">Download from Server…</button>
-          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-          <button class="dropdown-item" id="menu-file-paste-script">Paste Script…</button>
           <button class="dropdown-item" id="menu-file-import-cadnano">Import caDNAno…</button>
           <button class="dropdown-item" id="menu-file-import-scadnano">Import scadnano…</button>
           <button class="dropdown-item" id="menu-file-import-pdb">Import PDB…</button>
-          <button class="dropdown-item" id="menu-file-attach-protein">Attach Protein to Overhang…</button>
+        </div>
+      </div>
+
+      <div class="menu-item" id="menu-item-export">
+        <button>Export</button>
+        <div class="dropdown">
+          <button class="dropdown-item" id="menu-file-export-native">Export Current NADOC…</button>
+          <button class="dropdown-item" id="menu-file-package-export">Export NADOC + Simulations…</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-          <button class="dropdown-item" id="menu-file-export-seq-csv">Export Sequences (CSV)</button>
-          <button class="dropdown-item" id="menu-file-export-seq-xlsx">Export Sequences (Excel, overhang bold)</button>
-          <button class="dropdown-item" id="menu-file-export-idt-xlsx">Export IDT Order (Excel)</button>
-          <button class="dropdown-item" id="menu-file-export-cadnano">Export caDNAno (.json)</button>
-          <button class="dropdown-item" id="menu-file-export-pdb">Export PDB</button>
-          <button class="dropdown-item" id="menu-file-export-psf">Export NAMD Topology (.psf)</button>
-          <button class="dropdown-item" id="menu-file-export-stl">Export Surface STL (3D print)</button>
-          <button class="dropdown-item" id="menu-file-export-3mf">Export Surface 3MF (multi-color print)</button>
-          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-          <button class="dropdown-item" id="menu-file-export-namd-complete">Export NAMD Package (.zip)</button>
-          <button class="dropdown-item" id="menu-file-export-gromacs-complete">Export GROMACS Package (.zip)</button>
+          <div class="submenu-item">Sequences &amp; Ordering <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
+            <div class="submenu">
+              <button class="dropdown-item" id="menu-file-export-seq-csv">Sequences (CSV)</button>
+              <button class="dropdown-item" id="menu-file-export-seq-xlsx">Sequences (Excel, overhang bold)</button>
+              <button class="dropdown-item" id="menu-file-export-idt-xlsx">IDT Order (Excel)</button>
+            </div>
+          </div>
+          <button class="dropdown-item" id="menu-file-export-cadnano">caDNAno (.json)</button>
+          <button class="dropdown-item" id="menu-file-export-scadnano">scadnano (.sc)</button>
+          <div class="submenu-item">Atomistic <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
+            <div class="submenu">
+              <button class="dropdown-item" id="menu-file-export-pdb">Structure (PDB)</button>
+              <button class="dropdown-item" id="menu-file-export-psf">NAMD Topology (PSF)</button>
+            </div>
+          </div>
+          <div class="submenu-item">3D Printing <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
+            <div class="submenu">
+              <button class="dropdown-item" id="menu-file-export-stl">Surface (STL)</button>
+              <button class="dropdown-item" id="menu-file-export-3mf">Multi-color Surface (3MF)</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -3804,6 +3752,16 @@
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-tools-overhangs-manager">Overhangs Manager…</button>
           <button class="dropdown-item" id="menu-tools-conjugate-manager">Conjugate Manager…</button>
+          <div class="submenu-item">Proteins <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
+            <div class="submenu">
+              <button class="dropdown-item" id="menu-file-attach-protein">Attach Protein to Overhang…</button>
+            </div>
+          </div>
+          <div class="submenu-item">Automation <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
+            <div class="submenu">
+              <button class="dropdown-item" id="menu-file-paste-script">Paste Script…</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -3861,30 +3819,33 @@
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-axes">Origin Axes<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-helical-axes">Helical Axis Lines <span style="color:#484f58;font-size:var(--text-xs)">[/]</span><span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-slice">Slice Plane <span style="color:#484f58;font-size:var(--text-xs)">[S]</span><span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-unfold">2D Unfold <span style="color:#484f58;font-size:var(--text-xs)">[U]</span><span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-cadnano">Cadnano Mode <span style="color:#484f58;font-size:var(--text-xs)">[K]</span><span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-deform">Deformed View <span style="color:#484f58;font-size:var(--text-xs)">[D]</span><span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-extra-base-spacing" title="Widen the lattice to the interhelical spacing this design actually relaxes to in MD. A structure with bases between crossovers ends up less dense; the widest junction sets the pitch for the whole bundle. Display only — the design is unchanged.">Adjust for Extra Bases<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-loop-skip">Loop/Skip Highlights<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-md-segmentation">MD Segmentation<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-helix-labels">Helix Labels<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-debug">Debug Overlay <span style="color:#484f58;font-size:var(--text-xs)">[`]</span><span class="menu-toggle-pill"></span></button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <!-- Match the View toolbar's left-to-right order. -->
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-sequences">Sequences<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-hide-staples">Hide Staples<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-reference" title="Show inactive reference geometry (translucent backdrop strands you design against)">Reference Geometry<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-overhang-names">Overhang Names<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-periodic-seam-arcs" title="Show the long crossover arcs that connect strands end-to-end across a periodic boundary (hidden by default)">End-to-End Crossovers<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-undefined-bases">Highlight Undefined Bases<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-joints">Joint Indicators<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-fluorescence">Fluorescence<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-fret">FRET Checker<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-loop-skip">Loop/Skip Highlights<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-overhang-names">Overhang Names<span class="menu-toggle-pill"></span></button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <!-- Match the Mode toolbar's left-to-right order. -->
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-extra-base-spacing" title="Widen the lattice to the interhelical spacing this design actually relaxes to in MD. A structure with bases between crossovers ends up less dense; the widest junction sets the pitch for the whole bundle. Display only — the design is unchanged.">Adjust for Extra Bases<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-deform">Deformed View<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-unfold" title="Stack helices into a flat 2D overview. Available for non-atomistic single-part views when deformations are suppressed; entering this view turns off expanded spacing.">2D Unfold <span style="color:#484f58;font-size:var(--text-xs)">[U]</span><span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-cadnano">Cadnano Mode <span style="color:#484f58;font-size:var(--text-xs)">[K]</span><span class="menu-toggle-pill"></span></button>
           <div class="dropdown-item" style="display:flex;align-items:center;gap:6px;padding:4px 12px">
             <label for="unfold-spacing-input" style="font-size:11px;color:#8b949e;white-space:nowrap">Unfold spacing</label>
             <input id="unfold-spacing-input" type="number" min="1" max="10" step="0.5" value="2.5"
               style="width:52px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:11px">
             <span style="font-size:11px;color:#8b949e">nm</span>
           </div>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-md-segmentation">MD Segmentation<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-helix-labels">Helix Labels <span style="color:#484f58;font-size:var(--text-xs)">[L]</span><span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-hide-staples">Hide Staples<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-reference" title="Show inactive reference geometry (translucent backdrop strands you design against)">Reference Geometry<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-periodic-seam-arcs" title="Show the normally hidden long connector arcs for forced ligations that cross a periodic seam. This does not create or remove crossovers.">Periodic Seam Connections<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-joints">Joint Indicators<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-fluorescence">Fluorescence<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-fret">FRET Checker<span class="menu-toggle-pill"></span></button>
         </div>
       </div>
 
@@ -3906,6 +3867,30 @@
         </div>
       </div>
 
+      <!-- Developer diagnostics and experimental render comparisons -->
+      <div class="menu-item" id="menu-item-debug">
+        <button>Debug</button>
+        <div class="dropdown">
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-debug">Debug Overlay <span style="color:#484f58;font-size:var(--text-xs)">[`]</span><span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item" id="menu-help-strand-anim">Strand Animations Testing…</button>
+          <button class="dropdown-item" id="menu-debug-mrdna-roundtrip">MrDNA Round-Trip Test…</button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-help-molecular-placement-audit" title="Compare current and diagnostic candidate molecular placements in a read-only four-panel view.">Molecular Placement Audit<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-help-extra-base-metrics-audit" title="Review measured extra-base states, stable windows, populations, transitions, and cross-metric validation.">Extra-Base Metrics Audit<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-help-hull-audit" title="Compare the current Hull Prism with the topology-preserving dsDNA occupancy candidate.">Hull Audit<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-help-overlay-mode" title="Show the full representation together with the atomistic ball-and-stick representation.">Overlay Mode<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-help-new-positioning" title="Show the full and atomistic representations at their MD-measured positions instead of the legacy build geometry. Display only.">New Positioning<span class="menu-toggle-pill"></span></button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
+          <button class="dropdown-item" id="menu-debug-lod-hud">Show LOD HUD</button>
+          <button class="dropdown-item" id="menu-debug-hull-cluster">Show Hull Cluster Debug</button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-debug-wireframe">Wireframe<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-debug-doubleside">Force Double-Side<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-debug-opaque">Force Opaque<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-debug-inspect">Inspect Mesh (click)<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item" id="menu-debug-copy-camera">Copy Camera</button>
+        </div>
+      </div>
+
       <!-- Help menu -->
       <div class="menu-item">
         <button>Help</button>
@@ -3916,27 +3901,7 @@
           <button class="dropdown-item" id="menu-help-open-steamvr" title="Start SteamVR. In a NADOC VR session, choose Desktop in the controller menu for the live interactive workstation view.">Open SteamVR / Desktop…</button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-help-view-vr" aria-pressed="false" title="View the current 3D scene in an immersive VR headset."><span class="vr-menu-label">View in VR</span><span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item" id="menu-help-fjc-sim">FJC sim…</button>
-          <button class="dropdown-item" id="menu-help-strand-anim">Strand Animations Testing…</button>
           <button class="dropdown-item" id="menu-create-seam">Create Seam</button>
-          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-help-molecular-placement-audit" title="Compare current and diagnostic candidate molecular placements in a read-only four-panel view.">Molecular Placement Audit<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-help-extra-base-metrics-audit" title="Review measured extra-base states, stable windows, populations, transitions, and cross-metric validation.">Extra-Base Metrics Audit<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-help-hull-audit" title="Compare the current Hull Prism with the topology-preserving dsDNA occupancy candidate.">Hull Audit<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-help-overlay-mode" title="Show the full representation together with the atomistic ball-and-stick representation.">Overlay Mode<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-help-new-positioning" title="Show the full and atomistic representations at their MD-measured positions instead of the legacy build geometry. Display only.">New Positioning<span class="menu-toggle-pill"></span></button>
-          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-          <div class="submenu-item">Debug <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
-            <div class="submenu">
-              <button class="dropdown-item" id="menu-debug-mrdna-roundtrip">MrDNA Round-Trip Test…</button>
-              <button class="dropdown-item" id="menu-debug-lod-hud">Show LOD HUD</button>
-              <button class="dropdown-item" id="menu-debug-hull-cluster">Show Hull Cluster Debug</button>
-              <button class="dropdown-item dropdown-item--toggleable" id="menu-debug-wireframe">Wireframe<span class="menu-toggle-pill"></span></button>
-              <button class="dropdown-item dropdown-item--toggleable" id="menu-debug-doubleside">Force Double-Side<span class="menu-toggle-pill"></span></button>
-              <button class="dropdown-item dropdown-item--toggleable" id="menu-debug-opaque">Force Opaque<span class="menu-toggle-pill"></span></button>
-              <button class="dropdown-item dropdown-item--toggleable" id="menu-debug-inspect">Inspect Mesh (click)<span class="menu-toggle-pill"></span></button>
-              <button class="dropdown-item" id="menu-debug-copy-camera">Copy Camera</button>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -3980,6 +3945,9 @@
             <div class="hk-section-title">Edit</div>
             <div class="hk-row"><span class="hk-desc">Undo</span><span class="hk-key">Ctrl Z</span></div>
             <div class="hk-row"><span class="hk-desc">Redo</span><span class="hk-key">Ctrl Y</span></div>
+            <div class="hk-row"><span class="hk-desc">Redo (alternate)</span><span class="hk-key">Ctrl Shift Z</span></div>
+            <div class="hk-row"><span class="hk-desc">Copy selected clusters</span><span class="hk-key">Ctrl C</span></div>
+            <div class="hk-row"><span class="hk-desc">Paste copied clusters</span><span class="hk-key">Ctrl V</span></div>
           </div>
           <div class="hk-section">
             <div class="hk-section-title">Routing &amp; Sequencing</div>
@@ -3991,17 +3959,18 @@
           </div>
           <div class="hk-section">
             <div class="hk-section-title">View</div>
-            <div class="hk-row"><span class="hk-desc">Fit in View</span><span class="hk-key">F</span></div>
+            <div class="hk-row"><span class="hk-desc">Frame selection or fit all</span><span class="hk-key">F</span></div>
+            <div class="hk-row"><span class="hk-desc">Snap camera to nearest axis</span><span class="hk-key">N</span></div>
+            <div class="hk-row"><span class="hk-desc">Capture camera pose</span><span class="hk-key">V</span></div>
+            <div class="hk-row"><span class="hk-desc">Expanded helix spacing</span><span class="hk-key">Q</span></div>
             <div class="hk-row"><span class="hk-desc">2D Unfold</span><span class="hk-key">U</span></div>
-            <div class="hk-row"><span class="hk-desc">Deformed View</span><span class="hk-key">D</span></div>
-            <div class="hk-row"><span class="hk-desc">Spreadsheet</span><span class="hk-key">S</span></div>
-            <div class="hk-row"><span class="hk-desc">Physics</span><span class="hk-key">P</span></div>
-            <div class="hk-row"><span class="hk-desc">Debug Overlay</span><span class="hk-key">`</span></div>
+            <div class="hk-row"><span class="hk-desc">caDNAno mode</span><span class="hk-key">K</span></div>
+            <div class="hk-row"><span class="hk-desc">Helical axis lines</span><span class="hk-key">/</span></div>
+            <div class="hk-row"><span class="hk-desc">Helix labels</span><span class="hk-key">L</span></div>
           </div>
           <div class="hk-section">
             <div class="hk-section-title">Tool Filter</div>
             <div class="hk-row"><span class="hk-desc">Toggle Blunt Ends</span><span class="hk-key">B</span></div>
-            <div class="hk-row"><span class="hk-desc">Toggle Manual Crossovers</span><span class="hk-key">C</span></div>
             <div class="hk-row"><span class="hk-desc">Toggle Overhang Locations</span><span class="hk-key">O</span></div>
           </div>
           <div class="hk-section">
@@ -4014,10 +3983,16 @@
           </div>
           <div class="hk-section">
             <div class="hk-section-title">Interaction</div>
-            <div class="hk-row"><span class="hk-desc">Place Crossover</span><span class="hk-key">X</span></div>
-            <div class="hk-row"><span class="hk-desc">Measure Distance</span><span class="hk-key">M</span></div>
+            <div class="hk-row"><span class="hk-desc">Ligate selected 5′/3′ ends</span><span class="hk-key">X</span></div>
+            <div class="hk-row"><span class="hk-desc">Measure selected points</span><span class="hk-key">Shift M</span></div>
+            <div class="hk-row"><span class="hk-desc">Delete selected object</span><span class="hk-key">Delete</span></div>
             <div class="hk-row"><span class="hk-desc">Command Palette</span><span class="hk-key">Ctrl K</span></div>
             <div class="hk-row"><span class="hk-desc">Cancel / Exit</span><span class="hk-key">Esc</span></div>
+          </div>
+          <div class="hk-section">
+            <div class="hk-section-title">Debug</div>
+            <div class="hk-row"><span class="hk-desc">Debug hover overlay</span><span class="hk-key">`</span></div>
+            <div class="hk-row"><span class="hk-desc">Dump deformation data</span><span class="hk-key">Shift D</span></div>
           </div>
         </div>
       </div>

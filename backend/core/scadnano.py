@@ -466,3 +466,87 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
     )
 
     return design, warnings
+
+
+def export_scadnano(design: Design) -> dict:
+    """Convert a NADOC design to scadnano's JSON interchange representation."""
+    if design.lattice_type not in (LatticeType.SQUARE, LatticeType.HONEYCOMB):
+        raise ValueError("scadnano export requires a square or honeycomb lattice")
+
+    used_indices: set[int] = set()
+    helix_indices: dict[str, int] = {}
+    for fallback, helix in enumerate(design.helices):
+        try:
+            candidate = int(helix.label) if helix.label is not None else fallback
+        except (TypeError, ValueError):
+            candidate = fallback
+        while candidate in used_indices:
+            candidate += 1
+        used_indices.add(candidate)
+        helix_indices[helix.id] = candidate
+
+    helices = []
+    loop_skips: dict[str, list[LoopSkip]] = {}
+    for helix in design.helices:
+        row, col = helix.grid_pos or (0, helix_indices[helix.id])
+        start = helix.bp_start
+        helices.append({
+            "idx": helix_indices[helix.id],
+            "grid_position": [col, row],
+            "min_offset": start,
+            "max_offset": start + helix.length_bp,
+        })
+        loop_skips[helix.id] = list(helix.loop_skips)
+
+    ext_by_key = {(ext.strand_id, ext.end): ext for ext in design.extensions}
+    strands = []
+    for strand in design.strands:
+        domains = []
+        ext5 = ext_by_key.get((strand.id, "five_prime"))
+        ext3 = ext_by_key.get((strand.id, "three_prime"))
+        if ext5 and ext5.sequence:
+            domains.append({"extension_num_bases": len(ext5.sequence)})
+        for domain in strand.domains:
+            lo, hi = sorted((domain.start_bp, domain.end_bp))
+            deletions = []
+            insertions = []
+            for entry in loop_skips.get(domain.helix_id, []):
+                if not lo <= entry.bp_index <= hi:
+                    continue
+                if entry.delta < 0:
+                    deletions.extend([entry.bp_index] * abs(entry.delta))
+                elif entry.delta > 0:
+                    insertions.append([entry.bp_index, entry.delta])
+            payload = {
+                "helix": helix_indices[domain.helix_id],
+                "forward": domain.direction == Direction.FORWARD,
+                "start": lo,
+                "end": hi + 1,
+            }
+            if deletions:
+                payload["deletions"] = deletions
+            if insertions:
+                payload["insertions"] = insertions
+            domains.append(payload)
+        if ext3 and ext3.sequence:
+            domains.append({"extension_num_bases": len(ext3.sequence)})
+
+        payload = {
+            "is_scaffold": strand.strand_type == StrandType.SCAFFOLD,
+            "domains": domains,
+        }
+        if strand.color and strand.strand_type != StrandType.SCAFFOLD:
+            payload["color"] = strand.color
+        sequence = (ext5.sequence if ext5 else "") + (strand.sequence or "") + (ext3.sequence if ext3 else "")
+        if sequence:
+            payload["sequence"] = sequence
+        strands.append(payload)
+
+    return {
+        "version": "0.19.0",
+        "name": design.metadata.name or "NADOC export",
+        "grid": "square" if design.lattice_type == LatticeType.SQUARE else "honeycomb",
+        "helices": helices,
+        "strands": strands,
+        "photoproduct_junctions": [junction.model_dump() for junction in design.photoproduct_junctions],
+    }

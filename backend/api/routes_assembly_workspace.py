@@ -40,14 +40,18 @@ from __future__ import annotations
 import asyncio
 import os
 import shutil
+import tempfile
 import threading
+import zipfile
 from datetime import datetime as _dt, timezone as _tz
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.background import BackgroundTasks
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from backend.api import assembly as _asm
 from backend.api import assembly_state
@@ -535,6 +539,60 @@ def get_library_file_content(path: str) -> dict:
         else dest.read_text(encoding="utf-8"),
         "identity_disposition": disposition,
     }
+
+
+@router.get("/library/native-package")
+def download_native_package(path: str, background_tasks: BackgroundTasks) -> FileResponse:
+    """Download a portable .nadocpkg containing a part and all associated simulations."""
+    from backend.core.native_part_package import create_package
+
+    try:
+        source = _safe_workspace_path(path)
+        fd, temporary = tempfile.mkstemp(prefix="nadoc-part-", suffix=".nadocpkg")
+        os.close(fd)
+        create_package(_asm._WORKSPACE_DIR, path, Path(temporary))
+    except (ValueError, OSError) as exc:
+        if "temporary" in locals():
+            Path(temporary).unlink(missing_ok=True)
+        raise HTTPException(400, detail=str(exc)) from exc
+    background_tasks.add_task(Path(temporary).unlink, missing_ok=True)
+    safe = "".join(c if c.isalnum() or c in "-_. " else "_" for c in source.stem)
+    return FileResponse(
+        temporary,
+        media_type="application/vnd.nadoc.part-package+zip",
+        filename=f"{safe}.nadocpkg",
+        background=background_tasks,
+    )
+
+
+@router.post("/library/native-package", status_code=201)
+async def upload_native_package(
+    request: Request, path: str, overwrite: bool = False
+) -> dict:
+    """Stream a .nadocpkg request body to disk, validate it, and restore its jobs."""
+    from backend.core.native_part_package import import_package
+
+    fd, temporary = tempfile.mkstemp(prefix="nadoc-upload-", suffix=".nadocpkg")
+    os.close(fd)
+    temp_path = Path(temporary)
+    try:
+        with temp_path.open("wb") as output:
+            async for chunk in request.stream():
+                output.write(chunk)
+        result = await run_in_threadpool(
+            import_package,
+            _asm._WORKSPACE_DIR,
+            temp_path,
+            path,
+            overwrite_part=overwrite,
+        )
+        return result
+    except FileExistsError as exc:
+        raise HTTPException(409, detail=str(exc)) from exc
+    except (ValueError, OSError, zipfile.BadZipFile) as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+    finally:
+        temp_path.unlink(missing_ok=True)
 
 
 @router.post("/library/mkdir", status_code=201)

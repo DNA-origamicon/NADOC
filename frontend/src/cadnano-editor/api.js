@@ -580,6 +580,19 @@ export async function exportCadnano() {
   return true
 }
 
+/** Download the current design as a scadnano .sc file. */
+export async function exportScadnano() {
+  const r = await fetch('/api/design/export/scadnano', { headers: docHeaders() })
+  if (!r.ok) return false
+  const cd = r.headers.get('Content-Disposition') ?? ''
+  const m = cd.match(/filename="([^"]+)"/)
+  const blob = await r.blob()
+  const url = URL.createObjectURL(blob)
+  const a = Object.assign(document.createElement('a'), { href: url, download: m ? m[1] : 'design.sc' })
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+  return true
+}
+
 /** Download the staple/scaffold sequences as a CSV file. */
 export async function exportSequenceCsv() {
   const r = await fetch('/api/design/export/sequence-csv', { headers: docHeaders() })

@@ -194,6 +194,7 @@ import { initExpandedSpacing }     from './scene/expanded_spacing.js'
 import { registerShortcut } from './input/shortcuts.js'
 import { initKeyboardShortcuts } from './ui/keyboard_shortcuts.js'
 import { initAccessibility } from './ui/accessibility.js'
+import { initMenuFlyouts } from './ui/menu_flyouts.js'
 import { initViewToolButtons } from './ui/view_tool_buttons.js'
 import { initToolFilterToggles } from './ui/tool_filter_toggles.js'
 import { initViewLegends } from './ui/view_legends.js'
@@ -1956,7 +1957,7 @@ async function main() {
       }) ?? false
       const { deformVisuActive } = store.getState()
       if ((hasDeformations || hasEffectiveTransform) && deformVisuActive) {
-        showToast('Deformations are active — press D to suppress them, then unfold')
+        showToast('Deformations are active — turn off Deformed View in the View menu, then unfold')
         return
       }
     }
@@ -2005,7 +2006,7 @@ async function main() {
       }) ?? false
       const { deformVisuActive } = store.getState()
       if ((hasDeformations || hasEffectiveTransform) && deformVisuActive) {
-        showToast('Deformations are active — press D to suppress them, then enter cadnano mode')
+        showToast('Deformations are active — turn off Deformed View in the View menu, then enter cadnano mode')
         return
       }
       expandedSpacing.forceOff()
@@ -2324,7 +2325,7 @@ async function main() {
     const { currentDesign, currentPlane, deformVisuActive } = store.getState()
     if (!currentDesign || !currentPlane) return
     if (deformVisuActive && currentDesign.deformations?.length) {
-      showToast('Slice plane is only available on the undeformed model — press D to suppress deformations first')
+      showToast('Slice plane is only available on the undeformed model — turn off Deformed View in the View menu first')
       return
     }
     const offset = bundleMidOffset(currentDesign, currentPlane)
@@ -3228,7 +3229,7 @@ async function main() {
         const ext     = file.name.endsWith('.nass') ? '.nass' : '.nadoc'
         const stem    = file.name.replace(/\.(nadoc|nass)$/i, '')
         const dest    = await openFileBrowser({
-          title: `Upload "${file.name}" to…`,
+          title: `Import "${file.name}" — choose destination`,
           mode: 'save',
           fileType: ext === '.nass' ? 'assembly' : 'part',
           suggestedName: stem,
@@ -3243,16 +3244,46 @@ async function main() {
     input.click()
   })
 
-  document.getElementById('menu-file-download')?.addEventListener('click', async () => {
-    const result = await openFileBrowser({ title: 'Download from Server', mode: 'open', fileType: 'all', api })
+  document.getElementById('menu-file-export-native')?.addEventListener('click', async () => {
+    const { assemblyActive, currentAssembly, currentDesign } = store.getState()
+    if (assemblyActive) {
+      if (!currentAssembly) { showToast('No assembly loaded.', { severity: 'error' }); return }
+      if (!await api.exportAssembly()) showToast('Assembly export failed.', { severity: 'error' })
+    } else {
+      if (!currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
+      if (!await api.exportDesign()) showToast('Part export failed.', { severity: 'error' })
+    }
+  })
+
+  document.getElementById('menu-file-package-export')?.addEventListener('click', async () => {
+    const result = await openFileBrowser({ title: 'Export NADOC + Simulations', mode: 'open', fileType: 'part', api })
     if (!result) return
-    const data = await api.getLibraryFileContent(result.path)
-    if (!data?.content) { showToast('Could not retrieve file from server.', { severity: 'error' }); return }
-    const blob = new Blob([data.content], { type: 'application/json' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
-    a.href = url; a.download = result.path.split('/').pop(); a.click()
-    URL.revokeObjectURL(url)
+    api.downloadNativePartPackage(result.path)
+    showToast('NADOC + simulations export is being built. Large simulations may take several minutes.')
+  })
+
+  document.getElementById('menu-file-package-import')?.addEventListener('click', () => {
+    const input = document.createElement('input')
+    input.type = 'file'; input.accept = '.nadocpkg,application/zip'
+    input.onchange = async (e) => {
+      const file = e.target.files?.[0]
+      if (!file) return
+      const stem = file.name.replace(/\.nadocpkg$/i, '')
+      const dest = await openFileBrowser({
+        title: `Import NADOC + Simulations — choose destination`, mode: 'save', fileType: 'part',
+        suggestedName: stem, suggestedExt: '.nadoc', api,
+      })
+      if (!dest) return
+      showToast('Importing NADOC + simulations…', { loading: true, id: 'native-package-import' })
+      const result = await api.uploadNativePartPackage(file, dest.path, dest.overwrite ?? false)
+      if (result) {
+        showToast(`Imported NADOC and ${result.simulations.length} simulation job(s).`, { severity: 'success', id: 'native-package-import' })
+        libraryPanel?.refresh()
+      } else {
+        showToast(api.lastErrorMessage?.() || 'Could not import NADOC + simulations.', { severity: 'error', id: 'native-package-import' })
+      }
+    }
+    input.click()
   })
 
   document.getElementById('menu-assembly-add-part')?.addEventListener('click', () => {
@@ -3947,6 +3978,7 @@ async function main() {
     getOoActiveIds:           () => _orientPanel.getActiveIds(),
   })
   initAccessibility()
+  initMenuFlyouts()
 
   // ── Command palette ─────────────────────────────────────────────────────────
   initCommandPalette({
@@ -5654,7 +5686,7 @@ async function main() {
     openProteinAttachModal({ store, api, onChanged: _refreshProteins })
   })
 
-  // ── Export menu (File → Export submenu) ──────────────────────────────────────
+  // ── Export menu ──────────────────────────────────────────────────────────────
   initExportMenu({
     store, api,
     getPdbVisualization: () => {

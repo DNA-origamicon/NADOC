@@ -1142,7 +1142,7 @@ async function _syncPositionsOnlyDiff(json) {
  * Uses the GET /design/export endpoint which returns JSON with Content-Disposition.
  */
 export async function exportDesign() {
-  const r = await fetch(`${BASE}/design/export`)
+  const r = await fetch(`${BASE}/design/export`, { headers: docHeaders() })
   if (!r.ok) {
     const json = await r.json().catch(() => null)
     store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
@@ -1477,6 +1477,23 @@ export async function exportCadnano() {
   return true
 }
 
+export async function exportScadnano() {
+  const r = await fetch(`${BASE}/design/export/scadnano`, { headers: docHeaders() })
+  if (!r.ok) {
+    const json = await r.json().catch(() => null)
+    store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
+    return false
+  }
+  const blob = await r.blob()
+  const cd = r.headers.get('Content-Disposition') || ''
+  const match = cd.match(/filename="?([^"]+)"?/)
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = match ? match[1] : 'design.sc'; a.click()
+  URL.revokeObjectURL(url)
+  return true
+}
+
 /**
  * Stream a backend export URL to a file download, doc-scoped and error-aware.
  *
@@ -1530,10 +1547,6 @@ export function exportPdb(positions = null, visualization = null) {
 
 export function exportPsf() {
   return _downloadBinaryExport('/design/export/psf', 'design.psf')
-}
-
-export function exportNamdComplete() {
-  return _downloadBinaryExport('/design/export/namd-complete', 'design_namd_complete.zip')
 }
 
 export async function exportSurfaceStl({ targetMm = 200, gridSpacing, probeRadius } = {}) {
@@ -3632,7 +3645,7 @@ export async function createAssembly(name = 'Untitled') {
 }
 
 export async function getAssemblyContent() {
-  const r = await fetch(`${BASE}/assembly/export`)
+  const r = await fetch(`${BASE}/assembly/export`, { headers: docHeaders() })
   if (!r.ok) return null
   return r.text()
 }
@@ -3646,7 +3659,7 @@ export async function importAssembly(content, { docId } = {}) {
  * Trigger a browser download of the active assembly as a .nass file.
  */
 export async function exportAssembly() {
-  const r = await fetch(`${BASE}/assembly/export`)
+  const r = await fetch(`${BASE}/assembly/export`, { headers: docHeaders() })
   if (!r.ok) {
     const json = await r.json().catch(() => null)
     store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
@@ -4540,6 +4553,32 @@ export async function uploadLibraryFile(content, filename, opts = {}) {
   if (opts.destPath)  body.dest_path = opts.destPath
   if (opts.overwrite !== undefined) body.overwrite = opts.overwrite
   return _request('POST', '/library/upload', body)
+}
+
+/** Download a portable part package containing the .nadoc and all linked simulations. */
+export function downloadNativePartPackage(path) {
+  const a = document.createElement('a')
+  a.href = `${BASE}/library/native-package?path=${encodeURIComponent(path)}`
+  a.download = ''
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
+/** Stream a portable .nadocpkg into the workspace without base64/JSON inflation. */
+export async function uploadNativePartPackage(file, path, overwrite = false) {
+  const q = new URLSearchParams({ path, overwrite: String(overwrite) })
+  const r = await fetch(`${BASE}/library/native-package?${q}`, {
+    method: 'POST',
+    headers: docHeaders(),
+    body: file,
+  })
+  const json = await r.json().catch(() => null)
+  if (!r.ok) {
+    store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
+    return null
+  }
+  return json
 }
 
 export async function mkdirLibrary(path) {

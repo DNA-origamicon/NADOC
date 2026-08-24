@@ -238,8 +238,8 @@
       padding: 2px 6px 3px;
     }
     .sf-label {
-      font-size: 10px;
-      color: #8b949e;
+      font-size: 11px;
+      color: #c9d1d9;
       text-transform: uppercase;
       letter-spacing: 0.04em;
       white-space: nowrap;
@@ -251,23 +251,24 @@
       flex-direction: column;
       align-items: center;
       gap: 1px;
-      background: #0d1117;
-      border: 1px solid #21262d;
+      background: #21262d;
+      border: 1px solid #6e7681;
       border-radius: 3px;
       cursor: pointer;
       padding: 3px 5px 2px;
-      color: #2d3f50;
+      color: #e6edf3;
       transition: color 0.1s, border-color 0.1s, background 0.1s;
       font-family: inherit;
       line-height: 1;
     }
     .sf-btn:hover:not(.active) {
-      color: #8b949e;
-      border-color: #30363d;
+      color: #ffffff;
+      border-color: #8c959f;
+      background: #30363d;
     }
     .sf-btn svg { width: 16px; height: auto; }
     .sf-btn .sf-label-text {
-      font-size: 9px;
+      font-size: 10px;
       text-transform: uppercase;
       letter-spacing: 0.03em;
     }
@@ -288,6 +289,15 @@
     .vt-btn.active[data-vt="grid"]           { color: #94a3b8; border-color: #475569; background: rgba(148,163,184,0.10); }
     .vt-btn.active[data-vt="referenceGeometry"] { color: #7dd3fc; border-color: #0284c7; background: rgba(125,211,252,0.10); }
     .vt-btn.active[data-vt="periodicBoundary"]  { color: #f87171; border-color: #dc2626; background: rgba(248,113,113,0.10); }
+    .sf-btn.active {
+      border-color: currentColor !important;
+      background: color-mix(in srgb, currentColor 14%, #21262d) !important;
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 55%, transparent);
+    }
+    .sf-btn:focus-visible {
+      outline: 2px solid #58a6ff;
+      outline-offset: 2px;
+    }
 
     /* ── Tool sidebar (right of pathview) ─────────────────────────── */
     #tool-sidebar {
@@ -669,7 +679,12 @@
       min-width: 200px;
       z-index: 100;
       box-shadow: var(--shadow-md);
+      max-width: calc(100vw - 8px);
+      box-sizing: border-box;
+      max-height: none;
+      overflow: visible;
     }
+    .dropdown.dropdown--align-right { left: auto; right: 0; }
     .menu-item:hover .dropdown { display: block; }
     .dropdown-item {
       display: block;
@@ -713,7 +728,10 @@
       min-width: 220px;
       z-index: 101;
       box-shadow: var(--shadow-md);
+      max-width: calc(100vw - 8px);
+      box-sizing: border-box;
     }
+    .submenu.submenu--open-left { left: auto; right: 100%; }
     .submenu-item:hover > .submenu { display: block; }
     .routing-check-mark { float: right; display: none; color: #3fb950; font-weight: bold; margin-left: 12px; }
     .dropdown-item.is-checked .routing-check-mark { display: inline; }
@@ -843,42 +861,6 @@
       box-sizing: border-box;
     }
     #paint-custom-text:focus { border-color: #388bfd; color: #e6edf3; }
-
-    /* ── Paste-script overlay ──────────────────────────────────────── */
-    #paste-script-overlay {
-      display: none; position: fixed; inset: 0;
-      background: rgba(1,4,9,0.72); z-index: 200;
-      align-items: center; justify-content: center;
-    }
-    #paste-script-overlay.visible { display: flex; }
-    #paste-script-box {
-      width: 480px; background: #161b22;
-      border: 1px solid #30363d; border-radius: 8px;
-      padding: 20px; box-shadow: var(--shadow-lg);
-    }
-    #paste-script-header {
-      font-size: 13px; font-weight: 700; color: #c9d1d9; margin-bottom: 12px;
-    }
-    #paste-script-input {
-      width: 100%; height: 140px; background: #0d1117;
-      border: 1px solid #30363d; border-radius: 4px;
-      color: #c9d1d9; font-family: var(--font-ui); font-size: 11px;
-      padding: 8px; box-sizing: border-box; resize: vertical; outline: none;
-    }
-    #paste-script-error {
-      min-height: 16px; font-size: 11px; color: #f85149; margin-top: 6px;
-    }
-    #paste-script-actions {
-      display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px;
-    }
-    #paste-script-actions button {
-      padding: 6px 14px; background: #21262d; border: 1px solid #30363d;
-      border-radius: 4px; color: #c9d1d9; font-family: inherit; cursor: pointer;
-    }
-    #paste-script-actions button.primary {
-      background: #1f6feb; border-color: transparent; color: #fff;
-    }
-    #paste-script-actions button:hover { opacity: 0.85; }
 
     /* ── AutoScaffold modal ──────────────────────────────────────────── */
     #autoscaffold-modal {
@@ -1118,18 +1100,31 @@
           </div>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-file-close-session" style="color:#f85149">Close Session</button>
-          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-          <button class="dropdown-item" id="menu-file-upload">Upload to Server…</button>
-          <button class="dropdown-item" id="menu-file-download">Download from Server…</button>
-          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-          <button class="dropdown-item" id="menu-file-paste-script">Paste Script…</button>
-          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-          <button class="dropdown-item" id="menu-file-export-seq-csv">Export Sequences (CSV)</button>
-          <button class="dropdown-item" id="menu-file-export-cadnano">Export caDNAno (.json)</button>
-          <button class="dropdown-item" id="menu-file-export-pdb">Export PDB</button>
-          <button class="dropdown-item" id="menu-file-export-psf">Export NAMD Topology (.psf)</button>
-          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-          <button class="dropdown-item" id="menu-file-export-namd-complete">Export NAMD Package (.zip)</button>
+        </div>
+      </div>
+
+      <div class="menu-item" id="menu-item-import">
+        <button>Import</button>
+        <div class="dropdown">
+          <button class="dropdown-item" id="menu-file-upload">Import Native Part or Assembly…</button>
+        </div>
+      </div>
+
+      <div class="menu-item" id="menu-item-export">
+        <button>Export</button>
+        <div class="dropdown">
+          <button class="dropdown-item" id="menu-file-export-native">Export Current NADOC…</button>
+          <div class="submenu-item">Sequences &amp; Ordering <span style="color:#8b949e;font-size:var(--text-xs)">▶</span>
+            <div class="submenu"><button class="dropdown-item" id="menu-file-export-seq-csv">Sequences (CSV)</button></div>
+          </div>
+          <button class="dropdown-item" id="menu-file-export-cadnano">caDNAno (.json)</button>
+          <button class="dropdown-item" id="menu-file-export-scadnano">scadnano (.sc)</button>
+          <div class="submenu-item">Atomistic <span style="color:#8b949e;font-size:var(--text-xs)">▶</span>
+            <div class="submenu">
+              <button class="dropdown-item" id="menu-file-export-pdb">Structure (PDB)</button>
+              <button class="dropdown-item" id="menu-file-export-psf">NAMD Topology (PSF)</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1484,25 +1479,6 @@
 
   </div>
 
-  <!-- Paste Script overlay -->
-  <div id="paste-script-overlay">
-    <div id="paste-script-box">
-      <div id="paste-script-header">Paste Script</div>
-      <textarea id="paste-script-input" spellcheck="false" placeholder='{
-  "name": "My Structure",
-  "steps": [
-    {"type": "bundle", "cells": [[0,0],[0,1]], "length_bp": 42, "plane": "XY"},
-    {"type": "bundle_continuation", "cells": [[0,0],[0,1]], "length_bp": 42, "count": 9}
-  ]
-}'></textarea>
-      <div id="paste-script-error"></div>
-      <div id="paste-script-actions">
-        <button id="paste-script-cancel">Cancel</button>
-        <button id="paste-script-run" class="primary">Run</button>
-      </div>
-    </div>
-  </div>
-
   <!-- New-design lattice picker -->
   <div id="new-design-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;align-items:center;justify-content:center">
     <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:24px;width:360px;font-family:monospace">
@@ -1629,13 +1605,17 @@
           <div class="hk-section-title">Edit</div>
           <div class="hk-row"><span class="hk-desc">Undo</span><span class="hk-key">Ctrl Z</span></div>
           <div class="hk-row"><span class="hk-desc">Redo</span><span class="hk-key">Ctrl Y</span></div>
+          <div class="hk-row"><span class="hk-desc">Redo (alternate)</span><span class="hk-key">Ctrl Shift Z</span></div>
         </div>
         <div class="hk-section">
           <div class="hk-section-title">Tools</div>
-          <div class="hk-row"><span class="hk-desc">Cycle tool (Select / Pencil / Nick / Paint)</span><span class="hk-key">E</span></div>
+          <div class="hk-row"><span class="hk-desc">Cycle tool (Select / Pencil / Nick / Paint)</span><span class="hk-key">R</span></div>
           <div class="hk-row"><span class="hk-desc">Nick tool</span><span class="hk-key">N</span></div>
           <div class="hk-row"><span class="hk-desc">Paint tool (press again to nudge colour +1)</span><span class="hk-key">P</span></div>
           <div class="hk-row"><span class="hk-desc">Cycle selectable filter</span><span class="hk-key">Tab</span></div>
+          <div class="hk-row"><span class="hk-desc">Fit path and slice views</span><span class="hk-key">F</span></div>
+          <div class="hk-row"><span class="hk-desc">Toggle strand spreadsheet</span><span class="hk-key">S</span></div>
+          <div class="hk-row"><span class="hk-desc">Return to Select / close popup</span><span class="hk-key">Esc</span></div>
         </div>
         <div class="hk-section">
           <div class="hk-section-title">Routing &amp; Sequencing</div>

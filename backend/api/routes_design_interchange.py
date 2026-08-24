@@ -250,6 +250,26 @@ def export_cadnano_design() -> Response:
     )
 
 
+@router.get("/design/export/scadnano")
+def export_scadnano_design() -> Response:
+    """Export the active design as a scadnano .sc JSON file."""
+    import json as _json
+    from backend.core.scadnano import export_scadnano
+
+    design = _design_for_export()
+    try:
+        data = export_scadnano(design)
+    except Exception as exc:
+        raise HTTPException(400, detail=f"scadnano export failed: {exc}") from exc
+    content = _json.dumps(data, separators=(",", ":")).encode("utf-8")
+    filename = f"{_export_filename_stem(design.metadata.name)}.sc"
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.post("/design/save")
 def save_design(body: FilePathRequest) -> dict:
     """Save the active design to the given server-side path as .nadoc JSON."""

@@ -15,6 +15,7 @@ import { addRecentFile, getRecentFiles, closeSession as apiCloseSession,
          saveDesignAs, saveDesignToWorkspace,
          mkdirLibrary, renameLibrary, moveLibrary, deleteLibraryItem } from '../api/client.js'
 import { openFileBrowser } from '../ui/file_browser.js'
+import { initMenuFlyouts } from '../ui/menu_flyouts.js'
 import {
   fetchDesign, addHelixAtCell, deleteHelix, reorderHelices, extendHelixBounds,
   scaffoldDomainPaint,
@@ -27,7 +28,7 @@ import {
   resizeStrandEnds, shiftDomains, insertLoopSkip, clearAllLoopSkips, generateAllOverhangSequences,
   // menu bar operations
   createDesign, importDesign,
-  exportDesign, exportCadnano, exportSequenceCsv,
+  exportDesign, exportCadnano, exportScadnano, exportSequenceCsv,
   addFullAutostaple, routeForPolymerization,
   autoScaffoldSeamed, autoScaffoldSeamless,
   assignScaffoldSequence, syncScaffoldSequenceResponse, assignStapleSequences,
@@ -48,6 +49,8 @@ import { initStrandSequenceDialog } from '../ui/strand_sequence_dialog.js'
 import { buildStrandMenuItems } from '../ui/strand_menu_items.js'
 import { createContextMenu } from '../ui/primitives/context_menu.js'
 import { ensureStapleColors, stapleColorOf, EXT_MOD_NAMES } from './pathview/palette.js'
+
+initMenuFlyouts()
 import { xoverKey, parseXoverKey, parseLineKey, parseEndKey, parseLoopSkipKey, parseForcedLigKey } from './element_keys.js'
 import { SCAFFOLD_LENGTHS, ascWarningText, countScaffoldNt } from '../scene/scaffold_assign.js'
 
@@ -848,7 +851,7 @@ document.getElementById('menu-file-upload')?.addEventListener('click', () => {
       const ext     = file.name.endsWith('.nass') ? '.nass' : '.nadoc'
       const stem    = file.name.replace(/\.(nadoc|nass)$/i, '')
       const dest    = await openFileBrowser({
-        title: `Upload "${file.name}" to…`,
+        title: `Import "${file.name}" — choose destination`,
         mode: 'save',
         fileType: ext === '.nass' ? 'assembly' : 'part',
         suggestedName: stem,
@@ -861,20 +864,6 @@ document.getElementById('menu-file-upload')?.addEventListener('click', () => {
     }
   }
   input.click()
-})
-
-document.getElementById('menu-file-download')?.addEventListener('click', async () => {
-  const _fbApi = { listLibraryFiles, mkdirLibrary, renameLibrary, moveLibrary, deleteLibraryItem }
-  const result = await openFileBrowser({ title: 'Download from Server', mode: 'open', fileType: 'all', api: _fbApi })
-  if (!result) return
-  const res = await getLibraryFileContent(result.path)
-  if (!res?.content) { showToast('Could not retrieve file from server.', { severity: 'error' }); return }
-  const blob = new Blob([res.content], { type: 'application/json' })
-  const url  = URL.createObjectURL(blob)
-  const a    = document.createElement('a')
-  a.href = url; a.download = result.path.split('/').pop(); a.click()
-  URL.revokeObjectURL(url)
-  _syncLog('info', 'DL', `downloaded ${a.download}`)
 })
 
 document.getElementById('menu-file-save')?.addEventListener('click', async () => {
@@ -943,45 +932,24 @@ document.getElementById('menu-file-close-session')?.addEventListener('click', as
   window.location.href = '/'
 })
 
-// Paste Script
-;(() => {
-  const overlay    = document.getElementById('paste-script-overlay')
-  const input      = document.getElementById('paste-script-input')
-  const errorEl    = document.getElementById('paste-script-error')
-  const runBtn     = document.getElementById('paste-script-run')
-  const cancelBtn  = document.getElementById('paste-script-cancel')
-
-  function _open()  { if (errorEl) errorEl.textContent = ''; overlay?.classList.add('visible'); input?.focus() }
-  function _close() { overlay?.classList.remove('visible') }
-
-  document.getElementById('menu-file-paste-script')?.addEventListener('click', _open)
-  cancelBtn?.addEventListener('click', _close)
-  overlay?.addEventListener('click', e => { if (e.target === overlay) _close() })
-  input?.addEventListener('keydown', e => { if (e.key === 'Escape') _close() })
-
-  runBtn?.addEventListener('click', async () => {
-    if (errorEl) errorEl.textContent = ''
-    let script
-    try { script = JSON.parse(input?.value ?? '') }
-    catch (e) { if (errorEl) errorEl.textContent = `JSON parse error: ${e.message}`; return }
-    if (!Array.isArray(script?.steps)) {
-      if (errorEl) errorEl.textContent = 'Script must have a "steps" array.'
-      return
-    }
-    _close()
-    showToast('Paste Script is not available in the Origami Editor. Open the 3D view to run scripts.', { severity: 'error' })
-  })
-})()
-
 document.getElementById('menu-file-export-seq-csv')?.addEventListener('click', async () => {
   if (!editorStore.getState().design) { showToast('No design loaded.', { severity: 'error' }); return }
   const ok = await exportSequenceCsv()
   if (!ok) showToast('Export failed: ' + (editorStore.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
 })
+document.getElementById('menu-file-export-native')?.addEventListener('click', async () => {
+  if (!editorStore.getState().design) { showToast('No design loaded.', { severity: 'error' }); return }
+  if (!await exportDesign()) showToast('Part export failed.', { severity: 'error' })
+})
 document.getElementById('menu-file-export-cadnano')?.addEventListener('click', async () => {
   if (!editorStore.getState().design) { showToast('No design loaded.', { severity: 'error' }); return }
   const ok = await exportCadnano()
   if (!ok) showToast('Export failed: ' + (editorStore.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
+})
+document.getElementById('menu-file-export-scadnano')?.addEventListener('click', async () => {
+  if (!editorStore.getState().design) { showToast('No design loaded.', { severity: 'error' }); return }
+  const ok = await exportScadnano()
+  if (!ok) showToast('scadnano export failed.', { severity: 'error' })
 })
 document.getElementById('menu-file-export-pdb')?.addEventListener('click', () => {
   if (!editorStore.getState().design) { showToast('No design loaded.', { severity: 'error' }); return }
@@ -991,11 +959,6 @@ document.getElementById('menu-file-export-psf')?.addEventListener('click', () =>
   if (!editorStore.getState().design) { showToast('No design loaded.', { severity: 'error' }); return }
   const a = document.createElement('a'); a.href = '/api/design/export/psf'; a.download = ''; a.click()
 })
-document.getElementById('menu-file-export-namd-complete')?.addEventListener('click', () => {
-  if (!editorStore.getState().design) { showToast('No design loaded.', { severity: 'error' }); return }
-  const a = document.createElement('a'); a.href = '/api/design/export/namd-complete'; a.download = ''; a.click()
-})
-
 // ── Menu bar — Edit ───────────────────────────────────────────────────────────
 document.getElementById('menu-edit-undo')?.addEventListener('click', () => undoDesign())
 document.getElementById('menu-edit-redo')?.addEventListener('click', () => redoDesign())

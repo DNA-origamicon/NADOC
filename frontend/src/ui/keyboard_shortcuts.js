@@ -287,6 +287,16 @@ export function initKeyboardShortcuts(deps) {
     handler() { toggleHelicalAxisLines() },
   })
 
+  registerShortcut({
+    key: 'l', ctrl: false,
+    description: 'Toggle helix labels',
+    blockedInInput: true,
+    noRepeat: true,
+    handler() {
+      store.setState({ showHelixLabels: !store.getState().showHelixLabels })
+    },
+  })
+
   // Tab — cycle the unified selectionLevel: cluster → strand → domain → end →
   // xover → none(default) → cluster. `default` = no button engaged = the drill
   // ladder. The filter row reflects it via the emitted level.

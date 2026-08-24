@@ -113,6 +113,18 @@ describe('initKeyboardShortcuts — helical axis lines', () => {
     await press('/', { tag: 'INPUT' })
     expect(d.toggleHelicalAxisLines).toHaveBeenCalledOnce()
   })
+
+  it('L toggles helix labels and is ignored in text inputs', async () => {
+    const d = makeDeps()
+    initKeyboardShortcuts(d)
+
+    await press('l')
+    expect(d.store.getState().showHelixLabels).toBe(true)
+    await press('l', { tag: 'INPUT' })
+    expect(d.store.getState().showHelixLabels).toBe(true)
+    await press('l')
+    expect(d.store.getState().showHelixLabels).toBe(false)
+  })
 })
 
 describe('initKeyboardShortcuts — Group 1 toggles', () => {

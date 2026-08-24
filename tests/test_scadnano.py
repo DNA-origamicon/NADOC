@@ -16,7 +16,7 @@ from __future__ import annotations
 import pytest
 
 from backend.core.models import Direction, LatticeType, StrandType
-from backend.core.scadnano import import_scadnano
+from backend.core.scadnano import export_scadnano, import_scadnano
 
 # ── Shared fixture builder helpers ────────────────────────────────────────────
 
@@ -69,6 +69,20 @@ def test_simple_square():
     assert len(scaffolds) == 1
     assert len(staples) == 1
     assert not warns
+
+
+def test_export_round_trip_preserves_basic_scadnano_topology():
+    original, _ = import_scadnano(_sq_design(name="Round trip"))
+    payload = export_scadnano(original)
+    restored, warnings = import_scadnano(payload)
+
+    assert payload["name"] == "Round trip"
+    assert payload["grid"] == "square"
+    assert payload["helices"][0]["grid_position"] == [0, 0]
+    assert not warnings
+    assert len(restored.helices) == len(original.helices)
+    assert len(restored.strands) == len(original.strands)
+    assert [len(s.domains) for s in restored.strands] == [len(s.domains) for s in original.strands]
 
 
 # ═════════════════════════════════════════════════════════════════════════════
