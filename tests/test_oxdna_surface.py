@@ -264,6 +264,28 @@ def test_write_run_forces_surface_only_needs_no_anchor(design, geometry, tmp_pat
     assert info["field"] is None and info["wall"] is not None
 
 
+def test_continued_surface_anchors_only_fix_surface_normal(design, geometry, tmp_path):
+    """A post-deposition run must not freeze either coordinate in the surface plane."""
+    from backend.physics.oxdna_interface import write_run_forces, write_configuration
+
+    conf = tmp_path / "conf.dat"
+    write_configuration(design, geometry, conf)
+    s0 = design.strands[0]
+    out = tmp_path / "run_forces.txt"
+    info = write_run_forces(
+        out,
+        design,
+        conf,
+        wall={"dir": [0, 1, 0], "offset_nm": 0.0, "stiff": 5.0},
+        surface_anchors=[{"kind": "domain", "strand_id": s0.id, "domain_index": 0}],
+    )
+    text = out.read_text()
+    assert "type = lowdim_trap" in text
+    assert "visibility = 0,1,0" in text
+    assert "type = trap\n" not in text
+    assert info["surface_anchor_particles"]
+
+
 def test_write_run_forces_anchors_only(design, geometry, tmp_path):
     """Anchors with no field/surface = a plain production with some strands pinned."""
     from backend.physics.oxdna_interface import write_run_forces, write_configuration
@@ -462,7 +484,8 @@ def test_run_preserves_surface_anchor_provenance(design, monkeypatch, tmp_path):
     assert child.run_config["surface_anchors"] == [anchor]
     forces = (child.job_dir(tmp_path) / "run_forces.txt").read_text()
     assert "type = repulsion_plane" in forces
-    assert "type = trap" in forces
+    assert "type = lowdim_trap" in forces
+    assert "visibility = 0,1,0" in forces
 
 
 def test_surface_deposition_creates_staged_child(design, monkeypatch, tmp_path):
@@ -799,3 +822,27 @@ def test_run_composes_field_surface_anchors(design, monkeypatch, tmp_path):
     forces = (child.job_dir(tmp_path) / "run_forces.txt").read_text()
     assert "type = string" in forces and "type = repulsion_plane" in forces
     assert forces.count("type = trap") > 0
+
+
+def test_run_keeps_surface_anchors_free_in_plane(design, monkeypatch, tmp_path):
+    client, _ = _run_client(monkeypatch, tmp_path)
+    parent = _completed_parent(tmp_path, design)
+    s0 = design.strands[0]
+    r = client.post(
+        f"/api/oxdna/jobs/{parent.job_id}/run",
+        json={
+            "steps": 1000,
+            "surface": {"dir": [0, 1, 0], "offset_nm": 0.0, "stiff": 5.0},
+            "surface_anchors": [
+                {"kind": "domain", "strandId": s0.id, "domainIndex": 0}
+            ],
+        },
+    )
+    assert r.status_code == 200, r.text
+    from backend.core.oxdna_job import OxdnaJob
+
+    child = OxdnaJob.load(r.json()["job_id"], tmp_path)
+    forces = (child.job_dir(tmp_path) / "run_forces.txt").read_text()
+    assert "type = lowdim_trap" in forces
+    assert "visibility = 0,1,0" in forces
+    assert "type = trap\n" not in forces

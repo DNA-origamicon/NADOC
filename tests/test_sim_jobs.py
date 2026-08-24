@@ -155,6 +155,16 @@ def test_filter_backslash_and_trailing_slash_normalized():
     assert sim_jobs.filter_nodes([n], "C:/w/d.nadoc/", show_all=False)
 
 
+def test_filter_workspace_prefixed_open_path_matches_historical_job_path():
+    n = sim_jobs.normalize_oxdna_job(_ox(design_source_path="VoltronCoreArm.nadoc"))
+    assert sim_jobs.filter_nodes(
+        [n], "workspace/VoltronCoreArm.nadoc", show_all=False
+    )
+    assert sim_jobs.filter_nodes(
+        [n], "/home/user/NADOC/workspace/VoltronCoreArm.nadoc", show_all=False
+    )
+
+
 def test_filter_no_path_shows_nothing_unless_show_all():
     nodes = [sim_jobs.normalize_oxdna_job(_ox())]
     assert sim_jobs.filter_nodes(nodes, None, show_all=False) == []

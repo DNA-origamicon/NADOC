@@ -231,7 +231,7 @@ def _export_filename_stem(name: str | None, fallback: str = "design") -> str:
     return stem or fallback
 
 
-def _ensure_default_cluster(design: Design) -> Design:
+def _ensure_default_cluster(design: Design, *, persist: bool = True) -> Design:
     """If the design has helices but no clusters, auto-create a default cluster
     containing all helices and persist it silently (no undo snapshot)."""
     from backend.core.cluster_autodetect import repair_empty_auto_clusters
@@ -239,7 +239,8 @@ def _ensure_default_cluster(design: Design) -> Design:
     repaired = repair_empty_auto_clusters(design)
     if repaired is not design:
         design = repaired
-        design_state.set_design_silent(design)
+        if persist:
+            design_state.set_design_silent(design)
     if design.cluster_transforms or not design.helices:
         return design
     from backend.core.models import ClusterRigidTransform
@@ -253,7 +254,8 @@ def _ensure_default_cluster(design: Design) -> Design:
         helix_ids=[h.id for h in design.helices if h.id not in ref_ids],
     )
     updated = design.copy_with(cluster_transforms=[default_ct])
-    design_state.set_design_silent(updated)
+    if persist:
+        design_state.set_design_silent(updated)
     return updated
 
 
@@ -8361,6 +8363,12 @@ def roll_active_to_job_state(
     from backend.core.oxdna_staleness import design_build_fingerprint
     from backend.core.validator import validate_design
 
+    # Old frozen job snapshots can predate the mandatory default-cluster migration.
+    # Normalize the VALUE before installing it as a protected branch. If response
+    # formatting performs this migration afterward, _ensure_default_cluster tries to
+    # persist into the now-protected active loadout and the warning click fails with a
+    # 409 instead of ever returning the design to the browser.
+    snapshot = _ensure_default_cluster(snapshot, persist=False)
     current = design_state.get_or_404()
     loadouts, active_id = _ensure_loadouts(current)
     loadouts = _save_active_loadout_snapshot(current, loadouts, active_id)
@@ -8372,17 +8380,24 @@ def roll_active_to_job_state(
         editable = next((l for l in loadouts if not l.protected), None)
         last_editable_id = editable.id if editable else None
 
-    sim_id = next(
+    existing_sim = next(
         (
-            l.id
-            for l in loadouts
+            l for l in loadouts
             if l.protected
             and l.simulation_engine == simulation_engine
             and l.simulation_job_id == simulation_job_id
         ),
-        str(_uuid.uuid4()),
+        None,
     )
-    payload, size = _encode_loadout_design_snapshot(snapshot)
+    sim_id = existing_sim.id if existing_sim is not None else str(_uuid.uuid4())
+    # A protected job loadout is immutable and re-selecting it is common. Reuse its
+    # already-compressed snapshot rather than JSON-serializing + gzip-compressing the
+    # same large Voltron-style design on every warning-icon click.
+    if existing_sim is not None:
+        payload = existing_sim.design_snapshot_gz_b64
+        size = existing_sim.snapshot_size_bytes
+    else:
+        payload, size = _encode_loadout_design_snapshot(snapshot)
     sim_loadout = DesignLoadout(
         id=sim_id,
         name=f"Simulation · {return_name}",
@@ -8403,7 +8418,12 @@ def roll_active_to_job_state(
     report = validate_design(rolled)
     # Branch switch to a job snapshot — "complete historical feature log is
     # restored verbatim" (see docstring); unrelated to the client's cache.
-    resp = _design_response_with_geometry(rolled, report, full_feature_log=True)
+    resp = _design_response_with_geometry(
+        rolled,
+        report,
+        full_feature_log=True,
+        compact_deformed=True,
+    )
     resp["return_loadout_id"] = last_editable_id
     resp["simulation_loadout_id"] = sim_id
     # Lets the UI proceed without synchronously re-listing every historical job.

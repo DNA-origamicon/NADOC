@@ -3336,6 +3336,7 @@ def write_run_forces(
     field: dict | None = None,
     wall: dict | None = None,
     anchors: list[dict] | None = None,
+    surface_anchors: list[dict] | None = None,
     anchor_stiff: float = DEFAULT_ANCHOR_STIFF,
     field_exclude_trailing: int = 0,
 ) -> dict:
@@ -3345,9 +3346,9 @@ def write_run_forces(
 
     ``field`` is ``{"force_oxdna": f, "dir": [x,y,z]}`` or None; ``wall`` is
     ``{"dir": [x,y,z], "offset_nm": d, "stiff": s}`` or None; ``anchors`` is the
-    anchor-descriptor list.  Each element is independent — pass only the ones the
-    user enabled.  Anchor traps pin to each particle's position in ``conf_path``
-    (the configuration the run starts from).
+    ordinary, fully-fixed anchor list. ``surface_anchors`` are restrained only along
+    the wall normal, leaving both in-plane dimensions free. Each element is
+    independent — pass only the ones the user enabled.
 
     ``field_exclude_trailing`` — number of trailing particles (the appended surface
     capture-strand beads) to EXCLUDE from the uniform field, so the field acts on the
@@ -3360,6 +3361,32 @@ def write_run_forces(
     sa_text, info = surface_anchor_forces_text(
         design, conf_path, wall=wall, anchors=anchors, anchor_stiff=anchor_stiff
     )
+
+    # Surface anchors retain only their height after deposition.  They must remain
+    # free to diffuse in the two tangential directions in every continuation run.
+    # An explicitly ordinary-anchored particle wins if the two selections overlap.
+    surface_text = ""
+    if surface_anchors:
+        if not wall:
+            raise ValueError("Surface anchors require a hard surface in the continued run.")
+        resolved_particles, surface_keys = resolve_anchor_particles(
+            design, surface_anchors
+        )
+        ordinary = set(info["anchor_particles"])
+        cm = read_cm_positions_oxdna(conf_path)
+        surface_particles = [
+            p for p in resolved_particles if p not in ordinary and p < len(cm)
+        ]
+        surface_text = "\n".join(
+            surface_normal_trap_block(p, cm[p], wall.get("dir"), anchor_stiff)
+            for p in surface_particles
+        )
+        info["surface_anchor_particles"] = surface_particles
+        info["surface_anchor_keys"] = [
+            list(k[:3]) for p, k in zip(resolved_particles, surface_keys)
+            if p in surface_particles
+        ]
+        info["n_anchored"] += len(surface_particles)
 
     field_text = ""
     field_meta = None
@@ -3381,7 +3408,7 @@ def write_run_forces(
                 "particle_count": n_field,
             }
 
-    parts = [t for t in (field_text, sa_text) if t]  # field first, then wall + anchors
+    parts = [t for t in (field_text, sa_text, surface_text) if t]
     Path(path).write_text("\n".join(parts), encoding="utf-8")
     return {**info, "field": field_meta, "has_forces": bool(parts)}
 
@@ -3392,6 +3419,7 @@ def surface_anchor_forces_text(
     *,
     wall: dict | None = None,
     anchors: list[dict] | None = None,
+    surface_anchors: list[dict] | None = None,
     anchor_stiff: float = DEFAULT_ANCHOR_STIFF,
 ) -> tuple[str, dict]:
     """Compose the hard-surface ``repulsion_plane`` + anchor ``trap`` block text —
@@ -3444,11 +3472,32 @@ def surface_anchor_forces_text(
         if p < n_total:
             blocks.append(anchor_trap_block(p, cm[p], anchor_stiff))
 
+    surface_particles: list[int] = []
+    surface_keys = []
+    if surface_anchors:
+        if not wall:
+            raise ValueError("Surface anchors require a hard surface.")
+        resolved, resolved_keys = resolve_anchor_particles(design, surface_anchors)
+        ordinary = set(particles)
+        kept = [
+            (p, key)
+            for p, key in zip(resolved, resolved_keys)
+            if p not in ordinary and p < n_total
+        ]
+        surface_particles = [p for p, _key in kept]
+        surface_keys = [key for _p, key in kept]
+        for p in surface_particles:
+            blocks.append(
+                surface_normal_trap_block(p, cm[p], wall.get("dir"), anchor_stiff)
+            )
+
     return "\n".join(blocks), {
-        "n_anchored": len(particles),
+        "n_anchored": len(particles) + len(surface_particles),
         "n_total": n_total,
         "anchor_particles": particles,
         "anchor_keys": [list(k[:3]) for k in anchor_keys],
+        "surface_anchor_particles": surface_particles,
+        "surface_anchor_keys": [list(k[:3]) for k in surface_keys],
         "wall": wall_meta,
     }
 

@@ -86,6 +86,24 @@ def test_md_out_of_date_flag_and_roll_clears_it(monkeypatch, tmp_path):
     assert c.get(f"/api/md/jobs/{job.job_id}").json()["out_of_date"] is True
 
 
+def test_md_roll_migrates_old_snapshot_before_protecting_it(monkeypatch, tmp_path):
+    """Old NAMD snapshots with no cluster must still become a visible protected loadout."""
+    monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
+    prepared = make_6hb_design().copy_with(cluster_transforms=[])
+    job = _make_md_job(
+        tmp_path, prepared, fingerprint=design_build_fingerprint(prepared)
+    )
+    design_state.set_design(make_18hb_design())
+
+    r = TestClient(app).post(f"/api/md/jobs/{job.job_id}/roll-design")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["matches_job"] is True
+    assert body["design"]["active_loadout_id"] == body["simulation_loadout_id"]
+    assert body["design"]["cluster_transforms"]
+    assert body.get("nucleotides_compact")
+
+
 def test_md_stale_message_names_a_different_loaded_design(monkeypatch, tmp_path):
     """When a WHOLLY different design is loaded (not an edit of the job's design), the
     409 must say so and name both designs — rolling the feature log can't fix it.

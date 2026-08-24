@@ -452,6 +452,7 @@ def prepare_oxdna_job(
     *,
     surface: dict | None = None,
     anchors: list[dict] | None = None,
+    surface_anchors: list[dict] | None = None,
     anchor_stiff: float = 1000.0,
     surface_strands: dict | None = None,
 ) -> dict:
@@ -510,12 +511,13 @@ def prepare_oxdna_job(
     # (before capture strands are appended) so the wall plane sits at the origami extent,
     # not below the capture beads (which we then place exactly on that plane).
     sa_text, info = "", {}
-    if surface or anchors:
+    if surface or anchors or surface_anchors:
         sa_text, info = surface_anchor_forces_text(
             design,
             jd / "conf.dat",
             wall=surface,
             anchors=anchors,
+            surface_anchors=surface_anchors,
             anchor_stiff=anchor_stiff,
         )
 

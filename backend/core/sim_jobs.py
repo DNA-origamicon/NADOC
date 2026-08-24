@@ -172,7 +172,19 @@ def _norm_path(p) -> str:
     matches ``filterJobsForPart`` exactly)."""
     if not p:
         return ""
-    return str(p).replace("\\", "/").rstrip("/")
+    value = str(p).replace("\\", "/").rstrip("/")
+    while value.startswith("./"):
+        value = value[2:]
+    # File-open responses use workspace-relative paths (`workspace/foo.nadoc`),
+    # historical jobs store paths relative to the workspace root (`foo.nadoc`),
+    # and desktop/file-handle paths may be absolute (`.../workspace/foo.nadoc`).
+    # All three identify the same design and must share one job list.
+    marker = "/workspace/"
+    if marker in value:
+        value = value.rsplit(marker, 1)[1]
+    elif value.startswith("workspace/"):
+        value = value[len("workspace/"):]
+    return value
 
 
 def filter_nodes(nodes: list[dict], design_source_path, show_all: bool) -> list[dict]:

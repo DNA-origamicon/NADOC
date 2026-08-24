@@ -4,7 +4,10 @@
 // so the server seeked the design but the client never re-rendered it.
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-import { rollOxdnaJobDesign, rollMdJobDesign, seekFeatures, rollbackLastFeature } from './client.js'
+import {
+  rollOxdnaJobDesign, rollMdJobDesign, seekFeatures, rollbackLastFeature,
+  wasLastDesignSyncTransient,
+} from './client.js'
 import { store } from '../state/store.js'
 
 function rollResponse() {
@@ -24,6 +27,7 @@ function rollResponse() {
 describe('roll-design client calls apply the seeked design', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn())
+    vi.stubGlobal('requestAnimationFrame', vi.fn(cb => { cb(); return 1 }))
     store.setState({ currentDesign: { feature_log_cursor: -1, strands: [], helices: [] }, currentGeometry: [{ x: 1 }] })
   })
 
@@ -36,8 +40,30 @@ describe('roll-design client calls apply the seeked design', () => {
 
   it('rollMdJobDesign syncs the seeked design too', async () => {
     fetch.mockResolvedValueOnce(rollResponse())
+    let autosaveSuppressedDuringApply = false
+    const unsubscribe = store.subscribeSlice('design', () => {
+      autosaveSuppressedDuringApply = wasLastDesignSyncTransient()
+    })
     await rollMdJobDesign('md1')
+    unsubscribe()
     expect(store.getState().currentDesign.feature_log_cursor).toBe(6)
+    expect(autosaveSuppressedDuringApply).toBe(true)
+  })
+
+  it('shows immediate progress through the request and scene sync', async () => {
+    const events = []
+    const onProgress = e => events.push(e.detail)
+    window.addEventListener('nadoc:op-progress', onProgress)
+    document.body.innerHTML = `
+      <div id="op-progress"><div id="op-progress-header"></div>
+      <div id="op-progress-label"></div><div id="op-progress-track">
+      <div id="op-progress-fill"></div></div><button id="op-progress-cancel"></button></div>`
+    fetch.mockResolvedValueOnce(rollResponse())
+    await rollMdJobDesign('md-progress')
+    window.removeEventListener('nadoc:op-progress', onProgress)
+    expect(events[0]).toMatchObject({ action: 'show', visible: true })
+    expect(events.some(e => e.label.includes('Loading geometry'))).toBe(true)
+    expect(events.at(-1)).toMatchObject({ action: 'hide', visible: false })
   })
 })
 

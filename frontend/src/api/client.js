@@ -34,7 +34,7 @@ function _signalDesignChanged({
   }
 }
 import { showToast } from '../ui/toast.js'
-import { showOpProgress, hideOpProgress } from '../ui/op_progress.js'
+import { showOpProgress, hideOpProgress, setOpProgressLabel } from '../ui/op_progress.js'
 import { notifyRequestFailure, notifyRequestSuccess, pokeProbe } from '../shared/connection_monitor.js'
 import { docHeaders, docHeadersFor, docKey, docKeyFor } from '../shared/doc_id.js'
 import { activeOperationTiming, beginOperationTiming, finishOperationAfterRender, markOperationTiming, whenOperationIdle } from '../perf/operation_timing.js'
@@ -478,8 +478,11 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
  * Caller is responsible for invoking helixCtrl.commitClusterPositions() to
  * keep currentGeometry consistent with what's rendered.
  */
-// True only while applying a TRANSIENT design mutation — a bend/twist preview,
-// live param PATCH, or cancel-revert (the `?preview=true` / PATCH endpoints).
+// True while applying a design response that must NOT trigger workspace autosave:
+// either a transient mutation (bend/twist preview, live PATCH, cancel-revert) or a
+// protected simulation-loadout selection. The latter is a temporary viewing branch;
+// autosaving it receives the protected-loadout 409, whose recovery switches straight
+// back to the editable branch and visually undoes the user's warning-icon click.
 // The design auto-save subscriber reads this synchronously during setState and
 // skips: transient changes must NOT propagate to disk (→ SSE) or to the assembly
 // (→ part-design-updated). Committed changes (Apply) leave it false → they save.
@@ -3362,14 +3365,43 @@ export async function rollbackLastFeature() {
 // current edits as a "Return to latest" loadout branch. Returns the design response +
 // `return_loadout_id`. _request syncs the design response → the scene rebuilds.
 export async function rollOxdnaJobDesign(jobId) {
-  const json = await _request('POST', `/oxdna/jobs/${jobId}/roll-design`)
-  if (json) await _syncFromDesignResponse(json)   // apply the seeked design (scene + feature-log cursor)
-  return json
+  return _rollJobDesign('oxdna', jobId)
 }
 export async function rollMdJobDesign(jobId) {
-  const json = await _request('POST', `/md/jobs/${jobId}/roll-design`)
-  if (json) await _syncFromDesignResponse(json)
-  return json
+  return _rollJobDesign('md', jobId)
+}
+
+/** Rollbacks can spend seconds decoding a large snapshot, generating geometry, and
+ * rebuilding GPU buffers. Show feedback before the request starts and own the popup
+ * through the complete sync; the generic request popup starts after five seconds and
+ * used to disappear before the subsequent geometry/render work was finished. */
+async function _rollJobDesign(engine, jobId) {
+  showOpProgress(
+    'Switching simulation loadout',
+    'Restoring the design saved with this job…',
+    { indeterminate: true },
+  )
+  // Yield once so the popup is painted before snapshot decoding can occupy either side.
+  await new Promise(resolve => {
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => resolve())
+    else setTimeout(resolve, 0)
+  })
+  try {
+    const json = await _request(
+      'POST', `/${engine}/jobs/${jobId}/roll-design`, undefined,
+      { suppressBusy: true },
+    )
+    if (!json) return null
+    setOpProgressLabel(
+      'Switching simulation loadout',
+      'Loading geometry and rebuilding the 3D view…',
+    )
+    await _syncFromDesignResponse(json, { transient: true })
+    setOpProgressLabel('Switching simulation loadout', '3D view updated')
+    return json
+  } finally {
+    hideOpProgress()
+  }
 }
 
 export async function deleteFeature(index, subIndex = null, { cascade = false } = {}) {

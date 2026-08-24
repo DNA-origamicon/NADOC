@@ -206,6 +206,8 @@ describe('normalizeWorkspacePath', () => {
   it('treats library workspace prefixes as workspace-relative paths', () => {
     expect(normalizeWorkspacePath('workspace/2hb_2xT.nadoc')).toBe('2hb_2xT.nadoc')
     expect(normalizeWorkspacePath('./workspace/2hb_2xT.nadoc')).toBe('2hb_2xT.nadoc')
+    expect(normalizeWorkspacePath('/home/user/NADOC/workspace/2hb_2xT.nadoc'))
+      .toBe('2hb_2xT.nadoc')
   })
 })
 

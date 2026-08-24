@@ -197,9 +197,12 @@ const _ts = () => new Date().toISOString().slice(11, 23)
  * those spellings as identical so reopening a design cannot hide its archived jobs.
  */
 export function normalizeWorkspacePath(path) {
-  return path
-    ? String(path).replace(/\\/g, '/').replace(/^\.\//, '').replace(/^workspace\//, '').replace(/\/+$/, '')
-    : ''
+  if (!path) return ''
+  let value = String(path).replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '')
+  const marker = '/workspace/'
+  if (value.includes(marker)) value = value.slice(value.lastIndexOf(marker) + marker.length)
+  else value = value.replace(/^workspace\//, '')
+  return value
 }
 
 /**

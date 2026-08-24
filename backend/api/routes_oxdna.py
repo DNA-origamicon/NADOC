@@ -211,6 +211,7 @@ class CreateOxdnaJobRequest(BaseModel):
     # structure is not how it would settle, so the field is production-only.
     surface: Optional[dict] = Field(None)
     anchors: list[dict] = Field(default_factory=list)
+    surface_anchors: list[dict] = Field(default_factory=list)
     anchor_stiff: float = Field(DEFAULT_ANCHOR_STIFF, gt=0.0)
     # Surface capture strands (immobilization): sim-only ssDNA strands complementary to the
     # overhangs, dispersed on the hard surface and built into the relaxed system.  Requires
@@ -778,6 +779,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         else None
     )
     anchors_in = body.anchors or []
+    surface_anchors_in = body.surface_anchors or []
     # Capture strands attach to the plane, so they require a hard surface; ignored without one.
     surface_strands_in = (
         body.surface_strands
@@ -788,7 +790,9 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         )
         else None
     )
-    relax_has_forces = bool(surface_in or anchors_in or surface_strands_in)
+    relax_has_forces = bool(
+        surface_in or anchors_in or surface_anchors_in or surface_strands_in
+    )
 
     # Proteins present → an ANM-oxDNA (DNANM) hybrid run on the fork binary.
     from backend.physics.oxdna_protein import has_proteins
@@ -847,6 +851,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
             "max_relax_retries": body.max_relax_retries,
             "surface": surface_in,
             "anchors": anchors_in,
+            "surface_anchors": surface_anchors_in,
             "surface_strands": surface_strands_in,
         },
     )
@@ -890,6 +895,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
             specs,
             surface=surface_in,
             anchors=anchors_in,
+            surface_anchors=surface_anchors_in,
             anchor_stiff=body.anchor_stiff,
             surface_strands=surface_strands_in,
         )
@@ -1360,13 +1366,6 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
         }
     ordinary_anchors = [a.model_dump(by_alias=False) for a in body.anchors]
     surface_anchors = [a.model_dump(by_alias=False) for a in body.surface_anchors]
-    anchors = []
-    seen_anchors = set()
-    for anchor in [*ordinary_anchors, *surface_anchors]:
-        key = json.dumps(anchor, sort_keys=True)
-        if key not in seen_anchors:
-            seen_anchors.add(key)
-            anchors.append(anchor)
     # Surface capture strands built into the relaxed parent are inherited via the copied
     # topology/conf; re-pin their attach ends so they stay tethered through production too.
     cap = capture_run_decision(parent.run_config, body.surface_strands)
@@ -1378,7 +1377,9 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
     field_exclude = (
         cap_n_beads if (field_in and cap_n_beads > 0 and not subject_caps) else 0
     )
-    has_forces = bool(field_in or wall_in or anchors or cap_particles)
+    has_forces = bool(
+        field_in or wall_in or ordinary_anchors or surface_anchors or cap_particles
+    )
 
     stage = build_run_stage(
         name="1_production",
@@ -1389,7 +1390,7 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
         forces_meta={"has_field": bool(field_in), "has_surface": bool(wall_in)},
         # repulsion plane / anchor / capture-strand traps are absolute-coordinate forces →
         # disable oxDNA's COM diffusion-fix so it doesn't shift them into the structure.
-        absolute_forces=bool(wall_in or anchors or cap_particles),
+        absolute_forces=bool(wall_in or ordinary_anchors or surface_anchors or cap_particles),
         backend=parent.backend,
         device=parent.device,
         salt_concentration=parent.salt_concentration,
@@ -1402,7 +1403,7 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
             for x in (
                 "field" if field_in else "",
                 "surface" if wall_in else "",
-                "anchored" if anchors and not field_in else "",
+                "anchored" if (ordinary_anchors or surface_anchors) and not field_in else "",
             )
             if x
         )
@@ -1470,7 +1471,8 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
                 cjd / "conf.dat",
                 field=field_in,
                 wall=wall_in,
-                anchors=anchors,
+                anchors=ordinary_anchors,
+                surface_anchors=surface_anchors,
                 anchor_stiff=body.anchor_stiff,
                 field_exclude_trailing=field_exclude,
             )

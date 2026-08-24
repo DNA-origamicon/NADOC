@@ -165,12 +165,10 @@ export function initAutosaveSync({
   let _libRefreshTimer = null
 
   store.subscribeSlice('design', (newState, prevState) => {
-    // Skip TRANSIENT deform mutations — a bend/twist live preview, param PATCH, or
-    // cancel-revert. They must NOT auto-save (→ file → SSE) or push the part to the
-    // assembly (→ part-design-updated): the assembly updates ONLY when the user
-    // commits via Apply (a non-preview add / editFeature), and does nothing if the
-    // edit was cancelled or unchanged. Read synchronously here (the flag is set
-    // during this very setState by _syncFromDesignResponse).
+    // Skip non-persistent syncs: transient deform previews AND protected simulation
+    // loadout selections. The latter must remain selected for viewing; attempting to
+    // autosave a protected branch invokes the 409 recovery path, which activates the
+    // editable branch and silently undoes the warning-icon rollback.
     if (newState.currentDesign !== prevState.currentDesign && api.wasLastDesignSyncTransient()) return
     if (getPartEditContext()) {
       if (newState.currentDesign === prevState.currentDesign) return
