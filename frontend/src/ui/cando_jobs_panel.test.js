@@ -15,7 +15,29 @@ import {
   autorefineJobResultHtml,
   refineImproved,
   refineMarkCounts,
+  renderCandoDisplayProgress,
 } from './cando_jobs_panel.js'
+
+describe('renderCandoDisplayProgress', () => {
+  it('retains one named progress row per visualization subprocess', () => {
+    const el = document.createElement('div')
+    renderCandoDisplayProgress(el, new Map([
+      ['thermal-download', { done: 892800, total: 892800 }],
+      ['thermal-decode', { done: 1, total: 1 }],
+      ['snapshot', { done: 1, total: 1 }],
+      ['render-snapshot', { done: 0, total: 1 }],
+      ['apply', { done: 0, total: 1 }],
+      ['error', { done: 1, total: 1 }],
+    ]))
+    expect(el.querySelectorAll('[data-cando-display-phase]')).toHaveLength(6)
+    expect(el.textContent).toContain('Download representative conformation · 892800 of 892800')
+    expect(el.textContent).toContain('Decode representative conformation · 1 of 1')
+    expect(el.textContent).toContain('Build snapshot geometry · 1 of 1')
+    expect(el.textContent).toContain('Build snapshot scene · 0 of 1')
+    expect(el.textContent).toContain('Apply visualization · 0 of 1')
+    expect(el.textContent).toContain('Visualization failed · 1 of 1')
+  })
+})
 
 describe('formatProgress', () => {
   it('is 100% when completed, blank when failed/stopped', () => {

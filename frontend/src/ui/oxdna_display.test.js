@@ -19,7 +19,6 @@ describe('framesToUpdates', () => {
     const updates = framesToUpdates([['h0', 5, 'REVERSE', 2]], [7, 8, 9, 0, 1, 0])
     expect(updates[0].copy).toBe(2)
   })
-
   it('carries the complete simulated a1/a3 frame and reconstructs the base site', () => {
     const [u] = framesToUpdates([['h0', 0, 'FORWARD']], [
       1, 2, 3,  1, 0, 0,  0, 0, 1,
@@ -33,6 +32,14 @@ describe('framesToUpdates', () => {
     expect(u.cm_position[1]).toBeCloseTo(2 - 0.3408 * 0.8518, 12)
     expect(u.cm_position[2]).toBeCloseTo(3, 12)
     expect(u.exact_sites).toBe(true)
+  })
+
+  it('accepts a binary trajectory Float32Array without materialising a number[]', () => {
+    const frame = new Float32Array([1, 2, 3, 0, 1, 0])
+    expect(framesToUpdates([['h0', 7, 'FORWARD']], frame)).toEqual([
+      { helix_id: 'h0', bp_index: 7, direction: 'FORWARD', copy: 0,
+        backbone_position: [1, 2, 3], nx: 0, ny: 1, nz: 0 },
+    ])
   })
   it('returns [] for bad input', () => {
     expect(framesToUpdates(null, [])).toEqual([])

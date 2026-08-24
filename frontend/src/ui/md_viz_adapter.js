@@ -46,7 +46,12 @@ export function mdVizApiAdapter(api) {
     // tells the controller it may batch its prebuild; oxDNA leaves it unset and keeps
     // fetching one frame at a time, which is right for a per-frame reconstruction.
     heavyBatch: true,
+    preferTrajectoryBin: true,
     getOxdnaTrajectory: (id, { signal, stride } = {}) => api.getMdTrajectory(id, signal, { stride }),
+    ...(api.getMdTrajectoryBin ? {
+      getOxdnaTrajectoryBin: (id, { signal, stride, onProgress } = {}) =>
+        api.getMdTrajectoryBin(id, signal, { stride, onProgress }),
+    } : {}),
     getOxdnaRmsf:       (id, { signal } = {}) => api.getMdRmsf(id, signal),
     getOxdnaRmsfAtomistic: (id) => api.getMdRmsfAtomistic(id),
     getOxdnaRmsfSurface: (id, params = {}) => api.getMdRmsfSurface(id, params),

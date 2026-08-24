@@ -175,7 +175,9 @@ def test_list_md_jobs_uses_live_remote_dcd_and_total_sizes(monkeypatch, tmp_path
     assert row["size_bytes"] == 1200
 
 
-def test_terminal_remote_job_uses_local_size_not_stale_live_metrics(monkeypatch, tmp_path):
+def test_terminal_remote_job_uses_local_size_not_stale_live_metrics(
+    monkeypatch, tmp_path
+):
     import asyncio
 
     from backend.core.design_disk_usage import warm_dir_sizes
@@ -186,7 +188,9 @@ def test_terminal_remote_job_uses_local_size_not_stale_live_metrics(monkeypatch,
     job.status = MdStatus.completed
     job.live_metrics = {"dcd_size_bytes": 700, "total_size_bytes": 1200}
     job.download_status = {
-        "state": "verified", "total_bytes": 5000, "verified_bytes": 5000,
+        "state": "verified",
+        "total_bytes": 5000,
+        "verified_bytes": 5000,
         "dcd_bytes": 4000,
     }
     job.save(tmp_path)
@@ -243,3 +247,43 @@ def test_list_md_jobs_repairs_running_runpod_job_when_pod_is_gone(
     saved = MdJob.load(job.job_id, tmp_path)
     assert saved.status == MdStatus.running
     assert saved.runpod_pod_id is None
+
+
+def test_list_md_jobs_skips_runpod_network_when_all_runpod_jobs_are_terminal(
+    monkeypatch, tmp_path
+):
+    """Historical RunPod rows never force an external API call on every panel poll."""
+    import asyncio
+    from backend.api import routes_runpod
+
+    class MustNotProbe:
+        async def list_pods(self):
+            raise AssertionError("terminal-only list must not probe RunPod")
+
+    monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
+    monkeypatch.setattr(routes_runpod._SESSION, "client", MustNotProbe())  # noqa: SLF001
+    job = new_job("6hb", "equilibrium_aware", "", "")
+    job.execution_target = "runpod"
+    job.status = MdStatus.completed
+    job.save(tmp_path)
+
+    rows = asyncio.run(routes_md.list_md_jobs())
+    assert (
+        next(row for row in rows if row["job_id"] == job.job_id)["status"]
+        == "completed"
+    )
+
+
+def test_md_jobs_list_health_compaction_keeps_tail_and_each_segment_latest():
+    """The poll payload stays bounded without losing any timeline's terminal state."""
+    from backend.api.routes_md import _compact_list_health_samples
+
+    samples = [{"segment": "min", "step": 1}] + [
+        {"segment": "equil", "step": i} for i in range(200)
+    ]
+    compact, truncated = _compact_list_health_samples(samples)
+
+    assert truncated is True
+    assert len(compact) == 17
+    assert compact[0] == {"segment": "min", "step": 1}
+    assert compact[-1] == {"segment": "equil", "step": 199}

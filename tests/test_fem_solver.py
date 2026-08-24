@@ -326,10 +326,18 @@ def test_predict_shape_defaults_to_nonlinear_and_returns_positions_and_rmsf():
     reconstructed = {
         key: float(np.sqrt(np.mean(point_msf[cols]))) for key, cols in by_bp.items()
     }
+    # A deletion/skip site remains a valid FEM axis node for mechanics but has no
+    # drawable nucleotide column in the reconstructed trajectory.  Drawable nodes
+    # use reconstructed off-axis motion; absent sites retain the modal axis RMSF.
+    missing_reconstruction = 0
     for value in res["rmsf"]:
-        assert value["rmsf_nm"] == pytest.approx(
-            reconstructed[(value["helix_id"], value["bp_index"])], abs=1e-12
-        )
+        key = (value["helix_id"], value["bp_index"])
+        if key in reconstructed:
+            assert value["rmsf_nm"] == pytest.approx(reconstructed[key], abs=1e-12)
+        else:
+            missing_reconstruction += 1
+            assert value["rmsf_nm"] >= 0.0 and np.isfinite(value["rmsf_nm"])
+    assert missing_reconstruction > 0  # this fixture deliberately contains skips
     # The representative final state must retain the full wound reconstruction frame.
     # XYZ-only records move beads but leave slabs in their design orientation.
     for p in thermal["representative_positions"][:100]:

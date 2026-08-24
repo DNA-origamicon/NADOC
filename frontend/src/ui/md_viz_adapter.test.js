@@ -6,11 +6,16 @@ describe('mdVizApiAdapter', () => {
   it('maps the oxDNA-named controller methods to the MD endpoints', () => {
     const api = {
       getMdTrajectory: vi.fn((id) => `traj:${id}`),
+      getMdTrajectoryBin: vi.fn((id) => `bin:${id}`),
       getMdRmsf: vi.fn((id) => `rmsf:${id}`),
     }
     const a = mdVizApiAdapter(api)
     expect(a.getOxdnaTrajectory('J1')).toBe('traj:J1')
     expect(api.getMdTrajectory).toHaveBeenCalledWith('J1', undefined, { stride: undefined })
+    expect(a.getOxdnaTrajectoryBin('J1')).toBe('bin:J1')
+    expect(api.getMdTrajectoryBin).toHaveBeenCalledWith(
+      'J1', undefined, { stride: undefined, onProgress: undefined },
+    )
     expect(a.getOxdnaRmsf('J2')).toBe('rmsf:J2')
     expect(api.getMdRmsf).toHaveBeenCalledWith('J2', undefined)
   })
@@ -105,6 +110,17 @@ describe('mdVizApiAdapter', () => {
       await ctrl.loadTrajectory('J1', true, 'lineage', 20)
       const [, , opts] = api.getMdTrajectory.mock.calls[0]
       expect(opts).toEqual({ stride: 20 })
+    })
+
+    it('carries signal, interval, and progress through the compact binary path', async () => {
+      const progress = vi.fn()
+      const api = { getMdTrajectoryBin: vi.fn(async () => null), getMdTrajectory: vi.fn(async () => ({ ready: false })) }
+      const ctrl = initOxdnaDisplay({ designRenderer: renderer(), api: mdVizApiAdapter(api) })
+      await ctrl.loadTrajectory('J1', true, 'lineage', 7, progress)
+      const [id, signal, opts] = api.getMdTrajectoryBin.mock.calls[0]
+      expect(id).toBe('J1')
+      expect(signal).toBeInstanceOf(AbortSignal)
+      expect(opts).toEqual({ stride: 7, onProgress: progress })
     })
 
     // ── The atomistic bug: NAMD frames never reached the renderer ──────────────

@@ -2437,16 +2437,63 @@ async function _backgroundJobList(path) {
   return _oxdnaJSON('GET', path)
 }
 
-/** Binary sibling of _oxdnaJSON — returns the response as an ArrayBuffer (or null). */
-async function _oxdnaBin(method, path, body = undefined) {
+/** Binary sibling of _oxdnaJSON — returns the response as an ArrayBuffer (or null).
+ *  When `onProgress` is supplied, stream into one pre-sized buffer (Content-Length)
+ *  and report downloaded bytes so multi-megabyte visualization loads stay determinate. */
+async function _oxdnaBin(method, path, body = undefined, { signal, onProgress } = {}) {
   const opts = { method, headers: { ...docHeaders() } }
+  if (signal != null) {
+    if (!(signal instanceof AbortSignal)) {
+      throw new TypeError(`_oxdnaBin(${method} ${path}): signal must be an AbortSignal`)
+    }
+    opts.signal = signal
+  }
   if (body !== undefined) {
     opts.headers['Content-Type'] = 'application/json'
     opts.body = JSON.stringify(body)
   }
   const r = await fetch(`${BASE}${path}`, opts).catch(() => null)
   if (!r || !r.ok) return null
-  return r.arrayBuffer().catch(() => null)
+  if (typeof onProgress !== 'function' || !r.body?.getReader) {
+    return r.arrayBuffer().catch(() => null)
+  }
+  let total = Number(r.headers.get('x-nadoc-uncompressed-length'))
+    || Number(r.headers.get('content-length')) || 0
+  onProgress({ phase: 'download', done: 0, total })
+  const reader = r.body.getReader()
+  let received = 0
+  let out = total > 0 ? new Uint8Array(total) : null
+  const chunks = total > 0 ? null : []
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (out && received + value.byteLength > out.byteLength) {
+        // Content-Length can describe compressed bytes while fetch yields decoded chunks
+        // (development/reverse proxies). Grow safely; future progress becomes indeterminate
+        // unless X-NADOC-Uncompressed-Length supplied the decoded size.
+        const grown = new Uint8Array(Math.max(received + value.byteLength, out.byteLength * 2))
+        grown.set(out)
+        out = grown
+        total = 0
+      }
+      if (out) out.set(value, received)
+      else chunks.push(value)
+      received += value.byteLength
+      onProgress({ phase: 'download', done: received, total })
+    }
+  } catch (err) {
+    if (err?.name === 'AbortError') return null
+    throw err
+  }
+  if (!out) {
+    out = new Uint8Array(received)
+    let off = 0
+    for (const chunk of chunks) { out.set(chunk, off); off += chunk.byteLength }
+  } else if (received !== total) {
+    out = out.slice(0, received)
+  }
+  return out.buffer
 }
 
 /** Last API error message (e.g. the 400 detail from a rejected create). */
@@ -2528,6 +2575,14 @@ export const stopLammpsJob       = (id)          => _oxdnaJSON('POST', `/lammps/
 export const getLammpsTrajectory = (id, opts) => {
   const { align, signal } = _vizOpts(opts, 'getLammpsTrajectory')
   return _oxdnaJSON('GET', `/lammps/jobs/${id}/trajectory?align=${align}`, undefined, { signal })
+}
+/** Compact typed-array LAMMPS trajectory with streamed byte progress. */
+export const getLammpsTrajectoryBin = (id, opts) => {
+  const { align, signal } = _vizOpts(opts, 'getLammpsTrajectoryBin')
+  return _oxdnaBin(
+    'GET', `/lammps/jobs/${id}/trajectory-bin?align=${align}`,
+    undefined, { signal, onProgress: opts?.onProgress },
+  )
 }
 /** Final structure as applyFemPositions positions (the display view); align superposes onto design pose. */
 export const getLammpsDisplay = (id, opts) => {
@@ -2685,6 +2740,16 @@ async function _oxdnaTrajectoryBin(id, { align, signal, scope }) {
   const { decodeOxdnaTrajectoryBin } = await import('../ui/oxdna_trajectory_bin.js')
   return decodeOxdnaTrajectoryBin(buf)
 }
+/** Compact typed-array sibling used by the interactive scrubber. Null means the server
+ *  is older, the request was aborted, or the payload was unavailable; callers then use
+ *  getOxdnaTrajectory as a compatibility fallback. */
+export const getOxdnaTrajectoryBin = (id, opts) => {
+  const { align, signal, scope } = _vizOpts(opts, 'getOxdnaTrajectoryBin')
+  return _oxdnaBin(
+    'GET', `/oxdna/jobs/${id}/trajectory-bin?align=${align}&scope=${scope}`,
+    undefined, { signal, onProgress: opts?.onProgress },
+  )
+}
 /** Frame count + stage markers only (no coordinates) — sizes the trajectory slider fast.
  *  Pass the SAME scope as getOxdnaTrajectory or the slider length won't match the payload. */
 export const getOxdnaTrajectoryMeta = (id, scope = 'lineage') =>
@@ -2837,6 +2902,15 @@ export const getCandoSnapshotGeometry = (id, signal) => _oxdnaJSON('GET',  `/can
 export const getCandoRmsf        = (id, signal)  => _oxdnaJSON('GET',  `/cando/jobs/${id}/rmsf`, undefined, { signal })
 /** 298 K normal-mode ensemble and its representative static conformation. */
 export const getCandoThermalTrajectory = (id, signal) => _oxdnaJSON('GET', `/cando/jobs/${id}/thermal-trajectory`, undefined, { signal })
+/** Single static 298 K conformation used by display modes; excludes unused ensemble frames. */
+export const getCandoThermalRepresentative = (id, signal) =>
+  _oxdnaJSON('GET', `/cando/jobs/${id}/thermal-representative`, undefined, { signal })
+/** Columnar float32 representative conformation; JSON remains a compatibility fallback. */
+export const getCandoThermalRepresentativeBin = (id, { signal, onProgress } = {}) =>
+  _oxdnaBin(
+    'GET', `/cando/jobs/${id}/thermal-representative-bin`, undefined,
+    { signal, onProgress },
+  )
 /** Per-bp deviation from the intended (displayed) geometry + global RMSD (Item 3). */
 export const getCandoDeviation   = (id, signal)  => _oxdnaJSON('GET',  `/cando/jobs/${id}/deviation`, undefined, { signal })
 /** CanDo-style jointed-cylinder geometry (per-helix axis tubes + crossover joints). */
@@ -2862,6 +2936,9 @@ export const startSnupiJob       = (id)          => _oxdnaJSON('POST', `/snupi/j
 export const stopSnupiJob        = (id)          => _oxdnaJSON('POST', `/snupi/jobs/${id}/stop`)
 export const deleteSnupiJob      = (id)          => _oxdnaJSON('DELETE', `/snupi/jobs/${id}`)
 export const getSnupiDisplay     = (id, signal)  => _oxdnaJSON('GET',  `/snupi/jobs/${id}/display`, undefined, { signal })
+/** Compact columnar static FEM frame; JSON remains the compatibility fallback. */
+export const getSnupiDisplayBin = (id, { signal, onProgress } = {}) =>
+  _oxdnaBin('GET', `/snupi/jobs/${id}/display-bin`, undefined, { signal, onProgress })
 /** Full geometry of the job's OWN design snapshot (topology at solve time). */
 export const getSnupiSnapshotGeometry = (id, signal) => _oxdnaJSON('GET',  `/snupi/jobs/${id}/snapshot-geometry`, undefined, { signal })
 /** Per-bp RMSF (nm) for the flexibility map. */
@@ -2970,6 +3047,12 @@ function _strideBody(opts) {
  *  a bare value, so it can't be mistaken for `signal` (see _oxdnaJSON's type check). */
 export const getMdTrajectory     = (id, signal, opts = {}) =>
   _oxdnaJSON('GET',  `/md/jobs/${id}/trajectory${_strideQuery(opts)}`, undefined, { signal })
+/** Compact float32 sibling used by the interactive NAMD scrubber. */
+export const getMdTrajectoryBin = (id, signal, opts = {}) =>
+  _oxdnaBin(
+    'GET', `/md/jobs/${id}/trajectory-bin${_strideQuery(opts)}`, undefined,
+    { signal, onProgress: opts?.onProgress },
+  )
 /** Frame count + segment markers only (no coordinates) — sizes the trajectory slider fast.
  *  Also returns `total_raw` + per-stage `n_raw` (undownsampled DCD counts). */
 export const getMdTrajectoryMeta = (id, opts = {})       =>

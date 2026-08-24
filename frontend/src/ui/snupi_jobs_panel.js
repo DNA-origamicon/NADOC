@@ -41,6 +41,41 @@ const POLL_MS = 1500
 
 const _C = { ok: '#5cb85c', warn: '#e0a800', err: '#d9534f', accent: '#4a9eff', dim: '#8a8a8a' }
 
+const SNUPI_DISPLAY_PHASE_LABELS = {
+  'display-data': 'Load predicted positions', snapshot: 'Build snapshot geometry',
+  'display-download': 'Download predicted positions',
+  'display-decode': 'Decode predicted positions',
+  rmsf: 'Load flexibility values', deviation: 'Compute deviation map',
+  cylinders: 'Build CanDo cylinders', trajectory: 'Load thermal trajectory',
+  transform: 'Transform display data', 'render-snapshot': 'Build snapshot scene',
+  'reuse-scene': 'Reuse matching live scene', apply: 'Apply visualization',
+  error: 'Visualization failed',
+}
+
+/** Render retained, labelled progress rows for a SNUPI visualization selection. */
+export function renderSnupiDisplayProgress(el, phases) {
+  if (!el) return
+  el.replaceChildren()
+  for (const [phase, p] of phases) {
+    const row = document.createElement('div')
+    row.dataset.snupiDisplayPhase = phase
+    row.style.marginTop = el.childElementCount ? '4px' : '0'
+    const track = document.createElement('div')
+    track.style.cssText = 'height:4px;background:#21262d;border-radius:3px;overflow:hidden'
+    const fill = document.createElement('div')
+    fill.style.cssText = 'height:100%;background:#4a9eff;transition:width .15s'
+    const pct = p.total ? Math.max(0, Math.min(100, (100 * p.done) / p.total)) : 0
+    fill.style.width = `${pct}%`
+    track.appendChild(fill)
+    const label = document.createElement('div')
+    label.style.cssText = 'margin-top:3px;color:#8b949e;font-size:10px'
+    const count = p.total ? `${Math.min(p.done, p.total)} of ${p.total}` : 'working…'
+    label.textContent = `${SNUPI_DISPLAY_PHASE_LABELS[phase] || phase} · ${count}`
+    row.append(track, label)
+    el.appendChild(row)
+  }
+}
+
 // ── Pure helpers (unit-tested) ────────────────────────────────────────────────
 
 /** Overall progress % string for a job + progress payload. */
@@ -539,7 +574,10 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
       snupiDisplay.stopDeform?.(); setMode('off'); _syncDisplayStatus()
       return
     }
-    const r = await snupiDisplay[_MODE_FNS[mode]]?.(_selectedId)
+    const r = await snupiDisplay[_MODE_FNS[mode]]?.(
+      _selectedId, _showDisplayProgress,
+      { reuseLiveGeometry: _selectedJob()?.out_of_date === false },
+    )
     if (!r?.ok) { snupiDisplay.stopDeform?.(); setMode('off') }
     _syncDisplayStatus()
   }
@@ -585,8 +623,18 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
   }
 
   /** Readout under the radios: the active mode + its scalar range / RMSD. */
+  const _displayLoadPhases = new Map()
+  function _showDisplayProgress(p) {
+    if (!p || !displayStatus) return
+    if (p.reset) _displayLoadPhases.clear()
+    if (p.phase) _displayLoadPhases.set(p.phase, {
+      done: Math.max(0, Number(p.done) || 0), total: Math.max(0, Number(p.total) || 0),
+    })
+    renderSnupiDisplayProgress(displayStatus, _displayLoadPhases)
+  }
   function _syncDisplayStatus() {
     if (!displayStatus) return
+    _displayLoadPhases.clear()
     const mode = snupiDisplay?.mode?.()
     if (!mode) { displayStatus.textContent = ''; return }
     const s = snupiDisplay?.lastStats?.()
@@ -638,12 +686,23 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
     if (mode !== 'trajectory') snupiDisplay.stopTrajectory?.()   // leaving the player → halt the loop
     if (mode === 'off') { snupiDisplay.stopDeform?.(); _syncDisplayStatus(); return }
     if (!_selectedId) { setMode('off'); return }
-    const r = await snupiDisplay[_MODE_FNS[mode]]?.(_selectedId)
+    _showDisplayProgress({ reset: true })
+    let r
+    try {
+      r = await snupiDisplay[_MODE_FNS[mode]]?.(
+        _selectedId, _showDisplayProgress,
+        { reuseLiveGeometry: _selectedJob()?.out_of_date === false },
+      )
+    } catch (err) {
+      r = { ok: false, reason: err?.message || 'load failed' }
+    }
     if (!r?.ok) {
       setMode('off'); snupiDisplay.stopDeform?.()
+      _showDisplayProgress({ phase: 'error', done: 1, total: 1 })
       showToast(mode === 'flex' ? 'RMSF not available for this job'
         : mode === 'trajectory' ? 'No trajectory — run a Langevin dynamics job (Advanced ▸ Langevin dynamics)'
         : 'Predicted positions not ready', { severity: 'warn' })
+      return
     }
     _syncDisplayStatus()
   }

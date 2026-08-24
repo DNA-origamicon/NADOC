@@ -27,11 +27,14 @@ from __future__ import annotations
 
 import json
 import logging
+import struct
 import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+
+import numpy as np
 
 from backend.core.cando_job import CandoJob, CandoStatus
 from backend.core.models import Design
@@ -105,6 +108,158 @@ def load_rmsf(job_dir: Path) -> Optional[dict]:
 def load_thermal_trajectory(job_dir: Path) -> Optional[dict]:
     """Cached 298 K normal-mode equilibrium conformations, or None."""
     return load_cached(job_dir, "thermal_trajectory.json")
+
+
+_THERMAL_REPRESENTATIVE_FIELDS = (
+    "kind",
+    "temperature_k",
+    "n_frames",
+    "representative_frame",
+    "representative_positions",
+    "representative_axis",
+)
+
+
+def thermal_representative_payload(thermal: dict) -> dict:
+    """The one static 298 K conformation consumed by every CanDo display mode.
+
+    The full normal-mode ensemble is retained for exports and scientific tests, but a
+    static display must not parse or transfer dozens of frames it will never render.
+    """
+    return {
+        key: thermal[key] for key in _THERMAL_REPRESENTATIVE_FIELDS if key in thermal
+    }
+
+
+def load_thermal_representative(job_dir: Path) -> Optional[dict]:
+    """Load the small display sidecar, deriving it once for pre-sidecar jobs."""
+    cached = load_cached(job_dir, "thermal_representative.json")
+    if cached is not None:
+        return cached
+    thermal = load_thermal_trajectory(job_dir)
+    if not thermal:
+        return None
+    representative = thermal_representative_payload(thermal)
+    if representative.get("representative_positions"):
+        (job_dir / "thermal_representative.json").write_text(json.dumps(representative))
+    return representative
+
+
+_THERMAL_REP_BIN_MAGIC = 0x4D524643  # little-endian bytes spell "CFRM"
+_THERMAL_REP_BIN_VERSION = 1
+
+
+def pack_thermal_representative_bin(representative: dict) -> bytes:
+    """Pack a representative conformation without repeated JSON objects/strings.
+
+    Layout (little-endian)::
+
+        u32 magic, version, n_positions, n_axis, n_helices, header_len
+        JSON {kind, temperature_k, n_frames, representative_frame, helix_ids}
+        4-byte padding
+        position[n]: u32 helix, i32 bp, i32 copy, u32 reverse, f32[9]
+        axis[m]:     u32 helix, i32 bp, f32[3]
+
+    Float32 matches the WebGL instance-matrix precision while the integer/string
+    identity columns remain exact. A 14k-nucleotide fixture contracts from ~5 MB of
+    JSON to under 1 MB and avoids constructing its repeated JSON object graph.
+    """
+    import orjson
+
+    positions = representative.get("representative_positions") or []
+    axis = representative.get("representative_axis") or []
+    helix_ids = list(
+        dict.fromkeys(str(row.get("helix_id", "")) for row in [*positions, *axis])
+    )
+    helix_at = {helix_id: i for i, helix_id in enumerate(helix_ids)}
+    pos_dtype = np.dtype(
+        [
+            ("helix", "<u4"),
+            ("bp", "<i4"),
+            ("copy", "<i4"),
+            ("reverse", "<u4"),
+            ("coords", "<f4", (9,)),
+        ]
+    )
+    packed_positions = np.empty(len(positions), dtype=pos_dtype)
+    for i, row in enumerate(positions):
+        packed_positions["helix"][i] = helix_at[str(row.get("helix_id", ""))]
+        packed_positions["bp"][i] = int(row.get("bp_index", 0))
+        packed_positions["copy"][i] = int(row.get("copy", 0))
+        packed_positions["reverse"][i] = int(
+            str(row.get("direction", "FORWARD")).upper() == "REVERSE"
+        )
+        backbone = row.get("backbone_position") or [np.nan] * 3
+        packed_positions["coords"][i] = [
+            *backbone,
+            row.get("nx", np.nan),
+            row.get("ny", np.nan),
+            row.get("nz", np.nan),
+            row.get("tx", np.nan),
+            row.get("ty", np.nan),
+            row.get("tz", np.nan),
+        ]
+
+    axis_dtype = np.dtype([("helix", "<u4"), ("bp", "<i4"), ("position", "<f4", (3,))])
+    packed_axis = np.empty(len(axis), dtype=axis_dtype)
+    for i, row in enumerate(axis):
+        packed_axis["helix"][i] = helix_at[str(row.get("helix_id", ""))]
+        packed_axis["bp"][i] = int(row.get("bp_index", 0))
+        packed_axis["position"][i] = row.get("position") or [np.nan] * 3
+
+    header = orjson.dumps(
+        {
+            key: representative[key]
+            for key in ("kind", "temperature_k", "n_frames", "representative_frame")
+            if key in representative
+        }
+        | {"helix_ids": helix_ids}
+    )
+    fixed = struct.pack(
+        "<IIIIII",
+        _THERMAL_REP_BIN_MAGIC,
+        _THERMAL_REP_BIN_VERSION,
+        len(positions),
+        len(axis),
+        len(helix_ids),
+        len(header),
+    )
+    pad = b"\0" * ((4 - ((len(fixed) + len(header)) % 4)) % 4)
+    return (
+        fixed
+        + header
+        + pad
+        + packed_positions.tobytes(order="C")
+        + packed_axis.tobytes(order="C")
+    )
+
+
+def pack_static_fem_frame_bin(display: dict, **metadata) -> bytes:
+    """Pack any cached static FEM display using the shared CFRM column contract."""
+    return pack_thermal_representative_bin(
+        {
+            "kind": "static-fem-frame",
+            "representative_positions": display.get("positions") or [],
+            "representative_axis": display.get("axis") or [],
+            **metadata,
+        }
+    )
+
+
+def load_thermal_representative_bin(job_dir: Path) -> Optional[bytes]:
+    """Load the packed display sidecar, deriving it once for older jobs."""
+    path = job_dir / "thermal_representative.bin"
+    if path.exists():
+        try:
+            return path.read_bytes()
+        except OSError:
+            return None
+    representative = load_thermal_representative(job_dir)
+    if not representative or not representative.get("representative_positions"):
+        return None
+    payload = pack_thermal_representative_bin(representative)
+    path.write_bytes(payload)
+    return payload
 
 
 # ── Progress (time-based estimate; the true completion signal is the thread) ──
@@ -185,6 +340,11 @@ def _cache_fem_analysis(job: CandoJob, jd: Path, result: dict) -> None:
     thermal = result.get("thermal_trajectory")
     if thermal and thermal.get("frames"):
         (jd / "thermal_trajectory.json").write_text(json.dumps(thermal))
+        representative = thermal_representative_payload(thermal)
+        (jd / "thermal_representative.json").write_text(json.dumps(representative))
+        (jd / "thermal_representative.bin").write_bytes(
+            pack_thermal_representative_bin(representative)
+        )
     # positions carry two entries (FORWARD/REVERSE) per axis node; the RMSF list is one entry per
     # node, so it is the honest FEM-node (= base pair) count.
     job.n_nodes = len(rmsf) if rmsf else (len(positions) // 2 if positions else 0)

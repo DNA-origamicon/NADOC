@@ -20,6 +20,7 @@
 import { toFemUpdates, flexColorMap, deviationColorMap } from './cando_display.js'
 import { framesToUpdates } from './oxdna_display.js'
 import { initFrameSteppers } from './frame_steppers.js'
+import { parseCandoRepresentativeBin } from '../scene/cando_representative_bin.js'
 
 export function initSnupiDisplay({
   designRenderer, api, cylinderOverlay = null, setDesignVisible = null, flexScale = null,
@@ -32,6 +33,41 @@ export function initSnupiDisplay({
     return { epoch: ++_epoch, signal: _loadAbort.signal }
   }
   function _cancelLoad() { _loadAbort?.abort(); _loadAbort = null; _epoch++ }
+  function _progress(onProgress, phase, done, total = 1) {
+    onProgress?.({ phase, done, total })
+  }
+  async function _fetchPhase(onProgress, phase, promise) {
+    _progress(onProgress, phase, 0)
+    const result = await promise
+    _progress(onProgress, phase, 1)
+    return result
+  }
+  async function _paintBefore(onProgress, phase) {
+    _progress(onProgress, phase, 0)
+    if (typeof requestAnimationFrame === 'function') {
+      await new Promise(resolve => requestAnimationFrame(resolve))
+    }
+  }
+  async function _displayRequest(jobId, signal, onProgress) {
+    if (api.getSnupiDisplayBin) {
+      _progress(onProgress, 'display-download', 0, 0)
+      const buf = await api.getSnupiDisplayBin(jobId, {
+        signal,
+        onProgress: p => _progress(onProgress, 'display-download', p.done, p.total),
+      })
+      if (buf) {
+        await _paintBefore(onProgress, 'display-decode')
+        const decoded = parseCandoRepresentativeBin(buf)
+        _progress(onProgress, 'display-decode', 1)
+        if (decoded) return {
+          ...decoded,
+          positions: decoded.representative_positions,
+          axis: decoded.representative_axis,
+        }
+      }
+    }
+    return _fetchPhase(onProgress, 'display-data', api.getSnupiDisplay(jobId, signal))
+  }
   let _jobId = null         // job whose overlay is applied (or null)
   let _mode = null          // 'deform' | 'flex' | 'deviation' | 'cando' | null
   let _stats = null         // last flex/deviation/cando summary for the panel readout
@@ -64,6 +100,14 @@ export function initSnupiDisplay({
     _nativeVisible(true)
   }
 
+  function _prepareForLive() {
+    flexScale?.hide()
+    cylinderOverlay?.clear()
+    designRenderer.clearScalarColors?.()
+    designRenderer.clearExternalGeometry?.()
+    _nativeVisible(true)
+  }
+
   function _snapshotReady(snap) {
     return !!(snap?.ready && snap.design && Array.isArray(snap.nucleotides) && snap.nucleotides.length)
   }
@@ -81,17 +125,26 @@ export function initSnupiDisplay({
   }
 
   /** Deform the model to the predicted shape (no recolour). */
-  async function showDeform(jobId) {
+  async function showDeform(jobId, onProgress, { reuseLiveGeometry = false } = {}) {
     const { epoch, signal } = _beginLoad()
     const [resp, snap] = await Promise.all([
-      api.getSnupiDisplay(jobId, signal), api.getSnupiSnapshotGeometry(jobId, signal)])
+      _displayRequest(jobId, signal, onProgress),
+      reuseLiveGeometry ? Promise.resolve(null)
+        : _fetchPhase(onProgress, 'snapshot', api.getSnupiSnapshotGeometry(jobId, signal))])
     if (epoch !== _epoch) return { ok: false }
+    await _paintBefore(onProgress, 'transform')
     const updates = toFemUpdates(resp)
-    if (!updates.length || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
-    _prepareForExternal()
-    _renderExternal(snap)
+    _progress(onProgress, 'transform', 1)
+    if (!updates.length || (!reuseLiveGeometry && !_snapshotReady(snap))) return { ok: false, reason: 'not-ready' }
+    const scenePhase = reuseLiveGeometry ? 'reuse-scene' : 'render-snapshot'
+    await _paintBefore(onProgress, scenePhase)
+    if (reuseLiveGeometry) _prepareForLive()
+    else { _prepareForExternal(); _renderExternal(snap) }
+    _progress(onProgress, scenePhase, 1)
+    await _paintBefore(onProgress, 'apply')
     designRenderer.applyFemPositions(updates)
     designRenderer.clearScalarColors?.()
+    _progress(onProgress, 'apply', 1)
     _jobId = jobId; _mode = 'deform'; _stats = null
     return { ok: true, n: updates.length }
   }
@@ -118,17 +171,27 @@ export function initSnupiDisplay({
   }
 
   /** Deform to the predicted shape + recolour beads by per-bp RMSF (flexibility map). */
-  async function showFlex(jobId) {
+  async function showFlex(jobId, onProgress, { reuseLiveGeometry = false } = {}) {
     const { epoch, signal } = _beginLoad()
     const [disp, rmsf, snap] = await Promise.all([
-      api.getSnupiDisplay(jobId, signal), api.getSnupiRmsf(jobId, signal), api.getSnupiSnapshotGeometry(jobId, signal)])
+      _displayRequest(jobId, signal, onProgress),
+      _fetchPhase(onProgress, 'rmsf', api.getSnupiRmsf(jobId, signal)),
+      reuseLiveGeometry ? Promise.resolve(null)
+        : _fetchPhase(onProgress, 'snapshot', api.getSnupiSnapshotGeometry(jobId, signal))])
     if (epoch !== _epoch) return { ok: false }
+    await _paintBefore(onProgress, 'transform')
     const map = flexColorMap(disp, rmsf, undefined, undefined, _flexCmap)
-    if (!map || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
-    _prepareForExternal()
-    _renderExternal(snap)
+    _progress(onProgress, 'transform', 1)
+    if (!map || (!reuseLiveGeometry && !_snapshotReady(snap))) return { ok: false, reason: 'not-ready' }
+    const scenePhase = reuseLiveGeometry ? 'reuse-scene' : 'render-snapshot'
+    await _paintBefore(onProgress, scenePhase)
+    if (reuseLiveGeometry) _prepareForLive()
+    else { _prepareForExternal(); _renderExternal(snap) }
+    _progress(onProgress, scenePhase, 1)
+    await _paintBefore(onProgress, 'apply')
     designRenderer.applyFemPositions(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
+    _progress(onProgress, 'apply', 1)
     _flexResp = { disp, rmsf }
     _flexBounds = { lo: map.min, hi: map.max }
     _jobId = jobId; _mode = 'flex'
@@ -139,17 +202,26 @@ export function initSnupiDisplay({
 
   /** Deform to the predicted shape + recolour beads green→red by deviation from the
    *  design's intended geometry (deviation map).  Reports the global RMSD. */
-  async function showDeviation(jobId) {
+  async function showDeviation(jobId, onProgress, { reuseLiveGeometry = false } = {}) {
     const { epoch, signal } = _beginLoad()
     const [resp, snap] = await Promise.all([
-      api.getSnupiDeviation(jobId, signal), api.getSnupiSnapshotGeometry(jobId, signal)])
+      _fetchPhase(onProgress, 'deviation', api.getSnupiDeviation(jobId, signal)),
+      reuseLiveGeometry ? Promise.resolve(null)
+        : _fetchPhase(onProgress, 'snapshot', api.getSnupiSnapshotGeometry(jobId, signal))])
     if (epoch !== _epoch) return { ok: false }
+    await _paintBefore(onProgress, 'transform')
     const map = deviationColorMap(resp, undefined, undefined, _devCmap)
-    if (!map || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
-    _prepareForExternal()
-    _renderExternal(snap)
+    _progress(onProgress, 'transform', 1)
+    if (!map || (!reuseLiveGeometry && !_snapshotReady(snap))) return { ok: false, reason: 'not-ready' }
+    const scenePhase = reuseLiveGeometry ? 'reuse-scene' : 'render-snapshot'
+    await _paintBefore(onProgress, scenePhase)
+    if (reuseLiveGeometry) _prepareForLive()
+    else { _prepareForExternal(); _renderExternal(snap) }
+    _progress(onProgress, scenePhase, 1)
+    await _paintBefore(onProgress, 'apply')
     designRenderer.applyFemPositions(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
+    _progress(onProgress, 'apply', 1)
     _devResp = resp
     _devBounds = { lo: map.min, hi: map.max }
     _jobId = jobId; _mode = 'deviation'
@@ -159,18 +231,20 @@ export function initSnupiDisplay({
   }
 
   /** CanDo-style output: draw the predicted shape as jointed-cylinder tubes (native model hidden). */
-  async function showCandoStyle(jobId) {
+  async function showCandoStyle(jobId, onProgress) {
     const { epoch, signal } = _beginLoad()
-    const resp = await api.getSnupiCylinders(jobId, signal)
+    const resp = await _fetchPhase(onProgress, 'cylinders', api.getSnupiCylinders(jobId, signal))
     if (epoch !== _epoch) return { ok: false }
     if (!resp?.ready || !cylinderOverlay || (!resp.helices?.length && !resp.joints?.length)) {
       return { ok: false, reason: 'not-ready' }
     }
+    await _paintBefore(onProgress, 'apply')
     _clearAll()   // restore the live model first, then hide it under the tubes
     cylinderOverlay.update(resp, {
       lo: resp.rmsf_min, hi: resp.rmsf_p95, colormap: _candoCmap,
     })
     _nativeVisible(false)
+    _progress(onProgress, 'apply', 1)
     _candoResp = resp
     _jobId = jobId; _mode = 'cando'
     _stats = { kind: 'cando', helices: resp.n_helices || 0, joints: resp.n_joints || 0 }
@@ -229,20 +303,27 @@ export function initSnupiDisplay({
   }
 
   /** Animate a dynamics job's thermal trajectory (the actual motion, not just its mean shape). */
-  async function showTrajectory(jobId) {
+  async function showTrajectory(jobId, onProgress, { reuseLiveGeometry = false } = {}) {
     const { epoch, signal } = _beginLoad()
     const [resp, snap] = await Promise.all([
-      api.getSnupiTrajectory(jobId, signal), api.getSnupiSnapshotGeometry(jobId, signal)])
+      _fetchPhase(onProgress, 'trajectory', api.getSnupiTrajectory(jobId, signal)),
+      reuseLiveGeometry ? Promise.resolve(null)
+        : _fetchPhase(onProgress, 'snapshot', api.getSnupiSnapshotGeometry(jobId, signal))])
     if (epoch !== _epoch) return { ok: false }
-    if (!resp?.ready || !resp.n_frames || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
-    _prepareForExternal()
-    _renderExternal(snap)
+    if (!resp?.ready || !resp.n_frames || (!reuseLiveGeometry && !_snapshotReady(snap))) return { ok: false, reason: 'not-ready' }
+    const scenePhase = reuseLiveGeometry ? 'reuse-scene' : 'render-snapshot'
+    await _paintBefore(onProgress, scenePhase)
+    if (reuseLiveGeometry) _prepareForLive()
+    else { _prepareForExternal(); _renderExternal(snap) }
+    _progress(onProgress, scenePhase, 1)
     _traj = { keys: resp.keys, frames: resp.frames }
     _trajIdx = 0
     _wireTrajControls()
     const ctl = _tel('snupi-traj-controls'); if (ctl) ctl.style.display = 'flex'
     const sc = _tel('snupi-traj-scrubber'); if (sc) { sc.max = String(resp.n_frames - 1); sc.value = '0' }
+    await _paintBefore(onProgress, 'apply')
     _trajApplyFrame(0)
+    _progress(onProgress, 'apply', 1)
     _trajSetPlaying(true)
     _jobId = jobId; _mode = 'trajectory'
     _stats = { kind: 'trajectory', frames: resp.n_frames }

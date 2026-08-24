@@ -944,6 +944,48 @@ async def get_md_job_trajectory_progress(job_id: str) -> dict:
         return {"active": True, "done": 0, "total": 0}
 
 
+@router.get("/md/jobs/{job_id}/trajectory-bin", response_model=None)
+async def get_md_job_trajectory_bin(
+    job_id: str,
+    request: Request,
+    stride: int | None = None,
+) -> Response | dict:
+    """Typed-array sibling of the composite NAMD trajectory for interactive display."""
+    stride = _traj_stride(stride)
+    job = _load_job(job_id)
+    package_dir = job.package_dir(_workspace())
+    psf = package_dir / f"{job.name_stem}.psf"
+    ref = package_dir / f"{job.name_stem}.pdb"
+    if not psf.exists() or not ref.exists():
+        return {"ready": False, "reason": "topology/reference not found"}
+    segments = _md_segment_dcds(job)
+    if not segments:
+        return {"ready": False, "reason": "no trajectory yet"}
+    design = _md_snapshot_design(job) or design_state.get_or_404()
+    fd, progress_name = tempfile.mkstemp(prefix="nadoc_md_traj_", suffix=".json")
+    os.close(fd)
+    progress_path = Path(progress_name)
+    _TRAJ_PROGRESS_PATHS[job_id] = progress_path
+    try:
+        payload = await _run_md_analysis(
+            request,
+            job_id,
+            "trajectory",
+            "md_composite_trajectory_bin",
+            (psf, segments, ref, design, 200, stride, str(progress_path)),
+            timeout_s=180.0 if stride is None else 900.0,
+        )
+    finally:
+        if _TRAJ_PROGRESS_PATHS.get(job_id) == progress_path:
+            _TRAJ_PROGRESS_PATHS.pop(job_id, None)
+        progress_path.unlink(missing_ok=True)
+    return Response(
+        content=payload,
+        media_type="application/octet-stream",
+        headers={"X-NADOC-Uncompressed-Length": str(len(payload))},
+    )
+
+
 @router.get("/md/jobs/{job_id}/trajectory-meta")
 async def get_md_job_trajectory_meta(
     job_id: str,
@@ -3970,6 +4012,31 @@ def _decorate_preparation_progress(job: MdJob, payload: dict, ws: Path) -> None:
         payload["progress_estimated"] = True
 
 
+_MD_LIST_HEALTH_TAIL = 16
+
+
+def _compact_list_health_samples(samples: list) -> tuple[list, bool]:
+    """Bound health history carried by the frequently-polled jobs-list response.
+
+    Keep the latest record for every segment (timeline/advisory state) plus the most
+    recent window (metric tiles and WC sparkline). Full history remains available on
+    the job-detail route and status WebSocket; persisted job data is never changed.
+    """
+    if len(samples) <= _MD_LIST_HEALTH_TAIL:
+        return samples, False
+    keep = set(range(len(samples) - _MD_LIST_HEALTH_TAIL, len(samples)))
+    latest_by_segment: dict[str, int] = {}
+    for index, sample in enumerate(samples):
+        if isinstance(sample, dict):
+            segment = sample.get("segment") or sample.get("stage")
+        else:
+            segment = getattr(sample, "segment", None) or getattr(sample, "stage", None)
+        if segment is not None:
+            latest_by_segment[str(segment)] = index
+    keep.update(latest_by_segment.values())
+    return [sample for index, sample in enumerate(samples) if index in keep], True
+
+
 @router.get("/md/jobs")
 async def list_md_jobs() -> list[dict]:
     from backend.core.oxdna_staleness import current_active_design_fingerprint
@@ -3990,7 +4057,12 @@ async def list_md_jobs() -> list[dict]:
 
     runpod_ids: set[str] | None = None
     runpod_connected = routes_runpod._SESSION.is_connected()  # noqa: SLF001
-    if runpod_connected:
+    needs_runpod_probe = any(
+        job.execution_target == "runpod"
+        and job.status in {MdStatus.preparing, MdStatus.queued, MdStatus.running}
+        for job in jobs
+    )
+    if runpod_connected and needs_runpod_probe:
         try:
             pods = await routes_runpod._SESSION.require().list_pods()  # noqa: SLF001
             runpod_ids = {p.id for p in pods if not p.is_destroyed}
@@ -4049,7 +4121,15 @@ async def list_md_jobs() -> list[dict]:
             from backend.core.md_executor import verify_local_download
 
             verify_local_download(j, ws)
+        full_health_count = len(j.health_samples)
+        compact_health, truncated = _compact_list_health_samples(j.health_samples)
+        # `jobs` are request-local objects freshly loaded above. Compact before
+        # dataclasses.asdict recursively copies them; no persisted record is changed.
+        j.health_samples = compact_health
         d = j.to_dict()
+        if truncated:
+            d["health_samples_truncated"] = True
+            d["health_samples_total"] = full_health_count
         d["failure_details"] = _failure_diagnostics(j)
         _decorate_terminal_segment_progress(j, d, ws)
         d["out_of_date"] = _md_job_out_of_date(j, current_fp)

@@ -3021,20 +3021,35 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
   function _trajTotalFrames(v) { return Number(v?.trajectoryInfo?.()?.total) || 0 }
 
+  const _TRAJ_LOAD_LABELS = {
+    initialize: 'Open topology and trajectory files',
+    extract: 'Read and align NAMD frames',
+    pack: 'Pack display frames',
+    download: 'Download trajectory',
+    decode: 'Decode trajectory',
+    'surface-strands': 'Load simulated surface strands',
+    display: 'Apply first frame',
+  }
+  function _showTrajLoadProgress(p) {
+    if (!p) return
+    trajPlayer.setLoading({ ...p, label: _TRAJ_LOAD_LABELS[p.phase] || p.label || '' })
+  }
+
   async function _refreshTraj() {
     const v = getMdViz?.()
     if (!_selectedId || !v) return
     const interval = _trajInterval()
     _setTrajStatus('Loading trajectory…', _C.accent)
     const jobId = _selectedId
-    trajPlayer.setLoading({ done: 0, total: 0 })
+    trajPlayer.setLoading({ phase: 'extract', done: 0, total: 0, reset: true,
+      label: _TRAJ_LOAD_LABELS.extract })
     const poll = setInterval(async () => {
       const p = await api.getMdTrajectoryProgress(jobId).catch(() => null)
-      if (_selectedId === jobId && p?.active) trajPlayer.setLoading(p)
+      if (_selectedId === jobId && p?.active) _showTrajLoadProgress(p)
     }, 250)
     let r
     try {
-      r = await v.loadTrajectory(jobId, true, 'lineage', interval)
+      r = await v.loadTrajectory(jobId, true, 'lineage', interval, _showTrajLoadProgress)
     } finally {
       clearInterval(poll)
       trajPlayer.setLoading(null)
@@ -4901,6 +4916,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const delta = last - first
     const trend = values.length < 2 ? 'single point' : `${delta >= 0 ? '+' : ''}${(delta * 100).toFixed(1)} pts`
     const lastReason = latestHealth?.reason ? ` · ${latestHealth.reason}` : ''
+    const historyNote = job?.health_samples_truncated
+      ? ` · recent ${samples.length} of ${job.health_samples_total ?? '?'} samples`
+      : ''
 
     const tip = document.createElement('div')
     tip.style.cssText = [
@@ -4918,7 +4936,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       'pointer-events:none',
     ].join(';')
     tip.innerHTML = `
-      <div style="font-size:9px;color:${_C.muted};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px">${_escapeHtml(stage)}</div>
+      <div style="font-size:9px;color:${_C.muted};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px">${_escapeHtml(stage + historyNote)}</div>
       ${svg}
       <div style="display:flex;justify-content:space-between;gap:6px;margin-top:3px;font-size:9px;font-family:var(--font-mono)">
         <span style="color:${_C.muted}">${samples.length} pts</span>

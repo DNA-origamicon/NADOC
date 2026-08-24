@@ -51,7 +51,7 @@ import {
   runConfigForJob, healthForDisplay, productionRunAnchors, runElements, runIndicatorTags, runRowLabel, runChildTitle,
   jobHasFailure, errorLogText, jobOutOfDate, jobSelectionSignature,
   trajectoryFrameEstimate, relaxIndexMap, relaxRowLabel,
-  captureStrandRunPlan,
+  captureStrandRunPlan, renderLammpsDisplayProgress,
 } from './oxdna_jobs_panel.js'
 
 describe('relaxIndexMap / relaxRowLabel (root job naming)', () => {
@@ -1066,7 +1066,9 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     $('oxdna-jobs-traj-toggle').checked = true
     $('oxdna-jobs-traj-toggle').dispatchEvent(new Event('change'))
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
-    expect(disp.loadTrajectory).toHaveBeenCalledWith('jt', true, 'lineage')     // sparse = whole lineage
+    expect(disp.loadTrajectory).toHaveBeenCalledWith(
+      'jt', true, 'lineage', undefined, expect.any(Function),
+    )                                                                          // sparse = whole lineage + progress
     expect($('oxdna-jobs-traj-controls').style.display).not.toBe('none')
     expect($('oxdna-jobs-traj-slider').max).toBe('5')                           // 6 frames → max idx 5
   })
@@ -1082,7 +1084,9 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     $('oxdna-jobs-traj-full-toggle').dispatchEvent(new Event('change'))
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
     // scope 'job' = drop the ancestors, keep every frame written (no stride).
-    expect(disp.loadTrajectory).toHaveBeenCalledWith('jt', true, 'job')
+    expect(disp.loadTrajectory).toHaveBeenCalledWith(
+      'jt', true, 'job', undefined, expect.any(Function),
+    )
     expect($('oxdna-jobs-traj-controls').style.display).not.toBe('none')
   })
 
@@ -1119,14 +1123,27 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     $('oxdna-jobs-display-toggle').checked = true
     $('oxdna-jobs-display-toggle').dispatchEvent(new Event('change'))
     await Promise.resolve(); await Promise.resolve()
-    expect(lammps.displayJob).toHaveBeenCalledWith('lm7', expect.anything())
+    expect(lammps.displayJob).toHaveBeenCalledWith('lm7', expect.anything(), expect.any(Function))
     expect(oxdnaDisplay.displayJob).not.toHaveBeenCalled()
     // Trajectory radio → LAMMPS trajectory + reveals the shared player
     $('oxdna-jobs-traj-toggle').checked = true
     $('oxdna-jobs-traj-toggle').dispatchEvent(new Event('change'))
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
-    expect(lammps.loadTrajectory).toHaveBeenCalledWith('lm7', true)
+    expect(lammps.loadTrajectory).toHaveBeenCalledWith('lm7', true, expect.any(Function))
     expect($('oxdna-jobs-traj-controls').style.display).not.toBe('none')
+  })
+
+  it('renders a labelled progress bar for every LAMMPS display subprocess', () => {
+    const status = $('oxdna-jobs-display-status')
+    renderLammpsDisplayProgress(status, new Map([
+      ['final-frame', { done: 1, total: 1 }],
+      ['transform', { done: 0, total: 1 }],
+      ['apply', { done: 0, total: 1 }],
+    ]))
+    expect(status.querySelectorAll('[data-lammps-display-phase]')).toHaveLength(3)
+    expect(status.textContent).toContain('Read and align final frame')
+    expect(status.textContent).toContain('Transform final coordinates')
+    expect(status.textContent).toContain('Apply final structure')
   })
 
   it('a LAMMPS run whose sim is unfinished (not viewable) leaves the viz radios disabled', () => {

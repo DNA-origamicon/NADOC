@@ -845,6 +845,26 @@ _SLOW_TESTS = {
     # Same file, same cost driver: a real inserted atomistic build plus the detector.
     "test_gate_reports_a_clean_seed",
     "test_gate_refuses_a_pierced_seed",
+    # ---------------------------------------------------------------------------
+    # 2026-08-24 full-suite budget triage. These six otherwise-correct tests exceed
+    # the 5 s per-test fast-loop ceiling because they deliberately exercise large
+    # reconstruction or dense numerical workloads. Keep their lighter module peers
+    # fast and relegate only the measured offenders.
+    # ---------------------------------------------------------------------------
+    # test_oxdna_extra_bases.py: routed 6hb extra-base configuration followed by two
+    # full CG→atomistic reconstructions (relaxed-display and NAMD-seed parity), 51.36 s.
+    "test_namd_seed_extra_base_matches_relaxed_display_pose",
+    # test_snupi_hydro_coarse.py: generalized RPY mobility construction plus dense
+    # eigendecomposition/inversion or the dense GJF inverse oracle (6.65–8.61 s).
+    "test_generalized_rpy_min_eigenvalue_is_stable_in_N",
+    "test_coarse_xi_is_spd_and_apply_Z_matches_dense_inverse",
+    "test_coarse_apply_b_inv_matches_the_dense_gjf_operator",
+    # test_oxdna_relaxation.py: constructs and serializes an imported-scale 18×388 bp
+    # skipped design (~14k nucleotides), 5.70 s.
+    "test_large_structure_oxdna_files_self_consistent",
+    # test_headless_corner_build.py: builds both uniform and length-optimized 12-helix
+    # corners, then performs the full steric-clash scan, 5.02 s.
+    "test_length_optimizer_does_not_worsen_steric_clashes",
 }
 
 # Individual heavy PARAMETRISATIONS of an otherwise-fast test.  Matched against the

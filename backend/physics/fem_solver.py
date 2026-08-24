@@ -2465,6 +2465,7 @@ def deformed_positions_with_axis(
     # pointing in their straight-frame radial direction → visibly wrong on a curved bundle).
     node_anchors: Dict[str, list] = {}
     helix_by_id = {h.id: h for h in design.helices}
+    deformed_axis_pts = np.empty((len(mesh.nodes), 3), dtype=float)
     for idx, node in enumerate(mesh.nodes):
         disp = u[6 * idx : 6 * idx + 3]
         rotation = u[6 * idx + 3 : 6 * idx + 6]
@@ -2481,6 +2482,7 @@ def deformed_positions_with_axis(
         nadoc_axis_position = (
             h_start + (node.global_bp - helix.bp_start) * BDNA_RISE_PER_BP * h_axis
         )
+        deformed_axis_pts[idx] = nadoc_axis_position + disp
         node_anchors.setdefault(node.helix_id, []).append(
             (
                 node.global_bp,
@@ -2604,13 +2606,13 @@ def deformed_positions_with_axis(
     # rep threads its tubes through these.  Only duplex core → no ssDNA nodes.
     axis: List[dict] = []
     if mesh.nodes:
-        node_pts = np.array(
-            [
-                mesh.nodes[i].position + u[6 * i : 6 * i + 3]
-                for i in range(len(mesh.nodes))
-            ]
-        )
-        node_aligned = _apply_transform(node_pts, cs, cd, R)
+        # Emit the exact same NADOC-reference centerline used to wind the
+        # backbones above.  ``mesh.nodes[*].position`` uses CanDo's 0.340 nm/bp
+        # rise, while the displayed NADOC geometry uses 0.334 nm/bp.  Mixing the
+        # two references makes the reported axis drift longitudinally away from
+        # its own beads as bp index grows, even though both receive the same
+        # displacement and Kabsch transform.
+        node_aligned = _apply_transform(deformed_axis_pts, cs, cd, R)
         axis = [
             {
                 "helix_id": node.helix_id,

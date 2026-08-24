@@ -157,6 +157,24 @@ def load_display(job_dir: Path) -> Optional[dict]:
     return load_cached(job_dir, "display.json")
 
 
+def load_display_bin(job_dir: Path) -> Optional[bytes]:
+    """Load the compact static FEM sidecar, deriving it once for older jobs."""
+    path = job_dir / "display.bin"
+    if path.exists():
+        try:
+            return path.read_bytes()
+        except OSError:
+            return None
+    display = load_display(job_dir)
+    if not display or not display.get("positions"):
+        return None
+    from backend.core.cando_runner import pack_static_fem_frame_bin
+
+    payload = pack_static_fem_frame_bin(display, solver=display.get("solver"))
+    path.write_bytes(payload)
+    return payload
+
+
 def load_rmsf(job_dir: Path) -> Optional[dict]:
     """The cached per-bp RMSF payload, or None."""
     return load_cached(job_dir, "rmsf.json")
@@ -344,6 +362,18 @@ def _cache_fem_analysis(job: SnupiJob, jd: Path, result: dict) -> None:
                     "axis", []
                 ),  # per-bp helix-centre nodes (cylinder rep)
             }
+        )
+    )
+    from backend.core.cando_runner import pack_static_fem_frame_bin
+
+    (jd / "display.bin").write_bytes(
+        pack_static_fem_frame_bin(
+            {
+                "solver": result.get("solver"),
+                "positions": positions,
+                "axis": result.get("axis", []),
+            },
+            solver=result.get("solver"),
         )
     )
     traj = result.get("trajectory")

@@ -1390,7 +1390,9 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
         forces_meta={"has_field": bool(field_in), "has_surface": bool(wall_in)},
         # repulsion plane / anchor / capture-strand traps are absolute-coordinate forces →
         # disable oxDNA's COM diffusion-fix so it doesn't shift them into the structure.
-        absolute_forces=bool(wall_in or ordinary_anchors or surface_anchors or cap_particles),
+        absolute_forces=bool(
+            wall_in or ordinary_anchors or surface_anchors or cap_particles
+        ),
         backend=parent.backend,
         device=parent.device,
         salt_concentration=parent.salt_concentration,
@@ -1403,7 +1405,9 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
             for x in (
                 "field" if field_in else "",
                 "surface" if wall_in else "",
-                "anchored" if (ordinary_anchors or surface_anchors) and not field_in else "",
+                "anchored"
+                if (ordinary_anchors or surface_anchors) and not field_in
+                else "",
             )
             if x
         )
@@ -1528,7 +1532,9 @@ async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) 
     design = _load_snapshot_design(pjd)
     relaxed_conf, _stage = _latest_relaxed_conf(parent, ws)
     if design is None or relaxed_conf is None:
-        raise HTTPException(400, "The selected job has no relaxed structure to deposit.")
+        raise HTTPException(
+            400, "The selected job has no relaxed structure to deposit."
+        )
 
     wall = {
         "dir": list(body.surface.dir),
@@ -1536,7 +1542,9 @@ async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) 
         "position_nm": body.surface.position_nm,
         "stiff": body.surface.stiff,
     }
-    anchors = [a.model_dump(by_alias=False, exclude_none=True) for a in body.surface_anchors]
+    anchors = [
+        a.model_dump(by_alias=False, exclude_none=True) for a in body.surface_anchors
+    ]
     stages = build_surface_deposition_stages(
         backend=parent.backend,
         device=parent.device,
@@ -1546,10 +1554,14 @@ async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) 
         equil_steps=body.equil_steps,
         steps_per_frame=body.steps_per_frame,
     )
-    stages[2].forces_meta.update({
-        "wall": wall, "anchors": anchors, "anchor_stiff": body.anchor_stiff,
-        "max_contact_gap_nm": body.contact_gap_nm,
-    })
+    stages[2].forces_meta.update(
+        {
+            "wall": wall,
+            "anchors": anchors,
+            "anchor_stiff": body.anchor_stiff,
+            "max_contact_gap_nm": body.contact_gap_nm,
+        }
+    )
     child = new_oxdna_job(
         design_name=f"{parent.design_name} · surface deposition",
         stages=[s.to_status() for s in stages],
@@ -1565,7 +1577,8 @@ async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) 
             "kind": "surface_deposition",
             "surface": wall,
             "surface_anchors": [
-                a.model_dump(by_alias=True, exclude_none=True) for a in body.surface_anchors
+                a.model_dump(by_alias=True, exclude_none=True)
+                for a in body.surface_anchors
             ],
             "approach_force_pn": body.approach_force_pn,
             "max_approach_force_pn": body.max_approach_force_pn,
@@ -1590,12 +1603,20 @@ async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) 
         read_configuration_unwrapped,
         write_configuration_from_full_map,
     )
+
     if not _job_has_surface(parent):
         aligned = read_configuration_unwrapped(
-            relaxed_conf, design, _design_ref_conf(pjd, design), align=True,
-            copies=True, include_extra_bases=True, include_extensions=True,
+            relaxed_conf,
+            design,
+            _design_ref_conf(pjd, design),
+            align=True,
+            copies=True,
+            include_extra_bases=True,
+            include_extensions=True,
         )
-        write_configuration_from_full_map(cjd / "conf.dat", relaxed_conf, design, aligned)
+        write_configuration_from_full_map(
+            cjd / "conf.dat", relaxed_conf, design, aligned
+        )
     else:
         shutil.copy(relaxed_conf, cjd / "conf.dat")
     try:
@@ -1605,11 +1626,18 @@ async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) 
             len(parent_dir) == 3
             and parent_wall.get("position_nm") is not None
             and wall.get("position_nm") is not None
-            and all(abs(float(parent_dir[i]) - float(wall["dir"][i])) < 1e-6 for i in range(3))
-            and abs(float(parent_wall["position_nm"]) - float(wall["position_nm"])) < 1e-6
+            and all(
+                abs(float(parent_dir[i]) - float(wall["dir"][i])) < 1e-6
+                for i in range(3)
+            )
+            and abs(float(parent_wall["position_nm"]) - float(wall["position_nm"]))
+            < 1e-6
         )
         placement_info = place_configuration_against_surface(
-            cjd / "conf.dat", design, wall=wall, anchors=anchors,
+            cjd / "conf.dat",
+            design,
+            wall=wall,
+            anchors=anchors,
             # A surface-relaxed parent is already positioned relative to its wall.
             # Preserve that placement and only validate it; free parents or a changed
             # plane are placed using the extent of the entire structure.
@@ -1640,6 +1668,7 @@ async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) 
     child.run_config["surface_placement"] = placement_info
     import json
     from dataclasses import asdict
+
     (cjd / "stages_spec.json").write_text(
         json.dumps([asdict(stage) for stage in stages], indent=2), encoding="utf-8"
     )
@@ -2236,7 +2265,10 @@ _SPARSE_FRAME_CAP = 200
 
 @router.get("/oxdna/jobs/{job_id}/trajectory")
 async def get_oxdna_trajectory(
-    job_id: str, request: Request, align: bool = True, scope: str = "lineage",
+    job_id: str,
+    request: Request,
+    align: bool = True,
+    scope: str = "lineage",
     transport: str = "json",
 ):
     """Composite scrub-able trajectory for the WHOLE lineage: every stage of the
@@ -2276,7 +2308,7 @@ async def get_oxdna_trajectory(
             raise _TrajectoryCancelled()
         _TRAJ_PROGRESS[job_id] = {"done": done, "total": total, "phase": phase}
 
-    _TRAJ_PROGRESS[job_id] = {"done": 0, "total": 0}
+    _TRAJ_PROGRESS[job_id] = {"phase": "aligning", "done": 0, "total": 0}
     try:
         task = asyncio.create_task(
             run_in_threadpool(
@@ -2334,6 +2366,79 @@ async def get_oxdna_trajectory(
             },
         )
     return {"ready": result["n_frames"] > 0, **result}
+
+
+@router.get("/oxdna/jobs/{job_id}/trajectory-bin")
+async def get_oxdna_trajectory_bin(
+    job_id: str, request: Request, align: bool = True, scope: str = "lineage"
+) -> Response:
+    """Compact binary sibling of ``/trajectory`` for the interactive scrubber.
+
+    Coordinates are contiguous float32 typed arrays with a small JSON metadata header
+    (see :func:`backend.core.oxdna_health.pack_composite_trajectory_bin`).  The browser
+    decodes zero-copy frame views instead of parsing hundreds of megabytes of JSON.
+    The JSON route remains intact as a compatibility fallback.
+    """
+    from backend.core.oxdna_health import pack_composite_trajectory_bin
+
+    job = _load_job(job_id)
+    design, stages, ref = _composite_inputs(job, scope)
+    if not stages:
+        return Response(status_code=204)
+    budget = 0 if scope == "job" else _SPARSE_FRAME_CAP
+    cancelled = threading.Event()
+
+    class _TrajectoryCancelled(Exception):
+        pass
+
+    def _prog(phase: str, done: int, total: int) -> None:
+        if cancelled.is_set():
+            raise _TrajectoryCancelled()
+        _TRAJ_PROGRESS[job_id] = {
+            "phase": phase,
+            "done": done,
+            "total": total,
+        }
+
+    _TRAJ_PROGRESS[job_id] = {
+        "phase": "align",
+        "done": 0,
+        "total": 0,
+    }
+    try:
+        task = asyncio.create_task(
+            run_in_threadpool(
+                pack_composite_trajectory_bin,
+                design,
+                stages,
+                ref,
+                budget,
+                _prog,
+                align,
+                _capture_bead_count(job),
+                _capture_strand_length(job),
+            )
+        )
+        while not task.done():
+            if await request.is_disconnected():
+                cancelled.set()
+                break
+            await asyncio.sleep(0.1)
+        try:
+            buf = await task
+        except _TrajectoryCancelled:
+            return Response(status_code=499)
+    finally:
+        cancelled.set()
+        _TRAJ_PROGRESS.pop(job_id, None)
+    return Response(
+        content=buf,
+        media_type="application/octet-stream",
+        # A development/reverse proxy may gzip the response: Content-Length then names
+        # compressed bytes while fetch() yields decompressed chunks. Preserve the real
+        # decoded size so the client can preallocate and show honest transfer progress.
+        headers={"X-NADOC-Uncompressed-Length": str(len(buf))},
+    )
 
 
 @router.get("/oxdna/jobs/{job_id}/trajectory-progress")

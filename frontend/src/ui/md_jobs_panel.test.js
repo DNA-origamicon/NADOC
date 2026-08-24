@@ -1560,6 +1560,7 @@ describe('initMdJobsPanel — trajectory frame interval', () => {
       'md-jobs-panel': 'div', 'md-jobs-panel-heading': 'div', 'md-jobs-panel-arrow': 'div',
       'md-jobs-panel-body': 'div', 'md-jobs-list': 'div', 'md-jobs-detail': 'div',
       'md-jobs-traj-opts': 'div', 'md-jobs-traj-status': 'div', 'md-jobs-traj-controls': 'div',
+      'md-jobs-traj-load-progress': 'div',
       'md-jobs-traj-frames-hint': 'div', 'md-jobs-traj-slider': 'input',
       'md-jobs-traj-toggle': 'input', 'md-jobs-traj-interval': 'input',
     })
@@ -1621,7 +1622,33 @@ describe('initMdJobsPanel — trajectory frame interval', () => {
     t.checked = true
     t.dispatchEvent(new Event('change'))
     await flushMicro()
-    expect(viz.loadTrajectory).toHaveBeenCalledWith('J9', true, 'lineage', 7)
+    expect(viz.loadTrajectory).toHaveBeenCalledWith(
+      'J9', true, 'lineage', 7, expect.any(Function),
+    )
+  })
+
+  it('shows a named progress row for every trajectory load subprocess', async () => {
+    let finish
+    viz.loadTrajectory.mockImplementation((_id, _align, _scope, _stride, onProgress) => {
+      onProgress({ phase: 'initialize', done: 1, total: 1 })
+      onProgress({ phase: 'extract', done: 12, total: 20 })
+      onProgress({ phase: 'download', done: 400, total: 1000 })
+      return new Promise(resolve => { finish = resolve })
+    })
+    await openWithJob()
+    const t = $('md-jobs-traj-toggle')
+    t.checked = true
+    t.dispatchEvent(new Event('change'))
+    await flushMicro()
+    const progress = $('md-jobs-traj-load-progress')
+    expect(progress.querySelector('[data-trajectory-load-phase="initialize"]')?.textContent)
+      .toContain('Open topology and trajectory files')
+    expect(progress.querySelector('[data-trajectory-load-phase="extract"]')?.textContent)
+      .toContain('Read and align NAMD frames · 12 of 20')
+    expect(progress.querySelector('[data-trajectory-load-phase="download"]')?.textContent)
+      .toContain('Download trajectory · 400 of 1,000')
+    finish({ ok: false, reason: 'test complete' })
+    await flushMicro()
   })
 
   it('falls back to the default interval when the field is emptied', async () => {
@@ -1632,7 +1659,9 @@ describe('initMdJobsPanel — trajectory frame interval', () => {
     t.checked = true
     t.dispatchEvent(new Event('change'))
     await flushMicro()
-    expect(viz.loadTrajectory).toHaveBeenCalledWith('J9', true, 'lineage', DEFAULT_TRAJ_INTERVAL)
+    expect(viz.loadTrajectory).toHaveBeenCalledWith(
+      'J9', true, 'lineage', DEFAULT_TRAJ_INTERVAL, expect.any(Function),
+    )
   })
 
   it('reloads at the new density when the interval is committed while displaying', async () => {
@@ -1647,7 +1676,9 @@ describe('initMdJobsPanel — trajectory frame interval', () => {
     iv.value = '4'
     iv.dispatchEvent(new Event('change'))
     await flushMicro()
-    expect(viz.loadTrajectory).toHaveBeenCalledWith('J9', true, 'lineage', 4)
+    expect(viz.loadTrajectory).toHaveBeenCalledWith(
+      'J9', true, 'lineage', 4, expect.any(Function),
+    )
   })
 
   it('does NOT reload on a committed interval while the view is off', async () => {
@@ -1722,7 +1753,9 @@ describe('initMdJobsPanel — trajectory frame interval', () => {
     t.checked = true
     t.dispatchEvent(new Event('change'))
     await flushMicro()
-    expect(viz.loadTrajectory).toHaveBeenCalledWith('J9', true, 'lineage', 1)
+    expect(viz.loadTrajectory).toHaveBeenCalledWith(
+      'J9', true, 'lineage', 1, expect.any(Function),
+    )
     confirm.mockRestore()
   })
 

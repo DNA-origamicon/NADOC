@@ -21,10 +21,15 @@ from __future__ import annotations
 
 import json
 import os
-import struct
 from pathlib import Path
+import struct
 
 import numpy as np
+import orjson
+
+
+_TRAJECTORY_BIN_MAGIC = 0x4E54524A  # "NTRJ", shared with the browser decoder
+_TRAJECTORY_BIN_VERSION = 1
 
 
 class _DcdPrefixFile:
@@ -34,6 +39,7 @@ class _DcdPrefixFile:
         self.path = os.fspath(path)
         self.fd = os.open(self.path, os.O_RDONLY)
         with open(self.path, "rb") as fh:
+
             def record():
                 size = struct.unpack("<i", fh.read(4))[0]
                 payload = fh.read(size)
@@ -126,7 +132,9 @@ def _select_p_order(u, chain_map, run_dir, coordinate_path):
     return build_p_pdb_order(pdb_text, chain_map), "reference-pdb"
 
 
-def _build_fast_md_metrics_ctx(topology_path, trajectory_paths, coordinate_path, design):
+def _build_fast_md_metrics_ctx(
+    topology_path, trajectory_paths, coordinate_path, design
+):
     """Metrics-only context without MDAnalysis' multi-million-atom PSF topology."""
     from backend.core.atomistic_to_nadoc import (
         _GRO_DNA_RESNAMES,
@@ -173,7 +181,12 @@ def _build_fast_md_metrics_ctx(topology_path, trajectory_paths, coordinate_path,
                 if atoms_left == 0:
                     break
                 continue
-            serial, segid, resid, atom_name = int(fields[0]), fields[1], int(fields[2]), fields[4]
+            serial, segid, resid, atom_name = (
+                int(fields[0]),
+                fields[1],
+                int(fields[2]),
+                fields[4],
+            )
             residue = (segid, resid)
             if atom_name == "C1'":
                 c1_by_residue[residue] = serial - 1
@@ -312,9 +325,7 @@ def _build_md_nadoc_ctx(
             _universe_cache_key,
         )
 
-        universe_key = _universe_cache_key(
-            topology_path, paths[0], topology_only=True
-        )
+        universe_key = _universe_cache_key(topology_path, paths[0], topology_only=True)
         cached_universe = _cache_get_universe(universe_key)
         if cached_universe is None:
             with _universe_build_lock(universe_key):
@@ -408,18 +419,26 @@ def _build_md_nadoc_ctx(
             residue_atoms = p_atom.residue.atoms
             c1p_atoms = residue_atoms.select_atoms("name C1'")
             c1p_list.append(int(c1p_atoms[0].index) if len(c1p_atoms) > 0 else -1)
-            ring_names = purine_ring if str(p_atom.resname) in {"DA", "DG", "ADE", "GUA"} else pyrimidine_ring
-            base_ring_idx.append(np.asarray(
-                [int(atom.index) for atom in residue_atoms if str(atom.name) in ring_names],
-                dtype=np.int64,
-            ))
+            ring_names = (
+                purine_ring
+                if str(p_atom.resname) in {"DA", "DG", "ADE", "GUA"}
+                else pyrimidine_ring
+            )
+            base_ring_idx.append(
+                np.asarray(
+                    [
+                        int(atom.index)
+                        for atom in residue_atoms
+                        if str(atom.name) in ring_names
+                    ],
+                    dtype=np.int64,
+                )
+            )
         c1p_idx = np.array(c1p_list, dtype=np.int64)
 
     dcd_prefix = None
     if not with_atoms and paths and all(str(p).lower().endswith(".dcd") for p in paths):
-        required = np.concatenate(
-            [dna_p_sel.indices, c1p_idx[c1p_idx >= 0]]
-        )
+        required = np.concatenate([dna_p_sel.indices, c1p_idx[c1p_idx >= 0]])
         if len(required):
             try:
                 dcd_prefix = _DcdPrefixChain(paths, int(required.max()) + 1)
@@ -550,7 +569,9 @@ def _install_direct_heavy_layout(u, heavy_ag, dna_p, atom_meta=None) -> dict:
             residue_at[residue_id] = group
             residue_ids.append(residue_id)
             residue_anchor_rows.append(row)
-            segid = str(getattr(atom.residue, "segid", "") or getattr(atom, "segid", ""))
+            segid = str(
+                getattr(atom.residue, "segid", "") or getattr(atom, "segid", "")
+            )
             residue_segment_ids.append(segid)
         heavy_res_group[row] = group
         if str(getattr(atom, "name", "")) == "P":
@@ -565,16 +586,14 @@ def _install_direct_heavy_layout(u, heavy_ag, dna_p, atom_meta=None) -> dict:
     heavy_segment_group = residue_segment_group[heavy_res_group]
 
     heavy_row_by_global = {
-        int(atom_index): row for row, atom_index in enumerate(np.asarray(heavy_ag.indices))
+        int(atom_index): row
+        for row, atom_index in enumerate(np.asarray(heavy_ag.indices))
     }
     p_heavy_rows = np.asarray(
         [heavy_row_by_global.get(int(atom.index), -1) for atom in dna_p], dtype=np.int64
     )
     p_segment_group = np.asarray(
-        [
-            heavy_segment_group[row] if row >= 0 else -1
-            for row in p_heavy_rows
-        ],
+        [heavy_segment_group[row] if row >= 0 else -1 for row in p_heavy_rows],
         dtype=np.int64,
     )
     layout = {
@@ -641,14 +660,20 @@ def _add_mean_axis_tangents(positions: list[dict]) -> None:
     for row in positions:
         helix = row.get("helix_id")
         bp = row.get("bp_index")
-        if not isinstance(helix, str) or helix.startswith("__") or not isinstance(bp, int):
+        if (
+            not isinstance(helix, str)
+            or helix.startswith("__")
+            or not isinstance(bp, int)
+        ):
             continue
         point = row.get("backbone_position")
         if point is None and all(axis in row for axis in ("x", "y", "z")):
             point = [row["x"], row["y"], row["z"]]
         if point is None:
             continue
-        columns.setdefault(helix, {}).setdefault(bp, []).append(np.asarray(point, float))
+        columns.setdefault(helix, {}).setdefault(bp, []).append(
+            np.asarray(point, float)
+        )
 
     tangents: dict[tuple[str, int], np.ndarray] = {}
     for helix, by_bp in columns.items():
@@ -689,7 +714,6 @@ def _extract_md_nadoc_frame(
     base-ring atoms. It is used by Full slabs so their center is reconstructed from
     live geometry instead of translating an equilibrium offset from the phosphate."""
     from backend.core.atomistic_to_nadoc import (
-        _GRO_DNA_RESNAMES,
         _unwrap_min_image,
         reassemble_to_posed_reference,
     )
@@ -1801,7 +1825,8 @@ def md_metric_series(
     }
     core_idx = np.asarray(
         [
-            i for i, k in enumerate(keys)
+            i
+            for i, k in enumerate(keys)
             if isinstance(k[1], int) and (k[0], k[1]) in ref_cols
         ],
         dtype=np.int64,
@@ -1830,11 +1855,10 @@ def md_metric_series(
     n_frames = 0
     measured_frame_indices: list[int] = []
     if max_frames is not None and max_frames > 0 and n > max_frames:
-        frame_indices = np.unique(
-            np.linspace(0, n - 1, max_frames, dtype=np.int64)
-        )
+        frame_indices = np.unique(np.linspace(0, n - 1, max_frames, dtype=np.int64))
     else:
         frame_indices = np.arange(n, dtype=np.int64)
+
     def _measure_chunk(local_ctx, indices):
         records = []
         local_sum = np.zeros((n_keys, 3), dtype=np.float64)
@@ -1865,7 +1889,12 @@ def md_metric_series(
                 bp_value = 0.0
             local_sum += p_nm
             records.append(
-                (int(idx), frame_twist - analytic_twist, frame_curv - analytic_curv, bp_value)
+                (
+                    int(idx),
+                    frame_twist - analytic_twist,
+                    frame_curv - analytic_curv,
+                    bp_value,
+                )
             )
             if on_frame is not None:
                 on_frame()
@@ -1881,7 +1910,9 @@ def md_metric_series(
     if worker_count > 1 and len(frame_indices) >= 128:
         from concurrent.futures import ThreadPoolExecutor
 
-        chunks = [chunk for chunk in np.array_split(frame_indices, worker_count) if len(chunk)]
+        chunks = [
+            chunk for chunk in np.array_split(frame_indices, worker_count) if len(chunk)
+        ]
 
         def _worker(chunk):
             local_ctx = (
@@ -1932,9 +1963,7 @@ def md_metric_series(
         measure_bundle_curvature_profile(mean_core, n_slices=n_slices),
         measure_bundle_curvature_profile(analytic_reference, n_slices=n_slices),
     )
-    pair_frac = {
-        k: float(formed_counts[i] / n_frames) for i, k in enumerate(designed)
-    }
+    pair_frac = {k: float(formed_counts[i] / n_frames) for i, k in enumerate(designed)}
     bp_sp = base_pairing_spatial_profile(pair_frac, mean_positions, n_slices=n_slices)
 
     return {
@@ -2090,6 +2119,79 @@ def md_composite_trajectory(
     stride: int | None = None,
     progress_path: str | None = None,
 ) -> dict:
+    """JSON-compatible composite retained for API compatibility and exports."""
+    return _md_composite_trajectory_data(
+        topology_path,
+        segments,
+        coordinate_path,
+        design,
+        max_frames,
+        stride,
+        progress_path,
+        binary=False,
+    )
+
+
+def md_composite_trajectory_bin(
+    topology_path,
+    segments,
+    coordinate_path,
+    design,
+    max_frames: int = 200,
+    stride: int | None = None,
+    progress_path: str | None = None,
+) -> bytes:
+    """Pack the interactive NAMD scrub trajectory as float32 typed-array data.
+
+    The scientific extraction is identical to :func:`md_composite_trajectory`; only
+    its display transport changes.  Avoiding one Python ``float`` plus JSON token per
+    coordinate materially reduces worker RAM, server encoding, transfer and browser
+    parsing.  Float32 is sufficient for display coordinates and matches the DCD input.
+
+    Wire layout is the shared ``NTRJ`` format: five little-endian uint32 values
+    (magic, version, frame count, key count, JSON-header byte count), compact metadata,
+    padding to four-byte alignment, then contiguous little-endian float32 frames.
+    """
+    result = _md_composite_trajectory_data(
+        topology_path,
+        segments,
+        coordinate_path,
+        design,
+        max_frames,
+        stride,
+        progress_path,
+        binary=True,
+    )
+    frames = result.pop("frames")
+    header = orjson.dumps({k: result[k] for k in ("keys", "stages", "markers")})
+    prefix = struct.pack(
+        "<5I",
+        _TRAJECTORY_BIN_MAGIC,
+        _TRAJECTORY_BIN_VERSION,
+        int(result["n_frames"]),
+        int(result["n_nucleotides"]),
+        len(header),
+    )
+    pad = b"\0" * ((-(len(prefix) + len(header))) % 4)
+    payload = prefix + header + pad + frames.tobytes(order="C")
+    if progress_path:
+        Path(progress_path).write_text(
+            json.dumps({"phase": "pack", "done": 1, "total": 1})
+        )
+    return payload
+
+
+def _md_composite_trajectory_data(
+    topology_path,
+    segments,
+    coordinate_path,
+    design,
+    max_frames: int,
+    stride: int | None,
+    progress_path: str | None,
+    *,
+    binary: bool,
+) -> dict:
     """Composite scrub-able NAMD trajectory for a trajectory keyframe.
 
     ``segments`` = ordered ``[(name, stage, dcd_path), …]`` (every segment that has
@@ -2099,6 +2201,16 @@ def md_composite_trajectory(
     INTERVAL (every Nth frame of each segment) — with a boundary marker at each segment
     start. Returns the same shape as ``oxdna_health.composite_trajectory``."""
     import MDAnalysis as mda  # type: ignore
+
+    progress_file = Path(progress_path) if progress_path else None
+
+    def write_phase(phase: str, done: int, total: int) -> None:
+        if progress_file:
+            progress_file.write_text(
+                json.dumps({"phase": phase, "done": done, "total": total})
+            )
+
+    write_phase("initialize", 0, 1)
 
     seg_paths = [s[2] for s in segments]
     # with_termini: recover each strand's 5'-terminal base (no P atom) so the scrubbable
@@ -2118,39 +2230,41 @@ def md_composite_trajectory(
     for _, _, dcd in segments:
         su = mda.Universe(str(topology_path), str(dcd))
         seg_counts.append(len(su.trajectory))
+    write_phase("initialize", 1, 1)
     total = sum(seg_counts)
     if total == 0:
         return {
             "n_frames": 0,
             "n_nucleotides": len(key_list),
             "keys": key_list,
-            "frames": [],
+            "frames": np.empty((0, len(key_list) * 6), dtype="<f4") if binary else [],
             "stages": [],
             "markers": [],
         }
 
     seg_picked = _composite_indices(seg_counts, max_frames, stride)
     picked_total = sum(len(v) for v in seg_picked)
-    progress_file = Path(progress_path) if progress_path else None
 
-    def report(done: int) -> None:
-        if progress_file:
-            progress_file.write_text(json.dumps({"done": done, "total": picked_total}))
+    def report(done: int, phase: str = "extract") -> None:
+        write_phase(phase, done, picked_total)
 
     report(0)
-    out_frames: list[list[float]] = []
+    n_keys = len(key_list)
+    out_frames = np.empty((picked_total, n_keys * 6), dtype="<f4") if binary else []
     out_stages: list[dict] = []
     markers: list[dict] = []
     run_no = 0
+    frame_idx = 0
     for (name, stage, _dcd), count, picked in zip(segments, seg_counts, seg_picked):
         if count <= 0:
             continue
         same_logical_stage = bool(out_stages and out_stages[-1]["name"] == name)
-        if out_frames and not same_logical_stage:
+        n_out = frame_idx if binary else len(out_frames)
+        if n_out and not same_logical_stage:
             run_no += 1
             markers.append(
                 {
-                    "frame": len(out_frames),
+                    "frame": n_out,
                     "label": f"→ {name}",
                     "kind": stage or "md",
                     "stage_name": name,
@@ -2166,34 +2280,56 @@ def md_composite_trajectory(
             p_nm, normals, tpos, tnorm = _extract_md_nadoc_frame(
                 ctx, gidx, with_termini=True
             )
-            flat: list[float] = []
-            for i in range(len(p_order)):
-                flat.extend((float(p_nm[i, 0]), float(p_nm[i, 1]), float(p_nm[i, 2])))
-                if normals is not None:
+            if binary:
+                frame = out_frames[frame_idx].reshape(n_keys, 6)
+                n_p = len(p_order)
+                frame[:n_p, :3] = p_nm
+                if normals is None:
+                    frame[:n_p, 3:] = (0.0, 0.0, 1.0)
+                else:
+                    frame[:n_p, 3:] = normals
+                n_t = min(len(term_specs), len(tpos))
+                if n_t:
+                    frame[n_p : n_p + n_t, :3] = tpos[:n_t]
+                    frame[n_p : n_p + n_t, 3:] = tnorm[:n_t]
+                if n_t < len(term_specs):
+                    frame[n_p + n_t :, :] = (0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
+                frame_idx += 1
+                report(frame_idx)
+            else:
+                flat: list[float] = []
+                for i in range(len(p_order)):
                     flat.extend(
-                        (
-                            float(normals[i, 0]),
-                            float(normals[i, 1]),
-                            float(normals[i, 2]),
+                        (float(p_nm[i, 0]), float(p_nm[i, 1]), float(p_nm[i, 2]))
+                    )
+                    if normals is not None:
+                        flat.extend(
+                            (
+                                float(normals[i, 0]),
+                                float(normals[i, 1]),
+                                float(normals[i, 2]),
+                            )
                         )
-                    )
-                else:
-                    flat.extend((0.0, 0.0, 1.0))
-            for j in range(len(term_specs)):
-                if j < len(tpos):
-                    flat.extend(
-                        (float(tpos[j, 0]), float(tpos[j, 1]), float(tpos[j, 2]))
-                    )
-                    flat.extend(
-                        (float(tnorm[j, 0]), float(tnorm[j, 1]), float(tnorm[j, 2]))
-                    )
-                else:
-                    flat.extend((0.0, 0.0, 0.0, 0.0, 0.0, 1.0))
-            out_frames.append(flat)
-            report(len(out_frames))
+                    else:
+                        flat.extend((0.0, 0.0, 1.0))
+                for j in range(len(term_specs)):
+                    if j < len(tpos):
+                        flat.extend(
+                            (float(tpos[j, 0]), float(tpos[j, 1]), float(tpos[j, 2]))
+                        )
+                        flat.extend(
+                            (float(tnorm[j, 0]), float(tnorm[j, 1]), float(tnorm[j, 2]))
+                        )
+                    else:
+                        flat.extend((0.0, 0.0, 0.0, 0.0, 0.0, 1.0))
+                out_frames.append(flat)
+                report(len(out_frames))
+
+    if binary:
+        write_phase("pack", 0, 1)
 
     return {
-        "n_frames": len(out_frames),
+        "n_frames": picked_total if binary else len(out_frames),
         "n_nucleotides": len(key_list),
         "keys": key_list,
         "frames": out_frames,
@@ -2326,7 +2462,11 @@ def md_occupancy(
     if not pool:
         return {"ready": False, "reason": "no free-sampling frames in this run"}
 
-    picked = pool if max_frames <= 0 or len(pool) <= max_frames else _stride_pick(pool, max_frames)
+    picked = (
+        pool
+        if max_frames <= 0 or len(pool) <= max_frames
+        else _stride_pick(pool, max_frames)
+    )
     render_rows = set(np.linspace(0, len(picked) - 1, min(200, len(picked)), dtype=int))
 
     scoped = resolve_selection_keys(design, key_list, selection)
@@ -2400,7 +2540,11 @@ def md_occupancy(
 
     if density:
         from backend.core.occupancy_core import occupancy_density_grids
-        feature_keys = [key_list[i] for i in (sel_idx if sel_idx is not None else range(len(key_list)))]
+
+        feature_keys = [
+            key_list[i]
+            for i in (sel_idx if sel_idx is not None else range(len(key_list)))
+        ]
         res["density_grids"] = occupancy_density_grids(fitted, feature_keys)
         res["density_registered"] = bool(res["density_grids"])
         res["density_n_frames"] = int(len(fitted))

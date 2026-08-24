@@ -82,6 +82,21 @@ describe('initOxdnaTrajectoryPlayer', () => {
     expect(loadProgressEl.style.display).toBe('none')
   })
 
+  it('retains one labelled progress bar per subprocess until the load finishes', () => {
+    player.setLoading({ reset: true, phase: 'align', label: 'Read & align frames', done: 4, total: 8 })
+    player.setLoading({ phase: 'pack', label: 'Pack display frames', done: 2, total: 8 })
+    player.setLoading({ phase: 'download', label: 'Download trajectory', done: 5, total: 10 })
+    const rows = loadProgressEl.querySelectorAll('[data-trajectory-load-phase]')
+    expect(rows).toHaveLength(3)
+    expect(Array.from(rows).map(r => r.dataset.trajectoryLoadPhase))
+      .toEqual(['align', 'pack', 'download'])
+    expect(rows[0].textContent).toContain('Read & align frames · 4 of 8')
+    expect(rows[1].querySelector('[data-trajectory-load-fill]').style.width).toBe('25%')
+    expect(rows[2].textContent).toContain('Download trajectory · 5 of 10')
+    player.setLoading(null)
+    expect(loadProgressEl.querySelectorAll('[data-trajectory-load-phase]')).toHaveLength(0)
+  })
+
   describe('◂ / ▸ frame steppers', () => {
     let prevBtn, nextBtn
     beforeEach(() => {

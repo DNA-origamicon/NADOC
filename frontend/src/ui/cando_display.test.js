@@ -108,6 +108,23 @@ describe('initCandoDisplay controller', () => {
     expect(c.deformJobId()).toBe(null)
   })
 
+  it('reuses the live scene when the selected job fingerprint is current', async () => {
+    const { designRenderer, api } = makeDeps()
+    api.getCandoThermalRepresentative = vi.fn(async () => ({
+      ready: true, n_frames: 1,
+      representative_positions: [{
+        helix_id: 'h', bp_index: 0, direction: 'FORWARD', copy: 0,
+        backbone_position: [5, 6, 7], nx: 0, ny: 1, nz: 0, tx: 0, ty: 0, tz: 1,
+      }],
+    }))
+    const c = initCandoDisplay({ designRenderer, api })
+    const r = await c.showDeform('current-job', null, { reuseLiveGeometry: true })
+    expect(r.ok).toBe(true)
+    expect(api.getCandoSnapshotGeometry).not.toHaveBeenCalled()
+    expect(designRenderer.renderExternalGeometry).not.toHaveBeenCalled()
+    expect(designRenderer.applyFemPositions).toHaveBeenCalled()
+  })
+
   it('showDeform returns not-ready when the response is empty (model untouched)', async () => {
     const { designRenderer } = makeDeps()
     const api = {
@@ -124,9 +141,9 @@ describe('initCandoDisplay controller', () => {
 
   it('predicted shape uses thermal conformations automatically instead of the static mean', async () => {
     const { designRenderer, api } = makeDeps()
-    api.getCandoThermalTrajectory = vi.fn(async () => ({
+    api.getCandoThermalTrajectory = vi.fn(async () => { throw new Error('full ensemble must not load') })
+    api.getCandoThermalRepresentative = vi.fn(async () => ({
       ready: true, temperature_k: 298, n_frames: 2, representative_frame: 1,
-      keys: [['h', 0, 'FORWARD', 0]], frames: [[2, 3, 4], [5, 6, 7]],
       representative_positions: [{
         helix_id: 'h', bp_index: 0, direction: 'FORWARD', copy: 0,
         backbone_position: [5, 6, 7], nx: 0, ny: 1, nz: 0, tx: 0, ty: 0, tz: 1,
@@ -141,6 +158,7 @@ describe('initCandoDisplay controller', () => {
         backbone_position: [5, 6, 7], nx: 0, ny: 1, nz: 0, tx: 0, ty: 0, tz: 1,
       }),
     ])
+    expect(api.getCandoThermalTrajectory).not.toHaveBeenCalled()
     c.stopAndRestore()
   })
 

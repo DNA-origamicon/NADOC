@@ -27,6 +27,7 @@ import { colormapHex } from './colormaps.js'
 import { expandStampFrames, stampTopologyMatches } from '../scene/atomistic_stamp.js'
 import { parseSurfaceBin } from '../scene/surface_bin.js'
 import { parseAtomisticBundleBin } from '../scene/atomistic_bundle_bin.js'
+import { parseOxdnaTrajectoryBin } from '../scene/oxdna_trajectory_bin.js'
 
 /**
  * Pure mapping: a /oxdna/jobs/{id}/display response → applyFemPositions updates.
@@ -1562,11 +1563,29 @@ export function initOxdnaDisplay({
    * cache it, and show the first frame.  Returns metadata for the player
    * (n_frames + stage markers).  The actual scrubbing is driven by showFrame().
    */
-  async function loadTrajectory(jobId, align = true, scope = 'lineage', stride = undefined) {
+  async function loadTrajectory(
+    jobId, align = true, scope = 'lineage', stride = undefined, onProgress = null,
+  ) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const epoch = ++_epoch
     const signal = _beginLoad()
-    const resp = await api.getOxdnaTrajectory(jobId, { align, signal, scope, stride })
+    let resp = null
+    if (api.preferTrajectoryBin && api.getOxdnaTrajectoryBin) {
+      const buf = await api.getOxdnaTrajectoryBin(
+        jobId, { align, signal, scope, stride, onProgress },
+      )
+      if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
+      if (buf) {
+        onProgress?.({ phase: 'decode', done: 0, total: 1 })
+        resp = parseOxdnaTrajectoryBin(buf)
+        onProgress?.({ phase: 'decode', done: 1, total: 1 })
+      }
+    }
+    // Compatibility with older backends and with the NAMD adapter, which intentionally
+    // exposes only the shared JSON-shaped getOxdnaTrajectory contract.
+    if (!resp && !signal.aborted) {
+      resp = await api.getOxdnaTrajectory(jobId, { align, signal, scope, stride })
+    }
     if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     if (!resp?.ready || !Array.isArray(resp.frames) || !resp.frames.length) {
       return { ok: false, reason: resp?.reason || 'no trajectory yet' }
@@ -1583,10 +1602,20 @@ export function initOxdnaDisplay({
     _trajStride = stride
     // Replace setup-preview strands before showFrame's FEM move; otherwise the rebuild
     // leaves the origami at design coordinates and the preview caps at seed coordinates.
+    onProgress?.({ phase: 'surface-strands', done: 0, total: 1 })
     if (!await _applyJobSurfaceStrands(jobId, align, epoch, signal)) {
       return { ok: false, reason: 'superseded' }
     }
+    onProgress?.({ phase: 'surface-strands', done: 1, total: 1 })
+    // Yield one paint so the final "Applying first frame" phase is visible before the
+    // O(N) renderer update. jsdom has no requestAnimationFrame, so unit tests stay fast.
+    onProgress?.({ phase: 'display', done: 0, total: 1 })
+    if (typeof requestAnimationFrame === 'function') {
+      await new Promise(resolve => requestAnimationFrame(resolve))
+      if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
+    }
     showFrame(0)
+    onProgress?.({ phase: 'display', done: 1, total: 1 })
     return { ok: true, n_frames: resp.n_frames, markers: resp.markers || [], stages: resp.stages || [] }
   }
 

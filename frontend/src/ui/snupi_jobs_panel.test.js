@@ -14,7 +14,23 @@ import {
   stageChip,
   formatSummary,
   snupiRunConfig,
+  renderSnupiDisplayProgress,
 } from './snupi_jobs_panel.js'
+
+describe('renderSnupiDisplayProgress', () => {
+  it('retains one named row per visualization subprocess', () => {
+    const el = document.createElement('div')
+    renderSnupiDisplayProgress(el, new Map([
+      ['display-data', { done: 1, total: 1 }],
+      ['reuse-scene', { done: 1, total: 1 }],
+      ['apply', { done: 0, total: 1 }],
+    ]))
+    expect(el.querySelectorAll('[data-snupi-display-phase]')).toHaveLength(3)
+    expect(el.textContent).toContain('Load predicted positions · 1 of 1')
+    expect(el.textContent).toContain('Reuse matching live scene · 1 of 1')
+    expect(el.textContent).toContain('Apply visualization · 0 of 1')
+  })
+})
 
 describe('formatProgress', () => {
   it('is 100% when completed, blank when failed/stopped', () => {

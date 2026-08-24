@@ -12,14 +12,14 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
-  getOxdnaTrajectory, getOxdnaRmsf, getOxdnaDeviation, getOxdnaDisplay,
+  getOxdnaTrajectory, getOxdnaTrajectoryBin, getOxdnaRmsf, getOxdnaDeviation, getOxdnaDisplay,
   getOxdnaRmsfAtomistic, getOxdnaRmsfSurface, getOxdnaOccupancy,
   getLammpsTrajectory, getLammpsRmsf, getLammpsDeviation, getLammpsDisplay,
-  getMdTrajectory,
+  getMdTrajectory, getMdTrajectoryBin,
 } from './client.js'
 
 const VIZ = {
-  getOxdnaTrajectory, getOxdnaRmsf, getOxdnaDeviation, getOxdnaDisplay,
+  getOxdnaTrajectory, getOxdnaTrajectoryBin, getOxdnaRmsf, getOxdnaDeviation, getOxdnaDisplay,
   getLammpsTrajectory, getLammpsRmsf, getLammpsDeviation, getLammpsDisplay,
   getOxdnaRmsfAtomistic, getOxdnaOccupancy,
 }
@@ -151,5 +151,49 @@ describe('_vizOpts defaults scope even with no options object', () => {
     expect(r.frames[0]).toBeInstanceOf(Float32Array)
     expect(r.frames[0][2]).toBe(3)
     expect(progress[0]).toMatchObject({ jobId: 'J1', loaded: 20, total: buf.byteLength })
+  })
+})
+
+describe('binary trajectory streaming', () => {
+  it('uses the NAMD binary route with the same frame interval', async () => {
+    let url = null
+    global.fetch = async (u) => {
+      url = u
+      return { ok: true, arrayBuffer: async () => new ArrayBuffer(0) }
+    }
+    await getMdTrajectoryBin('M1', undefined, { stride: 7 })
+    expect(url).toMatch(/\/md\/jobs\/M1\/trajectory-bin\?stride=7$/)
+  })
+
+  it('reports decoded-byte progress and safely assembles streamed chunks', async () => {
+    const chunks = [new Uint8Array([1, 2, 3]), new Uint8Array([4, 5])]
+    let i = 0
+    global.fetch = async () => ({
+      ok: true,
+      headers: { get: k => k.toLowerCase() === 'x-nadoc-uncompressed-length' ? '5' : null },
+      body: { getReader: () => ({ read: async () => i < chunks.length
+        ? { done: false, value: chunks[i++] } : { done: true } }) },
+    })
+    const progress = []
+    const out = await getOxdnaTrajectoryBin('J1', { onProgress: p => progress.push(p) })
+    expect(Array.from(new Uint8Array(out))).toEqual([1, 2, 3, 4, 5])
+    expect(progress).toEqual([
+      { phase: 'download', done: 0, total: 5 },
+      { phase: 'download', done: 3, total: 5 },
+      { phase: 'download', done: 5, total: 5 },
+    ])
+  })
+
+  it('grows instead of throwing when Content-Length described compressed bytes', async () => {
+    let i = 0
+    const chunks = [new Uint8Array([1, 2, 3]), new Uint8Array([4, 5, 6])]
+    global.fetch = async () => ({
+      ok: true,
+      headers: { get: k => k.toLowerCase() === 'content-length' ? '3' : null },
+      body: { getReader: () => ({ read: async () => i < chunks.length
+        ? { done: false, value: chunks[i++] } : { done: true } }) },
+    })
+    const out = await getOxdnaTrajectoryBin('J1', { onProgress: () => {} })
+    expect(Array.from(new Uint8Array(out))).toEqual([1, 2, 3, 4, 5, 6])
   })
 })

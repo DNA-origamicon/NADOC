@@ -6,6 +6,7 @@ CG-DNA-capable ``lmp`` being installed (skipped otherwise) and registered slow.
 
 from __future__ import annotations
 
+import asyncio
 import time
 
 import pytest
@@ -219,3 +220,63 @@ def test_trajectory_guard_on_design_mismatch(monkeypatch, tmp_path):
     r = client.get(f"/api/lammps/jobs/{job.job_id}/trajectory").json()
     assert r["ready"] is False
     assert "nucleotides" in r["reason"]
+
+
+def test_rmsf_route_uses_signature_cache_and_hides_internal_average(monkeypatch):
+    """LAMMPS RMSF must share the existing completed-trajectory cache; its internal
+    tuple-keyed reconstruction frame is never serialized on the public route."""
+    import backend.core.oxdna_health as health
+
+    design = make_6hb_design(length_bp=4)
+    monkeypatch.setattr(
+        routes_lammps,
+        "_traj_inputs",
+        lambda _job_id: ((design, "/tmp/traj.dat", "/tmp/ref.dat"), None),
+    )
+    calls = []
+
+    def cached(*args, **kwargs):
+        calls.append((args, kwargs))
+        return {
+            "ready": True,
+            "n_frames": 2,
+            "positions": [],
+            "min_rmsf": 0.0,
+            "max_rmsf": 0.0,
+            "mean_rmsf": 0.0,
+            "average_frame": {("h", 0, "FORWARD"): {"internal": True}},
+        }
+
+    monkeypatch.setattr(health, "production_rmsf_cached", cached)
+    result = asyncio.run(routes_lammps.get_lammps_rmsf("job"))
+
+    assert len(calls) == 1
+    assert calls[0][1] == {"copies": True, "align": True}
+    assert result["ready"] is True
+    assert "average_frame" not in result
+
+
+def test_trajectory_binary_route_uses_ntrj_packer(monkeypatch):
+    """LAMMPS exposes the shared compact trajectory contract, not another schema."""
+    import backend.core.oxdna_health as health
+
+    design = make_6hb_design(length_bp=4)
+    monkeypatch.setattr(
+        routes_lammps,
+        "_traj_inputs",
+        lambda _job_id: ((design, "/tmp/traj.dat", "/tmp/ref.dat"), None),
+    )
+    payload = b"JRTN" + b"compact"
+    calls = []
+
+    def packed(*args, **kwargs):
+        calls.append((args, kwargs))
+        return payload
+
+    monkeypatch.setattr(health, "pack_composite_trajectory_bin", packed)
+    response = asyncio.run(routes_lammps.get_lammps_trajectory_bin("job"))
+
+    assert response.body == payload
+    assert response.media_type == "application/octet-stream"
+    assert response.headers["x-nadoc-uncompressed-length"] == str(len(payload))
+    assert calls[0][0][3] == 200

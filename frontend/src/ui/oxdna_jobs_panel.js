@@ -56,6 +56,41 @@ const _STATUS_COLOR = {
   completed: _C.ok, failed: _C.err, stopped: _C.dim,
 }
 
+const LAMMPS_DISPLAY_PHASE_LABELS = {
+  'final-frame': 'Read and align final frame',
+  'rmsf-analysis': 'Read, align, and analyze trajectory',
+  'deviation-analysis': 'Compute mean deviation from design',
+  'trajectory-download': 'Download trajectory frames',
+  'trajectory-decode': 'Decode trajectory frames',
+  'trajectory-data': 'Load trajectory frames',
+  transform: 'Transform final coordinates',
+  apply: 'Apply final structure',
+}
+
+/** Render one labelled, determinate progress bar per LAMMPS display subprocess. */
+export function renderLammpsDisplayProgress(target, phases) {
+  if (!target) return
+  target.replaceChildren()
+  for (const [phase, progress] of phases) {
+    const row = document.createElement('div')
+    row.dataset.lammpsDisplayPhase = phase
+    row.style.marginTop = target.childElementCount ? '4px' : '0'
+    const track = document.createElement('div')
+    track.style.cssText = 'height:4px;background:#21262d;border-radius:3px;overflow:hidden'
+    const fill = document.createElement('div')
+    fill.style.cssText = 'height:100%;background:#4a9eff;transition:width .15s'
+    const total = Number(progress.total) || 0
+    const done = Math.max(0, Number(progress.done) || 0)
+    fill.style.width = `${total ? Math.min(100, 100 * done / total) : 0}%`
+    track.appendChild(fill)
+    const label = document.createElement('div')
+    label.style.cssText = 'margin-top:3px;color:#8b949e;font-size:10px'
+    label.textContent = `${LAMMPS_DISPLAY_PHASE_LABELS[phase] || phase} · ${total ? `${Math.min(done, total)} of ${total}` : 'working…'}`
+    row.append(track, label)
+    target.appendChild(row)
+  }
+}
+
 /** Pure: overall progress % string for a job + progress payload. */
 export function formatProgress(job, progress) {
   const total = job?.stages?.length ?? 0
@@ -2353,7 +2388,30 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (!_selectedId || !oxdnaDisplay) return
     const full = scope === 'job'
     _trajBusy = true
-    trajPlayer.setLoading({ done: 0, total: 0 })
+    const phaseLabels = {
+      align: 'Read & align frames',
+      aligning: 'Read & align frames',
+      preprocessing: 'Preprocess trajectory',
+      pack: 'Pack display frames',
+      packing: 'Pack display frames',
+      download: 'Download trajectory',
+      transferring: 'Download trajectory',
+      decode: 'Decode trajectory',
+      'surface-strands': 'Load simulated surface strands',
+      display: 'Apply first frame',
+    }
+    const showProgress = (p) => {
+      if (!p) return
+      const label = phaseLabels[p.phase] || 'Prepare trajectory'
+      trajPlayer.setLoading({ ...p, label })
+      const pct = p.total ? Math.round((100 * p.done) / p.total) : 0
+      const amount = p.phase === 'download' && p.total
+        ? `${formatBytes(p.done)} / ${formatBytes(p.total)}`
+        : (p.total ? `${p.done}/${p.total}` : 'starting')
+      _setTrajStatus(`${label}… ${p.total ? `${pct}% · ` : ''}${amount}`, _C.accent)
+    }
+    trajPlayer.setLoading({ reset: true, phase: 'align', done: 0, total: 0,
+                            label: phaseLabels.align })
     _setTrajStatus(full ? 'Loading full trajectory… (no downsampling — this can take a while)'
                         : 'Loading trajectory…', _C.accent)
     // Poll the backend build for accurate frames-processed progress (the align pass
@@ -2363,23 +2421,18 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     const poll = setInterval(async () => {
       if (!_trajBusy) return
       const p = await api.getOxdnaTrajectoryProgress(jobId).catch(() => null)
-      if (_trajBusy && p?.active && p.total > 0) {
+      if (_trajBusy && p?.active) {
         sawBackendProgress = true
-        trajPlayer.setLoading(p)
-        const pct = Math.round((100 * p.done) / p.total)
-        const phase = p.phase === 'preprocessing' ? 'Preprocessing'
-          : p.phase === 'packing' ? 'Packing frames'
-          : 'Aligning frames'
-        _setTrajStatus(`${phase}… ${pct}%`, _C.accent)
+        showProgress(p)
       } else if (_trajBusy && sawBackendProgress && p && !p.active) {
-        trajPlayer.setLoading({ done: 0, total: 0, phase: 'transferring' })
-        _setTrajStatus('Transferring and decoding trajectory…', _C.accent)
+        showProgress({ done: 0, total: 0, phase: 'transferring' })
       }
     }, 250)
     let r
     try {
       r = await oxdnaDisplay.loadTrajectory(
-        _selectedId, alignToggle ? alignToggle.checked : true, scope)
+        _selectedId, alignToggle ? alignToggle.checked : true, scope, undefined,
+        showProgress)
     } finally {
       clearInterval(poll)
       trajPlayer.setLoading(null)
@@ -2644,25 +2697,53 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     const id = _selectedId
     if (kind === 'off' || !id || !lammpsDisplay) { _syncVizOffRadio(); return }
     if (kind === 'display') {
-      const r = await lammpsDisplay.displayJob(id, alignToggle ? alignToggle.checked : true)
+      const phases = new Map()
+      const onProgress = progress => {
+        phases.set(progress.phase, progress)
+        renderLammpsDisplayProgress(displayStatus, phases)
+      }
+      const r = await lammpsDisplay.displayJob(
+        id, alignToggle ? alignToggle.checked : true, onProgress,
+      )
       _setDisplayStatus(r.ok ? `Showing the final structure (${r.n} beads)` : (r.reason || 'not ready'),
                         r.ok ? _C.ok : _C.warn)
     } else if (kind === 'flex') {
-      const r = await lammpsDisplay.displayRmsf(id, alignToggle ? alignToggle.checked : true)
+      const phases = new Map()
+      const onProgress = progress => {
+        phases.set(progress.phase, progress)
+        renderLammpsDisplayProgress(flexStatus, phases)
+      }
+      const r = await lammpsDisplay.displayRmsf(
+        id, alignToggle ? alignToggle.checked : true, onProgress,
+      )
       if (r.ok) {
         _setFlexStatus(`Avg structure · RMSF ${_fmtNm(r.min)} → ${_fmtNm(r.max)} · ${r.nFrames ?? '?'} frames`, _C.ok)
         _flexScale.show({ title: 'RMSF (nm)', min: r.min, max: r.max, mapType: 'flex',
           onRecolor: (lo, hi, cmap) => lammpsDisplay.recolorRmsf(lo, hi, cmap) })
       } else { _setFlexStatus(r.reason || 'not ready', _C.warn); if (flexToggle) flexToggle.checked = false; _syncVizOffRadio() }
     } else if (kind === 'deviation') {
-      const r = await lammpsDisplay.displayDeviation(id, alignToggle ? alignToggle.checked : true)
+      const phases = new Map()
+      const onProgress = progress => {
+        phases.set(progress.phase, progress)
+        renderLammpsDisplayProgress(autorefineDevStatus, phases)
+      }
+      const r = await lammpsDisplay.displayDeviation(
+        id, alignToggle ? alignToggle.checked : true, onProgress,
+      )
       if (r.ok) {
         _setDevStatus(`Mean vs design — ${_fmtNm(r.min)} (green) → ${_fmtNm(r.max)} (red), mean ${_fmtNm(r.mean)}`, '#3fb950')
         _flexScale.show({ title: 'Deviation (nm)', min: r.min, max: r.max, mapType: 'deviation',
           onRecolor: (lo, hi, cmap) => lammpsDisplay.recolorDeviation(lo, hi, cmap) })
       } else { _setDevStatus(r.reason || 'not ready', _C.warn); if (autorefineDevToggle) autorefineDevToggle.checked = false; _syncVizOffRadio() }
     } else if (kind === 'traj') {
-      const r = await lammpsDisplay.loadTrajectory(id, alignToggle ? alignToggle.checked : true)
+      const phases = new Map()
+      const onProgress = progress => {
+        phases.set(progress.phase, progress)
+        renderLammpsDisplayProgress(trajStatus, phases)
+      }
+      const r = await lammpsDisplay.loadTrajectory(
+        id, alignToggle ? alignToggle.checked : true, onProgress,
+      )
       if (r.ok) { if (trajControls) trajControls.style.display = ''; trajPlayer.setTrajectory(r.n_frames, r.markers)
         _setTrajStatus(`${r.n_frames} frames — play or scrub`, _C.ok) }
       else { _setTrajStatus(r.reason || 'no trajectory', _C.warn); if (trajToggle) trajToggle.checked = false; _syncVizOffRadio() }

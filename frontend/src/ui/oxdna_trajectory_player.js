@@ -81,39 +81,56 @@ export function initOxdnaTrajectoryPlayer({
   let _preparing = false   // awaiting onBeforePlay (pre-building heavy frames)
   let _prepToken = 0       // bumped to cancel an in-flight prepare (user clicked again)
   let _bgPrep = null       // {done,total} while frames are prepared in the BACKGROUND
+  const _loadPhases = new Map() // phase → latest progress; completed rows stay visible
 
   /** Shared oxDNA/NAMD trajectory-build bar. The engines only supply counts; this
    * component owns identical bar/readout rendering for both. */
   function setLoading(progress) {
     if (!loadProgressEl) return
-    if (!progress) { loadProgressEl.style.display = 'none'; loadProgressEl.innerHTML = ''; return }
-    const done = Math.max(0, progress.done | 0)
-    const total = Math.max(0, progress.total | 0)
-    const pct = total ? Math.max(0, Math.min(100, (100 * done) / total)) : 0
+    if (!progress) {
+      _loadPhases.clear()
+      loadProgressEl.style.display = 'none'
+      loadProgressEl.innerHTML = ''
+      return
+    }
+    if (progress.reset) _loadPhases.clear()
+    const phase = progress.phase || 'frames'
+    _loadPhases.set(phase, {
+      done: Math.max(0, Number(progress.done) || 0),
+      total: Math.max(0, Number(progress.total) || 0),
+      label: progress.label || '',
+    })
     loadProgressEl.style.display = ''
-    let fill = loadProgressEl.querySelector('[data-trajectory-load-fill]')
-    let readout = loadProgressEl.querySelector('[data-trajectory-load-label]')
-    if (!fill || !readout) {
+    loadProgressEl.replaceChildren()
+    for (const [key, p] of _loadPhases) {
+      const row = document.createElement('div')
+      row.dataset.trajectoryLoadPhase = key
+      row.style.marginTop = loadProgressEl.childElementCount ? '4px' : '0'
       const track = document.createElement('div')
       track.style.cssText = 'height:4px;background:#21262d;border-radius:3px;overflow:hidden'
-      fill = document.createElement('div')
+      const fill = document.createElement('div')
       fill.dataset.trajectoryLoadFill = ''
+      fill.dataset.phase = key
       fill.style.cssText = 'height:100%;background:#4a9eff;transition:width .15s'
       track.appendChild(fill)
-      readout = document.createElement('div')
+      const readout = document.createElement('div')
       readout.dataset.trajectoryLoadLabel = ''
       readout.style.cssText = 'margin-top:3px;color:#8b949e;font-size:10px'
-      loadProgressEl.replaceChildren(track, readout)
+      const pct = p.total ? Math.max(0, Math.min(100, (100 * p.done) / p.total)) : 0
+      fill.style.width = `${pct}%`
+      const count = p.total
+        ? `${Math.min(p.done, p.total).toLocaleString()} of ${p.total.toLocaleString()}`
+        : 'working…'
+      const defaultLabel = key === 'preprocessing' ? 'Preprocessing trajectory'
+        : key === 'packing' || key === 'pack' ? 'Packing frames'
+        : key === 'transferring' || key === 'download' ? 'Transferring and decoding'
+        : 'Aligning frames'
+      readout.textContent = p.label
+        ? `${p.label} · ${count}`
+        : (p.total ? `${defaultLabel}… ${Math.round(pct)}%` : `${defaultLabel}…`)
+      row.append(track, readout)
+      loadProgressEl.appendChild(row)
     }
-    fill.style.width = `${pct}%`
-    const phase = progress.phase || 'aligning'
-    const phaseLabel = phase === 'preprocessing' ? 'Preprocessing trajectory'
-      : phase === 'packing' ? 'Packing frames'
-      : phase === 'transferring' ? 'Transferring and decoding'
-      : 'Aligning frames'
-    readout.textContent = total
-      ? `${phaseLabel}… ${Math.round(pct)}%`
-      : `${phaseLabel}…`
   }
 
   // ◂ / ▸ — step exactly one frame. Scrubbing a 200-frame slider moves several frames

@@ -279,8 +279,9 @@ def production_rmsf(
     the CM, exactly as it does for a trajectory frame.
     """
     from backend.physics.oxdna_interface import (
+        _build_unwrap_plan,
         _parse_box_nm,
-        oxdna_backbone_site,
+        oxdna_backbone_sites,
         read_configuration_full,
         read_trajectory_frames_full,
         unwrap_align_to_reference,
@@ -303,6 +304,10 @@ def production_rmsf(
 
     acc: dict[tuple, dict] = {}  # key → {"pos": [bb xyz...], "a1": [a1...]}
     n_frames = 0
+    # Topology and particle identities are constant across a trajectory. Rebuilding
+    # the bond graph + DFS traversal for every frame is pure repeated Python work;
+    # reuse the same vectorized unwrap plan for every matching key set.
+    plan_by_keys: dict[frozenset, dict] = {}
     for path in paths:
         frames = read_trajectory_frames_full(
             path,
@@ -313,14 +318,27 @@ def production_rmsf(
         )
         box = _parse_box_nm(path)
         for fr in frames:
+            key_set = frozenset(fr)
+            plan = plan_by_keys.get(key_set)
+            if plan is None:
+                plan = _build_unwrap_plan(fr, design)
+                plan_by_keys[key_set] = plan
             aligned = (
-                unwrap_align_to_reference(fr, ref, design, box, align=align)
+                unwrap_align_to_reference(fr, ref, design, box, plan=plan, align=align)
                 if box is not None and np.all(box > 0)
                 else fr
             )
             n_frames += 1
-            for k, v in aligned.items():
-                bb = oxdna_backbone_site(v["backbone_position"], v["a1"], v["a3"])
+            # One native cross-product over the whole frame. Calling np.cross on
+            # every individual 3-vector pays Python/NumPy dispatch once per
+            # nucleotide (134k calls on the representative 101×1328 job).
+            frame_keys = list(aligned)
+            frame_values = [aligned[k] for k in frame_keys]
+            cm = np.asarray([v["backbone_position"] for v in frame_values])
+            a1 = np.asarray([v["a1"] for v in frame_values])
+            a3 = np.asarray([v["a3"] for v in frame_values])
+            bb_sites = oxdna_backbone_sites(cm, a1, a3)
+            for k, v, bb in zip(frame_keys, frame_values, bb_sites):
                 slot = acc.setdefault(k, {"pos": [], "a1": [], "cm": [], "a3": []})
                 slot["pos"].append(bb)
                 slot["a1"].append(v["a1"])
@@ -1713,7 +1731,10 @@ def measure_bundle_twist_curvature(
         n_groups = int(groups.max()) + 1 if len(groups) else 0
         counts = np.bincount(groups, minlength=n_groups)
         sums = np.column_stack(
-            [np.bincount(groups, weights=site_xyz[:, axis], minlength=n_groups) for axis in range(3)]
+            [
+                np.bincount(groups, weights=site_xyz[:, axis], minlength=n_groups)
+                for axis in range(3)
+            ]
         )
         pts = sums / counts[:, None]
         helix_idx = np.asarray(group_helix_index, dtype=np.int64)
@@ -1758,7 +1779,10 @@ def measure_bundle_twist_curvature(
     # Curvature: all 3-D points reduced to one centroid per occupied slab.
     slab_count = np.bincount(slab, minlength=n_slices)
     slab_xyz = np.column_stack(
-        [np.bincount(slab, weights=pts[:, axis], minlength=n_slices) for axis in range(3)]
+        [
+            np.bincount(slab, weights=pts[:, axis], minlength=n_slices)
+            for axis in range(3)
+        ]
     )
     occupied = slab_count > 0
     centroids = slab_xyz[occupied] / slab_count[occupied, None]
@@ -1772,7 +1796,9 @@ def measure_bundle_twist_curvature(
             if np.any(valid):
                 dots = np.einsum("ij,ij->i", segs[:-1], segs[1:])
                 denom = seg_len[:-1] * seg_len[1:]
-                angles = np.degrees(np.arccos(np.clip(dots[valid] / denom[valid], -1.0, 1.0)))
+                angles = np.degrees(
+                    np.arccos(np.clip(dots[valid] / denom[valid], -1.0, 1.0))
+                )
                 curvature = float(angles.sum() / arc)
 
     # Twist: vectorized means for each (slab, helix), then small consecutive-slab
@@ -1788,7 +1814,9 @@ def measure_bundle_twist_curvature(
         ]
     ).reshape(n_slices, nh, 2)
     centres = np.divide(
-        cell_sum, cell_count[..., None], out=np.zeros_like(cell_sum),
+        cell_sum,
+        cell_count[..., None],
+        out=np.zeros_like(cell_sum),
         where=cell_count[..., None] > 0,
     )
     slab_t_sum = np.bincount(slab, weights=t, minlength=n_slices)
@@ -2965,7 +2993,8 @@ def _aligned_downsampled_frames(
         )
     _transform = (
         (lambda fr: _flatten_cg_frame_array(fr, key_list))
-        if frame_transform is not None else None
+        if frame_transform is not None
+        else None
     )
 
     def _store(result):
@@ -3086,7 +3115,8 @@ def _aligned_downsampled_frames(
             )
             hit = (
                 _frame_cache_get(frame_key)
-                if ref_sig is not None and frame_transform is None else None
+                if ref_sig is not None and frame_transform is None
+                else None
             )
             if hit is not None:
                 aligned[idx] = hit
@@ -3098,6 +3128,7 @@ def _aligned_downsampled_frames(
         if missing:
             box = _parse_box_nm(path)
             do_align = box is not None and np.all(box > 0)
+
             def _align_frame(idx, fr):
                 nonlocal done
                 af = (
@@ -3108,10 +3139,13 @@ def _aligned_downsampled_frames(
                     else fr
                 )
                 if idx == 0 and frame_transform is not None:
-                    capture_first.update({
-                        k: v for k, v in af.items()
-                        if isinstance(k[0], str) and k[0].startswith("cap")
-                    })
+                    capture_first.update(
+                        {
+                            k: v
+                            for k, v in af.items()
+                            if isinstance(k[0], str) and k[0].startswith("cap")
+                        }
+                    )
                 aligned[idx] = _transform(af) if _transform is not None else af
                 if ref_sig is not None and frame_transform is None:
                     _frame_cache_put(
@@ -3129,6 +3163,7 @@ def _aligned_downsampled_frames(
                 done += 1
                 if progress:
                     progress(done, total_kept)
+
             # Align each parsed frame immediately. The old dict-return path retained
             # every raw frame until a multi-GB file had been fully scanned, doubling
             # peak memory for full-resolution trajectories.
@@ -3151,7 +3186,11 @@ def _aligned_downsampled_frames(
                 # (Extra bases + extension tails DO exist in design_ref.dat — they come
                 # from ref_display, at their design-pose positions.)
                 seed = dict(ref_display)
-                first = capture_first if frame_transform is not None else (aligned.get(0) or {})
+                first = (
+                    capture_first
+                    if frame_transform is not None
+                    else (aligned.get(0) or {})
+                )
                 seed.update(
                     {
                         k: v
@@ -3159,7 +3198,9 @@ def _aligned_downsampled_frames(
                         if isinstance(k[0], str) and k[0].startswith("cap")
                     }
                 )
-                stage_frames.append(_transform(seed) if _transform is not None else seed)
+                stage_frames.append(
+                    _transform(seed) if _transform is not None else seed
+                )
                 continue
             fr = aligned.get((p - 1) if seed_here else p)
             if fr is not None:  # a malformed / half-written frame drops out (as before)
@@ -3223,6 +3264,178 @@ def _flatten_cg_frame(frame: dict, key_list) -> list:
     return np.round(_flatten_cg_frame_array(frame, key_list), decimals=6).tolist()
 
 
+def _flatten_cg_frame_ntrj_array(
+    frame: dict, key_list, *, dtype=np.float64
+) -> np.ndarray:
+    """Flatten a frame to the shared six-float NTRJ compatibility layout.
+
+    missing key stays all-zeros — cm/a1/a3 default to 0 → backbone site 0 → six zeros,
+    identical to the old per-key fallback.
+
+    Keeping this as an ndarray is load-bearing for the binary trajectory route: calling
+    ``tolist()`` creates one Python float object per coordinate before serialisation
+    (millions for a large trajectory).  The legacy JSON route wraps this helper and does
+    that conversion only at its compatibility boundary."""
+    from backend.physics.oxdna_interface import oxdna_backbone_sites
+
+    n = len(key_list)
+    zero = (0.0, 0.0, 0.0)
+    values = [frame.get(key) for key in key_list]
+    # np.asarray over one nested sequence is measurably faster than N small row
+    # assignments.  Missing keys remain the documented six-zero sentinel.
+    cm = np.asarray(
+        [v["backbone_position"] if v is not None else zero for v in values], dtype=dtype
+    )
+    a1 = np.asarray([v["a1"] if v is not None else zero for v in values], dtype=dtype)
+    a3 = np.asarray([v["a3"] if v is not None else zero for v in values], dtype=dtype)
+    out = np.empty((n, 6), dtype=dtype)
+    out[:, 0:3] = oxdna_backbone_sites(cm, a1, a3)
+    out[:, 3:6] = a1
+    return np.ascontiguousarray(out.reshape(-1))
+
+
+def _flatten_cg_frame_ntrj(frame: dict, key_list) -> list:
+    """Legacy JSON-shaped wrapper for the shared six-float NTRJ payload."""
+    return _flatten_cg_frame_ntrj_array(frame, key_list).tolist()
+
+
+def latest_aligned_trajectory_frame(
+    design,
+    trajectory_path,
+    reference_conf_path,
+    *,
+    align: bool = True,
+) -> tuple[list[tuple], list[float]]:
+    """Return only a trajectory's latest complete frame in display wire order.
+
+    Final-structure views previously called :func:`composite_trajectory`, which
+    counted, parsed, unwrapped, and aligned up to 200 frames before discarding all
+    but the last one.  This path seeks into a bounded suffix of the trajectory and
+    applies the exact same unwrap/Kabsch implementation to that single frame.  It
+    therefore scales with one frame rather than the trajectory's history while
+    preserving the composite display's key ordering and nine-float payload.
+
+    An empty frame is represented as ``([], [])``.  Loop-insertion copies remain
+    distinct, matching ``composite_trajectory(..., copies=True)``.
+    """
+    from backend.physics.oxdna_interface import (
+        _build_unwrap_plan,
+        _parse_box_nm,
+        _strand_nucleotide_order,
+        read_configuration_full,
+        read_latest_trajectory_frame_full,
+        unwrap_align_to_reference,
+    )
+
+    frame = read_latest_trajectory_frame_full(
+        trajectory_path,
+        design,
+        copies=True,
+    )
+    if not frame:
+        return [], []
+    ref = read_configuration_full(reference_conf_path, design, copies=True)
+    box = _parse_box_nm(trajectory_path)
+    if box is not None and np.all(box > 0):
+        frame = unwrap_align_to_reference(
+            frame,
+            ref,
+            design,
+            box,
+            plan=_build_unwrap_plan(frame, design),
+            align=align,
+        )
+    keys = list(dict.fromkeys(_strand_nucleotide_order(design)))
+    return keys, _flatten_cg_frame(frame, keys)
+
+
+_TRAJECTORY_BIN_MAGIC = 0x4E54524A  # "NTRJ" as little-endian u32
+_TRAJECTORY_BIN_VERSION = 1
+
+
+def pack_composite_trajectory_bin(
+    design,
+    stages,
+    reference_conf_path,
+    max_frames: int = 200,
+    progress=None,
+    align: bool = True,
+    n_trailing_extra: int = 0,
+    trailing_extra_strand_length: int = 0,
+) -> bytes:
+    """Build the View-trajectory payload in a compact typed-array wire format.
+
+    Layout (little-endian)::
+
+        u32 magic · u32 version · u32 n_frames · u32 n_keys · u32 header_len
+        bytes[header_len] JSON {keys, stages, markers}
+        zero padding to a 4-byte boundary
+        f32[n_frames * n_keys * 6] frames
+
+    The JSON endpoint remains as a compatibility fallback.  This form avoids both its
+    Python-float object graph and browser ``JSON.parse`` of every coordinate; the client
+    exposes each frame as a zero-copy ``Float32Array`` view.  Float32 is comfortably below
+    the visual renderer's precision floor while cutting the coordinate body to exactly
+    24 bytes per nucleotide-frame.
+
+    ``progress(phase, done, total)`` reports the alignment/read and binary-pack phases
+    independently so the UI never freezes at 100% alignment while packing a large result.
+    """
+    import orjson
+    import struct
+
+    align_reported = False
+
+    def _align_progress(done, total):
+        nonlocal align_reported
+        align_reported = True
+        if progress:
+            progress("align", done, total)
+
+    key_list, ordered, out_stages, markers = _aligned_downsampled_frames(
+        design,
+        stages,
+        reference_conf_path,
+        max_frames,
+        copies=True,
+        progress=_align_progress,
+        align=align,
+        n_trailing_extra=n_trailing_extra,
+        trailing_extra_strand_length=trailing_extra_strand_length,
+    )
+    # A whole-composite cache hit legitimately skips all alignment callbacks. Still close
+    # the phase explicitly so a warm re-view shows it as completed rather than absent.
+    if progress and not align_reported:
+        progress("align", 1, 1)
+    n_frames = len(ordered)
+    n_keys = len(key_list)
+    if progress:
+        progress("pack", 0, n_frames)
+    frames = np.empty((n_frames, n_keys * 6), dtype=np.float32)
+    for i, frame in enumerate(ordered):
+        frames[i] = _flatten_cg_frame_ntrj_array(frame, key_list, dtype=np.float32)
+        if progress:
+            progress("pack", i + 1, n_frames)
+
+    header = orjson.dumps(
+        {
+            "keys": [list(k) for k in key_list],
+            "stages": out_stages,
+            "markers": markers,
+        }
+    )
+    fixed = struct.pack(
+        "<IIIII",
+        _TRAJECTORY_BIN_MAGIC,
+        _TRAJECTORY_BIN_VERSION,
+        n_frames,
+        n_keys,
+        len(header),
+    )
+    pad = b"\0" * ((4 - ((len(fixed) + len(header)) % 4)) % 4)
+    return fixed + header + pad + frames.tobytes(order="C")
+
+
 def composite_trajectory(
     design,
     stages,
@@ -3282,8 +3495,7 @@ def composite_trajectory(
             "markers": [],
         }
     out_frames = (
-        np.empty((len(ordered), len(key_list) * 9), dtype=np.float32)
-        if packed else []
+        np.empty((len(ordered), len(key_list) * 9), dtype=np.float32) if packed else []
     )
     if phase_progress:
         phase_progress("packing", 0, len(ordered))

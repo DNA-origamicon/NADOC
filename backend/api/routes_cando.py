@@ -18,6 +18,7 @@ POST   /cando/jobs/{id}/stop        stop a running job (best-effort cancel)
 DELETE /cando/jobs/{id}             delete job + generated files
 GET    /cando/jobs/{id}/snapshot-geometry  full geometry of the job's OWN design snapshot
 GET    /cando/jobs/{id}/display     predicted positions → applyFemPositions list
+GET    /cando/jobs/{id}/thermal-representative-bin compact static 298 K conformation
 GET    /cando/jobs/{id}/rmsf        per-bp RMSF (nm) for the flex map (Item 3)
 GET    /cando/jobs/{id}/deviation   per-bp deviation from the intended shape + RMSD (Item 3)
 GET    /cando/jobs/{id}/cylinders   CanDo-style jointed-cylinder geometry (tubes + joints)
@@ -38,6 +39,7 @@ from typing import Optional
 import numpy as np
 from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from backend.api import state as design_state
@@ -48,6 +50,8 @@ from backend.core.cando_runner import (
     job_progress,
     load_display,
     load_rmsf,
+    load_thermal_representative,
+    load_thermal_representative_bin,
     load_thermal_trajectory,
     prepare_cando_job,
     reconcile_cando_status,
@@ -401,8 +405,53 @@ async def get_cando_thermal_trajectory(job_id: str) -> dict:
     job = _load_job(job_id)
     cached = load_thermal_trajectory(job.job_dir(_workspace()))
     if not cached or not cached.get("frames"):
-        return {"job_id": job.job_id, "ready": False, "keys": [], "frames": [], "n_frames": 0}
+        return {
+            "job_id": job.job_id,
+            "ready": False,
+            "keys": [],
+            "frames": [],
+            "n_frames": 0,
+        }
     return {"job_id": job.job_id, "ready": True, **cached}
+
+
+@router.get("/cando/jobs/{job_id}/thermal-representative")
+async def get_cando_thermal_representative(job_id: str) -> dict:
+    """The single deterministic 298 K conformation used by static display modes.
+
+    The full ensemble endpoint remains available, but sending all of its frames to a
+    view that consumes only ``representative_positions`` wastes browser parse time and
+    memory. Pre-sidecar jobs derive and cache this subset on their first request.
+    """
+    job = _load_job(job_id)
+    cached = await run_in_threadpool(
+        load_thermal_representative, job.job_dir(_workspace())
+    )
+    if not cached or not cached.get("representative_positions"):
+        return {
+            "job_id": job.job_id,
+            "ready": False,
+            "n_frames": 0,
+            "representative_positions": [],
+            "representative_axis": [],
+        }
+    return {"job_id": job.job_id, "ready": True, **cached}
+
+
+@router.get("/cando/jobs/{job_id}/thermal-representative-bin")
+async def get_cando_thermal_representative_bin(job_id: str) -> Response:
+    """Columnar float32 sibling of ``thermal-representative`` for visualization."""
+    job = _load_job(job_id)
+    payload = await run_in_threadpool(
+        load_thermal_representative_bin, job.job_dir(_workspace())
+    )
+    if not payload:
+        return Response(status_code=204)
+    return Response(
+        content=payload,
+        media_type="application/octet-stream",
+        headers={"X-NADOC-Uncompressed-Length": str(len(payload))},
+    )
 
 
 @router.get("/cando/jobs/{job_id}/deviation")

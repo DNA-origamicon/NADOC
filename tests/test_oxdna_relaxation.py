@@ -1279,6 +1279,31 @@ def test_production_rmsf(design, geometry, tmp_path):
     assert r["max_rmsf"] > r["min_rmsf"] + 0.4
 
 
+def test_production_rmsf_reuses_one_unwrap_plan_per_particle_set(
+    design, geometry, tmp_path, monkeypatch
+):
+    """A trajectory's constant topology builds one unwrap traversal, not one per frame."""
+    import backend.physics.oxdna_interface as interface
+    from backend.core.oxdna_health import production_rmsf
+
+    ref = tmp_path / "ref.dat"
+    traj = tmp_path / "traj.dat"
+    write_configuration(design, geometry, ref, box_nm=80.0)
+    _write_traj(design, geometry, traj, 6)
+    original = interface._build_unwrap_plan
+    calls = []
+
+    def counted(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(interface, "_build_unwrap_plan", counted)
+    result = production_rmsf(design, traj, ref)
+
+    assert result["n_frames"] == 6
+    assert len(calls) == 1
+
+
 def test_production_rmsf_ignores_trailing_surface_capture_particles(
     design, geometry, tmp_path
 ):
@@ -2493,7 +2518,9 @@ def test_combined_twist_curvature_matches_individual_metrics():
 
     positions = _arc_bundle(25.0, 70.0, n_axial=64)
     twist, curvature = measure_bundle_twist_curvature(positions, n_slices=18)
-    assert twist == pytest.approx(measure_bundle_twist(positions, n_slices=18), abs=1e-9)
+    assert twist == pytest.approx(
+        measure_bundle_twist(positions, n_slices=18), abs=1e-9
+    )
     assert curvature == pytest.approx(
         measure_bundle_curvature(positions, n_slices=18), abs=1e-9
     )
@@ -2847,6 +2874,39 @@ def test_composite_trajectory(design, geometry, tmp_path):
     assert [s["kind"] for s in r["stages"]] == ["equil", "production"]
     assert len(r["markers"]) == 1  # one transition equil→production
     assert r["markers"][0]["frame"] == 3 and r["markers"][0]["kind"] == "production"
+
+
+@pytest.mark.parametrize("align", [True, False])
+def test_latest_aligned_frame_matches_composite_last_frame(
+    design, geometry, tmp_path, align
+):
+    """The bounded-tail final-frame path is numerically identical to the legacy
+    full composite path it replaces, both with and without rigid-body alignment."""
+    from backend.core.oxdna_health import (
+        composite_trajectory,
+        latest_aligned_trajectory_frame,
+    )
+
+    ref = tmp_path / "conf.dat"
+    _write_traj(design, geometry, ref, 1)
+    traj = tmp_path / "production.dat"
+    _write_traj(design, geometry, traj, 5)
+
+    legacy = composite_trajectory(
+        design,
+        [("production", "production", traj)],
+        ref,
+        align=align,
+    )
+    keys, frame = latest_aligned_trajectory_frame(
+        design,
+        traj,
+        ref,
+        align=align,
+    )
+
+    assert [list(key) for key in keys] == legacy["keys"]
+    assert frame == pytest.approx(legacy["frames"][-1], abs=1e-12)
 
 
 def test_job_field_prefers_run_config_falls_back_to_efield():
@@ -3531,7 +3591,9 @@ def test_oxdna_trajectory_walks_full_lineage(monkeypatch, tmp_path, design, geom
     data_offset = (12 + header_n + 3) & ~3
     packed_frames = np.frombuffer(packed.content, dtype="<f4", offset=data_offset)
     assert packed_frames.size == body["n_frames"] * len(body["frames"][0])
-    assert np.allclose(packed_frames[: len(body["frames"][0])], body["frames"][0], atol=1e-6)
+    assert np.allclose(
+        packed_frames[: len(body["frames"][0])], body["frames"][0], atol=1e-6
+    )
 
 
 # ── PBC unwrap for display ────────────────────────────────────────────────────
@@ -5895,6 +5957,90 @@ def test_packed_composite_matches_json_without_dictionary_cache(
     assert np.allclose(packed["frames"], np.asarray(legacy["frames"]), atol=1e-6)
     assert health._ALIGNED_CACHE is not None and len(health._ALIGNED_CACHE) == 0
     assert health._FRAME_CACHE is None or len(health._FRAME_CACHE) == 0
+
+
+def test_composite_trajectory_binary_matches_json_and_reports_each_phase(
+    tmp_path, design, geometry
+):
+    """Full file→align→flatten→wire oracle for the interactive trajectory payload.
+
+    The binary path must decode to the legacy JSON values within float32 precision, be
+    materially smaller, and expose alignment + packing as distinct progress phases.
+    """
+    import struct
+    import orjson
+    import backend.core.oxdna_health as health
+
+    ref = tmp_path / "ref.dat"
+    traj = tmp_path / "trajectory.dat"
+    write_configuration(design, geometry, ref, box_nm=80.0)
+    _write_traj(design, geometry, traj, n_frames=12)
+    stages = [("relax", "mc", str(traj))]
+    legacy = health.composite_trajectory(design, stages, str(ref), max_frames=8)
+
+    calls: list[tuple] = []
+    buf = health.pack_composite_trajectory_bin(
+        design,
+        stages,
+        str(ref),
+        max_frames=8,
+        progress=lambda phase, done, total: calls.append((phase, done, total)),
+    )
+    magic, version, n_frames, n_keys, header_len = struct.unpack_from("<IIIII", buf)
+    assert magic == health._TRAJECTORY_BIN_MAGIC
+    assert version == health._TRAJECTORY_BIN_VERSION
+    assert (n_frames, n_keys) == (legacy["n_frames"], legacy["n_nucleotides"])
+    header = orjson.loads(buf[20 : 20 + header_len])
+    assert header == {
+        "keys": legacy["keys"],
+        "stages": legacy["stages"],
+        "markers": legacy["markers"],
+    }
+    off = 20 + header_len
+    off += (4 - (off % 4)) % 4
+    frames = np.frombuffer(buf, dtype="<f4", offset=off).reshape(n_frames, n_keys * 6)
+    legacy_six = (
+        np.asarray(legacy["frames"])
+        .reshape(n_frames, n_keys, 9)[:, :, :6]
+        .reshape(n_frames, n_keys * 6)
+    )
+    np.testing.assert_allclose(frames, legacy_six, rtol=1e-6, atol=2e-5)
+
+    legacy_wire = orjson.dumps({"ready": True, **legacy})
+    assert len(buf) < len(legacy_wire) * 0.35  # typed f32 vs decimal JSON numbers
+    assert calls[0][0] == "align"
+    assert any(p == "pack" and d == 0 for p, d, _ in calls)
+    assert calls[-1] == ("pack", n_frames, n_frames)
+
+
+def test_oxdna_trajectory_binary_route_runs_the_full_builder(
+    tmp_path, design, geometry, monkeypatch
+):
+    """HTTP route → file reader/alignment → packer, not a mocked payload passthrough."""
+    from types import SimpleNamespace
+    from fastapi.testclient import TestClient
+    from backend.api.main import app
+    import backend.api.routes_oxdna as routes
+
+    ref = tmp_path / "ref.dat"
+    traj = tmp_path / "trajectory.dat"
+    write_configuration(design, geometry, ref, box_nm=80.0)
+    _write_traj(design, geometry, traj, n_frames=4)
+    monkeypatch.setattr(
+        routes, "_load_job", lambda _job_id: SimpleNamespace(run_config={})
+    )
+    monkeypatch.setattr(
+        routes,
+        "_composite_inputs",
+        lambda _job, _scope: (design, [("relax", "mc", str(traj))], str(ref)),
+    )
+    monkeypatch.setattr(routes, "_capture_bead_count", lambda _job: 0)
+    monkeypatch.setattr(routes, "_capture_strand_length", lambda _job: 0)
+
+    response = TestClient(app).get("/api/oxdna/jobs/J/trajectory-bin")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/octet-stream"
+    assert response.content[:4] == b"JRTN"  # little-endian bytes of the NTRJ magic
 
 
 def test_oxdna_trajectory_progress_endpoint_idle(monkeypatch, tmp_path):

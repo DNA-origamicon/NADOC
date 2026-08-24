@@ -33,6 +33,7 @@
 
 import { colormapHex } from './colormaps.js'
 import { framesToUpdates } from './oxdna_display.js'
+import { parseCandoRepresentativeBin } from '../scene/cando_representative_bin.js'
 
 /**
  * Pure mapping: a /cando/jobs/{id}/display response → applyFemPositions updates.
@@ -210,6 +211,44 @@ export function initCandoDisplay({
     return { epoch: ++_epoch, signal: _loadAbort.signal }
   }
   function _cancelLoad() { _loadAbort?.abort(); _loadAbort = null; _epoch++ }
+  function _progress(onProgress, phase, done, total = 1) {
+    onProgress?.({ phase, done, total })
+  }
+  async function _fetchPhase(onProgress, phase, promise) {
+    _progress(onProgress, phase, 0)
+    const result = await promise
+    _progress(onProgress, phase, 1)
+    return result
+  }
+  async function _paintBefore(onProgress, phase) {
+    _progress(onProgress, phase, 0)
+    if (typeof requestAnimationFrame === 'function') {
+      await new Promise(resolve => requestAnimationFrame(resolve))
+    }
+  }
+  async function _thermalRequest(jobId, signal, onProgress) {
+    if (api.getCandoThermalRepresentativeBin) {
+      _progress(onProgress, 'thermal-download', 0, 0)
+      const buf = await api.getCandoThermalRepresentativeBin(jobId, {
+        signal,
+        onProgress: p => _progress(onProgress, 'thermal-download', p.done, p.total),
+      })
+      if (buf) {
+        await _paintBefore(onProgress, 'thermal-decode')
+        const decoded = parseCandoRepresentativeBin(buf)
+        _progress(onProgress, 'thermal-decode', 1)
+        if (decoded) return decoded
+      }
+    }
+    const fetcher = api.getCandoThermalRepresentative || api.getCandoThermalTrajectory
+    return _fetchPhase(onProgress, 'thermal', fetcher?.(jobId, signal) ?? Promise.resolve(null))
+  }
+  function _thermalDisplay(thermal) {
+    return thermal?.ready && Array.isArray(thermal.representative_positions)
+      && thermal.representative_positions.length
+      ? { ready: true, positions: thermal.representative_positions }
+      : null
+  }
   let _jobId = null         // job whose overlay is applied (or null)
   let _mode = null          // 'deform' | 'flex' | 'deviation' | 'cando' | null
   let _stats = null         // last flex/deviation/cando summary for the panel readout
@@ -254,6 +293,16 @@ export function initCandoDisplay({
     _nativeVisible(true)
   }
 
+  // A current job's fingerprint proves its snapshot topology equals the live design.
+  // Keep the already-built scene and apply only the physical overlay in that case.
+  function _prepareForLive() {
+    flexScale?.hide()
+    cylinderOverlay?.clear()
+    designRenderer.clearScalarColors?.()
+    designRenderer.clearExternalGeometry?.()
+    _nativeVisible(true)
+  }
+
   function _snapshotReady(snap) {
     return !!(snap?.ready && snap.design && Array.isArray(snap.nucleotides) && snap.nucleotides.length)
   }
@@ -274,7 +323,7 @@ export function initCandoDisplay({
   /** Apply one deterministic 298 K conformation whose displacement profile best
    *  represents the NMA RMSF. Standard CanDo views are static final states—not movies. */
   function _startThermalFrames(resp, frameApplier = null) {
-    if (!resp?.ready || !resp.n_frames || !resp.frames?.length) return false
+    if (!resp?.ready) return false
     const full = Array.isArray(resp.representative_positions)
       ? toFemUpdates({ ready: true, positions: resp.representative_positions }) : []
     if (full.length) {
@@ -282,6 +331,7 @@ export function initCandoDisplay({
       else designRenderer.applyFemPositions(full)
       return true
     }
+    if (!resp.n_frames || !resp.frames?.length) return false
     // Backward compatibility for caches produced before full wound-frame records were
     // persisted. These can place beads but cannot correct slab orientation.
     const idx = Math.max(0, Math.min(resp.frames.length - 1,
@@ -292,19 +342,32 @@ export function initCandoDisplay({
   }
 
   /** Deform the model to the predicted shape (no recolour). */
-  async function showDeform(jobId) {
+  async function showDeform(jobId, onProgress = null, { reuseLiveGeometry = false } = {}) {
     const { epoch, signal } = _beginLoad()
-    const [resp, thermal, snap] = await Promise.all([
-      api.getCandoDisplay(jobId, signal), api.getCandoThermalTrajectory?.(jobId, signal),
-      api.getCandoSnapshotGeometry(jobId, signal)])
+    const [thermal, snap] = await Promise.all([
+      _thermalRequest(jobId, signal, onProgress),
+      reuseLiveGeometry ? Promise.resolve(null)
+        : _fetchPhase(onProgress, 'snapshot', api.getCandoSnapshotGeometry(jobId, signal))])
+    const resp = _thermalDisplay(thermal) || await _fetchPhase(
+      onProgress, 'display-data', api.getCandoDisplay(jobId, signal),
+    )
     if (epoch !== _epoch) return { ok: false }
+    await _paintBefore(onProgress, 'transform')
     const updates = toFemUpdates(resp)
-    if (!updates.length || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
-    _prepareForExternal()
-    _renderExternal(snap)
+    _progress(onProgress, 'transform', 1)
+    if (!updates.length || (!reuseLiveGeometry && !_snapshotReady(snap))) {
+      return { ok: false, reason: 'not-ready' }
+    }
+    const scenePhase = reuseLiveGeometry ? 'reuse-scene' : 'render-snapshot'
+    await _paintBefore(onProgress, scenePhase)
+    if (reuseLiveGeometry) _prepareForLive()
+    else { _prepareForExternal(); _renderExternal(snap) }
+    _progress(onProgress, scenePhase, 1)
+    await _paintBefore(onProgress, 'apply')
     const moving = _startThermalFrames(thermal)
     if (!moving) designRenderer.applyFemPositions(updates)
     designRenderer.clearScalarColors?.()
+    _progress(onProgress, 'apply', 1)
     _jobId = jobId; _mode = 'deform'
     _stats = { kind: 'deform', thermal: moving, frames: thermal?.n_frames || 0 }
     return { ok: true, n: updates.length }
@@ -332,19 +395,31 @@ export function initCandoDisplay({
   }
 
   /** Deform to the predicted shape + recolour beads by per-bp RMSF (flexibility map). */
-  async function showFlex(jobId) {
+  async function showFlex(jobId, onProgress = null, { reuseLiveGeometry = false } = {}) {
     const { epoch, signal } = _beginLoad()
-    const [disp, rmsf, thermal, snap] = await Promise.all([
-      api.getCandoDisplay(jobId, signal), api.getCandoRmsf(jobId, signal),
-      api.getCandoThermalTrajectory?.(jobId, signal), api.getCandoSnapshotGeometry(jobId, signal)])
+    const [rmsf, thermal, snap] = await Promise.all([
+      _fetchPhase(onProgress, 'rmsf', api.getCandoRmsf(jobId, signal)),
+      _thermalRequest(jobId, signal, onProgress),
+      reuseLiveGeometry ? Promise.resolve(null)
+        : _fetchPhase(onProgress, 'snapshot', api.getCandoSnapshotGeometry(jobId, signal))])
+    const disp = _thermalDisplay(thermal) || await _fetchPhase(
+      onProgress, 'display-data', api.getCandoDisplay(jobId, signal),
+    )
     if (epoch !== _epoch) return { ok: false }
+    await _paintBefore(onProgress, 'transform')
     const map = flexColorMap(disp, rmsf, undefined, undefined, _flexCmap)
-    if (!map || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
-    _prepareForExternal()
-    _renderExternal(snap)
+    _progress(onProgress, 'transform', 1)
+    if (!map || (!reuseLiveGeometry && !_snapshotReady(snap))) return { ok: false, reason: 'not-ready' }
+    const scenePhase = reuseLiveGeometry ? 'reuse-scene' : 'render-snapshot'
+    await _paintBefore(onProgress, scenePhase)
+    if (reuseLiveGeometry) _prepareForLive()
+    else { _prepareForExternal(); _renderExternal(snap) }
+    _progress(onProgress, scenePhase, 1)
+    await _paintBefore(onProgress, 'apply')
     const moving = _startThermalFrames(thermal)
     if (!moving) designRenderer.applyFemPositions(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
+    _progress(onProgress, 'apply', 1)
     _flexResp = { disp, rmsf }
     _flexBounds = { lo: map.min, hi: map.max }
     _jobId = jobId; _mode = 'flex'
@@ -357,19 +432,28 @@ export function initCandoDisplay({
 
   /** Deform to the predicted shape + recolour beads green→red by deviation from the
    *  design's intended geometry (deviation map).  Reports the global RMSD. */
-  async function showDeviation(jobId) {
+  async function showDeviation(jobId, onProgress = null, { reuseLiveGeometry = false } = {}) {
     const { epoch, signal } = _beginLoad()
     const [resp, thermal, snap] = await Promise.all([
-      api.getCandoDeviation(jobId, signal), api.getCandoThermalTrajectory?.(jobId, signal),
-      api.getCandoSnapshotGeometry(jobId, signal)])
+      _fetchPhase(onProgress, 'deviation', api.getCandoDeviation(jobId, signal)),
+      _thermalRequest(jobId, signal, onProgress),
+      reuseLiveGeometry ? Promise.resolve(null)
+        : _fetchPhase(onProgress, 'snapshot', api.getCandoSnapshotGeometry(jobId, signal))])
     if (epoch !== _epoch) return { ok: false }
+    await _paintBefore(onProgress, 'transform')
     const map = deviationColorMap(resp, undefined, undefined, _devCmap)
-    if (!map || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
-    _prepareForExternal()
-    _renderExternal(snap)
+    _progress(onProgress, 'transform', 1)
+    if (!map || (!reuseLiveGeometry && !_snapshotReady(snap))) return { ok: false, reason: 'not-ready' }
+    const scenePhase = reuseLiveGeometry ? 'reuse-scene' : 'render-snapshot'
+    await _paintBefore(onProgress, scenePhase)
+    if (reuseLiveGeometry) _prepareForLive()
+    else { _prepareForExternal(); _renderExternal(snap) }
+    _progress(onProgress, scenePhase, 1)
+    await _paintBefore(onProgress, 'apply')
     const moving = _startThermalFrames(thermal)
     if (!moving) designRenderer.applyFemPositions(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
+    _progress(onProgress, 'apply', 1)
     _devResp = resp
     _devBounds = { lo: map.min, hi: map.max }
     _jobId = jobId; _mode = 'deviation'
@@ -382,14 +466,16 @@ export function initCandoDisplay({
   /** CanDo-style output: draw the predicted shape as the familiar jointed-cylinder
    *  representation (one grey tube per helix + crossover joints) with the native
    *  NADOC model hidden.  Standalone rep, like the mrDNA CG-beads mode. */
-  async function showCandoStyle(jobId) {
+  async function showCandoStyle(jobId, onProgress = null) {
     const { epoch, signal } = _beginLoad()
     const [resp, thermal] = await Promise.all([
-      api.getCandoCylinders(jobId, signal), api.getCandoThermalTrajectory?.(jobId, signal)])
+      _fetchPhase(onProgress, 'cylinders', api.getCandoCylinders(jobId, signal)),
+      _thermalRequest(jobId, signal, onProgress)])
     if (epoch !== _epoch) return { ok: false }
     if (!resp?.ready || !cylinderOverlay || (!resp.helices?.length && !resp.joints?.length)) {
       return { ok: false, reason: 'not-ready' }
     }
+    await _paintBefore(onProgress, 'apply')
     _clearAll()   // restore the live model first, then hide it under the tubes
     cylinderOverlay.update(resp, {
       lo: resp.rmsf_min, hi: resp.rmsf_p95, colormap: _candoCmap,
@@ -418,6 +504,7 @@ export function initCandoDisplay({
     if (resp.has_rmsf) {
       flexScale?.show({ title: 'RMSF (nm)', min: resp.rmsf_min, max: resp.rmsf_p95, mapType: 'cando', onRecolor: _recolorCando })
     }
+    _progress(onProgress, 'apply', 1)
     return { ok: true, helices: resp.n_helices, joints: resp.n_joints }
   }
 

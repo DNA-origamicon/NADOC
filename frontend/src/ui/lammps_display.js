@@ -18,6 +18,7 @@
 
 import { toFemUpdates, rmsfColorMap, deviationColorMap, framesToUpdates } from './oxdna_display.js'
 import * as client from '../api/client.js'
+import { parseOxdnaTrajectoryBin } from '../scene/oxdna_trajectory_bin.js'
 
 export function initLammpsDisplay({ designRenderer = null, api = client } = {}) {
   let _mode = null          // 'display' | 'rmsf' | 'deviation' | 'trajectory' | null
@@ -39,54 +40,81 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
     return { epoch: ++_epoch, signal: _loadAbort.signal }
   }
   function _cancelLoad() { _loadAbort?.abort(); _loadAbort = null; _epoch++ }
+  function _progress(onProgress, phase, done, total = 1) {
+    onProgress?.({ phase, done, total })
+  }
+  async function _paintBefore(onProgress, phase) {
+    _progress(onProgress, phase, 0)
+    if (typeof requestAnimationFrame === 'function') {
+      await new Promise(resolve => requestAnimationFrame(resolve))
+    }
+  }
 
   function _restore() {
     designRenderer?.applyFemPositions(null)
     designRenderer?.clearScalarColors?.()
   }
 
-  async function displayJob(jobId, align = true) {
+  async function displayJob(jobId, align = true, onProgress = null) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const { epoch, signal } = _beginLoad()
+    _progress(onProgress, 'final-frame', 0)
     const resp = await api.getLammpsDisplay(jobId, { align, signal })
+    _progress(onProgress, 'final-frame', 1)
     if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
+    await _paintBefore(onProgress, 'transform')
     const updates = toFemUpdates(resp)
+    _progress(onProgress, 'transform', 1)
     if (!updates.length) return { ok: false, reason: resp?.reason || 'not ready' }
+    await _paintBefore(onProgress, 'apply')
     designRenderer.clearScalarColors?.()          // plain positions, no per-base colour
     designRenderer.applyFemPositions(updates)
+    _progress(onProgress, 'apply', 1)
     _mode = 'display'; _traj = null; _jobId = jobId
     _align = align
     return { ok: true, n: updates.length }
   }
 
-  async function displayRmsf(jobId, align = true) {
+  async function displayRmsf(jobId, align = true, onProgress = null) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const { epoch, signal } = _beginLoad()
+    _progress(onProgress, 'rmsf-analysis', 0, 0)
     const resp = await api.getLammpsRmsf(jobId, { align, signal })
+    _progress(onProgress, 'rmsf-analysis', 1)
     if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
+    await _paintBefore(onProgress, 'transform')
     const map = rmsfColorMap(resp, undefined, undefined, _rmsfCmap)
+    _progress(onProgress, 'transform', 1)
     if (!map) return { ok: false, reason: resp?.reason || 'not ready' }
     _rmsfResp = resp
     _rmsfBounds = { lo: map.min, hi: map.max }
+    await _paintBefore(onProgress, 'apply')
     designRenderer.applyFemPositions(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
+    _progress(onProgress, 'apply', 1)
     _mode = 'rmsf'; _traj = null; _jobId = jobId
     _align = align
     return { ok: true, min: map.min, max: map.max, mean: resp.mean_rmsf,
              nFrames: resp.n_frames, confidence: resp.confidence }
   }
 
-  async function displayDeviation(jobId, align = true) {
+  async function displayDeviation(jobId, align = true, onProgress = null) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const { epoch, signal } = _beginLoad()
+    _progress(onProgress, 'deviation-analysis', 0, 0)
     const resp = await api.getLammpsDeviation(jobId, { align, signal })
+    _progress(onProgress, 'deviation-analysis', 1)
     if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
+    await _paintBefore(onProgress, 'transform')
     const map = deviationColorMap(resp, undefined, undefined, _devCmap)
+    _progress(onProgress, 'transform', 1)
     if (!map) return { ok: false, reason: resp?.reason || 'not ready' }
     _devResp = resp
     _devBounds = { lo: map.min, hi: map.max }
+    await _paintBefore(onProgress, 'apply')
     designRenderer.applyFemPositions(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
+    _progress(onProgress, 'apply', 1)
     _mode = 'deviation'; _traj = null; _jobId = jobId
     _align = align
     return { ok: true, min: map.min, max: map.max, mean: resp.mean_deviation, nFrames: resp.n_frames }
@@ -114,17 +142,40 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
     return true
   }
 
-  async function loadTrajectory(jobId, align = true) {
+  async function loadTrajectory(jobId, align = true, onProgress = null) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const { epoch, signal } = _beginLoad()
-    const t = await api.getLammpsTrajectory(jobId, { align, signal })
+    let t = null
+    if (api.getLammpsTrajectoryBin) {
+      _progress(onProgress, 'trajectory-download', 0, 0)
+      const buf = await api.getLammpsTrajectoryBin(jobId, {
+        align, signal,
+        onProgress: p => _progress(onProgress, 'trajectory-download', p.done, p.total),
+      })
+      if (buf) {
+        await _paintBefore(onProgress, 'trajectory-decode')
+        t = parseOxdnaTrajectoryBin(buf)
+        _progress(onProgress, 'trajectory-decode', 1)
+      }
+    }
+    if (!t && !signal.aborted) {
+      _progress(onProgress, 'trajectory-data', 0, 0)
+      t = await api.getLammpsTrajectory(jobId, { align, signal })
+      _progress(onProgress, 'trajectory-data', 1)
+    }
     if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     if (!t || !t.ready) { _traj = null; return { ok: false, reason: t?.reason || 'not ready' } }
     _traj = { keys: t.keys, frames: t.frames }
     _mode = 'trajectory'; _jobId = jobId
     _align = align
     designRenderer.clearScalarColors?.()
-    showFrame(0)
+    await _paintBefore(onProgress, 'transform')
+    const first = framesToUpdates(_traj.keys, _traj.frames[0])
+    _progress(onProgress, 'transform', 1)
+    await _paintBefore(onProgress, 'apply')
+    designRenderer.applyFemPositions(first)
+    _trajIdx = 0
+    _progress(onProgress, 'apply', 1)
     return { ok: true, n_frames: t.n_frames, markers: t.markers || [] }
   }
 

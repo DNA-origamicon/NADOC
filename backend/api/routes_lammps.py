@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
@@ -275,22 +275,52 @@ async def get_lammps_trajectory(job_id: str, align: bool = True) -> dict:
     return {"ready": result["n_frames"] > 0, **result}
 
 
+@router.get("/lammps/jobs/{job_id}/trajectory-bin")
+async def get_lammps_trajectory_bin(job_id: str, align: bool = True) -> Response:
+    """Compact float32 NTRJ sibling of the JSON trajectory player payload."""
+    from backend.core.oxdna_health import pack_composite_trajectory_bin
+
+    inputs, _not_ready = _traj_inputs(job_id)
+    if inputs is None:
+        return Response(status_code=204)
+    design, dat, ref = inputs
+    buf = await run_in_threadpool(
+        pack_composite_trajectory_bin,
+        design,
+        [("lammps", "production", dat)],
+        ref,
+        200,
+        None,
+        align,
+    )
+    if not buf:
+        return Response(status_code=204)
+    return Response(
+        content=buf,
+        media_type="application/octet-stream",
+        headers={"X-NADOC-Uncompressed-Length": str(len(buf))},
+    )
+
+
 @router.get("/lammps/jobs/{job_id}/display")
 async def get_lammps_display(job_id: str, align: bool = True) -> dict:
     """The run's final structure as an applyFemPositions update list (the "display"
     view) — the last aligned trajectory frame, same payload shape as the oxDNA one."""
-    from backend.core.oxdna_health import composite_trajectory
+    from backend.core.oxdna_health import latest_aligned_trajectory_frame
 
     inputs, not_ready = _traj_inputs(job_id)
     if inputs is None:
         return not_ready
     design, dat, ref = inputs
-    result = await run_in_threadpool(
-        composite_trajectory, design, [("lammps", "production", dat)], ref, align=align
+    keys, last = await run_in_threadpool(
+        latest_aligned_trajectory_frame,
+        design,
+        dat,
+        ref,
+        align=align,
     )
-    if not result["n_frames"]:
+    if not last:
         return {"ready": False, "positions": [], "stage_name": None}
-    keys, last = result["keys"], result["frames"][-1]
     positions = [
         {
             "helix_id": k[0],
@@ -317,15 +347,18 @@ async def get_lammps_display(job_id: str, align: bool = True) -> dict:
 async def get_lammps_rmsf(job_id: str, align: bool = True) -> dict:
     """Per-nucleotide average position + RMSF over the run (the flexibility map) —
     reuses oxDNA's ``production_rmsf`` verbatim on the transcoded trajectory."""
-    from backend.core.oxdna_health import production_rmsf, rmsf_confidence
+    from backend.core.oxdna_health import production_rmsf_cached, rmsf_confidence
 
     inputs, not_ready = _traj_inputs(job_id)
     if inputs is None:
         return not_ready
     design, dat, ref = inputs
-    result = await run_in_threadpool(
-        production_rmsf, design, [dat], ref, copies=True, align=align
+    cached = await run_in_threadpool(
+        production_rmsf_cached, design, [dat], ref, copies=True, align=align
     )
+    # The shared cache also retains an internal reconstruction frame for heavy-rep
+    # export. It is not part of this JSON contract (and has tuple keys/ndarrays).
+    result = {key: value for key, value in cached.items() if key != "average_frame"}
     result["confidence"] = rmsf_confidence(result.get("n_frames", 0))
     result["production_running"] = False
     return result
@@ -338,7 +371,7 @@ async def get_lammps_deviation(job_id: str, align: bool = True) -> dict:
     from backend.api.skip_twist_tuning import core_reference_geometry
     from backend.core.oxdna_health import (
         geometry_deviation_map,
-        production_rmsf,
+        production_rmsf_cached,
         rmsf_confidence,
     )
 
@@ -348,7 +381,7 @@ async def get_lammps_deviation(job_id: str, align: bool = True) -> dict:
     design, dat, ref = inputs
 
     def _compute():
-        mean = production_rmsf(design, [dat], ref, copies=True, align=align)
+        mean = production_rmsf_cached(design, [dat], ref, copies=True, align=align)
         if not mean.get("ready") or not mean.get("positions"):
             return None, mean
         return geometry_deviation_map(

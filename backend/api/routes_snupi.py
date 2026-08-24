@@ -24,6 +24,7 @@ POST   /snupi/jobs/{id}/stop        stop a running job (best-effort cancel)
 DELETE /snupi/jobs/{id}             delete job + generated files
 GET    /snupi/jobs/{id}/snapshot-geometry  full geometry of the job's OWN design snapshot
 GET    /snupi/jobs/{id}/display     predicted positions → applyFemPositions list
+GET    /snupi/jobs/{id}/display-bin compact static FEM frame
 GET    /snupi/jobs/{id}/rmsf        per-bp RMSF (nm) for the flex map
 GET    /snupi/jobs/{id}/deviation   per-bp deviation from the intended shape + RMSD
 GET    /snupi/jobs/{id}/cylinders   CanDo-style jointed-cylinder geometry (tubes + joints)
@@ -43,6 +44,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from backend.api import state as design_state
@@ -52,6 +54,7 @@ from backend.core.snupi_runner import (
     is_running,
     job_progress,
     load_display,
+    load_display_bin,
     load_rmsf,
     prepare_snupi_job,
     reconcile_snupi_status,
@@ -478,6 +481,20 @@ async def get_snupi_display(job_id: str) -> dict:
         "n_positions": len(positions),
         "positions": positions,
     }
+
+
+@router.get("/snupi/jobs/{job_id}/display-bin")
+async def get_snupi_display_bin(job_id: str) -> Response:
+    """Columnar float32 sibling of ``display`` for interactive visualization."""
+    job = _load_job(job_id)
+    payload = await run_in_threadpool(load_display_bin, job.job_dir(_workspace()))
+    if not payload:
+        return Response(status_code=204)
+    return Response(
+        content=payload,
+        media_type="application/octet-stream",
+        headers={"X-NADOC-Uncompressed-Length": str(len(payload))},
+    )
 
 
 @router.get("/snupi/jobs/{job_id}/rmsf")
