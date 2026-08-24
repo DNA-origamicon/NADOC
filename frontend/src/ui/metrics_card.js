@@ -143,7 +143,8 @@ export function initMetricsCard({ idPrefix, api, getSelectedJob = null, getJobs 
       const eta = st.eta_s != null ? ` · ~${_fmtEta(st.eta_s)} left` : ''
       const frames = st.frames_total ? ` (${st.frames_done || 0}/${st.frames_total} frames)` : ''
       if (st.state === 'running') {
-        _setStatus(row, `Computing${frames}${eta}…`)
+        const phase = st.phase || 'Computing'
+        _setStatus(row, `${phase}${frames}${eta}…`)
         _pollTimer = setTimeout(tick, POLL_MS); return
       }
       _runningMetric = null

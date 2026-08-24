@@ -71,22 +71,86 @@ def _build_md_nadoc_ctx(
     NAMD atomistic/surface trajectory path (Phase 2b)."""
     import MDAnalysis as mda  # type: ignore
 
-    from backend.core.atomistic import build_atomistic_model
     from backend.core.atomistic_to_nadoc import (
         _GRO_DNA_RESNAMES,
         _extract_universe,
+        build_active_design_reference,
         build_chain_map,
-        centroid_offset,
+        build_namd_coarse_reference,
         load_segid_chain_map,
         md_rigid_reference,
+        md_rigid_reference_from_map,
         md_snap_mask,
     )
 
-    model = build_atomistic_model(design)
-    cm = build_chain_map(model)
+    # Metrics and coarse trajectories only need residue identity plus phosphate
+    # reference positions.  Rebuilding the full atomistic model here spent minutes
+    # minimising backbone bridges before the first DCD frame was touched.  The NAMD
+    # package already contains the exact residue map/P coordinates, so use the same
+    # lightweight path as Display MD.  Atomistic views still build the full model
+    # because their metadata genuinely consumes it.
+    model = None
+    p_reference = None
+    seg2chain = load_segid_chain_map(Path(topology_path).parent)
+    if not with_atoms and seg2chain:
+        try:
+            try:
+                from backend.api.ws import _cached_namd_coarse_reference
+
+                (cm, _package_p_reference, p_reference), _ = (
+                    _cached_namd_coarse_reference(
+                        design,
+                        coordinate_path,
+                        seg2chain,
+                        build_namd_coarse_reference,
+                        build_active_design_reference,
+                    )
+                )
+            except ImportError:
+                cm, _package_p_reference = build_namd_coarse_reference(
+                    design, coordinate_path, seg2chain
+                )
+                p_reference = build_active_design_reference(design)
+        except Exception:  # uncommon synthetic layouts retain the exact fallback
+            cm = None
+    else:
+        cm = None
+    if cm is None:
+        from backend.core.atomistic import build_atomistic_model
+
+        model = build_atomistic_model(design)
+        cm = build_chain_map(model)
 
     paths = [str(p) for p in trajectory_paths]
-    u = mda.Universe(str(topology_path), paths if len(paths) > 1 else paths[0])
+    trajectory_arg = paths if len(paths) > 1 else paths[0]
+    # Share Display MD's parsed-topology LRU.  A VoltronCoreArm PSF is 433 MB and
+    # costs ~48 s of pure-Python parsing; attaching an independent DCD reader to its
+    # cached MDAnalysis Topology takes well under a second.  The per-key lock also
+    # prevents a graph request and viewer open from parsing it simultaneously.
+    try:
+        from backend.api.ws import (
+            _cache_get_universe,
+            _cache_put_universe,
+            _universe_build_lock,
+            _universe_cache_key,
+        )
+
+        universe_key = _universe_cache_key(
+            topology_path, paths[0], topology_only=True
+        )
+        cached_universe = _cache_get_universe(universe_key)
+        if cached_universe is None:
+            with _universe_build_lock(universe_key):
+                cached_universe = _cache_get_universe(universe_key)
+                if cached_universe is None:
+                    u = mda.Universe(str(topology_path), trajectory_arg)
+                    _cache_put_universe(universe_key, u)
+                else:
+                    u = mda.Universe(cached_universe._topology, trajectory_arg)
+        else:
+            u = mda.Universe(cached_universe._topology, trajectory_arg)
+    except ImportError:
+        u = mda.Universe(str(topology_path), trajectory_arg)
     # NOTE: no whole-system ``mda_unwrap`` transformation.  It make-wholes ALL ~1 M
     # atoms (incl. solvent) on EVERY frame seek — ~180 s/frame for a solvated origami,
     # the dominant cost of the flex map / trajectory.  It is redundant here: both
@@ -108,7 +172,12 @@ def _build_md_nadoc_ctx(
 
     # Equilibrium P-atom reference + rigid mask for the Kabsch alignment (shared with
     # the live-display ws handler; handles crossover extra-base "__xb__" inserts).
-    eq_positions, eq_valid, rigid_mask = md_rigid_reference(model, p_order)
+    if p_reference is not None:
+        eq_positions, eq_valid, rigid_mask = md_rigid_reference_from_map(
+            p_reference, p_order
+        )
+    else:
+        eq_positions, eq_valid, rigid_mask = md_rigid_reference(model, p_order)
     # snap_mask = rigid dsDNA PLUS crossover extra-base (__xb__) + extension (__ext_) inserts:
     # the atoms that get the design-eq nearest-image PBC snap so a strand-boundary reset in the
     # sequential unwrap can't strand one a full box away (the "few bases wrapped" bug — visible on
@@ -126,29 +195,48 @@ def _build_md_nadoc_ctx(
 
     n_frames = len(u.trajectory)
     beads_0 = _extract_universe(u, 0, p_order)
-    T = centroid_offset(beads_0, design)
-
-    dna_p_sel = u.select_atoms("name P and resname " + " ".join(_GRO_DNA_RESNAMES))
-    c1p_list: list[int] = []
-    purine_ring = {"N9", "C8", "N7", "C5", "C6", "N1", "C2", "N3", "C4"}
-    pyrimidine_ring = {"N1", "C2", "N3", "C4", "C5", "C6"}
-    base_ring_idx: list[np.ndarray] = []
-    for p_atom in dna_p_sel:
-        residue_atoms = p_atom.residue.atoms
-        c1p_atoms = residue_atoms.select_atoms("name C1'")
-        c1p_list.append(int(c1p_atoms[0].index) if len(c1p_atoms) > 0 else -1)
-        ring_names = (
-            purine_ring
-            if str(p_atom.resname) in {"DA", "DG", "ADE", "GUA"}
-            else pyrimidine_ring
+    if p_reference is not None:
+        bead_pts = []
+        ref_pts = []
+        for bead in beads_0:
+            key = (bead.helix_id, bead.bp_index, bead.direction)
+            ref_pos = p_reference.get(key)
+            if ref_pos is not None:
+                bead_pts.append(bead.pos)
+                ref_pts.append(ref_pos)
+        T = (
+            np.mean(ref_pts, axis=0) - np.mean(bead_pts, axis=0)
+            if bead_pts
+            else np.zeros(3)
         )
-        base_ring_idx.append(
-            np.asarray(
+    else:
+        from backend.core.atomistic_to_nadoc import centroid_offset
+
+        T = centroid_offset(beads_0, design)
+
+    try:
+        from backend.api.ws import _cached_dna_site_indices
+
+        (dna_p_indices, c1p_idx, base_ring_idx), _ = _cached_dna_site_indices(
+            u, topology_path, _GRO_DNA_RESNAMES
+        )
+        dna_p_sel = u.atoms[dna_p_indices]
+    except ImportError:
+        dna_p_sel = u.select_atoms("name P and resname " + " ".join(_GRO_DNA_RESNAMES))
+        c1p_list: list[int] = []
+        purine_ring = {"N9", "C8", "N7", "C5", "C6", "N1", "C2", "N3", "C4"}
+        pyrimidine_ring = {"N1", "C2", "N3", "C4", "C5", "C6"}
+        base_ring_idx: list[np.ndarray] = []
+        for p_atom in dna_p_sel:
+            residue_atoms = p_atom.residue.atoms
+            c1p_atoms = residue_atoms.select_atoms("name C1'")
+            c1p_list.append(int(c1p_atoms[0].index) if len(c1p_atoms) > 0 else -1)
+            ring_names = purine_ring if str(p_atom.resname) in {"DA", "DG", "ADE", "GUA"} else pyrimidine_ring
+            base_ring_idx.append(np.asarray(
                 [int(atom.index) for atom in residue_atoms if str(atom.name) in ring_names],
                 dtype=np.int64,
-            )
-        )
-    c1p_idx = np.array(c1p_list, dtype=np.int64)
+            ))
+        c1p_idx = np.array(c1p_list, dtype=np.int64)
 
     heavy_idx = None
     atom_meta = None
@@ -227,6 +315,7 @@ def _build_md_nadoc_ctx(
     return {
         "universe": u,
         "p_order": p_order,
+        "dna_p_idx": dna_p_sel.indices,
         "n_frames": n_frames,
         "centroid_T": T,
         "eq_positions": eq_positions,
@@ -429,8 +518,7 @@ def _extract_md_nadoc_frame(
     eq_centroid = ctx["eq_centroid"]
 
     u.trajectory[frame_idx]
-    dna_p = u.select_atoms("name P and resname " + " ".join(_GRO_DNA_RESNAMES))
-    p_raw = dna_p.positions / 10.0
+    p_raw = u.atoms[ctx["dna_p_idx"]].positions / 10.0
     dims = u.dimensions
 
     if dims is not None and dims[0] > 0:
@@ -1440,7 +1528,9 @@ def md_metric_series(
     analytic_reference,
     *,
     n_slices: int = 0,
+    max_frames: int | None = 64,
     on_frame=None,
+    on_stage=None,
 ) -> dict:
     """SINGLE-PASS per-frame twist, curvature AND base-pairing over a NAMD run — the
     MD analogue of :func:`oxdna_health.production_metric_series`, and the compute behind
@@ -1473,6 +1563,8 @@ def md_metric_series(
         twist_series_stats,
     )
 
+    if on_stage is not None:
+        on_stage("Preparing topology and trajectory")
     seg_paths = [s[2] for s in segments]
     ctx = _build_md_nadoc_ctx(topology_path, seg_paths, coordinate_path, design)
     p_order = ctx["p_order"]
@@ -1490,49 +1582,71 @@ def md_metric_series(
     rev_idx = {(k[0], k[1]): i for i, k in enumerate(keys) if k[2] == "REVERSE"}
     designed = sorted(set(fwd_idx) & set(rev_idx))
     n_designed = len(designed)
+    fwd_arr = np.asarray([fwd_idx[k] for k in designed], dtype=np.int64)
+    rev_arr = np.asarray([rev_idx[k] for k in designed], dtype=np.int64)
+
+    # Resolve the immutable dsDNA core mask once. The prior loop rebuilt every
+    # nucleotide dict plus the reference-key set for every trajectory frame.
+    ref_cols = {
+        (p["helix_id"], int(p["bp_index"]))
+        for p in analytic_reference
+        if isinstance(p.get("bp_index"), int)
+    }
+    core_idx = np.asarray(
+        [
+            i for i, k in enumerate(keys)
+            if isinstance(k[1], int) and (k[0], k[1]) in ref_cols
+        ],
+        dtype=np.int64,
+    )
+    core_positions = [
+        {
+            "helix_id": keys[i][0],
+            "bp_index": keys[i][1],
+            "direction": keys[i][2],
+            "backbone_position": np.zeros(3),
+        }
+        for i in core_idx
+    ]
 
     twist_pf: list[float] = []
     curv_pf: list[float] = []
     bp_pf: list[float] = []
-    acc: dict[tuple, list] = {}  # key → [bb xyz, …] for the mean structure
-    formed: dict[tuple, int] = {}  # (helix,bp) → frames the pair was within cutoff
-    total_pair: dict[tuple, int] = {}  # (helix,bp) → frames the pair was measured
+    # Streaming means replace O(frames × nucleotides) retained coordinate arrays.
+    position_sum = np.zeros((n_keys, 3), dtype=np.float64)
+    formed_counts = np.zeros(n_designed, dtype=np.int64)
     n_frames = 0
-    for idx in range(n):
+    if max_frames is not None and max_frames > 0 and n > max_frames:
+        frame_indices = np.unique(
+            np.linspace(0, n - 1, max_frames, dtype=np.int64)
+        )
+    else:
+        frame_indices = np.arange(n, dtype=np.int64)
+    if on_stage is not None:
+        on_stage("Measuring sampled frames")
+    for idx in frame_indices:
         p_nm, _normals, c1p_nm = _extract_md_nadoc_frame(ctx, idx, with_c1p=True)
         if p_nm is None or len(p_nm) != n_keys:
             continue
-        frame_positions = []
-        for i, key in enumerate(keys):
-            bb = p_nm[i]
-            frame_positions.append(
-                {
-                    "helix_id": key[0],
-                    "bp_index": key[1],
-                    "direction": key[2],
-                    "backbone_position": bb,
-                }
-            )
-            acc.setdefault(key, []).append(bb)
-        core = _filter_to_reference_core(frame_positions, analytic_reference)
+        position_sum += p_nm
+        for p, i in zip(core_positions, core_idx):
+            p["backbone_position"] = p_nm[i]
         try:
             twist_pf.append(
-                measure_bundle_twist(core, n_slices=n_slices) - analytic_twist
+                measure_bundle_twist(core_positions, n_slices=n_slices) - analytic_twist
             )
             curv_pf.append(
-                measure_bundle_curvature(core, n_slices=n_slices) - analytic_curv
+                measure_bundle_curvature(core_positions, n_slices=n_slices) - analytic_curv
             )
         except ValueError:
             continue  # degenerate frame (too few helices) — skip
         if c1p_nm is not None and designed:
-            n_formed = 0
-            for hb in designed:
-                d = float(np.linalg.norm(c1p_nm[fwd_idx[hb]] - c1p_nm[rev_idx[hb]]))
-                total_pair[hb] = total_pair.get(hb, 0) + 1
-                if d <= MD_BP_CUTOFF_NM:
-                    formed[hb] = formed.get(hb, 0) + 1
-                    n_formed += 1
-            bp_pf.append(n_formed / len(designed))
+            paired = (
+                np.linalg.norm(c1p_nm[fwd_arr] - c1p_nm[rev_arr], axis=1)
+                <= MD_BP_CUTOFF_NM
+            )
+            formed_counts += paired
+            bp_pf.append(float(np.mean(paired)))
         else:
             bp_pf.append(0.0)
         n_frames += 1
@@ -1542,14 +1656,15 @@ def md_metric_series(
     if n_frames == 0 or not twist_pf:
         return {"ready": False, "n_frames": 0}
 
+    mean_xyz = position_sum / n_frames
     mean_positions = [
         {
             "helix_id": k[0],
             "bp_index": k[1],
             "direction": k[2],
-            "backbone_position": np.mean(v, axis=0),
+            "backbone_position": mean_xyz[i],
         }
-        for k, v in acc.items()
+        for i, k in enumerate(keys)
     ]
     mean_core = _filter_to_reference_core(mean_positions, analytic_reference)
     twist_sp = differential_profile(
@@ -1560,12 +1675,16 @@ def md_metric_series(
         measure_bundle_curvature_profile(mean_core, n_slices=n_slices),
         measure_bundle_curvature_profile(analytic_reference, n_slices=n_slices),
     )
-    pair_frac = {k: formed.get(k, 0) / total_pair[k] for k in total_pair}
+    pair_frac = {
+        k: float(formed_counts[i] / n_frames) for i, k in enumerate(designed)
+    }
     bp_sp = base_pairing_spatial_profile(pair_frac, mean_positions, n_slices=n_slices)
 
     return {
         "ready": True,
         "n_frames": n_frames,
+        "n_frames_raw": n,
+        "sampling": "uniform" if n_frames < n else "all",
         "twist": {
             "temporal": {
                 "per_frame": [round(x, 3) for x in twist_pf],

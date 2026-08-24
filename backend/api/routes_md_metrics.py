@@ -41,6 +41,7 @@ _LOCK = threading.Lock()
 class MdMetricsStartRequest(BaseModel):
     scope: str = "latest"  # "latest" (this job only) | "chain" (whole refit lineage)
     n_slices: int = 0  # 0 => auto (~1-turn slabs), matching the measure defaults
+    max_frames: int = 64  # interactive uniform sample; short trajectories stay exact
 
 
 def _set(run_id: str, **fields) -> None:
@@ -148,11 +149,18 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
             _set(run_id, state="done", result={"ready": False, "reason": reason})
             return
 
+        raw_total = 0
         total = 0
-        for _j, (_psf, _ref, segments, _d) in inputs:
-            total += count_md_frames(segments)
+        per_job_limits: dict[str, int] = {}
+        for j, (_psf, _ref, segments, _d) in inputs:
+            raw = count_md_frames(segments)
+            raw_total += raw
+            limit = min(raw, max(1, req.max_frames))
+            per_job_limits[j.job_id] = limit
+            total += limit
         _set(
-            run_id, frames_total=max(1, total), frames_done=0, progress=0.0, eta_s=None
+            run_id, frames_total=max(1, total), frames_done=0, progress=0.0,
+            eta_s=None, phase="Preparing topology and trajectory"
         )
 
         started = time.time()
@@ -186,7 +194,9 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
                 design,
                 analytic,
                 n_slices=req.n_slices,
+                max_frames=per_job_limits[j.job_id],
                 on_frame=_tick,
+                on_stage=lambda phase: _set(run_id, phase=phase),
             )
             if not res.get("ready"):
                 continue
@@ -225,6 +235,9 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
             "ready": True,
             "scope": req.scope,
             "jobs": [j.job_id for j, _ in inputs],
+            "frames_raw": raw_total,
+            "frames_sampled": len(twist_pf),
+            "sampling": "uniform" if len(twist_pf) < raw_total else "all",
             "twist": {
                 "temporal": {"per_frame": twist_pf, "boundaries": boundaries},
                 "spatial": [
