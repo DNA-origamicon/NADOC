@@ -1461,6 +1461,25 @@ function _buildExtrusionBoxes(design, helixAxes = null, curveTolNm = 0, opts = n
   // build-time dimensions. Axial coord of a global bp index is bp·rise.
   const dsBpRange = opts?.dsBpRange ?? null
 
+  // A saved design can retain only the tail of its build history (snapshot
+  // compaction, import, or an older writer).  In that case the presence of one
+  // extrusion record is not evidence that the log describes the whole part.
+  // Refuse the history path when it covers less than 90% of the actual dsDNA
+  // helices; the caller will reconstruct from the current helix axes instead.
+  // This also avoids interpreting stale absolute lattice cells as a complete,
+  // displaced part (VoltronCoreArm retained only its final 2x3 continuation).
+  if (dsBpRange?.size) {
+    const covered = new Set()
+    for (const e of fl) {
+      if (!_EXTRUSION_OPS.has(e.op_kind)) continue
+      for (const cell of e.params?.cells ?? []) {
+        const hid = cellToHelix.get(`${cell[0]},${cell[1]}`)
+        if (hid && dsBpRange.has(hid)) covered.add(hid)
+      }
+    }
+    if (covered.size / dsBpRange.size < 0.9) return null
+  }
+
   // Emit one box geometry record. `clusterIdx` (subset index, -1 = none) is only
   // meaningful in cluster-aware mode.
   const pushBox = (geos, m, wCol, wRow, cCol, cRow, extCenter, axialLen, clusterIdx) => {
@@ -3514,7 +3533,7 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
       // hull lines up with the cylinder rep (back-porch ends, staggered starts).
       const _dsBpRange = _dsBpRangeByHelix(store.getState().currentGeometry)
       const fl = _buildExtrusionBoxes(design, helixAxes, _hullCurveTolNm,
-        _splitClusters.length ? { clusters: _splitClusters, keyByCluster: true, dsBpRange: _dsBpRange } : null)
+        { clusters: _splitClusters, keyByCluster: _splitClusters.length > 0, dsBpRange: _dsBpRange })
       if (fl instanceof Map) {
         for (const [key, grp] of fl) { scene.add(grp); _hullReprMeshes.set(key, grp) }
         _hullDone = true
@@ -3526,10 +3545,10 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
         if (grp) { scene.add(grp); _hullReprMeshes.set('__extrusions__', grp) }
         _hullDone = true
       }
-      // else: fall through to the per-cluster loop.
+      // else: fall through to the current-geometry scan below.
     }
 
-    if (!_hullDone && design.cluster_transforms?.length && helixAxes) {
+    if (!_hullDone && helixAxes) {
       // Per-cluster dsDNA base-pair fraction, used to drop clusters too small to
       // be worth a prism (and to label them in debug mode).
       const fractionOf = (cluster) => {
@@ -3538,10 +3557,22 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
         for (const hid of cluster.helix_ids) bp += (helixBp.get(hid) ?? 0)
         return bp / totalBp
       }
+      const dsHelices = new Set(helixBp.keys())
+      const clusteredHelices = new Set()
+      for (const cluster of _renderClusters) {
+        for (const hid of cluster.helix_ids ?? []) if (dsHelices.has(hid)) clusteredHelices.add(hid)
+      }
+      const clustersComplete = dsHelices.size === 0 || clusteredHelices.size / dsHelices.size >= 0.9
+      // Partial/stale cluster metadata must not make the rest of the part
+      // disappear.  A synthetic whole-part cluster scans the authoritative
+      // current axes, which already include committed cluster transforms.
+      const clustersToRender = design.cluster_transforms?.length && clustersComplete
+        ? _renderClusters
+        : [{ id: '__current_geometry__', name: design.metadata?.name || 'Part', helix_ids: [...dsHelices] }]
       const ctx = { helixBp, spacing: _spacing, latticeType: design.lattice_type, scanTickBp: _hullScanTickBp, scanAxes: _scanAxes }
 
       let colorIdx = 0
-      _renderClusters.forEach((cluster) => {
+      clustersToRender.forEach((cluster) => {
         const frac     = fractionOf(cluster)
         const excluded = frac < _hullMinSizeFraction
         // Normal mode: skip small clusters. Debug mode: still build them, faint.

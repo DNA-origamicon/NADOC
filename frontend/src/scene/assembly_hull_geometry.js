@@ -109,6 +109,15 @@ export function _hullGeoForSource(design, nucleotides, helixAxes) {
   const allClusters = design.cluster_transforms ?? []
   const finer = allClusters.filter(c => !isWholePart(c))
   const renderClusters = finer.length ? finer : allClusters
+  const dsHelices = new Set(helixBp.keys())
+  const clusteredHelices = new Set()
+  for (const cluster of renderClusters) {
+    for (const hid of cluster.helix_ids ?? []) if (dsHelices.has(hid)) clusteredHelices.add(hid)
+  }
+  const clustersComplete = dsHelices.size === 0 || clusteredHelices.size / dsHelices.size >= 0.9
+  const clustersToRender = allClusters.length && clustersComplete
+    ? renderClusters
+    : [{ id: '__current_geometry__', name: design.metadata?.name || 'Part', helix_ids: [...dsHelices] }]
   const fractionOf = (c) => {
     if (totalBp <= 0) return 1
     let bp = 0
@@ -148,8 +157,10 @@ export function _hullGeoForSource(design, nucleotides, helixAxes) {
     return Math.abs(T[0]) > 1e-9 || Math.abs(T[1]) > 1e-9 || Math.abs(T[2]) > 1e-9 ||
            Math.abs(R[0]) > 1e-9 || Math.abs(R[1]) > 1e-9 || Math.abs(R[2]) > 1e-9 || Math.abs(R[3] - 1) > 1e-9
   }
-  const hullOpts = allClusters.some(clusterMoved)
-    ? { clusters: allClusters, dsBpRange: dsBpRangeByHelix(nucleotides) } : null
+  const hullOpts = {
+    clusters: allClusters.some(clusterMoved) ? allClusters : [],
+    dsBpRange: dsBpRangeByHelix(nucleotides),
+  }
   let grp = buildExtrusionBoxes(design, helixAxes ?? null, HULL_CURVE_TOL_NM, hullOpts)  // 1. extrusion boxes
   if (!grp && !allClusters.length) {                          // 2. scan (no clusters)
     grp = scanExtrusionGroup(
@@ -159,12 +170,12 @@ export function _hullGeoForSource(design, nucleotides, helixAxes) {
   }
   if (grp) {
     collect(grp)
-  } else if (allClusters.length && helixAxes) {
+  } else if (helixAxes) {
     // 3. Per-cluster dsDNA cross-section scan — mirror _rebuildHullRepr (NOT
     //    convex prisms): drop clusters under HULL_MIN_SIZE_FRACTION of dsDNA bp,
     //    scan each remaining cluster on its own axis.
     const tmp = new THREE.Group()
-    for (const cluster of renderClusters) {
+    for (const cluster of clustersToRender) {
       if (fractionOf(cluster) < HULL_MIN_SIZE_FRACTION) continue
       const cg = scanExtrusionGroup(
         cluster.helix_ids, scanAxes, helixBp, design.lattice_type, cluster.name, null,
