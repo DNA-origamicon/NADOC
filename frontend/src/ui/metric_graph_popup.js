@@ -61,6 +61,9 @@ function _build() {
 export function metricSpecs(metric, result, scope) {
   const meta = METRIC_META[metric]
   const bp = metric === 'base_pairing'
+  const sampleNote = result?.sampling === 'uniform'
+    ? ` — ${result.frames_sampled} uniformly sampled of ${result.frames_raw} frames`
+    : ''
   return {
     spatial: buildChartSpec({
       series: metricSeries(result, metric, 'spatial'), width: CANVAS_W, height: CANVAS_H,
@@ -70,7 +73,7 @@ export function metricSpecs(metric, result, scope) {
     }),
     temporal: buildChartSpec({
       series: metricSeries(result, metric, 'temporal'), width: CANVAS_W, height: CANVAS_H,
-      title: scope === 'chain' ? 'Temporal — vs sim time (jobs concatenated)' : 'Temporal — vs sim time',
+      title: (scope === 'chain' ? 'Temporal — vs sim time (jobs concatenated)' : 'Temporal — vs sim time') + sampleNote,
       xLabel: meta.temporal.xLabel, yLabel: meta.temporal.yLabel,
       zeroLine: meta.zeroLine, yMin: bp ? 0 : null, yMax: bp ? 1 : null,
     }),

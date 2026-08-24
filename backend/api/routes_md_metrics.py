@@ -155,7 +155,7 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
         for j, (_psf, _ref, segments, _d) in inputs:
             raw = count_md_frames(segments)
             raw_total += raw
-            limit = min(raw, max(1, req.max_frames))
+            limit = raw if req.max_frames <= 0 else min(raw, req.max_frames)
             per_job_limits[j.job_id] = limit
             total += limit
         _set(
@@ -165,26 +165,30 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
 
         started = time.time()
         done = {"n": 0}
+        tick_lock = threading.Lock()
 
         def _tick() -> None:
-            done["n"] += 1
-            elapsed = time.time() - started
-            frac = done["n"] / max(1, total)
-            eta = (elapsed / done["n"]) * (total - done["n"]) if done["n"] else None
-            _set(
-                run_id,
-                frames_done=done["n"],
-                progress=round(min(1.0, frac), 4),
-                eta_s=round(eta, 1) if eta is not None else None,
-            )
+            with tick_lock:
+                done["n"] += 1
+                elapsed = time.time() - started
+                frac = done["n"] / max(1, total)
+                eta = (elapsed / done["n"]) * (total - done["n"])
+                _set(
+                    run_id,
+                    frames_done=done["n"],
+                    progress=round(min(1.0, frac), 4),
+                    eta_s=round(eta, 1),
+                )
 
         # temporal series concatenate end-to-end; spatial profiles overlay one per job.
         twist_pf: list[float] = []
         curv_pf: list[float] = []
         bp_pf: list[float] = []
+        temporal_frame_indices: list[int] = []
         boundaries: list[dict] = []
         per_job: list[dict] = []
         n_designed = 0
+        raw_frame_offset = 0
         for j, (psf, ref, segments, design) in inputs:
             analytic = core_reference_geometry(design)
             res = md_metric_series(
@@ -203,9 +207,14 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
             boundaries.append(
                 {
                     "job_id": j.job_id,
-                    "start_frame": len(twist_pf),
+                    "start_frame": raw_frame_offset,
+                    "start_point": len(twist_pf),
                     "n_frames": res["n_frames"],
+                    "n_frames_raw": res.get("n_frames_raw", res["n_frames"]),
                 }
+            )
+            temporal_frame_indices.extend(
+                raw_frame_offset + int(i) for i in res.get("frame_indices", [])
             )
             twist_pf.extend(res["twist"]["temporal"]["per_frame"])
             curv_pf.extend(res["curvature"]["temporal"]["per_frame"])
@@ -219,6 +228,7 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
                     "base_pairing_spatial": res["base_pairing"]["spatial"],
                 }
             )
+            raw_frame_offset += res.get("n_frames_raw", res["n_frames"])
 
         if not per_job:
             _set(
@@ -239,14 +249,14 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
             "frames_sampled": len(twist_pf),
             "sampling": "uniform" if len(twist_pf) < raw_total else "all",
             "twist": {
-                "temporal": {"per_frame": twist_pf, "boundaries": boundaries},
+                "temporal": {"per_frame": twist_pf, "frame_indices": temporal_frame_indices, "boundaries": boundaries},
                 "spatial": [
                     {"job_id": p["job_id"], "points": p["twist_spatial"]}
                     for p in per_job
                 ],
             },
             "curvature": {
-                "temporal": {"per_frame": curv_pf, "boundaries": boundaries},
+                "temporal": {"per_frame": curv_pf, "frame_indices": temporal_frame_indices, "boundaries": boundaries},
                 "spatial": [
                     {"job_id": p["job_id"], "points": p["curvature_spatial"]}
                     for p in per_job
@@ -255,6 +265,7 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
             "base_pairing": {
                 "temporal": {
                     "per_frame": bp_pf,
+                    "frame_indices": temporal_frame_indices,
                     "boundaries": boundaries,
                     "n_designed": n_designed,
                 },

@@ -20,9 +20,81 @@ they do not rebuild atoms from the design's idealized atomistic model.
 from __future__ import annotations
 
 import json
+import os
+import struct
 from pathlib import Path
 
 import numpy as np
+
+
+class _DcdPrefixFile:
+    """Minimal NAMD DCD reader that decodes only an atom-prefix from each frame."""
+
+    def __init__(self, path, prefix_atoms: int):
+        self.path = os.fspath(path)
+        self.fd = os.open(self.path, os.O_RDONLY)
+        with open(self.path, "rb") as fh:
+            def record():
+                size = struct.unpack("<i", fh.read(4))[0]
+                payload = fh.read(size)
+                if struct.unpack("<i", fh.read(4))[0] != size:
+                    raise ValueError("invalid DCD Fortran record")
+                return payload
+
+            header = record()
+            if header[:4] != b"CORD":
+                raise ValueError("unsupported DCD header")
+            ints = struct.unpack("<20i", header[4:84])
+            self.n_frames = int(ints[0])
+            if ints[8] != 0:
+                raise ValueError("fixed-atom DCD is not supported by the prefix reader")
+            record()  # title
+            self.n_atoms = struct.unpack("<i", record())[0]
+            self.frame_start = fh.tell()
+        self.prefix_atoms = min(int(prefix_atoms), self.n_atoms)
+        self.coord_record_bytes = 8 + 4 * self.n_atoms
+        self.cell_record_bytes = 56 if ints[10] else 0
+        self.frame_bytes = self.cell_record_bytes + 3 * self.coord_record_bytes
+        expected = self.frame_start + self.n_frames * self.frame_bytes
+        if os.path.getsize(self.path) < expected:
+            raise ValueError("truncated or unsupported DCD layout")
+
+    def frame(self, index: int) -> tuple[np.ndarray, np.ndarray | None]:
+        base = self.frame_start + int(index) * self.frame_bytes
+        dims = None
+        if self.cell_record_bytes:
+            raw_cell = os.pread(self.fd, 48, base + 4)
+            cell = struct.unpack("<6d", raw_cell)
+            dims = np.asarray([cell[0], cell[2], cell[5], 90.0, 90.0, 90.0])
+        coord_base = base + self.cell_record_bytes
+        nbytes = 4 * self.prefix_atoms
+        xyz = np.empty((self.prefix_atoms, 3), dtype=np.float32)
+        for axis in range(3):
+            offset = coord_base + axis * self.coord_record_bytes + 4
+            xyz[:, axis] = np.frombuffer(os.pread(self.fd, nbytes, offset), dtype="<f4")
+        return xyz, dims
+
+    def close(self):
+        if self.fd is not None:
+            os.close(self.fd)
+            self.fd = None
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
+
+class _DcdPrefixChain:
+    def __init__(self, paths, prefix_atoms: int):
+        self.readers = [_DcdPrefixFile(path, prefix_atoms) for path in paths]
+        self.ends = np.cumsum([reader.n_frames for reader in self.readers])
+
+    def frame(self, index: int):
+        part = int(np.searchsorted(self.ends, index, side="right"))
+        start = 0 if part == 0 else int(self.ends[part - 1])
+        return self.readers[part].frame(index - start)
 
 
 def _select_p_order(u, chain_map, run_dir, coordinate_path):
@@ -52,6 +124,111 @@ def _select_p_order(u, chain_map, run_dir, coordinate_path):
             return cand, "segid"
     pdb_text = Path(coordinate_path).read_text(errors="replace")
     return build_p_pdb_order(pdb_text, chain_map), "reference-pdb"
+
+
+def _build_fast_md_metrics_ctx(topology_path, trajectory_paths, coordinate_path, design):
+    """Metrics-only context without MDAnalysis' multi-million-atom PSF topology."""
+    from backend.core.atomistic_to_nadoc import (
+        _GRO_DNA_RESNAMES,
+        build_active_design_reference,
+        build_namd_coarse_reference,
+        load_segid_chain_map,
+        md_rigid_reference_from_map,
+        md_snap_mask,
+    )
+
+    run_dir = Path(topology_path).parent
+    seg2chain = load_segid_chain_map(run_dir)
+    if not seg2chain:
+        raise ValueError("NAMD segid map unavailable")
+    try:
+        from backend.api.ws import _cached_namd_coarse_reference
+
+        (cm, _package_ref, p_reference), _ = _cached_namd_coarse_reference(
+            design,
+            coordinate_path,
+            seg2chain,
+            build_namd_coarse_reference,
+            build_active_design_reference,
+        )
+    except ImportError:
+        cm, _package_ref = build_namd_coarse_reference(
+            design, coordinate_path, seg2chain
+        )
+        p_reference = build_active_design_reference(design)
+
+    dna_names = set(_GRO_DNA_RESNAMES)
+    p_rows: list[tuple[tuple, int, tuple[str, int]]] = []
+    c1_by_residue: dict[tuple[str, int], int] = {}
+    with Path(topology_path).open("r", errors="replace") as fh:
+        atoms_left = 0
+        for line in fh:
+            if atoms_left == 0:
+                if "!NATOM" in line:
+                    atoms_left = int(line.split()[0])
+                continue
+            fields = line.split()
+            atoms_left -= 1
+            if len(fields) < 6 or fields[3] not in dna_names:
+                if atoms_left == 0:
+                    break
+                continue
+            serial, segid, resid, atom_name = int(fields[0]), fields[1], int(fields[2]), fields[4]
+            residue = (segid, resid)
+            if atom_name == "C1'":
+                c1_by_residue[residue] = serial - 1
+            elif atom_name == "P":
+                chain = seg2chain.get(segid)
+                key = cm.get((chain, resid)) if chain is not None else None
+                if key is not None:
+                    p_rows.append((tuple(key), serial - 1, residue))
+            if atoms_left == 0:
+                break
+    if not p_rows:
+        raise ValueError("no mapped DNA phosphate atoms in PSF")
+    p_order = [row[0] for row in p_rows]
+    dna_p_idx = np.asarray([row[1] for row in p_rows], dtype=np.int64)
+    c1p_idx = np.asarray(
+        [c1_by_residue.get(row[2], -1) for row in p_rows], dtype=np.int64
+    )
+    if np.any(c1p_idx < 0):
+        raise ValueError("PSF DNA P/C1' mapping is incomplete")
+    prefix = _DcdPrefixChain(
+        [str(p) for p in trajectory_paths],
+        int(max(dna_p_idx.max(), c1p_idx.max())) + 1,
+    )
+    eq_positions, eq_valid, rigid_mask = md_rigid_reference_from_map(
+        p_reference, p_order
+    )
+    snap_mask = md_snap_mask(p_order, eq_valid, rigid_mask)
+    eq_centroid = (
+        eq_positions[rigid_mask].mean(axis=0)
+        if int(rigid_mask.sum()) >= 3
+        else np.zeros(3)
+    )
+    eq_centered = eq_positions - eq_centroid if int(rigid_mask.sum()) >= 3 else None
+    if eq_centered is not None:
+        eq_centered[~rigid_mask] = 0.0
+    return {
+        "universe": None,
+        "p_order": p_order,
+        "dna_p_idx": dna_p_idx,
+        "n_frames": int(prefix.ends[-1]),
+        "centroid_T": np.zeros(3),
+        "eq_positions": eq_positions,
+        "eq_valid": eq_valid,
+        "rigid_mask": rigid_mask,
+        "snap_mask": snap_mask,
+        "eq_centroid": eq_centroid,
+        "eq_centered": eq_centered,
+        "c1p_idx": c1p_idx,
+        "base_ring_idx": [],
+        "dcd_prefix": prefix,
+        "R_prev": None,
+        "prev_frame_idx": -999,
+        "n_dna_p": len(p_order),
+        "p_order_source": "psf-stream",
+    }
 
 
 def _build_md_nadoc_ctx(
@@ -238,6 +415,17 @@ def _build_md_nadoc_ctx(
             ))
         c1p_idx = np.array(c1p_list, dtype=np.int64)
 
+    dcd_prefix = None
+    if not with_atoms and paths and all(str(p).lower().endswith(".dcd") for p in paths):
+        required = np.concatenate(
+            [dna_p_sel.indices, c1p_idx[c1p_idx >= 0]]
+        )
+        if len(required):
+            try:
+                dcd_prefix = _DcdPrefixChain(paths, int(required.max()) + 1)
+            except (OSError, ValueError, struct.error):
+                dcd_prefix = None
+
     heavy_idx = None
     atom_meta = None
     direct_heavy_layout = None
@@ -326,6 +514,7 @@ def _build_md_nadoc_ctx(
         "eq_centered": eq_centered,
         "c1p_idx": c1p_idx,
         "base_ring_idx": base_ring_idx,
+        "dcd_prefix": dcd_prefix,
         "heavy_idx": heavy_idx,
         "atom_meta": atom_meta,
         "direct_heavy_layout": direct_heavy_layout,
@@ -517,9 +706,15 @@ def _extract_md_nadoc_frame(
     eq_centered = ctx["eq_centered"]
     eq_centroid = ctx["eq_centroid"]
 
-    u.trajectory[frame_idx]
-    p_raw = u.atoms[ctx["dna_p_idx"]].positions / 10.0
-    dims = u.dimensions
+    prefix_xyz = None
+    prefix_reader = ctx.get("dcd_prefix")
+    if prefix_reader is not None and not with_base_centers and not with_termini:
+        prefix_xyz, dims = prefix_reader.frame(frame_idx)
+        p_raw = prefix_xyz[ctx["dna_p_idx"]] / 10.0
+    else:
+        u.trajectory[frame_idx]
+        p_raw = u.atoms[ctx["dna_p_idx"]].positions / 10.0
+        dims = u.dimensions
 
     if dims is not None and dims[0] > 0:
         box_nm = dims[:3] / 10.0
@@ -616,7 +811,11 @@ def _extract_md_nadoc_frame(
     normals = None
     c1p_nm = None
     if c1p_idx is not None and np.all(c1p_idx >= 0) and len(c1p_idx) == len(p_order):
-        c1p_raw = u.atoms[c1p_idx].positions / 10.0
+        c1p_raw = (
+            prefix_xyz[c1p_idx] / 10.0
+            if prefix_xyz is not None
+            else u.atoms[c1p_idx].positions / 10.0
+        )
         dn = c1p_raw - p_raw
         # Minimum-image the intra-nucleotide P→C1' vector: without the (removed)
         # whole-system unwrap a residue straddling a periodic boundary would give a
@@ -1529,6 +1728,7 @@ def md_metric_series(
     *,
     n_slices: int = 0,
     max_frames: int | None = 64,
+    workers: int = 1,
     on_frame=None,
     on_stage=None,
 ) -> dict:
@@ -1556,9 +1756,8 @@ def md_metric_series(
         _filter_to_reference_core,
         base_pairing_spatial_profile,
         differential_profile,
-        measure_bundle_curvature,
         measure_bundle_curvature_profile,
-        measure_bundle_twist,
+        measure_bundle_twist_curvature,
         measure_bundle_twist_profile,
         twist_series_stats,
     )
@@ -1566,7 +1765,14 @@ def md_metric_series(
     if on_stage is not None:
         on_stage("Preparing topology and trajectory")
     seg_paths = [s[2] for s in segments]
-    ctx = _build_md_nadoc_ctx(topology_path, seg_paths, coordinate_path, design)
+    try:
+        ctx = _build_fast_md_metrics_ctx(
+            topology_path, seg_paths, coordinate_path, design
+        )
+        fast_metrics_ctx = True
+    except (OSError, ValueError, struct.error):
+        ctx = _build_md_nadoc_ctx(topology_path, seg_paths, coordinate_path, design)
+        fast_metrics_ctx = False
     p_order = ctx["p_order"]
     n = ctx["n_frames"]
     if n <= 0 or not p_order:
@@ -1574,8 +1780,9 @@ def md_metric_series(
     keys = [(k[0], k[1], k[2]) for k in p_order]
     n_keys = len(keys)
 
-    analytic_twist = measure_bundle_twist(analytic_reference, n_slices=n_slices)
-    analytic_curv = measure_bundle_curvature(analytic_reference, n_slices=n_slices)
+    analytic_twist, analytic_curv = measure_bundle_twist_curvature(
+        analytic_reference, n_slices=n_slices
+    )
 
     # FORWARD/REVERSE index of each designed (helix, bp) column, for the C1' pairing test.
     fwd_idx = {(k[0], k[1]): i for i, k in enumerate(keys) if k[2] == "FORWARD"}
@@ -1599,15 +1806,20 @@ def md_metric_series(
         ],
         dtype=np.int64,
     )
-    core_positions = [
-        {
-            "helix_id": keys[i][0],
-            "bp_index": keys[i][1],
-            "direction": keys[i][2],
-            "backbone_position": np.zeros(3),
-        }
-        for i in core_idx
-    ]
+    core_bp_keys = [(keys[i][0], keys[i][1]) for i in core_idx]
+    bp_group_at: dict[tuple, int] = {}
+    core_group_idx = np.empty(len(core_bp_keys), dtype=np.int64)
+    group_helices: list[object] = []
+    for i, bp_key in enumerate(core_bp_keys):
+        group = bp_group_at.get(bp_key)
+        if group is None:
+            group = len(group_helices)
+            bp_group_at[bp_key] = group
+            group_helices.append(bp_key[0])
+        core_group_idx[i] = group
+    _helix_values, group_helix_idx = np.unique(
+        np.asarray(group_helices, dtype=object), return_inverse=True
+    )
 
     twist_pf: list[float] = []
     curv_pf: list[float] = []
@@ -1616,42 +1828,87 @@ def md_metric_series(
     position_sum = np.zeros((n_keys, 3), dtype=np.float64)
     formed_counts = np.zeros(n_designed, dtype=np.int64)
     n_frames = 0
+    measured_frame_indices: list[int] = []
     if max_frames is not None and max_frames > 0 and n > max_frames:
         frame_indices = np.unique(
             np.linspace(0, n - 1, max_frames, dtype=np.int64)
         )
     else:
         frame_indices = np.arange(n, dtype=np.int64)
+    def _measure_chunk(local_ctx, indices):
+        records = []
+        local_sum = np.zeros((n_keys, 3), dtype=np.float64)
+        local_formed = np.zeros(n_designed, dtype=np.int64)
+        for idx in indices:
+            p_nm, _normals, c1p_nm = _extract_md_nadoc_frame(
+                local_ctx, int(idx), with_c1p=True
+            )
+            if p_nm is None or len(p_nm) != n_keys:
+                continue
+            try:
+                frame_twist, frame_curv = measure_bundle_twist_curvature(
+                    p_nm[core_idx],
+                    n_slices=n_slices,
+                    group_index=core_group_idx,
+                    group_helix_index=group_helix_idx,
+                )
+            except ValueError:
+                continue
+            if c1p_nm is not None and designed:
+                paired = (
+                    np.linalg.norm(c1p_nm[fwd_arr] - c1p_nm[rev_arr], axis=1)
+                    <= MD_BP_CUTOFF_NM
+                )
+                local_formed += paired
+                bp_value = float(np.mean(paired))
+            else:
+                bp_value = 0.0
+            local_sum += p_nm
+            records.append(
+                (int(idx), frame_twist - analytic_twist, frame_curv - analytic_curv, bp_value)
+            )
+            if on_frame is not None:
+                on_frame()
+        return records, local_sum, local_formed
+
     if on_stage is not None:
         on_stage("Measuring sampled frames")
-    for idx in frame_indices:
-        p_nm, _normals, c1p_nm = _extract_md_nadoc_frame(ctx, idx, with_c1p=True)
-        if p_nm is None or len(p_nm) != n_keys:
-            continue
-        position_sum += p_nm
-        for p, i in zip(core_positions, core_idx):
-            p["backbone_position"] = p_nm[i]
-        try:
-            twist_pf.append(
-                measure_bundle_twist(core_positions, n_slices=n_slices) - analytic_twist
+    worker_count = min(max(1, int(workers)), len(frame_indices))
+    # Long/exact analyses use independent DCD cursors over contiguous frame chunks.
+    # MDAnalysis' parsed topology is shared from the process cache, so workers do not
+    # repeat the expensive 433 MB PSF parse. Short interactive samples stay serial to
+    # avoid reader/context startup overhead.
+    if worker_count > 1 and len(frame_indices) >= 128:
+        from concurrent.futures import ThreadPoolExecutor
+
+        chunks = [chunk for chunk in np.array_split(frame_indices, worker_count) if len(chunk)]
+
+        def _worker(chunk):
+            local_ctx = (
+                _build_fast_md_metrics_ctx(
+                    topology_path, seg_paths, coordinate_path, design
+                )
+                if fast_metrics_ctx
+                else _build_md_nadoc_ctx(
+                    topology_path, seg_paths, coordinate_path, design
+                )
             )
-            curv_pf.append(
-                measure_bundle_curvature(core_positions, n_slices=n_slices) - analytic_curv
-            )
-        except ValueError:
-            continue  # degenerate frame (too few helices) — skip
-        if c1p_nm is not None and designed:
-            paired = (
-                np.linalg.norm(c1p_nm[fwd_arr] - c1p_nm[rev_arr], axis=1)
-                <= MD_BP_CUTOFF_NM
-            )
-            formed_counts += paired
-            bp_pf.append(float(np.mean(paired)))
-        else:
-            bp_pf.append(0.0)
-        n_frames += 1
-        if on_frame is not None:
-            on_frame()
+            return _measure_chunk(local_ctx, chunk)
+
+        with ThreadPoolExecutor(max_workers=len(chunks)) as pool:
+            chunk_results = list(pool.map(_worker, chunks))
+    else:
+        chunk_results = [_measure_chunk(ctx, frame_indices)]
+
+    for records, local_sum, local_formed in chunk_results:
+        position_sum += local_sum
+        formed_counts += local_formed
+        for idx, twist_value, curv_value, bp_value in records:
+            measured_frame_indices.append(idx)
+            twist_pf.append(twist_value)
+            curv_pf.append(curv_value)
+            bp_pf.append(bp_value)
+            n_frames += 1
 
     if n_frames == 0 or not twist_pf:
         return {"ready": False, "n_frames": 0}
@@ -1684,6 +1941,7 @@ def md_metric_series(
         "ready": True,
         "n_frames": n_frames,
         "n_frames_raw": n,
+        "frame_indices": measured_frame_indices,
         "sampling": "uniform" if n_frames < n else "all",
         "twist": {
             "temporal": {

@@ -1034,6 +1034,17 @@ def reassemble_to_posed_reference(
     # The per-run shift is the MEDIAN of its atoms' individual shifts, so a few atoms whose
     # reference is off by >L/2 are outvoted instead of escaping.
     runs = _strand_runs(p_box, box, strand_ids)
+    run_starts = np.fromiter((s for s, _e in runs), dtype=np.int64)
+    run_lengths = np.fromiter((e - s for s, e in runs), dtype=np.int64)
+    run_group = np.repeat(np.arange(len(runs), dtype=np.int64), run_lengths)
+
+    def _run_medians(values: np.ndarray) -> np.ndarray:
+        """Exact median per contiguous strand run without Python/NumPy call loops."""
+        order = np.lexsort((values, run_group))
+        ordered = values[order]
+        lo = run_starts + (run_lengths - 1) // 2
+        hi = run_starts + run_lengths // 2
+        return (ordered[lo] + ordered[hi]) * 0.5
 
     def _whole_strand_candidate(ref_box: np.ndarray) -> np.ndarray:
         dc = p_box - ref_box
@@ -1041,10 +1052,7 @@ def reassemble_to_posed_reference(
         for k in range(3):
             if box[k] > 0:
                 shift[:, k] = np.round(dc[:, k] / box[k]) * box[k]
-        for s, e in runs:
-            for k in range(3):
-                if box[k] > 0:
-                    shift[s:e, k] = np.median(shift[s:e, k])
+                shift[:, k] = np.repeat(_run_medians(shift[:, k]), run_lengths)
         candidate = p_box - shift
         if snap_mask is not None:
             keep = ~np.asarray(snap_mask, dtype=bool)

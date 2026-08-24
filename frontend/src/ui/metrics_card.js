@@ -158,7 +158,11 @@ export function initMetricsCard({ idPrefix, api, getSelectedJob = null, getJobs 
       _cache[result.scope || _scope()] = result
       _setBar(row, 1)
       const n = result[metricKey]?.temporal?.per_frame?.length || 0
-      _setStatus(rows[metricKey], `Ready — ${n} frames, ${result.jobs.length} job(s). ` +
+      const sampled = result.sampling === 'uniform' && result.frames_raw > n
+      const frameText = sampled
+        ? `${n} uniformly sampled frames spanning ${result.frames_raw} total frames`
+        : `${n} frames`
+      _setStatus(rows[metricKey], `Ready — ${frameText}, ${result.jobs.length} job(s). ` +
         'All three metrics computed.', '#3fb950')
       // The single pass produced every metric — reflect that on the other rows too.
       for (const { key } of METRICS) if (key !== metricKey && _cache[_scope()]?.[key]) {

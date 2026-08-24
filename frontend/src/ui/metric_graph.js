@@ -84,7 +84,7 @@ export function buildChartSpec({
   series = [], width = 520, height = 300, title = '', xLabel = '', yLabel = '',
   zeroLine = false, yMin = null, yMax = null,
 } = {}) {
-  const pad = { l: 62, r: 16, t: title ? 30 : 14, b: 42 }
+  const pad = { l: 78, r: 18, t: title ? 38 : 18, b: 50 }
   const nonEmpty = series.filter(s => s.points && s.points.length)
   if (!nonEmpty.length) {
     return { empty: true, width, height, title, pad, series: [], xTicks: [], yTicks: [], legend: [] }
@@ -131,8 +131,9 @@ export function metricSeries(result, metric, domain) {
   const block = result[metric]
   if (domain === 'temporal') {
     const arr = block.temporal?.per_frame || []
+    const frameIndices = block.temporal?.frame_indices || []
     return arr.length ? [{ label: 'all frames', color: SERIES_COLORS[0],
-                           points: arr.map((v, i) => [i, v]) }] : []
+                           points: arr.map((v, i) => [frameIndices[i] ?? i, v]) }] : []
   }
   const jobs = block.spatial || []
   return jobs.map((jb, i) => ({
@@ -150,16 +151,18 @@ function _shortId(jobId, i) {
 export function metricCSVs(result, metric) {
   const block = result?.[metric] || {}
   const temporalRows = ['frame,value']
+  const frameIndices = block.temporal?.frame_indices || []
   const bounds = block.temporal?.boundaries || []
-  const jobAt = i => {
+  const jobAt = frame => {
     let jid = ''
-    for (const b of bounds) if (i >= b.start_frame) jid = b.job_id
+    for (const b of bounds) if (frame >= b.start_frame) jid = b.job_id
     return jid
   }
   const hasJobs = bounds.length > 1
   if (hasJobs) temporalRows[0] = 'frame,value,job_id'
   ;(block.temporal?.per_frame || []).forEach((v, i) => {
-    temporalRows.push(hasJobs ? `${i},${v},${jobAt(i)}` : `${i},${v}`)
+    const frame = frameIndices[i] ?? i
+    temporalRows.push(hasJobs ? `${frame},${v},${jobAt(frame)}` : `${frame},${v}`)
   })
   const spatialRows = ['job_id,axial_nm,value']
   ;(block.spatial || []).forEach(jb => {
@@ -180,7 +183,7 @@ export function drawChart(canvas, spec) {
   canvas.width = width; canvas.height = height
   ctx.clearRect(0, 0, width, height)
   ctx.fillStyle = _C.bg; ctx.fillRect(0, 0, width, height)
-  ctx.font = '11px var(--font-ui, sans-serif)'
+  ctx.font = '14px var(--font-ui, sans-serif)'
   ctx.textBaseline = 'middle'
 
   if (spec.empty) {
@@ -191,9 +194,9 @@ export function drawChart(canvas, spec) {
   const { plot } = spec
 
   if (spec.title) {
-    ctx.fillStyle = _C.text; ctx.textAlign = 'center'; ctx.font = '12px var(--font-ui, sans-serif)'
+    ctx.fillStyle = _C.text; ctx.textAlign = 'center'; ctx.font = '16px var(--font-ui, sans-serif)'
     ctx.fillText(spec.title, width / 2, spec.pad.t / 2)
-    ctx.font = '11px var(--font-ui, sans-serif)'
+    ctx.font = '14px var(--font-ui, sans-serif)'
   }
   // grid + y ticks
   ctx.textAlign = 'right'

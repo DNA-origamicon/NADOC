@@ -6067,6 +6067,9 @@
                     <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="radio" name="md-metrics-scope" id="md-metrics-scope-latest" checked> Latest job</label>
                     <label style="display:flex;gap:4px;align-items:center;cursor:pointer" title="Concatenate this job's whole refit lineage into one timeline (spatial profiles overlay per job)."><input type="radio" name="md-metrics-scope" id="md-metrics-scope-chain"> All refit jobs</label>
                   </div>
+                  <label style="display:flex;gap:5px;align-items:center;margin:-2px 0 8px;font-size:var(--text-xs);color:#8b949e;cursor:pointer" title="Analyze every trajectory frame. Leave off for a fast 64-point uniform preview.">
+                    <input type="checkbox" id="md-metrics-all-frames"> Analyze all frames (exact)
+                  </label>
                   <!-- Twist -->
                   <div style="margin-bottom:8px">
                     <div style="display:flex;align-items:center;gap:5px">

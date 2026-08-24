@@ -15,7 +15,13 @@ import { initMetricsCard, METRIC_META } from './metrics_card.js'
 export function initMdMetricsCard({ getSelectedJob = null, getJobs = null } = {}) {
   return initMetricsCard({
     idPrefix: 'md-metrics',
-    api: { start: startMdMetrics, poll: getMdMetricsRun },
+    api: {
+      start: (jobId, body) => startMdMetrics(jobId, {
+        ...body,
+        max_frames: document.getElementById('md-metrics-all-frames')?.checked ? 0 : 64,
+      }),
+      poll: getMdMetricsRun,
+    },
     getSelectedJob, getJobs,
   })
 }

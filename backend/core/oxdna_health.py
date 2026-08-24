@@ -1689,6 +1689,135 @@ def measure_bundle_curvature(positions, *, n_slices: int = 0) -> float:
     return total_turn / arc  # deg per nm
 
 
+def measure_bundle_twist_curvature(
+    positions,
+    *,
+    n_slices: int = 0,
+    group_index: "np.ndarray | None" = None,
+    group_helix_index: "np.ndarray | None" = None,
+) -> tuple[float, float]:
+    """Measure twist and curvature together using one vectorized bundle reduction.
+
+    This is numerically equivalent to calling :func:`measure_bundle_twist` and
+    :func:`measure_bundle_curvature` separately, but is intended for trajectory hot
+    loops.  It collapses base pairs, fits the principal axis, assigns slabs, and
+    computes slab centroids once.  ``np.add.at`` replaces thousands of tiny Python
+    ``np.mean`` calls per frame.
+    """
+    if group_index is None and not positions:
+        raise ValueError("measure_bundle_twist_curvature: empty position map")
+
+    if group_index is not None:
+        site_xyz = np.asarray(positions, dtype=float)
+        groups = np.asarray(group_index, dtype=np.int64)
+        n_groups = int(groups.max()) + 1 if len(groups) else 0
+        counts = np.bincount(groups, minlength=n_groups)
+        sums = np.column_stack(
+            [np.bincount(groups, weights=site_xyz[:, axis], minlength=n_groups) for axis in range(3)]
+        )
+        pts = sums / counts[:, None]
+        helix_idx = np.asarray(group_helix_index, dtype=np.int64)
+        helix_values = np.arange(int(helix_idx.max()) + 1)
+    else:
+        key_to_group: dict[tuple, int] = {}
+        group_sum: list[np.ndarray] = []
+        group_count: list[int] = []
+        group_helix: list[object] = []
+        for p in positions:
+            key = (p["helix_id"], int(p["bp_index"]))
+            gi = key_to_group.get(key)
+            if gi is None:
+                gi = len(group_sum)
+                key_to_group[key] = gi
+                group_sum.append(np.asarray(p["backbone_position"], dtype=float).copy())
+                group_count.append(1)
+                group_helix.append(key[0])
+            else:
+                group_sum[gi] += np.asarray(p["backbone_position"], dtype=float)
+                group_count[gi] += 1
+        pts = np.asarray(group_sum) / np.asarray(group_count, dtype=float)[:, None]
+        helix_values, helix_idx = np.unique(
+            np.asarray(group_helix, dtype=object), return_inverse=True
+        )
+    if len(helix_values) < 2:
+        raise ValueError(
+            "measure_bundle_twist_curvature: need >= 2 helices to define a cross-section"
+        )
+
+    C, L, e1, e2 = _bundle_axis_frame(pts)
+    centered = pts - C
+    t = centered @ L
+    span = float(t.max() - t.min())
+    if span < 1e-6:
+        raise ValueError("measure_bundle_twist_curvature: zero axial span")
+    if n_slices <= 0:
+        n_slices = max(3, int(round(span / 3.5)))
+    edges = np.linspace(t.min(), t.max(), n_slices + 1)
+    slab = np.clip(np.digitize(t, edges[1:-1]), 0, n_slices - 1)
+
+    # Curvature: all 3-D points reduced to one centroid per occupied slab.
+    slab_count = np.bincount(slab, minlength=n_slices)
+    slab_xyz = np.column_stack(
+        [np.bincount(slab, weights=pts[:, axis], minlength=n_slices) for axis in range(3)]
+    )
+    occupied = slab_count > 0
+    centroids = slab_xyz[occupied] / slab_count[occupied, None]
+    curvature = 0.0
+    if len(centroids) >= 3:
+        segs = np.diff(centroids, axis=0)
+        seg_len = np.linalg.norm(segs, axis=1)
+        arc = float(seg_len.sum())
+        if arc >= 1e-9:
+            valid = (seg_len[:-1] >= 1e-9) & (seg_len[1:] >= 1e-9)
+            if np.any(valid):
+                dots = np.einsum("ij,ij->i", segs[:-1], segs[1:])
+                denom = seg_len[:-1] * seg_len[1:]
+                angles = np.degrees(np.arccos(np.clip(dots[valid] / denom[valid], -1.0, 1.0)))
+                curvature = float(angles.sum() / arc)
+
+    # Twist: vectorized means for each (slab, helix), then small consecutive-slab
+    # rotations. Empty helix/slab cells are excluded by their zero count.
+    u = np.column_stack([centered @ e1, centered @ e2])
+    nh = len(helix_values)
+    flat_group = slab * nh + helix_idx
+    cell_count = np.bincount(flat_group, minlength=n_slices * nh).reshape(n_slices, nh)
+    cell_sum = np.column_stack(
+        [
+            np.bincount(flat_group, weights=u[:, axis], minlength=n_slices * nh)
+            for axis in range(2)
+        ]
+    ).reshape(n_slices, nh, 2)
+    centres = np.divide(
+        cell_sum, cell_count[..., None], out=np.zeros_like(cell_sum),
+        where=cell_count[..., None] > 0,
+    )
+    slab_t_sum = np.bincount(slab, weights=t, minlength=n_slices)
+    slab_t = np.divide(
+        slab_t_sum, slab_count, out=np.zeros(n_slices, dtype=float), where=occupied
+    )
+    total = 0.0
+    previous = None
+    first_t = last_t = None
+    for k in np.flatnonzero(occupied):
+        if previous is not None:
+            common = (cell_count[previous] > 0) & (cell_count[k] > 0)
+            if int(common.sum()) >= 2:
+                A = centres[previous, common]
+                B = centres[k, common]
+                A = A - A.mean(axis=0)
+                B = B - B.mean(axis=0)
+                cross = float(np.sum(A[:, 0] * B[:, 1] - A[:, 1] * B[:, 0]))
+                dot = float(np.sum(A[:, 0] * B[:, 0] + A[:, 1] * B[:, 1]))
+                total += float(np.degrees(np.arctan2(cross, dot)))
+                if first_t is None:
+                    first_t = slab_t[previous]
+                last_t = slab_t[k]
+        previous = int(k)
+    if first_t is not None and last_t is not None and abs(last_t - first_t) > 1e-6:
+        total *= span / (last_t - first_t)
+    return total, curvature
+
+
 def _chord_sagitta_bend(centerline) -> tuple[float, float]:
     """Total bend angle (deg) + radius of curvature (nm) of an ordered centerline via
     chord+sagitta — the A9-safe estimator that reads ~0 for a STRAIGHT rod and the true arc

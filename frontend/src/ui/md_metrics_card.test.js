@@ -29,6 +29,7 @@ const IDS = {
   'md-metrics-arrow': 'span',
   'md-metrics-scope-latest': 'input',
   'md-metrics-scope-chain': 'input',
+  'md-metrics-all-frames': 'input',
 }
 for (const tok of ['twist', 'curve', 'bp']) {
   IDS[`md-metrics-${tok}-gen`] = 'button'
@@ -69,7 +70,7 @@ describe('initMdMetricsCard', () => {
     gen.click()
 
     await vi.waitFor(() => expect(disp.disabled).toBe(false))
-    expect(start).toHaveBeenCalledWith('md123', { scope: 'latest' })
+    expect(start).toHaveBeenCalledWith('md123', { scope: 'latest', max_frames: 64 })
     expect(document.getElementById('md-metrics-twist-fill').style.width).toBe('100%')
     // one pass computed every metric → base-pairing display also enabled
     expect(document.getElementById('md-metrics-bp-display').disabled).toBe(false)
@@ -85,6 +86,16 @@ describe('initMdMetricsCard', () => {
     await Promise.resolve()
     expect(start).not.toHaveBeenCalled()
     expect(document.getElementById('md-metrics-twist-status').textContent).toMatch(/job/i)
+  })
+
+  it('requests every frame when exact analysis is selected', async () => {
+    start.mockResolvedValue({ metrics_id: 'r1', state: 'running' })
+    poll.mockResolvedValue({ state: 'done', progress: 1, result: makeResult() })
+    document.getElementById('md-metrics-all-frames').checked = true
+    initMdMetricsCard({ getSelectedJob: () => ({ job_id: 'md123' }), getJobs: () => [] })
+    document.getElementById('md-metrics-twist-gen').click()
+    await vi.waitFor(() => expect(start).toHaveBeenCalled())
+    expect(start).toHaveBeenCalledWith('md123', { scope: 'latest', max_frames: 0 })
   })
 
   it('scope switch re-keys the cache — chain has no cached result yet', async () => {

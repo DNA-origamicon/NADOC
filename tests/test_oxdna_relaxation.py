@@ -2484,6 +2484,39 @@ def test_measure_bundle_curvature_rejects_empty():
         measure_bundle_curvature([])
 
 
+def test_combined_twist_curvature_matches_individual_metrics():
+    from backend.core.oxdna_health import (
+        measure_bundle_curvature,
+        measure_bundle_twist,
+        measure_bundle_twist_curvature,
+    )
+
+    positions = _arc_bundle(25.0, 70.0, n_axial=64)
+    twist, curvature = measure_bundle_twist_curvature(positions, n_slices=18)
+    assert twist == pytest.approx(measure_bundle_twist(positions, n_slices=18), abs=1e-9)
+    assert curvature == pytest.approx(
+        measure_bundle_curvature(positions, n_slices=18), abs=1e-9
+    )
+    bp_at = {}
+    groups = []
+    helices = []
+    helix_at = {}
+    for p in positions:
+        bp_key = (p["helix_id"], p["bp_index"])
+        if bp_key not in bp_at:
+            bp_at[bp_key] = len(helices)
+            helices.append(helix_at.setdefault(p["helix_id"], len(helix_at)))
+        groups.append(bp_at[bp_key])
+    xyz = np.asarray([p["backbone_position"] for p in positions])
+    grouped = measure_bundle_twist_curvature(
+        xyz,
+        n_slices=18,
+        group_index=np.asarray(groups),
+        group_helix_index=np.asarray(helices),
+    )
+    assert grouped == pytest.approx((twist, curvature), abs=1e-9)
+
+
 def test_curvature_profile_flat_for_straight_ramps_for_arc():
     from backend.core.oxdna_health import measure_bundle_curvature_profile
 
