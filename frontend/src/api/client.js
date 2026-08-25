@@ -4517,6 +4517,32 @@ export async function sendVRVisualizationFeedback(body) {
   return _request('POST', '/vr/visualization-feedback', body, { suppressBusy: true })
 }
 
+/** Coordinate-only native trajectory update. Atom identity/topology is published once
+ * through visualization-feedback; subsequent frames are stable-order float32 XYZ. */
+export async function sendVRTrajectoryFeedback({ coordinates, ...state } = {}) {
+  const values = coordinates instanceof Float32Array
+    ? coordinates : new Float32Array(coordinates ?? [])
+  const query = new URLSearchParams({
+    active: String(state.active === true),
+    frame_idx: String(Math.max(0, Number(state.frame_idx) || 0)),
+    n_frames: String(Math.max(0, Number(state.n_frames) || 0)),
+    playing: String(state.playing === true),
+    loop: String(state.loop === true),
+    live: String(state.live === true),
+    speed: String(Number.isFinite(state.speed) ? state.speed : 1),
+    stride: String(Math.max(1, Number(state.stride) || 1)),
+  })
+  const response = await fetch(`${BASE}/vr/trajectory-feedback?${query}`, {
+    method: 'POST',
+    headers: { ...docHeaders(), 'Content-Type': 'application/octet-stream' },
+    body: values,
+  })
+  if (!response.ok) {
+    throw new Error(`VR trajectory publication failed (HTTP ${response.status})`)
+  }
+  return await response.json()
+}
+
 export async function startSteamVR() {
   return _request('POST', '/vr/runtime/start', undefined, { timeoutMs: 30000 })
 }

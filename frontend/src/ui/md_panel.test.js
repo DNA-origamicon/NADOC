@@ -304,6 +304,52 @@ describe('live solvent side-channel', () => {
     expect(ws.binaryType).toBe('arraybuffer')
   })
 
+  it('negotiates and applies a topology-stable binary atom frame', () => {
+    const localDeps = makeDeps()
+    localDeps.atomisticRenderer.updateFrame = vi.fn(() => 'incremental')
+    const { c } = connected(localDeps)
+
+    // Entering an atomistic scene rebuilds the stream with binary negotiation.
+    setSceneRepr('ballstick')
+    vi.advanceTimersByTime(200)
+    const ws = sockets.at(-1)
+    ws.open()
+    expect(ws.lastOf('load')).toMatchObject({
+      mode: 'ballstick', binary_atom_frames: true,
+    })
+    ws.onmessage({ data: JSON.stringify({
+      type: 'ready', n_frames: 8, binary_atom_frames: true,
+      atom_serials: [10, 21], atom_elements: ['P', 'C'], atom_bonds: [10, 21],
+      atom_ident: {
+        strands: ['s0'], helices: ['h0'], dirs: ['FORWARD'],
+        strand_idx: [0, 0], helix_idx: [0, 0], dir_idx: [0, 0], bp: [3, 3],
+        names: ['P', "C1'"], copy_k: [0, 0],
+        scalar_keys: ['h0:3:FORWARD:0', 'h0:3:FORWARD:0'],
+        base_keys: ['h0:3:FORWARD', 'h0:3:FORWARD'],
+      },
+    }) })
+
+    const buffer = new ArrayBuffer(36 + 2 * 12)
+    const bytes = new Uint8Array(buffer)
+    bytes.set([...'NADOCMDA'].map(c => c.charCodeAt(0)))
+    const view = new DataView(buffer)
+    view.setUint32(8, 1, true); view.setUint32(12, 36, true)
+    view.setUint32(16, 4, true); view.setUint32(20, 8, true)
+    view.setUint32(24, 2, true); view.setFloat64(28, 80, true)
+    new Float32Array(buffer, 36).set([1, 4, 2, 5, 3, 6])
+    ws.onmessage({ data: buffer })
+
+    expect(localDeps.atomisticRenderer.updateFrame).toHaveBeenCalledTimes(1)
+    const payload = localDeps.atomisticRenderer.updateFrame.mock.calls[0][0]
+    expect(payload).toMatchObject({ columnar: true, count: 2 })
+    expect(Array.from(payload.bonds)).toEqual([10, 21])
+    expect(Array.from(payload.serial)).toEqual([10, 21])
+    expect(Array.from(payload.x)).toEqual([1, 4])
+    expect(Array.from(payload.y)).toEqual([2, 5])
+    expect(Array.from(payload.z)).toEqual([3, 6])
+    expect(c.trajectoryState()).toMatchObject({ frame_idx: 4, n_frames: 8 })
+  })
+
   it('scopes display events to the job and ignores messages drained from an old socket', () => {
     const seen = []
     const onState = e => seen.push(e.detail)
@@ -357,6 +403,55 @@ describe('live solvent side-channel', () => {
     } finally {
       window.removeEventListener('nadoc:md-display-state', onState)
       window.removeEventListener('nadoc:md-display-process', onProcess)
+    }
+  })
+
+  it('applies sequenced VR play/pause/seek commands to the desktop timeline', () => {
+    const trajectoryEvents = []
+    const localDeps = makeDeps()
+    let frameApplied = false
+    localDeps.designRenderer.applyFemPositions.mockImplementation(() => {
+      frameApplied = true
+    })
+    const onTrajectory = event => {
+      if (event.detail.coordinatesReady) expect(frameApplied).toBe(true)
+      trajectoryEvents.push(event.detail)
+    }
+    window.addEventListener('nadoc:md-trajectory-state', onTrajectory)
+    try {
+      const c = initMdPanel(store, localDeps)
+      c.displayLatest('/tmp/run.json', { forceReload: true, live: false, jobId: 'run-1' })
+      vi.advanceTimersByTime(200)
+      const ws = sockets.at(-1)
+      ws.open()
+      ws.onmessage({ data: JSON.stringify({
+        type: 'ready', n_frames: 20, dt_ps: 2, nstxout_comp: 10,
+      }) })
+      ws.onmessage({ data: JSON.stringify({
+        type: 'frame', frame_idx: 0, n_frames: 20,
+        positions: [{ helix_id: 'h1', bp_index: 0, direction: 'FORWARD', x: 1, y: 2, z: 3 }],
+      }) })
+
+      expect(c.trajectoryState()).toMatchObject({
+        active: true, frame_idx: 0, n_frames: 20, playing: false,
+      })
+      expect(trajectoryEvents.at(-1)).toMatchObject({
+        frame_idx: 0, coordinatesReady: true,
+      })
+
+      expect(c.applyTrajectoryCommand({ action: 'seek', frameIdx: 7 })).toBe(true)
+      expect(ws.lastOf('seek')).toEqual({ action: 'seek', frame_idx: 7 })
+      expect(c.trajectoryState()).toMatchObject({ frame_idx: 7, playing: false })
+      expect(trajectoryEvents.at(-1)).toMatchObject({
+        frame_idx: 7, coordinatesReady: false,
+      })
+
+      expect(c.applyTrajectoryCommand({ action: 'play' })).toBe(true)
+      expect(c.trajectoryState().playing).toBe(true)
+      expect(c.applyTrajectoryCommand({ action: 'pause' })).toBe(true)
+      expect(c.trajectoryState().playing).toBe(false)
+    } finally {
+      window.removeEventListener('nadoc:md-trajectory-state', onTrajectory)
     }
   })
 })

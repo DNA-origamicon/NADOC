@@ -6061,6 +6061,7 @@ async function main() {
         })
       })
     }
+    const trajectory = mdDisplayController.trajectoryState?.() ?? {}
     return {
       representation,
       coloring: ['strand', 'base', 'cluster', 'cpk'].includes(store.getState().coloringMode)
@@ -6074,10 +6075,36 @@ async function main() {
           atoms: visualizationAtoms,
         },
       ),
+      trajectory_active: trajectory.active === true,
+      trajectory_frame_idx: trajectory.frame_idx ?? 0,
+      trajectory_n_frames: trajectory.n_frames ?? 0,
+      trajectory_playing: trajectory.playing === true,
+      trajectory_loop: trajectory.loop === true,
+      trajectory_live: trajectory.live === true,
+      trajectory_speed: trajectory.speed ?? 1,
+      trajectory_stride: trajectory.stride ?? 1,
+    }
+  }
+
+  const _vrTrajectoryFeedbackState = ({ coordinates = false } = {}) => {
+    const packStarted = performance.now()
+    const state = mdDisplayController.trajectoryState?.() ?? {}
+    const renderedRepr = mdDisplayController.renderedRepresentation?.()
+    const atomistic = ['ballstick', 'stick'].includes(renderedRepr)
+    const packed = coordinates && state.active && atomistic
+      ? atomisticRenderer.packedAtomPositions?.() ?? new Float32Array()
+      : new Float32Array()
+    return {
+      ...state,
+      frame_idx: coordinates ? (state.rendered_frame_idx ?? state.frame_idx ?? 0)
+        : (state.frame_idx ?? 0),
+      coordinates: packed,
+      pack_ms: performance.now() - packStarted,
     }
   }
 
   let _vrStyleApply = Promise.resolve()
+  let _vrTrajectoryPublishCount = 0
   const vrSession = initVRSession({
     renderer,
     scene,
@@ -6105,6 +6132,37 @@ async function main() {
       errorMessage: api.lastErrorMessage,
     },
     publishNativeJobs: () => api.refreshNativeVRVisualization(_vrCompanionState()),
+    // Coordinate frames have their own coalesced binary channel. Disable the old
+    // periodic multi-megabyte JSON republish; topology/style still publish on change.
+    nativeJobPollIntervalMs: 0,
+    publishNativeTrajectory: async options => {
+      const started = performance.now()
+      const state = _vrTrajectoryFeedbackState(options)
+      const { pack_ms: packMs, ...payload } = state
+      const count = ++_vrTrajectoryPublishCount
+      try {
+        const result = await api.sendVRTrajectoryFeedback(payload)
+        if (count <= 5 || count % 30 === 0) {
+          console.info(
+            `VR_METRIC event=process_progress phase=browser_coordinate_publish status=ok ` +
+            `revision=${count} frame_idx=${payload.frame_idx} ` +
+            `atoms=${payload.coordinates.length / 3} bytes=${payload.coordinates.byteLength} ` +
+            `pack_ms=${packMs.toFixed(3)} backend_publish_ms=${Number(result?.publish_ms ?? 0).toFixed(3)} ` +
+            `round_trip_ms=${(performance.now() - started).toFixed(3)}`,
+          )
+        }
+        return result
+      } catch (error) {
+        console.error(
+          `VR_METRIC event=process_progress phase=browser_coordinate_publish status=failed ` +
+          `revision=${count} frame_idx=${payload.frame_idx} ` +
+          `atoms=${payload.coordinates.length / 3} bytes=${payload.coordinates.byteLength} ` +
+          `pack_ms=${packMs.toFixed(3)} round_trip_ms=${(performance.now() - started).toFixed(3)} ` +
+          `reason=${JSON.stringify(error?.message ?? String(error))}`,
+        )
+        throw error
+      }
+    },
     onNativeEvent: event => {
       const button = document.getElementById('menu-help-view-vr')
       if (event?.type === 'style') {
@@ -6119,6 +6177,12 @@ async function main() {
         }).catch(() => {
           showToast('Could not apply the VR representation on desktop.', { severity: 'error' })
         })
+      } else if (event?.type === 'trajectory') {
+        if (mdDisplayController.applyTrajectoryCommand?.({
+          action: event.action, frameIdx: event.frameIdx,
+        })) {
+          void vrSession.publishNativeTrajectoryState?.({ coordinates: false })
+        }
       } else if (event?.type === 'selection_level') {
         selectionManager.setSelectionLevel?.(event.level)
         selectionManager.previewVRIdentity?.(button?.dataset.vrHoverIdentity || null)
@@ -6316,6 +6380,18 @@ async function main() {
   // publishes Full together with its authoritative coarse frame.
   window.addEventListener('nadoc:representation-change', _publishVRRepresentation)
   window.addEventListener('nadoc:representation-settled', _publishVRRepresentation)
+  window.addEventListener('nadoc:md-trajectory-state', event => {
+    const coordinatesReady = event.detail?.coordinatesReady === true
+    const renderedRepr = mdDisplayController.renderedRepresentation?.()
+    const atomistic = ['ballstick', 'stick'].includes(renderedRepr)
+    void vrSession.publishNativeTrajectoryState?.({
+      coordinates: coordinatesReady && atomistic,
+    })
+    // Full contains coarse cylinders/slabs whose orientation cannot be reconstructed
+    // from atom XYZ alone. Keep that mode correct with a coalesced authoritative
+    // snapshot until it gains its own compact coordinate/orientation protocol.
+    if (coordinatesReady && !atomistic) void vrSession.publishNativeState?.()
+  })
 
   document.getElementById('menu-help-fjc-sim')?.addEventListener('click', async () => {
     // Lazy-load the modal so the dev bundle stays slim until the user opens it.

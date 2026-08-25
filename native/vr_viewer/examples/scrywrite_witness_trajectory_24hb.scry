@@ -1,0 +1,157 @@
+SCRYWRITE_WITNESS 1
+# Run with playback-md publishing the real 24hb_1xT trajectory snapshot. The
+# companion viewer metrics must show coordinate_update records throughout each
+# hold, zero sequence gaps, and update total_ms below the 11.11 ms HMD budget.
+head 0 1.60 0 1 0 0 0
+pose right 0.28 1.72 -0.60 1 0 0 0
+pose left -0.24 1.28 -0.24 1 0 0 0
+step 120
+button right menu down
+step 2
+button right menu up
+step 45
+expect menu options
+expect representation ballstick
+expect layout valid
+expect display submitted
+expect tracking tracked
+expect overlay visible
+expect framing valid
+snapshot trajectory_ballstick_start
+
+# Exercise the native timeline submenu semantically. Witness Mode records the
+# request without opening a browser mutation channel; desktop-sync behavior is
+# covered by the sequenced bridge and desktop-controller tests.
+aim_menu left trajectory
+step 20
+expect hover trajectory
+button left trigger down
+step 2
+button left trigger up
+step 20
+expect menu trajectory
+expect layout valid
+aim_menu left play_pause
+step 12
+expect hover play_pause
+button left trigger down
+step 2
+button left trigger up
+aim_menu left timeline
+step 12
+expect hover timeline
+button left trigger down
+step 2
+button left trigger up
+aim_menu left back
+step 12
+button left trigger down
+step 2
+button left trigger up
+step 20
+expect menu options
+
+# Close the opaque tablet for each hold so captures are the unobstructed HMD-eye
+# molecular view, then reopen it only to request the next representation.
+button right menu down
+step 2
+button right menu up
+# Side-on actor eye: the origami's long axis is native +Z/-Z, so looking from +X
+# exposes the full bundle length instead of validating only its end-on cross-section.
+head 0.75 0 -1.30 0.7071068 0 0.7071068 0
+step 30
+expect menu closed
+snapshot trajectory_ballstick_unobstructed
+
+# Hold for two seconds of real headset frames while trajectory updates arrive.
+step 180
+expect representation ballstick
+expect display submitted
+expect tracking tracked
+snapshot trajectory_ballstick_end
+
+head 0 1.60 0 1 0 0 0
+button right menu down
+step 2
+button right menu up
+head 0.75 0 -1.30 0.7071068 0 0.7071068 0
+step 30
+expect menu options
+aim_menu left stick_only
+step 20
+expect hover stick_only
+button left trigger down
+step 2
+button left trigger up
+step 45
+expect representation stick
+expect display submitted
+expect tracking tracked
+snapshot trajectory_stick_start
+button right menu down
+step 2
+button right menu up
+step 30
+expect menu closed
+snapshot trajectory_stick_unobstructed
+step 180
+expect representation stick
+expect display submitted
+expect tracking tracked
+snapshot trajectory_stick_end
+
+head 0 1.60 0 1 0 0 0
+button right menu down
+step 2
+button right menu up
+head 0.75 0 -1.30 0.7071068 0 0.7071068 0
+step 30
+expect menu options
+aim_menu left full
+step 20
+expect hover full
+button left trigger down
+step 2
+button left trigger up
+step 45
+expect representation full
+expect display submitted
+expect tracking tracked
+snapshot trajectory_full_start
+button right menu down
+step 2
+button right menu up
+step 30
+expect menu closed
+snapshot trajectory_full_unobstructed
+step 180
+expect representation full
+expect display submitted
+expect tracking tracked
+snapshot trajectory_full_end
+
+# Finish by crossing the coarse/atomistic boundary during active playback.
+head 0 1.60 0 1 0 0 0
+button right menu down
+step 2
+button right menu up
+head 0.75 0 -1.30 0.7071068 0 0.7071068 0
+step 30
+expect menu options
+aim_menu left ball_stick
+step 20
+expect hover ball_stick
+button left trigger down
+step 2
+button left trigger up
+step 45
+expect representation ballstick
+expect display submitted
+expect tracking tracked
+snapshot trajectory_ballstick_return
+button right menu down
+step 2
+button right menu up
+step 30
+expect menu closed
+snapshot trajectory_ballstick_return_unobstructed

@@ -48,6 +48,7 @@ export function initVRSession({
   nativeEventPollIntervalMs = 50,
   nativeJobPollIntervalMs = 1500,
   publishNativeJobs = refreshNativeVRJobs,
+  publishNativeTrajectory = null,
   onNativeEvent = null,
 } = {}) {
   let session = null
@@ -57,10 +58,14 @@ export function initVRSession({
   let nativeJobPollTimer = null
   let nativePublishQueued = false
   let nativePublishPromise = null
+  let nativeTrajectoryPublishQueued = false
+  let nativeTrajectoryCoordinatesQueued = false
+  let nativeTrajectoryPublishPromise = null
   let lastNativeEventSequence = 0
   let lastNativeSelectSequence = 0
   let lastNativeLevelSequence = 0
   let lastNativeStyleSequence = 0
+  let lastNativeTrajectorySequence = 0
   let lastNativeToolSequence = 0
   let lastNativeToolConfigSequence = 0
   let lastNativePlanePickSequence = 0
@@ -200,6 +205,27 @@ export function initVRSession({
     return nativePublishPromise
   }
 
+  function _publishNativeTrajectoryState({ coordinates = false } = {}) {
+    if (!nativeActive || disposed || typeof publishNativeTrajectory !== 'function') {
+      return Promise.resolve(false)
+    }
+    nativeTrajectoryPublishQueued = true
+    nativeTrajectoryCoordinatesQueued ||= coordinates
+    if (nativeTrajectoryPublishPromise) return nativeTrajectoryPublishPromise
+    nativeTrajectoryPublishPromise = (async () => {
+      while (nativeTrajectoryPublishQueued && nativeActive && !disposed) {
+        nativeTrajectoryPublishQueued = false
+        const includeCoordinates = nativeTrajectoryCoordinatesQueued
+        nativeTrajectoryCoordinatesQueued = false
+        try { await publishNativeTrajectory({ coordinates: includeCoordinates }) } catch {
+          // Retain the last complete native frame; a newer revision will supersede it.
+        }
+      }
+      return true
+    })().finally(() => { nativeTrajectoryPublishPromise = null })
+    return nativeTrajectoryPublishPromise
+  }
+
   function _scheduleNativeJobPoll({ immediate = false } = {}) {
     _clearNativeJobPoll()
     if (!nativeActive || disposed || nativeJobPollIntervalMs <= 0 ||
@@ -258,6 +284,18 @@ export function initVRSession({
             type: 'style',
             representation: event.representation,
             coloring: event.coloring,
+          })
+        }
+        const trajectorySequence = Number(event?.trajectory_sequence ?? 0)
+        if (Number.isSafeInteger(trajectorySequence) &&
+            trajectorySequence > lastNativeTrajectorySequence &&
+            ['toggle', 'play', 'pause', 'seek', 'step'].includes(event?.trajectory_action)) {
+          lastNativeTrajectorySequence = trajectorySequence
+          onNativeEvent({
+            sequence: trajectorySequence,
+            type: 'trajectory',
+            action: event.trajectory_action,
+            frameIdx: Math.max(0, Number(event?.trajectory_frame_idx) || 0),
           })
         }
         const toolSequence = Number(event?.tool_sequence ?? 0)
@@ -338,6 +376,7 @@ export function initVRSession({
       lastNativeSelectSequence = 0
       lastNativeLevelSequence = 0
       lastNativeStyleSequence = 0
+      lastNativeTrajectorySequence = 0
       lastNativeToolSequence = 0
       lastNativeToolConfigSequence = 0
       lastNativePlanePickSequence = 0
@@ -531,6 +570,7 @@ export function initVRSession({
     toggle,
     isActive: () => session !== null || nativeActive,
     publishNativeState: _publishNativeState,
+    publishNativeTrajectoryState: _publishNativeTrajectoryState,
     dispose,
   }
 }

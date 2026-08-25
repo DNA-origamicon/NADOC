@@ -75,6 +75,10 @@ if(BUILD_TESTING)
   target_include_directories(nadoc-vr-reference-grid-test PRIVATE src)
   target_compile_options(nadoc-vr-reference-grid-test PRIVATE -Wall -Wextra -Wpedantic)
   add_test(NAME nadoc-vr-reference-grid-unit COMMAND nadoc-vr-reference-grid-test)
+  add_executable(nadoc-vr-trajectory-test tests/trajectory_test.cpp)
+  target_include_directories(nadoc-vr-trajectory-test PRIVATE src)
+  target_compile_options(nadoc-vr-trajectory-test PRIVATE -Wall -Wextra -Wpedantic)
+  add_test(NAME nadoc-vr-trajectory-unit COMMAND nadoc-vr-trajectory-test)
   add_test(
     NAME nadoc-vr-scrywrite-evidence-export
     COMMAND nadoc-vr-scrywrite-export
@@ -108,6 +112,11 @@ if(BUILD_TESTING)
     NAME nadoc-vr-scrywrite-witness-atomistic-24hb-hold-script
     COMMAND nadoc-vr-viewer --validate-witness
       ${CMAKE_CURRENT_SOURCE_DIR}/examples/scrywrite_witness_atomistic_24hb_hold.scry
+  )
+  add_test(
+    NAME nadoc-vr-scrywrite-witness-trajectory-24hb-script
+    COMMAND nadoc-vr-viewer --validate-witness
+      ${CMAKE_CURRENT_SOURCE_DIR}/examples/scrywrite_witness_trajectory_24hb.scry
   )
   add_test(
     NAME nadoc-vr-scrywrite-poc

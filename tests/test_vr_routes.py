@@ -25,6 +25,7 @@ from backend.api.routes_vr import (
     VRToolFeedbackRequest,
     VRCamera,
     _bundle_expanded_scene,
+    _coordinate_record,
     _event_payload,
     _expanded_helix_offsets,
     _expanded_scene_inputs,
@@ -32,6 +33,7 @@ from backend.api.routes_vr import (
     _require_local,
     _publish_job_feedback,
     _publish_visualization_feedback,
+    _publish_trajectory_feedback,
     _runtime_timing,
     _selection_cluster,
     _selection_clusters,
@@ -42,6 +44,7 @@ from backend.api.routes_vr import (
     _write_feedback,
     _write_job_snapshot,
     _write_visualization_snapshot,
+    _write_trajectory_feeds,
     _write_plane_feedback,
     _write_preflight_feedback,
     _write_tool_feedback,
@@ -366,6 +369,9 @@ def test_native_event_reader_is_bounded_and_tolerates_partial_writes(tmp_path) -
         "style_sequence": 5,
         "representation": "ballstick",
         "coloring": "cpk",
+        "trajectory_sequence": 0,
+        "trajectory_action": "none",
+        "trajectory_frame_idx": 0,
         "tool_sequence": 4,
         "tool_mode": "twist",
         "tool_action": "preview",
@@ -460,6 +466,9 @@ def test_native_tool_transform_returns_to_nadoc_coordinates(tmp_path) -> None:
         "style_sequence": 0,
         "representation": "full",
         "coloring": "strand",
+        "trajectory_sequence": 0,
+        "trajectory_action": "none",
+        "trajectory_frame_idx": 0,
         "tool_sequence": 0,
         "tool_mode": "inspect",
         "tool_action": "activate",
@@ -1117,6 +1126,8 @@ def test_native_launch_passes_initial_selection_as_opaque_arguments(tmp_path) ->
         tmp_path / "tool-execution-feedback.txt",
         tmp_path / "jobs.txt",
         tmp_path / "visualization.txt",
+        tmp_path / "trajectory.txt",
+        tmp_path / "coordinates.bin",
         VRLaunchRequest(
             selection_level="domain",
             selected_owner_tokens=[token],
@@ -1133,6 +1144,8 @@ def test_native_launch_passes_initial_selection_as_opaque_arguments(tmp_path) ->
     assert command[command.index("--tool-execution-feedback") + 1].endswith(
         "tool-execution-feedback.txt"
     )
+    assert command[command.index("--trajectory") + 1].endswith("trajectory.txt")
+    assert command[command.index("--coordinates") + 1].endswith("coordinates.bin")
     assert command[command.index("--jobs") + 1].endswith("jobs.txt")
     assert command[command.index("--visualization") + 1].endswith(
         "visualization.txt"
@@ -1316,6 +1329,52 @@ def test_native_visualization_feed_rotates_positions_and_skips_duplicates() -> N
         assert " 3 ff0088 " in path.read_text()
     finally:
         path.unlink(missing_ok=True)
+
+
+def test_native_trajectory_feed_is_float32_rotated_and_atomic() -> None:
+    rotation = np.array([[0, 1, 0], [-1, 0, 0], [0, 0, 1]], dtype=float)
+    launch = VRLaunchRequest(
+        trajectory_active=True, trajectory_frame_idx=2, trajectory_n_frames=10,
+        trajectory_playing=True, trajectory_loop=True, trajectory_speed=0.5,
+        trajectory_stride=2,
+    )
+    trajectory_path, coordinate_path = _write_trajectory_feeds(launch, rotation)
+    state = {
+        "trajectory_path": str(trajectory_path),
+        "coordinate_path": str(coordinate_path),
+        "view_rotation": rotation.tolist(),
+    }
+    source = np.asarray([[1, 2, 3], [-4, 5, 6]], dtype="<f4").tobytes()
+    try:
+        sequence, count = _publish_trajectory_feedback(
+            state, source, active=True, frame_idx=3, n_frames=10,
+            playing=False, loop=True, live=False, speed=1.0, stride=1,
+        )
+        assert (sequence, count) == (2, 2)
+        assert trajectory_path.read_text() == (
+            "NADOCVR_TRAJECTORY 1 2 1 3 10 0 1 0 1 1\n"
+        )
+        payload = coordinate_path.read_bytes()
+        assert payload[:8] == b"NVRCOORD"
+        assert int.from_bytes(payload[16:24], "little") == 2
+        assert int.from_bytes(payload[32:36], "little") == 2
+        np.testing.assert_allclose(
+            np.frombuffer(payload[36:], dtype="<f4").reshape((-1, 3)),
+            [[2, -1, 3], [5, 4, 6]],
+        )
+        assert trajectory_path.stat().st_mode & 0o777 == 0o600
+        assert coordinate_path.stat().st_mode & 0o777 == 0o600
+        assert not trajectory_path.with_name(f"{trajectory_path.name}.next").exists()
+        assert not coordinate_path.with_name(f"{coordinate_path.name}.next").exists()
+    finally:
+        trajectory_path.unlink(missing_ok=True)
+        coordinate_path.unlink(missing_ok=True)
+
+    with pytest.raises(ValueError, match="float32 XYZ"):
+        _coordinate_record(
+            b"bad", sequence=1, frame_idx=0, n_frames=1,
+            view_rotation=np.identity(3),
+        )
 
 
 def test_scene_snapshot_writer_is_private_gzip_and_round_trips() -> None:

@@ -34,6 +34,7 @@
 export const ATOM_FIELDS = [
   'serial', 'element', 'x', 'y', 'z',
   'strand_id', 'helix_id', 'bp_index', 'direction', 'aux_helix_id', 'aux_t',
+  'name', 'copy_k', 'scalar_key', 'base_key',
 ]
 
 /** True for a decoded columnar payload (see parseAtomisticBundleBin). */
@@ -45,7 +46,7 @@ export function isColumnarAtoms(data) {
  *  tables directly, so no per-atom object is ever allocated. */
 class ColumnarAtomView {
   constructor(c) { this._c = c; this._i = 0 }
-  get serial()       { return this._i }
+  get serial()       { return this._c.serial?.[this._i] ?? this._i }
   get element()      { const c = this._c; return c.elementTable[c.elementIdx[this._i]] }
   get x()            { return this._c.x[this._i] }
   get y()            { return this._c.y[this._i] }
@@ -56,6 +57,10 @@ class ColumnarAtomView {
   get direction()    { const c = this._c; return c.dirTable[c.dirIdx[this._i]] }
   get aux_helix_id() { const c = this._c; return c.auxHelixTable[c.auxHelixIdx[this._i]] }
   get aux_t()        { return this._c.auxT[this._i] }
+  get name()         { const c = this._c; return c.nameTable?.[c.nameIdx?.[this._i]] ?? '' }
+  get copy_k()       { return this._c.copyK?.[this._i] ?? 0 }
+  get scalar_key()   { const c = this._c; return c.scalarKeyTable?.[c.scalarKeyIdx?.[this._i]] ?? '' }
+  get base_key()     { const c = this._c; return c.baseKeyTable?.[c.baseKeyIdx?.[this._i]] ?? '' }
 }
 
 function _columnarTable(c) {
@@ -75,7 +80,7 @@ function _columnarTable(c) {
     x(i) { return c.x[i] },
     y(i) { return c.y[i] },
     z(i) { return c.z[i] },
-    serial(i) { return i },
+    serial(i) { return c.serial?.[i] ?? i },
     element(i) { return c.elementTable[c.elementIdx[i]] },
     helixId(i) { return c.helixTable[c.helixIdx[i]] },
   }

@@ -137,6 +137,24 @@ scrywrite-atomistic-24hb SCENE VISUALIZATION="/tmp/24hb_2xT-latest.visualization
 vr-atomistic-steamvr-stats:
     uv run python scripts/vr_atomistic_diagnostics.py steamvr-stats
 
+# Bounded, read-only source probe for the downloaded 168.7 GiB 24hb_1xT DCD.
+vr-trajectory-feasibility:
+    uv run python scripts/vr_atomistic_diagnostics.py trajectory-feasibility
+
+# Publish the real 24hb_1xT topology once, then coordinate-only binary frames.
+vr-trajectory-playback FRAMES="30" FPS="10":
+    uv run python scripts/vr_atomistic_diagnostics.py playback-md --coordinate /tmp/24hb_1xT-trajectory.coordinates.bin --trajectory-state /tmp/24hb_1xT-trajectory.state.txt --frame-count {{FRAMES}} --fps {{FPS}}
+
+# Headset-free benchmark of the resident atom-instance coordinate update path.
+vr-trajectory-coordinate-benchmark SCENE VISUALIZATION="/tmp/24hb_1xT-benchmark.visualization.txt":
+    env PATH=/usr/bin:/bin cmake --build native/vr_viewer/build --target nadoc-vr-viewer
+    native/vr_viewer/build/nadoc-vr-viewer --benchmark-atomistic {{SCENE}} {{VISUALIZATION}}
+
+# Real-headset trajectory automation: producer + ScryWrite representation replay +
+# SteamVR compositor interval + strict combined assessment.
+vr-trajectory-validate SCENE:
+    uv run python scripts/vr_atomistic_diagnostics.py validate-playback {{SCENE}}
+
 # Launch a local fixture with a read-only desktop mirror of the physical HMD eye.
 vr-hmd-mirror SCENE="native/vr_viewer/examples/scrywrite_chiral_perspective.nadocvr" EYE="left" GRID="room" PLACE="on" VIEW="mirror" ORIENT="front" DISTANCE="1.30" SCALE="2.0" YAW="0" PITCH="0" ROLL="0" DIAGNOSTICS="/tmp/scrywrite_mirror_diagnostics.jsonl":
     env -u CFLAGS -u CXXFLAGS -u CPPFLAGS -u LDFLAGS CC=/usr/bin/gcc CXX=/usr/bin/g++ cmake -S native/vr_viewer -B native/vr_viewer/build -G Ninja -DCMAKE_BUILD_TYPE=Release

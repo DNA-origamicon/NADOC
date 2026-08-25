@@ -7,7 +7,7 @@ vi.mock('../state/store.js', () => ({
 import {
   enginesStatus, getMdJob, getMdTrajectory, getSystemResources,
   launchNativeVR, listActiveJobs, listLibraryFiles, listSimJobs,
-  refreshNativeVRJobs, refreshNativeVRVisualization,
+  refreshNativeVRJobs, refreshNativeVRVisualization, sendVRTrajectoryFeedback,
 } from './client.js'
 import { docKey } from '../shared/doc_id.js'
 
@@ -147,6 +147,32 @@ describe('job JSON GET coalescing', () => {
       visualization_mode: 'oxdna_rmsf',
       visualization_points: [{ owner_token: 'base-token', position: [1, 2, 3], color: 9 }],
     })
+  })
+
+  it('publishes trajectory coordinates as compact float32 binary with query state', async () => {
+    let request = null
+    global.fetch = vi.fn(async (url, options = {}) => {
+      request = { url, options }
+      return { ok: true, status: 200, json: async () => ({ acknowledged: true }) }
+    })
+    const coordinates = new Float32Array([1, 2, 3, 4, 5, 6])
+    await expect(sendVRTrajectoryFeedback({
+      coordinates, active: true, frame_idx: 7, n_frames: 100,
+      playing: true, loop: false, live: false, speed: 0.5, stride: 2,
+    })).resolves.toEqual({ acknowledged: true })
+    expect(request.url).toContain('/api/vr/trajectory-feedback?')
+    expect(request.url).toContain('frame_idx=7')
+    expect(request.url).toContain('playing=true')
+    expect(request.options.headers['Content-Type']).toBe('application/octet-stream')
+    expect(request.options.body).toBe(coordinates)
+    expect(request.options.body.byteLength).toBe(24)
+  })
+
+  it('surfaces a failed trajectory publication to telemetry/coalescing callers', async () => {
+    global.fetch = vi.fn(async () => ({ ok: false, status: 503 }))
+    await expect(sendVRTrajectoryFeedback({
+      coordinates: new Float32Array([1, 2, 3]), n_frames: 1,
+    })).rejects.toThrow('HTTP 503')
   })
 
   it('publishes successful unified-list refreshes to the native live feed', async () => {

@@ -17,6 +17,7 @@ import os
 from pathlib import Path
 import shutil
 import signal
+import struct
 import subprocess
 import tempfile
 import threading
@@ -52,6 +53,11 @@ _TOOL_FEEDBACK_LOCK = threading.Lock()
 _TOOL_EXECUTION_FEEDBACK_LOCK = threading.Lock()
 _JOB_FEEDBACK_LOCK = threading.Lock()
 _VISUALIZATION_FEEDBACK_LOCK = threading.Lock()
+_TRAJECTORY_FEEDBACK_LOCK = threading.Lock()
+
+_COORDINATE_MAGIC = b"NVRCOORD"
+_COORDINATE_HEADER = struct.Struct("<8sIIQIII")
+_MAX_VR_TRAJECTORY_ATOMS = 1_000_000
 
 SelectionKind = Literal[
     "none",
@@ -131,6 +137,14 @@ class VRLaunchRequest(BaseModel):
     visualization_points: list[VRVisualizationPoint] = Field(
         default_factory=list, max_length=1_000_000
     )
+    trajectory_active: bool = False
+    trajectory_frame_idx: int = Field(default=0, ge=0, le=2**31 - 1)
+    trajectory_n_frames: int = Field(default=0, ge=0, le=2**31 - 1)
+    trajectory_playing: bool = False
+    trajectory_loop: bool = False
+    trajectory_live: bool = False
+    trajectory_speed: float = Field(default=1.0, ge=0.1, le=8.0)
+    trajectory_stride: int = Field(default=1, ge=1, le=100_000)
 
 
 class VRJobsFeedbackRequest(BaseModel):
@@ -3016,6 +3030,8 @@ def _cleanup_after_process(
     tool_execution_feedback_path: Path,
     job_path: Path,
     visualization_path: Path,
+    trajectory_path: Path,
+    coordinate_path: Path,
 ) -> None:
     process.wait()
     scene_path.unlink(missing_ok=True)
@@ -3027,6 +3043,8 @@ def _cleanup_after_process(
     tool_execution_feedback_path.unlink(missing_ok=True)
     job_path.unlink(missing_ok=True)
     visualization_path.unlink(missing_ok=True)
+    trajectory_path.unlink(missing_ok=True)
+    coordinate_path.unlink(missing_ok=True)
     with _STATE_LOCK:
         state = _read_state()
         if state and int(state["pid"]) == process.pid:
@@ -3231,6 +3249,9 @@ def _event_payload(state: dict | None) -> dict:
             "style_sequence": 0,
             "representation": "full",
             "coloring": "strand",
+            "trajectory_sequence": 0,
+            "trajectory_action": "none",
+            "trajectory_frame_idx": 0,
             "tool_sequence": 0,
             "tool_mode": "inspect",
             "tool_action": "activate",
@@ -3267,6 +3288,9 @@ def _event_payload(state: dict | None) -> dict:
         style_sequence = int(event.get("style_sequence", 0))
         representation = event.get("representation", "full")
         coloring = event.get("coloring", "strand")
+        trajectory_sequence = int(event.get("trajectory_sequence", 0))
+        trajectory_action = event.get("trajectory_action", "none")
+        trajectory_frame_idx = int(event.get("trajectory_frame_idx", 0))
         tool_sequence = int(event.get("tool_sequence", 0))
         tool_mode = event.get("tool_mode", "inspect")
         tool_action = event.get("tool_action", "activate")
@@ -3312,6 +3336,9 @@ def _event_payload(state: dict | None) -> dict:
             or select_sequence < 0
             or level_sequence < 0
             or style_sequence < 0
+            or trajectory_sequence < 0
+            or trajectory_action not in {"none", "toggle", "play", "pause", "seek", "step"}
+            or trajectory_frame_idx < 0
             or tool_sequence < 0
             or tool_config_sequence < 0
             or plane_pick_sequence < 0
@@ -3450,6 +3477,9 @@ def _event_payload(state: dict | None) -> dict:
             "style_sequence": style_sequence,
             "representation": representation,
             "coloring": coloring,
+            "trajectory_sequence": trajectory_sequence,
+            "trajectory_action": trajectory_action,
+            "trajectory_frame_idx": trajectory_frame_idx,
             "tool_sequence": tool_sequence,
             "tool_mode": tool_mode,
             "tool_action": tool_action,
@@ -3483,6 +3513,9 @@ def _event_payload(state: dict | None) -> dict:
             "style_sequence": 0,
             "representation": "full",
             "coloring": "strand",
+            "trajectory_sequence": 0,
+            "trajectory_action": "none",
+            "trajectory_frame_idx": 0,
             "tool_sequence": 0,
             "tool_mode": "inspect",
             "tool_action": "activate",
@@ -4088,6 +4121,128 @@ def _write_visualization_snapshot(
     return path
 
 
+def _trajectory_state_record(
+    *, sequence: int, active: bool, frame_idx: int, n_frames: int,
+    playing: bool, loop: bool, live: bool, speed: float, stride: int,
+) -> str:
+    """Serialize desktop-authoritative playback state for the native menu."""
+    if (
+        not 0 <= sequence <= 2**53 - 1
+        or not 0 <= frame_idx <= 2**31 - 1
+        or not 0 <= n_frames <= 2**31 - 1
+        or (n_frames == 0 and frame_idx != 0)
+        or (n_frames > 0 and frame_idx >= n_frames)
+        or not math.isfinite(speed)
+        or not 0.1 <= speed <= 8.0
+        or not 1 <= stride <= 100_000
+    ):
+        raise ValueError("Invalid VR trajectory state.")
+    return (
+        f"NADOCVR_TRAJECTORY 1 {sequence} {int(active)} {frame_idx} {n_frames} "
+        f"{int(playing)} {int(loop)} {int(live)} {speed:.7g} {stride}\n"
+    )
+
+
+def _coordinate_record(
+    coordinates: bytes, *, sequence: int, frame_idx: int, n_frames: int,
+    view_rotation: np.ndarray,
+) -> bytes:
+    """Rotate and pack one stable-order float32 XYZ frame for native VR."""
+    if len(coordinates) % 12 != 0:
+        raise ValueError("VR trajectory coordinates must contain float32 XYZ triples.")
+    count = len(coordinates) // 12
+    if count > _MAX_VR_TRAJECTORY_ATOMS:
+        raise ValueError("VR trajectory coordinate payload is too large.")
+    if (
+        not 0 <= sequence <= 2**53 - 1
+        or not 0 <= frame_idx <= 2**31 - 1
+        or not 0 <= n_frames <= 2**31 - 1
+        or (n_frames == 0 and frame_idx != 0)
+        or (n_frames > 0 and frame_idx >= n_frames)
+    ):
+        raise ValueError("Invalid VR trajectory frame metadata.")
+    rotation = np.asarray(view_rotation, dtype=np.float32)
+    if rotation.shape != (3, 3) or not np.all(np.isfinite(rotation)):
+        raise ValueError("Invalid VR trajectory view rotation.")
+    source = np.frombuffer(coordinates, dtype="<f4").reshape((-1, 3))
+    if not np.all(np.isfinite(source)) or (count and np.max(np.abs(source)) > 1e9):
+        raise ValueError("Invalid VR trajectory coordinates.")
+    transformed = np.asarray(source @ rotation.T, dtype="<f4", order="C")
+    header = _COORDINATE_HEADER.pack(
+        _COORDINATE_MAGIC, 1, _COORDINATE_HEADER.size, sequence,
+        frame_idx, n_frames, count,
+    )
+    return header + transformed.tobytes(order="C")
+
+
+def _write_trajectory_feeds(body: VRLaunchRequest, view_rotation: np.ndarray) -> tuple[Path, Path]:
+    """Create private timeline and coordinate feeds used by the native viewer."""
+    with tempfile.NamedTemporaryFile(
+        mode="w", prefix="nadoc-vr-trajectory-", suffix=".txt", delete=False,
+    ) as state_file:
+        state_file.write(_trajectory_state_record(
+            sequence=1, active=body.trajectory_active,
+            frame_idx=body.trajectory_frame_idx,
+            n_frames=body.trajectory_n_frames,
+            playing=body.trajectory_playing, loop=body.trajectory_loop,
+            live=body.trajectory_live, speed=body.trajectory_speed,
+            stride=body.trajectory_stride,
+        ))
+        trajectory_path = Path(state_file.name)
+    trajectory_path.chmod(0o600)
+    with tempfile.NamedTemporaryFile(
+        mode="wb", prefix="nadoc-vr-coordinates-", suffix=".bin", delete=False,
+    ) as coordinate_file:
+        coordinate_file.write(_coordinate_record(
+            b"", sequence=0, frame_idx=body.trajectory_frame_idx,
+            n_frames=body.trajectory_n_frames, view_rotation=view_rotation,
+        ))
+        coordinate_path = Path(coordinate_file.name)
+    coordinate_path.chmod(0o600)
+    return trajectory_path, coordinate_path
+
+
+def _publish_trajectory_feedback(
+    state: dict | None, coordinates: bytes, *, active: bool, frame_idx: int,
+    n_frames: int, playing: bool, loop: bool, live: bool, speed: float,
+    stride: int,
+) -> tuple[int, int]:
+    """Atomically publish a frame and matching desktop timeline state."""
+    if not state or not state.get("trajectory_path") or not state.get("coordinate_path"):
+        raise HTTPException(409, detail="Native VR is not running.")
+    trajectory_path = Path(state["trajectory_path"])
+    coordinate_path = Path(state["coordinate_path"])
+    trajectory_next = trajectory_path.with_name(f"{trajectory_path.name}.next")
+    coordinate_next = coordinate_path.with_name(f"{coordinate_path.name}.next")
+    with _TRAJECTORY_FEEDBACK_LOCK:
+        try:
+            fields = trajectory_path.read_text().split()
+            if len(fields) != 11 or fields[:2] != ["NADOCVR_TRAJECTORY", "1"]:
+                raise ValueError("invalid VR trajectory header")
+            sequence = int(fields[2]) + 1
+            record = _coordinate_record(
+                coordinates, sequence=sequence, frame_idx=frame_idx,
+                n_frames=n_frames,
+                view_rotation=np.asarray(state["view_rotation"], dtype=float),
+            )
+            trajectory_record = _trajectory_state_record(
+                sequence=sequence, active=active, frame_idx=frame_idx,
+                n_frames=n_frames, playing=playing, loop=loop, live=live,
+                speed=speed, stride=stride,
+            )
+            coordinate_next.write_bytes(record)
+            coordinate_next.chmod(0o600)
+            os.replace(coordinate_next, coordinate_path)
+            trajectory_next.write_text(trajectory_record)
+            trajectory_next.chmod(0o600)
+            os.replace(trajectory_next, trajectory_path)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            coordinate_next.unlink(missing_ok=True)
+            trajectory_next.unlink(missing_ok=True)
+            raise HTTPException(503, detail="Could not publish VR trajectory frame.") from exc
+    return sequence, len(coordinates) // 12
+
+
 def _publish_visualization_feedback(
     state: dict | None,
     body: VRJobsFeedbackRequest | VRVisualizationFeedbackRequest,
@@ -4269,6 +4424,36 @@ def vr_visualization_feedback(
     return {"acknowledged": True, "visualization_sequence": sequence}
 
 
+@router.post("/vr/trajectory-feedback")
+async def vr_trajectory_feedback(
+    request: Request,
+    active: bool = False,
+    frame_idx: int = 0,
+    n_frames: int = 0,
+    playing: bool = False,
+    loop: bool = False,
+    live: bool = False,
+    speed: float = 1.0,
+    stride: int = 1,
+) -> dict:
+    """Publish stable-order little-endian float32 XYZ coordinates and timeline state."""
+    _require_local(request)
+    started = time.perf_counter()
+    coordinates = await request.body()
+    sequence, atom_count = _publish_trajectory_feedback(
+        _read_state(), coordinates, active=active, frame_idx=frame_idx,
+        n_frames=n_frames, playing=playing, loop=loop, live=live,
+        speed=speed, stride=stride,
+    )
+    return {
+        "acknowledged": True,
+        "trajectory_sequence": sequence,
+        "atom_count": atom_count,
+        "payload_bytes": len(coordinates),
+        "publish_ms": (time.perf_counter() - started) * 1000.0,
+    }
+
+
 def _viewer_command(
     scene_path: Path,
     event_path: Path,
@@ -4279,6 +4464,8 @@ def _viewer_command(
     tool_execution_feedback_path: Path,
     job_path: Path,
     visualization_path: Path,
+    trajectory_path: Path,
+    coordinate_path: Path,
     body: VRLaunchRequest,
 ) -> list[str]:
     command = [
@@ -4302,6 +4489,10 @@ def _viewer_command(
         str(job_path),
         "--visualization",
         str(visualization_path),
+        "--trajectory",
+        str(trajectory_path),
+        "--coordinates",
+        str(coordinate_path),
         "--mirror-eye",
         body.mirror_eye,
         "--reference-grid",
@@ -4476,6 +4667,8 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
                 f'"level_sequence":0,"selection_level":"{body.selection_level}",'
                 f'"style_sequence":0,"representation":"{body.representation}",'
                 f'"coloring":"{body.coloring}",'
+                '"trajectory_sequence":0,"trajectory_action":"none",'
+                f'"trajectory_frame_idx":{body.trajectory_frame_idx},'
                 '"tool_sequence":0,"tool_mode":"inspect",'
                 '"tool_action":"activate","transform_sequence":0,'
                 '"transform_matrix":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],'
@@ -4557,6 +4750,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             representation=body.representation,
             coloring=body.coloring,
         )
+        trajectory_path, coordinate_path = _write_trajectory_feeds(body, view_rotation)
 
         log = _LOG_PATH.open("ab")
         try:
@@ -4565,7 +4759,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
                     scene_path, event_path, feedback_path, tool_feedback_path,
                     plane_feedback_path, preflight_feedback_path,
                     tool_execution_feedback_path, job_path,
-                    visualization_path, body
+                    visualization_path, trajectory_path, coordinate_path, body
                 ),
                 cwd=_REPO_ROOT,
                 env=_build_environment(),
@@ -4586,6 +4780,8 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             tool_execution_feedback_path.unlink(missing_ok=True)
             job_path.unlink(missing_ok=True)
             visualization_path.unlink(missing_ok=True)
+            trajectory_path.unlink(missing_ok=True)
+            coordinate_path.unlink(missing_ok=True)
             raise HTTPException(
                 503, detail=f"Could not launch VR viewer: {exc}"
             ) from exc
@@ -4604,6 +4800,8 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             tool_execution_feedback_path.unlink(missing_ok=True)
             job_path.unlink(missing_ok=True)
             visualization_path.unlink(missing_ok=True)
+            trajectory_path.unlink(missing_ok=True)
+            coordinate_path.unlink(missing_ok=True)
             detail = "Native VR viewer exited during startup."
             try:
                 tail = _LOG_PATH.read_text(errors="replace").splitlines()[-1]
@@ -4624,6 +4822,8 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             "tool_execution_feedback_path": str(tool_execution_feedback_path),
             "job_path": str(job_path),
             "visualization_path": str(visualization_path),
+            "trajectory_path": str(trajectory_path),
+            "coordinate_path": str(coordinate_path),
             "started_at": process_started_at,
             "launch_requested_at": launch_requested_at,
             "browser_requested_at": (
@@ -4646,6 +4846,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
                 process, scene_path, event_path, feedback_path, tool_feedback_path,
                 plane_feedback_path, preflight_feedback_path,
                 tool_execution_feedback_path, job_path, visualization_path,
+                trajectory_path, coordinate_path,
             ),
             daemon=True,
             name="nadoc-vr-cleanup",

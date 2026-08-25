@@ -28,6 +28,11 @@
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { initFrameSteppers } from './frame_steppers.js'
 import {
+  isMdAtomFrameBin,
+  makeMdAtomFrameTopology,
+  parseMdAtomFrameBin,
+} from '../scene/md_atom_frame_bin.js'
+import {
   targetStreamMode,
   sceneUsesAtomistic,
   sceneUsesNativeCg,
@@ -61,6 +66,10 @@ function _fmtSize(bytes) {
 
 function _basename(path) {
   return path ? path.replace(/\\/g, '/').split('/').pop() : ''
+}
+
+function _framePositionCount(msg) {
+  return msg?.positions?.length ?? msg?.atoms?.count ?? msg?.atoms?.length ?? 0
 }
 
 function _emitMdDisplayEvent(detail, jobId = null) {
@@ -155,6 +164,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
   let _loadInFlight   = false  // true between sending 'load' and receiving 'ready'/'error'
   let _loadConfigPath = null   // config path of the in-flight load (for decideReload)
   let _nFrames   = 0
+  let _atomBinaryTopology = null
   let _curFrame  = 0
   let _dtPs      = null
   let _nstComp   = null
@@ -496,6 +506,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
         action:          'load',
         config_path:     _configPath,
         mode:            _repr,
+        binary_atom_frames: _repr === 'ballstick',
         job_id:          socketJobId,
         // Fallback only — the backend prefers the run's own design (resolved from
         // job_id) so the trajectory maps onto the right topology even when a
@@ -509,7 +520,29 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
 
     _ws.onmessage = ev => {
       if (_ws !== socket) return
-      if (ev.data instanceof ArrayBuffer) { _onSolventBlob?.(ev.data); return }
+      if (ev.data instanceof ArrayBuffer) {
+        if (isMdAtomFrameBin(ev.data)) {
+          const started = performance.now()
+          try {
+            const frame = parseMdAtomFrameBin(ev.data, _atomBinaryTopology)
+            _emitMdProcess('binary-frame-decoded', {
+              frameIdx: frame.frame_idx,
+              atoms: frame.atoms.count,
+              bytes: ev.data.byteLength,
+              decodeMs: performance.now() - started,
+            }, socketJobId)
+            _handleMessage(frame, socketJobId)
+          } catch (error) {
+            _log(`Binary atom frame rejected: ${error.message}`, 'error')
+            _emitMdDisplayEvent({
+              state: 'error', message: `Binary atom frame rejected: ${error.message}`,
+            }, socketJobId)
+          }
+          return
+        }
+        _onSolventBlob?.(ev.data)
+        return
+      }
       let msg
       try { msg = JSON.parse(ev.data) } catch { return }
       _handleMessage(msg, socketJobId)
@@ -584,6 +617,11 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
       _loadInFlight = false
       _atomIdent = msg.atom_ident ?? null
       _atomBonds = toBondPairs(msg.atom_bonds)
+      _atomBinaryTopology = msg.binary_atom_frames
+        ? makeMdAtomFrameTopology(msg) : null
+      if (msg.binary_atom_frames && !_atomBinaryTopology) {
+        _log('Binary atom topology was incomplete; frames will be rejected.', 'error')
+      }
       _atomColorsPrimed = false
       _nFrames = msg.n_frames
       _dtPs    = msg.dt_ps
@@ -638,7 +676,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
       _emitMdProcess('frame-received', {
         frameIdx: msg.frame_idx,
         nFrames: msg.n_frames ?? _nFrames,
-        nPositions: msg.positions?.length ?? msg.atoms?.length ?? 0,
+        nPositions: _framePositionCount(msg),
       }, eventJobId)
       // Live polling (dcd_fast) discovers frames appended after load — grow the
       // scrubber range so the user can scrub into them (the backend lazily reloads
@@ -648,8 +686,8 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
         if (scrubber) scrubber.max = Math.max(0, _nFrames - 1)
         if (statusLine && !_live) statusLine.textContent = `Ready — ${_nFrames} frames`
       }
-      _updateTimeline(msg.frame_idx)
       _lastFrameMsg = msg
+      _updateTimeline(msg.frame_idx)
       if (!_displayVisible) {
         // A prewarm deliberately does not deform the scene, but receiving the requested
         // frame is the definitive point at which Display MD is ready in memory. `ready`
@@ -657,14 +695,14 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
         _emitMdProcess('frame-cached', {
           frameIdx: msg.frame_idx,
           nFrames: msg.n_frames ?? _nFrames,
-          nPositions: msg.positions?.length ?? msg.atoms?.length ?? 0,
+          nPositions: _framePositionCount(msg),
         }, eventJobId)
         _emitMdDisplayEvent({
           state: 'prewarmed',
           message: `MD frame ${msg.frame_idx + 1}/${msg.n_frames ?? _nFrames} cached`,
           frameIdx: msg.frame_idx,
           nFrames: msg.n_frames ?? _nFrames,
-          nPositions: msg.positions?.length ?? msg.atoms?.length ?? 0,
+          nPositions: _framePositionCount(msg),
         }, eventJobId)
       }
       if (_displayVisible) {
@@ -682,7 +720,8 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
             detail: { representation: _sceneRepr, frameIdx: msg.frame_idx },
           }))
         } else if (
-          _pendingAtomisticSwap && _repr === 'ballstick' && Array.isArray(msg.atoms)
+          _pendingAtomisticSwap && _repr === 'ballstick' &&
+          (Array.isArray(msg.atoms) || msg.atoms?.columnar)
         ) {
           // _applyFrame has installed the authoritative atom coordinates and hidden
           // CG. Only now acknowledge the atomistic representation to native VR.
@@ -697,7 +736,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
         _setSwitchBusy(false, null)
         _emitMdProcess('frame-applied', {
           frameIdx: msg.frame_idx,
-          nPositions: msg.positions?.length ?? msg.atoms?.length ?? 0,
+          nPositions: _framePositionCount(msg),
           durationMs: performance.now() - applyStarted,
           source: 'socket',
           geometryPath: _lastAtomisticGeometryPath,
@@ -707,10 +746,14 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
           message: `Displaying frame ${msg.frame_idx + 1}/${msg.n_frames ?? _nFrames}`,
           frameIdx: msg.frame_idx,
           nFrames: msg.n_frames ?? _nFrames,
-          nPositions: msg.positions?.length ?? msg.atoms?.length ?? 0,
+          nPositions: _framePositionCount(msg),
           source: 'socket',
         }, eventJobId)
       }
+      // Coordinate publication must observe the matrices installed by _applyFrame
+      // and the settled representation above, never the preceding frame. A hidden
+      // prewarm updates timeline state but has no rendered coordinates to publish.
+      _emitTrajectoryState(_displayVisible)
       if (_live) {
         // Frame landed: clear the "fetching" state and restart the countdown.
         _livePendingPoll = false
@@ -748,7 +791,10 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
     } else if (_repr === 'ballstick') {
       if (!msg.atoms) return
       atomisticRenderer?.setMode(_sceneRepr === 'vdw' ? 'vdw' : (_sceneRepr === 'stick' ? 'stick' : 'ballstick'))
-      const frameData = {
+      const frameData = msg.atoms?.columnar ? {
+        ...msg.atoms,
+        bonds: msg.bonds ?? _atomBonds ?? [],
+      } : {
         // Bonds come from 'ready', not the frame: connectivity is static, coordinates
         // are not. `msg.bonds` first only so a future frame-level list would win.
         atoms: zipAtomIdentity(msg.atoms, _atomIdent),
@@ -796,6 +842,26 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
     _steppers.refresh()
   }
 
+  function _trajectorySnapshot() {
+    return {
+      active: _displayVisible && !!_lastFrameMsg,
+      frame_idx: _curFrame,
+      rendered_frame_idx: _lastFrameMsg?.frame_idx ?? _curFrame,
+      n_frames: _lastFrameMsg?.n_frames ?? _nFrames,
+      playing: _playing,
+      loop: _loop,
+      live: _live,
+      speed: _speed,
+      stride: _stride,
+    }
+  }
+
+  function _emitTrajectoryState(coordinatesReady = false) {
+    window.dispatchEvent(new CustomEvent('nadoc:md-trajectory-state', {
+      detail: { ..._trajectorySnapshot(), coordinatesReady },
+    }))
+  }
+
   function _seekFrame(idx) {
     if (!_ws || _ws.readyState !== WebSocket.OPEN) return
     _ws.send(JSON.stringify({ action: 'seek', frame_idx: idx }))
@@ -836,6 +902,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
       _playTimer = setInterval(_tick, 1000 / fps)
     }
     if (playBtn) playBtn.innerHTML = _playing ? '&#9646;&#9646; Pause' : '&#9654; Play'
+    _emitTrajectoryState(false)
   }
 
   playBtn?.addEventListener('click', () => { if (!_live) _setPlaying(!_playing) })
@@ -843,6 +910,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
   function _setLoop(v) {
     _loop = v
     if (loopBtn) loopBtn.style.color = _loop ? _C.accent : _C.muted
+    _emitTrajectoryState(false)
   }
   loopBtn?.addEventListener('click', () => _setLoop(!_loop))
 
@@ -929,6 +997,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
     if (liveBtn)  liveBtn.style.color  = _live ? _C.accent : _C.muted
     if (scrubber) scrubber.disabled    = _live
     if (playBtn)  playBtn.disabled     = _live
+    _emitTrajectoryState(false)
   }
   liveBtn?.addEventListener('click', () => _setLive(!_live))
 
@@ -1057,10 +1126,12 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
   speedSel?.addEventListener('change', () => {
     _speed = parseFloat(speedSel.value) || 1
     if (_playing) { _setPlaying(false); _setPlaying(true) }
+    else _emitTrajectoryState(false)
   })
 
   strideInput?.addEventListener('change', () => {
     _stride = Math.max(1, parseInt(strideInput.value) || 1)
+    _emitTrajectoryState(false)
   })
 
   ampSlider?.addEventListener('input', () => {
@@ -1242,6 +1313,29 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
       return this.isActive()
         ? { frame: (_lastFrameMsg.frame_idx ?? 0) + 1, total: _lastFrameMsg.n_frames ?? _nFrames }
         : null
+    },
+    trajectoryState() { return _trajectorySnapshot() },
+    applyTrajectoryCommand({ action, frameIdx } = {}) {
+      if (!this.isActive()) return false
+      if (action === 'play') {
+        if (!_live) _setPlaying(true)
+      } else if (action === 'pause') {
+        _setPlaying(false)
+      } else if (action === 'toggle') {
+        if (!_live) _setPlaying(!_playing)
+      } else if (action === 'seek' || action === 'step') {
+        const target = Math.max(0, Math.min(
+          _nFrames - 1,
+          Number.isFinite(Number(frameIdx)) ? Math.round(Number(frameIdx)) : _curFrame,
+        ))
+        _setPlaying(false)
+        _updateTimeline(target)
+        _seekFrame(target)
+        _emitTrajectoryState(false)
+      } else {
+        return false
+      }
+      return true
     },
 
     /** Representation whose authoritative live payload is actually visible. */

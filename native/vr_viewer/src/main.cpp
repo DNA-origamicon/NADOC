@@ -24,6 +24,7 @@
 #include "scrywrite_witness_surface.hpp"
 #include "scrywrite_visual.hpp"
 #include "spectator_mirror.hpp"
+#include "trajectory.hpp"
 #include "visualization.hpp"
 
 #include <glm/glm.hpp>
@@ -1325,11 +1326,18 @@ class GlScene {
         visualizationColors_.clear();
         visualizationSlabFrames_.clear();
         visualizationAtomTokens_.clear();
+        visualizationCoordinateIndex_.clear();
+        visualizationCoordinateTokens_.clear();
+        visualizationCoordinatePositions_.clear();
         visualizationDeltasValid_ = false;
         visualizationPositions_.reserve(snapshot.points.size());
         visualizationColors_.reserve(snapshot.points.size());
-        for (const auto& point : snapshot.points) {
+        visualizationCoordinateTokens_.reserve(snapshot.points.size());
+        for (size_t pointIndex = 0; pointIndex < snapshot.points.size(); ++pointIndex) {
+            const auto& point = snapshot.points[pointIndex];
             visualizationPositions_.emplace(point.ownerToken, point.position);
+            visualizationCoordinateIndex_.emplace(point.ownerToken, pointIndex);
+            visualizationCoordinateTokens_.push_back(point.ownerToken);
             if (point.hasColor) {
                 visualizationColors_.emplace(point.ownerToken, point.color);
             }
@@ -1339,6 +1347,11 @@ class GlScene {
             if (point.ownerToken.starts_with("%5B%22atom%22")) {
                 visualizationAtomTokens_.insert(point.ownerToken);
             }
+        }
+        visualizationCoordinatePositions_.reserve(visualizationCoordinateTokens_.size());
+        for (const std::string& token : visualizationCoordinateTokens_) {
+            visualizationCoordinatePositions_.push_back(
+                &visualizationPositions_.find(token)->second);
         }
         // Legacy fixtures can use unencoded semantic tokens. Production v12 atom
         // tokens have the prefix above, avoiding a scan through every natural
@@ -1361,6 +1374,80 @@ class GlScene {
             // Backward compatibility for an already-running v1/v2 publisher.
             setStyle(representation_, coloring_);
         }
+    }
+
+    /** Update resident atom instances from a stable-order coordinate-only frame.
+     * This deliberately avoids semantic-map reconstruction and style/color work. */
+    bool updateAtomCoordinates(
+        const std::vector<std::array<float, 3>>& coordinates,
+        double* cpuMilliseconds = nullptr, double* uploadMilliseconds = nullptr) {
+        const auto started = std::chrono::steady_clock::now();
+        if ((representation_ != Representation::ballstick &&
+             representation_ != Representation::stick) ||
+            coordinates.size() != visualizationCoordinateTokens_.size() ||
+            coordinates.empty() || atomisticCylinderInstances_.empty() ||
+            atomisticCylinderCoordinateIndices_.size() !=
+                atomisticCylinderInstances_.size() ||
+            !toolCommittedToken_.empty() || !toolPreviewToken_.empty()) {
+            return false;
+        }
+        normalizedCoordinateScratch_.resize(coordinates.size());
+        for (size_t index = 0; index < coordinates.size(); ++index) {
+            const auto& source = coordinates[index];
+            glm::vec3 position(source[0], source[1], source[2]);
+            position = (position - scene_.normalizationCenter) * scene_.normalizationScale;
+            position.z -= kViewDistanceMeters;
+            normalizedCoordinateScratch_[index] = position;
+            *visualizationCoordinatePositions_[index] =
+                glm::vec3(source[0], source[1], source[2]);
+        }
+        for (size_t index = 0; index < atomisticSphereInstances_.size(); ++index) {
+            const int32_t coordinate = atomisticSphereCoordinateIndices_[index];
+            if (coordinate >= 0) {
+                atomisticSphereInstances_[index].position =
+                    normalizedCoordinateScratch_[static_cast<size_t>(coordinate)];
+            }
+        }
+        for (size_t index = 0; index < atomisticCylinderInstances_.size(); ++index) {
+            const auto coordinate = atomisticCylinderCoordinateIndices_[index];
+            if (coordinate[0] >= 0) {
+                atomisticCylinderInstances_[index].start =
+                    normalizedCoordinateScratch_[static_cast<size_t>(coordinate[0])];
+            }
+            if (coordinate[1] >= 0) {
+                atomisticCylinderInstances_[index].end =
+                    normalizedCoordinateScratch_[static_cast<size_t>(coordinate[1])];
+            }
+        }
+        visualizationDeltasValid_ = false;
+        const auto prepared = std::chrono::steady_clock::now();
+        glBindBuffer(GL_ARRAY_BUFFER, sphereInstanceVbo_);
+        glBufferData(GL_ARRAY_BUFFER,
+            static_cast<GLsizeiptr>(atomisticSphereInstances_.size() * sizeof(Vertex)),
+            nullptr, GL_STREAM_DRAW);
+        glBufferSubData(GL_ARRAY_BUFFER, 0,
+            static_cast<GLsizeiptr>(atomisticSphereInstances_.size() * sizeof(Vertex)),
+            atomisticSphereInstances_.data());
+        glBindBuffer(GL_ARRAY_BUFFER, cylinderInstanceVbo_);
+        glBufferData(GL_ARRAY_BUFFER,
+            static_cast<GLsizeiptr>(atomisticCylinderInstances_.size() * sizeof(Cylinder)),
+            nullptr, GL_STREAM_DRAW);
+        glBufferSubData(GL_ARRAY_BUFFER, 0,
+            static_cast<GLsizeiptr>(atomisticCylinderInstances_.size() * sizeof(Cylinder)),
+            atomisticCylinderInstances_.data());
+        sphereCount_ = representation_ == Representation::ballstick
+            ? static_cast<GLsizei>(atomisticSphereInstances_.size()) : 0;
+        cylinderCount_ = static_cast<GLsizei>(atomisticCylinderInstances_.size());
+        const auto uploaded = std::chrono::steady_clock::now();
+        if (cpuMilliseconds) {
+            *cpuMilliseconds = std::chrono::duration<double, std::milli>(
+                prepared - started).count();
+        }
+        if (uploadMilliseconds) {
+            *uploadMilliseconds = std::chrono::duration<double, std::milli>(
+                uploaded - prepared).count();
+        }
+        return true;
     }
 
     [[nodiscard]] const std::string& visualizationMode() const {
@@ -1509,12 +1596,84 @@ class GlScene {
                       << " rss_mib=" << currentResidentMiB() << std::endl;
             return;
         }
+        const bool restoringAtomistic =
+            representation != Representation::full &&
+            representation != Representation::cylinders &&
+            representation_ != Representation::ballstick &&
+            representation_ != Representation::stick &&
+            cachedAtomisticVisualizationRevision_ == visualizationRevision_ &&
+            cachedAtomisticColoring_ == coloring &&
+            !atomisticCylinderInstances_.empty() &&
+            snapHighlightOwnerTokens_.empty() && snapHighlightIdentities_.empty() &&
+            selectedHighlightOwnerTokens_.empty() && selectedHighlightIdentities_.empty();
+        if (restoringAtomistic) {
+            representation_ = representation;
+            coloring_ = coloring;
+            prepareDisplayedSource();
+            const auto preparedAt = std::chrono::steady_clock::now();
+            glBindBuffer(GL_ARRAY_BUFFER, sphereInstanceVbo_);
+            glBufferData(GL_ARRAY_BUFFER,
+                static_cast<GLsizeiptr>(atomisticSphereInstances_.size() * sizeof(Vertex)),
+                atomisticSphereInstances_.data(), GL_DYNAMIC_DRAW);
+            glBindBuffer(GL_ARRAY_BUFFER, cylinderInstanceVbo_);
+            glBufferData(GL_ARRAY_BUFFER,
+                static_cast<GLsizeiptr>(atomisticCylinderInstances_.size() * sizeof(Cylinder)),
+                atomisticCylinderInstances_.data(), GL_DYNAMIC_DRAW);
+            sphereCount_ = representation_ == Representation::ballstick
+                ? static_cast<GLsizei>(atomisticSphereInstances_.size()) : 0;
+            cylinderCount_ = static_cast<GLsizei>(atomisticCylinderInstances_.size());
+            halfCylinderCount_ = 0;
+            boxCount_ = 0;
+            sphereGlowCount_ = cylinderGlowCount_ = halfCylinderGlowCount_ = boxGlowCount_ = 0;
+            atomisticBuffersResident_ = true;
+            uploadedVisualizationRevision_ = visualizationRevision_;
+            const auto uploadedAt = std::chrono::steady_clock::now();
+            const double prepareMilliseconds = std::chrono::duration<double, std::milli>(
+                preparedAt - styleStarted).count();
+            const double uploadMilliseconds = std::chrono::duration<double, std::milli>(
+                uploadedAt - preparedAt).count();
+            const double milliseconds = std::chrono::duration<double, std::milli>(
+                uploadedAt - styleStarted).count();
+            std::cout << "VR_METRIC event=process_progress phase=style_apply"
+                      << " representation=" << representationName(representation_)
+                      << " coloring=" << coloringName(coloring_)
+                      << " points=" << sphereCount_
+                      << " cylinders=" << cylinderCount_
+                      << " prepare_ms=" << prepareMilliseconds
+                      << " upload_ms=" << uploadMilliseconds
+                      << " total_ms=" << milliseconds
+                      << " fast_path=restored_atomistic_buffers"
+                      << " rss_mib=" << currentResidentMiB() << std::endl;
+            return;
+        }
         representation_ = representation;
         coloring_ = coloring;
         prepareDisplayedSource();
         const RepresentationData& source = currentSource();
         ensureSourceIndex(source);
         const auto preparedAt = std::chrono::steady_clock::now();
+        auto coordinateIndexFor = [&](const std::string& identity, bool end) -> int32_t {
+            const auto ownership = sourceIndex_.ownership.find(identity);
+            if (ownership != sourceIndex_.ownership.end()) {
+                for (const TransformOwner& owner : ownership->second->owners) {
+                    const float weight = end ? owner.endWeight : owner.startWeight;
+                    const auto coordinate = visualizationCoordinateIndex_.find(owner.token);
+                    if (weight > 0.0F && coordinate != visualizationCoordinateIndex_.end()) {
+                        return static_cast<int32_t>(coordinate->second);
+                    }
+                }
+            }
+            const auto aliases = sourceIndex_.aliases.find(identity);
+            if (aliases != sourceIndex_.aliases.end()) {
+                for (const std::string& token : aliases->second->tokens) {
+                    const auto coordinate = visualizationCoordinateIndex_.find(token);
+                    if (coordinate != visualizationCoordinateIndex_.end()) {
+                        return static_cast<int32_t>(coordinate->second);
+                    }
+                }
+            }
+            return -1;
+        };
         auto collectWeights = [&](const std::string& token) {
             std::unordered_map<std::string, std::pair<float, float>> result;
             if (token.empty()) return result;
@@ -1598,8 +1757,10 @@ class GlScene {
         };
 
         std::vector<Vertex> points;
+        std::vector<int32_t> sphereCoordinateIndices;
         std::vector<Vertex> glowPoints;
         points.reserve(source.points.size());
+        sphereCoordinateIndices.reserve(source.points.size());
         for (const StyledPoint& point : source.points) {
             if (point.identity.starts_with("atom-ref:") &&
                 !hasCompleteVisualizationAtomEndpoints(source, point.identity)) {
@@ -1613,6 +1774,7 @@ class GlScene {
                 visualizationColor(source, point.identity)
                     .value_or(point.colors.get(coloring)),
                 point.size});
+            sphereCoordinateIndices.push_back(coordinateIndexFor(point.identity, false));
             if (const auto color = glowColor(point.identity)) {
                 glowPoints.push_back(Vertex{position, *color, point.size * 1.55F});
             }
@@ -1629,8 +1791,10 @@ class GlScene {
         sphereGlowCount_ = static_cast<GLsizei>(glowPoints.size());
 
         std::vector<Cylinder> cylinders;
+        std::vector<std::array<int32_t, 2>> cylinderCoordinateIndices;
         std::vector<Cylinder> glowCylinders;
         cylinders.reserve(source.cylinders.size());
+        cylinderCoordinateIndices.reserve(source.cylinders.size());
         for (const StyledCylinder& cylinder : source.cylinders) {
             if (cylinder.identity.starts_with("atom-bond-ref:") &&
                 !hasCompleteVisualizationAtomEndpoints(source, cylinder.identity)) {
@@ -1652,6 +1816,10 @@ class GlScene {
                 start, end, cylinder.radius,
                 visualizationColor(source, cylinder.identity)
                     .value_or(cylinder.colors.get(coloring))});
+            cylinderCoordinateIndices.push_back({
+                coordinateIndexFor(cylinder.identity, false),
+                coordinateIndexFor(cylinder.identity, true),
+            });
             if (const auto color = glowColor(cylinder.identity)) {
                 glowCylinders.push_back(Cylinder{
                     start, end, cylinder.radius * 1.55F, *color});
@@ -1667,6 +1835,18 @@ class GlScene {
                      static_cast<GLsizeiptr>(glowCylinders.size() * sizeof(Cylinder)),
                      glowCylinders.data(), GL_DYNAMIC_DRAW);
         cylinderGlowCount_ = static_cast<GLsizei>(glowCylinders.size());
+
+        if ((representation_ == Representation::ballstick ||
+             representation_ == Representation::stick) &&
+            !visualizationAtomTokens_.empty()) {
+            atomisticSphereInstances_ = points;
+            atomisticSphereCoordinateIndices_ = std::move(sphereCoordinateIndices);
+            atomisticCylinderInstances_ = cylinders;
+            atomisticCylinderCoordinateIndices_ =
+                std::move(cylinderCoordinateIndices);
+            cachedAtomisticVisualizationRevision_ = visualizationRevision_;
+            cachedAtomisticColoring_ = coloring_;
+        }
 
         std::vector<Cylinder> halfCylinders;
         std::vector<Cylinder> glowHalfCylinders;
@@ -3446,6 +3626,10 @@ class GlScene {
     std::unordered_map<std::string, nadoc_vr::VisualizationPoint>
         visualizationSlabFrames_;
     std::unordered_set<std::string> visualizationAtomTokens_;
+    std::unordered_map<std::string, size_t> visualizationCoordinateIndex_;
+    std::vector<std::string> visualizationCoordinateTokens_;
+    std::vector<glm::vec3*> visualizationCoordinatePositions_;
+    std::vector<glm::vec3> normalizedCoordinateScratch_;
     std::unordered_map<std::string, glm::vec3> visualizationDeltas_;
     bool visualizationDeltasValid_ = false;
     uint64_t visualizationRevision_ = 0;
@@ -3453,6 +3637,13 @@ class GlScene {
     bool atomisticSharedGeometry_ = false;
     bool atomisticBuffersResident_ = false;
     GLsizei ballstickSphereCount_ = 0;
+    std::vector<Vertex> atomisticSphereInstances_;
+    std::vector<int32_t> atomisticSphereCoordinateIndices_;
+    std::vector<Cylinder> atomisticCylinderInstances_;
+    std::vector<std::array<int32_t, 2>> atomisticCylinderCoordinateIndices_;
+    uint64_t cachedAtomisticVisualizationRevision_ =
+        std::numeric_limits<uint64_t>::max();
+    Coloring cachedAtomisticColoring_ = Coloring::strand;
     std::unordered_set<std::string> snapHighlightOwnerTokens_;
     std::unordered_set<std::string> snapHighlightIdentities_;
     std::unordered_set<std::string> selectedHighlightOwnerTokens_;
@@ -3613,6 +3804,59 @@ int benchmarkAtomisticStyles(
             GlScene glScene(std::move(scene));
             glScene.setVisualization(visualization);
             glScene.setStyle(Representation::stick, Coloring::cpk);
+            glScene.setStyle(Representation::ballstick, Coloring::cpk);
+            glFinish();
+            std::vector<std::array<float, 3>> coordinates;
+            coordinates.reserve(visualization.points.size());
+            for (const auto& point : visualization.points) {
+                coordinates.push_back({point.position.x, point.position.y, point.position.z});
+            }
+            std::vector<double> frameMilliseconds;
+            std::vector<double> cpuMilliseconds;
+            std::vector<double> uploadMilliseconds;
+            constexpr size_t benchmarkFrames = 40;
+            for (size_t frame = 0; frame < benchmarkFrames; ++frame) {
+                const float offset = (frame & 1U) == 0U ? 0.0001F : -0.0001F;
+                for (auto& position : coordinates) position[0] += offset;
+                double cpu = 0.0;
+                double upload = 0.0;
+                const auto frameStarted = std::chrono::steady_clock::now();
+                if (!glScene.updateAtomCoordinates(coordinates, &cpu, &upload)) {
+                    throw std::runtime_error("coordinate fast path rejected benchmark frame");
+                }
+                glFinish();
+                const double total = std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - frameStarted).count();
+                if (frame >= 5U) {
+                    frameMilliseconds.push_back(total);
+                    cpuMilliseconds.push_back(cpu);
+                    uploadMilliseconds.push_back(upload);
+                }
+            }
+            auto percentile = [](std::vector<double> values, double quantile) {
+                std::sort(values.begin(), values.end());
+                const size_t index = static_cast<size_t>(std::floor(
+                    quantile * static_cast<double>(values.size() - 1U)));
+                return values[index];
+            };
+            std::cout << "VR_METRIC event=process_end phase=coordinate_benchmark"
+                      << " frames=" << frameMilliseconds.size()
+                      << " atoms=" << coordinates.size()
+                      << " payload_bytes=" << coordinates.size() * 12U
+                      << " cpu_p50_ms=" << percentile(cpuMilliseconds, 0.50)
+                      << " cpu_p95_ms=" << percentile(cpuMilliseconds, 0.95)
+                      << " upload_submit_p50_ms=" << percentile(uploadMilliseconds, 0.50)
+                      << " upload_submit_p95_ms=" << percentile(uploadMilliseconds, 0.95)
+                      << " gpu_complete_p50_ms=" << percentile(frameMilliseconds, 0.50)
+                      << " gpu_complete_p95_ms=" << percentile(frameMilliseconds, 0.95)
+                      << " gpu_complete_max_ms="
+                      << *std::max_element(frameMilliseconds.begin(), frameMilliseconds.end())
+                      << " rss_mib=" << currentResidentMiB() << std::endl;
+            glScene.setStyle(Representation::full, Coloring::cpk);
+            if (glScene.updateAtomCoordinates(coordinates)) {
+                throw std::runtime_error(
+                    "atom-only coordinate frame was accepted in Full representation");
+            }
             glScene.setStyle(Representation::ballstick, Coloring::cpk);
             glFinish();
         }
@@ -4211,6 +4455,8 @@ class Viewer {
                     nadoc_vr::JobSnapshot jobSnapshot = {},
                     std::string visualizationPath = {},
                     nadoc_vr::VisualizationSnapshot visualizationSnapshot = {},
+                    std::string trajectoryPath = {},
+                    std::string coordinatePath = {},
                     std::string selectionLevel = "default",
                     std::vector<std::string> selectedOwnerTokens = {},
                     std::string selectedSelectionKind = "none",
@@ -4232,6 +4478,8 @@ class Viewer {
           toolExecutionFeedbackPath_(std::move(toolExecutionFeedbackPath)),
           jobPath_(std::move(jobPath)),
           visualizationPath_(std::move(visualizationPath)),
+          trajectoryPath_(std::move(trajectoryPath)),
+          coordinatePath_(std::move(coordinatePath)),
           jobsSnapshotAvailable_(jobSnapshot.available),
           jobsSnapshotTotal_(jobSnapshot.total),
           jobSnapshotSequence_(jobSnapshot.sequence),
@@ -4253,6 +4501,24 @@ class Viewer {
           exitOnWitnessComplete_(exitOnWitnessComplete),
           jobs_(std::move(jobSnapshot.rows)),
           selectionLevel_(std::move(selectionLevel)) {
+        if (!visualizationPath_.empty()) {
+            std::error_code error;
+            const auto modified = std::filesystem::last_write_time(
+                visualizationPath_, error);
+            if (!error) visualizationModified_ = modified;
+        }
+        if (!trajectoryPath_.empty()) {
+            std::ifstream input(trajectoryPath_);
+            trajectoryState_ = nadoc_vr::loadTrajectoryState(input);
+            std::error_code error;
+            trajectoryModified_ = std::filesystem::last_write_time(
+                trajectoryPath_, error);
+        }
+        if (!coordinatePath_.empty()) {
+            std::error_code error;
+            coordinateModified_ = std::filesystem::last_write_time(
+                coordinatePath_, error);
+        }
         if (initialScenePlacementRequested_ &&
             sceneViewPlacement_.view == nadoc_vr::ScenePlacementView::mirror &&
             mirrorEye_ == nadoc_vr::SpectatorMirrorEye::off) {
@@ -4776,7 +5042,9 @@ class Viewer {
         appendPlacedText(placement, text, x, y, scale, color, z);
     }
 
-    enum class MenuPage { options, tools, tool_config, jobs, job_detail, desktop };
+    enum class MenuPage {
+        options, tools, tool_config, jobs, job_detail, trajectory, desktop
+    };
 
     struct MenuItem {
         const char* label;
@@ -4787,7 +5055,7 @@ class Viewer {
     static constexpr std::array<const char*, 7> kSelectionLevels = {
         "default", "cluster", "strand", "domain", "end", "xover", "base",
     };
-    static constexpr std::array<MenuItem, 18> kOptionsMenuItems = {{
+    static constexpr std::array<MenuItem, 19> kOptionsMenuItems = {{
         {"CYLINDERS", -0.16F, 0.190F, 0.145F},
         {"FULL", -0.16F, 0.135F, 0.145F},
         {"BALL + STICK", -0.16F, 0.080F, 0.145F},
@@ -4805,7 +5073,8 @@ class Viewer {
         {"BASE", 0.16F, -0.215F, 0.145F},
         {"TOOLS", -0.16F, -0.350F, 0.145F},
         {"RECENTER", 0.16F, -0.350F, 0.145F},
-        {"DESKTOP", 0.0F, -0.415F, 0.305F},
+        {"TRAJECTORY", -0.16F, -0.415F, 0.145F},
+        {"DESKTOP", 0.16F, -0.415F, 0.145F},
     }};
     static constexpr std::array<MenuItem, 10> kToolMenuItems = {{
         {"INSPECT", -0.16F, 0.190F, 0.145F},
@@ -4843,6 +5112,13 @@ class Viewer {
     }};
     static constexpr std::array<MenuItem, 1> kDesktopMenuItems = {{
         {"BACK TO VR MENU", 0.0F, -0.260F, 0.305F},
+    }};
+    static constexpr std::array<MenuItem, 5> kTrajectoryMenuItems = {{
+        {"PLAY / PAUSE", 0.0F, 0.190F, 0.305F},
+        {"TIMELINE", 0.0F, 0.075F, 0.280F},
+        {"PREVIOUS FRAME", -0.16F, -0.035F, 0.145F},
+        {"NEXT FRAME", 0.16F, -0.035F, 0.145F},
+        {"BACK", 0.0F, -0.260F, 0.305F},
     }};
     static constexpr std::array<MenuItem, 3> kMenuControlItems = {{
         {"DOCK", -0.20F, -0.505F, 0.12F},
@@ -4904,6 +5180,7 @@ class Viewer {
             case MenuPage::tool_config: return "tool_config";
             case MenuPage::jobs: return "jobs";
             case MenuPage::job_detail: return "job_detail";
+            case MenuPage::trajectory: return "trajectory";
             case MenuPage::desktop: return "desktop";
         }
         return "closed";
@@ -4927,6 +5204,7 @@ class Viewer {
         else if (menuPage_ == MenuPage::tool_config) append(kToolConfigMenuItems);
         else if (menuPage_ == MenuPage::jobs) append(kJobsMenuItems);
         else if (menuPage_ == MenuPage::job_detail) append(kJobDetailMenuItems);
+        else if (menuPage_ == MenuPage::trajectory) append(kTrajectoryMenuItems);
         else append(std::array<MenuItem, 1>{desktopBackItem()});
         std::array<MenuItem, kMenuControlItems.size()> controls{};
         for (size_t index = 0; index < controls.size(); ++index) {
@@ -4980,6 +5258,7 @@ class Viewer {
 
     void toggleMenu(size_t hand) {
         radialToolMenu_.close();
+        trajectoryScrubHand_.reset();
         menuHand_ = hand;
         if (menuOpen_) {
             menuOpen_ = false;
@@ -5065,8 +5344,10 @@ class Viewer {
                     ? "VR TOOL SETTINGS DRAFT"
                     : menuPage_ == MenuPage::jobs
                         ? "SIMULATION CONTEXT"
-                        : menuPage_ == MenuPage::job_detail
-                            ? "SIMULATION JOB DETAILS" : "NADOC DESKTOP";
+                    : menuPage_ == MenuPage::job_detail
+                            ? "SIMULATION JOB DETAILS"
+                            : menuPage_ == MenuPage::trajectory
+                                ? "MD TRAJECTORY" : "NADOC DESKTOP";
         const bool jobMenu = menuPage_ == MenuPage::jobs ||
                              menuPage_ == MenuPage::job_detail;
         appendMenuText(
@@ -5118,6 +5399,53 @@ class Viewer {
                 ? glm::vec3(1.0F, 0.78F, 0.22F)
                 : glm::vec3(0.65F, 0.70F, 0.78F);
             itemBox(desktopBackItem(), backColor);
+            return;
+        }
+
+        if (menuPage_ == MenuPage::trajectory) {
+            const bool available = trajectoryState_.active &&
+                                   trajectoryState_.frameCount > 0;
+            std::ostringstream frameLabel;
+            frameLabel << "FRAME " << (available ? trajectoryState_.frameIndex + 1 : 0)
+                       << " / " << trajectoryState_.frameCount;
+            appendMenuText(frameLabel.str(), -0.145F, 0.255F, 0.0042F,
+                           available ? glm::vec3(0.35F, 0.95F, 0.68F)
+                                     : glm::vec3(0.65F, 0.70F, 0.78F));
+            for (size_t index = 0; index < kTrajectoryMenuItems.size(); ++index) {
+                glm::vec3 color = available || index == 4
+                    ? glm::vec3(0.65F, 0.70F, 0.78F)
+                    : glm::vec3(0.30F, 0.32F, 0.36F);
+                if (static_cast<int>(index) == menuHover_) {
+                    color = available || index == 4
+                        ? glm::vec3(1.0F, 0.78F, 0.22F)
+                        : glm::vec3(0.48F, 0.32F, 0.30F);
+                }
+                const char* label = index == 0
+                    ? (trajectoryState_.playing ? "PAUSE" : "PLAY")
+                    : kTrajectoryMenuItems[index].label;
+                itemBox(kTrajectoryMenuItems[index], color, label);
+            }
+            const float left = kTrajectoryMenuItems[1].x - 0.245F;
+            const float right = kTrajectoryMenuItems[1].x + 0.245F;
+            const float progress = trajectoryState_.frameCount > 1
+                ? static_cast<float>(trajectoryState_.frameIndex) /
+                    static_cast<float>(trajectoryState_.frameCount - 1) : 0.0F;
+            line(menuWorld(left, 0.052F), menuWorld(right, 0.052F),
+                 glm::vec3(0.30F, 0.42F, 0.58F));
+            const float thumb = left + (right - left) * progress;
+            line(menuWorld(thumb, 0.040F), menuWorld(thumb, 0.064F),
+                 glm::vec3(0.35F, 0.95F, 0.68F));
+            appendMenuText(
+                trajectoryState_.live ? "LIVE SOURCE" :
+                    trajectoryState_.loop ? "LOOP ON" : "LOOP OFF",
+                -0.090F, -0.105F, 0.0038F,
+                trajectoryState_.live ? glm::vec3(0.95F, 0.68F, 0.22F)
+                                      : glm::vec3(0.72F, 0.80F, 0.92F));
+            std::ostringstream rate;
+            rate << "SPEED " << trajectoryState_.speed << "X  STRIDE "
+                 << trajectoryState_.stride;
+            appendMenuText(rate.str(), -0.120F, -0.155F, 0.0035F,
+                           {0.72F, 0.80F, 0.92F});
             return;
         }
 
@@ -5894,8 +6222,10 @@ class Viewer {
                     ? kToolConfigMenuItems.data()
                     : menuPage_ == MenuPage::jobs
                         ? kJobsMenuItems.data()
-                        : menuPage_ == MenuPage::job_detail
-                            ? kJobDetailMenuItems.data() : nullptr;
+                    : menuPage_ == MenuPage::job_detail
+                            ? kJobDetailMenuItems.data()
+                            : menuPage_ == MenuPage::trajectory
+                                ? kTrajectoryMenuItems.data() : nullptr;
         const size_t itemCount = menuPage_ == MenuPage::options
             ? kOptionsMenuItems.size()
             : menuPage_ == MenuPage::tools
@@ -5904,8 +6234,10 @@ class Viewer {
                     ? kToolConfigMenuItems.size()
                     : menuPage_ == MenuPage::jobs
                         ? kJobsMenuItems.size()
-                        : menuPage_ == MenuPage::job_detail
-                            ? kJobDetailMenuItems.size() : 1U;
+                    : menuPage_ == MenuPage::job_detail
+                            ? kJobDetailMenuItems.size()
+                            : menuPage_ == MenuPage::trajectory
+                                ? kTrajectoryMenuItems.size() : 1U;
         for (size_t index = 0; index < itemCount; ++index) {
             const MenuItem item = menuPage_ == MenuPage::desktop
                 ? desktopBackItem() : items[index];
@@ -6090,8 +6422,28 @@ class Viewer {
         std::array<bool, 2> controlTargeted = blocked;
         menuHover_ = -1;
         desktopSurface_.hidePointer();
+        if (!menuOpen_ || menuPage_ != MenuPage::trajectory) {
+            trajectoryScrubHand_.reset();
+        }
+        auto trajectoryFrameAt = [&](const nadoc_vr::HandPose& hand)
+                -> std::optional<uint32_t> {
+            if (!trajectoryState_.active || trajectoryState_.frameCount == 0) {
+                return std::nullopt;
+            }
+            const auto local = menuRayPanelLocalPoint(hand);
+            if (!local) return std::nullopt;
+            constexpr float left = -0.245F;
+            constexpr float right = 0.245F;
+            const float amount = glm::clamp(
+                (local->x - left) / (right - left), 0.0F, 1.0F);
+            return static_cast<uint32_t>(std::lround(
+                amount * static_cast<float>(trajectoryState_.frameCount - 1)));
+        };
         for (size_t hand = 0; hand < hands_.size(); ++hand) {
             if (blocked[hand]) {
+                if (trajectoryScrubHand_ && *trajectoryScrubHand_ == hand) {
+                    trajectoryScrubHand_.reset();
+                }
                 menuHoverTargets_[hand] = -1;
                 continue;
             }
@@ -6100,9 +6452,20 @@ class Viewer {
                 menuHoverTargets_[hand] = -1;
                 continue;
             }
+            if (trajectoryScrubHand_ && *trajectoryScrubHand_ == hand) {
+                controlTargeted[hand] = true;
+                if (!triggerPressed_[hand]) {
+                    trajectoryScrubHand_.reset();
+                } else if (const auto frame = trajectoryFrameAt(hands_[hand]);
+                           frame && *frame != trajectoryScrubFrame_) {
+                    trajectoryScrubFrame_ = *frame;
+                    publishTrajectoryRequest("seek", *frame);
+                }
+            }
             const int hit = menuHit(hands_[hand]);
             const auto desktopPointer = desktopPointerUv(hands_[hand]);
-            controlTargeted[hand] = hit >= 0 || desktopPointer.has_value();
+            controlTargeted[hand] = controlTargeted[hand] || hit >= 0 ||
+                                    desktopPointer.has_value();
             const int hoverTarget = hit < 0
                 ? -1 : static_cast<int>(menuPage_) * 1000 + hit;
             if (nadoc_vr::menuHoverHapticRequested(
@@ -6139,6 +6502,38 @@ class Viewer {
             if (menuPage_ == MenuPage::job_detail) {
                 menuPage_ = MenuPage::jobs;
                 menuHover_ = -1;
+                continue;
+            }
+            if (menuPage_ == MenuPage::trajectory) {
+                if (hit == 4) {
+                    trajectoryScrubHand_.reset();
+                    menuPage_ = MenuPage::options;
+                    menuHover_ = -1;
+                    continue;
+                }
+                if (!trajectoryState_.active || trajectoryState_.frameCount == 0) {
+                    continue;
+                }
+                if (hit == 0) {
+                    publishTrajectoryRequest(
+                        trajectoryState_.playing ? "pause" : "play",
+                        trajectoryState_.frameIndex);
+                } else if (hit == 1) {
+                    if (const auto frame = trajectoryFrameAt(hands_[hand])) {
+                        trajectoryScrubHand_ = hand;
+                        trajectoryScrubFrame_ = *frame;
+                        publishTrajectoryRequest("seek", *frame);
+                    }
+                } else if (hit == 2) {
+                    publishTrajectoryRequest(
+                        "seek", trajectoryState_.frameIndex > 0
+                            ? trajectoryState_.frameIndex - 1 : 0);
+                } else if (hit == 3) {
+                    publishTrajectoryRequest(
+                        "seek", std::min(
+                            trajectoryState_.frameIndex + 1,
+                            trajectoryState_.frameCount - 1));
+                }
                 continue;
             }
             if (menuPage_ == MenuPage::jobs) {
@@ -6261,6 +6656,9 @@ class Viewer {
                 menuHover_ = -1;
                 suppressManipulationUntilRelease_ = true;
             } else if (hit == 17) {
+                menuPage_ = MenuPage::trajectory;
+                menuHover_ = -1;
+            } else if (hit == 18) {
                 menuPage_ = MenuPage::desktop;
                 menuHover_ = -1;
             }
@@ -6689,6 +7087,18 @@ class Viewer {
         publishEventState();
     }
 
+    void publishTrajectoryRequest(const std::string& action, uint32_t frameIndex) {
+        if (witness_ && eventPath_.empty()) {
+            std::cout << "VR_METRIC event=process_progress phase=witness_trajectory_request"
+                      << " action=" << action << " frame_idx=" << frameIndex << std::endl;
+            return;
+        }
+        trajectoryAction_ = action;
+        trajectoryRequestedFrameIndex_ = frameIndex;
+        ++trajectoryRequestSequence_;
+        publishEventState();
+    }
+
     void publishToolIntent(nadoc_vr::ToolAction action) {
         lastToolAction_ = action;
         // Bind the intent to the acknowledged target visible at controller-click
@@ -6740,6 +7150,10 @@ class Viewer {
         output << ",\"style_sequence\":" << styleSequence_
                << ",\"representation\":\"" << requestedRepresentation_
                << "\",\"coloring\":\"" << requestedColoring_ << "\"";
+        output << ",\"trajectory_sequence\":" << trajectoryRequestSequence_
+               << ",\"trajectory_action\":\"" << trajectoryAction_
+               << "\",\"trajectory_frame_idx\":"
+               << trajectoryRequestedFrameIndex_;
         output << ",\"tool_sequence\":" << toolSequence_
                << ",\"tool_mode\":\"" << nadoc_vr::toolModeName(toolShell_.mode())
                << "\",\"tool_action\":\""
@@ -8480,24 +8894,153 @@ class Viewer {
     }
 
     void pollVisualizationSnapshot() {
-        if (visualizationPath_.empty() ||
-            (++visualizationSnapshotPollFrame_ % 10U) != 0U) return;
+        if (visualizationPath_.empty()) return;
+        ++visualizationSnapshotPollFrame_;
+        // A production all-atom snapshot is several MB. The old path reparsed it
+        // every ten HMD frames merely to rediscover the same sequence number,
+        // creating a periodic render-thread stall even while playback was paused.
+        // Stat each frame (cheap), and parse only an atomically published revision.
+        std::error_code error;
+        const auto modified = std::filesystem::last_write_time(
+            visualizationPath_, error);
+        if (error || (visualizationModified_ && *visualizationModified_ == modified)) {
+            return;
+        }
+        visualizationModified_ = modified;
+        const uintmax_t sourceBytes = std::filesystem::file_size(
+            visualizationPath_, error);
+        const auto started = std::chrono::steady_clock::now();
         try {
             auto next = nadoc_vr::loadVisualizationSnapshot(visualizationPath_);
+            const auto parsedAt = std::chrono::steady_clock::now();
             if (next.sequence <= visualizationSequence_) return;
+            const uint64_t previousSequence = visualizationSequence_;
             visualizationSequence_ = next.sequence;
             visualizationSnapshot_ = std::move(next);
             glScene_->setVisualization(visualizationSnapshot_);
+            const auto appliedAt = std::chrono::steady_clock::now();
             if (!visualizationSnapshot_.representation.empty()) {
                 desktopRepresentation_ = visualizationSnapshot_.representation;
                 desktopColoring_ = visualizationSnapshot_.coloring;
             }
+            ++visualizationUpdateCount_;
+            const uint64_t sequenceGap = visualizationSequence_ > previousSequence
+                ? visualizationSequence_ - previousSequence - 1U : 0U;
+            visualizationSequenceGaps_ += sequenceGap;
+            const double parseMilliseconds =
+                std::chrono::duration<double, std::milli>(parsedAt - started).count();
+            const double applyMilliseconds =
+                std::chrono::duration<double, std::milli>(appliedAt - parsedAt).count();
+            std::cout << "VR_METRIC event=process_progress phase=visualization_update"
+                      << " sequence=" << visualizationSequence_
+                      << " updates=" << visualizationUpdateCount_
+                      << " sequence_gap=" << sequenceGap
+                      << " sequence_gaps_total=" << visualizationSequenceGaps_
+                      << " points=" << visualizationSnapshot_.points.size()
+                      << " source_bytes=" << (error ? 0U : sourceBytes)
+                      << " parse_ms=" << parseMilliseconds
+                      << " apply_upload_ms=" << applyMilliseconds
+                      << " total_ms=" << (parseMilliseconds + applyMilliseconds)
+                      << " hmd_poll_frame=" << visualizationSnapshotPollFrame_
+                      << " rss_mib=" << currentResidentMiB() << std::endl;
             std::cout << "VR desktop visualization: "
                       << visualizationSnapshot_.mode << " ("
                       << visualizationSnapshot_.points.size() << " positions)\n";
         } catch (const std::exception&) {
             // Atomic publication means a failed revision is never required for
             // progress. Retain the last complete desktop visualization.
+        }
+    }
+
+    void pollTrajectoryFeeds() {
+        if (!trajectoryPath_.empty()) {
+            std::error_code error;
+            const auto modified = std::filesystem::last_write_time(
+                trajectoryPath_, error);
+            if (!error && (!trajectoryModified_ || *trajectoryModified_ != modified)) {
+                try {
+                    std::ifstream input(trajectoryPath_);
+                    auto next = nadoc_vr::loadTrajectoryState(input);
+                    if (next.sequence >= trajectoryState_.sequence) {
+                        trajectoryState_ = next;
+                    }
+                    trajectoryModified_ = modified;
+                } catch (const std::exception&) {
+                    // Atomic publisher should make this exceptional; retain last state.
+                }
+            }
+        }
+        if (coordinatePath_.empty()) return;
+        std::error_code error;
+        const auto modified = std::filesystem::last_write_time(
+            coordinatePath_, error);
+        if (error || (coordinateModified_ && *coordinateModified_ == modified)) return;
+        const uintmax_t sourceBytes = std::filesystem::file_size(coordinatePath_, error);
+        const auto started = std::chrono::steady_clock::now();
+        try {
+            std::ifstream input(coordinatePath_, std::ios::binary);
+            nadoc_vr::loadCoordinateFrame(input, coordinateFrameScratch_);
+            const auto& frame = coordinateFrameScratch_;
+            const auto parsed = std::chrono::steady_clock::now();
+            coordinateModified_ = modified;
+            if (frame.sequence <= coordinateSequence_) return;
+            if (frame.positions.empty()) {
+                coordinateSequence_ = frame.sequence;
+                return;
+            }
+            if (glScene_->representation() != Representation::ballstick &&
+                glScene_->representation() != Representation::stick) {
+                // The compact feed contains atom XYZ only. Full also needs coarse
+                // slab orientation and therefore arrives through the authoritative
+                // visualization feed. Consume this revision so returning to an
+                // atomistic mode does not report an intentional Full hold as loss.
+                coordinateSequence_ = frame.sequence;
+                std::cout << "VR_METRIC event=process_progress phase=coordinate_update"
+                          << " status=skipped_incompatible_representation"
+                          << " sequence=" << frame.sequence
+                          << " frame_idx=" << frame.frameIndex
+                          << " atoms=" << frame.positions.size()
+                          << " representation="
+                          << representationName(glScene_->representation())
+                          << std::endl;
+                return;
+            }
+            double cpuMilliseconds = 0.0;
+            double uploadMilliseconds = 0.0;
+            if (!glScene_->updateAtomCoordinates(
+                    frame.positions, &cpuMilliseconds, &uploadMilliseconds)) {
+                std::cout << "VR_METRIC event=process_progress phase=coordinate_update"
+                          << " status=rejected sequence=" << frame.sequence
+                          << " frame_idx=" << frame.frameIndex
+                          << " atoms=" << frame.positions.size() << std::endl;
+                return;
+            }
+            const uint64_t previousSequence = coordinateSequence_;
+            coordinateSequence_ = frame.sequence;
+            ++coordinateUpdateCount_;
+            const uint64_t sequenceGap = previousSequence > 0 &&
+                    coordinateSequence_ > previousSequence
+                ? coordinateSequence_ - previousSequence - 1U : 0U;
+            coordinateSequenceGaps_ += sequenceGap;
+            const double parseMilliseconds =
+                std::chrono::duration<double, std::milli>(parsed - started).count();
+            std::cout << "VR_METRIC event=process_progress phase=coordinate_update"
+                      << " status=applied sequence=" << coordinateSequence_
+                      << " updates=" << coordinateUpdateCount_
+                      << " sequence_gap=" << sequenceGap
+                      << " sequence_gaps_total=" << coordinateSequenceGaps_
+                      << " frame_idx=" << frame.frameIndex
+                      << " frame_count=" << frame.frameCount
+                      << " atoms=" << frame.positions.size()
+                      << " source_bytes=" << (error ? 0U : sourceBytes)
+                      << " parse_ms=" << parseMilliseconds
+                      << " cpu_update_ms=" << cpuMilliseconds
+                      << " upload_ms=" << uploadMilliseconds
+                      << " total_ms="
+                      << (parseMilliseconds + cpuMilliseconds + uploadMilliseconds)
+                      << " rss_mib=" << currentResidentMiB() << std::endl;
+        } catch (const std::exception&) {
+            // Retain the last complete frame and retry the next atomic revision.
         }
     }
 
@@ -8538,6 +9081,7 @@ class Viewer {
             if (sessionRunning_) {
                 pollJobSnapshot();
                 pollVisualizationSnapshot();
+                pollTrajectoryFeeds();
                 renderFrame();
             } else {
                 std::this_thread::sleep_for(std::chrono::milliseconds(20));
@@ -8554,6 +9098,8 @@ class Viewer {
     std::string toolExecutionFeedbackPath_;
     std::string jobPath_;
     std::string visualizationPath_;
+    std::string trajectoryPath_;
+    std::string coordinatePath_;
     bool jobsSnapshotAvailable_ = false;
     int jobsSnapshotTotal_ = 0;
     uint64_t jobSnapshotSequence_ = 0;
@@ -8562,6 +9108,16 @@ class Viewer {
     nadoc_vr::VisualizationSnapshot visualizationSnapshot_;
     uint64_t visualizationSequence_ = 0;
     uint32_t visualizationSnapshotPollFrame_ = 0;
+    std::optional<std::filesystem::file_time_type> visualizationModified_;
+    uint64_t visualizationUpdateCount_ = 0;
+    uint64_t visualizationSequenceGaps_ = 0;
+    nadoc_vr::TrajectoryState trajectoryState_;
+    std::optional<std::filesystem::file_time_type> trajectoryModified_;
+    std::optional<std::filesystem::file_time_type> coordinateModified_;
+    nadoc_vr::CoordinateFrame coordinateFrameScratch_;
+    uint64_t coordinateSequence_ = 0;
+    uint64_t coordinateUpdateCount_ = 0;
+    uint64_t coordinateSequenceGaps_ = 0;
     std::string desktopActiveJobEngine_;
     std::string desktopActiveJobId_;
     std::string desktopRepresentation_;
@@ -8594,6 +9150,9 @@ class Viewer {
     uint64_t styleSequence_ = 0;
     std::string requestedRepresentation_ = "full";
     std::string requestedColoring_ = "strand";
+    uint64_t trajectoryRequestSequence_ = 0;
+    std::string trajectoryAction_ = "none";
+    uint32_t trajectoryRequestedFrameIndex_ = 0;
     uint64_t toolSequence_ = 0;
     nadoc_vr::ToolAction lastToolAction_ = nadoc_vr::ToolAction::activate;
     std::string lastToolTargetIdentity_;
@@ -8736,6 +9295,8 @@ class Viewer {
     bool suppressManipulationUntilRelease_ = false;
     int menuHover_ = -1;
     std::array<int, 2> menuHoverTargets_{-1, -1};
+    std::optional<size_t> trajectoryScrubHand_;
+    uint32_t trajectoryScrubFrame_ = 0;
     size_t jobPage_ = 0;
     size_t selectedJobIndex_ = 0;
     nadoc_vr::MenuPlacement menuPlacement_;
@@ -8812,6 +9373,8 @@ int main(int argc, char** argv) {
                      "[--tool-execution-feedback <tool-execution-feedback.txt>] "
                      "[--jobs <jobs.txt>] "
                      "[--visualization <visualization.txt>] "
+                     "[--trajectory <trajectory.txt>] "
+                     "[--coordinates <coordinates.bin>] "
                      "[--selection-level <level>] "
                      "[--selected-owner <token>]... [--selected-kind <kind>] "
                      "[--mirror-eye <off|left|right>] "
@@ -8837,6 +9400,8 @@ int main(int argc, char** argv) {
     std::string toolExecutionFeedbackPath;
     std::string jobPath;
     std::string visualizationPath;
+    std::string trajectoryPath;
+    std::string coordinatePath;
     std::string witnessPath;
     std::string mirrorDiagnosticsPath;
     std::string witnessCaptureDirectory;
@@ -8868,6 +9433,8 @@ int main(int argc, char** argv) {
         }
         else if (option == "--jobs") jobPath = argv[index + 1];
         else if (option == "--visualization") visualizationPath = argv[index + 1];
+        else if (option == "--trajectory") trajectoryPath = argv[index + 1];
+        else if (option == "--coordinates") coordinatePath = argv[index + 1];
         else if (option == "--scrywrite-witness") witnessPath = argv[index + 1];
         else if (option == "--witness-captures") {
             witnessCaptureDirectory = argv[index + 1];
@@ -9013,7 +9580,8 @@ int main(int argc, char** argv) {
             planeFeedbackPath, preflightFeedbackPath, toolExecutionFeedbackPath,
             jobPath,
             nadoc_vr::loadJobSnapshot(jobPath), visualizationPath,
-            nadoc_vr::loadVisualizationSnapshot(visualizationPath), selectionLevel,
+            nadoc_vr::loadVisualizationSnapshot(visualizationPath),
+            trajectoryPath, coordinatePath, selectionLevel,
             std::move(selectedOwnerTokens), std::move(selectedSelectionKind),
             witnessPath, mirrorEye, referenceGrid, placeSceneInView,
             sceneViewPlacement,

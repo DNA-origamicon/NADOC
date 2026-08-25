@@ -282,7 +282,7 @@ export function initAtomisticRenderer(scene) {
       // Bonds reference atom SERIALS. In the columnar format serial IS the row, but a
       // legacy object array can be sparse/reordered, so map serial → row.
       let rowOfSerial = null
-      if (!table.columnar) {
+      if (!table.columnar || table.raw.serial) {
         rowOfSerial = new Map()
         for (let i = 0; i < n; i++) rowOfSerial.set(table.serial(i), i)
       }
@@ -534,6 +534,28 @@ export function initAtomisticRenderer(scene) {
           visitor(_state.atoms.get(group[i]), pos)
         }
       }
+    },
+
+    /** Stable-order packed positions for the native VR trajectory transport.
+     * Ordering is identical to visitAtoms(), which supplies the one-time topology. */
+    packedAtomPositions() {
+      if (_state.mode === 'off') return new Float32Array()
+      const count = Object.values(_state.elementAtoms)
+        .reduce((total, group) => total + group.length, 0)
+      const positions = new Float32Array(count * 3)
+      let offset = 0
+      for (const [el, group] of Object.entries(_state.elementAtoms)) {
+        const mesh = _state.elementMeshes[el]
+        if (!mesh?.visible) continue
+        const matrices = mesh.instanceMatrix.array
+        for (let i = 0; i < group.length; i++) {
+          const matrixOffset = i * 16
+          positions[offset++] = matrices[matrixOffset + 12]
+          positions[offset++] = matrices[matrixOffset + 13]
+          positions[offset++] = matrices[matrixOffset + 14]
+        }
+      }
+      return offset === positions.length ? positions : positions.slice(0, offset)
     },
 
     /** Build live glow entries for all atoms belonging to the supplied nucleotides. */

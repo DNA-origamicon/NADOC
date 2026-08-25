@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+import struct
 import threading
 import time
 from collections import OrderedDict
@@ -71,6 +72,71 @@ _DNA_SITE_INDEX_CACHE_LOCK = threading.Lock()
 # eternal "loading" spinner.  The parse thread is not cancellable, so on timeout it
 # keeps running and populates the cache — the user's retry is then fast.
 _LOAD_TIMEOUT_S = float(os.environ.get("NADOC_MD_LOAD_TIMEOUT_S", "240"))
+
+_MD_ATOM_FRAME_MAGIC = b"NADOCMDA"
+_MD_ATOM_FRAME_HEADER = struct.Struct("<8sIIIIId")
+_MAX_MD_ATOM_FRAME_ATOMS = 1_000_000
+
+# Reading a DCD coordinate record is proportional to its complete solvated atom
+# count, even when the viewer needs only the DNA prefix.  Use the lightweight
+# prefix reader when doing so avoids at least 25% of the coordinate I/O.  The
+# common NAMD package layout (DNA first, water/ions after it) is much better than
+# this threshold: 24hb_1xT needs about 17% of its 1.35 M-atom frame.
+_DCD_PREFIX_MAX_FRACTION = 0.75
+
+
+def _pack_md_atom_frame(frame: dict) -> bytes:
+    """Pack topology-stable atom XYZ as three float32 columns for the browser."""
+    positions = np.asarray(frame.get("_atom_positions"), dtype=np.float32)
+    if (
+        positions.ndim != 2
+        or positions.shape[1:] != (3,)
+        or positions.shape[0] > _MAX_MD_ATOM_FRAME_ATOMS
+        or not np.all(np.isfinite(positions))
+    ):
+        raise ValueError("invalid binary MD atom frame positions")
+    frame_idx = int(frame.get("frame_idx", 0))
+    n_frames = int(frame.get("n_frames", 0))
+    if frame_idx < 0 or n_frames <= 0 or frame_idx >= n_frames:
+        raise ValueError("invalid binary MD atom frame metadata")
+    time_ps = float(frame.get("time_ps", float("nan")))
+    columns = np.asarray(positions.T, dtype="<f4", order="C")
+    return _MD_ATOM_FRAME_HEADER.pack(
+        _MD_ATOM_FRAME_MAGIC,
+        1,
+        _MD_ATOM_FRAME_HEADER.size,
+        frame_idx,
+        n_frames,
+        positions.shape[0],
+        time_ps,
+    ) + columns.tobytes(order="C")
+
+
+def _make_binary_atom_prefix(loaded: dict):
+    """Return a DCD reader limited to the highest displayed-DNA atom index.
+
+    This optimization is deliberately negotiated with binary atom frames.  The
+    legacy JSON path and coarse representations retain MDAnalysis as their sole
+    frame reader, while solvent overlays automatically fall back per seek.
+    """
+    from pathlib import Path
+
+    path = Path(str(loaded.get("xtc_path") or ""))
+    heavy_idx = np.asarray(loaded.get("heavy_idx"), dtype=np.int64)
+    universe = loaded.get("universe")
+    if path.suffix.lower() != ".dcd" or heavy_idx.size == 0 or universe is None:
+        return None, None
+    required = int(heavy_idx.max()) + 1
+    total = int(len(universe.atoms))
+    if required <= 0 or total <= 0 or required >= total * _DCD_PREFIX_MAX_FRACTION:
+        return None, None
+    try:
+        from backend.core.md_trajectory import _DcdPrefixChain
+
+        reader = _DcdPrefixChain([path], required)
+    except (OSError, ValueError, struct.error):
+        return None, None
+    return reader, {"prefix_atoms": required, "source_atoms": total}
 
 
 def _file_identity(path) -> str:
@@ -304,7 +370,8 @@ async def md_run_ws(websocket: WebSocket) -> None:
        "topology_path": str,   # abs path to .gro/.tpr or .psf
        "xtc_path":      str,   # abs path to .xtc or .dcd
        "coordinate_path": str, # optional abs path to .pdb for PSF/DCD
-       "mode": "nadoc"|"beads"|"ballstick"}
+       "mode": "nadoc"|"beads"|"ballstick",
+       "binary_atom_frames": bool} # optional topology-stable float32 transport
       {"action": "seek",       "frame_idx": int}
       {"action": "get_latest"}
       {"action": "set_solvent", "water": bool, "ions": bool, "box": bool,
@@ -339,6 +406,8 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 frontend/src/scene/md_solvent_bin.js. Binary and separate from the
                 frame because a whole-cell frame is millions of coordinates; the
                 client must set ws.binaryType = 'arraybuffer'.
+      <BINARY>  `NADOCMDA` v1 atom coordinates when `binary_atom_frames` is true:
+                a 36-byte header followed by float32 x[], y[], z[] columns.
     """
     await websocket.accept()
 
@@ -366,6 +435,9 @@ async def md_run_ws(websocket: WebSocket) -> None:
         "heavy_raw": None,
         "heavy_pre": None,
         "last_frame_idx": 0,
+        "binary_atom_frames": False,
+        "binary_atom_prefix": None,
+        "binary_atom_prefix_info": None,
     }
     _latest_refresh_lock = asyncio.Lock()
 
@@ -459,6 +531,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
             build_p_pdb_order,
             centroid_offset,
             load_segid_chain_map,
+            _map_positions,
             md_rigid_reference,
             md_rigid_reference_from_map,
             md_snap_mask,
@@ -696,10 +769,10 @@ async def md_run_ws(websocket: WebSocket) -> None:
         # p_order.  GROMACS retains the legacy geometry fallback until its chain
         # labels are plumbed through explicitly.
         p_strand_ids = None
+        _dna_p_for_runs = u.select_atoms(
+            "name P and resname " + " ".join(_GRO_DNA_RESNAMES)
+        )
         if is_namd:
-            _dna_p_for_runs = u.select_atoms(
-                "name P and resname " + " ".join(_GRO_DNA_RESNAMES)
-            )
             if len(_dna_p_for_runs) == len(p_order):
                 p_strand_ids = np.asarray(_dna_p_for_runs.segids, dtype=object)
                 logs.append(
@@ -765,13 +838,10 @@ async def md_run_ws(websocket: WebSocket) -> None:
         #    0 atoms needing correction.  Raw GROMACS trajectories may have 10–200+
         #    atoms shifted per frame.  > 5 relocated atoms indicates the trajectory
         #    was not pre-processed with '-pbc whole'.
-        if n_frames > 2:
+        if n_frames > 2 and not _large_namd:
             _mid = n_frames // 2
             u.trajectory[_mid]
-            _dna_p_chk = u.select_atoms(
-                "name P and resname " + " ".join(_GRO_DNA_RESNAMES)
-            )
-            _p_chk = _dna_p_chk.positions / 10.0
+            _p_chk = _dna_p_for_runs.positions / 10.0
             _dims_chk = u.dimensions
             if _dims_chk is not None and _dims_chk[0] > 0:
                 _box_chk = _dims_chk[:3] / 10.0
@@ -795,14 +865,41 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     load_warnings.append(_pbc_msg)
             # Restore frame 0 for centroid computation.
             u.trajectory[0]
+        elif n_frames > 2 and _large_namd:
+            logs.append(
+                "PBC check : deferred for large NAMD DCD (avoids a cold random "
+                "mid-trajectory seek during load; per-frame reassembly remains active)"
+            )
 
         # Centroid offset — computed on the (possibly unwrapped) frame 0.
-        beads_0 = _extract_universe(u, 0, p_order)
-        if p_reference is not None and eq_valid.any():
+        _centroid_t0 = time.perf_counter()
+        if _large_namd:
+            # Universe construction/attachment already populated frame 0. Reuse it;
+            # a second pread of a 168 GiB archive file costs a full cold seek even
+            # when only its DNA prefix is requested.
+            _p0 = _dna_p_for_runs.positions / 10.0
+            _centroid_positions_t = time.perf_counter()
+            _load_dims = u.dimensions
+            if _load_dims is not None and _load_dims[0] > 0:
+                _p0 = _unwrap_min_image(
+                    _p0, _load_dims[:3] / 10.0, p_strand_ids
+                )
+            beads_0 = _map_positions(list(_p0), p_order)
+        else:
+            beads_0 = _extract_universe(u, 0, p_order)
+            _centroid_positions_t = time.perf_counter()
+        _centroid_map_t = time.perf_counter()
+        if eq_valid.any():
             _bead_arr = np.asarray([b.pos for b in beads_0], dtype=float)
             T = eq_positions[eq_valid].mean(axis=0) - _bead_arr[eq_valid].mean(axis=0)
         else:
             T = centroid_offset(beads_0, design)
+        logs.append(
+            "Centroid timing: frame/positions "
+            f"{_centroid_positions_t - _centroid_t0:.3f}s; map/unwrap "
+            f"{_centroid_map_t - _centroid_positions_t:.3f}s; reference offset "
+            f"{time.perf_counter() - _centroid_map_t:.3f}s"
+        )
         logs.append(
             f"Centroid shift: ({T[0] * 10:.1f}, {T[1] * 10:.1f}, {T[2] * 10:.1f}) Å"
         )
@@ -1036,10 +1133,39 @@ async def md_run_ws(websocket: WebSocket) -> None:
         _ctx["heavy_raw"] = None
         _ctx["heavy_pre"] = None
 
-        if _injected is None:
+        # A negotiated atom stream can decode only the DNA prefix of a NAMD DCD.
+        # Do not use it while a solvent/ion/box overlay is active: those overlays
+        # genuinely require coordinates outside the DNA prefix.
+        _prefix_xyz = None
+        _prefix_dims = None
+        _prefix_reader = (
+            _ctx.get("binary_atom_prefix")
+            if (
+                _injected is None
+                and mode == "ballstick"
+                and _ctx.get("binary_atom_frames")
+                and not _ctx.get("solvent_opts")
+            )
+            else None
+        )
+        if _prefix_reader is not None:
+            try:
+                _prefix_xyz, _prefix_dims = _prefix_reader.frame(frame_idx)
+                time_ps = float(frame_idx) * float(getattr(u.trajectory, "dt", 1.0))
+            except (OSError, ValueError, IndexError, struct.error) as exc:
+                # A live/truncated DCD or an uncommon layout must degrade to the
+                # authoritative MDAnalysis reader, never fail trajectory playback.
+                print(
+                    f"[ws seek] DCD DNA-prefix read skipped "
+                    f"({type(exc).__name__}: {exc})",
+                    flush=True,
+                )
+                _prefix_xyz = None
+                _prefix_dims = None
+        if _injected is None and _prefix_xyz is None:
             ts = u.trajectory[frame_idx]
             time_ps = float(ts.time)
-        else:
+        elif _injected is not None:
             _all_pos, _dims_inj, time_ps = _injected
 
         if mode in ("nadoc", "beads"):
@@ -1332,8 +1458,13 @@ async def md_run_ws(websocket: WebSocket) -> None:
             # Full branch starts from raw DCD coordinates. Both branches subsequently
             # run NADOC's own PBC reassembly + Kabsch, so entering that shared pipeline
             # from two different periodic images creates a global repr-dependent pose.
+            _frame_pos = (
+                _all_pos
+                if _injected is not None
+                else (_prefix_xyz if _prefix_xyz is not None else None)
+            )
             pos_raw = (
-                _all_pos[heavy_idx] if _injected is not None else ag.positions
+                _frame_pos[heavy_idx] if _frame_pos is not None else ag.positions
             ) / 10.0
             pos_nm = pos_raw + T
 
@@ -1349,11 +1480,15 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     "name P and resname " + " ".join(_GRO_DNA_RESNAMES)
                 )
                 p_raw = (
-                    _all_pos[dna_p.indices]
-                    if _injected is not None
+                    _frame_pos[dna_p.indices]
+                    if _frame_pos is not None
                     else dna_p.positions
                 ) / 10.0
-                dims = _dims_inj if _injected is not None else u.dimensions
+                dims = (
+                    _dims_inj
+                    if _injected is not None
+                    else (_prefix_dims if _prefix_xyz is not None else u.dimensions)
+                )
                 eq_pos = _ctx.get("eq_positions")
                 rigid_mask = _ctx.get("rigid_mask")
                 snap_mask = _ctx.get("snap_mask")
@@ -1473,23 +1608,29 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     f"({type(exc).__name__}: {exc})",
                     flush=True,
                 )
-            atoms = [
-                {
-                    "serial": m["serial"],
-                    "element": m["element"],
-                    "x": float(pos_nm[i, 0]),
-                    "y": float(pos_nm[i, 1]),
-                    "z": float(pos_nm[i, 2]),
-                }
-                for i, m in enumerate(atom_meta)
-            ]
-            return {
+            frame = {
                 "type": "frame",
                 "frame_idx": frame_idx,
                 "n_frames": n_frames,
                 "time_ps": time_ps,
-                "atoms": atoms,
             }
+            if _ctx.get("binary_atom_frames"):
+                # Identity/serial/element/topology were sent once in `ready`.
+                # Keeping this ndarray private avoids constructing and JSON-encoding
+                # 144k short-lived Python dictionaries for every trajectory frame.
+                frame["_atom_positions"] = pos_nm
+            else:
+                frame["atoms"] = [
+                    {
+                        "serial": m["serial"],
+                        "element": m["element"],
+                        "x": float(pos_nm[i, 0]),
+                        "y": float(pos_nm[i, 1]),
+                        "z": float(pos_nm[i, 2]),
+                    }
+                    for i, m in enumerate(atom_meta)
+                ]
+            return frame
 
     def _trajectory_signature() -> tuple[int, int] | None:
         from pathlib import Path
@@ -1697,7 +1838,10 @@ async def md_run_ws(websocket: WebSocket) -> None:
 
         Binary, and a SEPARATE message: a whole-cell frame is millions of numbers,
         which as JSON would dwarf the frame it accompanies."""
-        await websocket.send_json(frame_msg)
+        if "_atom_positions" in frame_msg:
+            await websocket.send_bytes(_pack_md_atom_frame(frame_msg))
+        else:
+            await websocket.send_json(frame_msg)
         if not _ctx.get("solvent_opts"):
             return
         _ctx["last_frame_idx"] = frame_msg.get("frame_idx", 0)
@@ -1720,6 +1864,9 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 xtc_str = msg.get("xtc_path", "")
                 coordinate_str = msg.get("coordinate_path") or None
                 mode = msg.get("mode", "nadoc")
+                binary_atom_frames = bool(
+                    msg.get("binary_atom_frames") and mode == "ballstick"
+                )
                 job_id_msg = msg.get("job_id") or None
                 design_payload = msg.get("design")
                 # Prefer the RUN's OWN design (resolved from job_id) over whatever design
@@ -1802,8 +1949,32 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     await websocket.send_json({"type": "error", "message": str(exc)})
                     continue
 
+                _old_prefix = _ctx.get("binary_atom_prefix")
+                if _old_prefix is not None:
+                    try:
+                        _old_prefix.close()
+                    except Exception:  # noqa: BLE001
+                        pass
+
                 _ctx.update(loaded)
                 _ctx["mode"] = mode
+                _ctx["binary_atom_frames"] = binary_atom_frames
+                _ctx["binary_atom_prefix"] = None
+                _ctx["binary_atom_prefix_info"] = None
+                if binary_atom_frames:
+                    _prefix_reader, _prefix_info = await asyncio.to_thread(
+                        _make_binary_atom_prefix, loaded
+                    )
+                    _ctx["binary_atom_prefix"] = _prefix_reader
+                    _ctx["binary_atom_prefix_info"] = _prefix_info
+                    if _prefix_info:
+                        loaded["logs"].append(
+                            "Frame I/O : DNA-prefix DCD reader "
+                            f"({_prefix_info['prefix_atoms']:,}/"
+                            f"{_prefix_info['source_atoms']:,} atoms, "
+                            f"{100.0 * _prefix_info['prefix_atoms'] / _prefix_info['source_atoms']:.1f}% "
+                            "of each coordinate record)"
+                        )
                 _ctx["latest_frame_cache"] = None
                 _ctx["latest_frame_sig"] = None
 
@@ -1832,6 +2003,28 @@ async def md_run_ws(websocket: WebSocket) -> None:
                         # also static across frames (null in bead modes / bond-less
                         # topologies).
                         "atom_bonds": loaded.get("atom_bonds"),
+                        # Sparse universe serials and elements are static. Binary
+                        # coordinate frames refer to these arrays by row and never
+                        # repeat either field.
+                        "atom_serials": (
+                            [row["serial"] for row in loaded.get("atom_meta") or []]
+                            if binary_atom_frames else None
+                        ),
+                        "atom_elements": (
+                            [row["element"] for row in loaded.get("atom_meta") or []]
+                            if binary_atom_frames else None
+                        ),
+                        "binary_atom_frames": binary_atom_frames,
+                        "binary_atom_prefix_atoms": (
+                            (_ctx.get("binary_atom_prefix_info") or {}).get(
+                                "prefix_atoms"
+                            )
+                        ),
+                        "source_atom_count": (
+                            (_ctx.get("binary_atom_prefix_info") or {}).get(
+                                "source_atoms"
+                            )
+                        ),
                     }
                 )
 
@@ -1898,6 +2091,13 @@ async def md_run_ws(websocket: WebSocket) -> None:
         pass
     except Exception:
         pass
+    finally:
+        _prefix_reader = _ctx.get("binary_atom_prefix")
+        if _prefix_reader is not None:
+            try:
+                _prefix_reader.close()
+            except Exception:  # noqa: BLE001
+                pass
 
 
 # ── mrdna CG relaxation WebSocket ─────────────────────────────────────────────

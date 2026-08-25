@@ -164,6 +164,12 @@ Stick (F8) uses the same bonds, strand/base/cluster/CPK coloring, simulation ove
 selection, regional overrides, assembly persistence, and Photo Mode materials/shadows as
 Ball & Stick, while omitting the atom spheres.
 
+Native VR full-origami atomistic validation is documented in
+[`docs/scrywrite_atomistic_md.md`](docs/scrywrite_atomistic_md.md). The production-scale
+trajectory feasibility measurements, streaming architecture, telemetry, and one-command
+headset automation are in
+[`docs/vr_md_trajectory_feasibility.md`](docs/vr_md_trajectory_feasibility.md).
+
 Crossover extra bases use one representation-neutral residue placement shared by Full
 beads/slabs/connectors and the atomistic model. A one-base crossover uses the calibrated
 junction-local 1xT pose rather than the legacy Bézier midpoint; both chemical traversal
@@ -211,7 +217,10 @@ background (parse the topology + build the atomistic model once), and a readines
 dot beside the toggle shows *warming → ready*, so flipping it on paints the latest
 frame instantly. Toggling off keeps the socket warm (no re-parse), and a re-toggle
 re-applies the cached frame immediately. A trajectory scrubber, playback, and a
-flexibility (RMSF) map mirror the oxDNA display controls.
+flexibility (RMSF) map mirror the oxDNA display controls. Atomistic trajectory frames
+negotiate a topology-stable binary stream and, for the standard DNA-first NAMD layout,
+read only the displayed DNA prefix of each DCD record. Desktop and native-VR
+play/pause/step/scrub controls share one authoritative trajectory state.
 
 ### FEM structural analysis
 Euler-Bernoulli beam model; RMSF heatmap via eigenvalue decomposition; real-time

@@ -39,6 +39,7 @@ coverage without further fixtures.
 from __future__ import annotations
 
 import os
+import struct
 import tempfile
 
 import numpy as np
@@ -746,6 +747,40 @@ def test_md_run_ws_load_seek_ballstick(client, md_fixture_dir):
             a0 = f0["atoms"][0]
             for k in ("serial", "element", "x", "y", "z"):
                 assert k in a0
+
+
+def test_md_run_ws_binary_ballstick_frame(client, md_fixture_dir):
+    """Negotiated binary mode sends topology once and float32 XYZ without atom dicts."""
+    fix = md_fixture_dir
+    with client.websocket_connect("/ws/md-run") as ws:
+        ws.send_json({
+            "action": "load",
+            "topology_path": fix["gro"],
+            "xtc_path": fix["xtc"],
+            "mode": "ballstick",
+            "binary_atom_frames": True,
+        })
+        ready = None
+        for _ in range(60):
+            message = ws.receive_json()
+            if message["type"] == "ready":
+                ready = message
+                break
+            assert message["type"] == "log"
+        assert ready is not None and ready["binary_atom_frames"] is True
+        assert len(ready["atom_serials"]) == len(ready["atom_elements"])
+
+        ws.send_json({"action": "seek", "frame_idx": 0})
+        payload = ws.receive_bytes()
+        magic, version, header, frame, n_frames, count, time_ps = struct.unpack(
+            "<8sIIIIId", payload[:36]
+        )
+        assert (magic, version, header, frame) == (b"NADOCMDA", 1, 36, 0)
+        assert n_frames >= 1 and count == len(ready["atom_serials"])
+        assert np.isfinite(time_ps)
+        columns = np.frombuffer(payload[36:], dtype="<f4").reshape((3, count))
+        assert columns.shape == (3, count)
+        assert np.all(np.isfinite(columns))
 
 
 # ── Parsed-Universe cache + load-progress helpers (module-level, 2026-07-16) ──

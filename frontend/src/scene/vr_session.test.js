@@ -14,6 +14,7 @@ function makeHarness({
   nativeEventPollIntervalMs = 0,
   nativeJobPollIntervalMs = 0,
   publishNativeJobs = vi.fn(),
+  publishNativeTrajectory = vi.fn(),
   onNativeEvent = null,
 } = {}) {
   document.body.innerHTML = `
@@ -49,6 +50,7 @@ function makeHarness({
   const controller = initVRSession({
     renderer, scene, camera, button, xr, native, nativePollIntervalMs,
     nativeEventPollIntervalMs, nativeJobPollIntervalMs, publishNativeJobs,
+    publishNativeTrajectory,
     onNativeEvent,
     setMenuToggle, showToast,
   })
@@ -252,6 +254,9 @@ describe('initVRSession', () => {
           style_sequence: 1,
           representation: 'ballstick',
           coloring: 'cpk',
+          trajectory_sequence: 1,
+          trajectory_action: 'seek',
+          trajectory_frame_idx: 42,
           tool_sequence: 1,
           tool_mode: 'twist',
           tool_action: 'preview',
@@ -286,6 +291,9 @@ describe('initVRSession', () => {
           style_sequence: 1,
           representation: 'ballstick',
           coloring: 'cpk',
+          trajectory_sequence: 1,
+          trajectory_action: 'seek',
+          trajectory_frame_idx: 42,
           tool_sequence: 1,
           tool_mode: 'twist',
           tool_action: 'preview',
@@ -332,6 +340,7 @@ describe('initVRSession', () => {
       [{
         sequence: 1, type: 'style', representation: 'ballstick', coloring: 'cpk',
       }],
+      [{ sequence: 1, type: 'trajectory', action: 'seek', frameIdx: 42 }],
       [{
         sequence: 1, type: 'tool', mode: 'twist', action: 'preview',
         targetIdentity: 'nuc:s1', targetKind: 'domain',

@@ -102,6 +102,16 @@ class _DcdPrefixChain:
         start = 0 if part == 0 else int(self.ends[part - 1])
         return self.readers[part].frame(index - start)
 
+    def close(self):
+        for reader in self.readers:
+            reader.close()
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
 
 def _select_p_order(u, chain_map, run_dir, coordinate_path):
     """Choose the DNA-P → (helix, bp, dir) order for a NAMD PSF/DCD Universe.
@@ -596,6 +606,18 @@ def _install_direct_heavy_layout(u, heavy_ag, dna_p, atom_meta=None) -> dict:
         [heavy_segment_group[row] if row >= 0 else -1 for row in p_heavy_rows],
         dtype=np.int64,
     )
+    valid_p = (p_heavy_rows >= 0) & (p_segment_group >= 0)
+    # Precompute row lists once.  Rebuilding full-length boolean masks for every
+    # DNA strand on every trajectory frame cost O(n_atoms * n_strands), which is
+    # conspicuous for a 144k-atom / hundreds-of-staples origami.
+    segment_p_rows = [
+        np.flatnonzero(valid_p & (p_segment_group == segment))
+        for segment in range(len(segment_at))
+    ]
+    segment_heavy_rows = [
+        np.flatnonzero(heavy_segment_group == segment)
+        for segment in range(len(segment_at))
+    ]
     layout = {
         "heavy_res_group": heavy_res_group,
         "residue_anchor_rows": np.asarray(residue_anchor_rows, dtype=np.int64),
@@ -604,6 +626,8 @@ def _install_direct_heavy_layout(u, heavy_ag, dna_p, atom_meta=None) -> dict:
         "p_heavy_rows": p_heavy_rows,
         "p_segment_group": p_segment_group,
         "n_segments": len(segment_at),
+        "segment_p_rows": segment_p_rows,
+        "segment_heavy_rows": segment_heavy_rows,
     }
     if atom_meta is not None:
         for row, meta in enumerate(atom_meta):
@@ -636,16 +660,28 @@ def _direct_heavy_pre_positions(
 
     p_rows = layout["p_heavy_rows"]
     p_segments = layout["p_segment_group"]
-    valid = (p_rows >= 0) & (p_segments >= 0)
-    for segment in range(int(layout.get("n_segments", 0))):
-        rows = np.flatnonzero(valid & (p_segments == segment))
+    n_segments = int(layout.get("n_segments", 0))
+    segment_p_rows = layout.get("segment_p_rows")
+    segment_heavy_rows = layout.get("segment_heavy_rows")
+    if segment_p_rows is None or segment_heavy_rows is None:
+        # Compatibility with cached/test layouts created before row-list caching.
+        valid = (p_rows >= 0) & (p_segments >= 0)
+        segment_p_rows = [
+            np.flatnonzero(valid & (p_segments == segment))
+            for segment in range(n_segments)
+        ]
+        heavy_segments = layout["heavy_segment_group"]
+        segment_heavy_rows = [
+            np.flatnonzero(heavy_segments == segment) for segment in range(n_segments)
+        ]
+    for segment, rows in enumerate(segment_p_rows):
         if not len(rows):
             continue
         delta = np.median(p_pre[rows] - placed[p_rows[rows]], axis=0)
         lattice = np.zeros(3, dtype=float)
         good = box > 0
         lattice[good] = np.round(delta[good] / box[good]) * box[good]
-        placed[layout["heavy_segment_group"] == segment] += lattice
+        placed[segment_heavy_rows[segment]] += lattice
     return placed
 
 
