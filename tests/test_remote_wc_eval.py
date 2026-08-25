@@ -6,11 +6,12 @@ import numpy as np
 
 from backend.core import remote_wc_eval as ev
 from backend.core.dcd_fast import write_trajectory
+from backend.core.md_health import WcPair, wc_window_metrics_from_dcd
 
 
 def _plan():
     return {
-        "version": 1,
+        "version": ev.PLAN_VERSION,
         "n_atoms": 4,
         "ref_delta_ang": 0.75,
         "pairs": [
@@ -40,7 +41,7 @@ def _write_tiny_pair_package(tmp_path):
         ("DNAB", 1, "DT", "N3", (4.0, 0.0, 0.0)),
         ("DNAB", 1, "DT", "O4", (4.0, 1.0, 0.0)),
     ]
-    psf = ["PSF", "", f"{len(atoms):8d} !NATOM"]
+    psf = ["PSF", "", "       1 !NTITLE", " REMARKS test", "", f"{len(atoms):8d} !NATOM"]
     pdb = []
     for serial, (segid, resid, resname, name, xyz) in enumerate(atoms, 1):
         psf.append(
@@ -51,6 +52,7 @@ def _write_tiny_pair_package(tmp_path):
             f"ATOM  {serial:5d} {name:>4} {resname:>3} A{resid:4d}    "
             f"{xyz[0]:8.3f}{xyz[1]:8.3f}{xyz[2]:8.3f}  1.00  0.00      {segid:>4}"
         )
+    psf.extend(["", "       0 !NBOND: bonds", ""])
     (tmp_path / "tiny.psf").write_text("\n".join(psf) + "\n")
     (tmp_path / "tiny.pdb").write_text("\n".join(pdb) + "\n")
 
@@ -112,3 +114,24 @@ def test_atom_count_mismatch_fails_closed(tmp_path):
         assert "atom-count mismatch" in str(exc)
     else:
         raise AssertionError("mismatched topology plan must not be accepted")
+
+
+def test_display_wc_scalar_is_mean_of_trailing_ten_frames(tmp_path):
+    _write_tiny_pair_package(tmp_path)
+    frames = []
+    for i in range(12):
+        xyz = np.zeros((6, 3), dtype=np.float32)
+        xyz[1] = (1.0, 0.0, 0.0)
+        xyz[2] = (1.0, 1.0, 0.0)
+        xyz[4] = (4.0, 0.0, 0.0)
+        xyz[5] = ((4.0 if i % 2 == 0 else 6.0), 1.0, 0.0)
+        frames.append(xyz)
+    dcd = tmp_path / "rolling.dcd"
+    write_trajectory(dcd, 6, frames, 12)
+    metrics = wc_window_metrics_from_dcd(
+        tmp_path / "tiny.psf",
+        dcd,
+        [WcPair("A", "B", [(1, 4), (2, 5)], [3.0, 3.0])],
+    )
+    assert metrics["window_frames"] == 10
+    assert metrics["ref_relative_paired_fraction"] == 0.5

@@ -434,6 +434,11 @@ async def md_run_ws(websocket: WebSocket) -> None:
         "xf_parts": None,
         "heavy_raw": None,
         "heavy_pre": None,
+        # Complete coordinates from dcd_fast's O(1) latest-frame read.  MDAnalysis'
+        # Universe stays on its older indexed frame in that path; solvent must consume
+        # these same coordinates or it will be paired with the wrong DNA frame/cell.
+        "frame_positions_ang": None,
+        "frame_dimensions_ang": None,
         "last_frame_idx": 0,
         "binary_atom_frames": False,
         "binary_atom_prefix": None,
@@ -1132,6 +1137,8 @@ async def md_run_ws(websocket: WebSocket) -> None:
         _ctx["xf_parts"] = None
         _ctx["heavy_raw"] = None
         _ctx["heavy_pre"] = None
+        _ctx["frame_positions_ang"] = None
+        _ctx["frame_dimensions_ang"] = None
 
         # A negotiated atom stream can decode only the DNA prefix of a NAMD DCD.
         # Do not use it while a solvent/ion/box overlay is active: those overlays
@@ -1167,6 +1174,8 @@ async def md_run_ws(websocket: WebSocket) -> None:
             time_ps = float(ts.time)
         elif _injected is not None:
             _all_pos, _dims_inj, time_ps = _injected
+            _ctx["frame_positions_ang"] = _all_pos
+            _ctx["frame_dimensions_ang"] = _dims_inj
 
         if mode in ("nadoc", "beads"):
             if _injected is None:
@@ -1808,7 +1817,12 @@ async def md_run_ws(websocket: WebSocket) -> None:
             if heavy_idx is None or p_raw is None or p_pre is None:
                 return None
             heavy_ag = u.atoms[heavy_idx]
-            heavy_raw = heavy_ag.positions / 10.0
+            frame_positions = _ctx.get("frame_positions_ang")
+            heavy_raw = (
+                frame_positions[heavy_idx]
+                if frame_positions is not None
+                else heavy_ag.positions
+            ) / 10.0
             dna_p = u.select_atoms("name P and resname " + " ".join(_GRO_DNA_RESNAMES))
             heavy_pre = _MS.reconstruct_heavy_pre(
                 heavy_ag, dna_p, heavy_raw, p_raw, p_pre, xf.box_nm, rows_cache=_ctx
@@ -1830,6 +1844,8 @@ async def md_run_ws(websocket: WebSocket) -> None:
             ),
             atomistic=bool(opts.get("atomistic")),
             max_waters=opts.get("max_waters"),
+            positions_ang=_ctx.get("frame_positions_ang"),
+            dimensions_ang=_ctx.get("frame_dimensions_ang"),
         )
         return _MS.pack_solvent_bin({int(_ctx.get("last_frame_idx") or 0): frame})
 

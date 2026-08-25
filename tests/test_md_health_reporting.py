@@ -599,13 +599,14 @@ def stub_health(monkeypatch, tmp_path):
         )
         monkeypatch.setattr(
             H,
-            "wc_metrics_from_dcd",
+            "wc_window_metrics_from_dcd",
             lambda *a, **k: {
                 "absolute_paired_fraction": 0.9,
                 "ref_relative_paired_fraction": 0.9,
                 "mean_hbond_proxy_ang": 3.0,
                 "p90_max_hbond_proxy_ang": 3.5,
                 "n_pairs": 1,
+                "window_frames": min(10, max(1, n_frames - int(k.get("safe_back", 0)))),
             },
         )
         monkeypatch.setattr(

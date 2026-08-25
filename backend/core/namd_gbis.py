@@ -34,8 +34,6 @@ from backend.core.md_protocols import (
     _min_conf,
     _round_up_to_cycle,
     _segment_conf,
-    design_has_extra_bases,
-    design_has_extensions,
     mgh_slow_release_segments,
     namd_efield_vector,
     psf_atom_count,
@@ -141,16 +139,14 @@ def build_namd_gbis_package(
     # neighbour by 3D coincidence (measured: a junction extra base, and an
     # extension tail near a packed bundle at 10.72 Å, under the 10.8 Å cutoff).
     # See topology_ss_exclusion_set's docstring for the measured repro.
-    exclude = None
-    if design_has_extra_bases(design) or design_has_extensions(design):
-        from backend.core.atomistic import build_atomistic_model  # noqa: PLC0415
+    from backend.core.atomistic import build_atomistic_model  # noqa: PLC0415
 
-        exclude = topology_ss_exclusion_set(
-            atomistic_model or build_atomistic_model(design, include_proteins=True),
-            package_dir / f"{name_stem}.psf",
-            pdb_path,
-            sort_chains=True,
-        )
+    exclude = topology_ss_exclusion_set(
+        atomistic_model or build_atomistic_model(design, include_proteins=True),
+        package_dir / f"{name_stem}.psf",
+        pdb_path,
+        sort_chains=True,
+    )
     enm_report = write_aksimentiev_enm_files(
         pdb_path,
         package_dir,

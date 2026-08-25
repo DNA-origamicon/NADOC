@@ -4838,8 +4838,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const cards = [
       { key: 'temp',       label: 'Temp',       value: _fmt(scalar?.temperature_k ?? null, 1, 'K'),          color: _C.text },
       { key: 'pressure',   label: 'Pressure avg', value: _fmt(pressure, 2, 'bar'),                            color: _C.text, title: pressureTitle },
-      { key: 'basePairs',  label: 'Base pairs', value: _fmtPct(health?.c1_paired_fraction ?? null),          color: _healthColor(health?.c1_paired_fraction, 0.90) },
-      { key: 'wcHealth',   label: 'WC health',  value: wcValue,                                               color: wcAdvisory ? _C.warn : _healthColor(health?.wc_ref_relative_fraction, wcThreshold), wcTrend: true },
+      { key: 'basePairs',  label: 'Base pairs', value: _fmtPct(health?.c1_paired_fraction ?? null),          color: _healthColor(health?.c1_paired_fraction, 0.90),
+        title: `Designed-pair C1′ geometry${health?.n_c1_pairs ? ` · ${health.n_c1_pairs} expected pairs` : ''}. A pair counts when its C1′–C1′ distance is below 12 Å.` },
+      { key: 'wcHealth',   label: 'WC geometry', value: wcValue,                                               color: wcAdvisory ? _C.warn : _healthColor(health?.wc_ref_relative_fraction, wcThreshold), wcTrend: true,
+        title: `Advisory canonical H-bond geometry${health?.n_wc_pairs ? ` across ${health.n_wc_pairs} designed pairs` : ''}${health?.wc_window_frames ? `, averaged over the latest ${health.wc_window_frames} trajectory frames` : ''}. Every A–T contact (2) or G–C contact (3) must remain within its reference-relative limit; this is not an overall simulation-health score.` },
       { key: 'speed',      label: 'Speed',      value: (speedNote && speedValue !== '—') ? `${speedValue} *` : speedValue, color: _C.muted, title: speedNote?.tooltip },
       // Falls back to a RUNNING minimisation: it produces no health sample, so a job
       // spending its first half-hour minimising otherwise reads "Latest —".
@@ -4980,7 +4982,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       return `<circle cx="${xFor(i).toFixed(1)}" cy="${yFor(v).toFixed(1)}" r="2" fill="${color}"/>`
     }).join('')
     return `
-      <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="WC health trend">
+      <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="WC geometry trend">
         <line x1="${pad}" y1="${thresholdY}" x2="${w - pad}" y2="${thresholdY}" stroke="${_C.warn}" stroke-width="1" stroke-dasharray="3 3" opacity="0.8"/>
         <polyline points="${points}" fill="none" stroke="${_C.accent}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
         ${dots}

@@ -1636,7 +1636,7 @@ def _production_checkpoint_warning(
     if sample is None:
         warnings.append("No health metrics were recorded for this checkpoint.")
     else:
-        if not sample.passed:
+        if not sample.passed and sample.blocking:
             warnings.append(
                 f"Checkpoint health did not pass: {sample.reason or 'unknown reason'}."
             )
@@ -1650,8 +1650,9 @@ def _production_checkpoint_warning(
             and sample.wc_ref_relative_fraction < 0.80
         ):
             warnings.append(
-                f"WC ref-relative pairing is {sample.wc_ref_relative_fraction * 100:.1f}%, "
-                "below the normal 80.0% production qualification target."
+                f"Advisory WC geometry is {sample.wc_ref_relative_fraction * 100:.1f}% "
+                "over its trailing frame window. This reports canonical H-bond "
+                "geometry and does not by itself disqualify the simulation."
             )
     return " ".join(warnings)
 

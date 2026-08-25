@@ -88,15 +88,25 @@ def test_the_emitted_affine_reproduces_the_served_dna_exactly(solvated):
 def test_every_selected_water_is_inside_the_shell_after_the_transform(
     solvated, shell_ang
 ):
-    """A rotation is an isometry, so 'within N Å of a DNA atom' has to still be
-    true on screen. This is the property that makes the shell mean anything."""
+    """Every selected water remains within the shell under minimum-image PBC.
+
+    A water folded into the primary cell can sit across a face from its nearest
+    DNA image, so a plain Euclidean tree is wrong at the boundary.
+    """
     from scipy.spatial import cKDTree
 
-    _ctx, _sctx, _fo, _xf, dna = solvated
+    _ctx, _sctx, _fo, xf, dna = solvated
     out = _extract(solvated, shell_nm=shell_ang / 10.0)
     water = out["water"].reshape(-1, 3)
     assert water.shape[0] > 0
-    d, _ = cKDTree(dna).query(water, k=1)
+    corners = out["box"].reshape(8, 3)
+    origin = corners[0]
+    unit = np.array(
+        [(corners[k] - origin) / xf.box_nm[i] for i, k in enumerate((1, 2, 4))]
+    )
+    dna_cell = np.mod((dna - origin) @ unit.T, xf.box_nm)
+    water_cell = np.mod((water - origin) @ unit.T, xf.box_nm)
+    d, _ = cKDTree(dna_cell, boxsize=xf.box_nm).query(water_cell, k=1)
     assert d.max() <= shell_ang / 10.0 + 1e-6
 
 
@@ -133,9 +143,10 @@ def test_water_molecules_are_whole_after_imaging(solvated):
     assert np.allclose(hh, 1.5139, atol=0.03), (hh.min(), hh.max())
 
 
-def test_whole_cell_water_is_imaged_inside_the_drawn_cell(solvated):
+@pytest.mark.parametrize("shell_nm", [0.50, None])
+def test_water_is_imaged_inside_the_drawn_cell(solvated, shell_nm):
     _ctx, _sctx, _fo, xf, _dna = solvated
-    out = _extract(solvated, shell_nm=None)
+    out = _extract(solvated, shell_nm=shell_nm)
     water = out["water"].reshape(-1, 3)
     corners = out["box"].reshape(8, 3)
     origin = corners[0]
@@ -144,6 +155,19 @@ def test_whole_cell_water_is_imaged_inside_the_drawn_cell(solvated):
         t = (water - origin) @ unit
         assert t.min() >= -1e-4
         assert t.max() <= L + 1e-4
+
+
+def test_ions_are_imaged_inside_the_drawn_cell(solvated):
+    _ctx, _sctx, _fo, xf, _dna = solvated
+    out = _extract(solvated, shell_nm=0.50)
+    ions = out["ions"].reshape(-1, 3)
+    corners = out["box"].reshape(8, 3)
+    origin = corners[0]
+    for k, length in zip((1, 2, 4), xf.box_nm):
+        unit = (corners[k] - origin) / np.linalg.norm(corners[k] - origin)
+        coordinate = (ions - origin) @ unit
+        assert coordinate.min() >= -1e-4
+        assert coordinate.max() <= length + 1e-4
 
 
 # ── counts ───────────────────────────────────────────────────────────────────

@@ -170,3 +170,44 @@ def test_build_c1_pairs_exclusion_drops_the_ss_residue(mini_ref):
     assert 2 in set(incl.pi.tolist()) | set(incl.pj.tolist())
     excl = H.build_c1_pairs(psf, pdb, exclude_residues={("C", "1")})
     assert 2 not in set(excl.pi.tolist()) | set(excl.pj.tolist())
+
+
+def test_topology_pair_sidecar_overrides_closer_spurious_geometry(mini_ref):
+    """The authored A-B duplex wins even though geometric B-C is shorter."""
+    psf, pdb = mini_ref
+    H._wc_pair_sidecar_path(psf.parent, psf.stem).write_text(
+        '{"schema":"nadoc.wc_pairs.v1","pairs":[{"a":["A","1"],"b":["B","1"]}]}'
+    )
+    wc = H.build_wc_pairs(psf, pdb)
+    assert [(p.res_a.split(":")[0], p.res_b.split(":")[0]) for p in wc] == [
+        ("A", "B")
+    ]
+    c1 = H.build_c1_pairs(psf, pdb)
+    selected = {0, 1}
+    assert set(c1.pi.tolist()) | set(c1.pj.tolist()) == selected
+
+
+def test_package_registry_authors_pairs_and_all_intentional_ssdna(mini_ref):
+    from backend.core.md_protocols import _persist_topology_health_registry
+
+    psf, _pdb = mini_ref
+    atoms = [
+        SimpleNamespace(
+            residue="THY", chain_id="A", seq_num=1, helix_id="h0", bp_index=1,
+            direction="FORWARD", copy_k=0, crossover_id=None, extension_id=None,
+        ),
+        SimpleNamespace(
+            residue="ADE", chain_id="B", seq_num=1, helix_id="h0", bp_index=1,
+            direction="REVERSE", copy_k=0, crossover_id=None, extension_id=None,
+        ),
+        SimpleNamespace(
+            residue="THY", chain_id="C", seq_num=1, helix_id="h0", bp_index=2,
+            direction="FORWARD", copy_k=0, crossover_id=None, extension_id=None,
+        ),
+    ]
+    model = SimpleNamespace(atoms=atoms)
+    ss = _persist_topology_health_registry(model, psf, sort_chains=False)
+    assert ss == {("C", "1")}
+    assert H.read_topology_wc_sidecar(psf.parent, psf.stem) == [
+        (("A", "1"), ("B", "1"))
+    ]

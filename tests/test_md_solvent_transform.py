@@ -17,9 +17,13 @@ import pytest
 from backend.core.md_solvent import (
     BOX_EDGES,
     DisplayXform,
+    _build_heavy_anchor_rows,
     apply_xform,
     box_corners,
+    extract_solvent_frame,
+    image_into_cell,
     min_image,
+    reconstruct_heavy_pre,
 )
 
 
@@ -125,6 +129,84 @@ class TestMinImage:
         np.testing.assert_array_equal(d, [[9.0, 9.0, 9.0]])
 
 
+class _Residue:
+    def __init__(self, ix, resid, segid):
+        self.ix = ix
+        self.resid = resid
+        self.segid = segid
+
+
+class _Atom:
+    def __init__(self, residue):
+        self.residue = residue
+        self.segid = residue.segid
+
+
+class TestCoarseHeavyReconstruction:
+    def test_terminal_residue_uses_nearest_phosphate_in_the_same_segment(self):
+        p0 = _Atom(_Residue(10, 2, "A"))
+        p1 = _Atom(_Residue(20, 7, "B"))
+        heavy = [
+            _Atom(_Residue(9, 1, "A")),  # 5' terminal: no phosphate of its own
+            _Atom(p0.residue),
+            _Atom(_Residue(19, 6, "B")),
+            _Atom(_Residue(99, 1, "C")),  # no phosphate anywhere in segment C
+        ]
+        np.testing.assert_array_equal(
+            _build_heavy_anchor_rows(heavy, [p0, p1]), [0, 0, 1, -1]
+        )
+
+    def test_reconstruction_runs_without_md_trajectory_private_import(self):
+        phosphate = _Atom(_Residue(10, 2, "A"))
+        heavy = [_Atom(phosphate.residue)]
+        cache = {}
+        out = reconstruct_heavy_pre(
+            heavy,
+            [phosphate],
+            pos_raw=np.array([[9.9, 1.0, 1.0]]),
+            p_raw=np.array([[0.1, 1.0, 1.0]]),
+            p_pre=np.array([[5.1, 1.0, 1.0]]),
+            box_nm=np.array([10.0, 10.0, 10.0]),
+            rows_cache=cache,
+        )
+        np.testing.assert_allclose(out, [[4.9, 1.0, 1.0]])
+        np.testing.assert_array_equal(cache["_heavy_anchor_rows"], [0])
+
+
+class TestDirectFrameCoordinates:
+    def test_direct_dcd_positions_override_the_universes_stale_frame(self):
+        class _Atoms:
+            # Deliberately different from the direct latest-frame coordinates below.
+            positions = np.array([[10.0, 0.0, 0.0], [20.0, 0.0, 0.0]])
+
+        class _Universe:
+            atoms = _Atoms()
+            dimensions = np.array([100.0, 100.0, 100.0, 90.0, 90.0, 90.0])
+
+        sctx = {
+            "water_o": np.array([0]),
+            "water_h1": np.array([0]),
+            "water_h2": np.array([0]),
+            "ion_rows": np.array([1]),
+            "ion_species": np.array([2], dtype=np.uint8),
+            "n_waters_total": 1,
+            "n_ions": 1,
+        }
+        xf = DisplayXform.build(T_dyn=(0, 0, 0), c_box=(0, 0, 0), box_nm=(10, 10, 10))
+        out = extract_solvent_frame(
+            _Universe(),
+            sctx,
+            np.zeros((0, 3)),
+            np.zeros((0, 3)),
+            xf,
+            shell_nm=None,
+            positions_ang=np.array([[30.0, 0.0, 0.0], [40.0, 0.0, 0.0]]),
+            dimensions_ang=np.array([90.0, 90.0, 90.0, 90.0, 90.0, 90.0]),
+        )
+        np.testing.assert_allclose(out["water"].reshape(-1, 3), [[3.0, 0.0, 0.0]])
+        np.testing.assert_allclose(out["ions"].reshape(-1, 3), [[4.0, 0.0, 0.0]])
+
+
 class TestBoxCorners:
     def test_eight_corners_centred_on_the_dna_anchor(self):
         rng = np.random.default_rng(11)
@@ -207,3 +289,21 @@ class TestBoxCorners:
             t = (pts - origin) @ unit
             assert t.min() >= -1e-6
             assert t.max() <= L + 1e-6
+
+    def test_nearest_dna_images_are_folded_back_into_the_drawn_cell(self):
+        rng = np.random.default_rng(16)
+        xf = _xform(rng, box=(4.0, 5.0, 6.0))
+        centre = xf.c_box + xf.T_dyn
+        # These stand in for shell waters/ions deliberately placed beside periodic
+        # DNA images several cells away from the primary wireframe.
+        points_pre = centre + np.array(
+            [[5.8, -7.1, 4.2], [-9.9, 13.2, -10.1], [0.1, 0.2, 0.3]]
+        )
+        points = apply_xform(image_into_cell(points_pre, xf), xf)
+        corners = box_corners(xf)
+        origin = corners[0]
+        for k, length in zip((1, 2, 4), xf.box_nm):
+            unit = (corners[k] - origin) / length
+            coordinate = (points - origin) @ unit
+            assert coordinate.min() >= -1e-9
+            assert coordinate.max() <= length + 1e-9

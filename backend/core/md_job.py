@@ -42,6 +42,9 @@ class MdHealthSample:
     c1_p90_ang: Optional[float] = None
     wc_ref_relative_fraction: Optional[float] = None
     wc_mean_hbond_ang: Optional[float] = None
+    n_c1_pairs: int = 0
+    n_wc_pairs: int = 0
+    wc_window_frames: int = 0
     passed: bool = True
     # False only for a non-blocking advisory failure (WC-only breach): the checkpoint
     # did not fully pass but the run was allowed to continue.  Blocking failures
@@ -99,6 +102,9 @@ class MdHealthSample:
             c1_p90_ang=hresult.c1_p90_ang,
             wc_ref_relative_fraction=hresult.wc_ref_relative_fraction,
             wc_mean_hbond_ang=hresult.wc_mean_hbond_ang,
+            n_c1_pairs=getattr(hresult, "n_c1_pairs", 0),
+            n_wc_pairs=getattr(hresult, "n_wc_pairs", 0),
+            wc_window_frames=getattr(hresult, "wc_window_frames", 0),
             passed=hresult.passed,
             blocking=blocking,
             reason=hresult.reason or (hresult.error or ""),

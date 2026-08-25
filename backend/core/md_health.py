@@ -31,6 +31,8 @@ logger = logging.getLogger(__name__)
 C1_SEARCH_LO = 8.5  # Å — minimum C1'…C1' distance for a paired candidate
 C1_SEARCH_HI = 13.0  # Å — maximum C1'…C1' distance
 C1_PAIRED_MAX_DEFAULT = 12.0  # Å — threshold for "paired" call
+WC_REFERENCE_CONTACT_MAX_ANG = 3.6  # Å — true central WC contact in a legacy ref
+WC_ROLLING_FRAMES_DEFAULT = 10  # smooth the advisory scalar, not wc_per_frame
 
 # Watson-Crick canonical H-bond donor/acceptor heavy-atom pairs
 WC_ATOMS: dict[tuple[str, str], list[tuple[str, str]]] = {
@@ -94,6 +96,7 @@ class HealthCheckResult:
     wc_p90_max_hbond_ang: Optional[float] = None
     n_c1_pairs: int = 0
     n_wc_pairs: int = 0
+    wc_window_frames: int = 0
     frame: Optional[int] = None
     error: Optional[str] = None
     wc_per_frame: list[float] = field(default_factory=list)
@@ -286,6 +289,112 @@ def _shell_selections(u) -> tuple[np.ndarray, np.ndarray]:
 # ── C1' pair builder ──────────────────────────────────────────────────────────
 
 
+_WC_PAIR_SIDECAR_SUFFIX = "_wc_pairs.json"
+
+
+def _wc_pair_sidecar_path(package_dir: Path, name_stem: str) -> Path:
+    return package_dir / f"{name_stem}{_WC_PAIR_SIDECAR_SUFFIX}"
+
+
+def read_topology_wc_sidecar(
+    package_dir: Path, name_stem: str
+) -> Optional[list[tuple[tuple[str, str], tuple[str, str]]]]:
+    """Read the exact design-authored residue partner registry when present."""
+    path = _wc_pair_sidecar_path(package_dir, name_stem)
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text())
+        out = []
+        for row in data.get("pairs", []):
+            a, b = row["a"], row["b"]
+            out.append(((str(a[0]), str(a[1])), (str(b[0]), str(b[1]))))
+        return out
+    except Exception as exc:
+        raise ValueError(f"Invalid WC partner sidecar {path}: {exc}") from exc
+
+
+def _reference_residue_pairs(
+    u: Any,
+    psf: Path,
+    *,
+    exclude_residues: Optional[set[tuple[str, str]]] = None,
+    wc_only: bool = False,
+) -> list[tuple[Any, Any]]:
+    """Resolve intended partners shared by the C1' and WC metrics.
+
+    New packages carry a topology-authored registry.  For legacy packages, true
+    canonical pairs with a central N1...N3 reference contact are assigned before the
+    remaining C1'-geometry candidates.  A closer neighbouring helix can therefore no
+    longer steal a real partner during greedy matching.
+    """
+    c1 = _select_c1(u)
+    excl = exclude_residues or set()
+    residue_by_key = {
+        (str(r.segid), str(int(r.resid))): r
+        for r in c1.residues
+    }
+
+    authored = read_topology_wc_sidecar(psf.parent, psf.stem)
+    if authored is not None:
+        pairs: list[tuple[Any, Any]] = []
+        missing = []
+        for key_a, key_b in authored:
+            ra, rb = residue_by_key.get(key_a), residue_by_key.get(key_b)
+            if ra is None or rb is None:
+                missing.append((key_a, key_b))
+                continue
+            # The authored partner list is authoritative.  Geometry-derived ssDNA
+            # exclusions can false-positive a strained but intentionally paired base;
+            # an authored pair can never simultaneously be intentional ssDNA.
+            if wc_only and (ra.resname.strip(), rb.resname.strip()) not in WC_ATOMS:
+                continue
+            pairs.append((ra, rb))
+        if missing:
+            raise RuntimeError(
+                f"WC partner sidecar does not match topology ({len(missing)} missing pair(s))"
+            )
+        if not pairs:
+            raise RuntimeError("WC partner sidecar resolved no usable pairs")
+        return pairs
+
+    pos = c1.positions
+    candidates: list[tuple[int, float, int, int]] = []
+    for i, j in cKDTree(pos).query_pairs(C1_SEARCH_HI):
+        if c1[i].segid == c1[j].segid:
+            continue
+        if _residue_key(c1[i]) in excl or _residue_key(c1[j]) in excl:
+            continue
+        d_c1 = float(np.linalg.norm(pos[i] - pos[j]))
+        if d_c1 < C1_SEARCH_LO:
+            continue
+        ra, rb = c1[i].residue, c1[j].residue
+        hbonds = WC_ATOMS.get((ra.resname.strip(), rb.resname.strip()), [])
+        if wc_only and not hbonds:
+            continue
+        priority, score = 1, d_c1
+        if hbonds:
+            ia = _atom_index(ra, hbonds[0][0])
+            ib = _atom_index(rb, hbonds[0][1])
+            if ia is not None and ib is not None:
+                central = float(
+                    np.linalg.norm(u.atoms[ia].position - u.atoms[ib].position)
+                )
+                if central <= WC_REFERENCE_CONTACT_MAX_ANG:
+                    priority, score = 0, central
+        candidates.append((priority, score, i, j))
+    candidates.sort()
+
+    used: set[int] = set()
+    pairs = []
+    for _priority, _score, i, j in candidates:
+        if i in used or j in used:
+            continue
+        used.update((i, j))
+        pairs.append((c1[i].residue, c1[j].residue))
+    return pairs
+
+
 def build_c1_pairs(
     psf: Path,
     pdb: Path,
@@ -294,10 +403,9 @@ def build_c1_pairs(
 ) -> C1Pairs:
     """Identify C1'...C1' base pairs from the reference structure.
 
-    All cross-segment candidate pairs within [C1_SEARCH_LO, C1_SEARCH_HI] Å
-    are collected, sorted by distance, and then greedily assigned shortest-first.
-    This makes intra-duplex pairs (~10 Å) win over inter-helix contacts
-    (~12+ Å) regardless of atom-index ordering or PSF segment layout.
+    Uses the package's topology-authored registry when available.  Legacy packages
+    recover tight central Watson-Crick contacts first, then fill unmatched residues
+    from C1' geometry.
 
     ``exclude_residues`` is a set of ``(chain, resid)`` keys (as produced by
     ``identify_unpaired_residues``) for deliberately single-stranded
@@ -310,29 +418,12 @@ def build_c1_pairs(
     u = mda.Universe(str(psf), str(pdb))
     c1 = _select_c1(u)
     pos = c1.positions
-    segids = c1.atoms.segids
-    excl = exclude_residues or set()
-
-    candidates: list[tuple[float, int, int]] = []
-    for i, j in cKDTree(pos).query_pairs(C1_SEARCH_HI):
-        if segids[i] == segids[j]:
-            continue
-        if _residue_key(c1[i]) in excl or _residue_key(c1[j]) in excl:
-            continue
-        d = float(np.linalg.norm(pos[i] - pos[j]))
-        if d >= C1_SEARCH_LO:
-            candidates.append((d, i, j))
-    candidates.sort()
-
-    used = np.zeros(len(pos), dtype=bool)
-    pi_list: list[int] = []
-    pj_list: list[int] = []
-    for _, i, j in candidates:
-        if used[i] or used[j]:
-            continue
-        used[i] = used[j] = True
-        pi_list.append(i)
-        pj_list.append(j)
+    c1_index = {atom.residue.ix: i for i, atom in enumerate(c1)}
+    residue_pairs = _reference_residue_pairs(
+        u, psf, exclude_residues=exclude_residues, wc_only=False
+    )
+    pi_list = [c1_index[a.ix] for a, _b in residue_pairs]
+    pj_list = [c1_index[b.ix] for _a, b in residue_pairs]
 
     if not pi_list:
         raise RuntimeError("No C1' base pairs found in reference structure.")
@@ -440,10 +531,9 @@ def build_wc_pairs(
     Only residue pairs that have a WC_ATOMS entry (i.e. known base-type
     complement) are included — mismatches and abasic sites are skipped.
 
-    Candidates are sorted by C1'…C1' distance before greedy assignment so
-    intra-duplex pairs win over inter-helix contacts regardless of atom order.
-    Non-WC-compatible candidates do not consume atoms, allowing each atom to
-    be re-evaluated with the next-shortest candidate.
+    Partner identity comes from the same registry as :func:`build_c1_pairs`.
+    ``lo``/``hi`` remain accepted for API compatibility; the shared legacy fallback
+    uses the module's calibrated C1' search band.
 
     ``exclude_residues`` is a set of ``(chain, resid)`` keys (as produced by
     ``identify_unpaired_residues``) for deliberately single-stranded
@@ -456,29 +546,12 @@ def build_wc_pairs(
     import MDAnalysis as mda  # noqa: PLC0415
 
     u = mda.Universe(str(psf), str(pdb))
-    c1 = _select_c1(u)
-    pos = c1.positions
-    excl = exclude_residues or set()
-
-    candidates: list[tuple[float, int, int]] = []
-    for i, j in cKDTree(pos).query_pairs(hi):
-        if c1[i].segid == c1[j].segid:
-            continue
-        if _residue_key(c1[i]) in excl or _residue_key(c1[j]) in excl:
-            continue
-        d = float(np.linalg.norm(pos[i] - pos[j]))
-        if d >= lo:
-            candidates.append((d, i, j))
-    candidates.sort()
-
-    used = np.zeros(len(pos), dtype=bool)
+    residue_pairs = _reference_residue_pairs(
+        u, psf, exclude_residues=exclude_residues, wc_only=True
+    )
     pairs: list[WcPair] = []
 
-    for _, i, j in candidates:
-        if used[i] or used[j]:
-            continue
-        res_a = c1[i].residue
-        res_b = c1[j].residue
+    for res_a, res_b in residue_pairs:
         key = (res_a.resname.strip(), res_b.resname.strip())
         hbonds = WC_ATOMS.get(key, [])
         atom_pairs: list[tuple[int, int]] = []
@@ -493,7 +566,6 @@ def build_wc_pairs(
                 atom_pairs.append((ia, ib))
                 ref_distances.append(d_ref)
         if atom_pairs:
-            used[i] = used[j] = True
             pairs.append(
                 WcPair(
                     res_a=f"{res_a.segid}:{res_a.resname}{res_a.resid}",
@@ -606,6 +678,60 @@ def wc_metrics_from_dcd(
     )
 
 
+def wc_window_metrics_from_dcd(
+    psf: Path,
+    dcd: Path,
+    wc_pairs: list[WcPair],
+    *,
+    window_frames: int = WC_ROLLING_FRAMES_DEFAULT,
+    safe_back: int = 0,
+    cutoff_ang: float = 3.6,
+    ref_delta_ang: float = 0.75,
+) -> dict:
+    """Mean WC geometry over the trailing complete trajectory frames.
+
+    ``wc_per_frame`` remains the unsmoothed series used by plateau detection.  This
+    bounded window is only the advisory scalar shown to a person, where one stretched
+    thermal contact in one snapshot should not masquerade as global duplex damage.
+    """
+    import MDAnalysis as mda  # noqa: PLC0415
+
+    u = mda.Universe(str(psf), str(dcd))
+    stop = len(u.trajectory) - max(0, int(safe_back))
+    if stop <= 0:
+        raise ValueError("DCD has no complete frames for WC window")
+    start = max(0, stop - max(1, int(window_frames)))
+    rows = []
+    for i in range(start, stop):
+        ts = u.trajectory[i]
+        box = ts.dimensions
+        L = box[:3] if box is not None and len(box) >= 3 else None
+        rows.append(
+            wc_frame_metrics(
+                u.atoms.positions,
+                wc_pairs,
+                cutoff_ang=cutoff_ang,
+                ref_delta_ang=ref_delta_ang,
+                box=L,
+            )
+        )
+    keys = (
+        "absolute_paired_fraction",
+        "ref_relative_paired_fraction",
+        "mean_hbond_proxy_ang",
+        "p90_max_hbond_proxy_ang",
+        "max_hbond_proxy_ang",
+    )
+    out = {key: float(np.mean([row[key] for row in rows])) for key in keys}
+    out.update(
+        n_pairs=len(wc_pairs),
+        window_frames=len(rows),
+        absolute_paired_percent=out["absolute_paired_fraction"] * 100.0,
+        ref_relative_paired_percent=out["ref_relative_paired_fraction"] * 100.0,
+    )
+    return out
+
+
 # ── Combined health check ─────────────────────────────────────────────────────
 
 
@@ -647,8 +773,8 @@ def run_health_check(
     evaluator).  **The default must stay True** — ``remote_health_eval`` runs a staged
     copy of this module on the compute node and exits "no WC" on an empty series,
     which would make every Tier-A stage hold.  An in-flight probe, which discards the
-    series anyway, passes ``per_frame=False`` and gets the two scalars from a single
-    frame: O(1) instead of O(n_frames), which matters because the probe runs inline in
+    series anyway, passes ``per_frame=False`` and gets the scalars from a bounded
+    trailing window: O(1) in trajectory length, which matters because the probe runs inline in
     the disk guard's poll loop and a 500 ns run reaches tens of thousands of frames.
     """
     psf = package_dir / f"{name_stem}.psf"
@@ -691,12 +817,11 @@ def run_health_check(
         return HealthCheckResult(passed=False, error=f"C1' metrics failed: {exc}")
 
     try:
-        wc_m = wc_metrics_from_dcd(
+        wc_m = wc_window_metrics_from_dcd(
             psf,
-            pdb,
             dcd,
             wc_pairs,
-            frame=-1,
+            safe_back=safe_back,
             cutoff_ang=cutoff_ang,
             ref_delta_ang=ref_delta_ang,
         )
@@ -813,6 +938,7 @@ def run_health_check(
         wc_p90_max_hbond_ang=wc_m["p90_max_hbond_proxy_ang"],
         n_c1_pairs=c1_m["n_pairs"],
         n_wc_pairs=wc_m["n_pairs"],
+        wc_window_frames=wc_m["window_frames"],
         frame=c1_m.get("frame"),
         wc_per_frame=wc_per_frame,
         broken_bp_count=broken_per_frame[-1] if broken_per_frame else None,
@@ -843,6 +969,7 @@ def append_health_jsonl(
         "wc_mean_hbond_ang": result.wc_mean_hbond_ang,
         "n_c1_pairs": result.n_c1_pairs,
         "n_wc_pairs": result.n_wc_pairs,
+        "wc_window_frames": result.wc_window_frames,
         "frame": result.frame,
         "error": result.error,
         "wc_per_frame": result.wc_per_frame,

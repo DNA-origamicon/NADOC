@@ -201,6 +201,24 @@ def box_corners(xf: DisplayXform) -> np.ndarray:
     return apply_xform(centre_pre + signs * half, xf)
 
 
+def image_into_cell(points_pre: np.ndarray, xf: DisplayXform) -> np.ndarray:
+    """Fold points into the exact primary cell drawn by :func:`box_corners`.
+
+    Shell selection first chooses the periodic image nearest a DNA atom.  That is
+    the right image for measuring the shell, but it can sit beyond a face of the
+    primary cell when the DNA approaches that face.  The viewer promises one
+    periodic cell, so make a final molecule-level lattice translation around the
+    same centre the box uses.  Distances remain correct under minimum-image PBC.
+    """
+    pts = np.asarray(points_pre, dtype=float)
+    if pts.size == 0:
+        return pts.reshape(-1, 3)
+    if not xf.has_box:
+        return pts.copy()
+    centre_pre = xf.c_box + xf.T_dyn
+    return centre_pre + min_image(pts - centre_pre, xf.box_nm)
+
+
 #: The 12 cuboid edges as corner-index pairs (each differs in exactly one bit).
 BOX_EDGES = tuple(
     (k, k | (1 << a)) for k in range(8) for a in range(3) if not (k >> a) & 1
@@ -285,6 +303,55 @@ def ion_rows(names, resnames) -> tuple[np.ndarray, np.ndarray]:
     return np.asarray(rows, dtype=np.int64), np.asarray(codes, dtype=np.uint8)
 
 
+def _build_heavy_anchor_rows(heavy_ag, dna_p) -> np.ndarray:
+    """Map each DNA heavy atom to its phosphate row for coarse-frame anchoring.
+
+    Most atoms use the phosphate in their own residue.  A 5' terminal residue can
+    have no phosphate after psfgen processing, so fall back to the nearest
+    phosphate-bearing residue in the same segment.  This topology-only table is
+    cached by :func:`reconstruct_heavy_pre` and reused for every live frame.
+
+    This helper deliberately lives with the solvent reconstruction it serves.  It
+    used to be imported from ``md_trajectory``; the direct-heavy display refactor
+    removed it there while leaving this live coarse-display caller behind, causing
+    every Water / Ions / Periodic box request to fail at runtime.
+    """
+    p_row_by_res: dict[int, int] = {}
+    p_row_by_key: dict[tuple[str, int], int] = {}
+    p_resids_by_seg: dict[str, list[int]] = {}
+    for row, atom in enumerate(dna_p):
+        res_ix = int(atom.residue.ix)
+        segid = str(getattr(atom.residue, "segid", "") or getattr(atom, "segid", ""))
+        resid = int(atom.residue.resid)
+        p_row_by_res[res_ix] = row
+        p_row_by_key[(segid, resid)] = row
+        p_resids_by_seg.setdefault(segid, []).append(resid)
+    for segid in p_resids_by_seg:
+        p_resids_by_seg[segid].sort()
+
+    def _row_for(atom) -> int:
+        row = p_row_by_res.get(int(atom.residue.ix))
+        if row is not None:
+            return row
+        segid = str(getattr(atom.residue, "segid", "") or getattr(atom, "segid", ""))
+        resid = int(atom.residue.resid)
+        for delta_resid in (1, -1, 2, -2):
+            near = p_row_by_key.get((segid, resid + delta_resid))
+            if near is not None:
+                return near
+        candidates = p_resids_by_seg.get(segid)
+        if candidates:
+            nearest = min(candidates, key=lambda candidate: abs(candidate - resid))
+            near = p_row_by_key.get((segid, nearest))
+            if near is not None:
+                return near
+        return -1
+
+    return np.fromiter(
+        (_row_for(atom) for atom in heavy_ag), dtype=np.int64, count=len(heavy_ag)
+    )
+
+
 def reconstruct_heavy_pre(
     heavy_ag, dna_p, pos_raw, p_raw, p_pre, box_nm, rows_cache: dict | None = None
 ):
@@ -303,8 +370,6 @@ def reconstruct_heavy_pre(
 
     Returns ``pos_pre`` (N,3) nm, aligned with ``heavy_ag`` order.
     """
-    from backend.core.md_trajectory import _build_heavy_anchor_rows
-
     rows = None if rows_cache is None else rows_cache.get("_heavy_anchor_rows")
     if rows is None:
         rows = _build_heavy_anchor_rows(heavy_ag, dna_p)
@@ -405,6 +470,8 @@ def extract_solvent_frame(
     shell_nm: float | None = 0.5,
     atomistic: bool = False,
     max_waters: int | None = None,
+    positions_ang: np.ndarray | None = None,
+    dimensions_ang: np.ndarray | None = None,
 ) -> dict:
     """Solvent + cell for the CURRENT frame of ``universe``, in the display frame.
 
@@ -413,8 +480,8 @@ def extract_solvent_frame(
     caller already built for the DNA itself.  They are the shell anchors: each
     solvent molecule is placed beside the DNA atom it is nearest, which both
     chooses its periodic image and guarantees the shell survives the display
-    transform (a rotation is an isometry, so "within 5 Å of that atom" is true
-    before and after).
+    transform.  A final fold keeps the molecule in the drawn primary cell, so
+    shell distance at a cell face is understood with the usual minimum-image PBC.
 
     ``shell_nm=None`` selects the whole cell instead, imaged around ``c_box``.
     """
@@ -434,8 +501,20 @@ def extract_solvent_frame(
         "shell_nm": shell_nm,
         "n_water": 0,
     }
-    dims = getattr(universe, "dimensions", None)
-    pos_all = universe.atoms.positions
+    # The live latest-frame path reads a growing DCD by direct O(1) byte seek.  In
+    # that path MDAnalysis' Universe intentionally remains on an older indexed frame,
+    # so its ``atoms.positions`` / ``dimensions`` are not authoritative.  Callers can
+    # hand us the coordinates from the same direct read that produced the DNA frame.
+    dims = (
+        np.asarray(dimensions_ang, dtype=float)
+        if dimensions_ang is not None
+        else getattr(universe, "dimensions", None)
+    )
+    pos_all = (
+        np.asarray(positions_ang, dtype=float)
+        if positions_ang is not None
+        else universe.atoms.positions
+    )
 
     # ── Water ────────────────────────────────────────────────────────────────
     if water and sctx["n_waters_total"]:
@@ -455,6 +534,10 @@ def extract_solvent_frame(
             # Whole cell: image every molecule around the DNA centroid, i.e. into
             # exactly the box that box_corners() draws.
             o_pre = (xf.c_box + xf.T_dyn) + min_image(o_sel - xf.c_box, xf.box_nm)
+        # The nearest-DNA image used for shell selection can lie just beyond a cell
+        # face.  Fold the O (the molecule anchor) back into the one primary cell the
+        # wireframe depicts; hydrogens below ride the same molecule-level image.
+        o_pre = image_into_cell(o_pre, xf)
         out["capped"] = out["capped"] or capped
         out["n_water"] = int(sel.size)
 
@@ -490,6 +573,9 @@ def extract_solvent_frame(
                 i_pre[sel] = dna_pre[anchor] + min_image(
                     i_raw[sel] - dna_raw[anchor], xf.box_nm
                 )
+        # Anchoring a condensed ion beside DNA may choose an equivalent image beyond
+        # a face.  The display is a single primary cell, so fold that image back in.
+        i_pre = image_into_cell(i_pre, xf)
         out["ions"] = apply_xform(i_pre, xf).astype(np.float32).reshape(-1)
         out["ion_species"] = sctx["ion_species"]
         out["n_ions"] = int(sctx["n_ions"])

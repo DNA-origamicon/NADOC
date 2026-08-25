@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 
-PLAN_VERSION = 1
+PLAN_VERSION = 2
 DEFAULT_WINDOW = 10
 DEFAULT_REF_DELTA_ANG = 0.75
 
@@ -193,6 +193,9 @@ def _source_fingerprint(package_dir, stem):
     sidecar = package_dir / (stem + "_ss_exclusion.json")
     if sidecar.exists():
         paths.append(sidecar)
+    pair_sidecar = package_dir / (stem + "_wc_pairs.json")
+    if pair_sidecar.exists():
+        paths.append(pair_sidecar)
     return {
         p.name: {"size": p.stat().st_size, "mtime_ns": p.stat().st_mtime_ns}
         for p in paths
@@ -277,6 +280,21 @@ def _topology_exclusions(package_dir, stem):
         return set()
 
 
+def _topology_pairs(package_dir, stem):
+    path = Path(package_dir) / (stem + "_wc_pairs.json")
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text())
+        return [
+            ((str(row["a"][0]), _normal_resid(row["a"][1])),
+             (str(row["b"][0]), _normal_resid(row["b"][1])))
+            for row in data.get("pairs", [])
+        ]
+    except (OSError, ValueError, TypeError, KeyError, IndexError) as exc:
+        raise ValueError("invalid WC pair sidecar: %s" % exc)
+
+
 def build_plan(package_dir, stem):
     """Build the canonical pair plan locally without loading every solvent atom.
 
@@ -335,26 +353,57 @@ def build_plan(package_dir, stem):
         if closest > _C1_NO_PARTNER_ANG:
             exclusions.add((key[0][-1], key[1]))
 
-    candidates = []
-    for i, j in tree.query_pairs(C1_SEARCH_HI):
-        _, key_i, _ = c1_rows[i]
-        _, key_j, _ = c1_rows[j]
-        if key_i[0] == key_j[0]:
-            continue
-        if (key_i[0][-1], key_i[1]) in exclusions:
-            continue
-        if (key_j[0][-1], key_j[1]) in exclusions:
-            continue
-        distance = float(np.linalg.norm(c1_pos[i] - c1_pos[j]))
-        if distance >= C1_SEARCH_LO:
-            candidates.append((distance, i, j))
-    candidates.sort()
+    row_by_key = {key: i for i, (_index, key, _residue) in enumerate(c1_rows)}
+    authored = _topology_pairs(package_dir, stem)
+    if authored is not None:
+        pair_indices = []
+        for key_i, key_j in authored:
+            if key_i not in row_by_key or key_j not in row_by_key:
+                raise ValueError("WC pair sidecar does not match PSF residues")
+            pair_indices.append((row_by_key[key_i], row_by_key[key_j]))
+    else:
+        candidates = []
+        for i, j in tree.query_pairs(C1_SEARCH_HI):
+            _, key_i, res_i = c1_rows[i]
+            _, key_j, res_j = c1_rows[j]
+            if key_i[0] == key_j[0]:
+                continue
+            if (key_i[0][-1], key_i[1]) in exclusions:
+                continue
+            if (key_j[0][-1], key_j[1]) in exclusions:
+                continue
+            distance = float(np.linalg.norm(c1_pos[i] - c1_pos[j]))
+            if distance < C1_SEARCH_LO:
+                continue
+            hbonds = WC_ATOMS.get(
+                (res_i["resname"].strip(), res_j["resname"].strip()), []
+            )
+            if not hbonds:
+                continue
+            priority, score = 1, distance
+            ia = res_i["atoms"].get(hbonds[0][0])
+            ib = res_j["atoms"].get(hbonds[0][1])
+            if ia is not None and ib is not None:
+                central = float(
+                    np.linalg.norm(
+                        np.asarray(positions[ia]) - np.asarray(positions[ib])
+                    )
+                )
+                if central <= 3.6:
+                    priority, score = 0, central
+            candidates.append((priority, score, i, j))
+        candidates.sort()
+        used = set()
+        pair_indices = []
+        for _priority, _score, i, j in candidates:
+            if i in used or j in used:
+                continue
+            used.add(i)
+            used.add(j)
+            pair_indices.append((i, j))
 
-    used = set()
     pairs = []
-    for _, i, j in candidates:
-        if i in used or j in used:
-            continue
+    for i, j in pair_indices:
         _, key_i, res_i = c1_rows[i]
         _, key_j, res_j = c1_rows[j]
         atom_pairs = []
@@ -375,8 +424,6 @@ def build_plan(package_dir, stem):
                 )
             )
         if atom_pairs:
-            used.add(i)
-            used.add(j)
             pairs.append(
                 {
                     "res_a": "%s:%s%s" % (key_i[0], res_i["resname"], key_i[1]),

@@ -1960,7 +1960,7 @@ describe('initMdJobsPanel — Health card tile states', () => {
     expect(byLabel['Temp']).toMatch(/310/)          // log-derived tiles still populate
     expect(byLabel['Speed']).toMatch(/44/)
     expect(byLabel['Base pairs']).toBe('—')         // and the rest say "no", not "wait"
-    expect(byLabel['WC health']).toBe('—')
+    expect(byLabel['WC geometry']).toBe('—')
     expect(byLabel['Broken bp']).toBe('—')
     expect(byLabel['Shell charge']).toBe('—')
     // "Latest" is derived from the running segment, so it is never unknown mid-run.

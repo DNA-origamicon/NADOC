@@ -2590,6 +2590,104 @@ def write_aksimentiev_enm_files(
 _DECLASH_BUILD_PDB_SUFFIX = "_build.pdb"  # backup of the original (clashed) build PDB
 
 
+def _persist_topology_health_registry(
+    model: "AtomisticModel",  # noqa: F821
+    psf_path: Path,
+    *,
+    sort_chains: bool,
+) -> set[tuple[str, str]]:
+    """Persist exact designed partners and return every designed-unpaired residue.
+
+    Atomistic residues retain ``(helix_id, bp_index, direction, copy_k)`` provenance;
+    the prepared PSF retains their residue order.  Joining those two facts gives the
+    health checker an exact partner registry without trying to rediscover topology from
+    packed 3-D distances.  Native scaffold tails, loop-insertion copies, crossover
+    inserts, and extensions naturally remain unmatched and are written to the ssDNA
+    sidecar as well.
+    """
+    from backend.core.md_health import (  # noqa: PLC0415
+        _ss_exclusion_sidecar_path,
+        _wc_pair_sidecar_path,
+    )
+
+    dna_names = {"THY", "ADE", "CYT", "GUA", "DA", "DT", "DC", "DG"}
+    atoms_by_chain: dict[str, list] = {}
+    for atom in model.atoms:
+        if atom.residue in dna_names:
+            atoms_by_chain.setdefault(atom.chain_id, []).append(atom)
+    chain_order = sorted(atoms_by_chain) if sort_chains else list(atoms_by_chain)
+    model_rows = []
+    for chain_id in chain_order:
+        by_seq: dict[int, list] = {}
+        for atom in atoms_by_chain[chain_id]:
+            by_seq.setdefault(atom.seq_num, []).append(atom)
+        for seq in sorted(by_seq):
+            a = by_seq[seq][0]
+            model_rows.append(
+                {
+                    "helix": a.helix_id,
+                    "bp": int(a.bp_index),
+                    "direction": str(getattr(a.direction, "value", a.direction)),
+                    "copy": int(a.copy_k or 0),
+                    "insert": a.crossover_id is not None,
+                    "extension": a.extension_id is not None,
+                }
+            )
+
+    psf_rows: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    in_atoms = False
+    with psf_path.open(errors="replace") as fh:
+        for line in fh:
+            if "!NATOM" in line:
+                in_atoms = True
+                continue
+            if in_atoms and "!NBOND" in line:
+                break
+            if not in_atoms:
+                continue
+            fields = line.split()
+            if len(fields) < 6 or not fields[0].isdigit() or fields[3] not in dna_names:
+                continue
+            key = (fields[1], str(int(fields[2])))
+            if key not in seen:
+                seen.add(key)
+                psf_rows.append(key)
+    if len(model_rows) != len(psf_rows):
+        raise RuntimeError(
+            "Cannot author WC registry: atomistic/PSF DNA residue counts differ "
+            f"({len(model_rows)} != {len(psf_rows)})"
+        )
+
+    by_site: dict[tuple[str, int], dict[str, int]] = {}
+    for i, row in enumerate(model_rows):
+        if row["insert"] or row["extension"] or row["copy"] != 0 or not row["helix"]:
+            continue
+        by_site.setdefault((row["helix"], row["bp"]), {})[row["direction"]] = i
+
+    partner_rows = []
+    paired: set[int] = set()
+    for site in sorted(by_site):
+        directions = by_site[site]
+        ia = directions.get("FORWARD")
+        ib = directions.get("REVERSE")
+        if ia is None or ib is None:
+            continue
+        paired.update((ia, ib))
+        partner_rows.append({"a": list(psf_rows[ia]), "b": list(psf_rows[ib])})
+    unpaired_indices = set(range(len(model_rows))) - paired
+    topology_last_char = {
+        (psf_rows[i][0][-1], psf_rows[i][1]) for i in unpaired_indices
+    }
+    _wc_pair_sidecar_path(psf_path.parent, psf_path.stem).write_text(
+        json.dumps({"schema": "nadoc.wc_pairs.v1", "pairs": partner_rows})
+    )
+    _ss_exclusion_sidecar_path(psf_path.parent, psf_path.stem).write_text(
+        json.dumps({"topology_last_char": sorted(topology_last_char)})
+    )
+    return topology_last_char
+
+
 def topology_ss_exclusion_set(
     model: "AtomisticModel",  # noqa: F821
     psf_path: Path,
@@ -2612,41 +2710,22 @@ def topology_ss_exclusion_set(
       single-base 5′ tail measured 10.72 Å to the nearest unrelated cross-chain
       C1' — under the 10.8 Å cutoff by 0.08 Å).
 
-    Extra bases and extensions carry an explicit per-atom tag in the
-    ``AtomisticModel`` (``crossover_id`` / ``extension_id``) — no geometry needed —
-    so ``extra_base_segid_resids`` / ``extension_segid_resids`` place them by PSF
-    ordinal instead, and can never miss one regardless of 3D proximity.  Native
-    ssDNA (scaffold loops with no explicit tag) has no such marker, so
-    ``identify_unpaired_residues``'s C1'-distance geometry is still the only way to
-    find it — kept as the third, unioned leg.  ``sort_chains`` must match how the
-    package's PDB was built (``True`` for the psfgen path, ``False`` for
-    ``export_pdb`` — see ``namd_topology.built_pdb_residue_keys``).
+    The ``AtomisticModel`` retains each ordinary nucleotide's helix, base-pair index,
+    direction and copy number.  Opposite directions at the same helix/index are exact
+    designed partners; every remaining DNA residue is exact designed ssDNA.  This also
+    catches native scaffold tails and loops, which have no explicit insert tag.
+    ``sort_chains`` must match how the package's PDB was built (``True`` for the psfgen
+    path, ``False`` for ``export_pdb``).
 
-    SIDE EFFECT: persists the topology-exact leg to ``{name_stem}_ss_exclusion.json``
-    next to the PSF, so a later health check — which has only the PSF/PDB on disk,
-    never the ``AtomisticModel`` — can recover it via
-    ``md_health.read_topology_ss_sidecar`` and union it with a fresh geometric pass
-    instead of falling back to geometry alone.  ``identify_unpaired_residues`` and
-    the sidecar helpers live in ``md_health`` (not here) because that module is
-    ALSO staged standalone to remote compute nodes for the early-stop WC step — a
-    cross-module import back into this file (which pulls in the full Design/
-    pydantic dependency graph) would silently fail there.
+    SIDE EFFECT: persists both ``{name_stem}_wc_pairs.json`` and
+    ``{name_stem}_ss_exclusion.json`` next to the PSF.  Later local and remote health
+    checks have only PSF/PDB files, so these sidecars preserve the authored topology
+    without loading the Design/pydantic graph on a compute node.
     """
-    from backend.core.md_health import (  # noqa: PLC0415
-        _ss_exclusion_sidecar_path,
-        identify_unpaired_residues,
-    )
-    from backend.core.namd_topology import (  # noqa: PLC0415
-        extension_segid_resids,
-        extra_base_segid_resids,
-    )
+    from backend.core.md_health import identify_unpaired_residues  # noqa: PLC0415
 
-    topology_full_segid = extra_base_segid_resids(
+    topology_last_char = _persist_topology_health_registry(
         model, psf_path, sort_chains=sort_chains
-    ) | extension_segid_resids(model, psf_path, sort_chains=sort_chains)
-    topology_last_char = {(seg[-1], resid) for seg, resid in topology_full_segid}
-    _ss_exclusion_sidecar_path(psf_path.parent, psf_path.stem).write_text(
-        json.dumps({"topology_last_char": sorted(topology_last_char)})
     )
     geometric = identify_unpaired_residues(psf_path, pdb_path)
     return topology_last_char | geometric
@@ -3630,16 +3709,17 @@ def prepare_mgh_slow_release(
     # supplied, only its COORDINATES differ — e.g. an oxDNA seed): chain_id /
     # seq_num / tag assignment is purely topological and position-independent, so
     # a plain rebuild always matches the package's residue order.
-    _ladder_enm_exclude: "set[tuple[str, str]]" = set()
-    if design_has_extra_bases(design) or design_has_extensions(design) or declash:
-        from backend.core.atomistic import build_atomistic_model  # noqa: PLC0415
+    from backend.core.atomistic import build_atomistic_model  # noqa: PLC0415
 
-        _ladder_enm_exclude = topology_ss_exclusion_set(
-            build_atomistic_model(design),
-            package_dir / f"{name_stem}.psf",
-            pdb_path,
-            sort_chains=require_full_topology,
-        )
+    # Always author the exact health-pair registry.  Native ssDNA exists even when a
+    # design has no explicit crossover insert/extension tag, so conditioning this on
+    # those features recreates the denominator bug the registry is meant to prevent.
+    _ladder_enm_exclude = topology_ss_exclusion_set(
+        build_atomistic_model(design),
+        package_dir / f"{name_stem}.psf",
+        pdb_path,
+        sort_chains=require_full_topology,
+    )
     enm_report = write_aksimentiev_enm_files(
         pdb_path,
         package_dir,
