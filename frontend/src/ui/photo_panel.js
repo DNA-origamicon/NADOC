@@ -138,6 +138,12 @@ export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVi
     exit:      $('photo-exit-btn'),
     status:    $('photo-status'),
     pinLights: $('photo-pin-lights'),
+    studioEnvironment:         $('photo-studio-environment'),
+    studioEnvironmentControls: $('photo-studio-environment-controls'),
+    studioEnvironmentIntensity:      $('photo-studio-environment-intensity'),
+    studioEnvironmentIntensityLabel: $('photo-studio-environment-intensity-label'),
+    studioEnvironmentRotation:       $('photo-studio-environment-rotation'),
+    studioEnvironmentRotationLabel:  $('photo-studio-environment-rotation-label'),
     keyShadow: $('photo-key-shadow'),
     keyShadowControls:  $('photo-key-shadow-controls'),
     keyShadowMapSize:   $('photo-key-shadow-mapsize'),
@@ -239,6 +245,22 @@ export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVi
   function syncToState() {
     const s = photoMode.getSettings()
     if (els.pinLights) els.pinLights.checked = s.pinLights
+    if (els.studioEnvironment) els.studioEnvironment.checked = s.studioEnvironment
+    if (els.studioEnvironmentControls) {
+      els.studioEnvironmentControls.style.display = s.studioEnvironment ? 'flex' : 'none'
+    }
+    if (els.studioEnvironmentIntensity) {
+      els.studioEnvironmentIntensity.value = String(s.studioEnvironmentIntensity)
+    }
+    if (els.studioEnvironmentIntensityLabel) {
+      els.studioEnvironmentIntensityLabel.textContent = s.studioEnvironmentIntensity.toFixed(2)
+    }
+    if (els.studioEnvironmentRotation) {
+      els.studioEnvironmentRotation.value = String(s.studioEnvironmentRotation)
+    }
+    if (els.studioEnvironmentRotationLabel) {
+      els.studioEnvironmentRotationLabel.textContent = `${s.studioEnvironmentRotation.toFixed(0)}°`
+    }
     if (els.keyShadow) els.keyShadow.checked = s.keyShadow
     if (els.keyShadowMapSize)   els.keyShadowMapSize.value = String(s.keyShadowMapSize)
     if (els.keyShadowBias)      els.keyShadowBias.value = String(s.keyShadowBias)
@@ -327,7 +349,10 @@ export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVi
     els.shadowDepth.textContent =
       `A cast shadow removes ${pct}% of the light here (key ${s.keyIntensity.toFixed(2)} of `
       + `${(s.keyIntensity + s.fillIntensity + s.ambientIntensity).toFixed(2)} total). `
-      + `Lower Fill and Ambient to deepen it.`
+      + `Lower Fill and Diffuse ambient to deepen it.`
+      + (s.studioEnvironment
+        ? ' Studio reflections add non-shadowing PBR fill, especially on metal.'
+        : '')
   }
 
   /** Bind an intensity slider → setter → label → readout. */
@@ -346,6 +371,30 @@ export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVi
 
 
   els.pinLights?.addEventListener('change', () => photoMode.setPinLights(els.pinLights.checked))
+
+  els.studioEnvironment?.addEventListener('change', () => {
+    photoMode.setStudioEnvironment(els.studioEnvironment.checked)
+    if (els.studioEnvironmentControls) {
+      els.studioEnvironmentControls.style.display = els.studioEnvironment.checked ? 'flex' : 'none'
+    }
+    _refreshShadowDepth()
+  })
+
+  els.studioEnvironmentIntensity?.addEventListener('input', () => {
+    const v = Number(els.studioEnvironmentIntensity.value)
+    photoMode.setStudioEnvironmentIntensity(v)
+    if (els.studioEnvironmentIntensityLabel) {
+      els.studioEnvironmentIntensityLabel.textContent = v.toFixed(2)
+    }
+  })
+
+  els.studioEnvironmentRotation?.addEventListener('input', () => {
+    const v = Number(els.studioEnvironmentRotation.value)
+    photoMode.setStudioEnvironmentRotation(v)
+    if (els.studioEnvironmentRotationLabel) {
+      els.studioEnvironmentRotationLabel.textContent = `${v.toFixed(0)}°`
+    }
+  })
 
   els.keyShadow?.addEventListener('change', () => {
     photoMode.setKeyShadow(els.keyShadow.checked)

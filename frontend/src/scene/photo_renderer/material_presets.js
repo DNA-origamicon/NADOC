@@ -20,6 +20,10 @@ import * as THREE from 'three'
 const FLAT = Object.freeze({
   roughness: 1.0, metalness: 0.0, clearcoat: 0.0,
   specularIntensity: 0.0, sheen: 0.0, transmission: 0.0,
+  // The studio IBL exists for product materials, especially metal. Keep the
+  // publication-style flat preset pixel-stable: its shape should still come
+  // from the direct key/shadow and silhouette, not environment fill.
+  envMapIntensity: 0.0,
 })
 
 export const PRESETS = {

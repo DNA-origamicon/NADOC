@@ -134,6 +134,32 @@ describe('beginFrameSession', () => {
     session.dispose()
   })
 
+  it('bakes a context-local studio environment for preview and export', async () => {
+    const baked = []
+    ctx.bakeStudioEnvironment = vi.fn(() => {
+      const texture = { dispose: vi.fn() }
+      baked.push(texture)
+      return texture
+    })
+    mode = createPhotoMode(ctx)
+    mode.activate()
+    expect(ctx.scene.environment).toBe(baked[0])
+
+    const session = mode.beginFrameSession(320, 240)
+    expect(ctx.bakeStudioEnvironment).toHaveBeenCalledTimes(2)
+    expect(baked[1]).not.toBe(baked[0])
+    await session.renderFrame()
+    // The export PMREM is bound only for its synchronous draw; the live scene
+    // gets its preview-context texture back before toBlob yields.
+    expect(ctx.scene.environment).toBe(baked[0])
+
+    session.dispose()
+    expect(baked[1].dispose).toHaveBeenCalledTimes(1)
+    expect(baked[0].dispose).not.toHaveBeenCalled()
+    mode.deactivate()
+    expect(baked[0].dispose).toHaveBeenCalledTimes(1)
+  })
+
   it('the per-frame renderToBlob loop this replaced would blow the context budget', async () => {
     // The discriminator for the test above: same 40 frames, the OLD way. Each
     // renderToBlob is its own probe + offscreen context, so this is 80 — and a

@@ -118,6 +118,12 @@ const PANEL_IDS = {
   'photo-exit-btn':               'button',
   'photo-status':                 'div',
   'photo-pin-lights':             'input',
+  'photo-studio-environment':     'input',
+  'photo-studio-environment-controls': 'div',
+  'photo-studio-environment-intensity': 'input',
+  'photo-studio-environment-intensity-label': 'span',
+  'photo-studio-environment-rotation': 'input',
+  'photo-studio-environment-rotation-label': 'span',
   'photo-key-shadow':             'input',
   'photo-key-shadow-controls':    'div',
   'photo-key-shadow-mapsize':     'select',
@@ -203,6 +209,7 @@ function makeMode(overrides = {}) {
   const settings = {
     bgType: 'color', bgColor: '#0b0d10',
     pinLights: true, keyShadow: true, keyShadowMapSize: 2048,
+    studioEnvironment: true, studioEnvironmentIntensity: 1, studioEnvironmentRotation: 0,
     keyShadowBias: 1.0, shadowStrength: 1.0,
     keyAzimuth: 135, keyElevation: 35.264,
     floor: true, floorAxis: '-y', floorOpacity: 0.35, floorOffset: 0,
@@ -219,6 +226,8 @@ function makeMode(overrides = {}) {
     getSettings: () => ({ ...settings }),
     getStatus: () => ({ active: true, keyShadow: true, pinned: true, radius: 150, mapSize: 2048 }),
     setPinLights: vi.fn(), setKeyShadow: vi.fn(),
+    setStudioEnvironment: vi.fn(), setStudioEnvironmentIntensity: vi.fn(),
+    setStudioEnvironmentRotation: vi.fn(),
     setKeyAzimuth: vi.fn(), setKeyElevation: vi.fn(), resetKeyDirection: vi.fn(),
     setKeyShadowMapSize: vi.fn(), setKeyShadowBias: vi.fn(), setShadowStrength: vi.fn(),
     setKeyIntensity: vi.fn(), setFillIntensity: vi.fn(), setAmbientIntensity: vi.fn(),
@@ -239,11 +248,12 @@ describe('initPhotoPanel', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     els = mountIds(PANEL_IDS)
-    for (const id of ['photo-pin-lights', 'photo-key-shadow',
+    for (const id of ['photo-pin-lights', 'photo-studio-environment', 'photo-key-shadow',
                       'photo-outline', 'photo-depthcue',
                       'photo-floor']) els[id].type = 'checkbox'
     for (const id of ['photo-outline-color', 'photo-depthcue-color']) els[id].type = 'color'
     for (const id of ['photo-key-shadow-bias', 'photo-shadow-strength',
+                      'photo-studio-environment-intensity', 'photo-studio-environment-rotation',
                       'photo-floor-opacity', 'photo-floor-offset',
                       'photo-fov']) els[id].type = 'range'
     for (const id of ['photo-res-w', 'photo-res-h']) els[id].type = 'number'
@@ -275,6 +285,27 @@ describe('initPhotoPanel', () => {
     expect(els['photo-key-shadow-mapsize'].value).toBe('2048')
     expect(els['photo-key-shadow-bias-label'].textContent).toBe('1.0×')
     expect(els['photo-shadow-strength-label'].textContent).toBe('1.00')
+    expect(els['photo-studio-environment'].checked).toBe(true)
+    expect(els['photo-studio-environment-intensity-label'].textContent).toBe('1.00')
+    expect(els['photo-studio-environment-rotation-label'].textContent).toBe('0°')
+  })
+
+  it('wires studio ambient reflections, strength, and rotation', () => {
+    panel.syncToState()
+    els['photo-studio-environment'].checked = false
+    els['photo-studio-environment'].dispatchEvent(new Event('change'))
+    expect(mode.setStudioEnvironment).toHaveBeenCalledWith(false)
+    expect(els['photo-studio-environment-controls'].style.display).toBe('none')
+
+    els['photo-studio-environment-intensity'].value = '1.75'
+    els['photo-studio-environment-intensity'].dispatchEvent(new Event('input'))
+    expect(mode.setStudioEnvironmentIntensity).toHaveBeenCalledWith(1.75)
+    expect(els['photo-studio-environment-intensity-label'].textContent).toBe('1.75')
+
+    els['photo-studio-environment-rotation'].value = '45'
+    els['photo-studio-environment-rotation'].dispatchEvent(new Event('input'))
+    expect(mode.setStudioEnvironmentRotation).toHaveBeenCalledWith(45)
+    expect(els['photo-studio-environment-rotation-label'].textContent).toBe('45°')
   })
 
   it('shows the live nm/texel resolution for the fitted scene', () => {

@@ -6490,6 +6490,27 @@
               </label>
 
               <label class="pxr-check"
+                     title="Surrounds the object with a neutral virtual studio made of broad softboxes. This supplies the reflections a metallic PBR material needs; it does not replace the selected solid or transparent background and does not cast shadows.">
+                <input id="photo-studio-environment" type="checkbox" checked> Studio ambient reflections
+              </label>
+              <div id="photo-studio-environment-controls" class="pxr-col">
+                <div class="pxr-row">
+                  <span class="pxr-lbl" title="Brightness of the reflected studio. Raise this when metallic materials are too dark; lower it to preserve more contrast.">Reflection strength</span>
+                  <input id="photo-studio-environment-intensity" type="range" min="0" max="3" step="0.05" value="1" class="pxr-rng" style="accent-color:#8cc8ff">
+                  <span id="photo-studio-environment-intensity-label" class="pxr-val">1.00</span>
+                </div>
+                <div class="pxr-row">
+                  <span class="pxr-lbl" title="Rotates the virtual softboxes around the object, moving their broad highlight bands across metallic surfaces without changing the key light or its shadow.">Rotate studio</span>
+                  <input id="photo-studio-environment-rotation" type="range" min="-180" max="180" step="1" value="0" class="pxr-rng" style="accent-color:#8cc8ff">
+                  <span id="photo-studio-environment-rotation-label" class="pxr-val">0°</span>
+                </div>
+                <div class="pxr-note">
+                  Product-lighting fill: broad virtual softboxes appear in glossy and
+                  metallic reflections while the key light remains responsible for shadows.
+                </div>
+              </div>
+
+              <label class="pxr-check"
                      title="A real shadow map cast by the key light, re-rendered every frame. No floor required.">
                 <input id="photo-key-shadow" type="checkbox" checked> Key light casts a shadow
               </label>
@@ -6589,7 +6610,7 @@
                   <span id="photo-fill-intensity-label" class="pxr-val">0.00</span>
                 </div>
                 <div class="pxr-row">
-                  <span class="pxr-lbl" title="Omnidirectional light. This is the floor a cast shadow cannot go below, so lowering it deepens the shadow.">Ambient</span>
+                  <span class="pxr-lbl" title="Diffuse-only omnidirectional light. This fills matte/flat materials but cannot illuminate a fully metallic surface; use Studio ambient reflections for metal.">Diffuse ambient</span>
                   <input id="photo-ambient-intensity" type="range" min="0" max="3" step="0.05" value="0.15" class="pxr-rng">
                   <span id="photo-ambient-intensity-label" class="pxr-val">0.15</span>
                 </div>
@@ -6602,7 +6623,9 @@
             </div>
 
             <div class="pxr-note" style="margin-top:8px">
-              One key light, 55° off the view axis (upper-left), pinned to the camera.
+              A shadow-casting key light plus an independent neutral studio environment.
+              The studio supplies broad reflections for metallic product materials without
+              appearing in the background. The key stays 55° off the view axis (upper-left), pinned to the camera.
               Key 2.0 / fill 0 / ambient 0.15 rebalances ChimeraX's own 0.7 / 0.3 / 0.8:
               a cast shadow can only subtract the key light, so that takes it from
               removing 39% of the light to ~93%. The shadow map re-renders every frame,

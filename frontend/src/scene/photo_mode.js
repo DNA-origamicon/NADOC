@@ -11,6 +11,8 @@
  *   • flat figure materials (no specular lobe at all)
  *   • a CAMERA-PINNED key light — ChimeraX's move_lights_with_camera, so the
  *     shadow sweeps across the structure as you reorient it
+ *   • a neutral synthetic studio environment — broad reflected softboxes that
+ *     keep metallic product materials readable without changing the backdrop
  *   • a real KEY-LIGHT SHADOW MAP, with no floor required, so an object casts
  *     onto whatever is behind it
  *   • an optional SHADOW-CATCHING floor (photo_renderer/shadow_catcher.js) —
@@ -20,8 +22,8 @@
  *   • the ChimeraX depth-outline silhouette + a depth cue
  *   • flat-colour background, SMAA, and tiled PNG export
  *
- * No HDRI, no bloom, no path tracer, no visible ground plane, no mist — all
- * deliberate.
+ * No user-supplied HDRI, no bloom, no path tracer, no visible ground plane, no
+ * mist — all deliberate.
  *
  * REMOVED 2026-07-28 — multishadow ambient occlusion. A faithful port of
  * ChimeraX's 64-direction ambient shadows shipped here and was cut after
@@ -43,6 +45,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass }     from 'three/addons/postprocessing/RenderPass.js'
 import { SMAAPass }       from 'three/addons/postprocessing/SMAAPass.js'
 import { OutputPass }     from 'three/addons/postprocessing/OutputPass.js'
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 
 import { makeMaterial }               from './photo_renderer/material_presets.js'
 import { reprOf }                     from './photo_renderer/mesh_repr.js'
@@ -177,6 +180,15 @@ export const DEFAULT_PHOTO_SETTINGS = Object.freeze({
   keyIntensity:     2.0,
   fillIntensity:    0.0,
   ambientIntensity: 0.15,
+
+  // A neutral studio environment used as image-based lighting (IBL). This is
+  // the part that makes a PBR metal readable: AmbientLight only supplies a
+  // diffuse term, which a metalness=1 material does not have, while the broad
+  // softboxes in RoomEnvironment show up across the metal's reflections. It is
+  // lighting only — the chosen solid/transparent background remains visible.
+  studioEnvironment:          true,
+  studioEnvironmentIntensity: 1.0,
+  studioEnvironmentRotation:  0,       // degrees around world Y
   shadowStrength:   1.0,      // three's LightShadow.intensity; 1 = physical
 })
 
@@ -294,6 +306,22 @@ export function swapToFlatMaterials(root, presets = null) {
 export function createPhotoMode(sceneCtx) {
   const { scene, camera, renderer, controls, setRenderFn, resetRenderFn,
           setResizeCallback, clearResizeCallback } = sceneCtx
+  const bakeStudioEnvironment = sceneCtx.bakeStudioEnvironment ?? ((targetRenderer) => {
+    // The jsdom unit harness intentionally supplies a renderer-shaped object,
+    // not a WebGLRenderer. Production and offscreen export renderers carry this
+    // flag; keeping the guard here leaves the mode's CPU contracts testable.
+    if (!targetRenderer?.isWebGLRenderer) return null
+    const pmrem = new THREE.PMREMGenerator(targetRenderer)
+    const room  = new RoomEnvironment()
+    try {
+      // A slight convolution avoids razor-edged cards while retaining the broad
+      // highlight bands that describe curved metal.
+      return pmrem.fromScene(room, 0.04).texture
+    } finally {
+      room.dispose?.()
+      pmrem.dispose()
+    }
+  })
 
   const _settings = { ...DEFAULT_PHOTO_SETTINGS }
 
@@ -305,6 +333,9 @@ export function createPhotoMode(sceneCtx) {
   let _keyLight    = null        // the one directional that casts the shadow
   let _savedLights = []          // [{light, visible}] of the editor's own lights
   let _savedEnv    = undefined
+  let _savedEnvIntensity = 1
+  let _savedEnvRotation  = null
+  let _studioEnvTexture  = null
   let _savedBg     = undefined
   const _savedClearColor = new THREE.Color()
   let _savedClearAlpha   = 1
@@ -350,6 +381,34 @@ export function createPhotoMode(sceneCtx) {
       scene.background = c
       renderer.setClearColor(c, 1)
     }
+  }
+
+  // ── Studio environment: broad reflected light for PBR materials ───────────
+
+  /** Bind the preview renderer's PMREM without changing the visible backdrop. */
+  function _applyStudioEnvironment() {
+    scene.environment = _settings.studioEnvironment ? _studioEnvTexture : null
+    scene.environmentIntensity = _settings.studioEnvironmentIntensity
+    scene.environmentRotation.set(
+      0,
+      THREE.MathUtils.degToRad(_settings.studioEnvironmentRotation),
+      0,
+    )
+  }
+
+  /** Bake once per WebGL context. A PMREM render-target texture cannot be shared
+   *  with the separate context used by tiled still/video export. */
+  function _ensurePreviewStudioEnvironment() {
+    if (_studioEnvTexture || !_settings.studioEnvironment) return
+    _studioEnvTexture = bakeStudioEnvironment(renderer)
+    // PMREMGenerator uses its own render targets and texture bindings. Flush the
+    // live renderer's cache before EffectComposer draws the next frame.
+    renderer.resetState?.()
+  }
+
+  function _disposePreviewStudioEnvironment() {
+    _studioEnvTexture?.dispose?.()
+    _studioEnvTexture = null
   }
 
   // ── Light rig: camera-pinned, fitted to the scene's bounding sphere ─────────
@@ -631,8 +690,10 @@ export function createPhotoMode(sceneCtx) {
     // Scene state.
     _savedFov = camera.fov
     _savedEnv = scene.environment
+    _savedEnvIntensity = scene.environmentIntensity
+    _savedEnvRotation  = scene.environmentRotation.clone()
     _savedBg  = scene.background
-    scene.environment = null          // ambient occlusion IS the ambient light here
+    scene.environment = null
 
     _lightGroup = new THREE.Group()
     _lightGroup.name = 'expPhotoLights'
@@ -648,6 +709,12 @@ export function createPhotoMode(sceneCtx) {
     _floor = createShadowCatcher(scene)
 
     _buildComposer()
+
+    // Composer first, PMREM second. PMREM baking churns WebGL render targets;
+    // constructing the post chain before that bake and resetting renderer state
+    // afterward keeps the first composed frame deterministic.
+    _ensurePreviewStudioEnvironment()
+    _applyStudioEnvironment()
 
     // Rig last: it fits itself to the scene bounds, and the material swap above
     // does not move geometry, so the bounds are already final.
@@ -728,8 +795,12 @@ export function createPhotoMode(sceneCtx) {
     _restoreEditorLights()
 
     scene.environment = _savedEnv
+    scene.environmentIntensity = _savedEnvIntensity
+    if (_savedEnvRotation) scene.environmentRotation.copy(_savedEnvRotation)
     scene.background  = _savedBg
+    _disposePreviewStudioEnvironment()
     _savedEnv = undefined
+    _savedEnvRotation = null
     _savedBg  = undefined
     renderer.setClearColor(_savedClearColor, _savedClearAlpha)
     // Restore the editor's lens WITH a dolly, so the user keeps the framing
@@ -970,6 +1041,14 @@ export function createPhotoMode(sceneCtx) {
     composer.addPass(new OutputPass())
     composer.setSize(tileW, tileH)
 
+    // PMREM textures are WebGL-context-local. Re-bake the same neutral studio
+    // for the export renderer or metallic exports would be black even though
+    // the live preview is correctly lit.
+    const exportEnvTexture = _settings.studioEnvironment
+      ? bakeStudioEnvironment(offRenderer)
+      : null
+    offRenderer.resetState?.()
+
     let _disposed = false
 
     /**
@@ -1002,7 +1081,16 @@ export function createPhotoMode(sceneCtx) {
             figure.setParams(_figureParams())
             _pushCueRangeTo(figure)
             figure.enabled = figure.hasEffect()
-            composer.render()
+            // Keep the context-local export PMREM bound only for this synchronous
+            // draw. Restoring immediately preserves the live preview between
+            // asynchronously encoded video/still frames.
+            const liveEnv = scene.environment
+            scene.environment = _settings.studioEnvironment ? exportEnvTexture : null
+            try {
+              composer.render()
+            } finally {
+              scene.environment = liveEnv
+            }
             finalCtx.drawImage(offCanvas, tx * tileW, ty * tileH)
           }
         }
@@ -1024,6 +1112,7 @@ export function createPhotoMode(sceneCtx) {
       _disposed = true
       composer.dispose?.()
       figure.dispose?.()
+      exportEnvTexture?.dispose?.()
       offRenderer.dispose()
     }
 
@@ -1085,6 +1174,25 @@ export function createPhotoMode(sceneCtx) {
     if (_active) _applyKeyShadow()
   }
 
+  /** Neutral image-based studio light. Unlike AmbientLight, this contributes a
+   *  specular environment for metalness=1 materials. */
+  function setStudioEnvironment(on) {
+    _settings.studioEnvironment = !!on
+    if (!_active) return
+    _ensurePreviewStudioEnvironment()
+    _applyStudioEnvironment()
+  }
+
+  function setStudioEnvironmentIntensity(v) {
+    _settings.studioEnvironmentIntensity = Number.isFinite(v) ? Math.max(0, v) : 0
+    if (_active) _applyStudioEnvironment()
+  }
+
+  function setStudioEnvironmentRotation(deg) {
+    _settings.studioEnvironmentRotation = Number.isFinite(deg) ? deg : 0
+    if (_active) _applyStudioEnvironment()
+  }
+
   /** ChimeraX move_lights_with_camera. Off → the rig is welded to the world. */
   function setPinLights(on) {
     _settings.pinLights = !!on
@@ -1138,15 +1246,6 @@ export function createPhotoMode(sceneCtx) {
 
   /** World centre + reach of the catcher, for main.js's adaptive far clip. */
   function getFloorReach() { return _floor?.getReach() ?? null }
-
-  /** Absolute per-light intensities — the real shadow-contrast controls. */
-  function setKeyIntensity(v)     { _settings.keyIntensity = Math.max(0, v);     if (_active) _rebuildRig() }
-  function setFillIntensity(v)    { _settings.fillIntensity = Math.max(0, v);    if (_active) _rebuildRig() }
-  function setAmbientIntensity(v) { _settings.ambientIntensity = Math.max(0, v); if (_active) _rebuildRig() }
-  function setShadowStrength(v) {
-    _settings.shadowStrength = Math.max(0, Math.min(1, v))
-    if (_active) _applyKeyShadow()
-  }
 
   function setBackground(type, color) {
     if (type)  _settings.bgType  = type
@@ -1259,7 +1358,7 @@ export function createPhotoMode(sceneCtx) {
     setFloor, setFloorOpacity, setFloorOffset, setFloorAxis, getFloorReach,
     setKeyAzimuth, setKeyElevation, resetKeyDirection,
     setKeyIntensity, setFillIntensity, setAmbientIntensity, setShadowStrength,
-    setKeyIntensity, setFillIntensity, setAmbientIntensity, setShadowStrength,
+    setStudioEnvironment, setStudioEnvironmentIntensity, setStudioEnvironmentRotation,
     resync,
     getSettings, getStatus,
     // Test/console seams.

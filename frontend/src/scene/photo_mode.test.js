@@ -28,6 +28,7 @@ describe('swapToFlatMaterials', () => {
     expect(mesh.material.specularIntensity).toBe(0)
     expect(mesh.material.roughness).toBe(1)
     expect(mesh.material.metalness).toBe(0)
+    expect(mesh.material.envMapIntensity).toBe(0)
   })
 
   it('applies the preset for each mesh\'s OWN representation', () => {
@@ -437,6 +438,38 @@ describe('createPhotoMode', () => {
     expect(ctx.scene.environment).toBe(env)
     expect(ctx.renderer.toneMapping).toBe(THREE.NoToneMapping)
     expect(ctx.scene.getObjectByName('expPhotoLights')).toBeFalsy()
+  })
+
+  it('uses a neutral studio environment for metallic reflections and restores scene state', () => {
+    const priorEnv = { fake: 'editor-environment' }
+    const studioEnv = { fake: 'studio-pmrem', dispose: vi.fn() }
+    ctx.scene.environment = priorEnv
+    ctx.scene.environmentIntensity = 0.4
+    ctx.scene.environmentRotation.set(0.1, 0.2, 0.3)
+    ctx.bakeStudioEnvironment = vi.fn(() => studioEnv)
+    const withStudio = createPhotoMode(ctx)
+
+    withStudio.activate()
+    expect(ctx.bakeStudioEnvironment).toHaveBeenCalledWith(ctx.renderer)
+    expect(ctx.scene.environment).toBe(studioEnv)
+    expect(ctx.scene.environmentIntensity).toBe(1)
+
+    withStudio.setStudioEnvironmentIntensity(1.75)
+    withStudio.setStudioEnvironmentRotation(90)
+    expect(ctx.scene.environmentIntensity).toBe(1.75)
+    expect(ctx.scene.environmentRotation.y).toBeCloseTo(Math.PI / 2, 9)
+
+    withStudio.setStudioEnvironment(false)
+    expect(ctx.scene.environment).toBeNull()
+    withStudio.setStudioEnvironment(true)
+    expect(ctx.scene.environment).toBe(studioEnv)
+    expect(ctx.bakeStudioEnvironment).toHaveBeenCalledTimes(1)
+
+    withStudio.deactivate()
+    expect(ctx.scene.environment).toBe(priorEnv)
+    expect(ctx.scene.environmentIntensity).toBe(0.4)
+    expect(ctx.scene.environmentRotation.toArray()).toEqual([0.1, 0.2, 0.3, 'XYZ'])
+    expect(studioEnv.dispose).toHaveBeenCalledTimes(1)
   })
 
   it('deactivate() restores every swapped material', () => {
