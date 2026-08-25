@@ -1,0 +1,64 @@
+SCRYWRITE_WITNESS 1
+# Physical-headset inspection variant. It exercises both atomistic styles, returns
+# to Ball + Stick, closes the tablet, then leaves the submitted eye live.
+head 0 1.60 0 1 0 0 0
+pose right 0.28 1.72 -0.60 1 0 0 0
+pose left -0.24 1.28 -0.24 1 0 0 0
+step 120
+button right menu down
+step 2
+button right menu up
+step 45
+expect menu options
+expect representation ballstick
+
+aim_menu left full
+step 20
+button left trigger down
+step 2
+button left trigger up
+step 30
+expect representation full
+
+aim_menu left ball_stick
+step 20
+button left trigger down
+step 2
+button left trigger up
+step 30
+expect representation ballstick
+
+aim_menu left stick_only
+step 20
+button left trigger down
+step 2
+button left trigger up
+step 30
+expect representation stick
+
+aim_menu left full
+step 20
+button left trigger down
+step 2
+button left trigger up
+step 30
+expect representation full
+
+aim_menu left ball_stick
+step 20
+button left trigger down
+step 2
+button left trigger up
+step 30
+expect representation ballstick
+
+button right menu down
+step 2
+button right menu up
+step 45
+expect menu closed
+expect display submitted
+expect tracking tracked
+
+# Keep the clean physical eye visible for through-lens/mirror inspection.
+step 1000000

@@ -87,6 +87,18 @@ int main() {
     require(liveDisplayReplay.finished() && !liveDisplayReplay.failed(),
             "submitted-eye, tracking, and overlay provenance should be assertable");
 
+    std::istringstream representationSource(
+        "SCRYWRITE_WITNESS 1\n"
+        "expect representation ballstick\n");
+    auto representationReplay =
+        nadoc_vr::scrywrite::WitnessReplay::load(representationSource);
+    representationReplay.advance({
+        "options", "none", "none", "none", "following", {}, "valid", "",
+        "submitted", "tracked", "visible", "valid", "ballstick",
+    });
+    require(representationReplay.finished() && !representationReplay.failed(),
+            "the native representation should be assertable after a menu choice");
+
     std::istringstream fallbackSource(
         "SCRYWRITE_WITNESS 1\n"
         "expect display submitted\n");

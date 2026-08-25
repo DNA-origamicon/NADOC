@@ -190,6 +190,8 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
   // Static heavy-atom bond topology for ball-and-stick, likewise sent ONCE in 'ready'
   // — an MD frame carries coordinates only, so without this the sticks never appear.
   let _atomBonds = null
+  // Exposed on frame-applied telemetry so full geometry rebuild regressions are visible.
+  let _lastAtomisticGeometryPath = null
   let _atomColorsPrimed = false   // reset per load: pull the colouring mode onto MD atoms once
   let _latestOnReady = false
   let _latestOnceOnReady = false
@@ -698,6 +700,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
           nPositions: msg.positions?.length ?? msg.atoms?.length ?? 0,
           durationMs: performance.now() - applyStarted,
           source: 'socket',
+          geometryPath: _lastAtomisticGeometryPath,
         }, eventJobId)
         _emitMdDisplayEvent({
           state: 'frame',
@@ -726,6 +729,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
 
   // ── Apply frame to scene ──────────────────────────────────────────────────
   function _applyFrame(msg) {
+    _lastAtomisticGeometryPath = null
     if (_repr === 'nadoc') {
       if (!msg.positions) return
       designRenderer?.applyFemPositions(
@@ -744,12 +748,15 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
     } else if (_repr === 'ballstick') {
       if (!msg.atoms) return
       atomisticRenderer?.setMode(_sceneRepr === 'vdw' ? 'vdw' : (_sceneRepr === 'stick' ? 'stick' : 'ballstick'))
-      atomisticRenderer?.update({
+      const frameData = {
         // Bonds come from 'ready', not the frame: connectivity is static, coordinates
         // are not. `msg.bonds` first only so a future frame-level list would win.
         atoms: zipAtomIdentity(msg.atoms, _atomIdent),
         bonds: msg.bonds ?? _atomBonds ?? [],
-      })
+      }
+      _lastAtomisticGeometryPath = atomisticRenderer?.updateFrame
+        ? atomisticRenderer.updateFrame(frameData)
+        : (atomisticRenderer?.update(frameData), 'rebuild')
       // The renderer resolves colours against whatever mode was last set on it, and MD
       // drives setMode() directly (bypassing the representation switcher that normally
       // primes it) — so pull the live coloringMode + strand palette across, or the MD
@@ -970,6 +977,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
       nPositions: _lastFrameMsg.positions?.length ?? _lastFrameMsg.atoms?.length ?? 0,
       durationMs: performance.now() - applyStarted,
       source: 'memory-cache',
+      geometryPath: _lastAtomisticGeometryPath,
     }, _jobId)
     _emitMdDisplayEvent({
       state: 'frame',

@@ -117,6 +117,26 @@ scrywrite-menu-trace CAPTURES="/tmp/nadoc-scry-menu-trace" SCENE="native/vr_view
 vr-diagnostics-check:
     scripts/vr_diagnostics.sh check
 
+# Check host headroom and capture the latest downloaded 24hb_2xT Alpine frame.
+vr-atomistic-system:
+    uv run python scripts/vr_atomistic_diagnostics.py system
+
+vr-atomistic-capture:
+    uv run python scripts/vr_atomistic_diagnostics.py capture-md
+
+# Exercise every atomistic representation exposed by the native VR menu against a
+# supplied full scene snapshot and the captured real MD frame. Witness Mode is
+# read-only and exits on its own after semantic representation assertions pass.
+scrywrite-atomistic-24hb SCENE VISUALIZATION="/tmp/24hb_2xT-latest.visualization.txt" CAPTURES="/tmp/nadoc-scry-24hb":
+    env -u CFLAGS -u CXXFLAGS -u CPPFLAGS -u LDFLAGS CC=/usr/bin/gcc CXX=/usr/bin/g++ cmake -S native/vr_viewer -B native/vr_viewer/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+    env PATH=/usr/bin:/bin cmake --build native/vr_viewer/build --target nadoc-vr-viewer
+    mkdir -p {{CAPTURES}}
+    env -u LD_LIBRARY_PATH XR_RUNTIME_JSON="$HOME/.local/share/Steam/steamapps/common/SteamVR/steamxr_linux64.json" native/vr_viewer/build/nadoc-vr-viewer {{SCENE}} --visualization {{VISUALIZATION}} --mirror-eye left --reference-grid off --place-scene-in-view on --scene-view mirror --scene-orientation front --scene-distance 0.90 --scene-scale 2.1 --scrywrite-witness native/vr_viewer/examples/scrywrite_witness_atomistic_24hb.scry --witness-captures {{CAPTURES}} --witness-exit on
+
+# Run while the HMD is active/worn; inactive-headset samples fail closed.
+vr-atomistic-steamvr-stats:
+    uv run python scripts/vr_atomistic_diagnostics.py steamvr-stats
+
 # Launch a local fixture with a read-only desktop mirror of the physical HMD eye.
 vr-hmd-mirror SCENE="native/vr_viewer/examples/scrywrite_chiral_perspective.nadocvr" EYE="left" GRID="room" PLACE="on" VIEW="mirror" ORIENT="front" DISTANCE="1.30" SCALE="2.0" YAW="0" PITCH="0" ROLL="0" DIAGNOSTICS="/tmp/scrywrite_mirror_diagnostics.jsonl":
     env -u CFLAGS -u CXXFLAGS -u CPPFLAGS -u LDFLAGS CC=/usr/bin/gcc CXX=/usr/bin/g++ cmake -S native/vr_viewer -B native/vr_viewer/build -G Ninja -DCMAKE_BUILD_TYPE=Release

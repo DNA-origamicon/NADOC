@@ -100,6 +100,16 @@ if(BUILD_TESTING)
       ${CMAKE_CURRENT_SOURCE_DIR}/examples/scrywrite_witness_headset_menu.scry
   )
   add_test(
+    NAME nadoc-vr-scrywrite-witness-atomistic-24hb-script
+    COMMAND nadoc-vr-viewer --validate-witness
+      ${CMAKE_CURRENT_SOURCE_DIR}/examples/scrywrite_witness_atomistic_24hb.scry
+  )
+  add_test(
+    NAME nadoc-vr-scrywrite-witness-atomistic-24hb-hold-script
+    COMMAND nadoc-vr-viewer --validate-witness
+      ${CMAKE_CURRENT_SOURCE_DIR}/examples/scrywrite_witness_atomistic_24hb_hold.scry
+  )
+  add_test(
     NAME nadoc-vr-scrywrite-poc
     COMMAND nadoc-vr-scrywrite
       ${CMAKE_CURRENT_SOURCE_DIR}/examples/scrywrite_move_rotate.scry

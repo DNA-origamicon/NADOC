@@ -108,6 +108,7 @@ export function initAtomisticRenderer(scene) {
     atoms:          makeAtomTable(null),
     mode:           'off',
     lastData:       null,
+    topologyBonds:  null,
     // Last highlight params — re-applied after rebuild so mode-switch preserves colour.
     lastSel:        null,
     geom:           createGeometryState(),
@@ -218,7 +219,8 @@ export function initAtomisticRenderer(scene) {
     const table = _state.atoms = makeAtomTable(data)
     if (_state.mode === 'off' || !table.count) { _notifyAtoms(); return }
 
-    const bonds = data.bonds ?? []
+    const bonds = data?.bonds ?? []
+    _state.topologyBonds = bonds
     const isVdw = _state.mode === 'vdw'
     const n = table.count
 
@@ -319,6 +321,62 @@ export function initAtomisticRenderer(scene) {
     // Re-apply last known highlight state after geometry rebuild
     _applyColors(_state.lastSel)
     _notifyAtoms()
+  }
+
+  /**
+   * Replace coordinates for a topology-stable trajectory frame without destroying
+   * and recreating hundreds of thousands of instances.  The MD websocket hands the
+   * same static bond array to every frame; row serials/elements are checked as a
+   * defensive guard before the fast path is accepted.
+   *
+   * @returns {boolean} true when existing GPU buffers were updated in place.
+   */
+  function _updateFrameCoordinates(data) {
+    if (_state.mode === 'off' || !data || data.bonds !== _state.topologyBonds) return false
+    const previous = _state.atoms
+    const next = makeAtomTable(data)
+    if (!next.count || next.count !== previous.count) return false
+
+    let mapped = 0
+    for (const [el, group] of Object.entries(_state.elementAtoms)) {
+      const mesh = _state.elementMeshes[el]
+      if (!mesh || mesh.count !== group.length) return false
+      for (let i = 0; i < group.length; i++) {
+        const row = group[i]
+        if (next.element(row) !== el || next.serial(row) !== previous.serial(row)) return false
+      }
+      mapped += group.length
+    }
+    if (mapped !== next.count) return false
+
+    _state.atoms = next
+    _state.lastData = data
+    for (const [el, group] of Object.entries(_state.elementAtoms)) {
+      const mesh = _state.elementMeshes[el]
+      const scale = _state.elementScale[el]
+      for (let i = 0; i < group.length; i++) {
+        const row = group[i]
+        mesh.setMatrixAt(i, sphereMatrix(
+          _state.geom, next.x(row), next.y(row), next.z(row), scale))
+      }
+      mesh.instanceMatrix.needsUpdate = true
+    }
+
+    const bidx = _state.bondAtomIdx
+    if (_state.bondMesh && bidx?.length) {
+      for (let i = 0; i < bidx.length / 2; i++) {
+        const ra = bidx[i * 2], rb = bidx[i * 2 + 1]
+        const m = bondMatrix(
+          _state.geom,
+          next.x(ra), next.y(ra), next.z(ra),
+          next.x(rb), next.y(rb), next.z(rb),
+          BOND_RADIUS,
+        )
+        _state.bondMesh.setMatrixAt(i, m ?? _HIDDEN_BOND)
+      }
+      _state.bondMesh.instanceMatrix.needsUpdate = true
+    }
+    return true
   }
 
   // ── Colour application ────────────────────────────────────────────────────
@@ -423,6 +481,14 @@ export function initAtomisticRenderer(scene) {
     update(data) {
       _state.lastData = data
       _rebuild(data)
+    },
+
+    /** Update an MD trajectory frame in place, rebuilding only if topology changed. */
+    updateFrame(data) {
+      if (_updateFrameCoordinates(data)) return 'coordinates'
+      _state.lastData = data
+      _rebuild(data)
+      return 'rebuild'
     },
 
     /**
@@ -687,6 +753,18 @@ export function initAtomisticRenderer(scene) {
      */
     setMode(mode) {
       if (mode === _state.mode) return
+      if (
+        (mode === 'stick' && _state.mode === 'ballstick') ||
+        (mode === 'ballstick' && _state.mode === 'stick')
+      ) {
+        for (const mesh of Object.values(_state.elementMeshes)) {
+          if (mode === 'stick') _state.scene.remove(mesh)
+          else _state.scene.add(mesh)
+        }
+        _state.mode = mode
+        _notifyAtoms()
+        return
+      }
       _state.mode = mode
       _rebuild(_state.lastData)
     },

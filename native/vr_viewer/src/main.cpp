@@ -50,8 +50,10 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <tuple>
 #include <unordered_set>
@@ -69,6 +71,19 @@ constexpr int32_t kMirrorDiagnosticSize = 64;
 constexpr uint64_t kMirrorDiagnosticIntervalFrames = 30U;
 
 std::atomic_bool gStopRequested{false};
+
+double currentResidentMiB() {
+    std::ifstream status("/proc/self/status");
+    std::string line;
+    while (std::getline(status, line)) {
+        if (!line.starts_with("VmRSS:")) continue;
+        std::istringstream fields(line.substr(6));
+        double kibibytes = 0.0;
+        fields >> kibibytes;
+        return kibibytes / 1024.0;
+    }
+    return -1.0;
+}
 
 std::optional<float> parseFiniteFloat(const std::string& value) {
     float parsed = 0.0F;
@@ -362,11 +377,13 @@ constexpr const char* kLitFragmentSource = R"GLSL(
     uniform sampler2DShadow uShadowMap;
     uniform mat4 uLightViewProjection;
     uniform vec3 uLightDirection;
+    uniform int uShadowsEnabled;
     uniform float uAlpha;
     uniform float uEmissive;
     out vec4 outColor;
 
     float shadowVisibility(vec3 normal) {
+        if (uShadowsEnabled == 0) return 1.0;
         vec4 lightClip = uLightViewProjection * vec4(vWorldPosition, 1.0);
         vec3 projected = lightClip.xyz / lightClip.w;
         projected = projected * 0.5 + 0.5;
@@ -406,20 +423,99 @@ GLuint makeSphereProgram() {
         uniform mat4 uViewProjection;
         uniform mat4 uModel;
         out vec3 vColor;
-        out vec3 vNormal;
-        out vec3 vWorldPosition;
+        out vec2 vCorner;
+        flat out vec3 vWorldCenter;
+        flat out float vWorldRadius;
+        flat out vec4 vCenterClip;
         void main() {
-            vec3 localPosition = aCenter + aUnitPosition * aRadius;
-            vec4 worldPosition = uModel * vec4(localPosition, 1.0);
-            gl_Position = uViewProjection * worldPosition;
-            vNormal = normalize(mat3(uModel) * aUnitPosition);
-            vWorldPosition = worldPosition.xyz;
+            vec4 worldCenter = uModel * vec4(aCenter, 1.0);
+            float modelScale = max(length(uModel[0].xyz),
+                               max(length(uModel[1].xyz), length(uModel[2].xyz)));
+            vec3 projectionRowX = vec3(
+                uViewProjection[0][0], uViewProjection[1][0],
+                uViewProjection[2][0]);
+            vec3 projectionRowY = vec3(
+                uViewProjection[0][1], uViewProjection[1][1],
+                uViewProjection[2][1]);
+            vWorldRadius = aRadius * modelScale;
+            vWorldCenter = worldCenter.xyz;
+            vCenterClip = uViewProjection * worldCenter;
+            gl_Position = vCenterClip;
+            gl_Position.xy += aUnitPosition.xy * vWorldRadius *
+                vec2(length(projectionRowX), length(projectionRowY));
+            vCorner = aUnitPosition.xy;
             vColor = aColor;
         }
     )GLSL";
 
+    static constexpr const char* fragmentSource = R"GLSL(
+        #version 330 core
+        in vec3 vColor;
+        in vec2 vCorner;
+        flat in vec3 vWorldCenter;
+        flat in float vWorldRadius;
+        flat in vec4 vCenterClip;
+        uniform mat4 uViewProjection;
+        uniform sampler2DShadow uShadowMap;
+        uniform mat4 uLightViewProjection;
+        uniform vec3 uLightDirection;
+        uniform int uShadowsEnabled;
+        uniform float uAlpha;
+        uniform float uEmissive;
+        out vec4 outColor;
+
+        float shadowVisibility(vec3 worldPosition, vec3 normal) {
+            if (uShadowsEnabled == 0) return 1.0;
+            vec4 lightClip = uLightViewProjection * vec4(worldPosition, 1.0);
+            vec3 projected = lightClip.xyz / lightClip.w;
+            projected = projected * 0.5 + 0.5;
+            if (projected.x <= 0.0 || projected.x >= 1.0 ||
+                projected.y <= 0.0 || projected.y >= 1.0 ||
+                projected.z <= 0.0 || projected.z >= 1.0) return 1.0;
+            float facing = max(dot(normal, uLightDirection), 0.0);
+            float bias = mix(0.0012, 0.00018, facing);
+            float visibility = 0.0;
+            const float texel = 1.0 / 2048.0;
+            for (int y = -1; y <= 1; ++y) {
+                for (int x = -1; x <= 1; ++x) {
+                    visibility += texture(
+                        uShadowMap,
+                        vec3(projected.xy + vec2(x, y) * texel,
+                             projected.z - bias));
+                }
+            }
+            return visibility / 9.0;
+        }
+
+        void main() {
+            float radiusSquared = dot(vCorner, vCorner);
+            if (radiusSquared > 1.0) discard;
+            vec3 projectionRowX = vec3(
+                uViewProjection[0][0], uViewProjection[1][0],
+                uViewProjection[2][0]);
+            vec3 projectionRowY = vec3(
+                uViewProjection[0][1], uViewProjection[1][1],
+                uViewProjection[2][1]);
+            vec3 projectionRowZ = vec3(
+                uViewProjection[0][2], uViewProjection[1][2],
+                uViewProjection[2][2]);
+            vec3 normal = normalize(
+                normalize(projectionRowX) * vCorner.x +
+                normalize(projectionRowY) * vCorner.y -
+                normalize(projectionRowZ) * sqrt(1.0 - radiusSquared));
+            vec3 worldPosition = vWorldCenter + normal * vWorldRadius;
+            vec4 surfaceClip = uViewProjection * vec4(worldPosition, 1.0);
+            gl_FragDepth = surfaceClip.z / surfaceClip.w * 0.5 + 0.5;
+            float diffuse = max(dot(normal, uLightDirection), 0.0);
+            float lighting = 0.20 + 0.90 * diffuse *
+                shadowVisibility(worldPosition, normal);
+            lighting = mix(lighting, 1.0, uEmissive);
+            outColor = vec4(vColor * lighting, uAlpha);
+        }
+    )GLSL";
+
     const GLuint vertex = compileShader(GL_VERTEX_SHADER, vertexSource);
-    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, kLitFragmentSource);
+    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, fragmentSource);
     const GLuint program = glCreateProgram();
     glAttachShader(program, vertex);
     glAttachShader(program, fragment);
@@ -491,6 +587,48 @@ GLuint makeCylinderProgram() {
     glGetProgramInfoLog(program, length, nullptr, log.data());
     glDeleteProgram(program);
     throw std::runtime_error("OpenGL cylinder shader link failed: " + log);
+}
+
+GLuint makeAtomisticBondProgram() {
+    static constexpr const char* vertexSource = R"GLSL(
+        #version 330 core
+        layout(location = 1) in vec3 aStart;
+        layout(location = 2) in vec3 aEnd;
+        layout(location = 4) in vec3 aColor;
+        uniform mat4 uViewProjection;
+        uniform mat4 uModel;
+        out vec3 vColor;
+        void main() {
+            vec3 position = gl_VertexID == 0 ? aStart : aEnd;
+            gl_Position = uViewProjection * uModel * vec4(position, 1.0);
+            vColor = aColor;
+        }
+    )GLSL";
+    static constexpr const char* fragmentSource = R"GLSL(
+        #version 330 core
+        in vec3 vColor;
+        out vec4 outColor;
+        void main() {
+            outColor = vec4(vColor, 1.0);
+        }
+    )GLSL";
+    const GLuint vertex = compileShader(GL_VERTEX_SHADER, vertexSource);
+    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, fragmentSource);
+    const GLuint program = glCreateProgram();
+    glAttachShader(program, vertex);
+    glAttachShader(program, fragment);
+    glLinkProgram(program);
+    glDeleteShader(vertex);
+    glDeleteShader(fragment);
+    GLint ok = GL_FALSE;
+    glGetProgramiv(program, GL_LINK_STATUS, &ok);
+    if (ok == GL_TRUE) return program;
+    GLint length = 0;
+    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &length);
+    std::string log(static_cast<size_t>(std::max(length, 1)), '\0');
+    glGetProgramInfoLog(program, length, nullptr, log.data());
+    glDeleteProgram(program);
+    throw std::runtime_error("OpenGL atomistic bond program link failed: " + log);
 }
 
 GLuint makeBoxProgram() {
@@ -595,6 +733,9 @@ class GzipInputStream : public std::istream {
 };
 
 SceneData loadScene(const std::string& path) {
+    const auto started = std::chrono::steady_clock::now();
+    std::cout << "VR_METRIC event=process_progress phase=scene_load_start rss_mib="
+              << currentResidentMiB() << std::endl;
     // zlib's transparent read mode accepts both gzip and ordinary scene files,
     // retaining legacy fixtures while production snapshots stay compact.
     GzipInputStream input(path);
@@ -629,6 +770,7 @@ SceneData loadScene(const std::string& path) {
         std::vector<std::tuple<std::string, std::string, std::string>>, 4>, 2>
         toolHandleKeys;
     size_t poseIndex = 0;
+    size_t recordsRead = 0;
     auto readIdentity = [&](char recordType) {
         std::string identity;
         if (version >= 6) {
@@ -648,6 +790,15 @@ SceneData loadScene(const std::string& path) {
     };
     char type = '\0';
     while (input >> type) {
+        ++recordsRead;
+        if (recordsRead % 250000U == 0U) {
+            const double milliseconds = std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - started).count();
+            std::cout << "VR_METRIC event=process_progress phase=scene_load"
+                      << " records=" << recordsRead
+                      << " elapsed_ms=" << milliseconds
+                      << " rss_mib=" << currentResidentMiB() << std::endl;
+        }
         if (type == '#') {
             input.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             continue;
@@ -999,6 +1150,12 @@ SceneData loadScene(const std::string& path) {
             normalize(scene.expandedRepresentations[index], true);
         }
     }
+    const double milliseconds = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - started).count();
+    std::cout << "VR_METRIC event=process_progress phase=scene_load_end"
+              << " records=" << recordsRead
+              << " elapsed_ms=" << milliseconds
+              << " rss_mib=" << currentResidentMiB() << std::endl;
     return scene;
 }
 
@@ -1083,6 +1240,7 @@ std::array<uint8_t, 7> glyph(char value) {
 class GlScene {
   public:
     explicit GlScene(SceneData scene) : scene_(std::move(scene)) {
+        atomisticSharedGeometry_ = atomisticCylindersEquivalent(scene_);
         program_ = makeProgram();
         viewProjection_ = glGetUniformLocation(program_, "uViewProjection");
         upload({}, lineVao_, lineVbo_);
@@ -1096,11 +1254,36 @@ class GlScene {
     }
 
     void setVisualization(const nadoc_vr::VisualizationSnapshot& snapshot) {
+        bool samePositions = visualizationPositions_.size() == snapshot.points.size();
+        bool snapshotHasColors = false;
+        bool snapshotHasSlabs = false;
+        if (samePositions) {
+            for (const auto& point : snapshot.points) {
+                const auto previous = visualizationPositions_.find(point.ownerToken);
+                if (previous == visualizationPositions_.end() ||
+                    previous->second != point.position) {
+                    samePositions = false;
+                    break;
+                }
+                snapshotHasColors = snapshotHasColors || point.hasColor;
+                snapshotHasSlabs = snapshotHasSlabs || point.hasSlabFrame;
+            }
+        } else {
+            for (const auto& point : snapshot.points) {
+                snapshotHasColors = snapshotHasColors || point.hasColor;
+                snapshotHasSlabs = snapshotHasSlabs || point.hasSlabFrame;
+            }
+        }
+        if (!samePositions || snapshotHasColors || snapshotHasSlabs ||
+            !visualizationColors_.empty() || !visualizationSlabFrames_.empty()) {
+            ++visualizationRevision_;
+        }
         visualizationMode_ = snapshot.mode;
         visualizationPositions_.clear();
         visualizationColors_.clear();
         visualizationSlabFrames_.clear();
         visualizationAtomTokens_.clear();
+        visualizationDeltasValid_ = false;
         visualizationPositions_.reserve(snapshot.points.size());
         visualizationColors_.reserve(snapshot.points.size());
         for (const auto& point : snapshot.points) {
@@ -1111,12 +1294,20 @@ class GlScene {
             if (point.hasSlabFrame) {
                 visualizationSlabFrames_.emplace(point.ownerToken, point);
             }
+            if (point.ownerToken.starts_with("%5B%22atom%22")) {
+                visualizationAtomTokens_.insert(point.ownerToken);
+            }
         }
-        for (const RepresentationData& source : scene_.representations) {
-            for (const ToolHandle& handle : source.toolHandles) {
-                if (handle.kind == "atom" &&
-                    visualizationPositions_.contains(handle.token)) {
-                    visualizationAtomTokens_.insert(handle.token);
+        // Legacy fixtures can use unencoded semantic tokens. Production v12 atom
+        // tokens have the prefix above, avoiding a scan through every natural
+        // representation (hundreds of thousands of handles for a full origami).
+        if (!visualizationPositions_.empty() && visualizationAtomTokens_.empty()) {
+            for (const RepresentationData& source : scene_.representations) {
+                for (const ToolHandle& handle : source.toolHandles) {
+                    if (handle.kind == "atom" &&
+                        visualizationPositions_.contains(handle.token)) {
+                        visualizationAtomTokens_.insert(handle.token);
+                    }
                 }
             }
         }
@@ -1241,6 +1432,7 @@ class GlScene {
     }
 
     void setStyle(Representation representation, Coloring coloring) {
+        const auto styleStarted = std::chrono::steady_clock::now();
         // Coarse helix cylinders have domain-level ownership and cannot represent
         // independent per-base MD motion. Keep an active desktop visualization in
         // one of the base-resolved representations instead of showing a stale pose.
@@ -1248,10 +1440,39 @@ class GlScene {
             representation == Representation::cylinders) {
             representation = Representation::full;
         }
+        const bool atomisticPair =
+            (representation_ == Representation::ballstick &&
+             representation == Representation::stick) ||
+            (representation_ == Representation::stick &&
+             representation == Representation::ballstick);
+        if (atomisticPair && coloring == coloring_ && atomisticSharedGeometry_ &&
+            atomisticBuffersResident_ &&
+            uploadedVisualizationRevision_ == visualizationRevision_) {
+            representation_ = representation;
+            prepareDisplayedSource();
+            sphereCount_ = representation_ == Representation::ballstick
+                ? ballstickSphereCount_ : 0;
+            const double milliseconds = std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - styleStarted).count();
+            std::cout << "VR_METRIC event=process_progress phase=style_apply"
+                      << " representation=" << representationName(representation_)
+                      << " coloring=" << coloringName(coloring_)
+                      << " points=" << sphereCount_
+                      << " cylinders=" << cylinderCount_
+                      << " half_cylinders=" << halfCylinderCount_
+                      << " boxes=" << boxCount_
+                      << " prepare_ms=" << milliseconds
+                      << " upload_ms=0 total_ms=" << milliseconds
+                      << " fast_path=shared_atomistic_buffers"
+                      << " rss_mib=" << currentResidentMiB() << std::endl;
+            return;
+        }
         representation_ = representation;
         coloring_ = coloring;
         prepareDisplayedSource();
         const RepresentationData& source = currentSource();
+        ensureSourceIndex(source);
+        const auto preparedAt = std::chrono::steady_clock::now();
         auto collectWeights = [&](const std::string& token) {
             std::unordered_map<std::string, std::pair<float, float>> result;
             if (token.empty()) return result;
@@ -1287,10 +1508,10 @@ class GlScene {
                 ? std::pair(0.0F, 0.0F) : found->second;
         };
         auto transformPoint = [&](const glm::vec3& point, const std::string& identity,
-                                  bool end) {
+                                  bool end,
+                                  const std::pair<glm::vec3, glm::vec3>& visualization) {
             const auto committed = weights(committedWeights, identity);
             const auto pending = weights(pendingWeights, identity);
-            const auto visualization = visualizationOffsets(source, identity);
             glm::vec3 result = nadoc_vr::weightedTransformPoint(
                 point + (end ? visualization.second : visualization.first),
                 toolCommittedTransform_, end ? committed.second : committed.first);
@@ -1308,23 +1529,15 @@ class GlScene {
         auto matchesOwner = [&](const std::string& identity,
                                 const std::unordered_set<std::string>& tokens) {
             if (tokens.empty()) return false;
-            const auto aliases = std::find_if(
-                source.ownerAliases.begin(), source.ownerAliases.end(),
-                [&](const nadoc_vr::OwnerAliasEntry& candidate) {
-                    return candidate.identity == identity;
-                });
-            if (aliases != source.ownerAliases.end() && std::any_of(
-                aliases->tokens.begin(), aliases->tokens.end(),
+            const auto aliases = sourceIndex_.aliases.find(identity);
+            if (aliases != sourceIndex_.aliases.end() && std::any_of(
+                aliases->second->tokens.begin(), aliases->second->tokens.end(),
                 [&](const std::string& token) { return tokens.contains(token); })) {
                 return true;
             }
-            const auto ownership = std::find_if(
-                source.toolScopeOwnership.begin(), source.toolScopeOwnership.end(),
-                [&](const TransformOwnership& candidate) {
-                    return candidate.identity == identity;
-                });
-            return ownership != source.toolScopeOwnership.end() && std::any_of(
-                ownership->owners.begin(), ownership->owners.end(),
+            const auto ownership = sourceIndex_.ownership.find(identity);
+            return ownership != sourceIndex_.ownership.end() && std::any_of(
+                ownership->second->owners.begin(), ownership->second->owners.end(),
                 [&](const TransformOwner& owner) {
                     return (owner.startWeight > 0.0F || owner.endWeight > 0.0F) &&
                         tokens.contains(owner.token);
@@ -1350,8 +1563,9 @@ class GlScene {
                 !hasCompleteVisualizationAtomEndpoints(source, point.identity)) {
                 continue;
             }
+            const auto visualization = visualizationOffsets(source, point.identity);
             const glm::vec3 position = transformPoint(
-                point.position, point.identity, false);
+                point.position, point.identity, false, visualization);
             points.push_back(Vertex{
                 position,
                 visualizationColor(source, point.identity)
@@ -1380,10 +1594,11 @@ class GlScene {
                 !hasCompleteVisualizationAtomEndpoints(source, cylinder.identity)) {
                 continue;
             }
+            const auto visualization = visualizationOffsets(source, cylinder.identity);
             const glm::vec3 start = transformPoint(
-                cylinder.start, cylinder.identity, false);
+                cylinder.start, cylinder.identity, false, visualization);
             glm::vec3 end = transformPoint(
-                cylinder.end, cylinder.identity, true);
+                cylinder.end, cylinder.identity, true, visualization);
             if (cylinder.identity.ends_with(":slab-connector")) {
                 if (const auto frame = displayedVisualizationSlabFrame(
                         source, cylinder.identity)) {
@@ -1415,10 +1630,11 @@ class GlScene {
         std::vector<Cylinder> glowHalfCylinders;
         halfCylinders.reserve(source.halfCylinders.size());
         for (const StyledCylinder& cylinder : source.halfCylinders) {
+            const auto visualization = visualizationOffsets(source, cylinder.identity);
             const glm::vec3 start = transformPoint(
-                cylinder.start, cylinder.identity, false);
+                cylinder.start, cylinder.identity, false, visualization);
             const glm::vec3 end = transformPoint(
-                cylinder.end, cylinder.identity, true);
+                cylinder.end, cylinder.identity, true, visualization);
             halfCylinders.push_back(Cylinder{
                 start, end, cylinder.radius,
                 visualizationColor(source, cylinder.identity)
@@ -1455,7 +1671,9 @@ class GlScene {
                 axisY = frame->axisY;
                 axisZ = frame->axisZ;
             } else {
-                center = transformPoint(box.center, box.identity, false);
+                const auto visualization = visualizationOffsets(source, box.identity);
+                center = transformPoint(
+                    box.center, box.identity, false, visualization);
                 axisX = transformVector(box.axisX, box.identity);
                 axisY = transformVector(box.axisY, box.identity);
                 axisZ = transformVector(box.axisZ, box.identity);
@@ -1512,6 +1730,25 @@ class GlScene {
             localCenter_ = (lo + hi) * 0.5F;
             localRadius_ = std::max(glm::length(hi - lo) * 0.5F, 0.01F);
         }
+        const auto completedAt = std::chrono::steady_clock::now();
+        const double prepareMilliseconds = std::chrono::duration<double, std::milli>(
+            preparedAt - styleStarted).count();
+        const double uploadMilliseconds = std::chrono::duration<double, std::milli>(
+            completedAt - preparedAt).count();
+        std::cout << "VR_METRIC event=process_progress phase=style_apply"
+                  << " representation=" << representationName(representation_)
+                  << " coloring=" << coloringName(coloring_)
+                  << " points=" << sphereCount_
+                  << " cylinders=" << cylinderCount_
+                  << " half_cylinders=" << halfCylinderCount_
+                  << " boxes=" << boxCount_
+                  << " prepare_ms=" << prepareMilliseconds
+                  << " upload_ms=" << uploadMilliseconds
+                  << " total_ms=" << (prepareMilliseconds + uploadMilliseconds)
+                  << " rss_mib=" << currentResidentMiB() << std::endl;
+        uploadedVisualizationRevision_ = visualizationRevision_;
+        atomisticBuffersResident_ = representation_ == Representation::ballstick;
+        if (atomisticBuffersResident_) ballstickSphereCount_ = sphereCount_;
     }
 
     [[nodiscard]] Representation representation() const { return representation_; }
@@ -1886,6 +2123,14 @@ class GlScene {
             -radius, radius, -radius, radius, radius * 0.05F, radius * 4.0F)
             * glm::lookAt(eye, worldCenter, up);
 
+        // Dense atomistic views are already depth-rich and their hundreds of
+        // thousands of tiny primitives make a third full geometry pass plus 9-tap
+        // PCF disproportionately expensive. Direct diffuse lighting remains clear
+        // at headset resolution and removes both the shadow draw and texture taps.
+        shadowsEnabled_ = representation_ != Representation::ballstick &&
+                          representation_ != Representation::stick;
+        if (!shadowsEnabled_) return;
+
         glBindFramebuffer(GL_FRAMEBUFFER, shadowFramebuffer_);
         glViewport(0, 0, kShadowMapSize, kShadowMapSize);
         glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
@@ -1965,6 +2210,7 @@ class GlScene {
         if (sphereVao_) glDeleteVertexArrays(1, &sphereVao_);
         if (sphereGlowVao_) glDeleteVertexArrays(1, &sphereGlowVao_);
         if (cylinderVao_) glDeleteVertexArrays(1, &cylinderVao_);
+        if (atomisticBondVao_) glDeleteVertexArrays(1, &atomisticBondVao_);
         if (cylinderGlowVao_) glDeleteVertexArrays(1, &cylinderGlowVao_);
         if (halfCylinderVao_) glDeleteVertexArrays(1, &halfCylinderVao_);
         if (halfCylinderGlowVao_) glDeleteVertexArrays(1, &halfCylinderGlowVao_);
@@ -1973,6 +2219,7 @@ class GlScene {
         if (program_) glDeleteProgram(program_);
         if (sphereProgram_) glDeleteProgram(sphereProgram_);
         if (cylinderProgram_) glDeleteProgram(cylinderProgram_);
+        if (atomisticBondProgram_) glDeleteProgram(atomisticBondProgram_);
         if (boxProgram_) glDeleteProgram(boxProgram_);
         if (shadowTexture_) glDeleteTextures(1, &shadowTexture_);
         if (shadowFramebuffer_) glDeleteFramebuffers(1, &shadowFramebuffer_);
@@ -1994,23 +2241,42 @@ class GlScene {
             glUniform1f(sphereAlpha_, 1.0F);
             glUniform1f(sphereEmissive_, 0.0F);
             applyLightingUniforms(
-                sphereLightViewProjection_, sphereLightDirection_, sphereShadowMap_);
+                sphereLightViewProjection_, sphereLightDirection_, sphereShadowMap_,
+                sphereShadowsEnabled_);
             glBindVertexArray(sphereVao_);
             glDrawElementsInstanced(
                 GL_TRIANGLES, sphereIndexCount_, GL_UNSIGNED_SHORT, nullptr, sphereCount_);
         }
 
         if (cylinderCount_ > 0) {
-            glUseProgram(cylinderProgram_);
-            glUniformMatrix4fv(cylinderViewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
-            glUniformMatrix4fv(cylinderModel_, 1, GL_FALSE, &modelTransform[0][0]);
-            glUniform1f(cylinderAlpha_, 1.0F);
-            glUniform1f(cylinderEmissive_, 0.0F);
-            applyLightingUniforms(
-                cylinderLightViewProjection_, cylinderLightDirection_, cylinderShadowMap_);
-            glBindVertexArray(cylinderVao_);
-            glDrawElementsInstanced(
-                GL_TRIANGLES, cylinderIndexCount_, GL_UNSIGNED_SHORT, nullptr, cylinderCount_);
+            const bool atomistic = representation_ == Representation::ballstick ||
+                                   representation_ == Representation::stick;
+            if (atomistic) {
+                glUseProgram(atomisticBondProgram_);
+                glUniformMatrix4fv(
+                    atomisticBondViewProjection_, 1, GL_FALSE,
+                    &viewProjection[0][0]);
+                glUniformMatrix4fv(
+                    atomisticBondModel_, 1, GL_FALSE, &modelTransform[0][0]);
+                glBindVertexArray(atomisticBondVao_);
+                glLineWidth(1.25F);
+                glDrawArraysInstanced(GL_LINES, 0, 2, cylinderCount_);
+            } else {
+                glUseProgram(cylinderProgram_);
+                glUniformMatrix4fv(
+                    cylinderViewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
+                glUniformMatrix4fv(
+                    cylinderModel_, 1, GL_FALSE, &modelTransform[0][0]);
+                glUniform1f(cylinderAlpha_, 1.0F);
+                glUniform1f(cylinderEmissive_, 0.0F);
+                applyLightingUniforms(
+                    cylinderLightViewProjection_, cylinderLightDirection_,
+                    cylinderShadowMap_, cylinderShadowsEnabled_);
+                glBindVertexArray(cylinderVao_);
+                glDrawElementsInstanced(
+                    GL_TRIANGLES, cylinderIndexCount_, GL_UNSIGNED_SHORT, nullptr,
+                    cylinderCount_);
+            }
         }
 
         if (halfCylinderCount_ > 0) {
@@ -2020,7 +2286,8 @@ class GlScene {
             glUniform1f(cylinderAlpha_, 1.0F);
             glUniform1f(cylinderEmissive_, 0.0F);
             applyLightingUniforms(
-                cylinderLightViewProjection_, cylinderLightDirection_, cylinderShadowMap_);
+                cylinderLightViewProjection_, cylinderLightDirection_, cylinderShadowMap_,
+                cylinderShadowsEnabled_);
             glBindVertexArray(halfCylinderVao_);
             glDrawElementsInstanced(
                 GL_TRIANGLES, halfCylinderIndexCount_, GL_UNSIGNED_SHORT, nullptr,
@@ -2033,7 +2300,9 @@ class GlScene {
             glUniformMatrix4fv(boxModel_, 1, GL_FALSE, &modelTransform[0][0]);
             glUniform1f(boxAlpha_, 1.0F);
             glUniform1f(boxEmissive_, 0.0F);
-            applyLightingUniforms(boxLightViewProjection_, boxLightDirection_, boxShadowMap_);
+            applyLightingUniforms(
+                boxLightViewProjection_, boxLightDirection_, boxShadowMap_,
+                boxShadowsEnabled_);
             glBindVertexArray(boxVao_);
             glDrawElementsInstanced(
                 GL_TRIANGLES, boxIndexCount_, GL_UNSIGNED_SHORT, nullptr, boxCount_);
@@ -2052,7 +2321,8 @@ class GlScene {
                 glUniform1f(sphereAlpha_, 0.34F);
                 glUniform1f(sphereEmissive_, 1.0F);
                 applyLightingUniforms(
-                    sphereLightViewProjection_, sphereLightDirection_, sphereShadowMap_);
+                    sphereLightViewProjection_, sphereLightDirection_, sphereShadowMap_,
+                    sphereShadowsEnabled_);
                 glBindVertexArray(sphereGlowVao_);
                 glDrawElementsInstanced(
                     GL_TRIANGLES, sphereIndexCount_, GL_UNSIGNED_SHORT, nullptr,
@@ -2068,7 +2338,7 @@ class GlScene {
                 glUniform1f(cylinderEmissive_, 1.0F);
                 applyLightingUniforms(
                     cylinderLightViewProjection_, cylinderLightDirection_,
-                    cylinderShadowMap_);
+                    cylinderShadowMap_, cylinderShadowsEnabled_);
                 glBindVertexArray(cylinderGlowVao_);
                 glDrawElementsInstanced(
                     GL_TRIANGLES, cylinderIndexCount_, GL_UNSIGNED_SHORT, nullptr,
@@ -2084,7 +2354,7 @@ class GlScene {
                 glUniform1f(cylinderEmissive_, 1.0F);
                 applyLightingUniforms(
                     cylinderLightViewProjection_, cylinderLightDirection_,
-                    cylinderShadowMap_);
+                    cylinderShadowMap_, cylinderShadowsEnabled_);
                 glBindVertexArray(halfCylinderGlowVao_);
                 glDrawElementsInstanced(
                     GL_TRIANGLES, halfCylinderIndexCount_, GL_UNSIGNED_SHORT, nullptr,
@@ -2098,7 +2368,8 @@ class GlScene {
                 glUniform1f(boxAlpha_, 0.34F);
                 glUniform1f(boxEmissive_, 1.0F);
                 applyLightingUniforms(
-                    boxLightViewProjection_, boxLightDirection_, boxShadowMap_);
+                    boxLightViewProjection_, boxLightDirection_, boxShadowMap_,
+                    boxShadowsEnabled_);
                 glBindVertexArray(boxGlowVao_);
                 glDrawElementsInstanced(
                     GL_TRIANGLES, boxIndexCount_, GL_UNSIGNED_SHORT, nullptr,
@@ -2133,6 +2404,56 @@ class GlScene {
     }
 
   private:
+    [[nodiscard]] static bool atomisticCylindersEquivalent(const SceneData& scene) {
+        const auto& ballstick = scene.representations[
+            static_cast<size_t>(Representation::ballstick)];
+        const auto& stick = scene.representations[
+            static_cast<size_t>(Representation::stick)];
+        if (ballstick.cylinders.size() != stick.cylinders.size() ||
+            !ballstick.halfCylinders.empty() || !stick.halfCylinders.empty() ||
+            !ballstick.boxes.empty() || !stick.boxes.empty()) {
+            return false;
+        }
+        for (size_t index = 0; index < ballstick.cylinders.size(); ++index) {
+            const StyledCylinder& first = ballstick.cylinders[index];
+            const StyledCylinder& second = stick.cylinders[index];
+            if (first.identity != second.identity || first.start != second.start ||
+                first.end != second.end || first.radius != second.radius) {
+                return false;
+            }
+            for (size_t color = 0; color < first.colors.values.size(); ++color) {
+                if (first.colors.values[color] != second.colors.values[color]) return false;
+            }
+        }
+        return true;
+    }
+
+    struct SourceIndex {
+        std::unordered_map<std::string_view, const TransformOwnership*> ownership;
+        std::unordered_map<std::string_view, const nadoc_vr::OwnerAliasEntry*> aliases;
+        std::unordered_map<std::string_view, const ToolHandle*> toolHandles;
+
+        void rebuild(const RepresentationData& source) {
+            ownership.clear();
+            aliases.clear();
+            toolHandles.clear();
+            const auto& records = source.toolScopeOwnership.empty()
+                ? source.transformOwnership : source.toolScopeOwnership;
+            ownership.reserve(records.size());
+            aliases.reserve(source.ownerAliases.size());
+            toolHandles.reserve(source.toolHandles.size());
+            for (const TransformOwnership& record : records) {
+                ownership.emplace(record.identity, &record);
+            }
+            for (const nadoc_vr::OwnerAliasEntry& entry : source.ownerAliases) {
+                aliases.emplace(entry.identity, &entry);
+            }
+            for (const ToolHandle& handle : source.toolHandles) {
+                toolHandles.try_emplace(handle.token, &handle);
+            }
+        }
+    };
+
     struct ExpandedPairing {
         std::vector<size_t> points;
         std::vector<size_t> cylinders;
@@ -2171,12 +2492,51 @@ class GlScene {
     void prepareDisplayedSource() {
         if (displayedSourceValid_ && displayedRepresentation_ == representation_) return;
         displayedRepresentation_ = representation_;
-        const size_t index = static_cast<size_t>(representation_);
-        displayedSource_ = scene_.representations[index];
+        displayedSource_ = nullptr;
+        sourceIndexValid_ = false;
         expandedPairing_ = {};
-        if (scene_.hasExpanded) {
-            const RepresentationData& natural = scene_.representations[index];
-            const RepresentationData& expanded = scene_.expandedRepresentations[index];
+        displayedSourceValid_ = true;
+        updateDisplayedGeometry();
+    }
+
+    void ensureSourceIndex(const RepresentationData& source) {
+        if (!sourceIndexValid_) {
+            sourceIndex_.rebuild(source);
+            sourceIndexValid_ = true;
+            visualizationDeltasValid_ = false;
+        }
+        if (visualizationDeltasValid_) return;
+        visualizationDeltas_.clear();
+        visualizationDeltas_.reserve(visualizationPositions_.size());
+        for (const auto& [token, target] : visualizationPositions_) {
+            const auto handle = sourceIndex_.toolHandles.find(token);
+            if (handle == sourceIndex_.toolHandles.end()) continue;
+            glm::vec3 normalized =
+                (target - scene_.normalizationCenter) * scene_.normalizationScale;
+            normalized.z -= kViewDistanceMeters;
+            visualizationDeltas_.emplace(token, normalized - handle->second->center);
+        }
+        visualizationDeltasValid_ = true;
+    }
+
+    void updateDisplayedGeometry() {
+        if (!displayedSourceValid_) return;
+        const size_t index = static_cast<size_t>(representation_);
+        const RepresentationData& natural = scene_.representations[index];
+        if (!scene_.hasExpanded || expansion_.value() <= 0.0F) {
+            if (displayedSource_ != &natural) sourceIndexValid_ = false;
+            displayedSource_ = &natural;
+            return;
+        }
+        const RepresentationData& expanded = scene_.expandedRepresentations[index];
+        const float amount = expansion_.value();
+        if (amount >= 1.0F) {
+            if (displayedSource_ != &expanded) sourceIndexValid_ = false;
+            displayedSource_ = &expanded;
+            return;
+        }
+        if (displayedSource_ != &interpolatedSource_) {
+            interpolatedSource_ = natural;
             auto identity = [](const auto& value) { return value.identity; };
             expandedPairing_.points = matchExpandedIndices(
                 natural.points, expanded.points, identity, "point");
@@ -2192,22 +2552,14 @@ class GlScene {
             expandedPairing_.toolHandles = matchExpandedIndices(
                 natural.toolHandles, expanded.toolHandles,
                 [](const ToolHandle& value) { return value.id; }, "tool handle");
+            displayedSource_ = &interpolatedSource_;
+            sourceIndexValid_ = false;
         }
-        displayedSourceValid_ = true;
-        updateDisplayedGeometry();
-    }
-
-    void updateDisplayedGeometry() {
-        if (!scene_.hasExpanded || !displayedSourceValid_) return;
-        const size_t index = static_cast<size_t>(representation_);
-        const RepresentationData& natural = scene_.representations[index];
-        const RepresentationData& expanded = scene_.expandedRepresentations[index];
-        const float amount = expansion_.value();
-        for (size_t i = 0; i < displayedSource_.points.size(); ++i) {
+        for (size_t i = 0; i < interpolatedSource_.points.size(); ++i) {
             const StyledPoint& a = natural.points[i];
             const StyledPoint& b = expanded.points[expandedPairing_.points[i]];
-            displayedSource_.points[i].position = glm::mix(a.position, b.position, amount);
-            displayedSource_.points[i].size = glm::mix(a.size, b.size, amount);
+            interpolatedSource_.points[i].position = glm::mix(a.position, b.position, amount);
+            interpolatedSource_.points[i].size = glm::mix(a.size, b.size, amount);
         }
         auto blendCylinders = [&](std::vector<StyledCylinder>& output,
                                   const std::vector<StyledCylinder>& a,
@@ -2221,79 +2573,75 @@ class GlScene {
             }
         };
         blendCylinders(
-            displayedSource_.cylinders, natural.cylinders, expanded.cylinders,
+            interpolatedSource_.cylinders, natural.cylinders, expanded.cylinders,
             expandedPairing_.cylinders);
         blendCylinders(
-            displayedSource_.halfCylinders, natural.halfCylinders,
+            interpolatedSource_.halfCylinders, natural.halfCylinders,
             expanded.halfCylinders, expandedPairing_.halfCylinders);
-        for (size_t i = 0; i < displayedSource_.boxes.size(); ++i) {
+        for (size_t i = 0; i < interpolatedSource_.boxes.size(); ++i) {
             const StyledBox& a = natural.boxes[i];
             const StyledBox& b = expanded.boxes[expandedPairing_.boxes[i]];
-            displayedSource_.boxes[i].center = glm::mix(a.center, b.center, amount);
-            displayedSource_.boxes[i].axisX = glm::mix(a.axisX, b.axisX, amount);
-            displayedSource_.boxes[i].axisY = glm::mix(a.axisY, b.axisY, amount);
-            displayedSource_.boxes[i].axisZ = glm::mix(a.axisZ, b.axisZ, amount);
+            interpolatedSource_.boxes[i].center = glm::mix(a.center, b.center, amount);
+            interpolatedSource_.boxes[i].axisX = glm::mix(a.axisX, b.axisX, amount);
+            interpolatedSource_.boxes[i].axisY = glm::mix(a.axisY, b.axisY, amount);
+            interpolatedSource_.boxes[i].axisZ = glm::mix(a.axisZ, b.axisZ, amount);
         }
-        for (size_t i = 0; i < displayedSource_.ownerHandles.size(); ++i) {
-            displayedSource_.ownerHandles[i].center = glm::mix(
+        for (size_t i = 0; i < interpolatedSource_.ownerHandles.size(); ++i) {
+            interpolatedSource_.ownerHandles[i].center = glm::mix(
                 natural.ownerHandles[i].center,
                 expanded.ownerHandles[expandedPairing_.ownerHandles[i]].center, amount);
         }
-        for (size_t i = 0; i < displayedSource_.toolHandles.size(); ++i) {
-            displayedSource_.toolHandles[i].center = glm::mix(
+        for (size_t i = 0; i < interpolatedSource_.toolHandles.size(); ++i) {
+            interpolatedSource_.toolHandles[i].center = glm::mix(
                 natural.toolHandles[i].center,
                 expanded.toolHandles[expandedPairing_.toolHandles[i]].center, amount);
         }
     }
 
     [[nodiscard]] const RepresentationData& currentSource() const {
-        return displayedSource_;
+        if (!displayedSource_) {
+            throw std::runtime_error("VR displayed source is not prepared");
+        }
+        return *displayedSource_;
     }
 
     [[nodiscard]] static std::pair<float, float> layerWeights(
-        const RepresentationData& source, const std::string& identity,
-        const std::string& token) {
+        const RepresentationData&, const std::string& identity,
+        const std::string& token, const SourceIndex& index) {
         if (token.empty()) return {0.0F, 0.0F};
-        const auto& ownershipRecords = source.toolScopeOwnership.empty()
-            ? source.transformOwnership : source.toolScopeOwnership;
-        const auto ownership = std::find_if(
-            ownershipRecords.begin(), ownershipRecords.end(),
-            [&](const TransformOwnership& candidate) {
-                return candidate.identity == identity;
-            });
-        if (ownership != ownershipRecords.end()) {
+        const auto ownership = index.ownership.find(identity);
+        if (ownership != index.ownership.end()) {
             const auto owner = std::find_if(
-                ownership->owners.begin(), ownership->owners.end(),
+                ownership->second->owners.begin(), ownership->second->owners.end(),
                 [&](const TransformOwner& candidate) {
                     return candidate.token == token;
                 });
-            if (owner != ownership->owners.end()) {
+            if (owner != ownership->second->owners.end()) {
                 return {owner->startWeight, owner->endWeight};
             }
         }
-        const auto aliases = std::find_if(
-            source.ownerAliases.begin(), source.ownerAliases.end(),
-            [&](const nadoc_vr::OwnerAliasEntry& candidate) {
-                return candidate.identity == identity &&
-                    std::find(candidate.tokens.begin(), candidate.tokens.end(), token)
-                        != candidate.tokens.end();
-            });
-        return aliases == source.ownerAliases.end()
+        const auto aliases = index.aliases.find(identity);
+        if (aliases == index.aliases.end()) return {0.0F, 0.0F};
+        return std::find(
+            aliases->second->tokens.begin(), aliases->second->tokens.end(), token)
+            == aliases->second->tokens.end()
             ? std::pair(0.0F, 0.0F) : std::pair(1.0F, 1.0F);
     }
 
     void bakeCommittedLayer(RepresentationData& source) {
         if (toolCommittedToken_.empty()) return;
+        SourceIndex index;
+        index.rebuild(source);
         for (StyledPoint& point : source.points) {
             const float weight = layerWeights(
-                source, point.identity, toolCommittedToken_).first;
+                source, point.identity, toolCommittedToken_, index).first;
             point.position = nadoc_vr::weightedTransformPoint(
                 point.position, toolCommittedTransform_, weight);
         }
         auto bakeCylinders = [&](std::vector<StyledCylinder>& cylinders) {
             for (StyledCylinder& cylinder : cylinders) {
                 const auto [startWeight, endWeight] = layerWeights(
-                    source, cylinder.identity, toolCommittedToken_);
+                    source, cylinder.identity, toolCommittedToken_, index);
                 cylinder.start = nadoc_vr::weightedTransformPoint(
                     cylinder.start, toolCommittedTransform_, startWeight);
                 cylinder.end = nadoc_vr::weightedTransformPoint(
@@ -2304,7 +2652,7 @@ class GlScene {
         bakeCylinders(source.halfCylinders);
         for (StyledBox& box : source.boxes) {
             const float weight = layerWeights(
-                source, box.identity, toolCommittedToken_).first;
+                source, box.identity, toolCommittedToken_, index).first;
             box.center = nadoc_vr::weightedTransformPoint(
                 box.center, toolCommittedTransform_, weight);
             box.axisX = nadoc_vr::weightedTransformVector(
@@ -2340,37 +2688,25 @@ class GlScene {
         toolCommittedToken_.clear();
         toolCommittedTransform_ = glm::mat4(1.0F);
         displayedSourceValid_ = false;
+        sourceIndexValid_ = false;
     }
 
     [[nodiscard]] std::optional<glm::vec3> visualizationDelta(
-        const RepresentationData& source, const std::string& token) const {
-        const auto target = visualizationPositions_.find(token);
-        if (target == visualizationPositions_.end()) return std::nullopt;
-        const auto handle = std::find_if(
-            source.toolHandles.begin(), source.toolHandles.end(),
-            [&](const ToolHandle& candidate) { return candidate.token == token; });
-        if (handle == source.toolHandles.end()) return std::nullopt;
-        glm::vec3 normalized =
-            (target->second - scene_.normalizationCenter) * scene_.normalizationScale;
-        normalized.z -= kViewDistanceMeters;
-        return normalized - handle->center;
+        const RepresentationData&, const std::string& token) const {
+        const auto delta = visualizationDeltas_.find(token);
+        return delta == visualizationDeltas_.end()
+            ? std::nullopt : std::optional<glm::vec3>(delta->second);
     }
 
     [[nodiscard]] std::pair<glm::vec3, glm::vec3> visualizationOffsets(
         const RepresentationData& source, const std::string& identity) const {
         if (visualizationPositions_.empty()) return {};
-        const auto& ownershipRecords = source.toolScopeOwnership.empty()
-            ? source.transformOwnership : source.toolScopeOwnership;
-        const auto ownership = std::find_if(
-            ownershipRecords.begin(), ownershipRecords.end(),
-            [&](const TransformOwnership& candidate) {
-                return candidate.identity == identity;
-            });
-        if (ownership != ownershipRecords.end()) {
+        const auto ownership = sourceIndex_.ownership.find(identity);
+        if (ownership != sourceIndex_.ownership.end()) {
             std::array<nadoc_vr::VisualizationOffsetContribution, 32>
                 contributions{};
             size_t contributionCount = 0;
-            for (const TransformOwner& owner : ownership->owners) {
+            for (const TransformOwner& owner : ownership->second->owners) {
                 if (const auto delta = visualizationDelta(source, owner.token)) {
                     if (contributionCount >= contributions.size()) break;
                     contributions[contributionCount++] = {
@@ -2386,13 +2722,9 @@ class GlScene {
                     contributions.data(), contributionCount);
             }
         }
-        const auto aliases = std::find_if(
-            source.ownerAliases.begin(), source.ownerAliases.end(),
-            [&](const nadoc_vr::OwnerAliasEntry& candidate) {
-                return candidate.identity == identity;
-            });
-        if (aliases != source.ownerAliases.end()) {
-            for (const std::string& token : aliases->tokens) {
+        const auto aliases = sourceIndex_.aliases.find(identity);
+        if (aliases != sourceIndex_.aliases.end()) {
+            for (const std::string& token : aliases->second->tokens) {
                 if (const auto delta = visualizationDelta(source, token)) {
                     return {*delta, *delta};
                 }
@@ -2406,17 +2738,13 @@ class GlScene {
      * omit terminal phosphate atoms. Once an atom feed is active, leaving those
      * unmatched primitives visible would mix reconstructed and measured positions. */
     [[nodiscard]] bool hasCompleteVisualizationAtomEndpoints(
-        const RepresentationData& source, const std::string& identity) const {
+        const RepresentationData&, const std::string& identity) const {
         if (visualizationAtomTokens_.empty()) return true;
-        const auto ownership = std::find_if(
-            source.toolScopeOwnership.begin(), source.toolScopeOwnership.end(),
-            [&](const TransformOwnership& candidate) {
-                return candidate.identity == identity;
-            });
-        if (ownership == source.toolScopeOwnership.end()) return false;
+        const auto ownership = sourceIndex_.ownership.find(identity);
+        if (ownership == sourceIndex_.ownership.end()) return false;
         bool start = false;
         bool end = false;
-        for (const TransformOwner& owner : ownership->owners) {
+        for (const TransformOwner& owner : ownership->second->owners) {
             if (!visualizationAtomTokens_.contains(owner.token)) continue;
             start = start || owner.startWeight > 0.0F;
             end = end || owner.endWeight > 0.0F;
@@ -2425,30 +2753,20 @@ class GlScene {
     }
 
     [[nodiscard]] std::optional<glm::vec3> visualizationColor(
-        const RepresentationData& source, const std::string& identity) const {
+        const RepresentationData&, const std::string& identity) const {
         if (visualizationColors_.empty()) return std::nullopt;
-        const auto aliases = std::find_if(
-            source.ownerAliases.begin(), source.ownerAliases.end(),
-            [&](const nadoc_vr::OwnerAliasEntry& candidate) {
-                return candidate.identity == identity;
-            });
-        if (aliases != source.ownerAliases.end()) {
-            for (const std::string& token : aliases->tokens) {
+        const auto aliases = sourceIndex_.aliases.find(identity);
+        if (aliases != sourceIndex_.aliases.end()) {
+            for (const std::string& token : aliases->second->tokens) {
                 const auto color = visualizationColors_.find(token);
                 if (color != visualizationColors_.end()) return color->second;
             }
         }
-        const auto& ownershipRecords = source.toolScopeOwnership.empty()
-            ? source.transformOwnership : source.toolScopeOwnership;
-        const auto ownership = std::find_if(
-            ownershipRecords.begin(), ownershipRecords.end(),
-            [&](const TransformOwnership& candidate) {
-                return candidate.identity == identity;
-            });
-        if (ownership == ownershipRecords.end()) return std::nullopt;
+        const auto ownership = sourceIndex_.ownership.find(identity);
+        if (ownership == sourceIndex_.ownership.end()) return std::nullopt;
         glm::vec3 total{};
         float weight = 0.0F;
-        for (const TransformOwner& owner : ownership->owners) {
+        for (const TransformOwner& owner : ownership->second->owners) {
             const auto color = visualizationColors_.find(owner.token);
             if (color == visualizationColors_.end()) continue;
             const float ownerWeight = (owner.startWeight + owner.endWeight) * 0.5F;
@@ -2459,28 +2777,18 @@ class GlScene {
     }
 
     [[nodiscard]] const nadoc_vr::VisualizationPoint* visualizationSlabFrame(
-        const RepresentationData& source, const std::string& identity) const {
+        const RepresentationData&, const std::string& identity) const {
         if (visualizationSlabFrames_.empty()) return nullptr;
-        const auto aliases = std::find_if(
-            source.ownerAliases.begin(), source.ownerAliases.end(),
-            [&](const nadoc_vr::OwnerAliasEntry& candidate) {
-                return candidate.identity == identity;
-            });
-        if (aliases != source.ownerAliases.end()) {
-            for (const std::string& token : aliases->tokens) {
+        const auto aliases = sourceIndex_.aliases.find(identity);
+        if (aliases != sourceIndex_.aliases.end()) {
+            for (const std::string& token : aliases->second->tokens) {
                 const auto frame = visualizationSlabFrames_.find(token);
                 if (frame != visualizationSlabFrames_.end()) return &frame->second;
             }
         }
-        const auto& ownershipRecords = source.toolScopeOwnership.empty()
-            ? source.transformOwnership : source.toolScopeOwnership;
-        const auto ownership = std::find_if(
-            ownershipRecords.begin(), ownershipRecords.end(),
-            [&](const TransformOwnership& candidate) {
-                return candidate.identity == identity;
-            });
-        if (ownership != ownershipRecords.end()) {
-            for (const TransformOwner& owner : ownership->owners) {
+        const auto ownership = sourceIndex_.ownership.find(identity);
+        if (ownership != sourceIndex_.ownership.end()) {
+            for (const TransformOwner& owner : ownership->second->owners) {
                 const auto frame = visualizationSlabFrames_.find(owner.token);
                 if (frame != visualizationSlabFrames_.end()) return &frame->second;
             }
@@ -2509,9 +2817,9 @@ class GlScene {
         };
         displayed.center.z -= kViewDistanceMeters;
         const float committed = layerWeights(
-            source, identity, toolCommittedToken_).first;
+            source, identity, toolCommittedToken_, sourceIndex_).first;
         const float pending = layerWeights(
-            source, identity, toolPreviewToken_).first;
+            source, identity, toolPreviewToken_, sourceIndex_).first;
         displayed.center = nadoc_vr::weightedTransformPoint(
             displayed.center, toolCommittedTransform_, committed);
         displayed.center = nadoc_vr::weightedTransformPoint(
@@ -2528,12 +2836,12 @@ class GlScene {
 
     [[nodiscard]] std::pair<float, float> previewWeights(
         const RepresentationData& source, const std::string& identity) const {
-        return layerWeights(source, identity, toolPreviewToken_);
+        return layerWeights(source, identity, toolPreviewToken_, sourceIndex_);
     }
 
     [[nodiscard]] std::pair<float, float> committedWeights(
         const RepresentationData& source, const std::string& identity) const {
-        return layerWeights(source, identity, toolCommittedToken_);
+        return layerWeights(source, identity, toolCommittedToken_, sourceIndex_);
     }
 
     [[nodiscard]] glm::vec3 previewPoint(
@@ -2565,13 +2873,15 @@ class GlScene {
     }
 
     void applyLightingUniforms(
-        GLint lightProjection, GLint lightDirection, GLint shadowMap) const {
+        GLint lightProjection, GLint lightDirection, GLint shadowMap,
+        GLint shadowsEnabled) const {
         glUniformMatrix4fv(
             lightProjection, 1, GL_FALSE, &lightViewProjection_[0][0]);
         glUniform3fv(lightDirection, 1, &lightDirection_[0]);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, shadowTexture_);
         glUniform1i(shadowMap, 0);
+        glUniform1i(shadowsEnabled, shadowsEnabled_ ? 1 : 0);
     }
 
     void initializeShadowMap() {
@@ -2610,25 +2920,14 @@ class GlScene {
             glGetUniformLocation(sphereProgram_, "uLightViewProjection");
         sphereLightDirection_ = glGetUniformLocation(sphereProgram_, "uLightDirection");
         sphereShadowMap_ = glGetUniformLocation(sphereProgram_, "uShadowMap");
+        sphereShadowsEnabled_ = glGetUniformLocation(sphereProgram_, "uShadowsEnabled");
         sphereAlpha_ = glGetUniformLocation(sphereProgram_, "uAlpha");
         sphereEmissive_ = glGetUniformLocation(sphereProgram_, "uEmissive");
 
-        constexpr float goldenRatio = 1.6180339887498948482F;
         std::vector<glm::vec3> mesh = {
-            {-1, goldenRatio, 0}, {1, goldenRatio, 0},
-            {-1, -goldenRatio, 0}, {1, -goldenRatio, 0},
-            {0, -1, goldenRatio}, {0, 1, goldenRatio},
-            {0, -1, -goldenRatio}, {0, 1, -goldenRatio},
-            {goldenRatio, 0, -1}, {goldenRatio, 0, 1},
-            {-goldenRatio, 0, -1}, {-goldenRatio, 0, 1},
+            {-1, -1, 0}, {1, -1, 0}, {1, 1, 0}, {-1, 1, 0},
         };
-        for (glm::vec3& vertex : mesh) vertex = glm::normalize(vertex);
-        static constexpr std::array<GLushort, 60> indices = {
-            0, 11, 5,  0, 5, 1,   0, 1, 7,   0, 7, 10,  0, 10, 11,
-            1, 5, 9,   5, 11, 4,  11, 10, 2, 10, 7, 6,   7, 1, 8,
-            3, 9, 4,   3, 4, 2,   3, 2, 6,   3, 6, 8,    3, 8, 9,
-            4, 9, 5,   2, 4, 11,  6, 2, 10,  8, 6, 7,    9, 8, 1,
-        };
+        static constexpr std::array<GLushort, 6> indices = {0, 1, 2, 0, 2, 3};
         sphereIndexCount_ = static_cast<GLsizei>(indices.size());
 
         glGenVertexArrays(1, &sphereVao_);
@@ -2687,12 +2986,18 @@ class GlScene {
 
     void uploadCylinders() {
         cylinderProgram_ = makeCylinderProgram();
+        atomisticBondProgram_ = makeAtomisticBondProgram();
+        atomisticBondViewProjection_ =
+            glGetUniformLocation(atomisticBondProgram_, "uViewProjection");
+        atomisticBondModel_ = glGetUniformLocation(atomisticBondProgram_, "uModel");
         cylinderViewProjection_ = glGetUniformLocation(cylinderProgram_, "uViewProjection");
         cylinderModel_ = glGetUniformLocation(cylinderProgram_, "uModel");
         cylinderLightViewProjection_ =
             glGetUniformLocation(cylinderProgram_, "uLightViewProjection");
         cylinderLightDirection_ = glGetUniformLocation(cylinderProgram_, "uLightDirection");
         cylinderShadowMap_ = glGetUniformLocation(cylinderProgram_, "uShadowMap");
+        cylinderShadowsEnabled_ =
+            glGetUniformLocation(cylinderProgram_, "uShadowsEnabled");
         cylinderAlpha_ = glGetUniformLocation(cylinderProgram_, "uAlpha");
         cylinderEmissive_ = glGetUniformLocation(cylinderProgram_, "uEmissive");
 
@@ -2782,6 +3087,26 @@ class GlScene {
         glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Cylinder),
                               reinterpret_cast<void*>(offsetof(Cylinder, color)));
         for (GLuint attribute = 1; attribute <= 4; ++attribute) {
+            glVertexAttribDivisor(attribute, 1);
+        }
+        glBindVertexArray(0);
+
+        glGenVertexArrays(1, &atomisticBondVao_);
+        glBindVertexArray(atomisticBondVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, cylinderInstanceVbo_);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(
+            1, 3, GL_FLOAT, GL_FALSE, sizeof(Cylinder),
+            reinterpret_cast<void*>(offsetof(Cylinder, start)));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(
+            2, 3, GL_FLOAT, GL_FALSE, sizeof(Cylinder),
+            reinterpret_cast<void*>(offsetof(Cylinder, end)));
+        glEnableVertexAttribArray(4);
+        glVertexAttribPointer(
+            4, 3, GL_FLOAT, GL_FALSE, sizeof(Cylinder),
+            reinterpret_cast<void*>(offsetof(Cylinder, color)));
+        for (GLuint attribute : {1U, 2U, 4U}) {
             glVertexAttribDivisor(attribute, 1);
         }
         glBindVertexArray(0);
@@ -2948,6 +3273,7 @@ class GlScene {
         boxLightViewProjection_ = glGetUniformLocation(boxProgram_, "uLightViewProjection");
         boxLightDirection_ = glGetUniformLocation(boxProgram_, "uLightDirection");
         boxShadowMap_ = glGetUniformLocation(boxProgram_, "uShadowMap");
+        boxShadowsEnabled_ = glGetUniformLocation(boxProgram_, "uShadowsEnabled");
         boxAlpha_ = glGetUniformLocation(boxProgram_, "uAlpha");
         boxEmissive_ = glGetUniformLocation(boxProgram_, "uEmissive");
 
@@ -3058,7 +3384,10 @@ class GlScene {
 
     GLuint program_ = 0;
     SceneData scene_;
-    RepresentationData displayedSource_;
+    RepresentationData interpolatedSource_;
+    const RepresentationData* displayedSource_ = nullptr;
+    SourceIndex sourceIndex_;
+    bool sourceIndexValid_ = false;
     ExpandedPairing expandedPairing_;
     Representation displayedRepresentation_ = Representation::full;
     bool displayedSourceValid_ = false;
@@ -3075,6 +3404,13 @@ class GlScene {
     std::unordered_map<std::string, nadoc_vr::VisualizationPoint>
         visualizationSlabFrames_;
     std::unordered_set<std::string> visualizationAtomTokens_;
+    std::unordered_map<std::string, glm::vec3> visualizationDeltas_;
+    bool visualizationDeltasValid_ = false;
+    uint64_t visualizationRevision_ = 0;
+    uint64_t uploadedVisualizationRevision_ = std::numeric_limits<uint64_t>::max();
+    bool atomisticSharedGeometry_ = false;
+    bool atomisticBuffersResident_ = false;
+    GLsizei ballstickSphereCount_ = 0;
     std::unordered_set<std::string> snapHighlightOwnerTokens_;
     std::unordered_set<std::string> snapHighlightIdentities_;
     std::unordered_set<std::string> selectedHighlightOwnerTokens_;
@@ -3092,6 +3428,8 @@ class GlScene {
     GLuint sphereGlowVao_ = 0;
     GLuint sphereGlowInstanceVbo_ = 0;
     GLuint cylinderProgram_ = 0;
+    GLuint atomisticBondProgram_ = 0;
+    GLuint atomisticBondVao_ = 0;
     GLuint cylinderVao_ = 0;
     GLuint cylinderMeshVbo_ = 0;
     GLuint cylinderIndexVbo_ = 0;
@@ -3119,13 +3457,17 @@ class GlScene {
     GLint sphereLightViewProjection_ = -1;
     GLint sphereLightDirection_ = -1;
     GLint sphereShadowMap_ = -1;
+    GLint sphereShadowsEnabled_ = -1;
     GLint sphereAlpha_ = -1;
     GLint sphereEmissive_ = -1;
     GLint cylinderViewProjection_ = -1;
+    GLint atomisticBondViewProjection_ = -1;
+    GLint atomisticBondModel_ = -1;
     GLint cylinderModel_ = -1;
     GLint cylinderLightViewProjection_ = -1;
     GLint cylinderLightDirection_ = -1;
     GLint cylinderShadowMap_ = -1;
+    GLint cylinderShadowsEnabled_ = -1;
     GLint cylinderAlpha_ = -1;
     GLint cylinderEmissive_ = -1;
     GLint boxViewProjection_ = -1;
@@ -3133,6 +3475,7 @@ class GlScene {
     GLint boxLightViewProjection_ = -1;
     GLint boxLightDirection_ = -1;
     GLint boxShadowMap_ = -1;
+    GLint boxShadowsEnabled_ = -1;
     GLint boxAlpha_ = -1;
     GLint boxEmissive_ = -1;
     GLsizei lineCount_ = 0;
@@ -3152,6 +3495,7 @@ class GlScene {
     float localRadius_ = 0.5F;
     glm::mat4 lightViewProjection_{1.0F};
     glm::vec3 lightDirection_{-0.577F, 0.577F, 0.577F};
+    bool shadowsEnabled_ = true;
     static constexpr GLsizei kShadowMapSize = 2048;
 };
 
@@ -3178,6 +3522,73 @@ struct DesktopVertex {
  * This small fallback captures the real X11 root and injects ordinary pointer input,
  * keeping the desktop usable inside the same controller-mounted tablet.
  */
+int benchmarkAtomisticStyles(
+    const std::string& scenePath, const std::string& visualizationPath) {
+    const auto started = std::chrono::steady_clock::now();
+    std::cout << "VR_METRIC event=process_start mode=benchmark_atomistic_styles"
+              << " rss_mib=" << currentResidentMiB() << std::endl;
+    SceneData scene = loadScene(scenePath);
+    nadoc_vr::VisualizationSnapshot visualization;
+    if (!visualizationPath.empty()) {
+        visualization = nadoc_vr::loadVisualizationSnapshot(visualizationPath);
+    } else {
+        visualization.sequence = 1;
+        visualization.mode = "namd_display";
+        visualization.representation = "ballstick";
+        visualization.coloring = "cpk";
+        const RepresentationData& atomistic = scene.representations[
+            static_cast<size_t>(Representation::ballstick)];
+        std::unordered_set<std::string> tokens;
+        tokens.reserve(atomistic.toolHandles.size());
+        visualization.points.reserve(atomistic.toolHandles.size());
+        for (const ToolHandle& handle : atomistic.toolHandles) {
+            if (handle.kind != "atom" || !tokens.insert(handle.token).second) continue;
+            glm::vec3 sourcePosition = handle.center;
+            sourcePosition.z += kViewDistanceMeters;
+            sourcePosition = sourcePosition / scene.normalizationScale
+                           + scene.normalizationCenter;
+            visualization.points.push_back(nadoc_vr::VisualizationPoint{
+                handle.token, sourcePosition});
+        }
+    }
+    std::cout << "VR_METRIC event=process_progress phase=visualization_ready"
+              << " points=" << visualization.points.size()
+              << " rss_mib=" << currentResidentMiB() << std::endl;
+
+    if (!glfwInit()) throw std::runtime_error("GLFW initialization failed");
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+    GLFWwindow* window = glfwCreateWindow(64, 64, "NADOC VR benchmark", nullptr, nullptr);
+    if (!window) {
+        glfwTerminate();
+        throw std::runtime_error("Could not create the benchmark OpenGL context");
+    }
+    glfwMakeContextCurrent(window);
+    try {
+        {
+            GlScene glScene(std::move(scene));
+            glScene.setVisualization(visualization);
+            glScene.setStyle(Representation::stick, Coloring::cpk);
+            glScene.setStyle(Representation::ballstick, Coloring::cpk);
+            glFinish();
+        }
+        glfwDestroyWindow(window);
+        glfwTerminate();
+    } catch (...) {
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        throw;
+    }
+    const double milliseconds = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - started).count();
+    std::cout << "VR_METRIC event=process_end mode=benchmark_atomistic_styles"
+              << " status=ok elapsed_ms=" << milliseconds
+              << " rss_mib=" << currentResidentMiB() << std::endl;
+    return 0;
+}
+
 class DesktopSurface {
   public:
     void initialize(Display* display) {
@@ -5808,6 +6219,21 @@ class Viewer {
     void publishStyleRequest(Representation representation, Coloring coloring) {
         if (glScene_ && representation == glScene_->representation() &&
             coloring == glScene_->coloring()) return;
+        if (witness_ && eventPath_.empty()) {
+            // Witness Mode is already prohibited from opening the browser event
+            // channel.  Apply style choices to its private snapshot directly so a
+            // semantic menu replay can validate the real native geometry and GPU
+            // uploads without mutating a design or pretending the browser acked it.
+            glScene_->setStyle(representation, coloring);
+            desktopRepresentation_ = representationName(representation);
+            desktopColoring_ = coloringName(coloring);
+            requestedRepresentation_ = desktopRepresentation_;
+            requestedColoring_ = desktopColoring_;
+            std::cout << "VR_METRIC event=process_progress phase=witness_style_applied"
+                      << " representation=" << requestedRepresentation_
+                      << " coloring=" << requestedColoring_ << std::endl;
+            return;
+        }
         requestedRepresentation_ = representationName(representation);
         requestedColoring_ = coloringName(coloring);
         ++styleSequence_;
@@ -6290,6 +6716,7 @@ class Viewer {
                     : mirrorCoverageAssessment_.overlayFraction >= 0.001F
                         ? "visible" : "missing",
                 witnessMenuFramingStatus(),
+                glScene_ ? representationName(glScene_->representation()) : "none",
             });
             resolveWitnessAim();
             const auto bounds = menuPanelBounds();
@@ -7286,6 +7713,7 @@ class Viewer {
         XrFrameBeginInfo beginInfo{XR_TYPE_FRAME_BEGIN_INFO};
         checkXr(instance_, xrBeginFrame(session_, &beginInfo), "xrBeginFrame");
         syncActions(frameState.predictedDisplayTime);
+        const auto inputFinished = std::chrono::steady_clock::now();
         desktopSurface_.update(menuOpen_ && menuPage_ == MenuPage::desktop);
         glScene_->updateExpanded(
             static_cast<float>(frameState.predictedDisplayPeriod) / 1.0e9F);
@@ -7387,7 +7815,9 @@ class Viewer {
         endInfo.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
         endInfo.layerCount = layerCount;
         endInfo.layers = layerCount ? layers : nullptr;
+        const auto sceneFinished = std::chrono::steady_clock::now();
         checkXr(instance_, xrEndFrame(session_, &endInfo), "xrEndFrame");
+        const auto endFinished = std::chrono::steady_clock::now();
         if (layerCount > 0 && readySequence_ == 0) {
             firstFrameAtMilliseconds_ = std::chrono::duration<double, std::milli>(
                 std::chrono::system_clock::now().time_since_epoch()).count();
@@ -7400,6 +7830,49 @@ class Viewer {
             std::cout << "VR first frame submitted: CPU="
                       << firstFrameCpuMilliseconds_ << " ms, runtime period="
                       << displayPeriodMilliseconds_ << " ms" << std::endl;
+        }
+        if (layerCount > 0) {
+            const double milliseconds = std::chrono::duration<double, std::milli>(
+                endFinished - frameStarted).count();
+            (void)frameInputTiming_.add(std::chrono::duration<double, std::milli>(
+                inputFinished - frameStarted).count());
+            (void)frameSceneTiming_.add(std::chrono::duration<double, std::milli>(
+                sceneFinished - inputFinished).count());
+            (void)frameEndTiming_.add(std::chrono::duration<double, std::milli>(
+                endFinished - sceneFinished).count());
+            if (frameCpuTiming_.add(milliseconds)) {
+                const auto summary = frameCpuTiming_.takeSummary();
+                const auto inputSummary = frameInputTiming_.takeSummary();
+                const auto sceneSummary = frameSceneTiming_.takeSummary();
+                const auto endSummary = frameEndTiming_.takeSummary();
+                if (summary && inputSummary && sceneSummary && endSummary) {
+                    const double runtimePeriod =
+                        static_cast<double>(frameState.predictedDisplayPeriod) / 1.0e6;
+                    std::cout << "VR_METRIC event=process_progress phase=frame_timing"
+                              << " representation="
+                              << representationName(glScene_->representation())
+                              << " samples=" << summary->samples
+                              << " runtime_period_ms=" << runtimePeriod
+                              << " loop_p50_ms=" << summary->p50Milliseconds
+                              << " loop_p95_ms=" << summary->p95Milliseconds
+                              << " loop_p99_ms=" << summary->p99Milliseconds
+                              << " loop_max_ms=" << summary->maxMilliseconds
+                              << " input_p50_ms=" << inputSummary->p50Milliseconds
+                              << " input_p95_ms=" << inputSummary->p95Milliseconds
+                              << " scene_p50_ms=" << sceneSummary->p50Milliseconds
+                              << " scene_p95_ms=" << sceneSummary->p95Milliseconds
+                              << " xr_end_p50_ms=" << endSummary->p50Milliseconds
+                              << " xr_end_p95_ms=" << endSummary->p95Milliseconds
+                              // xrSyncActions/xrEndFrame are runtime scheduling points and
+                              // may deliberately block until the compositor wants the next
+                              // frame.  Only the scene interval is application work; treating
+                              // the whole loop as render time incorrectly reported a healthy
+                              // 90 Hz SteamVR session as over budget.
+                              << " scene_p95_within_budget="
+                              << (sceneSummary->p95Milliseconds <= runtimePeriod ? "true" : "false")
+                              << std::endl;
+                }
+            }
         }
         if (toolShell_.mode() == nadoc_vr::ToolMode::move_rotate &&
             toolShell_.previewRequested()) {
@@ -7631,6 +8104,10 @@ class Viewer {
     double displayPeriodMilliseconds_ = 0.0;
     XrTime currentPredictedDisplayTime_ = 0;
     nadoc_vr::TimingWindow previewFrameTiming_{240};
+    nadoc_vr::TimingWindow frameCpuTiming_{240};
+    nadoc_vr::TimingWindow frameInputTiming_{240};
+    nadoc_vr::TimingWindow frameSceneTiming_{240};
+    nadoc_vr::TimingWindow frameEndTiming_{240};
     uint64_t feedbackSequence_ = 0;
     uint32_t feedbackPollFrame_ = 0;
     uint64_t toolFeedbackSequence_ = 0;
@@ -7744,6 +8221,18 @@ class Viewer {
 }  // namespace
 
 int main(int argc, char** argv) {
+    if ((argc == 3 || argc == 4) &&
+        std::string(argv[1]) == "--benchmark-atomistic") {
+        try {
+            return benchmarkAtomisticStyles(
+                argv[2], argc == 4 ? argv[3] : std::string{});
+        } catch (const std::exception& error) {
+            std::cerr << "VR_METRIC event=process_end mode=benchmark_atomistic_styles"
+                      << " status=error rss_mib=" << currentResidentMiB() << '\n';
+            std::cerr << "NADOC VR benchmark error: " << error.what() << '\n';
+            return 1;
+        }
+    }
     if (argc == 3 && std::string(argv[1]) == "--validate-witness") {
         try {
             std::ifstream input(argv[2]);
@@ -7767,7 +8256,8 @@ int main(int argc, char** argv) {
         }
     }
     if (argc < 2) {
-        std::cerr << "Usage: nadoc-vr-viewer [--validate|--validate-witness] <file> "
+        std::cerr << "Usage: nadoc-vr-viewer "
+                     "[--validate|--validate-witness|--benchmark-atomistic] <file> "
                      "[--events <event.json>] [--feedback <feedback.txt>] "
                      "[--tool-feedback <tool-feedback.txt>] "
                      "[--plane-feedback <plane-feedback.txt>] "
@@ -7968,6 +8458,9 @@ int main(int argc, char** argv) {
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
     try {
+        const auto processStarted = std::chrono::steady_clock::now();
+        std::cout << "VR_METRIC event=process_start mode=openxr_viewer rss_mib="
+                  << currentResidentMiB() << std::endl;
         Viewer viewer(
             loadScene(argv[1]), eventPath, feedbackPath, toolFeedbackPath,
             planeFeedbackPath, preflightFeedbackPath, toolExecutionFeedbackPath,
@@ -7979,8 +8472,17 @@ int main(int argc, char** argv) {
             sceneViewPlacement,
             mirrorDiagnosticsPath, witnessCaptureDirectory,
             witnessVisualExpectationDirectory, exitOnWitnessComplete);
-        return viewer.run();
+        const int result = viewer.run();
+        const double milliseconds = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - processStarted).count();
+        std::cout << "VR_METRIC event=process_end mode=openxr_viewer"
+                  << " status=" << (result == 0 ? "ok" : "error")
+                  << " elapsed_ms=" << milliseconds
+                  << " rss_mib=" << currentResidentMiB() << std::endl;
+        return result;
     } catch (const std::exception& error) {
+        std::cerr << "VR_METRIC event=process_end mode=openxr_viewer"
+                  << " status=error rss_mib=" << currentResidentMiB() << '\n';
         std::cerr << "NADOC VR error: " << error.what() << '\n';
         return 1;
     }

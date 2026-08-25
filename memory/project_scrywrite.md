@@ -230,3 +230,34 @@ environment issue without a source change.
   workflow. Core validation passed the complete trace with no errors; API dump kept
   the frame-284 pass; Nsight emitted an 18 MB `.qdstrm` (this install lacks its report
   importer and kernel CPU sampling); RenderDoc is not installed and is not claimed.
+
+## Full-origami atomistic MD validation (2026-08-24)
+
+- Canonical runbook: [`docs/scrywrite_atomistic_md.md`](../docs/scrywrite_atomistic_md.md).
+  Fixture is downloaded Alpine job `fc12195d0636` for `24hb_2xT`: 151,013 displayed
+  DNA-heavy atoms and about 169k bonds from a 1,354,425-atom solvated topology.
+- Root cause was native `GlScene::setStyle` doing repeated linear ownership/alias/tool
+  searches per primitive plus large source copies/uploads. Hash indexes, immutable
+  source pointers, atom-token indexing, and a validated shared Ball+Stick/Stick buffer
+  path reduced repeated switches from crash-scale work to about 0.001 ms.
+- Native atomistic rendering uses sphere impostors, line-bond LOD, and no dense-scene
+  shadow pass. Exact physical-HMD scene work measured about 0.22 ms p50 / 1.6 ms p95.
+  OpenXR loop duration is not render duration: runtime synchronization may block.
+  Judge `scene_p95_within_budget` and active-headset SteamVR compositor statistics.
+- Browser MD frames now use `atomisticRenderer.updateFrame`: stable topology updates
+  matrices in place and emits `geometryPath: coordinates`; topology changes fail back
+  to `rebuild`. Browser Ball+Stick/Stick changes reuse sphere and bond instances.
+- `scripts/vr_atomistic_diagnostics.py` has `system`, `capture-md`, and
+  `steamvr-stats`; all emit private JSONL process start/progress/end telemetry. The
+  SteamVR gate rejects absent/inactive/timed-out HMD samples.
+- `scrywrite_witness_atomistic_24hb.scry` semantically asserts the complete native
+  representation boundary chain: Ball+Stick → Full → Ball+Stick → Stick → Full →
+  Ball+Stick. The extended Vive run remained submitted/tracked, captured all six
+  states, and passed at frame 514. Exact transition times were 309 ms Ball→Full,
+  798–815 ms Full→Ball, 0.0005 ms Ball→Stick, and 321 ms Stick→Full. A clean 960×540
+  submitted left-eye image visibly contained the complete CPK atom/bond assembly.
+- Remaining cost is startup, not interaction: snapshot creation is about 58 seconds;
+  the 82 MiB gzip expands to about 726 MiB, parses in about seven seconds, and leaves
+  native RSS near 2.9–3.3 GiB. A future versioned format may deduplicate identical
+  atomistic bond/ownership blocks only if semantic identity and Expanded parity remain
+  strict.

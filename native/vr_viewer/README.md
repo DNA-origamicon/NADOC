@@ -152,6 +152,17 @@ selecting a Flex Map applies both its mean positions and scalar colors. Clearing
 desktop overlay restores the launch geometry and normal VR coloring. This is a compact
 per-base feed rather than a repeated full-scene rebuild, so the OpenXR session and the
 user's scene placement remain intact.
+
+For the full-origami atomistic regression, `just vr-atomistic-system` checks host
+headroom, `just vr-atomistic-capture` extracts the already-downloaded latest
+`24hb_2xT` MD frame, and
+`just scrywrite-atomistic-24hb /tmp/nadoc-vr-XXXXXX.nadocvr.gz` drives and asserts
+Ball + Stick → Full → Ball + Stick → Stick Only → Full → Ball + Stick through the
+real menu. A headset-free style
+benchmark is available as
+`nadoc-vr-viewer --benchmark-atomistic <scene> [visualization]`. The exact fixture,
+thresholds, SteamVR timing gate, evidence semantics, and failure map are in
+[`docs/scrywrite_atomistic_md.md`](../../docs/scrywrite_atomistic_md.md).
 For native-to-browser interaction, the backend creates a private (`0600`), bounded
 event record and passes its path directly to the viewer. A localhost-only endpoint
 exposes validated, sequenced hover, Select, and selection-level intents. The browser

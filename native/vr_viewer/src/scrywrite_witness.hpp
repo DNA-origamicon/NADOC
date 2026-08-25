@@ -29,7 +29,7 @@ enum class WitnessCommandKind {
     expect_menu, expect_hover, expect_tool, expect_status,
     expect_menu_placement, expect_menu_moved, expect_layout,
     expect_display, expect_tracking, expect_overlay,
-    expect_framing,
+    expect_framing, expect_representation,
 };
 
 struct WitnessHeadPose {
@@ -58,14 +58,16 @@ struct WitnessObservation {
         std::string displayValue = "pending",
         std::string trackingValue = "pending",
         std::string overlayValue = "pending",
-        std::string framingValue = "pending")
+        std::string framingValue = "pending",
+        std::string representationValue = "full")
         : menu(std::move(menuValue)), hover(std::move(hoverValue)),
           tool(std::move(toolValue)), status(std::move(statusValue)),
           menuPlacement(std::move(menuPlacementValue)),
           menuPosition(menuPositionValue), layout(std::move(layoutValue)),
           layoutDetail(std::move(layoutDetailValue)),
           display(std::move(displayValue)), tracking(std::move(trackingValue)),
-          overlay(std::move(overlayValue)), framing(std::move(framingValue)) {}
+          overlay(std::move(overlayValue)), framing(std::move(framingValue)),
+          representation(std::move(representationValue)) {}
 
     std::string menu = "closed";
     std::string hover = "none";
@@ -79,6 +81,7 @@ struct WitnessObservation {
     std::string tracking = "pending";
     std::string overlay = "pending";
     std::string framing = "pending";
+    std::string representation = "full";
 };
 
 struct WitnessAim {
@@ -253,6 +256,13 @@ class WitnessReplay {
                     if (canonical(observation.framing) != command.value) {
                         fail(command.line, "expected framing " + command.value +
                              ", got " + canonical(observation.framing));
+                        return;
+                    }
+                    break;
+                case WitnessCommandKind::expect_representation:
+                    if (canonical(observation.representation) != command.value) {
+                        fail(command.line, "expected representation " + command.value +
+                             ", got " + canonical(observation.representation));
                         return;
                     }
                     break;
@@ -501,9 +511,9 @@ class WitnessReplay {
                      fields[1] != "placement" && fields[1] != "menu_moved" &&
                      fields[1] != "layout" && fields[1] != "display" &&
                      fields[1] != "tracking" && fields[1] != "overlay" &&
-                     fields[1] != "framing")) {
+                     fields[1] != "framing" && fields[1] != "representation")) {
                     parseFail(line,
-                        "expect requires <menu|hover|tool|status|placement|menu_moved|layout|display|tracking|overlay|framing> <value>");
+                        "expect requires <menu|hover|tool|status|placement|menu_moved|layout|display|tracking|overlay|framing|representation> <value>");
                 }
                 if (fields[1] == "menu") command.kind = WitnessCommandKind::expect_menu;
                 else if (fields[1] == "hover") command.kind = WitnessCommandKind::expect_hover;
@@ -530,6 +540,8 @@ class WitnessReplay {
                     command.kind = WitnessCommandKind::expect_tracking;
                 } else if (fields[1] == "overlay") {
                     command.kind = WitnessCommandKind::expect_overlay;
+                } else if (fields[1] == "representation") {
+                    command.kind = WitnessCommandKind::expect_representation;
                 } else {
                     command.kind = WitnessCommandKind::expect_framing;
                 }

@@ -4321,6 +4321,15 @@ def _write_scene_snapshot(
     """Write one private gzip snapshot from text or a constant-memory line source."""
     if (scene_text is None) == (producer is None):
         raise ValueError("Provide exactly one VR scene source")
+    started = time.monotonic()
+    lines_written = 0
+    print(
+        "VR_SNAPSHOT " + json.dumps({
+            "event": "process_start", "phase": "scene_snapshot_write",
+            "source": "text" if scene_text is not None else "stream",
+        }, separators=(",", ":")),
+        flush=True,
+    )
     with tempfile.NamedTemporaryFile(
         mode="wb",
         prefix="nadoc-vr-",
@@ -4344,9 +4353,20 @@ def _write_scene_snapshot(
                 pending_size = 0
 
                 def write_line(line: str) -> None:
-                    nonlocal pending_size
+                    nonlocal pending_size, lines_written
                     pending.append(line)
                     pending_size += len(line) + 1
+                    lines_written += 1
+                    if lines_written % 250_000 == 0:
+                        print(
+                            "VR_SNAPSHOT " + json.dumps({
+                                "event": "process_progress",
+                                "phase": "scene_snapshot_write",
+                                "lines": lines_written,
+                                "elapsed_s": round(time.monotonic() - started, 3),
+                            }, separators=(",", ":")),
+                            flush=True,
+                        )
                     if pending_size >= 1 << 20:
                         compressed.write("\n".join(pending) + "\n")
                         pending.clear()
@@ -4357,11 +4377,28 @@ def _write_scene_snapshot(
                 if pending:
                     compressed.write("\n".join(pending) + "\n")
         scene_path.chmod(0o600)
+        print(
+            "VR_SNAPSHOT " + json.dumps({
+                "event": "process_end", "phase": "scene_snapshot_write",
+                "status": "ok", "lines": lines_written,
+                "bytes": scene_path.stat().st_size,
+                "elapsed_s": round(time.monotonic() - started, 3),
+            }, separators=(",", ":")),
+            flush=True,
+        )
         return scene_path
     except OSError as exc:
         scene_path.unlink(missing_ok=True)
         raise HTTPException(503, detail="Could not write the VR scene snapshot.") from exc
     except Exception:
+        print(
+            "VR_SNAPSHOT " + json.dumps({
+                "event": "process_end", "phase": "scene_snapshot_write",
+                "status": "error", "lines": lines_written,
+                "elapsed_s": round(time.monotonic() - started, 3),
+            }, separators=(",", ":")),
+            flush=True,
+        )
         scene_path.unlink(missing_ok=True)
         raise
 

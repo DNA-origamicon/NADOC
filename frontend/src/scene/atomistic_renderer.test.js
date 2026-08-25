@@ -416,6 +416,61 @@ describe('atomistic_renderer sphere impostors (Phase C)', () => {
   })
 })
 
+describe('atomistic_renderer trajectory fast path', () => {
+  it('updates stable MD coordinates in existing instance buffers', () => {
+    const scene = new THREE.Scene()
+    const ar = initAtomisticRenderer(scene)
+    const bonds = new Int32Array([4021, 4022])
+    ar.setMode('ballstick')
+    ar.update({
+      atoms: [
+        { serial: 4021, element: 'P', helix_id: 'h0', x: 0, y: 0, z: 0 },
+        { serial: 4022, element: 'O', helix_id: 'h0', x: 0.15, y: 0, z: 0 },
+      ],
+      bonds,
+    })
+    const sphere = _atomMeshes(scene).find(mesh => mesh.userData.element === 'P')
+    const bond = _bondMesh(scene)
+
+    expect(ar.updateFrame({
+      atoms: [
+        { serial: 4021, element: 'P', helix_id: 'h0', x: 2, y: 3, z: 4 },
+        { serial: 4022, element: 'O', helix_id: 'h0', x: 2.3, y: 3, z: 4 },
+      ],
+      bonds,
+    })).toBe('coordinates')
+    expect(_atomMeshes(scene).find(mesh => mesh.userData.element === 'P')).toBe(sphere)
+    expect(_bondMesh(scene)).toBe(bond)
+    const matrix = new THREE.Matrix4()
+    sphere.getMatrixAt(0, matrix)
+    expect(new THREE.Vector3().setFromMatrixPosition(matrix).toArray()).toEqual([2, 3, 4])
+    expect(bondCylinderScaleY(scene)).toBeCloseTo(0.3, 5)
+    ar.dispose()
+  })
+
+  it('rebuilds when topology changes but not for Ball+Stick/Stick toggles', () => {
+    const scene = new THREE.Scene()
+    const ar = initAtomisticRenderer(scene)
+    const atoms = [
+      { serial: 0, element: 'P', helix_id: 'h0', x: 0, y: 0, z: 0 },
+      { serial: 1, element: 'O', helix_id: 'h0', x: 0.15, y: 0, z: 0 },
+    ]
+    const bonds = new Int32Array([0, 1])
+    ar.setMode('ballstick')
+    ar.update({ atoms, bonds })
+    const sphere = _atomMeshes(scene)[0]
+
+    ar.setMode('stick')
+    expect(_atomMeshes(scene)).toHaveLength(0)
+    ar.setMode('ballstick')
+    expect(_atomMeshes(scene)[0]).toBe(sphere)
+
+    expect(ar.updateFrame({ atoms, bonds: new Int32Array([0, 1]) })).toBe('rebuild')
+    expect(_atomMeshes(scene)[0]).not.toBe(sphere)
+    ar.dispose()
+  })
+})
+
 // The live NAMD MD-Display payload, end to end. `ws.py` sends heavy-atom bond
 // topology once in 'ready' as FLAT universe-global serial pairs; md_panel caches it
 // as an Int32Array and re-hands it to every frame's plain-object atom list. Two
