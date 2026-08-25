@@ -930,6 +930,111 @@ class TimingWindow {
     std::vector<double> samples_;
 };
 
+struct MenuComfortSample {
+    float nearestEyeMeters = 0.0F;
+    float menuLinearVelocityMetersPerSecond = 0.0F;
+    float menuAngularVelocityDegreesPerSecond = 0.0F;
+    float controllerPoseDeltaMillimeters = 0.0F;
+    float controllerAngularDeltaDegrees = 0.0F;
+    float controllerJitterMillimeters = 0.0F;
+    float controllerAngularJitterDegrees = 0.0F;
+};
+
+/** Motion/depth measurements for a visible tablet.
+ *
+ * The controller "jitter" values are residuals from a 120 ms exponential pose
+ * baseline.  They intentionally remain diagnostic rather than a comfort verdict:
+ * deliberate high-frequency hand motion can also contribute to the residual.
+ */
+class MenuComfortTracker {
+  public:
+    void reset() {
+        initialized_ = false;
+        controllerInitialized_ = false;
+    }
+
+    [[nodiscard]] MenuComfortSample sample(
+        const MenuPlacement& placement, const MenuPanelBounds& bounds,
+        const std::array<glm::vec3, 2>& eyes, const HandPose* controller,
+        float deltaSeconds) {
+        const float dt = glm::clamp(deltaSeconds, 1.0F / 240.0F, 0.10F);
+        MenuComfortSample result;
+        result.nearestEyeMeters = std::min(
+            nearestDistance(placement, bounds, eyes[0]),
+            nearestDistance(placement, bounds, eyes[1]));
+
+        if (initialized_) {
+            result.menuLinearVelocityMetersPerSecond =
+                glm::length(placement.position() - previousMenuPosition_) / dt;
+            result.menuAngularVelocityDegreesPerSecond =
+                quaternionAngleDegrees(previousMenuOrientation_, placement.orientation()) / dt;
+        }
+        previousMenuPosition_ = placement.position();
+        previousMenuOrientation_ = placement.orientation();
+        initialized_ = true;
+
+        if (!controller || !controller->valid) {
+            controllerInitialized_ = false;
+            return result;
+        }
+        if (!controllerInitialized_) {
+            previousControllerPosition_ = controller->position;
+            previousControllerOrientation_ = controller->orientation;
+            filteredControllerPosition_ = controller->position;
+            filteredControllerOrientation_ = controller->orientation;
+            controllerInitialized_ = true;
+            return result;
+        }
+
+        result.controllerPoseDeltaMillimeters = 1000.0F * glm::length(
+            controller->position - previousControllerPosition_);
+        result.controllerAngularDeltaDegrees = quaternionAngleDegrees(
+            previousControllerOrientation_, controller->orientation);
+        previousControllerPosition_ = controller->position;
+        previousControllerOrientation_ = controller->orientation;
+
+        constexpr float kBaselineSeconds = 0.120F;
+        const float alpha = 1.0F - std::exp(-dt / kBaselineSeconds);
+        filteredControllerPosition_ = glm::mix(
+            filteredControllerPosition_, controller->position, alpha);
+        filteredControllerOrientation_ = glm::normalize(glm::slerp(
+            filteredControllerOrientation_, controller->orientation, alpha));
+        result.controllerJitterMillimeters = 1000.0F * glm::length(
+            controller->position - filteredControllerPosition_);
+        result.controllerAngularJitterDegrees = quaternionAngleDegrees(
+            filteredControllerOrientation_, controller->orientation);
+        return result;
+    }
+
+    [[nodiscard]] static float nearestDistance(
+        const MenuPlacement& placement, const MenuPanelBounds& bounds,
+        const glm::vec3& eye) {
+        const glm::vec3 localEye = placement.localPoint(eye);
+        const glm::vec3 nearestLocal{
+            glm::clamp(localEye.x, bounds.minimum.x, bounds.maximum.x),
+            glm::clamp(localEye.y, bounds.minimum.y, bounds.maximum.y), 0.0F};
+        return glm::length(eye - placement.worldPoint(nearestLocal));
+    }
+
+  private:
+    [[nodiscard]] static float quaternionAngleDegrees(
+        const glm::quat& first, const glm::quat& second) {
+        const float cosine = glm::clamp(
+            std::abs(glm::dot(glm::normalize(first), glm::normalize(second))),
+            0.0F, 1.0F);
+        return glm::degrees(2.0F * std::acos(cosine));
+    }
+
+    bool initialized_ = false;
+    bool controllerInitialized_ = false;
+    glm::vec3 previousMenuPosition_{};
+    glm::quat previousMenuOrientation_{1.0F, 0.0F, 0.0F, 0.0F};
+    glm::vec3 previousControllerPosition_{};
+    glm::quat previousControllerOrientation_{1.0F, 0.0F, 0.0F, 0.0F};
+    glm::vec3 filteredControllerPosition_{};
+    glm::quat filteredControllerOrientation_{1.0F, 0.0F, 0.0F, 0.0F};
+};
+
 /** Conservative owner-wide local bounds used for tool locators and future pivots. */
 class BoundsAccumulator {
   public:

@@ -369,6 +369,48 @@ GLuint makeDesktopProgram() {
     throw std::runtime_error("OpenGL desktop shader link failed: " + log);
 }
 
+GLuint makeMenuPanelProgram() {
+    static constexpr const char* vertexSource = R"GLSL(
+        #version 330 core
+        layout(location = 0) in vec3 aPosition;
+        layout(location = 1) in vec2 aUv;
+        uniform mat4 uViewProjection;
+        out vec2 vUv;
+        void main() {
+            gl_Position = uViewProjection * vec4(aPosition, 1.0);
+            vUv = aUv;
+        }
+    )GLSL";
+    static constexpr const char* fragmentSource = R"GLSL(
+        #version 330 core
+        in vec2 vUv;
+        uniform sampler2D uPanel;
+        out vec4 outColor;
+        void main() {
+            vec4 color = texture(uPanel, vUv);
+            if (color.a < 0.004) discard;
+            outColor = color;
+        }
+    )GLSL";
+    const GLuint vertex = compileShader(GL_VERTEX_SHADER, vertexSource);
+    const GLuint fragment = compileShader(GL_FRAGMENT_SHADER, fragmentSource);
+    const GLuint program = glCreateProgram();
+    glAttachShader(program, vertex);
+    glAttachShader(program, fragment);
+    glLinkProgram(program);
+    glDeleteShader(vertex);
+    glDeleteShader(fragment);
+    GLint ok = GL_FALSE;
+    glGetProgramiv(program, GL_LINK_STATUS, &ok);
+    if (ok == GL_TRUE) return program;
+    GLint length = 0;
+    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &length);
+    std::string log(static_cast<size_t>(std::max(length, 1)), '\0');
+    glGetProgramInfoLog(program, length, nullptr, log.data());
+    glDeleteProgram(program);
+    throw std::runtime_error("OpenGL menu panel program link failed: " + log);
+}
+
 constexpr const char* kLitFragmentSource = R"GLSL(
     #version 330 core
     in vec3 vColor;
@@ -3721,7 +3763,11 @@ class DesktopSurface {
             {corners[2], {1.0F, 0.0F}},
             {corners[3], {1.0F, 1.0F}},
         }};
-        glDisable(GL_DEPTH_TEST);
+        // The desktop is a world-space tablet, not a compositor overlay.  Keep
+        // depth testing/writes enabled so nearby scene geometry and the panel
+        // obey the same occlusion cues in both eyes.
+        glEnable(GL_DEPTH_TEST);
+        glDepthMask(GL_TRUE);
         glUseProgram(program_);
         glUniformMatrix4fv(viewProjection_, 1, GL_FALSE, &viewProjection[0][0]);
         glUniform2fv(pointerUniform_, 1, &pointer_[0]);
@@ -3736,7 +3782,6 @@ class DesktopSurface {
         glBindVertexArray(0);
         glBindTexture(GL_TEXTURE_2D, 0);
         glUseProgram(0);
-        glEnable(GL_DEPTH_TEST);
     }
 
   private:
@@ -3771,6 +3816,387 @@ class DesktopSurface {
     bool pointerVisible_ = false;
     glm::vec2 pointer_{0.5F, 0.5F};
     std::chrono::steady_clock::time_point lastCapture_{};
+};
+
+/** Cached, multisampled tablet UI rendered as one depth-tested world quad. */
+class MenuPanelSurface {
+  public:
+    struct CacheStats {
+        uint64_t updates = 0;
+        uint64_t hits = 0;
+        double lastUpdateMilliseconds = 0.0;
+        size_t guideVertices = 0;
+        int width = 0;
+        int height = 0;
+        int samples = 1;
+    };
+
+    void initialize() {
+        lineProgram_ = makeProgram();
+        lineProjection_ = glGetUniformLocation(lineProgram_, "uViewProjection");
+        panelProgram_ = makeMenuPanelProgram();
+        panelProjection_ = glGetUniformLocation(panelProgram_, "uViewProjection");
+        panelTextureUniform_ = glGetUniformLocation(panelProgram_, "uPanel");
+
+        glGenVertexArrays(1, &lineVao_);
+        glGenBuffers(1, &lineVbo_);
+        glBindVertexArray(lineVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, lineVbo_);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(
+            0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+            reinterpret_cast<void*>(offsetof(Vertex, position)));
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(
+            1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+            reinterpret_cast<void*>(offsetof(Vertex, color)));
+
+        glGenVertexArrays(1, &panelVao_);
+        glGenBuffers(1, &panelVbo_);
+        glBindVertexArray(panelVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, panelVbo_);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(DesktopVertex) * 4, nullptr, GL_DYNAMIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(
+            0, 3, GL_FLOAT, GL_FALSE, sizeof(DesktopVertex),
+            reinterpret_cast<void*>(offsetof(DesktopVertex, position)));
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(
+            1, 2, GL_FLOAT, GL_FALSE, sizeof(DesktopVertex),
+            reinterpret_cast<void*>(offsetof(DesktopVertex, uv)));
+        glBindVertexArray(0);
+
+        glGenFramebuffers(1, &multisampleFramebuffer_);
+        glGenFramebuffers(1, &resolveFramebuffer_);
+        glGenRenderbuffers(1, &multisampleColor_);
+        glGenTextures(1, &texture_);
+        glBindTexture(GL_TEXTURE_2D, texture_);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        GLint maximumSamples = 1;
+        glGetIntegerv(GL_MAX_SAMPLES, &maximumSamples);
+        samples_ = std::max(1, std::min(4, maximumSamples));
+        stats_.samples = samples_;
+    }
+
+    void shutdown() {
+        if (texture_) glDeleteTextures(1, &texture_);
+        if (multisampleColor_) glDeleteRenderbuffers(1, &multisampleColor_);
+        if (resolveFramebuffer_) glDeleteFramebuffers(1, &resolveFramebuffer_);
+        if (multisampleFramebuffer_) glDeleteFramebuffers(1, &multisampleFramebuffer_);
+        if (panelVbo_) glDeleteBuffers(1, &panelVbo_);
+        if (panelVao_) glDeleteVertexArrays(1, &panelVao_);
+        if (lineVbo_) glDeleteBuffers(1, &lineVbo_);
+        if (lineVao_) glDeleteVertexArrays(1, &lineVao_);
+        if (panelProgram_) glDeleteProgram(panelProgram_);
+        if (lineProgram_) glDeleteProgram(lineProgram_);
+        texture_ = multisampleColor_ = resolveFramebuffer_ = multisampleFramebuffer_ = 0;
+        panelVbo_ = panelVao_ = lineVbo_ = lineVao_ = 0;
+        panelProgram_ = lineProgram_ = 0;
+        ready_ = false;
+    }
+
+    bool update(
+        const std::vector<Vertex>& localGuides,
+        const nadoc_vr::MenuPanelBounds& bounds, bool transparentBackground) {
+        const uint64_t contentHash = hash(localGuides, bounds, transparentBackground);
+        if (ready_ && contentHash == contentHash_) {
+            ++stats_.hits;
+            return false;
+        }
+        const auto started = std::chrono::steady_clock::now();
+        const float aspect = std::max(
+            (bounds.maximum.x - bounds.minimum.x) /
+                std::max(bounds.maximum.y - bounds.minimum.y, 1.0e-4F),
+            0.25F);
+        constexpr int kTextureHeight = 1536;
+        const int width = std::clamp(
+            static_cast<int>(std::lround(kTextureHeight * aspect)), 512, 2048);
+        allocate(width, kTextureHeight);
+
+        GLint previousDrawFramebuffer = 0;
+        GLint previousReadFramebuffer = 0;
+        std::array<GLint, 4> previousViewport{};
+        std::array<GLfloat, 4> previousClearColor{};
+        GLfloat previousLineWidth = 1.0F;
+        glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previousDrawFramebuffer);
+        glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousReadFramebuffer);
+        glGetIntegerv(GL_VIEWPORT, previousViewport.data());
+        glGetFloatv(GL_COLOR_CLEAR_VALUE, previousClearColor.data());
+        glGetFloatv(GL_LINE_WIDTH, &previousLineWidth);
+        const GLboolean depthEnabled = glIsEnabled(GL_DEPTH_TEST);
+        const GLboolean blendEnabled = glIsEnabled(GL_BLEND);
+        const GLboolean multisampleEnabled = glIsEnabled(GL_MULTISAMPLE);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, multisampleFramebuffer_);
+        glViewport(0, 0, width_, height_);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_BLEND);
+        if (samples_ > 1) glEnable(GL_MULTISAMPLE);
+        if (transparentBackground) glClearColor(0.0F, 0.0F, 0.0F, 0.0F);
+        else glClearColor(0.026F, 0.046F, 0.078F, 1.0F);
+        glClear(GL_COLOR_BUFFER_BIT);
+        if (!localGuides.empty()) {
+            const glm::mat4 projection = glm::ortho(
+                bounds.minimum.x, bounds.maximum.x,
+                bounds.minimum.y, bounds.maximum.y, -1.0F, 1.0F);
+            glUseProgram(lineProgram_);
+            glUniformMatrix4fv(lineProjection_, 1, GL_FALSE, &projection[0][0]);
+            glBindBuffer(GL_ARRAY_BUFFER, lineVbo_);
+            glBufferData(
+                GL_ARRAY_BUFFER,
+                static_cast<GLsizeiptr>(localGuides.size() * sizeof(Vertex)),
+                localGuides.data(), GL_DYNAMIC_DRAW);
+            glBindVertexArray(lineVao_);
+            glLineWidth(4.0F);
+            glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(localGuides.size()));
+        }
+
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, multisampleFramebuffer_);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, resolveFramebuffer_);
+        glBlitFramebuffer(
+            0, 0, width_, height_, 0, 0, width_, height_,
+            GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        glBindTexture(GL_TEXTURE_2D, texture_);
+        glGenerateMipmap(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, previousDrawFramebuffer);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, previousReadFramebuffer);
+        glViewport(previousViewport[0], previousViewport[1],
+                   previousViewport[2], previousViewport[3]);
+        glClearColor(previousClearColor[0], previousClearColor[1],
+                     previousClearColor[2], previousClearColor[3]);
+        glLineWidth(previousLineWidth);
+        if (depthEnabled) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+        if (blendEnabled) glEnable(GL_BLEND); else glDisable(GL_BLEND);
+        if (multisampleEnabled) glEnable(GL_MULTISAMPLE); else glDisable(GL_MULTISAMPLE);
+        glBindVertexArray(0);
+        glUseProgram(0);
+
+        contentHash_ = contentHash;
+        transparent_ = transparentBackground;
+        ready_ = true;
+        ++stats_.updates;
+        stats_.guideVertices = localGuides.size();
+        stats_.lastUpdateMilliseconds = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - started).count();
+        return true;
+    }
+
+    void render(
+        const glm::mat4& viewProjection,
+        const nadoc_vr::MenuPlacement& placement,
+        const nadoc_vr::MenuPanelBounds& bounds, float localDepth = 0.002F) const {
+        if (!ready_) return;
+        const std::array<DesktopVertex, 4> vertices = {{
+            {placement.worldPoint({bounds.minimum.x, bounds.maximum.y, localDepth}),
+             {0.0F, 1.0F}},
+            {placement.worldPoint({bounds.minimum.x, bounds.minimum.y, localDepth}),
+             {0.0F, 0.0F}},
+            {placement.worldPoint({bounds.maximum.x, bounds.maximum.y, localDepth}),
+             {1.0F, 1.0F}},
+            {placement.worldPoint({bounds.maximum.x, bounds.minimum.y, localDepth}),
+             {1.0F, 0.0F}},
+        }};
+        glEnable(GL_DEPTH_TEST);
+        glDepthMask(GL_TRUE);
+        if (transparent_) {
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        } else {
+            glDisable(GL_BLEND);
+        }
+        glUseProgram(panelProgram_);
+        glUniformMatrix4fv(panelProjection_, 1, GL_FALSE, &viewProjection[0][0]);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texture_);
+        glUniform1i(panelTextureUniform_, 0);
+        glBindBuffer(GL_ARRAY_BUFFER, panelVbo_);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices.data());
+        glBindVertexArray(panelVao_);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        glBindVertexArray(0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glUseProgram(0);
+        glDisable(GL_BLEND);
+    }
+
+    [[nodiscard]] const CacheStats& stats() const { return stats_; }
+
+  private:
+    static uint64_t mixHash(uint64_t value, int64_t component) {
+        value ^= static_cast<uint64_t>(component);
+        value *= 1099511628211ULL;
+        return value;
+    }
+
+    static int64_t quantized(float value) {
+        return static_cast<int64_t>(std::llround(static_cast<double>(value) * 100000.0));
+    }
+
+    static uint64_t hash(
+        const std::vector<Vertex>& guides,
+        const nadoc_vr::MenuPanelBounds& bounds, bool transparent) {
+        uint64_t value = 1469598103934665603ULL;
+        value = mixHash(value, transparent ? 1 : 0);
+        value = mixHash(value, quantized(bounds.minimum.x));
+        value = mixHash(value, quantized(bounds.minimum.y));
+        value = mixHash(value, quantized(bounds.maximum.x));
+        value = mixHash(value, quantized(bounds.maximum.y));
+        value = mixHash(value, static_cast<int64_t>(guides.size()));
+        for (const Vertex& guide : guides) {
+            value = mixHash(value, quantized(guide.position.x));
+            value = mixHash(value, quantized(guide.position.y));
+            value = mixHash(value, quantized(guide.position.z));
+            value = mixHash(value, quantized(guide.color.r));
+            value = mixHash(value, quantized(guide.color.g));
+            value = mixHash(value, quantized(guide.color.b));
+        }
+        return value;
+    }
+
+    void allocate(int width, int height) {
+        if (width_ == width && height_ == height) return;
+        width_ = width;
+        height_ = height;
+        glBindRenderbuffer(GL_RENDERBUFFER, multisampleColor_);
+        if (samples_ > 1) {
+            glRenderbufferStorageMultisample(
+                GL_RENDERBUFFER, samples_, GL_RGBA8, width_, height_);
+        } else {
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, width_, height_);
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, multisampleFramebuffer_);
+        glFramebufferRenderbuffer(
+            GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, multisampleColor_);
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+            throw std::runtime_error("OpenGL multisampled menu framebuffer is incomplete");
+        }
+
+        glBindTexture(GL_TEXTURE_2D, texture_);
+        glTexImage2D(
+            GL_TEXTURE_2D, 0, GL_RGBA8, width_, height_, 0,
+            GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glBindFramebuffer(GL_FRAMEBUFFER, resolveFramebuffer_);
+        glFramebufferTexture2D(
+            GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture_, 0);
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+            throw std::runtime_error("OpenGL resolved menu framebuffer is incomplete");
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindRenderbuffer(GL_RENDERBUFFER, 0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        stats_.width = width_;
+        stats_.height = height_;
+    }
+
+    GLuint lineProgram_ = 0;
+    GLuint lineVao_ = 0;
+    GLuint lineVbo_ = 0;
+    GLuint panelProgram_ = 0;
+    GLuint panelVao_ = 0;
+    GLuint panelVbo_ = 0;
+    GLuint multisampleFramebuffer_ = 0;
+    GLuint resolveFramebuffer_ = 0;
+    GLuint multisampleColor_ = 0;
+    GLuint texture_ = 0;
+    GLint lineProjection_ = -1;
+    GLint panelProjection_ = -1;
+    GLint panelTextureUniform_ = -1;
+    int width_ = 0;
+    int height_ = 0;
+    int samples_ = 1;
+    bool ready_ = false;
+    bool transparent_ = false;
+    uint64_t contentHash_ = 0;
+    CacheStats stats_{};
+};
+
+class GpuFrameTimer {
+  public:
+    struct Report {
+        bool menuOpen = false;
+        nadoc_vr::TimingSummary summary;
+    };
+
+    void initialize() {
+        glGenQueries(static_cast<GLsizei>(slots_.size()), queries_.data());
+    }
+
+    void shutdown() {
+        if (queries_[0]) {
+            glDeleteQueries(static_cast<GLsizei>(queries_.size()), queries_.data());
+        }
+        queries_.fill(0);
+        active_.reset();
+    }
+
+    void begin(bool menuOpen) {
+        if (active_) return;
+        collect();
+        for (size_t offset = 0; offset < slots_.size(); ++offset) {
+            const size_t index = (next_ + offset) % slots_.size();
+            if (slots_[index].pending) continue;
+            glBeginQuery(GL_TIME_ELAPSED, queries_[index]);
+            slots_[index] = {true, menuOpen};
+            active_ = index;
+            next_ = (index + 1U) % slots_.size();
+            return;
+        }
+        ++skipped_;
+    }
+
+    void end() {
+        if (!active_) return;
+        glEndQuery(GL_TIME_ELAPSED);
+        active_.reset();
+    }
+
+    void collect() {
+        for (size_t index = 0; index < slots_.size(); ++index) {
+            if (!slots_[index].pending || active_ == index) continue;
+            GLint available = GL_FALSE;
+            glGetQueryObjectiv(queries_[index], GL_QUERY_RESULT_AVAILABLE, &available);
+            if (available != GL_TRUE) continue;
+            GLuint64 nanoseconds = 0;
+            glGetQueryObjectui64v(queries_[index], GL_QUERY_RESULT, &nanoseconds);
+            auto& window = slots_[index].menuOpen ? menuOpenTiming_ : menuClosedTiming_;
+            if (window.add(static_cast<double>(nanoseconds) / 1.0e6)) {
+                if (const auto summary = window.takeSummary()) {
+                    reports_.push_back({slots_[index].menuOpen, *summary});
+                }
+            }
+            slots_[index].pending = false;
+        }
+    }
+
+    [[nodiscard]] std::vector<Report> takeReports() {
+        collect();
+        std::vector<Report> result;
+        result.swap(reports_);
+        return result;
+    }
+
+    [[nodiscard]] uint64_t skipped() const { return skipped_; }
+
+  private:
+    struct Slot {
+        bool pending = false;
+        bool menuOpen = false;
+    };
+    std::array<GLuint, 16> queries_{};
+    std::array<Slot, 16> slots_{};
+    std::optional<size_t> active_;
+    size_t next_ = 0;
+    uint64_t skipped_ = 0;
+    nadoc_vr::TimingWindow menuOpenTiming_{120};
+    nadoc_vr::TimingWindow menuClosedTiming_{120};
+    std::vector<Report> reports_;
 };
 
 class Viewer {
@@ -3885,6 +4311,8 @@ class Viewer {
     }
 
     ~Viewer() {
+        gpuFrameTimer_.shutdown();
+        menuPanelSurface_.shutdown();
         witnessSurface_.shutdown();
         desktopSurface_.shutdown();
         glScene_.reset();
@@ -4233,6 +4661,8 @@ class Viewer {
             }
         }
         desktopSurface_.initialize(glfwGetX11Display());
+        menuPanelSurface_.initialize();
+        gpuFrameTimer_.initialize();
         if (witness_) witnessSurface_.initialize(makeDesktopProgram());
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_PROGRAM_POINT_SIZE);
@@ -6076,7 +6506,23 @@ class Viewer {
         }
         appendRadialToolGuides();
         appendLatticeGuides();
+        const size_t menuGuideBegin = controllerGuides_.size();
         appendMenuGuides();
+        menuGuides_.assign(
+            controllerGuides_.begin() + static_cast<std::ptrdiff_t>(menuGuideBegin),
+            controllerGuides_.end());
+        controllerGuides_.resize(menuGuideBegin);
+        menuLocalGuides_.clear();
+        menuLocalGuides_.reserve(menuGuides_.size());
+        for (const Vertex& guide : menuGuides_) {
+            Vertex local = guide;
+            local.position = menuPlacement_.localPoint(guide.position);
+            menuLocalGuides_.push_back(local);
+        }
+        if (menuOpen_) {
+            menuPanelSurface_.update(
+                menuLocalGuides_, menuPanelBounds(), menuPage_ == MenuPage::desktop);
+        }
         appendThumbwheelGuides();
         witnessActorGuideCount_ = controllerGuides_.size();
         if (witness_) {
@@ -7059,6 +7505,91 @@ class Viewer {
         updateControllerGuides();
     }
 
+    void updateMenuComfortTelemetry(uint32_t viewCount) {
+        const bool docked = menuOpen_ && menuPlacement_.worldDocked();
+        if (menuOpen_ != menuTelemetryOpen_ ||
+            (menuOpen_ && (docked != menuTelemetryDocked_ ||
+                           menuPage_ != menuTelemetryPage_))) {
+            const auto& cache = menuPanelSurface_.stats();
+            std::cout << "VR_METRIC event=process_progress phase=menu_state"
+                      << " menu_open=" << (menuOpen_ ? "true" : "false")
+                      << " page=" << menuPageName()
+                      << " placement=" << (!menuOpen_ ? "closed" : docked ? "docked" : "following")
+                      << " depth_mode=world_depth_tested"
+                      << " backing=" << (menuPage_ == MenuPage::desktop ? "desktop" : "opaque")
+                      << " cache_updates=" << cache.updates
+                      << " cache_hits=" << cache.hits
+                      << std::endl;
+            menuTelemetryOpen_ = menuOpen_;
+            menuTelemetryDocked_ = docked;
+            menuTelemetryPage_ = menuPage_;
+            menuComfortTracker_.reset();
+            menuNearestEyeMinimum_ = std::numeric_limits<float>::infinity();
+        }
+        if (!menuOpen_ || viewCount == 0) return;
+
+        std::array<glm::vec3, 2> eyes{};
+        if (witness_) {
+            const auto& head = witness_->input().head;
+            const glm::vec3 halfIpd = head.orientation * glm::vec3(0.032F, 0.0F, 0.0F);
+            eyes = {head.position - halfIpd, head.position + halfIpd};
+        } else {
+            for (size_t index = 0; index < eyes.size(); ++index) {
+                const uint32_t viewIndex = std::min<uint32_t>(
+                    static_cast<uint32_t>(index), viewCount - 1U);
+                eyes[index] = {
+                    views_[viewIndex].pose.position.x,
+                    views_[viewIndex].pose.position.y,
+                    views_[viewIndex].pose.position.z,
+                };
+            }
+        }
+        const nadoc_vr::HandPose* controller = nullptr;
+        const size_t anchor = menuPlacement_.anchorHand();
+        if (anchor < hands_.size() && hands_[anchor].valid) controller = &hands_[anchor];
+        const auto sample = menuComfortTracker_.sample(
+            menuPlacement_, menuPanelBounds(), eyes, controller, frameDeltaSeconds_);
+        menuNearestEyeMinimum_ = std::min(
+            menuNearestEyeMinimum_, sample.nearestEyeMeters);
+        const bool report = menuNearestEyeTiming_.add(sample.nearestEyeMeters);
+        (void)menuAngularVelocityTiming_.add(
+            sample.menuAngularVelocityDegreesPerSecond);
+        (void)menuControllerJitterTiming_.add(sample.controllerJitterMillimeters);
+        (void)menuControllerAngularJitterTiming_.add(
+            sample.controllerAngularJitterDegrees);
+        (void)menuControllerDeltaTiming_.add(sample.controllerPoseDeltaMillimeters);
+        if (!report) return;
+
+        const auto nearest = menuNearestEyeTiming_.takeSummary();
+        const auto angular = menuAngularVelocityTiming_.takeSummary();
+        const auto jitter = menuControllerJitterTiming_.takeSummary();
+        const auto angularJitter = menuControllerAngularJitterTiming_.takeSummary();
+        const auto controllerDelta = menuControllerDeltaTiming_.takeSummary();
+        if (!nearest || !angular || !jitter || !angularJitter || !controllerDelta) return;
+        const auto& cache = menuPanelSurface_.stats();
+        std::cout << "VR_METRIC event=process_progress phase=menu_comfort"
+                  << " menu_open=true"
+                  << " page=" << menuPageName()
+                  << " placement=" << (docked ? "docked" : "following")
+                  << " samples=" << nearest->samples
+                  << " nearest_eye_m_min=" << menuNearestEyeMinimum_
+                  << " nearest_eye_m_p50=" << nearest->p50Milliseconds
+                  << " menu_angular_velocity_deg_s_p95=" << angular->p95Milliseconds
+                  << " controller_pose_delta_mm_p95=" << controllerDelta->p95Milliseconds
+                  << " controller_jitter_mm_p95=" << jitter->p95Milliseconds
+                  << " controller_angular_jitter_deg_p95="
+                  << angularJitter->p95Milliseconds
+                  << " cache_updates=" << cache.updates
+                  << " cache_hits=" << cache.hits
+                  << " cache_last_update_ms=" << cache.lastUpdateMilliseconds
+                  << " texture_width=" << cache.width
+                  << " texture_height=" << cache.height
+                  << " texture_samples=" << cache.samples
+                  << " guide_vertices=" << cache.guideVertices
+                  << std::endl;
+        menuNearestEyeMinimum_ = std::numeric_limits<float>::infinity();
+    }
+
     void applyInitialScenePlacement(uint32_t viewCount, bool fullyTracked) {
         if (!initialScenePlacementRequested_ || viewCount == 0) return;
         if (!fullyTracked) {
@@ -7151,6 +7682,24 @@ class Viewer {
         glDisable(GL_STENCIL_TEST);
     }
 
+    void renderMenuSurface(const glm::mat4& viewProjection) {
+        if (!menuOpen_) return;
+        const auto bounds = menuPanelBounds();
+        if (menuPage_ == MenuPage::desktop) {
+            desktopSurface_.render(viewProjection, {{
+                menuWorld(bounds.minimum.x, bounds.maximum.y, 0.004F),
+                menuWorld(bounds.minimum.x, bounds.minimum.y, 0.004F),
+                menuWorld(bounds.maximum.x, bounds.maximum.y, 0.004F),
+                menuWorld(bounds.maximum.x, bounds.minimum.y, 0.004F),
+            }});
+            menuPanelSurface_.render(
+                viewProjection, menuPlacement_, bounds, 0.008F);
+        } else {
+            menuPanelSurface_.render(
+                viewProjection, menuPlacement_, bounds, 0.002F);
+        }
+    }
+
     bool renderView(uint32_t index, const XrView& view,
                     XrCompositionLayerProjectionView& layerView) {
         Swapchain& swapchain = swapchains_[index];
@@ -7184,13 +7733,12 @@ class Viewer {
         glClear(clearMask);
         const glm::mat4 projection = projectionFromFov(view.fov, kNearMeters, kFarMeters);
         const glm::mat4 viewProjection = projection * viewFromPose(view.pose);
-        const bool desktopMenu = menuOpen_ && menuPage_ == MenuPage::desktop;
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::design);
         glScene_->render(
             viewProjection, manipulator_.transform(),
-            spectatorClassificationEnabled() || desktopMenu
+            spectatorClassificationEnabled()
                 ? std::vector<Vertex>{} : controllerGuides_);
-        if (spectatorClassificationEnabled() && !desktopMenu) {
+        if (spectatorClassificationEnabled()) {
             setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
             glScene_->renderGuides(viewProjection, controllerGuides_);
         }
@@ -7199,18 +7747,9 @@ class Viewer {
                 nadoc_vr::SpectatorRenderClass::reference_grid);
             glScene_->renderGuides(viewProjection, referenceGridGuides_);
         }
-        if (desktopMenu) {
+        if (menuOpen_) {
             setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
-            const auto bounds = menuPanelBounds();
-            desktopSurface_.render(viewProjection, {{
-                menuWorld(bounds.minimum.x, bounds.maximum.y, 0.004F),
-                menuWorld(bounds.minimum.x, bounds.minimum.y, 0.004F),
-                menuWorld(bounds.maximum.x, bounds.maximum.y, 0.004F),
-                menuWorld(bounds.maximum.x, bounds.minimum.y, 0.004F),
-            }});
-            // The desktop quad is intentionally always visible over the model;
-            // redraw tablet controls/border afterward so they remain actionable.
-            glScene_->renderGuides(viewProjection, controllerGuides_);
+            renderMenuSurface(viewProjection);
         }
         if (witness_) {
             setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
@@ -7585,29 +8124,19 @@ class Viewer {
         const glm::mat4 projection = projectionFromFov(
             view.fov, kNearMeters, kFarMeters);
         const glm::mat4 viewProjection = projection * viewFromPose(view.pose);
-        const bool desktopMenu = menuOpen_ && menuPage_ == MenuPage::desktop;
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::design);
         glScene_->render(
             viewProjection, manipulator_.transform(), {});
-        if (!desktopMenu) {
-            setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
-            glScene_->renderGuides(viewProjection, controllerGuides_);
-        }
+        setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
+        glScene_->renderGuides(viewProjection, controllerGuides_);
         if (referenceGrid_) {
             setSpectatorRenderClass(
                 nadoc_vr::SpectatorRenderClass::reference_grid);
             glScene_->renderGuides(viewProjection, referenceGridGuides_);
         }
-        if (desktopMenu) {
+        if (menuOpen_) {
             setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
-            const auto bounds = menuPanelBounds();
-            desktopSurface_.render(viewProjection, {{
-                menuWorld(bounds.minimum.x, bounds.maximum.y, 0.004F),
-                menuWorld(bounds.minimum.x, bounds.minimum.y, 0.004F),
-                menuWorld(bounds.maximum.x, bounds.maximum.y, 0.004F),
-                menuWorld(bounds.maximum.x, bounds.minimum.y, 0.004F),
-            }});
-            glScene_->renderGuides(viewProjection, controllerGuides_);
+            renderMenuSurface(viewProjection);
         }
         if (witness_) {
             setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
@@ -7631,27 +8160,17 @@ class Viewer {
             kNearMeters, kFarMeters);
         const glm::mat4 viewProjection = projection * glm::inverse(headTransform);
         witnessSurface_.beginCapture();
-        const bool desktopMenu = menuOpen_ && menuPage_ == MenuPage::desktop;
         const std::vector<Vertex> actorGuides(
             controllerGuides_.begin(),
             controllerGuides_.begin() + static_cast<std::ptrdiff_t>(
                 std::min(witnessActorGuideCount_, controllerGuides_.size())));
         glScene_->render(
             viewProjection, manipulator_.transform(),
-            desktopMenu ? std::vector<Vertex>{} : actorGuides);
+            actorGuides);
         if (referenceGrid_) {
             glScene_->renderGuides(viewProjection, referenceGridGuides_);
         }
-        if (desktopMenu) {
-            const auto bounds = menuPanelBounds();
-            desktopSurface_.render(viewProjection, {{
-                menuWorld(bounds.minimum.x, bounds.maximum.y, 0.004F),
-                menuWorld(bounds.minimum.x, bounds.minimum.y, 0.004F),
-                menuWorld(bounds.maximum.x, bounds.maximum.y, 0.004F),
-                menuWorld(bounds.maximum.x, bounds.minimum.y, 0.004F),
-            }});
-            glScene_->renderGuides(viewProjection, actorGuides);
-        }
+        renderMenuSurface(viewProjection);
         if (witness_->pendingSnapshot()) {
             const std::string name = witness_->pendingSnapshot()->name;
             if (witnessCaptureDirectory_.empty()) {
@@ -7770,6 +8289,8 @@ class Viewer {
                 if (frameState.shouldRender && validViewSet) {
                     applyPendingMenu(viewCount);
                     applyPendingRecenter(viewCount);
+                    updateMenuComfortTelemetry(viewCount);
+                    gpuFrameTimer_.begin(menuOpen_);
                     if (witness_) {
                         const glm::vec3 actorKeyDirection =
                             witness_->input().head.orientation * glm::normalize(
@@ -7782,6 +8303,7 @@ class Viewer {
                     for (uint32_t i = 0; i < viewCount; ++i) {
                         renderView(i, views_[i], layerViews[i]);
                     }
+                    gpuFrameTimer_.end();
                     layer.space = space_;
                     layer.viewCount = viewCount;
                     layer.views = layerViews.data();
@@ -7818,6 +8340,17 @@ class Viewer {
         const auto sceneFinished = std::chrono::steady_clock::now();
         checkXr(instance_, xrEndFrame(session_, &endInfo), "xrEndFrame");
         const auto endFinished = std::chrono::steady_clock::now();
+        for (const auto& report : gpuFrameTimer_.takeReports()) {
+            std::cout << "VR_METRIC event=process_progress phase=menu_gpu_timing"
+                      << " menu_open=" << (report.menuOpen ? "true" : "false")
+                      << " samples=" << report.summary.samples
+                      << " gpu_p50_ms=" << report.summary.p50Milliseconds
+                      << " gpu_p95_ms=" << report.summary.p95Milliseconds
+                      << " gpu_p99_ms=" << report.summary.p99Milliseconds
+                      << " gpu_max_ms=" << report.summary.maxMilliseconds
+                      << " query_skips=" << gpuFrameTimer_.skipped()
+                      << std::endl;
+        }
         if (layerCount > 0 && readySequence_ == 0) {
             firstFrameAtMilliseconds_ = std::chrono::duration<double, std::milli>(
                 std::chrono::system_clock::now().time_since_epoch()).count();
@@ -8170,6 +8703,8 @@ class Viewer {
     std::vector<std::string> committedSelectionOwnerTokens_;
     nadoc_vr::SceneManipulator manipulator_;
     std::vector<Vertex> controllerGuides_;
+    std::vector<Vertex> menuGuides_;
+    std::vector<Vertex> menuLocalGuides_;
     size_t witnessActorGuideCount_ = 0;
     nadoc_vr::MenuLayoutAudit menuLayoutAudit_;
     bool menuLayoutAudited_ = false;
@@ -8204,6 +8739,18 @@ class Viewer {
     size_t jobPage_ = 0;
     size_t selectedJobIndex_ = 0;
     nadoc_vr::MenuPlacement menuPlacement_;
+    MenuPanelSurface menuPanelSurface_;
+    GpuFrameTimer gpuFrameTimer_;
+    nadoc_vr::MenuComfortTracker menuComfortTracker_;
+    nadoc_vr::TimingWindow menuNearestEyeTiming_{120};
+    nadoc_vr::TimingWindow menuAngularVelocityTiming_{120};
+    nadoc_vr::TimingWindow menuControllerJitterTiming_{120};
+    nadoc_vr::TimingWindow menuControllerAngularJitterTiming_{120};
+    nadoc_vr::TimingWindow menuControllerDeltaTiming_{120};
+    float menuNearestEyeMinimum_ = std::numeric_limits<float>::infinity();
+    bool menuTelemetryOpen_ = false;
+    bool menuTelemetryDocked_ = false;
+    MenuPage menuTelemetryPage_ = MenuPage::options;
     size_t menuHand_ = 0;
     bool recenterRequested_ = false;
     size_t recenterHand_ = 0;

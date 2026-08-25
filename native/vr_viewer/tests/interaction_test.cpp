@@ -1283,6 +1283,38 @@ void liveSlabConnectorUsesTheDisplayedSlabCorner() {
         glm::vec3(2.0F, 3.15F, 4.35F), 1.0e-6F)));
 }
 
+void menuComfortTelemetryMeasuresDepthMotionAndControllerResiduals() {
+    std::array<HandPose, 2> hands{};
+    hands[1].valid = true;
+    hands[1].position = {0.0F, 1.25F, -0.45F};
+    MenuPlacement menu;
+    menu.open(1, hands, {0, 0, -1}, {});
+    const nadoc_vr::MenuPanelBounds bounds{{-0.33F, -0.545F}, {0.33F, 0.33F}};
+    const std::array<glm::vec3, 2> eyes{{
+        {-0.032F, 1.60F, 0.0F}, {0.032F, 1.60F, 0.0F},
+    }};
+    nadoc_vr::MenuComfortTracker tracker;
+    const auto initial = tracker.sample(menu, bounds, eyes, &hands[1], 1.0F / 90.0F);
+    require(initial.nearestEyeMeters > 0.0F);
+    require(initial.menuAngularVelocityDegreesPerSecond == 0.0F);
+
+    hands[1].position.x += 0.004F;
+    hands[1].orientation = glm::angleAxis(
+        glm::radians(1.0F), glm::vec3(0.0F, 1.0F, 0.0F));
+    menu.update(hands);
+    const auto moved = tracker.sample(menu, bounds, eyes, &hands[1], 1.0F / 90.0F);
+    require(moved.menuLinearVelocityMetersPerSecond > 0.30F);
+    require(moved.menuAngularVelocityDegreesPerSecond > 80.0F);
+    require(moved.controllerPoseDeltaMillimeters > 3.9F);
+    require(moved.controllerAngularDeltaDegrees > 0.9F);
+    require(moved.controllerJitterMillimeters > 0.0F);
+    require(moved.controllerAngularJitterDegrees > 0.0F);
+
+    const float centerDistance = nadoc_vr::MenuComfortTracker::nearestDistance(
+        menu, bounds, menu.worldPoint({0.0F, 0.0F, 0.50F}));
+    require(std::abs(centerDistance - 0.50F * menu.scale()) < 1.0e-5F);
+}
+
 }  // namespace
 
 int main() {
@@ -1334,4 +1366,5 @@ int main() {
     visualizationSnapshotParserPreservesPositionsColorsAndRejectsDuplicates();
     atomVisualizationOffsetsReplaceCoarseBaseOffsets();
     liveSlabConnectorUsesTheDisplayedSlabCorner();
+    menuComfortTelemetryMeasuresDepthMotionAndControllerResiduals();
 }

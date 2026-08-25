@@ -191,18 +191,12 @@ def _find_vrcmd(explicit: Path | None) -> Path:
     raise FileNotFoundError("SteamVR vrcmd was not found; install/start SteamVR")
 
 
-def _steamvr_stats(args: argparse.Namespace, metrics: "JsonlMetrics") -> dict[str, Any]:
-    command = _find_vrcmd(args.vrcmd)
-    metrics.emit("process_start", phase="steamvr_stats", command=str(command))
-    environment = os.environ.copy()
-    # SteamVR ships libopenvr_api beside vrcmd.  Preserve any caller path after it.
-    environment["LD_LIBRARY_PATH"] = str(command.parent) + (
-        ":" + environment["LD_LIBRARY_PATH"]
-        if environment.get("LD_LIBRARY_PATH") else ""
-    )
+def _read_steamvr_stats(
+    command: Path, environment: dict[str, str], timeout: float,
+) -> dict[str, Any]:
     completed = subprocess.run(
         [str(command), "--stats"], capture_output=True, text=True,
-        timeout=args.timeout, env=environment, check=False,
+        timeout=timeout, env=environment, check=False,
     )
     raw = completed.stdout.strip()
     if completed.returncode != 0:
@@ -222,19 +216,69 @@ def _steamvr_stats(args: argparse.Namespace, metrics: "JsonlMetrics") -> dict[st
     )
     if stats is None:
         raise RuntimeError(f"vrcmd returned no compositor_stats record: {raw[:500]}")
+    return stats
+
+
+STEAMVR_INTERVAL_COUNTERS = (
+    "frame_presents", "frame_submits", "dropped_frames",
+    "dropped_frames_loading", "dropped_frames_on_startup",
+    "dropped_frames_timed_out", "reprojected_frames",
+    "reprojected_frames_loading", "reprojected_frames_on_startup",
+    "reprojected_frames_timed_out", "timed_out",
+)
+
+
+def _steamvr_counter_deltas(
+    before: dict[str, Any], after: dict[str, Any],
+) -> dict[str, int]:
+    """Return reset-safe compositor counter changes for the measured interval."""
+    return {
+        name: max(0, int(after.get(name, 0)) - int(before.get(name, 0)))
+        for name in STEAMVR_INTERVAL_COUNTERS
+    }
+
+
+def _steamvr_stats(args: argparse.Namespace, metrics: "JsonlMetrics") -> dict[str, Any]:
+    command = _find_vrcmd(args.vrcmd)
+    metrics.emit(
+        "process_start", phase="steamvr_stats", command=str(command),
+        sample_seconds=args.sample_seconds,
+    )
+    environment = os.environ.copy()
+    # SteamVR ships libopenvr_api beside vrcmd.  Preserve any caller path after it.
+    environment["LD_LIBRARY_PATH"] = str(command.parent) + (
+        ":" + environment["LD_LIBRARY_PATH"]
+        if environment.get("LD_LIBRARY_PATH") else ""
+    )
+    before = _read_steamvr_stats(command, environment, args.timeout)
+    if args.sample_seconds > 0:
+        time.sleep(args.sample_seconds)
+    stats = _read_steamvr_stats(command, environment, args.timeout)
+    interval = _steamvr_counter_deltas(before, stats)
+    same_application = before.get("key") == stats.get("key")
     cpu_ms = stats.get("average_application_cpu_time_ms")
     gpu_ms = stats.get("average_application_gpu_time_ms")
     active_sample = (
-        stats.get("timed_out", 0) == 0
-        and stats.get("dropped_frames_timed_out", 0) == 0
+        same_application
+        and isinstance(stats.get("key"), str)
+        and interval["frame_presents"] > 0
+        and interval["timed_out"] == 0
+        and interval["dropped_frames_timed_out"] == 0
     )
     assessment = {
+        "same_application_interval": same_application,
         "active_headset_sample": active_sample,
         "app_cpu_within_90hz": isinstance(cpu_ms, (int, float)) and cpu_ms < 11.111,
         "app_gpu_within_90hz": isinstance(gpu_ms, (int, float)) and gpu_ms < 11.111,
-        "no_reprojection": stats.get("reprojected_frames") == 0,
+        "no_interval_reprojection": interval["reprojected_frames"] == 0,
+        "no_interval_drops": interval["dropped_frames"] == 0,
     }
-    result = {"stats": stats, "assessment": assessment}
+    result = {
+        "stats": stats,
+        "interval": interval,
+        "sample_seconds": args.sample_seconds,
+        "assessment": assessment,
+    }
     metrics.emit("process_progress", phase="steamvr_compositor", **result)
     metrics.emit(
         "process_end", phase="steamvr_stats",
@@ -493,6 +537,10 @@ def _parser() -> argparse.ArgumentParser:
     )
     steamvr.add_argument("--vrcmd", type=Path)
     steamvr.add_argument("--timeout", type=float, default=15.0)
+    steamvr.add_argument(
+        "--sample-seconds", type=float, default=3.0,
+        help="measure dropped/reprojected counter deltas over this active interval",
+    )
     steamvr.add_argument(
         "--metrics", type=Path,
         default=Path("/tmp/24hb_2xT-steamvr-stats.jsonl"),

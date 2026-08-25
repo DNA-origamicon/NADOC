@@ -335,6 +335,16 @@ is returned by `/api/vr/status`; on the current workstation it can also be watch
 with `tail -f /tmp/nadoc-vr-$UID.log`. Use SteamVR's performance overlay alongside
 these CPU numbers to capture GPU/reprojection behavior.
 
+The controller tablet is a cached, mipmapped, 4x-MSAA texture on a depth-tested
+world-space quad. Non-Desktop pages have an opaque backing so the molecule cannot
+remain visible through the UI; the Desktop surface and its controls follow the same
+world-depth rules. `menu_state`, `menu_comfort`, and `menu_gpu_timing` metrics expose
+cache behavior, eye distance, pose residuals, angular velocity, and nonblocking GPU
+timings. SteamVR drop/reprojection telemetry is sampled as an interval by
+`just vr-atomistic-steamvr-stats`. The implementation rationale, exact fields, and
+repeatable comfort validation are in
+[`docs/vr_interface_comfort.md`](../../docs/vr_interface_comfort.md).
+
 The native renderer uses the Photo-mode Full lighting balance: a camera-pinned
 directional key, low ambient fill, and one 2048² soft self-shadow map shared by
 both eyes. Full representation geometry mirrors the editor's physical display
