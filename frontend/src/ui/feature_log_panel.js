@@ -22,6 +22,19 @@ import { showDependentsDecision } from './primitives/dependents_dialog.js'
 import { editFeature, isEditable as _isOpEditable } from './edit_feature_popover.js'
 import { canonicalSelection } from '../scene/selection_model.js'
 
+const FEATURE_LOG_BOTTOM_TOLERANCE_PX = 8
+
+/** Whether a scroll container is close enough to its newest content to follow it. */
+export function isFeatureLogAtBottom(container, tolerance = FEATURE_LOG_BOTTOM_TOLERANCE_PX) {
+  if (!container) return true
+  return container.scrollHeight - container.clientHeight - container.scrollTop <= tolerance
+}
+
+/** Keep the newest feature visible after the rebuilt rows have been laid out. */
+export function scrollFeatureLogToBottom(container) {
+  if (container) container.scrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
+}
+
 // Fine Routing sub-steps with no captured diff (legacy clusters) can still be
 // individually reverted/deleted IF their op type is replayable on the backend.
 // Keep in sync with backend.api.crud._replay_minor_op.
@@ -38,6 +51,33 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
   const arrow     = document.getElementById('feature-log-panel-arrow')
   const titleEl   = heading?.querySelector('span')
   if (!panelBody || !heading) return
+
+  // The whole left sidebar owns vertical scrolling; the feature list itself
+  // deliberately grows with its rows so the rail and rows remain aligned.
+  const scrollContainer = panelBody.closest('#left-panel') ?? panelBody
+  const featureTab = panelBody.closest('.tab-content')
+  let _followNewest = true
+  let _bottomScrollFrame = null
+
+  scrollContainer.addEventListener('scroll', () => {
+    _followNewest = isFeatureLogAtBottom(scrollContainer)
+  }, { passive: true })
+
+  function _scheduleFollowNewest() {
+    if (featureTab?.hidden || !_followNewest || _bottomScrollFrame != null) return
+    _bottomScrollFrame = requestAnimationFrame(() => {
+      _bottomScrollFrame = null
+      if (!featureTab?.hidden && _followNewest) scrollFeatureLogToBottom(scrollContainer)
+    })
+  }
+
+  // A log can update while another left-sidebar tab is open. Do not move that
+  // tab's scroll position; follow the newest entry when Feature Log is shown.
+  if (featureTab) {
+    new MutationObserver(() => {
+      if (!featureTab.hidden) _scheduleFollowNewest()
+    }).observe(featureTab, { attributes: true, attributeFilter: ['hidden'] })
+  }
 
   let _collapsed    = getSectionCollapsed('feature-log', 'feature-log-panel', false)
   let _latestDesign = null
@@ -525,6 +565,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
   // ── Notch positioning ──────────────────────────────────────────────────────
   let _railPositionFrame = null
   function _schedulePositionRail() {
+    _scheduleFollowNewest()
     if (_railPositionFrame != null) return
     _railPositionFrame = requestAnimationFrame(() => {
       _railPositionFrame = null

@@ -2366,30 +2366,18 @@ def _split_segment_by_bps(seg: dict, drop_bps: set) -> list[dict]:
 def _segments_for_helix(design: "Design", h: "Helix") -> list[dict]:
     """Return per-domain axis segment descriptors for helix *h*, sorted by bp_lo.
 
-    Prefers scaffold strand domains; falls back to all strand domains for stub
-    helices; last fallback: a single full-helix segment with no domain identity.
-
-    On stub helices multiple strand domains can cover the same bp range
-    (overhang strand + paired linker strand). We dedupe by bp range so the
-    helix renders one stick per coverage interval, picking the first candidate
-    encountered (scaffold > earlier strands), which sets the segment's domain
-    identity for cluster filtering.
+    Domain ranges may overlap or only partially coincide (notably an inline
+    overhang inside a longer scaffold domain).  Split at every domain boundary
+    and retain *all* owners of each atomic interval.  Collapsing an interval to
+    one scaffold owner made moving a short overhang drag the axis line for the
+    rest of that scaffold domain.
     """
     from backend.core.models import StrandType as _StrandType
 
     cands: list[tuple] = []
     for strand in design.strands:
-        if strand.strand_type != _StrandType.SCAFFOLD:
-            continue
         for di, dom in enumerate(strand.domains):
-            if dom.helix_id != h.id:
-                continue
-            cands.append((strand, di, dom))
-    if not cands:
-        for strand in design.strands:
-            for di, dom in enumerate(strand.domains):
-                if dom.helix_id != h.id:
-                    continue
+            if dom.helix_id == h.id:
                 cands.append((strand, di, dom))
     if not cands:
         return [
@@ -2401,23 +2389,35 @@ def _segments_for_helix(design: "Design", h: "Helix") -> list[dict]:
                 "bp_hi": h.bp_start + h.length_bp - 1,
             }
         ]
-    cands.sort(key=lambda c: min(c[2].start_bp, c[2].end_bp))
-    seen_ranges: set = set()
+    boundaries = sorted({
+        bp
+        for _, _, d in cands
+        for bp in (min(d.start_bp, d.end_bp), max(d.start_bp, d.end_bp) + 1)
+    })
     deduped: list[dict] = []
-    for s, di, d in cands:
-        lo = min(d.start_bp, d.end_bp)
-        hi = max(d.start_bp, d.end_bp)
-        key = (lo, hi)
-        if key in seen_ranges:
+    for lo, end_exclusive in zip(boundaries, boundaries[1:]):
+        owners = [
+            (s, di, d) for s, di, d in cands
+            if min(d.start_bp, d.end_bp) <= lo
+            and max(d.start_bp, d.end_bp) >= end_exclusive - 1
+        ]
+        if not owners:
             continue
-        seen_ranges.add(key)
+        # Keep the legacy scalar owner deterministic for older clients, while
+        # domain_ids is the authoritative movement membership.
+        owners.sort(key=lambda x: (x[0].strand_type != _StrandType.SCAFFOLD, x[0].id, x[1]))
+        s, di, d = owners[0]
         deduped.append(
             {
                 "strand_id": s.id,
                 "domain_index": di,
                 "ovhg_id": d.overhang_id,
                 "bp_lo": lo,
-                "bp_hi": hi,
+                "bp_hi": end_exclusive - 1,
+                "domain_ids": [
+                    {"strand_id": os.id, "domain_index": odi}
+                    for os, odi, _ in owners
+                ],
             }
         )
     # Carve out flexible ssDNA bp ranges — no axis stick over a flexible segment.
@@ -2484,11 +2484,14 @@ def _apply_clusters_to_seg_point(
     that cluster's moving set. Skips clusters whose helix_ids don't include
     helix_id (matches the frontend's helixSet check)."""
     p = np.array(point, dtype=float)
-    seg_key = (seg["strand_id"], seg["domain_index"])
+    seg_keys = {
+        (d["strand_id"], d["domain_index"])
+        for d in seg.get("domain_ids", [])
+    } or {(seg["strand_id"], seg["domain_index"])}
     for cluster, moving_keys in clusters_with_keys:
         if helix_id not in (cluster.helix_ids or []):
             continue
-        if seg_key not in moving_keys:
+        if seg_keys.isdisjoint(moving_keys):
             continue
         R = _rot_from_quaternion(*cluster.rotation)
         pivot = np.array(cluster.pivot, dtype=float)

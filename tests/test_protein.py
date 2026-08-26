@@ -355,6 +355,25 @@ def test_azide_attach_end_picks_nearer_overhang_end():
     assert azide_attach_end(nucs, "ov", "bnd", "3p") == "root"
 
 
+def test_conjugate_terminus_uses_actual_resized_binder_end_not_overhang_length():
+    from backend.core.protein import _conjugate_terminus_position
+
+    # The binder is deliberately longer than the nominal overhang.  Constraint
+    # reach must come from its selected physical terminus, never sequence equality.
+    att = ProteinAttachment(
+        asset_id="asset",
+        target=ProteinTargetDesign(overhang_id="ov"),
+        binder_strand_id="binder",
+        azide_end="5p",
+    )
+    geometry = [
+        {"strand_id": "binder", "is_three_prime": True, "backbone_position": [0, 0, 2]},
+        {"strand_id": "binder", "is_five_prime": True, "backbone_position": [0, 0, 9]},
+        {"overhang_id": "ov", "is_three_prime": True, "backbone_position": [0, 0, 5]},
+    ]
+    assert np.allclose(_conjugate_terminus_position(geometry, att), [0, 0, 9])
+
+
 def _set_sequenced_overhang():
     d = _design_with_overhang()
     design_state.set_design(d)
@@ -1452,3 +1471,197 @@ def test_gizmo_move_translates_free_protein_and_logs(_clean_state):
         c1 - c0, [5, 0, 0], atol=1e-4
     )  # whole protein translated +5 in x
     assert design_state.get_design().feature_log[-1].op_kind == "protein-attach-patch"
+
+
+def _conjugate_joint_state():
+    from backend.core.design_geometry import _geometry_for_design
+    from backend.core.protein import _conjugate_terminus_position
+
+    design = design_state.get_design()
+    att = design.protein_attachments[0]
+    asset = next(a for a in design.protein_assets if a.id == att.asset_id)
+    geometry = _geometry_for_design(design)
+    root, _ = resolve_overhang_anchor(geometry, att.target.overhang_id, "root")
+    tip, outward = resolve_overhang_anchor(
+        geometry, att.target.overhang_id, att.target.attach_end
+    )
+    terminus = _conjugate_terminus_position(geometry, att)
+    world = compose_protein_world_transform(asset, att, tip, outward)
+    atom = next(a for a in asset.atoms if a.serial == att.conjugation_atom_serial)
+    joint = (world @ np.array([atom.x, atom.y, atom.z, 1.0]))[:3]
+    com = (world @ np.array([*asset.center_of_mass, 1.0]))[:3]
+    return att, root, terminus, joint, com
+
+
+def test_conjugated_protein_move_clamps_and_co_rotates_bound_oligos(_clean_state):
+    _set_sequenced_overhang()
+    asset_id = _import_protein()
+    created = client.post(
+        "/api/design/protein/conjugate",
+        json={"asset_id": asset_id, "overhang_id": "oh_5p", "azide_end": "5p"},
+    )
+    assert created.status_code == 201, created.text
+    before, root0, term0, joint0, _ = _conjugate_joint_state()
+    radius0 = np.linalg.norm(term0 - root0)
+    assert np.linalg.norm(joint0 - term0) <= 1.0e-4
+    live_constraint = client.get("/api/design/protein/atomistic").json()[
+        "protein_constraints"
+    ][0]
+    assert live_constraint["helix_id"] == "oh_helix"
+    assert live_constraint["overhang_id"] == "oh_5p"
+    assert live_constraint["is_extrude"] is True
+    assert {
+        (ref["strand_id"], ref["domain_index"])
+        for ref in live_constraint["domain_ids"]
+    } == {("oh_strand", 0), (created.json()["binder_strand_id"], 0)}
+    assert live_constraint["joint"] == pytest.approx(term0.tolist(), abs=1.0e-6)
+
+    moved = client.patch(
+        f"/api/design/protein/attachments/{before.id}",
+        json={
+            "gizmo_move": {
+                "pivot": joint0.tolist(),
+                "translation": [100.0, 30.0, 20.0],
+                "rotation": [0.0, 0.0, 0.0, 1.0],
+            }
+        },
+    )
+    assert moved.status_code == 200, moved.text
+    diagnostic = moved.json()["protein_constraint"]
+    assert diagnostic["mode"] == "two_ball_joint"
+    assert diagnostic["clamped"] is True
+    # The move response must carry only the affected helix geometry.  Otherwise
+    # the browser falls back to a second, full /design/geometry request and shows
+    # the long-lived "Loading geometry" popup on large designs.
+    assert moved.json()["partial_geometry"] is True
+    assert moved.json()["changed_helix_ids"] == ["oh_helix"]
+    assert moved.json()["nucleotides_compact"]
+
+    after, root1, term1, joint1, _ = _conjugate_joint_state()
+    assert after.binder_strand_id == created.json()["binder_strand_id"]
+    assert np.linalg.norm(root1 - root0) <= 1.0e-6
+    assert np.linalg.norm(term1 - root1) == pytest.approx(radius0, abs=1.0e-4)
+    assert np.linalg.norm(joint1 - term1) <= 1.0e-4
+    assert not np.allclose(term1, term0)
+
+    undone = client.post("/api/design/undo")
+    assert undone.status_code == 200, undone.text
+    assert undone.json()["partial_geometry"] is True
+    assert undone.json()["changed_helix_ids"] == ["oh_helix"]
+    assert "path:protein_constraint_partial" in undone.headers.get("server-timing", "")
+    _, undo_root, undo_term, undo_joint, _ = _conjugate_joint_state()
+    assert np.linalg.norm(undo_root - root0) <= 1.0e-6
+    assert np.linalg.norm(undo_term - term0) <= 1.0e-4
+    assert np.linalg.norm(undo_joint - undo_term) <= 1.0e-4
+
+    redone = client.post("/api/design/redo")
+    assert redone.status_code == 200, redone.text
+    assert redone.json()["partial_geometry"] is True
+    assert redone.json()["changed_helix_ids"] == ["oh_helix"]
+    assert "path:protein_constraint_partial" in redone.headers.get("server-timing", "")
+    _, redo_root, redo_term, redo_joint, _ = _conjugate_joint_state()
+    assert np.linalg.norm(redo_root - root1) <= 1.0e-6
+    assert np.linalg.norm(redo_term - term1) <= 1.0e-4
+    assert np.linalg.norm(redo_joint - redo_term) <= 1.0e-4
+
+
+def test_conjugated_protein_live_preview_matches_saved_apply(_clean_state):
+    """The browser preview oracle and persisted constrained solve are coordinate-identical."""
+    from backend.core.design_geometry import _geometry_for_design
+    from backend.core.protein import _rotation_between
+
+    _set_sequenced_overhang()
+    asset_id = _import_protein()
+    created = client.post(
+        "/api/design/protein/conjugate",
+        json={"asset_id": asset_id, "overhang_id": "oh_5p", "azide_end": "5p"},
+    )
+    assert created.status_code == 201, created.text
+    att, root, terminus, joint, centroid = _conjugate_joint_state()
+    before_atoms = client.get("/api/design/protein/atomistic").json()["atoms"]
+    before_xyz = np.asarray([[a["x"], a["y"], a["z"]] for a in before_atoms])
+    before_geometry = _geometry_for_design(design_state.get_design())
+
+    # Mirrors constrainCentroidTransform + proteinPreviewMatrix exactly.
+    angle = np.deg2rad(73.0)
+    axis = np.asarray([0.3, -0.4, 0.5], dtype=float)
+    axis /= np.linalg.norm(axis)
+    half = angle / 2.0
+    quat = [*(axis * np.sin(half)), np.cos(half)]
+    from scipy.spatial.transform import Rotation
+
+    rot = Rotation.from_quat(quat).as_matrix()
+    requested_translation = np.asarray([18.0, -7.0, 11.0])
+    proposed_joint = rot @ (joint - centroid) + centroid + requested_translation
+    radius = np.linalg.norm(terminus - root)
+    desired_joint = root + (proposed_joint - root) / np.linalg.norm(proposed_joint - root) * radius
+    corrected_translation = requested_translation + desired_joint - proposed_joint
+    corrected_centroid = centroid + corrected_translation
+    preview_atoms = (rot @ (before_xyz - centroid).T).T + corrected_centroid
+
+    link_rot = _rotation_between(terminus - root, desired_joint - root)
+    constraint = client.get("/api/design/protein/atomistic").json()["protein_constraints"][0]
+    moved_refs = {
+        (ref["strand_id"], ref["domain_index"])
+        for ref in constraint["domain_ids"]
+    }
+    preview_nucs = {
+        (n["strand_id"], n["domain_index"], n["bp_index"], n["direction"]):
+        root + link_rot @ (np.asarray(n["backbone_position"]) - root)
+        for n in before_geometry
+        if (n["strand_id"], n["domain_index"]) in moved_refs
+    }
+
+    applied = client.patch(
+        f"/api/design/protein/attachments/{att.id}",
+        json={"gizmo_move": {
+            "pivot": centroid.tolist(),
+            # The frontend sends the already constraint-corrected dummy delta.
+            "translation": corrected_translation.tolist(),
+            "rotation": [float(v) for v in quat],
+        }},
+    )
+    assert applied.status_code == 200, applied.text
+
+    after_atoms = client.get("/api/design/protein/atomistic").json()["atoms"]
+    after_xyz = np.asarray([[a["x"], a["y"], a["z"]] for a in after_atoms])
+    assert np.allclose(after_xyz, preview_atoms, atol=2.0e-5)
+
+    after_geometry = _geometry_for_design(design_state.get_design())
+    saved_nucs = {
+        (n["strand_id"], n["domain_index"], n["bp_index"], n["direction"]):
+        np.asarray(n["backbone_position"])
+        for n in after_geometry
+        if (n["strand_id"], n["domain_index"]) in moved_refs
+    }
+    assert saved_nucs.keys() == preview_nucs.keys()
+    for key, expected in preview_nucs.items():
+        assert np.allclose(saved_nucs[key], expected, atol=2.0e-5), key
+
+
+def test_conjugated_protein_rotates_freely_about_protein_joint(_clean_state):
+    _set_sequenced_overhang()
+    asset_id = _import_protein()
+    created = client.post(
+        "/api/design/protein/conjugate",
+        json={"asset_id": asset_id, "overhang_id": "oh_5p", "azide_end": "5p"},
+    )
+    assert created.status_code == 201, created.text
+    att, root0, term0, joint0, com0 = _conjugate_joint_state()
+    half = np.sin(np.pi / 4)
+    moved = client.patch(
+        f"/api/design/protein/attachments/{att.id}",
+        json={
+            "gizmo_move": {
+                "pivot": joint0.tolist(),
+                "translation": [0.0, 0.0, 0.0],
+                "rotation": [0.0, 0.0, float(half), float(half)],
+            }
+        },
+    )
+    assert moved.status_code == 200, moved.text
+    _, root1, term1, joint1, com1 = _conjugate_joint_state()
+    assert np.linalg.norm(root1 - root0) <= 1.0e-6
+    assert np.linalg.norm(term1 - term0) <= 1.0e-4
+    assert np.linalg.norm(joint1 - term1) <= 1.0e-4
+    assert not np.allclose(com1 - joint1, com0 - joint0)

@@ -171,6 +171,7 @@ from backend.core.render_diff import (  # noqa: F401
     _cluster_diff_payload,
     _diff_is_cluster_only,
     _local_changed_helices,
+    _protein_constraint_move_helix_ids,
     _strand_occupancy,
     _topology_diff_field,
     _topology_unchanged,
@@ -966,6 +967,18 @@ def _design_replace_response(
     this path is excluded from FL-01's default until that's addressed on its
     own (see memory/project_response_diffing.md, deferred FL item).
     """
+    protein_move_helices = _protein_constraint_move_helix_ids(prev_design, design)
+    if protein_move_helices is not None:
+        if trace is not None:
+            trace._steps.append(("path:protein_constraint_partial", 0.0))
+        return _design_response_with_geometry(
+            design,
+            report,
+            changed_helix_ids=protein_move_helices,
+            compact_deformed=True,
+            partial_axes=True,
+            full_feature_log=True,
+        )
     if _diff_is_cluster_only(prev_design, design):
         if trace is not None:
             trace._steps.append(("path:cluster_only", 0.0))

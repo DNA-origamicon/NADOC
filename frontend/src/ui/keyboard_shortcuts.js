@@ -57,7 +57,7 @@ export function initKeyboardShortcuts(deps) {
     savePartToAssembly, saveAssemblyAsGuarded, setAssemblyWorkspacePath,
     showWelcome, ooClose, cancelTranslateRotateTool,
     watchDeformState, deformEscape, popGroupUndo, popVisibilityUndo, popVisibilityRedo,
-    isTranslateRotateActive, getPartEditContext, getAssemblyWorkspacePath, getOoActiveIds,
+    isTranslateRotateActive, isProteinMoveActive, getPartEditContext, getAssemblyWorkspacePath, getOoActiveIds,
     flashSelectionLevel,
   } = deps
 
@@ -306,7 +306,7 @@ export function initKeyboardShortcuts(deps) {
     description: 'Cycle selection level (cluster → strand → domain → end → xover → drill)',
     blockedInInput: true,
     canvasOnly: true,
-    blockedWhen: () => isTranslateRotateActive(),
+    blockedWhen: () => isTranslateRotateActive() || isProteinMoveActive?.(),
     handler(e) {
       e.preventDefault()
       const cur  = selectionManager.getSelectionLevel?.() ?? 'default'

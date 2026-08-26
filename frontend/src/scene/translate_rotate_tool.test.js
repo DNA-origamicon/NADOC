@@ -53,12 +53,16 @@ function makeDeps(overrides = {}) {
     discardPendingTransforms: vi.fn(),
     detach: vi.fn(),
   }
+  const proteinGizmo = overrides.proteinGizmo ?? {
+    isAttached: vi.fn(() => false), commit: vi.fn(), cancel: vi.fn(), reset: vi.fn(),
+  }
   const deps = {
     store,
     scene: {}, camera: {}, canvas: { addEventListener: vi.fn(), removeEventListener: vi.fn() },
     designRenderer: { getHelixCtrl: vi.fn(() => helixCtrl) },
     getJointRenderer: () => jointRenderer,
     clusterGizmo,
+    proteinGizmo,
     instanceGizmo: { detach: vi.fn() },
     assemblyRenderer: { rebuild: vi.fn(async () => {}), rebuildLinkers: vi.fn() },
     assemblyJointRenderer: { rebuild: vi.fn() },
@@ -84,6 +88,7 @@ function makeDeps(overrides = {}) {
     rebakeHelixAxesForClusterDelta: vi.fn(),
     reemitClusterBridges: vi.fn(async () => {}),
     refreshClusterOverlays: vi.fn(),
+    rightSidebar: { open: vi.fn() },
     getActive: () => active,
     setActive: (v) => { active = v; store.setState({ translateRotateActive: v }) },
     getClusterDirty: () => dirty,
@@ -91,7 +96,7 @@ function makeDeps(overrides = {}) {
     getEditContext: () => editCtx,
     setEditContext: (v) => { editCtx = v },
   }
-  return { deps, store, clusterGizmo, jointRenderer, helixCtrl, get active() { return active }, get dirty() { return dirty }, get editCtx() { return editCtx } }
+  return { deps, store, clusterGizmo, proteinGizmo, jointRenderer, helixCtrl, get active() { return active }, get dirty() { return dirty }, get editCtx() { return editCtx } }
 }
 
 beforeEach(() => {
@@ -105,6 +110,23 @@ beforeEach(() => {
 })
 
 describe('initTranslateRotateTool — API + init side effects', () => {
+  it('routes Apply, Cancel, and Reset to an attached protein session', () => {
+    const proteinGizmo = {
+      isAttached: vi.fn(() => true), commit: vi.fn(), cancel: vi.fn(), reset: vi.fn(),
+    }
+    const { deps } = makeDeps({ proteinGizmo })
+    initTranslateRotateTool(deps)
+
+    document.getElementById('mr-apply-btn').click()
+    document.getElementById('mr-cancel-btn').click()
+    document.getElementById('mr-reset-btn').click()
+
+    expect(proteinGizmo.commit).toHaveBeenCalledTimes(1)
+    expect(proteinGizmo.cancel).toHaveBeenCalledTimes(1)
+    expect(proteinGizmo.reset).toHaveBeenCalledTimes(1)
+    expect(deps.clusterGizmo.detach).not.toHaveBeenCalled()
+  })
+
   it('returns the tool API surface', () => {
     const { deps } = makeDeps()
     const t = initTranslateRotateTool(deps)
@@ -276,6 +298,7 @@ describe('initTranslateRotateTool — activate (design mode)', () => {
     const ctx = makeDeps()
     const t = initTranslateRotateTool(ctx.deps)
     await t.activate()
+    expect(ctx.deps.rightSidebar.open).toHaveBeenCalledWith('properties')
     expect(ctx.active).toBe(true)
     expect(ctx.clusterGizmo.attach).not.toHaveBeenCalled()
     expect(toastCalls.length).toBe(0)

@@ -7,25 +7,88 @@
 // Lifted verbatim from main.js (extraction #85). Two atomistic renderer instances
 // exist in main(): the global DNA `atomisticRenderer` and this `proteinRenderer` —
 // distinct so proteins draw regardless of the DNA representation mode.
+import * as THREE from 'three'
 import { initAtomisticRenderer } from './atomistic_renderer.js'
 import { initProteinGizmo } from './protein_gizmo.js'
 import { docHeaders } from '../shared/doc_id.js'
 import { primaryRefOfKind } from './selection_model.js'
 
-export function initProteinSubsystem({ scene, store, controls, camera, canvas }) {
+export function initProteinSubsystem({
+  scene, store, controls, camera, canvas,
+  designRenderer = null, overhangLocations = null, getBluntEnds = null,
+  rightSidebar = null,
+}) {
   // Protein renderer (imported proteins; independent of the DNA atomistic
   // mode so proteins coexist with cylinders/beads/atomistic DNA).
   const proteinRenderer = initAtomisticRenderer(scene)
   const _proteinCentroid = (id) =>
     proteinRenderer.centroidOf(a => a.helix_id === `__protein__${id}`)
+  let _constraints = new Map()
+  let _moveRotatePanel = null
 
-  // Transform gizmo for the selected protein. Live preview during drag; on
-  // drag-end it commits a gizmo_move (which syncs the design → the currentDesign
-  // subscription below re-renders + re-anchors the gizmo). No onCommitted needed.
+  function _captureConstraintGeometry(constraint) {
+    const hid = constraint?.helix_id
+    if (!hid) return
+    const domainIds = constraint.domain_ids?.length ? constraint.domain_ids : null
+    designRenderer?.getHelixCtrl?.()?.captureClusterBase(
+      [hid], domainIds,
+    )
+    getBluntEnds?.()?.captureClusterBase?.(
+      new Set([constraint.overhang_id]), false, domainIds,
+    )
+    // Deliberately do not append a helix-wide forceAxes capture here. A stub
+    // helix may contain several overhang/conjugate domains even though it has
+    // no scaffold. The old independent-shaft implementation (479e9e39) kept
+    // those domains separate; appending an unfiltered capture reintroduced the
+    // exact regression where every sibling axis segment followed one protein.
+  }
+
+  function _applyConstraintGeometry(meta) {
+    const constraint = meta?.constraint
+    const hid = constraint?.helix_id
+    if (!hid) return
+    const root = new THREE.Vector3(...constraint.root)
+    const start = new THREE.Vector3(...constraint.joint).sub(root)
+    const current = (meta.constrainedJoint ?? meta.position).clone().sub(root)
+    if (start.lengthSq() <= 1e-24 || current.lengthSq() <= 1e-24) return
+    const swing = new THREE.Quaternion().setFromUnitVectors(
+      start.normalize(), current.normalize(),
+    )
+    const ids = [hid]
+    const domainIds = constraint.domain_ids?.length ? constraint.domain_ids : null
+    designRenderer?.getHelixCtrl?.()?.applyClusterTransform(
+      ids, root, root, swing, domainIds,
+    )
+    getBluntEnds?.()?.applyClusterTransform?.(
+      [constraint.overhang_id], root, root, swing, domainIds,
+    )
+    // Axis sticks and overhang cylinders are domain-owned. Never apply the
+    // helix-wide overhangLocations transform during a protein drag: on a
+    // shared stub it also moves labels/anchors for sibling domains.
+  }
+
+  // Transform gizmo for the selected protein. Drag/input changes stay in the
+  // captured live preview until Apply commits one gizmo_move; Cancel/Reset use
+  // the same snapshots so preview and saved coordinates share an exact basis.
   const proteinGizmo = initProteinGizmo(store, controls, {
-    onLiveStart: (id) => proteinRenderer.beginLiveTransform(a => a.helix_id === `__protein__${id}`),
-    onLive:      (m)  => proteinRenderer.applyLiveTransform(m),
+    onCommitted: () => _refreshProteins(),
+    onCancelled: () => _refreshProteins(),
+    onLiveStart: (id) => {
+      proteinRenderer.beginLiveTransform(a => a.helix_id === `__protein__${id}`)
+      _captureConstraintGeometry(_constraints.get(id))
+    },
+    onLive:      (m, meta)  => {
+      proteinRenderer.applyLiveTransform(m)
+      _applyConstraintGeometry(meta)
+    },
     onLiveEnd:   ()   => proteinRenderer.endLiveTransform(),
+    onTransform: (translation, rotation) => {
+      const e = new THREE.Euler().setFromQuaternion(new THREE.Quaternion(...rotation), 'XYZ')
+      _moveRotatePanel?.setTransformValues?.(
+        ...translation,
+        THREE.MathUtils.radToDeg(e.x), THREE.MathUtils.radToDeg(e.y), THREE.MathUtils.radToDeg(e.z),
+      )
+    },
   })
 
   // Re-apply the selection visual: highlight + (re)anchor the gizmo at the
@@ -37,11 +100,43 @@ export function initProteinSubsystem({ scene, store, controls, camera, canvas })
     const protId = ref?.id ?? null
     const c = protId ? _proteinCentroid(protId) : null
     if (protId && c) {
+      // Switching directly between proteins implicitly cancels the previous
+      // preview. cancel() restores its captured protein/DNA geometry and the
+      // authoritative refresh below re-enters here for the new selection.
+      const attachedId = proteinGizmo.getAttachmentId?.()
+      if (attachedId && attachedId !== protId) {
+        proteinGizmo.cancel?.()
+        return
+      }
       proteinRenderer.highlight({ type: 'protein', id: protId, data: { attachment_id: protId } })
-      proteinGizmo.attach(protId, scene, camera, canvas, c)
+      const constraint = _constraints.get(protId) ?? null
+      proteinGizmo.attach(protId, scene, camera, canvas, c, constraint)
+      _moveRotatePanel?.setProteinController?.(proteinGizmo)
+      _moveRotatePanel?.setSessionMode?.('protein')
+      _moveRotatePanel?.setTransformValues?.(0, 0, 0, 0, 0, 0)
+      rightSidebar?.open?.('properties')
+      const panel = document.getElementById('move-rotate-panel')
+      if (panel) {
+        panel.style.display = ''
+        panel.dataset.proteinActive = 'true'
+      }
+      const selectionBox = document.getElementById('mr-current-selection')
+      if (selectionBox) selectionBox.textContent = `Protein · ${protId}`
+      const hint = document.getElementById('mr-session-hint')
+      if (hint) hint.textContent = constraint
+        ? 'Drag the protein joint. The conjugate oligo is constrained live.'
+        : 'Drag the protein gizmo. Press T or R to change mode.'
     } else {
-      if (proteinGizmo.isAttached()) proteinGizmo.detach()
+      // Clicking away is Cancel, never Apply. Restore the pre-move snapshot
+      // before dropping the gizmo so an uncommitted preview cannot persist.
+      if (proteinGizmo.isAttached()) proteinGizmo.cancel?.()
+      _moveRotatePanel?.setProteinController?.(null)
       proteinRenderer.highlight(null)
+      const panel = document.getElementById('move-rotate-panel')
+      if (panel?.dataset.proteinActive === 'true') {
+        panel.style.display = 'none'
+        delete panel.dataset.proteinActive
+      }
     }
   }
 
@@ -56,6 +151,9 @@ export function initProteinSubsystem({ scene, store, controls, camera, canvas })
       const resp = await fetch('/api/design/protein/atomistic', { headers: docHeaders() })
       if (!resp.ok) return
       const data = await resp.json()
+      _constraints = new Map(
+        (data?.protein_constraints ?? []).map(item => [item.attachment_id, item])
+      )
       if (data?.atoms?.length) {
         proteinRenderer.setMode('vdw')
         proteinRenderer.update(data)
@@ -98,5 +196,9 @@ export function initProteinSubsystem({ scene, store, controls, camera, canvas })
     gizmo: proteinGizmo,
     refresh: _refreshProteins,
     syncSelectionVisual: _syncProteinSelectionVisual,
+    setMoveRotatePanel(panel) {
+      _moveRotatePanel = panel
+      _moveRotatePanel?.setProteinController?.(proteinGizmo.isAttached() ? proteinGizmo : null)
+    },
   }
 }

@@ -15,7 +15,7 @@
  */
 import * as THREE from 'three'
 import { initOverhangGizmo } from '../scene/overhang_gizmo.js'
-import { isExtrudeOverhang, ovhgDomainIds, ovhgBinderDomainIds } from '../scene/design_queries.js'
+import { ovhgDomainIds, ovhgBinderDomainIds } from '../scene/design_queries.js'
 
 /**
  * Build the rotation patch ops for `activeIds`: compose the world-space delta
@@ -153,23 +153,16 @@ export function initOverhangOrientationPanel({
     if (!_ooActiveIds.length) return
     const { currentDesign } = store.getState()
     const helixCtrl = designRenderer.getHelixCtrl()
-    const helixIds = [], allDomainIds = [], extrudeHelixIds = []
+    const helixIds = [], allDomainIds = []
     for (const id of _ooActiveIds) {
       const o = currentDesign?.overhangs?.find(x => x.id === id)
       if (!o) continue
       helixIds.push(o.helix_id)
       const domIds = domsForOverhang(id, currentDesign)
       if (domIds) allDomainIds.push(...domIds)
-      if (isExtrudeOverhang(id, currentDesign)) {
-        extrudeHelixIds.push(o.helix_id)
-      }
     }
     helixCtrl?.captureClusterBase(helixIds, allDomainIds.length ? allDomainIds : null)
     bluntEnds?.captureClusterBase(new Set(_ooActiveIds))
-    if (extrudeHelixIds.length) {
-      helixCtrl?.captureClusterBase(extrudeHelixIds, null, true, { forceAxes: true })
-      overhangLocations?.captureClusterBase(extrudeHelixIds)
-    }
     _ooDirtyPreview = true
     for (const id of _ooActiveIds) {
       const o = currentDesign?.overhangs?.find(x => x.id === id)
@@ -177,13 +170,8 @@ export function initOverhangOrientationPanel({
       const pivot = _ooPivotPositions[id]
         ?? new THREE.Vector3(o.pivot[0], o.pivot[1], o.pivot[2])
       const domIds = domsForOverhang(id, currentDesign)
-      const isExtrude = isExtrudeOverhang(id, currentDesign)
-      helixCtrl?.applyClusterTransform([o.helix_id], pivot, pivot, q_inc, domIds,
-        isExtrude ? { forceAxes: true } : undefined)
+      helixCtrl?.applyClusterTransform([o.helix_id], pivot, pivot, q_inc, domIds)
       bluntEnds?.applyClusterTransform([id], pivot, pivot, q_inc)
-      if (isExtrude) {
-        overhangLocations?.applyClusterTransform([o.helix_id], pivot, pivot, q_inc)
-      }
     }
     overhangGizmo.accumulateDelta(q_inc)
     _ooUpdateAngleFields(overhangGizmo.getCurrentRDelta())
@@ -203,21 +191,16 @@ export function initOverhangOrientationPanel({
     const R_curInv = overhangGizmo.getCurrentRDelta().invert()  // undo the uniform gizmo delta
 
     // Capture the current rendered geometry as the base (same set as the preview path).
-    const helixIds = [], allDomainIds = [], extrudeHelixIds = []
+    const helixIds = [], allDomainIds = []
     for (const id of _ooActiveIds) {
       const o = currentDesign?.overhangs?.find(x => x.id === id)
       if (!o) continue
       helixIds.push(o.helix_id)
       const domIds = domsForOverhang(id, currentDesign)
       if (domIds) allDomainIds.push(...domIds)
-      if (isExtrudeOverhang(id, currentDesign)) extrudeHelixIds.push(o.helix_id)
     }
     helixCtrl?.captureClusterBase(helixIds, allDomainIds.length ? allDomainIds : null)
     bluntEnds?.captureClusterBase(new Set(_ooActiveIds))
-    if (extrudeHelixIds.length) {
-      helixCtrl?.captureClusterBase(extrudeHelixIds, null, true, { forceAxes: true })
-      overhangLocations?.captureClusterBase(extrudeHelixIds)
-    }
 
     _ooDirtyPreview = true
     for (const id of _ooActiveIds) {
@@ -230,13 +213,8 @@ export function initOverhangOrientationPanel({
       const pivot = _ooPivotPositions[id]
         ?? new THREE.Vector3(o.pivot[0], o.pivot[1], o.pivot[2])
       const domIds = domsForOverhang(id, currentDesign)
-      const isExtrude = isExtrudeOverhang(id, currentDesign)
-      helixCtrl?.applyClusterTransform([o.helix_id], pivot, pivot, inc, domIds,
-        isExtrude ? { forceAxes: true } : undefined)
+      helixCtrl?.applyClusterTransform([o.helix_id], pivot, pivot, inc, domIds)
       bluntEnds?.applyClusterTransform([id], pivot, pivot, inc)
-      if (isExtrude) {
-        overhangLocations?.applyClusterTransform([o.helix_id], pivot, pivot, inc)
-      }
       _ooBaseRotations[id] = [0, 0, 0, 1]
     }
   }
@@ -300,11 +278,9 @@ export function initOverhangOrientationPanel({
 
   // ── Overhang gizmo (TransformControls, rotate-only) ─────────────────────────
 
-  // Returns true if this overhang has its own independent helix (no scaffold on that helix).
-  // This covers native extrude overhangs AND autodetected stub-helix inline overhangs from
-  // imported designs (including helices that once had scaffold but the user deleted it).
-  // Split-domain inline overhangs (helix shared with scaffold) return false — their axis
-  // cannot be rotated independently.
+  // Axis motion is always domain scoped. A no-scaffold stub is not necessarily
+  // exclusive: imported designs can place several independent overhang domains
+  // on it, so helix-wide movement is never a safe proxy for ownership.
   const overhangGizmo = initOverhangGizmo(scene, camera, canvas, controls)
   overhangGizmo.setCallbacks({
     onDragStart: (helixIds) => {
@@ -312,15 +288,7 @@ export function initOverhangOrientationPanel({
       const helixCtrl = designRenderer.getHelixCtrl()
       const allDomainIds = _ooActiveIds.flatMap(id => domsForOverhang(id, currentDesign))
       helixCtrl?.captureClusterBase(helixIds, allDomainIds.length ? allDomainIds : null)
-      const extrudeHelixIds = _ooActiveIds
-        .filter(id => isExtrudeOverhang(id, currentDesign))
-        .map(id => currentDesign?.overhangs?.find(x => x.id === id)?.helix_id)
-        .filter(Boolean)
       bluntEnds?.captureClusterBase(new Set(_ooActiveIds))
-      if (extrudeHelixIds.length) {
-        helixCtrl?.captureClusterBase(extrudeHelixIds, null, true, { forceAxes: true })
-        overhangLocations?.captureClusterBase(extrudeHelixIds)
-      }
     },
     onPreview: (R_delta) => {
       _ooDirtyPreview = true
@@ -332,13 +300,8 @@ export function initOverhangOrientationPanel({
         const pivot = _ooPivotPositions[id]
           ?? new THREE.Vector3(o.pivot[0], o.pivot[1], o.pivot[2])
         const domIds = domsForOverhang(id, currentDesign)
-        const isExtrude = isExtrudeOverhang(id, currentDesign)
-        helixCtrl?.applyClusterTransform([o.helix_id], pivot, pivot, R_delta, domIds,
-          isExtrude ? { forceAxes: true } : undefined)
+        helixCtrl?.applyClusterTransform([o.helix_id], pivot, pivot, R_delta, domIds)
         bluntEnds?.applyClusterTransform([id], pivot, pivot, R_delta)
-        if (isExtrude) {
-          overhangLocations?.applyClusterTransform([o.helix_id], pivot, pivot, R_delta)
-        }
       }
       _ooUpdateAngleFields(overhangGizmo.getCurrentRDelta())
     },

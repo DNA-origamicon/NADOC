@@ -27,6 +27,7 @@ import time
 import uuid
 from typing import List, Literal, Optional
 
+import numpy as np
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
@@ -37,7 +38,12 @@ from backend.api import state as design_state
 #   _geometry_for_helices  — geometry kernel (10 cross-region callers)
 #   _find_ovhg_or_404      — trivial overhang lookup (11 overhang-region callers)
 # Same convention as routes_camera_poses.py / routes_clusters.py.
-from backend.api.crud import _design_response, _find_ovhg_or_404, _geometry_for_helices
+from backend.api.crud import (
+    _design_response,
+    _design_response_with_geometry,
+    _find_ovhg_or_404,
+    _geometry_for_helices,
+)
 from backend.core.models import Design
 from backend.core.protein import protein_asset_meta
 from backend.core.render_diff import _local_changed_helices, _strand_occupancy
@@ -134,7 +140,21 @@ def get_protein_atomistic(asset_id: str | None = Query(None)) -> dict:
         assets_by_id.setdefault(a.id, a)
 
     models = []
-    nucs = None  # geometry lazily computed only if an overhang target needs it
+    constraints = []
+    target_helix_ids = {
+        ovhg.helix_id
+        for att in design.protein_attachments
+        if getattr(att.target, "kind", None) == "overhang" and att.visible
+        for ovhg in design.overhangs
+        if ovhg.id == att.target.overhang_id
+    }
+    # Protein placement only needs its target overhang helices.  On large designs
+    # computing every unrelated helix here dominated every post-move refresh.
+    nucs = (
+        _geometry_for_helices(design, frozenset(target_helix_ids))
+        if target_helix_ids
+        else None
+    )
     for att in design.protein_attachments:
         kind = getattr(att.target, "kind", None)
         if kind not in ("free", "overhang") or not att.visible:
@@ -144,20 +164,54 @@ def get_protein_atomistic(asset_id: str | None = Query(None)) -> dict:
             continue
         tip = outward = None
         if kind == "overhang":
-            if nucs is None:
-                nucs = _geometry_for_helices(design)
             tip, outward = resolve_overhang_anchor(
                 nucs, att.target.overhang_id, att.target.attach_end
             )
             if tip is None:
                 continue  # overhang has no geometry yet
         m = compose_protein_world_transform(asset, att, tip, outward)
+        if att.binder_strand_id and att.conjugation_atom_serial is not None:
+            from backend.core.protein import _conjugate_terminus_position
+
+            root, _ = resolve_overhang_anchor(nucs, att.target.overhang_id, "root")
+            terminus = _conjugate_terminus_position(nucs, att)
+            if root is not None and terminus is not None:
+                overhang = next(
+                    o for o in design.overhangs if o.id == att.target.overhang_id
+                )
+                domain_ids = [
+                    {"strand_id": strand.id, "domain_index": index}
+                    for strand in design.strands
+                    for index, domain in enumerate(strand.domains)
+                    if domain.overhang_id == overhang.id
+                    or domain.binds_overhang_id == overhang.id
+                ]
+                is_extrude = not any(
+                    strand.strand_type.value == "scaffold"
+                    and any(domain.helix_id == overhang.helix_id for domain in strand.domains)
+                    for strand in design.strands
+                )
+                constraints.append(
+                    {
+                        "attachment_id": att.id,
+                        "mode": "two_ball_joint",
+                        "root": root.tolist(),
+                        "joint": terminus.tolist(),
+                        "radius_nm": float(np.linalg.norm(terminus - root)),
+                        "helix_id": overhang.helix_id,
+                        "overhang_id": overhang.id,
+                        "domain_ids": domain_ids,
+                        "is_extrude": is_extrude,
+                    }
+                )
         models.append(
             protein_asset_to_atomistic(asset, pose_matrix=m, sentinel_id=att.id)
         )
 
     merged = merge_models(*models) if models else merge_models()
-    return atomistic_to_json(merged)
+    payload = atomistic_to_json(merged)
+    payload["protein_constraints"] = constraints
+    return payload
 
 
 @router.get("/design/protein/conjugation-candidates")
@@ -513,10 +567,27 @@ def conjugate_protein_to_overhang(body: ProteinConjugateRequest) -> dict:
         conjugation_accessible_fraction=(
             selected_candidate["accessible"] if selected_candidate else None
         ),
+        binder_strand_id=binder.id,
+        azide_end=body.azide_end,
         # Cache the sequence of the REAL topology element, not a second
         # derivation from OverhangSpec that could diverge on sub-domain overrides.
         handle_sequence=binder.sequence,
     )
+    # Affix the selected protein atom to the actual binder backbone terminus,
+    # not the opposite strand's base-pair axis.  The two backbones are radially
+    # separated, so this offset is physically meaningful.
+    from backend.core.models import Mat4x4
+    from backend.core.protein import _conjugate_terminus_position, resolve_overhang_anchor
+
+    binder_tip = _conjugate_terminus_position(nucs, attachment)
+    overhang_tip, _ = resolve_overhang_anchor(
+        nucs, body.overhang_id, attachment.target.attach_end
+    )
+    if binder_tip is not None and overhang_tip is not None:
+        delta = binder_tip - overhang_tip
+        values = np.eye(4)
+        values[:3, 3] = delta
+        attachment.pose = Mat4x4.from_array(values)
 
     def _fn(d: Design) -> Design:
         assets = (
@@ -653,13 +724,13 @@ def patch_protein_attachment(
         )
     if body.pose is not None and len(body.pose) != 16:
         raise HTTPException(400, detail="pose must be 16 floats (row-major 4×4).")
+    current_attachment = next(
+        a for a in design.protein_attachments if a.id == attachment_id
+    )
     selected_candidate = None
     if body.conjugation_atom_serial is not None:
         from backend.core.conjugation import conjugation_candidate_for_serial
 
-        current_attachment = next(
-            a for a in design.protein_attachments if a.id == attachment_id
-        )
         asset = _resolve_protein_asset(current_attachment.asset_id)
         selected_candidate = (
             conjugation_candidate_for_serial(asset, body.conjugation_atom_serial)
@@ -672,7 +743,50 @@ def patch_protein_attachment(
                 detail="Conjugation atom must be a supported surface-accessible site.",
             )
 
+    constraint_result = None
+    constrained_pose = None
+    constrained_rotation = None
+    if body.gizmo_move is not None and current_attachment.binder_strand_id:
+        from backend.core.protein import constrained_conjugate_move
+
+        asset = _resolve_protein_asset(current_attachment.asset_id)
+        if asset is None:
+            raise HTTPException(422, detail="Conjugated protein asset is missing.")
+        target_spec = next(
+            (
+                ovhg
+                for ovhg in design.overhangs
+                if ovhg.id == current_attachment.target.overhang_id
+            ),
+            None,
+        )
+        if target_spec is None:
+            raise HTTPException(422, detail="Conjugated protein overhang is missing.")
+        try:
+            constrained_pose, constrained_rotation, constraint_result = (
+                constrained_conjugate_move(
+                    design,
+                    asset,
+                    current_attachment,
+                    _geometry_for_helices(
+                        design, frozenset({target_spec.helix_id})
+                    ),
+                    pivot=body.gizmo_move.pivot,
+                    translation=body.gizmo_move.translation,
+                    rotation=body.gizmo_move.rotation,
+                )
+            )
+        except ValueError as exc:
+            raise HTTPException(422, detail=str(exc)) from exc
+
     def _fn(d: Design) -> None:
+        if constrained_rotation is not None:
+            d.overhangs = [
+                ovhg.model_copy(update={"rotation": constrained_rotation})
+                if ovhg.id == current_attachment.target.overhang_id
+                else ovhg
+                for ovhg in d.overhangs
+            ]
         out = []
         for att in d.protein_attachments:
             if att.id != attachment_id:
@@ -682,11 +796,15 @@ def patch_protein_attachment(
             if body.pose is not None:
                 upd["pose"] = Mat4x4(values=body.pose)
             if body.gizmo_move is not None:
-                new_pose = gizmo_move_to_pose(
-                    att.pose.to_array(),
-                    body.gizmo_move.pivot,
-                    body.gizmo_move.translation,
-                    body.gizmo_move.rotation,
+                new_pose = (
+                    constrained_pose
+                    if constrained_pose is not None
+                    else gizmo_move_to_pose(
+                        att.pose.to_array(),
+                        body.gizmo_move.pivot,
+                        body.gizmo_move.translation,
+                        body.gizmo_move.rotation,
+                    )
                 )
                 upd["pose"] = Mat4x4.from_array(new_pose)
             if body.conjugation_atom_serial is not None:
@@ -715,7 +833,24 @@ def patch_protein_attachment(
         {"attachment_id": attachment_id},
         _fn,
     )
-    return _design_response(updated, report)
+    if constraint_result is not None:
+        changed_spec = next(
+            ovhg
+            for ovhg in updated.overhangs
+            if ovhg.id == current_attachment.target.overhang_id
+        )
+        response = _design_response_with_geometry(
+            updated,
+            report,
+            changed_helix_ids=[changed_spec.helix_id],
+            compact_deformed=True,
+            partial_axes=True,
+        )
+    else:
+        response = _design_response(updated, report)
+    if constraint_result is not None:
+        response["protein_constraint"] = constraint_result
+    return response
 
 
 @router.delete("/design/protein/attachments/{attachment_id}")

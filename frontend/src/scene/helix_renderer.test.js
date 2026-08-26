@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { coalesceCylinderRuns, directConnectedOverhangIds, orderStrandNucleotides } from './helix_renderer.js'
+import * as THREE from 'three'
+import { coalesceCylinderRuns, directConnectedOverhangIds, orderStrandNucleotides, syncPatchedBeadPosition } from './helix_renderer.js'
 
 describe('coalesceCylinderRuns', () => {
   it('merges only contiguous same-color domains on the same helix', () => {
@@ -306,5 +307,63 @@ describe('cluster transforms keep the complete slab frame rigid', () => {
     expect(commitBody).toContain('slab.nuc.base_position')
     expect(commitBody).toContain('slab.nuc.base_normal')
     expect(commitBody).toContain('slab.nuc.axis_tangent')
+  })
+
+  it('rotates slab centers and orientations from the same captured rigid frame', () => {
+    expect(captureBody).toContain('center: renderedCenter')
+    expect(captureBody).toContain('quat: slab.quat.clone()')
+    expect(applyBody).toContain('_clusterV.copy(baseData.center).sub(centerVec).applyQuaternion(incrRotQuat)')
+    expect(applyBody).toContain('_clusterQ.multiplyQuaternions(incrRotQuat, baseData.quat)')
+  })
+})
+
+describe('authoritative partial geometry preserves the applied bead preview', () => {
+  const start = HR.indexOf('patchNucleotides(partialNucs')
+  const end = HR.indexOf('\n    setStrandColor(', start)
+  const body = HR.slice(start, end)
+
+  it('copies saved backbone coordinates instead of patching metadata only', () => {
+    expect(body).toContain("'backbone_position', 'base_position', 'base_normal', 'axis_tangent'")
+    expect(body).toContain('entry.nuc[field] = [...nuc[field]]')
+    expect(body).toContain('data.bb.push(nuc.backbone_position)')
+  })
+
+  it('rewrites bead matrices through the same updater used by undo/redo positions', () => {
+    expect(body).toContain('this.applyPositionsUpdate(positionsByHelix)')
+    const updater = HR.slice(HR.lastIndexOf('applyPositionsUpdate(positionsByHelix'))
+    expect(updater).toContain('syncPatchedBeadPosition(entry, u.bb)')
+    expect(updater).toContain('entry.instMesh.setMatrixAt(entry.id, _tMatrix)')
+  })
+
+  it('keeps a live-previewed bead at the identical saved Apply coordinate', () => {
+    const previewed = new THREE.Vector3(8.125, -3.75, 11.5)
+    const entry = { pos: previewed.clone() }
+    const beforeApply = entry.pos.clone()
+    syncPatchedBeadPosition(entry, previewed.toArray())
+    expect(entry.pos.distanceTo(beforeApply)).toBeLessThan(1e-12)
+
+    // A native/stale response would make this assertion fail visibly.
+    const native = new THREE.Vector3(0, 0, 1.7)
+    expect(entry.pos.distanceTo(native)).toBeGreaterThan(1)
+  })
+})
+
+describe('domain-scoped cluster axis transforms', () => {
+  const captureStart = HR.indexOf('\n    captureClusterBase(')
+  const applyStart = HR.indexOf('\n    applyClusterTransform(', captureStart)
+  const captureBody = HR.slice(captureStart, applyStart)
+  const applyBody = HR.slice(applyStart, HR.indexOf('\n    commitClusterPositions(', applyStart))
+
+  it('matches atomic axis segments against every owning domain', () => {
+    expect(HR).toContain('domainIds:    bs?.domain_ids')
+    expect(captureBody).toContain('seg.domainIds.some(')
+    expect(captureBody).not.toContain('domainKeySet.has(`${seg.strandId}:${seg.domainIndex}`)')
+  })
+
+  it('moves only captured curved segment tubes with their corresponding axis interval', () => {
+    expect(captureBody).toContain('tubePos: seg.tubeMesh?.position.clone()')
+    expect(captureBody).toContain('tubeQuat: seg.tubeMesh?.quaternion.clone()')
+    expect(applyBody).toContain('if (seg.tubeMesh && snap.tubePos && snap.tubeQuat)')
+    expect(applyBody).toContain('seg.tubeMesh.quaternion.multiplyQuaternions(incrRotQuat, snap.tubeQuat)')
   })
 })

@@ -2598,6 +2598,11 @@ class ProteinAttachment(BaseModel):
     conjugation_atom_serial: Optional[int] = None
     conjugation_chemistry: Optional[str] = None
     conjugation_accessible_fraction: Optional[float] = None
+    # Present for manager-created conjugates.  These stable identities let the
+    # motion constraint follow the actual oligo terminus even when the overhang
+    # and binder are later resized to unequal lengths.
+    binder_strand_id: Optional[str] = None
+    azide_end: Optional[Literal["5p", "3p"]] = None
     pose: Mat4x4 = Field(default_factory=Mat4x4)
     handle_complement_bp: int = 0  # display-only handle duplex length
     handle_spacer_nt: int = 0

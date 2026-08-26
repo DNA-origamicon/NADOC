@@ -255,6 +255,39 @@ def test_axis_segments_skip_flexible_bps():
     assert {0, 1, 2, 3, 4, 5, 6, 7, 8} <= covered  # rigid bps still do
 
 
+def test_axis_segments_split_overlapping_domains_and_keep_all_owners():
+    """A short conjugate/overhang must not borrow a longer domain's axis stick."""
+    from backend.core.deformation import _segments_for_helix
+
+    d = _hinge_design()
+    short = Strand(
+        id="conjugate",
+        strand_type=StrandType.STAPLE,
+        domains=[Domain(
+            helix_id="h_a", start_bp=3, end_bp=5,
+            direction=Direction.REVERSE, overhang_id="protein_oh",
+        )],
+    )
+    d = d.model_copy(update={"strands": [*d.strands, short]})
+    h_a = next(h for h in d.helices if h.id == "h_a")
+    segments = _segments_for_helix(d, h_a)
+
+    assert [(s["bp_lo"], s["bp_hi"]) for s in segments[:3]] == [(0, 2), (3, 5), (6, 8)]
+    middle_owners = {
+        (ref["strand_id"], ref["domain_index"])
+        for ref in segments[1]["domain_ids"]
+    }
+    assert ("scaf", 0) in middle_owners
+    assert ("conjugate", 0) in middle_owners
+    assert all(
+        ("conjugate", 0) not in {
+            (ref["strand_id"], ref["domain_index"])
+            for ref in s["domain_ids"]
+        }
+        for s in (segments[0], segments[2])
+    )
+
+
 def test_marks_change_forces_full_geometry():
     """A marks-only diff must NOT take the positions_only fast path (which omits
     per-bead is_flexible_segment) — else undo leaves the segment invisible."""

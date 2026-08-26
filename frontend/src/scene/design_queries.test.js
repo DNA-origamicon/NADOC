@@ -310,12 +310,12 @@ describe('isExtrudeOverhang', () => {
 })
 
 describe('ovhgDomainIds', () => {
-  it('returns {strand_id, domain_index} for every domain of the overhang strand', () => {
-    const design = { overhangs: [{ id: 'o1', strand_id: 's1' }], strands: [{ id: 's1', domains: [{}, {}, {}] }] }
+  it('returns only domains explicitly owned by the selected overhang', () => {
+    const design = { overhangs: [{ id: 'o1', strand_id: 's1' }], strands: [{ id: 's1', domains: [
+      { overhang_id: 'sibling' }, { overhang_id: 'o1' }, {},
+    ] }] }
     expect(ovhgDomainIds('o1', design)).toEqual([
-      { strand_id: 's1', domain_index: 0 },
       { strand_id: 's1', domain_index: 1 },
-      { strand_id: 's1', domain_index: 2 },
     ])
   })
   it('returns null when the overhang/strand/domains are missing', () => {

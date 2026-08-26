@@ -148,6 +148,12 @@ export function directConnectedOverhangIds(design) {
   return ids
 }
 
+/** Copy an authoritative partial-geometry bead coordinate into a live entry. */
+export function syncPatchedBeadPosition(entry, backbonePosition) {
+  entry.pos.set(backbonePosition[0], backbonePosition[1], backbonePosition[2])
+  return entry.pos
+}
+
 // Modification type → Three.js hex color (display color in the 3D scene)
 const MODIFICATION_COLORS = {
   cy3:     0xff8c00,
@@ -846,6 +852,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           tubeMesh,
           strandId:    bs ? bs.strand_id    : ds.strandId,
           domainIndex: bs ? bs.domain_index : ds.domainIndex,
+          domainIds:    bs?.domain_ids ?? [{
+            strand_id: bs ? bs.strand_id : ds.strandId,
+            domain_index: bs ? bs.domain_index : ds.domainIndex,
+          }],
           ovhgId:      bs ? bs.ovhg_id      : ds.ovhgId,
           bp_lo:       ds.bp_lo,
           bp_hi:       ds.bp_hi,
@@ -3386,7 +3396,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           paletteIdx++
         }
       }
-      // Update each entry's nuc metadata and defaultColor.
+      // Update each entry's complete nucleotide frame and defaultColor. This
+      // path consumes authoritative partial geometry after Apply; copying only
+      // strand metadata leaves bead matrices at their native positions while
+      // slabs adopt the response orientation.
+      const positionsByHelix = {}
       for (const nuc of partialNucs) {
         const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
         const entry = _keyToEntry.get(key)
@@ -3396,10 +3410,23 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         entry.nuc.is_five_prime  = nuc.is_five_prime
         entry.nuc.is_three_prime = nuc.is_three_prime
         entry.nuc.domain_index   = nuc.domain_index
+        for (const field of ['backbone_position', 'base_position', 'base_normal', 'axis_tangent']) {
+          if (nuc[field] != null) entry.nuc[field] = [...nuc[field]]
+        }
+        const byDir = (positionsByHelix[nuc.helix_id] ??= {})
+        const data = (byDir[nuc.direction] ??= { bp: [], bb: [], bs: [], bn: [], at: [] })
+        data.bp.push(nuc.bp_index)
+        data.bb.push(nuc.backbone_position)
+        data.bs.push(nuc.base_position)
+        data.bn.push(nuc.base_normal)
+        data.at.push(nuc.axis_tangent)
         const color = nucColor(nuc, stapleColorMap, customColors, loopSet)
         entry.defaultColor = color
         _setInstColor(entry, color)
       }
+      // Reuse the positions-only renderer path so beads, cones, slabs and slab
+      // connectors all consume the same authoritative coordinates atomically.
+      this.applyPositionsUpdate(positionsByHelix)
       // Also update cone entries that cross the changed helices (strand-ID changed).
       const helixSet = new Set(partialNucs.map(n => n.helix_id))
       for (const cone of coneEntries) {
@@ -5325,10 +5352,16 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         if (!helixSet.has(arrow.helixId)) continue
         for (const seg of arrow.segments) {
           if (domainKeySet) {
-            const k = `${seg.strandId}:${seg.domainIndex}`
-            if (!domainKeySet.has(k)) continue
+            const inScope = seg.domainIds.some(
+              d => domainKeySet.has(`${d.strand_id}:${d.domain_index}`))
+            if (!inScope) continue
           }
-          _cbSegments.set(seg, { wsStart: seg.wsStart.clone(), wsEnd: seg.wsEnd.clone() })
+          _cbSegments.set(seg, {
+            wsStart: seg.wsStart.clone(),
+            wsEnd: seg.wsEnd.clone(),
+            tubePos: seg.tubeMesh?.position.clone() ?? null,
+            tubeQuat: seg.tubeMesh?.quaternion.clone() ?? null,
+          })
         }
       }
     },
@@ -5589,6 +5622,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
               seg.mesh.position.copy(_clusterV.set(d0x, d0y, d0z).addScaledVector(_physDir, seg.adjLen * 0.5 / segLen))
               seg.mesh.quaternion.setFromUnitVectors(_AY, _physDir.divideScalar(segLen))
             }
+            if (seg.tubeMesh && snap.tubePos && snap.tubeQuat) {
+              _clusterV.copy(snap.tubePos).sub(centerVec).applyQuaternion(incrRotQuat)
+              seg.tubeMesh.position.copy(_clusterV).add(dummyPosVec)
+              seg.tubeMesh.quaternion.multiplyQuaternions(incrRotQuat, snap.tubeQuat)
+            }
           }
         }
       }
@@ -5819,7 +5857,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         const n = entry.nuc
         const u = updateByKey.get(`${n.helix_id}:${n.bp_index}:${n.direction}`)
         if (!u || !u.bb) continue
-        entry.pos.set(u.bb[0], u.bb[1], u.bb[2])
+        syncPatchedBeadPosition(entry, u.bb)
         _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
         entry.instMesh.setMatrixAt(entry.id, _tMatrix)
         updatedNucs.add(n)
@@ -5828,7 +5866,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         const n = entry.nuc
         const u = updateByKey.get(`${n.helix_id}:${n.bp_index}:${n.direction}`)
         if (!u || !u.bb) continue
-        entry.pos.set(u.bb[0], u.bb[1], u.bb[2])
+        syncPatchedBeadPosition(entry, u.bb)
         _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
         entry.instMesh.setMatrixAt(entry.id, _tMatrix)
         updatedNucs.add(n)

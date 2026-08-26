@@ -141,6 +141,27 @@ def test_single_site_fast_path_matches_full_sasa_and_candidate_report():
     assert conjugation_candidate_for_serial(asset, 999999) is None
 
 
+def test_candidate_mapping_scores_only_eligible_functional_atoms(monkeypatch):
+    """The manager must not regress to computing SASA for every protein atom."""
+    import backend.core.conjugation as conjugation
+
+    asset = _candidate_asset()
+    scored = []
+    real = conjugation._sasa_for_indices
+
+    def capture(coords, radii, indices, **kwargs):
+        selected = list(indices)
+        scored.extend(selected)
+        return real(coords, radii, selected, **kwargs)
+
+    monkeypatch.setattr(conjugation, "_sasa_for_indices", capture)
+    candidates = find_conjugation_candidates(asset)
+
+    assert candidates
+    assert len(scored) == 4  # N-term N, two Lys NZ atoms, and one Cys SG atom
+    assert len(scored) < len(asset.atoms)
+
+
 def test_full_candidate_cache_is_content_keyed_and_returns_defensive_copies():
     clear_conjugation_candidate_cache()
     asset = _candidate_asset()

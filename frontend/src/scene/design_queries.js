@@ -24,15 +24,18 @@ export function isExtrudeOverhang(ovhgId, design) {
   )
 }
 
-// Returns domain ID objects for the overhang's strand — used to filter captureClusterBase
-// and applyClusterTransform so that unselected overhangs sharing the same child helix are
-// not affected by the live preview transform.
+// Returns only domain ID objects explicitly owned by this overhang. An overhang
+// strand can contain several domains (including other overhangs); returning the
+// whole strand makes their axis segments move together.
 export function ovhgDomainIds(ovhgId, design) {
   const o = design?.overhangs?.find(x => x.id === ovhgId)
   if (!o) return null
   const strand = design?.strands?.find(s => s.id === o.strand_id)
   if (!strand?.domains?.length) return null
-  return strand.domains.map((_, i) => ({ strand_id: strand.id, domain_index: i }))
+  return strand.domains.flatMap((domain, i) =>
+    domain.overhang_id === ovhgId
+      ? [{ strand_id: strand.id, domain_index: i }]
+      : [])
 }
 
 // Returns {strand_id, domain_index} for every domain in the design that BINDS the

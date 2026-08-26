@@ -1090,7 +1090,12 @@ async function main() {
   // ── Protein subsystem (imported proteins; independent of the DNA atomistic
   // mode so proteins coexist with cylinders/beads/atomistic DNA). Owns its own
   // atomistic renderer + transform gizmo + coalesced refresh + 2 subscribers. ──
-  const proteinSubsystem = initProteinSubsystem({ scene, store, controls, camera, canvas })
+  const proteinSubsystem = initProteinSubsystem({
+    scene, store, controls, camera, canvas,
+    designRenderer, overhangLocations,
+    getBluntEnds: () => bluntEnds,
+    rightSidebar,
+  })
   const proteinRenderer = proteinSubsystem.renderer
   const proteinGizmo = proteinSubsystem.gizmo
   const _refreshProteins = proteinSubsystem.refresh
@@ -3976,6 +3981,7 @@ async function main() {
     popVisibilityUndo: () => visibilityController?.undo() ?? false,
     popVisibilityRedo: () => visibilityController?.redo() ?? false,
     isTranslateRotateActive:  () => _translateRotateActive,
+    isProteinMoveActive:      () => proteinGizmo?.isAttached?.() === true,
     getPartEditContext:       () => _partEditContext,
     getAssemblyWorkspacePath: () => _assemblyWorkspacePath,
     getOoActiveIds:           () => _orientPanel.getActiveIds(),
@@ -4310,6 +4316,7 @@ async function main() {
     queueAssemblyPrimaryCommit:   _queueAssemblyPrimaryCommit,
     setClusterRotationPoint:      api.setClusterRotationPoint,
   })
+  proteinSubsystem.setMoveRotatePanel(_moveRotatePanel)
   const _mrPanel                        = _moveRotatePanel.panel
   const _mrPivotSel                     = _moveRotatePanel.pivotSel
   const _mrSetTransformValues           = _moveRotatePanel.setTransformValues
@@ -4671,7 +4678,7 @@ async function main() {
     store, scene, camera, canvas,
     designRenderer,
     getJointRenderer: () => jointRenderer,
-    clusterGizmo, instanceGizmo,
+    clusterGizmo, instanceGizmo, proteinGizmo,
     nucleotideTransformTool: _nucleotideTransformTool,
     assemblyRenderer, assemblyJointRenderer,
     api,
@@ -4695,6 +4702,7 @@ async function main() {
     rebakeHelixAxesForClusterDelta: _rebakeHelixAxesForClusterDelta,
     reemitClusterBridges: _reemitClusterBridges,
     refreshClusterOverlays: _refreshClusterOverlays,
+    rightSidebar,
     getActive: () => _translateRotateActive,
     setActive: (v) => { _translateRotateActive = v; store.setState({ translateRotateActive: v }) },
     getClusterDirty: () => _clusterDirty,
@@ -6602,6 +6610,7 @@ async function main() {
       _activateTranslateRotateTool,
       _clusterBackboneEntries,
       clusterGizmo,
+      proteinGizmo,
       api,
       _enterAssemblyMode,
       _exitAssemblyMode,

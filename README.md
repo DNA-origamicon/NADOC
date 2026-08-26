@@ -128,6 +128,15 @@ Helices grouped into named clusters; per-cluster deformation ops; feature log
 timeline with draggable playhead; pre-baked animation at 60 fps (one geometry
 batch fetch, then pure client-side lerp).
 
+### Protein conjugation and movement
+The conjugation manager maps accessible reactive sites with candidate-only,
+KD-tree-accelerated surface sampling. Conjugated proteins use a live two-ball-joint
+Move / Rotate interaction: the protein remains attached to its conjugate oligo,
+the bound overhang moves in its domain basis, and Apply commits the exact preview
+as an undoable Feature Log entry. See
+[Protein conjugation and constrained movement](docs/protein_conjugate_movement.md)
+for kinematics, transaction semantics, performance targets, and regression tests.
+
 ### Loop/skip topological deformation
 Implements the Dietz, Douglas & Shih (Science 2009) mechanism for bending and
 twisting bundles by inserting/deleting base pairs. Enforces physical limits

@@ -76,7 +76,7 @@ export function initTranslateRotateTool(deps) {
     store, scene, camera, canvas,
     designRenderer,
     getJointRenderer,
-    clusterGizmo, instanceGizmo, nucleotideTransformTool,
+    clusterGizmo, instanceGizmo, nucleotideTransformTool, proteinGizmo,
     assemblyRenderer, assemblyJointRenderer,
     api,
     moveRotatePanel,
@@ -94,6 +94,7 @@ export function initTranslateRotateTool(deps) {
     rebakeHelixAxesForClusterDelta,
     reemitClusterBridges,
     refreshClusterOverlays,
+    rightSidebar,
     getActive, setActive,
     getClusterDirty, setClusterDirty,
     getEditContext, setEditContext,
@@ -317,6 +318,7 @@ export function initTranslateRotateTool(deps) {
   document.body.appendChild(_confirmBtn)
 
   async function _activateTranslateRotateTool(targetClusterId = null) {
+    rightSidebar?.open?.('properties')
     const { assemblyActive, activeInstanceId, currentDesign } = store.getState()
 
     // ── Assembly mode: attach instance gizmo ────────────────────────────────
@@ -825,15 +827,18 @@ export function initTranslateRotateTool(deps) {
 
   _confirmBtn.addEventListener('click', _confirmTranslateRotateTool)
   document.getElementById('mr-apply-btn')?.addEventListener('click', () => {
-    if (nucleotideTransformTool?.isActive()) nucleotideTransformTool.confirm()
+    if (proteinGizmo?.isAttached()) proteinGizmo.commit()
+    else if (nucleotideTransformTool?.isActive()) nucleotideTransformTool.confirm()
     else _confirmTranslateRotateTool()
   })
   document.getElementById('mr-cancel-btn')?.addEventListener('click', () => {
-    if (nucleotideTransformTool?.isActive()) nucleotideTransformTool.cancel()
+    if (proteinGizmo?.isAttached()) proteinGizmo.cancel()
+    else if (nucleotideTransformTool?.isActive()) nucleotideTransformTool.cancel()
     else _cancelTranslateRotateTool()
   })
   document.getElementById('mr-reset-btn')?.addEventListener('click', () => {
-    if (nucleotideTransformTool?.isActive()) nucleotideTransformTool.reset()
+    if (proteinGizmo?.isAttached()) proteinGizmo.reset()
+    else if (nucleotideTransformTool?.isActive()) nucleotideTransformTool.reset()
     else _resetActiveClusterToSaved()
   })
 

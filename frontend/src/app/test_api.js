@@ -28,6 +28,7 @@ export function installTestApi({
   _activateTranslateRotateTool,
   _clusterBackboneEntries,
   clusterGizmo,
+  proteinGizmo,
   api,
   _enterAssemblyMode,
   _exitAssemblyMode,
@@ -37,6 +38,19 @@ export function installTestApi({
 }) {
   window.__nadocTest = {
     scene,
+    getProteinGizmoMode: () => proteinGizmo?.getMode?.() ?? null,
+    isProteinGizmoAttached: () => proteinGizmo?.isAttached?.() ?? false,
+    selectProteinForTest(id) {
+      const ref = { kind: 'protein', id }
+      store.setState({
+        selection: { context: 'design', level: 'default', items: [ref], primary: ref },
+      })
+    },
+    async importProteinForTest(content) {
+      const response = await api.importPdbAuto({ content, name: 'e2e-protein' })
+      await api.syncDesignResponse(response)
+      return response
+    },
     store,
     multiOverlayDiagnostics: () => multiOverlay?.diagnostics?.() ?? [],
     multiOverlayRenderOrder: () => multiOverlay?.renderOrder?.() ?? [],

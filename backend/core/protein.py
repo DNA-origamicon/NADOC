@@ -577,6 +577,116 @@ def gizmo_move_to_pose(
     return d @ np.asarray(pose_old, dtype=float)
 
 
+def _conjugate_terminus_position(geometry: list[dict], attachment) -> np.ndarray | None:
+    """Position of the persisted binder's selected azide terminus."""
+    binder_id = getattr(attachment, "binder_strand_id", None)
+    azide_end = getattr(attachment, "azide_end", None)
+    if not binder_id or azide_end not in ("5p", "3p"):
+        return None
+    flag = "is_five_prime" if azide_end == "5p" else "is_three_prime"
+    nuc = next(
+        (
+            n
+            for n in geometry
+            if n.get("strand_id") == binder_id and n.get(flag)
+        ),
+        None,
+    )
+    if nuc is None:
+        return None
+    pos = nuc.get("backbone_position") or nuc.get("base_position")
+    return None if pos is None else np.asarray(pos, dtype=float)
+
+
+def constrained_conjugate_move(
+    design,
+    asset: ProteinAsset,
+    attachment,
+    geometry: list[dict],
+    *,
+    pivot,
+    translation,
+    rotation,
+) -> tuple[np.ndarray, list[float], dict]:
+    """Clamp a conjugated-protein move through its two ball joints.
+
+    The overhang root is the fixed joint and the selected binder terminus is the
+    protein joint.  Their current canonical separation is the rigid link length;
+    because it comes from rendered nucleotide geometry, unequal resized strands
+    are handled without assuming equal sequence lengths.
+    """
+    from scipy.spatial.transform import Rotation
+
+    overhang_id = getattr(attachment.target, "overhang_id", None)
+    if overhang_id is None:
+        raise ValueError("Conjugated protein has no overhang target.")
+    root, _ = resolve_overhang_anchor(geometry, overhang_id, "root")
+    terminus = _conjugate_terminus_position(geometry, attachment)
+    if root is None or terminus is None:
+        raise ValueError("Conjugate constraint cannot resolve its overhang root and binder terminus.")
+    tip, outward = resolve_overhang_anchor(
+        geometry, overhang_id, getattr(attachment.target, "attach_end", "free_end")
+    )
+    old_base = protein_base_world(asset, attachment, tip, outward)
+    proposed_pose = gizmo_move_to_pose(
+        attachment.pose.to_array(), pivot, translation, rotation
+    )
+    proposed_world = proposed_pose @ old_base
+    conj = _conjugation_local_pos(asset, attachment)
+    proposed_joint = (proposed_world @ np.array([*conj, 1.0]))[:3]
+
+    link = terminus - root
+    link_length = float(np.linalg.norm(link))
+    requested = proposed_joint - root
+    requested_length = float(np.linalg.norm(requested))
+    if link_length <= 1e-12:
+        desired_joint = root.copy()
+        delta_r = np.eye(3)
+    else:
+        direction = requested / requested_length if requested_length > 1e-12 else link / link_length
+        desired_joint = root + direction * link_length
+        delta_r = _rotation_between(link, desired_joint - root)
+
+    ovhg = next((o for o in design.overhangs if o.id == overhang_id), None)
+    if ovhg is None:
+        raise ValueError("Conjugate constraint overhang is missing.")
+    old_r = Rotation.from_quat(ovhg.rotation).as_matrix()
+    new_rotation = Rotation.from_matrix(delta_r @ old_r).as_quat().tolist()
+
+    # Preserve the user's requested protein orientation, but translate it so the
+    # functional atom coincides with the clamped binder joint.
+    desired_world = proposed_world.copy()
+    desired_world[:3, 3] = desired_joint - desired_world[:3, :3] @ conj
+
+    interim = design.model_copy(
+        update={
+            "overhangs": [
+                o.model_copy(update={"rotation": new_rotation}) if o.id == overhang_id else o
+                for o in design.overhangs
+            ]
+        },
+        deep=True,
+    )
+    from backend.core.design_geometry import _geometry_for_helices
+
+    new_geometry = _geometry_for_helices(
+        interim, frozenset({ovhg.helix_id})
+    )
+    new_tip, new_outward = resolve_overhang_anchor(
+        new_geometry, overhang_id, getattr(attachment.target, "attach_end", "free_end")
+    )
+    new_base = protein_base_world(asset, attachment, new_tip, new_outward)
+    pose = desired_world @ np.linalg.inv(new_base)
+    result = {
+        "mode": "two_ball_joint",
+        "clamped": abs(requested_length - link_length) > 1.0e-6,
+        "requested_radius_nm": requested_length,
+        "allowed_radius_nm": link_length,
+        "joint_error_nm": float(np.linalg.norm(desired_joint - (root + delta_r @ link))),
+    }
+    return pose, new_rotation, result
+
+
 def reverse_complement(seq: str) -> str:
     """Reverse-complement a DNA sequence (display-only handle sequence)."""
     from backend.core.sequences import complement_base

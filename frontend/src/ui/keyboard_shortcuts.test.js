@@ -93,6 +93,7 @@ function makeDeps(overrides = {}) {
     deformEscape: vi.fn(),
     popGroupUndo: vi.fn(() => false),
     isTranslateRotateActive: vi.fn(() => false),
+    isProteinMoveActive: vi.fn(() => false),
     getPartEditContext: vi.fn(() => null),
     getAssemblyWorkspacePath: vi.fn(() => null),
     getOoActiveIds: vi.fn(() => []),
@@ -161,6 +162,14 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
   it("Tab is blocked when translate/rotate is active", async () => {
     const d = makeDeps()
     d.isTranslateRotateActive.mockReturnValue(true)
+    initKeyboardShortcuts(d)
+    await press('Tab', { tag: 'CANVAS' })
+    expect(d.selectionManager.setSelectionLevel).not.toHaveBeenCalled()
+  })
+
+  it('Tab is reserved for the gizmo when a protein move session is active', async () => {
+    const d = makeDeps()
+    d.isProteinMoveActive.mockReturnValue(true)
     initKeyboardShortcuts(d)
     await press('Tab', { tag: 'CANVAS' })
     expect(d.selectionManager.setSelectionLevel).not.toHaveBeenCalled()

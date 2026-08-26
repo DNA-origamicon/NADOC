@@ -95,6 +95,63 @@ def _diff_is_cluster_only(prev: "Design", new: "Design") -> bool:
     return True
 
 
+def _protein_constraint_move_helix_ids(
+    prev: "Design", new: "Design"
+) -> list[str] | None:
+    """Affected helix for an undo/redo of one constrained protein move.
+
+    Such a move changes exactly one conjugated attachment pose and the rotation
+    of its target overhang.  Recognising that pair lets replacement operations
+    return the same single-helix geometry patch as the forward PATCH.
+    """
+    # Shallowly substitute the three allowed fields and use model equality;
+    # avoid serialising large embedded protein assets merely to classify undo.
+    comparable = prev.model_copy(
+        update={
+            "protein_attachments": new.protein_attachments,
+            "overhangs": new.overhangs,
+            "feature_log": new.feature_log,
+        }
+    )
+    if comparable != new:
+        return None
+    prev_atts = {a.id: a for a in prev.protein_attachments}
+    new_atts = {a.id: a for a in new.protein_attachments}
+    if set(prev_atts) != set(new_atts):
+        return None
+    changed_atts = []
+    for aid, old in prev_atts.items():
+        current = new_atts[aid]
+        old_body = old.model_dump(exclude={"pose"})
+        new_body = current.model_dump(exclude={"pose"})
+        if old_body != new_body:
+            return None
+        if old.pose != current.pose:
+            changed_atts.append(current)
+    if len(changed_atts) != 1 or not changed_atts[0].binder_strand_id:
+        return None
+
+    prev_oh = {o.id: o for o in prev.overhangs}
+    new_oh = {o.id: o for o in new.overhangs}
+    if set(prev_oh) != set(new_oh):
+        return None
+    changed_oh = []
+    for oid, old in prev_oh.items():
+        current = new_oh[oid]
+        if old.model_dump(exclude={"rotation"}) != current.model_dump(
+            exclude={"rotation"}
+        ):
+            return None
+        if old.rotation != current.rotation:
+            changed_oh.append(current)
+    attachment = changed_atts[0]
+    target_id = getattr(attachment.target, "overhang_id", None)
+    if len(changed_oh) > 1 or (changed_oh and changed_oh[0].id != target_id):
+        return None
+    target = new_oh.get(target_id)
+    return [target.helix_id] if target is not None else None
+
+
 def _cluster_diff_payload(prev: "Design", new: "Design") -> list[dict]:
     """For each cluster whose translation / rotation / pivot changed
     between *prev* and *new*, emit a record the frontend can use to

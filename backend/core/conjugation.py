@@ -27,6 +27,7 @@ from collections import OrderedDict
 from typing import Iterable
 
 import numpy as np
+from scipy.spatial import cKDTree
 
 from backend.core.atomistic import DEFAULT_VDW_RADIUS, VDW_RADIUS
 from backend.core.models import ProteinAsset
@@ -63,6 +64,52 @@ _candidate_cache: OrderedDict[str, tuple[dict, ...]] = OrderedDict()
 _candidate_cache_lock = threading.Lock()
 
 
+def _sasa_for_indices(
+    coords: np.ndarray,
+    radii: np.ndarray,
+    indices: Iterable[int],
+    *,
+    n_points: int = 96,
+) -> dict[int, float]:
+    """Vectorized Shrake–Rupley fractions for selected heavy-atom indices."""
+    if len(coords) == 0:
+        return {}
+    sphere = _SPHERE if n_points == 96 else _sphere_points(n_points)
+    tree = cKDTree(coords)
+    rmax = float(radii.max())
+    out: dict[int, float] = {}
+    for raw_index in indices:
+        i = int(raw_index)
+        ci, ri = coords[i], radii[i]
+        near = np.asarray(tree.query_ball_point(ci, ri + rmax), dtype=np.intp)
+        near = near[near != i]
+        if near.size == 0:
+            out[i] = 1.0
+            continue
+        test = ci + sphere * ri
+        # (surface points, nearby atoms, xyz).  Proteins have only a small local
+        # neighbour set, so this removes the Python loop over all 96 points
+        # without creating an atom-count-sized temporary array.
+        delta = test[:, None, :] - coords[near][None, :, :]
+        occluded = np.any(
+            np.einsum("pni,pni->pn", delta, delta, optimize=True)
+            < radii[near][None, :] ** 2,
+            axis=1,
+        )
+        out[i] = float(np.count_nonzero(~occluded)) / len(test)
+    return out
+
+
+def _heavy_geometry(asset: ProteinAsset):
+    heavy = [a for a in asset.atoms if a.element.upper() != "H"]
+    coords = np.array([[a.x, a.y, a.z] for a in heavy], dtype=float)
+    radii = np.array(
+        [VDW_RADIUS.get(a.element, DEFAULT_VDW_RADIUS) + PROBE_RADIUS for a in heavy],
+        dtype=float,
+    )
+    return heavy, coords, radii
+
+
 def atom_sasa(asset: ProteinAsset, *, n_points: int = 96) -> dict[int, float]:
     """Per-atom solvent-accessible *fraction* in ``[0, 1]`` keyed by atom serial.
 
@@ -72,71 +119,26 @@ def atom_sasa(asset: ProteinAsset, *, n_points: int = 96) -> dict[int, float]:
     Heavy atoms only (hydrogens are usually absent from these assets and would
     bias the surface).  Deterministic — the point set is fixed.
     """
-    heavy = [a for a in asset.atoms if a.element.upper() != "H"]
+    heavy, coords, radii = _heavy_geometry(asset)
     if not heavy:
         return {}
-
-    coords = np.array([[a.x, a.y, a.z] for a in heavy], dtype=float)
-    radii = np.array(
-        [VDW_RADIUS.get(a.element, DEFAULT_VDW_RADIUS) + PROBE_RADIUS for a in heavy],
-        dtype=float,
+    fractions = _sasa_for_indices(
+        coords, radii, range(len(heavy)), n_points=n_points
     )
-    serials = [a.serial for a in heavy]
-    sphere = _SPHERE if n_points == 96 else _sphere_points(n_points)
-
-    # Neighbour radius: two atoms can only occlude each other if their expanded
-    # spheres overlap, i.e. within (r_i + r_j).  Use the max radius as a bound.
-    rmax = float(radii.max())
-
-    out: dict[int, float] = {}
-    for i in range(len(heavy)):
-        ci, ri = coords[i], radii[i]
-        # Candidate occluders: atoms whose centre is within ri + rj of this atom.
-        d = np.linalg.norm(coords - ci, axis=1)
-        near = np.where((d > 0) & (d < (ri + rmax)))[0]
-        if near.size == 0:
-            out[serials[i]] = 1.0
-            continue
-        near_c = coords[near]
-        near_r2 = radii[near] ** 2
-        test = ci + sphere * ri  # (n_points, 3)
-        accessible = 0
-        for p in test:
-            diff = near_c - p
-            sq = np.einsum("ij,ij->i", diff, diff)
-            if not np.any(sq < near_r2):
-                accessible += 1
-        out[serials[i]] = accessible / len(test)
-    return out
+    return {heavy[i].serial: fraction for i, fraction in fractions.items()}
 
 
 def atom_accessible_fraction(
     asset: ProteinAsset, serial: int, *, n_points: int = 96
 ) -> float | None:
     """Compute SASA fraction for one atom without auditing the whole protein."""
-    heavy = [a for a in asset.atoms if a.element.upper() != "H"]
+    heavy, coords, radii = _heavy_geometry(asset)
     target_index = next((i for i, atom in enumerate(heavy) if atom.serial == serial), None)
     if target_index is None:
         return None
-    coords = np.array([[a.x, a.y, a.z] for a in heavy], dtype=float)
-    radii = np.array(
-        [VDW_RADIUS.get(a.element, DEFAULT_VDW_RADIUS) + PROBE_RADIUS for a in heavy],
-        dtype=float,
-    )
-    ci, ri = coords[target_index], radii[target_index]
-    d = np.linalg.norm(coords - ci, axis=1)
-    near = np.where((d > 0) & (d < (ri + float(radii.max()))))[0]
-    if near.size == 0:
-        return 1.0
-    sphere = _SPHERE if n_points == 96 else _sphere_points(n_points)
-    test = ci + sphere * ri
-    near_c = coords[near]
-    near_r2 = radii[near] ** 2
-    accessible = sum(
-        not np.any(np.einsum("ij,ij->i", near_c - point, near_c - point) < near_r2)
-        for point in test
-    )
-    return accessible / len(test)
+    return _sasa_for_indices(
+        coords, radii, [target_index], n_points=n_points
+    )[target_index]
 
 
 def _nterm_residues(asset: ProteinAsset) -> set[tuple[str, int]]:
@@ -201,23 +203,34 @@ def find_conjugation_candidates(
     atom has an accessible fraction ≥ ``min_accessible`` are returned.
     """
     chemistries = set(chemistries)
-    sasa = atom_sasa(asset)
     nterms = _nterm_residues(asset) if "nterm" in chemistries else set()
-    candidates: list[dict] = []
-
+    heavy, coords, radii = _heavy_geometry(asset)
+    heavy_index = {a.serial: i for i, a in enumerate(heavy)}
+    eligible = []
+    eligible_chemistry: dict[int, str] = {}
     for a in asset.atoms:
-        chem: str | None = None
-        # Side-chain chemistries take priority; the N-terminus is a backbone atom.
-        for key in ("lys", "cys"):
-            if key not in chemistries:
-                continue
-            res_name, atom_name, _ = _CHEMISTRY[key]
-            if a.res_name == res_name and a.name == atom_name:
-                chem = key
-                break
+        chem = next(
+            (
+                key
+                for key in ("lys", "cys")
+                if key in chemistries
+                and a.res_name == _CHEMISTRY[key][0]
+                and a.name == _CHEMISTRY[key][1]
+            ),
+            None,
+        )
         if chem is None and "nterm" in chemistries:
             if a.name == _NTERM_ATOM and (a.chain_id, a.res_seq) in nterms:
                 chem = "nterm"
+        if chem is not None and a.serial in heavy_index:
+            eligible.append(heavy_index[a.serial])
+            eligible_chemistry[a.serial] = chem
+    sasa_by_index = _sasa_for_indices(coords, radii, eligible)
+    sasa = {heavy[i].serial: value for i, value in sasa_by_index.items()}
+    candidates: list[dict] = []
+
+    for a in asset.atoms:
+        chem = eligible_chemistry.get(a.serial)
         if chem is None:
             continue
 

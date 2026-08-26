@@ -195,7 +195,14 @@ def validate_protein_conjugate(
     orientation_dot = math.nan
     if atom is not None and tip is not None and outward is not None and finite:
         atom_world = world @ np.array([atom.x, atom.y, atom.z, 1.0])
-        expected_tip = tip + outward * max(attachment.handle_spacer_nt, 0) * 0.5
+        from backend.core.protein import _conjugate_terminus_position
+
+        binder_tip = _conjugate_terminus_position(geometry, attachment)
+        expected_tip = (
+            binder_tip
+            if binder_tip is not None
+            else tip + outward * max(attachment.handle_spacer_nt, 0) * 0.5
+        )
         anchor_error = float(np.linalg.norm(atom_world[:3] - expected_tip))
         com_world = world @ np.array([*asset.center_of_mass, 1.0])
         orientation_dot = float(np.dot(com_world[:3] - atom_world[:3], outward))

@@ -70,6 +70,7 @@ export function initMoveRotatePanel({
   const _mrSnapChk       = document.getElementById('mr-snap-45')
   let   _mrPivotIsJoint  = false
   let   _mrAssemblyCtx   = null
+  let   _proteinController = null
 
   function _mrSetSessionMode(sessionMode = 'cluster') {
     const gizmoOnly = sessionMode === 'nucleotide' || sessionMode === 'waiting'
@@ -89,8 +90,11 @@ export function initMoveRotatePanel({
         ? 'Select a cluster or nucleotide to attach the gizmo.'
         : sessionMode === 'nucleotide'
           ? 'Drag the gizmo. Press Tab to switch move/rotate.'
+          : sessionMode === 'protein'
+            ? 'Translate or rotate the protein about its centroid. Tethers remain constrained live.'
           : 'Drag the gizmo or enter an exact transform below.'
     }
+    if (_mrPivotSel) _mrPivotSel.disabled = sessionMode === 'protein' || gizmoOnly
   }
 
 
@@ -205,6 +209,16 @@ export function initMoveRotatePanel({
   }
 
   function _mrCommitInputs() {
+    if (_proteinController?.isAttached?.()) {
+      const t = [parseFloat(_mrTxInp?.value) || 0, parseFloat(_mrTyInp?.value) || 0, parseFloat(_mrTzInp?.value) || 0]
+      const q = eulerDegToQuat(
+        parseFloat(_mrRxInp?.value) || 0,
+        parseFloat(_mrRyInp?.value) || 0,
+        parseFloat(_mrRzInp?.value) || 0,
+      )
+      _proteinController.setTransform(t, q)
+      return
+    }
     if (store.getState().assemblyActive) {
       if (!_mrAssemblyCtx) return
       const tx = parseFloat(_mrTxInp?.value) || 0
@@ -281,6 +295,7 @@ export function initMoveRotatePanel({
   // ── Snap 45° toggle — snap the rotate-gizmo drag to 45° increments ──────────
   function _mrApplySnap() {
     clusterGizmo.setRotationSnap?.(_mrSnapChk?.checked ? 45 : null)
+    _proteinController?.setRotationSnap?.(_mrSnapChk?.checked ? 45 : null)
   }
   _mrSnapChk?.addEventListener('change', _mrApplySnap)
 
@@ -378,5 +393,7 @@ export function initMoveRotatePanel({
     getAssemblyCtx:               () => _mrAssemblyCtx,
     setAssemblyCtx:               (ctx) => { _mrAssemblyCtx = ctx },
     getPivotIsJoint:              () => _mrPivotIsJoint,
+    setProteinController:         controller => { _proteinController = controller },
+    getProteinController:         () => _proteinController,
   }
 }

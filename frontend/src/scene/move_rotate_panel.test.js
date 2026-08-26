@@ -109,6 +109,13 @@ function duplexDesign() {
 beforeEach(() => { clearDom() })
 
 describe('initMoveRotatePanel — view setters', () => {
+  it('accepts an entity-neutral protein transform controller', () => {
+    const api = initMoveRotatePanel(makeDeps())
+    const controller = { isAttached: () => true, setTransform() {} }
+    api.setProteinController(controller)
+    expect(api.getProteinController()).toBe(controller)
+  })
+
   it('no-ops gracefully when DOM is absent', () => {
     const api = initMoveRotatePanel(makeDeps())
     expect(api).toBeTruthy()

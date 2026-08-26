@@ -7,6 +7,7 @@
  * changes and assert the subscribers route to refresh / gizmo correctly.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { Vector3 } from 'three'
 import { createMockStore } from '../test-helpers/mock_store.js'
 
 // Capture the gizmo callbacks main.js wires (onLiveStart/onLive/onLiveEnd) and
@@ -34,7 +35,9 @@ vi.mock('./protein_gizmo.js', () => ({
       _cbs: cbs,
       attach: vi.fn(() => { attached = true }),
       detach: vi.fn(() => { attached = false }),
+      cancel: vi.fn(() => { attached = false; return Promise.resolve(true) }),
       isAttached: vi.fn(() => attached),
+      getAttachmentId: vi.fn(() => attached ? 'p1' : null),
     }
     return _lastGizmo
   }),
@@ -122,11 +125,121 @@ describe('initProteinSubsystem', () => {
       items: [{ kind: 'protein', id: 'p1' }], primary: { kind: 'protein', id: 'p1' },
     } })
     expect(_lastRenderer.centroidOf).toHaveBeenCalled()
-    expect(_lastGizmo.attach).toHaveBeenCalledWith('p1', deps.scene, deps.camera, deps.canvas, [1, 2, 3])
+    expect(_lastGizmo.attach).toHaveBeenCalledWith('p1', deps.scene, deps.camera, deps.canvas, [1, 2, 3], null)
     expect(_lastRenderer.highlight).toHaveBeenCalledWith({ type: 'protein', id: 'p1', data: { attachment_id: 'p1' } })
   })
 
-  it('detaches the gizmo + clears highlight when selection leaves a protein', () => {
+  it('anchors a conjugated protein gizmo at the protein centroid', async () => {
+    const constraint = {
+      attachment_id: 'p1', mode: 'two_ball_joint',
+      root: [0, 0, 0], joint: [4, 5, 6], radius_nm: 8.77,
+    }
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ atoms: [{ helix_id: '__protein__p1' }], protein_constraints: [constraint] }),
+    })
+    document.body.innerHTML = '<div id="move-rotate-panel" style="display:none"></div><div id="mr-current-selection"></div><div id="mr-session-hint"></div>'
+    const deps = makeDeps()
+    deps.rightSidebar = { open: vi.fn() }
+    const sub = initProteinSubsystem(deps)
+    await sub.refresh()
+    deps.store._emit({ selection: {
+      context: 'design', level: 'default',
+      items: [{ kind: 'protein', id: 'p1' }], primary: { kind: 'protein', id: 'p1' },
+    } })
+    expect(_lastGizmo.attach).toHaveBeenCalledWith(
+      'p1', deps.scene, deps.camera, deps.canvas,
+      [1, 2, 3], constraint,
+    )
+    expect(deps.rightSidebar.open).toHaveBeenCalledWith('properties')
+    expect(document.getElementById('move-rotate-panel').style.display).toBe('')
+    expect(document.getElementById('mr-session-hint').textContent).toContain('constrained live')
+  })
+
+  it('previews the constrained overhang and binder on every live protein frame', async () => {
+    const helixCtrl = { captureClusterBase: vi.fn(), applyClusterTransform: vi.fn() }
+    const bluntEnds = { captureClusterBase: vi.fn(), applyClusterTransform: vi.fn() }
+    const locations = { captureClusterBase: vi.fn(), applyClusterTransform: vi.fn() }
+    const constraint = {
+      attachment_id: 'p1', mode: 'two_ball_joint', helix_id: 'oh-h', overhang_id: 'oh-1',
+      domain_ids: [
+        { strand_id: 'selected-oh', domain_index: 0 },
+        { strand_id: 'selected-binder', domain_index: 0 },
+      ],
+      is_extrude: false,
+      root: [0, 0, 0], joint: [5, 0, 0], radius_nm: 5,
+    }
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ atoms: [{ helix_id: '__protein__p1' }], protein_constraints: [constraint] }),
+    })
+    const deps = makeDeps()
+    Object.assign(deps, {
+      designRenderer: { getHelixCtrl: () => helixCtrl },
+      getBluntEnds: () => bluntEnds,
+      overhangLocations: locations,
+    })
+    const sub = initProteinSubsystem(deps)
+    await sub.refresh()
+    _lastGizmo._cbs.onLiveStart('p1')
+    _lastGizmo._cbs.onLive('protein-matrix', {
+      constraint,
+      position: new Vector3(0, 5, 0),
+    })
+    expect(helixCtrl.captureClusterBase).toHaveBeenCalled()
+    expect(helixCtrl.applyClusterTransform).toHaveBeenCalled()
+    expect(bluntEnds.applyClusterTransform).toHaveBeenCalled()
+    const domainIds = constraint.domain_ids
+    expect(helixCtrl.captureClusterBase).toHaveBeenCalledWith(['oh-h'], domainIds)
+    expect(helixCtrl.applyClusterTransform.mock.calls[0][4]).toEqual(domainIds)
+    expect(bluntEnds.captureClusterBase.mock.calls[0][0]).toEqual(new Set(['oh-1']))
+    expect(bluntEnds.applyClusterTransform.mock.calls[0][0]).toEqual(['oh-1'])
+    // Shared/inline helix: never invoke the whole-helix location/axis path,
+    // which would move sibling overhang domains on the same helix.
+    expect(locations.captureClusterBase).not.toHaveBeenCalled()
+    expect(locations.applyClusterTransform).not.toHaveBeenCalled()
+    expect(_lastRenderer.applyLiveTransform).toHaveBeenCalledWith('protein-matrix')
+    expect(global.fetch).toHaveBeenCalledTimes(1) // selection fetch only; drag frames stay local
+  })
+
+  it('keeps extrude/stub sibling axes domain-scoped instead of appending forceAxes', async () => {
+    const helixCtrl = { captureClusterBase: vi.fn(), applyClusterTransform: vi.fn() }
+    const locations = { captureClusterBase: vi.fn(), applyClusterTransform: vi.fn() }
+    const constraint = {
+      attachment_id: 'p1', mode: 'two_ball_joint', helix_id: 'shared-stub',
+      overhang_id: 'selected-oh', is_extrude: true,
+      domain_ids: [{ strand_id: 'selected-strand', domain_index: 1 }],
+      root: [0, 0, 0], joint: [4, 0, 0], radius_nm: 4,
+    }
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ atoms: [{ helix_id: '__protein__p1' }], protein_constraints: [constraint] }),
+    })
+    const deps = makeDeps()
+    Object.assign(deps, {
+      designRenderer: { getHelixCtrl: () => helixCtrl },
+      overhangLocations: locations,
+    })
+    const sub = initProteinSubsystem(deps)
+    await sub.refresh()
+
+    _lastGizmo._cbs.onLiveStart('p1')
+    _lastGizmo._cbs.onLive('protein-matrix', {
+      constraint, position: new Vector3(0, 4, 0),
+    })
+
+    expect(helixCtrl.captureClusterBase).toHaveBeenCalledTimes(1)
+    expect(helixCtrl.captureClusterBase).toHaveBeenCalledWith(
+      ['shared-stub'], constraint.domain_ids,
+    )
+    expect(helixCtrl.applyClusterTransform).toHaveBeenCalledTimes(1)
+    expect(helixCtrl.applyClusterTransform.mock.calls[0]).toHaveLength(5)
+    expect(locations.captureClusterBase).not.toHaveBeenCalled()
+    expect(locations.applyClusterTransform).not.toHaveBeenCalled()
+  })
+
+  it('implicitly cancels and restores the preview when selection leaves a protein', () => {
+    document.body.innerHTML = '<div id="move-rotate-panel" data-protein-active="true"></div>'
     const deps = makeDeps()
     initProteinSubsystem(deps)
     deps.store._emit({ selection: {
@@ -134,8 +247,10 @@ describe('initProteinSubsystem', () => {
       items: [{ kind: 'protein', id: 'p1' }], primary: { kind: 'protein', id: 'p1' },
     } })
     deps.store._emit({ selection: { context: 'design', level: 'default', items: [], primary: null } })
-    expect(_lastGizmo.detach).toHaveBeenCalled()
+    expect(_lastGizmo.cancel).toHaveBeenCalledTimes(1)
+    expect(_lastGizmo.detach).not.toHaveBeenCalled()
     expect(_lastRenderer.highlight).toHaveBeenLastCalledWith(null)
+    expect(document.getElementById('move-rotate-panel').style.display).toBe('none')
   })
 
   it('wires the gizmo live-transform callbacks to the protein renderer', () => {
