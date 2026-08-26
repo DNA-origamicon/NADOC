@@ -1,0 +1,106 @@
+{
+  "schema": "nadoc.exp55.24hb_orientation_density.v1",
+  "source_metrics": "/home/jojo/Work/NADOC/experiments/exp53_extra_base_state_refinement/results/24hb_1xT__large-bundle-single-long__metrics.json",
+  "source_design": "/media/jojo/Archive/NADOC_archive/6950d3b79138/design.json",
+  "n_crossovers": 338,
+  "classification_counts": {
+    "reciprocal_lower": 159,
+    "reciprocal_upper": 159,
+    "unpaired": 20
+  },
+  "n_sampled_frames": 509,
+  "n_stable_observations": 160333,
+  "mean_global_pairing": 0.9927618653706958,
+  "minimum_global_pairing": 0.9859022556390977,
+  "max_frame_reconstruction_rms": 2.84096883518504e-14,
+  "filters": {
+    "global_paired_min": 0.9,
+    "local_bp_min_A": 8.0,
+    "local_bp_max_A": 13.0,
+    "bond_min_A": 1.2,
+    "bond_max_A": 2.2,
+    "pose_rmsd_max_A": 1.5,
+    "min_window_samples": 25
+  },
+  "density_method": "Each crossover contributes unit total mass; 5-degree spherical histogram, 1.25-bin Gaussian smoothing, solid-angle correction, and 300-crossover bootstrap 95% intervals.",
+  "reciprocal_mean_directed_separation_deg": 141.92041926815887,
+  "reciprocal_mean_undirected_slab_separation_deg": 38.07958073184113,
+  "groups": {
+    "all": {
+      "n_crossovers": 338,
+      "n_stable_observations": 160333,
+      "equal_crossover_mean_direction_ih_ax_perp": [
+        0.25880092328331367,
+        0.23928840271651647,
+        0.9358221745786336
+      ],
+      "equal_crossover_mean_azimuth_deg": 74.54125675868696,
+      "equal_crossover_mean_polar_deg": 76.15545486770623,
+      "equal_crossover_resultant_length": 0.10011786695825363,
+      "within_crossover_resultant_median": 0.8763721259722057,
+      "within_crossover_resultant_p05": 0.6370512021213662,
+      "within_crossover_resultant_p95": 0.9592919337445242,
+      "stable_samples_per_crossover_median": 508.0,
+      "density_peak_azimuth_deg": 27.5,
+      "density_peak_polar_deg": 117.5,
+      "peak_enrichment_over_isotropic": 2.9006297034496926
+    },
+    "reciprocal_lower": {
+      "n_crossovers": 159,
+      "n_stable_observations": 76385,
+      "equal_crossover_mean_direction_ih_ax_perp": [
+        -0.6081092336234547,
+        0.7379476962379468,
+        0.29263690402784415
+      ],
+      "equal_crossover_mean_azimuth_deg": 154.30201246229595,
+      "equal_crossover_mean_polar_deg": 42.443117010808706,
+      "equal_crossover_resultant_length": 0.34319465468210314,
+      "within_crossover_resultant_median": 0.8761905737130538,
+      "within_crossover_resultant_p05": 0.6776947820579284,
+      "within_crossover_resultant_p95": 0.9547358718018557,
+      "stable_samples_per_crossover_median": 508.0,
+      "density_peak_azimuth_deg": 162.5,
+      "density_peak_polar_deg": 67.5,
+      "peak_enrichment_over_isotropic": 5.303070906207616
+    },
+    "reciprocal_upper": {
+      "n_crossovers": 159,
+      "n_stable_observations": 75871,
+      "equal_crossover_mean_direction_ih_ax_perp": [
+        0.7092311681879848,
+        -0.6172755597678151,
+        0.34053198584573063
+      ],
+      "equal_crossover_mean_azimuth_deg": 25.647638575671433,
+      "equal_crossover_mean_polar_deg": 128.11745323009117,
+      "equal_crossover_resultant_length": 0.2971808222209261,
+      "within_crossover_resultant_median": 0.8828370334899269,
+      "within_crossover_resultant_p05": 0.6917515328897313,
+      "within_crossover_resultant_p95": 0.9605380286611728,
+      "stable_samples_per_crossover_median": 507.0,
+      "density_peak_azimuth_deg": 27.5,
+      "density_peak_polar_deg": 122.5,
+      "peak_enrichment_over_isotropic": 5.700348717721346
+    },
+    "unpaired": {
+      "n_crossovers": 20,
+      "n_stable_observations": 8077,
+      "equal_crossover_mean_direction_ih_ax_perp": [
+        0.9410819963833438,
+        -0.3353450497597414,
+        -0.043684936588905474
+      ],
+      "equal_crossover_mean_azimuth_deg": -2.6577567357586767,
+      "equal_crossover_mean_polar_deg": 109.59352160208,
+      "equal_crossover_resultant_length": 0.44781653238304636,
+      "within_crossover_resultant_median": 0.7151111208586711,
+      "within_crossover_resultant_p05": 0.538705621265361,
+      "within_crossover_resultant_p95": 0.9012302127085489,
+      "stable_samples_per_crossover_median": 469.5,
+      "density_peak_azimuth_deg": 77.5,
+      "density_peak_polar_deg": 177.5,
+      "peak_enrichment_over_isotropic": 8.37747897177112
+    }
+  }
+}

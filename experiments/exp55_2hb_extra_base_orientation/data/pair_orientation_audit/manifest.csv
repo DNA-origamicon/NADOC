@@ -1,0 +1,5 @@
+label,measured_angle_deg,time_ns,frame,sample,lower,upper,lower_pose_rmsd_A,upper_pose_rmsd_A,render
+Strongly opposed,159.10068439264833,204.18,10208,464,103ece6f-67c3-4c86-b1e6-9b1fde77deaa,8fdb431f-1974-48fc-943a-6f8ac39c0283,0.5180616365729355,0.5738896044389942,data/pair_orientation_audit/1_strongly_opposed/render.png
+Ensemble-typical,126.97435762976949,141.26,7062,321,85406cac-15d3-4f35-8315-f97221ca45d7,38219493-cc31-44ba-9cb2-309e1d4a33bc,0.5512674713173527,0.4847814343685394,data/pair_orientation_audit/2_ensemble_typical/render.png
+Near orthogonal,90.69708162482657,222.22,11110,505,dbc17770-0f73-443d-a4cd-51b94aa7821a,d085cfc1-9eb4-469a-a5f9-65f9e08ee4fd,0.5867380243809321,0.5155736575795918,data/pair_orientation_audit/3_near_orthogonal/render.png
+Rare same hemisphere,62.035133259061475,212.98,10648,484,3dad1467-f378-40a5-b1d3-3f9a893e5245,b884c651-8b4f-475d-973f-6c16a2662004,0.5639600136990287,0.6242490477699493,data/pair_orientation_audit/4_rare_same_hemisphere/render.png

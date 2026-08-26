@@ -645,6 +645,43 @@ export function initSurfaceRenderer(scene) {
     }
   }
 
+  /** Recolour surface vertices from a per-nucleotide scalar map.
+   * `colorByKey` uses the same helix:bp:direction keys as the CG/atomistic renderers.
+   * Vertices belonging to unscored nucleotides retain their current colour. */
+  function applyNucleotideScalarColors(colorByKey) {
+    const identity = _vertexIdentity(_cachedData)
+    if (!_mesh || !identity?.perNuc || !colorByKey) return false
+    const count = identity.index.length
+    const current = _mesh.geometry.getAttribute('color')?.array
+    const colors = current?.length === count * 3
+      ? new Float32Array(current)
+      : new Float32Array(count * 3)
+    if (!current || current.length !== count * 3) {
+      const materialHex = _mesh.material.color?.getHex?.() ?? UNIFORM_COLOR
+      const r = ((materialHex >> 16) & 0xff) / 255
+      const g = ((materialHex >> 8) & 0xff) / 255
+      const b = (materialHex & 0xff) / 255
+      for (let i = 0; i < count; i++) {
+        colors[i * 3] = r; colors[i * 3 + 1] = g; colors[i * 3 + 2] = b
+      }
+    }
+    const get = colorByKey instanceof Map
+      ? key => colorByKey.get(key)
+      : key => colorByKey[key]
+    let changed = 0
+    for (let i = 0; i < count; i++) {
+      const hex = get(identity.table[identity.index[i]])
+      if (hex == null) continue
+      colors[i * 3] = ((hex >> 16) & 0xff) / 255
+      colors[i * 3 + 1] = ((hex >> 8) & 0xff) / 255
+      colors[i * 3 + 2] = (hex & 0xff) / 255
+      changed++
+    }
+    if (!changed) return false
+    applyScalarVertexColors(colors)
+    return true
+  }
+
   /** Return 'on' when a surface mesh is displayed, 'off' otherwise. */
   function getMode() { return _mode }
 
@@ -666,5 +703,6 @@ export function initSurfaceRenderer(scene) {
   }
 
   return { update, setColorMode, setOpacity, dispose, applyPositionLerp, getMode,
-           applyStrandColors, applyClusterDisplay, applyScalarVertexColors, getMesh, strandIdAt, setCrispZones }
+           applyStrandColors, applyClusterDisplay, applyScalarVertexColors,
+           applyNucleotideScalarColors, getMesh, strandIdAt, setCrispZones }
 }

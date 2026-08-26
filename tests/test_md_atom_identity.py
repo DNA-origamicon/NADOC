@@ -1,7 +1,10 @@
 """Synthetic-nucleotide identity used by NAMD atomistic scalar overlays."""
 
+from types import SimpleNamespace
+
 from backend.core.atomistic_to_nadoc import atom_design_ident
 import backend.core.md_trajectory as md_trajectory
+from backend.core.surface import _nuc_key
 import numpy as np
 
 
@@ -33,12 +36,26 @@ def test_loop_copy_identity_keeps_copy_index():
     assert atom_design_ident(("h0", 9, "FORWARD", 2), "scaffold")["copy_k"] == 2
 
 
+def test_surface_owner_prefers_full_synthetic_scalar_key():
+    atom = SimpleNamespace(
+        scalar_key="__xb__:xo7:2:0",
+        helix_id="__xb__",
+        bp_index=-1,
+        direction="",
+    )
+    assert _nuc_key(atom) == "__xb__:xo7:2:0"
+
+
 def test_direct_heavy_pbc_preserves_recorded_intra_residue_coordinates():
     """Atomistic display may choose periodic images, but must never stamp/rebuild atoms."""
-    raw = np.array([
-        [9.8, 1.0, 2.0], [9.9, 1.1, 2.2],
-        [0.2, 1.2, 2.4], [0.4, 1.3, 2.5],
-    ])
+    raw = np.array(
+        [
+            [9.8, 1.0, 2.0],
+            [9.9, 1.1, 2.2],
+            [0.2, 1.2, 2.4],
+            [0.4, 1.3, 2.5],
+        ]
+    )
     layout = {
         "heavy_res_group": np.array([0, 0, 1, 1]),
         "residue_anchor_rows": np.array([0, 2]),

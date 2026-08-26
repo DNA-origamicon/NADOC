@@ -5860,6 +5860,24 @@
                   <div id="md-jobs-flex-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
                   <div id="md-jobs-flex-bar" style="margin-top:3px;display:none"></div>
                   <div id="md-jobs-flex-legend" style="display:none"></div>
+                  <!-- Per-thymine relative KIMMDY propensity over free production dynamics. -->
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
+                         title="False-color each topology thymine by its relative incident T–T photoproduct propensity over production frames. This is a geometric propensity, not an absolute reaction probability.">
+                    <input id="md-jobs-photoproduct-toggle" name="md-viz" type="radio" value="photoproduct" disabled> Photoproduct propensity (T–T)
+                  </label>
+                  <div id="md-jobs-photoproduct-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                  <div id="md-jobs-photoproduct-progress" role="progressbar"
+                       aria-label="Photoproduct visualization loading progress"
+                       aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"
+                       style="display:none;margin-top:4px">
+                    <div style="height:5px;background:#21262d;border-radius:3px;overflow:hidden">
+                      <div id="md-jobs-photoproduct-progress-fill"
+                           style="height:100%;width:0%;background:#bc8cff;transition:width .18s ease"></div>
+                    </div>
+                    <div id="md-jobs-photoproduct-progress-label" aria-live="polite"
+                         style="font-size:9px;color:#8b949e;margin-top:3px"></div>
+                  </div>
+                  <div id="md-jobs-photoproduct-legend" style="display:none"></div>
                   <!-- Occupancy clouds: the top-N most likely CONFIGURATIONS, superposed. -->
                   <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
                          title="The most likely CONFIGURATIONS over this run's FREE (unrestrained) sampling, superposed. Frames are clustered by shape; each cluster's real medoid frame is drawn, opacity set by how often the structure is in that state. The ENM restraint ramp is excluded by default — a restraint ramp is a one-way relaxation, so clustering across it finds 'early vs late' rather than what the free ensemble does.">

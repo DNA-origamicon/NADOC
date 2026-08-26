@@ -1,0 +1,11 @@
+side,variable,n_categories,eta_squared,permutation_p,fdr_q,n_permutations,stratification,primary_test,category_counts
+reciprocal_lower,source_base,4,0.010318033551757042,0.8075596220188991,0.9569021548922554,20000,lattice_edge × bp_mod21,True,"{""A"": 49, ""C"": 32, ""G"": 38, ""T"": 40}"
+reciprocal_lower,destination_base,4,0.01918882295621347,0.41317934103294834,0.6610869456527173,20000,lattice_edge × bp_mod21,True,"{""A"": 57, ""C"": 36, ""G"": 39, ""T"": 27}"
+reciprocal_lower,source_purine_pyrimidine,2,0.0005115873138799089,0.9569021548922554,0.9569021548922554,20000,lattice_edge × bp_mod21,True,"{""purine"": 87, ""pyrimidine"": 72}"
+reciprocal_lower,destination_purine_pyrimidine,2,0.0012943288066088346,0.8645567721613919,0.9569021548922554,20000,lattice_edge × bp_mod21,True,"{""purine"": 96, ""pyrimidine"": 63}"
+reciprocal_lower,source_destination_dinucleotide_exploratory,16,0.09591144651827085,0.44757762111894406,,20000,lattice_edge × bp_mod21,False,"{""AA"": 18, ""AC"": 11, ""AG"": 14, ""AT"": 6, ""CA"": 10, ""CC"": 7, ""CG"": 8, ""CT"": 7, ""GA"": 14, ""GC"": 9, ""GG"": 10, ""GT"": 5, ""TA"": 15, ""TC"": 9, ""TG"": 7, ""TT"": 9}"
+reciprocal_upper,source_base,4,0.05280104372589645,0.010899455027248638,0.04359782010899455,20000,lattice_edge × bp_mod21,True,"{""A"": 56, ""C"": 35, ""G"": 23, ""T"": 45}"
+reciprocal_upper,destination_base,4,0.027803207126482172,0.1592920353982301,0.4247787610619469,20000,lattice_edge × bp_mod21,True,"{""A"": 52, ""C"": 29, ""G"": 44, ""T"": 34}"
+reciprocal_upper,source_purine_pyrimidine,2,0.031177865842026285,0.003399830008499575,0.0271986400679966,20000,lattice_edge × bp_mod21,True,"{""purine"": 79, ""pyrimidine"": 80}"
+reciprocal_upper,destination_purine_pyrimidine,2,0.007368437791055463,0.3067346632668367,0.6134693265336734,20000,lattice_edge × bp_mod21,True,"{""purine"": 96, ""pyrimidine"": 63}"
+reciprocal_upper,source_destination_dinucleotide_exploratory,16,0.15329795389847398,0.011949402529873506,,20000,lattice_edge × bp_mod21,False,"{""AA"": 18, ""AC"": 13, ""AG"": 12, ""AT"": 13, ""CA"": 11, ""CC"": 6, ""CG"": 11, ""CT"": 7, ""GA"": 7, ""GC"": 4, ""GG"": 6, ""GT"": 6, ""TA"": 16, ""TC"": 6, ""TG"": 15, ""TT"": 8}"

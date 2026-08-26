@@ -152,6 +152,9 @@ def _nuc_key(a: Atom) -> str:
     ``direction`` arrives as either the enum or its value depending on the producer
     (same guard oxdna_health._vertex_rmsf uses), so normalise it here.
     """
+    scalar_key = str(getattr(a, "scalar_key", "") or "")
+    if scalar_key:
+        return scalar_key
     if not a.helix_id:
         return ""
     d = a.direction.value if hasattr(a.direction, "value") else a.direction

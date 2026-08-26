@@ -1,6 +1,9 @@
 /** Help ▸ Extra-Base Metrics Audit — measured states, windows and validation. */
 import { docHeaders } from '../shared/doc_id.js'
-import { createExtraBaseComparisonViewer } from './extra_base_cluster_viewer.js'
+import {
+  createExtraBaseComparisonViewer,
+  createExtraBaseSampleViewer,
+} from './extra_base_cluster_viewer.js'
 import './extra_base_metrics_audit.css'
 
 const PANEL_ORDER = ['hop_position', 'pose_orientation', 'environment']
@@ -138,6 +141,26 @@ function pooledMarkup(pooled) {
     ${comparisonMarkup(pooled)}`
 }
 
+function sampleRecordMarkup(record) {
+  const quality = record.quality ?? {}
+  return `<span class="xbma-sample-record ${esc(record.side)}"><strong>${esc(record.side)} · ${esc(record.crossover_id?.slice(0, 8))} · k${record.insert_k}</strong>
+    ${esc(record.base)} · pose RMSD ${num(quality.pose_rmsd_A)} Å · source/destination pairing ${num(quality.source_pair_distance_A)}/${num(quality.destination_pair_distance_A)} Å</span>`
+}
+
+export function sampleAuditMarkup(bundle) {
+  if (!(bundle?.groups ?? []).length) return '<div class="xbma-empty">No sampled poses were returned.</div>'
+  return bundle.groups.map((group, index) => {
+    const angle = Number.isFinite(Number(group.directed_normal_separation_deg))
+      ? `${num(group.directed_normal_separation_deg, 1)}° directed-normal separation`
+      : 'single crossover pose'
+    return `<article class="xbma-sample-card"><header><strong>${group.reciprocal_pair ? 'Reciprocal pair' : 'Crossover sample'}</strong>
+      <span>sample ${bundle.sample_index} · DCD frame ${bundle.frame?.toLocaleString?.() ?? bundle.frame} · ${angle}</span></header>
+      <div class="xbma-sample-records">${group.records.map(sampleRecordMarkup).join('')}</div>
+      <div class="xbma-sample-view" data-sample-view="${index}" aria-label="Orbitable real extra-base trajectory sample"></div>
+      <footer class="xbma-sample-legend"><span class="side-i">● i / lower-bp</span><span class="side-i1">● i+1 / higher-bp</span><span>arrows = directed slab normals</span><span>axes: X interhelix · Y helix axis · Z out of plane</span></footer></article>`
+  }).join('')
+}
+
 function mountPooledViewer(root, pooled, comparisonViewerFactory) {
   if (!comparisonViewerFactory) return []
   const selected = { i: 0, 'i+1': 0 }
@@ -172,11 +195,13 @@ export function renderExtraBaseMetricsAudit(root, bundle, options = {}) {
     return
   }
   const pooled = source.pooled_positions?.ready ? source.pooled_positions : null
+  const frameSummary = source.n_frames == null ? 'trajectory samples available on demand' : `${source.n_frames.toLocaleString()} trajectory frames`
+  const topologySummary = source.topology_pass == null ? 'topology status unavailable' : (source.topology_pass ? '✓ no seed ring piercing' : '⚠ topology not validated')
   root.innerHTML = `<div class="xbma-source-summary">
       <strong>${esc(source.part)}</strong><span>${esc(source.role)}</span>
-      <span>${source.n_frames?.toLocaleString?.() ?? source.n_frames} trajectory frames</span>
-      <span>${source.topology_pass ? '✓ no seed ring piercing' : '⚠ topology not validated'}</span>
-      <span>${esc(source.job)}</span>
+      <span>${esc(frameSummary)}</span>
+      <span>${esc(topologySummary)}</span>
+      <span>${esc(source.job ?? 'source metadata loads with sample catalog')}</span>
     </div>${cpdMarkup(source.cpd_reference)}<div class="xbma-context"><strong>Trajectory context</strong> ${esc((source.dcd ?? []).join?.(', ') ?? source.dcd)}<br>
       <strong>Integrity filter</strong> ${esc(Object.entries(source.filters ?? {}).map(([key, value]) => `${key}=${value}`).join(' · '))}</div>
     ${pooled ? pooledMarkup(pooled) : (source.inserts ?? []).map(insert => insertMarkup(insert, bundle.metric_panels, stableOnly)).join('')}`
@@ -200,15 +225,43 @@ function modalMarkup() {
       <label class="xbma-legacy-control"><input data-panel-toggle="hop_position" type="checkbox" checked> Hop position</label>
       <label class="xbma-legacy-control"><input data-panel-toggle="pose_orientation" type="checkbox" checked> Pose / orientation</label>
       <label class="xbma-legacy-control"><input data-panel-toggle="environment" type="checkbox" checked> Environment</label></div>
+    <section class="xbma-sample-tool"><header><div><strong>Actual trajectory sample viewer</strong><small>Select sampled frames and any set of crossover IDs. Reciprocal partners can be included automatically.</small></div>
+      <div class="xbma-sample-representation"><button type="button" data-sample-representation="atomistic" class="active">Atomistic</button><button type="button" data-sample-representation="schematic">Schematic</button><button type="button" class="xbma-sample-reset">Reset view</button></div></header>
+      <div class="xbma-sample-controls"><label>Suggested example <select class="xbma-sample-preset"><option value="">Custom selection</option></select></label>
+        <label>Sample <input class="xbma-sample-frame" type="range" min="0" max="0" value="0"><output class="xbma-sample-frame-readout">0</output></label>
+        <label>DCD frame <input class="xbma-sample-dcd-frame" type="number" min="0" step="1" value="0"><small>Nearest sampled frame is used.</small></label>
+        <label>Crossovers <select class="xbma-sample-crossovers" multiple size="4"></select></label>
+        <label><input class="xbma-sample-partners" type="checkbox" checked> Include reciprocal partners</label>
+        <button type="button" class="xbma-sample-load">Load selected frame</button></div>
+      <div class="xbma-sample-status">Choose an evidence source to load its sampled-frame catalog.</div>
+      <div class="xbma-sample-results"></div></section>
     <main class="xbma-body"></main>`
   return modal
 }
 
-export function initExtraBaseMetricsAudit({ setMenuToggle = () => {}, comparisonViewerFactory = createExtraBaseComparisonViewer, fetchAudit = async () => {
+export function initExtraBaseMetricsAudit({
+  setMenuToggle = () => {},
+  comparisonViewerFactory = createExtraBaseComparisonViewer,
+  sampleViewerFactory = createExtraBaseSampleViewer,
+  fetchAudit = async () => {
   const response = await fetch('/api/design/extra-base-metrics-audit', { headers: docHeaders() })
   if (!response.ok) throw new Error(`Metrics audit request failed (${response.status})`)
   return response.json()
-} } = {}) {
+  },
+  fetchSampleCatalog = async sourceId => {
+    const response = await fetch(`/api/design/extra-base-sample-audit/catalog?source_id=${encodeURIComponent(sourceId)}`, { headers: docHeaders() })
+    if (!response.ok) throw new Error(`Sample catalog request failed (${response.status})`)
+    return response.json()
+  },
+  fetchSamples = async request => {
+    const response = await fetch('/api/design/extra-base-sample-audit', {
+      method: 'POST', headers: { ...docHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    })
+    if (!response.ok) throw new Error(`Trajectory sample request failed (${response.status})`)
+    return response.json()
+  },
+} = {}) {
   const menu = document.getElementById('menu-help-extra-base-metrics-audit')
   const modal = modalMarkup()
   document.body.appendChild(modal)
@@ -217,11 +270,20 @@ export function initExtraBaseMetricsAudit({ setMenuToggle = () => {}, comparison
   let bundle = null
   let open = false
   let viewers = []
+  let sampleViewers = []
+  let sampleCatalog = null
+  let sampleRepresentation = 'atomistic'
+  let catalogRequestId = 0
+  let sampleRequestId = 0
   const panelVisibility = Object.fromEntries(PANEL_ORDER.map(name => [name, true]))
 
   function disposeViewers() {
     viewers.forEach(viewer => viewer?.dispose?.())
     viewers = []
+  }
+  function disposeSampleViewers() {
+    sampleViewers.forEach(viewer => viewer?.dispose?.())
+    sampleViewers = []
   }
   function render() {
     if (!bundle) return
@@ -238,9 +300,120 @@ export function initExtraBaseMetricsAudit({ setMenuToggle = () => {}, comparison
   }
   function close() {
     open = false
+    catalogRequestId += 1
+    sampleRequestId += 1
     disposeViewers()
+    disposeSampleViewers()
     modal.classList.remove('visible')
     setMenuToggle('menu-help-extra-base-metrics-audit', false)
+  }
+  function updateSampleFrameReadout() {
+    const slider = modal.querySelector('.xbma-sample-frame')
+    const index = Number(slider.value || 0)
+    const frame = sampleCatalog?.frames?.[index]
+    modal.querySelector('.xbma-sample-frame-readout').textContent = frame == null
+      ? `sample ${index}`
+      : `sample ${index} · DCD ${Number(frame).toLocaleString()}`
+    if (frame != null) modal.querySelector('.xbma-sample-dcd-frame').value = String(frame)
+  }
+  function selectNearestDcdFrame() {
+    if (!sampleCatalog?.frames?.length) return
+    const requested = Number(modal.querySelector('.xbma-sample-dcd-frame').value)
+    if (!Number.isFinite(requested)) return
+    let nearestIndex = 0
+    let nearestDistance = Infinity
+    sampleCatalog.frames.forEach((frame, index) => {
+      const distance = Math.abs(Number(frame) - requested)
+      if (distance < nearestDistance) { nearestIndex = index; nearestDistance = distance }
+    })
+    modal.querySelector('.xbma-sample-frame').value = String(nearestIndex)
+    updateSampleFrameReadout()
+  }
+  function applySamplePreset(index) {
+    const suggestion = sampleCatalog?.suggestions?.[index]
+    if (!suggestion) return
+    modal.querySelector('.xbma-sample-frame').value = String(suggestion.sample_index)
+    const ids = new Set(suggestion.crossover_ids ?? [])
+    modal.querySelectorAll('.xbma-sample-crossovers option').forEach(option => {
+      option.selected = ids.has(option.value)
+    })
+    updateSampleFrameReadout()
+  }
+  async function loadSamples() {
+    if (!sampleCatalog) return
+    const selected = [...modal.querySelector('.xbma-sample-crossovers').selectedOptions]
+      .map(option => option.value)
+    const status = modal.querySelector('.xbma-sample-status')
+    const results = modal.querySelector('.xbma-sample-results')
+    if (!selected.length) {
+      status.textContent = 'Select at least one crossover.'
+      return
+    }
+    const requestId = ++sampleRequestId
+    status.textContent = 'Loading measured poses…'
+    disposeSampleViewers()
+    results.innerHTML = ''
+    try {
+      const response = await fetchSamples({
+        source_id: sampleCatalog.source_id,
+        crossover_ids: selected,
+        sample_index: Number(modal.querySelector('.xbma-sample-frame').value || 0),
+        include_reciprocal_partners: modal.querySelector('.xbma-sample-partners').checked,
+      })
+      if (requestId !== sampleRequestId) return
+      results.innerHTML = sampleAuditMarkup(response)
+      response.groups.forEach((group, index) => {
+        const container = results.querySelector(`[data-sample-view="${index}"]`)
+        if (!container) return
+        const viewer = sampleViewerFactory(container, { records: group.records })
+        viewer.setRepresentation?.(sampleRepresentation)
+        sampleViewers.push(viewer)
+      })
+      status.textContent = `${response.groups.length} local view${response.groups.length === 1 ? '' : 's'} · sample ${response.sample_index} · DCD frame ${Number(response.frame).toLocaleString()}`
+    } catch (error) {
+      if (requestId !== sampleRequestId) return
+      status.textContent = error.message
+      results.innerHTML = ''
+    }
+  }
+  async function loadSampleCatalog() {
+    const requestId = ++catalogRequestId
+    sampleRequestId += 1
+    disposeSampleViewers()
+    sampleCatalog = null
+    const status = modal.querySelector('.xbma-sample-status')
+    const results = modal.querySelector('.xbma-sample-results')
+    results.innerHTML = ''
+    const source = bundle?.sources?.[Number(sourceSelect.value || 0)]
+    if (!source?.source_id) {
+      status.textContent = 'This legacy evidence source has no on-demand sample feed.'
+      return
+    }
+    status.textContent = 'Loading sampled-frame catalog…'
+    try {
+      const response = await fetchSampleCatalog(source.source_id)
+      if (requestId !== catalogRequestId) return
+      sampleCatalog = response
+      const slider = modal.querySelector('.xbma-sample-frame')
+      slider.max = String(Math.max(0, sampleCatalog.n_samples - 1))
+      slider.value = '0'
+      const crossovers = modal.querySelector('.xbma-sample-crossovers')
+      crossovers.innerHTML = sampleCatalog.crossovers.map(row => `<option value="${esc(row.crossover_id)}">${esc(row.side)} · bp ${esc(row.bp_level)} · ${esc(row.crossover_id.slice(0, 8))} · ${(row.bases ?? []).join('')}</option>`).join('')
+      const presets = modal.querySelector('.xbma-sample-preset')
+      presets.innerHTML = '<option value="">Custom selection</option>' + (sampleCatalog.suggestions ?? []).map((row, index) => `<option value="${index}">${esc(row.label)} · frame ${esc(row.frame)}</option>`).join('')
+      if (sampleCatalog.suggestions?.length) {
+        presets.value = '0'
+        applySamplePreset(0)
+      } else if (crossovers.options.length) {
+        crossovers.options[0].selected = true
+      }
+      updateSampleFrameReadout()
+      status.textContent = `${sampleCatalog.crossovers.length} crossovers · ${sampleCatalog.n_samples.toLocaleString()} sampled frames`
+      await loadSamples()
+    } catch (error) {
+      if (requestId !== catalogRequestId) return
+      status.textContent = error.message
+    }
   }
   async function show() {
     if (open) { close(); return }
@@ -252,11 +425,12 @@ export function initExtraBaseMetricsAudit({ setMenuToggle = () => {}, comparison
       bundle = await fetchAudit()
       sourceSelect.innerHTML = bundle.sources.map((s, i) => `<option value="${i}">${esc(s.part)} · ${esc(s.role)}</option>`).join('')
       render()
+      await loadSampleCatalog()
     } catch (error) {
       body.innerHTML = `<div class="xbma-error">${esc(error.message)}</div>`
     }
   }
-  sourceSelect.addEventListener('change', render)
+  sourceSelect.addEventListener('change', () => { render(); loadSampleCatalog() })
   modal.querySelector('.xbma-stable-only').addEventListener('change', render)
   modal.querySelector('.xbma-extra-only').addEventListener('change', event => {
     body.classList.toggle('show-context', !event.target.checked)
@@ -266,6 +440,20 @@ export function initExtraBaseMetricsAudit({ setMenuToggle = () => {}, comparison
     render()
   }))
   modal.querySelector('.xbma-close').addEventListener('click', close)
+  modal.querySelector('.xbma-sample-frame').addEventListener('input', updateSampleFrameReadout)
+  modal.querySelector('.xbma-sample-dcd-frame').addEventListener('change', selectNearestDcdFrame)
+  modal.querySelector('.xbma-sample-preset').addEventListener('change', event => {
+    if (event.target.value !== '') applySamplePreset(Number(event.target.value))
+  })
+  modal.querySelector('.xbma-sample-load').addEventListener('click', loadSamples)
+  modal.querySelectorAll('[data-sample-representation]').forEach(button => button.addEventListener('click', () => {
+    sampleRepresentation = button.dataset.sampleRepresentation
+    modal.querySelectorAll('[data-sample-representation]').forEach(candidate => candidate.classList.toggle('active', candidate === button))
+    sampleViewers.forEach(viewer => viewer.setRepresentation?.(sampleRepresentation))
+  }))
+  modal.querySelector('.xbma-sample-reset').addEventListener('click', () => {
+    sampleViewers.forEach(viewer => viewer.resetView?.())
+  })
   menu?.addEventListener('click', show)
   return { show, close, modal }
 }

@@ -1,0 +1,43 @@
+{
+  "schema": "nadoc.exp55.inventory.v1",
+  "canonical_design": "workspace/2hb_1xT.nadoc",
+  "common_sampling_ps": 200.0,
+  "sources": [
+    {
+      "id": "replica_A_200ns",
+      "replica": "A",
+      "job": "/media/jojo/Archive/NADOC_archive/29c5b267380f",
+      "dcd": "2hb_1xT_01_production_200ns_k0.dcd",
+      "stride": 20,
+      "time_offset_ns": 0.0,
+      "note": "Independent 200 ns free-production lineage; 10 ps stored-frame interval."
+    },
+    {
+      "id": "replica_B_prelude",
+      "replica": "B",
+      "job": "/media/jojo/Archive/NADOC_archive/7d5937e569c6",
+      "dcd": "2hb_1xT_01_production_200ns_k0.dcd",
+      "stride": 20,
+      "time_offset_ns": 0.0,
+      "note": "Stored 69.81-82.06 ns tail of the interrupted parent production."
+    },
+    {
+      "id": "replica_B_800ns_continuation",
+      "replica": "B",
+      "job": "/media/jojo/Archive/NADOC_archive/4c0ba3a85587",
+      "dcd": "2hb_1xT_01_production_800ns_k0.dcd",
+      "stride": 10,
+      "time_offset_ns": 82.06,
+      "note": "800 ns free-production continuation from replica_B_prelude; DCD time resets."
+    }
+  ],
+  "filters": {
+    "global_paired_min": 0.9,
+    "local_bp_min_A": 8.0,
+    "local_bp_max_A": 13.0,
+    "bond_min_A": 1.2,
+    "bond_max_A": 2.2,
+    "pose_rmsd_max_A": 1.5,
+    "min_window_samples": 25
+  }
+}

@@ -1,0 +1,424 @@
+{
+  "schema": "nadoc.exp55.24hb_subpopulations.v1",
+  "n_crossovers": 318,
+  "sequence_checks": {
+    "paired_complement_mismatches": 0
+  },
+  "frame_interpretation": {
+    "global": "fixed helix(min id)->helix(max id), axial, perpendicular",
+    "hop": "chemical 3' source->5' destination, axial, perpendicular"
+  },
+  "sides": {
+    "reciprocal_lower": {
+      "n_crossovers": 159,
+      "global_apparent_k2": {
+        "silhouette": 0.693821307649316,
+        "sizes": [
+          55,
+          104
+        ],
+        "centers": [
+          {
+            "azimuth_deg": -21.815759241284443,
+            "polar_deg": 69.32064932304877
+          },
+          {
+            "azimuth_deg": 156.8699712196314,
+            "polar_deg": 71.20316697895805
+          }
+        ],
+        "traversal_direction_explained_fraction": 1.0,
+        "interpretation": "coordinate/traversal polarity, not a conformational state"
+      },
+      "hop_frame_silhouette_sweep": {
+        "2": {
+          "silhouette": 0.35264869155846423,
+          "sizes": [
+            87,
+            72
+          ],
+          "inertia": 13.459358037554491
+        },
+        "3": {
+          "silhouette": 0.3776506463078677,
+          "sizes": [
+            24,
+            65,
+            70
+          ],
+          "inertia": 9.144322690838505
+        },
+        "4": {
+          "silhouette": 0.36574593124253924,
+          "sizes": [
+            23,
+            39,
+            50,
+            47
+          ],
+          "inertia": 6.913758649686137
+        },
+        "5": {
+          "silhouette": 0.36127886917413754,
+          "sizes": [
+            36,
+            19,
+            46,
+            22,
+            36
+          ],
+          "inertia": 5.701062816098213
+        },
+        "6": {
+          "silhouette": 0.36715486813835296,
+          "sizes": [
+            46,
+            10,
+            34,
+            19,
+            36,
+            14
+          ],
+          "inertia": 4.938186201319702
+        }
+      },
+      "hop_candidate_k2": {
+        "silhouette": 0.35264869155846423,
+        "sizes": [
+          87,
+          72
+        ],
+        "centers": [
+          {
+            "azimuth_deg": 170.51496132955447,
+            "polar_deg": 57.18108810490025
+          },
+          {
+            "azimuth_deg": 143.34377989929197,
+            "polar_deg": 88.62946558584234
+          }
+        ],
+        "stability": {
+          "subsample_fraction": 0.8,
+          "n_subsamples": 500,
+          "ari_median": 0.6560112116081497,
+          "ari_p05": 0.41567174071419777,
+          "max_centroid_shift_deg_median": 6.5566275718769536,
+          "max_centroid_shift_deg_p95": 13.429138103571347
+        }
+      }
+    },
+    "reciprocal_upper": {
+      "n_crossovers": 159,
+      "global_apparent_k2": {
+        "silhouette": 0.7303600118244579,
+        "sizes": [
+          56,
+          103
+        ],
+        "centers": [
+          {
+            "azimuth_deg": -148.78531271376238,
+            "polar_deg": 95.11582819936567
+          },
+          {
+            "azimuth_deg": 27.976747223653263,
+            "polar_deg": 106.82873492722027
+          }
+        ],
+        "traversal_direction_explained_fraction": 0.9811320754716981,
+        "interpretation": "coordinate/traversal polarity, not a conformational state"
+      },
+      "hop_frame_silhouette_sweep": {
+        "2": {
+          "silhouette": 0.4174826050235033,
+          "sizes": [
+            113,
+            46
+          ],
+          "inertia": 13.913346212665758
+        },
+        "3": {
+          "silhouette": 0.36338013808147385,
+          "sizes": [
+            89,
+            11,
+            59
+          ],
+          "inertia": 9.885833059517262
+        },
+        "4": {
+          "silhouette": 0.361610974102622,
+          "sizes": [
+            58,
+            40,
+            53,
+            8
+          ],
+          "inertia": 7.077777839074147
+        },
+        "5": {
+          "silhouette": 0.35919013185651455,
+          "sizes": [
+            8,
+            58,
+            38,
+            24,
+            31
+          ],
+          "inertia": 5.682977570040881
+        },
+        "6": {
+          "silhouette": 0.3549182561218492,
+          "sizes": [
+            40,
+            7,
+            44,
+            17,
+            25,
+            26
+          ],
+          "inertia": 4.716764850456419
+        }
+      },
+      "hop_candidate_k2": {
+        "silhouette": 0.4174826050235033,
+        "sizes": [
+          46,
+          113
+        ],
+        "centers": [
+          {
+            "azimuth_deg": -142.33443499290905,
+            "polar_deg": 71.20838132421473
+          },
+          {
+            "azimuth_deg": -153.97902661729105,
+            "polar_deg": 114.39088417976616
+          }
+        ],
+        "stability": {
+          "subsample_fraction": 0.8,
+          "n_subsamples": 500,
+          "ari_median": 0.9486620089932214,
+          "ari_p05": 0.5556222554381189,
+          "max_centroid_shift_deg_median": 2.8634174967345785,
+          "max_centroid_shift_deg_p95": 13.731695590649199
+        }
+      }
+    }
+  },
+  "upper_source_purine_pyrimidine_effect": {
+    "purine_minus_pyrimidine_polar_deg": 11.35873445551041,
+    "purine_minus_pyrimidine_polar_ci95_deg": [
+      4.415086114305463,
+      18.586669854387328
+    ],
+    "mean_direction_separation_deg": 11.780561788864555,
+    "mean_direction_separation_ci95_deg": [
+      5.148182101358028,
+      18.942294455407126
+    ],
+    "candidate_cluster_contingency_rows_purine_pyrimidine": [
+      [
+        16,
+        63
+      ],
+      [
+        30,
+        50
+      ]
+    ],
+    "candidate_cluster_fisher_odds_ratio": 0.42328042328042326,
+    "candidate_cluster_fisher_p": 0.022597099359526737,
+    "note": "paired-complement identity is deterministic and is not an independent test"
+  },
+  "association_tests": [
+    {
+      "side": "reciprocal_lower",
+      "variable": "source_base",
+      "n_categories": 4,
+      "eta_squared": 0.010318033551757042,
+      "permutation_p": 0.8075596220188991,
+      "n_permutations": 20000,
+      "stratification": "lattice_edge \u00d7 bp_mod21",
+      "category_counts": {
+        "A": 49,
+        "C": 32,
+        "G": 38,
+        "T": 40
+      },
+      "primary_test": true,
+      "fdr_q": 0.9569021548922554
+    },
+    {
+      "side": "reciprocal_lower",
+      "variable": "destination_base",
+      "n_categories": 4,
+      "eta_squared": 0.01918882295621347,
+      "permutation_p": 0.41317934103294834,
+      "n_permutations": 20000,
+      "stratification": "lattice_edge \u00d7 bp_mod21",
+      "category_counts": {
+        "A": 57,
+        "C": 36,
+        "G": 39,
+        "T": 27
+      },
+      "primary_test": true,
+      "fdr_q": 0.6610869456527173
+    },
+    {
+      "side": "reciprocal_lower",
+      "variable": "source_purine_pyrimidine",
+      "n_categories": 2,
+      "eta_squared": 0.0005115873138799089,
+      "permutation_p": 0.9569021548922554,
+      "n_permutations": 20000,
+      "stratification": "lattice_edge \u00d7 bp_mod21",
+      "category_counts": {
+        "purine": 87,
+        "pyrimidine": 72
+      },
+      "primary_test": true,
+      "fdr_q": 0.9569021548922554
+    },
+    {
+      "side": "reciprocal_lower",
+      "variable": "destination_purine_pyrimidine",
+      "n_categories": 2,
+      "eta_squared": 0.0012943288066088346,
+      "permutation_p": 0.8645567721613919,
+      "n_permutations": 20000,
+      "stratification": "lattice_edge \u00d7 bp_mod21",
+      "category_counts": {
+        "purine": 96,
+        "pyrimidine": 63
+      },
+      "primary_test": true,
+      "fdr_q": 0.9569021548922554
+    },
+    {
+      "side": "reciprocal_lower",
+      "variable": "source_destination_dinucleotide_exploratory",
+      "n_categories": 16,
+      "eta_squared": 0.09591144651827085,
+      "permutation_p": 0.44757762111894406,
+      "n_permutations": 20000,
+      "stratification": "lattice_edge \u00d7 bp_mod21",
+      "category_counts": {
+        "AA": 18,
+        "AC": 11,
+        "AG": 14,
+        "AT": 6,
+        "CA": 10,
+        "CC": 7,
+        "CG": 8,
+        "CT": 7,
+        "GA": 14,
+        "GC": 9,
+        "GG": 10,
+        "GT": 5,
+        "TA": 15,
+        "TC": 9,
+        "TG": 7,
+        "TT": 9
+      },
+      "primary_test": false,
+      "fdr_q": null
+    },
+    {
+      "side": "reciprocal_upper",
+      "variable": "source_base",
+      "n_categories": 4,
+      "eta_squared": 0.05280104372589645,
+      "permutation_p": 0.010899455027248638,
+      "n_permutations": 20000,
+      "stratification": "lattice_edge \u00d7 bp_mod21",
+      "category_counts": {
+        "A": 56,
+        "C": 35,
+        "G": 23,
+        "T": 45
+      },
+      "primary_test": true,
+      "fdr_q": 0.04359782010899455
+    },
+    {
+      "side": "reciprocal_upper",
+      "variable": "destination_base",
+      "n_categories": 4,
+      "eta_squared": 0.027803207126482172,
+      "permutation_p": 0.1592920353982301,
+      "n_permutations": 20000,
+      "stratification": "lattice_edge \u00d7 bp_mod21",
+      "category_counts": {
+        "A": 52,
+        "C": 29,
+        "G": 44,
+        "T": 34
+      },
+      "primary_test": true,
+      "fdr_q": 0.4247787610619469
+    },
+    {
+      "side": "reciprocal_upper",
+      "variable": "source_purine_pyrimidine",
+      "n_categories": 2,
+      "eta_squared": 0.031177865842026285,
+      "permutation_p": 0.003399830008499575,
+      "n_permutations": 20000,
+      "stratification": "lattice_edge \u00d7 bp_mod21",
+      "category_counts": {
+        "purine": 79,
+        "pyrimidine": 80
+      },
+      "primary_test": true,
+      "fdr_q": 0.0271986400679966
+    },
+    {
+      "side": "reciprocal_upper",
+      "variable": "destination_purine_pyrimidine",
+      "n_categories": 2,
+      "eta_squared": 0.007368437791055463,
+      "permutation_p": 0.3067346632668367,
+      "n_permutations": 20000,
+      "stratification": "lattice_edge \u00d7 bp_mod21",
+      "category_counts": {
+        "purine": 96,
+        "pyrimidine": 63
+      },
+      "primary_test": true,
+      "fdr_q": 0.6134693265336734
+    },
+    {
+      "side": "reciprocal_upper",
+      "variable": "source_destination_dinucleotide_exploratory",
+      "n_categories": 16,
+      "eta_squared": 0.15329795389847398,
+      "permutation_p": 0.011949402529873506,
+      "n_permutations": 20000,
+      "stratification": "lattice_edge \u00d7 bp_mod21",
+      "category_counts": {
+        "AA": 18,
+        "AC": 13,
+        "AG": 12,
+        "AT": 13,
+        "CA": 11,
+        "CC": 6,
+        "CG": 11,
+        "CT": 7,
+        "GA": 7,
+        "GC": 4,
+        "GG": 6,
+        "GT": 6,
+        "TA": 16,
+        "TC": 6,
+        "TG": 15,
+        "TT": 8
+      },
+      "primary_test": false,
+      "fdr_q": null
+    }
+  ]
+}

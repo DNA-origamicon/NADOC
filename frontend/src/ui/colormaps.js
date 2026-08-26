@@ -36,7 +36,10 @@ export const COLORMAP_LIST = Object.keys(COLORMAPS).map((name) => ({ name, label
 /** Per map-type default colormap (each map keeps its "respective colours").
  *  `strain` is SIGNED (compression ← 0 → tension), so it defaults to the DIVERGING
  *  cool–warm ramp: blue = compressed, white = relaxed, red = stretched. */
-export const DEFAULT_COLORMAP_FOR = { flex: 'viridis', deviation: 'devramp', cando: 'jet', strain: 'coolwarm' }
+export const DEFAULT_COLORMAP_FOR = {
+  flex: 'viridis', deviation: 'devramp', cando: 'jet', strain: 'coolwarm',
+  photoproduct: 'magma',
+}
 
 /** Pure: resolve a colormap name to a valid registry key (falls back to viridis). */
 export function normalizeColormap(name) {

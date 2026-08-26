@@ -3141,6 +3141,13 @@ export const getMdAtomisticModel = (id) =>
  *  empty for a design with no insert-carrying reciprocal crossover pair (most designs). */
 export const getMdCpdPairs = (id) =>
   _oxdnaJSON('GET', `/md/jobs/${id}/cpd-pairs`)
+/** Whole-design T-T KIMMDY analysis for the NAMD false-color view. Returns relative
+ *  per-thymine incident propensities; these are not absolute reaction probabilities. */
+export const getMdPhotoproductLikelihood = (id, { signal, maxFrames = 2000 } = {}) =>
+  _oxdnaJSON('GET', `/md/jobs/${id}/photoproduct-likelihood?max_frames=${maxFrames}`,
+    undefined, { signal })
+export const getMdPhotoproductProgress = (id) =>
+  _oxdnaJSON('GET', `/md/jobs/${id}/photoproduct-progress`)
 /** Start a background pass measuring (d_mid, eta, k) for the weld pairs over the WHOLE
  *  trajectory → {trace_id}. The overlay answers "how close now"; this answers "did they
  *  ever get close". Poll with getMdCpdTrace. */

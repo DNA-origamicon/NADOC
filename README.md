@@ -141,6 +141,11 @@ selected hardware, choose a larger-memory target, a smaller construct, or the op
 GBIS continuum-solvent protocol. GBIS removes explicit water but cannot use NAMD's
 GPU-resident mode and currently runs through NADOC's multicore CPU path.
 
+Prepared or archived NAMD jobs can be screened for intended and off-target thymine CPD
+geometries with the frontend-independent arbitrary-design KIMMDY analysis command. It supports
+designed reciprocal welds, proximity-screened whole-design T–T rankings, and explicit residue
+pairs; see [`docs/kimmdy_design_analysis.md`](docs/kimmdy_design_analysis.md).
+
 PDB export can use either native NADOC
 coordinates or the currently displayed simulation/FEM coordinates. Scalar maps
 (RMSF and deviation) can be embedded as per-atom B-factors using the current

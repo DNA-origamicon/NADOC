@@ -92,6 +92,66 @@ export function rmsfColorMap(resp, loBound, hiBound, cmap = 'viridis') {
   return { updates, colorByKey, min: dataLo, max: dataHi }
 }
 
+function _isNucleotideScalarKey(key) {
+  if (typeof key !== 'string') return false
+  if (/^__xb__:[^:]+:\d+(?::\d+)?$/.test(key)) return true
+  const parts = key.split(':')
+  return (parts.length === 3 || parts.length === 4)
+    && parts[0] !== '' && Number.isFinite(Number(parts[1]))
+    && (parts[2] === 'FORWARD' || parts[2] === 'REVERSE')
+}
+
+/** Map that assigns a deliberate fallback color to every valid nucleotide identity.
+ * Renderers query their own complete nucleotide inventories, so this covers ordinary,
+ * loop-copy, extension-anchor, and crossover-insert bases without coloring proteins or
+ * solvent atoms whose identity fields are absent. */
+class NucleotideDefaultColorMap extends Map {
+  constructor(defaultHex) {
+    super()
+    this.defaultHex = defaultHex
+  }
+
+  get(key) {
+    if (super.has(key)) return super.get(key)
+    return _isNucleotideScalarKey(key) ? this.defaultHex : undefined
+  }
+}
+
+/** Pure: NAMD KIMMDY response → per-base false colors on a relative [0,1] scale.
+ * Every nucleotide receives a color. Bases absent from the topology-thymine score,
+ * including non-thymines and thymines without candidates, use the zero-value color. */
+export function photoproductColorMap(
+  resp, loBound = 0, hiBound = 1, cmap = 'magma',
+) {
+  if (!resp?.ready || !Array.isArray(resp.base_likelihoods)) return null
+  const lo = Number.isFinite(loBound) ? loBound : 0
+  const hi = Number.isFinite(hiBound) ? hiBound : 1
+  const span = hi - lo
+  const zeroHex = colormapHex(cmap, span > 1e-12 ? (0 - lo) / span : 0)
+  const colorByKey = new NucleotideDefaultColorMap(zeroHex)
+  let nEligible = 0
+  let nPositive = 0
+  let maxAggregate = 0
+  for (const base of resp.base_likelihoods) {
+    const key = base?.display_key
+    const value = Number(base?.relative_likelihood)
+    if (!key || !Number.isFinite(value)) continue
+    const hex = colormapHex(cmap, span > 1e-12 ? (value - lo) / span : 0)
+    colorByKey.set(key, hex)
+    // Heavy-atom metadata always adds the copy suffix, including to synthetic
+    // crossover-insert keys; the CG insert mesh uses the unsuffixed identity.
+    if (key.startsWith('__xb__:')) {
+      colorByKey.set(`${key}:0`, hex)
+    } else if (key.split(':').length === 3) {
+      colorByKey.set(`${key}:0`, hex)
+    }
+    nEligible++
+    if ((base.aggregate_propensity ?? 0) > 0) nPositive++
+    maxAggregate = Math.max(maxAggregate, Number(base.aggregate_propensity) || 0)
+  }
+  return { colorByKey, min: 0, max: 1, nEligible, nPositive, maxAggregate }
+}
+
 /** Pure: per-vertex RMSF floats → flat RGB Float32Array (0-1), viridis over
  *  [lo,hi] (values outside clamp).  Lets the surface use the SAME ramp/scale as
  *  the beads + atomistic.  Kept pure for unit testing. */
@@ -420,9 +480,11 @@ export function initOxdnaDisplay({
   let _rmsfResp = null // cached /rmsf payload so the scale can recolour without re-fetching
   let _devResp = null  // cached /deviation payload so the scale can recolour without re-fetching
   let _strainResp = null // cached /strain payload (same reason)
+  let _photoproductResp = null // cached relative per-thymine KIMMDY payload
   let _rmsfCmap = 'viridis'    // active flex-map colormap (widget-driven)
   let _devCmap  = 'devramp'    // active deviation-map colormap (widget-driven)
   let _strainCmap = 'coolwarm' // active strain-map colormap (diverging — 0 at the midpoint)
+  let _photoproductCmap = 'magma'
   let _strainDsOnly = false    // strain map: colour designed-duplex bases only (ssDNA rides uncoloured)
   let _devBounds = null
   let _strainBounds = null
@@ -1415,6 +1477,48 @@ export function initOxdnaDisplay({
     }
   }
 
+  /** Apply a precomputed NAMD KIMMDY per-base false-color map at native positions. */
+  function displayPhotoproduct(jobId, resp) {
+    if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
+    const map = photoproductColorMap(resp, 0, 1, _photoproductCmap)
+    if (!map) return { ok: false, reason: resp?.reason || 'no scored thymine bases' }
+    _epoch++
+    _cancelLoad()
+    designRenderer.clearScalarColors?.()
+    _applyFem(null)
+    designRenderer.applyScalarColors(map.colorByKey)
+    const ar = getAtomisticRenderer?.()
+    if (ar && ar.getMode?.() !== 'off') ar.applyScalarColors?.(map.colorByKey)
+    const sr = getSurfaceRenderer?.()
+    if (sr && sr.getMode?.() !== 'off') sr.applyNucleotideScalarColors?.(map.colorByKey)
+    _photoproductResp = resp
+    _active = true
+    _mode = 'photoproduct'
+    _jobId = jobId
+    return {
+      ok: true,
+      n: map.nEligible,
+      nPositive: map.nPositive,
+      maxAggregate: map.maxAggregate,
+      nFrames: resp.n_sampled_frames,
+      nCandidates: resp.n_candidates,
+      truncated: !!resp.screen?.truncated,
+    }
+  }
+
+  function recolorPhotoproduct(lo = 0, hi = 1, cmap) {
+    if (_mode !== 'photoproduct' || !_photoproductResp || !designRenderer) return false
+    if (cmap) _photoproductCmap = cmap
+    const map = photoproductColorMap(_photoproductResp, lo, hi, _photoproductCmap)
+    if (!map) return false
+    designRenderer.applyScalarColors(map.colorByKey)
+    const ar = getAtomisticRenderer?.()
+    if (ar && ar.getMode?.() !== 'off') ar.applyScalarColors?.(map.colorByKey)
+    const sr = getSurfaceRenderer?.()
+    if (sr && sr.getMode?.() !== 'off') sr.applyNucleotideScalarColors?.(map.colorByKey)
+    return true
+  }
+
   /**
    * Render a DEVIATION map: a job's time-averaged mean structure, each bead recoloured
    * green→red by its distance from the designed position.  Takes a PRE-FETCHED response
@@ -1646,6 +1750,17 @@ export function initOxdnaDisplay({
    *  with the active oxDNA frame). No-op when nothing is displayed. */
   function reapplyForRepr() {
     if (!_active) return
+    if (_mode === 'photoproduct') {
+      const map = photoproductColorMap(_photoproductResp, 0, 1, _photoproductCmap)
+      if (!map) return
+      designRenderer.applyScalarColors(map.colorByKey)
+      if (_repKind() === 'atomistic') {
+        getAtomisticRenderer?.()?.applyScalarColors?.(map.colorByKey)
+      } else if (_repKind() === 'surface') {
+        getSurfaceRenderer?.()?.applyNucleotideScalarColors?.(map.colorByKey)
+      }
+      return
+    }
     // Restoring a CG rep: setCGVisible → refreshArcVisibility may have re-driven the
     // extra-base / connector arcs from NATIVE geometry.  Re-apply the last relaxed overlay
     // so __xb__ extra-base beads and __ext_ extension tails return to their simulated
@@ -1699,6 +1814,7 @@ export function initOxdnaDisplay({
     _restoreHeavy()   // atomistic/surface back to the plain design (rebuild from design)
     _rmsfResp = null
     _strainResp = null
+    _photoproductResp = null
     _traj = null
   }
 
@@ -1706,10 +1822,12 @@ export function initOxdnaDisplay({
     displayJob,
     displayLiveFrame,
     displayRmsf,
+    displayPhotoproduct,
     displayOccupancy,
     displayDeviation,
     displayStrain,
     recolorRmsf,
+    recolorPhotoproduct,
     recolorDeviation,
     recolorStrain,
     setStrainDsdnaOnly,
@@ -1743,7 +1861,19 @@ export function initOxdnaDisplay({
     coloringInfo: () => {
       const resp = _mode === 'rmsf' ? _rmsfResp
         : _mode === 'deviation' ? _devResp
-        : _mode === 'strain' ? _strainResp : null
+        : _mode === 'strain' ? _strainResp
+        : _mode === 'photoproduct' ? _photoproductResp : null
+      if (_mode === 'photoproduct') {
+        if (!resp?.base_likelihoods?.length) return null
+        return {
+          attribute: 'relative_photoproduct_propensity',
+          title: 'Relative T–T photoproduct propensity', unit: 'relative',
+          colormap: _photoproductCmap, lo: 0, hi: 1,
+          values: resp.base_likelihoods.filter(p => p.display_key).map(p => ({
+            key: p.display_key, value: p.relative_likelihood,
+          })),
+        }
+      }
       if (!resp?.positions?.length) return null
       // Per scalar mode: the attribute name exported to ChimeraX/photo paths, its
       // colour bounds (the ones the beads actually used), and the per-nucleotide value.

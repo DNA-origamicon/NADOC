@@ -5,6 +5,7 @@ import {
   cpdMarkup,
   populationRows,
   renderExtraBaseMetricsAudit,
+  sampleAuditMarkup,
   stableWindowCoverage,
   stateCloudSvg,
 } from './extra_base_metrics_audit.js'
@@ -50,6 +51,20 @@ describe('extra-base metrics helpers', () => {
   it('draws occupancy points and CPD reaction coordinate evidence', () => {
     expect(stateCloudSvg({ points: [[.5, -.3, 0, 1]] })).toContain('<circle')
     expect(cpdMarkup(bundle.sources[0].cpd_reference)).toContain('Reactive corner 0/1619')
+  })
+
+  it('renders real sampled-pair readouts and viewer mounts', () => {
+    const sampled = {
+      sample_index: 7, frame: 154, groups: [{ reciprocal_pair: true,
+        directed_normal_separation_deg: 121.2,
+        records: [{ side: 'i', crossover_id: 'abcdefgh-1', insert_k: 0, base: 'T',
+          quality: { pose_rmsd_A: .4, source_pair_distance_A: 10, destination_pair_distance_A: 10.2 } }] }],
+    }
+    const markup = sampleAuditMarkup(sampled)
+    expect(markup).toContain('121.2° directed-normal separation')
+    expect(markup).toContain('DCD frame 154')
+    expect(markup).toContain('pose RMSD 0.40 Å')
+    expect(markup).toContain('arrows = directed slab normals')
   })
 
   it('uses one aligned i/i+1 panel and switches both medoids', () => {
@@ -103,5 +118,51 @@ describe('Extra-Base Metrics Audit toggle', () => {
     expect(audit.modal.querySelector('.xbma-body').classList.contains('show-context')).toBe(true)
     audit.modal.querySelector('.xbma-close').click()
     expect(setMenuToggle).toHaveBeenLastCalledWith('menu-help-extra-base-metrics-audit', false)
+  })
+
+  it('loads a source catalog, suggested frame, selected crossover and 3D sample feed', async () => {
+    const sourceBundle = structuredClone(bundle)
+    sourceBundle.sources[0].source_id = 'fixture__trajectory'
+    const catalog = {
+      source_id: 'fixture__trajectory', n_samples: 2, frames: [100, 120],
+      crossovers: [
+        { crossover_id: 'abcdefgh-1', side: 'i', bp_level: 10, bases: ['T'] },
+        { crossover_id: 'ijklmnop-2', side: 'i+1', bp_level: 11, bases: ['T'] },
+      ],
+      suggestions: [{ label: 'Left · cluster 1 medoid', sample_index: 1, frame: 120,
+        crossover_ids: ['abcdefgh-1'] }],
+    }
+    const sampleResponse = {
+      sample_index: 1, frame: 120, groups: [{ reciprocal_pair: true,
+        directed_normal_separation_deg: 120,
+        records: [{ side: 'i', crossover_id: 'abcdefgh-1', insert_k: 0, base: 'T', quality: {} }] }],
+    }
+    const fetchSamples = vi.fn(async () => sampleResponse)
+    const viewer = { setRepresentation: vi.fn(), resetView: vi.fn(), dispose: vi.fn() }
+    const sampleViewerFactory = vi.fn(() => viewer)
+    const audit = initExtraBaseMetricsAudit({
+      fetchAudit: async () => sourceBundle,
+      fetchSampleCatalog: async () => catalog,
+      fetchSamples,
+      sampleViewerFactory,
+    })
+    document.getElementById('menu-help-extra-base-metrics-audit').click()
+    await vi.waitFor(() => expect(fetchSamples).toHaveBeenCalled())
+    expect(fetchSamples.mock.calls[0][0]).toMatchObject({
+      source_id: 'fixture__trajectory', crossover_ids: ['abcdefgh-1'], sample_index: 1,
+      include_reciprocal_partners: true,
+    })
+    expect(sampleViewerFactory).toHaveBeenCalledTimes(1)
+    expect(audit.modal.querySelector('.xbma-sample-status').textContent).toContain('DCD frame 120')
+    const exactFrame = audit.modal.querySelector('.xbma-sample-dcd-frame')
+    exactFrame.value = '101'; exactFrame.dispatchEvent(new Event('change'))
+    expect(audit.modal.querySelector('.xbma-sample-frame').value).toBe('0')
+    expect(exactFrame.value).toBe('100')
+    audit.modal.querySelector('[data-sample-representation="schematic"]').click()
+    expect(viewer.setRepresentation).toHaveBeenLastCalledWith('schematic')
+    audit.modal.querySelector('.xbma-sample-reset').click()
+    expect(viewer.resetView).toHaveBeenCalled()
+    audit.close()
+    expect(viewer.dispose).toHaveBeenCalled()
   })
 })

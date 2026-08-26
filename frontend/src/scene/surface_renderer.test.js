@@ -315,6 +315,15 @@ describe('surface — simulation frames keep cluster colour + opacity', () => {
     expect(colorAt(sr, 2)).toEqual([0, 0, 0])
   })
 
+  it('applies a per-base scalar map while leaving unscored nucleotides unchanged', () => {
+    const sr = build()
+    push(sr, SIM)
+    const before = colorAt(sr, 2)
+    expect(sr.applyNucleotideScalarColors({ 'hA:5:FORWARD': 0xff0000 })).toBe(true)
+    expect(colorAt(sr, 0)).toEqual([1, 0, 0])
+    expect(colorAt(sr, 2)).toEqual(before)
+  })
+
   it('applies a fade set AFTER the frame landed', () => {
     // Dragging the opacity slider while a simulation overlay is on screen.
     const sr = build()

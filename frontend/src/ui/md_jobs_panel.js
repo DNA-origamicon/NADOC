@@ -91,6 +91,30 @@ export function productionNsFromSteps(steps, timestepFs = DEFAULT_PRODUCTION_TIM
   const ts = Number(timestepFs) > 0 ? Number(timestepFs) : DEFAULT_PRODUCTION_TIMESTEP_FS
   return (Number(steps) || 0) * ts / 1_000_000
 }
+
+/** Pure presentation model for the NAMD photoproduct loading indicator. */
+export function photoproductProgressView(progress = {}) {
+  const fraction = Math.max(0, Math.min(1, Number(progress.fraction) || 0))
+  const percent = Math.round(fraction * 100)
+  const units = {
+    screening: 'frames',
+    measuring: 'frames',
+    aggregating: 'pairs',
+    serializing: 'bases',
+    coloring: 'bases',
+  }
+  const unit = units[progress.phase]
+  const count = Number(progress.total) > 0
+    ? ` · ${Number(progress.done) || 0}/${Number(progress.total)}${unit ? ` ${unit}` : ''}`
+    : ''
+  return {
+    percent,
+    count,
+    message: progress.message || 'Preparing photoproduct visualization',
+    tone: progress.phase === 'error' ? 'error'
+      : progress.phase === 'complete' ? 'complete' : 'active',
+  }
+}
 // "View trajectory" frame interval: load every Nth frame of each written segment, the
 // same idea as the stride field when a DCD is imported into VMD.  The DEFAULT lives in
 // index.html's `value=` attribute (form_defaults reads el.defaultValue) — this constant is
@@ -1336,7 +1360,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // lost trajectory, failed load).
   function _syncVizOffRadio() {
     if (!vizOffRadio) return
-    const anyOn = [displayToggle, flexToggle, trajToggle, occupancyToggle].some(t => t?.checked)
+    const anyOn = [displayToggle, flexToggle, photoproductToggle, trajToggle, occupancyToggle]
+      .some(t => t?.checked)
     if (!anyOn) vizOffRadio.checked = true
   }
 
@@ -1373,6 +1398,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const flexStatus   = document.getElementById('md-jobs-flex-status')
   const flexBar      = document.getElementById('md-jobs-flex-bar')
   const flexLegend   = document.getElementById('md-jobs-flex-legend')
+  const photoproductToggle = document.getElementById('md-jobs-photoproduct-toggle')
+  const photoproductStatus = document.getElementById('md-jobs-photoproduct-status')
+  const photoproductProgress = document.getElementById('md-jobs-photoproduct-progress')
+  const photoproductProgressFill = document.getElementById('md-jobs-photoproduct-progress-fill')
+  const photoproductProgressLabel = document.getElementById('md-jobs-photoproduct-progress-label')
+  const photoproductLegend = document.getElementById('md-jobs-photoproduct-legend')
   const trajToggle   = document.getElementById('md-jobs-traj-toggle')
   // With its peers, not beside the occupancy card below: _syncVizOffRadio reads this in
   // its `anyOn` array and runs during init, so a later `const` is a TDZ that kills boot.
@@ -2648,6 +2679,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (!displayToggle) return
     if (_occupancyIsActive()) _setOccupancyOff()
     _setFlexOff()                     // live display + flex/traj are mutually exclusive
+    _setPhotoproductOff()
     _setTrajOff()
     displayToggle.checked = true
     clearInterval(_prewarmTimer)
@@ -2722,6 +2754,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   vizOffRadio?.addEventListener('click', () => {
     if (_occupancyReady && _occupancyIsActive()) _setOccupancyOff()
     _setFlexOff()
+    _setPhotoproductOff()
     _setTrajOff()
     _stopMdDisplay('Native positions restored')
   })
@@ -2850,6 +2883,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     }
     if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
     _setFlexOff()
+    _setPhotoproductOff()
     _setTrajOff()
     await _occupancy?.refresh()
   })
@@ -2895,11 +2929,142 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       }
       if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
       if (_occupancyIsActive()) _setOccupancyOff()
+      _setPhotoproductOff()
       _setTrajOff()
       await _refreshFlex()
     } else {
       _setFlexOff()
     }
+  })
+
+  let _photoproductAbort = null
+  function _setPhotoproductStatus(text, color = _C.dim) {
+    if (photoproductStatus) {
+      photoproductStatus.textContent = text
+      photoproductStatus.style.color = color
+    }
+  }
+  function _setPhotoproductLegend(show) {
+    if (!photoproductLegend) return
+    photoproductLegend.style.display = show ? '' : 'none'
+    photoproductLegend.innerHTML = show
+      ? `<div style="display:flex;align-items:center;gap:5px;font-size:9px;color:${_C.dim};margin-top:3px">`
+        + `<span>0</span><span style="flex:1;height:7px;border-radius:3px;background:`
+        + `linear-gradient(90deg,#000004,#51127c,#b73779,#fc8961,#fcfdbf)"></span>`
+        + `<span>1</span></div><div style="font-size:9px;color:${_C.dim}">`
+        + `low → high relative T–T propensity · unscored bases use 0</div>`
+      : ''
+  }
+  function _paintPhotoproductProgress(progress = null) {
+    if (!photoproductProgress) return
+    if (!progress) {
+      photoproductProgress.style.display = 'none'
+      photoproductProgress.setAttribute('aria-valuenow', '0')
+      if (photoproductProgressFill) photoproductProgressFill.style.width = '0%'
+      if (photoproductProgressLabel) photoproductProgressLabel.textContent = ''
+      return
+    }
+    const { percent, count, message, tone } = photoproductProgressView(progress)
+    photoproductProgress.style.display = ''
+    photoproductProgress.setAttribute('aria-valuenow', String(percent))
+    photoproductProgress.setAttribute('aria-valuetext', `${message}${count}`)
+    if (photoproductProgressFill) {
+      photoproductProgressFill.style.width = `${percent}%`
+      photoproductProgressFill.style.background = tone === 'error'
+        ? _C.err : tone === 'complete' ? _C.ok : _C.purple
+    }
+    if (photoproductProgressLabel) {
+      photoproductProgressLabel.textContent = `${message} · ${percent}%${count}`
+    }
+    _setPhotoproductStatus(`${message}${count}`,
+      tone === 'error' ? _C.err : tone === 'complete' ? _C.ok : _C.accent)
+  }
+  function _setPhotoproductOff() {
+    _photoproductAbort?.abort()
+    _photoproductAbort = null
+    if (_selectedId) api.cancelMdAnalysis(_selectedId, 'photoproduct')
+    if (getMdViz?.()?.mode?.() === 'photoproduct') getMdViz().stopAndRestore()
+    if (photoproductToggle) photoproductToggle.checked = false
+    getFlexScale?.()?.hide?.()
+    _setPhotoproductStatus('', _C.dim)
+    _paintPhotoproductProgress(null)
+    _setPhotoproductLegend(false)
+    _syncVizOffRadio()
+  }
+  async function _refreshPhotoproduct() {
+    const v = getMdViz?.()
+    if (!_selectedId || !v) return
+    const jobId = _selectedId
+    _photoproductAbort?.abort()
+    const controller = new AbortController()
+    _photoproductAbort = controller
+    _paintPhotoproductProgress({
+      phase: 'preparing', fraction: 0.01,
+      message: 'Loading topology and production trajectories',
+    })
+    const poll = setInterval(async () => {
+      if (controller.signal.aborted || jobId !== _selectedId
+          || !photoproductToggle?.checked) return
+      const progress = await api.getMdPhotoproductProgress(jobId).catch(() => null)
+      if (controller.signal.aborted || jobId !== _selectedId
+          || !photoproductToggle?.checked) return
+      if (progress?.active) _paintPhotoproductProgress(progress)
+    }, 250)
+    try {
+      const response = await api.getMdPhotoproductLikelihood(jobId, {
+        signal: controller.signal, maxFrames: 2000,
+      })
+      if (controller.signal.aborted || jobId !== _selectedId
+          || !photoproductToggle?.checked) return
+      _paintPhotoproductProgress({
+        phase: 'coloring', fraction: 0.995,
+        done: response.n_display_bases, total: response.n_display_bases,
+        message: 'Applying per-base false colors',
+      })
+      const result = v.displayPhotoproduct(jobId, response)
+      if (!result.ok) throw new Error(result.reason || 'no photoproduct data')
+      _setPhotoproductLegend(true)
+      getFlexScale?.()?.show?.({
+        title: 'Relative T–T photoproduct propensity', min: 0, max: 1,
+        mapType: 'photoproduct',
+        onRecolor: (lo, hi, cmap) => getMdViz?.()?.recolorPhotoproduct?.(lo, hi, cmap),
+      })
+      const cap = result.truncated ? ' · candidate cap reached' : ''
+      _paintPhotoproductProgress({
+        phase: 'complete', fraction: 1,
+        message: `Ready · ${result.nPositive}/${result.n} thymine bases with candidate partners`
+          + ` · ${result.nFrames ?? '?'} sampled frames${cap}`,
+      })
+      if (result.truncated) _setPhotoproductStatus(
+        `Ready · candidate cap reached; inspect the status before interpreting the map`,
+        _C.warn,
+      )
+    } catch (error) {
+      if (controller.signal.aborted) return
+      _paintPhotoproductProgress({
+        phase: 'error', fraction: 1,
+        message: error?.message || 'Photoproduct analysis failed',
+      })
+      if (photoproductToggle) photoproductToggle.checked = false
+      _syncVizOffRadio()
+    } finally {
+      clearInterval(poll)
+      if (_photoproductAbort === controller) _photoproductAbort = null
+    }
+  }
+  photoproductToggle?.addEventListener('change', async () => {
+    if (!photoproductToggle.checked) { _setPhotoproductOff(); return }
+    if (!_selectedId || !mdHasProductionRun(_selectedJob())) {
+      photoproductToggle.checked = false
+      showToast('A free production trajectory is required', 'warn')
+      _syncVizOffRadio()
+      return
+    }
+    if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
+    if (_occupancyIsActive()) _setOccupancyOff()
+    _setFlexOff()
+    _setTrajOff()
+    await _refreshPhotoproduct()
   })
 
   function _setTrajStatus(text, color = _C.ok) {
@@ -3086,6 +3251,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
       if (_occupancyIsActive()) _setOccupancyOff()
       _setFlexOff()
+      _setPhotoproductOff()
       await _refreshTraj()
     } else {
       _setTrajOff()
@@ -3134,11 +3300,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // Occupancy needs PRODUCTION dynamics, not merely frames: clustering the relaxation
     // ladder describes the schedule. Gated tighter than the flexibility map on purpose.
     const hasFree = mdHasProductionRun(job)
+    _setRadioEnabled(photoproductToggle, hasFree)
     _setRadioEnabled(occupancyToggle, hasFree)
     // `_ready` guards the `const _occupancy` this tears down: _updateVizToggles runs
     // during init, before that const exists, and touching it there is a TDZ that aborts
     // the whole panel's boot (it did once — see the occupancyToggle note above).
     if (!hasFree && occupancyToggle?.checked && _occupancyReady) _setOccupancyOff()
+    if (!hasFree && photoproductToggle?.checked) _setPhotoproductOff()
     if (!hasJob && displayToggle?.checked) _stopMdDisplay('Native positions restored')
     if (!hasTraj) { if (flexToggle?.checked) _setFlexOff(); if (trajToggle?.checked) _setTrajOff() }
     // Solvent layers over any view that shows ONE FRAME — the live stream or the
@@ -4260,6 +4428,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const visualizationAction = mdVisualizationJobSwitchAction({
       display: displayToggle?.checked,
       flex: flexToggle?.checked,
+      photoproduct: photoproductToggle?.checked,
       occupancy: occupancyToggle?.checked,
       trajectory: trajToggle?.checked,
     })
@@ -4298,6 +4467,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         await _refreshMdDisplay()
       },
       flex: () => _mdHasTrajectory(job) && flexToggle?.checked ? _refreshFlex() : undefined,
+      photoproduct: () => mdHasProductionRun(job) && photoproductToggle?.checked
+        ? _refreshPhotoproduct()
+        : undefined,
       occupancy: () => mdHasProductionRun(job) && occupancyToggle?.checked
         ? _occupancy?.refresh()
         : undefined,

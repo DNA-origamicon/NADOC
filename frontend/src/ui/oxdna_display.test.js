@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { toFemUpdates, viridisHex, rmsfColorMap, framesToUpdates, initOxdnaDisplay, repKind, rmsfToVertexColors, deviationHex, deviationColorMap, strainBounds, strainColorMap, strainStats, affordableAtomFrames, prebuildMemoryPlan, atomFrameBytes,
+import { toFemUpdates, viridisHex, rmsfColorMap, photoproductColorMap, framesToUpdates, initOxdnaDisplay, repKind, rmsfToVertexColors, deviationHex, deviationColorMap, strainBounds, strainColorMap, strainStats, affordableAtomFrames, prebuildMemoryPlan, atomFrameBytes,
   BROWSER_HEAP_CEILING_BYTES, SERIALS_PER_NUCLEOTIDE_EST } from './oxdna_display.js'
 import { colormapHex } from './colormaps.js'
 
@@ -335,6 +335,40 @@ describe('rmsfColorMap', () => {
   })
 })
 
+describe('photoproductColorMap', () => {
+  it('colors mapped thymines and defaults every other nucleotide to magma zero', () => {
+    const map = photoproductColorMap({ ready: true, base_likelihoods: [
+      { display_key: 'h0:4:FORWARD', relative_likelihood: 0,
+        aggregate_propensity: 0 },
+      { display_key: '__xb__:xo7:0', relative_likelihood: 1,
+        aggregate_propensity: 0.3 },
+      { display_key: null, relative_likelihood: 0.5, aggregate_propensity: 0.1 },
+    ] })
+    expect(map.nEligible).toBe(2)
+    expect(map.nPositive).toBe(1)
+    expect(map.colorByKey.get('h0:4:FORWARD')).toBe(colormapHex('magma', 0))
+    expect(map.colorByKey.get('h0:4:FORWARD:0')).toBe(colormapHex('magma', 0))
+    expect(map.colorByKey.get('__xb__:xo7:0')).toBe(colormapHex('magma', 1))
+    expect(map.colorByKey.get('__xb__:xo7:0:0')).toBe(colormapHex('magma', 1))
+    expect(map.colorByKey.get('h9:80:REVERSE')).toBe(colormapHex('magma', 0))
+    expect(map.colorByKey.get('__xb__:unscored:2')).toBe(colormapHex('magma', 0))
+    expect(map.colorByKey.get('__xb__:unscored:2:0')).toBe(colormapHex('magma', 0))
+    expect(map.colorByKey.get('__ext_tail7:3:REVERSE:0')).toBe(colormapHex('magma', 0))
+    expect(map.colorByKey.get('undefined:undefined:undefined')).toBeUndefined()
+  })
+
+  it('rejects unavailable responses but renders an all-zero map with no scored bases', () => {
+    expect(photoproductColorMap({ ready: false, base_likelihoods: [] })).toBe(null)
+    const unmapped = photoproductColorMap({ ready: true, base_likelihoods: [
+      { display_key: null, relative_likelihood: 1 },
+    ] })
+    expect(unmapped.nEligible).toBe(0)
+    expect(unmapped.colorByKey.get('h0:1:FORWARD')).toBe(colormapHex('magma', 0))
+    const empty = photoproductColorMap({ ready: true, base_likelihoods: [] })
+    expect(empty.colorByKey.get('h0:1:FORWARD:0')).toBe(colormapHex('magma', 0))
+  })
+})
+
 describe('rmsfToVertexColors', () => {
   it('maps per-vertex RMSF onto the viridis ramp (3 RGB floats per vertex)', () => {
     const col = rmsfToVertexColors([0, 0.5, 1], 0, 1)
@@ -587,6 +621,42 @@ describe('initOxdnaDisplay controller', () => {
     await ctrl.displayJob('jobF')
     expect(designRenderer.clearScalarColors).toHaveBeenCalled()
     expect(ctrl.mode()).toBe('relaxed')
+  })
+
+  it('applies and restores a native-position photoproduct false-color view', () => {
+    const designRenderer = {
+      applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn(),
+    }
+    const ctrl = initOxdnaDisplay({ designRenderer, api: {} })
+    const response = { ready: true, n_sampled_frames: 50, n_candidates: 3,
+      base_likelihoods: [{ display_key: 'h0:4:FORWARD', relative_likelihood: 1,
+        aggregate_propensity: 0.2 }] }
+    const result = ctrl.displayPhotoproduct('jobP', response)
+    expect(result).toMatchObject({ ok: true, n: 1, nPositive: 1, nFrames: 50 })
+    expect(ctrl.mode()).toBe('photoproduct')
+    expect(designRenderer.applyFemPositions).toHaveBeenCalledWith(null)
+    expect(designRenderer.applyScalarColors).toHaveBeenCalled()
+    const appliedColors = designRenderer.applyScalarColors.mock.calls.at(-1)[0]
+    expect(appliedColors.get('h0:99:REVERSE')).toBe(colormapHex('magma', 0))
+    expect(ctrl.coloringInfo()).toMatchObject({
+      attribute: 'relative_photoproduct_propensity', lo: 0, hi: 1,
+    })
+    ctrl.stopAndRestore()
+    expect(designRenderer.clearScalarColors).toHaveBeenCalled()
+    expect(ctrl.isActive()).toBe(false)
+  })
+
+  it('still displays an all-zero photoproduct view when no base has a score', () => {
+    const designRenderer = {
+      applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn(),
+    }
+    const ctrl = initOxdnaDisplay({ designRenderer, api: {} })
+    const result = ctrl.displayPhotoproduct('jobP', {
+      ready: true, n_sampled_frames: 10, n_candidates: 0, base_likelihoods: [],
+    })
+    expect(result).toMatchObject({ ok: true, n: 0, nPositive: 0 })
+    const appliedColors = designRenderer.applyScalarColors.mock.calls.at(-1)[0]
+    expect(appliedColors.get('h0:4:FORWARD:0')).toBe(colormapHex('magma', 0))
   })
 
   it('flexibility map replaces surface-strand preview before applying mean positions', async () => {

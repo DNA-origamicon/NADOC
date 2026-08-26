@@ -374,6 +374,19 @@ class JunctionProbe:
         if len(world) >= 6:
             o, R, rms = kabsch(np.asarray(lset), np.asarray(world))
             B = np.column_stack([u, b_p, a3])
+            G = np.column_stack([e_ih, e_ax, e_pp])
+            # Keep this permutation in exact parity with
+            # crossoverExtraSlabQuaternion() in crossover_extra_placement.js:
+            #   makeBasis(template-y, template-z, template-x)
+            # The mesh's local +Y axis is therefore the directed slab-face normal,
+            # while local +Z is its long in-plane axis.  Reporting those axes in the
+            # stable two-helix frame lets downstream experiments use the same slab
+            # abstraction as Full representation without reproducing atom-template
+            # orientation code.
+            slab_world = np.column_stack([R[:, 1], R[:, 2], R[:, 0]])
+            slab_two_helix = G.T @ slab_world
+            face = slab_two_helix[:, 1]
+            long_axis = slab_two_helix[:, 2]
             d = o - p0
             out["pose_t"] = float(np.dot(d, u)) / L
             out["pose_bow"] = float(np.dot(d, b_p)) / L
@@ -381,6 +394,29 @@ class JunctionProbe:
             out["pose_bow_sd"] = float(np.dot(d, bow_sd)) / L
             out["pose_rmsd"] = rms
             out["pose_M"] = (B.T @ R).ravel().tolist()
+            out["slab_M_two_helix"] = slab_two_helix.ravel().tolist()
+            for tag, vector in (("slab_face", face), ("slab_long", long_axis)):
+                out[f"{tag}_ih"] = float(vector[0])
+                out[f"{tag}_ax"] = float(vector[1])
+                out[f"{tag}_perp"] = float(vector[2])
+                out[f"{tag}_azimuth_deg"] = float(np.degrees(
+                    np.arctan2(vector[2], vector[0])
+                ))
+                out[f"{tag}_polar_deg"] = float(np.degrees(
+                    np.arccos(np.clip(vector[1], -1.0, 1.0))
+                ))
+
+            c1_from_junction = c1 - jc
+            c1_radius = float(np.linalg.norm(c1_from_junction))
+            out["position_radius_A"] = c1_radius
+            if c1_radius > 1e-12:
+                c1_g = G.T @ (c1_from_junction / c1_radius)
+                out["position_azimuth_deg"] = float(np.degrees(
+                    np.arctan2(c1_g[2], c1_g[0])
+                ))
+                out["position_polar_deg"] = float(np.degrees(
+                    np.arccos(np.clip(c1_g[1], -1.0, 1.0))
+                ))
         return out
 
 
@@ -500,11 +536,12 @@ def main(argv=None):
         )
         for ins, _ in probes
     }
-    frames, paired, boxes = [], [], []
+    frames, times_ps, paired, boxes = [], [], [], []
     for sample_no, ts in enumerate(uni.trajectory[args.start::args.stride], start=1):
         box = ts.dimensions[:3].astype(float)
         X = ts.positions if joiner is None else joiner.positions(box)
         frames.append(int(ts.frame))
+        times_ps.append(float(ts.time))
         boxes.append([float(v) for v in box])
         delta = X[bp_pairs[:, 0]] - X[bp_pairs[:, 1]]
         if joiner is None:
@@ -525,6 +562,7 @@ def main(argv=None):
 
     out = {"stem": stem, "job": str(job), "dcd": dcd, "n_frames": n,
            "stride": args.stride, "start": args.start, "frames": frames,
+           "times_ps": times_ps,
            "paired_fraction": paired, "boxes": boxes, "n_bp": len(bp_pairs),
            "static": static,
            "inserts": [{"crossover_id": ins.crossover_id, "k": ins.k, "base": ins.base,

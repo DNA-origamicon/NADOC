@@ -1,0 +1,70 @@
+{
+  "schema": "nadoc.exp55.24hb_hop_full_ensemble_density.v1",
+  "coordinate_frame": "right-handed chemical-hop frame: +x is 3' source to 5' destination, +y is increasing-bp helix axis, +z = +x cross +y",
+  "n_crossovers": 338,
+  "n_stable_observations": 160333,
+  "density_method": "All stable frame observations enter a 5-degree spherical histogram. Each crossover is normalized to unit mass before pooling; 1.25-bin Gaussian smoothing uses polar reflection and azimuthal wrapping, followed by solid-angle correction.",
+  "groups": {
+    "all": {
+      "n_crossovers": 338,
+      "n_stable_observations": 160333,
+      "density_peak_azimuth_deg": -157.5,
+      "density_peak_polar_deg": 117.5,
+      "peak_enrichment_over_isotropic": 4.2510792802411395,
+      "equal_crossover_mean_direction_hop_ax_perp": [
+        -0.9974494343623965,
+        0.03829855955892382,
+        -0.060231604875237064
+      ],
+      "equal_crossover_mean_azimuth_deg": -176.54435486696434,
+      "equal_crossover_mean_polar_deg": 87.80511738448625,
+      "equal_crossover_resultant_length": 0.6255338253901265
+    },
+    "reciprocal_lower": {
+      "n_crossovers": 159,
+      "n_stable_observations": 76385,
+      "density_peak_azimuth_deg": 162.5,
+      "density_peak_polar_deg": 62.5,
+      "peak_enrichment_over_isotropic": 7.432740764576238,
+      "equal_crossover_mean_direction_hop_ax_perp": [
+        -0.8652812554889743,
+        0.34193080163226647,
+        0.3665674232587235
+      ],
+      "equal_crossover_mean_azimuth_deg": 157.04055954964676,
+      "equal_crossover_mean_polar_deg": 70.0054473274507,
+      "equal_crossover_resultant_length": 0.7406753166864647
+    },
+    "reciprocal_upper": {
+      "n_crossovers": 159,
+      "n_stable_observations": 75871,
+      "density_peak_azimuth_deg": -157.5,
+      "density_peak_polar_deg": 117.5,
+      "peak_enrichment_over_isotropic": 7.941739231745103,
+      "equal_crossover_mean_direction_hop_ax_perp": [
+        -0.8459023959767334,
+        -0.2453518240161124,
+        -0.4735521290552797
+      ],
+      "equal_crossover_mean_azimuth_deg": -150.75907439876502,
+      "equal_crossover_mean_polar_deg": 104.20262638062559,
+      "equal_crossover_resultant_length": 0.7476710602185495
+    },
+    "unpaired": {
+      "n_crossovers": 20,
+      "n_stable_observations": 8077,
+      "density_peak_azimuth_deg": -102.5,
+      "density_peak_polar_deg": 177.5,
+      "peak_enrichment_over_isotropic": 11.65299035569813,
+      "equal_crossover_mean_direction_hop_ax_perp": [
+        -0.9410819963833438,
+        -0.3353450497597414,
+        0.043684936588905474
+      ],
+      "equal_crossover_mean_azimuth_deg": 177.34224326424132,
+      "equal_crossover_mean_polar_deg": 109.59352160208,
+      "equal_crossover_resultant_length": 0.44781653238304636
+    }
+  },
+  "reciprocal_mean_directed_separation_deg": 61.67571512917254
+}

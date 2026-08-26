@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildExtraBaseClusterGroup, buildExtraBaseComparisonGroup } from './extra_base_cluster_viewer.js'
+import {
+  buildExtraBaseClusterGroup,
+  buildExtraBaseComparisonGroup,
+  buildExtraBaseSampleGroup,
+} from './extra_base_cluster_viewer.js'
 
 const cluster = {
   center_A: [0, 1, -5],
@@ -68,5 +72,19 @@ describe('extra-base cluster medoid scene', () => {
       c1Separation_A: 5,
       medoidFrames: [220, 440],
     })
+  })
+
+  it('renders actual sampled reciprocal poses and their directed normals together', () => {
+    const lower = { ...structuredClone(cluster.medoid), side: 'i', frame: 220,
+      crossover_id: 'lower-xo', insert_k: 0 }
+    const upper = { ...structuredClone(cluster.medoid), side: 'i+1', frame: 220,
+      crossover_id: 'upper-xo', insert_k: 0 }
+    upper.atoms_A["C1'"] = [4, 5, -5]
+    const group = buildExtraBaseSampleGroup([lower, upper])
+    expect(group.getObjectByName("sample-i-lower-xo-0-C1'")).not.toBeNull()
+    expect(group.getObjectByName("sample-i+1-upper-xo-0-C1'")).not.toBeNull()
+    expect(group.getObjectByName('sample-i-lower-xo-0-directed-slab-normal')).not.toBeNull()
+    expect(group.getObjectByName('sample-i+1-upper-xo-0-directed-slab-normal')).not.toBeNull()
+    expect(group.userData).toMatchObject({ frame: 220, representation: 'atomistic' })
   })
 })

@@ -2412,6 +2412,127 @@ def md_production_segments(segments) -> list[int]:
     ]
 
 
+def md_photoproduct_likelihood(
+    topology_path,
+    segments,
+    coordinate_path,
+    design,
+    max_frames: int = 2000,
+    max_candidates: int = 500,
+    rate_model: str = "upstream",
+    progress_path: str | None = None,
+) -> dict:
+    """Relative per-thymine KIMMDY propensity over free NAMD production dynamics.
+
+    The trajectory's restraint/equilibration ladder is deliberately excluded: it is a
+    directed relaxation protocol, not an equilibrium population.  Every retained T-T
+    pair contributes its ensemble-mean propensity to both incident bases; the reusable
+    KIMMDY analyzer normalizes those base sums for false-color visualization.
+    """
+
+    del coordinate_path  # the atomistic geometry is read directly from PSF + DCD
+    progress_file = Path(progress_path) if progress_path else None
+    last_written: dict[str, int] = {}
+
+    def write_progress(
+        phase: str, fraction: float, done: int, total: int, message: str
+    ) -> None:
+        if not progress_file:
+            return
+        progress_file.write_text(
+            json.dumps(
+                {
+                    "phase": phase,
+                    "fraction": max(0.0, min(1.0, float(fraction))),
+                    "done": int(done),
+                    "total": int(total),
+                    "message": message,
+                }
+            )
+        )
+
+    write_progress(
+        "preparing", 0.01, 0, 0, "Loading topology and production trajectories"
+    )
+    production = md_production_segments(segments)
+    if not production:
+        return {
+            "ready": False,
+            "reason": "no free production trajectory; equilibration is not scored",
+            "base_likelihoods": [],
+        }
+    trajectory_paths = [Path(segments[index][2]) for index in production]
+    from backend.core.kimmdy_analysis import analyze_kimmdy_trajectory
+
+    def analysis_progress(phase: str, done: int, total: int) -> None:
+        # Bound filesystem traffic on long trajectories while retaining smooth UI motion.
+        interval = max(1, total // 200)
+        previous = last_written.get(phase, -interval)
+        if done not in {1, total} and done - previous < interval:
+            return
+        last_written[phase] = done
+        part = done / total if total else 0.0
+        if phase == "screen":
+            write_progress(
+                "screening",
+                0.05 + 0.43 * part,
+                done,
+                total,
+                "Screening T–T candidate contacts",
+            )
+        else:
+            write_progress(
+                "measuring",
+                0.48 + 0.45 * part,
+                done,
+                total,
+                "Measuring T–T distance, orientation, and propensity",
+            )
+
+    report, _series = analyze_kimmdy_trajectory(
+        Path(topology_path),
+        trajectory_paths,
+        design,
+        pair_mode="all-tt",
+        pair_scope="all",
+        max_candidates=max_candidates,
+        max_frames=max_frames,
+        rate_model=rate_model,
+        progress=analysis_progress,
+    )
+    write_progress(
+        "aggregating",
+        0.96,
+        report["n_candidates"],
+        report["n_candidates"],
+        "Aggregating pair propensities onto individual bases",
+    )
+    bases = [row for row in report["base_likelihoods"] if row.get("display_key")]
+    write_progress(
+        "serializing",
+        0.99,
+        len(bases),
+        len(bases),
+        "Preparing the per-base visualization payload",
+    )
+    return {
+        "ready": True,
+        "schema": report["schema"],
+        "rate_model": report["rate_model"],
+        "pair_scope": report["pair_scope"],
+        "n_total_frames": report["n_total_frames"],
+        "n_sampled_frames": report["n_sampled_frames"],
+        "n_topology_thymines": report["n_topology_thymines"],
+        "n_display_bases": len(bases),
+        "n_positive_bases": sum(row["aggregate_propensity"] > 0 for row in bases),
+        "n_candidates": report["n_candidates"],
+        "screen": report["screen"],
+        "base_likelihoods": bases,
+        "base_likelihood_note": report["base_likelihood_note"],
+        "top_pairs": report["pairs"][:20],
+    }
+
+
 def md_occupancy(
     topology_path,
     segments,

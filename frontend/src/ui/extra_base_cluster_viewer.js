@@ -90,7 +90,9 @@ function addAtomisticNucleotide(group, atomistic, accent = null, prefix = 'atomi
   const ribose = new Set(atomistic?.ribose_ring ?? [])
   for (const atom of atomistic?.atoms ?? []) {
     const material = new THREE.MeshStandardMaterial({
-      color: CPK_COLORS[atom.element] ?? 0x9ca3af,
+      color: accent != null && atom.element === 'C'
+        ? accent
+        : (CPK_COLORS[atom.element] ?? 0x9ca3af),
       emissive: ribose.has(atom.name) ? 0x24170a : 0x000000,
       roughness: 0.32,
       metalness: 0.02,
@@ -125,6 +127,20 @@ function addAtomisticNucleotide(group, atomistic, accent = null, prefix = 'atomi
     bond.name = `${prefix}-bond-${nameA}-${nameB}`
     group.add(bond)
   }
+}
+
+function addDirectedNormal(group, medoid, color, prefix) {
+  const orientation = medoid?.base_orientation
+  const center = medoid?.atoms_A?.base
+  if (!center || !Array.isArray(orientation) || orientation.length !== 3) return
+  const direction = new THREE.Vector3(
+    Number(orientation[0]?.[2]), Number(orientation[1]?.[2]), Number(orientation[2]?.[2]),
+  )
+  if (!Number.isFinite(direction.lengthSq()) || direction.lengthSq() < 1e-12) return
+  direction.normalize()
+  const arrow = new THREE.ArrowHelper(direction, new THREE.Vector3(...center), 8, color, 1.8, 0.8)
+  arrow.name = `${prefix}-directed-slab-normal`
+  group.add(arrow)
 }
 
 function addJunctionContext(group, spacing, activeLevels, levelColors = SIDE_COLORS) {
@@ -232,6 +248,102 @@ export function buildExtraBaseComparisonGroup(clusterI, clusterI1, representatio
     medoidFrames: entries.map(([, cluster]) => cluster?.medoid?.frame),
   }
   return group
+}
+
+/** Build one real-frame local junction view from an on-demand sample-audit group. */
+export function buildExtraBaseSampleGroup(records = [], representation = 'atomistic') {
+  const group = new THREE.Group()
+  group.name = 'extra-base-sample-group'
+  const spacings = records.map(record => Number(record?.interhelix_A)).filter(Number.isFinite)
+  const spacing = spacings.length
+    ? spacings.reduce((sum, value) => sum + value, 0) / spacings.length
+    : 25
+  const activeSides = [...new Set(records.map(record => record.side).filter(side => side === 'i' || side === 'i+1'))]
+  addJunctionContext(group, spacing, activeSides)
+  records.forEach((record, index) => {
+    const color = SIDE_COLORS[record.side] ?? [0xa371f7, 0x3fb950, 0xf85149][index % 3]
+    const prefix = `sample-${record.side}-${record.crossover_id}-${record.insert_k}`
+    if (representation === 'atomistic' && record.atomistic) {
+      addAtomisticNucleotide(group, record.atomistic, color, prefix)
+    } else {
+      addSchematicNucleotide(group, record, color, prefix)
+    }
+    addDirectedNormal(group, record, color, prefix)
+  })
+  addFrameAxes(group, spacing)
+  group.userData = {
+    spacing_A: spacing,
+    representation,
+    frame: records[0]?.frame,
+    crossoverIds: [...new Set(records.map(record => record.crossover_id))],
+  }
+  return group
+}
+
+/** Orbitable viewer for one or both members of a real sampled reciprocal pair. */
+export function createExtraBaseSampleViewer(container, { records = [] } = {}) {
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+  renderer.setClearColor(0x070b12, 1)
+  container.appendChild(renderer.domElement)
+  const scene = new THREE.Scene()
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x111827, 1.35))
+  const key = new THREE.DirectionalLight(0xffffff, 1.5)
+  key.position.set(30, 35, 45)
+  scene.add(key)
+  const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 300)
+  camera.position.set(38, 26, 48)
+  const controls = new OrbitControls(camera, renderer.domElement)
+  controls.enableDamping = true
+  controls.dampingFactor = 0.08
+  controls.target.set(0, 0, -2)
+  let representation = 'atomistic'
+  let sampleGroup = buildExtraBaseSampleGroup(records, representation)
+  scene.add(sampleGroup)
+  let alive = true
+  let raf = null
+  const resize = () => {
+    const width = Math.max(300, container.clientWidth || 620)
+    const height = Math.max(300, Math.min(460, Math.round(width * 0.58)))
+    renderer.setSize(width, height, false)
+    camera.aspect = width / height
+    camera.updateProjectionMatrix()
+  }
+  const observer = new ResizeObserver(resize)
+  observer.observe(container)
+  resize()
+  const rebuild = () => {
+    disposeTree(sampleGroup)
+    sampleGroup = buildExtraBaseSampleGroup(records, representation)
+    scene.add(sampleGroup)
+  }
+  const render = () => {
+    if (!alive) return
+    controls.update()
+    renderer.render(scene, camera)
+    raf = requestAnimationFrame(render)
+  }
+  render()
+  return {
+    setRepresentation(next) {
+      representation = next === 'schematic' ? 'schematic' : 'atomistic'
+      rebuild()
+    },
+    resetView() {
+      camera.position.set(38, 26, 48)
+      controls.target.set(0, 0, -2)
+      controls.update()
+    },
+    dispose() {
+      alive = false
+      if (raf != null) cancelAnimationFrame(raf)
+      observer.disconnect()
+      controls.dispose()
+      disposeTree(sampleGroup)
+      renderer.dispose()
+      renderer.domElement.remove()
+    },
+  }
 }
 
 /** Create a responsive, orbitable viewer. Returns ``setCluster`` and ``dispose``. */

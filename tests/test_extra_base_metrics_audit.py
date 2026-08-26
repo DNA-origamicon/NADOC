@@ -78,6 +78,22 @@ def test_empty_results_are_honestly_not_ready(tmp_path):
     assert result["ready"] is False and result["sources"] == []
 
 
+def test_metrics_only_source_is_discoverable_without_parsing_large_dump(tmp_path):
+    path = tmp_path / "24hb_1xT__new-run__metrics.json"
+    path.write_text("intentionally not parsed by the source-list endpoint")
+
+    result = build_extra_base_metrics_audit(tmp_path)
+
+    assert result["ready"] is True
+    assert result["sources"] == [{
+        "source_id": "24hb_1xT__new-run",
+        "part": "24hb_1xT", "role": "new-run", "job": None, "dcd": [],
+        "n_frames": None, "stride": None, "filters": {}, "topology_pass": None,
+        "inserts": [], "pooled_positions": None, "cpd_reference": None,
+        "sample_only": True,
+    }]
+
+
 def test_pooled_source_replaces_per_insert_payload_and_skips_metrics_parse(tmp_path):
     state = {
         "job": "/archive/job",

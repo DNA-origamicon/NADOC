@@ -70,7 +70,8 @@ def _compact_panel(panel: dict) -> dict:
 
 
 def _source_name(path: Path) -> tuple[str, str]:
-    part, role = path.name.removesuffix("__states.json").split("__", 1)
+    stem = path.name.removesuffix("__states.json").removesuffix("__metrics.json")
+    part, role = stem.split("__", 1)
     return part, role
 
 
@@ -159,6 +160,7 @@ def build_extra_base_metrics_audit(results_dir: Path | None = None) -> dict:
     if cache_key == _CACHE_KEY and _CACHE_VALUE is not None:
         return _CACHE_VALUE
     sources = []
+    represented_source_ids: set[str] = set()
     if root.exists():
         for path in sorted(root.glob("*__states.json")):
             if "__exp46_smoke__" in path.name:
@@ -209,6 +211,7 @@ def build_extra_base_metrics_audit(results_dir: Path | None = None) -> dict:
                 inserts.append(compact_insert)
             sources.append(
                 {
+                    "source_id": path.name.removesuffix("__states.json"),
                     "part": part,
                     "role": role,
                     "job": raw.get("job"),
@@ -222,6 +225,33 @@ def build_extra_base_metrics_audit(results_dir: Path | None = None) -> dict:
                     "cpd_reference": CPD_1XT_REFERENCE if part == "2hb_1xT" else None,
                 }
             )
+            represented_source_ids.add(path.name.removesuffix("__states.json"))
+        # A raw observable dump is already sufficient for the on-demand trajectory
+        # viewer.  Keep it discoverable even before optional state analysis has
+        # produced a companion ``__states.json`` file.  Deliberately do not parse the
+        # potentially multi-hundred-megabyte dump here; the sample endpoint loads it
+        # only when selected.
+        for path in sorted(root.glob("*__metrics.json")):
+            source_id = path.name.removesuffix("__metrics.json")
+            if "__exp46_smoke__" in path.name or source_id in represented_source_ids:
+                continue
+            part, role = _source_name(path)
+            sources.append({
+                "source_id": source_id,
+                "part": part,
+                "role": role,
+                "job": None,
+                "dcd": [],
+                "n_frames": None,
+                "stride": None,
+                "filters": {},
+                "topology_pass": None,
+                "inserts": [],
+                "pooled_positions": None,
+                "cpd_reference": CPD_1XT_REFERENCE if part == "2hb_1xT" else None,
+                "sample_only": True,
+            })
+        sources.sort(key=lambda source: (source["part"], source["role"]))
     result = {
         "schema": SCHEMA,
         "results_dir": str(root),

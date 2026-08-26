@@ -29,7 +29,7 @@ from __future__ import annotations
 from typing import List
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.api import state as design_state
 from backend.core.flexible_display import flexible_segment_atomistic_frame_overrides
@@ -48,6 +48,14 @@ class SurfaceRegionRequest(BaseModel):
     probe_radius: float = 0.28
     radius_inflate: float = 1.30
     smooth: int = 15
+
+
+class ExtraBaseSampleAuditRequest(BaseModel):
+    source_id: str
+    crossover_ids: list[str] = Field(min_length=1, max_length=512)
+    sample_index: int | None = None
+    frame: int | None = None
+    include_reciprocal_partners: bool = True
 
 
 # ── Atomistic + molecular-surface display geometry ────────────────────────────
@@ -204,6 +212,36 @@ def get_extra_base_metrics_audit() -> dict:
     from backend.core.extra_base_metrics_audit import build_extra_base_metrics_audit
 
     return build_extra_base_metrics_audit()
+
+
+@router.get("/design/extra-base-sample-audit/catalog")
+def get_extra_base_sample_audit_catalog(source_id: str) -> dict:
+    """List sampled frames and selectable crossover inserts for one evidence source."""
+    from backend.core.extra_base_sample_audit import build_extra_base_sample_catalog
+
+    try:
+        return build_extra_base_sample_catalog(source_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/design/extra-base-sample-audit")
+def get_extra_base_sample_audit(request: ExtraBaseSampleAuditRequest) -> dict:
+    """Return real measured poses for selected crossovers at one sampled frame."""
+    from backend.core.extra_base_sample_audit import build_extra_base_sample_audit
+
+    try:
+        return build_extra_base_sample_audit(
+            request.source_id,
+            request.crossover_ids,
+            sample_index=request.sample_index,
+            frame=request.frame,
+            include_reciprocal_partners=request.include_reciprocal_partners,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/design/clashes")

@@ -148,6 +148,11 @@ export function initAtomSurfaceDisplay({
     if (el) el.style.display = visible ? '' : 'none'
   }
 
+  function _refreshSurfaceScalarColors() {
+    const scalar = designRenderer?.getScalarColors?.()
+    if (scalar) surfaceRenderer.applyNucleotideScalarColors?.(scalar)
+  }
+
   async function _applySurfaceMode(mode) {
     _surfaceMode = mode
     if (mode === 'off') {
@@ -218,6 +223,7 @@ export function initAtomSurfaceDisplay({
     surfaceRenderer.setCrispZones?.(false)
     surfaceRenderer.update(_surfaceDataCache, surfaceColorMode)
     surfaceRenderer.applyStrandColors(_getAtomStrandColors())
+    _refreshSurfaceScalarColors()
     surfaceRenderer.setOpacity(surfaceOpacity)
   }
 
@@ -245,6 +251,7 @@ export function initAtomSurfaceDisplay({
         } else if (newState.surfaceColorMode === 'uniform' || _surfaceDataCache?.vertex_colors) {
           // Switch colour in-place — no re-fetch needed
           surfaceRenderer.setColorMode(newState.surfaceColorMode)
+          _refreshSurfaceScalarColors()
         } else {
           // Need vertex colours but cache lacks them — re-fetch with new color_mode
           _surfaceDataCache = null
@@ -376,6 +383,12 @@ export function initAtomSurfaceDisplay({
       // 'strand' or 'cluster' → strand-color path; map already reflects mode.
       atomisticRenderer.setColorMode('strand', strandMap)
     }
+    // CG-only scalar views (for example the NAMD photoproduct map) leave the design's
+    // native atom coordinates in place. Carry the design renderer's active per-base
+    // scalar map onto those atoms after their ordinary color mode has been restored.
+    const scalar = designRenderer?.getScalarColors?.()
+    if (scalar) atomisticRenderer.applyScalarColors?.(scalar)
+    else atomisticRenderer.clearScalarColors?.()
   }
 
   /**

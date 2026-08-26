@@ -1,0 +1,363 @@
+{
+  "schema": "nadoc.exp55.archive_scan.v1",
+  "canonical_design": "/home/jojo/Work/NADOC/workspace/2hb_1xT.nadoc",
+  "canonical_design_sha256": "2826d0b2a62cc92351d4756d5fcd75cc8d29efabcdc91b2ad1c8776909cf3f03",
+  "canonical_structural_design_sha256": "6a57fa5077a71984877f02520bab8c31c5fa2d74d35d3d4062345421ab34167e",
+  "selected_jobs": [
+    "29c5b267380f",
+    "4c0ba3a85587",
+    "7d5937e569c6"
+  ],
+  "jobs": [
+    {
+      "job_id": "0335fd23ce2a",
+      "status": "stopped",
+      "parent_job_id": null,
+      "design_sha256": null,
+      "structural_design_sha256": null,
+      "matches_canonical_design": null,
+      "design_snapshot_available": false,
+      "package": "/media/jojo/Archive/NADOC_archive/0335fd23ce2a/package/2hb_1xT_namd_solvated",
+      "dcds": [
+        {
+          "name": "2hb_1xT_01_300K_NPT_ENM_k0p5_p10.dcd",
+          "bytes": 11726436,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_01_300K_NPT_ENM_k0p5_p100.dcd",
+          "bytes": 11726436,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_01_300K_NPT_ENM_k0p5_p50.dcd",
+          "bytes": 11726436,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_02_300K_NPT_ENM_k0p1_p10.dcd",
+          "bytes": 11726436,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_02_300K_NPT_ENM_k0p1_p50.dcd",
+          "bytes": 11726436,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_03_300K_NPT_ENM_k0p01_p10.dcd",
+          "bytes": 782020,
+          "free_production": false
+        }
+      ]
+    },
+    {
+      "job_id": "066b8dd60a2e",
+      "status": "completed",
+      "parent_job_id": null,
+      "design_sha256": "08014f634aedffe1683a9b4699e194456c21e8d372572b4ef85bddda331a20a2",
+      "structural_design_sha256": "6a57fa5077a71984877f02520bab8c31c5fa2d74d35d3d4062345421ab34167e",
+      "matches_canonical_design": true,
+      "design_snapshot_available": true,
+      "package": "/media/jojo/Archive/NADOC_archive/066b8dd60a2e/package/2hb_1xT_namd_solvated",
+      "dcds": [
+        {
+          "name": "2hb_1xT_01_300K_NPT_ENM_k0p5_p10.dcd",
+          "bytes": 22566396,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_01_300K_NPT_ENM_k0p5_p25.dcd",
+          "bytes": 22566396,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_01_300K_NPT_ENM_k0p5_p50.dcd",
+          "bytes": 22566396,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_02_300K_NPT_ENM_k0p1_p10.dcd",
+          "bytes": 22566396,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_03_300K_NPT_ENM_k0p01_p10.dcd",
+          "bytes": 22566396,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_03_300K_NPT_ENM_k0p01_p25.dcd",
+          "bytes": 22566396,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_03_300K_NPT_ENM_k0p01_p50.dcd",
+          "bytes": 22566396,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_04_300K_NPT_MGHH_only_p10.dcd",
+          "bytes": 22566396,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_0S_300K_NPT_settle_fixed_dna_p100.dcd",
+          "bytes": 22566396,
+          "free_production": false
+        }
+      ]
+    },
+    {
+      "job_id": "29c5b267380f",
+      "status": "completed",
+      "parent_job_id": "e4a49b2057a5",
+      "design_sha256": "08014f634aedffe1683a9b4699e194456c21e8d372572b4ef85bddda331a20a2",
+      "structural_design_sha256": "6a57fa5077a71984877f02520bab8c31c5fa2d74d35d3d4062345421ab34167e",
+      "matches_canonical_design": true,
+      "design_snapshot_available": true,
+      "package": "/media/jojo/Archive/NADOC_archive/29c5b267380f/package/2hb_1xT_namd_solvated",
+      "dcds": [
+        {
+          "name": "2hb_1xT_01_production_200ns_k0.dcd",
+          "bytes": 5146240276,
+          "free_production": true
+        }
+      ]
+    },
+    {
+      "job_id": "4c0ba3a85587",
+      "status": "completed",
+      "parent_job_id": "7d5937e569c6",
+      "design_sha256": "08014f634aedffe1683a9b4699e194456c21e8d372572b4ef85bddda331a20a2",
+      "structural_design_sha256": "6a57fa5077a71984877f02520bab8c31c5fa2d74d35d3d4062345421ab34167e",
+      "matches_canonical_design": true,
+      "design_snapshot_available": true,
+      "package": "/media/jojo/Archive/NADOC_archive/4c0ba3a85587/package/2hb_1xT_namd_solvated",
+      "dcds": [
+        {
+          "name": "2hb_1xT_01_production_800ns_k0.dcd",
+          "bytes": 30088160276,
+          "free_production": true
+        }
+      ]
+    },
+    {
+      "job_id": "7d5937e569c6",
+      "status": "completed",
+      "parent_job_id": "8c116f8db22b",
+      "design_sha256": "08014f634aedffe1683a9b4699e194456c21e8d372572b4ef85bddda331a20a2",
+      "structural_design_sha256": "6a57fa5077a71984877f02520bab8c31c5fa2d74d35d3d4062345421ab34167e",
+      "matches_canonical_design": true,
+      "design_snapshot_available": true,
+      "package": "/media/jojo/Archive/NADOC_archive/7d5937e569c6/package/2hb_1xT_namd_solvated",
+      "dcds": [
+        {
+          "name": "2hb_1xT_01_production_200ns_k0.dcd",
+          "bytes": 922222592,
+          "free_production": true
+        }
+      ]
+    },
+    {
+      "job_id": "8c116f8db22b",
+      "status": "completed",
+      "parent_job_id": null,
+      "design_sha256": "08014f634aedffe1683a9b4699e194456c21e8d372572b4ef85bddda331a20a2",
+      "structural_design_sha256": "6a57fa5077a71984877f02520bab8c31c5fa2d74d35d3d4062345421ab34167e",
+      "matches_canonical_design": true,
+      "design_snapshot_available": true,
+      "package": "/media/jojo/Archive/NADOC_archive/8c116f8db22b/package/2hb_1xT_namd_solvated",
+      "dcds": [
+        {
+          "name": "2hb_1xT_01_300K_NPT_ENM_k0p5_p10.dcd",
+          "bytes": 22566396,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_01_300K_NPT_ENM_k0p5_p25.dcd",
+          "bytes": 22566396,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_02_300K_NPT_ENM_k0p1_p10.dcd",
+          "bytes": 22566396,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_02_300K_NPT_ENM_k0p1_p25.dcd",
+          "bytes": 22566396,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_03_300K_NPT_ENM_k0p01_p10.dcd",
+          "bytes": 22566396,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_04_300K_NPT_MGHH_only_p10.dcd",
+          "bytes": 22566396,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_0S_300K_NPT_settle_fixed_dna_p100.dcd",
+          "bytes": 22566396,
+          "free_production": false
+        }
+      ]
+    },
+    {
+      "job_id": "c8bcf4c1406f",
+      "status": "completed",
+      "parent_job_id": null,
+      "design_sha256": "08014f634aedffe1683a9b4699e194456c21e8d372572b4ef85bddda331a20a2",
+      "structural_design_sha256": "6a57fa5077a71984877f02520bab8c31c5fa2d74d35d3d4062345421ab34167e",
+      "matches_canonical_design": true,
+      "design_snapshot_available": true,
+      "package": "/media/jojo/Archive/NADOC_archive/c8bcf4c1406f/package/2hb_1xT_namd_solvated",
+      "dcds": [
+        {
+          "name": "2hb_1xT_01_300K_NPT_ENM_k0p5_p10.dcd",
+          "bytes": 7719636,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_02_300K_NPT_ENM_k0p1_p10.dcd",
+          "bytes": 7719636,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_02_300K_NPT_ENM_k0p1_p100.dcd",
+          "bytes": 7719636,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_02_300K_NPT_ENM_k0p1_p50.dcd",
+          "bytes": 7719636,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_03_300K_NPT_ENM_k0p01_p10.dcd",
+          "bytes": 7719636,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_03_300K_NPT_ENM_k0p01_p100.dcd",
+          "bytes": 7719636,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_03_300K_NPT_ENM_k0p01_p50.dcd",
+          "bytes": 7719636,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_04_300K_NPT_MGHH_only_p10.dcd",
+          "bytes": 7719636,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_04_300K_NPT_MGHH_only_p100.dcd",
+          "bytes": 7719636,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_04_300K_NPT_MGHH_only_p50.dcd",
+          "bytes": 7719636,
+          "free_production": false
+        }
+      ]
+    },
+    {
+      "job_id": "d43d88d9e812",
+      "status": "stopped",
+      "parent_job_id": null,
+      "design_sha256": null,
+      "structural_design_sha256": null,
+      "matches_canonical_design": null,
+      "design_snapshot_available": false,
+      "package": "/media/jojo/Archive/NADOC_archive/d43d88d9e812/package/2hb_1xT_namd_solvated",
+      "dcds": [
+        {
+          "name": "2hb_1xT_01_300K_NPT_ENM_k0p5_p10.dcd",
+          "bytes": 11728596,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_01_300K_NPT_ENM_k0p5_p50.dcd",
+          "bytes": 11728596,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_02_300K_NPT_ENM_k0p1_p10.dcd",
+          "bytes": 11728596,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_03_300K_NPT_ENM_k0p01_p10.dcd",
+          "bytes": 782164,
+          "free_production": false
+        }
+      ]
+    },
+    {
+      "job_id": "e4a49b2057a5",
+      "status": "completed",
+      "parent_job_id": "c8bcf4c1406f",
+      "design_sha256": "08014f634aedffe1683a9b4699e194456c21e8d372572b4ef85bddda331a20a2",
+      "structural_design_sha256": "6a57fa5077a71984877f02520bab8c31c5fa2d74d35d3d4062345421ab34167e",
+      "matches_canonical_design": true,
+      "design_snapshot_available": true,
+      "package": "/media/jojo/Archive/NADOC_archive/e4a49b2057a5/package/2hb_1xT_namd_solvated",
+      "dcds": [
+        {
+          "name": "2hb_1xT_01_production_2ns_k0.cont1.dcd",
+          "bytes": 26760724,
+          "free_production": true
+        },
+        {
+          "name": "2hb_1xT_01_production_2ns_k0.dcd",
+          "bytes": 24959540,
+          "free_production": true
+        }
+      ]
+    },
+    {
+      "job_id": "f2fd20dc5ff7",
+      "status": "failed",
+      "parent_job_id": null,
+      "design_sha256": "fefdf4330e84905c43012e249ce0b2e900ff637dd8e29656804faa3f9b033443",
+      "structural_design_sha256": "e99053e012c02166c29dc8778a0e0b1e6d4747d3cd70918672eb5cdad1165551",
+      "matches_canonical_design": false,
+      "design_snapshot_available": true,
+      "package": "/media/jojo/Archive/NADOC_archive/f2fd20dc5ff7/package/2hb_1xT_namd_solvated",
+      "dcds": [
+        {
+          "name": "2hb_1xT_01_300K_NPT_ENM_k0p5_p10.dcd",
+          "bytes": 38514756,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_02_300K_NPT_ENM_k0p1_p10.dcd",
+          "bytes": 38514756,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_02_300K_NPT_ENM_k0p1_p25.dcd",
+          "bytes": 38514756,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_02_300K_NPT_ENM_k0p1_p50.dcd",
+          "bytes": 38514756,
+          "free_production": false
+        },
+        {
+          "name": "2hb_1xT_02_300K_NPT_ENM_k0p1_p75.dcd",
+          "bytes": 8986988,
+          "free_production": false
+        }
+      ]
+    }
+  ]
+}

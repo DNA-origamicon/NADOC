@@ -1,10 +1,31 @@
-.xbma-modal { position:fixed; inset:0; z-index:141; display:none; grid-template-rows:auto auto 1fr; background:rgba(1,4,9,.97); color:#c9d1d9; }
+.xbma-modal { position:fixed; inset:0; z-index:141; display:none; grid-template-rows:auto auto auto 1fr; background:rgba(1,4,9,.97); color:#c9d1d9; }
 .xbma-modal.visible { display:grid; }
 .xbma-header,.xbma-controls { display:flex; align-items:center; gap:14px; padding:10px 14px; border-bottom:1px solid #30363d; background:#0d1117; }
 .xbma-header>div { display:flex; flex-direction:column; flex:1; }
 .xbma-header small,.xbma-source-summary span,.xbma-panel-stats,.xbma-metric-list,.xbma-agreement,details { color:#8b949e; font-size:10px; }
 .xbma-close,.xbma-controls select { border:1px solid #30363d; border-radius:5px; color:#c9d1d9; background:#21262d; padding:5px 9px; }
 .xbma-controls { flex-wrap:wrap; font-size:11px; }
+.xbma-sample-tool { max-height:calc(100vh - 116px); overflow:auto; border-bottom:1px solid #30363d; background:#090e15; }
+.xbma-sample-tool>header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 14px; }
+.xbma-sample-tool>header>div { display:flex; flex-direction:column; }.xbma-sample-tool header small{color:#8b949e;font-size:9px}
+.xbma-sample-controls { display:grid; grid-template-columns:minmax(170px,1fr) minmax(210px,1.3fr) minmax(120px,.6fr) minmax(260px,1.5fr) auto auto; gap:9px; align-items:end; padding:0 14px 9px; }
+.xbma-sample-controls label { display:flex; flex-direction:column; gap:3px; color:#8b949e; font-size:9px; }
+.xbma-sample-controls label:has(input[type=checkbox]) { flex-direction:row; align-items:center; padding-bottom:7px; white-space:nowrap; }
+.xbma-sample-controls select,.xbma-sample-controls button,.xbma-sample-representation button { border:1px solid #30363d;border-radius:4px;color:#c9d1d9;background:#161b22;padding:4px 7px;font-size:9px }
+.xbma-sample-dcd-frame { min-width:0; border:1px solid #30363d; border-radius:4px; color:#c9d1d9; background:#161b22; padding:4px 7px; font:9px ui-monospace,monospace; }
+.xbma-sample-crossovers { min-height:68px; font-family:ui-monospace,monospace; }
+.xbma-sample-frame-readout { color:#c9d1d9; font:9px ui-monospace,monospace; }
+.xbma-sample-load { min-height:28px; margin-bottom:4px; cursor:pointer; }
+.xbma-sample-representation { display:flex; gap:4px; }.xbma-sample-representation button.active{border-color:#d29922;color:#f0c66c;background:#211a0d}
+.xbma-sample-status { padding:6px 14px; border-top:1px solid #161b22; color:#8b949e; font:9px ui-monospace,monospace; }
+.xbma-sample-results { display:grid; grid-template-columns:repeat(auto-fit,minmax(420px,1fr)); gap:8px; padding:0 12px 10px; }
+.xbma-sample-card { overflow:hidden; border:1px solid #30363d; border-radius:6px; background:#0d1117; }
+.xbma-sample-card>header { display:flex; justify-content:space-between; gap:8px; padding:6px 9px; background:#161b22; font-size:9px; }
+.xbma-sample-card>header span { color:#8b949e; }.xbma-sample-records{display:flex;flex-wrap:wrap;gap:6px;padding:6px 9px}
+.xbma-sample-record { color:#8b949e; font:8px/1.4 ui-monospace,monospace; }.xbma-sample-record strong{color:#c9d1d9}.xbma-sample-record.i strong{color:#f59e0b}.xbma-sample-record.i\+1 strong{color:#22d3ee}
+.xbma-sample-view { min-height:300px; background:#070b12; }.xbma-sample-view canvas{display:block;width:100%!important;height:auto!important;touch-action:none}
+.xbma-sample-legend { display:flex; flex-wrap:wrap; gap:12px; padding:6px 9px; border-top:1px solid #21262d; color:#8b949e; font-size:8px; }
+.xbma-sample-legend .side-i { color:#f59e0b; }.xbma-sample-legend .side-i1 { color:#22d3ee; }
 .xbma-modal.has-pooled .xbma-legacy-control { display:none; }
 .xbma-body { min-height:0; overflow:auto; padding:12px; }
 .xbma-source-summary { display:grid; grid-template-columns:auto auto auto auto minmax(160px,1fr); gap:12px; padding:10px; background:#161b22; border:1px solid #30363d; border-radius:6px; }
@@ -55,4 +76,5 @@
 .xbma-comparison-readout strong { color:#c9d1d9; }
 @media(max-width:1000px){.xbma-panels{grid-template-columns:1fr}.xbma-source-summary{grid-template-columns:1fr 1fr}}
 @media(max-width:800px){.xbma-comparison>header{align-items:flex-start;flex-direction:column}.xbma-comparison-controls{flex-wrap:wrap}}
+@media(max-width:1000px){.xbma-sample-controls{grid-template-columns:1fr 1fr}.xbma-sample-results{grid-template-columns:1fr}}
 @media(max-width:620px){.xbma-pooled-intro{flex-direction:column}}

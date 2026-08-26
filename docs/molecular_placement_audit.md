@@ -7,6 +7,10 @@ changes. Open it from **Help → Molecular Placement Audit**. It remains a pre-p
 surface for new candidates; for the authorized 2xT v7 placement it also shows the active
 production geometry and whether another proposal is pending.
 
+To inspect actual extra-base poses from selected trajectory frames and crossover IDs, use
+**Help → Extra-Base Metrics Audit** instead. Its reusable trajectory sample feed is documented in
+[`extra_base_sample_audit.md`](extra_base_sample_audit.md).
+
 Opening the audit never changes the active design. For 1xT, Current is production and Candidate is
 the diagnostic geometric baseline. For 2xT, both panels are labeled **Production v7** because the
 reviewed flexible-linker clearance is now the implemented default and no placement proposal is

@@ -133,6 +133,7 @@ async def _write_prep_heartbeat(
 
 
 _TRAJ_PROGRESS_PATHS: dict[str, Path] = {}
+_PHOTOPRODUCT_PROGRESS_PATHS: dict[str, Path] = {}
 
 #: Upper bound on a single production run's length.  These are sanity rails, not a
 #: policy on how long a run *should* be — microsecond-scale origami production is a
@@ -1034,6 +1035,78 @@ async def get_md_job_rmsf(job_id: str, request: Request) -> dict:
     if result.get("ready"):
         result["confidence"] = rmsf_confidence(result.get("n_frames", 0))
     return result
+
+
+@router.get("/md/jobs/{job_id}/photoproduct-likelihood")
+async def get_md_photoproduct_likelihood(
+    job_id: str,
+    request: Request,
+    max_frames: int = 2000,
+) -> dict:
+    """Relative per-thymine T-T photoproduct propensity over production frames.
+
+    This is a bounded, killable whole-design KIMMDY pass for the NAMD visualization
+    toggle.  It reports relative geometric propensity rather than an absolute quantum
+    yield or probability, and excludes restrained equilibration segments.
+    """
+
+    inputs = _md_traj_inputs(job_id)
+    if inputs is None:
+        return {
+            "ready": False,
+            "reason": "topology/reference or trajectory not found",
+            "base_likelihoods": [],
+        }
+    psf, ref, segments, design = inputs
+    bounded_frames = max(1, min(int(max_frames), 10_000))
+    fd, progress_name = tempfile.mkstemp(
+        prefix="nadoc_md_photoproduct_", suffix=".json"
+    )
+    os.close(fd)
+    progress_path = Path(progress_name)
+    _PHOTOPRODUCT_PROGRESS_PATHS[job_id] = progress_path
+    try:
+        return await _run_md_analysis(
+            request,
+            job_id,
+            "photoproduct",
+            "md_photoproduct_likelihood",
+            (
+                psf,
+                segments,
+                ref,
+                design,
+                bounded_frames,
+                5000,
+                "upstream",
+                str(progress_path),
+            ),
+            timeout_s=900.0,
+        )
+    finally:
+        if _PHOTOPRODUCT_PROGRESS_PATHS.get(job_id) == progress_path:
+            _PHOTOPRODUCT_PROGRESS_PATHS.pop(job_id, None)
+        progress_path.unlink(missing_ok=True)
+
+
+@router.get("/md/jobs/{job_id}/photoproduct-progress")
+async def get_md_photoproduct_progress(job_id: str) -> dict:
+    """Live stage/frame progress for the active photoproduct analysis worker."""
+
+    path = _PHOTOPRODUCT_PROGRESS_PATHS.get(job_id)
+    if not path:
+        return {"active": False}
+    try:
+        return {"active": True, **json.loads(path.read_text() or "{}")}
+    except (OSError, ValueError):
+        return {
+            "active": True,
+            "phase": "preparing",
+            "fraction": 0.01,
+            "done": 0,
+            "total": 0,
+            "message": "Loading topology and production trajectories",
+        }
 
 
 from backend.api.routes_oxdna import OccupancySelection  # noqa: E402  (shared vocabulary)

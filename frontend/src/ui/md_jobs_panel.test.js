@@ -1,5 +1,36 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { DEFAULT_PRODUCTION_TIMESTEP_FS, mdAnchorAtomNames, mdAnchorStiffness, mdCanReuseStatusSocket, mdForcesProvenance, DEFAULT_TRAJ_INTERVAL, MD_PRODUCTION_MARKER, TRAJ_FRAME_CONFIRM, effectiveProductionTimestepFs, filterJobsForPart, jobProductionTimestepFs, mdHasProductionRun, mdIsLocalTarget, mdIsRemoteJob, mdJobEditable, mdRunTargetForJob, mdSegGlyphKind, newestCompletedForPart, normalizeWorkspacePath, productionNsFromSteps, seededBadge, selectCreatedMdJob, stridedFrameCount } from './md_jobs_panel.js'
+import { DEFAULT_PRODUCTION_TIMESTEP_FS, mdAnchorAtomNames, mdAnchorStiffness, mdCanReuseStatusSocket, mdForcesProvenance, DEFAULT_TRAJ_INTERVAL, MD_PRODUCTION_MARKER, TRAJ_FRAME_CONFIRM, effectiveProductionTimestepFs, filterJobsForPart, jobProductionTimestepFs, mdHasProductionRun, mdIsLocalTarget, mdIsRemoteJob, mdJobEditable, mdRunTargetForJob, mdSegGlyphKind, newestCompletedForPart, normalizeWorkspacePath, photoproductProgressView, productionNsFromSteps, seededBadge, selectCreatedMdJob, stridedFrameCount } from './md_jobs_panel.js'
+
+describe('photoproductProgressView', () => {
+  it('reports every loading phase with the appropriate work unit', () => {
+    const phases = [
+      ['preparing', undefined],
+      ['screening', 'frames'],
+      ['measuring', 'frames'],
+      ['aggregating', 'pairs'],
+      ['serializing', 'bases'],
+      ['coloring', 'bases'],
+      ['complete', undefined],
+    ]
+    for (const [phase, unit] of phases) {
+      const view = photoproductProgressView({
+        phase, fraction: phase === 'complete' ? 1 : 0.375,
+        done: 3, total: 8, message: phase,
+      })
+      expect(view.message).toBe(phase)
+      expect(view.percent).toBe(phase === 'complete' ? 100 : 38)
+      expect(view.count).toContain('3/8')
+      if (unit) expect(view.count).toContain(unit)
+      else expect(view.count).not.toMatch(/frames|pairs|bases/)
+    }
+  })
+
+  it('clamps percentages and exposes complete/error tones', () => {
+    expect(photoproductProgressView({ fraction: -2 }).percent).toBe(0)
+    expect(photoproductProgressView({ phase: 'complete', fraction: 2 }).tone).toBe('complete')
+    expect(photoproductProgressView({ phase: 'error', fraction: 1 }).tone).toBe('error')
+  })
+})
 
 describe('mdCanReuseStatusSocket', () => {
   it('reuses a same-job socket while connecting or open', () => {
