@@ -10,6 +10,34 @@
  * Phase 3+: factory primitives output elements with these classes.
  */
 
+/* Text-to-intent debug prototype */
+.tti { display: grid; gap: var(--space-3); min-width: 0; }
+.tti h3 { margin: var(--space-2) 0 0; color: var(--color-text-secondary); font-size: var(--text-sm); }
+.tti-intro, .tti-muted { color: var(--color-text-muted); margin: 0; }
+.tti-examples { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.tti-input { width: 100%; box-sizing: border-box; overflow-y: auto; min-height: 7rem; max-height: 18rem; padding: var(--space-3); color: var(--color-text-primary); background: var(--color-bg-base); border: var(--border-thin) solid var(--color-border-default); border-radius: var(--radius-md); font: inherit; line-height: 1.55; white-space: pre-wrap; }
+.tti-input:empty::before { content: attr(data-placeholder); color: var(--color-text-muted); pointer-events: none; }
+.tti-input:focus { outline: 2px solid var(--color-accent-strong); outline-offset: 1px; }
+.tti-mark { padding: 1px 3px; border-radius: var(--radius-sm); color: inherit; }
+.tti-mark--component { background: rgba(88, 166, 255, .28); }
+.tti-mark--composition, .tti-mark--interface { background: rgba(163, 113, 247, .3); }
+.tti-mark--layout { background: rgba(63, 185, 80, .28); }
+.tti-mark--mechanics, .tti-mark--reference { background: rgba(210, 153, 34, .32); }
+.tti-status { padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--color-bg-raised); color: var(--color-text-secondary); }
+.tti-status--ready_with_questions { border-left: 3px solid var(--color-success); }
+.tti-status--needs_external_reasoning, .tti-status--unsupported { border-left: 3px solid var(--color-warning); }
+.tti-proposal { padding: var(--space-3); border-radius: var(--radius-md); background: rgba(88, 166, 255, .1); color: var(--color-text-primary); font-weight: var(--weight-medium); }
+.tti-mapping { display: grid; gap: var(--space-1); }
+.tti-field { display: grid; grid-template-columns: minmax(8rem, .7fr) minmax(12rem, 1.5fr) minmax(7rem, 1fr); gap: var(--space-2); align-items: center; padding: var(--space-2); background: var(--color-bg-raised); border-radius: var(--radius-sm); }
+.tti-field__name { color: var(--color-text-muted); }
+.tti-field__source { color: var(--color-text-muted); font-size: var(--text-sm); }
+.tti-field__source--inferred, .tti-field__source--derived { color: var(--color-warning); }
+.tti-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.tti-two-col ul { margin: var(--space-1) 0 0; padding-left: var(--space-4); color: var(--color-text-secondary); }
+@media (max-width: 760px) {
+  .tti-field, .tti-two-col { grid-template-columns: 1fr; }
+}
+
 /* ════════════════════════════════════════════════════════════════════
    Buttons
    ════════════════════════════════════════════════════════════════════ */

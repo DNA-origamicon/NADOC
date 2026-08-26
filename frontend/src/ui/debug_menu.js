@@ -1,3 +1,5 @@
+import { initTextToIntentModal } from './text_to_intent_modal.js'
+
 /** Wire the developer-facing render diagnostics menu. */
 export function initDebugMenu({
   THREE,
@@ -11,6 +13,8 @@ export function initDebugMenu({
   showToast,
   store,
 }) {
+  initTextToIntentModal()
+
   document.getElementById('menu-debug-lod-hud')?.addEventListener('click', function () {
     if (!window.__NADOC_DBG__?.toggleLodHud) {
       showToast(
