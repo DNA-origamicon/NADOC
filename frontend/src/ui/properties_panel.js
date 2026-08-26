@@ -456,7 +456,65 @@ export function initPropertiesPanel({ clearSelection } = {}) {
         <span class="prop-label">attach id</span>
         <span class="prop-val mono" style="font-size:var(--text-xs)">${att.id}</span>
       </div>
+      <div class="prop-row" style="margin-top:6px">
+        <button id="protein-validate-btn" type="button">Validate conjugate</button>
+        <span id="protein-validation-status" class="dim" style="margin-left:7px"></span>
+      </div>
     `
+    const validateBtn = content.querySelector('#protein-validate-btn')
+    const validationStatus = content.querySelector('#protein-validation-status')
+    validateBtn?.addEventListener('click', async () => {
+      validateBtn.disabled = true
+      validationStatus.textContent = 'Validating…'
+      try {
+        const report = await api.getProteinValidation()
+        const element = report?.elements?.find(item => item.attachment_id === att.id)
+        const related = report?.findings?.filter(item =>
+          item.asset_id === att.asset_id
+          || item.free_attachment_ids?.includes(att.id)
+          || item.conjugated_attachment_ids?.includes(att.id)) ?? []
+        const failures = [...(element?.failed_metrics ?? []), ...related.map(item => item.code)]
+        validationStatus.textContent = failures.length
+          ? `Failed: ${failures.join(', ')}`
+          : `Valid · ${Number(report?.audit_ms ?? 0).toFixed(1)} ms`
+        validationStatus.classList.toggle('tag-warn', failures.length > 0)
+        const repair = related.find(item => item.code === 'legacy_unconverted_free_placement'
+          && item.repairable
+          && item.free_attachment_ids?.length === 1
+          && item.conjugated_attachment_ids?.length === 1)
+        content.querySelector('#protein-repair-duplicate-btn')?.remove()
+        if (repair) {
+          const repairBtn = document.createElement('button')
+          repairBtn.id = 'protein-repair-duplicate-btn'
+          repairBtn.type = 'button'
+          repairBtn.textContent = 'Repair duplicate'
+          repairBtn.style.marginLeft = '7px'
+          validationStatus.insertAdjacentElement('afterend', repairBtn)
+          repairBtn.addEventListener('click', async () => {
+            repairBtn.disabled = true
+            try {
+              const args = {
+                freeAttachmentId: repair.free_attachment_ids[0],
+                conjugatedAttachmentId: repair.conjugated_attachment_ids[0],
+              }
+              await api.repairProteinDuplicate(args) // server-side proof, read-only preview
+              if (!globalThis.confirm?.('Remove the superseded free protein placement? This is undoable.')) return
+              await api.repairProteinDuplicate({ ...args, apply: true })
+            } catch (error) {
+              validationStatus.textContent = `Repair failed: ${error?.message ?? error}`
+              validationStatus.classList.add('tag-warn')
+            } finally {
+              repairBtn.disabled = false
+            }
+          })
+        }
+      } catch (error) {
+        validationStatus.textContent = `Validation failed: ${error?.message ?? error}`
+        validationStatus.classList.add('tag-warn')
+      } finally {
+        validateBtn.disabled = false
+      }
+    })
   }
 
   /** Canonical Base-ref readout. Keys are app-wide identities from base_ref.js. */

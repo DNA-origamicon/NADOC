@@ -228,14 +228,20 @@ export function initConjugateManager({ api, store } = {}) {
       if (!ctx.selectedOverhang || ctx.selectedSiteIndex == null) return
       const cand = ctx.candidates[ctx.selectedSiteIndex]
       const azideEnd = sidebar.querySelector('input[name="cm-azide"]:checked')?.value ?? '5p'
+      const operationId = globalThis.crypto?.randomUUID?.()
       applyBtn.disabled = true; status.textContent = 'Applying…'
       try {
         const res = await api?.conjugateProteinToOverhang?.({
           assetId: ctx.assetId, overhangId: ctx.selectedOverhang.id,
+          sourceAttachmentId: ctx.sourceAttachmentId,
           conjugationAtomSerial: cand.functional_atom_serial, azideEnd,
+          operationId,
+          expectedRevision: ctx.expectedRevision,
         })
         if (res) { _close(); return }
-        status.textContent = 'Conjugation failed.'; ctx.refreshApply()
+        const detail = store?.getState?.().lastError?.message
+        status.textContent = detail ? `Conjugation failed: ${detail}` : 'Conjugation failed.'
+        ctx.refreshApply()
       } catch (e) {
         status.textContent = 'Conjugation failed: ' + (e?.message ?? e); ctx.refreshApply()
       }
@@ -265,9 +271,10 @@ export function initConjugateManager({ api, store } = {}) {
       if (!ctx.selectedOverhang) return
       const cands = ctx.candidates ?? []
       if (!cands.length) { status.textContent = 'No surface-accessible sites on this protein.'; return }
-      // Use the selected site; if none chosen yet, pick one at random and select it.
+      // Use the selected site; otherwise choose the backend's highest-ranked
+      // accessible site (index 0). Never make chemistry selection random.
       let idx = ctx.selectedSiteIndex
-      if (idx == null) { idx = Math.floor(Math.random() * cands.length); _selectSite(ctx, idx) }
+      if (idx == null) { idx = 0; _selectSite(ctx, idx) }
       const cand = cands[idx]
       const azideEnd = sidebar.querySelector('input[name="cm-azide"]:checked')?.value ?? '5p'
       const handle = reverseComplement(ctx.selectedOverhang.sequence)
@@ -288,7 +295,7 @@ export function initConjugateManager({ api, store } = {}) {
     const list = document.createElement('div')
     list.style.cssText = 'flex:1;overflow-y:auto;border:1px solid #30363d;border-radius:4px;'
     if (!candidates.length) {
-      list.innerHTML = '<div style="padding:14px;font-size:11px;color:#6e7681;text-align:center">No surface-accessible sites found.</div>'
+      list.innerHTML = '<div style="padding:14px;font-size:11px;color:#6e7681;text-align:center">No supported surface-accessible Lys, Cys, or N-terminal sites were found. Choose another protein construct or expose/engineer a conjugation residue before continuing.</div>'
     }
     rightbar.appendChild(list)
 
@@ -322,7 +329,7 @@ export function initConjugateManager({ api, store } = {}) {
     })
   }
 
-  async function open(assetId) {
+  async function open(assetId, { sourceAttachmentId = null } = {}) {
     if (!assetId) return
     _close()
     _ensureSpinStyle()
@@ -402,6 +409,8 @@ export function initConjugateManager({ api, store } = {}) {
     _ctx = {
       overlay, glRenderer, scene, camera, controls, renderer, raf: null, onKey, onResize, assetId,
       candidates: [], markerMeshes: [], listRows: [], handleGroup: null, selectedSiteIndex: null,
+      sourceAttachmentId,
+      expectedRevision: api?.currentRevisionWatermark?.() ?? null,
     }
     _sizeToCanvas()
     _buildLeft(leftbar, _ctx)
@@ -425,6 +434,12 @@ export function initConjugateManager({ api, store } = {}) {
       const candResp = await api?.getConjugationCandidates?.(assetId)
       const candidates = candResp?.candidates ?? []
       if (!_ctx) return
+      // Bind selection + Apply to the same authoritative backend snapshot.
+      // This avoids false conflicts from a stale/global client watermark while
+      // still rejecting genuine design changes made after preview loaded.
+      if (Number.isInteger(candResp?.design_revision)) {
+        _ctx.expectedRevision = candResp.design_revision
+      }
       _ctx.candidates = candidates
       _addMarkers(_ctx, candidates)
       _buildRight(rightbar, _ctx, candidates)
@@ -437,7 +452,7 @@ export function initConjugateManager({ api, store } = {}) {
   }
 
   // ── one-item context menu used by the protein right-click entry point ────────
-  function showConjugateMenu({ x, y, assetId } = {}) {
+  function showConjugateMenu({ x, y, assetId, attachmentId = null } = {}) {
     if (!assetId) return
     document.getElementById('conjugate-context-menu')?.remove()
     const menu = document.createElement('div')
@@ -451,7 +466,7 @@ export function initConjugateManager({ api, store } = {}) {
     item.addEventListener('mouseleave', () => { item.style.background = '' })
     const dismiss = () => { menu.remove(); window.removeEventListener('pointerdown', onOutside, true) }
     const onOutside = (ev) => { if (!menu.contains(ev.target)) dismiss() }
-    item.addEventListener('click', () => { dismiss(); open(assetId) })
+    item.addEventListener('click', () => { dismiss(); open(assetId, { sourceAttachmentId: attachmentId }) })
     menu.appendChild(item)
     document.body.appendChild(menu)
     setTimeout(() => window.addEventListener('pointerdown', onOutside, true), 0)

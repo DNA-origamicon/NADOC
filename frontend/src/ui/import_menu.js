@@ -233,7 +233,13 @@ export function initImportMenu(deps) {
 
   // ── Import PDB (DNA design and/or protein, by RCSB id or file) ──────────────────
   async function runPdbImport(args) {
-    const json = await api.importPdbAuto(args)
+    const json = await api.importPdbAuto({
+      ...args,
+      expectedRevision: api.currentRevisionWatermark?.() ?? null,
+    })
+    // A response can win the network race with AbortController. Never apply a
+    // result after the user cancelled/closed the import dialog.
+    if (args.signal?.aborted) return { cancelled: true }
     if (!json) {
       showToast('PDB import failed: ' + (store.getState().lastError?.message ?? 'Unknown error'), { severity: 'error' })
       return null
@@ -248,12 +254,14 @@ export function initImportMenu(deps) {
       if (json.import_warnings?.length) showToast(json.import_warnings.join(' | '), 5000)
     }
     if (json.imported?.protein) {
-      // Sync the design (the import added a free attachment, server-side); the
-      // currentDesign subscription then re-renders the protein. Hide the welcome
-      // screen so the freshly-placed protein is visible.
-      api.syncDesignResponse(json)
-      hideWelcome()
-      parts.push(`protein ${json.protein.name} (${json.protein.atom_count} atoms)`)
+      if (json.protein_placement === 'library') {
+        parts.push(`protein ${json.protein.name} in library (${json.protein.atom_count} atoms)`)
+      } else {
+        // A free placement was added server-side; syncing renders that exact instance.
+        api.syncDesignResponse(json)
+        hideWelcome()
+        parts.push(`protein ${json.protein.name} (${json.protein.atom_count} atoms)`)
+      }
     }
     if (parts.length) showToast('Imported ' + parts.join(' + '), 4000)
     return json

@@ -78,6 +78,11 @@ export function resetRevisionWatermark() {
   _lastAppliedRevision = -1
 }
 
+/** Revision of the newest design response accepted by this tab. */
+export function currentRevisionWatermark() {
+  return _lastAppliedRevision >= 0 ? _lastAppliedRevision : null
+}
+
 // ── Recovery-cache quota management ──────────────────────────────────────────
 // The full design/assembly JSON is cached per-document for server-restart
 // recovery. Each independently-opened tab mints a STICKY doc id (doc_id.js) that
@@ -1849,10 +1854,12 @@ export async function importPdbDesign(content, merge = false) {
  * response ({ imported:{dna,protein}, design?, protein?, import_warnings? })
  * WITHOUT syncing — the caller decides reset/sync order via syncDesignResponse.
  */
-export async function importPdbAuto({ content = null, pdbId = null, name = '', removeDnaFromProtein = null } = {}) {
+export async function importPdbAuto({ content = null, pdbId = null, name = '', removeDnaFromProtein = null, proteinPlacement = 'free', operationId = null, expectedRevision = null, signal = undefined } = {}) {
   return _request('POST', '/design/import/pdb-auto', {
     content, pdb_id: pdbId, name, remove_dna_from_protein: removeDnaFromProtein,
-  })
+    protein_placement: proteinPlacement, operation_id: operationId,
+    expected_revision: expectedRevision,
+  }, { signal })
 }
 
 /** Apply a design-response payload to the store (renderer rebuild). */
@@ -1881,6 +1888,22 @@ export async function getConjugationCandidates(assetId) {
   return _request('GET', `/design/protein/conjugation-candidates?asset_id=${encodeURIComponent(assetId)}`)
 }
 
+/** Audit all persisted protein placements and conjugates in the active design. */
+export async function getProteinValidation() {
+  return _request('GET', '/design/protein/validation')
+}
+
+/** Preview/apply an audit-proven legacy free+conjugated duplicate repair. */
+export async function repairProteinDuplicate({ freeAttachmentId, conjugatedAttachmentId, apply = false }) {
+  const json = await _request('POST', '/design/protein/validation/repair-duplicate', {
+    free_attachment_id: freeAttachmentId,
+    conjugated_attachment_id: conjugatedAttachmentId,
+    apply,
+  })
+  if (apply && json) _syncFromDesignResponse(json)
+  return json
+}
+
 /** Remove a protein asset from the session library. */
 export async function deleteProteinAsset(assetId) {
   return _request('DELETE', `/design/protein/${assetId}`)
@@ -1904,12 +1927,15 @@ export async function createProteinAttachment(assetId, overhangId, opts = {}) {
  *  as an OH_BINDER strand bound to the overhang AND attaches the protein so its
  *  conjugation residue sits at the chosen azide terminus. One undo step.
  *  Returns json (carries attachment_id + binder_strand_id). */
-export async function conjugateProteinToOverhang({ assetId, overhangId, conjugationAtomSerial = null, azideEnd = '5p' }) {
+export async function conjugateProteinToOverhang({ assetId, overhangId, sourceAttachmentId = null, conjugationAtomSerial = null, azideEnd = '5p', operationId = null, expectedRevision = null }) {
   const json = await _request('POST', '/design/protein/conjugate', {
     asset_id: assetId,
     overhang_id: overhangId,
+    source_attachment_id: sourceAttachmentId,
     conjugation_atom_serial: conjugationAtomSerial,
     azide_end: azideEnd,
+    operation_id: operationId,
+    expected_revision: expectedRevision,
   })
   if (json) _syncFromDesignResponse(json)
   return json

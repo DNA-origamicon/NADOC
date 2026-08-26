@@ -2596,6 +2596,8 @@ class ProteinAttachment(BaseModel):
     asset_id: str
     target: ProteinTarget
     conjugation_atom_serial: Optional[int] = None
+    conjugation_chemistry: Optional[str] = None
+    conjugation_accessible_fraction: Optional[float] = None
     pose: Mat4x4 = Field(default_factory=Mat4x4)
     handle_complement_bp: int = 0  # display-only handle duplex length
     handle_spacer_nt: int = 0

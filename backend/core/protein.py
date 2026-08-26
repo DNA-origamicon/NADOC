@@ -19,6 +19,8 @@ codebase.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import numpy as np
 
 from backend.core.atomistic import Atom, AtomisticModel
@@ -165,6 +167,9 @@ def parse_protein_pdb(
     serial = 0
     chain_ids: set[str] = set()
     res_keys: set[tuple[str, int]] = set()
+    input_atom_records = 0
+    filtered_atom_records = 0
+    malformed_atom_records = 0
 
     for line in text.splitlines():
         rec = line[:6].rstrip()
@@ -177,7 +182,9 @@ def parse_protein_pdb(
             break
         if rec not in ("ATOM", "HETATM"):
             continue
+        input_atom_records += 1
         if len(line) < 54:
+            malformed_atom_records += 1
             continue
 
         # Read 4 columns (18-21) so CHARMM 4-char residue names (TIP3, …) are
@@ -185,8 +192,10 @@ def parse_protein_pdb(
         # 3-char name.  chainID is the separate column 22.
         res_name = line[17:21].strip()
         if res_name in _DROP_RESIDUES:
+            filtered_atom_records += 1
             continue
         if exclude_dna and res_name in _DNA_RESNAME:
+            filtered_atom_records += 1
             continue
 
         atom_name = line[12:16].strip()
@@ -197,12 +206,14 @@ def parse_protein_pdb(
         try:
             res_seq = int(line[22:26])
         except ValueError:
+            malformed_atom_records += 1
             continue
         try:
             x = float(line[30:38]) / 10.0
             y = float(line[38:46]) / 10.0
             z = float(line[46:54]) / 10.0
         except ValueError:
+            malformed_atom_records += 1
             continue
         element = _element_from_atom(atom_name, line[76:78] if len(line) >= 78 else "")
 
@@ -240,7 +251,7 @@ def parse_protein_pdb(
         )
         default_conj = farthest.serial
 
-    return ProteinAsset(
+    asset = ProteinAsset(
         name=name or source_filename or "Protein",
         source_filename=source_filename,
         atoms=atoms,
@@ -251,8 +262,39 @@ def parse_protein_pdb(
             "atom_count": len(atoms),
             "residue_count": len(res_keys),
             "chain_ids": sorted(chain_ids),
+            "input_atom_record_count": input_atom_records,
+            "filtered_atom_record_count": filtered_atom_records,
+            "malformed_atom_record_count": malformed_atom_records,
         },
     )
+    asset.bonds = infer_bonds_by_distance(asset)
+    asset.metadata["bond_count"] = len(asset.bonds)
+    asset.metadata["parse_warnings"] = (
+        [f"Skipped {malformed_atom_records} malformed ATOM/HETATM record(s)."]
+        if malformed_atom_records
+        else []
+    )
+    asset.metadata["structure_fingerprint"] = protein_asset_fingerprint(asset)
+    return asset
+
+
+def protein_asset_fingerprint(asset: ProteinAsset) -> str:
+    """Stable SHA-256 identity of parsed molecular content, excluding labels/IDs."""
+    rows = [
+        [
+            atom.name,
+            atom.element,
+            atom.res_name,
+            atom.chain_id,
+            atom.res_seq,
+            atom.x,
+            atom.y,
+            atom.z,
+        ]
+        for atom in asset.atoms
+    ]
+    payload = json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def protein_asset_meta(asset: ProteinAsset) -> dict:
@@ -262,9 +304,16 @@ def protein_asset_meta(asset: ProteinAsset) -> dict:
         "name": asset.name,
         "source_filename": asset.source_filename,
         "atom_count": len(asset.atoms),
+        "bond_count": len(asset.bonds) if asset.bonds else len(infer_bonds_by_distance(asset)),
         "residue_count": asset.metadata.get("residue_count", 0),
         "chain_ids": asset.metadata.get("chain_ids", []),
         "default_conjugation_atom_serial": asset.default_conjugation_atom_serial,
+        "structure_fingerprint": asset.metadata.get("structure_fingerprint")
+        or protein_asset_fingerprint(asset),
+        "parse_warnings": asset.metadata.get("parse_warnings", []),
+        "input_atom_record_count": asset.metadata.get("input_atom_record_count"),
+        "filtered_atom_record_count": asset.metadata.get("filtered_atom_record_count"),
+        "malformed_atom_record_count": asset.metadata.get("malformed_atom_record_count"),
     }
 
 
@@ -304,7 +353,7 @@ def protein_asset_to_atomistic(
                 direction="FORWARD",
             )
         )
-    bonds = [(int(i), int(j)) for i, j in asset.bonds]
+    bonds = [(int(i), int(j)) for i, j in (asset.bonds or infer_bonds_by_distance(asset))]
     return AtomisticModel(atoms=out, bonds=bonds)
 
 
@@ -633,7 +682,7 @@ def build_protein_attachment_atoms(
                 )
             )
             serial += 1
-        for i, j in infer_bonds_by_distance(asset):
+        for i, j in (asset.bonds or infer_bonds_by_distance(asset)):
             bonds.append((base_serial + int(i), base_serial + int(j)))
     return atoms, bonds, serial
 

@@ -13,9 +13,14 @@ vi.mock('../state/store.js', async () => {
   const { createMockStore } = await import('../test-helpers/mock_store.js')
   return { store: createMockStore({ currentDesign: null, selection: { items: [] } }) }
 })
-vi.mock('../api/client.js', () => ({ deleteHelix: vi.fn() }))
+vi.mock('../api/client.js', () => ({
+  deleteHelix: vi.fn(),
+  getProteinValidation: vi.fn(),
+  repairProteinDuplicate: vi.fn(),
+}))
 
 import { store } from '../state/store.js'
+import * as api from '../api/client.js'
 import { initPropertiesPanel } from './properties_panel.js'
 
 const DESIGN = {
@@ -59,6 +64,8 @@ describe('properties panel — protein branch', () => {
   beforeEach(() => {
     ;({ 'properties-content': content } = mountIds(['properties-content']))
     store.setState({ currentDesign: null, selection: { items: [] } })
+    api.getProteinValidation.mockReset()
+    api.repairProteinDuplicate.mockReset()
   })
 
   it('renders an imported protein without throwing (regression: used to hit _renderNucleotide)', () => {
@@ -115,6 +122,48 @@ describe('properties panel — protein branch', () => {
     initPropertiesPanel()
     store._emit({ selection: PROTEIN_SELECTION })
     expect(content.innerHTML).toContain('hidden')
+  })
+
+  it('runs persisted element validation and displays duplicate findings', async () => {
+    api.getProteinValidation.mockResolvedValue({
+      audit_ms: 12.34,
+      elements: [{ attachment_id: 'att1', valid: true, failed_metrics: [] }],
+      findings: [{
+        code: 'legacy_unconverted_free_placement', asset_id: 'asset1',
+        free_attachment_ids: ['att1'], conjugated_attachment_ids: ['att2'],
+      }],
+    })
+    store.setState({ currentDesign: DESIGN })
+    initPropertiesPanel()
+    store._emit({ selection: PROTEIN_SELECTION })
+    content.querySelector('#protein-validate-btn').click()
+    await vi.waitFor(() => expect(content.querySelector('#protein-validation-status').textContent)
+      .toContain('legacy_unconverted_free_placement'))
+    expect(api.getProteinValidation).toHaveBeenCalledTimes(1)
+  })
+
+  it('previews and applies only the audit-proven duplicate repair', async () => {
+    api.getProteinValidation.mockResolvedValue({
+      elements: [{ attachment_id: 'att1', valid: true, failed_metrics: [] }],
+      findings: [{
+        code: 'legacy_unconverted_free_placement', asset_id: 'asset1', repairable: true,
+        free_attachment_ids: ['att1'], conjugated_attachment_ids: ['att2'],
+      }],
+    })
+    api.repairProteinDuplicate.mockResolvedValue({ applied: true })
+    vi.spyOn(globalThis, 'confirm').mockReturnValue(true)
+    store.setState({ currentDesign: DESIGN })
+    initPropertiesPanel()
+    store._emit({ selection: PROTEIN_SELECTION })
+    content.querySelector('#protein-validate-btn').click()
+    await vi.waitFor(() => expect(content.querySelector('#protein-repair-duplicate-btn')).not.toBeNull())
+    content.querySelector('#protein-repair-duplicate-btn').click()
+    await vi.waitFor(() => expect(api.repairProteinDuplicate).toHaveBeenCalledTimes(2))
+    expect(api.repairProteinDuplicate.mock.calls).toEqual([
+      [{ freeAttachmentId: 'att1', conjugatedAttachmentId: 'att2' }],
+      [{ freeAttachmentId: 'att1', conjugatedAttachmentId: 'att2', apply: true }],
+    ])
+    globalThis.confirm.mockRestore()
   })
 
   it('renders a canonical overhang ref with its related domain and strand', () => {

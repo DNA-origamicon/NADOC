@@ -481,6 +481,8 @@ def mutate_with_feature_log(
     label: str,
     params: dict,
     fn: Callable[[Design], Design | MutationReport | None],
+    *,
+    expected_revision: int | None = None,
 ) -> tuple[Design, ValidationReport, SnapshotLogEntry]:
     """Capture a pre-state snapshot, apply ``fn``, append a SnapshotLogEntry,
     reconcile cluster membership, validate, and push undo.
@@ -510,14 +512,34 @@ def mutate_with_feature_log(
         s = _session()
         if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
+        if expected_revision is not None and s.revision != expected_revision:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "Design changed while this operation was being prepared.",
+                    "expected_revision": expected_revision,
+                    "current_revision": s.revision,
+                },
+            )
         _assert_active_loadout_editable(s.design)
         before = s.design.model_copy(deep=True)
+        history_before = deque(s.history, maxlen=s.history.maxlen)
+        redo_before = deque(s.redo, maxlen=s.redo.maxlen)
         s.history.append(before)
         s.redo.clear()
 
         payload_b64, uncompressed_size = encode_design_snapshot(before)
-
-        result = fn(s.design)
+        try:
+            result = fn(s.design)
+        except Exception:
+            # A callback may mutate in place before discovering an invalid or
+            # duplicate operation. Restore all transaction-owned state so a
+            # rejected request changes neither the design nor undo/redo.
+            s.design = before
+            s.history.clear()
+            s.history.extend(history_before)
+            s.redo.extend(redo_before)
+            raise
         # Three return shapes supported:
         #   - Design                      : pure-functional, no custom report.
         #   - (Design, MutationReport)    : pure-functional + custom reconcile hint.
@@ -753,6 +775,11 @@ def close_session() -> None:
         s.pdb_atomistic = None
         _bump_revision(s)
         _protein_library.clear()
+        from backend.core.conjugation import clear_conjugation_candidate_cache
+        from backend.core.protein_metrics import clear_protein_process_metrics
+
+        clear_conjugation_candidate_cache()
+        clear_protein_process_metrics()
 
 
 def snapshot() -> None:

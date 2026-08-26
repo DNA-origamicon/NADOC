@@ -1,9 +1,12 @@
 """PDB import and file interchange routes for active designs."""
 
+import asyncio
 import os
-from typing import Optional
+import time
+import uuid
+from typing import Literal, Optional
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from backend.api import state as design_state
@@ -14,6 +17,9 @@ from backend.api.crud import (
 )
 
 router = APIRouter()
+
+MAX_PDB_INPUT_BYTES = 50 * 1024 * 1024
+MAX_PROTEIN_ATOMS = 250_000
 
 
 class FilePathRequest(BaseModel):
@@ -100,10 +106,13 @@ class PdbAutoImportRequest(BaseModel):
     # None = undecided (ask the user when the structure has both protein + DNA);
     # True/False = remove (or keep) DNA in the imported protein object.
     remove_dna_from_protein: Optional[bool] = None
+    protein_placement: Literal["free", "library"] = "free"
+    operation_id: Optional[str] = None
+    expected_revision: Optional[int] = None
 
 
 @router.post("/design/import/pdb-auto", status_code=200)
-def import_pdb_auto(body: PdbAutoImportRequest) -> dict:
+async def import_pdb_auto(body: PdbAutoImportRequest, request: Request) -> dict:
     """Unified PDB import: download by RCSB id or accept file content, then
     route by residue content.
 
@@ -114,12 +123,20 @@ def import_pdb_auto(body: PdbAutoImportRequest) -> dict:
       importing, so the UI can ask whether to strip the DNA.
     * DNA only → imported as a design (the classic PDB-as-design path).
     """
+    started = time.perf_counter()
+    operation_id = body.operation_id or str(uuid.uuid4())
+    stages_ms: dict[str, float] = {}
+
     from backend.core.pdb_to_design import import_pdb, merge_pdb_into_design
-    from backend.core.protein import classify_pdb_content, parse_protein_pdb
+    from backend.core.protein import (
+        classify_pdb_content,
+        parse_protein_pdb,
+        protein_asset_fingerprint,
+    )
     from backend.core.validator import validate_design
 
     if body.pdb_id:
-        content = _download_rcsb_pdb(body.pdb_id)
+        content = await asyncio.to_thread(_download_rcsb_pdb, body.pdb_id)
         name = body.name or body.pdb_id.strip().upper()
         source = f"rcsb:{body.pdb_id.strip().upper()}"
     elif body.content:
@@ -128,8 +145,20 @@ def import_pdb_auto(body: PdbAutoImportRequest) -> dict:
         source = "file"
     else:
         raise HTTPException(400, detail="Provide either pdb_id or content.")
+    input_bytes = len(content.encode("utf-8"))
+    if input_bytes > MAX_PDB_INPUT_BYTES:
+        raise HTTPException(
+            413,
+            detail=(
+                f"PDB input is {input_bytes} bytes; maximum is "
+                f"{MAX_PDB_INPUT_BYTES} bytes."
+            ),
+        )
+    stages_ms["acquire"] = (time.perf_counter() - started) * 1000.0
 
-    has_dna, has_protein = classify_pdb_content(content)
+    stage_started = time.perf_counter()
+    has_dna, has_protein = await asyncio.to_thread(classify_pdb_content, content)
+    stages_ms["classify"] = (time.perf_counter() - stage_started) * 1000.0
     if not has_dna and not has_protein:
         raise HTTPException(400, detail="No DNA or protein residues found in the PDB.")
 
@@ -137,22 +166,40 @@ def import_pdb_auto(body: PdbAutoImportRequest) -> dict:
         "imported": {"dna": False, "protein": False},
         "source": source,
         "name": name,
+        "protein_placement": body.protein_placement,
     }
 
     if has_protein:
         # Ask before stripping DNA from a protein-DNA complex.
         if has_dna and body.remove_dna_from_protein is None:
+            # A downloaded RCSB structure can be fetched again after the user
+            # chooses Remove/Keep DNA. Do not echo a potentially multi-megabyte
+            # PDB through the browser and ask it to upload the same text back.
+            # Local-file imports still need the resolved content for step two.
+            decision_source = (
+                {"pdb_id": body.pdb_id.strip().upper()}
+                if body.pdb_id
+                else {"content": content}
+            )
             return {
                 **resp,
                 "needs_dna_decision": True,
                 "has_dna": True,
                 "has_protein": True,
-                "content": content,
+                **decision_source,
+                "process_metrics": _import_process_metrics(
+                    operation_id, started, stages_ms, "needs_dna_decision"
+                ),
             }
         exclude_dna = bool(body.remove_dna_from_protein)
         try:
-            asset = parse_protein_pdb(
-                content, name=name, source_filename=name, exclude_dna=exclude_dna
+            stage_started = time.perf_counter()
+            asset = await asyncio.to_thread(
+                parse_protein_pdb,
+                content,
+                name=name,
+                source_filename=name,
+                exclude_dna=exclude_dna,
             )
         except Exception as exc:
             raise HTTPException(
@@ -160,21 +207,79 @@ def import_pdb_auto(body: PdbAutoImportRequest) -> dict:
             ) from exc
         if not asset.atoms:
             raise HTTPException(400, detail="No protein atoms found after parsing.")
-        updated, report, meta = _import_protein_free(asset)
-        resp.update(_design_response(updated, report))
+        if len(asset.atoms) > MAX_PROTEIN_ATOMS:
+            raise HTTPException(
+                413,
+                detail=(
+                    f"Protein has {len(asset.atoms)} atoms; maximum is "
+                    f"{MAX_PROTEIN_ATOMS}."
+                ),
+            )
+        stages_ms["parse_protein"] = (time.perf_counter() - stage_started) * 1000.0
+        stage_started = time.perf_counter()
+        fingerprint = await asyncio.to_thread(protein_asset_fingerprint, asset)
+        active = design_state.get_design()
+        known_assets = [*design_state.list_protein_assets()]
+        if active is not None:
+            known_assets.extend(active.protein_assets)
+        existing_asset = next(
+            (
+                known
+                for known in known_assets
+                if (
+                    known.metadata.get("structure_fingerprint")
+                    or protein_asset_fingerprint(known)
+                )
+                == fingerprint
+            ),
+            None,
+        )
+        duplicate_detected = existing_asset is not None
+        deduplicated = existing_asset is not None and body.protein_placement == "library"
+        if deduplicated:
+            asset = existing_asset
+        stages_ms["deduplicate"] = (time.perf_counter() - stage_started) * 1000.0
+        stage_started = time.perf_counter()
+        await _reject_disconnected_import(request, operation_id, started, stages_ms)
+        if body.protein_placement == "library":
+            from backend.core.protein import protein_asset_meta
+
+            design_state.add_protein_asset(asset)
+            meta = protein_asset_meta(asset)
+        else:
+            updated, report, meta = _import_protein_free(
+                asset,
+                operation_id=operation_id,
+                expected_revision=body.expected_revision,
+            )
+            resp.update(_design_response(updated, report))
+        stages_ms["commit"] = (time.perf_counter() - stage_started) * 1000.0
         resp["protein"] = meta
+        resp["protein"]["deduplicated"] = deduplicated
+        resp["protein"]["duplicate_detected"] = duplicate_detected
+        if meta.get("parse_warnings"):
+            resp["import_warnings"] = meta["parse_warnings"]
         resp["imported"]["protein"] = True
+        resp["process_metrics"] = _import_process_metrics(
+            operation_id, started, stages_ms, "imported"
+        )
         return resp
 
     # DNA only → design import.
     existing = design_state.get_design()
     try:
+        stage_started = time.perf_counter()
         if existing and existing.helices:
-            design, pdb_atomistic, w = merge_pdb_into_design(existing, content)
+            design, pdb_atomistic, w = await asyncio.to_thread(
+                merge_pdb_into_design, existing, content
+            )
         else:
-            design, pdb_atomistic, w = import_pdb(content)
+            design, pdb_atomistic, w = await asyncio.to_thread(import_pdb, content)
     except Exception as exc:
         raise HTTPException(400, detail=f"DNA PDB import failed: {exc}") from exc
+    stages_ms["parse_dna"] = (time.perf_counter() - stage_started) * 1000.0
+    stage_started = time.perf_counter()
+    await _reject_disconnected_import(request, operation_id, started, stages_ms)
     design_state.clear_history()
     design_state.set_design(design)
     design_state.set_pdb_atomistic(pdb_atomistic)
@@ -184,10 +289,59 @@ def import_pdb_auto(body: PdbAutoImportRequest) -> dict:
     resp["imported"]["dna"] = True
     if w:
         resp["import_warnings"] = w
+    stages_ms["commit"] = (time.perf_counter() - stage_started) * 1000.0
+    resp["process_metrics"] = _import_process_metrics(
+        operation_id, started, stages_ms, "imported"
+    )
     return resp
 
 
-def _import_protein_free(asset):
+async def _reject_disconnected_import(
+    request: Request,
+    operation_id: str,
+    started: float,
+    stages_ms: dict[str, float],
+) -> None:
+    """Make browser cancellation a no-commit gate after expensive parsing.
+
+    CPU-heavy parsing runs in worker threads so the ASGI server can observe a
+    disconnected client. The check is deliberately adjacent to the first state
+    mutation; cancellation during acquisition/parsing therefore leaves the
+    design and protein library untouched.
+    """
+    if await request.is_disconnected():
+        raise HTTPException(
+            499,
+            detail={
+                "message": "Protein import cancelled before commit.",
+                "operation_id": operation_id,
+                "process_metrics": _import_process_metrics(
+                    operation_id, started, stages_ms, "cancelled"
+                ),
+            },
+        )
+
+
+def _import_process_metrics(
+    operation_id: str,
+    started: float,
+    stages_ms: dict[str, float],
+    outcome: str,
+) -> dict:
+    metrics = {
+        "schema_version": 1,
+        "operation_id": operation_id,
+        "outcome": outcome,
+        "total_ms": round((time.perf_counter() - started) * 1000.0, 3),
+        "stages_ms": {name: round(value, 3) for name, value in stages_ms.items()},
+    }
+    from backend.core.protein_metrics import record_protein_process
+
+    record_protein_process("import", metrics)
+    return metrics
+
+
+def _import_protein_free(asset, *, operation_id: str, expected_revision: int | None):
     """Embed a protein asset + add a free-standing placement, logged.
 
     Also registers the asset in the session library (so the attach-to-overhang
@@ -208,6 +362,14 @@ def _import_protein_free(asset):
     )
 
     def _fn(d: Design) -> None:
+        if any(
+            getattr(entry, "op_kind", None) == "protein-import"
+            and entry.params.get("operation_id") == operation_id
+            for entry in d.feature_log
+        ):
+            raise HTTPException(
+                409, detail=f"Protein import operation {operation_id} was already committed."
+            )
         if not any(a.id == asset.id for a in d.protein_assets):
             d.protein_assets = [*d.protein_assets, asset]
         d.protein_attachments = [*d.protein_attachments, attachment]
@@ -215,8 +377,9 @@ def _import_protein_free(asset):
     updated, report, _entry = design_state.mutate_with_feature_log(
         "protein-import",
         f"Import protein {asset.name}",
-        {"asset_id": asset.id, "name": asset.name},
+        {"asset_id": asset.id, "name": asset.name, "operation_id": operation_id},
         _fn,
+        expected_revision=expected_revision,
     )
     return updated, report, protein_asset_meta(asset)
 

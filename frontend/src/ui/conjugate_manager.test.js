@@ -67,8 +67,11 @@ const CANDIDATES = [
 const OVERHANGS = [{ id: 'ovhg_1', label: 'A1', sequence: 'ATGC' }, { id: 'ovhg_2', sequence: '' }]
 
 const makeApi = () => ({
-  getConjugationCandidates: vi.fn(async () => ({ asset_id: 'a1', candidates: CANDIDATES })),
+  getConjugationCandidates: vi.fn(async () => ({
+    asset_id: 'a1', design_revision: 7, candidates: CANDIDATES,
+  })),
   conjugateProteinToOverhang: vi.fn(async () => ({ attachment_id: 'att1', binder_strand_id: 'b1' })),
+  currentRevisionWatermark: vi.fn(() => 7),
 })
 const makeStore = (overhangs = OVERHANGS) => ({ getState: () => ({ currentDesign: { overhangs } }) })
 const overlayEl = () => document.getElementById('conjugate-manager-overlay')
@@ -143,12 +146,12 @@ describe('site selection', () => {
     expect(overlayEl().textContent).toContain('ssDNA on #3 MET A:1')
   })
 
-  it('Conjugate with no site selected picks one and reports it', async () => {
+  it('Conjugate with no site selected deterministically picks the top-ranked site', async () => {
     const mgr = initConjugateManager({ api: makeApi(), store: makeStore() })
     await mgr.open('a1')
     overlayEl().querySelectorAll('.ohc-list-row')[0].click()
     conjugateBtn().click()
-    expect(overlayEl().textContent).toMatch(/ssDNA on #\d/)
+    expect(overlayEl().textContent).toContain('ssDNA on #1')
   })
 })
 
@@ -175,6 +178,50 @@ describe('Apply / Cancel', () => {
     expect(api.conjugateProteinToOverhang).toHaveBeenCalledWith(
       expect.objectContaining({ assetId: 'a1', overhangId: 'ovhg_1', azideEnd: '3p' }))
     expect(mgr.isOpen()).toBe(false)                            // closed on success
+  })
+
+  it('passes the originating placement so conjugation converts it in place', async () => {
+    const api = makeApi()
+    const mgr = initConjugateManager({ api, store: makeStore() })
+    await mgr.open('a1', { sourceAttachmentId: 'free-att-1' })
+    overlayEl().querySelectorAll('.ohc-list-row')[0].click()
+    siteRows()[0].click()
+    btnByText('Apply').click()
+    await Promise.resolve(); await Promise.resolve()
+    expect(api.conjugateProteinToOverhang).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceAttachmentId: 'free-att-1' }))
+  })
+
+  it('uses the authoritative revision returned with the candidate snapshot', async () => {
+    const api = makeApi()
+    api.currentRevisionWatermark.mockReturnValue(99)
+    const mgr = initConjugateManager({ api, store: makeStore() })
+    await mgr.open('a1', { sourceAttachmentId: 'free-att-1' })
+    overlayEl().querySelectorAll('.ohc-list-row')[0].click()
+    siteRows()[0].click()
+    btnByText('Apply').click()
+    await Promise.resolve(); await Promise.resolve()
+    expect(api.conjugateProteinToOverhang).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedRevision: 7 }))
+  })
+
+  it('shows the backend conflict reason when Apply is rejected', async () => {
+    const api = makeApi()
+    api.conjugateProteinToOverhang.mockResolvedValue(null)
+    const store = {
+      getState: () => ({
+        currentDesign: { overhangs: OVERHANGS },
+        lastError: { status: 409, message: 'Design changed while this operation was prepared.' },
+      }),
+    }
+    const mgr = initConjugateManager({ api, store })
+    await mgr.open('a1')
+    overlayEl().querySelectorAll('.ohc-list-row')[0].click()
+    siteRows()[0].click()
+    btnByText('Apply').click()
+    await Promise.resolve(); await Promise.resolve()
+    expect(overlayEl().textContent).toContain(
+      'Conjugation failed: Design changed while this operation was prepared.')
   })
 
   it('Cancel closes without committing', async () => {

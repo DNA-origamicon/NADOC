@@ -25,13 +25,20 @@ const BTN = 'padding:6px 12px;background:#238636;color:#fff;border:none;border-r
 const BTN2 = 'width:100%;padding:8px;background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:5px;cursor:pointer;'
 
 export function openImportPdbModal({ onResult }) {
+  const abortController = new AbortController()
   const backdrop = document.createElement('div')
   backdrop.style.cssText = WRAP
   const dialog = document.createElement('div')
   dialog.style.cssText = DIALOG
   backdrop.appendChild(dialog)
   document.body.appendChild(backdrop)
-  const close = () => backdrop.remove()
+  let closed = false
+  const close = () => {
+    if (closed) return
+    closed = true
+    abortController.abort(new DOMException('Import cancelled', 'AbortError'))
+    backdrop.remove()
+  }
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close() })
 
   // Header
@@ -47,8 +54,18 @@ export function openImportPdbModal({ onResult }) {
 
   const sub = document.createElement('div')
   sub.style.cssText = 'color:#8b949e;font-size:12px;margin-bottom:12px;'
-  sub.textContent = 'DNA is imported as a design; protein is added to the protein library (auto-detected).'
+  sub.textContent = 'DNA is imported as a design; choose whether an auto-detected protein is placed or kept in the library.'
   dialog.appendChild(sub)
+
+  const placementLabel = document.createElement('label')
+  placementLabel.style.cssText = 'display:flex;align-items:center;gap:8px;margin:8px 0 12px;'
+  placementLabel.textContent = 'Protein import result'
+  const placementSelect = document.createElement('select')
+  placementSelect.id = 'pdb-protein-placement'
+  placementSelect.innerHTML = '<option value="free">Place in design</option><option value="library">Library only</option>'
+  placementSelect.style.cssText = 'margin-left:auto;background:#161b22;color:#c9d1d9;border:1px solid #30363d;border-radius:5px;padding:5px;'
+  placementLabel.appendChild(placementSelect)
+  dialog.appendChild(placementLabel)
 
   const status = document.createElement('div')
   status.style.cssText = 'color:#8b949e;font-size:12px;min-height:16px;margin:8px 0;'
@@ -58,15 +75,33 @@ export function openImportPdbModal({ onResult }) {
 
   // `recentMeta` (the source that triggered this import) is threaded through so
   // the DNA-decision re-call still records the correct kind (code vs file).
+  let running = false
   async function run(args, busyMsg, recentMeta) {
+    if (running) return
+    running = true
     setBusy(busyMsg)
-    const json = await onResult(args)   // returns the response json or null
+    let json
+    try {
+      json = await onResult({
+        ...args,
+        proteinPlacement: placementSelect.value,
+        operationId: globalThis.crypto?.randomUUID?.(),
+        signal: abortController.signal,
+      })   // returns the response json or null
+    } catch (error) {
+      running = false
+      if (abortController.signal.aborted || error?.name === 'AbortError') return
+      setErr(error?.message || 'Import failed.')
+      return
+    }
+    running = false
+    if (closed || abortController.signal.aborted || json?.cancelled) return
     if (json === null) {
       setErr('Import failed.')   // detailed message surfaced via the app toast/lastError
       return
     }
     if (json.needs_dna_decision) {
-      showDnaChoice(json, recentMeta)   // structure has protein + DNA — ask before stripping
+      showDnaChoice(json, recentMeta, args)   // structure has protein + DNA — ask before stripping
       return
     }
     if (recentMeta?.kind === 'code') addRecentProteinCode(recentMeta.code)
@@ -75,7 +110,7 @@ export function openImportPdbModal({ onResult }) {
   }
 
   // Inline choice when a protein structure also contains DNA.
-  function showDnaChoice(json, recentMeta) {
+  function showDnaChoice(json, recentMeta, originalArgs) {
     status.textContent = ''
     const box = document.createElement('div')
     box.style.cssText = 'margin-top:10px;padding:10px;border:1px solid #d29922;border-radius:6px;background:#1c1a12;'
@@ -89,8 +124,11 @@ export function openImportPdbModal({ onResult }) {
       const b = document.createElement('button')
       b.textContent = label
       b.style.cssText = primary ? BTN : BTN2.replace('width:100%;', '')
+      const retrySource = json.pdb_id
+        ? { pdbId: json.pdb_id, name: json.name || originalArgs.name }
+        : { content: json.content ?? originalArgs.content, name: json.name || originalArgs.name }
       b.onclick = () => run(
-        { content: json.content, name: json.name, removeDnaFromProtein: remove },
+        { ...retrySource, removeDnaFromProtein: remove },
         remove ? 'Importing protein (DNA removed)…' : 'Importing protein + DNA…',
         recentMeta,
       )
@@ -218,5 +256,5 @@ export function openImportPdbModal({ onResult }) {
 
   dialog.appendChild(status)
   setTimeout(() => idInput.focus(), 0)
-  return { close }
+  return { close, signal: abortController.signal }
 }

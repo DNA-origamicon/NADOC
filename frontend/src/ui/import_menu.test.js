@@ -157,6 +157,20 @@ describe('runPdbImport', () => {
     expect(showToast).toHaveBeenCalledWith('Imported protein GFP (1234 atoms)', 4000)
   })
 
+  it('keeps a library-only protein out of the design sync', async () => {
+    const json = {
+      imported: { protein: true }, protein_placement: 'library',
+      protein: { name: 'GFP', atom_count: 1234 },
+    }
+    const deps = makeDeps({}, { importPdbAuto: vi.fn().mockResolvedValue(json) })
+    const { runPdbImport } = initImportMenu(deps)
+    await runPdbImport({})
+    expect(deps.api.syncDesignResponse).not.toHaveBeenCalled()
+    expect(deps.hideWelcome).not.toHaveBeenCalled()
+    expect(showToast).toHaveBeenCalledWith(
+      'Imported protein GFP in library (1234 atoms)', 4000)
+  })
+
   it('combines DNA + protein in one summary toast', async () => {
     const json = { imported: { dna: true, protein: true }, protein: { name: 'GFP', atom_count: 10 } }
     const deps = makeDeps({}, { importPdbAuto: vi.fn().mockResolvedValue(json) })

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from concurrent.futures import ThreadPoolExecutor
 from fastapi.testclient import TestClient
 
 from backend.api import state as design_state
@@ -31,6 +32,7 @@ from backend.core.models import (
     PartSourceInline,
     ProteinAttachment,
     ProteinTargetDesign,
+    RoutingClusterLogEntry,
     Strand,
     StrandType,
     Vec3,
@@ -355,12 +357,11 @@ def test_azide_attach_end_picks_nearer_overhang_end():
 
 def _set_sequenced_overhang():
     d = _design_with_overhang()
-    d = d.model_copy(
-        update={
-            "overhangs": [d.overhangs[0].model_copy(update={"sequence": "ACGTACGT"})]
-        }
-    )
     design_state.set_design(d)
+    response = client.patch(
+        "/api/design/overhang/oh_5p", json={"sequence": "ACGTACGT"}
+    )
+    assert response.status_code == 200, response.text
 
 
 def test_conjugate_creates_binder_and_attachment(_clean_state):
@@ -373,7 +374,24 @@ def test_conjugate_creates_binder_and_attachment(_clean_state):
         json={"asset_id": asset_id, "overhang_id": "oh_5p", "azide_end": "5p"},
     )
     assert r.status_code == 201, r.text
-    binder_id = r.json()["binder_strand_id"]
+    payload = r.json()
+    binder_id = payload["binder_strand_id"]
+    validation = payload["element_validation"]
+    assert validation["valid"], validation
+    assert validation["failed_metrics"] == []
+    assert validation["metrics"]["anchor_error_nm"]["value"] <= 1.0e-4
+    assert validation["metrics"]["binder_cardinality"]["value"] == 1
+    process = payload["process_metrics"]
+    assert process["operation_id"]
+    assert process["outcome"] == "committed"
+    assert process["total_ms"] >= 0
+    assert set(process["stages_ms"]) == {
+        "resolve_inputs",
+        "build_binder",
+        "resolve_geometry",
+        "commit",
+        "validate_element",
+    }
 
     d = design_state.get_design()
     # (1) the handle is a real overhang-binding domain
@@ -387,8 +405,371 @@ def test_conjugate_creates_binder_and_attachment(_clean_state):
     att = d.protein_attachments[0]
     assert att.target.overhang_id == "oh_5p"
     assert att.conjugation_atom_serial is not None
+    assert att.conjugation_chemistry in {"lys", "cys", "nterm"}
+    assert att.conjugation_accessible_fraction is not None
+    evidence = validation["metrics"]["selection_evidence"]
+    assert evidence["passed"] and evidence["value"]["persisted"]
     assert att.target.attach_end in ("free_end", "root")
     assert any(a.id == asset_id for a in d.protein_assets)
+
+
+def test_conjugate_converts_imported_free_placement_without_duplication(_clean_state):
+    _set_sequenced_overhang()
+    client.post(
+        "/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth"}
+    )
+    before = design_state.get_design()
+    source = before.protein_attachments[0]
+
+    r = client.post(
+        "/api/design/protein/conjugate",
+        json={
+            "asset_id": source.asset_id,
+            "source_attachment_id": source.id,
+            "overhang_id": "oh_5p",
+            "azide_end": "5p",
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["element_validation"]["valid"]
+    d = design_state.get_design()
+    assert len(d.protein_assets) == 1
+    assert len(d.protein_attachments) == 1
+    assert d.protein_attachments[0].id == source.id
+    assert d.protein_attachments[0].target.kind == "overhang"
+
+
+def test_conjugate_rejects_mismatched_source_attachment(_clean_state):
+    _set_sequenced_overhang()
+    client.post("/api/design/import/pdb-auto", json={"content": _SYNTH_PDB})
+    source = design_state.get_design().protein_attachments[0]
+    other_asset_id = _import_protein()
+    r = client.post(
+        "/api/design/protein/conjugate",
+        json={
+            "asset_id": other_asset_id,
+            "source_attachment_id": source.id,
+            "overhang_id": "oh_5p",
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_conjugate_does_not_orphan_binder_when_source_is_already_attached(_clean_state):
+    _set_sequenced_overhang()
+    asset_id = _import_protein()
+    first = client.post(
+        "/api/design/protein/conjugate",
+        json={"asset_id": asset_id, "overhang_id": "oh_5p"},
+    )
+    source_id = first.json()["attachment_id"]
+    strands_before = [s.id for s in design_state.get_design().strands]
+    r = client.post(
+        "/api/design/protein/conjugate",
+        json={
+            "asset_id": asset_id,
+            "source_attachment_id": source_id,
+            "overhang_id": "oh_5p",
+        },
+    )
+    assert r.status_code == 409
+    assert [s.id for s in design_state.get_design().strands] == strands_before
+
+
+def test_conjugate_rejects_an_occupied_overhang_without_mutation(_clean_state):
+    _set_sequenced_overhang()
+    first_asset = _import_protein()
+    assert client.post(
+        "/api/design/protein/conjugate",
+        json={"asset_id": first_asset, "overhang_id": "oh_5p"},
+    ).status_code == 201
+    second_asset = _import_protein()
+    before = design_state.get_design().model_dump(mode="json")
+    r = client.post(
+        "/api/design/protein/conjugate",
+        json={"asset_id": second_asset, "overhang_id": "oh_5p"},
+    )
+    assert r.status_code == 422
+    assert "binder_cardinality" in r.json()["detail"]["element_validation"][
+        "failed_metrics"
+    ]
+    assert design_state.get_design().model_dump(mode="json") == before
+
+
+def test_conjugate_operation_id_prevents_duplicate_commit(_clean_state):
+    _set_sequenced_overhang()
+    asset_id = _import_protein()
+    body = {
+        "asset_id": asset_id,
+        "overhang_id": "oh_5p",
+        "operation_id": "conjugation-request-1",
+    }
+    first = client.post("/api/design/protein/conjugate", json=body)
+    assert first.status_code == 201
+    before = design_state.get_design().model_dump(mode="json")
+    second = client.post("/api/design/protein/conjugate", json=body)
+    assert second.status_code == 409
+    assert design_state.get_design().model_dump(mode="json") == before
+
+
+def test_conjugate_rejects_stale_design_revision_before_commit(_clean_state):
+    _set_sequenced_overhang()
+    asset_id = _import_protein()
+    stale_revision = design_state.revision()
+    design_state.set_design_silent(design_state.get_design().model_copy(deep=True))
+    current = design_state.get_design().model_dump(mode="json")
+    r = client.post(
+        "/api/design/protein/conjugate",
+        json={
+            "asset_id": asset_id,
+            "overhang_id": "oh_5p",
+            "expected_revision": stale_revision,
+        },
+    )
+    assert r.status_code == 409
+    assert r.json()["detail"]["expected_revision"] == stale_revision
+    assert r.json()["detail"]["current_revision"] == stale_revision + 1
+    assert design_state.get_design().model_dump(mode="json") == current
+
+
+def test_concurrent_conjugate_requests_commit_exactly_once(_clean_state):
+    _set_sequenced_overhang()
+    asset_id = _import_protein()
+    revision = design_state.revision()
+    body = {
+        "asset_id": asset_id,
+        "overhang_id": "oh_5p",
+        "operation_id": "concurrent-conjugation-1",
+        "expected_revision": revision,
+    }
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(
+            pool.map(
+                lambda _: client.post("/api/design/protein/conjugate", json=body),
+                range(2),
+            )
+        )
+    assert sorted(r.status_code for r in responses) == [201, 409]
+    design = design_state.get_design()
+    assert len(design.protein_attachments) == 1
+    binders = [
+        strand
+        for strand in design.strands
+        if any(domain.binds_overhang_id == "oh_5p" for domain in strand.domains)
+    ]
+    assert len(binders) == 1
+    assert sum(entry.op_kind == "protein-conjugate" for entry in design.feature_log) == 1
+
+
+def test_conjugate_validation_exception_leaves_design_and_undo_history_untouched(
+    _clean_state, monkeypatch
+):
+    _set_sequenced_overhang()
+    asset_id = _import_protein()
+    before = design_state.get_design().model_dump(mode="json")
+    with design_state._lock:
+        history_len = len(design_state._session().history)
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("injected validation failure")
+
+    monkeypatch.setattr(
+        "backend.core.protein_validation.validate_protein_conjugate", _boom
+    )
+    no_raise_client = TestClient(app, raise_server_exceptions=False)
+    r = no_raise_client.post(
+        "/api/design/protein/conjugate",
+        json={"asset_id": asset_id, "overhang_id": "oh_5p"},
+    )
+    assert r.status_code == 500
+    assert design_state.get_design().model_dump(mode="json") == before
+    with design_state._lock:
+        assert len(design_state._session().history) == history_len
+
+
+def test_conjugate_invalid_site_is_rejected_atomically_with_metrics(_clean_state):
+    _set_sequenced_overhang()
+    asset_id = _import_protein()
+    before = design_state.get_design().model_dump(mode="json")
+    r = client.post(
+        "/api/design/protein/conjugate",
+        json={
+            "asset_id": asset_id,
+            "overhang_id": "oh_5p",
+            "conjugation_atom_serial": 999999,
+            "operation_id": "bad-site-1",
+        },
+    )
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert detail["process_metrics"]["outcome"] == "rejected_invalid"
+    assert "conjugation_atom_integrity" in detail["element_validation"]["failed_metrics"]
+    assert design_state.get_design().model_dump(mode="json") == before
+
+
+def test_persisted_validation_detects_voltron_free_plus_conjugated_duplicate(
+    _clean_state,
+):
+    _set_sequenced_overhang()
+    imported = client.post(
+        "/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth"}
+    )
+    assert imported.status_code == 200
+    asset_id = imported.json()["protein"]["id"]
+    committed = client.post(
+        "/api/design/protein/conjugate",
+        json={"asset_id": asset_id, "overhang_id": "oh_5p"},
+    )
+    assert committed.status_code == 201
+
+    r = client.get("/api/design/protein/validation")
+    assert r.status_code == 200, r.text
+    report = r.json()
+    assert not report["valid"]
+    assert report["summary"] == {
+        "asset_count": 1,
+        "placement_count": 2,
+        "free_placement_count": 1,
+        "conjugated_placement_count": 1,
+        "failed_element_count": 0,
+        "error_count": 1,
+        "warning_count": 0,
+    }
+    duplicate = next(
+        f
+        for f in report["findings"]
+        if f["code"] == "legacy_unconverted_free_placement"
+    )
+    assert duplicate["repairable"] is True
+    assert len(duplicate["free_attachment_ids"]) == 1
+    assert duplicate["conjugated_attachment_ids"] == [
+        committed.json()["attachment_id"]
+    ]
+
+    repair_body = {
+        "free_attachment_id": duplicate["free_attachment_ids"][0],
+        "conjugated_attachment_id": duplicate["conjugated_attachment_ids"][0],
+    }
+    preview = client.post(
+        "/api/design/protein/validation/repair-duplicate", json=repair_body
+    )
+    assert preview.status_code == 200
+    assert preview.json()["applied"] is False
+    assert len(design_state.get_design().protein_attachments) == 2
+
+    applied = client.post(
+        "/api/design/protein/validation/repair-duplicate",
+        json={**repair_body, "apply": True},
+    )
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["validation_after"]["valid"]
+    assert len(design_state.get_design().protein_attachments) == 1
+    assert design_state.get_design().protein_attachments[0].id == repair_body[
+        "conjugated_attachment_id"
+    ]
+    assert design_state.get_design().feature_log[-1].params["repair"] == (
+        "legacy-import-conjugate-duplicate"
+    )
+
+    assert client.post("/api/design/undo").status_code == 200
+    assert len(design_state.get_design().protein_attachments) == 2
+    assert client.post("/api/design/redo").status_code == 200
+    assert len(design_state.get_design().protein_attachments) == 1
+
+
+def test_persisted_validation_survives_design_serialization(_clean_state):
+    from backend.core.design_geometry import _geometry_for_design
+    from backend.core.protein_validation import audit_protein_design
+
+    _set_sequenced_overhang()
+    asset_id = _import_protein()
+    r = client.post(
+        "/api/design/protein/conjugate",
+        json={"asset_id": asset_id, "overhang_id": "oh_5p"},
+    )
+    assert r.status_code == 201
+    design = design_state.get_design()
+    geometry = _geometry_for_design(design)
+    before = audit_protein_design(design, geometry)
+    restored = Design.model_validate_json(design.model_dump_json())
+    after = audit_protein_design(restored, _geometry_for_design(restored))
+    assert before == after
+
+
+def test_conjugate_save_load_preserves_identity_topology_and_validation(
+    _clean_state, tmp_path
+):
+    _set_sequenced_overhang()
+    asset_id = _import_protein()
+    committed = client.post(
+        "/api/design/protein/conjugate",
+        json={"asset_id": asset_id, "overhang_id": "oh_5p"},
+    )
+    assert committed.status_code == 201, committed.text
+    before = client.get("/api/design/protein/validation").json()
+    attachment_id = committed.json()["attachment_id"]
+    binder_id = committed.json()["binder_strand_id"]
+    save_path = tmp_path / "protein-conjugate.nadoc"
+    saved = client.post("/api/design/save", json={"path": str(save_path)})
+    assert saved.status_code == 200, saved.text
+
+    design_state.set_design(Design())
+    loaded = client.post("/api/design/load", json={"path": str(save_path)})
+    assert loaded.status_code == 200, loaded.text
+    restored = design_state.get_design()
+    assert [a.id for a in restored.protein_attachments] == [attachment_id]
+    assert any(s.id == binder_id for s in restored.strands)
+    after = client.get("/api/design/protein/validation").json()
+    before.pop("audit_ms")
+    after.pop("audit_ms")
+    before.pop("process_metrics")
+    after.pop("process_metrics")
+    assert after == before
+
+
+def test_conjugated_pose_matches_viewer_atomistic_export_and_oxdna_beads(_clean_state):
+    from backend.core.design_geometry import _geometry_for_design
+    from backend.core.protein import build_protein_attachment_atoms
+    from backend.physics.oxdna_protein import build_protein_blocks
+
+    _set_sequenced_overhang()
+    asset_id = _import_protein()
+    r = client.post(
+        "/api/design/protein/conjugate",
+        json={"asset_id": asset_id, "overhang_id": "oh_5p"},
+    )
+    assert r.status_code == 201
+    design = design_state.get_design()
+    geometry = _geometry_for_design(design)
+
+    viewer_model = client.get("/api/design/protein/atomistic").json()
+    viewer = viewer_model["atoms"]
+    exported, exported_bonds, _ = build_protein_attachment_atoms(
+        design, geometry=geometry
+    )
+    assert len(viewer) == len(exported)
+    viewer_xyz = np.array([[a["x"], a["y"], a["z"]] for a in viewer])
+    export_xyz = np.array([[a.x, a.y, a.z] for a in exported])
+    # Viewer JSON intentionally rounds coordinates to 5 decimals; export keeps
+    # full precision. Their discrepancy must stay below that display quantum.
+    assert np.max(np.linalg.norm(viewer_xyz - export_xyz, axis=1)) <= 1.0e-5
+    assert viewer_model["bonds"]
+    assert {tuple(pair) for pair in viewer_model["bonds"]} == set(exported_bonds)
+
+    attachments, blocks = build_protein_blocks(design, geometry)
+    assert [a.id for a in attachments] == [r.json()["attachment_id"]]
+    viewer_ca = {
+        (atom["chain_id"], atom["seq_num"]): np.array(
+            [atom["x"], atom["y"], atom["z"]]
+        )
+        for atom in viewer
+        if atom["name"] == "CA"
+    }
+    assert blocks and blocks[0]
+    for bead in blocks[0]:
+        assert np.allclose(
+            bead.pos_nm, viewer_ca[(bead.chain_id, bead.res_seq)], atol=1.0e-5
+        )
 
 
 def test_conjugate_azide_end_flips_attach_end(_clean_state):
@@ -526,6 +907,21 @@ def test_patch_visible_false_hides_protein(_clean_state):
     assert len(hidden["atoms"]) == 0
 
 
+def test_patch_rejects_invalid_conjugation_site_without_mutation(_clean_state):
+    asset_id = _import_protein()
+    att_id = client.post(
+        "/api/design/protein/attachments",
+        json={"asset_id": asset_id, "overhang_id": "oh_5p"},
+    ).json()["attachment_id"]
+    before = design_state.get_design().model_dump(mode="json")
+    r = client.patch(
+        f"/api/design/protein/attachments/{att_id}",
+        json={"conjugation_atom_serial": 999999},
+    )
+    assert r.status_code == 422
+    assert design_state.get_design().model_dump(mode="json") == before
+
+
 def test_delete_attachment(_clean_state):
     asset_id = _import_protein()
     att_id = client.post(
@@ -535,6 +931,63 @@ def test_delete_attachment(_clean_state):
     r = client.delete(f"/api/design/protein/attachments/{att_id}")
     assert r.status_code == 200, r.text
     assert len(design_state.get_design().protein_attachments) == 0
+
+
+def test_delete_conjugate_removes_owned_binder_and_undo_restores_both(_clean_state):
+    _set_sequenced_overhang()
+    asset_id = _import_protein()
+    created = client.post(
+        "/api/design/protein/conjugate",
+        json={"asset_id": asset_id, "overhang_id": "oh_5p"},
+    ).json()
+    r = client.delete(
+        f"/api/design/protein/attachments/{created['attachment_id']}"
+    )
+    assert r.status_code == 200, r.text
+    design = design_state.get_design()
+    assert not any(a.id == created["attachment_id"] for a in design.protein_attachments)
+    assert not any(s.id == created["binder_strand_id"] for s in design.strands)
+
+    assert client.post("/api/design/undo").status_code == 200
+    restored = design_state.get_design()
+    assert any(a.id == created["attachment_id"] for a in restored.protein_attachments)
+    assert any(s.id == created["binder_strand_id"] for s in restored.strands)
+
+
+def test_delete_display_only_overhang_attachment_keeps_unowned_topology(_clean_state):
+    asset_id = _import_protein()
+    strands_before = [s.id for s in design_state.get_design().strands]
+    attachment_id = client.post(
+        "/api/design/protein/attachments",
+        json={"asset_id": asset_id, "overhang_id": "oh_5p"},
+    ).json()["attachment_id"]
+    assert client.delete(
+        f"/api/design/protein/attachments/{attachment_id}"
+    ).status_code == 200
+    assert [s.id for s in design_state.get_design().strands] == strands_before
+
+
+def test_delete_then_reconjugate_same_overhang_is_clean(_clean_state):
+    _set_sequenced_overhang()
+    asset_id = _import_protein()
+    first = client.post(
+        "/api/design/protein/conjugate",
+        json={"asset_id": asset_id, "overhang_id": "oh_5p"},
+    ).json()
+    assert client.delete(
+        f"/api/design/protein/attachments/{first['attachment_id']}"
+    ).status_code == 200
+    second = client.post(
+        "/api/design/protein/conjugate",
+        json={"asset_id": asset_id, "overhang_id": "oh_5p"},
+    )
+    assert second.status_code == 201, second.text
+    design = design_state.get_design()
+    assert len(design.protein_attachments) == 1
+    assert sum(
+        any(domain.binds_overhang_id == "oh_5p" for domain in strand.domains)
+        for strand in design.strands
+    ) == 1
 
 
 def test_attach_unknown_overhang_404(_clean_state):
@@ -605,10 +1058,28 @@ def test_pdb_auto_rejects_empty_and_irrelevant(_clean_state):
     water = (
         "ATOM      1  OH2 TIP3    1       0.000   0.000   0.000  1.00  0.00      WAT\n"
     )
-    assert (
-        client.post("/api/design/import/pdb-auto", json={"content": water}).status_code
-        == 400
+    response = client.post("/api/design/import/pdb-auto", json={"content": water})
+    assert response.status_code == 400
+
+
+def test_pdb_auto_enforces_input_and_atom_resource_limits(_clean_state, monkeypatch):
+    from backend.api import routes_design_interchange
+
+    before = design_state.get_design().model_dump(mode="json")
+    monkeypatch.setattr(routes_design_interchange, "MAX_PDB_INPUT_BYTES", 10)
+    too_many_bytes = client.post(
+        "/api/design/import/pdb-auto", json={"content": _SYNTH_PDB}
     )
+    assert too_many_bytes.status_code == 413
+    assert design_state.get_design().model_dump(mode="json") == before
+
+    monkeypatch.setattr(routes_design_interchange, "MAX_PDB_INPUT_BYTES", 50_000)
+    monkeypatch.setattr(routes_design_interchange, "MAX_PROTEIN_ATOMS", 1)
+    too_many_atoms = client.post(
+        "/api/design/import/pdb-auto", json={"content": _SYNTH_PDB}
+    )
+    assert too_many_atoms.status_code == 413
+    assert design_state.get_design().model_dump(mode="json") == before
 
 
 def test_pdb_auto_invalid_rcsb_id_400(_clean_state):
@@ -661,6 +1132,36 @@ def test_pdb_auto_complex_needs_dna_decision_then_imports(_clean_state):
     assert r2.json()["protein"]["atom_count"] == 9
 
 
+def test_rcsb_complex_decision_reuses_id_without_echoing_pdb(
+    _clean_state, monkeypatch
+):
+    from backend.api import routes_design_interchange
+
+    monkeypatch.setattr(
+        routes_design_interchange, "_download_rcsb_pdb", lambda _pdb_id: _SYNTH_PROT_DNA
+    )
+    decision = client.post(
+        "/api/design/import/pdb-auto", json={"pdb_id": "8scp", "name": "8SCP"}
+    )
+    assert decision.status_code == 200, decision.text
+    payload = decision.json()
+    assert payload["needs_dna_decision"] is True
+    assert payload["pdb_id"] == "8SCP"
+    assert "content" not in payload
+
+    imported = client.post(
+        "/api/design/import/pdb-auto",
+        json={
+            "pdb_id": payload["pdb_id"],
+            "name": payload["name"],
+            "remove_dna_from_protein": True,
+        },
+    )
+    assert imported.status_code == 200, imported.text
+    assert imported.json()["source"] == "rcsb:8SCP"
+    assert imported.json()["protein"]["atom_count"] == 9
+
+
 def test_pdb_auto_complex_keep_dna(_clean_state):
     r = client.post(
         "/api/design/import/pdb-auto",
@@ -680,6 +1181,242 @@ def test_import_places_free_protein_and_logs(_clean_state):
     assert d.protein_attachments[0].target.kind == "free"
     # Import is recorded in the feature log.
     assert d.feature_log[-1].op_kind == "protein-import"
+    payload = r.json()["protein"]
+    assert payload["atom_count"] == 9
+    assert payload["bond_count"] > 0
+    assert payload["input_atom_record_count"] == 12
+    assert payload["filtered_atom_record_count"] == 3
+    assert payload["malformed_atom_record_count"] == 0
+
+
+def test_import_reports_malformed_atom_records(_clean_state):
+    malformed = _SYNTH_PDB.replace(
+        "ATOM      2  CA  ALA     1       1.500   0.000   0.000  1.00  0.00      PROA\n",
+        "ATOM      2 malformed\n",
+    )
+    response = client.post(
+        "/api/design/import/pdb-auto", json={"content": malformed}
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["protein"]["malformed_atom_record_count"] == 1
+    assert payload["import_warnings"] == [
+        "Skipped 1 malformed ATOM/HETATM record(s)."
+    ]
+
+
+def test_repeated_import_operation_id_is_rejected_without_mutation(_clean_state):
+    operation_id = "import-once"
+    first_revision = design_state.get_design_with_revision()[1]
+    first = client.post(
+        "/api/design/import/pdb-auto",
+        json={
+            "content": _SYNTH_PDB,
+            "operation_id": operation_id,
+            "expected_revision": first_revision,
+        },
+    )
+    assert first.status_code == 200, first.text
+    before = design_state.get_design().model_dump(mode="json")
+    current_revision = design_state.get_design_with_revision()[1]
+
+    repeated = client.post(
+        "/api/design/import/pdb-auto",
+        json={
+            "content": _SYNTH_PDB,
+            "operation_id": operation_id,
+            "expected_revision": current_revision,
+        },
+    )
+    assert repeated.status_code == 409
+    assert "already committed" in str(repeated.json()["detail"])
+    assert design_state.get_design().model_dump(mode="json") == before
+
+
+def test_import_conjugate_and_audit_tolerate_routing_cluster_log_entries(
+    _clean_state,
+):
+    design = _design_with_overhang()
+    design.feature_log = [RoutingClusterLogEntry()]
+    design_state.set_design(design)
+    imported = client.post(
+        "/api/design/import/pdb-auto",
+        json={"content": _SYNTH_PDB, "operation_id": "after-routing-cluster"},
+    )
+    assert imported.status_code == 200, imported.text
+    attachment_id = design_state.get_design().protein_attachments[0].id
+    sequenced = client.patch(
+        "/api/design/overhang/oh_5p", json={"sequence": "ACGTACGT"}
+    )
+    assert sequenced.status_code == 200, sequenced.text
+    conjugated = client.post(
+        "/api/design/protein/conjugate",
+        json={
+            "asset_id": imported.json()["protein"]["id"],
+            "source_attachment_id": attachment_id,
+            "overhang_id": "oh_5p",
+            "operation_id": "conjugate-after-routing-cluster",
+        },
+    )
+    assert conjugated.status_code == 201, conjugated.text
+    audit = client.get("/api/design/protein/validation")
+    assert audit.status_code == 200, audit.text
+    assert audit.json()["valid"] is True
+
+
+def test_cancelled_import_is_rejected_before_any_commit(_clean_state, monkeypatch):
+    from backend.api import routes_design_interchange
+
+    before = design_state.get_design().model_dump(mode="json")
+    library_ids = {asset.id for asset in design_state.list_protein_assets()}
+
+    async def _cancel(*_args, **_kwargs):
+        from fastapi import HTTPException
+
+        raise HTTPException(499, detail={"message": "Protein import cancelled before commit."})
+
+    monkeypatch.setattr(
+        routes_design_interchange, "_reject_disconnected_import", _cancel
+    )
+    response = client.post(
+        "/api/design/import/pdb-auto",
+        json={"content": _SYNTH_PDB, "operation_id": "cancel-before-commit"},
+    )
+    assert response.status_code == 499
+    assert design_state.get_design().model_dump(mode="json") == before
+    assert {asset.id for asset in design_state.list_protein_assets()} == library_ids
+
+
+def test_feature_log_mutation_exception_restores_design_and_history(_clean_state):
+    before = design_state.get_design().model_dump(mode="json")
+
+    def _partial_then_fail(design):
+        design.metadata.name = "should roll back"
+        raise RuntimeError("injected mutation failure")
+
+    with pytest.raises(RuntimeError, match="injected mutation failure"):
+        design_state.mutate_with_feature_log(
+            "protein-import", "fault injection", {}, _partial_then_fail
+        )
+    assert design_state.get_design().model_dump(mode="json") == before
+
+
+def test_import_library_only_is_explicit_measured_and_does_not_place(_clean_state):
+    before = design_state.get_design().model_dump(mode="json")
+    r = client.post(
+        "/api/design/import/pdb-auto",
+        json={
+            "content": _SYNTH_PDB,
+            "name": "library synth",
+            "protein_placement": "library",
+            "operation_id": "import-library-1",
+        },
+    )
+    assert r.status_code == 200, r.text
+    payload = r.json()
+    assert payload["protein_placement"] == "library"
+    assert payload["process_metrics"]["operation_id"] == "import-library-1"
+    assert payload["process_metrics"]["outcome"] == "imported"
+    assert set(payload["process_metrics"]["stages_ms"]) == {
+        "acquire",
+        "classify",
+        "parse_protein",
+        "deduplicate",
+        "commit",
+    }
+    assert design_state.get_design().model_dump(mode="json") == before
+    assert any(a.id == payload["protein"]["id"] for a in design_state.list_protein_assets())
+
+
+def test_repeated_placed_import_detects_duplicate_but_preserves_independent_assets(
+    _clean_state,
+):
+    first = client.post(
+        "/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "first"}
+    ).json()
+    second = client.post(
+        "/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "second"}
+    ).json()
+    assert first["protein"]["deduplicated"] is False
+    assert second["protein"]["deduplicated"] is False
+    assert second["protein"]["duplicate_detected"] is True
+    assert first["protein"]["id"] != second["protein"]["id"]
+    design = design_state.get_design()
+    assert len(design.protein_assets) == 2
+    assert len(design.protein_attachments) == 2  # two explicit Place-in-design actions
+
+
+def test_repeated_library_import_deduplicates_without_design_lifecycle_coupling(
+    _clean_state,
+):
+    body = {
+        "content": _SYNTH_PDB,
+        "name": "library copy",
+        "protein_placement": "library",
+    }
+    first = client.post("/api/design/import/pdb-auto", json=body).json()
+    second = client.post("/api/design/import/pdb-auto", json=body).json()
+    assert first["protein"]["id"] == second["protein"]["id"]
+    assert second["protein"]["deduplicated"] is True
+    matching = [
+        asset
+        for asset in design_state.list_protein_assets()
+        if asset.id == first["protein"]["id"]
+    ]
+    assert len(matching) == 1
+
+
+def test_candidate_endpoint_reports_cache_miss_then_hit(_clean_state):
+    from backend.core.conjugation import clear_conjugation_candidate_cache
+
+    clear_conjugation_candidate_cache()
+    asset_id = _import_protein()
+    first = client.get(
+        f"/api/design/protein/conjugation-candidates?asset_id={asset_id}"
+    ).json()
+    second = client.get(
+        f"/api/design/protein/conjugation-candidates?asset_id={asset_id}"
+    ).json()
+    assert first["candidates"] == second["candidates"]
+    assert first["process_metrics"]["cache_hit"] is False
+    assert second["process_metrics"]["cache_hit"] is True
+    assert first["process_metrics"]["candidate_count"] == len(first["candidates"])
+    assert first["design_revision"] == design_state.revision()
+
+
+def test_process_metrics_endpoint_aggregates_workflow_without_raw_ids(_clean_state):
+    _set_sequenced_overhang()
+    imported = client.post(
+        "/api/design/import/pdb-auto",
+        json={"content": _SYNTH_PDB, "operation_id": "metrics-import"},
+    ).json()
+    asset_id = imported["protein"]["id"]
+    client.get(
+        "/api/design/protein/conjugation-candidates",
+        params={"asset_id": asset_id, "operation_id": "metrics-candidates"},
+    )
+    source_id = design_state.get_design().protein_attachments[0].id
+    client.post(
+        "/api/design/protein/conjugate",
+        json={
+            "asset_id": asset_id,
+            "overhang_id": "oh_5p",
+            "source_attachment_id": source_id,
+            "operation_id": "metrics-conjugation",
+        },
+    )
+    metrics = client.get("/api/design/protein/metrics").json()
+    assert metrics["retained_run_count"] == 3
+    assert set(metrics["operations"]) == {
+        "candidate_analysis",
+        "conjugation",
+        "import",
+    }
+    assert all(
+        operation["correlation_rate"] == 1.0
+        for operation in metrics["operations"].values()
+    )
+    assert "metrics-import" not in str(metrics)
 
 
 def test_gizmo_move_to_pose_math():

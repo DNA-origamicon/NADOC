@@ -1062,7 +1062,7 @@ async function main() {
     if (!assetId) return
     e.preventDefault()
     e.stopPropagation()
-    conjugateManager.showConjugateMenu({ x: e.clientX, y: e.clientY, assetId })
+    conjugateManager.showConjugateMenu({ x: e.clientX, y: e.clientY, assetId, attachmentId: attId })
   }, { capture: true }), { capture: true })
 
 
@@ -3563,15 +3563,18 @@ async function main() {
     const state = store.getState()
     const sel = primaryRefOfKind(state, 'protein')
     let assetId = null
+    let sourceAttachmentId = null
     if (sel) {
-      assetId = state.currentDesign?.protein_attachments?.find(a => a.id === sel.id)?.asset_id
+      const attachment = state.currentDesign?.protein_attachments?.find(a => a.id === sel.id)
+      assetId = attachment?.asset_id
+      sourceAttachmentId = attachment?.id ?? null
     }
     if (!assetId) {
       const lib = await api.listProteinLibrary().catch(() => null)
       assetId = lib?.assets?.[0]?.id ?? lib?.[0]?.id ?? null
     }
     if (!assetId) { showToast('Import a protein first (File ▸ Import PDB…).', { severity: 'error' }); return }
-    conjugateManager.open(assetId)
+    conjugateManager.open(assetId, { sourceAttachmentId })
   })
 
   initAssemblyOverhangsManagerPopup({ store })

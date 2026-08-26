@@ -23,6 +23,8 @@ in ``backend_router_carveup.md`` (Refactor #41).
 
 from __future__ import annotations
 
+import time
+import uuid
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -101,9 +103,7 @@ def get_protein_atomistic(asset_id: str | None = Query(None)) -> dict:
 
     * ``?asset_id=`` — render that single asset at its imported PDB coordinates
       (library preview).
-    * no arg — render every visible design ``ProteinAttachment`` placed at its
-      overhang anchor, plus any imported asset not yet referenced by an
-      attachment at its PDB coordinates.
+    * no arg — render every visible design ``ProteinAttachment`` at its target.
 
     Response shape matches ``GET /design/atomistic`` ({ atoms, bonds, element_meta }).
     """
@@ -161,7 +161,9 @@ def get_protein_atomistic(asset_id: str | None = Query(None)) -> dict:
 
 
 @router.get("/design/protein/conjugation-candidates")
-def get_conjugation_candidates(asset_id: str = Query(...)) -> dict:
+def get_conjugation_candidates(
+    asset_id: str = Query(...), operation_id: str | None = Query(None)
+) -> dict:
     """Surface-accessible azide-oligo conjugation sites on a protein asset.
 
     Read-only.  Returns the residues (Lys ε-amine / Cys thiol / N-terminal amine)
@@ -170,12 +172,156 @@ def get_conjugation_candidates(asset_id: str = Query(...)) -> dict:
     Coordinates are the asset's PDB/local frame, matching the ``?asset_id=``
     atomistic preview render.
     """
-    from backend.core.conjugation import find_conjugation_candidates
+    from backend.core.conjugation import find_conjugation_candidates_cached
 
     asset = _resolve_protein_asset(asset_id)
     if asset is None:
         raise HTTPException(404, detail=f"Protein asset {asset_id} not found.")
-    return {"asset_id": asset.id, "candidates": find_conjugation_candidates(asset)}
+    started = time.perf_counter()
+    candidates, cache_hit = find_conjugation_candidates_cached(asset)
+    metrics = {
+        "schema_version": 1,
+        "operation_id": operation_id or str(uuid.uuid4()),
+        "outcome": "completed",
+        "total_ms": round((time.perf_counter() - started) * 1000.0, 3),
+        "stage": "candidate_analysis",
+        "duration_ms": round((time.perf_counter() - started) * 1000.0, 3),
+        "stages_ms": {
+            "candidate_analysis": round(
+                (time.perf_counter() - started) * 1000.0, 3
+            )
+        },
+        "cache_hit": cache_hit,
+        "candidate_count": len(candidates),
+    }
+    from backend.core.protein_metrics import record_protein_process
+
+    record_protein_process("candidate_analysis", metrics)
+    return {
+        "asset_id": asset.id,
+        # The candidate/overhang choices belong to this exact design snapshot.
+        # Apply uses it for optimistic concurrency instead of a potentially
+        # stale frontend-global watermark.
+        "design_revision": design_state.revision(),
+        "candidates": candidates,
+        "process_metrics": metrics,
+    }
+
+
+@router.get("/design/protein/metrics")
+def get_protein_process_metrics() -> dict:
+    """Rolling p50/p95 process telemetry; contains no molecular content."""
+    from backend.core.protein_metrics import protein_process_summary
+
+    return protein_process_summary()
+
+
+@router.get("/design/protein/validation")
+def get_protein_validation(operation_id: str | None = Query(None)) -> dict:
+    """Quantitatively audit every persisted protein placement/conjugate."""
+    from backend.core.protein_validation import audit_protein_design
+
+    design = design_state.get_or_404()
+    needs_geometry = any(
+        getattr(a.target, "kind", None) == "overhang"
+        for a in design.protein_attachments
+    )
+    started = time.perf_counter()
+    stage_started = time.perf_counter()
+    geometry = _geometry_for_helices(design) if needs_geometry else []
+    geometry_ms = (time.perf_counter() - stage_started) * 1000.0
+    stage_started = time.perf_counter()
+    report = audit_protein_design(design, geometry)
+    audit_ms = (time.perf_counter() - stage_started) * 1000.0
+    report["audit_ms"] = round(audit_ms, 3)
+    metrics = {
+        "schema_version": 1,
+        "operation_id": operation_id or str(uuid.uuid4()),
+        "outcome": "valid" if report["valid"] else "invalid",
+        "total_ms": round((time.perf_counter() - started) * 1000.0, 3),
+        "stages_ms": {
+            "geometry": round(geometry_ms, 3),
+            "element_audit": round(audit_ms, 3),
+        },
+    }
+    from backend.core.protein_metrics import record_protein_process
+
+    record_protein_process("validation", metrics)
+    report["process_metrics"] = metrics
+    return report
+
+
+class ProteinDuplicateRepairRequest(BaseModel):
+    free_attachment_id: str
+    conjugated_attachment_id: str
+    apply: bool = False
+
+
+@router.post("/design/protein/validation/repair-duplicate")
+def repair_protein_duplicate(body: ProteinDuplicateRepairRequest) -> dict:
+    """Preview or apply a narrowly proven legacy import→conjugate repair.
+
+    The endpoint never guesses from asset cardinality alone. It requires the
+    exact pair reported as ``legacy_unconverted_free_placement`` and defaults
+    to a read-only preview. Applying records a normal feature-log mutation.
+    """
+    from backend.core.protein_validation import audit_protein_design
+
+    design = design_state.get_or_404()
+    geometry = _geometry_for_helices(design)
+    before = audit_protein_design(design, geometry)
+    finding = next(
+        (
+            item
+            for item in before["findings"]
+            if item["code"] == "legacy_unconverted_free_placement"
+            and item.get("repairable")
+            and item["free_attachment_ids"] == [body.free_attachment_id]
+            and item["conjugated_attachment_ids"] == [body.conjugated_attachment_id]
+        ),
+        None,
+    )
+    if finding is None:
+        raise HTTPException(
+            409,
+            detail="The requested pair is not an unambiguous legacy duplicate; no changes made.",
+        )
+    if not body.apply:
+        return {
+            "applied": False,
+            "would_remove_attachment_id": body.free_attachment_id,
+            "validation_before": before,
+        }
+
+    def _fn(d: Design) -> None:
+        d.protein_attachments = [
+            attachment
+            for attachment in d.protein_attachments
+            if attachment.id != body.free_attachment_id
+        ]
+
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        "protein-attach-delete",
+        "Repair legacy duplicate protein placement",
+        {
+            "attachment_id": body.free_attachment_id,
+            "kept_attachment_id": body.conjugated_attachment_id,
+            "repair": "legacy-import-conjugate-duplicate",
+        },
+        _fn,
+    )
+    after = audit_protein_design(updated, _geometry_for_helices(updated))
+    resp = _design_response(updated, report)
+    resp.update(
+        {
+            "applied": True,
+            "removed_attachment_id": body.free_attachment_id,
+            "kept_attachment_id": body.conjugated_attachment_id,
+            "validation_before": before,
+            "validation_after": after,
+        }
+    )
+    return resp
 
 
 # ── Protein attachments (anchor a protein to an overhang; display-only) ────────
@@ -221,6 +367,11 @@ def create_protein_attachment(body: ProteinAttachRequest) -> dict:
     conj = body.conjugation_atom_serial
     if conj is None:
         conj = asset.default_conjugation_atom_serial
+    from backend.core.conjugation import conjugation_candidate_for_serial
+
+    selected_candidate = (
+        conjugation_candidate_for_serial(asset, conj) if conj is not None else None
+    )
     handle_seq = reverse_complement(spec.sequence) if spec.sequence else None
 
     attachment = ProteinAttachment(
@@ -229,6 +380,12 @@ def create_protein_attachment(body: ProteinAttachRequest) -> dict:
             overhang_id=body.overhang_id, attach_end=body.attach_end
         ),
         conjugation_atom_serial=conj,
+        conjugation_chemistry=(
+            selected_candidate["chemistry"] if selected_candidate else None
+        ),
+        conjugation_accessible_fraction=(
+            selected_candidate["accessible"] if selected_candidate else None
+        ),
         handle_complement_bp=body.handle_complement_bp,
         handle_spacer_nt=body.handle_spacer_nt,
         handle_sequence=handle_seq,
@@ -253,6 +410,11 @@ def create_protein_attachment(body: ProteinAttachRequest) -> dict:
 class ProteinConjugateRequest(BaseModel):
     asset_id: str
     overhang_id: str
+    # When conjugation starts from a rendered protein, convert that placement
+    # instead of creating a second instance.  Omitted for library-only assets.
+    source_attachment_id: Optional[str] = None
+    operation_id: Optional[str] = None
+    expected_revision: Optional[int] = None
     conjugation_atom_serial: Optional[int] = None
     azide_end: Literal["5p", "3p"] = "5p"
 
@@ -268,19 +430,53 @@ def conjugate_protein_to_overhang(body: ProteinConjugateRequest) -> dict:
     overhang end, via ``azide_attach_end``).  The strand edit + the display-only
     attachment land as a single feature-log entry.
     """
+    operation_id = body.operation_id or str(uuid.uuid4())
+    started = time.perf_counter()
+    stages_ms: dict[str, float] = {}
+
     from backend.core.lattice import make_binder_for_overhang
     from backend.core.models import ProteinAttachment, ProteinTargetDesign
-    from backend.core.protein import azide_attach_end, reverse_complement
+    from backend.core.protein import azide_attach_end
 
     design = design_state.get_or_404()
+    if body.operation_id is not None and any(
+        getattr(entry, "op_kind", None) == "protein-conjugate"
+        and entry.params.get("operation_id") == body.operation_id
+        for entry in design.feature_log
+    ):
+        raise HTTPException(
+            409, detail=f"Conjugation operation {body.operation_id} was already committed."
+        )
     asset = _resolve_protein_asset(body.asset_id)
     if asset is None:
         raise HTTPException(404, detail=f"Protein asset {body.asset_id} not found.")
     spec = _find_ovhg_or_404(design, body.overhang_id)
+    source_attachment = None
+    if body.source_attachment_id is not None:
+        source_attachment = next(
+            (a for a in design.protein_attachments if a.id == body.source_attachment_id),
+            None,
+        )
+        if source_attachment is None:
+            raise HTTPException(404, detail="Source protein attachment not found.")
+        if source_attachment.asset_id != asset.id:
+            raise HTTPException(
+                400, detail="Source protein attachment does not reference this asset."
+            )
+        if getattr(source_attachment.target, "kind", None) != "free":
+            raise HTTPException(
+                409,
+                detail=(
+                    "Only a free protein placement can be converted. Detach an existing "
+                    "conjugate before attaching it to another overhang."
+                ),
+            )
+    stages_ms["resolve_inputs"] = (time.perf_counter() - started) * 1000.0
 
     # Build the binder once (deterministic id) so the appended strand and the
     # geometry used to resolve the attach end refer to the same object.
     try:
+        stage_started = time.perf_counter()
         binder_design = make_binder_for_overhang(design, body.overhang_id)
     except ValueError as e:
         raise HTTPException(400, detail=str(e))
@@ -288,18 +484,38 @@ def conjugate_protein_to_overhang(body: ProteinConjugateRequest) -> dict:
     binder = next((s for s in binder_design.strands if s.id not in existing_ids), None)
     if binder is None:
         raise HTTPException(500, detail="Binder strand was not created.")
+    stages_ms["build_binder"] = (time.perf_counter() - stage_started) * 1000.0
 
+    stage_started = time.perf_counter()
     nucs = _geometry_for_helices(binder_design)
     attach_end = azide_attach_end(nucs, body.overhang_id, binder.id, body.azide_end)
+    stages_ms["resolve_geometry"] = (time.perf_counter() - stage_started) * 1000.0
 
     conj = body.conjugation_atom_serial
     if conj is None:
         conj = asset.default_conjugation_atom_serial
+    from backend.core.conjugation import conjugation_candidate_for_serial
+
+    selected_candidate = (
+        conjugation_candidate_for_serial(asset, conj) if conj is not None else None
+    )
+    attachment_kwargs = (
+        {"id": source_attachment.id} if source_attachment is not None else {}
+    )
     attachment = ProteinAttachment(
+        **attachment_kwargs,
         asset_id=asset.id,
         target=ProteinTargetDesign(overhang_id=body.overhang_id, attach_end=attach_end),
         conjugation_atom_serial=conj,
-        handle_sequence=reverse_complement(spec.sequence) if spec.sequence else None,
+        conjugation_chemistry=(
+            selected_candidate["chemistry"] if selected_candidate else None
+        ),
+        conjugation_accessible_fraction=(
+            selected_candidate["accessible"] if selected_candidate else None
+        ),
+        # Cache the sequence of the REAL topology element, not a second
+        # derivation from OverhangSpec that could diverge on sub-domain overrides.
+        handle_sequence=binder.sequence,
     )
 
     def _fn(d: Design) -> Design:
@@ -311,10 +527,57 @@ def conjugate_protein_to_overhang(body: ProteinConjugateRequest) -> dict:
         return d.copy_with(
             strands=[*d.strands, binder],
             protein_assets=assets,
-            protein_attachments=[*d.protein_attachments, attachment],
+            protein_attachments=[
+                *(
+                    a
+                    for a in d.protein_attachments
+                    if source_attachment is None or a.id != source_attachment.id
+                ),
+                attachment,
+            ],
+        )
+
+    # Validate the complete proposed element before touching shared design
+    # state. This turns every metric into a commit gate, not post-hoc telemetry.
+    stage_started = time.perf_counter()
+    from backend.core.protein_validation import validate_protein_conjugate
+
+    proposed = _fn(design)
+    element_validation = validate_protein_conjugate(
+        design,
+        proposed,
+        asset=asset,
+        attachment=attachment,
+        binder=binder,
+        geometry=nucs,
+        source_attachment_id=body.source_attachment_id,
+    )
+    stages_ms["validate_element"] = (time.perf_counter() - stage_started) * 1000.0
+    if not element_validation["valid"]:
+        process_metrics = {
+            "schema_version": 1,
+            "operation_id": operation_id,
+            "outcome": "rejected_invalid",
+            "total_ms": round((time.perf_counter() - started) * 1000.0, 3),
+            "stages_ms": {
+                name: round(value, 3) for name, value in stages_ms.items()
+            },
+        }
+        from backend.core.protein_metrics import record_protein_process
+
+        record_protein_process("conjugation", process_metrics)
+        raise HTTPException(
+            422,
+            detail={
+                "message": "Protein conjugate failed element validation; no changes committed.",
+                "operation_id": operation_id,
+                "element_validation": element_validation,
+                "process_metrics": process_metrics,
+            },
         )
 
     before_occ = _strand_occupancy(design)
+    stage_started = time.perf_counter()
     updated, report, _entry = design_state.mutate_with_feature_log(
         "protein-conjugate",
         f"Conjugate {asset.name} to {spec.label or body.overhang_id}",
@@ -322,9 +585,15 @@ def conjugate_protein_to_overhang(body: ProteinConjugateRequest) -> dict:
             "asset_id": asset.id,
             "overhang_id": body.overhang_id,
             "azide_end": body.azide_end,
+            "source_attachment_id": body.source_attachment_id,
+            "operation_id": operation_id,
+            "attachment_id": attachment.id,
+            "binder_strand_id": binder.id,
         },
         _fn,
+        expected_revision=body.expected_revision,
     )
+    stages_ms["commit"] = (time.perf_counter() - stage_started) * 1000.0
     from backend.api.crud import _design_response_with_geometry
 
     changed = _local_changed_helices(before_occ, _strand_occupancy(updated))
@@ -333,6 +602,17 @@ def conjugate_protein_to_overhang(body: ProteinConjugateRequest) -> dict:
     )
     resp["attachment_id"] = attachment.id
     resp["binder_strand_id"] = binder.id
+    resp["element_validation"] = element_validation
+    resp["process_metrics"] = {
+        "schema_version": 1,
+        "operation_id": operation_id,
+        "outcome": "committed",
+        "total_ms": round((time.perf_counter() - started) * 1000.0, 3),
+        "stages_ms": {name: round(value, 3) for name, value in stages_ms.items()},
+    }
+    from backend.core.protein_metrics import record_protein_process
+
+    record_protein_process("conjugation", resp["process_metrics"])
     return resp
 
 
@@ -373,6 +653,24 @@ def patch_protein_attachment(
         )
     if body.pose is not None and len(body.pose) != 16:
         raise HTTPException(400, detail="pose must be 16 floats (row-major 4×4).")
+    selected_candidate = None
+    if body.conjugation_atom_serial is not None:
+        from backend.core.conjugation import conjugation_candidate_for_serial
+
+        current_attachment = next(
+            a for a in design.protein_attachments if a.id == attachment_id
+        )
+        asset = _resolve_protein_asset(current_attachment.asset_id)
+        selected_candidate = (
+            conjugation_candidate_for_serial(asset, body.conjugation_atom_serial)
+            if asset is not None
+            else None
+        )
+        if selected_candidate is None:
+            raise HTTPException(
+                422,
+                detail="Conjugation atom must be a supported surface-accessible site.",
+            )
 
     def _fn(d: Design) -> None:
         out = []
@@ -393,6 +691,10 @@ def patch_protein_attachment(
                 upd["pose"] = Mat4x4.from_array(new_pose)
             if body.conjugation_atom_serial is not None:
                 upd["conjugation_atom_serial"] = body.conjugation_atom_serial
+                upd["conjugation_chemistry"] = selected_candidate["chemistry"]
+                upd["conjugation_accessible_fraction"] = selected_candidate[
+                    "accessible"
+                ]
             if body.handle_complement_bp is not None:
                 upd["handle_complement_bp"] = body.handle_complement_bp
             if body.handle_spacer_nt is not None:
@@ -418,22 +720,74 @@ def patch_protein_attachment(
 
 @router.delete("/design/protein/attachments/{attachment_id}")
 def delete_protein_attachment(attachment_id: str) -> dict:
-    """Remove a protein attachment (leaves the asset embedded in the design)."""
+    """Remove a protein attachment and its owned conjugate binder, if any."""
     design = design_state.get_or_404()
-    if not any(a.id == attachment_id for a in design.protein_attachments):
+    attachment = next(
+        (a for a in design.protein_attachments if a.id == attachment_id), None
+    )
+    if attachment is None:
         raise HTTPException(
             404, detail=f"Protein attachment {attachment_id} not found."
         )
+
+    binder_id = None
+    overhang_id = getattr(attachment.target, "overhang_id", None)
+    if overhang_id is not None:
+        # New entries carry exact IDs. Legacy entries are repairable only when
+        # history proves a conjugation and the target has one unambiguous binder.
+        log_entry = next(
+            (
+                entry
+                for entry in reversed(design.feature_log)
+                if getattr(entry, "op_kind", None) == "protein-conjugate"
+                and entry.params.get("asset_id") == attachment.asset_id
+                and entry.params.get("overhang_id") == overhang_id
+                and (
+                    entry.params.get("attachment_id") in (None, attachment.id)
+                )
+            ),
+            None,
+        )
+        if log_entry is not None:
+            logged_binder = log_entry.params.get("binder_strand_id")
+            candidates = [
+                strand
+                for strand in design.strands
+                if any(
+                    domain.binds_overhang_id == overhang_id
+                    for domain in strand.domains
+                )
+            ]
+            if logged_binder and any(s.id == logged_binder for s in candidates):
+                binder_id = logged_binder
+            elif len(candidates) == 1:
+                binder_id = candidates[0].id
 
     def _fn(d: Design) -> None:
         d.protein_attachments = [
             a for a in d.protein_attachments if a.id != attachment_id
         ]
+        if binder_id is not None:
+            d.strands = [strand for strand in d.strands if strand.id != binder_id]
 
     updated, report, _entry = design_state.mutate_with_feature_log(
         "protein-attach-delete",
         "Detach protein",
-        {"attachment_id": attachment_id},
+        {"attachment_id": attachment_id, "binder_strand_id": binder_id},
         _fn,
     )
-    return _design_response(updated, report)
+    if binder_id is None:
+        return _design_response(updated, report)
+    from backend.api.crud import _design_response_with_geometry
+
+    return _design_response_with_geometry(
+        updated,
+        report,
+        changed_helix_ids={
+            domain.helix_id
+            for strand in design.strands
+            if strand.id == binder_id
+            for domain in strand.domains
+        },
+        compact_deformed=True,
+    )

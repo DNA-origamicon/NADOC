@@ -3,10 +3,19 @@
 import math
 
 from backend.core.conjugation import (
+    atom_accessible_fraction,
     atom_sasa,
+    conjugation_candidate_for_serial,
+    clear_conjugation_candidate_cache,
     find_conjugation_candidates,
+    find_conjugation_candidates_cached,
 )
 from backend.core.models import ProteinAsset, ProteinAtom
+from backend.core.protein_metrics import (
+    clear_protein_process_metrics,
+    protein_process_summary,
+    record_protein_process,
+)
 
 
 def _atom(serial, name, element, res_name, res_seq, xyz, chain="A"):
@@ -93,6 +102,9 @@ def test_candidates_pick_exposed_drop_buried():
     assert ("lys", 5) in by_chem  # exposed Lys NZ
     assert ("cys", 7) in by_chem  # exposed Cys SG
     assert ("lys", 6) not in by_chem  # buried Lys NZ rejected
+    assert [c["accessible"] for c in cands] == sorted(
+        (c["accessible"] for c in cands), reverse=True
+    )
 
 
 def test_candidate_functional_atom_serials_and_coords():
@@ -114,3 +126,53 @@ def test_nterm_only_first_residue_per_chain():
     cands = find_conjugation_candidates(_candidate_asset())
     nterm = [c for c in cands if c["chemistry"] == "nterm"]
     assert len(nterm) == 1 and nterm[0]["res_seq"] == 1
+
+
+def test_single_site_fast_path_matches_full_sasa_and_candidate_report():
+    asset = _candidate_asset()
+    full_sasa = atom_sasa(asset)
+    full_candidates = {
+        c["functional_atom_serial"]: c for c in find_conjugation_candidates(asset)
+    }
+    for serial in (1, 11, 21, 30):
+        assert atom_accessible_fraction(asset, serial) == full_sasa[serial]
+        assert conjugation_candidate_for_serial(asset, serial) == full_candidates.get(serial)
+    assert atom_accessible_fraction(asset, 999999) is None
+    assert conjugation_candidate_for_serial(asset, 999999) is None
+
+
+def test_full_candidate_cache_is_content_keyed_and_returns_defensive_copies():
+    clear_conjugation_candidate_cache()
+    asset = _candidate_asset()
+    first, hit1 = find_conjugation_candidates_cached(asset)
+    first[0]["accessible"] = -1
+    clone = asset.model_copy(update={"id": "different-id", "name": "renamed"})
+    second, hit2 = find_conjugation_candidates_cached(clone)
+    assert hit1 is False and hit2 is True
+    assert second[0]["accessible"] >= 0
+
+
+def test_process_summary_reports_outcomes_correlation_and_percentiles():
+    clear_protein_process_metrics()
+    for index, duration in enumerate([10.0, 20.0, 30.0, 40.0, 100.0]):
+        record_protein_process(
+            "import",
+            {
+                "operation_id": f"op-{index}" if index else "",
+                "outcome": "committed" if index < 4 else "rejected",
+                "total_ms": duration,
+                "stages_ms": {"parse": duration / 2},
+            },
+        )
+    imported = protein_process_summary()["operations"]["import"]
+    assert imported["run_count"] == 5
+    assert imported["outcomes"] == {"committed": 4, "rejected": 1}
+    assert imported["correlated_run_count"] == 4
+    assert imported["correlation_rate"] == 0.8
+    assert imported["total_ms"] == {"p50": 30.0, "p95": 100.0, "max": 100.0}
+    assert imported["stages_ms"]["parse"] == {
+        "sample_count": 5,
+        "p50": 15.0,
+        "p95": 50.0,
+    }
+    assert "op-1" not in str(protein_process_summary())
