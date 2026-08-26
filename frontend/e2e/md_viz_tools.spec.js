@@ -22,6 +22,33 @@ const API = `${process.env.NADOC_E2E_API_BASE || 'http://127.0.0.1:8000'}/api`
 const JOB_ID = 'b9f5df08a55e'
 const DESIGN_PATH = '/home/jojo/Work/NADOC/workspace/6hb_84bp.nadoc'
 
+test('photoproduct option is visible directly below the flexibility map', async ({ page }) => {
+  await page.goto('/')
+  await page.waitForSelector('#md-jobs-photoproduct-option', { state: 'attached' })
+  await page.evaluate(() => {
+    for (const id of ['splash-screen', 'welcome-screen']) {
+      document.getElementById(id)?.style.setProperty('display', 'none')
+    }
+    document.getElementById('left-panel')?.classList.remove('hidden', 'locked-hidden')
+    const dynamics = document.getElementById('tab-content-dynamics')
+    if (dynamics) { dynamics.hidden = false; dynamics.style.display = '' }
+  })
+  await page.locator('.engine-selector-btn[data-engine="namd"]').click()
+  const vizBody = page.locator('#md-jobs-viz-body')
+  if (!(await vizBody.isVisible())) await page.locator('#md-jobs-viz-toggle').click()
+  await expect(vizBody).toBeVisible()
+
+  const flexOption = page.locator('#md-jobs-flex-toggle').locator('..')
+  const photoOption = page.locator('#md-jobs-photoproduct-option')
+  await expect(flexOption).toBeVisible()
+  await expect(photoOption).toBeVisible()
+  await expect(photoOption).toContainText('Photoproduct propensity (T–T)')
+
+  const flexBox = await flexOption.boundingBox()
+  const photoBox = await photoOption.boundingBox()
+  expect(photoBox.y).toBeGreaterThan(flexBox.y + flexBox.height)
+})
+
 test('MD trajectory + flexibility-map toggles drive the MD viz endpoints', async ({ page, request }) => {
   test.setTimeout(60_000)
 

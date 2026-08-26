@@ -5861,9 +5861,10 @@
                   <div id="md-jobs-flex-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
                   <div id="md-jobs-flex-bar" style="margin-top:3px;display:none"></div>
                   <div id="md-jobs-flex-legend" style="display:none"></div>
-                  <!-- Per-thymine relative KIMMDY propensity over free production dynamics. -->
-                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
-                         title="False-color each topology thymine by its relative incident T–T photoproduct propensity over production frames. This is a geometric propensity, not an absolute reaction probability.">
+                  <!-- Per-thymine KIMMDY score; every other base receives the zero color. -->
+                  <label id="md-jobs-photoproduct-option"
+                         style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
+                         title="False-color every base by relative incident T–T photoproduct propensity over production frames; unscored bases use the zero color. This is a geometric propensity, not an absolute reaction probability.">
                     <input id="md-jobs-photoproduct-toggle" name="md-viz" type="radio" value="photoproduct" disabled> Photoproduct propensity (T–T)
                   </label>
                   <div id="md-jobs-photoproduct-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>

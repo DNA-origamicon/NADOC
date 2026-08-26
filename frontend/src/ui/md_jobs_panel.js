@@ -82,6 +82,7 @@ const _C = {
 }
 
 const _TERMINAL_STATUSES = new Set(['completed', 'failed', 'stopped'])
+const _PHOTO_NEEDS_PRODUCTION = 'Requires a free production trajectory'
 // Production runs at the timestep chosen in the Advanced card: 4 fs fast (default),
 // 2 fs medium, or 1 fs conservative.  (This was hard-coded to 1 fs, which under-reported
 // every fast production run's simulated time by 4x.)
@@ -3302,6 +3303,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const hasFree = mdHasProductionRun(job)
     _setRadioEnabled(photoproductToggle, hasFree)
     _setRadioEnabled(occupancyToggle, hasFree)
+    if (!hasFree && !photoproductToggle?.checked) {
+      _setPhotoproductStatus(_PHOTO_NEEDS_PRODUCTION, _C.dim)
+    } else if (hasFree && photoproductStatus?.textContent === _PHOTO_NEEDS_PRODUCTION) {
+      _setPhotoproductStatus('', _C.dim)
+    }
     // `_ready` guards the `const _occupancy` this tears down: _updateVizToggles runs
     // during init, before that const exists, and touching it there is a TDZ that aborts
     // the whole panel's boot (it did once — see the occupancyToggle note above).
