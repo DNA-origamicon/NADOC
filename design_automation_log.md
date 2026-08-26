@@ -187,10 +187,12 @@ md_relax stage.* Investigated on CUDA (RTX 2080 SUPER) with oxDNA's OWN `HBList`
 
 ## Oracle catalog — index (MIRROR THESE; don't reinvent)
 
-61 proven oracles. Full table (Pins / File(s) / Reuse for) is in the archive's
+62 proven oracles. Full table (Pins / File(s) / Reuse for) is in the archive's
 `## Oracle catalog` section.
 
 - `_canonical_topology(design)` — id/order-independent design fingerprint (helices by grid_pos; strands by grid_p…
+- `assert_attachment_layout` — named interface labels, local geometry/orientation, mixed chemistry,
+  clearance, uniform spacing, and `.nass` regeneration; includes a geometry-drift red path
 - `validate_design(design)→ValidationReport` — no unresolved nicks, strand-position consistency, domain count
 - `derive_periodic_delta(design)` — rigid repeat transform (Kabsch on axis geom; pure axial translate, no spiral); …
 - `solve_closing_curvature` / `closure_residual` — κ that closes an N-copy ring to <0.5°/<0.5 nm

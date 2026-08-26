@@ -1167,7 +1167,9 @@ class RepresentationOverride(BaseModel):
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = ""
-    representation: Literal["full", "cylinders", "surface", "vdw", "ballstick", "stick"] = "full"
+    representation: Literal[
+        "full", "cylinders", "surface", "vdw", "ballstick", "stick"
+    ] = "full"
     segments: List[RepresentationSegment] = Field(default_factory=list)
 
 
@@ -1246,39 +1248,68 @@ class NucleotideTransform(BaseModel):
     copy_k: int = Field(0, ge=0)
     crossover_id: Optional[str] = None
     extra_base_k: Optional[int] = Field(None, ge=0)
-    pivot: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0], min_length=3, max_length=3)
-    translation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0], min_length=3, max_length=3)
-    rotation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0, 1.0], min_length=4, max_length=4)
+    pivot: List[float] = Field(
+        default_factory=lambda: [0.0, 0.0, 0.0], min_length=3, max_length=3
+    )
+    translation: List[float] = Field(
+        default_factory=lambda: [0.0, 0.0, 0.0], min_length=3, max_length=3
+    )
+    rotation: List[float] = Field(
+        default_factory=lambda: [0.0, 0.0, 0.0, 1.0], min_length=4, max_length=4
+    )
     # Full-representation source slab pose. Atomistic consumers ignore these;
     # the CG renderer uses them to preserve the exact bead↔slab arrangement.
     display_slab_offset: Optional[List[float]] = Field(None, min_length=3, max_length=3)
-    display_slab_rotation: Optional[List[float]] = Field(None, min_length=4, max_length=4)
+    display_slab_rotation: Optional[List[float]] = Field(
+        None, min_length=4, max_length=4
+    )
 
     @model_validator(mode="after")
     def _validate_target_and_pose(self) -> "NucleotideTransform":
         if self.kind == "base":
             if self.helix_id is None or self.bp_index is None or self.direction is None:
-                raise ValueError("base transform requires helix_id, bp_index, and direction")
+                raise ValueError(
+                    "base transform requires helix_id, bp_index, and direction"
+                )
             if self.crossover_id is not None or self.extra_base_k is not None:
                 raise ValueError("base transform cannot carry crossover identity")
         else:
             if self.crossover_id is None or self.extra_base_k is None:
-                raise ValueError("extra_base transform requires crossover_id and extra_base_k")
-            if self.helix_id is not None or self.bp_index is not None or self.direction is not None:
-                raise ValueError("extra_base transform cannot carry ordinary-base identity")
-        values = [*self.pivot, *self.translation, *self.rotation,
-                  *(self.display_slab_offset or []), *(self.display_slab_rotation or [])]
+                raise ValueError(
+                    "extra_base transform requires crossover_id and extra_base_k"
+                )
+            if (
+                self.helix_id is not None
+                or self.bp_index is not None
+                or self.direction is not None
+            ):
+                raise ValueError(
+                    "extra_base transform cannot carry ordinary-base identity"
+                )
+        values = [
+            *self.pivot,
+            *self.translation,
+            *self.rotation,
+            *(self.display_slab_offset or []),
+            *(self.display_slab_rotation or []),
+        ]
         if not all(math.isfinite(float(v)) for v in values):
             raise ValueError("nucleotide transform values must be finite")
         norm = math.sqrt(sum(float(v) ** 2 for v in self.rotation))
         if norm < 1e-12:
-            raise ValueError("nucleotide transform rotation must be a non-zero quaternion")
+            raise ValueError(
+                "nucleotide transform rotation must be a non-zero quaternion"
+            )
         self.rotation = [float(v) / norm for v in self.rotation]
         if self.display_slab_rotation is not None:
-            slab_norm = math.sqrt(sum(float(v) ** 2 for v in self.display_slab_rotation))
+            slab_norm = math.sqrt(
+                sum(float(v) ** 2 for v in self.display_slab_rotation)
+            )
             if slab_norm < 1e-12:
                 raise ValueError("display slab rotation must be a non-zero quaternion")
-            self.display_slab_rotation = [float(v) / slab_norm for v in self.display_slab_rotation]
+            self.display_slab_rotation = [
+                float(v) / slab_norm for v in self.display_slab_rotation
+            ]
         return self
 
     def target_key(self) -> tuple:
@@ -3008,17 +3039,20 @@ class Design(BaseModel):
         strand_ids = {s.id for s in strands}
         helix_ids = {h.id for h in self.helices if h.id not in reference_only}
         overhangs = [
-            o for o in self.overhangs
+            o
+            for o in self.overhangs
             if o.strand_id in strand_ids and o.helix_id in helix_ids
         ]
         overhang_ids = {o.id for o in overhangs}
         crossovers = [
-            x for x in self.crossovers
+            x
+            for x in self.crossovers
             if x.half_a.helix_id in helix_ids and x.half_b.helix_id in helix_ids
         ]
         crossover_ids = {x.id for x in crossovers}
         protein_attachments = [
-            a for a in self.protein_attachments
+            a
+            for a in self.protein_attachments
             if getattr(a.target, "kind", None) != "overhang"
             or getattr(a.target, "overhang_id", None) in overhang_ids
         ]
@@ -3028,9 +3062,13 @@ class Design(BaseModel):
                 "helices": [h for h in self.helices if h.id in helix_ids],
                 "crossovers": crossovers,
                 "deformations": [
-                    op.model_copy(update={"affected_helix_ids": [
-                        hid for hid in op.affected_helix_ids if hid in helix_ids
-                    ]})
+                    op.model_copy(
+                        update={
+                            "affected_helix_ids": [
+                                hid for hid in op.affected_helix_ids if hid in helix_ids
+                            ]
+                        }
+                    )
                     for op in self.deformations
                     if not op.affected_helix_ids
                     or any(hid in helix_ids for hid in op.affected_helix_ids)
@@ -3038,30 +3076,39 @@ class Design(BaseModel):
                 "extensions": [e for e in self.extensions if e.strand_id in strand_ids],
                 "overhangs": overhangs,
                 "overhang_connections": [
-                    c for c in self.overhang_connections
-                    if c.overhang_a_id in overhang_ids and c.overhang_b_id in overhang_ids
+                    c
+                    for c in self.overhang_connections
+                    if c.overhang_a_id in overhang_ids
+                    and c.overhang_b_id in overhang_ids
                 ],
                 "overhang_bindings": [
-                    b for b in self.overhang_bindings
-                    if b.overhang_a_id in overhang_ids and b.overhang_b_id in overhang_ids
+                    b
+                    for b in self.overhang_bindings
+                    if b.overhang_a_id in overhang_ids
+                    and b.overhang_b_id in overhang_ids
                 ],
                 "duplexes": [
-                    x for x in self.duplexes
-                    if x.left.overhang_id in overhang_ids and x.right.overhang_id in overhang_ids
+                    x
+                    for x in self.duplexes
+                    if x.left.overhang_id in overhang_ids
+                    and x.right.overhang_id in overhang_ids
                 ],
                 "forced_ligations": [
-                    x for x in self.forced_ligations
+                    x
+                    for x in self.forced_ligations
                     if x.three_prime_helix_id in helix_ids
                     and x.five_prime_helix_id in helix_ids
                 ],
                 "nucleotide_transforms": [
-                    x for x in self.nucleotide_transforms
+                    x
+                    for x in self.nucleotide_transforms
                     if (x.kind == "base" and x.helix_id in helix_ids)
                     or (x.kind == "extra_base" and x.crossover_id in crossover_ids)
                 ],
                 "protein_attachments": protein_attachments,
                 "protein_assets": [
-                    asset for asset in self.protein_assets
+                    asset
+                    for asset in self.protein_assets
                     if any(a.asset_id == asset.id for a in protein_attachments)
                 ],
             }
@@ -3153,6 +3200,11 @@ class InterfacePoint(BaseModel):
     position: Vec3
     normal: Vec3
     connection_type: ConnectionType
+    clearance_nm: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Required free radius around the attachment point in nm.",
+    )
     cluster_id: Optional[str] = None
 
 
@@ -3250,7 +3302,14 @@ class PartInstance(BaseModel):
     mode: Literal["rigid", "flexible"] = "flexible"
     visible: bool = True
     representation: Literal[
-        "full", "beads", "cylinders", "vdw", "ballstick", "stick", "hull-prism", "surface"
+        "full",
+        "beads",
+        "cylinders",
+        "vdw",
+        "ballstick",
+        "stick",
+        "hull-prism",
+        "surface",
     ] = "full"
     fixed: bool = False  # anchored in assembly; not moved by joint constraint solving
     allow_part_joints: bool = (
@@ -3632,7 +3691,14 @@ class PartGroup(BaseModel):
     visible: bool = True
     representation: Optional[
         Literal[
-            "full", "beads", "cylinders", "vdw", "ballstick", "stick", "hull-prism", "surface"
+            "full",
+            "beads",
+            "cylinders",
+            "vdw",
+            "ballstick",
+            "stick",
+            "hull-prism",
+            "surface",
         ]
     ] = None
     expanded: bool = True

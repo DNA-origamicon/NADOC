@@ -7,6 +7,14 @@ originSessionId: 292b0b35-a6b9-4693-be07-bd8f4db21d5a
 **Rank:** P3 — the four blunt-end defects are FIXED (2026-07-25, see below). What's left is one
 latent root cause (`_sourceKey` blind to overhang rotation) and a missing route test.
 
+**Headless parametric interfaces (2026-08-25):** `InterfacePoint` now persists a non-negative
+`clearance_nm` (default 0 for compatibility), and the connector route accepts its existing typed
+`ConnectionType` instead of hard-coding `COVALENT`. The pure
+`backend.core.attachment_layout.linear_attachment_layout` plus
+`hab.add_linear_attachment_layout` creates mixed-composition named tracks through that same route.
+Normals are explicit local-frame declarations; this does not replace the geometry-derived blunt-end
+logic below. `assert_attachment_layout` pins geometry, chemistry, clearance, and `.nass` round-trip.
+
 **The computation now lives in its own module:**
 [frontend/src/scene/blunt_end_connectors.js](../frontend/src/scene/blunt_end_connectors.js)
 (`computeInstanceBluntEnds` + 4 exported pure helpers, 26 vitest tests in the sibling

@@ -302,6 +302,74 @@ def roundtrip_nass(assembly):
         return assembly_state.get_or_404().model_copy(deep=True)
 
 
+def assert_attachment_layout(
+    assembly,
+    instance_id: str,
+    expected_sites: list[dict],
+    *,
+    spacing_tol_nm: float = 1e-6,
+    roundtrip: bool = True,
+):
+    """Pin named interface geometry, orientation, chemistry, clearance, and save/load.
+
+    The expected positions are independent declarations emitted by the pure layout
+    service.  The oracle reads the materialized ``InterfacePoint`` records, verifies
+    exact label/composition membership and consecutive Euclidean spacing, and repeats
+    the full comparison after a real ``.nass`` import when requested.
+    """
+    import math
+
+    def inspect(candidate):
+        inst = next((i for i in candidate.instances if i.id == instance_id), None)
+        assert inst is not None, f"instance {instance_id!r} is missing"
+        actual = {ip.label: ip for ip in inst.interface_points}
+        labels = [site["label"] for site in expected_sites]
+        assert len(labels) >= 2, "attachment-layout oracle requires at least two sites"
+        assert len(set(labels)) == len(labels), "expected site labels must be unique"
+        assert set(actual) == set(labels), (
+            f"attachment labels differ: actual={sorted(actual)}, expected={sorted(labels)}"
+        )
+        positions = []
+        for site in expected_sites:
+            ip = actual[site["label"]]
+            position = tuple(
+                float(getattr(ip.position, axis)) for axis in ("x", "y", "z")
+            )
+            positions.append(position)
+            assert all(
+                math.isclose(got, float(want), abs_tol=spacing_tol_nm)
+                for got, want in zip(position, site["position"])
+            ), (
+                f"position differs for {site['label']!r}: {position} != {site['position']}"
+            )
+            actual_normal = tuple(
+                float(getattr(ip.normal, axis)) for axis in ("x", "y", "z")
+            )
+            assert all(
+                math.isclose(got, float(want), abs_tol=spacing_tol_nm)
+                for got, want in zip(actual_normal, site["normal"])
+            ), f"normal differs for {site['label']!r}"
+            assert ip.connection_type.value == site["connection_type"]
+            assert math.isclose(
+                float(ip.clearance_nm),
+                float(site["clearance_nm"]),
+                abs_tol=spacing_tol_nm,
+            )
+        spacings = [
+            math.dist(positions[i - 1], positions[i]) for i in range(1, len(positions))
+        ]
+        assert min(spacings) > spacing_tol_nm, "layout contains coincident sites"
+        assert max(spacings) - min(spacings) <= spacing_tol_nm, (
+            f"layout spacing is not uniform: {spacings}"
+        )
+        return {"count": len(labels), "spacing_nm": sum(spacings) / len(spacings)}
+
+    result = inspect(assembly)
+    if roundtrip:
+        result["roundtrip"] = inspect(roundtrip_nass(assembly))
+    return result
+
+
 def assert_assembly_roundtrip_stable(
     build_fn: Callable[[], "object"],
     *,

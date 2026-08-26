@@ -28,7 +28,7 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.api import assembly_state
 from backend.api.assembly import (
@@ -49,6 +49,8 @@ class AddConnectorRequest(BaseModel):
     position: list[float]
     normal: list[float]
     cluster_id: Optional[str] = None
+    connection_type: ConnectionType = ConnectionType.COVALENT
+    clearance_nm: float = Field(default=0.0, ge=0.0)
 
 
 @router.post("/assembly/instances/{instance_id}/connectors", status_code=201)
@@ -71,7 +73,8 @@ def add_connector(instance_id: str, body: AddConnectorRequest) -> dict:
         label=label,
         position=Vec3(x=body.position[0], y=body.position[1], z=body.position[2]),
         normal=Vec3(x=body.normal[0], y=body.normal[1], z=body.normal[2]),
-        connection_type=ConnectionType.COVALENT,
+        connection_type=body.connection_type,
+        clearance_nm=body.clearance_nm,
         cluster_id=body.cluster_id,
     )
     new_instances = [
@@ -91,6 +94,8 @@ def add_connector(instance_id: str, body: AddConnectorRequest) -> dict:
             "position": list(body.position),
             "normal": list(body.normal),
             "cluster_id": body.cluster_id,
+            "connection_type": body.connection_type.value,
+            "clearance_nm": body.clearance_nm,
         },
     )
     return _assembly_response(assembly_state.get_or_404())

@@ -2280,3 +2280,13 @@ none of which any prior pin asserted for the direct-bind relax."
   direction, axis floats and orphaned helices, in one comparison; the mount-set covers its `OverhangSpec` blind
   spot. Non-vacuity is asserted, not assumed (clause 1), so the pin cannot rot into a green no-op the way the ds
   relax fixture silently did for ~3 weeks.
+- **2026-08-25 — named linear attachment layouts:** pure `linear_attachment_layout` + route-backed
+  `hab.add_linear_attachment_layout`; `InterfacePoint`/connector route extended with typed chemistry
+  and non-negative clearance. New reusable `assert_attachment_layout` covers geometry, composition,
+  clearance, non-vacuity, and `.nass` round-trip. Headless route coverage unchanged (existing route,
+  richer operation); `main.js` LOC Δ 0. Validation gained, not just a passthrough: a five-site mixed
+  BIOTIN/TOEHOLD track on a 6hb rod is property-checked and regeneration-stable. Gate: affected
+  **3 passed**; `just test-smart` decision **FAST**, **7294 passed / 45 skipped / 1 unrelated optional-
+  workspace fixture failure** (`VoltronCoreArm.nadoc` no longer has the empty clusters that the test's
+  precondition asserts). **DEFERRED verbatim:** "this change would have needed the FULL suite, but no
+  test-dedicated session is open, so only the fast suite ran. Parked in .nadoc-slow-pending."

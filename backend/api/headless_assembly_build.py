@@ -77,7 +77,7 @@ from backend.api.routes_assembly_polymerize import (
     polymerize_periodic_assembly as _route_polymerize_periodic_assembly,
 )
 from backend.core.instance_layout import grid_translations, ring_translations
-from backend.core.models import Assembly, Design, Mat4x4
+from backend.core.models import Assembly, ConnectionType, Design, Mat4x4
 
 _scratch_counter = itertools.count()
 
@@ -374,7 +374,16 @@ def place_file_ring(
     return assembly_state.get_or_404()
 
 
-def add_connector(instance_id: str, label: str, position, normal) -> Assembly:
+def add_connector(
+    instance_id: str,
+    label: str,
+    position,
+    normal,
+    *,
+    connection_type: ConnectionType | str = ConnectionType.COVALENT,
+    clearance_nm: float = 0.0,
+    cluster_id: str | None = None,
+) -> Assembly:
     """Register a named connector (InterfacePoint) on an instance (POST .../connectors).
 
     ``position`` / ``normal`` are instance-LOCAL (3-vectors); the connector's world
@@ -388,9 +397,58 @@ def add_connector(instance_id: str, label: str, position, normal) -> Assembly:
             label=label,
             position=[float(v) for v in position],
             normal=[float(v) for v in normal],
+            connection_type=connection_type,
+            clearance_nm=clearance_nm,
+            cluster_id=cluster_id,
         ),
     )
     return assembly_state.get_or_404()
+
+
+def add_linear_attachment_layout(
+    instance_id: str,
+    count: int,
+    *,
+    pitch_nm: float,
+    origin=(0.0, 0.0, 0.0),
+    direction=(1.0, 0.0, 0.0),
+    normal=(0.0, 0.0, 1.0),
+    label_prefix: str = "site",
+    connection_types: tuple[ConnectionType | str, ...] = (ConnectionType.COVALENT,),
+    clearances_nm=(0.0,),
+    cluster_id: str | None = None,
+) -> dict:
+    """Create a parametric linear interface layout through the connector route.
+
+    Returns both the updated assembly and the typed, deterministic site declarations
+    so callers can inspect exactly what was materialized.
+    """
+    from backend.core.attachment_layout import linear_attachment_layout
+
+    sites = linear_attachment_layout(
+        count,
+        pitch_nm=pitch_nm,
+        origin=origin,
+        direction=direction,
+        normal=normal,
+        label_prefix=label_prefix,
+        connection_types=connection_types,
+        clearances_nm=clearances_nm,
+    )
+    for site in sites:
+        add_connector(
+            instance_id,
+            site.label,
+            site.position,
+            site.normal,
+            connection_type=site.connection_type,
+            clearance_nm=site.clearance_nm,
+            cluster_id=cluster_id,
+        )
+    return {
+        "assembly": assembly_state.get_or_404(),
+        "sites": [site.to_dict() for site in sites],
+    }
 
 
 def define_mate(

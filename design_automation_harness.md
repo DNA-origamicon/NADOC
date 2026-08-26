@@ -57,6 +57,20 @@ oracle catalog row lives in `design_automation_log.md`; the metrics row in `desi
 
 ## Harness reference blocks + archived handoff history
 
+> **■ HARNESS NOW AVAILABLE — named linear attachment layouts (2026-08-25).**
+> - `backend.core.attachment_layout.linear_attachment_layout(...)` is the pure typed
+>   position/orientation/chemistry/clearance generator. Chemistry and clearance sequences cycle,
+>   enabling mixed surface composition; direction and normal are normalized, never inferred.
+> - `hab.add_linear_attachment_layout(instance_id, count, *, pitch_nm, origin, direction, normal,
+>   label_prefix, connection_types, clearances_nm, cluster_id)` lowers every generated site through
+>   the same `POST /assembly/instances/{id}/connectors` handler used by the GUI/API.
+> - `InterfacePoint.clearance_nm` is persisted (default 0 for old `.nass` files); connector creation
+>   now accepts the existing `ConnectionType` instead of hard-coding `COVALENT`.
+> - Oracle `assert_attachment_layout(assembly, instance_id, expected_sites)` pins unique labels,
+>   uniform nonzero spacing, local positions/normals, mixed chemistry, clearance, and real `.nass`
+>   round-trip. Its red-path test perturbs one materialized position.
+> - Next gap: grid/radial/path layout composition plus inter-site/body clearance measurement.
+
 _Below: the verbatim `▶ HARNESS NOW AVAILABLE` blocks, plus the historical handoff narrative
 (audit notes, priority-track scoping, Tier-6/7 as-built assessments) that preceded them._
 
