@@ -2,9 +2,8 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { _hullGeoForSource } from '../scene/assembly_hull_geometry.js'
-import { buildOccupancyHull } from '../scene/joint_renderer.js'
+import { buildClusteredOccupancyHull, partitionOccupancyGeometry } from '../scene/joint_renderer.js'
 import { buildHelixObjects } from '../scene/helix_renderer.js'
-import { buildClusterLookup } from '../scene/helix_renderer/palette.js'
 import './hull_audit.css'
 
 export function disposeTree(root) {
@@ -47,80 +46,10 @@ export function setHullElementBoundaries(root, visible) {
   return count
 }
 
-export function partitionAuditGeometry(design, geometry) {
-  const total = design?.helices?.length ?? 0
-  const clusters = design?.cluster_transforms ?? []
-  const finer = clusters.map((cluster, index) => ({ cluster, index })).filter(({ cluster }) =>
-    !cluster.is_default && total > 0 && (cluster.helix_ids?.length ?? 0) < 0.9 * total)
-  if (!finer.length) return { finer, buckets: new Map(), unclustered: geometry.slice() }
-  const ownerOf = buildClusterLookup(design)
-  const strandsById = new Map((design.strands ?? []).map(strand => [strand.id, strand]))
-  const ownershipNucleotide = nucleotide => {
-    if (nucleotide.domain_index != null || nucleotide.strand_id == null) return nucleotide
-    const domains = strandsById.get(nucleotide.strand_id)?.domains ?? []
-    const domainIndex = domains.findIndex(domain => {
-      if (domain.helix_id !== nucleotide.helix_id) return false
-      const lo = Math.min(domain.start_bp, domain.end_bp), hi = Math.max(domain.start_bp, domain.end_bp)
-      return nucleotide.bp_index >= lo && nucleotide.bp_index < hi
-    })
-    return domainIndex >= 0 ? { ...nucleotide, domain_index: domainIndex } : nucleotide
-  }
-  const finerByIndex = new Map(finer.map(entry => [entry.index, entry.cluster]))
-  const buckets = new Map(finer.map(({ cluster }) => [cluster.id, []]))
-  const unclustered = []
-  for (const nucleotide of geometry) {
-    const cluster = finerByIndex.get(ownerOf(ownershipNucleotide(nucleotide)))
-    if (cluster) buckets.get(cluster.id).push(nucleotide)
-    else unclustered.push(nucleotide)
-  }
-  return { finer, buckets, unclustered }
-}
+export const partitionAuditGeometry = partitionOccupancyGeometry
 
 export function buildClusteredAuditHull(design, geometry, axes) {
-  const { finer, buckets, unclustered } = partitionAuditGeometry(design, geometry)
-  if (!finer.length) return buildOccupancyHull(design, geometry, axes, 1.0)
-
-  const root = new THREE.Group()
-  const axesForSubset = (ids, subsetGeometry, domainLevel) => {
-    const result = Object.fromEntries([...ids].filter(id => axes[id]).map(id => [id, axes[id]]))
-    if (!domainLevel) return result
-    const byHelixBp = new Map()
-    for (const n of subsetGeometry) {
-      const position = n.axis_position ?? n.backbone_position
-      if (!position) continue
-      const key = `${n.helix_id}:${n.bp_index}`
-      let rec = byHelixBp.get(key)
-      if (!rec) { rec = { id: n.helix_id, bp: n.bp_index, sum: new THREE.Vector3(), count: 0 }; byHelixBp.set(key, rec) }
-      rec.sum.add(new THREE.Vector3(...position)); rec.count++
-    }
-    for (const id of ids) {
-      const samples = [...byHelixBp.values()].filter(rec => rec.id === id).sort((a, b) => a.bp - b.bp)
-      if (samples.length < 2) continue
-      result[id] = { ...result[id],
-        start: samples[0].sum.divideScalar(samples[0].count).toArray(),
-        end: samples.at(-1).sum.divideScalar(samples.at(-1).count).toArray(),
-      }
-      delete result[id].samples
-    }
-    return result
-  }
-  const addSubset = (subsetGeometry, cluster = null) => {
-    const ids = new Set(subsetGeometry.map(n => n.helix_id).filter(Boolean))
-    const helices = design.helices.filter(h => ids.has(h.id))
-    if (!helices.length) return
-    const subsetAxes = axesForSubset(ids, subsetGeometry, !!cluster?.domain_ids?.length)
-    const subsetDesign = { ...design, helices, cluster_transforms: [] }
-    const hull = buildOccupancyHull(subsetDesign, subsetGeometry, subsetAxes, 1.0)
-    if (!hull) return
-    // currentGeometry/currentHelixAxes are already in the committed world pose.
-    // Keeping clusters separate is enough; applying cluster.rotation here would
-    // rotate a moved arm twice (e.g. two 45.5° turns looked like ~90°).
-    hull.userData.hullAuditClusterId = cluster?.id ?? '__unclustered__'
-    root.add(hull)
-  }
-  for (const { cluster } of finer) addSubset(buckets.get(cluster.id), cluster)
-  addSubset(unclustered)
-  return root.children.length ? root : null
+  return buildClusteredOccupancyHull(design, geometry, axes, 1.0)
 }
 
 function fit(camera, controls, root) {
@@ -193,7 +122,7 @@ export function initHullAudit({ getState, subscribe, setMenuToggle = () => {}, v
     if (!design || !geometry?.length || !axes) {
       grid.innerHTML = '<div class="ha-error">Load a design with generated geometry before opening Hull Audit.</div>'; return
     }
-    const oldData = _hullGeoForSource(design, geometry, axes)
+    const oldData = _hullGeoForSource(design, geometry, axes, { forceLegacy: true })
     const oldRoot = new THREE.Group()
     if (oldData?.solid) oldRoot.add(new THREE.Mesh(oldData.solid, new THREE.MeshPhongMaterial({ color: 0x9a9a9a, shininess: 16 })))
     oldData?.markers?.dispose?.()
@@ -205,8 +134,8 @@ export function initHullAudit({ getState, subscribe, setMenuToggle = () => {}, v
     const fullCtrl = buildHelixObjects(geometry, design, fullRoot, customColors, [], axes, 'full')
     fullCtrl.setMode?.('normal'); fullCtrl.setAxisArrowsVisible?.(false)
     const defs = [
-      { id: 'old', title: 'Old', note: 'Current production Hull Prism', root: oldRoot },
-      { id: 'candidate', title: 'New', note: 'Six-plane honeycomb / occupied square envelope', root: candidate ?? new THREE.Group() },
+      { id: 'old', title: 'Old', note: 'Legacy feature-history / scan Hull Prism', root: oldRoot },
+      { id: 'candidate', title: 'New', note: 'Imported-design production occupancy envelope', root: candidate ?? new THREE.Group() },
       { id: 'full', title: 'Full reference', note: 'Current detailed representation', root: fullRoot },
     ]
     grid.innerHTML = ''

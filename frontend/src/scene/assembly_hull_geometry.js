@@ -16,7 +16,7 @@ import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import {
   buildExtrusionBoxes, scanExtrusionGroup, dsTrimmedAxes, dsBpByHelix, dsBpRangeByHelix,
-  buildOverhangMarkers,
+  buildOverhangMarkers, buildClusteredOccupancyHull, usesOccupancyHull,
 } from './joint_renderer.js'
 
 // Clusters under this fraction of the part's dsDNA bp are dropped from the
@@ -95,7 +95,7 @@ export function _bboxSolidFromNucs(nucleotides) {
 // convex bundle prism.  Pass source-local `nucleotides` + a source-local
 // helix-axes map ({helixId:{start,end,samples,ovhgAxes}}); the caller bakes the
 // instance world transform into the returned `solid`.
-export function _hullGeoForSource(design, nucleotides, helixAxes) {
+export function _hullGeoForSource(design, nucleotides, helixAxes, { forceLegacy = false } = {}) {
   if (!design) return null
 
   // Shared inputs for every hull branch AND the markers (mirror _rebuildHullRepr):
@@ -161,7 +161,9 @@ export function _hullGeoForSource(design, nucleotides, helixAxes) {
     clusters: allClusters.some(clusterMoved) ? allClusters : [],
     dsBpRange: dsBpRangeByHelix(nucleotides),
   }
-  let grp = buildExtrusionBoxes(design, helixAxes ?? null, HULL_CURVE_TOL_NM, hullOpts)  // 1. extrusion boxes
+  let grp = !forceLegacy && usesOccupancyHull(design)
+    ? buildClusteredOccupancyHull(design, nucleotides, helixAxes, HULL_CURVE_TOL_NM)
+    : buildExtrusionBoxes(design, helixAxes ?? null, HULL_CURVE_TOL_NM, hullOpts)  // 1. native extrusion boxes
   if (!grp && !allClusters.length) {                          // 2. scan (no clusters)
     grp = scanExtrusionGroup(
       (design.helices ?? []).map(h => h.id),

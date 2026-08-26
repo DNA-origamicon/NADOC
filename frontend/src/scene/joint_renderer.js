@@ -2423,6 +2423,94 @@ function _buildOccupancyHull(design, geometry, helixAxes, curveTolNm = 1.0) {
   return _finishOccupancyHull(design, merged, curved, 'candidate-general-lattice-union', false, true)
 }
 
+/**
+ * Select the topology-derived hull for imported designs. Native NADOC parts
+ * have a `bundle-create` root in their feature history; caDNAno/scadnano
+ * imports do not, even after later native edits append extrusion operations.
+ */
+function _usesOccupancyHull(design) {
+  return !(design?.feature_log ?? []).some(entry => entry?.op_kind === 'bundle-create')
+}
+
+function _partitionOccupancyGeometry(design, geometry) {
+  const total = design?.helices?.length ?? 0
+  const clusters = design?.cluster_transforms ?? []
+  const finer = clusters.map((cluster, index) => ({ cluster, index })).filter(({ cluster }) =>
+    !cluster.is_default && total > 0 && (cluster.helix_ids?.length ?? 0) < 0.9 * total)
+  if (!finer.length) return { finer, buckets: new Map(), unclustered: geometry.slice() }
+  const ownerOf = buildClusterLookup(design)
+  const strandsById = new Map((design.strands ?? []).map(strand => [strand.id, strand]))
+  const ownershipNucleotide = nucleotide => {
+    if (nucleotide.domain_index != null || nucleotide.strand_id == null) return nucleotide
+    const domains = strandsById.get(nucleotide.strand_id)?.domains ?? []
+    const domainIndex = domains.findIndex(domain => {
+      if (domain.helix_id !== nucleotide.helix_id) return false
+      const lo = Math.min(domain.start_bp, domain.end_bp), hi = Math.max(domain.start_bp, domain.end_bp)
+      return nucleotide.bp_index >= lo && nucleotide.bp_index < hi
+    })
+    return domainIndex >= 0 ? { ...nucleotide, domain_index: domainIndex } : nucleotide
+  }
+  const finerByIndex = new Map(finer.map(entry => [entry.index, entry.cluster]))
+  const buckets = new Map(finer.map(({ cluster }) => [cluster.id, []]))
+  const unclustered = []
+  for (const nucleotide of geometry) {
+    const cluster = finerByIndex.get(ownerOf(ownershipNucleotide(nucleotide)))
+    if (cluster) buckets.get(cluster.id).push(nucleotide)
+    else unclustered.push(nucleotide)
+  }
+  return { finer, buckets, unclustered }
+}
+
+function _buildClusteredOccupancyHull(design, geometry, axes, curveTolNm = 1.0) {
+  const { finer, buckets, unclustered } = _partitionOccupancyGeometry(design, geometry)
+  if (!finer.length) return _buildOccupancyHull(design, geometry, axes, curveTolNm)
+
+  const root = new THREE.Group()
+  const axesForSubset = (ids, subsetGeometry, domainLevel) => {
+    const result = Object.fromEntries([...ids].filter(id => axes[id]).map(id => [id, axes[id]]))
+    if (!domainLevel) return result
+    const byHelixBp = new Map()
+    for (const n of subsetGeometry) {
+      const position = n.axis_position ?? n.backbone_position
+      if (!position) continue
+      const key = `${n.helix_id}:${n.bp_index}`
+      let rec = byHelixBp.get(key)
+      if (!rec) {
+        rec = { id: n.helix_id, bp: n.bp_index, sum: new THREE.Vector3(), count: 0 }
+        byHelixBp.set(key, rec)
+      }
+      rec.sum.add(new THREE.Vector3(...position)); rec.count++
+    }
+    for (const id of ids) {
+      const samples = [...byHelixBp.values()].filter(rec => rec.id === id).sort((a, b) => a.bp - b.bp)
+      if (samples.length < 2) continue
+      result[id] = {
+        ...result[id],
+        start: samples[0].sum.divideScalar(samples[0].count).toArray(),
+        end: samples.at(-1).sum.divideScalar(samples.at(-1).count).toArray(),
+      }
+      delete result[id].samples
+    }
+    return result
+  }
+  const addSubset = (subsetGeometry, cluster = null) => {
+    const ids = new Set(subsetGeometry.map(n => n.helix_id).filter(Boolean))
+    const helices = design.helices.filter(h => ids.has(h.id))
+    if (!helices.length) return
+    const subsetAxes = axesForSubset(ids, subsetGeometry, !!cluster?.domain_ids?.length)
+    const subsetDesign = { ...design, helices, cluster_transforms: [] }
+    const hull = _buildOccupancyHull(subsetDesign, subsetGeometry, subsetAxes, curveTolNm)
+    if (!hull) return
+    // Geometry and axes already carry the committed world pose; applying the
+    // saved cluster transform here would move the subset twice.
+    hull.userData.hullAuditClusterId = cluster?.id ?? '__unclustered__'
+    root.add(hull)
+  }
+  for (const { cluster } of finer) addSubset(buckets.get(cluster.id), cluster)
+  addSubset(unclustered)
+  return root.children.length ? root : null
+}
+
 function _finishOccupancyHull(design, merged, curved, version, showEdges = true, elementEdges = false) {
   merged.computeBoundingBox()
   const group = new THREE.Group()
@@ -3514,6 +3602,22 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
     // fall through to the per-cluster cross-section scan (own frame + scan).
     let _hullDone = false
     if (_hullMode === 'extrusions') {
+      if (_usesOccupancyHull(design)) {
+        const occupancy = _buildClusteredOccupancyHull(
+          design, store.getState().currentGeometry, helixAxes, _hullCurveTolNm)
+        if (occupancy?.userData?.hullAuditVersion) {
+          scene.add(occupancy)
+          _hullReprMeshes.set('__occupancy__', occupancy)
+          _hullDone = true
+        } else if (occupancy?.children?.length) {
+          for (const group of [...occupancy.children]) {
+            scene.add(group)
+            _hullReprMeshes.set(group.userData.hullAuditClusterId ?? '__unclustered__', group)
+          }
+          _hullDone = true
+        }
+      }
+
       // Split out finer clusters big enough to matter (≥ _hullMinSizeFraction of
       // dsDNA bp); small ones + the whole-part cluster keep their boxes in
       // '__extrusions__' so nothing vanishes. Each split cluster gets its own
@@ -3532,14 +3636,14 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
       // dsBpRange gives each box its real (post-routing) dsDNA axial extent so the
       // hull lines up with the cylinder rep (back-porch ends, staggered starts).
       const _dsBpRange = _dsBpRangeByHelix(store.getState().currentGeometry)
-      const fl = _buildExtrusionBoxes(design, helixAxes, _hullCurveTolNm,
+      const fl = _hullDone ? null : _buildExtrusionBoxes(design, helixAxes, _hullCurveTolNm,
         { clusters: _splitClusters, keyByCluster: _splitClusters.length > 0, dsBpRange: _dsBpRange })
       if (fl instanceof Map) {
         for (const [key, grp] of fl) { scene.add(grp); _hullReprMeshes.set(key, grp) }
         _hullDone = true
       } else if (fl) {
         scene.add(fl); _hullReprMeshes.set('__extrusions__', fl); _hullDone = true
-      } else if (!design.cluster_transforms?.length) {
+      } else if (!_hullDone && !design.cluster_transforms?.length) {
         const grp = _scanExtrusionGroup((design.helices ?? []).map(h => h.id),
           _scanAxes, helixBp, design.lattice_type, design.metadata?.name, _hullScanTickBp)
         if (grp) { scene.add(grp); _hullReprMeshes.set('__extrusions__', grp) }
@@ -3926,6 +4030,9 @@ export {
   _hullMeshPhong          as buildHullMeshPhong,
   _buildExtrusionBoxes    as buildExtrusionBoxes,
   _buildOccupancyHull     as buildOccupancyHull,
+  _buildClusteredOccupancyHull as buildClusteredOccupancyHull,
+  _partitionOccupancyGeometry as partitionOccupancyGeometry,
+  _usesOccupancyHull      as usesOccupancyHull,
   _latticeCrossSections  as latticeCrossSections,
   _supportedLatticeOccupancy as supportedLatticeOccupancy,
   _honeycombHexCorners    as honeycombHexCorners,

@@ -4,6 +4,7 @@ import {
   hullSpansIgnoringSkips,
   latticeCrossSections,
   supportedLatticeOccupancy,
+  usesOccupancyHull,
 } from './joint_renderer.js'
 
 const squarePoint = cell => ({ x: cell.col * 2.25, z: cell.row * 2.25 })
@@ -18,6 +19,14 @@ const rectangle = (rows, cols) => {
 }
 
 describe('general lattice-union hull', () => {
+  it('selects occupancy for imports, including imports later extended in NADOC', () => {
+    expect(usesOccupancyHull({ feature_log: [] })).toBe(true)
+    expect(usesOccupancyHull({ feature_log: [{ op_kind: 'extrude-continuation' }] })).toBe(true)
+    expect(usesOccupancyHull({ feature_log: [
+      { op_kind: 'bundle-create' }, { op_kind: 'extrude-continuation' },
+    ] })).toBe(false)
+  })
+
   it('bridges explicit skips but preserves deliberate domain gaps', () => {
     expect(hullSpansIgnoringSkips([31, 32, 34, 35, 41], new Set([33]))).toEqual([[31, 36], [41, 42]])
     expect(hullSpansIgnoringSkips([31, 34], new Set([32]))).toEqual([[31, 32], [34, 35]])
