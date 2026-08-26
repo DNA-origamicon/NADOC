@@ -572,6 +572,28 @@ describe('initOxdnaDisplay controller', () => {
     expect(api.getOxdnaDisplay).toHaveBeenCalledTimes(1) // scrubbing never rebuilds/refetches caps
   })
 
+  it('trajectory keeps a hybrid protein at the job simulation pose', async () => {
+    const M = Array.from({ length: 16 }, (_, i) => i)
+    const designRenderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
+    const proteinRenderer = { applyOxdnaTransforms: vi.fn(), clearOxdnaTransforms: vi.fn() }
+    const api = {
+      getOxdnaTrajectory: vi.fn().mockResolvedValue({
+        ready: true, n_frames: 1, keys: [['h0', 0, 'FORWARD']],
+        frames: [[1, 2, 3, 1, 0, 0]], markers: [], stages: [],
+      }),
+      getOxdnaDisplay: vi.fn().mockResolvedValue({
+        ready: true, proteins: [{ attachment_id: 'protein-1', transform: M }],
+      }),
+    }
+    const ctrl = initOxdnaDisplay({ designRenderer, api, proteinRenderer })
+
+    await ctrl.loadTrajectory('hybrid-job')
+
+    expect(proteinRenderer.applyOxdnaTransforms).toHaveBeenCalledWith({ 'protein-1': M })
+    ctrl.showFrame(0)
+    expect(api.getOxdnaDisplay).toHaveBeenCalledTimes(1)
+  })
+
   it('aborts an in-flight trajectory request when toggled off before it loads', async () => {
     const designRenderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
     let signal, release
@@ -621,6 +643,27 @@ describe('initOxdnaDisplay controller', () => {
     await ctrl.displayJob('jobF')
     expect(designRenderer.clearScalarColors).toHaveBeenCalled()
     expect(ctrl.mode()).toBe('relaxed')
+  })
+
+  it('displayRmsf keeps a hybrid protein at the job simulation pose', async () => {
+    const M = Array.from({ length: 16 }, (_, i) => i + 1)
+    const designRenderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
+    const proteinRenderer = { applyOxdnaTransforms: vi.fn(), clearOxdnaTransforms: vi.fn() }
+    const api = {
+      getOxdnaRmsf: vi.fn().mockResolvedValue({
+        ready: true, n_frames: 4, min_rmsf: 0.1, max_rmsf: 0.2,
+        positions: [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD',
+          backbone_position: [0, 0, 0], nx: 1, ny: 0, nz: 0, rmsf: 0.1 }],
+      }),
+      getOxdnaDisplay: vi.fn().mockResolvedValue({
+        ready: true, proteins: [{ attachment_id: 'protein-1', transform: M }],
+      }),
+    }
+    const ctrl = initOxdnaDisplay({ designRenderer, api, proteinRenderer })
+
+    await ctrl.displayRmsf('hybrid-job')
+
+    expect(proteinRenderer.applyOxdnaTransforms).toHaveBeenCalledWith({ 'protein-1': M })
   })
 
   it('applies and restores a native-position photoproduct false-color view', () => {

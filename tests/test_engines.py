@@ -56,17 +56,17 @@ def _gpu(present, toolkit=True, arch="75"):
 def test_gpu_machine_targets_cuda_never_cpu():
     """The core requirement: a GPU box is planned a CUDA build, not CPU."""
     plan = engines._source_build_plan(
-        _gpu(True), _FULL_TOOLCHAIN, name="oxDNA", commands_fn=engines._oxdna_commands
+        _gpu(True), _FULL_TOOLCHAIN, name="oxDNA", commands_fn=engines._managed_oxdna_commands
     )
     assert plan["target"] == "CUDA"
     assert plan["can_auto"] is True
     joined = "\n".join(plan["commands"])
-    assert "-DCUDA=ON" in joined
+    assert "OXDNA_CUDA_ARCH=75" in joined
 
 
 def test_no_gpu_targets_cpu():
     plan = engines._source_build_plan(
-        _gpu(False), _FULL_TOOLCHAIN, name="oxDNA", commands_fn=engines._oxdna_commands
+        _gpu(False), _FULL_TOOLCHAIN, name="oxDNA", commands_fn=engines._managed_oxdna_commands
     )
     assert plan["target"] == "CPU"
     assert "-DCUDA=ON" not in "\n".join(plan["commands"])
@@ -80,7 +80,7 @@ def test_gpu_present_but_no_toolkit_blocks_auto_and_surfaces_nvcc():
         _gpu(True, toolkit=False),
         tools,
         name="oxDNA",
-        commands_fn=engines._oxdna_commands,
+        commands_fn=engines._managed_oxdna_commands,
     )
     assert plan["target"] == "CUDA"
     assert plan["can_auto"] is False
@@ -91,7 +91,7 @@ def test_gpu_present_but_no_toolkit_blocks_auto_and_surfaces_nvcc():
 def test_missing_base_toolchain_blocks_auto():
     tools = {**_FULL_TOOLCHAIN, "cmake": False}
     plan = engines._source_build_plan(
-        _gpu(False), tools, name="oxDNA", commands_fn=engines._oxdna_commands
+        _gpu(False), tools, name="oxDNA", commands_fn=engines._managed_oxdna_commands
     )
     assert plan["can_auto"] is False
     assert "cmake" in plan["missing_prereqs"]
@@ -102,30 +102,30 @@ def test_arch_flows_into_cuda_command():
         _gpu(True, arch="86"),
         _FULL_TOOLCHAIN,
         name="oxDNA",
-        commands_fn=engines._oxdna_commands,
+        commands_fn=engines._managed_oxdna_commands,
     )
-    assert "-DCMAKE_CUDA_ARCHITECTURES=86" in "\n".join(plan["commands"])
+    assert "OXDNA_CUDA_ARCH=86" in "\n".join(plan["commands"])
 
 
-def test_anm_build_script_carries_arch_env_on_gpu():
+def test_managed_oxdna_build_script_carries_arch_env_on_gpu():
     plan = engines._source_build_plan(
         _gpu(True, arch="89"),
         _FULL_TOOLCHAIN,
-        name="ANM",
-        commands_fn=engines._oxdna_anm_commands,
+        name="oxDNA",
+        commands_fn=engines._managed_oxdna_commands,
     )
     (cmd,) = plan["commands"]
     assert "OXDNA_CUDA_ARCH=89" in cmd
-    assert cmd.endswith("bash scripts/build-anm-oxdna.sh")
+    assert cmd.endswith("bash scripts/build-oxdna.sh")
 
 
-def test_anm_command_is_pasteable_from_any_dir():
-    """The copy-paste ANM command must cd into the project root by ABSOLUTE path —
+def test_oxdna_command_is_pasteable_from_any_dir():
+    """The copy-paste command must cd into the project root by ABSOLUTE path —
     a bare relative `scripts/...` fails when pasted from the wrong directory."""
-    (cmd,) = engines._oxdna_anm_commands("CPU", "75")
+    (cmd,) = engines._managed_oxdna_commands("CPU", "75")
     assert cmd.startswith(f"cd {engines._PROJECT_ROOT} && ")
     assert os.path.isabs(engines._PROJECT_ROOT)
-    assert "bash scripts/build-anm-oxdna.sh" in cmd
+    assert "bash scripts/build-oxdna.sh" in cmd
 
 
 def test_mrdna_command_cds_into_project_root():
@@ -203,7 +203,6 @@ def _patch_all(
     monkeypatch, *, oxdna, anm, namd, gmx, psfgen, dnanalysis, gpu_present=False
 ):
     monkeypatch.setattr(engines, "find_oxdna", lambda: oxdna)
-    monkeypatch.setattr(engines, "find_oxdna_anm", lambda: anm)
     monkeypatch.setattr(engines, "find_dnanalysis", lambda: dnanalysis)
     monkeypatch.setattr(
         engines, "find_namd", lambda: namd or (_ for _ in ()).throw(RuntimeError())
@@ -386,7 +385,7 @@ def test_installable_keys_only_source_engines():
     assert "dnanalysis" not in keys  # bundled with oxdna
     assert "arbd" not in keys  # downloaded source tarball, not a repo
     assert "cuda" not in keys  # guided (needs sudo)
-    assert "oxdna" in keys and "oxdna_anm" in keys
+    assert "oxdna" in keys and "oxdna_anm" not in keys
     assert "mrdna" in keys  # git clone via setup-mrdna.sh, no GPU
 
 

@@ -3,7 +3,7 @@
 Pure geometry over a :class:`ProteinAsset`: collapses the all-atom structure to
 **one bead per residue** at the Cα (alpha-carbon), and builds an **anisotropic
 network model (ANM)** — beads connected by harmonic springs between every pair
-within a cutoff.  This is the protein side of the ANM-oxDNA hybrid (``DNANM``)
+within a cutoff. This is the protein side of upstream oxDNA's ``DNANM`` hybrid
 model (Procyk/Šulc, Soft Matter 2021): DNA↔protein interaction is excluded-volume
 only, so a *stiff* network behaves as a near-rigid body with a real shape
 envelope.

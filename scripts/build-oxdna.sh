@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Build the pinned upstream oxDNA used by NADOC for DNA, RNA, and DNANM
+# protein-DNA simulations. The pin includes upstream PR #192 (CUDA DNANM).
+set -euo pipefail
+
+OXDNA_URL="${NADOC_OXDNA_URL:-https://github.com/lorenzo-rovigatti/oxDNA.git}"
+OXDNA_REV="${NADOC_OXDNA_REV:-8028cf33b3cba12992b771156085fa54879f50cd}"
+ENGINE_ROOT="${NADOC_OXDNA_ROOT:-$HOME/.local/share/nadoc/engines/oxdna}"
+SOURCE_DIR="${NADOC_OXDNA_SOURCE:-$ENGINE_ROOT/source}"
+INSTALL_DIR="$ENGINE_ROOT/$OXDNA_REV"
+CURRENT="$ENGINE_ROOT/current"
+BUILD_DIR="$SOURCE_DIR/build-nadoc"
+JOBS="${NADOC_BUILD_JOBS:-$(nproc)}"
+
+echo "==> upstream oxDNA $OXDNA_REV"
+echo "    source:  $OXDNA_URL"
+echo "    install: $INSTALL_DIR"
+
+mkdir -p "$ENGINE_ROOT"
+if [ ! -d "$SOURCE_DIR/.git" ]; then
+  git clone "$OXDNA_URL" "$SOURCE_DIR"
+fi
+git -C "$SOURCE_DIR" remote set-url origin "$OXDNA_URL"
+git -C "$SOURCE_DIR" fetch --depth 1 origin "$OXDNA_REV"
+git -C "$SOURCE_DIR" checkout --detach "$OXDNA_REV"
+
+cmake_args=(-S "$SOURCE_DIR" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release)
+if [ "${NADOC_OXDNA_CPU_ONLY:-0}" != "1" ]; then
+  if ! command -v nvcc >/dev/null 2>&1; then
+    echo "ERROR: CUDA build requested but nvcc is not on PATH." >&2
+    echo "Set NADOC_OXDNA_CPU_ONLY=1 to explicitly build CPU-only." >&2
+    exit 2
+  fi
+  cmake_args+=(-DCUDA=ON)
+  if [ -n "${OXDNA_CUDA_ARCH:-}" ]; then
+    cmake_args+=("-DCMAKE_CUDA_ARCHITECTURES=${OXDNA_CUDA_ARCH}")
+  fi
+fi
+
+cmake "${cmake_args[@]}"
+cmake --build "$BUILD_DIR" -j"$JOBS" --target oxDNA DNAnalysis
+
+mkdir -p "$INSTALL_DIR/bin" "$INSTALL_DIR/lib"
+install -m 0755 "$BUILD_DIR/bin/oxDNA" "$INSTALL_DIR/bin/oxDNA"
+install -m 0755 "$BUILD_DIR/bin/DNAnalysis" "$INSTALL_DIR/bin/DNAnalysis"
+install -m 0755 "$BUILD_DIR/src/liboxdna_common.so" "$INSTALL_DIR/lib/liboxdna_common.so"
+cmake -D "BINARY=$INSTALL_DIR/bin/oxDNA" \
+      -D "OLD_RPATH=$BUILD_DIR/src" -P "$(dirname "$0")/set-relative-rpath.cmake"
+cmake -D "BINARY=$INSTALL_DIR/bin/DNAnalysis" \
+      -D "OLD_RPATH=$BUILD_DIR/src" -P "$(dirname "$0")/set-relative-rpath.cmake"
+printf '%s\n' "$OXDNA_URL" > "$INSTALL_DIR/source-url"
+printf '%s\n' "$OXDNA_REV" > "$INSTALL_DIR/source-revision"
+ln -sfn "$INSTALL_DIR" "$CURRENT"
+
+echo "==> installed: $CURRENT/bin/oxDNA"
+echo "==> source revision: $OXDNA_REV"

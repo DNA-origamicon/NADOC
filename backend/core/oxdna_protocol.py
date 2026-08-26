@@ -77,15 +77,12 @@ class OxdnaStageSpec:
     forces_meta: dict | None = None
     # Health gate (checked after the stage).
     min_bp_retained: float = 0.0
-    # ── ANM-oxDNA hybrid (protein present) ──────────────────────────────────────
-    # interaction_type override (e.g. "DNANM" / "DNANM_relax"); None → "DNA2".
+    # ── upstream DNANM hybrid (protein present) ─────────────────────────────────
+    # interaction_type override (e.g. "DNANM"); None → "DNA2".
     interaction: str | None = None
     # ANM parameter-file name in the job dir (the protein spring network); emitted
-    # as `parfile = <name>` only for hybrid stages.  Its presence marks a fork
-    # (anm-oxdna) stage, so the renderer also emits the keys that fork makes
-    # mandatory (refresh_vel for MC) and `relax_type` for DNANM_relax.
+    # as `parfile = <name>` only for hybrid stages.
     parfile: str | None = None
-    relax_type: str = "harmonic_force"  # DNANM_relax algorithm
     # ── Output-cadence overrides (benchmark trials) ─────────────────────────────
     # None → derive from `steps` as usual (~100 trajectory + energy samples).  A
     # short THROUGHPUT trial sets print_conf_interval high (no intermediate frames)
@@ -140,17 +137,16 @@ def build_relaxation_stages(
     always CPU — oxDNA's Monte Carlo backend is CPU-only — and the CUDA-built
     oxDNA binary runs the CPU backend fine.
     """
-    # ANM-oxDNA hybrid (protein present): the fork's DNANM interaction + the protein
-    # ANM parameter file on every stage; DNANM_relax (non-diverging backbone) for the
-    # MC/MD relax stages, plain DNANM for equil.  The protein traps (conjugation /
+    # Upstream DNANM interaction + the protein ANM parameter file on every hybrid
+    # stage. The protein traps (conjugation /
     # anchors) are ABSOLUTE-coordinate forces → fix_diffusion off, and they persist
     # through equil (in equil_forces.txt) so proteins don't drift off during the
     # unbiased settle.  The bp-retention metric IS hybrid-aware (read_configuration's
     # protein-lead offset), but the gate stays lenient (0) for protein jobs until the
-    # threshold is validated against the fork's HBList — the % is still recorded for
+    # threshold is validated against DNANM's HBList — the % is still recorded for
     # the health readout.
     parfile = "anm.par" if protein else None
-    relax_interaction = "DNANM_relax" if protein else None
+    relax_interaction = "DNANM" if protein else None
     equil_interaction = "DNANM" if protein else None
     abs_forces = surface_present or protein
     equil_external = surface_present or protein
@@ -304,22 +300,18 @@ def render_stage_input(
         lines.append(f"ensemble = {spec.ensemble}")
         lines.append(f"delta_translation = {spec.delta_translation}")
         lines.append(f"delta_rotation = {spec.delta_rotation}")
-        # The anm-oxdna fork makes refresh_vel mandatory (even for MC).
+        # Retained for DNANM MC compatibility.
         if spec.parfile:
             lines.append("refresh_vel = true")
 
     # ── Interaction ─────────────────────────────────────────────────────────────
-    # Hybrid protein+DNA runs use the ANM-oxDNA fork's DNANM interaction (+ a
-    # parameter file for the protein spring network); DNANM_relax additionally
-    # takes a relax_type.  DNA-only runs stay on mainline DNA2.
+    # Hybrid protein+DNA runs use upstream DNANM plus a protein spring network.
     lines.append("")
     interaction = spec.interaction or "DNA2"
     lines.append(f"interaction_type = {interaction}")
     parfile = parfile_name or spec.parfile
     if parfile:
         lines.append(f"parfile = {parfile}")
-        if interaction == "DNANM_relax":
-            lines.append(f"relax_type = {spec.relax_type}")
     lines.append(f"salt_concentration = {spec.salt_concentration}")
 
     # ── Mutual-trap external forces (hold designed pairs during relaxation) ──────
@@ -372,6 +364,22 @@ DEFAULT_PRODUCTION_STEPS: int = 5_000_000
 # trajectory instead of a coarser one; the submit card surfaces the resulting frame
 # count + disk cost before launch.
 DEFAULT_STEPS_PER_FRAME: int = 10_000
+
+
+def hybridize_stage(spec: OxdnaStageSpec, *, protein: bool) -> OxdnaStageSpec:
+    """Apply upstream oxDNA's DNANM contract to an MD sampling stage.
+
+    Production, field, surface, and consolidated run builders are intentionally
+    generic.  A job that contains proteins must retain DNANM + its spring network
+    after relaxation; silently reverting to DNA2 mis-parses the hybrid topology.
+    """
+    if not protein:
+        return spec
+    return replace(
+        spec,
+        interaction="DNANM",
+        parfile="anm.par",
+    )
 
 
 def build_production_stage(

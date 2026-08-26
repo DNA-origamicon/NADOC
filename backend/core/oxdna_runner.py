@@ -135,6 +135,7 @@ def _external_oxdna_pid(job: OxdnaJob, workspace_dir: Path) -> Optional[int]:
 # very often a CPU-only conda/package build, it does NOT automatically win — see
 # ``find_oxdna``'s CUDA preference below.
 _OXDNA_CANDIDATES = [
+    os.path.expanduser("~/.local/share/nadoc/engines/oxdna/current/bin/oxDNA"),
     "oxDNA",
     os.path.expanduser("~/oxDNA/build_cuda/bin/oxDNA"),
     os.path.expanduser("~/oxDNA/build/bin/oxDNA"),
@@ -144,17 +145,15 @@ _OXDNA_CANDIDATES = [
 # Cache CUDA-capability by (path, mtime) so the per-request find_oxdna() calls
 # don't re-run ldd every time.  mtime keying means a rebuild is picked up.
 _CUDA_CAP_CACHE: dict[tuple[str, float], bool] = {}
+_DNANM_CAP_CACHE: dict[tuple[str, float], bool] = {}
 
 
 def oxdna_supports_cuda(path: str) -> bool:
-    """True iff the oxDNA binary at ``path`` is linked against the CUDA runtime.
+    """True iff the oxDNA binary at ``path`` contains a CUDA backend.
 
     A CUDA-enabled oxDNA links ``libcudart`` (directly or via
-    ``liboxdna_common.so``); a CPU-only build does not.  We read this statically
-    with ``ldd`` — fast, no GPU needed, and definitive (the CPU-only conda build
-    that silently breaks GPU jobs has no ``libcudart`` line).  A binary whose
-    ``libcudart`` resolves to "not found" is treated as NOT CUDA-capable (it
-    couldn't load anyway).  Returns False on any probe failure.
+    ``liboxdna_common.so``); a CPU-only build does not. A dynamically linked
+    runtime that resolves to "not found" is unusable. No GPU is touched.
     """
     if not path:
         return False
@@ -184,6 +183,34 @@ def oxdna_supports_cuda(path: str) -> bool:
         except (OSError, subprocess.SubprocessError):
             result = False
     _CUDA_CAP_CACHE[key] = result
+    return result
+
+
+def oxdna_supports_dnanm(path: str) -> bool:
+    """Return whether this oxDNA installation contains upstream DNANM support."""
+    if not path:
+        return False
+    try:
+        key = (path, os.path.getmtime(path))
+    except OSError:
+        return False
+    if key in _DNANM_CAP_CACHE:
+        return _DNANM_CAP_CACHE[key]
+    executable = Path(path).resolve()
+    candidates = [
+        executable,
+        executable.parent.parent / "lib" / "liboxdna_common.so",
+        executable.parent.parent / "src" / "liboxdna_common.so",
+    ]
+    result = False
+    for candidate in candidates:
+        try:
+            if b"DNANM" in candidate.read_bytes():
+                result = True
+                break
+        except OSError:
+            continue
+    _DNANM_CAP_CACHE[key] = result
     return result
 
 
@@ -291,32 +318,6 @@ def find_oxdna(*, prefer_cuda: bool = True) -> Optional[str]:
             if oxdna_supports_cuda(found):
                 return found
     return resolved[0]
-
-
-_OXDNA_ANM_CANDIDATES = [
-    os.path.expanduser("~/anm-oxdna/oxDNA/build_cuda/bin/oxDNA"),  # CUDA (preferred)
-    os.path.expanduser("~/anm-oxdna/oxDNA/build/bin/oxDNA"),  # CPU fallback
-]
-
-
-def find_oxdna_anm() -> Optional[str]:
-    """Return the ANM-oxDNA (``DNANM`` hybrid) binary path, or None if not found.
-
-    This is the SEPARATE fork (sulcgroup/anm-oxdna) used only when a design has
-    proteins — mainline oxDNA has no DNANM support.  Resolution: ``$OXDNA_ANM_BIN``
-    → conventional ``~/anm-oxdna/oxDNA/build_cuda/bin/oxDNA`` (CUDA) → ``…/build/``
-    (CPU).  Built by ``scripts/build-anm-oxdna.sh``.
-    """
-    override = os.environ.get("OXDNA_ANM_BIN", "").strip()
-    for candidate in ([override] if override else []) + _OXDNA_ANM_CANDIDATES:
-        found = shutil.which(candidate) or (
-            candidate
-            if os.path.isfile(candidate) and os.access(candidate, os.X_OK)
-            else None
-        )
-        if found:
-            return found
-    return None
 
 
 def find_dnanalysis() -> Optional[str]:
@@ -483,7 +484,7 @@ def prepare_oxdna_job(
     jd = job.job_dir(workspace_dir)
     jd.mkdir(parents=True, exist_ok=True)
 
-    # ── Hybrid protein+DNA (ANM-oxDNA / DNANM) ──────────────────────────────────
+    # ── Hybrid protein+DNA (upstream DNANM) ─────────────────────────────────────
     # Protein beads occupy the LEADING particle indices, so the topology/conf are
     # the hybrid writers' and every DNA particle index (mutual traps especially)
     # is shifted by +N_protein.  An ANM parameter file + the protein tethers
@@ -1516,19 +1517,18 @@ async def run_job(
     jd = job.job_dir(workspace_dir)
     logger.info("[%s] oxdna run_job starting; job_dir=%s", job.job_id, jd)
 
-    # Hybrid protein jobs (any DNANM stage → spec.parfile set) need the ANM-oxDNA
-    # fork; DNA-only jobs use mainline oxDNA.
     is_hybrid = any(s.parfile for s in specs)
-    oxdna_bin = find_oxdna_anm() if is_hybrid else find_oxdna()
+    oxdna_bin = find_oxdna()
     if oxdna_bin is None:
         job.status = OxdnaStatus.failed
+        job.error = "oxDNA binary not found. Set $OXDNA_BIN or run scripts/build-oxdna.sh."
+        job.save(workspace_dir)
+        return
+    if is_hybrid and not oxdna_supports_dnanm(oxdna_bin):
+        job.status = OxdnaStatus.failed
         job.error = (
-            (
-                "ANM-oxDNA (protein) binary not found. Set $OXDNA_ANM_BIN or run "
-                "scripts/build-anm-oxdna.sh."
-            )
-            if is_hybrid
-            else "oxDNA binary not found. Set $OXDNA_BIN or install to ~/oxDNA/build/bin/oxDNA."
+            "The resolved oxDNA binary predates upstream DNANM protein support. "
+            "Run scripts/build-oxdna.sh or set OXDNA_BIN to a compatible build."
         )
         job.save(workspace_dir)
         return
@@ -1628,8 +1628,11 @@ async def run_job(
         # approach stage. Materialise it only at the stage boundary; projecting selected
         # beads onto the plane before dynamics would create overstretched backbones.
         contact_forces = jd / (spec.forces_file or "deposition_settle_forces.txt")
-        if (spec.forces_meta and spec.forces_meta.get("materialize_contact_traps")
-                and not contact_forces.exists()):
+        if (
+            spec.forces_meta
+            and spec.forces_meta.get("materialize_contact_traps")
+            and not contact_forces.exists()
+        ):
             try:
                 write_surface_deposition_settle_forces(
                     contact_forces,
@@ -2023,8 +2026,13 @@ async def run_job(
                 logger.info(
                     "[%s] surface contact incomplete (%s) -> adaptive window %d/%d; "
                     "%d captured, %d remaining, force %.3g pN",
-                    job.job_id, exc, retry + 1, max_windows,
-                    info["n_captured"], len(info["remaining_particles"]), force_pn,
+                    job.job_id,
+                    exc,
+                    retry + 1,
+                    max_windows,
+                    info["n_captured"],
+                    len(info["remaining_particles"]),
+                    force_pn,
                 )
                 continue
 

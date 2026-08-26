@@ -868,7 +868,7 @@ def topology_rows(design: Design) -> tuple[list[tuple[int, str, int, int]], int]
     ``write_configuration``.  Extracted from ``write_topology`` so the hybrid
     protein+DNA topology writer (``oxdna_protein``) can reuse it — there the DNA
     particle indices are shifted by ``+N_protein`` because protein beads occupy
-    the leading indices in the ANM-oxDNA convention.
+    the leading indices in the DNANM convention.
     """
     steps = list(_walk_strand_nucleotides(design))
     order = [s.key for s in steps]
@@ -982,14 +982,28 @@ def assert_topology_matches_design(
     if not first:
         return
     try:
-        n_top = int(first[0].split()[0])
+        fields = first[0].split()
+        n_top = int(fields[0])
     except (ValueError, IndexError):
         return
-    n_now = len(_strand_nucleotide_order(design)) + int(extra_trailing)
-    if n_top != n_now:
+    n_walk = len(_strand_nucleotide_order(design))
+    # DNANM writes a five-field hybrid header:
+    # N_total N_strands N_dna N_protein N_dna_strands. Its protein particles
+    # legitimately lead the DNA, so validate the explicit DNA count rather than
+    # mistaking that leading block for a stale nucleotide walk.
+    hybrid = len(fields) >= 5
+    try:
+        n_dna = int(fields[2]) if hybrid else n_top - int(extra_trailing)
+        n_leading = int(fields[3]) if hybrid else 0
+    except (ValueError, IndexError):
+        return
+    expected_total = n_walk + n_leading + int(extra_trailing)
+    if n_dna != n_walk or n_top != expected_total:
         raise StaleJobTopologyError(
             f"This oxDNA job's topology has {n_top} particles but the design now "
-            f"walks to {n_now}. The job predates a change to the nucleotide walk "
+            f"walks to {n_walk} DNA particles"
+            f" (plus {n_leading} leading protein and {int(extra_trailing)} trailing "
+            f"simulation particles). The job predates a change to the nucleotide walk "
             f"(most likely strand-extension support, which adds one particle per "
             f"extension base). Re-run the relaxation to regenerate it."
         )
@@ -1549,7 +1563,7 @@ def _protein_lead_offset(
 ) -> int:
     """Number of leading non-DNA particle lines in a configuration.
 
-    A hybrid ANM-oxDNA (DNANM) conf writes the protein beads FIRST, then the DNA
+    A hybrid DNANM conf writes the protein beads FIRST, then the DNA
     nucleotides, so it has ``N_protein + len(order)`` data lines.  A DNA-only conf
     has exactly ``len(order)``.  The difference is the count of leading protein
     lines to skip so the DNA keys line up with the trailing DNA lines.  Robust to
@@ -1565,7 +1579,7 @@ def _protein_lead_offset(
 def read_protein_bead_positions(conf_path: str | Path, n_dna: int) -> list:
     """The LEADING protein-bead positions (nm) of a hybrid conf — the first
     ``total_data_lines - n_dna`` particle lines (protein beads precede the DNA in
-    the ANM-oxDNA convention).  Empty for a DNA-only conf.  ``n_dna`` =
+    the DNANM convention). Empty for a DNA-only conf. ``n_dna`` =
     ``len(_strand_nucleotide_order(design))``."""
     lines = Path(conf_path).read_text(encoding="utf-8").splitlines()
     data = [l for l in lines if l.strip() and not l.startswith(("t ", "b ", "E "))]

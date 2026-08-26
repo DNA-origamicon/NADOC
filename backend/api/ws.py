@@ -2455,12 +2455,12 @@ async def md_job_status_ws(websocket: WebSocket, job_id: str) -> None:
 
 @router.websocket("/ws/engines/install")
 async def engines_install_ws(websocket: WebSocket) -> None:
-    """Auto-build a source MD engine (oxDNA / ANM-oxDNA fork), streaming progress.
+    """Auto-build a source MD engine, streaming progress.
 
     Protocol
     ────────
     Client → Server (once), either:
-      {"engine": "oxdna" | "oxdna_anm" | "mrdna"}        — auto-build/install here
+      {"engine": "oxdna" | "mrdna" | "lammps_oxdna"} — auto-build/install here
       {"engine": "namd", "archive_path": "/path.tar.gz"} — finish a downloaded package
       {"engine": "arbd", "archive_path": "/path.tar.gz"} — build a downloaded source tarball
       {"engine": "arbd", "install_built": true}          — copy an already-built arbd onto PATH (no sudo)

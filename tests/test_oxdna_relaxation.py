@@ -429,6 +429,40 @@ def test_oxdna_supports_cuda_cache(tmp_path, monkeypatch):
     assert oxdna_runner.oxdna_supports_cuda("/no/such/file") is False
 
 
+def test_oxdna_static_probe_requires_backend_and_runtime_markers(tmp_path, monkeypatch):
+    from backend.core import oxdna_runner
+
+    binary = tmp_path / "not_cuda"
+    binary.write_bytes(b"ELF documentation mentions CUDABackend")
+    binary.chmod(0o755)
+    monkeypatch.setattr(oxdna_runner.shutil, "which", lambda name: None)
+    oxdna_runner._CUDA_CAP_CACHE.clear()
+    assert oxdna_runner.oxdna_supports_cuda(str(binary)) is False
+
+
+def test_oxdna_supports_dnanm_from_managed_library(tmp_path):
+    from backend.core import oxdna_runner
+
+    binary = tmp_path / "bin" / "oxDNA"
+    library = tmp_path / "lib" / "liboxdna_common.so"
+    binary.parent.mkdir()
+    library.parent.mkdir()
+    binary.write_bytes(b"ELF")
+    library.write_bytes(b"InteractionFactory DNANM DNACT")
+    oxdna_runner._DNANM_CAP_CACHE.clear()
+    assert oxdna_runner.oxdna_supports_dnanm(str(binary)) is True
+
+
+def test_oxdna_supports_dnanm_rejects_old_binary(tmp_path):
+    from backend.core import oxdna_runner
+
+    binary = tmp_path / "bin" / "oxDNA"
+    binary.parent.mkdir()
+    binary.write_bytes(b"ELF DNA2 RNA2")
+    oxdna_runner._DNANM_CAP_CACHE.clear()
+    assert oxdna_runner.oxdna_supports_dnanm(str(binary)) is False
+
+
 def test_find_oxdna_prefers_cuda_over_cpu_on_path(tmp_path, monkeypatch):
     """A CPU-only binary first in the candidate list must NOT shadow a CUDA one."""
     from backend.core import oxdna_runner

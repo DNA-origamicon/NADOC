@@ -1,6 +1,6 @@
 """MD-engine status + install planning — the model behind the "MD Engines" panel.
 
-NADOC's heavy simulation back-ends (oxDNA, the ANM-oxDNA protein fork, NAMD,
+NADOC's heavy simulation back-ends (oxDNA, NAMD,
 GROMACS) are installed by the user, once per machine.  This module answers two
 questions for the UI:
 
@@ -44,7 +44,6 @@ from backend.core.oxdna_runner import (
     find_dnanalysis,
     find_lammps,
     find_oxdna,
-    find_oxdna_anm,
     lammps_supports_cgdna,
     oxdna_supports_cuda,
 )
@@ -72,8 +71,9 @@ def is_forced_missing(key: str) -> bool:
 
 # Upstream sources (kept here so the doc, the plan, and engine_install.py agree).
 OXDNA_REPO = "https://github.com/lorenzo-rovigatti/oxDNA.git"
+OXDNA_REV = "8028cf33b3cba12992b771156085fa54879f50cd"
 LAMMPS_REPO = "https://github.com/lammps/lammps.git"
-ANM_OXDNA_BUILD_SCRIPT = "scripts/build-anm-oxdna.sh"
+OXDNA_BUILD_SCRIPT = "scripts/build-oxdna.sh"
 NAMD_DOWNLOAD_URL = "https://www.ks.uiuc.edu/Research/namd/"
 MRDNA_SETUP_SCRIPT = "./scripts/setup-mrdna.sh"
 # ARBD ships from the UIUC KS group's download portal (register + accept the license,
@@ -319,30 +319,10 @@ def _source_build_plan(gpu: dict, tools: dict, *, name: str, commands_fn) -> dic
     }
 
 
-def _oxdna_commands(target: str, arch: str) -> list[str]:
-    # Build into the conventional ~/oxDNA/build/ — the path find_oxdna() auto-detects,
-    # so no OXDNA_BIN env var is needed afterward.  -DCUDA=ON makes one binary that
-    # runs on GPU *or* CPU (oxDNA picks the backend from the input file).
-    cmake = (
-        "cmake .."
-        if target == "CPU"
-        else f"cmake .. -DCUDA=ON -DCMAKE_CUDA_ARCHITECTURES={arch}"
-    )
-    return [
-        f"git clone {OXDNA_REPO} ~/oxDNA",
-        "cd ~/oxDNA && mkdir -p build && cd build",
-        cmake,
-        "make -j$(nproc) oxDNA DNAnalysis",
-    ]
-
-
-def _oxdna_anm_commands(target: str, arch: str) -> list[str]:
-    # The build script self-detects CPU/CUDA; arch via OXDNA_CUDA_ARCH.  Absolute
-    # `cd` into the project root FIRST — the script lives there and is referenced by
-    # a relative path, so a bare paste from the wrong directory would fail with
-    # "No such file or directory".
+def _managed_oxdna_commands(target: str, arch: str) -> list[str]:
+    """Commands for NADOC's pinned upstream build (DNA, RNA, and DNANM)."""
     env = f"OXDNA_CUDA_ARCH={arch} " if target == "CUDA" else ""
-    return [f"cd {_PROJECT_ROOT} && {env}bash {ANM_OXDNA_BUILD_SCRIPT}"]
+    return [f"cd {_PROJECT_ROOT} && {env}bash {OXDNA_BUILD_SCRIPT}"]
 
 
 def _lammps_commands(*, parallel: bool, install_mpi: bool) -> list[str]:
@@ -708,7 +688,7 @@ def engines_status() -> dict:
         {
           "gpu": {present, devices, names, toolkit, arch},
           "toolchain": {git, cmake, make, cxx, nvcc, conda, apt},
-          "engines": {oxdna, oxdna_anm, namd, gromacs, psfgen, dnanalysis},
+          "engines": {oxdna, namd, gromacs, psfgen, dnanalysis},
           "sections": {
              "oxdna": {required:[...], ready:bool, missing:[...]},
              "md":    {required:[...], ready:bool, missing:[...]},
@@ -723,7 +703,6 @@ def engines_status() -> dict:
 
     ox_path = find_oxdna()
     lammps_path = _try_find(find_lammps)
-    anm_path = find_oxdna_anm()
     namd_path = _try_find(find_namd)
     gmx_path = _try_find(find_gmx)
     psfgen_path = _try_find(find_psfgen)
@@ -741,9 +720,9 @@ def engines_status() -> dict:
         "oxdna": _engine(
             "oxdna",
             "oxDNA",
-            "Coarse-grained DNA molecular dynamics — relax, E-field, health.",
+            "GPU molecular dynamics for DNA/RNA and DNANM protein-DNA hybrids.",
             ox_path,
-            _source_build_plan(gpu, tools, name="oxDNA", commands_fn=_oxdna_commands),
+            _source_build_plan(gpu, tools, name="oxDNA", commands_fn=_managed_oxdna_commands),
             forced=_f("oxdna"),
         ),
         "lammps_oxdna": _engine(
@@ -754,17 +733,6 @@ def engines_status() -> dict:
             _lammps_plan(gpu, tools),
             required_note="Optional — for assemblies too large for single-GPU oxDNA.",
             forced=_f("lammps_oxdna"),
-        ),
-        "oxdna_anm": _engine(
-            "oxdna_anm",
-            "ANM-oxDNA (protein fork)",
-            "oxDNA's DNANM hybrid — required only for designs that include proteins.",
-            anm_path,
-            _source_build_plan(
-                gpu, tools, name="ANM-oxDNA", commands_fn=_oxdna_anm_commands
-            ),
-            required_note="Only needed for protein-bearing designs.",
-            forced=_f("oxdna_anm"),
         ),
         "namd": _engine(
             "namd",
@@ -808,7 +776,7 @@ def engines_status() -> dict:
             "DNAnalysis",
             "oxDNA H-bond health oracle — builds alongside oxDNA.",
             dnanalysis_path,
-            _source_build_plan(gpu, tools, name="oxDNA", commands_fn=_oxdna_commands),
+            _source_build_plan(gpu, tools, name="oxDNA", commands_fn=_managed_oxdna_commands),
             required_note="Bundled with oxDNA; building oxDNA provides it.",
             forced=_f("dnanalysis"),
         ),
@@ -850,7 +818,7 @@ def engines_status() -> dict:
     # present that is "installed but not full-speed": flag it and re-attach the
     # CUDA build plan as the fix, without marking the engine missing (the CPU
     # binary still runs — just slowly).
-    for key in ("oxdna", "oxdna_anm"):
+    for key in ("oxdna",):
         eng = engines[key]
         path = eng["path"]
         cuda_capable = oxdna_supports_cuda(path) if path else None
@@ -862,11 +830,11 @@ def engines_status() -> dict:
                 gpu,
                 tools,
                 name=eng["name"],
-                commands_fn=_oxdna_commands if key == "oxdna" else _oxdna_anm_commands,
+                commands_fn=_managed_oxdna_commands,
             )
             names = ", ".join(gpu["names"]) or "a CUDA GPU"
             eng["degraded_note"] = (
-                f"oxDNA is installed but the binary NADOC resolved is CPU-only, while "
+                f"{eng['name']} is installed but the binary NADOC resolved is CPU-only, while "
                 f"{names} is available. GPU (CUDA) runs are ~1–2 orders of magnitude "
                 f"faster. Rebuild with CUDA (commands below), or set OXDNA_BIN to an "
                 f"existing CUDA build."
@@ -920,4 +888,4 @@ def installable_engine_keys() -> list[str]:
     downloaded source tarball (handled via the archive path), CUDA is guided.
     LAMMPS (CG-DNA) is source-built (git clone + cmake), no license/download.
     """
-    return ["oxdna", "oxdna_anm", "mrdna", "lammps_oxdna"]
+    return ["oxdna", "mrdna", "lammps_oxdna"]

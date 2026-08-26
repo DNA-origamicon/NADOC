@@ -18,7 +18,7 @@ What it checks, in order of what breaks full-speed runs:
   conda/apt ``oxDNA`` on PATH that makes every ``backend = CUDA`` MD stage abort
   with "Backend 'CUDA' not supported").
 
-``--fix`` runs the auto-build (clone → cmake -DCUDA=ON → make) into ``~/oxDNA``,
+``--fix`` builds NADOC's pinned upstream oxDNA revision into its managed engine directory,
 the path NADOC's CUDA-preferring resolver picks up automatically — no env var
 needed afterward.  Idempotent: an existing clone is reused.
 """
@@ -107,7 +107,7 @@ def _fix(st: dict) -> int:
         return 0
 
     plan = ox.get("install") or engines._source_build_plan(
-        gpu, tools, name="oxDNA", commands_fn=engines._oxdna_commands)
+        gpu, tools, name="oxDNA", commands_fn=engines._managed_oxdna_commands)
     if not plan.get("can_auto"):
         miss = ", ".join(plan.get("missing_prereqs", [])) or "prerequisites"
         print(f"\n{_BAD} Cannot auto-build: missing {miss}.")
@@ -154,7 +154,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--fix", action="store_true",
-                    help="auto-build a CUDA-enabled oxDNA into ~/oxDNA")
+                    help="build NADOC's pinned CUDA-enabled upstream oxDNA")
     args = ap.parse_args()
     st = diagnose()
     if args.fix:

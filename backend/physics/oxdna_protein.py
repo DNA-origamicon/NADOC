@@ -1,4 +1,4 @@
-"""oxDNA-format writers for the protein side of an ANM-oxDNA (``DNANM``) hybrid.
+"""oxDNA-format writers for upstream oxDNA's ``DNANM`` protein-DNA hybrid.
 
 Turns the coarse-grained protein beads + ANM springs (``backend.core.protein_cg``)
 into the three oxDNA-format artifacts a hybrid run needs:

@@ -13,7 +13,7 @@
 export const ENGINE_ORDER = [
   'oxdna', 'lammps_oxdna', 'namd', 'gromacs',
   'mrdna', 'arbd', 'cuda',
-  'oxdna_anm', 'psfgen', 'dnanalysis',
+  'psfgen', 'dnanalysis',
 ]
 
 /** Human one-liner about the local GPU, used at the top of the panel. */

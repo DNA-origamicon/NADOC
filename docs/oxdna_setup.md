@@ -4,17 +4,10 @@ This document covers getting **oxDNA** installed so NADOC's **Dynamics** sidebar
 can run coarse-grained relaxation, E-field, and protein-DNA jobs. It also covers
 the WSL2 + NVIDIA GPU story (shared with NAMD).
 
-NADOC runs oxDNA as its coarse-grained MD engine. It does **not** ship oxDNA — you
-build it once on your own machine. There are **two** flavors, and which you need
-depends on what you simulate:
-
-| Flavor | Repo | When NADOC uses it | Built by |
-|---|---|---|---|
-| **Mainline oxDNA** | `lorenzo-rovigatti/oxDNA` | DNA-only relax / E-field / health | you (CMake, steps below) |
-| **ANM-oxDNA fork** (`DNANM`) | `sulcgroup/anm-oxdna` | designs that include **proteins** | `scripts/build-anm-oxdna.sh` |
-
-You can install just the mainline build and have full DNA-only MD; the fork is
-only needed once you put imported proteins into an oxDNA job.
+NADOC uses one pinned build of upstream `lorenzo-rovigatti/oxDNA`. Upstream merged
+CUDA DNANM protein-DNA support in February 2026 (PR #192), so a separate ANM fork
+is no longer required. The latest tagged release predates that merge; use NADOC's
+build script instead of an older release package.
 
 ---
 
@@ -24,20 +17,19 @@ only needed once you put imported proteins into an oxDNA job.
    `nvidia-smi` *inside* WSL. (Same rule as NAMD — see below.)
 2. Install build tools: `sudo apt-get install -y build-essential cmake git`.
    For a GPU build, also install the CUDA toolkit (provides `nvcc`).
-3. **Mainline oxDNA:** clone to `~/oxDNA`, `cmake` + `make`, and NADOC
-   auto-detects `~/oxDNA/build/bin/oxDNA`.
-4. **Protein-DNA fork:** run `scripts/build-anm-oxdna.sh`; point
-   `OXDNA_ANM_BIN` at the binary it prints.
+3. Run `scripts/build-oxdna.sh`. It pins a reviewed upstream revision, builds
+   `oxDNA` and `DNAnalysis`, and installs them under NADOC's engine directory.
 
 ---
 
 ## How NADOC finds oxDNA
 
 `find_oxdna()` in [backend/core/oxdna_runner.py](../backend/core/oxdna_runner.py)
-resolves the mainline binary like this:
+resolves the binary like this:
 
 1. **`$OXDNA_BIN`** — explicit override (absolute path or a name on `$PATH`). Always wins.
 2. Otherwise, among these candidates it **prefers a CUDA-capable binary**:
+   - `~/.local/share/nadoc/engines/oxdna/current/bin/oxDNA`
    - `oxDNA` on `$PATH`
    - `~/oxDNA/build_cuda/bin/oxDNA`
    - `~/oxDNA/build/bin/oxDNA`
@@ -54,10 +46,7 @@ oxDNA on `$PATH` — just build the CUDA engine into `~/oxDNA` and NADOC finds i
 
 > **Quick check / one-command fix:** `just oxdna-doctor` reports your GPU,
 > toolchain, which binary NADOC resolves, and whether it is CUDA-capable.
-> `just oxdna-doctor --fix` auto-builds a CUDA-enabled oxDNA into `~/oxDNA`.
-
-The ANM fork is resolved separately by `find_oxdna_anm()`: **`$OXDNA_ANM_BIN`** →
-`~/anm-oxdna/oxDNA/build_cuda/bin/oxDNA` (CUDA) → `…/build/bin/oxDNA` (CPU).
+> `just oxdna-doctor --fix` auto-builds the pinned CUDA-enabled upstream oxDNA.
 
 `DNAnalysis` — the ground-truth H-bond counter used by the health check — builds
 alongside oxDNA and is found **next to** the resolved oxDNA binary (or via
@@ -157,29 +146,22 @@ the value NADOC reports as the recommended device.
 
 ---
 
-## Install the ANM-oxDNA fork (protein-DNA, `DNANM`)
+## Install upstream oxDNA (`DNANM` included)
 
-Only needed for designs that include imported proteins (mainline oxDNA has no
-`DNANM` interaction). The fork is a ~2021 codebase that does **not** compile on a
-modern toolchain unaided, so NADOC ships a build script that clones it, applies a
-CUDA-13/g++-13 portability patch, and builds both CPU and (if available) CUDA
-binaries:
+The script checks out NADOC's pinned upstream revision and builds one engine for
+DNA-only and protein-DNA jobs:
 
 ```bash
-scripts/build-anm-oxdna.sh
+scripts/build-oxdna.sh
 ```
 
-It is idempotent (safe to re-run) and prints the binary path at the end. Persist
-the override it tells you:
-
-```bash
-# CUDA binary if a toolkit + GPU were present, else the CPU binary
-export OXDNA_ANM_BIN=$HOME/anm-oxdna/oxDNA/build_cuda/bin/oxDNA
-```
+It is idempotent and prints the installed binary and source revision. NADOC finds
+the `current` symlink automatically; `OXDNA_BIN` remains an optional override.
 
 Optional knobs for the script:
 - `OXDNA_CUDA_ARCH` — compute capability (default `75`; set to match your card).
-- `ANM_OXDNA_DIR` — clone/build location (default `~/anm-oxdna`).
+- `NADOC_OXDNA_ROOT` — managed install root.
+- `NADOC_OXDNA_CPU_ONLY=1` — explicitly request a CPU-only build.
 
 Validated on WSL2 Ubuntu, CUDA 13.3, g++ 13, RTX 2080 Super (`sm_75`).
 
@@ -195,12 +177,11 @@ Validated on WSL2 Ubuntu, CUDA 13.3, g++ 13, RTX 2080 Super (`sm_75`).
 # One-shot: GPU, toolchain, resolved binary, and CUDA-capability in one report:
 just oxdna-doctor
 
-# Or the raw resolution (mainline + fork + DNAnalysis):
+# Or the raw resolution:
 uv run python -c "
-from backend.core.oxdna_runner import find_oxdna, find_oxdna_anm, find_dnanalysis, oxdna_supports_cuda
+from backend.core.oxdna_runner import find_oxdna, find_dnanalysis, oxdna_supports_cuda
 ox = find_oxdna()
 print('oxDNA     ', ox or '(not found)', '[CUDA]' if ox and oxdna_supports_cuda(ox) else '[CPU-only]')
-print('oxDNA-ANM ', find_oxdna_anm()  or '(not found)')
 print('DNAnalysis', find_dnanalysis() or '(not found)')
 "
 ```
@@ -251,8 +232,7 @@ elements fixed; the surface deposition designation remains independently editabl
 | oxDNA runs but won't use the GPU | The resolved binary is CPU-only. `just oxdna-doctor` shows which one and whether it's CUDA-capable; `--fix` builds a CUDA one. NADOC prefers a CUDA binary automatically — no `$OXDNA_BIN` needed unless you must force a specific build. |
 | `nvidia-smi` fails inside WSL | Windows NVIDIA driver missing/old, or a Linux driver was installed inside WSL. Fix on the Windows side; never install a Linux GPU driver in WSL. |
 | Wrong GPU selected on a multi-GPU box | Set `OXDNA_DEVICE` to the device index you want. |
-| Protein job fails / "DNANM not available" | The mainline binary doesn't support proteins. Build the fork (`scripts/build-anm-oxdna.sh`) and set `$OXDNA_ANM_BIN`. |
-| `scripts/build-anm-oxdna.sh`: "patch does not apply" | The upstream checkout drifted from the shipped patch. Inspect `scripts/anm-oxdna-cuda13.patch`. |
+| Protein job fails / "DNANM not available" | The resolved binary predates upstream PR #192. Run `scripts/build-oxdna.sh`; do not use the older v3.7.0 release package. |
 | Health check shows no H-bond count | `DNAnalysis` not found. It builds with `make … DNAnalysis`; ensure it sits next to the oxDNA binary, or set `$DNANALYSIS_BIN`. |
 | Surface deposition never reaches settle | Inspect the reported remaining-anchor count and maximum gap. The runner automatically captures arrivals and ramps the remaining anchors up to the configured ceiling; increase the window count or force ceiling only if the structure remains healthy. |
 | Deposited anchors stretch nearby backbone bonds | Use the surface-specific normal restraint (default stiffness `1.0`), not the generic immobile structure-anchor stiffness. Restart settle from the last healthy approach checkpoint if an older run used stiff traps. |

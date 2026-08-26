@@ -53,7 +53,6 @@ def stub_host_probes(monkeypatch):
     """
     for name, path in (
         ("find_oxdna", "/o/oxDNA"),
-        ("find_oxdna_anm", "/a/oxDNA"),
         ("find_dnanalysis", "/o/DNAnalysis"),
         ("find_namd", "/n/namd3"),
         ("find_gmx", "/g/gmx"),

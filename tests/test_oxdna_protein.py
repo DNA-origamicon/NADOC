@@ -56,6 +56,16 @@ def test_hybrid_header_five_fields():
     ]
 
 
+def test_hybrid_topology_passes_current_walk_staleness_guard(tmp_path):
+    """A legitimate leading protein block is not a stale DNA walk."""
+    from backend.physics.oxdna_interface import assert_topology_matches_design
+
+    design = make_6hb_design()
+    top = tmp_path / "hybrid.top"
+    top.write_text(hybrid_topology_text(design, [_chain_block(5)]))
+    assert_topology_matches_design(top, design)
+
+
 def test_protein_lines_first_then_dna_shifted():
     design = make_6hb_design()
     rows, _ = topology_rows(design)
@@ -314,29 +324,31 @@ def test_render_hybrid_emits_dnanm_and_parfile():
     assert "parfile = anm.par" in txt
 
 
-def test_render_hybrid_relax_emits_relax_type():
+def test_render_hybrid_relax_uses_upstream_dnanm():
     from backend.core.oxdna_protocol import render_stage_input
 
     txt = render_stage_input(
         _spec(
-            interaction="DNANM_relax", parfile="anm.par", relax_type="harmonic_force"
+            interaction="DNANM",
+            parfile="anm.par",
+            backend="CUDA",
         ),
         "t.top",
         "c.dat",
     )
-    assert "interaction_type = DNANM_relax" in txt
-    assert "relax_type = harmonic_force" in txt
+    assert "interaction_type = DNANM" in txt
+    assert "relax_type" not in txt
 
 
 def test_render_hybrid_mc_gets_refresh_vel():
-    # The anm-oxdna fork makes refresh_vel mandatory even for MC.
+    # DNANM MC inputs retain refresh_vel compatibility.
     from backend.core.oxdna_protocol import render_stage_input
 
     mc = _spec(
         name="1_mc",
         kind="mc",
         sim_type="MC",
-        interaction="DNANM_relax",
+        interaction="DNANM",
         parfile="anm.par",
     )
     txt = render_stage_input(mc, "t.top", "c.dat")
@@ -347,24 +359,6 @@ def test_render_hybrid_mc_gets_refresh_vel():
 
 
 # ── binary discovery ────────────────────────────────────────────────────────────
-
-
-def test_find_oxdna_anm_honors_env_override(monkeypatch, tmp_path):
-    from backend.core import oxdna_runner
-
-    fake = tmp_path / "oxDNA"
-    fake.write_text("#!/bin/sh\n")
-    fake.chmod(0o755)
-    monkeypatch.setenv("OXDNA_ANM_BIN", str(fake))
-    assert oxdna_runner.find_oxdna_anm() == str(fake)
-
-
-def test_find_oxdna_anm_none_when_absent(monkeypatch):
-    from backend.core import oxdna_runner
-
-    monkeypatch.setenv("OXDNA_ANM_BIN", "/nonexistent/oxDNA")
-    monkeypatch.setattr(oxdna_runner, "_OXDNA_ANM_CANDIDATES", ["/also/nonexistent"])
-    assert oxdna_runner.find_oxdna_anm() is None
 
 
 # ── Phase 4: runner integration (prepare_oxdna_job hybrid path) ─────────────────
@@ -441,32 +435,39 @@ def test_prepare_writes_hybrid_files_with_offset_traps(tmp_path):
     assert "type = trap" in forces
 
 
-def test_prepare_stages_select_dnanm_and_fork():
+def test_prepare_stages_select_upstream_dnanm():
     from backend.core.oxdna_protocol import build_relaxation_stages
 
     specs = build_relaxation_stages(protein=True)
-    assert specs[0].interaction == "DNANM_relax" and specs[0].parfile == "anm.par"
-    assert specs[2].interaction == "DNANM"  # equil = plain DNANM
+    assert all(s.interaction == "DNANM" and s.parfile == "anm.par" for s in specs)
     # DNA-only stays mainline
     dna = build_relaxation_stages(protein=False)
     assert all(s.interaction is None and s.parfile is None for s in dna)
 
 
+def test_hybridize_sampling_stage_keeps_protein_contract():
+    from backend.core.oxdna_protocol import build_production_stage, hybridize_stage
+
+    spec = hybridize_stage(build_production_stage(steps=1000), protein=True)
+    assert spec.interaction == "DNANM"
+    assert spec.parfile == "anm.par"
+
+
 @pytest.mark.skipif(
     __import__(
-        "backend.core.oxdna_runner", fromlist=["find_oxdna_anm"]
-    ).find_oxdna_anm()
+        "backend.core.oxdna_runner", fromlist=["find_oxdna"]
+    ).find_oxdna()
     is None,
-    reason="ANM-oxDNA fork binary not built",
+    reason="upstream oxDNA binary not built",
 )
-def test_prepared_hybrid_job_runs_on_fork(tmp_path):
-    """The job dir prepare_oxdna_job writes is loadable + runnable by the fork."""
+def test_prepared_hybrid_job_runs_on_upstream(tmp_path):
+    """The prepared hybrid job is loadable by upstream oxDNA."""
     import subprocess
 
     from backend.api.crud import _geometry_for_design
     from backend.core.oxdna_job import new_oxdna_job
     from backend.core.oxdna_protocol import build_relaxation_stages, render_stage_input
-    from backend.core.oxdna_runner import find_oxdna_anm, prepare_oxdna_job
+    from backend.core.oxdna_runner import find_oxdna, prepare_oxdna_job
 
     design = _protein_design()
     geometry = _geometry_for_design(design)
@@ -490,7 +491,7 @@ def test_prepared_hybrid_job_runs_on_fork(tmp_path):
     )
     (stage / "input.txt").write_text(inp)
     r = subprocess.run(
-        [find_oxdna_anm(), str(stage / "input.txt")],
+        [find_oxdna(), str(stage / "input.txt")],
         cwd=stage,
         capture_output=True,
         text=True,
@@ -549,6 +550,48 @@ def test_base_pair_retention_on_hybrid_conf(tmp_path):
     full_map = read_configuration_full(hybrid, design)
     frac, total = base_pair_retention(design, full_map)
     assert total > 0 and 0.0 <= frac <= 1.0  # resolves DNA pairs, no crash
+
+
+def test_hybrid_trajectory_and_flex_map_ignore_leading_protein_particles(tmp_path):
+    """The shared trajectory/RMSF readers keep nucleotide identities aligned when
+    protein beads lead every DNANM frame; protein motion must not become DNA motion."""
+    from backend.api.crud import _geometry_for_design
+    from backend.core.oxdna_health import composite_trajectory, production_rmsf
+    from backend.physics.oxdna_protein import hybrid_configuration_text
+
+    design = _protein_design()
+    geometry = _geometry_for_design(design)
+    beads0 = _chain_block(5, x0=2.0, step=0.38)
+    beads1 = [
+        ProteinBead(
+            index=b.index,
+            aa=b.aa,
+            chain_id=b.chain_id,
+            res_seq=b.res_seq,
+            pos_nm=b.pos_nm + np.array([1.0, 0.0, 0.0]),
+            prev_index=b.prev_index,
+        )
+        for b in beads0
+    ]
+    frame0 = hybrid_configuration_text(design, geometry, [beads0])
+    frame1 = hybrid_configuration_text(design, geometry, [beads1])
+    ref = tmp_path / "hybrid_ref.dat"
+    traj = tmp_path / "hybrid_trajectory.dat"
+    ref.write_text(frame0)
+    traj.write_text(frame0 + frame1)
+
+    flex = production_rmsf(design, traj, ref, align=False)
+    assert flex["ready"] is True
+    assert flex["n_frames"] == 2
+    assert flex["max_rmsf"] == pytest.approx(0.0, abs=1e-6)
+
+    composite = composite_trajectory(
+        design, [("production", "production", traj)], ref, align=False
+    )
+    assert composite["n_frames"] == 3  # prepended reference + two written frames
+    assert composite["n_nucleotides"] == len(composite["keys"])
+    assert all(len(frame) == len(composite["keys"]) * 9 for frame in composite["frames"])
+    assert composite["frames"][1] == pytest.approx(composite["frames"][2], abs=1e-6)
 
 
 # ── Phase 4b: protein display transform (Kabsch recovery) ───────────────────────

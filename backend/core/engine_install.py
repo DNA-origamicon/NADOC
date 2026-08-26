@@ -23,7 +23,7 @@ from pathlib import Path
 
 from backend.core import engines
 from backend.core.mrdna_bridge import find_mrdna
-from backend.core.oxdna_runner import find_lammps, find_oxdna, find_oxdna_anm
+from backend.core.oxdna_runner import find_lammps, find_oxdna
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _OXDNA_DIR = os.path.expanduser("~/oxDNA")
@@ -70,22 +70,13 @@ def install_steps(engine_key: str, gpu: dict, tools: dict) -> list[dict]:
     cuda = gpu.get("present")
 
     if engine_key == "oxdna":
-        build = os.path.join(_OXDNA_DIR, "build")
-        cmake = ["cmake", ".."]
-        if cuda:
-            cmake += ["-DCUDA=ON", f"-DCMAKE_CUDA_ARCHITECTURES={arch}"]
+        env = {"OXDNA_CUDA_ARCH": str(arch)} if cuda else {"NADOC_OXDNA_CPU_ONLY": "1"}
         return [
             {
-                "label": "Downloading oxDNA (git clone)",
-                "cwd": os.path.expanduser("~"),
-                "argv": ["git", "clone", engines.OXDNA_REPO, _OXDNA_DIR],
-                "skip_if_dir": _OXDNA_DIR,
-            },
-            {"label": "Configuring (cmake)", "cwd": build, "argv": cmake},
-            {
-                "label": "Compiling (make) — this can take several minutes",
-                "cwd": build,
-                "argv": ["make", f"-j{os.cpu_count() or 2}", "oxDNA", "DNAnalysis"],
+                "label": "Building pinned upstream oxDNA — several minutes",
+                "cwd": str(_PROJECT_ROOT),
+                "argv": ["bash", engines.OXDNA_BUILD_SCRIPT],
+                "env": env,
             },
         ]
 
@@ -137,17 +128,6 @@ def install_steps(engine_key: str, gpu: dict, tools: dict) -> list[dict]:
             },
         ]
 
-    if engine_key == "oxdna_anm":
-        env = {"OXDNA_CUDA_ARCH": str(arch)} if cuda else {}
-        return [
-            {
-                "label": "Building ANM-oxDNA (clone + patch + compile) — several minutes",
-                "cwd": str(_PROJECT_ROOT),
-                "argv": ["bash", engines.ANM_OXDNA_BUILD_SCRIPT],
-                "env": env,
-            },
-        ]
-
     if engine_key == "mrdna":
         # Pure Python (git clone + patch + editable install) — no GPU, no compile.
         return [
@@ -166,7 +146,6 @@ def install_steps(engine_key: str, gpu: dict, tools: dict) -> list[dict]:
 def _verify(engine_key: str) -> str | None:
     return {
         "oxdna": find_oxdna,
-        "oxdna_anm": find_oxdna_anm,
         "mrdna": find_mrdna,
         "lammps_oxdna": find_lammps,
     }[engine_key]()

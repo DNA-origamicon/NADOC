@@ -2,7 +2,7 @@
 
 NADOC's **core** (design, editing, validation, geometry, exports) needs **no**
 external tools — `./setup.sh` installs everything for that. This page is only for
-the **heavy simulation back-ends** (oxDNA, the ANM-oxDNA fork, NAMD, GROMACS,
+the **heavy simulation back-ends** (oxDNA, NAMD, GROMACS,
 mrdna), which you install yourself, once per machine.
 
 Every external binary is found the same way:
@@ -25,8 +25,7 @@ This is the single source of truth for these variables. The per-tool guides
 
 | Variable | Tool | Overrides | If unset, NADOC looks for… |
 |---|---|---|---|
-| `OXDNA_BIN` | oxDNA (mainline) | path to the `oxDNA` binary | `oxDNA` on PATH → `~/oxDNA/build/bin/oxDNA` → `~/Applications/oxDNA/build/bin/oxDNA` |
-| `OXDNA_ANM_BIN` | ANM-oxDNA fork (`DNANM`, protein-DNA) | path to the fork's `oxDNA` binary | `~/anm-oxdna/oxDNA/build_cuda/bin/oxDNA` (CUDA) → `…/build/bin/oxDNA` (CPU) |
+| `OXDNA_BIN` | upstream oxDNA (DNA/RNA/DNANM) | path to the `oxDNA` binary | managed NADOC build → `oxDNA` on PATH → conventional `~/oxDNA` builds |
 | `DNANALYSIS_BIN` | `DNAnalysis` (H-bond health oracle) | path to `DNAnalysis` | sibling of the resolved oxDNA binary → `DNAnalysis` on PATH |
 | `OXDNA_DEVICE` | oxDNA CUDA device id | default GPU index | `0` |
 | `NADOC_NAMD_BIN` | NAMD 3 | path to `namd3` | `namd3` on PATH → `~/Applications/NAMD_*/namd3` (CUDA build preferred; CPU build used for GBIS) |
@@ -52,8 +51,7 @@ Put the binaries here and NADOC auto-detects them:
 
 | Tool | Conventional location |
 |---|---|
-| oxDNA (mainline) | `~/oxDNA/build/bin/oxDNA` |
-| ANM-oxDNA fork | `~/anm-oxdna/oxDNA/build_cuda/bin/oxDNA` (CUDA), `…/build/bin/oxDNA` (CPU) |
+| oxDNA | `~/.local/share/nadoc/engines/oxdna/current/bin/oxDNA` (preferred), or `~/oxDNA/build/bin/oxDNA` |
 | NAMD 3 + psfgen | `~/Applications/NAMD_*/` (any version; the `*-CUDA` build is preferred) |
 | mrdna | `~/mrdna-tool` (or `$MRDNA_TOOL_PATH`) |
 
@@ -92,7 +90,7 @@ To see which binaries NADOC currently finds on this machine:
 
 ```bash
 uv run python -c "
-from backend.core.oxdna_runner import find_oxdna, find_oxdna_anm, find_dnanalysis
+from backend.core.oxdna_runner import find_oxdna, find_dnanalysis
 from backend.core.namd_runner import find_namd, find_gmx
 from backend.core.namd_topology import find_psfgen
 from backend.core.mrdna_bridge import mrdna_tool_path
@@ -100,7 +98,6 @@ def show(name, fn):
     try: print(f'{name:12} {fn() or \"(not found)\"}')
     except Exception as e: print(f'{name:12} (not found: {e})')
 show('oxDNA',     find_oxdna)
-show('oxDNA-ANM', find_oxdna_anm)
 show('DNAnalysis',find_dnanalysis)
 show('namd3',     find_namd)
 show('psfgen',    find_psfgen)
@@ -132,7 +129,7 @@ declines and shows the manual commands) — nothing is actually cloned or compil
 NADOC_ENGINES_FORCE_MISSING=oxdna,namd,gromacs just dev
 ```
 
-Engine keys: `oxdna`, `oxdna_anm`, `namd`, `gromacs`, `psfgen`, `dnanalysis`.
+Engine keys include `oxdna`, `namd`, `gromacs`, `psfgen`, and `dnanalysis`.
 
 ### 2. Test the *real* build on a genuinely clean machine
 

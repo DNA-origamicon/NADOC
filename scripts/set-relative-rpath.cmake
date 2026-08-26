@@ -1,0 +1,8 @@
+if(NOT DEFINED BINARY OR NOT DEFINED OLD_RPATH)
+  message(FATAL_ERROR "BINARY and OLD_RPATH are required")
+endif()
+file(RPATH_CHANGE
+  FILE "${BINARY}"
+  OLD_RPATH "${OLD_RPATH}"
+  NEW_RPATH "$ORIGIN/../lib"
+)

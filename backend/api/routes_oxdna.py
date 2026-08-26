@@ -46,6 +46,7 @@ from backend.core.oxdna_job import OxdnaJob, OxdnaStatus, new_oxdna_job
 from backend.core.oxdna_protocol import (
     build_field_stage,
     build_production_stage,
+    hybridize_stage,
     build_relaxation_stages,
     build_run_stage,
     build_surface_deposition_stages,
@@ -55,12 +56,12 @@ from backend.core.oxdna_runner import (
     _latest_relaxed_conf,
     _load_snapshot_design,
     find_oxdna,
-    find_oxdna_anm,
     is_running,
     job_progress,
     load_stage_specs,
     oxdna_available,
     oxdna_supports_cuda,
+    oxdna_supports_dnanm,
     prepare_oxdna_job,
     reconcile_oxdna_status,
     start_job,
@@ -794,26 +795,37 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         surface_in or anchors_in or surface_anchors_in or surface_strands_in
     )
 
-    # Proteins present → an ANM-oxDNA (DNANM) hybrid run on the fork binary.
+    # Current upstream oxDNA supports DNANM protein-DNA hybrids directly.
     from backend.physics.oxdna_protein import has_proteins
 
     protein = has_proteins(design)
+
+    if protein:
+        run_bin = find_oxdna()
+        if run_bin and not oxdna_supports_dnanm(run_bin):
+            raise HTTPException(
+                400,
+                "This design contains proteins, but the resolved oxDNA binary "
+                "predates upstream DNANM support. Run `bash scripts/build-oxdna.sh` "
+                "or set $OXDNA_BIN to a compatible upstream build.",
+            )
 
     # Fail fast on the classic broken state: a CUDA run requested but the binary
     # NADOC resolved is CPU-only (e.g. a conda/apt oxDNA on PATH).  oxDNA would
     # otherwise run the cheap MC stage and only abort the long MD stage with the
     # cryptic "Backend 'CUDA' not supported".  Point the user at the fix instead.
     if body.backend == "CUDA":
-        run_bin = find_oxdna_anm() if protein else find_oxdna()
+        run_bin = find_oxdna()
         if run_bin and not oxdna_supports_cuda(run_bin):
-            engine = "ANM-oxDNA" if protein else "oxDNA"
+            engine = "oxDNA"
+            override = "OXDNA_BIN"
+            build_hint = "run `bash scripts/build-oxdna.sh` from the NADOC directory"
             raise HTTPException(
                 400,
                 f"GPU (CUDA) run requested but the {engine} binary NADOC resolved "
                 f"({run_bin}) is CPU-only — it has no CUDA backend, so the MD stage "
-                f"would fail. Build a CUDA-enabled oxDNA (MD Engines panel → install, "
-                f"or `cmake .. -DCUDA=ON -DCMAKE_CUDA_ARCHITECTURES=<arch>` in "
-                f"~/oxDNA/build), or set $OXDNA_BIN to an existing CUDA build. To run "
+                f"would fail. Use MD Engines → install, {build_hint}, or set "
+                f"${override} to an existing CUDA build. To run "
                 f"on CPU anyway (much slower), choose the CPU backend.",
             )
 
@@ -1000,15 +1012,7 @@ async def get_oxdna_error_log(job_id: str) -> dict:
         else:
             log_text = "(no oxDNA log was written for this stage)"
 
-    # Hybrid (protein) jobs run on the ANM fork binary; detect from the snapshot.
-    protein = False
-    try:
-        from backend.physics.oxdna_protein import has_proteins
-
-        protein = has_proteins(_load_snapshot_design(job.job_dir(ws)))
-    except Exception:
-        protein = False
-    run_bin = find_oxdna_anm() if protein else find_oxdna()
+    run_bin = find_oxdna()
     return {
         "job_id": job_id,
         "status": job.status.value if hasattr(job.status, "value") else str(job.status),
@@ -1160,6 +1164,7 @@ async def append_oxdna_production(job_id: str, body: ProductionRequest) -> dict:
         device=job.device,
         salt_concentration=job.salt_concentration,
     )
+    prod = hybridize_stage(prod, protein=any(s.parfile for s in specs))
     specs.append(prod)
 
     # Persist the extended spec list + append the stage status; resume into it.
@@ -1251,6 +1256,9 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
         device=parent.device,
         salt_concentration=parent.salt_concentration,
     )
+    from backend.physics.oxdna_protein import has_proteins
+
+    stage = hybridize_stage(stage, protein=has_proteins(design))
     child = new_oxdna_job(
         design_name=f"{parent.design_name} · field",
         stages=[stage.to_status()],
@@ -1398,6 +1406,9 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
         salt_concentration=parent.salt_concentration,
         steps_per_frame=body.steps_per_frame,
     )
+    from backend.physics.oxdna_protein import has_proteins
+
+    stage = hybridize_stage(stage, protein=has_proteins(design))
 
     label = (
         " · ".join(
@@ -1554,6 +1565,11 @@ async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) 
         equil_steps=body.equil_steps,
         steps_per_frame=body.steps_per_frame,
     )
+    from backend.physics.oxdna_protein import has_proteins
+
+    stages = [
+        hybridize_stage(stage, protein=has_proteins(design)) for stage in stages
+    ]
     stages[2].forces_meta.update(
         {
             "wall": wall,

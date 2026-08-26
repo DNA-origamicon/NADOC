@@ -31,38 +31,13 @@ def _gpu(present, arch="75"):
 
 def test_oxdna_cpu_steps_no_cuda_flag():
     steps = ei.install_steps("oxdna", _gpu(False), {})
-    cmake = next(s for s in steps if s["label"].startswith("Configuring"))
-    assert cmake["argv"] == ["cmake", ".."]
-    # clone step is idempotent on the conventional dir
-    clone = steps[0]
-    assert clone["skip_if_dir"].endswith("oxDNA")
-    assert clone["argv"][0:2] == ["git", "clone"]
+    assert steps[0]["argv"] == ["bash", "scripts/build-oxdna.sh"]
+    assert steps[0]["env"] == {"NADOC_OXDNA_CPU_ONLY": "1"}
 
 
 def test_oxdna_gpu_steps_add_cuda_arch():
     steps = ei.install_steps("oxdna", _gpu(True, arch="86"), {})
-    cmake = next(s for s in steps if s["label"].startswith("Configuring"))
-    assert "-DCUDA=ON" in cmake["argv"]
-    assert "-DCMAKE_CUDA_ARCHITECTURES=86" in cmake["argv"]
-
-
-def test_oxdna_builds_into_conventional_build_dir():
-    """Must build into ~/oxDNA/build so find_oxdna() detects it afterward."""
-    steps = ei.install_steps("oxdna", _gpu(False), {})
-    make = next(s for s in steps if s["label"].startswith("Compiling"))
-    assert make["cwd"] == os.path.join(os.path.expanduser("~/oxDNA"), "build")
-
-
-def test_anm_runs_build_script_with_arch_env_on_gpu():
-    steps = ei.install_steps("oxdna_anm", _gpu(True, arch="75"), {})
-    assert len(steps) == 1
-    assert steps[0]["argv"] == ["bash", "scripts/build-anm-oxdna.sh"]
-    assert steps[0]["env"] == {"OXDNA_CUDA_ARCH": "75"}
-
-
-def test_anm_no_arch_env_without_gpu():
-    steps = ei.install_steps("oxdna_anm", _gpu(False), {})
-    assert steps[0]["env"] == {}
+    assert steps[0]["env"] == {"OXDNA_CUDA_ARCH": "86"}
 
 
 def test_mrdna_runs_setup_script_gpu_independent():
@@ -168,7 +143,7 @@ def test_run_install_success_streams_progress_and_completes(monkeypatch):
     assert "progress" in types and "complete" in types
     assert rec.msgs[-1] == {"type": "complete", "engine": "oxdna", "path": path}
     assert any(m.get("pct") == 100 for m in rec.msgs if m["type"] == "progress")
-    assert len(calls) == 3  # clone + cmake + make all streamed
+    assert len(calls) == 1  # canonical build script owns clone/configure/compile
 
 
 def test_run_install_mrdna_streams_and_completes(monkeypatch):
@@ -263,22 +238,15 @@ def test_stream_emits_interpolated_progress_from_output(monkeypatch):
     assert pcts == [50, 75, 100]
 
 
-def test_run_install_interpolates_build_percent_onto_step_slice(monkeypatch):
+def test_run_install_forwards_build_percent(monkeypatch):
     """A ``[ 50%]`` compile line during the last of 3 steps must land at ~83%
     overall ([66%..100%] slice), so the bar climbs *within* the compile."""
 
     async def pct_stream(argv, cwd, env, send, *, stage="", base=0.0, span=0.0):
-        # emit a mid-build make percent only on the compile (3rd) step
-        if "make" in argv[0] or argv[0] == "cmake" and "--build" in argv:
-            await send({"type": "log", "line": "[ 50%] Building CXX object x.o"})
-            inner = ei.parse_build_progress("[ 50%] Building CXX object x.o")
-            await send(
-                {
-                    "type": "progress",
-                    "stage": stage,
-                    "pct": round(base + span * inner / 100),
-                }
-            )
+        await send({"type": "log", "line": "[ 50%] Building CXX object x.o"})
+        inner = ei.parse_build_progress("[ 50%] Building CXX object x.o")
+        await send({"type": "progress", "stage": stage,
+                    "pct": round(base + span * inner / 100)})
         return 0
 
     monkeypatch.setattr(ei, "_stream", pct_stream)
@@ -288,5 +256,4 @@ def test_run_install_interpolates_build_percent_onto_step_slice(monkeypatch):
     rec = _Recorder()
     asyncio.run(ei.run_install("oxdna", rec))
     pcts = [m["pct"] for m in rec.msgs if m["type"] == "progress"]
-    # 3 steps → slice width 33.3; step 3 base=66.6, +50% of 33.3 ≈ 83
-    assert any(80 <= p <= 86 for p in pcts), pcts
+    assert 50 in pcts, pcts
