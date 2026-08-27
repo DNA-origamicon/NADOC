@@ -61,6 +61,7 @@ from backend.core.oxdna_runner import (
     job_progress,
     load_stage_specs,
     oxdna_available,
+    oxdna_build_flavor,
     oxdna_supports_cuda,
     oxdna_supports_dnanm,
     prepare_oxdna_job,
@@ -179,6 +180,10 @@ def _seed_geometry(design) -> list[dict]:
 class CreateOxdnaJobRequest(BaseModel):
     backend: str = Field("CUDA", description="'CUDA' or 'CPU' for the MD stages")
     interaction_type: str = Field("DNA2", description="'DNA2' (oxDNA2) or 'DNA' (legacy oxDNA1)")
+    engine_variant: str = Field(
+        "auto",
+        description="Required engine capability: auto, adaptive-memory, dnanm, or upstream",
+    )
     stage_overrides: dict[str, dict] = Field(default_factory=dict)
     device: str = Field("0", description="CUDA device index")
     salt_concentration: float = Field(0.5, gt=0.0, description="Molar salt for DNA2")
@@ -723,6 +728,8 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         raise HTTPException(400, f"Unknown backend: {body.backend!r}")
     if body.interaction_type not in {"DNA2", "DNA"}:
         raise HTTPException(400, f"Unknown oxDNA interaction model: {body.interaction_type!r}")
+    if body.engine_variant not in {"auto", "adaptive-memory", "dnanm", "upstream"}:
+        raise HTTPException(400, f"Unknown oxDNA engine build: {body.engine_variant!r}")
     if find_oxdna() is None:
         raise HTTPException(
             400,
@@ -833,6 +840,22 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
                 f"${override} to an existing CUDA build. To run "
                 f"on CPU anyway (much slower), choose the CPU backend.",
             )
+    run_bin = find_oxdna()
+    if body.engine_variant == "adaptive-memory" and (
+        not run_bin or oxdna_build_flavor(run_bin) != "adaptive-memory"
+    ):
+        raise HTTPException(
+            400,
+            "NADOC adaptive-memory oxDNA was selected, but the resolved local binary "
+            "is not an adaptive-memory build. Build it with scripts/build-oxdna.sh.",
+        )
+    if body.engine_variant == "dnanm" and (
+        not run_bin or not oxdna_supports_dnanm(run_bin)
+    ):
+        raise HTTPException(
+            400,
+            "Protein-capable DNANM oxDNA was selected, but the resolved binary has no DNANM support.",
+        )
 
     specs = build_relaxation_stages(
         mc_steps=body.mc_steps,
@@ -867,6 +890,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
             "kind": "relax",
             "backend": body.backend,
             "interaction_type": body.interaction_type,
+            "engine_variant": body.engine_variant,
             "stage_overrides": body.stage_overrides,
             "device": body.device,
             "salt_concentration": body.salt_concentration,

@@ -17,6 +17,13 @@ const FIELDS = [
   { key: 'max_relax_retries', label: 'Escalating MD retries', type: 'number', min: 0, max: 3, step: 1, help: 'Retries a stuck backbone with longer runs and stronger force caps.' },
 ]
 
+const ENGINE_VARIANTS = [
+  ['auto', 'Automatic', 'Choose the compatible build from the design and execution target.'],
+  ['adaptive-memory', 'NADOC adaptive-memory', 'CUDA build for very large assemblies with compact adaptive neighbour lists.'],
+  ['dnanm', 'Protein-capable DNANM', 'Hybrid DNA–protein build with the DNANM interaction model.'],
+  ['upstream', 'Standard upstream oxDNA', 'General-purpose upstream engine without a required NADOC or protein extension.'],
+]
+
 const EDITABLE_STAGE_FIELDS = new Set([
   'backend', 'steps', 'temperature', 'salt_concentration', 'device', 'ensemble',
   'delta_translation', 'delta_rotation', 'dt', 'thermostat', 'bussi_tau',
@@ -46,7 +53,16 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, getIni
     const grid = el('div', { className: 'wizard-field-grid' })
     panels.settings.replaceChildren(el('details', { attrs: { open: true }, children: [
       el('summary', { text: 'Engine versions & installation' }), engineDetails,
-    ] }), grid)
+    ] }), el('h3', { text: 'Engine build' }), el('div', {
+      className: 'oxdna-engine-options', children: ENGINE_VARIANTS.map(([value, label, explanation]) => {
+        const selected = values.engine_variant === value
+        return el('button', { className: `wizard-preset${selected ? ' is-selected' : ''}`,
+          attrs: { type: 'button', 'aria-pressed': String(selected) }, on: { click: () => {
+            values.engine_variant = value; renderSettings(); renderConfig()
+          } }, children: [el('div', { className: 'wizard-preset__label', text: label }),
+            el('div', { className: 'wizard-preset__summary', text: explanation })] })
+      }),
+    }), el('h3', { text: 'Protocol options' }), grid)
     for (const field of FIELDS) {
       if (field.local && targetStep?.target !== 'local') continue
       const input = field.type === 'select' ? el('select') : el('input', { attrs: { type: field.type, min: field.min, max: field.max, step: field.step } })

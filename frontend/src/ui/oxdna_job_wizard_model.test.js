@@ -11,9 +11,9 @@ describe('oxDNA job wizard model', () => {
   })
 
   it('merges the selected hardware into the create payload', () => {
-    expect(oxdnaWizardPayload({ salt_concentration: .25 }, {
+    expect(oxdnaWizardPayload({ salt_concentration: .25, engine_variant: 'adaptive-memory' }, {
       execution_target: 'runpod', runpod_gpu_key: 'NVIDIA H200', runpod_budget_usd: 5,
-    })).toMatchObject({ salt_concentration: .25, execution_target: 'runpod', runpod_gpu_key: 'NVIDIA H200', runpod_budget_usd: 5 })
+    })).toMatchObject({ salt_concentration: .25, engine_variant: 'adaptive-memory', execution_target: 'runpod', runpod_gpu_key: 'NVIDIA H200', runpod_budget_usd: 5 })
   })
 
   it('prints every stage and resolved control in the final document', () => {

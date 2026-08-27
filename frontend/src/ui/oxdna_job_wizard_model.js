@@ -1,6 +1,7 @@
 const DEFAULTS = Object.freeze({
   backend: 'CUDA', device: '0', salt_concentration: 0.5,
   interaction_type: 'DNA2',
+  engine_variant: 'auto',
   mc_steps: 1000, md_relax_steps: 1_000_000, equil_steps: 100_000,
   min_bp_retained: 0.5, max_relax_retries: 3,
 })
@@ -41,6 +42,7 @@ export function applyOxdnaStageOverrides(stages, overrides = {}) {
 export function oxdnaWizardPayload(values, targetFields = {}) {
   const v = oxdnaWizardDefaults(values)
   return { backend: v.backend, device: String(v.device), interaction_type: v.interaction_type,
+    engine_variant: v.engine_variant,
     salt_concentration: Number(v.salt_concentration),
     mc_steps: Number(v.mc_steps), md_relax_steps: Number(v.md_relax_steps), equil_steps: Number(v.equil_steps),
     min_bp_retained: Number(v.min_bp_retained), max_relax_retries: Number(v.max_relax_retries),
@@ -50,6 +52,7 @@ export function oxdnaWizardPayload(values, targetFields = {}) {
 export function oxdnaConfigDocument(values, targetFields = {}) {
   const payload = oxdnaWizardPayload(values, targetFields)
   const target = ['# NADOC oxDNA job', `execution_target = ${payload.execution_target || 'local'}`,
+    `engine_variant = ${payload.engine_variant}`,
     ...(payload.partition ? [`partition = ${payload.partition}`] : []),
     ...(payload.runpod_gpu_key ? [`runpod_gpu_key = ${payload.runpod_gpu_key}`] : []),
     `max_relax_retries = ${payload.max_relax_retries}`]
