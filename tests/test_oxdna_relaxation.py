@@ -47,6 +47,17 @@ def design():
     return make_6hb_design()
 
 
+def test_load_stage_specs_ignores_removed_fields(tmp_path):
+    """Saved jobs from older releases must not break the global job poller."""
+    from backend.core import oxdna_runner
+
+    specs = build_relaxation_stages(mc_steps=1, md_relax_steps=1, equil_steps=1)
+    payload = [{**spec.__dict__, "relax_type": "old-mode"} for spec in specs]
+    (tmp_path / "stages_spec.json").write_text(json.dumps(payload))
+
+    assert oxdna_runner.load_stage_specs(tmp_path) == specs
+
+
 @pytest.fixture
 def geometry(design):
     from backend.api.crud import _geometry_for_design

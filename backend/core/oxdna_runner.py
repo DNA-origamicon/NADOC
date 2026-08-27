@@ -29,7 +29,7 @@ import shutil
 import signal
 import threading
 import time
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, fields, replace
 from pathlib import Path
 from typing import Optional
 
@@ -578,11 +578,13 @@ def prepare_oxdna_job(
 
 
 def load_stage_specs(job_dir: Path) -> list[OxdnaStageSpec]:
-    """Reload the persisted OxdnaStageSpec list (for start/resume)."""
+    """Reload persisted stage specs, tolerating fields from older releases."""
     path = job_dir / "stages_spec.json"
     if not path.exists():
         return []
-    return [OxdnaStageSpec(**d) for d in json.loads(path.read_text())]
+    allowed = {field.name for field in fields(OxdnaStageSpec)}
+    return [OxdnaStageSpec(**{key: value for key, value in record.items() if key in allowed})
+            for record in json.loads(path.read_text())]
 
 
 def _load_snapshot_design(job_dir: Path) -> Optional[Design]:

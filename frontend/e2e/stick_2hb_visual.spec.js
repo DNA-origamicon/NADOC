@@ -50,8 +50,9 @@ test('F8 renders the 2HB as sticks without atom balls', async ({ page }) => {
     const ar = window.__nadocTest.getAtomisticRenderer()
     let strandId = null
     ar.visitAtoms(atom => { strandId ??= atom.strand_id })
+    const ref = { kind: 'strand', id: strandId }
     window.__nadocTest.store.setState({
-      selectedObject: { type: 'strand', id: strandId, data: { strand_id: strandId } },
+      selection: { context: 'design', level: 'default', items: [ref], primary: ref },
     })
     let whiteBonds = 0; let spheres = 0
     window.__nadocTest.scene.traverse(o => {

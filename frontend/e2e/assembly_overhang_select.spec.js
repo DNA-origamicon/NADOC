@@ -11,12 +11,12 @@
  * overhangs), separated in space for two unambiguous targets.
  *
  * Requires the shared renderer (default) so window.__NADOC_DBG__ is set.
- * Servers must be running (Vite :5173, FastAPI :8000).
+ * Uses the Playwright-configured isolated API backend.
  */
 
 import { test, expect } from '@playwright/test'
 
-const API    = 'http://localhost:8000'
+const API    = process.env.NADOC_E2E_API_BASE ?? 'http://127.0.0.1:8002'
 const MODE   = '#mode-indicator'
 const NASS   = 'OverhangSelTest'   // stem; file is OverhangSelTest.nass
 const SOURCE = 'Arm.nadoc'         // workspace design with labeled overhangs
@@ -48,6 +48,7 @@ const SCENE_PROBE = `(() => {
 })()`
 
 test('hover shows a label, click selects (ring + persistent label) and prefills the manager', async ({ page, request }) => {
+ test.setTimeout(90_000)
  try {
   // ── Build + save the assembly via API ───────────────────────────────────────
   expect((await request.post(`${API}/api/assembly`)).status()).toBe(201)
@@ -94,6 +95,12 @@ test('hover shows a label, click selects (ring + persistent label) and prefills 
   const corner = { x: probe0.rect.l + 5, y: probe0.rect.t + 5 }   // far from centred parts
 
   // ── Hover reveals a transient label for that instance ────────────────────────
+  // Assembly overhang picking is an explicit tool, shared with the visible
+  // toolbar's `ovhg` action and its O keyboard shortcut.
+  await page.keyboard.press('o')
+  await expect.poll(() => page.evaluate(
+    () => window.__NADOC_DBG__.store.getState().toolFilters?.overhangLocations,
+  )).toBe(true)
   await page.mouse.move(cA.sx, cA.sy)
   await page.waitForTimeout(200)
   let p = await page.evaluate(SCENE_PROBE)
