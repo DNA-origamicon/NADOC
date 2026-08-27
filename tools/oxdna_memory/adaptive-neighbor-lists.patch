@@ -26,8 +26,228 @@ index cff2a9ba..d369ef8d 100644
  		_obs_output_stdout = std::make_shared<ObservableOutput>(fake);
  		add_output(_obs_output_stdout);
  		_obs_output_stdout->add_observable("type = step");
+diff --git a/src/CUDA/Backends/MD_CUDABackend.cu b/src/CUDA/Backends/MD_CUDABackend.cu
+index 0905273a..c2de53f5 100644
+--- a/src/CUDA/Backends/MD_CUDABackend.cu
++++ b/src/CUDA/Backends/MD_CUDABackend.cu
+@@ -29,6 +29,7 @@ MD_CUDABackend::MD_CUDABackend() :
+ 	_d_vels = _d_Ls = _d_forces = _d_torques = _d_buff_vels = nullptr;
+ 	_h_vels = _h_Ls = _h_forces = _h_torques = _d_buff_Ls = nullptr;
+ 	_h_gpu_index = _h_cpu_index = nullptr;
++	_h_particle_ids = _d_particle_ids = _d_buff_particle_ids = nullptr;
+ 
+ 	_d_particles_to_mols = _d_mol_sizes = nullptr;
+ 	_d_molecular_coms = nullptr;
+@@ -52,6 +53,9 @@ MD_CUDABackend::~MD_CUDABackend() {
+ 	if(_d_particles_to_mols != nullptr) {
+ 		CUDA_SAFE_CALL(cudaFree(_d_particles_to_mols));
+ 	}
++	if(_d_particle_ids != nullptr) {
++		CUDA_SAFE_CALL(cudaFree(_d_particle_ids));
++	}
+ 
+ 	if(_d_vels != nullptr) {
+ 		CUDA_SAFE_CALL(cudaFree(_d_vels));
+@@ -68,11 +72,13 @@ MD_CUDABackend::~MD_CUDABackend() {
+ 		CUDA_SAFE_CALL(cudaFree(_d_buff_vels));
+ 		CUDA_SAFE_CALL(cudaFree(_d_buff_Ls));
+ 		CUDA_SAFE_CALL(cudaFree(_d_buff_particles_to_mols));
++		CUDA_SAFE_CALL(cudaFree(_d_buff_particle_ids));
+ 	}
+ 
+ 	if(_h_gpu_index != nullptr) {
+ 		delete[] _h_gpu_index;
+ 		delete[] _h_cpu_index;
++		delete[] _h_particle_ids;
+ 	}
+ 
+ 	if(_external_forces) {
+@@ -91,6 +97,7 @@ MD_CUDABackend::~MD_CUDABackend() {
+ 
+ void MD_CUDABackend::_host_to_gpu() {
+ 	CUDABaseBackend::_host_to_gpu();
++	CUDA_SAFE_CALL(cudaMemcpy(_d_particle_ids, _h_particle_ids, sizeof(int) * N(), cudaMemcpyHostToDevice));
+ 	CUDA_SAFE_CALL(cudaMemcpy(_d_particles_to_mols, _h_particles_to_mols.data(), sizeof(int) * N(), cudaMemcpyHostToDevice));
+ 	CUDA_SAFE_CALL(cudaMemcpy(_d_vels, _h_vels, _vec_size, cudaMemcpyHostToDevice));
+ 	CUDA_SAFE_CALL(cudaMemcpy(_d_Ls, _h_Ls, _vec_size, cudaMemcpyHostToDevice));
+@@ -98,6 +105,7 @@ void MD_CUDABackend::_host_to_gpu() {
+ 
+ void MD_CUDABackend::_gpu_to_host() {
+ 	CUDABaseBackend::_gpu_to_host();
++	CUDA_SAFE_CALL(cudaMemcpy(_h_particle_ids, _d_particle_ids, sizeof(int) * N(), cudaMemcpyDeviceToHost));
+ 	CUDA_SAFE_CALL(cudaMemcpy(_h_particles_to_mols.data(), _d_particles_to_mols, sizeof(int) * N(), cudaMemcpyDeviceToHost));
+ 	CUDA_SAFE_CALL(cudaMemcpy(_h_vels, _d_vels, _vec_size, cudaMemcpyDeviceToHost));
+ 	CUDA_SAFE_CALL(cudaMemcpy(_h_Ls, _d_Ls, _vec_size, cudaMemcpyDeviceToHost));
+@@ -239,19 +247,10 @@ void MD_CUDABackend::apply_changes_to_simulation_data() {
+ 
+ 		_h_particles_to_mols[i] = p->strand_id;
+ 
+-		// convert index and type into a float
+-		const unsigned int mask22 = 0x003FFFFF;   // bottom 22 bits
+-		// btype has a sign, and thus has to go first
+-		_h_poss[i].w = GpuUtils::int_as_float((p->btype << 22) | (mask22 & p->index));
+-		// we immediately check that the index and base type that we read are sensible
+-		int mybtype = (GpuUtils::float_as_int(_h_poss[i].w)) >> 22;
+-		int myindex = (GpuUtils::float_as_int(_h_poss[i].w)) & mask22;
+-		if(p->btype != mybtype) {
+-			throw oxDNAException("Could not treat the type (A, C, G, T or something specific) of particle %d; On CUDA, integer base types cannot be larger than 511 or smaller than -511");
+-		}
+-		if(p->index != myindex) {
+-			throw oxDNAException("Could not treat the index of particle %d; remember that on CUDA the maximum c_number of particles is 2^21", p->index);
+-		}
++		// Keep the complete signed base type in position metadata. Particle IDs
++		// live in a separate 32-bit array, removing the old 22-bit index limit.
++		_h_poss[i].w = GpuUtils::int_as_float(p->btype);
++		_h_particle_ids[i] = p->index;
+ 		
+ 		if(p->n3 == P_VIRTUAL) {
+ 			_h_bonds[i].n3 = P_INVALID;
+@@ -317,11 +316,9 @@ void MD_CUDABackend::apply_simulation_data_changes() {
+ 	_update_stress_tensor();
+ 
+ 	for(int i = 0; i < N(); i++) {
+-		// since we may have been sorted all the particles in a different order
+-		// we first take the particle index from the 4th component of its
+-		// position, and then use that index to access the right BaseParticle pointer
+-		const unsigned int mask22 = 0x003FFFFF;   // bottom 22 bits
+-		int newindex = ((GpuUtils::float_as_int(_h_poss[i].w)) & mask22);
++		// Particle IDs follow positions through Hilbert sorting in a separate
++		// 32-bit array, rather than sharing a 22-bit field with the base type.
++		int newindex = _h_particle_ids[i];
+ 		_h_gpu_index[i] = newindex;
+ 		_h_cpu_index[newindex] = i;
+ 		BaseParticle *p = _particles[newindex];
+@@ -333,21 +330,20 @@ void MD_CUDABackend::apply_simulation_data_changes() {
+ 
+ 		p->strand_id = _h_particles_to_mols[i];
+ 
+-		// get index and type from the fourth component of the position
+-		p->btype = (GpuUtils::float_as_int(_h_poss[i].w)) >> 22;
++		p->btype = GpuUtils::float_as_int(_h_poss[i].w);
+ 
+ 		if(_h_bonds[i].n3 == P_INVALID) {
+ 			p->n3 = P_VIRTUAL;
+ 		}
+ 		else {
+-			int n3index = ((GpuUtils::float_as_int(_h_poss[_h_bonds[i].n3].w)) & mask22);
++			int n3index = _h_particle_ids[_h_bonds[i].n3];
+ 			p->n3 = _particles[n3index];
+ 		}
+ 		if(_h_bonds[i].n5 == P_INVALID) {
+ 			p->n5 = P_VIRTUAL;
+ 		}
+ 		else {
+-			int n5index = ((GpuUtils::float_as_int(_h_poss[_h_bonds[i].n5].w)) & mask22);
++			int n5index = _h_particle_ids[_h_bonds[i].n5];
+ 			p->n5 = _particles[n5index];
+ 		}
+ 
+@@ -536,8 +532,8 @@ void MD_CUDABackend::_sort_particles() {
+ 	CUDABaseBackend::_sort_index();
+ 	permute_particles
+ 		<<<_particles_kernel_cfg.blocks, _particles_kernel_cfg.threads_per_block>>>
+-		(_d_sorted_hindex, _d_inv_sorted_hindex, _d_poss, _d_vels, _d_Ls, _d_orientations, _d_bonds, _d_particles_to_mols,
+-		 _d_buff_poss, _d_buff_vels, _d_buff_Ls, _d_buff_orientations, _d_buff_bonds, _d_buff_particles_to_mols);
++		(_d_sorted_hindex, _d_inv_sorted_hindex, _d_poss, _d_vels, _d_Ls, _d_orientations, _d_bonds, _d_particles_to_mols, _d_particle_ids,
++		 _d_buff_poss, _d_buff_vels, _d_buff_Ls, _d_buff_orientations, _d_buff_bonds, _d_buff_particles_to_mols, _d_buff_particle_ids);
+ 	CUT_CHECK_ERROR("_permute_particles error");
+ 	CUDA_SAFE_CALL(cudaMemcpy(_d_orientations, _d_buff_orientations, _orient_size, cudaMemcpyDeviceToDevice));
+ 
+@@ -547,6 +543,7 @@ void MD_CUDABackend::_sort_particles() {
+ 	CUDA_SAFE_CALL(cudaMemcpy(_d_vels, _d_buff_vels, _vec_size, cudaMemcpyDeviceToDevice));
+ 	CUDA_SAFE_CALL(cudaMemcpy(_d_Ls, _d_buff_Ls, _vec_size, cudaMemcpyDeviceToDevice));
+ 	CUDA_SAFE_CALL(cudaMemcpy(_d_particles_to_mols, _d_buff_particles_to_mols, sizeof(int) * N(), cudaMemcpyDeviceToDevice));
++	CUDA_SAFE_CALL(cudaMemcpy(_d_particle_ids, _d_buff_particle_ids, sizeof(int) * N(), cudaMemcpyDeviceToDevice));
+ }
+ 
+ void MD_CUDABackend::_thermalize() {
+@@ -682,6 +679,7 @@ void MD_CUDABackend::init() {
+ 	CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc<c_number4>(&_d_forces, _vec_size));
+ 	CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc<c_number4>(&_d_torques, _vec_size));
+ 	CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc<int>(&_d_particles_to_mols, sizeof(int) * N()));
++	CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc<int>(&_d_particle_ids, sizeof(int) * N()));
+ 	CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc<int>(&_d_mol_sizes, sizeof(int) * _molecules.size()));
+ 	CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc<c_number4>(&_d_molecular_coms, sizeof(c_number4) * _molecules.size()));
+ 
+@@ -708,14 +706,17 @@ void MD_CUDABackend::init() {
+ 		CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc<c_number4>(&_d_buff_vels, _vec_size));
+ 		CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc<c_number4>(&_d_buff_Ls, _vec_size));
+ 		CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc<int>(&_d_buff_particles_to_mols, sizeof(int) * N()));
++		CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc<int>(&_d_buff_particle_ids, sizeof(int) * N()));
+ 	}
+ 
+ 	// these values are changed only if the curve sorting is enabled
+ 	_h_gpu_index = new int[N()];
+ 	_h_cpu_index = new int[N()];
++	_h_particle_ids = new int[N()];
+ 	for(int i = 0; i < N(); i++) {
+ 		_h_gpu_index[i] = i;
+ 		_h_cpu_index[i] = i;
++		_h_particle_ids[i] = i;
+ 	}
+ 
+ 	for(int i = 0; i < N(); i++) {
+diff --git a/src/CUDA/Backends/MD_CUDABackend.h b/src/CUDA/Backends/MD_CUDABackend.h
+index b1b20641..0969cd2e 100644
+--- a/src/CUDA/Backends/MD_CUDABackend.h
++++ b/src/CUDA/Backends/MD_CUDABackend.h
+@@ -33,6 +33,7 @@ protected:
+ 	bool _avoid_cpu_calculations;
+ 
+ 	int *_h_gpu_index, *_h_cpu_index;
++	int *_h_particle_ids, *_d_particle_ids, *_d_buff_particle_ids;
+ 
+ 	std::shared_ptr<Timer> _timer_sorting;
+ 
+diff --git a/src/CUDA/CUDA_sort.cu b/src/CUDA/CUDA_sort.cu
+index b7f7c3bd..969623af 100644
+--- a/src/CUDA/CUDA_sort.cu
++++ b/src/CUDA/CUDA_sort.cu
+@@ -143,7 +143,7 @@ __global__ void hilbert_curve(const c_number4 *poss, int *hindex) {
+ 	hindex[IND] = code;
+ }
+ 
+-__global__ void permute_particles(int *sorted_hindex, int *inv_sorted_hindex, c_number4 *poss, c_number4 *vels, c_number4 *Ls, GPU_quat *orientations, LR_bonds *bonds, int *particles_to_mols, c_number4 *buff_poss, c_number4 *buff_vels, c_number4 *buff_Ls, GPU_quat *buff_orientations, LR_bonds *buff_bonds, int *buff_particles_to_mols) {
++__global__ void permute_particles(int *sorted_hindex, int *inv_sorted_hindex, c_number4 *poss, c_number4 *vels, c_number4 *Ls, GPU_quat *orientations, LR_bonds *bonds, int *particles_to_mols, int *particle_ids, c_number4 *buff_poss, c_number4 *buff_vels, c_number4 *buff_Ls, GPU_quat *buff_orientations, LR_bonds *buff_bonds, int *buff_particles_to_mols, int *buff_particle_ids) {
+ 	if(IND >= hilb_N[0]) return;
+ 
+ 	const int j = sorted_hindex[IND];
+@@ -163,6 +163,7 @@ __global__ void permute_particles(int *sorted_hindex, int *inv_sorted_hindex, c_
+ 	buff_vels[IND] = vels[j];
+ 	buff_Ls[IND] = Ls[j];
+ 	buff_particles_to_mols[IND] = particles_to_mols[j];
++	buff_particle_ids[IND] = particle_ids[j];
+ }
+ 
+ __global__ void permute_particles(int *sorted_hindex, c_number4 *poss, c_number4 *vels, c_number4 *buff_poss, c_number4 *buff_vels) {
+diff --git a/src/CUDA/CUDA_sort.cuh b/src/CUDA/CUDA_sort.cuh
+index 9f4ed731..af2842b9 100644
+--- a/src/CUDA/CUDA_sort.cuh
++++ b/src/CUDA/CUDA_sort.cuh
+@@ -21,7 +21,7 @@ __global__ void permute_particles(int *sorted_hindex, c_number4 *poss, c_number4
+ __global__ void permute_particles(int *sorted_hindex, c_number4 *poss, c_number4 *buff_poss);
+ 
+ 
+-__global__ void permute_particles(int *sorted_hindex, int *inv_sorted_hindex, c_number4 *poss, c_number4 *vels, c_number4 *Ls, GPU_quat *orientations, LR_bonds *bonds, int *particles_to_mols, c_number4 *buff_poss, c_number4 *buff_vels, c_number4 *buff_Ls, GPU_quat *buff_orientations, LR_bonds *buff_bonds, int *buff_particles_to_mols);
++__global__ void permute_particles(int *sorted_hindex, int *inv_sorted_hindex, c_number4 *poss, c_number4 *vels, c_number4 *Ls, GPU_quat *orientations, LR_bonds *bonds, int *particles_to_mols, int *particle_ids, c_number4 *buff_poss, c_number4 *buff_vels, c_number4 *buff_Ls, GPU_quat *buff_orientations, LR_bonds *buff_bonds, int *buff_particles_to_mols, int *buff_particle_ids);
+ __global__ void get_inverted_sorted_hindex(int *sorted_hindex, int *inv_sorted_hindex);
+ __global__ void reset_sorted_hindex(int *sorted_hindex);
+ 
+diff --git a/src/CUDA/Forces/metad_forces.cuh b/src/CUDA/Forces/metad_forces.cuh
+index dd500b23..c816abf9 100644
+--- a/src/CUDA/Forces/metad_forces.cuh
++++ b/src/CUDA/Forces/metad_forces.cuh
+@@ -375,8 +375,6 @@ __device__ inline void get_pair_force_torque_contribution(const lt_coordination
+     const c_number4 &rhydro, const c_number4 &ppos, const c_number4 &a1, const c_number4 &a3, const c_number4 &qpos, 
+     const c_number4 &b1, const c_number4 &b3, c_number4 &force, c_number4 &torque) {
+ 
+-    int p_idx = get_particle_index(ppos);
+-    int q_idx = get_particle_index(qpos);
+     // Handle different coordination modes
+ 	switch(coord->coord_mode) {
+ 		case meta::CoordSettings::CoordMode::HB_ENERGY: {
 diff --git a/src/CUDA/Lists/CUDASimpleVerletList.cu b/src/CUDA/Lists/CUDASimpleVerletList.cu
-index 7a716a42..485ba60f 100644
+index 7a716a42..6c39b6b2 100644
 --- a/src/CUDA/Lists/CUDASimpleVerletList.cu
 +++ b/src/CUDA/Lists/CUDASimpleVerletList.cu
 @@ -32,15 +32,20 @@ CUDASimpleVerletList::~CUDASimpleVerletList() {
@@ -135,7 +355,18 @@ index 7a716a42..485ba60f 100644
  		CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc(&_d_number_neighs_no_doubles, (size_t ) (_N + 1) * sizeof(int)));
  	}
  
-@@ -230,7 +258,24 @@ std::vector<int> CUDASimpleVerletList::is_large(c_number4 *data) {
+@@ -221,7 +249,9 @@ std::vector<int> CUDASimpleVerletList::is_large(c_number4 *data) {
+ 	std::vector<int> large_ids;
+ 	for(unsigned int idx = 0; idx < h_is_large.size(); idx++) {
+ 		if(h_is_large[idx]) {
+-			large_ids.push_back(get_particle_index_host(h_data[idx]));
++			// Particle identity is stored separately from position metadata. This
++			// diagnostic only has positions, so report the current device slot.
++			large_ids.push_back(idx);
+ 		}
+ 	}
+ 
+@@ -230,7 +260,24 @@ std::vector<int> CUDASimpleVerletList::is_large(c_number4 *data) {
  
  void CUDASimpleVerletList::update(c_number4 *poss, c_number4 *list_poss, LR_bonds *bonds) {
  	_init_cells(poss);
@@ -161,7 +392,7 @@ index 7a716a42..485ba60f 100644
  
  	// fill cells
  	simple_fill_cells
-@@ -261,19 +306,43 @@ void CUDASimpleVerletList::update(c_number4 *poss, c_number4 *list_poss, LR_bond
+@@ -261,19 +308,43 @@ void CUDASimpleVerletList::update(c_number4 *poss, c_number4 *list_poss, LR_bond
  		}
  		throw oxDNAException(message);
  	}
@@ -206,7 +437,7 @@ index 7a716a42..485ba60f 100644
  		// get edge list from matrix_neighs
  		compress_matrix_neighs
  			<<<_cells_kernel_cfg.blocks, _cells_kernel_cfg.threads_per_block>>>
-@@ -283,7 +352,7 @@ void CUDASimpleVerletList::update(c_number4 *poss, c_number4 *list_poss, LR_bond
+@@ -283,7 +354,7 @@ void CUDASimpleVerletList::update(c_number4 *poss, c_number4 *list_poss, LR_bond
  	else {
  		simple_update_neigh_list
  			<<<_cells_kernel_cfg.blocks, _cells_kernel_cfg.threads_per_block>>>
@@ -456,6 +687,41 @@ index a76ba36a..042fe8af 100644
  
  	list_poss[IND] = r;
  	nn[IND] = N_n;
+diff --git a/src/CUDA/cuda_utils/CUDA_lr_common.cuh b/src/CUDA/cuda_utils/CUDA_lr_common.cuh
+index 04bc9e4f..0b00a796 100644
+--- a/src/CUDA/cuda_utils/CUDA_lr_common.cuh
++++ b/src/CUDA/cuda_utils/CUDA_lr_common.cuh
+@@ -130,7 +130,7 @@ __forceinline__ __device__ void LR_atomicAddST(CUDAStressTensor *dst, const CUDA
+  * @brief returns the btype (i.e. the fake nucleotide type used to make only certain pairs of particle interacting through HB)
+  */
+ __forceinline__ __device__ int get_particle_btype(const c_number4 &r_i) {
+-	return __float_as_int(r_i.w) >> 22;
++	return __float_as_int(r_i.w);
+ }
+ 
+ __forceinline__ __device__ c_number quad_distance(const c_number4 &r_i, const c_number4 &r_j) {
+@@ -142,20 +142,10 @@ __forceinline__ __device__ c_number quad_distance(const c_number4 &r_i, const c_
+ }
+ 
+ __forceinline__ __device__ int get_particle_type(const c_number4 &r_i) {
+-	int my_btype = __float_as_int(r_i.w) >> 22;
++	int my_btype = __float_as_int(r_i.w);
+ 	return (my_btype > 0) ? (my_btype & 3) : 3 - ((3 - (my_btype)) & 3); // a & 3 is equivalent to a % 4, but much faster
+ }
+ 
+-__forceinline__ __device__ int get_particle_index(const c_number4 &r_i) {
+-	const unsigned int mask22 = 0x003FFFFF;   // keep bottom 22 bits
+-	return __float_as_int(r_i.w) & mask22;
+-}
+-
+-__forceinline__ __host__ int get_particle_index_host(const c_number4 &r_i) {
+-	const unsigned int mask22 = 0x003FFFFF;   // keep bottom 22 bits
+-	return GpuUtils::float_as_int(r_i.w) & mask22;
+-}
+-
+ __forceinline__ __device__ LR_double4 make_LR_double4(const float4 &v) {
+ 	LR_double4 ret;
+ 	ret.x = (double) v.x;
 diff --git a/src/Observables/Configurations/Configuration.cpp b/src/Observables/Configurations/Configuration.cpp
 index 1b850594..8fc85771 100644
 --- a/src/Observables/Configurations/Configuration.cpp
@@ -578,6 +844,11 @@ index 1b850594..8fc85771 100644
  	}
  
  	return conf.str();
+@@ -204,4 +228,3 @@ void Configuration::_fill_strands_cdm() {
+ 		_strands_cdm[strand_id] /= (number) nin_id;
+ 	}
+ }
+-
 diff --git a/src/Observables/Configurations/Configuration.h b/src/Observables/Configurations/Configuration.h
 index 98f8e6db..3c5a3635 100644
 --- a/src/Observables/Configurations/Configuration.h
@@ -590,3 +861,9 @@ index 98f8e6db..3c5a3635 100644
  
  	/**
  	 * @brief Returns the configuration header(s)
+@@ -77,4 +78,3 @@ public:
+ };
+ 
+ #endif /* CONFIGURATION_H_ */
+-
+

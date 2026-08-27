@@ -1,6 +1,25 @@
 from scripts.benchmark_oxdna_memory import parse_oxdna_log, tile_oxdna_system
 
 
+def test_adaptive_patch_uses_separate_wide_cuda_particle_ids():
+    patch = (
+        __import__("pathlib").Path(__file__).parents[1]
+        / "tools"
+        / "oxdna_memory"
+        / "adaptive-neighbor-lists.patch"
+    ).read_text(encoding="utf-8")
+
+    assert "_d_particle_ids" in patch
+    assert "buff_particle_ids[IND] = particle_ids[j]" in patch
+    assert "_h_poss[i].w = GpuUtils::int_as_float(p->btype)" in patch
+    assert "int newindex = _h_particle_ids[i]" in patch
+    added_lines = "\n".join(
+        line[1:] for line in patch.splitlines() if line.startswith("+")
+    )
+    assert "0x003FFFFF" not in added_lines
+    assert "get_particle_index(" not in added_lines
+
+
 def test_parses_adaptive_memory_telemetry():
     report = parse_oxdna_log(
         """

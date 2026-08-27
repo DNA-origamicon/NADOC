@@ -38,6 +38,21 @@ Compact cell construction uses a linear histogram → exclusive scan → scatter
 pipeline. This replaces the first implementation's per-rebuild particle sort and
 per-cell binary searches, at the cost of one additional integer counter per cell.
 
+## Wide CUDA particle indices
+
+The custom build also removes upstream oxDNA's packed 22-bit CUDA particle index
+(the former 4,194,303-particle ceiling). Position `.w` now stores the complete
+signed base type, while particle identity is carried in a separate signed 32-bit
+array and permuted alongside positions during Hilbert sorting. This preserves
+special DNA3/RNA base types such as `±300` rather than trading their 10-bit field
+for a wider packed index.
+
+The practical representation limit is now `INT_MAX` particles; memory and CUDA
+launch limits will be reached much earlier. The persistent cost is 4 bytes per
+particle, with another 4 bytes per particle only when Hilbert sorting is enabled.
+On a 60-million-particle H200-scale system that is about 229 MiB persistent (and
+229 MiB temporary with sorting), small relative to the neighbor and force arrays.
+
 The build logs observed/capacity counts and allocation sizes. Compare builds with:
 
 ```bash
@@ -106,24 +121,22 @@ curve is effectively linear (1.94× runtime for 2× particles). Further skin tun
 has crossed into diminishing returns; the next material gain would require force
 kernel or neighbor representation redesign rather than another scalar setting.
 
-## Capacity projections and current address limit
+## Capacity projections with wide indices
 
 The optimized 16→32 BigO measurements add about 29 MB of whole-device CUDA usage
 per repeat. Projections below reserve 15% of nominal VRAM and are planning
 estimates, not successful allocations on those GPUs:
 
-| target | usable VRAM assumption | memory-only BigO estimate | current-engine limit |
+| target | usable VRAM assumption | memory-only BigO estimate | index-limited? |
 |---|---:|---:|---:|
-| RTX 3080 Ti 12 GB | 10.2 GB | ~345 repeats / 4.87 Mnt | 297 repeats / 4.19 Mnt |
-| Alpine H200 35 GB MIG | 29.8 GB | ~1,020 repeats / 14.4 Mnt | 297 / 4.19 Mnt |
-| Alpine H200 71 GB MIG | 60.4 GB | ~2,080 repeats / 29.3 Mnt | 297 / 4.19 Mnt |
-| Alpine H200 141 GB | 119.9 GB | ~4,130 repeats / 58.3 Mnt | 297 / 4.19 Mnt |
+| RTX 3080 Ti 12 GB | 10.2 GB | ~345 repeats / 4.87 Mnt | no |
+| Alpine H200 35 GB MIG | 29.8 GB | ~1,020 repeats / 14.4 Mnt | no |
+| Alpine H200 71 GB MIG | 60.4 GB | ~2,080 repeats / 29.3 Mnt | no |
+| Alpine H200 141 GB | 119.9 GB | ~4,130 repeats / 58.3 Mnt | no |
 
-The current CUDA backend stores the particle index in the lower 22 bits of
-`c_number4.w` (`mask22 = 0x003FFFFF`), giving a hard 4,194,304-particle address
-space. BigO ×297 contains 4,191,264 nucleotides; ×298 exceeds the encoding even
-when VRAM is available. Unlocking the H200's memory-only range therefore requires
-separating particle type/index metadata from the packed float or otherwise
-widening the CUDA index representation. Alpine currently offers full 141 GB H200s
-and 71 GB/35 GB MIG profiles, so the requested GRES determines which memory-only
-projection applies.
+The separate 32-bit particle identity array removes the former ×297/4.19 Mnt
+address boundary. These estimates are now VRAM-limited rather than index-limited.
+Alpine currently offers full 141 GB H200s and 71 GB/35 GB MIG profiles, so the
+requested GRES determines which memory-only projection applies. A remote oxDNA
+submission path is not currently implemented in NADOC; Alpine/SLURM submission is
+available only for the atomistic MD pipeline.
