@@ -61,7 +61,7 @@ function getMultiSelected(page) {
 test('canvas click selects a part instance; empty click clears the selection', async ({ page }) => {
   const errors = trackConsoleErrors(page)
 
-  const ids = await loadAssemblyWithParts(page, { doc: DOC, n: 2, name: 'select' })
+  const ids = await loadAssemblyWithParts(page, { doc: `${DOC}-select`, n: 2, name: 'select' })
   expect(ids).toHaveLength(2)
 
   // Nothing selected on entry.
@@ -81,7 +81,7 @@ test('canvas click selects a part instance; empty click clears the selection', a
 test('clicking a second instance switches the active selection', async ({ page }) => {
   const errors = trackConsoleErrors(page)
 
-  const ids = await loadAssemblyWithParts(page, { doc: DOC, n: 2, name: 'switch' })
+  const ids = await loadAssemblyWithParts(page, { doc: `${DOC}-switch`, n: 2, name: 'switch' })
   expect(ids).toHaveLength(2)
 
   // Drive by what's actually pickable on screen (both rods, separated on X).
@@ -128,7 +128,7 @@ test('clicking a second instance switches the active selection', async ({ page }
 test('ISSUE-3b: Ctrl+click the only selected part deselects it cleanly', async ({ page }) => {
   const errors = trackConsoleErrors(page)
 
-  const ids = await loadAssemblyWithParts(page, { doc: DOC, n: 2, name: 'ctrl2' })
+  const ids = await loadAssemblyWithParts(page, { doc: `${DOC}-ctrl2`, n: 2, name: 'ctrl2' })
   expect(ids).toHaveLength(2)
 
   const cands = await assemblyInstanceCandidates(page)
