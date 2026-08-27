@@ -11,6 +11,7 @@ INFO: CUDA adaptive neighbour telemetry: 119 observed max, 64 capacity
 INFO: CUDA adaptive neighbour list grew to 142 entries per particle (15.96 MBs)
 INFO: CUDA adaptive edge list: 947992 observed edges, 1137590 capacity, 8.68 MBs
 INFO: Total Running Time: 10.3441 s, per step: 1.03441 ms
+***> Observables                      0.250 (  2.4%)
 """
     )
     assert report == {
@@ -23,6 +24,7 @@ INFO: Total Running Time: 10.3441 s, per step: 1.03441 ms
         "edge_capacity_mb": 8.68,
         "runtime_s": 10.3441,
         "ms_per_step": 1.03441,
+        "observables_s": 0.25,
     }
 
 

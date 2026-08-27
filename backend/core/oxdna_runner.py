@@ -25,6 +25,7 @@ import json
 import logging
 import math
 import os
+import re
 import shutil
 import signal
 import threading
@@ -230,13 +231,23 @@ def configure_adaptive_memory_input(oxdna_bin: str, input_path: Path) -> bool:
     text = input_path.read_text(encoding="utf-8")
     if "backend = CUDA" not in text or "use_edge = true" not in text:
         return False
-    if "adaptive_neighbor_list" not in text:
-        settings = (
-            "adaptive_neighbor_list = true\n"
-            "adaptive_neighbor_initial_capacity = 64\n"
-            "adaptive_compact_cells = true\n"
-        )
-        input_path.write_text(text.rstrip() + "\n" + settings, encoding="utf-8")
+    settings = {
+        "adaptive_neighbor_list": "true",
+        "adaptive_neighbor_initial_capacity": "64",
+        "adaptive_compact_cells": "true",
+        "configuration_print_energy": "false",
+        "print_initial_energy": "false",
+        "no_stdout_energy": "true",
+    }
+    additions = [f"{key} = {value}" for key, value in settings.items() if key not in text]
+    if additions:
+        text = text.rstrip() + "\n" + "\n".join(additions) + "\n"
+    default_skin = re.compile(r"(?m)^(\s*verlet_skin\s*=\s*)0\.20(?:0*)\s*$")
+    if default_skin.search(text):
+        text = default_skin.sub(r"\g<1>0.40", text)
+    elif "verlet_skin" not in text:
+        text = text.rstrip() + "\nverlet_skin = 0.40\n"
+    input_path.write_text(text, encoding="utf-8")
     return True
 
 

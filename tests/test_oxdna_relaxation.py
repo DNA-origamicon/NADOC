@@ -523,6 +523,10 @@ def test_managed_adaptive_build_enables_compact_cuda_lists(tmp_path):
     assert text.count("adaptive_neighbor_list = true") == 1
     assert "adaptive_neighbor_initial_capacity = 64" in text
     assert "adaptive_compact_cells = true" in text
+    assert "configuration_print_energy = false" in text
+    assert "print_initial_energy = false" in text
+    assert "no_stdout_energy = true" in text
+    assert "verlet_skin = 0.40" in text
     assert oxdna_runner.configure_adaptive_memory_input(str(binary), input_path)
     assert input_path.read_text(encoding="utf-8") == text
 

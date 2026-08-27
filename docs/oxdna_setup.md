@@ -164,7 +164,16 @@ NADOC_OXDNA_ADAPTIVE_MEMORY=1 scripts/build-oxdna.sh
 
 The flavors install side by side. The `current` symlink selects the most recently
 built flavor, and NADOC automatically enables its guarded compact-list settings
-for CUDA stages.
+for CUDA stages. The adaptive flavor also uses a linear histogram/scan/scatter
+cell builder, defers the redundant step-zero CPU energy calculation, avoids
+recomputing energy solely for restart-file headers, and changes the default
+`verlet_skin = 0.20` to the measured BigO optimum of `0.40`. Explicit non-default
+skin values remain untouched.
+
+On an RTX 2080 Super, the fully sequenced 14,112-nt BigO repeat scales from 11.37
+ms/step at 16 repeats to 22.04 ms/step at 32 repeats. See
+[`tools/oxdna_memory/README.md`](../tools/oxdna_memory/README.md) for the benchmark
+table, memory projections, and the current 22-bit CUDA particle-index ceiling.
 
 It is idempotent and prints the installed binary and source revision. NADOC finds
 the `current` symlink automatically; `OXDNA_BIN` remains an optional override.

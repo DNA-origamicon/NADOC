@@ -1,25 +1,41 @@
+diff --git a/src/Backends/MDBackend.cpp b/src/Backends/MDBackend.cpp
+index cff2a9ba..d369ef8d 100644
+--- a/src/Backends/MDBackend.cpp
++++ b/src/Backends/MDBackend.cpp
+@@ -62,10 +62,13 @@ void MDBackend::get_settings(input_file &inp) {
+ 	llint print_every;
+ 	getInputString(&inp, "energy_file", energy_file, 1);
+ 	getInputLLInt(&inp, "print_energy_every", &print_every, 1);
++	bool print_initial_energy = true;
++	getInputBool(&inp, "print_initial_energy", &print_initial_energy, 0);
++	llint energy_start_from = print_initial_energy ? 0 : 1;
+ 
+ 	// we build the default stream of observables;
+ 	// we use a helper string for that
+-	string fake = Utils::sformat("{\n\tname = %s\n\tprint_every = %lld\n}\n", energy_file, print_every);
++	string fake = Utils::sformat("{\n\tname = %s\n\tprint_every = %lld\n\tstart_from = %lld\n}\n", energy_file, print_every, energy_start_from);
+ 	_obs_output_file = std::make_shared<ObservableOutput>(fake);
+ 	add_output(_obs_output_file);
+ 	_obs_output_file->add_observable("type = step\nunits = MD");
+@@ -79,7 +82,7 @@ void MDBackend::get_settings(input_file &inp) {
+ 	int no_stdout_energy = 0;
+ 	getInputBoolAsInt(&inp, "no_stdout_energy", &no_stdout_energy, 0);
+ 	if(!no_stdout_energy) {
+-		fake = Utils::sformat("{\n\tname = stdout\n\tprint_every = %lld\n}\n", print_every);
++		fake = Utils::sformat("{\n\tname = stdout\n\tprint_every = %lld\n\tstart_from = %lld\n}\n", print_every, energy_start_from);
+ 		_obs_output_stdout = std::make_shared<ObservableOutput>(fake);
+ 		add_output(_obs_output_stdout);
+ 		_obs_output_stdout->add_observable("type = step");
 diff --git a/src/CUDA/Lists/CUDASimpleVerletList.cu b/src/CUDA/Lists/CUDASimpleVerletList.cu
-index 7a716a42..ba540ec6 100644
+index 7a716a42..485ba60f 100644
 --- a/src/CUDA/Lists/CUDASimpleVerletList.cu
 +++ b/src/CUDA/Lists/CUDASimpleVerletList.cu
-@@ -18,6 +18,10 @@
- #include <thrust/device_vector.h>
- #include <thrust/copy.h>
- #include <thrust/extrema.h>
-+#include <thrust/binary_search.h>
-+#include <thrust/iterator/counting_iterator.h>
-+#include <thrust/sequence.h>
-+#include <thrust/sort.h>
- 
- CUDASimpleVerletList::CUDASimpleVerletList() {
- 	_cells_kernel_cfg.threads_per_block = 0;
-@@ -32,15 +36,21 @@ CUDASimpleVerletList::~CUDASimpleVerletList() {
+@@ -32,15 +32,20 @@ CUDASimpleVerletList::~CUDASimpleVerletList() {
  void CUDASimpleVerletList::clean() {
  	if(_d_cells != nullptr) {
  		CUDA_SAFE_CALL(cudaFree(_d_cells));
 -		CUDA_SAFE_CALL(cudaFree(_d_counters_cells));
 +		if(_d_counters_cells != nullptr) CUDA_SAFE_CALL(cudaFree(_d_counters_cells));
-+		if(_d_cell_keys != nullptr) CUDA_SAFE_CALL(cudaFree(_d_cell_keys));
 +		if(_d_cell_offsets != nullptr) CUDA_SAFE_CALL(cudaFree(_d_cell_offsets));
  		CUDA_SAFE_CALL(cudaFree(d_matrix_neighs));
  		CUDA_SAFE_CALL(cudaFree(d_number_neighs));
@@ -36,7 +52,7 @@ index 7a716a42..ba540ec6 100644
  	}
  }
  
-@@ -50,6 +60,16 @@ void CUDASimpleVerletList::get_settings(input_file &inp) {
+@@ -50,6 +55,16 @@ void CUDASimpleVerletList::get_settings(input_file &inp) {
  	getInputNumber(&inp, "verlet_skin", &_verlet_skin, 1);
  	getInputNumber(&inp, "max_density_multiplier", &_max_density_multiplier, 0);
  	getInputBool(&inp, "use_edge", &_use_edge, 0);
@@ -53,20 +69,19 @@ index 7a716a42..ba540ec6 100644
  	if(_use_edge) {
  		OX_LOG(Logger::LOG_INFO, "Using edge-based approach");
  	}
-@@ -115,8 +135,11 @@ void CUDASimpleVerletList::_init_cells(c_number4 *poss) {
+@@ -115,8 +130,10 @@ void CUDASimpleVerletList::_init_cells(c_number4 *poss) {
  
  	if(_old_N_cells != -1 && _N_cells != _old_N_cells) {
  		CUDA_SAFE_CALL(cudaFree(_d_cells));
 -		CUDA_SAFE_CALL(cudaFree(_d_counters_cells));
 +		if(_d_counters_cells != nullptr) CUDA_SAFE_CALL(cudaFree(_d_counters_cells));
-+		if(_d_cell_keys != nullptr) CUDA_SAFE_CALL(cudaFree(_d_cell_keys));
 +		if(_d_cell_offsets != nullptr) CUDA_SAFE_CALL(cudaFree(_d_cell_offsets));
  		_d_cells = _d_counters_cells = nullptr;
-+		_d_cell_keys = _d_cell_offsets = nullptr;
++		_d_cell_offsets = nullptr;
  		cudaDestroyTextureObject(_counters_cells_tex);
  		OX_DEBUG("Re-allocating cells on GPU, from %d to %d\n", _old_N_cells, _N_cells);
  	}
-@@ -144,8 +167,15 @@ void CUDASimpleVerletList::_init_cells(c_number4 *poss) {
+@@ -144,8 +161,15 @@ void CUDASimpleVerletList::_init_cells(c_number4 *poss) {
  			_max_N_per_cell = 5;
  		}
  
@@ -74,7 +89,7 @@ index 7a716a42..ba540ec6 100644
 -		CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc(&_d_cells, (size_t ) _N_cells * _max_N_per_cell * sizeof(int)));
 +		if(_adaptive_compact_cells) {
 +			CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc(&_d_cells, (size_t) _N * sizeof(int)));
-+			CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc(&_d_cell_keys, (size_t) _N * sizeof(int)));
++			CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc(&_d_counters_cells, (size_t) _N_cells * sizeof(int)));
 +			CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc(&_d_cell_offsets, (size_t) (_N_cells + 1) * sizeof(int)));
 +		}
 +		else {
@@ -84,7 +99,7 @@ index 7a716a42..ba540ec6 100644
  		CUDA_SAFE_CALL(cudaMemcpyToSymbol(verlet_N_cells_side, _N_cells_side, 3 * sizeof(int)));
  		CUDA_SAFE_CALL(cudaMemcpyToSymbol(verlet_max_N_per_cell, &_max_N_per_cell, sizeof(int)));
  		if(deallocate) {
-@@ -156,7 +186,7 @@ void CUDASimpleVerletList::_init_cells(c_number4 *poss) {
+@@ -156,7 +180,7 @@ void CUDASimpleVerletList::_init_cells(c_number4 *poss) {
  		if(_counters_cells_tex != 0) {
  			cudaDestroyTextureObject(_counters_cells_tex);
  		}
@@ -93,12 +108,12 @@ index 7a716a42..ba540ec6 100644
  	}
  
  	_old_N_cells = _N_cells;
-@@ -172,20 +202,24 @@ void CUDASimpleVerletList::init(int N, c_number rcut, CUDABox *h_cuda_box, CUDAB
+@@ -172,20 +196,24 @@ void CUDASimpleVerletList::init(int N, c_number rcut, CUDABox *h_cuda_box, CUDAB
  
  	_init_cells();
  
 -	OX_LOG(Logger::LOG_INFO, "CUDA Cells mem: %.2lf MBs, lists mem: %.2lf MBs", (double) _N_cells*(1 + _max_N_per_cell) * sizeof(int)/1048576., (double) _N * (1 + _max_neigh) * sizeof(int)/1048576.);
-+	double cells_mem = _adaptive_compact_cells ? (double) (2 * _N + _N_cells + 1) * sizeof(int) : (double) _N_cells * (1 + _max_N_per_cell) * sizeof(int);
++	double cells_mem = _adaptive_compact_cells ? (double) (_N + 2 * _N_cells + 1) * sizeof(int) : (double) _N_cells * (1 + _max_N_per_cell) * sizeof(int);
 +	OX_LOG(Logger::LOG_INFO, "CUDA Cells mem: %.2lf MBs, lists mem: %.2lf MBs", cells_mem/1048576., (double) _N * (1 + _max_neigh) * sizeof(int)/1048576.);
  
  	// we multiply the maximum number of particles by the ratio between cell and list volumes to initialise the maximum number of neighbours per particle.
@@ -120,29 +135,33 @@ index 7a716a42..ba540ec6 100644
  		CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc(&_d_number_neighs_no_doubles, (size_t ) (_N + 1) * sizeof(int)));
  	}
  
-@@ -230,7 +264,20 @@ std::vector<int> CUDASimpleVerletList::is_large(c_number4 *data) {
+@@ -230,7 +258,24 @@ std::vector<int> CUDASimpleVerletList::is_large(c_number4 *data) {
  
  void CUDASimpleVerletList::update(c_number4 *poss, c_number4 *list_poss, LR_bonds *bonds) {
  	_init_cells(poss);
 -	CUDA_SAFE_CALL(cudaMemset(_d_counters_cells, 0, _N_cells * sizeof(int)));
 +	if(_adaptive_compact_cells) {
-+		simple_compute_cell_keys
++		CUDA_SAFE_CALL(cudaMemset(_d_counters_cells, 0, _N_cells * sizeof(int)));
++		simple_count_particles_per_cell
 +			<<<_cells_kernel_cfg.blocks, _cells_kernel_cfg.threads_per_block>>>
-+			(poss, _d_cell_keys, _d_cells, _d_cuda_box);
-+		CUT_CHECK_ERROR("compute_cell_keys (SimpleVerlet) error");
-+		thrust::device_ptr<int> keys(_d_cell_keys);
-+		thrust::device_ptr<int> particle_ids(_d_cells);
++			(poss, _d_counters_cells, _d_cuda_box);
++		CUT_CHECK_ERROR("count_particles_per_cell (SimpleVerlet) error");
++		thrust::device_ptr<int> counts(_d_counters_cells);
 +		thrust::device_ptr<int> offsets(_d_cell_offsets);
-+		thrust::sort_by_key(keys, keys + _N, particle_ids);
-+		auto cell_ids = thrust::make_counting_iterator(0);
-+		thrust::lower_bound(keys, keys + _N, cell_ids, cell_ids + _N_cells + 1, offsets);
++		thrust::exclusive_scan(counts, counts + _N_cells, offsets);
++		offsets[_N_cells] = _N;
++		CUDA_SAFE_CALL(cudaMemset(_d_counters_cells, 0, _N_cells * sizeof(int)));
++		simple_scatter_particles_to_cells
++			<<<_cells_kernel_cfg.blocks, _cells_kernel_cfg.threads_per_block>>>
++			(poss, _d_cells, _d_counters_cells, _d_cell_offsets, _d_cuda_box);
++		CUT_CHECK_ERROR("scatter_particles_to_cells (SimpleVerlet) error");
 +	}
 +	else {
 +		CUDA_SAFE_CALL(cudaMemset(_d_counters_cells, 0, _N_cells * sizeof(int)));
  
  	// fill cells
  	simple_fill_cells
-@@ -261,19 +308,43 @@ void CUDASimpleVerletList::update(c_number4 *poss, c_number4 *list_poss, LR_bond
+@@ -261,19 +306,43 @@ void CUDASimpleVerletList::update(c_number4 *poss, c_number4 *list_poss, LR_bond
  		}
  		throw oxDNAException(message);
  	}
@@ -187,7 +206,7 @@ index 7a716a42..ba540ec6 100644
  		// get edge list from matrix_neighs
  		compress_matrix_neighs
  			<<<_cells_kernel_cfg.blocks, _cells_kernel_cfg.threads_per_block>>>
-@@ -283,7 +354,7 @@ void CUDASimpleVerletList::update(c_number4 *poss, c_number4 *list_poss, LR_bond
+@@ -283,7 +352,7 @@ void CUDASimpleVerletList::update(c_number4 *poss, c_number4 *list_poss, LR_bond
  	else {
  		simple_update_neigh_list
  			<<<_cells_kernel_cfg.blocks, _cells_kernel_cfg.threads_per_block>>>
@@ -197,7 +216,7 @@ index 7a716a42..ba540ec6 100644
  	}
  }
 diff --git a/src/CUDA/Lists/CUDASimpleVerletList.h b/src/CUDA/Lists/CUDASimpleVerletList.h
-index 76885c90..458b0fc3 100644
+index 76885c90..5a4c7056 100644
 --- a/src/CUDA/Lists/CUDASimpleVerletList.h
 +++ b/src/CUDA/Lists/CUDASimpleVerletList.h
 @@ -21,6 +21,9 @@ protected:
@@ -210,11 +229,10 @@ index 76885c90..458b0fc3 100644
  	bool _print_problematic_ids = false;
  	c_number _max_density_multiplier = 3;
  	int _N_cells, _old_N_cells;
-@@ -31,8 +34,13 @@ protected:
+@@ -31,8 +34,12 @@ protected:
  
  	int *_d_cells = nullptr;
  	int *_d_counters_cells = nullptr;
-+	int *_d_cell_keys = nullptr;
 +	int *_d_cell_offsets = nullptr;
  	int *_d_number_neighs_no_doubles = nullptr;
 +	size_t _edge_capacity = 0;
@@ -225,7 +243,7 @@ index 76885c90..458b0fc3 100644
  	cudaTextureObject_t _counters_cells_tex = 0;
  
 diff --git a/src/CUDA/Lists/CUDA_simple_verlet.cuh b/src/CUDA/Lists/CUDA_simple_verlet.cuh
-index a76ba36a..a68364f7 100644
+index a76ba36a..042fe8af 100644
 --- a/src/CUDA/Lists/CUDA_simple_verlet.cuh
 +++ b/src/CUDA/Lists/CUDA_simple_verlet.cuh
 @@ -10,6 +10,7 @@ __constant__ int verlet_N[1];
@@ -236,16 +254,23 @@ index a76ba36a..a68364f7 100644
  
  __forceinline__ __device__ int neigh_cell(int3 index, int3 offset) {
  	// neighbour cell of this cell
-@@ -20,10 +21,17 @@ __forceinline__ __device__ int neigh_cell(int3 index, int3 offset) {
+@@ -20,10 +21,24 @@ __forceinline__ __device__ int neigh_cell(int3 index, int3 offset) {
  	return (index.z * verlet_N_cells_side[1] + index.y) * verlet_N_cells_side[0] + index.x;
  }
  
 -__device__ void update_cell_neigh_list(cudaTextureObject_t counters_cells_tex, c_number4 *poss, int cell_ind, int *cells, c_number4 r, int *neigh, int &N_neigh, LR_bonds b, CUDABox *box) {
 -	int size = tex1Dfetch<int>(counters_cells_tex, cell_ind);
-+__global__ void simple_compute_cell_keys(c_number4 *poss, int *keys, int *particle_ids, CUDABox *box) {
++__global__ void simple_count_particles_per_cell(c_number4 *poss, int *cell_counts, CUDABox *box) {
 +	if(IND >= verlet_N[0]) return;
-+	keys[IND] = box->compute_cell_index(verlet_N_cells_side, poss[IND]);
-+	particle_ids[IND] = IND;
++	int cell = box->compute_cell_index(verlet_N_cells_side, poss[IND]);
++	atomicAdd(cell_counts + cell, 1);
++}
++
++__global__ void simple_scatter_particles_to_cells(c_number4 *poss, int *cells, int *cell_cursors, int *cell_offsets, CUDABox *box) {
++	if(IND >= verlet_N[0]) return;
++	int cell = box->compute_cell_index(verlet_N_cells_side, poss[IND]);
++	int slot = atomicAdd(cell_cursors + cell, 1);
++	cells[cell_offsets[cell] + slot] = IND;
 +}
 +
 +__device__ void update_cell_neigh_list(cudaTextureObject_t counters_cells_tex, c_number4 *poss, int cell_ind, int *cells, int *cell_offsets, c_number4 r, int *neigh, int &N_neigh, LR_bonds b, CUDABox *box, bool *overflow) {
@@ -257,7 +282,7 @@ index a76ba36a..a68364f7 100644
  		// no bonded neighbours in our list!
  		if(m == IND || b.n3 == m || b.n5 == m) continue;
  
-@@ -31,13 +39,14 @@ __device__ void update_cell_neigh_list(cudaTextureObject_t counters_cells_tex, c
+@@ -31,13 +46,14 @@ __device__ void update_cell_neigh_list(cudaTextureObject_t counters_cells_tex, c
  
  		c_number sqr_dist = box->sqr_minimum_image(r, rm);
  		if(sqr_dist < verlet_sqr_rverlet[0]) {
@@ -274,7 +299,7 @@ index a76ba36a..a68364f7 100644
  	if(IND >= verlet_N[0]) return;
  
  	c_number4 r = poss[IND];
-@@ -48,34 +57,34 @@ __global__ void simple_update_neigh_list(cudaTextureObject_t counters_cells_tex,
+@@ -48,34 +64,34 @@ __global__ void simple_update_neigh_list(cudaTextureObject_t counters_cells_tex,
  	int index = (spl_idx.z * verlet_N_cells_side[1] + spl_idx.y) * verlet_N_cells_side[0] + spl_idx.x;
  
  	// visit this cell
@@ -336,7 +361,7 @@ index a76ba36a..a68364f7 100644
  
  	list_poss[IND] = r;
  	c_number_neighs[IND] = N_neighs;
-@@ -109,10 +118,11 @@ __global__ void compress_matrix_neighs(int *matrix, int *nneighs, int *offsets,
+@@ -109,10 +125,11 @@ __global__ void compress_matrix_neighs(int *matrix, int *nneighs, int *offsets,
  	}
  }
  
@@ -351,7 +376,7 @@ index a76ba36a..a68364f7 100644
  
  		// no bonded neighbours in our list!
  		if(m == IND || b.n3 == m || b.n5 == m) continue;
-@@ -121,14 +131,15 @@ __device__ void edge_update_cell_neigh_list(cudaTextureObject_t counters_cells_t
+@@ -121,14 +138,15 @@ __device__ void edge_update_cell_neigh_list(cudaTextureObject_t counters_cells_t
  
  		c_number sqr_dist = box->sqr_minimum_image(r, rm);
  		if(sqr_dist < verlet_sqr_rverlet[0]) {
@@ -369,7 +394,7 @@ index a76ba36a..a68364f7 100644
  	if(IND >= verlet_N[0]) return;
  
  	c_number4 r = poss[IND];
-@@ -140,34 +151,34 @@ __global__ void edge_update_neigh_list(cudaTextureObject_t counters_cells_tex, c
+@@ -140,34 +158,34 @@ __global__ void edge_update_neigh_list(cudaTextureObject_t counters_cells_tex, c
  	int index = (spl_idx.z * verlet_N_cells_side[1] + spl_idx.y) * verlet_N_cells_side[0] + spl_idx.x;
  
  	// visit this cell
@@ -431,3 +456,137 @@ index a76ba36a..a68364f7 100644
  
  	list_poss[IND] = r;
  	nn[IND] = N_n;
+diff --git a/src/Observables/Configurations/Configuration.cpp b/src/Observables/Configurations/Configuration.cpp
+index 1b850594..8fc85771 100644
+--- a/src/Observables/Configurations/Configuration.cpp
++++ b/src/Observables/Configurations/Configuration.cpp
+@@ -10,6 +10,7 @@
+ #include "../../Utilities/Utils.h"
+ 
+ #include <sstream>
++#include <charconv>
+ #include <typeinfo>
+ #include <map>
+ 
+@@ -20,6 +21,7 @@ Configuration::Configuration() {
+ 	_reduced = false;
+ 	_only_type = -1;
+ 	_print_momenta = true;
++	_print_energy = true;
+ }
+ 
+ Configuration::~Configuration() {
+@@ -34,6 +36,8 @@ void Configuration::get_settings(input_file &my_inp, input_file &sim_inp) {
+ 	getInputBool(&my_inp, "reduced", &_reduced, 0);
+ 	getInputInt(&my_inp, "only_type", &_only_type, 0);
+ 	getInputBool(&my_inp, "print_momenta", &_print_momenta, 0);
++	getInputBool(&sim_inp, "configuration_print_energy", &_print_energy, 0);
++	getInputBool(&my_inp, "print_energy", &_print_energy, 0);
+ 
+ 	string opt;
+ 	bool show_on = false;
+@@ -96,8 +100,12 @@ string Configuration::_headers(llint step) {
+ 		headers << strands.size() << " " << _config_info->box->box_sides().x << " " << _config_info->box->box_sides().y << " " << _config_info->box->box_sides().z << endl;
+ 	}
+ 	else {
+-		number U = _tot_energy.get_U(step);
+-		number K = _tot_energy.get_K(step);
++		number U = 0.;
++		number K = 0.;
++		if(_print_energy) {
++			U = _tot_energy.get_U(step);
++			K = _tot_energy.get_K(step);
++		}
+ 
+ 		headers << "t = " << step << endl;
+ 		headers << "b = " << _config_info->box->box_sides().x << " " << _config_info->box->box_sides().y << " " << _config_info->box->box_sides().z << endl;
+@@ -108,9 +116,6 @@ string Configuration::_headers(llint step) {
+ }
+ 
+ string Configuration::_particle(BaseParticle *p) {
+-	stringstream conf;
+-	conf.precision(15);
+-
+ 	LR_vector box_sides = _config_info->box->box_sides();
+ 
+ 	LR_vector mypos;
+@@ -127,16 +132,33 @@ string Configuration::_particle(BaseParticle *p) {
+ 	}
+ 
+ 	LR_matrix oT = p->orientation.get_transpose();
+-	conf << mypos.x << " " << mypos.y << " " << mypos.z << " ";
+-	conf << oT.v1.x << " " << oT.v1.y << " " << oT.v1.z << " ";
+-	conf << oT.v3.x << " " << oT.v3.y << " " << oT.v3.z;
+-
++	string line;
++	line.reserve(_print_momenta ? 240 : 150);
++	auto append_number = [&line](double value) {
++		if(!line.empty()) line.push_back(' ');
++		char buffer[32];
++		auto result = std::to_chars(buffer, buffer + sizeof(buffer), value,
++			std::chars_format::general, 15);
++		if(result.ec == std::errc()) line.append(buffer, result.ptr);
++	};
++	append_number((double) mypos.x);
++	append_number((double) mypos.y);
++	append_number((double) mypos.z);
++	append_number((double) oT.v1.x);
++	append_number((double) oT.v1.y);
++	append_number((double) oT.v1.z);
++	append_number((double) oT.v3.x);
++	append_number((double) oT.v3.y);
++	append_number((double) oT.v3.z);
+ 	if(_print_momenta) {
+-		conf << " " << p->vel.x << " " << p->vel.y << " " << p->vel.z << " ";
+-		conf << p->L.x << " " << p->L.y << " " << p->L.z;
++		append_number((double) p->vel.x);
++		append_number((double) p->vel.y);
++		append_number((double) p->vel.z);
++		append_number((double) p->L.x);
++		append_number((double) p->L.y);
++		append_number((double) p->L.z);
+ 	}
+-
+-	return conf.str();
++	return line;
+ }
+ 
+ string Configuration::_configuration(llint step) {
+@@ -163,18 +185,20 @@ string Configuration::_configuration(llint step) {
+ 	}
+ 	else {
+ 		if(_back_in_box) _fill_strands_cdm();
+-		// this is used to avoid printing empty lines
+-		bool empty = true;
++		string output;
++		output.reserve(_visible_particles.size() * (_print_momenta ? 240 : 150));
+ 		for(auto p_idx : _visible_particles) {
+ 			BaseParticle *p = _config_info->particles()[p_idx];
+ 			bool visible = (_only_type == -1 || p->type == _only_type);
+ 			if(visible) {
+-				if(p_idx != *_visible_particles.begin() && !empty) conf << endl;
+ 				string p_str = _particle(p);
+-				conf << p_str;
+-				empty = (p_str.size() == 0);
++				if(!p_str.empty()) {
++					if(!output.empty()) output.push_back('\n');
++					output.append(p_str);
++				}
+ 			}
+ 		}
++		return output;
+ 	}
+ 
+ 	return conf.str();
+diff --git a/src/Observables/Configurations/Configuration.h b/src/Observables/Configurations/Configuration.h
+index 98f8e6db..3c5a3635 100644
+--- a/src/Observables/Configurations/Configuration.h
++++ b/src/Observables/Configurations/Configuration.h
+@@ -35,6 +35,7 @@ protected:
+ 	std::map<int, LR_vector> _strands_cdm;
+ 	int _only_type;
+ 	bool _print_momenta;
++	bool _print_energy;
+ 
+ 	/**
+ 	 * @brief Returns the configuration header(s)

@@ -22,7 +22,21 @@ use_edge = true
 adaptive_neighbor_list = true
 adaptive_neighbor_initial_capacity = 64
 adaptive_compact_cells = true
+configuration_print_energy = false
+print_initial_energy = false
+no_stdout_energy = true
+verlet_skin = 0.40
 ```
+
+The managed runner adds these settings only for the custom adaptive build. The
+energy settings avoid redundant CPU force-field passes at startup and while
+writing restart configurations; energy sampling still occurs at the requested
+positive step intervals. Restart configurations retain the standard three-value
+`E =` header with zero placeholders, which oxDNA does not read on restart.
+
+Compact cell construction uses a linear histogram → exclusive scan → scatter
+pipeline. This replaces the first implementation's per-rebuild particle sort and
+per-cell binary searches, at the cost of one additional integer counter per cell.
 
 The build logs observed/capacity counts and allocation sizes. Compare builds with:
 
@@ -74,3 +88,42 @@ usage. CSR would also require changing every interaction kernel and its coalesce
 access pattern. That is a much smaller return than the 17.6× measured two-copy
 gain delivered here, so it is intentionally left as a separate speed/kernel
 redesign rather than extending this capacity patch.
+
+## BigO runtime scaling
+
+The fully sequenced 14,112-nt BigO periodic part exposes the runtime behavior at
+larger scale. On the RTX 2080 Super, 1,000-step runs showed:
+
+| BigO repeats | nucleotides | original corrected runtime | optimized runtime |
+|---:|---:|---:|---:|
+| 8 | 112,896 | 10.21 ms/step | 4.30 ms/step |
+| 16 | 225,792 | 24.07 ms/step | 11.37 ms/step |
+| 32 | 451,584 | — | 22.04 ms/step |
+
+At 16 repeats, `verlet_skin = 0.40` was the measured optimum: 0.35, 0.45, and
+0.50 produced 12.51, 11.89, and 11.74 ms/step respectively. The optimized 16→32
+curve is effectively linear (1.94× runtime for 2× particles). Further skin tuning
+has crossed into diminishing returns; the next material gain would require force
+kernel or neighbor representation redesign rather than another scalar setting.
+
+## Capacity projections and current address limit
+
+The optimized 16→32 BigO measurements add about 29 MB of whole-device CUDA usage
+per repeat. Projections below reserve 15% of nominal VRAM and are planning
+estimates, not successful allocations on those GPUs:
+
+| target | usable VRAM assumption | memory-only BigO estimate | current-engine limit |
+|---|---:|---:|---:|
+| RTX 3080 Ti 12 GB | 10.2 GB | ~345 repeats / 4.87 Mnt | 297 repeats / 4.19 Mnt |
+| Alpine H200 35 GB MIG | 29.8 GB | ~1,020 repeats / 14.4 Mnt | 297 / 4.19 Mnt |
+| Alpine H200 71 GB MIG | 60.4 GB | ~2,080 repeats / 29.3 Mnt | 297 / 4.19 Mnt |
+| Alpine H200 141 GB | 119.9 GB | ~4,130 repeats / 58.3 Mnt | 297 / 4.19 Mnt |
+
+The current CUDA backend stores the particle index in the lower 22 bits of
+`c_number4.w` (`mask22 = 0x003FFFFF`), giving a hard 4,194,304-particle address
+space. BigO ×297 contains 4,191,264 nucleotides; ×298 exceeds the encoding even
+when VRAM is available. Unlocking the H200's memory-only range therefore requires
+separating particle type/index metadata from the packed float or otherwise
+widening the CUDA index representation. Alpine currently offers full 141 GB H200s
+and 71 GB/35 GB MIG profiles, so the requested GRES determines which memory-only
+projection applies.

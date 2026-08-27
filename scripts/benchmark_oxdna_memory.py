@@ -33,6 +33,8 @@ _PATTERNS = {
     "ms_per_step": re.compile(r"per step: ([0-9.]+) ms"),
 }
 
+_OBSERVABLES_PATTERN = re.compile(r"\*\*\*> Observables\s+([0-9.]+)")
+
 
 def parse_oxdna_log(text: str) -> dict[str, float | int | None]:
     result: dict[str, float | int | None] = {}
@@ -47,6 +49,9 @@ def parse_oxdna_log(text: str) -> dict[str, float | int | None]:
         if matches:
             value = matches[-1]
             result[name] = int(value) if name in integer_fields else float(value)
+    observables = _OBSERVABLES_PATTERN.findall(text)
+    if observables:
+        result["observables_s"] = float(observables[-1])
     return result
 
 
@@ -128,19 +133,21 @@ def run_case(
     adaptive: bool,
     copies: int = 1,
     discard_output: bool = False,
+    suppress_periodic_output: bool = False,
 ) -> dict:
     with tempfile.TemporaryDirectory(prefix="nadoc-oxdna-memory-") as tmp:
         out = Path(tmp)
         trajectory = Path("/dev/null") if discard_output else out / "trajectory.dat"
         energy = Path("/dev/null") if discard_output else out / "energy.dat"
         last_conf = Path("/dev/null") if discard_output else out / "last_conf.dat"
+        output_interval = steps + 1 if suppress_periodic_output else steps
         command = [
             str(binary),
             str(input_path),
             "seed=424242",
             f"steps={steps}",
-            f"print_conf_interval={steps}",
-            f"print_energy_every={steps}",
+            f"print_conf_interval={output_interval}",
+            f"print_energy_every={output_interval}",
             f"trajectory_file={trajectory}",
             f"energy_file={energy}",
             f"lastconf_file={last_conf}",
@@ -199,6 +206,19 @@ def run_case(
             time.sleep(0.05)
         stdout, _ = proc.communicate()
         result = parse_oxdna_log(stdout)
+        runtime_s = result.get("runtime_s")
+        observables_s = result.get("observables_s")
+        if (
+            isinstance(runtime_s, float)
+            and isinstance(observables_s, float)
+            and steps > 0
+        ):
+            result["non_observable_runtime_s"] = max(
+                0.0, runtime_s - observables_s
+            )
+            result["non_observable_ms_per_step"] = (
+                1000.0 * result["non_observable_runtime_s"] / steps
+            )
         result.update(
             returncode=proc.returncode,
             command=command,
