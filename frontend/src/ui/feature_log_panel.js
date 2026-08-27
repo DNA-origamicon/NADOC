@@ -1643,6 +1643,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     // re-run. Stays in sync with _EDITABLE_OP_KINDS in backend/api/assembly.py.
     const editableOpKinds = new Set([
       'assembly-polymerize',
+      'assembly-polymerize-periodic',
       'assembly-overhang-connection-add',
       'assembly-overhang-connection-patch',
     ])

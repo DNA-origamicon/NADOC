@@ -7121,6 +7121,7 @@
 
       <div id="right-tab-strip" aria-label="Right sidebar sections">
         <button id="right-tab-toggle" title="Hide sidebar">▶</button>
+        <button class="right-tab-btn" data-tab="assembly" title="Assembly" hidden>Assembly</button>
         <button class="right-tab-btn active" data-tab="properties" title="Properties">Properties</button>
         <button class="right-tab-btn" data-tab="visualization" title="Visualization">Visualization</button>
         <button class="right-tab-btn" data-tab="clustering" title="Clustering">Clustering</button>
@@ -7130,6 +7131,7 @@
 
       <!-- Right panel — tabbed feature groups -->
       <div id="right-panel">
+        <div id="right-tab-content-assembly" class="right-tab-content" hidden></div>
         <div id="right-tab-content-properties" class="right-tab-content"></div>
         <div id="right-tab-content-visualization" class="right-tab-content" hidden></div>
         <div id="right-tab-content-clustering" class="right-tab-content" hidden></div>
@@ -7703,23 +7705,26 @@
         <!-- Physics / FEM / oxDNA / MD sections moved to left sidebar's
              Dynamics tab — see #tab-content-dynamics. -->
 
+        <!-- Coloring is representation-aware but remains available in both
+             design and assembly mode. Unsupported modes are disabled by JS. -->
+        <div class="panel-section" id="coloring-options-section">
+          <h2>Coloring</h2>
+          <div class="repr-color-btns" id="repr-coloring-row">
+            <button class="xover-mode-btn" id="repr-color-strand">Strand color</button>
+            <button class="xover-mode-btn" id="repr-color-base">Base color</button>
+            <button class="xover-mode-btn" id="repr-color-cluster">Cluster color</button>
+            <button class="xover-mode-btn" id="repr-color-overhang-only">Overhang highlight</button>
+            <button class="xover-mode-btn" id="repr-color-cpk">Atomic (CPK)</button>
+            <button class="xover-mode-btn" id="repr-color-source">By part / source</button>
+          </div>
+        </div>
+
         <!-- Representation options (collapsible) -->
         <div class="panel-section" id="repr-options-section">
           <h2 id="slab-heading" style="cursor:pointer;user-select:none">
             Representation Options <span id="slab-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
           </h2>
           <div id="slab-body" style="display:none">
-            <div class="xover-mode-row" id="repr-coloring-row">
-              <label>Coloring</label>
-              <div class="repr-color-btns">
-                <button class="xover-mode-btn" id="repr-color-strand">Strand color</button>
-                <button class="xover-mode-btn" id="repr-color-base">Base color</button>
-                <button class="xover-mode-btn" id="repr-color-cluster">Cluster color</button>
-                <button class="xover-mode-btn" id="repr-color-overhang-only">Overhang highlight</button>
-                <button class="xover-mode-btn" id="repr-color-cpk">Atomic (CPK)</button>
-                <button class="xover-mode-btn" id="repr-color-source">By part / source</button>
-              </div>
-            </div>
             <div class="slider-row" id="repr-bead-radius-row" style="display:none">
               <label>Bead radius (nm)</label>
               <span class="val" id="sv-bead-radius">0.10</span>

@@ -547,7 +547,10 @@ def load_assembly(body: AssemblyLoadRequest) -> dict:
     assembly, notice = _maybe_auto_downgrade_for_memory(assembly)
     assembly = _derive_assembly_duplexes_if_empty(assembly)
     assembly_state.clear_history()
-    assembly_state.set_assembly(assembly)
+    # Loading establishes a new baseline; do not push the previously-open
+    # document into this file's undo deque. Durable undo comes from the loaded
+    # assembly's own feature snapshots.
+    assembly_state.set_assembly_silent(assembly)
     resp = _assembly_response(assembly)
     if notice:
         resp["notice"] = notice
@@ -564,7 +567,7 @@ def import_assembly(body: AssemblyImportRequest) -> dict:
     assembly, notice = _maybe_auto_downgrade_for_memory(assembly)
     assembly = _derive_assembly_duplexes_if_empty(assembly)
     assembly_state.clear_history()
-    assembly_state.set_assembly(assembly)
+    assembly_state.set_assembly_silent(assembly)
     resp = _assembly_response(assembly)
     if notice:
         resp["notice"] = notice
@@ -2919,14 +2922,50 @@ def assembly_connector_arc_lengths(assembly) -> dict[str, dict[str, float]]:
 
 @router.post("/assembly/undo", status_code=200)
 def undo_assembly() -> dict:
-    """Undo the last assembly-level operation."""
-    return _assembly_response(assembly_state.undo())
+    """Undo the last assembly-level operation.
+
+    The in-memory deque is the fast path.  It is intentionally cleared when a
+    file is loaded, so after a reload fall back to the snapshots persisted in
+    ``Assembly.feature_log``.  This makes Ctrl-Z durable instead of limiting it
+    to the current server process/load session.
+    """
+    try:
+        return _assembly_response(assembly_state.undo())
+    except HTTPException as exc:
+        if exc.status_code != 404:
+            raise
+    current = assembly_state.get_or_404()
+    log = current.feature_log
+    cursor = current.feature_log_cursor
+    effective = len(log) - 1 if cursor == -1 else cursor
+    if not log or effective < 0:
+        raise HTTPException(status_code=404, detail="Nothing to undo.")
+    return seek_assembly_features(
+        SeekAssemblyFeaturesRequest(position=effective - 1 if effective > 0 else -2)
+    )
 
 
 @router.post("/assembly/redo", status_code=200)
 def redo_assembly() -> dict:
-    """Redo the last undone assembly-level operation."""
-    return _assembly_response(assembly_state.redo())
+    """Redo the last undone operation, including after a file reload."""
+    try:
+        return _assembly_response(assembly_state.redo())
+    except HTTPException as exc:
+        if exc.status_code != 404:
+            raise
+    current = assembly_state.get_or_404()
+    log = current.feature_log
+    cursor = current.feature_log_cursor
+    if not log or cursor == -1:
+        raise HTTPException(status_code=404, detail="Nothing to redo.")
+    next_index = 0 if cursor == -2 else cursor + 1
+    if next_index >= len(log):
+        raise HTTPException(status_code=404, detail="Nothing to redo.")
+    return seek_assembly_features(
+        SeekAssemblyFeaturesRequest(
+            position=-1 if next_index == len(log) - 1 else next_index
+        )
+    )
 
 
 # ── Debug endpoints ───────────────────────────────────────────────────────────

@@ -457,6 +457,40 @@ def test_periodic_feature_log_and_undo():
     assert len(v1_instances(u)) == 1  # chain removed
 
 
+def test_periodic_feature_log_persists_and_drives_undo_redo_after_reload(tmp_path):
+    """The on-disk feature snapshots are the durable undo stack.
+
+    Loading a .nass intentionally clears the process-local deque; Ctrl-Z/redo
+    must therefore fall back to the serialized feature log.
+    """
+    _seed_periodic_assembly()
+    r = client.post(
+        "/api/assembly/polymerize-periodic",
+        json={"instance_id": "seed", "count": 4, "direction": "forward"},
+    )
+    assert r.status_code == 200, r.text
+    saved = assembly_state.get_or_404().to_json()
+
+    saved_path = tmp_path / "periodic.nass"
+    saved_path.write_text(saved)
+    load = client.post("/api/assembly/load", json={"path": str(saved_path)})
+    assert load.status_code == 200, load.text
+    reloaded = assembly_state.get_or_404()
+    assert len(reloaded.instances) == 4
+    assert reloaded.feature_log[-1].op_kind == "assembly-polymerize-periodic"
+    assert reloaded.feature_log[-1].post_state_gz_b64
+
+    undo = client.post("/api/assembly/undo")
+    assert undo.status_code == 200, undo.text
+    assert len(v1_instances(undo)) == 1
+    assert undo.json()["assembly"]["feature_log_cursor"] == -2
+
+    redo = client.post("/api/assembly/redo")
+    assert redo.status_code == 200, redo.text
+    assert len(v1_instances(redo)) == 4
+    assert redo.json()["assembly"]["feature_log_cursor"] == -1
+
+
 def test_patch_instance_design_auto_resolves_periodic_chain():
     """The part-editor save path (PATCH /assembly/instances/{id}/design) must
     auto-resolve so a polymerized chain re-docks to the edited part — without the

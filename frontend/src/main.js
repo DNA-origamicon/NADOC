@@ -3026,6 +3026,7 @@ async function main() {
     _updateAssemblyTitle()
     document.getElementById('mode-indicator').textContent = 'ASSEMBLY MODE'
     _hideWelcome()
+    rightSidebar?.setAssemblyMode(true)
 
     // Save current display state of design-only right panel sections, then hide them
     _savedDesignPanelDisplay = {}
@@ -3069,6 +3070,7 @@ async function main() {
     store.setState({ assemblyActive: false })
     document.title = `NADOC 3D — ${_fileName ?? store.getState().currentDesign?.metadata?.name ?? 'Untitled'}`
     document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+    rightSidebar?.setAssemblyMode(false)
 
     // Restore design-only right panel sections
     for (const id of _DESIGN_PANEL_IDS) {
@@ -4499,9 +4501,12 @@ async function main() {
         showToast(`Duplicate failed: ${err?.message || 'unknown error'}`, { severity: 'error' })
       }
     },
-    onPolymerize: (inst) => polymerizePanel.open(
-      _instancePeriodic(inst) ? { periodicInstanceId: inst.id } : {},
-    ),
+    onPolymerize: (inst) => {
+      rightSidebar?.open('assembly')
+      polymerizePanel.open(
+        _instancePeriodic(inst) ? { periodicInstanceId: inst.id } : {},
+      )
+    },
     onDelete: async (inst) => {
       if (inst.id === store.getState().activeInstanceId) {
         store.setState({ activeInstanceId: null })

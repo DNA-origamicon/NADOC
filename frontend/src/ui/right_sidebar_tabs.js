@@ -1,8 +1,9 @@
 const TAB_SECTIONS = {
+  assembly: ['assembly-panel'],
   properties: ['properties-section', 'reverse-complement-section', 'move-rotate-panel', 'extrude-panel', 'deform-panel', 'strand-hist-section', 'groups-panel'],
-  visualization: ['representation-modes-section', 'repr-options-section', 'right-view-actions', 'right-multi-view', 'right-multi-overlay'],
+  visualization: ['representation-modes-section', 'coloring-options-section', 'repr-options-section', 'right-view-actions', 'right-multi-view', 'right-multi-overlay'],
   clustering: ['cluster-panel', 'joints-panel'],
-  overhangs: ['overhang-panel', 'overhang-connections-section', 'strand-anim-panel'],
+  overhangs: ['overhang-panel', 'overhang-connections-section', 'assembly-overhang-panel', 'assembly-oconn-panel', 'strand-anim-panel'],
 }
 
 const REPRESENTATIONS = [
@@ -132,6 +133,13 @@ export function initRightSidebarTabs({ document, storage = globalThis.localStora
     persist()
     render()
   }
+
+  function setAssemblyMode(enabled) {
+    const assemblyButton = buttons.find(button => button.dataset.tab === 'assembly')
+    if (assemblyButton) assemblyButton.hidden = !enabled
+    if (enabled) open('assembly')
+    else if (activeTab === 'assembly') open('properties')
+  }
   for (const button of buttons) button.addEventListener('click', () => select(button.dataset.tab))
   toggle?.addEventListener('click', () => {
     collapsed = !collapsed
@@ -153,5 +161,5 @@ export function initRightSidebarTabs({ document, storage = globalThis.localStora
   }
   updateRepresentation()
 
-  return { select, open, render, getActiveTab: () => activeTab, isCollapsed: () => collapsed, dispose: () => observer.disconnect() }
+  return { select, open, setAssemblyMode, render, getActiveTab: () => activeTab, isCollapsed: () => collapsed, dispose: () => observer.disconnect() }
 }

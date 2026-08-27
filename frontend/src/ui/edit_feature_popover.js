@@ -56,6 +56,10 @@ const OP_SCHEMAS = {
     { key: 'count',     label: 'Chain length',  type: 'number', integer: true, min: 2 },
     { key: 'direction', label: 'Direction',     type: 'select', options: ['forward', 'backward', 'both'] },
   ],
+  'assembly-polymerize-periodic': [
+    { key: 'count',     label: 'Chain length',  type: 'number', integer: true, min: 2 },
+    { key: 'direction', label: 'Direction',     type: 'select', options: ['forward', 'backward', 'both'] },
+  ],
   // assembly-mode overhang connection (linker definition)
   'assembly-overhang-connection-add': [
     { key: 'length_value',    label: 'Length value',     type: 'number' },

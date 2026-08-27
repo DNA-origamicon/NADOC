@@ -7,12 +7,14 @@ describe('right sidebar tabs', () => {
     const dom = new JSDOM(`
       <div id="right-tab-strip">
         <button id="right-tab-toggle"></button>
+        <button class="right-tab-btn" data-tab="assembly" hidden></button>
         <button class="right-tab-btn" data-tab="properties"></button>
         <button class="right-tab-btn" data-tab="visualization"></button>
         <button class="right-tab-btn" data-tab="clustering"></button>
         <button class="right-tab-btn" data-tab="overhangs"></button>
       </div>
       <div id="right-panel">
+        <div id="right-tab-content-assembly"></div>
         <div id="right-tab-content-properties"></div>
         <div id="right-tab-content-visualization"></div>
         <div id="right-tab-content-clustering"></div>
@@ -24,11 +26,15 @@ describe('right sidebar tabs', () => {
         <div class="panel-section" id="strand-hist-section"></div>
         <div class="panel-section" id="groups-panel"></div>
         <div class="panel-section" id="repr-options-section"></div>
+        <div class="panel-section" id="coloring-options-section"></div>
         <div class="panel-section" id="cluster-panel"></div>
         <div class="panel-section" id="joints-panel"></div>
         <div class="panel-section" id="overhang-panel"></div>
         <div class="panel-section" id="overhang-connections-section"></div>
         <div class="panel-section" id="strand-anim-panel"></div>
+        <div class="panel-section" id="assembly-panel"></div>
+        <div class="panel-section" id="assembly-overhang-panel"></div>
+        <div class="panel-section" id="assembly-oconn-panel"></div>
         <button id="reset-btn"></button><button id="unhide-all-btn"></button>
       </div>
       <button id="menu-view-detail-full" class="is-checked"></button>
@@ -46,6 +52,7 @@ describe('right sidebar tabs', () => {
     expect(document.querySelector('#right-tab-content-properties #move-rotate-panel')).toBeTruthy()
     expect(document.querySelector('#right-tab-content-clustering #joints-panel')).toBeTruthy()
     expect(document.querySelector('#right-tab-content-overhangs #strand-anim-panel')).toBeTruthy()
+    expect(document.querySelector('#right-tab-content-visualization #coloring-options-section')).toBeTruthy()
     expect(document.querySelector('#right-tab-content-visualization #right-view-actions #reset-btn')).toBeTruthy()
     expect(document.querySelector('#right-tab-content-visualization #right-multi-view-body')).toBeTruthy()
     expect(document.querySelector('#right-tab-content-visualization #right-multi-overlay-body')).toBeTruthy()
@@ -65,6 +72,26 @@ describe('right sidebar tabs', () => {
     expect(tabs.isCollapsed()).toBe(false)
     tabs.open('properties')
     expect(tabs.isCollapsed()).toBe(false)
+  })
+
+  it('keeps the assembly overview separate from overhang-related sections', () => {
+    const tabs = initRightSidebarTabs({ document, storage: null })
+    const button = document.querySelector('[data-tab="assembly"]')
+    expect(button.hidden).toBe(true)
+    expect(document.querySelector('#right-tab-content-assembly #assembly-panel')).toBeTruthy()
+    expect(document.querySelector('#right-tab-content-assembly #assembly-overhang-panel')).toBeNull()
+    expect(document.querySelector('#right-tab-content-assembly #assembly-oconn-panel')).toBeNull()
+    expect(document.querySelector('#right-tab-content-overhangs #assembly-overhang-panel')).toBeTruthy()
+    expect(document.querySelector('#right-tab-content-overhangs #assembly-oconn-panel')).toBeTruthy()
+
+    tabs.setAssemblyMode(true)
+    expect(button.hidden).toBe(false)
+    expect(tabs.getActiveTab()).toBe('assembly')
+    expect(document.getElementById('right-tab-content-assembly').hidden).toBe(false)
+
+    tabs.setAssemblyMode(false)
+    expect(button.hidden).toBe(true)
+    expect(tabs.getActiveTab()).toBe('properties')
   })
 
   it('proxies representation buttons to the existing controls', () => {

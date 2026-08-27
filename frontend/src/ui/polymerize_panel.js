@@ -11,8 +11,9 @@
  *     ring is the drag handle for revolute joints.)
  *   - Close (X button, Esc key, or another menu item) clears selection.
  *
- * The panel mounts itself as a sibling immediately after #properties-section
- * in #left-panel so it sits visually right below the Properties panel.
+ * The panel mounts immediately after #assembly-panel in the Assembly tab.
+ * The caller reveals that tab before opening it, including when Polymerize is
+ * invoked while another right-sidebar tab is active.
  *
  * Eligibility ("identical parts"):
  *   Mirrors backend _sources_match — file-backed sources match by path;
@@ -25,12 +26,14 @@
 
 import * as api from '../api/client.js'
 import { showConfirm } from './primitives/confirm.js'
+import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 
 const PANEL_HTML = `
-  <h2 style="display:flex;align-items:center;justify-content:space-between">
+  <h2 id="polymerize-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
     <span>Polymerize Origami</span>
-    <button id="poly-close-btn" title="Close" style="background:none;border:none;color:#8b949e;font-size:18px;cursor:pointer;padding:0 4px;line-height:1">&times;</button>
+    <span id="polymerize-panel-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
   </h2>
+  <div id="polymerize-panel-body" style="margin-top:8px">
   <div style="font-size:var(--text-xs);color:#484f58;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Mate</div>
   <select id="poly-mate-select" style="width:100%;background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:3px;padding:4px;font-size:var(--text-xs);margin-bottom:6px">
     <option value="">— Select a mate or periodic part —</option>
@@ -70,18 +73,18 @@ const PANEL_HTML = `
   </div>
   <button id="poly-go-btn" class="panel-action-btn" disabled style="width:100%">Polymerize</button>
   <div id="poly-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:6px;min-height:16px"></div>
+  </div>
 `
 
 export function initPolymerizePanel(store, { isInstancePeriodic, getBeltFillCount, onPolymerizeBelt } = {}) {
-  // ── Build panel DOM and mount below #properties-section ────────────────────
+  // Build panel DOM and mount it in the Assembly tab.
   const panel = document.createElement('div')
   panel.id = 'polymerize-panel'
   panel.className = 'panel-section'
-  panel.style.display = 'none'
   panel.innerHTML = PANEL_HTML
 
-  const propertiesSection = document.getElementById('properties-section')
-  if (propertiesSection) propertiesSection.after(panel)
+  const assemblySection = document.getElementById('assembly-panel')
+  if (assemblySection) assemblySection.after(panel)
   else document.body.appendChild(panel)
 
   const mateSelect    = panel.querySelector('#poly-mate-select')
@@ -90,7 +93,9 @@ export function initPolymerizePanel(store, { isInstancePeriodic, getBeltFillCoun
   const countInput    = panel.querySelector('#poly-count')
   const goBtn         = panel.querySelector('#poly-go-btn')
   const statusEl      = panel.querySelector('#poly-status')
-  const closeBtn      = panel.querySelector('#poly-close-btn')
+  const headingEl     = panel.querySelector('#polymerize-panel-heading')
+  const bodyEl        = panel.querySelector('#polymerize-panel-body')
+  const arrowEl       = panel.querySelector('#polymerize-panel-arrow')
   const additionalListEl = panel.querySelector('#poly-additional-list')
   const patternSectionEl = panel.querySelector('#poly-pattern-section')
   const patternActionsEl = panel.querySelector('#poly-pattern-actions')
@@ -112,7 +117,8 @@ export function initPolymerizePanel(store, { isInstancePeriodic, getBeltFillCoun
   selectNoneBtn.addEventListener('click', () => _setAllAdditional(false))
 
 
-  let _open                = false
+  let _collapsed           = getSectionCollapsed('right', 'polymerize-panel', true)
+  let _open                = !_collapsed
   let _selectedJointId     = null
   // When set, the dropdown's "via periodic boundary" option is selected: chain
   // grows from this single instance via POST /assembly/polymerize-periodic
@@ -124,6 +130,22 @@ export function initPolymerizePanel(store, { isInstancePeriodic, getBeltFillCoun
   let _beltCountPrefilled  = false   // so we pre-fill the auto count only once per selection
   // Set of instance ids the user wants to clone alongside the seed pair.
   let _additionalSelected  = new Set()
+
+  function _renderCollapsed() {
+    bodyEl.style.display = _collapsed ? 'none' : ''
+    arrowEl.classList.toggle('is-collapsed', _collapsed)
+  }
+
+  function _setCollapsed(collapsed) {
+    _collapsed = !!collapsed
+    _open = !_collapsed
+    setSectionCollapsed('right', 'polymerize-panel', _collapsed)
+    _renderCollapsed()
+    if (_open) _renderStateFromStore()
+  }
+
+  _renderCollapsed()
+  headingEl.addEventListener('click', () => _setCollapsed(!_collapsed))
 
   // A part is periodic when its design carries an is_periodic_seam forced
   // ligation. Inline sources embed the design (read it directly); file-backed
@@ -576,32 +598,24 @@ export function initPolymerizePanel(store, { isInstancePeriodic, getBeltFillCoun
   // `opts.periodicInstanceId` pre-selects that part's "via periodic boundary"
   // dropdown entry (used when opening from a right-click on a periodic part).
   function open(opts = {}) {
-    _open = true
     _selectedJointId = null
     _periodicInstanceId = opts?.periodicInstanceId || null
     _beltRiderId = null
     _beltCountPrefilled = false
     statusEl.textContent = ''
-    panel.style.display = ''
+    _setCollapsed(false)
     _renderStateFromStore()
     document.addEventListener('keydown', _onKey)
   }
 
   function close() {
-    if (!_open) return
-    _open = false
-    _selectedJointId = null
-    _periodicInstanceId = null
-    _beltRiderId = null
-    panel.style.display = 'none'
+    _setCollapsed(true)
     document.removeEventListener('keydown', _onKey)
   }
 
   function _onKey(e) {
     if (e.key === 'Escape') close()
   }
-
-  closeBtn.addEventListener('click', close)
 
   function setSelectedJoint(jointId) {
     if (!_open) return
