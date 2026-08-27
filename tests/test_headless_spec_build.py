@@ -43,6 +43,7 @@ from tests.automation_harness import (
     assert_part_from_primitive,
     assert_part_is_circular_disc,
     assert_polymer_chain,
+    assert_periodic_chain_tiles,
     assert_roundtrip_stable,
     assert_spec_constraints_reported,
     assert_spec_matches_calls,
@@ -1752,6 +1753,33 @@ def test_polymerized_spec_roundtrips_stable():
     assert len(reloaded.joints) == 3  # seed mate + 2 replicated chain joints
 
 
+def test_periodic_polymer_is_available_in_declarative_headless_specs(tmp_path):
+    """One periodic source part can be expanded without a browser or seed mate."""
+    from tests.test_headless_assembly_build import _periodic_seed_design
+
+    source = tmp_path / "periodic.nadoc"
+    source.write_text(_periodic_seed_design().to_json(), encoding="utf-8")
+    spec = {
+        "kind": "assembly",
+        "name": "Periodic polymer",
+        "parts": {"segment": {"from_file": str(source)}},
+        "ops": [
+            {"op": "add_part", "part": "segment", "ref": "seed"},
+            {
+                "op": "polymerize_periodic",
+                "instance": "seed",
+                "count": 5,
+                "direction": "both",
+            },
+        ],
+    }
+
+    assembly = hs.build_assembly(spec)
+    assert len(assembly.instances) == 5
+    assert_periodic_chain_tiles(assembly)
+    assert assembly.feature_log[-1].op_kind == "assembly-polymerize-periodic"
+
+
 # ── declarative relaxed-structure constraints (AF-13 P3 → grammar) ─────────────
 # build_and_check_design lowers a design spec's `constraints` block to
 # check_relaxed_constraint verdicts against an oxDNA relaxation.  Against the mock
@@ -2021,4 +2049,5 @@ def test_spec_build_adds_no_coverage():
     # relax_duplex added /design/duplexes/{id}/relax (bound-duplex relax): 55 → 56.
     # AF-37's direct-binding CREATION added create/patch/delete_overhang_binding
     # + split_sub_domain + patch_sub_domain: 56 → 61.
-    assert headless_coverage_report()["covered"] == 61
+    # Headless assembly validation + export wrappers: 61 → 63.
+    assert headless_coverage_report()["covered"] == 63

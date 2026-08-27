@@ -21,7 +21,7 @@ The grammar is deliberately tiny (the "start small, grow it" of the backlog):
   ``bend`` · ``twist`` · ``circle_segment`` · ``auto_scaffold`` · ``auto_crossover`` ·
   ``full_autostaple`` · ``apply_loop_skips``
 * **assembly** ops — ``add_part`` · ``place_grid`` · ``place_ring`` · ``mate`` ·
-  ``gear`` · ``belt`` · ``polymerize``
+  ``gear`` · ``belt`` · ``polymerize`` · ``polymerize_periodic``
 
 Helices are referenced declaratively by their lattice ``grid_pos`` ``[row, col]``
 (stable across id schemes), assembly instances by a spec-assigned ``ref`` key, and
@@ -814,6 +814,7 @@ _ASSEMBLY_OP_KEYS = {
     "gear": {"op", "joint_a", "joint_b", "ratio", "invert", "name"},
     "belt": {"op", "joint_a", "joint_b", "radius_a", "radius_b", "name"},
     "polymerize": {"op", "joint", "count", "direction"},
+    "polymerize_periodic": {"op", "instance", "count", "direction"},
 }
 _CONNECTOR_KEYS = {"label", "position", "normal"}
 
@@ -936,14 +937,17 @@ def _parse_assembly_op(raw, *, where: str) -> BuildOp:
             raise BuildSpecError(f"{here}: 'radius_a'/'radius_b' must be > 0")
         if "name" in raw:
             p["name"] = _as_str(raw["name"], key="name", where=here)
-    elif op == "polymerize":
+    elif op in ("polymerize", "polymerize_periodic"):
         # Grow a linear chain of identical parts from a SINGLE seed mate (referenced
         # by its ``ref`` key) — the chain marches along the seed mate's part-to-part
         # offset.  count is the total chain length (the seed pair already counts as 2).
         # Unlike gear/belt the seed mate may be ANY joint_type (rigid/revolute/…); the
         # only seed requirement (the two mated parts share a source design) is enforced
         # by the route at build time, not here.
-        p["joint"] = _as_str(_get(raw, "joint", where=here), key="joint", where=here)
+        ref_key = "joint" if op == "polymerize" else "instance"
+        p[ref_key] = _as_str(
+            _get(raw, ref_key, where=here), key=ref_key, where=here
+        )
         p["count"] = _as_int(_get(raw, "count", where=here), key="count", where=here)
         if p["count"] < 2:
             raise BuildSpecError(
@@ -1063,6 +1067,8 @@ def parse_assembly_spec(spec, *, where: str = "assembly") -> AssemblySpec:
             {"op": "belt", "joint_a": "<joint-key>", "joint_b": "<joint-key>",
              "radius_a": num, "radius_b": num},
             {"op": "polymerize", "joint": "<joint-key>", "count": int,
+             "direction": "forward"|"backward"|"both"},
+            {"op": "polymerize_periodic", "instance": "<inst-key>", "count": int,
              "direction": "forward"|"backward"|"both"}
           ]
         }
@@ -1076,8 +1082,10 @@ def parse_assembly_spec(spec, *, where: str = "assembly") -> AssemblySpec:
     ``polymerize`` ``joint`` names a joint defined by a prior ``mate`` ``ref`` (of
     *any* joint_type — polymerize replicates a single seed mate; the route's own
     requirement that the seed mate joins two source-identical parts is enforced at
-    build time).  So a structurally-impossible assembly fails at parse time, before
-    any build runs.  Raises :class:`BuildSpecError` on any violation.
+    build time); and ``polymerize_periodic`` names a prior instance ref (the route
+    validates that its source contains periodic seams). So a structurally-impossible
+    assembly fails at parse time, before any build runs. Raises
+    :class:`BuildSpecError` on any violation.
     """
     if not isinstance(spec, dict):
         raise BuildSpecError(
@@ -1164,6 +1172,13 @@ def parse_assembly_spec(spec, *, where: str = "assembly") -> AssemblySpec:
                 raise BuildSpecError(
                     f"{loc}: polymerize joint {jref!r} was not defined by a prior "
                     f"mate ref ({sorted(defined_joints)})"
+                )
+        if opn.op == "polymerize_periodic":
+            iref = p["instance"]
+            if iref not in defined:
+                raise BuildSpecError(
+                    f"{loc}: polymerize_periodic instance {iref!r} was not defined by "
+                    f"a prior add_part ref ({sorted(defined)})"
                 )
 
     return AssemblySpec(name=name, parts=parts, ops=ops)

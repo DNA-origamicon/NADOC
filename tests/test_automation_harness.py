@@ -518,7 +518,8 @@ def test_oxdna_coverage_report_separate_from_design_assembly():
     # + relax_duplex (55→56).
     # AF-37 direct-binding CREATION: create/patch/delete_overhang_binding +
     # split_sub_domain + patch_sub_domain (56→61).
-    assert headless_coverage_report()["covered"] == 61  # /oxdna audit is separate
+    # Assembly validation + export wrappers increased headless route coverage: 61 → 63.
+    assert headless_coverage_report()["covered"] == 63  # /oxdna audit is separate
     ox = oxdna_coverage_report()
     assert ox["total"] == ox["covered"] + ox["uncovered"]
     covered = {r["endpoint"] for r in ox["covered_routes"]}

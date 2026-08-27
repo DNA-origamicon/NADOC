@@ -901,6 +901,27 @@ def _periodic_chain(L: int = 42, *, count: int = 4, direction: str = "forward"):
     return assembly_state.get_or_404().model_copy(deep=True)
 
 
+def test_route_automation_validate_export_and_durable_history():
+    """Public headless helpers cover the inspection and history routes too."""
+    with hab.assembly_scratch_session():
+        built = _periodic_chain(count=4)
+        assert hab.validate()["passed"] is True
+        exported = hab.export_json()
+        assert len(type(built).from_json(exported).instances) == 4
+
+        hab.undo()
+        assert len(assembly_state.get_or_404().instances) == 1
+        hab.redo()
+        assert len(assembly_state.get_or_404().instances) == 4
+
+        # Import clears the in-memory stacks; feature-log snapshots still power undo.
+        hab.import_assembly(exported)
+        hab.undo()
+        assert len(assembly_state.get_or_404().instances) == 1
+        hab.redo()
+        assert len(assembly_state.get_or_404().instances) == 4
+
+
 def test_periodic_polymerize_tiles_chain():
     """The derived repeat unit tiles the chain seamlessly at every junction."""
     with hab.assembly_scratch_session():

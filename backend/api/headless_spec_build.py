@@ -503,6 +503,10 @@ def _run_assembly_op(
         )
     elif op.op == "polymerize":
         hab.polymerize(joint_refs[p["joint"]], p["count"], direction=p["direction"])
+    elif op.op == "polymerize_periodic":
+        hab.polymerize_periodic(
+            refs[p["instance"]], p["count"], direction=p["direction"]
+        )
     else:  # unreachable — parse_assembly_spec rejects unknown ops
         raise BuildSpecError(f"unsupported assembly op {op.op!r}")
 

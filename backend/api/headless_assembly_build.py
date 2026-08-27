@@ -40,8 +40,14 @@ from backend.api.assembly import (
     CreateAssemblyRequest,
     add_instance as _route_add_instance,
     create_assembly as _route_create_assembly,
+    export_assembly as _route_export_assembly,
     import_assembly as _route_import_assembly,
+    redo_assembly as _route_redo_assembly,
     resolve_assembly as _route_resolve_assembly,
+    undo_assembly as _route_undo_assembly,
+)
+from backend.api.routes_assembly_validation import (
+    validate_assembly as _route_validate_assembly,
 )
 from backend.api.routes_assembly_connectors import (
     AddConnectorRequest,
@@ -792,4 +798,26 @@ def import_assembly(content: str) -> Assembly:
     document, so wrap it in :func:`assembly_scratch_session` to stay isolated.
     """
     _route_import_assembly(AssemblyImportRequest(content=content))
+    return assembly_state.get_or_404()
+
+
+def validate() -> dict:
+    """Run the same structured validation used by ``GET /assembly/validate``."""
+    return _route_validate_assembly()
+
+
+def export_json() -> str:
+    """Serialize the active assembly through ``GET /assembly/export``."""
+    return bytes(_route_export_assembly().body).decode("utf-8")
+
+
+def undo() -> Assembly:
+    """Undo one feature through ``POST /assembly/undo`` (including durable fallback)."""
+    _route_undo_assembly()
+    return assembly_state.get_or_404()
+
+
+def redo() -> Assembly:
+    """Redo one feature through ``POST /assembly/redo`` (including durable fallback)."""
+    _route_redo_assembly()
     return assembly_state.get_or_404()
