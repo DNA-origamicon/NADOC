@@ -20,6 +20,13 @@ vi.mock('./metric_graph_popup.js', () => ({
   openMetricGraphPopup: (...a) => openPopup(...a),
   metricSpecs: () => ({ spatial: {}, temporal: {} }),
 }))
+const downloadText = vi.fn()
+vi.mock('./metric_export_modal.js', () => ({
+  openMetricExportModal: vi.fn().mockResolvedValue({ png: false, data: true }),
+  exportChoiceFiles: () => ['data'],
+  downloadText: (...a) => downloadText(...a),
+  downloadHref: vi.fn(),
+}))
 
 import { initMdMetricsCard } from './md_metrics_card.js'
 
@@ -31,7 +38,7 @@ const IDS = {
   'md-metrics-scope-chain': 'input',
   'md-metrics-all-frames': 'input',
 }
-for (const tok of ['twist', 'curve', 'bp']) {
+for (const tok of ['twist', 'curve', 'bp', 'rmsd', 'energy', 'pressure']) {
   IDS[`md-metrics-${tok}-gen`] = 'button'
   IDS[`md-metrics-${tok}-display`] = 'button'
   IDS[`md-metrics-${tok}-export`] = 'button'
@@ -49,12 +56,17 @@ function makeResult() {
                  spatial: [{ job_id: 'md123', points: [[0, 0], [5, 1]] }] },
     base_pairing: { temporal: { per_frame: [1, 0.99, 0.98], boundaries: [], n_designed: 100 },
                     spatial: [{ job_id: 'md123', points: [[0, 1], [5, 0.9]] }] },
+    rmsd: { temporal: { per_frame: [0, 0.15, 0.2], boundaries: [] }, spatial: [] },
+    energy: { temporal: { per_frame: [-1000, -1010], x_values: [0.1, 0.2], boundaries: [] },
+              spatial: [] },
+    pressure: { temporal: { per_frame: [1.2, 0.8], x_values: [0.1, 0.2], boundaries: [] },
+                spatial: [] },
   }
 }
 
 beforeEach(() => {
   clearDom(); mountIds(IDS)
-  start.mockReset(); poll.mockReset(); openPopup.mockReset()
+  start.mockReset(); poll.mockReset(); openPopup.mockReset(); downloadText.mockReset()
 })
 
 describe('initMdMetricsCard', () => {
@@ -74,10 +86,23 @@ describe('initMdMetricsCard', () => {
     expect(document.getElementById('md-metrics-twist-fill').style.width).toBe('100%')
     // one pass computed every metric → base-pairing display also enabled
     expect(document.getElementById('md-metrics-bp-display').disabled).toBe(false)
+    expect(document.getElementById('md-metrics-rmsd-display').disabled).toBe(false)
+    expect(document.getElementById('md-metrics-energy-display').disabled).toBe(false)
+    expect(document.getElementById('md-metrics-pressure-export').disabled).toBe(false)
 
     disp.click()
     expect(openPopup).toHaveBeenCalledTimes(1)
     expect(openPopup.mock.calls[0][0].metric).toBe('twist')
+
+    document.getElementById('md-metrics-pressure-display').click()
+    expect(openPopup.mock.calls[1][0].metric).toBe('pressure')
+
+    document.getElementById('md-metrics-rmsd-display').click()
+    expect(openPopup.mock.calls[2][0].metric).toBe('rmsd')
+
+    document.getElementById('md-metrics-energy-export').click()
+    await vi.waitFor(() => expect(downloadText).toHaveBeenCalledTimes(1))
+    expect(downloadText.mock.calls[0][0]).toBe('energy_latest_temporal.csv')
   })
 
   it('needs a job — no job → status warns, no request', async () => {

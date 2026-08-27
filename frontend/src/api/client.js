@@ -3203,8 +3203,9 @@ export const getMdFramesSolventBin = (id, frameIndices, opts = {}) =>
 export const getMdSolventMeta = (id) =>
   _oxdnaJSON('GET', `/md/jobs/${id}/solvent-meta`)
 
-/** MD "Graphs and Metrics" — launch a background twist/curvature/base-pairing compute for a
- *  NAMD job (`{scope:'latest'|'chain'}`) → {metrics_id}; poll `getMdMetricsRun`. Same shape
+/** MD "Graphs and Metrics" — launch twist/curvature/base-pairing plus NAMD-log
+ *  energy/pressure measurements for a NAMD job (`{scope:'latest'|'chain'}`)
+ *  → {metrics_id}; poll `getMdMetricsRun`. Same shape
  *  as the oxDNA metrics endpoints, so the shared metrics card reuses it. */
 export const startMdMetrics      = (id, body)    => _oxdnaJSON('POST', `/md/jobs/${id}/metrics/start`, body)
 /** Poll an MD metric run → {state, progress, eta_s, frames_done, frames_total, result?}. */

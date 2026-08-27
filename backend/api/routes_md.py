@@ -4024,41 +4024,116 @@ def _local_dcd_bytes(package_dir: Path) -> int:
     return total
 
 
-def _decorate_terminal_segment_progress(job: MdJob, payload: dict, ws: Path) -> None:
-    """Expose what a deliberately-finished partial production actually completed.
+def _production_target_ns(seg: dict) -> float | None:
+    """Production duration from either historical stage prose or the segment name."""
+    import re  # noqa: PLC0415
 
-    ``Terminate run and download`` marks the job complete even when its requested production
-    length was intentionally shortened. Persisted segment status can therefore still
-    say ``running``. The downloaded XST/restart markers are the durable truth for steps;
-    the conf's timestep is the durable truth for simulated nanoseconds.
+    text = f"{seg.get('stage') or ''} {seg.get('name') or ''}"
+    if not re.search(r"production", text, re.I):
+        return None
+    before = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*ns\b[^\n]*?\bproduction\b", text, re.I)
+    if before:
+        return float(before.group(1))
+    after = re.search(r"production(?:_|\s+)([0-9p.]+)\s*ns\b", text, re.I)
+    if after:
+        try:
+            return float(after.group(1).replace("p", "."))
+        except ValueError:
+            pass
+    return None
+
+
+def _segment_timestep_fs(package: Path, name: str, fallback: object = None) -> float | None:
+    """Read the segment's integration timestep from its small NAMD conf."""
+    try:
+        for line in (package / f"{name}.conf").read_text(errors="replace").splitlines():
+            fields = line.split()
+            if fields and fields[0].lower() == "timestep" and len(fields) > 1:
+                value = float(fields[1])
+                return value if value > 0 else None
+    except (OSError, ValueError):
+        pass
+    try:
+        value = float(fallback)
+        return value if value > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _decorate_terminal_segment_progress(job: MdJob, payload: dict, ws: Path) -> None:
+    """Stamp completed/target ns on every production segment in every job state.
+
+    The name is retained for compatibility with callers/tests written when this only
+    handled ``Terminate run and download``. It now covers local markers, fresh RunPod
+    and Alpine observations, Alpine projections while disconnected, and durable
+    paused/stopped/failed/completed readings. The segment payload is request-local;
+    the persisted job is never rewritten here.
     """
-    if job.status != MdStatus.completed:
-        return
     from backend.core.namd_metrics import live_segment_step
 
     package = job.package_dir(ws)
+    live = job.live_metrics or {}
+    alpine_synced = _alpine_progress_is_synced(job)
     for seg in payload.get("segments") or []:
         name = str(seg.get("name") or "")
-        step = live_segment_step(package, name)
-        if step is None:
+        if "production" not in f"{seg.get('stage') or ''} {name}".lower():
             continue
         planned = int(seg.get("steps") or 0)
-        step = min(step, planned) if planned > 0 else step
-        timestep_fs = None
-        conf = package / f"{name}.conf"
-        try:
-            for line in conf.read_text(errors="replace").splitlines():
-                fields = line.split()
-                if fields and fields[0].lower() == "timestep" and len(fields) > 1:
-                    timestep_fs = float(fields[1])
-                    break
-        except (OSError, ValueError):
-            pass
-        if timestep_fs is None:
-            timestep_fs = float((job.live_metrics or {}).get("timestep_fs") or 1.0)
+        timestep_fs = _segment_timestep_fs(package, name, live.get("timestep_fs"))
+        target_ns = _production_target_ns(seg)
+        if target_ns is None and planned > 0 and timestep_fs is not None:
+            target_ns = planned * timestep_fs / 1_000_000.0
+        if target_ns is None:
+            continue
+        seg["target_ns"] = target_ns
+
+        marker_step = live_segment_step(package, name)
+        observed_step = None
+        if live.get("segment") == name:
+            try:
+                observed_step = max(0, int(live.get("step")))
+            except (TypeError, ValueError):
+                pass
+
+        # A persisted done status proves the whole segment ran. A deliberately ended
+        # partial run is left marked running, and its marker/observation wins below.
+        step = planned if seg.get("status") == "done" and planned > 0 else 0
+        for candidate in (marker_step, observed_step):
+            if candidate is not None:
+                step = max(step, int(candidate))
+
+        estimated = False
+        # Only Alpine's disconnected/stale mode carries the last observation forward.
+        # A live RunPod poll shows its exact last node reading; paused/stopped jobs never
+        # continue advancing after their final durable checkpoint.
+        if (
+            job.execution_target == "alpine"
+            and job.status == MdStatus.running
+            and not alpine_synced
+            and live.get("segment") == name
+            and planned > 0
+        ):
+            projected, projected_ok = _remote_projected_step(job, planned)
+            if projected is not None and projected > step:
+                step = projected
+                estimated = projected_ok
+
+        if planned > 0:
+            step = min(step, planned)
+        if planned > 0:
+            completed_ns = target_ns * step / planned
+        elif timestep_fs is not None:
+            completed_ns = step * timestep_fs / 1_000_000.0
+        else:
+            completed_ns = 0.0
         seg["completed_steps"] = step
-        seg["completed_ns"] = step * timestep_fs / 1_000_000.0
-        seg["status"] = "done"
+        seg["completed_ns"] = completed_ns
+        if estimated:
+            seg["completed_ns_estimated"] = True
+        # Preserve the old early-termination behaviour: a completed job's partial
+        # production is an intentionally ended stage, not a forever-spinning one.
+        if job.status == MdStatus.completed and step > 0:
+            seg["status"] = "done"
 
 
 # Strong refs to in-flight background dir-size walks so the event loop can't GC them

@@ -6083,7 +6083,7 @@
                       <div style="font-size:10px;color:#6e7681;margin-top:5px">Whole machine · live · not saved (0–100%).</div>
                     </div>
                   </div>
-                  <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px">Twist, curvature &amp; base-pairing over a NAMD run — spatial (vs position) &amp; temporal (vs frame). Base pairing = fraction of designed pairs with C1'…C1' &lt; 12&nbsp;Å.</div>
+                  <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px">Twist, curvature, base-pairing, aligned DNA RMSD, total energy &amp; average pressure over a NAMD run. Geometry is shown spatially and temporally; RMSD measures duplex-core relaxation from the first trajectory frame; energy and pressure are NAMD log measurements versus simulated time. Base pairing = fraction of designed pairs with C1'…C1' &lt; 12&nbsp;Å.</div>
                   <div style="display:flex;gap:12px;margin-bottom:8px;font-size:var(--text-xs);color:#8b949e">
                     <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="radio" name="md-metrics-scope" id="md-metrics-scope-latest" checked> Latest job</label>
                     <label style="display:flex;gap:4px;align-items:center;cursor:pointer" title="Concatenate this job's whole refit lineage into one timeline (spatial profiles overlay per job)."><input type="radio" name="md-metrics-scope" id="md-metrics-scope-chain"> All refit jobs</label>
@@ -6114,7 +6114,7 @@
                     <div id="md-metrics-curve-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:12px"></div>
                   </div>
                   <!-- Base pairing -->
-                  <div>
+                  <div style="margin-bottom:8px">
                     <div style="display:flex;align-items:center;gap:5px">
                       <span style="flex:1;font-size:var(--text-xs);color:#c9d1d9" title="Fraction of designed base pairs with C1'…C1' within 12 Å (native MD Watson-Crick proxy)">Base pairing</span>
                       <button id="md-metrics-bp-gen"     title="Generate / refresh the measurements from the trajectory" style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Generate</button>
@@ -6123,6 +6123,39 @@
                     </div>
                     <div id="md-metrics-bp-bar" style="display:none;height:4px;background:#21262d;border-radius:2px;margin-top:4px;overflow:hidden"><div id="md-metrics-bp-fill" style="height:100%;width:0;background:#3fb950;transition:width .2s"></div></div>
                     <div id="md-metrics-bp-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:12px"></div>
+                  </div>
+                  <!-- Aligned DNA RMSD -->
+                  <div style="margin-bottom:8px">
+                    <div style="display:flex;align-items:center;gap:5px">
+                      <span style="flex:1;font-size:var(--text-xs);color:#c9d1d9" title="Least-squares RMSD of mapped phosphates in the designed dsDNA core relative to the job's first trajectory frame (nm)">Aligned DNA RMSD</span>
+                      <button id="md-metrics-rmsd-gen"     title="Generate / refresh aligned DNA RMSD from the trajectory" style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Generate</button>
+                      <button id="md-metrics-rmsd-display" title="Show aligned DNA RMSD versus trajectory frame" disabled style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed">Display</button>
+                      <button id="md-metrics-rmsd-export"  title="Export PNG and/or CSV" disabled style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed">Export</button>
+                    </div>
+                    <div id="md-metrics-rmsd-bar" style="display:none;height:4px;background:#21262d;border-radius:2px;margin-top:4px;overflow:hidden"><div id="md-metrics-rmsd-fill" style="height:100%;width:0;background:#3fb950;transition:width .2s"></div></div>
+                    <div id="md-metrics-rmsd-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:12px"></div>
+                  </div>
+                  <!-- Total energy -->
+                  <div style="margin-bottom:8px">
+                    <div style="display:flex;align-items:center;gap:5px">
+                      <span style="flex:1;font-size:var(--text-xs);color:#c9d1d9" title="NAMD TOTAL from each ENERGY record (kcal/mol)">Total energy</span>
+                      <button id="md-metrics-energy-gen"     title="Generate / refresh total-energy measurements from the NAMD logs" style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Generate</button>
+                      <button id="md-metrics-energy-display" title="Show total energy versus simulated time" disabled style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed">Display</button>
+                      <button id="md-metrics-energy-export"  title="Export PNG and/or CSV" disabled style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed">Export</button>
+                    </div>
+                    <div id="md-metrics-energy-bar" style="display:none;height:4px;background:#21262d;border-radius:2px;margin-top:4px;overflow:hidden"><div id="md-metrics-energy-fill" style="height:100%;width:0;background:#3fb950;transition:width .2s"></div></div>
+                    <div id="md-metrics-energy-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:12px"></div>
+                  </div>
+                  <!-- Pressure -->
+                  <div>
+                    <div style="display:flex;align-items:center;gap:5px">
+                      <span style="flex:1;font-size:var(--text-xs);color:#c9d1d9" title="NAMD PRESSAVG, falling back to GPRESSAVG or instantaneous PRESSURE (bar)">Pressure</span>
+                      <button id="md-metrics-pressure-gen"     title="Generate / refresh pressure measurements from the NAMD logs" style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Generate</button>
+                      <button id="md-metrics-pressure-display" title="Show average pressure versus simulated time" disabled style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed">Display</button>
+                      <button id="md-metrics-pressure-export"  title="Export PNG and/or CSV" disabled style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed">Export</button>
+                    </div>
+                    <div id="md-metrics-pressure-bar" style="display:none;height:4px;background:#21262d;border-radius:2px;margin-top:4px;overflow:hidden"><div id="md-metrics-pressure-fill" style="height:100%;width:0;background:#3fb950;transition:width .2s"></div></div>
+                    <div id="md-metrics-pressure-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:12px"></div>
                   </div>
                 </div>
               </div>

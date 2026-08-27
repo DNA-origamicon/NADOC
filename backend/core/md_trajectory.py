@@ -1779,6 +1779,35 @@ def count_md_frames(segments) -> int:
     return total
 
 
+def aligned_rmsd_nm(mobile, reference) -> float:
+    """Least-squares RMSD in nm after removing rigid translation and rotation.
+
+    The caller selects the DNA atoms used for both fitting and measurement.  The MD
+    metrics path passes the mapped phosphate atoms in the designed duplex core, so
+    solvent, ions, free tails, and synthetic crossover inserts cannot dominate the
+    equilibration signal.
+    """
+    mobile_xyz = np.asarray(mobile, dtype=float)
+    reference_xyz = np.asarray(reference, dtype=float)
+    if (
+        mobile_xyz.shape != reference_xyz.shape
+        or mobile_xyz.ndim != 2
+        or mobile_xyz.shape[1] != 3
+        or len(mobile_xyz) < 3
+    ):
+        raise ValueError("aligned RMSD requires matching (N, 3) arrays with N >= 3")
+    mobile_centered = mobile_xyz - mobile_xyz.mean(axis=0)
+    reference_centered = reference_xyz - reference_xyz.mean(axis=0)
+    covariance = mobile_centered.T @ reference_centered
+    u, _singular, vt = np.linalg.svd(covariance)
+    handedness = np.linalg.det(vt.T @ u.T)
+    rotation = vt.T @ np.diag([1.0, 1.0, handedness]) @ u.T
+    aligned = mobile_centered @ rotation.T
+    return float(
+        np.sqrt(np.mean(np.sum((aligned - reference_centered) ** 2, axis=1)))
+    )
+
+
 def md_metric_series(
     topology_path,
     segments,
@@ -1792,7 +1821,7 @@ def md_metric_series(
     on_frame=None,
     on_stage=None,
 ) -> dict:
-    """SINGLE-PASS per-frame twist, curvature AND base-pairing over a NAMD run — the
+    """SINGLE-PASS twist, curvature, base-pairing, and aligned DNA RMSD over a NAMD run — the
     MD analogue of :func:`oxdna_health.production_metric_series`, and the compute behind
     the MD "Graphs and Metrics" card.
 
@@ -1802,7 +1831,9 @@ def md_metric_series(
     fraction — the fraction of designed (helix, bp) columns whose FORWARD/REVERSE C1'
     atoms are within :data:`MD_BP_CUTOFF_NM` (the native MD WC proxy; oxDNA uses a base-
     site distance instead, so the two engines' pairing curves are comparable in *trend*
-    but not in absolute cutoff).  Twist/curvature geometry reuses the engine-agnostic
+    but not in absolute cutoff) — plus least-squares RMSD of the designed duplex-core
+    phosphate coordinates relative to the first trajectory frame. Twist/curvature
+    geometry reuses the engine-agnostic
     ``oxdna_health`` bundle measures verbatim; only the frame source (NAMD PSF/DCD via
     ``_extract_md_nadoc_frame``) and the pairing metric (C1'…C1') differ.
 
@@ -1882,9 +1913,20 @@ def md_metric_series(
         np.asarray(group_helices, dtype=object), return_inverse=True
     )
 
+    # The first trajectory frame is the structural reference for this job. The
+    # extractor has already repaired PBC images; aligned_rmsd_nm performs a fresh fit
+    # on precisely the measured dsDNA core so the result is independent of the
+    # viewer/design pose and remains a conventional "RMSD from start" curve.
+    reference_frame = _extract_md_nadoc_frame(ctx, 0, with_c1p=True)
+    reference_p_nm = reference_frame[0]
+    if reference_p_nm is None or len(reference_p_nm) != n_keys or len(core_idx) < 3:
+        return {"ready": False, "n_frames": 0}
+    rmsd_reference = np.asarray(reference_p_nm[core_idx], dtype=float)
+
     twist_pf: list[float] = []
     curv_pf: list[float] = []
     bp_pf: list[float] = []
+    rmsd_pf: list[float] = []
     # Streaming means replace O(frames × nucleotides) retained coordinate arrays.
     position_sum = np.zeros((n_keys, 3), dtype=np.float64)
     formed_counts = np.zeros(n_designed, dtype=np.int64)
@@ -1895,14 +1937,17 @@ def md_metric_series(
     else:
         frame_indices = np.arange(n, dtype=np.int64)
 
-    def _measure_chunk(local_ctx, indices):
+    def _measure_chunk(local_ctx, indices, cached_first_frame=None):
         records = []
         local_sum = np.zeros((n_keys, 3), dtype=np.float64)
         local_formed = np.zeros(n_designed, dtype=np.int64)
         for idx in indices:
-            p_nm, _normals, c1p_nm = _extract_md_nadoc_frame(
-                local_ctx, int(idx), with_c1p=True
-            )
+            if int(idx) == 0 and cached_first_frame is not None:
+                p_nm, _normals, c1p_nm = cached_first_frame
+            else:
+                p_nm, _normals, c1p_nm = _extract_md_nadoc_frame(
+                    local_ctx, int(idx), with_c1p=True
+                )
             if p_nm is None or len(p_nm) != n_keys:
                 continue
             try:
@@ -1930,6 +1975,7 @@ def md_metric_series(
                     frame_twist - analytic_twist,
                     frame_curv - analytic_curv,
                     bp_value,
+                    aligned_rmsd_nm(p_nm[core_idx], rmsd_reference),
                 )
             )
             if on_frame is not None:
@@ -1960,21 +2006,26 @@ def md_metric_series(
                     topology_path, seg_paths, coordinate_path, design
                 )
             )
-            return _measure_chunk(local_ctx, chunk)
+            return _measure_chunk(
+                local_ctx,
+                chunk,
+                reference_frame if int(chunk[0]) == 0 else None,
+            )
 
         with ThreadPoolExecutor(max_workers=len(chunks)) as pool:
             chunk_results = list(pool.map(_worker, chunks))
     else:
-        chunk_results = [_measure_chunk(ctx, frame_indices)]
+        chunk_results = [_measure_chunk(ctx, frame_indices, reference_frame)]
 
     for records, local_sum, local_formed in chunk_results:
         position_sum += local_sum
         formed_counts += local_formed
-        for idx, twist_value, curv_value, bp_value in records:
+        for idx, twist_value, curv_value, bp_value, rmsd_value in records:
             measured_frame_indices.append(idx)
             twist_pf.append(twist_value)
             curv_pf.append(curv_value)
             bp_pf.append(bp_value)
+            rmsd_pf.append(rmsd_value)
             n_frames += 1
 
     if n_frames == 0 or not twist_pf:
@@ -2030,6 +2081,14 @@ def md_metric_series(
                 "n_designed": n_designed,
             },
             "spatial": bp_sp,
+        },
+        "rmsd": {
+            "temporal": {
+                "per_frame": [round(x, 6) for x in rmsd_pf],
+                "reference": "first_trajectory_frame",
+                "selection": "designed_dsDNA_core_phosphates",
+            },
+            "spatial": [],
         },
     }
 

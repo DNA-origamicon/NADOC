@@ -1,6 +1,7 @@
 /**
  * metric_graph.js — vanilla-canvas line-chart renderer for the oxDNA "Graphs and
- * Metrics" card.  No external chart library (CSP/offline): the pure cores
+ * Metrics" card. It also renders NAMD's temporal-only RMSD, energy, and pressure series.
+ * No external chart library (CSP/offline): the pure cores
  * (`niceTicks`, `dataToPixel`, `buildChartSpec`, `metricSeries`, `metricCSVs`)
  * compute a plain spec object that `drawChart` strokes onto a 2-D context and
  * `renderToDataURL` bakes to a PNG for export — so the exported image is exactly
@@ -28,6 +29,36 @@ export const METRIC_META = {
     label: 'Base pairing',
     spatial: { xLabel: 'axial position (nm)', yLabel: 'fraction paired' },
     temporal: { xLabel: 'frame', yLabel: 'fraction paired' },
+    zeroLine: false,
+  },
+  rmsd: {
+    label: 'Aligned DNA RMSD',
+    spatial: null,
+    temporal: {
+      xLabel: 'frame', yLabel: 'aligned RMSD (nm)',
+      csvX: 'frame', csvValue: 'aligned_dna_rmsd_nm',
+    },
+    source: 'trajectory',
+    zeroLine: false,
+  },
+  energy: {
+    label: 'Total energy',
+    spatial: null,
+    temporal: {
+      xLabel: 'simulation time (ns)', yLabel: 'total energy (kcal/mol)',
+      csvX: 'simulation_time_ns', csvValue: 'total_energy_kcal_per_mol',
+    },
+    source: 'namd-log',
+    zeroLine: false,
+  },
+  pressure: {
+    label: 'Pressure',
+    spatial: null,
+    temporal: {
+      xLabel: 'simulation time (ns)', yLabel: 'average pressure (bar)',
+      csvX: 'simulation_time_ns', csvValue: 'average_pressure_bar',
+    },
+    source: 'namd-log',
     zeroLine: false,
   },
 }
@@ -131,7 +162,7 @@ export function metricSeries(result, metric, domain) {
   const block = result[metric]
   if (domain === 'temporal') {
     const arr = block.temporal?.per_frame || []
-    const frameIndices = block.temporal?.frame_indices || []
+    const frameIndices = block.temporal?.x_values || block.temporal?.frame_indices || []
     return arr.length ? [{ label: 'all frames', color: SERIES_COLORS[0],
                            points: arr.map((v, i) => [frameIndices[i] ?? i, v]) }] : []
   }
@@ -150,16 +181,19 @@ function _shortId(jobId, i) {
 /** CSV text for both domains of a metric → `{ temporal, spatial }`. */
 export function metricCSVs(result, metric) {
   const block = result?.[metric] || {}
-  const temporalRows = ['frame,value']
-  const frameIndices = block.temporal?.frame_indices || []
+  const meta = METRIC_META[metric]?.temporal || {}
+  const xHeader = meta.csvX || 'frame'
+  const valueHeader = meta.csvValue || 'value'
+  const temporalRows = [`${xHeader},${valueHeader}`]
+  const frameIndices = block.temporal?.x_values || block.temporal?.frame_indices || []
   const bounds = block.temporal?.boundaries || []
   const jobAt = frame => {
     let jid = ''
-    for (const b of bounds) if (frame >= b.start_frame) jid = b.job_id
+    for (const b of bounds) if (frame >= (b.start_x ?? b.start_frame)) jid = b.job_id
     return jid
   }
   const hasJobs = bounds.length > 1
-  if (hasJobs) temporalRows[0] = 'frame,value,job_id'
+  if (hasJobs) temporalRows[0] = `${xHeader},${valueHeader},job_id`
   ;(block.temporal?.per_frame || []).forEach((v, i) => {
     const frame = frameIndices[i] ?? i
     temporalRows.push(hasJobs ? `${frame},${v},${jobAt(frame)}` : `${frame},${v}`)

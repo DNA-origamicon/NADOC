@@ -32,6 +32,15 @@ class NamdLogMetrics:
     warnings: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class NamdScalarSample:
+    """One NAMD ``ENERGY`` record used by the Graphs and Metrics time series."""
+
+    step: int
+    total_energy_kcal: float | None = None
+    pressure_bar: float | None = None
+
+
 # ── Regexes ───────────────────────────────────────────────────────────────────
 
 # NAMD reports throughput on "Benchmark time:" lines in one of two historical formats:
@@ -123,6 +132,59 @@ def parse_namd_log(log_path: Path) -> NamdLogMetrics:
             m.warnings.append("Could not parse ns/day from Benchmark line.")
 
     return m
+
+
+def parse_namd_scalar_series(log_paths) -> list[NamdScalarSample]:
+    """Read total-energy and average-pressure samples from one logical segment.
+
+    ``log_paths`` may contain the original log followed by checkpoint-continuation
+    logs. NAMD repeats the checkpoint step on a continuation, so records are keyed by
+    timestep and the newest copy wins. ``PRESSAVG`` is preferred, then ``GPRESSAVG``,
+    with instantaneous ``PRESSURE`` as the final fallback. Missing columns stay null;
+    a sample is retained when at least one requested scalar is present.
+    """
+    samples: dict[int, NamdScalarSample] = {}
+    for raw_path in log_paths:
+        path = Path(raw_path)
+        try:
+            lines = path.read_text(errors="replace").splitlines()
+        except OSError:
+            continue
+        col_idx: dict[str, int] = {}
+        for line in lines:
+            if line.startswith("ETITLE:"):
+                fields = line.split()
+                col_idx = {name: i - 1 for i, name in enumerate(fields) if i >= 1}
+                continue
+            if not line.startswith("ENERGY:") or not col_idx:
+                continue
+            try:
+                values = [float(v) for v in line.split()[1:]]
+            except ValueError:
+                continue
+
+            def _get(name: str) -> float | None:
+                idx = col_idx.get(name)
+                return values[idx] if idx is not None and idx < len(values) else None
+
+            ts = _get("TS")
+            if ts is None:
+                continue
+            energy = _get("TOTAL")
+            pressure = _get("PRESSAVG")
+            if pressure is None:
+                pressure = _get("GPRESSAVG")
+            if pressure is None:
+                pressure = _get("PRESSURE")
+            if energy is None and pressure is None:
+                continue
+            step = int(ts)
+            samples[step] = NamdScalarSample(
+                step=step,
+                total_energy_kcal=energy,
+                pressure_bar=pressure,
+            )
+    return [samples[step] for step in sorted(samples)]
 
 
 def last_namd_timestep_fast(log_path: Path, tail_bytes: int = 131072) -> int | None:

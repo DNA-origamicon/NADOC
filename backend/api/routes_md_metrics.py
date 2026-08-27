@@ -1,7 +1,8 @@
 """Graphs & Metrics — REST surface for the MD (NAMD) "Graphs and Metrics" card.
 
-The MD twin of :mod:`backend.api.routes_oxdna_metrics`: computes twist, curvature and
-base-pairing over a NAMD run's DCD trajectory in ONE pass
+The MD twin of :mod:`backend.api.routes_oxdna_metrics`: computes twist, curvature,
+base-pairing, and aligned DNA RMSD over a NAMD run's DCD trajectory in ONE pass, and
+reads total energy plus average pressure from the corresponding NAMD logs
 (:func:`backend.core.md_trajectory.md_metric_series`) and serves them as both domains —
 spatial (vs position along the bundle) and temporal (vs frame index) — for the graph
 popups + PNG/CSV export.  ``scope="latest"`` measures a single job; ``scope="chain"``
@@ -28,6 +29,7 @@ from backend.api.routes_md import (
     _load_job,
     _md_segment_dcds,
     _md_snapshot_design,
+    _segment_timestep_fs,
     _workspace,
 )
 
@@ -126,6 +128,73 @@ def _resolve_jobs(job_id: str, scope: str, ws: Path):
     return chain or [anchor]
 
 
+def _job_scalar_series(job, segment_names: list[str], ws: Path) -> dict:
+    """Energy/pressure log samples for one job on a monotonic simulated-time axis.
+
+    A resumed segment has a base log plus ``.resumeN.log`` files whose timesteps overlap
+    at the checkpoint. The parser de-duplicates those steps. Different protocol
+    segments can restart their timestep numbering, so each segment is normalized to
+    its first observed step and appended after the preceding segment.
+    """
+    from backend.core.namd_metrics import parse_namd_scalar_series
+
+    package = job.package_dir(ws)
+    by_name = {seg.name: seg for seg in job.segments}
+    energy_x: list[float] = []
+    energy_y: list[float] = []
+    pressure_x: list[float] = []
+    pressure_y: list[float] = []
+    offset_ns = 0.0
+    for name in dict.fromkeys(segment_names):
+        seg = by_name.get(name)
+        logs = [package / f"{name}.log", *sorted(package.glob(f"{name}.resume*.log"))]
+        samples = parse_namd_scalar_series(logs)
+        timestep_fs = _segment_timestep_fs(
+            package,
+            name,
+            (job.live_metrics or {}).get("timestep_fs"),
+        )
+        if timestep_fs is None:
+            continue
+        if not samples:
+            if seg is not None and getattr(seg, "status", None) == "done":
+                offset_ns += (
+                    max(0, int(getattr(seg, "steps", 0)))
+                    * timestep_fs
+                    / 1_000_000.0
+                )
+            continue
+        first_step = 0
+        try:
+            for line in (package / f"{name}.conf").read_text(errors="replace").splitlines():
+                fields = line.split()
+                if fields and fields[0].lower() == "firsttimestep" and len(fields) > 1:
+                    first_step = int(float(fields[1]))
+                    break
+        except (OSError, ValueError):
+            pass
+        for sample in samples:
+            x_ns = offset_ns + (sample.step - first_step) * timestep_fs / 1_000_000.0
+            if sample.total_energy_kcal is not None:
+                energy_x.append(round(x_ns, 9))
+                energy_y.append(round(sample.total_energy_kcal, 6))
+            if sample.pressure_bar is not None:
+                pressure_x.append(round(x_ns, 9))
+                pressure_y.append(round(sample.pressure_bar, 6))
+        observed_ns = max(0, samples[-1].step - first_step) * timestep_fs / 1_000_000.0
+        planned_ns = (
+            max(0, int(getattr(seg, "steps", 0))) * timestep_fs / 1_000_000.0
+            if seg is not None and getattr(seg, "status", None) == "done"
+            else 0.0
+        )
+        offset_ns += max(observed_ns, planned_ns)
+    return {
+        "energy": {"x_values": energy_x, "per_frame": energy_y},
+        "pressure": {"x_values": pressure_x, "per_frame": pressure_y},
+        "duration_ns": offset_ns,
+    }
+
+
 def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> None:
     from backend.api.skip_twist_tuning import core_reference_geometry
     from backend.core.md_trajectory import count_md_frames, md_metric_series
@@ -184,11 +253,19 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
         twist_pf: list[float] = []
         curv_pf: list[float] = []
         bp_pf: list[float] = []
+        rmsd_pf: list[float] = []
         temporal_frame_indices: list[int] = []
         boundaries: list[dict] = []
         per_job: list[dict] = []
         n_designed = 0
         raw_frame_offset = 0
+        energy_x: list[float] = []
+        energy_pf: list[float] = []
+        pressure_x: list[float] = []
+        pressure_pf: list[float] = []
+        energy_boundaries: list[dict] = []
+        pressure_boundaries: list[dict] = []
+        scalar_time_offset = 0.0
         for j, (psf, ref, segments, design) in inputs:
             analytic = core_reference_geometry(design)
             res = md_metric_series(
@@ -219,7 +296,24 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
             twist_pf.extend(res["twist"]["temporal"]["per_frame"])
             curv_pf.extend(res["curvature"]["temporal"]["per_frame"])
             bp_pf.extend(res["base_pairing"]["temporal"]["per_frame"])
+            rmsd_pf.extend(res["rmsd"]["temporal"]["per_frame"])
             n_designed = max(n_designed, res["base_pairing"]["temporal"]["n_designed"])
+            scalar = _job_scalar_series(j, [s[0] for s in segments], ws)
+            if scalar["energy"]["per_frame"]:
+                energy_boundaries.append(
+                    {"job_id": j.job_id, "start_x": scalar_time_offset}
+                )
+            if scalar["pressure"]["per_frame"]:
+                pressure_boundaries.append(
+                    {"job_id": j.job_id, "start_x": scalar_time_offset}
+                )
+            energy_x.extend(scalar_time_offset + x for x in scalar["energy"]["x_values"])
+            energy_pf.extend(scalar["energy"]["per_frame"])
+            pressure_x.extend(
+                scalar_time_offset + x for x in scalar["pressure"]["x_values"]
+            )
+            pressure_pf.extend(scalar["pressure"]["per_frame"])
+            scalar_time_offset += scalar["duration_ns"]
             per_job.append(
                 {
                     "job_id": j.job_id,
@@ -274,6 +368,32 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
                     for p in per_job
                 ],
             },
+            "rmsd": {
+                "temporal": {
+                    "per_frame": rmsd_pf,
+                    "frame_indices": temporal_frame_indices,
+                    "boundaries": boundaries,
+                    "reference": "first_trajectory_frame_per_job",
+                    "selection": "designed_dsDNA_core_phosphates",
+                },
+                "spatial": [],
+            },
+            "energy": {
+                "temporal": {
+                    "per_frame": energy_pf,
+                    "x_values": energy_x,
+                    "boundaries": energy_boundaries,
+                },
+                "spatial": [],
+            },
+            "pressure": {
+                "temporal": {
+                    "per_frame": pressure_pf,
+                    "x_values": pressure_x,
+                    "boundaries": pressure_boundaries,
+                },
+                "spatial": [],
+            },
         }
         _set(run_id, state="done", progress=1.0, eta_s=0.0, result=result)
     except Exception as exc:  # surface any failure to the poller
@@ -282,7 +402,7 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
 
 @router.post("/md/jobs/{job_id}/metrics/start")
 def start_md_metrics(job_id: str, req: MdMetricsStartRequest) -> dict:
-    """Launch a background twist/curvature/base-pairing compute for a NAMD job
+    """Launch a background twist/curvature/base-pairing/RMSD/energy/pressure compute for a NAMD job
     (``scope=latest``) or its whole refit lineage (``scope=chain``).  Returns
     ``{metrics_id}``; poll ``GET /md/metrics/{id}`` for progress + the result."""
     _load_job(job_id)  # 404 early if the job is unknown
@@ -512,8 +632,8 @@ def get_md_cpd_trace(run_id: str) -> dict:
 def get_md_metrics(run_id: str) -> dict:
     """Progress + result of an MD metric run: ``{state, progress, eta_s, frames_done,
     frames_total, result?, error?}``.  ``state`` is ``running`` | ``done`` | ``error``;
-    ``result`` (on done) carries the twist/curvature/base-pairing series for both
-    domains — SAME shape as the oxDNA metrics route, so the graph card reuses it."""
+    ``result`` (on done) carries twist/curvature/base-pairing for both domains plus
+    temporal aligned-DNA-RMSD, NAMD total-energy, and average-pressure series."""
     with _LOCK:
         run = _RUNS.get(run_id)
         if run is None:

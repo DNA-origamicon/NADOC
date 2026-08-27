@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   niceTicks, dataToPixel, buildChartSpec, metricSeries, metricCSVs,
 } from './metric_graph.js'
+import { metricSpecs } from './metric_graph_popup.js'
 
 describe('niceTicks', () => {
   it('spans the range with round values', () => {
@@ -69,6 +70,15 @@ const RESULT = {
       { job_id: 'aaa111', points: [[0, 0], [5, 10]] },
       { job_id: 'bbb222', points: [[0, 0], [5, 12]] }],
   },
+  energy: {
+    temporal: { per_frame: [-1000, -1010], x_values: [0.25, 0.5], boundaries: [
+      { job_id: 'aaa111', start_x: 0 }, { job_id: 'bbb222', start_x: 0.5 }] },
+    spatial: [],
+  },
+  rmsd: {
+    temporal: { per_frame: [0, 0.12], frame_indices: [0, 8], boundaries: [] },
+    spatial: [],
+  },
 }
 
 describe('metricSeries', () => {
@@ -86,6 +96,14 @@ describe('metricSeries', () => {
   it('empty for a missing metric', () => {
     expect(metricSeries(RESULT, 'nope', 'temporal')).toEqual([])
   })
+  it('uses explicit simulation-time x values for NAMD scalar series', () => {
+    expect(metricSeries(RESULT, 'energy', 'temporal')[0].points)
+      .toEqual([[0.25, -1000], [0.5, -1010]])
+  })
+  it('uses sampled trajectory frame indices for aligned RMSD', () => {
+    expect(metricSeries(RESULT, 'rmsd', 'temporal')[0].points)
+      .toEqual([[0, 0], [8, 0.12]])
+  })
 })
 
 describe('metricCSVs', () => {
@@ -97,5 +115,35 @@ describe('metricCSVs', () => {
     expect(spatial.split('\n')[0]).toBe('job_id,axial_nm,value')
     expect(spatial).toContain('aaa111,0,0')
     expect(spatial).toContain('bbb222,5,12')
+  })
+  it('uses measurement-specific headers and time boundaries for energy CSV', () => {
+    const { temporal, spatial } = metricCSVs(RESULT, 'energy')
+    expect(temporal.split('\n')[0])
+      .toBe('simulation_time_ns,total_energy_kcal_per_mol,job_id')
+    expect(temporal).toContain('0.25,-1000,aaa111')
+    expect(temporal).toContain('0.5,-1010,bbb222')
+    expect(spatial).toBe('job_id,axial_nm,value\n')
+  })
+  it('exports aligned RMSD with its unit-bearing value header', () => {
+    const { temporal, spatial } = metricCSVs(RESULT, 'rmsd')
+    expect(temporal).toBe('frame,aligned_dna_rmsd_nm\n0,0\n8,0.12\n')
+    expect(spatial).toBe('job_id,axial_nm,value\n')
+  })
+})
+
+describe('metricSpecs', () => {
+  it('builds energy as a simulation-time graph without a fictional spatial graph', () => {
+    const specs = metricSpecs('energy', RESULT, 'latest')
+    expect(specs.spatial).toBeNull()
+    expect(specs.temporal.empty).toBe(false)
+    expect(specs.temporal.xLabel).toBe('simulation time (ns)')
+    expect(specs.temporal.yLabel).toBe('total energy (kcal/mol)')
+  })
+  it('builds RMSD as a frame graph without a fictional spatial graph', () => {
+    const specs = metricSpecs('rmsd', RESULT, 'latest')
+    expect(specs.spatial).toBeNull()
+    expect(specs.temporal.empty).toBe(false)
+    expect(specs.temporal.xLabel).toBe('frame')
+    expect(specs.temporal.yLabel).toBe('aligned RMSD (nm)')
   })
 })

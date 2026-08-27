@@ -62,7 +62,7 @@ import { shouldStopLiveSession, shouldResumeDisplays, displayTabIds } from './di
 import { initJobWizard } from './md_job_wizard.js'
 import { isProductionParent, jobSettingsState } from './md_job_wizard_model.js'
 import { createContextMenu } from './primitives/context_menu.js'
-import { mdMinimizationRow, mdLatestStageLabel } from './md_stage_timeline.js'
+import { mdMinimizationRow, mdLatestStageLabel, mdProductionStageLabel } from './md_stage_timeline.js'
 import { mdHealthTileStates, TILE_STATE } from './md_health_tiles.js'
 
 // Routine panel lifecycle, polling, and WebSocket chatter is opt-in. Failures
@@ -4858,10 +4858,18 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       row.style.cssText = 'display:flex;align-items:center;gap:5px;padding:2px 0;white-space:nowrap'
 
       const lbl = document.createElement('span')
-      lbl.style.cssText = `color:${_C.muted};display:inline-block;width:140px;overflow:hidden;text-overflow:ellipsis;flex-shrink:0`
+      lbl.style.cssText = `color:${_C.muted};display:inline-block;min-width:0;overflow:hidden;text-overflow:ellipsis;flex:1 1 auto`
       lbl.textContent = stage
       lbl.title = stage
       row.appendChild(lbl)
+
+      // Keep every progress dot and the stage-level ✓/✗/spinner together at the
+      // right edge of the timeline box. Labels can vary dramatically in length
+      // (especially "245/500 ns production run"), but their indicators should form
+      // one stable, vertically aligned column rather than following the label text.
+      const indicators = document.createElement('span')
+      indicators.className = 'md-stage-indicators'
+      indicators.style.cssText = 'display:flex;align-items:center;justify-content:flex-end;gap:5px;margin-left:auto;flex-shrink:0'
 
       segs.forEach(seg => {
         const dot = document.createElement('span')
@@ -4879,7 +4887,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
           : (warnNote
             ? `${seg.name} · ${seg.percent}% · ${seg.status} · ${warnNote}`
             : `${seg.name} · ${seg.percent}% · ${seg.status}`)
-        row.appendChild(dot)
+        indicators.appendChild(dot)
       })
 
       const allDone   = segs.every(s => s.status === 'done')
@@ -4891,15 +4899,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         // Spinning circle next to the stage currently running.
         const spin = makeSpinner(_C.warn, 10)
         spin.style.marginLeft = '4px'
-        row.appendChild(spin)
+        indicators.appendChild(spin)
       } else {
         const stageStat = document.createElement('span')
         const color = anyFailed ? _C.err : anyWarn ? _C.warn : allDone ? _C.ok : _C.dim
         stageStat.style.cssText = `color:${color};margin-left:4px`
         stageStat.textContent = anyFailed ? '✗' : anyWarn ? '⚠' : allDone ? '✓' : ''
-        row.appendChild(stageStat)
+        indicators.appendChild(stageStat)
       }
 
+      row.appendChild(indicators)
       timelineEl.appendChild(row)
     })
   }
@@ -5189,15 +5198,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
 
   function _timelineStage(seg) {
+    const production = mdProductionStageLabel(seg)
+    if (production) return production
     const stage = String(seg?.stage ?? '—')
-    const name = String(seg?.name ?? '')
-    const prodNs = stage.match(/production\s+([0-9.]+)\s*ns/i) || name.match(/production_([0-9p]+)ns/i)
-    const completedNs = Number(seg?.completed_ns)
-    if (prodNs && Number.isFinite(completedNs) && completedNs >= 0) {
-      const shown = completedNs.toFixed(2)
-      return `${shown.replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')} ns production complete`
-    }
-    if (prodNs) return `${prodNs[1].replace(/p/g, '.')} ns production run`
     if (/MGHH-only handoff/i.test(stage)) return '300K NPT k=0'
     return stage
   }

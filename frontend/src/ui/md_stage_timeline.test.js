@@ -5,7 +5,9 @@
  * minimising, and before this module the UI had no way to say so.
  */
 import { describe, it, expect } from 'vitest'
-import { mdMinimizationRow, mdShortStage, mdLatestStageLabel } from './md_stage_timeline.js'
+import {
+  mdMinimizationRow, mdShortStage, mdLatestStageLabel, mdProductionStageLabel,
+} from './md_stage_timeline.js'
 
 
 
@@ -104,22 +106,46 @@ describe('mdShortStage / mdLatestStageLabel', () => {
     expect(mdLatestStageLabel(job, { stage: '300K NPT k=0' }, null)).toBe('300K NPT k=0')
   })
 
-  it('reports the actually-completed ns after Terminate run and download, not the submitted target', () => {
+  it('reports completed / requested ns after Terminate run and download', () => {
     // _decorate_terminal_segment_progress (routes_md.py) stamps completed_ns on the
     // segment once the job is done — the raw stage string alone still says "500 ns
     // production run" no matter how much of it actually ran, which used to leave the
     // "Latest" card claiming the full submitted length even for a run cut short.
     const seg = { name: 'p1', stage: '310K NPT production 500 ns unrestrained', completed_ns: 42.5 }
     const job = { status: 'completed', current_segment_idx: 0, segments: [seg] }
-    expect(mdLatestStageLabel(job, null, null)).toBe('42.5 ns production complete')
+    expect(mdLatestStageLabel(job, null, null)).toBe('42.5/500 ns production run')
     // Same via a health sample / persisted metrics record naming that segment.
-    expect(mdLatestStageLabel(job, { stage: seg.stage, segment: 'p1' }, null)).toBe('42.5 ns production complete')
-    expect(mdLatestStageLabel(job, null, { stage: seg.stage, segment: 'p1' })).toBe('42.5 ns production complete')
+    expect(mdLatestStageLabel(job, { stage: seg.stage, segment: 'p1' }, null)).toBe('42.5/500 ns production run')
+    expect(mdLatestStageLabel(job, null, { stage: seg.stage, segment: 'p1' })).toBe('42.5/500 ns production run')
   })
 
   it('leaves the submitted-target label alone when the segment has no completed_ns yet', () => {
     const seg = { name: 'p1', stage: '310K NPT production 500 ns unrestrained' }
     const job = { status: 'running', current_segment_idx: 0, segments: [seg] }
     expect(mdLatestStageLabel(job, null, null)).toBe('500 ns production run')
+  })
+})
+
+describe('mdProductionStageLabel', () => {
+  it('shows exact local, synced Alpine, and live RunPod progress as completed / target', () => {
+    for (const execution_target of ['local', 'alpine', 'runpod']) {
+      const seg = { stage: '500 ns fast production run', target_ns: 500, completed_ns: 245,
+                    execution_target }
+      expect(mdProductionStageLabel(seg)).toBe('245/500 ns production run')
+    }
+  })
+
+  it('marks disconnected Alpine projection as estimated', () => {
+    expect(mdProductionStageLabel({
+      stage: '500 ns production run', target_ns: 500, completed_ns: 245,
+      completed_ns_estimated: true,
+    })).toBe('~245/500 ns production run')
+  })
+
+  it('recovers targets from legacy stage and segment naming', () => {
+    expect(mdProductionStageLabel({ stage: '200 ns production replica', completed_ns: 65.97 }))
+      .toBe('65.97/200 ns production run')
+    expect(mdProductionStageLabel({ name: 'D_01_production_50p5ns', stage: 'Production', completed_ns: 2 }))
+      .toBe('2/50.5 ns production run')
   })
 })

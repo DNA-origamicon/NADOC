@@ -1,8 +1,9 @@
 /**
  * metric_graph_popup.js — the Display popup for the oxDNA Graphs & Metrics card.
  * Shows a metric's SPATIAL (vs position) and TEMPORAL (vs sim time) graphs side by
- * side, annotated with axis labels/units, a zero reference line, and a per-job
- * legend (for the "all parent/child jobs" scope).  Built lazily, reused per open.
+ * side, or only the temporal graph for NAMD log scalars (energy/pressure). Graphs are
+ * annotated with axis labels/units, a zero reference line, and a per-job legend for
+ * the "all parent/child jobs" scope. Built lazily, reused per open.
  *
  * Display-only: an Export button hands off to the card's export flow via the
  * `onExport` callback (which opens metric_export_modal); this popup never writes.
@@ -61,19 +62,24 @@ function _build() {
 export function metricSpecs(metric, result, scope) {
   const meta = METRIC_META[metric]
   const bp = metric === 'base_pairing'
-  const sampleNote = result?.sampling === 'uniform'
+  const temporalBasis = meta.temporal.xLabel === 'simulation time (ns)'
+    ? 'sim time'
+    : 'trajectory frame'
+  const sampleNote = meta.source !== 'namd-log' && result?.sampling === 'uniform'
     ? ` — ${result.frames_sampled} uniformly sampled of ${result.frames_raw} frames`
     : ''
   return {
-    spatial: buildChartSpec({
+    spatial: meta.spatial ? buildChartSpec({
       series: metricSeries(result, metric, 'spatial'), width: CANVAS_W, height: CANVAS_H,
       title: 'Spatial — vs position along bundle',
       xLabel: meta.spatial.xLabel, yLabel: meta.spatial.yLabel,
       zeroLine: meta.zeroLine, yMin: bp ? 0 : null, yMax: bp ? 1 : null,
-    }),
+    }) : null,
     temporal: buildChartSpec({
       series: metricSeries(result, metric, 'temporal'), width: CANVAS_W, height: CANVAS_H,
-      title: (scope === 'chain' ? 'Temporal — vs sim time (jobs concatenated)' : 'Temporal — vs sim time') + sampleNote,
+      title: (scope === 'chain'
+        ? `Temporal — vs ${temporalBasis} (jobs concatenated)`
+        : `Temporal — vs ${temporalBasis}`) + sampleNote,
       xLabel: meta.temporal.xLabel, yLabel: meta.temporal.yLabel,
       zeroLine: meta.zeroLine, yMin: bp ? 0 : null, yMax: bp ? 1 : null,
     }),
@@ -89,7 +95,8 @@ export function openMetricGraphPopup({ metric, result, scope = 'latest', onExpor
   _titleEl.textContent =
     `${meta.label} — ${scope === 'chain' ? 'all parent/child jobs' : 'latest job'}`
   const specs = metricSpecs(metric, result, scope)
-  drawChart(_spatial, specs.spatial)
+  _spatial.style.display = specs.spatial ? '' : 'none'
+  if (specs.spatial) drawChart(_spatial, specs.spatial)
   drawChart(_temporal, specs.temporal)
   _root.style.display = 'flex'
 }

@@ -44,21 +44,45 @@ export function mdShortStage(stage) {
     .replace(/\s+unrestrained$/i, '')
 }
 
-/** Pure: swap a "N ns production run" label for what actually completed, when the
- *  named segment carries it. ``Terminate run and download`` (and a timed-out remote
- *  job whose walltime cut a production segment short) decorates that segment with
- *  ``completed_ns`` — see the backend's ``_decorate_terminal_segment_progress`` — but
- *  a bare stage string can't tell "ran to its submitted target" from "cut short", so
- *  the raw label alone would keep reporting the submitted total forever. Falls back
- *  to the raw label when no segment matches or it carries no completed_ns yet (a run
- *  still in progress, or a job persisted before this decoration existed). */
-function _withCompletedNs(shortLabel, seg) {
+function _shownNs(value) {
+  return Number(value).toFixed(2).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')
+}
+
+/** Requested production length encoded by new payloads, old stage prose, or old names. */
+function _productionTargetNs(seg) {
+  if (seg?.target_ns != null) {
+    const explicit = Number(seg.target_ns)
+    if (Number.isFinite(explicit) && explicit >= 0) return explicit
+  }
+  const text = `${seg?.stage ?? ''} ${seg?.name ?? ''}`
+  if (!/production/i.test(text)) return null
+  const before = text.match(/([0-9]+(?:\.[0-9]+)?)\s*ns\b[^\n]*?\bproduction\b/i)
+  if (before) return Number(before[1])
+  const after = text.match(/production(?:_|\s+)([0-9p.]+)\s*ns\b/i)
+  return after ? Number(after[1].replace(/p/g, '.')) : null
+}
+
+/** Pure: the compact production-stage label shared by the timeline and Latest card.
+ *
+ * The backend supplies `completed_ns` for live local/RunPod readings, synced or
+ * projected Alpine readings, and terminal/interrupted jobs. Keeping the submitted
+ * target beside it makes a stopped 245 ns run visibly different from a completed
+ * 500 ns run. A tilde is reserved for Alpine progress carried forward while the
+ * cluster cannot be synced. */
+export function mdProductionStageLabel(seg) {
+  const targetNs = _productionTargetNs(seg)
+  if (targetNs == null) return null
+  if (seg?.completed_ns == null) return `${_shownNs(targetNs)} ns production run`
   const completedNs = Number(seg?.completed_ns)
-  if (!Number.isFinite(completedNs) || completedNs < 0) return shortLabel
-  const m = /^([0-9.]+)\s*ns production run$/.exec(shortLabel)
-  if (!m) return shortLabel
-  const shown = completedNs.toFixed(2).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')
-  return `${shown} ns production complete`
+  if (!Number.isFinite(completedNs) || completedNs < 0) {
+    return `${_shownNs(targetNs)} ns production run`
+  }
+  const estimated = seg?.completed_ns_estimated ? '~' : ''
+  return `${estimated}${_shownNs(completedNs)}/${_shownNs(targetNs)} ns production run`
+}
+
+function _withCompletedNs(shortLabel, seg) {
+  return mdProductionStageLabel(seg) || shortLabel
 }
 
 function _segmentByName(job, name) {

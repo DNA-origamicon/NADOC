@@ -1,8 +1,8 @@
-"""MD "Graphs and Metrics" — twist/curvature/base-pairing over a NAMD run.
+"""MD "Graphs and Metrics" — trajectory and log measurements over a NAMD run.
 
 The heavy PSF/DCD reconstruction (``_build_md_nadoc_ctx`` / ``_extract_md_nadoc_frame``)
 is faked so these stay fast + always-on: the point is the metric ASSEMBLY (single pass,
-all three metrics, both domains, C1'…C1' pairing) and the route/chain glue, not the
+all trajectory metrics, both domains, C1'…C1' pairing) and the route/chain glue, not the
 MDAnalysis reader (covered by the env-gated heavy fixtures in test_md_trajectory.py).
 """
 
@@ -63,6 +63,20 @@ def _install_fake_reader(monkeypatch, order, analytic, n_frames, *, c1p_offset=0
     monkeypatch.setattr(mt, "_extract_md_nadoc_frame", _fake_extract)
 
 
+def test_aligned_rmsd_removes_translation_and_rotation():
+    from backend.core.md_trajectory import aligned_rmsd_nm
+
+    reference = np.asarray(
+        [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 3.0]]
+    )
+    rotation = np.asarray([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+    moved = reference @ rotation.T + np.asarray([8.0, -3.0, 2.0])
+
+    assert aligned_rmsd_nm(moved, reference) == pytest.approx(0.0, abs=1e-12)
+    moved[3, 2] += 0.5
+    assert aligned_rmsd_nm(moved, reference) > 0.1
+
+
 def test_md_metric_series_one_pass_all_metrics(monkeypatch):
     from backend.core.md_trajectory import md_metric_series
 
@@ -79,6 +93,9 @@ def test_md_metric_series_one_pass_all_metrics(monkeypatch):
     for key in ("twist", "curvature", "base_pairing"):
         assert len(out[key]["temporal"]["per_frame"]) == 4
         assert out[key]["spatial"]  # non-empty profile
+    assert out["rmsd"]["temporal"]["per_frame"] == [0.0] * 4
+    assert out["rmsd"]["temporal"]["reference"] == "first_trajectory_frame"
+    assert out["rmsd"]["spatial"] == []
     # Frames equal the analytic reference → differential twist/curvature ≈ 0.
     assert all(abs(v) < 1e-3 for v in out["twist"]["temporal"]["per_frame"])
     # Every designed pair is within the C1' cutoff → fraction 1.0.
@@ -252,3 +269,131 @@ def test_count_md_frames_missing_files_is_zero():
 
     assert count_md_frames([("s", "md", "/no/such.dcd")]) == 0
     assert count_md_frames([]) == 0
+
+
+def test_namd_scalar_series_reads_energy_pressure_and_deduplicates_resume(tmp_path):
+    from backend.core.namd_metrics import parse_namd_scalar_series
+
+    header = "ETITLE: TS TOTAL PRESSURE PRESSAVG GPRESSAVG\n"
+    base = tmp_path / "prod.log"
+    base.write_text(
+        header
+        + "ENERGY: 100 -1000 8 2 3\n"
+        + "ENERGY: 200 -1010 9 2.5 3.5\n"
+    )
+    resume = tmp_path / "prod.resume1.log"
+    resume.write_text(
+        header
+        + "ENERGY: 200 -1011 10 2.6 3.6\n"
+        + "ENERGY: 300 -1020 11 3 4\n"
+    )
+
+    out = parse_namd_scalar_series([base, resume])
+
+    assert [s.step for s in out] == [100, 200, 300]
+    assert [s.total_energy_kcal for s in out] == [-1000, -1011, -1020]
+    assert [s.pressure_bar for s in out] == [2, 2.6, 3]
+
+
+def test_job_scalar_series_uses_simulated_ns_and_appends_segments(tmp_path):
+    from backend.api.routes_md_metrics import _job_scalar_series
+
+    package = tmp_path / "pkg"
+    package.mkdir()
+    segments = [
+        SimpleNamespace(name="s1", steps=200, status="done"),
+        SimpleNamespace(name="s2", steps=100, status="running"),
+    ]
+    job = SimpleNamespace(
+        segments=segments,
+        live_metrics=None,
+        package_dir=lambda _ws: package,
+    )
+    for name in ("s1", "s2"):
+        (package / f"{name}.conf").write_text("timestep 4\n")
+    header = "ETITLE: TS TOTAL PRESSURE PRESSAVG\n"
+    (package / "s1.log").write_text(
+        header + "ENERGY: 100 -1000 8 2\nENERGY: 200 -1010 9 2.5\n"
+    )
+    (package / "s2.log").write_text(
+        header + "ENERGY: 50 -1020 10 3\nENERGY: 100 -1030 11 3.5\n"
+    )
+
+    out = _job_scalar_series(job, ["s1", "s2"], tmp_path)
+
+    # 4 fs × 200 completed steps = 0.0008 ns before segment 2 begins.
+    assert out["energy"]["x_values"] == [0.0004, 0.0008, 0.001, 0.0012]
+    assert out["energy"]["per_frame"] == [-1000, -1010, -1020, -1030]
+    assert out["pressure"]["per_frame"] == [2, 2.5, 3, 3.5]
+
+
+def test_md_metrics_compute_includes_energy_and_pressure_result_blocks(
+    tmp_path, monkeypatch
+):
+    from backend.api import routes_md_metrics as route
+    from backend.api import skip_twist_tuning
+    from backend.core import md_trajectory
+
+    job = SimpleNamespace(job_id="j1")
+    inputs = ("psf", "ref", [("prod", "production", "prod.dcd")], object())
+    monkeypatch.setattr(route, "_resolve_jobs", lambda *_a: [job])
+    monkeypatch.setattr(route, "_job_inputs", lambda *_a: inputs)
+    monkeypatch.setattr(md_trajectory, "count_md_frames", lambda _segments: 2)
+    monkeypatch.setattr(skip_twist_tuning, "core_reference_geometry", lambda _d: [])
+    monkeypatch.setattr(
+        md_trajectory,
+        "md_metric_series",
+        lambda *_a, **_k: {
+            "ready": True,
+            "n_frames": 2,
+            "n_frames_raw": 2,
+            "frame_indices": [0, 1],
+            "twist": {"temporal": {"per_frame": [0, 1]}, "spatial": [[0, 0]]},
+            "curvature": {
+                "temporal": {"per_frame": [0, 0.1]},
+                "spatial": [[0, 0]],
+            },
+            "base_pairing": {
+                "temporal": {"per_frame": [1, 0.9], "n_designed": 10},
+                "spatial": [[0, 1]],
+            },
+            "rmsd": {"temporal": {"per_frame": [0, 0.25]}, "spatial": []},
+        },
+    )
+    monkeypatch.setattr(
+        route,
+        "_job_scalar_series",
+        lambda *_a: {
+            "energy": {"x_values": [0.1, 0.2], "per_frame": [-1000, -1010]},
+            "pressure": {"x_values": [0.1, 0.2], "per_frame": [1.2, 0.8]},
+            "duration_ns": 0.2,
+        },
+    )
+    run_id = "scalar-result"
+    route._RUNS.pop(run_id, None)
+
+    route._compute(run_id, "j1", route.MdMetricsStartRequest(), tmp_path)
+
+    result = route._RUNS[run_id]["result"]
+    assert result["energy"]["temporal"] == {
+        "per_frame": [-1000, -1010],
+        "x_values": [0.1, 0.2],
+        "boundaries": [{"job_id": "j1", "start_x": 0.0}],
+    }
+    assert result["pressure"]["temporal"]["per_frame"] == [1.2, 0.8]
+    assert result["energy"]["spatial"] == []
+    assert result["rmsd"]["temporal"] == {
+        "per_frame": [0, 0.25],
+        "frame_indices": [0, 1],
+        "boundaries": [
+            {
+                "job_id": "j1",
+                "start_frame": 0,
+                "start_point": 0,
+                "n_frames": 2,
+                "n_frames_raw": 2,
+            }
+        ],
+        "reference": "first_trajectory_frame_per_job",
+        "selection": "designed_dsDNA_core_phosphates",
+    }

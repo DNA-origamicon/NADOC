@@ -2420,6 +2420,7 @@ async def md_job_status_ws(websocket: WebSocket, job_id: str) -> None:
             # uses, so the two channels never disagree.
             from backend.api.routes_md import (
                 _decorate_progress_provenance,
+                _decorate_terminal_segment_progress,
                 _namd_live_progress,
             )  # lazy: avoids a router import cycle
 
@@ -2433,6 +2434,7 @@ async def md_job_status_ws(websocket: WebSocket, job_id: str) -> None:
                 if eta is not None:
                     payload["eta_seconds"] = eta
                 _decorate_progress_provenance(job, payload, estimated=estimated)
+                _decorate_terminal_segment_progress(job, payload, _WORKSPACE_DIR)
             except Exception:
                 pass
 

@@ -1913,14 +1913,29 @@ describe('initMdJobsPanel — minimisation timeline row', () => {
     expect(done.children[0].textContent).toMatch(/✓/)
   })
 
-  it('shows actual completed production ns and a green completion check', async () => {
+  it('right-aligns each stage\'s circles and check mark as one indicator group', async () => {
+    const el = await openWith(jobWith({
+      minimization: { ...MIN, status: 'done' },
+      segments: [{ ...LADDER[0], status: 'done' }, { ...LADDER[1], status: 'done' }],
+    }))
+    for (const row of el.children) {
+      const indicators = row.querySelector('.md-stage-indicators')
+      expect(indicators).not.toBeNull()
+      expect(row.lastElementChild).toBe(indicators)
+      expect(indicators.style.marginLeft).toBe('auto')
+      expect(indicators.style.justifyContent).toBe('flex-end')
+      expect(indicators.textContent).toMatch(/[●✓]/)
+    }
+  })
+
+  it('shows actual / requested production ns and a green completion check', async () => {
     const el = await openWith(jobWith({
       status: 'completed',
       minimization: { ...MIN, status: 'done' },
       segments: [{ ...LADDER[0], name: 'D_01_production_200ns',
         stage: '200 ns production replica', completed_ns: 65.97, status: 'done' }],
     }))
-    expect(el.textContent).toContain('65.97 ns production complete')
+    expect(el.textContent).toContain('65.97/200 ns production run')
     expect(el.textContent).toContain('✓')
     const check = [...el.querySelectorAll('span')].find(s => s.textContent === '✓')
     expect(check?.style.color).toBe('rgb(63, 185, 80)')

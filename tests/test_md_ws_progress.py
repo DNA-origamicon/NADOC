@@ -308,6 +308,9 @@ def test_completed_partial_production_reports_actual_ns_and_done(tmp_path):
     seg = job.segments[0]
     seg.name = "VoltronCore_01_production_200ns"
     seg.steps = 50_000_000
+    # A deliberately shortened production is still the in-flight segment until the
+    # response decorator turns the terminal job's row into a completed timeline stage.
+    seg.status = "running"
     (pkg / f"{seg.name}.conf").write_text("timestep 4\nrun 50000000\n")
     (pkg / "output" / f"{seg.name}.xst").write_text(
         "#$LABELS step a_x\n16492500 1.0\n"
@@ -320,3 +323,135 @@ def test_completed_partial_production_reports_actual_ns_and_done(tmp_path):
     assert row["status"] == "done"
     assert row["completed_steps"] == 16_492_500
     assert row["completed_ns"] == 65.97
+    assert row["target_ns"] == 200.0
+
+
+def _production_job(tmp_path, *, target="local", status=MdStatus.running):
+    job = _running_job(tmp_path)
+    job.execution_target = target
+    job.status = status
+    job.current_segment_idx = 0
+    job.segments = [
+        MdSegmentStatus(
+            name="VoltronCore_01_production_500ns",
+            stage="500 ns fast production run",
+            percent=100,
+            steps=1000,
+            status="running",
+        )
+    ]
+    job.package_subdir = "pkg"
+    pkg = job.package_dir(tmp_path)
+    (pkg / "output").mkdir(parents=True, exist_ok=True)
+    (pkg / f"{job.segments[0].name}.conf").write_text("timestep 4\nrun 1000\n")
+    return job, pkg
+
+
+def test_local_live_production_decorator_reports_actual_over_target_ns(tmp_path):
+    from backend.api.routes_md import _decorate_terminal_segment_progress
+
+    job, pkg = _production_job(tmp_path)
+    (pkg / "output" / f"{job.segments[0].name}.xst").write_text(
+        "#$LABELS step a_x\n490 1.0\n"
+    )
+    payload = job.to_dict()
+
+    _decorate_terminal_segment_progress(job, payload, tmp_path)
+
+    row = payload["segments"][0]
+    assert row["target_ns"] == 500.0
+    assert row["completed_steps"] == 490
+    assert row["completed_ns"] == 245.0
+    assert "completed_ns_estimated" not in row
+
+
+def test_ws_live_production_stage_carries_completed_over_target_ns(tmp_path, monkeypatch):
+    monkeypatch.setattr(assembly, "_WORKSPACE_DIR", tmp_path)
+    monkeypatch.setattr(namd_runner, "reconcile_job_status", lambda job, ws: job)
+    job, pkg = _production_job(tmp_path)
+    (pkg / "output" / f"{job.segments[0].name}.xst").write_text(
+        "#$LABELS step a_x\n490 1.0\n"
+    )
+    job.save(tmp_path)
+
+    client = TestClient(app)
+    with client.websocket_connect(f"/ws/md-jobs/{job.job_id}") as ws:
+        row = ws.receive_json()["job"]["segments"][0]
+
+    assert row["completed_ns"] == 245.0
+    assert row["target_ns"] == 500.0
+
+
+def test_disconnected_alpine_production_decorator_marks_projection_estimated(
+    tmp_path, monkeypatch
+):
+    from backend.api import routes_md
+    from backend.core import cluster_ssh
+
+    job, _ = _production_job(tmp_path, target="alpine")
+    job.live_metrics = {
+        "segment": job.segments[0].name,
+        "step": 400,
+        "s_per_step": 1.0,
+        "retrieved_at": 910.0,
+        "timestep_fs": 4.0,
+    }
+    manager = type("Manager", (), {"is_connected": lambda self: False})()
+    monkeypatch.setattr(cluster_ssh, "get_manager", lambda: manager)
+    monkeypatch.setattr(routes_md.time, "time", lambda: 1000.0)
+    payload = job.to_dict()
+
+    routes_md._decorate_terminal_segment_progress(job, payload, tmp_path)
+
+    row = payload["segments"][0]
+    assert row["completed_steps"] == 490
+    assert row["completed_ns"] == 245.0
+    assert row["completed_ns_estimated"] is True
+
+
+def test_synced_alpine_and_live_runpod_use_observed_not_estimated_ns(
+    tmp_path, monkeypatch
+):
+    from backend.api import routes_md
+    from backend.core import cluster_ssh
+
+    manager = type("Manager", (), {"is_connected": lambda self: True})()
+    monkeypatch.setattr(cluster_ssh, "get_manager", lambda: manager)
+    monkeypatch.setattr(routes_md.time, "time", lambda: 1000.0)
+    for target in ("alpine", "runpod"):
+        job, _ = _production_job(tmp_path, target=target)
+        job.live_metrics = {
+            "segment": job.segments[0].name,
+            "step": 490,
+            "s_per_step": 1.0,
+            "retrieved_at": 990.0,
+            "timestep_fs": 4.0,
+        }
+        payload = job.to_dict()
+
+        routes_md._decorate_terminal_segment_progress(job, payload, tmp_path)
+
+        row = payload["segments"][0]
+        assert row["completed_ns"] == 245.0
+        assert "completed_ns_estimated" not in row
+
+
+def test_paused_stopped_failed_and_completed_keep_production_ns(tmp_path):
+    from backend.api.routes_md import _decorate_terminal_segment_progress
+
+    for status in (MdStatus.paused, MdStatus.stopped, MdStatus.failed, MdStatus.completed):
+        job, _ = _production_job(tmp_path, target="runpod", status=status)
+        job.live_metrics = {
+            "segment": job.segments[0].name,
+            "step": 490,
+            "timestep_fs": 4.0,
+        }
+        payload = job.to_dict()
+
+        _decorate_terminal_segment_progress(job, payload, tmp_path)
+
+        row = payload["segments"][0]
+        assert row["completed_ns"] == 245.0
+        assert "completed_ns_estimated" not in row
+        if status == MdStatus.completed:
+            assert row["status"] == "done"

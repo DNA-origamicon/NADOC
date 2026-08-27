@@ -13,8 +13,9 @@
  *   - `getSelectedJob` / `getJobs` — the panel's current selection + list.
  *
  * A child module of a jobs panel — it owns its own DOM (by id), the poll loop, and a
- * per-scope results cache.  One background compute yields all three metrics (single
- * trajectory pass), so any metric's Generate populates the whole card; each metric
+ * per-scope results cache. One background compute yields every configured measurement
+ * (one trajectory pass plus any cheap engine log parsing), so any metric's Generate
+ * populates the whole card; each metric
  * keeps its own buttons + progress bar.  The graph popup / export modules
  * (metric_graph*, metric_export_modal) are fully engine-agnostic and reused verbatim.
  */
@@ -26,8 +27,9 @@ import {
 } from './metric_export_modal.js'
 import { initResourceMonitor } from './resource_monitor.js'
 
-// Card metric key ↔ short DOM-id token.
-const METRICS = [
+// Card metric key ↔ short DOM-id token. MD adds RMSD, energy, and pressure; oxDNA keeps the
+// original geometry-only set because its metrics endpoint does not emit NAMD scalars.
+const BASE_METRICS = [
   { key: 'twist', tok: 'twist' },
   { key: 'curvature', tok: 'curve' },
   { key: 'base_pairing', tok: 'bp' },
@@ -35,9 +37,12 @@ const METRICS = [
 
 const POLL_MS = 400
 
-export function initMetricsCard({ idPrefix, api, getSelectedJob = null, getJobs = null } = {}) {
+export function initMetricsCard({
+  idPrefix, api, getSelectedJob = null, getJobs = null, extraMetrics = [],
+} = {}) {
   const card = document.getElementById(`${idPrefix}-card`)
   if (!card) return { refresh() {} }
+  const metrics = [...BASE_METRICS, ...extraMetrics]
 
   // Collapsible header (mirrors the panel's Advanced .ox-card) — starts collapsed.
   const toggle = document.getElementById(`${idPrefix}-toggle`)
@@ -55,7 +60,7 @@ export function initMetricsCard({ idPrefix, api, getSelectedJob = null, getJobs 
   const scopeLatest = document.getElementById(`${idPrefix}-scope-latest`)
   const scopeChain = document.getElementById(`${idPrefix}-scope-chain`)
   const rows = {}
-  for (const { key, tok } of METRICS) {
+  for (const { key, tok } of metrics) {
     rows[key] = {
       gen: document.getElementById(`${idPrefix}-${tok}-gen`),
       disp: document.getElementById(`${idPrefix}-${tok}-display`),
@@ -66,7 +71,7 @@ export function initMetricsCard({ idPrefix, api, getSelectedJob = null, getJobs 
     }
   }
 
-  // Per-scope cache of the last completed run result ({twist, curvature, base_pairing}).
+  // Per-scope cache of the last completed run result (all configured measurements).
   const _cache = { latest: null, chain: null }
   let _runningMetric = null            // the metric key whose Generate is in flight
   let _pollTimer = null
@@ -100,12 +105,19 @@ export function initMetricsCard({ idPrefix, api, getSelectedJob = null, getJobs 
     btn.style.cursor = disabled ? 'not-allowed' : 'pointer'
   }
 
+  function _hasMetricData(result, key) {
+    const metric = result?.[key]
+    if (!metric) return false
+    if ((metric.temporal?.per_frame?.length || 0) > 0) return true
+    return (metric.spatial || []).some(series => (series.points || []).length > 0)
+  }
+
   function _updateButtons() {
     const busy = _runningMetric != null
     const result = _cache[_scope()]
-    for (const { key } of METRICS) {
+    for (const { key } of metrics) {
       const row = rows[key]
-      const ready = !!(result?.ready && result[key])
+      const ready = !!(result?.ready && _hasMetricData(result, key))
       _style(row.gen, busy)
       _style(row.disp, busy || !ready)
       _style(row.exp, busy || !ready)
@@ -158,16 +170,26 @@ export function initMetricsCard({ idPrefix, api, getSelectedJob = null, getJobs 
       _cache[result.scope || _scope()] = result
       _setBar(row, 1)
       const n = result[metricKey]?.temporal?.per_frame?.length || 0
-      const sampled = result.sampling === 'uniform' && result.frames_raw > n
-      const frameText = sampled
-        ? `${n} uniformly sampled frames spanning ${result.frames_raw} total frames`
-        : `${n} frames`
-      _setStatus(rows[metricKey], `Ready — ${frameText}, ${result.jobs.length} job(s). ` +
-        'All three metrics computed.', '#3fb950')
+      const logSamples = METRIC_META[metricKey]?.source === 'namd-log'
+      const sampled = !logSamples && result.sampling === 'uniform' && result.frames_raw > n
+      const frameText = logSamples
+        ? `${n} NAMD log samples`
+        : sampled
+          ? `${n} uniformly sampled frames spanning ${result.frames_raw} total frames`
+          : `${n} frames`
+      if (_hasMetricData(result, metricKey)) {
+        _setStatus(rows[metricKey], `Ready — ${frameText}, ${result.jobs.length} job(s). ` +
+          'Generation complete.', '#3fb950')
+      } else {
+        _setStatus(rows[metricKey], `No ${METRIC_META[metricKey]?.label?.toLowerCase() || metricKey} samples found.`, '#d29922')
+      }
       // The single pass produced every metric — reflect that on the other rows too.
-      for (const { key } of METRICS) if (key !== metricKey && _cache[_scope()]?.[key]) {
+      for (const { key } of metrics) if (key !== metricKey && _cache[_scope()]?.[key]) {
         if (!rows[key].status.textContent || rows[key].status.dataset.stale) {
-          _setStatus(rows[key], 'Ready (computed with the last run).', '#3fb950')
+          _setStatus(rows[key], _hasMetricData(result, key)
+            ? 'Ready (computed with the last run).'
+            : `No ${METRIC_META[key]?.label?.toLowerCase() || key} samples found.`,
+          _hasMetricData(result, key) ? '#3fb950' : '#d29922')
         }
       }
       _updateButtons()
@@ -200,18 +222,18 @@ export function initMetricsCard({ idPrefix, api, getSelectedJob = null, getJobs 
     const base = `${metricKey}_${result.scope || _scope()}`
     if (kinds.includes('png')) {
       const specs = metricSpecs(metricKey, result, result.scope || _scope())
-      downloadHref(`${base}_spatial.png`, renderToDataURL(specs.spatial))
+      if (specs.spatial) downloadHref(`${base}_spatial.png`, renderToDataURL(specs.spatial))
       downloadHref(`${base}_temporal.png`, renderToDataURL(specs.temporal))
     }
     if (kinds.includes('data')) {
       const csv = metricCSVs(result, metricKey)
       downloadText(`${base}_temporal.csv`, csv.temporal)
-      downloadText(`${base}_spatial.csv`, csv.spatial)
+      if (METRIC_META[metricKey]?.spatial) downloadText(`${base}_spatial.csv`, csv.spatial)
     }
   }
 
   // Wire.
-  for (const { key } of METRICS) {
+  for (const { key } of metrics) {
     rows[key].gen?.addEventListener('click', () => _generate(key))
     rows[key].disp?.addEventListener('click', () => _display(key))
     rows[key].exp?.addEventListener('click', () => _export(key))
@@ -223,7 +245,7 @@ export function initMetricsCard({ idPrefix, api, getSelectedJob = null, getJobs 
   /** Called by the panel when the design changes → cached results are stale. */
   function refresh() {
     _cache.latest = null; _cache.chain = null
-    for (const { key } of METRICS) {
+    for (const { key } of metrics) {
       _setBar(rows[key], null)
       if (rows[key].status) rows[key].status.dataset.stale = '1'
     }
