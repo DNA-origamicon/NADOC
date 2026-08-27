@@ -1,0 +1,317 @@
+diff --git a/src/CUDA/Lists/CUDASimpleVerletList.cu b/src/CUDA/Lists/CUDASimpleVerletList.cu
+index 7a716a42..c81f31d3 100644
+--- a/src/CUDA/Lists/CUDASimpleVerletList.cu
++++ b/src/CUDA/Lists/CUDASimpleVerletList.cu
+@@ -36,11 +36,15 @@ void CUDASimpleVerletList::clean() {
+ 		CUDA_SAFE_CALL(cudaFree(d_matrix_neighs));
+ 		CUDA_SAFE_CALL(cudaFree(d_number_neighs));
+ 		CUDA_SAFE_CALL(cudaFreeHost(_d_cell_overflow));
++		if(_d_neigh_overflow != nullptr) CUDA_SAFE_CALL(cudaFreeHost(_d_neigh_overflow));
+ 	}
+ 
+ 	if(_use_edge && d_edge_list != nullptr) {
+ 		CUDA_SAFE_CALL(cudaFree(d_edge_list));
+ 		CUDA_SAFE_CALL(cudaFree(_d_number_neighs_no_doubles));
++		d_edge_list = nullptr;
++		_d_number_neighs_no_doubles = nullptr;
++		_edge_capacity = 0;
+ 	}
+ }
+ 
+@@ -50,6 +54,12 @@ void CUDASimpleVerletList::get_settings(input_file &inp) {
+ 	getInputNumber(&inp, "verlet_skin", &_verlet_skin, 1);
+ 	getInputNumber(&inp, "max_density_multiplier", &_max_density_multiplier, 0);
+ 	getInputBool(&inp, "use_edge", &_use_edge, 0);
++	getInputBool(&inp, "adaptive_neighbor_list", &_adaptive_neighbor_list, 0);
++	getInputInt(&inp, "adaptive_neighbor_initial_capacity", &_adaptive_initial_capacity, 0);
++	if(_adaptive_initial_capacity < 8) _adaptive_initial_capacity = 8;
++	if(_adaptive_neighbor_list && !_use_edge) {
++		throw oxDNAException("adaptive_neighbor_list currently requires use_edge = true");
++	}
+ 	if(_use_edge) {
+ 		OX_LOG(Logger::LOG_INFO, "Using edge-based approach");
+ 	}
+@@ -176,16 +186,19 @@ void CUDASimpleVerletList::init(int N, c_number rcut, CUDABox *h_cuda_box, CUDAB
+ 
+ 	// we multiply the maximum number of particles by the ratio between cell and list volumes to initialise the maximum number of neighbours per particle.
+ 	_max_neigh = std::min((int) (4 * M_PI * _max_N_per_cell / 3.), N - 1);
++	if(_adaptive_neighbor_list) _max_neigh = std::min(_max_neigh, _adaptive_initial_capacity);
+ 	OX_LOG(Logger::LOG_INFO, "CUDA max_neigh: %d, max_N_per_cell: %d, N_cells: %d (per side: %d %d %d)", _max_neigh, _max_N_per_cell, _N_cells, _N_cells_side[0], _N_cells_side[1], _N_cells_side[2]);
++	CUDA_SAFE_CALL(cudaMemcpyToSymbol(verlet_max_neigh, &_max_neigh, sizeof(int)));
+ 
+ 	CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc(&d_number_neighs, (size_t ) _N * sizeof(int)));
+ 	CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc(&d_matrix_neighs, (size_t ) _N * _max_neigh * sizeof(int)));
+ 
+ 	CUDA_SAFE_CALL(cudaMallocHost(&_d_cell_overflow, sizeof(bool), cudaHostAllocDefault));
+ 	_d_cell_overflow[0] = false;
++	CUDA_SAFE_CALL(cudaMallocHost(&_d_neigh_overflow, sizeof(bool), cudaHostAllocDefault));
++	_d_neigh_overflow[0] = false;
+ 
+ 	if(_use_edge) {
+-		CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc(&d_edge_list, (size_t ) _N * _max_neigh * sizeof(edge_bond)));
+ 		CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc(&_d_number_neighs_no_doubles, (size_t ) (_N + 1) * sizeof(int)));
+ 	}
+ 
+@@ -264,16 +277,39 @@ void CUDASimpleVerletList::update(c_number4 *poss, c_number4 *list_poss, LR_bond
+ 
+ 	// for edge based approach
+ 	if(_use_edge) {
++		_d_neigh_overflow[0] = false;
+ 		edge_update_neigh_list
+ 			<<<_cells_kernel_cfg.blocks, _cells_kernel_cfg.threads_per_block>>>
+-			(_counters_cells_tex, poss, list_poss, _d_cells, d_matrix_neighs, d_number_neighs, _d_number_neighs_no_doubles, bonds, _d_cuda_box);
++			(_counters_cells_tex, poss, list_poss, _d_cells, d_matrix_neighs, d_number_neighs, _d_number_neighs_no_doubles, bonds, _d_cuda_box, _d_neigh_overflow);
+ 		CUT_CHECK_ERROR("edge_update_neigh_list (SimpleVerlet) error");
++		thrust::device_ptr<int> d_number_neighs_w(d_number_neighs);
++		int observed_max_neigh = *thrust::max_element(d_number_neighs_w, d_number_neighs_w + _N);
++		if(observed_max_neigh > _observed_max_neigh) {
++			_observed_max_neigh = observed_max_neigh;
++			OX_LOG(Logger::LOG_INFO, "CUDA adaptive neighbour telemetry: %d observed max, %d capacity", _observed_max_neigh, _max_neigh);
++		}
++		if(_d_neigh_overflow[0]) {
++			_max_neigh = observed_max_neigh + std::max(observed_max_neigh / 5, 16);
++			CUDA_SAFE_CALL(cudaFree(d_matrix_neighs));
++			CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc(&d_matrix_neighs, (size_t) _N * _max_neigh * sizeof(int)));
++			CUDA_SAFE_CALL(cudaMemcpyToSymbol(verlet_max_neigh, &_max_neigh, sizeof(int)));
++			OX_LOG(Logger::LOG_INFO, "CUDA adaptive neighbour list grew to %d entries per particle (%.2lf MBs)", _max_neigh, (double) _N * _max_neigh * sizeof(int) / 1048576.);
++			update(poss, list_poss, bonds);
++			return;
++		}
+ 
+ 		// thrust operates on the GPU
+ 		thrust::device_ptr<int> d_number_neighs_no_doubles_w(_d_number_neighs_no_doubles);
+ 		d_number_neighs_no_doubles_w[_N] = 0;
+ 		thrust::exclusive_scan(d_number_neighs_no_doubles_w, d_number_neighs_no_doubles_w + _N + 1, d_number_neighs_no_doubles_w);
+ 		N_edges = d_number_neighs_no_doubles_w[_N];
++		if((size_t) N_edges > _edge_capacity) {
++			if(d_edge_list != nullptr) CUDA_SAFE_CALL(cudaFree(d_edge_list));
++			_edge_capacity = std::max((size_t) N_edges, (size_t) 1);
++			_edge_capacity += std::max(_edge_capacity / 5, (size_t) 1024);
++			CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc(&d_edge_list, _edge_capacity * sizeof(edge_bond)));
++			OX_LOG(Logger::LOG_INFO, "CUDA adaptive edge list: %d observed edges, %zu capacity, %.2lf MBs", N_edges, _edge_capacity, (double) _edge_capacity * sizeof(edge_bond) / 1048576.);
++		}
+ 		// get edge list from matrix_neighs
+ 		compress_matrix_neighs
+ 			<<<_cells_kernel_cfg.blocks, _cells_kernel_cfg.threads_per_block>>>
+@@ -283,7 +319,7 @@ void CUDASimpleVerletList::update(c_number4 *poss, c_number4 *list_poss, LR_bond
+ 	else {
+ 		simple_update_neigh_list
+ 			<<<_cells_kernel_cfg.blocks, _cells_kernel_cfg.threads_per_block>>>
+-			(_counters_cells_tex, poss, list_poss, _d_cells, d_matrix_neighs, d_number_neighs, bonds, _d_cuda_box);
++			(_counters_cells_tex, poss, list_poss, _d_cells, d_matrix_neighs, d_number_neighs, bonds, _d_cuda_box, _d_neigh_overflow);
+ 		CUT_CHECK_ERROR("update_neigh_list (SimpleVerlet) error");
+ 	}
+ }
+diff --git a/src/CUDA/Lists/CUDASimpleVerletList.h b/src/CUDA/Lists/CUDASimpleVerletList.h
+index 76885c90..85897041 100644
+--- a/src/CUDA/Lists/CUDASimpleVerletList.h
++++ b/src/CUDA/Lists/CUDASimpleVerletList.h
+@@ -21,6 +21,8 @@ protected:
+ 	int _max_N_per_cell = 0;
+ 	size_t _vec_size = 0;
+ 	bool _auto_optimisation = true;
++	bool _adaptive_neighbor_list = false;
++	int _adaptive_initial_capacity = 256;
+ 	bool _print_problematic_ids = false;
+ 	c_number _max_density_multiplier = 3;
+ 	int _N_cells, _old_N_cells;
+@@ -32,7 +34,10 @@ protected:
+ 	int *_d_cells = nullptr;
+ 	int *_d_counters_cells = nullptr;
+ 	int *_d_number_neighs_no_doubles = nullptr;
++	size_t _edge_capacity = 0;
++	int _observed_max_neigh = 0;
+ 	bool *_d_cell_overflow = nullptr;
++	bool *_d_neigh_overflow = nullptr;
+ 
+ 	cudaTextureObject_t _counters_cells_tex = 0;
+ 
+diff --git a/src/CUDA/Lists/CUDA_simple_verlet.cuh b/src/CUDA/Lists/CUDA_simple_verlet.cuh
+index a76ba36a..5fa300a2 100644
+--- a/src/CUDA/Lists/CUDA_simple_verlet.cuh
++++ b/src/CUDA/Lists/CUDA_simple_verlet.cuh
+@@ -10,6 +10,7 @@ __constant__ int verlet_N[1];
+ 
+ __constant__ int verlet_N_cells_side[3];
+ __constant__ int verlet_max_N_per_cell[1];
++__constant__ int verlet_max_neigh[1];
+ 
+ __forceinline__ __device__ int neigh_cell(int3 index, int3 offset) {
+ 	// neighbour cell of this cell
+@@ -20,7 +21,7 @@ __forceinline__ __device__ int neigh_cell(int3 index, int3 offset) {
+ 	return (index.z * verlet_N_cells_side[1] + index.y) * verlet_N_cells_side[0] + index.x;
+ }
+ 
+-__device__ void update_cell_neigh_list(cudaTextureObject_t counters_cells_tex, c_number4 *poss, int cell_ind, int *cells, c_number4 r, int *neigh, int &N_neigh, LR_bonds b, CUDABox *box) {
++__device__ void update_cell_neigh_list(cudaTextureObject_t counters_cells_tex, c_number4 *poss, int cell_ind, int *cells, c_number4 r, int *neigh, int &N_neigh, LR_bonds b, CUDABox *box, bool *overflow) {
+ 	int size = tex1Dfetch<int>(counters_cells_tex, cell_ind);
+ 	for(int i = 0; i < size; i++) {
+ 		int m = cells[cell_ind * verlet_max_N_per_cell[0] + i];
+@@ -31,13 +32,14 @@ __device__ void update_cell_neigh_list(cudaTextureObject_t counters_cells_tex, c
+ 
+ 		c_number sqr_dist = box->sqr_minimum_image(r, rm);
+ 		if(sqr_dist < verlet_sqr_rverlet[0]) {
+-			neigh[N_neigh * verlet_N[0] + IND] = m;
++			if(N_neigh < verlet_max_neigh[0]) neigh[N_neigh * verlet_N[0] + IND] = m;
++			else *overflow = true;
+ 			N_neigh++;
+ 		}
+ 	}
+ }
+ 
+-__global__ void simple_update_neigh_list(cudaTextureObject_t counters_cells_tex, c_number4 *poss, c_number4 *list_poss, int *cells, int *matrix_neighs, int *c_number_neighs, LR_bonds *bonds, CUDABox *box) {
++__global__ void simple_update_neigh_list(cudaTextureObject_t counters_cells_tex, c_number4 *poss, c_number4 *list_poss, int *cells, int *matrix_neighs, int *c_number_neighs, LR_bonds *bonds, CUDABox *box, bool *overflow) {
+ 	if(IND >= verlet_N[0]) return;
+ 
+ 	c_number4 r = poss[IND];
+@@ -48,34 +50,34 @@ __global__ void simple_update_neigh_list(cudaTextureObject_t counters_cells_tex,
+ 	int index = (spl_idx.z * verlet_N_cells_side[1] + spl_idx.y) * verlet_N_cells_side[0] + spl_idx.x;
+ 
+ 	// visit this cell
+-	update_cell_neigh_list(counters_cells_tex, poss, index, cells, r, matrix_neighs, N_neighs, b, box);
++	update_cell_neigh_list(counters_cells_tex, poss, index, cells, r, matrix_neighs, N_neighs, b, box, overflow);
+ 	// visit 26 neighbour cells grouped into 13 pairs of mutually opposite cells
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, -1, -1)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, +1, +1)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, -1, +1)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, +1, -1)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, +1, +1)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, -1, -1)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, -1, +1)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, +1, -1)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, -1, 0)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, +1, 0)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, +1, 0)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, -1, 0)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, 0, -1)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, 0, +1)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, 0, +1)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, 0, -1)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, -1, -1)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, +1, +1)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, -1, +1)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, +1, -1)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, 0, 0)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, 0, 0)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, -1, 0)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, +1, 0)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, 0, -1)), cells, r, matrix_neighs, N_neighs, b, box);
+-	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, 0, +1)), cells, r, matrix_neighs, N_neighs, b, box);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, -1, -1)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, +1, +1)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, -1, +1)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, +1, -1)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, +1, +1)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, -1, -1)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, -1, +1)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, +1, -1)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, -1, 0)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, +1, 0)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, +1, 0)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, -1, 0)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, 0, -1)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, 0, +1)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, 0, +1)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, 0, -1)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, -1, -1)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, +1, +1)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, -1, +1)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, +1, -1)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, 0, 0)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, 0, 0)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, -1, 0)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, +1, 0)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, 0, -1)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
++	update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, 0, +1)), cells, r, matrix_neighs, N_neighs, b, box, overflow);
+ 
+ 	list_poss[IND] = r;
+ 	c_number_neighs[IND] = N_neighs;
+@@ -109,7 +111,7 @@ __global__ void compress_matrix_neighs(int *matrix, int *nneighs, int *offsets,
+ 	}
+ }
+ 
+-__device__ void edge_update_cell_neigh_list(cudaTextureObject_t counters_cells_tex, c_number4 *poss, int cell_ind, int *cells, c_number4 &r, int *neigh, int &N_n, LR_bonds b, int &N_n_no_doubles, CUDABox *box) {
++__device__ void edge_update_cell_neigh_list(cudaTextureObject_t counters_cells_tex, c_number4 *poss, int cell_ind, int *cells, c_number4 &r, int *neigh, int &N_n, LR_bonds b, int &N_n_no_doubles, CUDABox *box, bool *overflow) {
+ 	int size = tex1Dfetch<int>(counters_cells_tex, cell_ind);
+ 	for(int i = 0; i < size; i++) {
+ 		int m = cells[cell_ind * verlet_max_N_per_cell[0] + i];
+@@ -121,14 +123,15 @@ __device__ void edge_update_cell_neigh_list(cudaTextureObject_t counters_cells_t
+ 
+ 		c_number sqr_dist = box->sqr_minimum_image(r, rm);
+ 		if(sqr_dist < verlet_sqr_rverlet[0]) {
+-			neigh[N_n * verlet_N[0] + IND] = m;
++			if(N_n < verlet_max_neigh[0]) neigh[N_n * verlet_N[0] + IND] = m;
++			else *overflow = true;
+ 			N_n++;
+ 			if(IND > m) N_n_no_doubles++;
+ 		}
+ 	}
+ }
+ 
+-__global__ void edge_update_neigh_list(cudaTextureObject_t counters_cells_tex, c_number4 *poss, c_number4 *list_poss, int *cells, int *matrix_neighs, int *nn, int *nn_no_doubles, LR_bonds *bonds, CUDABox *box) {
++__global__ void edge_update_neigh_list(cudaTextureObject_t counters_cells_tex, c_number4 *poss, c_number4 *list_poss, int *cells, int *matrix_neighs, int *nn, int *nn_no_doubles, LR_bonds *bonds, CUDABox *box, bool *overflow) {
+ 	if(IND >= verlet_N[0]) return;
+ 
+ 	c_number4 r = poss[IND];
+@@ -140,34 +143,34 @@ __global__ void edge_update_neigh_list(cudaTextureObject_t counters_cells_tex, c
+ 	int index = (spl_idx.z * verlet_N_cells_side[1] + spl_idx.y) * verlet_N_cells_side[0] + spl_idx.x;
+ 
+ 	// visit this cell
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, index, cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, index, cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
+ 	// visit 26 neighbour cells grouped into 13 pairs of mutually opposite cells
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, -1, -1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, +1, +1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, -1, +1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, +1, -1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, +1, +1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, -1, -1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, -1, +1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, +1, -1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, -1, 0)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, +1, 0)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, +1, 0)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, -1, 0)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, 0, -1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, 0, +1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, 0, +1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, 0, -1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, -1, -1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, +1, +1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, -1, +1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, +1, -1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, 0, 0)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, 0, 0)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, -1, 0)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, +1, 0)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, 0, -1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
+-	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, 0, +1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, -1, -1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, +1, +1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, -1, +1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, +1, -1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, +1, +1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, -1, -1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, -1, +1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, +1, -1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, -1, 0)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, +1, 0)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, +1, 0)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, -1, 0)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, 0, -1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, 0, +1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, 0, +1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, 0, -1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, -1, -1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, +1, +1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, -1, +1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, +1, -1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(-1, 0, 0)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(+1, 0, 0)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, -1, 0)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, +1, 0)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, 0, -1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
++	edge_update_cell_neigh_list(counters_cells_tex, poss, neigh_cell(spl_idx, make_int3(0, 0, +1)), cells, r, matrix_neighs, N_n, b, N_n_no_doubles, box, overflow);
+ 
+ 	list_poss[IND] = r;
+ 	nn[IND] = N_n;

@@ -7,9 +7,13 @@ OXDNA_URL="${NADOC_OXDNA_URL:-https://github.com/lorenzo-rovigatti/oxDNA.git}"
 OXDNA_REV="${NADOC_OXDNA_REV:-8028cf33b3cba12992b771156085fa54879f50cd}"
 ENGINE_ROOT="${NADOC_OXDNA_ROOT:-$HOME/.local/share/nadoc/engines/oxdna}"
 SOURCE_DIR="${NADOC_OXDNA_SOURCE:-$ENGINE_ROOT/source}"
-INSTALL_DIR="$ENGINE_ROOT/$OXDNA_REV"
+BUILD_FLAVOR="upstream"
+if [ "${NADOC_OXDNA_ADAPTIVE_MEMORY:-0}" = "1" ]; then
+  BUILD_FLAVOR="adaptive-memory"
+fi
+INSTALL_DIR="$ENGINE_ROOT/$OXDNA_REV-$BUILD_FLAVOR"
 CURRENT="$ENGINE_ROOT/current"
-BUILD_DIR="$SOURCE_DIR/build-nadoc"
+BUILD_DIR="$SOURCE_DIR/build-nadoc-$BUILD_FLAVOR"
 JOBS="${NADOC_BUILD_JOBS:-$(nproc)}"
 
 echo "==> upstream oxDNA $OXDNA_REV"
@@ -23,6 +27,23 @@ fi
 git -C "$SOURCE_DIR" remote set-url origin "$OXDNA_URL"
 git -C "$SOURCE_DIR" fetch --depth 1 origin "$OXDNA_REV"
 git -C "$SOURCE_DIR" checkout --detach "$OXDNA_REV"
+
+if [ "${NADOC_OXDNA_ADAPTIVE_MEMORY:-0}" = "1" ]; then
+  ADAPTIVE_PATCH="$(dirname "$0")/../tools/oxdna_memory/adaptive-neighbor-lists.patch"
+  if git -C "$SOURCE_DIR" apply --reverse --check "$ADAPTIVE_PATCH" >/dev/null 2>&1; then
+    echo "==> adaptive-memory patch already applied"
+  else
+    git -C "$SOURCE_DIR" apply --check "$ADAPTIVE_PATCH"
+    git -C "$SOURCE_DIR" apply "$ADAPTIVE_PATCH"
+    echo "==> applied adaptive-memory patch"
+  fi
+else
+  ADAPTIVE_PATCH="$(dirname "$0")/../tools/oxdna_memory/adaptive-neighbor-lists.patch"
+  if git -C "$SOURCE_DIR" apply --reverse --check "$ADAPTIVE_PATCH" >/dev/null 2>&1; then
+    git -C "$SOURCE_DIR" apply --reverse "$ADAPTIVE_PATCH"
+    echo "==> removed adaptive-memory patch for upstream build"
+  fi
+fi
 
 cmake_args=(-S "$SOURCE_DIR" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release)
 if [ "${NADOC_OXDNA_CPU_ONLY:-0}" != "1" ]; then
@@ -50,6 +71,7 @@ cmake -D "BINARY=$INSTALL_DIR/bin/DNAnalysis" \
       -D "OLD_RPATH=$BUILD_DIR/src" -P "$(dirname "$0")/set-relative-rpath.cmake"
 printf '%s\n' "$OXDNA_URL" > "$INSTALL_DIR/source-url"
 printf '%s\n' "$OXDNA_REV" > "$INSTALL_DIR/source-revision"
+printf '%s\n' "$BUILD_FLAVOR" > "$INSTALL_DIR/build-flavor"
 ln -sfn "$INSTALL_DIR" "$CURRENT"
 
 echo "==> installed: $CURRENT/bin/oxDNA"
