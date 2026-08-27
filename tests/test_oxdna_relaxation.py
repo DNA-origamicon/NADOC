@@ -27,6 +27,7 @@ from backend.core.oxdna_health import (
 )
 from backend.core.oxdna_job import OxdnaJob, OxdnaStatus, new_oxdna_job
 from backend.core.oxdna_protocol import (
+    apply_stage_overrides,
     build_relaxation_stages,
     expected_energy_lines,
     render_stage_input,
@@ -37,6 +38,18 @@ from backend.physics.oxdna_interface import (
 )
 
 from tests.conftest import make_6hb_design, make_18hb_design
+
+
+def test_stage_overrides_are_scoped_and_reject_runner_identity_fields():
+    specs = apply_stage_overrides(build_relaxation_stages(), {
+        "2_md_relax": {"dt": 0.001, "steps": 2_000_000, "print_conf_interval": 5000}
+    })
+    assert specs[1].dt == pytest.approx(0.001)
+    assert specs[1].steps == 2_000_000
+    assert specs[1].print_conf_interval_override == 5000
+    assert specs[2].dt == pytest.approx(0.003)
+    with pytest.raises(ValueError, match="not an editable"):
+        apply_stage_overrides(specs, {"2_md_relax": {"name": "wrong"}})
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────

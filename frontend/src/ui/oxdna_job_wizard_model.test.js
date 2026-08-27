@@ -29,4 +29,12 @@ describe('oxDNA job wizard model', () => {
   it('prices all scheduled steps in the Runpod preview shape', () => {
     expect(oxdnaRunpodPlanShape().relax_steps).toBe(1_101_000)
   })
+
+  it('applies and submits per-stage overrides without changing sibling stages', () => {
+    const values = { stage_overrides: { '2_md_relax': { dt: 0.001, steps: 2_000_000 } } }
+    const stages = oxdnaStagePlan(values)
+    expect(stages[1]).toMatchObject({ dt: 0.001, steps: 2_000_000 })
+    expect(stages[2].dt).toBe(0.003)
+    expect(oxdnaWizardPayload(values).stage_overrides).toEqual(values.stage_overrides)
+  })
 })

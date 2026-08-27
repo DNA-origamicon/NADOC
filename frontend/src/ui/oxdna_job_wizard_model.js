@@ -1,5 +1,6 @@
 const DEFAULTS = Object.freeze({
   backend: 'CUDA', device: '0', salt_concentration: 0.5,
+  interaction_type: 'DNA2',
   mc_steps: 1000, md_relax_steps: 1_000_000, equil_steps: 100_000,
   min_bp_retained: 0.5, max_relax_retries: 3,
 })
@@ -10,8 +11,8 @@ const interval = steps => Math.max(1, Math.floor(Number(steps) / 100))
 
 export function oxdnaStagePlan(values = {}) {
   const v = oxdnaWizardDefaults(values)
-  const shared = { interaction_type: 'DNA2', temperature: '296K', salt_concentration: Number(v.salt_concentration), topology: 'topology.top', device: String(v.device) }
-  return [
+  const shared = { interaction_type: v.interaction_type, temperature: '296K', salt_concentration: Number(v.salt_concentration), topology: 'topology.top', device: String(v.device) }
+  const stages = [
     { name: '1_mc_relax', purpose: 'Clear local clashes with mutual base-pair traps', ...shared,
       sim_type: 'MC', backend: 'CPU', steps: Number(v.mc_steps), ensemble: 'NVT', delta_translation: 0.1,
       delta_rotation: 0.1, max_backbone_force: 5, max_backbone_force_far: 10,
@@ -30,13 +31,20 @@ export function oxdnaStagePlan(values = {}) {
       min_bp_retained: Number(v.min_bp_retained), conf_file: '../2_md_relax/last_conf.dat',
       last_conf_file: 'last_conf.dat', trajectory_file: 'trajectory.dat', energy_file: 'energy.dat' },
   ].map(stage => ({ ...stage, print_conf_interval: interval(stage.steps), print_energy_every: interval(stage.steps) }))
+  return applyOxdnaStageOverrides(stages, v.stage_overrides)
+}
+
+export function applyOxdnaStageOverrides(stages, overrides = {}) {
+  return stages.map(stage => ({ ...stage, ...(overrides?.[stage.name] || {}) }))
 }
 
 export function oxdnaWizardPayload(values, targetFields = {}) {
   const v = oxdnaWizardDefaults(values)
-  return { backend: v.backend, device: String(v.device), salt_concentration: Number(v.salt_concentration),
+  return { backend: v.backend, device: String(v.device), interaction_type: v.interaction_type,
+    salt_concentration: Number(v.salt_concentration),
     mc_steps: Number(v.mc_steps), md_relax_steps: Number(v.md_relax_steps), equil_steps: Number(v.equil_steps),
-    min_bp_retained: Number(v.min_bp_retained), max_relax_retries: Number(v.max_relax_retries), ...targetFields }
+    min_bp_retained: Number(v.min_bp_retained), max_relax_retries: Number(v.max_relax_retries),
+    stage_overrides: v.stage_overrides || {}, ...targetFields }
 }
 
 export function oxdnaConfigDocument(values, targetFields = {}) {

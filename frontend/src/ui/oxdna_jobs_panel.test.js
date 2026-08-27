@@ -1220,6 +1220,7 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     const run = $('oxdna-jobs-run-btn')
     expect(run.textContent).toContain('Run')
     expect(run.disabled).toBe(false)
+    expect($('oxdna-jobs-list').querySelector('.nadoc-spinner')).toBeTruthy()
     run.click()
     await flush()
     expect(api.startOxdnaJob).toHaveBeenCalledWith('jReady')

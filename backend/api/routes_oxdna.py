@@ -44,6 +44,7 @@ from backend.api import state as design_state
 from backend.api.assembly import _WORKSPACE_DIR
 from backend.core.oxdna_job import OxdnaJob, OxdnaStatus, new_oxdna_job
 from backend.core.oxdna_protocol import (
+    apply_stage_overrides,
     build_field_stage,
     build_production_stage,
     hybridize_stage,
@@ -177,6 +178,8 @@ def _seed_geometry(design) -> list[dict]:
 
 class CreateOxdnaJobRequest(BaseModel):
     backend: str = Field("CUDA", description="'CUDA' or 'CPU' for the MD stages")
+    interaction_type: str = Field("DNA2", description="'DNA2' (oxDNA2) or 'DNA' (legacy oxDNA1)")
+    stage_overrides: dict[str, dict] = Field(default_factory=dict)
     device: str = Field("0", description="CUDA device index")
     salt_concentration: float = Field(0.5, gt=0.0, description="Molar salt for DNA2")
     mc_steps: int = Field(
@@ -718,6 +721,8 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
     """
     if body.backend not in {"CPU", "CUDA"}:
         raise HTTPException(400, f"Unknown backend: {body.backend!r}")
+    if body.interaction_type not in {"DNA2", "DNA"}:
+        raise HTTPException(400, f"Unknown oxDNA interaction model: {body.interaction_type!r}")
     if find_oxdna() is None:
         raise HTTPException(
             400,
@@ -840,6 +845,13 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         surface_present=relax_has_forces,
         protein=protein,
     )
+    if not protein:
+        for spec in specs:
+            spec.interaction = body.interaction_type
+    try:
+        specs = apply_stage_overrides(specs, body.stage_overrides)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(400, f"Invalid oxDNA stage override: {exc}") from exc
 
     job = new_oxdna_job(
         design_name=name,
@@ -854,6 +866,8 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         run_config={
             "kind": "relax",
             "backend": body.backend,
+            "interaction_type": body.interaction_type,
+            "stage_overrides": body.stage_overrides,
             "device": body.device,
             "salt_concentration": body.salt_concentration,
             "mc_steps": body.mc_steps,

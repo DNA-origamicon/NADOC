@@ -473,7 +473,9 @@ def oxdna_available() -> dict:
     return {
         "available": bin_path is not None,
         "oxdna_bin": bin_path,
+        "build_flavor": oxdna_build_flavor(bin_path) if bin_path else None,
         "cuda_capable": oxdna_supports_cuda(bin_path) if bin_path else False,
+        "dnanm_capable": oxdna_supports_dnanm(bin_path) if bin_path else False,
         "recommended_device": os.environ.get("OXDNA_DEVICE", "0"),
     }
 

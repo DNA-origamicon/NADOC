@@ -1520,6 +1520,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   const _wizard = initOxdnaJobWizard({
     api: {
       fetchHardware: () => api.optimizeMdHardware('0'),
+      getOxdnaAvailable: () => api.oxdnaAvailable(),
       fetchAvailability: opts => api.getClusterAvailability(opts),
       getSlurmPreview: body => api.getSlurmPreview(body),
       getRunpodJobPreview: body => api.getRunpodJobPreview(body),
@@ -1528,7 +1529,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       fsApi: api,
     },
     getInitialValues: () => ({
-      backend: backendSel?.value || 'CUDA', device: deviceInput?.value || '0',
+      backend: backendSel?.value || 'CUDA', device: deviceInput?.value || '0', interaction_type: 'DNA2',
       salt_concentration: parseFloat(saltInput?.value || '0.5'),
       mc_steps: parseInt(mcStepsInput?.value || '1000', 10),
       md_relax_steps: parseInt(mdStepsInput?.value || '1000000', 10),

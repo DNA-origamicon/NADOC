@@ -228,6 +228,57 @@ _RELAX_ESCALATION: dict[int, dict] = {
 }
 MAX_RELAX_RETRIES: int = 3
 
+_STAGE_OVERRIDE_FIELDS = {
+    "backend", "steps", "temperature", "salt_concentration", "device", "ensemble",
+    "delta_translation", "delta_rotation", "dt", "thermostat", "bussi_tau",
+    "newtonian_steps", "max_backbone_force", "max_backbone_force_far",
+    "external_forces", "min_bp_retained",
+}
+_STAGE_OVERRIDE_ALIASES = {
+    "print_conf_interval": "print_conf_interval_override",
+    "print_energy_every": "print_energy_every_override",
+}
+
+
+def apply_stage_overrides(
+    specs: list[OxdnaStageSpec], overrides: dict[str, dict] | None
+) -> list[OxdnaStageSpec]:
+    """Apply wizard-authored, per-stage overrides to a relaxation plan.
+
+    File identities, stage roles and interaction topology are intentionally immutable;
+    only directives represented as editable cells in the wizard are accepted.
+    """
+    if not overrides:
+        return specs
+    known = {spec.name for spec in specs}
+    unknown_stages = set(overrides) - known
+    if unknown_stages:
+        raise ValueError(f"unknown oxDNA stage override(s): {', '.join(sorted(unknown_stages))}")
+    result = []
+    for spec in specs:
+        changes = {}
+        for key, value in (overrides.get(spec.name) or {}).items():
+            target = _STAGE_OVERRIDE_ALIASES.get(key, key)
+            if target not in _STAGE_OVERRIDE_FIELDS and key not in _STAGE_OVERRIDE_ALIASES:
+                raise ValueError(f"{key!r} is not an editable oxDNA stage parameter")
+            current = getattr(spec, target)
+            if isinstance(current, bool):
+                value = bool(value)
+            elif isinstance(current, int) and not isinstance(current, bool):
+                value = int(value)
+            elif isinstance(current, float):
+                value = float(value)
+            elif current is not None:
+                value = str(value)
+            changes[target] = value
+        updated = replace(spec, **changes)
+        if updated.steps < 1 or updated.salt_concentration <= 0 or not 0 <= updated.min_bp_retained <= 1:
+            raise ValueError(f"invalid override values for {spec.name}")
+        if updated.backend not in {"CPU", "CUDA"}:
+            raise ValueError(f"invalid backend override for {spec.name}: {updated.backend!r}")
+        result.append(updated)
+    return result
+
 
 def escalate_md_relax_spec(base: OxdnaStageSpec, attempt: int) -> OxdnaStageSpec:
     """Return a more aggressive copy of an md_relax spec for retry *attempt* (1-based).
