@@ -155,11 +155,22 @@ DNA-only and protein-DNA jobs:
 scripts/build-oxdna.sh
 ```
 
+For the NADOC adaptive-memory CUDA flavor, which uses measured-capacity neighbor
+and edge lists plus compact cell storage:
+
+```bash
+NADOC_OXDNA_ADAPTIVE_MEMORY=1 scripts/build-oxdna.sh
+```
+
+The flavors install side by side. The `current` symlink selects the most recently
+built flavor, and NADOC automatically enables its guarded compact-list settings
+for CUDA stages.
+
 It is idempotent and prints the installed binary and source revision. NADOC finds
 the `current` symlink automatically; `OXDNA_BIN` remains an optional override.
 
 Optional knobs for the script:
-- `OXDNA_CUDA_ARCH` — compute capability (default `75`; set to match your card).
+- `OXDNA_CUDA_ARCH` — optional compute capability override (for example `75`).
 - `NADOC_OXDNA_ROOT` — managed install root.
 - `NADOC_OXDNA_CPU_ONLY=1` — explicitly request a CPU-only build.
 

@@ -214,6 +214,32 @@ def oxdna_supports_dnanm(path: str) -> bool:
     return result
 
 
+def oxdna_build_flavor(path: str) -> str:
+    """Return the managed build flavor recorded beside an oxDNA install."""
+    try:
+        marker = Path(path).resolve().parent.parent / "build-flavor"
+        return marker.read_text(encoding="utf-8").strip()
+    except OSError:
+        return "upstream"
+
+
+def configure_adaptive_memory_input(oxdna_bin: str, input_path: Path) -> bool:
+    """Enable guarded compact CUDA lists for the managed adaptive build."""
+    if oxdna_build_flavor(oxdna_bin) != "adaptive-memory":
+        return False
+    text = input_path.read_text(encoding="utf-8")
+    if "backend = CUDA" not in text or "use_edge = true" not in text:
+        return False
+    if "adaptive_neighbor_list" not in text:
+        settings = (
+            "adaptive_neighbor_list = true\n"
+            "adaptive_neighbor_initial_capacity = 64\n"
+            "adaptive_compact_cells = true\n"
+        )
+        input_path.write_text(text.rstrip() + "\n" + settings, encoding="utf-8")
+    return True
+
+
 def _usable_path(candidate: str) -> Optional[str]:
     """Resolve a candidate (PATH name or absolute path) to a runnable file."""
     return shutil.which(candidate) or (
@@ -965,6 +991,7 @@ async def _run_oxdna_async(
     ``on_spawn(pid)`` fires right after the process starts (and ``on_spawn(None)`` on
     exit) so the caller can persist the PID to job.json — surviving a server restart so
     ``stop_job`` can signal an orphaned run."""
+    configure_adaptive_memory_input(oxdna_bin, input_path)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("w") as log_fh:
         proc = await asyncio.create_subprocess_exec(

@@ -505,6 +505,42 @@ def test_find_oxdna_env_override_wins(tmp_path, monkeypatch):
     assert oxdna_runner.find_oxdna() == cpu
 
 
+def test_managed_adaptive_build_enables_compact_cuda_lists(tmp_path):
+    from backend.core import oxdna_runner
+
+    install = tmp_path / "adaptive"
+    binary = install / "bin" / "oxDNA"
+    binary.parent.mkdir(parents=True)
+    binary.write_bytes(b"ELF")
+    (install / "build-flavor").write_text("adaptive-memory\n", encoding="utf-8")
+    input_path = tmp_path / "input"
+    input_path.write_text(
+        "backend = CUDA\nuse_edge = true\nsim_type = MD\n", encoding="utf-8"
+    )
+
+    assert oxdna_runner.configure_adaptive_memory_input(str(binary), input_path)
+    text = input_path.read_text(encoding="utf-8")
+    assert text.count("adaptive_neighbor_list = true") == 1
+    assert "adaptive_neighbor_initial_capacity = 64" in text
+    assert "adaptive_compact_cells = true" in text
+    assert oxdna_runner.configure_adaptive_memory_input(str(binary), input_path)
+    assert input_path.read_text(encoding="utf-8") == text
+
+
+def test_upstream_build_does_not_mutate_input(tmp_path):
+    from backend.core import oxdna_runner
+
+    binary = tmp_path / "upstream" / "bin" / "oxDNA"
+    binary.parent.mkdir(parents=True)
+    binary.write_bytes(b"ELF")
+    input_path = tmp_path / "input"
+    original = "backend = CUDA\nuse_edge = true\n"
+    input_path.write_text(original, encoding="utf-8")
+
+    assert not oxdna_runner.configure_adaptive_memory_input(str(binary), input_path)
+    assert input_path.read_text(encoding="utf-8") == original
+
+
 def test_render_cuda_md_input():
     specs = build_relaxation_stages(md_relax_steps=10_000, device="2")
     txt = render_stage_input(specs[1], "/abs/topology.top", "/abs/conf.dat")
