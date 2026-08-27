@@ -6,6 +6,27 @@ const DEFAULTS = Object.freeze({
   min_bp_retained: 0.5, max_relax_retries: 3,
 })
 
+export const OXDNA_ENGINE_VARIANTS = Object.freeze(['auto', 'adaptive-memory', 'dnanm', 'upstream'])
+
+export function validateOxdnaWizard(values = {}) {
+  const v = oxdnaWizardDefaults(values)
+  const errors = {}
+  if (!['CUDA', 'CPU'].includes(v.backend)) errors.backend = 'Choose the CUDA or CPU backend.'
+  if (!['DNA2', 'DNA'].includes(v.interaction_type)) errors.interaction_type = 'Choose oxDNA2 or oxDNA1.'
+  if (!OXDNA_ENGINE_VARIANTS.includes(v.engine_variant)) errors.engine_variant = 'Choose a supported engine build.'
+  if (!String(v.device).trim()) errors.device = 'Enter a CUDA device.'
+  const range = (key, min, max, message) => {
+    const n = Number(v[key])
+    if (!Number.isFinite(n) || n < min || (max != null && n > max)) errors[key] = message
+  }
+  range('salt_concentration', 0.01, null, 'Salt concentration must be at least 0.01 M.')
+  for (const key of ['mc_steps', 'md_relax_steps', 'equil_steps'])
+    range(key, 100, null, 'Each stage must run for at least 100 steps.')
+  range('min_bp_retained', 0, 1, 'Base-pair retention must be between 0 and 1.')
+  range('max_relax_retries', 0, 3, 'Retries must be between 0 and 3.')
+  return { valid: Object.keys(errors).length === 0, errors }
+}
+
 export function oxdnaWizardDefaults(overrides = {}) { return { ...DEFAULTS, ...overrides } }
 
 const interval = steps => Math.max(1, Math.floor(Number(steps) / 100))

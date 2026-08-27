@@ -24,6 +24,10 @@ CG-to-atomistic handoff. Historical phases and experiments are in
   replaces the native placement. The seed's final global recenter preserves relative coordinates.
 - Atomistic display uses vectorized stamping and compact binary transport. Fine molecular surfaces
   are generated per strand to preserve geometric separation rather than only coloring one fused mesh.
+- The three-tab job wizard has a pure validation oracle and a reusable Playwright driver. Regression
+  coverage traverses every engine variant plus Local, Alpine, and RunPod UI paths using a disposable
+  two-helix design. Local prepared-job creation is wired; Alpine and RunPod selection/preview are wired,
+  but remote creation is still deliberately blocked by the frontend launch boundary.
 
 ## Binding invariants
 
@@ -45,4 +49,7 @@ CG-to-atomistic handoff. Historical phases and experiments are in
 ## Verification
 
 Use fast unit/integration tests for protocol rendering, health, mapping, and binary formats. Exercise
-display changes in the running app. Real oxDNA simulation tests are heavy and test-session-only.
+display changes in the running app. Run the wizard path regression with
+`cd frontend && npx playwright test e2e/oxdna_job_wizard_paths.spec.js --reporter=list`; it intercepts
+job creation and paid-provider calls and removes its generated design. Real oxDNA simulation tests are
+heavy and test-session-only.

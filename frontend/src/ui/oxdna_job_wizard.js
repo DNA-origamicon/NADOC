@@ -1,6 +1,6 @@
 import { createButton, createModal, el } from './primitives/index.js'
 import { initWizardTargetStep } from './md_job_wizard_target.js'
-import { oxdnaConfigDocument, oxdnaRunpodPlanShape, oxdnaStagePlan, oxdnaWizardDefaults, oxdnaWizardPayload } from './oxdna_job_wizard_model.js'
+import { oxdnaConfigDocument, oxdnaRunpodPlanShape, oxdnaStagePlan, oxdnaWizardDefaults, oxdnaWizardPayload, validateOxdnaWizard } from './oxdna_job_wizard_model.js'
 
 const TABS = [['target', 'Where it runs'], ['settings', 'Parameters & options'], ['config', 'Full configuration']]
 const FIELDS = [
@@ -47,7 +47,7 @@ const ROW_LABELS = {
 export function initOxdnaJobWizard({ api = {}, launch = async () => null, getInitialValues = () => ({}) } = {}) {
   let modal, targetStep, currentTab = 'target', values = oxdnaWizardDefaults(), busy = false
   const panels = {}, tabs = {}
-  let previousBtn, nextBtn, createBtn, configPre, stageSummary, stageTable, engineDetails
+  let previousBtn, nextBtn, createBtn, configPre, stageSummary, stageTable, engineDetails, validationNote
 
   function renderSettings() {
     const grid = el('div', { className: 'wizard-field-grid' })
@@ -71,7 +71,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, getIni
       input.value = values[field.key]
       input.addEventListener('input', () => {
         values[field.key] = field.type === 'number' ? Number(input.value) : input.value
-        renderConfig(); targetStep?.refreshSizing?.()
+        renderConfig(); paintValidation(); targetStep?.refreshSizing?.()
       })
       grid.append(el('label', { className: 'wizard-field', children: [
         el('span', { className: 'wizard-field__label', text: field.label }), input,
@@ -79,6 +79,14 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, getIni
         field.help ? el('span', { className: 'wizard-field__help', text: field.help }) : null,
       ] }))
     }
+  }
+
+  function paintValidation() {
+    if (!validationNote) return
+    const result = validateOxdnaWizard(values)
+    validationNote.textContent = result.valid ? '' : Object.values(result.errors)[0]
+    validationNote.hidden = result.valid
+    if (createBtn) createBtn.disabled = busy || !(targetStep?.isReady?.() ?? true) || !result.valid
   }
 
   function renderConfig() {
@@ -206,7 +214,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, getIni
     createBtn.style.display = index === TABS.length - 1 ? '' : 'none'
     const ready = targetStep?.isReady?.() ?? true
     nextBtn.disabled = currentTab === 'target' && !ready
-    createBtn.disabled = busy || !ready
+    createBtn.disabled = busy || !ready || !validateOxdnaWizard(values).valid
     if (currentTab === 'settings') renderSettings()
     if (currentTab === 'config') renderConfig()
   }
@@ -237,7 +245,8 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, getIni
     configPre = el('pre', { className: 'oxdna-wizard-config' })
     stageTable = el('div', { className: 'wizard-stages' })
     stageSummary = el('div', { className: 'wizard-totals' })
-    panels.config = el('section', { className: 'wizard-pane wizard-tabpanel', children: [stageSummary,
+    validationNote = el('div', { className: 'wizard-note oxdna-wizard-validation', attrs: { role: 'alert' } })
+    panels.config = el('section', { className: 'wizard-pane wizard-tabpanel', children: [validationNote, stageSummary,
       el('p', { className: 'oxdna-wizard-note', text: 'Click an editable cell to override that stage. Blue cells change from the previous stage; amber cells are your overrides.' }),
       stageTable, el('details', { children: [el('summary', { text: 'Config document' }), configPre] })] })
     for (const [id, label] of TABS) tabs[id] = el('button', { className: 'wizard-tab', text: label, attrs: { type: 'button', role: 'tab' }, on: { click: () => selectTab(id) } })

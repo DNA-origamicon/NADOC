@@ -236,6 +236,36 @@ print('DNAnalysis', find_dnanalysis() or '(not found)')
 Then restart the NADOC backend (`just dev`) and open the **Dynamics** sidebar —
 the "oxDNA missing" warning should be gone.
 
+## Job wizard validation and headless regression
+
+The three-tab oxDNA job wizard validates its engine build, force field, backend,
+salt concentration, stage lengths, base-pair retention gate, and retry count before
+enabling **Create job**. Its final configuration table supports per-stage overrides;
+the resolved values and selected engine variant are preserved in the prepared-job
+payload.
+
+Browser automation should use
+[`OxdnaWizardDriver`](../frontend/e2e/helpers/oxdna_wizard_driver.js), which provides
+headless methods for opening the wizard, selecting Local/Alpine/RunPod, choosing an
+engine, editing protocol fields and stage cells, and creating a prepared job. Run the
+focused regression with:
+
+```bash
+cd frontend
+npx playwright test e2e/oxdna_job_wizard_paths.spec.js --reporter=list
+```
+
+The regression generates a uniquely named two-helix design from the minimal checked-in
+seed and deletes it in `afterAll`; the global Playwright teardown also removes any
+`__e2e__` design artifact after an interrupted run. Job creation and RunPod APIs are
+intercepted, so the test launches no oxDNA process, cluster job, or paid pod.
+
+Local prepared-job creation is wired through the wizard. Alpine authentication,
+availability, partition selection, and configuration preview are wired, as are RunPod
+preflight, GPU pricing, storage, and budget preview. Remote **Create job** remains
+intentionally blocked in the frontend launch handler until those submission paths are
+connected to the persisted oxDNA job workflow.
+
 ---
 
 ## Surface deposition

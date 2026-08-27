@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { oxdnaConfigDocument, oxdnaRunpodPlanShape, oxdnaStagePlan, oxdnaWizardPayload } from './oxdna_job_wizard_model.js'
+import { oxdnaConfigDocument, oxdnaRunpodPlanShape, oxdnaStagePlan, oxdnaWizardPayload, validateOxdnaWizard } from './oxdna_job_wizard_model.js'
 
 describe('oxDNA job wizard model', () => {
   it('resolves the documented three-stage relaxation protocol', () => {
@@ -36,5 +36,19 @@ describe('oxDNA job wizard model', () => {
     expect(stages[1]).toMatchObject({ dt: 0.001, steps: 2_000_000 })
     expect(stages[2].dt).toBe(0.003)
     expect(oxdnaWizardPayload(values).stage_overrides).toEqual(values.stage_overrides)
+  })
+
+  it('rejects malformed protocol values and unknown engine builds', () => {
+    const result = validateOxdnaWizard({ engine_variant: 'mystery', salt_concentration: 0,
+      mc_steps: 99, min_bp_retained: 1.1, max_relax_retries: 4 })
+    expect(result.valid).toBe(false)
+    expect(Object.keys(result.errors)).toEqual(expect.arrayContaining([
+      'engine_variant', 'salt_concentration', 'mc_steps', 'min_bp_retained', 'max_relax_retries',
+    ]))
+  })
+
+  it('accepts every supported engine build with the default protocol', () => {
+    for (const engine_variant of ['auto', 'adaptive-memory', 'dnanm', 'upstream'])
+      expect(validateOxdnaWizard({ engine_variant })).toEqual({ valid: true, errors: {} })
   })
 })
