@@ -1,6 +1,7 @@
 """
 Ephemeral oxDNA LIVE field routes — an in-process oxpy session that runs WITHOUT
-storing a job, seeded from a completed relaxed run, re-aimable in (near) real time.
+storing a job, continued from a selected prepared or previously run job, re-aimable
+in (near) real time.
 
 Sibling of ``routes_oxdna.py`` (the persisted job manager).  Where a field *run*
 there is a stored child :class:`~backend.core.oxdna_job.OxdnaJob` (a job dir,
@@ -13,7 +14,7 @@ is re-aimed live (drag the field gizmo → the running structure follows).
 Route summary
 ─────────────
 GET    /oxdna/live/available          probe for a usable, field-steerable oxpy
-POST   /oxdna/live/start              seed from a completed relaxed job → start
+POST   /oxdna/live/start              continue from the selected job → start
 POST   /oxdna/live/{id}/field         re-aim / rescale the running field (live)
 GET    /oxdna/live/{id}/frame         current configuration → applyFemPositions list
 POST   /oxdna/live/{id}/stop          stop + teardown (removes the temp rundir)
@@ -349,7 +350,7 @@ async def get_oxdna_live_available() -> dict:
 
 @router.post("/oxdna/live/start")
 async def start_oxdna_live(body: LiveStartRequest) -> dict:
-    """Start an ephemeral live session seeded from a completed relaxed job.
+    """Start an ephemeral live session as a continuation of the selected job.
 
     Stages a temp run dir composing whatever elements are enabled — an electric
     field, a hard surface, anchor traps, or none (free dynamics) — with the SAME
@@ -363,8 +364,9 @@ async def start_oxdna_live(body: LiveStartRequest) -> dict:
         raise HTTPException(400, f"Live oxDNA not available: {avail['reason']}")
 
     parent = _load_job(body.job_id)
-    if is_running(body.job_id) or parent.status != OxdnaStatus.completed:
-        raise HTTPException(400, "Live needs a completed relaxed job to seed from.")
+    eligible = {OxdnaStatus.queued, OxdnaStatus.completed, OxdnaStatus.stopped, OxdnaStatus.failed}
+    if is_running(body.job_id) or parent.status not in eligible:
+        raise HTTPException(400, "Live needs a prepared or previously run job to seed from.")
     _assert_job_current(parent)  # refuse (409) if the design changed since the relax
 
     ws = _workspace()
@@ -375,6 +377,10 @@ async def start_oxdna_live(body: LiveStartRequest) -> dict:
             500, "design.json snapshot missing; cannot start live session."
         )
     seed_conf, _stage = _latest_relaxed_conf(parent, ws)
+    if seed_conf is None and parent.status == OxdnaStatus.queued:
+        prepared_conf = pjd / "conf.dat"
+        if prepared_conf.exists() and prepared_conf.stat().st_size:
+            seed_conf = prepared_conf
     if seed_conf is None:
         raise HTTPException(
             400, "No relaxed configuration to seed the live session from."

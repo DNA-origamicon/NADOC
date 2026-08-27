@@ -1005,8 +1005,8 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
   })
 
   // ── Activity spinners (reload-safe: driven by live job state) ──
-  // The Relax button is now the context control (▶ Relax ⇄ ■ Stop ⇄ ↻ Resume) tied to the
-  // SELECTED job, so with nothing selected it reads "▶ Relax" (no spinner); a running relax
+  // The Run button is the context control (▶ Run ⇄ ■ Stop ⇄ ↻ Resume) tied to the
+  // SELECTED job, so with nothing selected it reads "▶ Run" (disabled, no spinner); a running relax
   // still shows activity on its list row. SELECTING the running relax flips it to Stop.
   it('a running relaxation spins its list row; the Relax button reflects the selected job', async () => {
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jRlx', design_source_path: 'A.nadoc', status: 'running',
@@ -1015,11 +1015,11 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     await panel.refresh()
     await Promise.resolve(); await Promise.resolve()
     expect($('oxdna-jobs-list').querySelector('.nadoc-spinner')).toBeTruthy()   // row shows activity
-    expect($('oxdna-jobs-run-btn').textContent.trim()).toBe('▶ Relax')          // nothing selected → launch
+    expect($('oxdna-jobs-run-btn').textContent.trim()).toBe('▶ Run')
     expect($('oxdna-jobs-prod-btn').querySelector('.nadoc-spinner')).toBeFalsy()
 
-    await selectFirstJob(panel)   // select the running relaxation → Relax flips to Stop
-    expect($('oxdna-jobs-run-btn').textContent).toContain('Stop Relax')
+    await selectFirstJob(panel)   // select the running relaxation → Run flips to Stop
+    expect($('oxdna-jobs-run-btn').textContent).toContain('Stop Run')
     expect($('oxdna-jobs-run-btn').dataset.runAction).toBe('stop')
   })
 
@@ -1043,7 +1043,7 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     expect($('oxdna-jobs-list').querySelector('.nadoc-spinner')).toBeFalsy()
     expect($('oxdna-jobs-run-btn').querySelector('.nadoc-spinner')).toBeFalsy()
     expect($('oxdna-jobs-prod-btn').querySelector('.nadoc-spinner')).toBeFalsy()
-    expect($('oxdna-jobs-run-btn').textContent.trim()).toBe('▶ Relax')
+    expect($('oxdna-jobs-run-btn').textContent.trim()).toBe('▶ Run')
   })
 
   // ── Continue production + View trajectory ─────────────────────────────────
@@ -1210,6 +1210,21 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     expect($('oxdna-jobs-prod-btn').textContent).toBe('Full Sim')
   })
 
+  it('a prepared job is selected first, then started from the Run control', async () => {
+    const job = { job_id: 'jReady', design_source_path: 'A.nadoc', status: 'queued',
+      created_at: 1, current_stage_idx: 0, backend: 'CPU', stages: relaxStages() }
+    api.listOxdnaJobs.mockResolvedValue([job])
+    api.startOxdnaJob.mockClear()
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
+    await selectFirstJob(panel)
+    const run = $('oxdna-jobs-run-btn')
+    expect(run.textContent).toContain('Run')
+    expect(run.disabled).toBe(false)
+    run.click()
+    await flush()
+    expect(api.startOxdnaJob).toHaveBeenCalledWith('jReady')
+  })
+
   it('an interrupted full run is resumed from Full Sim, not Relax', async () => {
     const job = { job_id: 'jRun2', design_source_path: 'voltronCoreArm.nadoc', status: 'stopped',
       created_at: 1, current_stage_idx: 3,
@@ -1218,7 +1233,7 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'voltronCoreArm.nadoc' })
     await selectFirstJob(panel)
 
-    expect($('oxdna-jobs-run-btn').textContent).toContain('Relax')
+    expect($('oxdna-jobs-run-btn').textContent).toContain('Run')
     expect($('oxdna-jobs-run-btn').dataset.runAction).toBe('run')
     expect($('oxdna-jobs-prod-btn').textContent).toContain('Resume Run')
     expect(isProductionResumable(job)).toBe(true)

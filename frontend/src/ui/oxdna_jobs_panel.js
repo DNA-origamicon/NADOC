@@ -41,7 +41,7 @@ import { formatBytes } from './format_bytes.js'
 import { initJobArchive } from './job_archive_action.js'
 import { initOxdnaJobWizard } from './oxdna_job_wizard.js'
 import { helixDisplayLabel } from './design_display_labels.js'
-import { confirmNoConcurrentJob, confirmGpuLaunch, confirmDiskSpaceOk } from './job_activity.js'
+import { confirmNoConcurrentJob, confirmDiskSpaceOk } from './job_activity.js'
 import { shouldTearDownDisplays, shouldResumeDisplays } from './display_tab_policy.js'
 import * as api from '../api/client.js'
 
@@ -558,6 +558,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   if (!panel || !body) return
 
   const statusEl      = document.getElementById('oxdna-jobs-status')
+  const newBtn        = document.getElementById('oxdna-jobs-new-btn')
   const runBtn        = document.getElementById('oxdna-jobs-run-btn')
   const prodBtn       = document.getElementById('oxdna-jobs-prod-btn')
   const depositionBtn = document.getElementById('oxdna-surface-deposition-run')
@@ -1388,13 +1389,12 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     _fetchJobs()
   }
 
-  // ── Primary run control: ▶ Relax ⇄ ■ Stop ⇄ ↻ Resume (Phase C) ─────────────
+  // ── Primary run control: ▶ Run ⇄ ■ Stop ⇄ ↻ Resume (Phase C) ───────────────
   // One button, three meanings driven by the SELECTED job's state (job_run_control).
   function _runControl() {
-    // Gated to the RELAXATION phase: a job running its PRODUCTION phase keeps the
-    // Relax button as "▶ Relax" (disabled) and is stopped via the production control.
+    // Gated to the relaxation phase: production still owns its Advanced control.
     return runControlState(_selectedJob(), {
-      verb: 'Relax',
+      verb: 'Run',
       isActive: isRelaxRunning,
       isResumable: isRelaxResumable,
       busy: _launching,
@@ -1418,12 +1418,30 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       await _fetchJobs()
     }, { label: 'Resuming…' })
   }
+  function _startSelected() {
+    return runExclusive(runBtn, async () => {
+      const job = _selectedJob()
+      if (!job || job.status !== 'queued') return
+      if (!(await confirmNoConcurrentJob({
+        excludeJobId: _selectedId,
+        usesGpu: (job.backend || 'CUDA') === 'CUDA',
+      }))) return
+      const started = await api.startOxdnaJob(_selectedId)
+      if (!started) {
+        showToast(api.lastErrorMessage?.() || 'Could not start oxDNA job', 'error')
+        return
+      }
+      showToast('oxDNA run started', 'ok')
+      await _fetchJobs()
+    }, { label: 'Starting…' })
+  }
   runBtn?.addEventListener('click', () => {
     const action = _runControl().action
     if (action === RUN_ACTION.STOP) return _stopSelected()
     if (action === RUN_ACTION.RESUME) return _resumeSelected()
-    return _wizard.open()
+    return _startSelected()
   })
+  newBtn?.addEventListener('click', () => _wizard.open())
 
   // ── Launch ─────────────────────────────────────────────────────────────────
   async function _launchRelax(wizardPayload = null) {
@@ -1435,43 +1453,22 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       showToast(`${wizardPayload.execution_target === 'runpod' ? 'Runpod' : 'Alpine'} oxDNA submission is not wired yet`, 'info')
       return null
     }
-    // Resource-aware guard: oxDNA can run its MD stages on the CPU backend, so if
-    // the GPU is busy the user is offered a CPU fallback instead of a hard block.
     const selectedBackend = wizardPayload?.backend || backendSel?.value || 'CUDA'
     const selectedDevice = wizardPayload?.device || deviceInput?.value || '0'
-    const wantGpu = selectedBackend === 'CUDA'
-    // With the simulate coordinator, the CPU alternative is a DIFFERENT engine (LAMMPS,
-    // multi-core), not oxDNA's single-core CPU backend — so 'cpu' means the coordinator
-    // has already launched LAMMPS and oxDNA must abort. Without it, fall back to the
-    // per-panel GPU guard (oxDNA-CPU backend as the alternative).
-    let gpuDecision
-    if (simGuard) {
-      gpuDecision = await simGuard({ backendWanted: selectedBackend })
-      if (gpuDecision === 'cpu' || gpuDecision === 'cancel') return
-    } else {
-      gpuDecision = await confirmGpuLaunch({
-        usesGpu: wantGpu,
-        hasCpuAlternative: wantGpu,
-        devices: selectedDevice,
-      })
-      if (gpuDecision === 'cancel') return
-    }
-    const runBackend = gpuDecision === 'cpu' ? 'CPU' : selectedBackend
-    oxdnaLive?.stop()   // a relaxation supersedes any live session (shared overlay)
     _launching = true
     runBtn.disabled = true
-    _setStatus('Preparing relaxation job…', _C.accent)
-    _updateButtons(_selectedJob())   // show the relax spinner immediately
+    _setStatus('Preparing oxDNA job…', _C.accent)
+    _updateButtons(_selectedJob())
     const body = {
       ...(wizardPayload || {}),
-      backend:            runBackend,
+      backend:            selectedBackend,
       device:             selectedDevice,
       salt_concentration: wizardPayload?.salt_concentration ?? parseFloat(saltInput?.value || '0.5'),
       mc_steps:           wizardPayload?.mc_steps ?? parseInt(mcStepsInput?.value || '1000', 10),
       md_relax_steps:     wizardPayload?.md_relax_steps ?? parseInt(mdStepsInput?.value || '1000000', 10),
       equil_steps:        wizardPayload?.equil_steps ?? parseInt(equilStepsInput?.value || '100000', 10),
       min_bp_retained:    wizardPayload?.min_bp_retained ?? parseFloat(bpGateInput?.value || '0.5'),
-      autostart:          true,
+      autostart:          false,
       design_source_path: _currentPartPath(),
     }
     // Relax-on-a-surface: a structure relaxed free settles differently than one
@@ -1504,8 +1501,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     _updateButtons(_selectedJob())
     if (job?.job_id) {
       _selectedId = job.job_id
-      showToast('oxDNA relaxation started', 'ok')
-      _setStatus('Relaxation running…', _C.warn)
+      showToast('oxDNA job created — press Run when ready', 'ok')
+      _setStatus('Job ready to run.', _C.ok)
       await _fetchJobs()
     } else {
       const detail = api.lastErrorMessage?.()
@@ -1937,7 +1934,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     // re-run _updateButtons).
     const liveOn = !!oxdnaLive?.isOn?.()
 
-    // Relax — the primary CONTEXT control: ▶ Relax ⇄ ■ Stop ⇄ ↻ Resume (Phase C).
+    // Run — the primary CONTEXT control: ▶ Run ⇄ ■ Stop ⇄ ↻ Resume (Phase C).
     // Label + action come from the selected job's state; a spinner shows only while a
     // fresh launch is in flight. RUN is gated by availability + an active production.
     const prodActive  = _visibleJobs().some(isProductionRunning)
@@ -1949,8 +1946,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
         runBtn.dataset.spinning = '0'          // drop any spinner state, then set the label
         runBtn.textContent = rc.label
       }
+      const canStart = job?.status === 'queued'
       runBtn.disabled = !_available || _launching ||
-        (rc.action === RUN_ACTION.RUN && prodRunning)
+        (rc.action === RUN_ACTION.RUN && (!canStart || prodRunning))
       runBtn.dataset.runAction = rc.action
     }
     const prodLabel = prodResume ? '↻ Resume Run' : 'Full Sim'

@@ -16,7 +16,7 @@ async function openOxdna(page) {
   await page.locator('.left-tab-btn[data-tab="dynamics"]').click()
   await page.locator('.engine-selector-btn[data-engine="oxdna"]').click()
   await expect(page.locator('#oxdna-jobs-body')).toBeVisible()
-  await expect(page.locator('#oxdna-jobs-run-btn')).toBeEnabled({ timeout: 15_000 })
+  await expect(page.locator('#oxdna-jobs-new-btn')).toBeEnabled({ timeout: 15_000 })
 }
 
 test('oxDNA setup controls are accessible and do not create or start a job', async ({ page }) => {
@@ -50,10 +50,10 @@ test('oxDNA setup controls are accessible and do not create or start a job', asy
   await page.waitForTimeout(500)
   expect(creates).toBe(0)
   expect(starts).toBe(0)
-  await expect(page.locator('#oxdna-jobs-run-btn')).toHaveText(/Relax/)
+  await expect(page.locator('#oxdna-jobs-run-btn')).toHaveText(/Run/)
 })
 
-test('Relax assembles the configured preflight payload without running oxDNA', async ({ page }) => {
+test('New job assembles a prepared payload without running oxDNA', async ({ page }) => {
   test.setTimeout(90_000)
   const payloads = []
   let starts = 0
@@ -90,7 +90,7 @@ test('Relax assembles the configured preflight payload without running oxDNA', a
   await page.fill('#oxdna-jobs-equil-steps', '35000')
   await page.fill('#oxdna-jobs-bp-gate', '0.65')
 
-  await page.locator('#oxdna-jobs-run-btn').click()
+  await page.locator('#oxdna-jobs-new-btn').click()
   const wizard = page.locator('.modal--oxdna-wizard')
   await expect(wizard).toBeVisible()
   await wizard.locator('.wizard-tab', { hasText: 'Full configuration' }).click()
@@ -103,7 +103,7 @@ test('Relax assembles the configured preflight payload without running oxDNA', a
   expect(create).toMatchObject({
     backend: 'CPU', device: '3', salt_concentration: 0.35,
     mc_steps: 750, md_relax_steps: 350000, equil_steps: 35000,
-    min_bp_retained: 0.65, autostart: true, design_source_path: '2hb_1xT.nadoc',
+    min_bp_retained: 0.65, autostart: false, design_source_path: '2hb_1xT.nadoc',
   })
   expect(starts).toBe(0)
 

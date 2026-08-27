@@ -3,8 +3,8 @@
  * (Dynamics tab).
  *
  * Owns the #oxdna-jobs-live-btn toggle.  When turned on it starts an EPHEMERAL
- * in-process oxpy field session (routes_oxdna_live.py) seeded from the selected
- * completed relaxed job — NOTHING is persisted (no job in the list, no stored
+ * in-process oxpy field session (routes_oxdna_live.py) continued from the selected
+ * prepared or previously run job — NOTHING is persisted (no job in the list, no stored
  * frames, just a temp oxpy rundir).  It then polls the running session for the
  * current configuration and deforms the NADOC model to it via
  * oxdnaDisplay.displayLiveFrame(...), and on every field change (gizmo drag /
@@ -50,10 +50,10 @@ export function reconfigSig(el = {}) {
   return JSON.stringify({ fieldOn, surf, anchors })
 }
 
-/** Pure: can a job seed a live session?  A completed ROOT relaxation (not a
- *  field/production child — Live runs on a relaxed structure). */
+/** Pure: can a selected job seed a live continuation? Prepared jobs use their
+ *  initial configuration; finished/interrupted jobs use their latest checkpoint. */
 export function liveJobEligible(job) {
-  return job?.status === 'completed' && !job?.parent_job_id
+  return ['queued', 'completed', 'stopped', 'failed'].includes(job?.status)
 }
 
 /** Pure: gate the Live button.  Returns { enabled, reason } — `reason` is the
@@ -61,7 +61,7 @@ export function liveJobEligible(job) {
 export function liveButtonState({ available, availReason, job }) {
   if (!available) return { enabled: false, reason: availReason || 'oxpy live engine not available' }
   if (!liveJobEligible(job)) {
-    return { enabled: false, reason: 'Select a completed relaxed job to run Live on' }
+    return { enabled: false, reason: 'Select a prepared or previously run oxDNA job' }
   }
   return { enabled: true, reason: 'Start a live, field-steerable oxDNA session (nothing is saved)' }
 }
@@ -151,7 +151,7 @@ export function initOxdnaLive({
   async function start() {
     if (_busy || _on) return
     const job = getSelectedJob?.() || null
-    if (!liveJobEligible(job)) { showToast('Select a completed relaxed job first', 'warn'); return }
+    if (!liveJobEligible(job)) { showToast('Select a prepared or previously run oxDNA job first', 'warn'); return }
 
     // Stale-design guard: if the design changed since this job was relaxed, offer to
     // roll the feature log back to the relaxation stage (or cancel) before starting —

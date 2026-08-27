@@ -4170,28 +4170,32 @@
               <!-- loading bar: the running job's progress, above the launch buttons -->
               <div id="oxdna-jobs-progress" style="display:none;margin-bottom:6px"></div>
 
-              <!-- launch (current design): Relax + Production side by side (mirrors MD).
-                   Relocated above the jobs card at init (see main.js run-control move). -->
+              <!-- NAMD-parity workflow: configure a new job, then run the selected job.
+                   Live is oxDNA's one additional continuation mode. -->
               <div id="oxdna-launch-row" style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
+                <button id="oxdna-jobs-new-btn"
+                        style="flex:1;font-size:var(--text-xs);padding:5px;background:#1c2333;border:1px solid #30456d;color:#8fb3ff;border-radius:3px;cursor:pointer;font-weight:600">
+                  ＋ New job
+                </button>
                 <button id="oxdna-jobs-run-btn" disabled
                         style="flex:1;font-size:var(--text-xs);padding:5px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer;font-weight:600">
-                  ▶ Relax
+                  ▶ Run
                 </button>
                 <button id="oxdna-jobs-live-btn" disabled
                         title="Start a live, field-steerable oxDNA session (nothing is saved)"
                         style="flex:1;font-size:var(--text-xs);padding:5px;background:#1a1622;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;font-weight:600">
                   ◉ Live
                 </button>
-                <button id="oxdna-jobs-prod-btn" disabled
-                        title="Run a full unbiased MD simulation from the relaxed structure (composes any enabled field / hard surface / anchors)"
-                        style="flex:1;font-size:var(--text-xs);padding:5px;background:#122117;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;font-weight:600">
-                  Full Sim
-                </button>
               </div>
               <!-- live (ephemeral, in-process oxpy) session status -->
               <div id="oxdna-jobs-live-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
               <!-- production parameters (relocated into the Advanced card at init — see main.js) -->
               <div id="oxdna-prod-params" style="display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center;margin-bottom:6px">
+                <button id="oxdna-jobs-prod-btn" disabled
+                        title="Continue the selected relaxed structure with a stored production simulation"
+                        style="grid-column:1 / -1;font-size:var(--text-xs);padding:5px;background:#122117;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;font-weight:600">
+                  Full Sim
+                </button>
                 <label for="oxdna-jobs-prod-steps" style="font-size:var(--text-xs);color:#8b949e">Production steps</label>
                 <input id="oxdna-jobs-prod-steps" type="number" value="5000000" min="1000" max="200000000" step="1000000"
                        style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">

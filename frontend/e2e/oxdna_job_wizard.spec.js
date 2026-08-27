@@ -9,8 +9,9 @@ async function openWizard(page) {
   await page.waitForFunction(() => window.__nadocTest?.store.getState().currentDesign)
   await page.locator('.left-tab-btn[data-tab="dynamics"]').click()
   await page.locator('.engine-selector-btn[data-engine="oxdna"]').click()
-  await expect(page.locator('#oxdna-jobs-run-btn')).toBeEnabled({ timeout: 15_000 })
-  await page.locator('#oxdna-jobs-run-btn').click()
+  await expect(page.locator('#oxdna-jobs-new-btn')).toBeEnabled({ timeout: 15_000 })
+  await expect(page.locator('#oxdna-jobs-run-btn')).toBeDisabled()
+  await page.locator('#oxdna-jobs-new-btn').click()
   await expect(page.locator('.modal--oxdna-wizard')).toBeVisible()
   return page.locator('.modal--oxdna-wizard')
 }

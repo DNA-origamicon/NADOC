@@ -30,10 +30,12 @@ function makeDisplay() {
 }
 
 describe('liveJobEligible', () => {
-  it('true only for a completed ROOT relaxation', () => {
+  it('accepts prepared and previously run jobs, including continuations', () => {
     expect(liveJobEligible({ status: 'completed' })).toBe(true)
+    expect(liveJobEligible({ status: 'queued' })).toBe(true)
+    expect(liveJobEligible({ status: 'stopped', parent_job_id: 'p' })).toBe(true)
     expect(liveJobEligible({ status: 'running' })).toBe(false)
-    expect(liveJobEligible({ status: 'completed', parent_job_id: 'p' })).toBe(false)  // field/prod child
+    expect(liveJobEligible({ status: 'completed', parent_job_id: 'p' })).toBe(true)
     expect(liveJobEligible(null)).toBe(false)
   })
 })
@@ -47,7 +49,7 @@ describe('liveButtonState', () => {
   it('disabled when no eligible job is selected', () => {
     const s = liveButtonState({ available: true, job: null })
     expect(s.enabled).toBe(false)
-    expect(s.reason).toMatch(/completed relaxed job/)
+    expect(s.reason).toMatch(/prepared or previously run/)
   })
   it('enabled when available + eligible job', () => {
     const s = liveButtonState({ available: true, job: { status: 'completed' } })
