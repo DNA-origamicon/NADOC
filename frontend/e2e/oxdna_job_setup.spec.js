@@ -91,6 +91,10 @@ test('Relax assembles the configured preflight payload without running oxDNA', a
   await page.fill('#oxdna-jobs-bp-gate', '0.65')
 
   await page.locator('#oxdna-jobs-run-btn').click()
+  const wizard = page.locator('.modal--oxdna-wizard')
+  await expect(wizard).toBeVisible()
+  await wizard.locator('.wizard-tab', { hasText: 'Full configuration' }).click()
+  await wizard.locator('.modal__actions button', { hasText: 'Create job' }).click()
   await expect.poll(() => payloads.filter(entry => entry.kind === 'create').length).toBe(1)
 
   const estimate = payloads.find(entry => entry.kind === 'estimate').body

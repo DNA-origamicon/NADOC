@@ -39,6 +39,7 @@ import { renderJobList } from './jobs_panel_render.js'
 import { formatJobTime } from '../scene/trajectory_range.js'
 import { formatBytes } from './format_bytes.js'
 import { initJobArchive } from './job_archive_action.js'
+import { initOxdnaJobWizard } from './oxdna_job_wizard.js'
 import { helixDisplayLabel } from './design_display_labels.js'
 import { confirmNoConcurrentJob, confirmGpuLaunch, confirmDiskSpaceOk } from './job_activity.js'
 import { shouldTearDownDisplays, shouldResumeDisplays } from './display_tab_policy.js'
@@ -1421,45 +1422,55 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     const action = _runControl().action
     if (action === RUN_ACTION.STOP) return _stopSelected()
     if (action === RUN_ACTION.RESUME) return _resumeSelected()
-    return _launchRelax()
+    return _wizard.open()
   })
 
   // ── Launch ─────────────────────────────────────────────────────────────────
-  async function _launchRelax() {
+  async function _launchRelax(wizardPayload = null) {
     if (_launching || !_available) return
+    // The wizard deliberately lands before remote submission is wired. Never let an
+    // Alpine/Runpod selection fall through the legacy local create route and appear to
+    // have run remotely when Pydantic would simply ignore the target fields.
+    if (wizardPayload?.execution_target && wizardPayload.execution_target !== 'local') {
+      showToast(`${wizardPayload.execution_target === 'runpod' ? 'Runpod' : 'Alpine'} oxDNA submission is not wired yet`, 'info')
+      return null
+    }
     // Resource-aware guard: oxDNA can run its MD stages on the CPU backend, so if
     // the GPU is busy the user is offered a CPU fallback instead of a hard block.
-    const wantGpu = (backendSel?.value || 'CUDA') === 'CUDA'
+    const selectedBackend = wizardPayload?.backend || backendSel?.value || 'CUDA'
+    const selectedDevice = wizardPayload?.device || deviceInput?.value || '0'
+    const wantGpu = selectedBackend === 'CUDA'
     // With the simulate coordinator, the CPU alternative is a DIFFERENT engine (LAMMPS,
     // multi-core), not oxDNA's single-core CPU backend — so 'cpu' means the coordinator
     // has already launched LAMMPS and oxDNA must abort. Without it, fall back to the
     // per-panel GPU guard (oxDNA-CPU backend as the alternative).
     let gpuDecision
     if (simGuard) {
-      gpuDecision = await simGuard({ backendWanted: backendSel?.value || 'CUDA' })
+      gpuDecision = await simGuard({ backendWanted: selectedBackend })
       if (gpuDecision === 'cpu' || gpuDecision === 'cancel') return
     } else {
       gpuDecision = await confirmGpuLaunch({
         usesGpu: wantGpu,
         hasCpuAlternative: wantGpu,
-        devices: deviceInput?.value || '0',
+        devices: selectedDevice,
       })
       if (gpuDecision === 'cancel') return
     }
-    const runBackend = gpuDecision === 'cpu' ? 'CPU' : (backendSel?.value || 'CUDA')
+    const runBackend = gpuDecision === 'cpu' ? 'CPU' : selectedBackend
     oxdnaLive?.stop()   // a relaxation supersedes any live session (shared overlay)
     _launching = true
     runBtn.disabled = true
     _setStatus('Preparing relaxation job…', _C.accent)
     _updateButtons(_selectedJob())   // show the relax spinner immediately
     const body = {
+      ...(wizardPayload || {}),
       backend:            runBackend,
-      device:             deviceInput?.value || '0',
-      salt_concentration: parseFloat(saltInput?.value || '0.5'),
-      mc_steps:           parseInt(mcStepsInput?.value || '1000', 10),
-      md_relax_steps:     parseInt(mdStepsInput?.value || '1000000', 10),
-      equil_steps:        parseInt(equilStepsInput?.value || '100000', 10),
-      min_bp_retained:    parseFloat(bpGateInput?.value || '0.5'),
+      device:             selectedDevice,
+      salt_concentration: wizardPayload?.salt_concentration ?? parseFloat(saltInput?.value || '0.5'),
+      mc_steps:           wizardPayload?.mc_steps ?? parseInt(mcStepsInput?.value || '1000', 10),
+      md_relax_steps:     wizardPayload?.md_relax_steps ?? parseInt(mdStepsInput?.value || '1000000', 10),
+      equil_steps:        wizardPayload?.equil_steps ?? parseInt(equilStepsInput?.value || '100000', 10),
+      min_bp_retained:    wizardPayload?.min_bp_retained ?? parseFloat(bpGateInput?.value || '0.5'),
       autostart:          true,
       design_source_path: _currentPartPath(),
     }
@@ -1508,6 +1519,27 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       }
     }
   }
+
+  const _wizard = initOxdnaJobWizard({
+    api: {
+      fetchHardware: () => api.optimizeMdHardware('0'),
+      fetchAvailability: opts => api.getClusterAvailability(opts),
+      getSlurmPreview: body => api.getSlurmPreview(body),
+      getRunpodJobPreview: body => api.getRunpodJobPreview(body),
+      getRunpodVolumes: () => api.getRunpodVolumes(),
+      setRunpodVolume: id => api.setRunpodVolume(id),
+      fsApi: api,
+    },
+    getInitialValues: () => ({
+      backend: backendSel?.value || 'CUDA', device: deviceInput?.value || '0',
+      salt_concentration: parseFloat(saltInput?.value || '0.5'),
+      mc_steps: parseInt(mcStepsInput?.value || '1000', 10),
+      md_relax_steps: parseInt(mdStepsInput?.value || '1000000', 10),
+      equil_steps: parseInt(equilStepsInput?.value || '100000', 10),
+      min_bp_retained: parseFloat(bpGateInput?.value || '0.5'),
+    }),
+    launch: payload => _launchRelax(payload),
+  })
 
   // ── List ─────────────────────────────────────────────────────────────────
   // The canonical row/list model + renderer live in jobs_panel_model.js /

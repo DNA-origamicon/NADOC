@@ -1146,6 +1146,11 @@ body:has(#right-panel.locked-inactive) .toast {
   color: var(--color-text-muted);
   line-height: 1.4;
 }
+.modal--oxdna-wizard .wizard-field-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:0 var(--space-5); }
+.modal--oxdna-wizard .wizard-field input,
+.modal--oxdna-wizard .wizard-field select { min-width:150px; background:var(--color-bg-elevated); color:var(--color-text-primary); border:1px solid var(--color-border-default); border-radius:var(--radius-sm); padding:5px 7px; }
+.oxdna-wizard-note { color:var(--color-text-muted); font-size:var(--text-xs); }
+.oxdna-wizard-config { max-height:58vh; overflow:auto; padding:var(--space-3); border:1px solid var(--color-border-default); border-radius:var(--radius-sm); background:var(--color-bg-canvas); color:var(--color-text-primary); font:var(--text-xs)/1.55 var(--font-data); white-space:pre-wrap; }
 
 /* Provenance: where this value came from. Without it a number on screen gives no clue
    whether changing it does anything — which is the whole problem the wizard fixes. */
