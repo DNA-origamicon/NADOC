@@ -146,6 +146,33 @@ the value NADOC reports as the recommended device.
 
 ---
 
+## Run the adaptive large-assembly build on RunPod
+
+The first remote-submission phase is headless and targets the two GPU architectures
+that match Alpine's planned deployment: H200 (`sm_90`) and RTX PRO 6000 Blackwell
+(`sm_120`). Prepare an oxDNA job normally, then submit its persisted job id:
+
+```bash
+uv run python scripts/submit_runpod_oxdna.py JOB_ID --gpu rtx6000 --budget 5
+```
+
+The command uses `$RUNPOD_API_KEY` or `~/.runpod_key`, selects the account's sole
+network volume by default, compiles the pinned adaptive-memory engine into that volume,
+uploads a compressed prepared job, runs a restartable stage chain, fetches authoritative
+stage outputs into the normal `workspace/oxdna_jobs/JOB_ID` directory, and destroys the
+pod. Pass `--volume ID` when the account has multiple volumes. `--no-volume` permits any
+datacenter for validation but makes the engine and checkpoints ephemeral.
+
+The default campaign ledger is `workspace/runpod_oxdna_campaign_spend.json`. Its cap is
+cumulative across failed boots and retries; the provider-owned `terminateAfter` deadline
+is shortened to the affordable remainder. The CLI refuses a budget above $5. A successful
+return additionally requires a fetched `last_conf.dat`, adaptive CUDA telemetry, runtime
+completion timing, and no failed chain status.
+
+The validated reference run used 32 copies of BigO (451,584 nucleotides) on an H200 and
+is recorded under `workspace/runpod_oxdna_validation/`. Alpine submission remains a later
+phase and must reuse this build/chain contract rather than introduce another oxDNA runner.
+
 ## Install upstream oxDNA (`DNANM` included)
 
 The script checks out NADOC's pinned upstream revision and builds one engine for

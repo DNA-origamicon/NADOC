@@ -129,6 +129,13 @@ class OxdnaJob:
     # new jobs can still be chained off the archived parent.
     archived: bool = False
     archive_path: Optional[str] = None
+    # Remote execution metadata. Local remains the schema/default-compatible path;
+    # RunPod owns a disposable pod while outputs persist in this same job directory.
+    execution_target: str = "local"
+    runpod_pod_id: Optional[str] = None
+    runpod_gpu_key: Optional[str] = None
+    runpod_budget_usd: Optional[float] = None
+    runpod_final_cost_usd: Optional[float] = None
 
     # ── Paths ──────────────────────────────────────────────────────────────────
 
@@ -181,6 +188,11 @@ class OxdnaJob:
         data.setdefault("feature_log_position", None)
         data.setdefault("archived", False)
         data.setdefault("archive_path", None)
+        data.setdefault("execution_target", "local")
+        data.setdefault("runpod_pod_id", None)
+        data.setdefault("runpod_gpu_key", None)
+        data.setdefault("runpod_budget_usd", None)
+        data.setdefault("runpod_final_cost_usd", None)
         return cls(**data)
 
     @classmethod
