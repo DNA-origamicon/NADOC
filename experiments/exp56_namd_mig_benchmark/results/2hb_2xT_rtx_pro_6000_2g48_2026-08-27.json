@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "experiment": "exp56_namd_mig_benchmark",
+  "status": "provisional_running_production_observation",
+  "observed_at": "2026-08-27T17:23:38-06:00",
+  "source": {
+    "design": "2hb_2xT",
+    "nadoc_job_id": "da4af0483372",
+    "slurm_job_id": "31729706",
+    "slurm_start_time": "2026-08-27T14:37:22-06:00",
+    "slurm_runtime_at_probe": "02:46:16",
+    "cluster": "alpine",
+    "partition": "artxpro6000",
+    "node": "c3gpu-e7-u9",
+    "qos": "gpu-long",
+    "namd_build": "NAMD_Git-2025-12-04_Source/Linux-x86_64-g++/namd3"
+  },
+  "allocation": {
+    "gres_type": "rtx_pro_6000_2g.48gb",
+    "gpu_count": 1,
+    "mig": true,
+    "gpu_profile_label": "RTX Pro 6000 MIG 2g.48gb",
+    "gpu_vram_gb": 48,
+    "cpu_count": 8,
+    "memory_gb": 7,
+    "slurm_req_tres": "cpu=8,mem=7G,node=1,billing=134,gres/gpu:rtx_pro_6000_2g.48gb=1",
+    "slurm_alloc_tres": "cpu=8,mem=7G,node=1,billing=134,gres/gpu:rtx_pro_6000_2g.48gb=1"
+  },
+  "system": {
+    "atoms": 32868,
+    "dna_atoms": 3107,
+    "dna_residues": 98,
+    "production_target_ns": 500,
+    "production_total_steps": 125000000,
+    "timestep_fs_live": 4.0,
+    "hmr": true,
+    "gpu_resident": true,
+    "trajectory_output_enabled": true
+  },
+  "measurement": {
+    "segment": "2hb_2xT_01_production_500ns_k0",
+    "step": 9955000,
+    "simulated_ns": 39.82,
+    "fraction_complete": 0.07964,
+    "ns_per_day": 316.52119757846634,
+    "seconds_per_step": 0.00109187,
+    "dcd_size_bytes": 787019796,
+    "total_remote_size_bytes": 805010278,
+    "planning_estimate_ns_per_day": 171.139,
+    "observed_over_planning_estimate": 1.8494977625115627,
+    "projected_500ns_hours": 37.91215277777778,
+    "repeated_sample_note": "The rate remained 316.52119757846634 ns/day while live collection advanced from step 9870000 through a final verification at step 10075000."
+  },
+  "whole_gpu_reference": {
+    "nadoc_job_id": "029a76c6a59f",
+    "slurm_job_id": "30964837",
+    "gres_type": "rtx_pro_6000",
+    "atoms": 32868,
+    "cpu_count": 8,
+    "timestep_fs_live": 4.0,
+    "production_target_ns": 1000,
+    "measurement_step": 249975000,
+    "ns_per_day": 498.80206679560087,
+    "seconds_per_step": 0.00069286,
+    "projected_500ns_hours": 24.05763888888889
+  },
+  "comparison": {
+    "mig_fraction_of_whole_throughput": 0.6345627226684496,
+    "mig_slowdown_vs_whole": 1.5758883468521778,
+    "interpretation": "For this 32.9k-atom workload, the 2g.48gb MIG slice retains 63.46% of whole-card throughput despite representing approximately half of the card."
+  },
+  "caveats": [
+    "This is a running production observation, not a controlled output-free microbenchmark.",
+    "The whole-card reference used a different random seed and a 1000 ns target, but the same design, atom count, 4 fs HMR GPU-resident protocol, CPU count, partition family, and normal output path.",
+    "The final completed-run metric should supersede this provisional point if it differs materially."
+  ]
+}

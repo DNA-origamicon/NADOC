@@ -27,15 +27,14 @@ dependencies = [
     "pandas>=3.0.2",
     "appdirs>=1.4.4",
     "openpyxl>=3.1",
+    "openmm[cuda12]>=8.4,<9",
     "asyncssh>=2.24.0",
     "psutil>=7.0",
     "boto3>=1.40",
 ]
 
-# Phase 9 checker: openmm>=8.0 is a conda-only dependency and cannot be installed via pip.
-# Install with: conda install -c conda-forge openmm>=8.0
-# Required by: backend/checkers/openmm_checker.py
-# Tests in tests/test_openmm_checker.py skip gracefully when openmm is absent.
+# OpenMM's official pip package includes CPU/OpenCL/Reference.  The ``cuda12`` extra
+# also installs the NVIDIA CUDA platform; the host driver remains a system dependency.
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

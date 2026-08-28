@@ -1,10 +1,9 @@
 """Learned cluster throughput store (Phase 5 of alpine-cluster-submission).
 
 The Phase-2 resource recommender guesses ns/day from system size on the first run
-per (partition, size) — a deliberately conservative guess.  This module remembers
+per (GPU resource, size) — a deliberately conservative guess.  This module remembers
 the *measured* throughput of completed remote runs, keyed by ``(cluster, partition,
-size-bucket)``, so subsequent walltime estimates tighten toward reality instead of
-staying at the guess.
+GRES, size-bucket)``, so a MIG slice never inherits whole-GPU performance.
 
 A small JSON file in the workspace (``cluster_throughput.json``).  Each key maps to
 a running mean ns/day + sample count.  Reads are best-effort (a missing/corrupt
@@ -40,8 +39,11 @@ def size_bucket(n_atoms: int) -> str:
     return f"{lo}+"
 
 
-def _key(cluster: str, partition: str, n_atoms: int) -> str:
-    return f"{cluster or '?'}:{partition or '?'}:{size_bucket(n_atoms)}"
+def _key(
+    cluster: str, partition: str, n_atoms: int, gres_type: str | None = None
+) -> str:
+    resource = f"{partition}/{gres_type}" if gres_type else partition
+    return f"{cluster or '?'}:{resource or '?'}:{size_bucket(n_atoms)}"
 
 
 def update_record(prev: dict | None, ns_per_day: float) -> dict:
@@ -74,10 +76,15 @@ def _load(workspace_dir: Path) -> dict:
 
 
 def lookup_throughput(
-    workspace_dir: Path, *, cluster: str, partition: str, n_atoms: int
+    workspace_dir: Path,
+    *,
+    cluster: str,
+    partition: str,
+    n_atoms: int,
+    gres_type: str | None = None,
 ) -> float | None:
-    """Learned mean ns/day for this ``(cluster, partition, size-bucket)``, or None."""
-    rec = _load(workspace_dir).get(_key(cluster, partition, n_atoms))
+    """Learned mean ns/day for this exact resource and size bucket, or ``None``."""
+    rec = _load(workspace_dir).get(_key(cluster, partition, n_atoms, gres_type))
     if isinstance(rec, dict):
         v = rec.get("ns_per_day")
         if isinstance(v, (int, float)) and v > 0:
@@ -92,6 +99,7 @@ def record_throughput(
     partition: str,
     n_atoms: int,
     ns_per_day: float,
+    gres_type: str | None = None,
 ) -> None:
     """Fold a completed remote run's measured throughput into the store.
 
@@ -102,7 +110,7 @@ def record_throughput(
         return
     try:
         store = _load(workspace_dir)
-        key = _key(cluster, partition, n_atoms)
+        key = _key(cluster, partition, n_atoms, gres_type)
         store[key] = update_record(store.get(key), float(ns_per_day))
         path = _store_path(workspace_dir)
         path.parent.mkdir(parents=True, exist_ok=True)

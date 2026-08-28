@@ -8,16 +8,18 @@ prediction.
 Force field note
 ----------------
 NADOC's PDB export (pdb_export.py) uses CHARMM36 atom names (OP1/OP2 for
-non-bridging phosphate oxygens). This module converts OP1 → O1P, OP2 → O2P,
-renames terminal residues (DA → DA5/DA3 etc.), and removes 5'-terminal P/OP1/OP2
-atoms (absent from AMBER14 DA5/DT5/DC5/DG5 templates) before loading into OpenMM.
+non-bridging phosphate oxygens). The PDB compatibility path removes the
+5'-terminal P/OP1/OP2 atoms absent from AMBER14 DA5/DT5/DC5/DG5 templates.
+OpenMM's PDB reader normalizes phosphate names; explicit XX5/XX3 template maps
+select OL15 terminal variants while residue names remain canonical for hydrogen
+definitions.
 
 The force field used here (AMBER14+OL15+GBNeck2) intentionally differs from
 NADOC's NAMD export workflow (CHARMM36 + explicit solvent). This is by design:
 GBNeck2 (igb=8) in OpenMM is parameterized for AMBER OBC radii; there is no
 CHARMM36-compatible GBNeck2 variant in OpenMM's standard library.
-AMBER14+OL15 is the best-validated atomistic DNA force field for implicit-solvent
-simulations (Nguyen et al. J. Chem. Theory Comput. 2013, 9, 2020–2034).
+AMBER14+OL15 is paired here with the nucleic-acid GBn2 refinement of Nguyen et al.
+(J. Chem. Theory Comput. 2015, 11, 3714–3728; DOI: 10.1021/acs.jctc.5b00271).
 
 Architecture note (NADOC three-layer axiom)
 -------------------------------------------
@@ -82,8 +84,8 @@ _GLOBAL_RMSD_THRESHOLD_NM: float = 0.3  # 3 Å
 
 _FF_DESCRIPTION: str = (
     "AMBER14+OL15+GBNeck2 (igb=8); 150 mM NaCl implicit solvent; "
-    "CHARMM36→AMBER14: OP1/OP2→O1P/O2P, terminal residue suffixes, "
-    "5'-terminal P/OP1/OP2 removed per AMBER14 XX5 template convention"
+    "PDB atom names normalized by OpenMM, OL15 XX5/XX3 template maps, "
+    "5'-terminal P/OP1/OP2 removed per AMBER14 terminal convention"
 )
 
 
@@ -373,7 +375,7 @@ def verify_design_with_openmm(
     Raises
     ------
     ImportError
-        If openmm is not installed (install with conda install -c conda-forge openmm).
+        If openmm is not installed (install with ``uv sync`` in this repository).
     RuntimeError
         If PDB export fails or AMBER14 template matching fails (e.g. unknown residue).
     """
@@ -383,7 +385,7 @@ def verify_design_with_openmm(
     except ImportError as exc:
         raise ImportError(
             "openmm is required for verify_design_with_openmm(). "
-            "Install with: conda install -c conda-forge openmm>=8.0"
+            "Install the locked project environment with: uv sync"
         ) from exc
 
     # ── 1. Export and preprocess PDB ─────────────────────────────────────────
@@ -401,14 +403,33 @@ def verify_design_with_openmm(
 
     # ── 4. Force field ────────────────────────────────────────────────────────
     # AMBER14+OL15+GBNeck2 — best-validated implicit DNA GB model in OpenMM.
-    # Differs intentionally from NAMD export (CHARMM36): GBNeck2 has no
-    # CHARMM36-compatible variant. Ref: Nguyen et al. JCTC 2013, 9, 2020–2034.
-    ff = app.ForceField("amber14-all.xml", "DNA.OL15.xml", "implicit/gbn2.xml")
+    # ``amber14-all.xml`` already includes ``amber14/DNA.OL15.xml``.  There is
+    # no top-level ``DNA.OL15.xml`` in stock OpenMM.  GBn2 reference for nucleic
+    # acids: Nguyen et al. JCTC 2015, DOI 10.1021/acs.jctc.5b00271.
+    from backend.core.openmm_implicit import (
+        FORCEFIELD_FILES,
+        OpenMMImplicitProtocol,
+        amber_terminal_templates,
+        debye_kappa_per_nm,
+    )
+
+    ff = app.ForceField(*FORCEFIELD_FILES)
 
     # ── 5. Add hydrogens (AMBER14 is an all-atom FF; NADOC exports heavy only) ─
     modeller = app.Modeller(pdb.topology, pdb.positions)
+    # PDB residue suffixes select OL15 terminal templates, but OpenMM's
+    # hydrogen definitions are keyed by canonical DA/DT/DC/DG.
+    terminal_templates = {}
+    for residue in modeller.topology.residues():
+        if len(residue.name) == 3 and residue.name[-1] in {"3", "5"}:
+            terminal_templates[residue] = residue.name
+            residue.name = residue.name[:2]
     try:
-        modeller.addHydrogens(ff, pH=7.0)
+        modeller.addHydrogens(
+            ff,
+            pH=7.0,
+            residueTemplates=terminal_templates,
+        )
     except Exception as exc:
         raise RuntimeError(
             "OpenMM addHydrogens failed. Likely a terminal residue name mismatch "
@@ -432,12 +453,18 @@ def verify_design_with_openmm(
     # ── 7. Create system with GBNeck2 implicit solvent ────────────────────────
     system = ff.createSystem(
         modeller.topology,
+        residueTemplates=amber_terminal_templates(modeller.topology),
         nonbondedMethod=app.NoCutoff,  # no PBC in implicit solvent
         constraints=app.HBonds,  # constrain X-H bonds → 2 fs timestep
-        implicitSolvent=app.GBn2,  # GBNeck2 (igb=8)
         soluteDielectric=1.0,
         solventDielectric=78.5,
-        implicitSolventSaltConc=0.15 * unit.moles_per_liter,  # 150 mM NaCl
+        implicitSolventKappa=debye_kappa_per_nm(
+            OpenMMImplicitProtocol(
+                temperature_k=temperature_k,
+                salt_molar=0.15,
+                timestep_fs=timestep_fs,
+            )
+        ),
     )
 
     # ── 8. Integrator and simulation ──────────────────────────────────────────

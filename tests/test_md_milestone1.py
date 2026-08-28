@@ -1168,6 +1168,7 @@ class TestProductionAppend:
         # The seed is DRAWN, not fixed — assert the contract (a recorded, in-range NAMD
         # seed), never a literal value.
         assert 1 <= child.ensemble_seed <= md_ensemble.NAMD_SEED_MAX
+        assert child.namd_seed == child.ensemble_seed
         assert child.ensemble_index == 0
         assert child.execution_target == "local"
         assert child.status == MdStatus.queued  # autostart False

@@ -84,3 +84,27 @@ def test_lookup_missing_store_is_none(tmp_path):
         )
         is None
     )
+
+
+def test_mig_and_whole_gpu_throughput_are_isolated(tmp_path):
+    common = {
+        "cluster": "alpine",
+        "partition": "artxpro6000",
+        "n_atoms": 62_673,
+    }
+    ct.record_throughput(
+        tmp_path,
+        **common,
+        gres_type="rtx_pro_6000_2g.48gb",
+        ns_per_day=300.0,
+    )
+    assert ct.lookup_throughput(
+        tmp_path, **common, gres_type="rtx_pro_6000_2g.48gb"
+    ) == 300.0
+    assert ct.lookup_throughput(tmp_path, **common) is None
+    assert (
+        ct.lookup_throughput(
+            tmp_path, **common, gres_type="rtx_pro_6000_1g.24gb"
+        )
+        is None
+    )

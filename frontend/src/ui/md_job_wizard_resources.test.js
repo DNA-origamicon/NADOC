@@ -23,7 +23,7 @@ const SIZING = {
   available_qos: [{ name: 'normal', max_walltime_h: 24 }, { name: 'long', max_walltime_h: 168 }],
 }
 
-function setup({ partition = 'ah200', totalNs = 12, preview = SIZING } = {}) {
+function setup({ partition = 'ah200', gresType = null, totalNs = 12, preview = SIZING } = {}) {
   document.body.innerHTML = '<div id="mount"></div>'
   const mount = document.getElementById('mount')
   const getSlurmPreview = vi.fn(async () => preview)
@@ -32,6 +32,7 @@ function setup({ partition = 'ah200', totalNs = 12, preview = SIZING } = {}) {
   const res = initWizardResources({
     mount, getSlurmPreview, onChange,
     getPartition: () => _partition,
+    getGresType: () => gresType,
     getTotalNs: () => totalNs,
   })
   return { res, mount, getSlurmPreview, onChange, setPartition: p => { _partition = p } }
@@ -48,6 +49,14 @@ describe('sizing', () => {
     expect(getSlurmPreview).toHaveBeenCalledWith({
       cluster_name: 'alpine', partition: 'ah200', total_ns: 12, job_name: 'nadoc_job',
     })
+  })
+
+  it('sizes against the exact MIG GRES selected under the partition', async () => {
+    const { res, getSlurmPreview } = setup({ gresType: 'h200_3g.71gb' })
+    await res.refresh()
+    expect(getSlurmPreview).toHaveBeenCalledWith(expect.objectContaining({
+      partition: 'ah200', gres_type: 'h200_3g.71gb',
+    }))
   })
 
   it('autopopulates cores and wall time from the recommendation', async () => {

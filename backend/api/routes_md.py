@@ -162,6 +162,14 @@ class CreateJobRequest(BaseModel):
     autostart: bool = Field(
         False, description="Start NAMD immediately after preparation"
     )
+    seed: Optional[int] = Field(
+        None,
+        ge=1,
+        le=NAMD_SEED_MAX,
+        description="Base NAMD random seed for this job. The Job Wizard generates and "
+        "displays one before creation; API callers may omit it and the server draws one. "
+        "Relaxation stage i uses base+i, while the base itself is recorded on the job.",
+    )
     salt_mode: str = Field(
         "screening",
         description="'screening' uses validated origami screening defaults; 'custom' uses Mg/NaCl fields",
@@ -3335,6 +3343,8 @@ def _spawn_draft_job(body: CreateJobRequest, *, name: str) -> MdJob:
     Records the seed source + provenance + the default advanced params so the panel
     can pre-fill them; the expensive prep runs later in :func:`prepare_draft_job`.
     """
+    if body.seed is None:
+        body = body.model_copy(update={"seed": random_seed()})
     job_threads = body.threads
     job = new_job(
         design_name=name,
@@ -3344,6 +3354,7 @@ def _spawn_draft_job(body: CreateJobRequest, *, name: str) -> MdJob:
         threads=job_threads,
         devices=body.devices,
         design_source_path=body.design_source_path,
+        namd_seed=int(body.seed),
         seed_oxdna_job_id=body.oxdna_job_id,
         seed_mrdna_job_id=body.mrdna_job_id,
         seed_blade_job_id=body.blade_job_id,
@@ -3458,6 +3469,14 @@ def _spawn_prep_job(
     ``existing_job`` to prepare a DRAFT in place (reusing its id + seed) instead of
     creating a fresh record — the "Relax from oxDNA" path.
     """
+    # The browser normally supplies the seed it displayed.  Keep direct API callers and
+    # older clients equally safe, and preserve an editable draft's already-assigned seed
+    # when its sparse update omits the field.
+    if body.seed is None:
+        inherited_seed = existing_job.namd_seed if existing_job is not None else None
+        body = body.model_copy(
+            update={"seed": int(inherited_seed) if inherited_seed is not None else random_seed()}
+        )
     ion_conc_mM = body.ion_conc_mM
     mg_conc_mM = body.mg_conc_mM
     if body.salt_mode == "screening":
@@ -3500,6 +3519,7 @@ def _spawn_prep_job(
             seed_mrdna_job_id=body.mrdna_job_id if seeded else None,
             seed_blade_job_id=body.blade_job_id if seeded else None,
             parent_job_id=parent_job_id,
+            namd_seed=int(body.seed),
         )
         # Archive a fresh (non-draft) job at the requested run_dir BEFORE prep runs, so the
         # solvated package + trajectory are built there.  A draft was already placed by
@@ -3508,6 +3528,7 @@ def _spawn_prep_job(
     # Remote-execution tag (default "local"): submission itself happens later via
     # /md/jobs/{id}/submit-remote once the package is prepared and a cluster session
     # is connected.  Tagging here lets the UI show the intended target from creation.
+    job.namd_seed = int(body.seed)
     job.execution_target = body.execution_target
     job.cluster_name = body.cluster_name or (
         "alpine" if body.execution_target == "alpine" else None
@@ -3715,6 +3736,9 @@ async def _prepare_job_bg(
             anchors=body.anchors,
             anchor_atoms=body.anchor_atoms,
             field=body.field,
+            # One displayed random base seed owns both the solvent/ion draw and the
+            # explicit per-stage NAMD RNG seeds written by the package builder.
+            seed=int(body.seed),
             # Recorded, not acted on, at this layer: the runner owns the skipping. The
             # manifest needs it because a truncated ladder is a protocol deviation, and
             # protocol_fidelity is where a package states its own deltas.
@@ -5366,6 +5390,7 @@ async def _spawn_md_production_impl(
         run_kind="production",
     )
     child.ensemble_seed = seed
+    child.namd_seed = seed
     child.ensemble_index = index
     # Run target comes from the request (the panel's Local/Alpine radio), NOT the
     # parent — a locally-relaxed structure can be produced on Alpine and vice-versa.
@@ -5769,6 +5794,7 @@ async def stage_md_ensemble(parent_id: str, body: EnsembleProductionRequest) -> 
             design_source_path=parent.design_source_path,
             parent_job_id=parent.job_id,
             ensemble_seed=seed,
+            namd_seed=seed,
             ensemble_index=i,
         )
         child.execution_target = "alpine"
@@ -5887,10 +5913,9 @@ async def submit_md_ensemble(parent_id: str, body: EnsembleSubmitRequest) -> dic
             )
             submitted.append({"job_id": job.job_id, "slurm_job_id": job.slurm_job_id})
         except cluster_ssh.ClusterSSHError as exc:
-            _record_submit_failure(child, f"Cluster transport error: {exc}")
-            errors.append(
-                {"job_id": child.job_id, "error": f"Cluster transport error: {exc}"}
-            )
+            msg = _cluster_submit_error(exc)
+            _record_submit_failure(child, msg)
+            errors.append({"job_id": child.job_id, "error": msg})
         except (ValueError, RuntimeError) as exc:
             _record_submit_failure(child, str(exc))
             errors.append({"job_id": child.job_id, "error": str(exc)})
@@ -6123,7 +6148,11 @@ class SubmitRemoteRequest(BaseModel):
 
 
 def _size_prepared_job(
-    job: MdJob, profile, safety_factor: float, partition: Optional[str] = None
+    job: MdJob,
+    profile,
+    safety_factor: float,
+    partition: Optional[str] = None,
+    gres_type: Optional[str] = None,
 ) -> Optional[dict]:
     """Sizing + Phase-2 auto-recommendation for a prepared job.
 
@@ -6146,18 +6175,25 @@ def _size_prepared_job(
     # Alpine throughput for that exact partition + size bucket.  A learned value beats
     # both the local-GPU metrics (wrong hardware for a CPU target) and the size guess;
     # fall back to local metrics, then to the size-based guess inside recommend().
-    chosen_partition = cluster_resources.recommend(
+    selected_gres = gres_type or (job.requested_resources or {}).get(
+        "gres_type"
+    ) or (job.resources or {}).get("gres_type")
+    chosen = cluster_resources.recommend(
         profile,
         n_atoms=n_atoms,
         total_ns=total_ns,
         safety_factor=safety_factor,
         partition=partition,
-    )["partition"]
+        gres_type=selected_gres,
+    )
+    chosen_partition = chosen["partition"]
+    selected_gres = chosen.get("gres_type")
     measured = cluster_throughput.lookup_throughput(
         _workspace(),
         cluster=profile.name,
         partition=chosen_partition,
         n_atoms=n_atoms,
+        gres_type=selected_gres,
     )
     if measured is None:
         measured = cluster_resources.latest_ns_per_day(
@@ -6170,6 +6206,7 @@ def _size_prepared_job(
         measured_ns_per_day=measured,
         safety_factor=safety_factor,
         partition=chosen_partition,
+        gres_type=selected_gres,
     )
     return {
         "n_atoms": n_atoms,
@@ -6215,6 +6252,7 @@ def md_job_remote_recommendation(
     cluster_name: str = "alpine",
     safety_factor: float = 1.5,
     partition: Optional[str] = None,
+    gres_type: Optional[str] = None,
     current: bool = False,
 ) -> dict:
     """Preview the auto-recommended SLURM resources for a prepared job — read-only,
@@ -6238,7 +6276,11 @@ def md_job_remote_recommendation(
 
     try:
         sizing = _size_prepared_job(
-            job, profile, safety_factor, partition=partition or job.partition
+            job,
+            profile,
+            safety_factor,
+            partition=partition or job.partition,
+            gres_type=gres_type,
         )
     except ValueError as exc:  # unknown forced partition
         raise HTTPException(400, str(exc)) from exc
@@ -6246,12 +6288,18 @@ def md_job_remote_recommendation(
     # walltime it just ran) so the user reviews/edits what they actually used, rather
     # than a fresh auto-recommend.  Skipped when the user forces a partition (the
     # dropdown change re-sizes on that partition consistently, like the submit path).
-    if current and partition is None and job.resources and sizing is not None:
+    if (
+        current
+        and partition is None
+        and gres_type is None
+        and job.resources
+        and sizing is not None
+    ):
         sizing = {**sizing, "resources": job.resources}
     # Otherwise the card opens on what the WIZARD asked for, so the submit button shows the
     # same numbers the user chose next to the partition table rather than silently
     # re-deciding them.  Skipped when a partition is forced (that re-sizes consistently).
-    elif not current and partition is None and sizing is not None:
+    elif not current and partition is None and gres_type is None and sizing is not None:
         sizing = {**sizing, "resources": _merge_requested(sizing["resources"], job)}
     available = [
         {"name": p.name, "kind": p.kind, "gpu_model": p.gpu_model}
@@ -6301,6 +6349,18 @@ def _record_submit_failure(job: MdJob, msg: str) -> None:
         logger.warning("could not record submit failure on %s: %s", job.job_id, exc)
 
 
+def _cluster_submit_error(exc) -> str:
+    """Turn a classified cluster error into an honest, actionable submit message."""
+
+    kind = getattr(exc, "kind", "unknown")
+    if kind in {"filesystem", "permission", "unknown"}:
+        return (
+            f"Cluster storage error: {exc}. The SSH session is still connected; "
+            "check the read-only storage probe (curc-quota) and the remote path."
+        )
+    return f"Cluster transport error: {exc}"
+
+
 @router.post("/md/jobs/{job_id}/submit-remote")
 async def submit_md_job_remote(job_id: str, body: SubmitRemoteRequest) -> dict:
     """Stage + submit a prepared job to a cluster (needs a live cluster session).
@@ -6341,8 +6401,9 @@ async def submit_md_job_remote(job_id: str, body: SubmitRemoteRequest) -> dict:
             conn=mgr,
         )
     except cluster_ssh.ClusterSSHError as exc:
-        _record_submit_failure(job, f"Cluster transport error: {exc}")
-        raise HTTPException(502, f"Cluster transport error: {exc}") from exc
+        msg = _cluster_submit_error(exc)
+        _record_submit_failure(job, msg)
+        raise HTTPException(502, msg) from exc
     except (ValueError, RuntimeError) as exc:
         _record_submit_failure(job, str(exc))
         raise HTTPException(400, str(exc)) from exc

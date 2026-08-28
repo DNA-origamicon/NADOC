@@ -103,15 +103,17 @@ def _insert_residues_by_crossover(design) -> dict[str, list[tuple[str, int]]]:
     """crossover_id -> [(segid, resid), ...] for its inserted extra bases.
 
     Residue numbers follow the builder's 5'->3' walk per strand, inserts included — the
-    same numbering the packaged PDB/PSF uses (segids ``D000``, ``D001``, ... in
-    ``design.strands`` order).
+    same numbering the packaged PDB/PSF uses.  Segment IDs are translated from
+    ``design.strands`` order through the topology builder's chain-sort convention.
     """
     from backend.core import junction_topology as jt
+    from backend.core.namd_topology import psfgen_dna_segids_for_design
 
     junctions = jt._junction_index(design)
+    segids = psfgen_dna_segids_for_design(len(design.strands))
     out: dict[str, list[tuple[str, int]]] = {}
     for si, strand in enumerate(design.strands):
-        seg = f"D{si:03d}"
+        seg = segids[si]
         resid = 0
         doms = strand.domains
         for di, dom in enumerate(doms):

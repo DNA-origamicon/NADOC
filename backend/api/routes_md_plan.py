@@ -96,12 +96,6 @@ class ProtocolPlanRequest(CreateJobRequest):
     langevin_damping: Optional[float] = Field(
         None, gt=0.0, description="Production only: Langevin coupling, ps^-1."
     )
-    seed: Optional[int] = Field(
-        None,
-        ge=1,
-        description="Production only: pin the NAMD velocity seed to reproduce a past run. "
-        "Omit and one is drawn when the job is created.",
-    )
     stage_overrides: dict = Field(
         default_factory=dict,
         description="Per-stage NAMD directive overrides, keyed by stage index (and '*'). "
@@ -342,6 +336,9 @@ def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
         ),
         anchors_file="anchors_fixed.pdb" if resolved.anchors else None,
         field=resolved.field or None,
+        # A live wizard always supplies its generated value.  Keep the historical
+        # placeholder only for non-wizard preview callers that omit it.
+        seed=int(resolved.seed) if resolved.seed is not None else md_plan.PlanContext.seed,
     )
     try:
         stages = md_plan.relaxation_stages(

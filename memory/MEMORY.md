@@ -110,7 +110,7 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 **Native FEM shape predictor:** [cando_fem](project_cando_fem.md)·**[snupi_mimic](project_snupi_mimic.md)** (`material="snupi"`)·[snupi_frontend_tab](project_snupi_frontend_tab.md)·**[snupi_gaps](project_snupi_gaps.md)** (A–D DONE)·**[snupi_reference_compare](project_snupi_reference_compare.md)** (real SNUPI at `~/SNUPI`)·**[snupi_dynamics](project_snupi_dynamics.md)** (Langevin)·
 **[snupi_ssdna](project_snupi_ssdna.md)** (PLAN SS-0…SS-5)
 
-**BLADE — ARCHIVED 2026-07-20:** **[blade_frontend](project_blade_frontend.md)** (dormant, one-line revive)·**[atomistic_propagator](project_atomistic_propagator.md)** (shelved: ~60× too slow)
+**BLADE — ARCHIVED 2026-07-20:** **[blade_frontend](project_blade_frontend.md)** (dormant, one-line revive)·**[atomistic_propagator](project_atomistic_propagator.md)** (shelved: ~60× too slow) · **[openmm_implicit](project_openmm_implicit.md)** (ACTIVE OL15/GBn2 successor; tests deferred until NAMD finishes)
 
 **Multi-resolution / CG bridge:** [multiresolution_roadmap](project_multiresolution_roadmap.md)·**[crossover_parameterization](project_crossover_parameterization.md)** (live DB feeds every mrDNA relax)·[bundle_stiffness_params](project_bundle_stiffness_params.md)·[session_handoff](project_session_handoff.md)
 

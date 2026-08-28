@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   RESOURCE_FIELDS, TARGETS, TARGET_IDS, UNWIRED_TARGETS,
-  atomCapLabel, defaultPartition, localGpuSpeedFactor, localHardwareSummary,
+  atomCapLabel, defaultGpuChoice, defaultPartition, localGpuSpeedFactor, localHardwareSummary,
   partitionChoices, relativeSpeedLabel, renderSlurmDetails, slurmFacts,
   resourceContextRows, resourceFieldValues, resourceNotes,
   targetPayloadFields, targetReadiness,
@@ -173,6 +173,13 @@ describe('targetPayloadFields', () => {
     expect(out.slurm_resources).toEqual({ walltime: '48:00:00', cores: 16 })
   })
 
+  it('always persists the exact MIG GRES even when no numeric resource was edited', () => {
+    const out = targetPayloadFields('alpine', {
+      partition: 'artxpro6000', gresType: 'rtx_pro_6000_2g.48gb',
+    })
+    expect(out.slurm_resources).toEqual({ gres_type: 'rtx_pro_6000_2g.48gb' })
+  })
+
   it('sends null rather than {} when nothing was edited', () => {
     // An empty dict would read as "the user chose these", and the backend would stop
     // re-deriving the request from the built package's exact atom count.
@@ -281,11 +288,31 @@ describe('partitionChoices', () => {
     expect(rows[0].selectable).toBe(true)
   })
 
-  it('flags MIG slices as unusable rather than adding them to the free count', () => {
+  it('keeps legacy aggregate MIG totals out of the whole-card free count', () => {
     const rows = partitionChoices(AVAIL, 1.0)
     expect(rows[0].free).toBe('6 / 16')
-    expect(rows[0].migNote).toMatch(/25 MIG slices \(not usable/)
-    expect(rows[1].migNote).toBe('')
+  })
+
+  it('expands typed MIG resources into independently selectable rows', () => {
+    const live = { partitions: [{
+      partition: 'artxpro6000', gpu_model: 'RTX Pro 6000',
+      gpu_resources: [
+        { gres_type: 'rtx_pro_6000', label: 'RTX Pro 6000', mig: false,
+          gpus_total: 0, gpus_free: 0, speed_factor: 2.5 },
+        { gres_type: 'rtx_pro_6000_2g.48gb', label: 'RTX Pro 6000 MIG 2g.48gb',
+          mig: true, vram_gb: 48, gpus_total: 16, gpus_free: 7, speed_factor: 1.25 },
+      ],
+    }] }
+    const rows = partitionChoices(live, 1.0)
+    expect(rows).toHaveLength(2)
+    expect(rows[0].selectable).toBe(false)
+    expect(rows[1]).toMatchObject({
+      partition: 'artxpro6000', gresType: 'rtx_pro_6000_2g.48gb',
+      isMig: true, free: '7 / 16', selectable: true,
+    })
+    expect(defaultGpuChoice(rows)).toEqual({
+      partition: 'artxpro6000', gresType: 'rtx_pro_6000_2g.48gb',
+    })
   })
 
   it('keeps request-only hardware visible but unselectable', () => {

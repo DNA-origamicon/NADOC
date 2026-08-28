@@ -423,7 +423,6 @@ async def submit_job(
     submit_progress("preflight", "Checking cluster launch requirements…", 0.03)
 
     paths = resolve_paths(profile, user, job.job_id)
-    project_dir = paths["project_dir"]
     scratch_dir = paths["scratch_dir"]
 
     package_dir = job.package_dir(workspace_dir)
@@ -448,7 +447,11 @@ async def submit_job(
         early_stop_relax=early_stop,
     )
 
-    # 1) stage package → project (persistent), skipping local output/logs.
+    # 1) stage package directly → Alpine scratch, skipping local output/logs.
+    # CURC designates scratch for compute-job I/O and limits /projects to 250 GB for
+    # software and small data. Mirroring trajectories there filled that quota after
+    # only a handful of NAMD runs and made valid submissions fail with AsyncSSH's
+    # opaque ``SFTPFailure: Failure``. The local NADOC archive is the durable copy.
     #    NADOC's confs bake ``GPUresident on`` into the fast (HMR/4 fs) segments —
     #    the local pipeline is GPU-resident.  A CPU/multicore Alpine target FATALs on
     #    that, so amend EVERY staged .conf to strip it, matching the sbatch's CPU exec
@@ -517,11 +520,11 @@ async def submit_job(
         files_done=0, files_total=len(plan), bytes_done=0, bytes_total=total_bytes,
     )
     logger.info(
-        "[%s] staging %d files → %s (gpu=%s)", job.job_id, len(plan), project_dir, gpu
+        "[%s] staging %d files → %s (gpu=%s)", job.job_id, len(plan), scratch_dir, gpu
     )
-    await conn.mkdir_p(project_dir)
+    await conn.mkdir_p(scratch_dir)
     for index, (local_path, rel) in enumerate(plan, 1):
-        remote = f"{project_dir}/{rel}"
+        remote = f"{scratch_dir}/{rel}"
         if not gpu and local_path.suffix == ".conf":
             amended = strip_gpu_resident(local_path.read_text())
             await _put_text(conn, amended, remote, workspace_dir, job)
@@ -543,7 +546,7 @@ async def submit_job(
     await _put_text(
         conn,
         Path(remote_live_metrics.__file__).read_text(),
-        f"{project_dir}/{LIVE_METRICS_NAME}",
+        f"{scratch_dir}/{LIVE_METRICS_NAME}",
         workspace_dir,
         job,
     )
@@ -555,7 +558,7 @@ async def submit_job(
     await _put_text(
         conn,
         Path(remote_settle_retarget.__file__).read_text(),
-        f"{project_dir}/{SETTLE_RETARGET_NAME}",
+        f"{scratch_dir}/{SETTLE_RETARGET_NAME}",
         workspace_dir,
         job,
     )
@@ -563,14 +566,10 @@ async def submit_job(
     # 1c) stage the node early-stop scripts into project (mirrored to scratch next).
     if early_stop:
         await _stage_alpine_early_stop_evaluator(
-            conn, project_dir, workspace_dir, job, alpine_wc_plan
+            conn, scratch_dir, workspace_dir, job, alpine_wc_plan
         )
 
-    # 2) mirror project → scratch (two-filesystem model — jobs MUST run on scratch).
-    submit_progress("mirror", "Copying package to Alpine scratch storage…", 0.82)
-    await conn.mirror(project_dir, scratch_dir)
-
-    # 3) upload the sbatch into scratch and submit from there.
+    # 2) upload the sbatch into scratch and submit from there.
     submit_progress("sbatch", "Sending the job to the Slurm scheduler…", 0.95)
     remote_sbatch = f"{scratch_dir}/{_SBATCH_NAME}"
     await _put_text(conn, sbatch, remote_sbatch, workspace_dir, job)
@@ -585,7 +584,7 @@ async def submit_job(
     job.cluster_name = profile.name
     job.slurm_job_id = slurm_id
     job.slurm_state = "PENDING"
-    job.remote_project_dir = project_dir
+    job.remote_project_dir = None
     job.remote_scratch_dir = scratch_dir
     job.resources = resources
     job.remote_submit_progress = None
@@ -1012,20 +1011,16 @@ async def fetch_outputs(job: MdJob, workspace_dir: Path, *, conn=None) -> bool:
 async def _fetch_outputs_locked(job: MdJob, workspace_dir: Path, *, conn=None) -> bool:
     """Bring a finished remote run's results back to the login node and locally.
 
-    Mirrors scratch → project (persist before scratch is purged), then downloads the
-    remote ``output/`` tree and top-level ``*.log`` files into the local package dir
-    so the existing detail view + local health/metrics recompute work.
+    Downloads the remote ``output/`` tree and top-level ``*.log`` files into the local
+    package dir so the existing detail view + local health/metrics recompute work.
+    Results are deliberately not mirrored into Alpine ``/projects``: trajectories are
+    compute output, routinely tens of GB each, while CURC's projects quota is only
+    250 GB and is not intended for job I/O.
     """
     conn = conn or _default_conn()
     scratch = job.remote_scratch_dir
-    project = job.remote_project_dir
     if not scratch:
         return True
-    if project:
-        try:
-            await conn.mirror(scratch, project)
-        except Exception as exc:  # noqa: BLE001 — best-effort persistence
-            logger.warning("[%s] scratch→project mirror failed: %s", job.job_id, exc)
 
     package_dir = job.package_dir(workspace_dir)
     # List the remote files to pull: output/ tree + top-level logs + sbatch out/err.
@@ -1682,8 +1677,8 @@ def _scan_logs_for_error(
 
 def _record_learned_throughput(job: MdJob, workspace_dir: Path) -> None:
     """Fold this completed remote run's measured Alpine throughput into the learned
-    ns/day store, keyed by (cluster, partition, size-bucket), so future estimates for
-    similar systems tighten toward reality.  Best-effort; never raises."""
+    ns/day store, keyed by (cluster, partition, GRES, size-bucket), so a MIG run
+    cannot distort whole-GPU estimates.  Best-effort; never raises."""
     from backend.core import cluster_resources, cluster_throughput
 
     try:
@@ -1694,12 +1689,14 @@ def _record_learned_throughput(job: MdJob, workspace_dir: Path) -> None:
         manifest = _read_manifest(pkg) if (pkg / "manifest.json").exists() else {}
         n_atoms = cluster_resources.n_atoms_from_manifest(manifest)
         partition = (job.resources or {}).get("partition", "")
+        gres_type = (job.resources or {}).get("gres_type")
         cluster_throughput.record_throughput(
             workspace_dir,
             cluster=job.cluster_name or "",
             partition=partition,
             n_atoms=n_atoms,
             ns_per_day=nsday,
+            gres_type=gres_type,
         )
     except Exception:  # noqa: BLE001 — learning must not break job completion
         logger.warning(

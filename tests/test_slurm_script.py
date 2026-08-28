@@ -222,6 +222,20 @@ def test_gpu_exec_line_is_gpu_resident(alpine, gpu_resources):
     assert "#SBATCH --gres=gpu:h200:1" in script
 
 
+def test_mig_exec_requests_the_exact_typed_slice(alpine):
+    resources = cr.recommend(
+        alpine,
+        n_atoms=100_000,
+        total_ns=4.0,
+        partition="artxpro6000",
+        gres_type="rtx_pro_6000_2g.48gb",
+    )
+    script = ss.generate_sbatch(_manifest(), alpine, resources, "/scratch/x")
+    assert "#SBATCH --partition=artxpro6000" in script
+    assert "#SBATCH --gres=gpu:rtx_pro_6000_2g.48gb:1" in script
+    assert "+setcpuaffinity +devices 0" in script
+
+
 def test_untyped_gres_when_partition_has_no_gres_type(alpine):
     # A GPU partition without a gres_type falls back to the untyped form.
     res = cr.recommend(alpine, n_atoms=100_000, total_ns=4.0, measured_ns_per_day=50.0)

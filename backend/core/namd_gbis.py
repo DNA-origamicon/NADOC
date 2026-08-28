@@ -36,6 +36,7 @@ from backend.core.md_protocols import (
     _segment_conf,
     mgh_slow_release_segments,
     namd_efield_vector,
+    namd_stage_seed,
     psf_atom_count,
     topology_ss_exclusion_set,
     write_aksimentiev_enm_files,
@@ -61,7 +62,7 @@ def build_namd_gbis_package(
     minimize_steps: int = 4_800,
     adaptive_minimization: bool = True,
     min_scale: float = 0.5,
-    seed: int = 42,  # noqa: ARG001 — kept for signature parity with the solvate prep
+    seed: int = 42,
     atomistic_model=None,
     progress=None,
     declash: Optional[bool] = None,
@@ -251,6 +252,7 @@ def build_namd_gbis_package(
             False,
             minimize_steps,
             min_scale,
+            seed=seed,
             enm_file=declash_enm_file,
             anchors_file=anchors_file,
             field=field,
@@ -260,13 +262,14 @@ def build_namd_gbis_package(
         )
     )
     # _common_header carries the ionConcentration; patch it per requested salt.
-    for spec in segments:
+    for idx, spec in enumerate(segments, start=1):
         (package_dir / f"{spec.name}.conf").write_text(
             _segment_conf(
                 spec,
                 name_stem,
                 box,
                 False,
+                seed=namd_stage_seed(seed, idx),
                 anchors_file=anchors_file,
                 field=field,
                 gbis=True,
@@ -311,6 +314,14 @@ def build_namd_gbis_package(
         "protocol": IMPLICIT_GBIS_PROTOCOL,
         "package_dir": str(package_dir.resolve()),
         "name_stem": name_stem,
+        "namd_seed": int(seed),
+        "stage_seeds": {
+            min_name: int(seed),
+            **{
+                spec.name: namd_stage_seed(seed, idx)
+                for idx, spec in enumerate(segments, start=1)
+            },
+        },
         "files": {
             "topology": f"{name_stem}.psf",
             "coordinates": f"{name_stem}.pdb",
@@ -402,7 +413,7 @@ def prepare_implicit_gbis_namd(
     # cell, so there is no image for the solute to rotate into.
     free_ns: Optional[float] = None,  # noqa: ARG001
     fast: bool = False,  # noqa: ARG001 — GBIS forces standard CUDA
-    seed: int = 42,  # noqa: ARG001
+    seed: int = 42,
     # GBIS has no explicit-solvent box and cannot run GPU-resident (no implicit-solvent
     # path in resident mode), so both of these are inapplicable here — but the shared
     # prep call site in routes_md passes ONE uniform kwarg set for every protocol, so
@@ -453,5 +464,6 @@ def prepare_implicit_gbis_namd(
         anchors=anchors,
         anchor_atoms=anchor_atoms,
         field=field,
+        seed=seed,
         gbis_ion_conc_M=ion_M,
     )

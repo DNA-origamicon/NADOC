@@ -83,10 +83,11 @@ def designed_pairs(design):
     reciprocal crossover pair. Residue numbers follow the builder's 5'->3' walk, which is
     the numbering the package PDB/PSF uses."""
     from backend.core import junction_topology as jt
+    from backend.core.namd_topology import psfgen_dna_segids_for_design
 
     connectors = jt.crossover_connectors(design)
     junctions = jt._junction_index(design)
-    segnames = [f"D{i:03d}".replace(" ", "") for i in range(len(design.strands))]
+    segnames = psfgen_dna_segids_for_design(len(design.strands))
 
     # crossover_id -> [(segid, resid), ...] for its inserts
     inserts: dict[str, list[tuple[str, int]]] = {}
@@ -156,19 +157,28 @@ def make_whole(dna, frags, box):
 
 
 def seed_geometry(design, pairs):
-    """(d_nm, eta) per pair from the geometric build, no MD."""
+    """``(d_nm, eta)`` for the first intended pair in the geometric build."""
     from backend.core.atomistic import build_atomistic_model
+    from backend.core.namd_topology import psfgen_dna_segids_for_design
 
     model = build_atomistic_model(design)
-    xb: dict = {}
+    segid_by_strand = dict(
+        zip(
+            (strand.id for strand in design.strands),
+            psfgen_dna_segids_for_design(len(design.strands)),
+        )
+    )
+    xb: dict[tuple[str, int], dict[str, np.ndarray]] = {}
     for at in model.atoms:
-        cid, k = getattr(at, "crossover_id", None), getattr(at, "extra_base_k", None)
-        if cid is not None and k is not None:
-            xb.setdefault((cid, k), {})[at.name] = np.array([at.x, at.y, at.z], float)
-    keys = sorted(xb)
-    if len(keys) < 2:
+        key = (segid_by_strand.get(at.strand_id, ""), int(at.seq_num))
+        if key[0] and at.name in {"C5", "C6"}:
+            xb.setdefault(key, {})[at.name] = np.array([at.x, at.y, at.z], float)
+    if not pairs:
         return None
-    a, b = xb[keys[0]], xb[keys[1]]
+    _label, key_a, key_b = pairs[0]
+    a, b = xb.get(key_a, {}), xb.get(key_b, {})
+    if not {"C5", "C6"} <= a.keys() or not {"C5", "C6"} <= b.keys():
+        return None
     bond = np.linalg.norm(a["C5"] - a["C6"])
     scale = 1.0 if bond < 0.5 else 0.1  # model may be nm or Angstrom
     ma, mb = 0.5 * (a["C5"] + a["C6"]), 0.5 * (b["C5"] + b["C6"])
@@ -186,6 +196,19 @@ def main(argv=None) -> int:
     ap.add_argument("trajectories", nargs="*", type=Path, help="DCD(s)")
     ap.add_argument("--stride", type=int, default=1)
     ap.add_argument(
+        "--already-whole",
+        action="store_true",
+        help=(
+            "skip DNA PBC reconstruction; valid for NAMD trajectories produced with "
+            "wrapAll off"
+        ),
+    )
+    ap.add_argument(
+        "--summary-only",
+        action="store_true",
+        help="suppress the per-pair listing and report junction-level aggregates",
+    )
+    ap.add_argument(
         "--seed-only",
         action="store_true",
         help="report the geometric build only, no trajectory",
@@ -200,13 +223,17 @@ def main(argv=None) -> int:
     pairs, connectors = designed_pairs(design)
     print(f"design   {args.design.name}")
     print(f"  connectors {len(connectors)}, designed weld pairs {len(pairs)}")
-    for label, a, b in pairs:
-        print(f"    {label}   {a[0]}:{a[1]}  <->  {b[0]}:{b[1]}")
+    if not args.summary_only:
+        for label, a, b in pairs:
+            print(f"    {label}   {a[0]}:{a[1]}  <->  {b[0]}:{b[1]}")
     if not pairs:
         print("  no insert-carrying reciprocal pairs -- nothing to measure")
         return 0
 
-    seed = seed_geometry(design, pairs)
+    # A single arbitrary seed pair is misleading for a many-site summary and building
+    # a full origami atomistically only to print it is expensive.  Trajectory identity
+    # is still independently checked below against every designed insert.
+    seed = None if args.summary_only and len(pairs) > 1 else seed_geometry(design, pairs)
     if seed:
         d, e = seed
         print(
@@ -234,7 +261,8 @@ def main(argv=None) -> int:
     )
 
     u.trajectory[0]
-    make_whole(dna, frags, u.dimensions[:3])
+    if not args.already_whole:
+        make_whole(dna, frags, u.dimensions[:3])
 
     # cross-check identification
     walk = sorted({p for _l, a, b in pairs for p in (a, b)})
@@ -244,7 +272,13 @@ def main(argv=None) -> int:
         print(f"      design insert walk : {walk}")
         print(f"      unpaired thymines  : {geom}")
         return 1
-    print(f"  extra-base identification agrees (walk {walk} within unpaired {geom})")
+    if args.summary_only:
+        print(
+            f"  extra-base identification agrees ({len(walk)} designed inserts; "
+            f"{len(geom)} geometrically unpaired thymines)"
+        )
+    else:
+        print(f"  extra-base identification agrees (walk {walk} within unpaired {geom})")
 
     idx = {}
     for seg, resid in walk:
@@ -257,7 +291,8 @@ def main(argv=None) -> int:
     series = {label: {"d": [], "eta": []} for label, _a, _b in pairs}
     times = []
     for i, ts in enumerate(u.trajectory[:: args.stride]):
-        make_whole(dna, frags, u.dimensions[:3])
+        if not args.already_whole:
+            make_whole(dna, frags, u.dimensions[:3])
         Q = u.atoms.positions
         for label, a, b in pairs:
             (c5a, c6a), (c5b, c6b) = idx[a], idx[b]
@@ -269,21 +304,77 @@ def main(argv=None) -> int:
     times = np.array(times)
     span = (times[-1] - times[0]) / 1000.0 if len(times) > 1 else 0.0
     print(f"\n  measured {len(times)} frames spanning {span:.1f} ns\n")
-    print(
-        f"  {'pair':<28} {'d mean':>8} {'d min':>7} {'eta sd':>7} "
-        f"{'<k>':>8} {'d<4.5A':>8} {'reactive':>9}"
-    )
+    if not args.summary_only:
+        print(
+            f"  {'pair':<28} {'d mean':>8} {'d min':>7} {'eta sd':>7} "
+            f"{'<k>':>8} {'d<4.5A':>8} {'reactive':>9}"
+        )
+    metrics = {}
     for label, _a, _b in pairs:
         d = np.array(series[label]["d"])
         e = np.array(series[label]["eta"])
         k = kimmdy_rate(d, e)
         dth = np.minimum(np.abs(e - N0), 360 - np.abs(e - N0))
         react = (d < 0.45) & (dth < 45)
+        metrics[label] = {"contact": d < 0.45, "reactive": react, "k": k}
+        if not args.summary_only:
+            print(
+                f"  {label:<28} {d.mean() * 10:>6.2f} A {d.min() * 10:>6.2f} "
+                f"{e.std():>7.1f} {k.mean():>8.4f} "
+                f"{100 * (d < 0.45).mean():>7.2f}% {100 * react.mean():>8.3f}%"
+            )
+
+    # A 2xT reciprocal junction has four candidate insert registers.  Its efficacy is
+    # the probability that ANY intended register is reactive, not the sum of four pair
+    # occupancies (which would grant a mechanical multiplicity advantage).
+    grouped: dict[str, list[dict]] = {}
+    for label, row in metrics.items():
+        site = "~".join(part.split("[k=")[0] for part in label.split("~"))
+        grouped.setdefault(site, []).append(row)
+    site_rows = []
+    for site, rows in grouped.items():
+        contact = np.any(np.stack([row["contact"] for row in rows]), axis=0)
+        reactive = np.any(np.stack([row["reactive"] for row in rows]), axis=0)
+        max_k = np.max(np.stack([row["k"] for row in rows]), axis=0)
+        site_rows.append((site, contact, reactive, max_k))
+
+    site_contact = np.stack([row[1] for row in site_rows])
+    site_reactive = np.stack([row[2] for row in site_rows])
+    site_k = np.stack([row[3] for row in site_rows])
+    contact_pct = 100.0 * site_contact.mean(axis=1)
+    reactive_pct = 100.0 * site_reactive.mean(axis=1)
+    print("\n  junction-level aggregate (ANY intended register per reciprocal site)")
+    print(
+        f"    sites {len(site_rows)}, registers/site "
+        f"{min(len(v) for v in grouped.values())}-{max(len(v) for v in grouped.values())}"
+    )
+    print(
+        f"    site-frame contact {100 * site_contact.mean():.3f}%   "
+        f"reactive {100 * site_reactive.mean():.4f}%   <max k> {site_k.mean():.4f}"
+    )
+    print(
+        f"    sites ever contacting {int((contact_pct > 0).sum())}/{len(site_rows)}   "
+        f"ever reactive {int((reactive_pct > 0).sum())}/{len(site_rows)}"
+    )
+    print(
+        "    per-site reactive occupancy "
+        f"median {np.median(reactive_pct):.4f}%   "
+        f"p90 {np.percentile(reactive_pct, 90):.4f}%   max {reactive_pct.max():.4f}%"
+    )
+    if site_reactive.shape[1] >= 2:
+        mid = site_reactive.shape[1] // 2
         print(
-            f"  {label:<28} {d.mean() * 10:>6.2f} A {d.min() * 10:>6.2f} "
-            f"{e.std():>7.1f} {k.mean():>8.4f} "
-            f"{100 * (d < 0.45).mean():>7.2f}% {100 * react.mean():>8.3f}%"
+            f"    reactive first/second half "
+            f"{100 * site_reactive[:, :mid].mean():.4f}% / "
+            f"{100 * site_reactive[:, mid:].mean():.4f}%"
         )
+    ranked = sorted(
+        zip((row[0] for row in site_rows), contact_pct, reactive_pct),
+        key=lambda row: (-row[2], -row[1], row[0]),
+    )
+    print("    top reactive sites:")
+    for site, cpct, rpct in ranked[:10]:
+        print(f"      {site:<17} contact {cpct:7.3f}%   reactive {rpct:7.4f}%")
 
     print("\n  reactive corner = d < 4.5 A AND |eta - eta0| < 45 deg")
     print("  a classical force field cannot reach d0 = 1.57 A (a covalent bond);")

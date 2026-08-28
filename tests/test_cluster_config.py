@@ -17,7 +17,7 @@ def test_alpine_profile_shape():
     assert p.scheduler == "slurm"
     assert p.default_partition == "ah200"  # GPU-first; H200 since 2026-08-06
     assert "$USER" in p.project_base and "$USER" in p.scratch_base
-    assert p.su_per_gpu_hour == pytest.approx(108.2)
+    assert p.su_per_gpu_hour == pytest.approx(108.6)
     assert p.su_per_core_hour == pytest.approx(1.0)
     assert p.gpu_module_loads == ["gcc/11.2.0", "cuda/12.1.1", "fftw/3.3.10"]
     assert p.gpu_namd_bin.endswith("/Linux-x86_64-g++/namd3")
@@ -180,6 +180,27 @@ def test_new_gpu_partitions_present_with_correct_gres():
     rtx = p.partition("artxpro6000")
     assert rtx is not None
     assert rtx.gres_type == "rtx_pro_6000" and rtx.gpus == 4
+
+
+def test_retired_atesting_a100_partition_is_not_advertised():
+    assert cc.alpine_profile().partition("atesting_a100") is None
+
+
+def test_alpine_mig_profiles_are_typed_resources_under_their_partition():
+    p = cc.alpine_profile()
+    rtx = p.partition("artxpro6000")
+    slice_2g = rtx.gpu_resource("rtx_pro_6000_2g.48gb")
+    assert slice_2g is not None
+    assert slice_2g.mig and slice_2g.vram_gb == 48
+    assert slice_2g.max_cores == 16
+    assert slice_2g.su_per_gpu_hour == pytest.approx(130.2)
+    assert rtx.gpu_resource("not_a_real_profile") is None
+
+    h200 = p.partition("ah200")
+    assert {r.gres_type for r in h200.gpu_resources} == {
+        "h200_3g.71gb",
+        "h200_2g.35gb",
+    }
 
 
 def test_new_gpu_partitions_reject_gpu_testing():

@@ -694,4 +694,5 @@ def test_align_cluster_edge_adds_no_coverage():
     # relax_duplex added /design/duplexes/{id}/relax (55 → 56).
     # AF-37's direct-binding CREATION added create/patch/delete_overhang_binding
     # + split_sub_domain + patch_sub_domain (56 → 61).
-    assert rep["covered"] == 61
+    # Direct strand editing then covered ligate_strand + delete_strand (61 → 63).
+    assert rep["covered"] == 63

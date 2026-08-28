@@ -34,15 +34,45 @@ import {
   productionComparison,
   productionField,
   productionPayload,
+  randomNAMDSeed,
   pushUndo,
   relaxRunLabel,
   productionParents,
   snapshotState,
+  seedCollisionJobs,
+  namdSeedForJob,
   stageColumns,
   stageDiff,
   wizardPayload,
   WIZARD_FIELDS,
 } from './md_job_wizard_model.js'
+
+describe('NAMD job seeds', () => {
+  it('draws positive seeds in the NAMD base-seed range', () => {
+    const draws = Array.from({ length: 32 }, () => randomNAMDSeed())
+    expect(draws.every(Number.isInteger)).toBe(true)
+    expect(draws.every(seed => seed >= 1 && seed < 2 ** 31)).toBe(true)
+    expect(new Set(draws).size).toBeGreaterThan(1)
+  })
+
+  it('reads the unified field and both generations of production records', () => {
+    expect(namdSeedForJob({ namd_seed: 11, ensemble_seed: 12 })).toBe(11)
+    expect(namdSeedForJob({ ensemble_seed: 12 })).toBe(12)
+    expect(namdSeedForJob({ spawn_params: { seed: 13 } })).toBe(13)
+  })
+
+  it('finds collisions only among jobs for the open design', () => {
+    const jobs = [
+      { job_id: 'same', design_source_path: 'workspace/parts/a.nadoc', namd_seed: 77 },
+      { job_id: 'other', design_source_path: 'parts/b.nadoc', namd_seed: 77 },
+      { job_id: 'different-seed', design_source_path: 'parts/a.nadoc', namd_seed: 88 },
+    ]
+    expect(seedCollisionJobs(jobs, '/tmp/workspace/parts/a.nadoc', 77).map(j => j.job_id))
+      .toEqual(['same'])
+    expect(seedCollisionJobs(jobs, 'parts/a.nadoc', 77, { excludeJobId: 'same' }))
+      .toEqual([])
+  })
+})
 
 describe('high-aspect geometry advisory', () => {
   it('warns without changing the selected protocol', () => {
@@ -584,6 +614,10 @@ describe('wizardPayload', () => {
 
   it('carries autostart so Create and Create-and-run are one code path', () => {
     expect(wizardPayload({ presetId: 'x', autostart: true }).autostart).toBe(true)
+  })
+
+  it('carries the displayed relaxation seed into creation', () => {
+    expect(wizardPayload({ presetId: 'x', touched: { seed: 424242 } }).seed).toBe(424242)
   })
 })
 

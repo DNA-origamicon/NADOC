@@ -11,6 +11,7 @@ describe('installTestApi', () => {
 
   it('publishes the stable automation facade and force-crossover hook', () => {
     const forceApi = { state: () => 'idle' }
+    const selected = []
     installTestApi({
       scene: {},
       store: { getState: () => ({}) },
@@ -22,6 +23,7 @@ describe('installTestApi', () => {
       renderer: {},
       oxdnaAnchorsSetup: {},
       selectionManager: {},
+      selectionController: { replace: refs => selected.push(refs) },
       bluntEnds: {},
       slicePlane: {},
       assemblyRenderer: {},
@@ -36,5 +38,7 @@ describe('installTestApi', () => {
     expect(window.__nadocTest.viewerDiagnostic).toBeTypeOf('function')
     expect(window.__nadocTest.pickAssemblyInstanceAt).toBeTypeOf('function')
     expect(window.__nadocForceXover).toBe(forceApi)
+    window.__nadocTest.selectProteinForTest('protein-1')
+    expect(selected).toEqual([[{ kind: 'protein', id: 'protein-1' }]])
   })
 })

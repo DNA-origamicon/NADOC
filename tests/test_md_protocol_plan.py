@@ -195,8 +195,8 @@ def test_diff_at_a_rung_boundary_swaps_the_elastic_network_file():
     assert new[-1] == "demo_k0.1.enm.extra"
 
 
-def test_diff_within_a_rung_reports_only_the_chunk_length():
-    """Two chunks of the same rung differ in length and I/O cadence, nothing else."""
+def test_diff_within_a_rung_reports_length_io_and_its_own_rng_stream():
+    """Each separately launched chunk also advances the job's displayed base seed."""
     rows = md_plan.relaxation_stages(_ctx(fast=True))
     chunk = next(r for r in rows if r["name"].endswith("_01_300K_NPT_ENM_k0p5_p50"))
     assert set(chunk["diff_vs_previous"]) <= {
@@ -205,7 +205,18 @@ def test_diff_within_a_rung_reports_only_the_chunk_length():
         "outputenergies",
         "xstfreq",
         "restartfreq",
+        "seed",
     }
+
+
+def test_relaxation_plan_derives_distinct_stage_seeds_from_the_displayed_base():
+    rows = md_plan.relaxation_stages(_ctx(seed=7000))
+    assert rows[0]["params"]["seed"] == "7000"
+    assert [row["params"]["seed"] for row in rows[1:4]] == ["7001", "7002", "7003"]
+
+
+def test_namd_stage_seed_wraps_inside_the_positive_signed_range():
+    assert P.namd_stage_seed(2**31 - 1, 1) == 1
 
 
 # ── Conditions that skip or alter a stage ─────────────────────────────────────

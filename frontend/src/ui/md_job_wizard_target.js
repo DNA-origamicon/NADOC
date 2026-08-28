@@ -25,7 +25,7 @@ import { initWizardResources } from './md_job_wizard_resources.js'
 import { initWizardRunpod } from './md_job_wizard_runpod.js'
 import {
   TARGETS, UNWIRED_TARGETS,
-  atomCapLabel, defaultPartition, localGpuSpeedFactor, localHardwareSummary,
+  atomCapLabel, defaultGpuChoice, localGpuSpeedFactor, localHardwareSummary,
   partitionChoices, targetPayloadFields, targetReadiness,
 } from './md_job_wizard_target_model.js'
 
@@ -59,10 +59,12 @@ export function initWizardTargetStep({
   connect = initClusterConnection,
   onChange = () => {},
   initialTarget = 'local',
+  initialGresType = null,
   readOnly = () => false,
 } = {}) {
   let _target = initialTarget
   let _partition = null
+  let _gresType = initialGresType
   let _hw = null
   let _hwBusy = false
   let _avail = null
@@ -98,7 +100,10 @@ export function initWizardTargetStep({
 
   function _emit() {
     _paintHint()
-    onChange({ target: _target, partition: _partition, ready: readiness().ready })
+    onChange({
+      target: _target, partition: _partition, gresType: _gresType,
+      ready: readiness().ready,
+    })
   }
 
   // Nothing to be ready FOR in a locked view: the question was answered when the job was
@@ -179,8 +184,12 @@ export function initWizardTargetStep({
       // Preselect the backend's top row (it sorts by time-to-result), but never
       // overwrite a choice the user already made.
       const choices = partitionChoices(_avail, _localFactor())
-      if (!_partition || !choices.some(c => c.partition === _partition && c.selectable)) {
-        _partition = defaultPartition(choices)
+      const currentIsValid = choices.some(c => c.partition === _partition
+        && c.gresType === _gresType && c.selectable)
+      if (!currentIsValid) {
+        const choice = defaultGpuChoice(choices)
+        _partition = choice?.partition || null
+        _gresType = choice?.gresType || null
       }
     } catch (err) {
       _avail = null
@@ -206,7 +215,9 @@ export function initWizardTargetStep({
           + ' style="display:grid;grid-template-columns:1.4fr .8fr .9fr 1fr;gap:10px;'
           + 'align-items:baseline;padding:7px 9px;border-radius:4px;margin-bottom:3px;'
           + 'background:rgba(31,111,235,.18);border:1px solid #1f6feb">'
-          + `<span style="color:#c9d1d9;font-weight:600">${_partition}</span>`
+          + `<span style="color:#c9d1d9;font-weight:600">${_partition}`
+          + `${_gresType ? `<br><span style="font-size:9px;color:#6e7681">${_gresType}</span>` : ''}`
+          + '</span>'
           + '<span style="color:#6e7681;font-size:11px">—</span>'
           + '<span style="color:#6e7681;font-size:11px">—</span>'
           + '<span style="color:#6e7681;font-size:11px">chosen for this job</span></div>'
@@ -233,6 +244,7 @@ export function initWizardTargetStep({
       if (node.dataset.selectable !== '1') return
       node.addEventListener('click', () => {
         _partition = node.dataset.partition
+        _gresType = node.dataset.gresType || null
         _paintAlpine()
         // A different node is a different request — re-size against it straight away, so
         // the cores/wall time under the table always describe the row that is selected.
@@ -244,10 +256,11 @@ export function initWizardTargetStep({
   }
 
   function _rowHtml(c) {
-    const sel = c.partition === _partition
+    const sel = c.partition === _partition && c.gresType === _gresType
     const dim = c.selectable ? '' : 'opacity:.5;'
     return (
       `<div class="wiz-part-row" data-partition="${c.partition}" ` +
+      `data-gres-type="${c.gresType || ''}" ` +
       `data-selectable="${c.selectable ? '1' : '0'}" ` +
       `style="display:grid;grid-template-columns:1.4fr .8fr .9fr 1fr;gap:10px;align-items:baseline;` +
       `padding:7px 9px;border-radius:4px;margin-bottom:3px;${dim}` +
@@ -255,8 +268,8 @@ export function initWizardTargetStep({
       `background:${sel ? 'rgba(31,111,235,.18)' : 'transparent'};` +
       `border:1px solid ${sel ? '#1f6feb' : '#21262d'}">` +
       `<span><span style="color:#c9d1d9;font-weight:${sel ? 600 : 400}">${c.partition}</span>` +
-      `<br><span style="color:#6e7681;font-size:9px">${c.gpuModel}</span></span>` +
-      `<span style="color:#8b949e;font-size:11px" title="${c.migNote}">${c.free} free</span>` +
+      `<br><span style="color:#6e7681;font-size:9px">${c.gpuModel}${c.isMig ? ' · MIG' : ''}</span></span>` +
+      `<span style="color:#8b949e;font-size:11px">${c.free} free</span>` +
       `<span style="color:#c9d1d9;font-size:11px" title="${c.waitBasis}">${c.wait}</span>` +
       `<span style="color:#3fb950;font-size:11px">${c.speed || c.note}</span>` +
       `</div>`
@@ -288,7 +301,7 @@ export function initWizardTargetStep({
     if (_ro()) return
     if (_target === target) return
     _target = target
-    if (target !== 'alpine') _partition = null
+    if (target !== 'alpine') { _partition = null; _gresType = null }
     _paintCards()
     if (target === 'local') _loadHardware()
     if (target === 'alpine') {
@@ -380,6 +393,7 @@ export function initWizardTargetStep({
           mount: resMount,
           getSlurmPreview,
           getPartition: () => _partition,
+          getGresType: () => _gresType,
           getTotalNs,
           onChange: _emit,
           readOnly,
@@ -457,9 +471,10 @@ export function initWizardTargetStep({
    *  recorded job into the read-only view, and to put the live answer back afterwards —
    *  the step and the wizard hold this choice separately, so leaving it out of step would
    *  show one target while the payload carried another. */
-  function setChoice({ target = 'local', partition = null } = {}) {
+  function setChoice({ target = 'local', partition = null, gresType = null } = {}) {
     _target = target
     _partition = partition
+    _gresType = gresType
   }
 
   return {
@@ -467,9 +482,11 @@ export function initWizardTargetStep({
     setChoice,
     /** Load an existing job's recorded answer for the read-only view. */
     showRecorded({
-      target = 'local', partition = null, resources = null, requested = null, runpod = null,
+      target = 'local', partition = null, gresType = null, resources = null,
+      requested = null, runpod = null,
     } = {}) {
-      setChoice({ target, partition })
+      const recordedGres = gresType || resources?.gres_type || requested?.gres_type || null
+      setChoice({ target, partition, gresType: recordedGres })
       _recorded = { resources, requested }
       // What this job was set up to rent — never re-priced. See _paintRecorded there.
       _recordedRunpod = runpod
@@ -477,11 +494,13 @@ export function initWizardTargetStep({
     },
     get target() { return _target },
     get partition() { return _partition },
+    get gresType() { return _gresType },
     get hardware() { return _hw },
     isReady: () => readiness().ready,
     readiness,
     payloadFields: () => targetPayloadFields(_target, {
       partition: _partition,
+      gresType: _gresType,
       resources: _resources?.overrides?.() || null,
       runpodGpuKey: _runpod?.gpuKey?.() || null,
       runpodEstimatedCostUsd: _runpod?.estimatedCostUsd?.() ?? null,

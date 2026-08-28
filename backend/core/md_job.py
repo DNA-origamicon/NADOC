@@ -231,6 +231,12 @@ class MdJob:
     # spawns a fresh job from a failed one).  Drives the indented job-list
     # hierarchy: a derived job renders nested under its parent, mirroring oxDNA.
     parent_job_id: Optional[str] = None
+    # Random seed assigned to every NAMD job at creation.  Relaxation packages use this
+    # as the base for their per-stage NAMD seeds; production children also mirror their
+    # historical ``ensemble_seed`` here so callers have one engine-wide field to inspect.
+    # Kept separate from ``ensemble_seed`` because that field is also the UI's marker for
+    # a production/replica child — setting it on a root relaxation would misclassify it.
+    namd_seed: Optional[int] = None
     # Ensemble production replica marker (see backend.core.md_ensemble).  When set,
     # this job is one of N production replicas fanned out from the parent's
     # equilibrated structure with a distinct NAMD ``seed`` — ``ensemble_seed`` is that
@@ -450,6 +456,7 @@ class MdJob:
         data.setdefault("seed_blade_job_id", None)
         data.setdefault("seed_vacuum_job_id", None)
         data.setdefault("parent_job_id", None)
+        data.setdefault("namd_seed", None)
         data.setdefault("ensemble_seed", None)
         data.setdefault("ensemble_index", None)
         data.setdefault("run_kind", None)
@@ -604,6 +611,7 @@ def new_job(
     seed_blade_job_id: Optional[str] = None,
     seed_vacuum_job_id: Optional[str] = None,
     parent_job_id: Optional[str] = None,
+    namd_seed: Optional[int] = None,
     ensemble_seed: Optional[int] = None,
     ensemble_index: Optional[int] = None,
     run_kind: Optional[str] = None,
@@ -624,6 +632,7 @@ def new_job(
         seed_blade_job_id=seed_blade_job_id,
         seed_vacuum_job_id=seed_vacuum_job_id,
         parent_job_id=parent_job_id,
+        namd_seed=namd_seed,
         ensemble_seed=ensemble_seed,
         ensemble_index=ensemble_index,
         run_kind=run_kind,

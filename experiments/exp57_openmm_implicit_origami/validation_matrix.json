@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "model": "AMBER14/OL15 + GBn2; 0.150 M generic monovalent ionic strength",
+  "replicate_seeds": [20260827, 20260828, 20260829],
+  "rungs": [
+    {
+      "name": "duplex_21bp",
+      "purpose": "force-field and terminal-template smoke test",
+      "target_ns": 1.0,
+      "reference": "ideal B-DNA and published OL15/GBn2 duplex behavior"
+    },
+    {
+      "name": "two_helix_double_crossover",
+      "purpose": "prove covalent crossover topology and junction stability",
+      "target_ns": 5.0,
+      "reference": "matching explicit-solvent NAMD motif"
+    },
+    {
+      "name": "straight_6hb",
+      "purpose": "bundle spacing, twist, fraying, and performance crossover",
+      "target_ns": 10.0,
+      "reference": "matching explicit-solvent NAMD 6HB"
+    },
+    {
+      "name": "curved_6hb",
+      "purpose": "retention and fluctuations of authored global curvature",
+      "target_ns": 20.0,
+      "reference": "the currently running NAMD origami trajectory"
+    },
+    {
+      "name": "18hb",
+      "purpose": "origami-scale memory, throughput, and >62-strand topology",
+      "target_ns": 20.0,
+      "reference": "explicit-solvent NAMD only after earlier gates pass"
+    }
+  ],
+  "electrostatics_arms": [
+    {"nonbonded_mode": "no_cutoff"},
+    {"nonbonded_mode": "cutoff_nonperiodic", "cutoff_nm": 3.0},
+    {"nonbonded_mode": "cutoff_nonperiodic", "cutoff_nm": 2.4},
+    {"nonbonded_mode": "cutoff_nonperiodic", "cutoff_nm": 1.8}
+  ],
+  "observables": [
+    "Watson-Crick hydrogen-bond occupancy",
+    "terminal base-pair fraying",
+    "helical rise and twist",
+    "inter-helix centerline spacing",
+    "crossover O3'-P bond integrity",
+    "radius of gyration",
+    "centerline bend radius and tangent-angle profile",
+    "per-nucleotide RMSF",
+    "potential-energy and force differences relative to no-cutoff",
+    "ns/day, GPU utilization, peak GPU memory, and checkpoint restart identity"
+  ]
+}

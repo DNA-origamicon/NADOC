@@ -43,6 +43,7 @@ import {
   productionColumns,
   productionField,
   productionPayload,
+  randomNAMDSeed,
   planPayload,
   pushUndo,
   touchedAfterSettingField,
@@ -51,6 +52,7 @@ import {
   normaliseOverrideInput,
   overrideSummary,
   setStageOverride,
+  seedCollisionJobs,
   snapshotState,
   stageColumns,
   wizardPayload,
@@ -115,6 +117,8 @@ const FIELDS = [
   { key: 'adaptive_minimization', label: 'Stop minimisation when converged', type: 'checkbox',
     fallback: () => true,
     help: 'Enabled by default. Runs minimisation in chunks and stops only after three consecutive low-improvement windows. The atom-scaled step count remains a hard maximum, and missing energy data runs to that maximum. Turn this off to force every scheduled minimisation step.' },
+  { key: 'seed', label: 'Random seed', type: 'number', step: 1, min: 1,
+    help: 'Generated when this wizard session opens and recorded with the job. It is the base for distinct per-stage NAMD seeds, making the run reproducible without relying on the system clock. Change it only to replay a known seed.' },
   // ── Declash re-audit CONCLUDED (2026-08-19) ──
   // Runs ONLY when explicitly ticked — unticked (the untouched default) is OFF, full
   // stop, same as an explicit False; it no longer auto-detects from the design. A
@@ -234,8 +238,8 @@ const PRODUCTION_FIELD_DEFS = [
     help: 'Blank uses 1 ps⁻¹, suitable for production dynamics. Stronger coupling damps motion and can distort diffusion, relaxation times and other time-dependent measurements, although equilibrium averages should remain unchanged.' },
   { key: 'seed', label: 'Random seed', type: 'number', step: 1, min: 1, group: 'run',
     help: ({ continuation }) => (continuation
-      ? 'Blank draws a fresh seed when the job is created. This run inherits its velocities from the checkpoint it continues, so the seed does not choose them — it drives the Langevin thermostat from that point on. Two continuations of one checkpoint with different seeds diverge, but both carry the parent’s whole history, so they are not independent samples of it.'
-      : 'Blank draws a fresh seed when the job is created, allowing several production runs from one relaxation to sample independent trajectories. Set a value only when reproducing a specific past run; the chosen seed is recorded with the job.') },
+      ? 'Generated when this wizard session opens. This run inherits its velocities from the checkpoint it continues, so the seed does not choose them — it drives the Langevin thermostat from that point on. Two continuations of one checkpoint with different seeds diverge, but both carry the parent’s whole history, so they are not independent samples of it.'
+      : 'Generated and displayed when this wizard session opens, allowing several production runs from one relaxation to sample independent trajectories. The chosen seed is recorded with the job; change it only to reproduce a specific past run.') },
   { key: 'production_timestep_fs', label: 'Timestep', unit: 'fs', type: 'select',
     group: 'integrator',
     options: [{ value: '4', label: '4 fs (faster, risks RATTLE)' },
@@ -354,6 +358,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     // undoable and it rides along in the payload.
     target: 'local',
     partition: null,
+    gresType: null,
     presetId: 'design_speed',
     touched: {},          // only what the user actually changed — see wizardPayload
     // Set when the wizard was opened for a SEEDED DRAFT: submitting then solvates that
@@ -407,6 +412,9 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     if (!snap) return
     undoStack = undoStack.slice(0, -1)
     applySnapshot(state, snap)
+    targetStep?.setChoice?.({
+      target: state.target, partition: state.partition, gresType: state.gresType,
+    })
     paintUndo()
     renderSource()
     render()
@@ -771,6 +779,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
                 text: '⚠',
               }) : null,
               alertIcon(fieldConds.get(field.key)),
+              seedCollisionIcon(field.key),
               conditionRefs(fieldConds.get(field.key)),
             ],
           }),
@@ -809,6 +818,28 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     return el('span', {
       className: `wizard-field__alert wizard-field__alert--${kind}`,
       attrs: { title: conds.map(conditionTooltip).join('\n\n'), 'aria-label': kind },
+      text: '⚠',
+    })
+  }
+
+  /** The generated seed is compared locally against every cached NAMD job for the open
+   * design. A collision remains legal (an explicit replay may be intentional), but it is
+   * impossible to miss before Create is pressed. */
+  function seedCollisionIcon(key) {
+    if (key !== 'seed') return null
+    const matches = seedCollisionJobs(
+      getJobs?.() || [], getPartPath?.(), effectiveValue('seed'),
+      { excludeJobId: viewJob?.job_id || editJob?.job_id || null },
+    )
+    if (!matches.length) return null
+    const names = matches.slice(0, 4).map(viewJobLabel).join('\n')
+    const more = matches.length > 4 ? `\n…and ${matches.length - 4} more` : ''
+    return el('span', {
+      className: 'wizard-field__alert wizard-field__alert--warning',
+      attrs: {
+        title: `This seed matches ${matches.length} other NAMD job${matches.length === 1 ? '' : 's'} for the open design:\n${names}${more}`,
+        'aria-label': 'random seed matches another run',
+      },
       text: '⚠',
     })
   }
@@ -1499,7 +1530,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
   let slurmPreview = null
   let slurmBusy = false
   let slurmError = ''
-  let slurmKey = ''          // partition|total_ns — refetch only when those change
+  let slurmKey = ''          // partition|GRES|total_ns — exact accelerator identity
   // Collapsed on every entry to the step. The stage ladder is what this step is FOR;
   // the sbatch details are for the rarer "what exactly will be submitted" question.
   let slurmOpen = false
@@ -1562,7 +1593,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
       return
     }
     const totalNs = Number(plan.totals?.total_ns || 0)
-    const key = `${state.partition || ''}|${totalNs}`
+    const key = `${state.partition || ''}|${state.gresType || ''}|${totalNs}`
     if (key === slurmKey && (slurmPreview || slurmBusy)) return
     slurmKey = key
     slurmBusy = true
@@ -1570,7 +1601,9 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     paintSlurm()
     try {
       slurmPreview = await api.getSlurmPreview?.({
-        cluster_name: 'alpine', partition: state.partition, total_ns: totalNs,
+        cluster_name: 'alpine', partition: state.partition,
+        ...(state.gresType ? { gres_type: state.gresType } : {}),
+        total_ns: totalNs,
         job_name: 'nadoc_job',
       })
       if (!slurmPreview) slurmError = api.lastErrorMessage?.() || 'Could not size the SLURM request.'
@@ -1853,16 +1886,19 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
       getPlanShape: () => runpodPlanShape(plan),
       fsApi: api?.fsApi,
       initialTarget: state.target,
+      initialGresType: state.gresType,
       readOnly: () => readOnly,
-      onChange: ({ target, partition }) => {
+      onChange: ({ target, partition, gresType }) => {
         // A locked view must never write outwards. In live mode this callback is only an
         // optional observer; the wizard's own payload remains authoritative for launch.
         if (readOnly) return
         const targetMoved = state.target !== target
         // Fires on every resource keystroke too, so only a real move invalidates things.
         const nodeMoved = targetMoved || state.partition !== partition
+          || state.gresType !== gresType
         state.target = target
         state.partition = partition
+        state.gresType = gresType
         if (targetMoved && target === 'runpod'
             && !Object.prototype.hasOwnProperty.call(state.touched, 'gpu_resident')) {
           state.touched.gpu_resident = 'on'
@@ -1875,7 +1911,7 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
         }
         // A different node is a different SLURM request; drop the sized one.
         if (nodeMoved) { slurmPreview = null; slurmKey = '' }
-        onTargetChange({ target, partition })
+        onTargetChange({ target, partition, gresType })
         // CPU threads and CUDA devices are settings for THIS machine. On a cluster the
         // allocation decides both, so the settings tab has to be re-rendered without them
         // (and with them again when the run comes back local).
@@ -1966,7 +2002,9 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
       // Step 1 holds its own copy of the answer, so putting the live state back has to put
       // its copy back too — otherwise the card would show the job just VIEWED while the
       // payload carried the live one.
-      targetStep?.setChoice?.({ target: state.target, partition: state.partition })
+      targetStep?.setChoice?.({
+        target: state.target, partition: state.partition, gresType: state.gresType,
+      })
     }
     viewJob = job
     const replayJob = job || editableJob
@@ -1981,11 +2019,12 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
       state.parentJobId = view.parentJobId
       state.target = view.target
       state.partition = view.partition
+      state.gresType = view.gresType
       state.draftId = null
       slurmPreview = null
       slurmKey = ''
       targetStep?.showRecorded?.({
-        target: view.target, partition: view.partition,
+        target: view.target, partition: view.partition, gresType: view.gresType,
         resources: replayJob?.resources || null, requested: replayJob?.requested_resources || null,
         // Read off the JOB, not `prep_params`: a job can be re-pointed at a different target
         // after it was created, which is why `target`/`partition` come from there too.
@@ -2029,6 +2068,14 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
       // they survive a protocol switch and their chips read "you set this".
       state.touched = { ...prefill.touched }
       if (prefill.presetId) state.presetId = prefill.presetId
+    }
+    // A seed belongs to a JOB, not to a remembered form preference. Every new creation
+    // session gets a fresh draw before its first render/plan request, so the exact number
+    // the user sees is the exact number submitted. Draft/edit/read-only sessions preserve
+    // their existing seed; an old draft that predates seed recording gets one now.
+    if (!readOnly && !editableJob) {
+      const newCreation = !draftId && !prefill
+      if (newCreation || state.touched.seed == null) state.touched.seed = randomNAMDSeed()
     }
     renderSource()
     if (!presets.length) {

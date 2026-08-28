@@ -112,9 +112,8 @@ def test_create_runs_to_completion_and_lists(monkeypatch, tmp_path):
     assert traj["n_frames"] >= 2
     assert traj["n_nucleotides"] == final["n_atoms"]
     assert len(traj["keys"]) == final["n_atoms"]
-    assert (
-        len(traj["frames"][0]) == final["n_atoms"] * 6
-    )  # x,y,z,nx,ny,nz per nucleotide
+    assert len(traj["frames"][0]) == final["n_atoms"] * 9
+    # x,y,z + the full a1 and a3 orientation vectors per nucleotide.
 
     # the visualization views reuse the oxDNA health code on the transcoded .dat
     disp = client.get(f"/api/lammps/jobs/{job_id}/display").json()

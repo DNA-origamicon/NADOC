@@ -53,6 +53,7 @@ def test_spawn_draft_job_defers_prep(tmp_path, monkeypatch):
     """_spawn_draft_job creates a persisted draft (no solvation) that remembers its
     seed + default advanced params for later pre-fill."""
     monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+    monkeypatch.setattr(routes_md, "random_seed", lambda: 987654321)
     body = routes_md.CreateJobRequest(
         oxdna_job_id="ox1",
         draft=True,
@@ -64,6 +65,8 @@ def test_spawn_draft_job_defers_prep(tmp_path, monkeypatch):
     assert job.seed_oxdna_job_id == "ox1"
     assert job.seed_mrdna_job_id is None
     assert job.design_name == "GT_corner_v2"
+    assert job.namd_seed == 987654321
+    assert job.prep_params["seed"] == 987654321
     assert job.prep_params["draft"] is True
     # Persisted to disk in the draft state, with no package.
     loaded = MdJob.load(job.job_id, tmp_path)

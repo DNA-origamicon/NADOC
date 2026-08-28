@@ -127,6 +127,26 @@ def classify_ssh_error(text: str) -> str:
     return "unknown"
 
 
+def classify_transfer_error(exc: Exception, message: str) -> str:
+    """Classify an SFTP operation without confusing file errors with auth errors.
+
+    AsyncSSH's generic ``SFTPFailure`` is commonly returned for quota/capacity and
+    other server-side file failures, with no detail beyond ``"Failure"``. That is
+    not evidence that the authenticated SSH transport died. Conversely,
+    ``SFTPConnectionLost`` really is a transport failure.
+    """
+
+    kind = classify_ssh_error(message)
+    class_name = type(exc).__name__.lower()
+    if class_name.startswith("sftp"):
+        if "connectionlost" in class_name:
+            return "network"
+        if "permission" in class_name:
+            return "permission"
+        return "filesystem"
+    return kind
+
+
 class ClusterSSHError(RuntimeError):
     """Raised for transport-level failures (not-connected, auth, timeout).
 
@@ -361,13 +381,31 @@ class ClusterConnection:
             command=cmd, rc=run_result.rc,
             stdout_bytes=len(run_result.stdout.encode("utf-8")),
             stderr_bytes=len(run_result.stderr.encode("utf-8")),
+            # Byte counts alone hid the decisive rsync rc=11 diagnostic in the
+            # incident log. Preserve a bounded error tail for post-reload triage;
+            # successful command output remains count-only.
+            error_preview=(
+                (run_result.stderr or run_result.stdout).strip()[-2000:]
+                if run_result.rc != 0
+                else None
+            ),
         )
         return run_result
 
     async def mkdir_p(self, remote_dir: str) -> None:
         """Recursive remote mkdir (Appendix: recursive mkdir for job dirs)."""
 
-        await self.run(f"mkdir -p {_shquote(remote_dir)}")
+        result = await self.run(f"mkdir -p {_shquote(remote_dir)}")
+        if result.rc != 0:
+            detail = (result.stderr or result.stdout).strip()
+            message = (
+                f"remote directory creation failed for {remote_dir}: "
+                f"{detail or f'rc={result.rc}'}"
+            )
+            kind = classify_ssh_error(message)
+            raise ClusterSSHError(
+                message, kind="filesystem" if kind == "unknown" else kind
+            )
 
     async def sftp_put(self, local_path: str, remote_path: str) -> None:
         """Upload one file, chunked (256 KB, per-chunk flush)."""
@@ -387,8 +425,8 @@ class ClusterConnection:
                 remote_path=remote_path, bytes=size, error=str(exc),
             )
             raise
-        await self.mkdir_p(str(PurePosixPath(remote_path).parent))
         try:
+            await self.mkdir_p(str(PurePosixPath(remote_path).parent))
             async with conn.start_sftp_client() as sftp:
                 await _stream_put(sftp, local_path, remote_path)
             alpine_operations.finish(
@@ -408,11 +446,17 @@ class ClusterConnection:
             )
             raise
         except Exception as exc:  # noqa: BLE001
+            message = f"upload failed: {exc}"
+            kind = classify_transfer_error(exc, message)
             alpine_operations.finish(
                 "upload", op_id, started, outcome="error", local_path=local_path,
-                remote_path=remote_path, bytes=size, error=str(exc),
+                remote_path=remote_path, bytes=size, error=message, error_kind=kind,
             )
-            raise self._fail_transport(f"upload failed: {exc}") from exc
+            # A rejected remote write (quota, permissions, path, generic
+            # SFTPFailure) fails this file, not the authenticated connection.
+            if kind not in {"network", "timeout", "auth"}:
+                raise ClusterSSHError(message, kind=kind) from exc
+            raise self._fail_transport(message) from exc
 
     async def sftp_get(self, remote_path: str, local_path: str, on_progress=None) -> None:
         """Download one file, chunked."""
@@ -453,7 +497,7 @@ class ClusterConnection:
             raise
         except Exception as exc:  # noqa: BLE001
             message = f"download failed: {exc}"
-            kind = classify_ssh_error(message)
+            kind = classify_transfer_error(exc, message)
             alpine_operations.finish(
                 "download", op_id, started, outcome="error", remote_path=remote_path,
                 local_path=local_path, error=message, error_kind=kind,

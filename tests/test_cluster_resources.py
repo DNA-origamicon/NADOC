@@ -144,8 +144,48 @@ def test_cost_uses_gpu_billing(alpine):
         partition="aa100",
     )
     hours = r["walltime_h"]
-    expected = r["cores"] * hours * 1.0 + r["gpus"] * hours * 108.2
+    expected = r["cores"] * hours * 1.0 + r["gpus"] * hours * 108.6
     assert r["est_cost_su"] == pytest.approx(round(expected, 1))
+
+
+def test_rtx_mig_recommendation_uses_exact_gres_speed_core_cap_and_rate(alpine):
+    whole = cr.recommend(
+        alpine, n_atoms=100_000, total_ns=10.0, partition="artxpro6000"
+    )
+    mig = cr.recommend(
+        alpine,
+        n_atoms=100_000,
+        total_ns=10.0,
+        partition="artxpro6000",
+        gres_type="rtx_pro_6000_2g.48gb",
+    )
+    assert mig["gres_type"] == "rtx_pro_6000_2g.48gb"
+    assert mig["mig"] is True and mig["gpu_vram_gb"] == 48
+    assert mig["cores"] <= 16
+    assert mig["expected_ns_per_day"] == pytest.approx(
+        whole["expected_ns_per_day"] * 0.5
+    )
+    expected_cost = mig["cores"] * mig["walltime_h"] + 130.2 * mig["walltime_h"]
+    assert mig["est_cost_su"] == pytest.approx(round(expected_cost, 1))
+
+
+def test_invalid_or_cpu_mig_selection_is_rejected(alpine):
+    with pytest.raises(ValueError, match="not available"):
+        cr.recommend(
+            alpine,
+            n_atoms=100_000,
+            total_ns=1.0,
+            partition="artxpro6000",
+            gres_type="h200_3g.71gb",
+        )
+    with pytest.raises(ValueError, match="cannot use GPU GRES"):
+        cr.recommend(
+            alpine,
+            n_atoms=100_000,
+            total_ns=1.0,
+            partition="acpu",
+            gres_type="rtx_pro_6000_1g.24gb",
+        )
 
 
 def test_estimate_queue_time_known_and_unknown():

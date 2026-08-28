@@ -6610,6 +6610,7 @@ async function main() {
       _anchorSelectionState,
       atomisticRenderer,
       selectionManager,
+      selectionController,
       _nucleotideTransformTool,
       bluntEnds,
       slicePlane,

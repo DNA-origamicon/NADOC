@@ -1,0 +1,53 @@
+{
+  "archive": "/media/jojo/Archive/NADOC_archive/cb616816195f",
+  "design_name": "6hb_2xT",
+  "engine": "NAMD Git-2025-12-04 GPU-resident",
+  "gpu": "NVIDIA GeForce RTX 3080 Ti",
+  "force_field": "CHARMM36 nucleic acids + CUFIX",
+  "solvent": "explicit TIP3P with Mg(H2O)6 counterions",
+  "timestep_fs": 4.0,
+  "hydrogen_mass_repartitioning": true,
+  "dna_residues": 656,
+  "dry_dna_atoms": 20797,
+  "total_atoms": 182801,
+  "nominal_requested_ns": 10.0,
+  "completed_ns": 7.0,
+  "trajectory_frames": 700,
+  "trajectory_interval_ps": 10.0,
+  "user_stopped": true,
+  "throughput_ns_per_day": 90.9034,
+  "health_samples": 25,
+  "c1_paired_fraction": {
+    "first": 0.96,
+    "last": 0.8594377510040161,
+    "mean": 0.8989789558232931,
+    "minimum": 0.8554216867469879,
+    "maximum": 0.96,
+    "threshold_angstrom": 12.0
+  },
+  "c1_mean_angstrom": {
+    "first": 9.793936729431152,
+    "last": 10.179905891418457,
+    "mean": 10.00561882019043
+  },
+  "c1_p90_angstrom": {
+    "first": 11.2655611038208,
+    "last": 12.443243980407715,
+    "mean": 12.034859199523925
+  },
+  "wc_ref_relative_fraction": {
+    "first": 0.7964601769911505,
+    "last": 0.7168141592920354,
+    "mean": 0.7152212389380531,
+    "minimum": 0.6637168141592921,
+    "maximum": 0.7964601769911505
+  },
+  "broken_bp_count": {
+    "first": 83,
+    "last": 88,
+    "mean": 87.32,
+    "minimum": 74,
+    "maximum": 102
+  },
+  "comparison_limit": "Different engine, force field, ion chemistry, timestep, GPU, and sampled duration; compare stability envelopes and throughput, not coordinate identity."
+}

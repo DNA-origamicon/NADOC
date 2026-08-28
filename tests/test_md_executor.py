@@ -173,12 +173,13 @@ def _make_prepared_job(workspace: Path) -> MdJob:
     (pkg / "6hb_demo.pdb").write_text("pdb")
     # Alpine early-stop precomputes this from the real topology. Unit executor tests
     # use a deliberately tiny fake PSF/PDB, so provide the cached-plan seam directly.
+    from backend.core import remote_wc_eval
     from backend.core.slurm_script import ALPINE_WC_PLAN_NAME
 
     (pkg / ALPINE_WC_PLAN_NAME).write_text(
         json.dumps(
             {
-                "version": 1,
+                "version": remote_wc_eval.PLAN_VERSION,
                 "source": {
                     "6hb_demo.psf": {
                         "size": (pkg / "6hb_demo.psf").stat().st_size,
@@ -224,14 +225,15 @@ def test_submit_job_stages_and_parses_id(tmp_path, alpine, resources):
     assert out.queued_at is not None  # stamped for the queued-wait tooltip
     assert out.execution_target == "alpine"
     assert out.cluster_name == "alpine"
-    assert out.remote_project_dir == "/projects/jojo/nadoc_jobs/" + job.job_id
+    assert out.remote_project_dir is None
     assert out.remote_scratch_dir == "/scratch/alpine/jojo/nadoc_jobs/" + job.job_id
     # PSF/PDB/manifest staged; the sbatch uploaded into scratch and submitted there.
     staged = {r for _, r in conn.puts}
     assert any(r.endswith("/6hb_demo.psf") for r in staged)
     assert any(r.endswith("/" + ex._SBATCH_NAME) for r in staged)
     assert any(r.endswith("/nadoc_settle_retarget.py") for r in staged)
-    assert conn.mirrors and conn.mirrors[0][0] == out.remote_project_dir
+    assert not conn.mirrors
+    assert all(remote.startswith(out.remote_scratch_dir) for _, remote in conn.puts)
     assert any("sbatch" in c for c in conn.runs)
     # Persisted.
     assert MdJob.load(job.job_id, tmp_path).slurm_job_id == "987654"
@@ -436,8 +438,9 @@ def test_reconcile_completed_fetches_and_marks_done(tmp_path, alpine, resources)
     out = _run(ex.reconcile_remote_job(job, tmp_path, conn=conn))
     assert out.status == MdStatus.completed
     assert out.fetch_attempts == 0
-    # scratch→project mirror happened; the listed files were pulled down locally.
-    assert conn.mirrors and conn.mirrors[-1][0] == job.remote_scratch_dir
+    # Results are pulled directly from scratch; large trajectories must not consume
+    # Alpine's small /projects quota.
+    assert not conn.mirrors
     assert conn.gets
 
 
@@ -1384,6 +1387,17 @@ def test_record_submit_failure_marks_job_without_losing_prepared_state(
     assert "bad QoS" in reloaded.error
 
 
+def test_cluster_submit_error_does_not_call_storage_failure_transport():
+    from backend.api import routes_md
+    from backend.core.cluster_ssh import ClusterSSHError
+
+    msg = routes_md._cluster_submit_error(
+        ClusterSSHError("upload failed: Failure", kind="filesystem")
+    )
+    assert msg.startswith("Cluster storage error:")
+    assert "still connected" in msg
+
+
 # ── module pre-flight (SLURM 30948986 post-mortem) ───────────────────────────
 
 
@@ -1460,7 +1474,8 @@ def test_submit_persists_each_long_running_handoff_phase(
         ex.submit_job(job, tmp_path, profile=alpine, resources=resources, conn=conn)
     )
 
-    assert {p["phase"] for p in phases} >= {"preflight", "upload", "mirror", "sbatch"}
+    assert {p["phase"] for p in phases} >= {"preflight", "upload", "sbatch"}
+    assert "mirror" not in {p["phase"] for p in phases}
     assert [p["fraction"] for p in phases] == sorted(p["fraction"] for p in phases)
     assert out.remote_submit_progress is None
 

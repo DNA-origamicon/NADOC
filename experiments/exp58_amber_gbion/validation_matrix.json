@@ -1,0 +1,45 @@
+{
+  "campaign": "exp58_native_amber26_gbion",
+  "hard_budget_usd": 5.0,
+  "teardown_reserve_usd": 0.25,
+  "model": {
+    "engine": "Amber26 pmemd.cuda",
+    "dna_force_field": "OL15",
+    "implicit_water": "GBneck2 igb=8",
+    "ion_model": "GBION v3",
+    "salt": "explicit Na+/Cl- at nominal 0.150 M",
+    "debye_screening": false,
+    "alpb": false,
+    "gbsa": 3,
+    "timestep_fs": 2.0,
+    "temperature_k": 300.0,
+    "hmr": false
+  },
+  "duplex_gate": {
+    "minimum_sampled_ns": 1.0,
+    "minimum_mean_core_wc_occupancy": 0.8,
+    "maximum_final_aligned_c1prime_rmsd_nm": 0.5,
+    "maximum_core_c1prime_pair_distance_nm": 1.4,
+    "require_finite_energy": true,
+    "require_all_bonds_between_nm": [
+      0.08,
+      0.20
+    ],
+    "require_measured_ns_per_day": true,
+    "require_cpu_gpu_single_cycle_energy_parity": true,
+    "maximum_sampled_ion_radius_angstrom": 40.5,
+    "require_speedup_over_same_gpu_pmemd_cuda_tip3p": true,
+    "require_cuda_engine_banner": true,
+    "require_no_cpu_fallback": true
+  },
+  "lifecycle_gate": {
+    "maximum_total_spend_usd": 5.0,
+    "require_provider_terminate_after": true,
+    "require_setup_confirmation": true,
+    "require_launch_confirmation": true,
+    "require_termination_confirmation": true,
+    "require_zero_remaining_campaign_pods": true,
+    "preserve_unrelated_pods": true
+  },
+  "interpretation": "Passing certifies only native GPU execution, throughput, and short duplex integrity. The exact paired 2HB remains the production-model decision gate."
+}

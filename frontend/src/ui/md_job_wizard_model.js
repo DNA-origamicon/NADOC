@@ -348,7 +348,7 @@ export const WIZARD_FIELDS = [
   'threads', 'devices', 'salt_mode', 'mg_conc_mM', 'ion_conc_mM', 'padding_nm',
   'box_mode', 'minimize_steps', 'adaptive_minimization', 'fast',
   'gpu_fallback_policy', 'gpu_resident', 'early_stop_relax',
-  'allow_ring_pierced_seed',
+  'allow_ring_pierced_seed', 'seed',
   'force_soft', 'declash',
   // The three integrator axes, separated (exp51). null on any of them means "auto",
   // which the backend resolves from that run's timestep.
@@ -364,7 +364,55 @@ export const DEFAULT_FIELD_SCOPES = {
   force_soft: 'relaxation', declash: 'relaxation', early_stop_relax: 'relaxation',
   minimize_steps: 'relaxation', adaptive_minimization: 'relaxation', protocol: 'relaxation',
   gpu_resident: 'relaxation', gpu_fallback_policy: 'relaxation',
-  threads: 'relaxation', devices: 'relaxation',
+  threads: 'relaxation', devices: 'relaxation', seed: 'relaxation',
+}
+
+/** Highest automatically generated base seed. NAMD accepts signed 32-bit positive
+ * integers; reserving 4096 values lets the relaxation builder advance the displayed base
+ * once per stage without approaching the limit. */
+export const NAMD_RANDOM_SEED_MAX = (2 ** 31) - 1 - 4096
+
+/** Draw one positive NAMD seed for a new wizard session. Uses Web Crypto in real browsers;
+ * the Math.random fallback keeps non-browser unit harnesses functional. */
+export function randomNAMDSeed() {
+  const cryptoApi = globalThis.crypto
+  if (cryptoApi?.getRandomValues) {
+    const draw = new Uint32Array(1)
+    const range = NAMD_RANDOM_SEED_MAX
+    const limit = Math.floor((2 ** 32) / range) * range
+    do { cryptoApi.getRandomValues(draw) } while (draw[0] >= limit)
+    return (draw[0] % range) + 1
+  }
+  return Math.floor(Math.random() * NAMD_RANDOM_SEED_MAX) + 1
+}
+
+function normalizedDesignPath(path) {
+  if (!path) return ''
+  let value = String(path).replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '')
+  const marker = '/workspace/'
+  if (value.includes(marker)) value = value.slice(value.lastIndexOf(marker) + marker.length)
+  else value = value.replace(/^workspace\//, '')
+  return value
+}
+
+/** The explicit seed recorded on any generation of NAMD job schema. */
+export function namdSeedForJob(job) {
+  const value = job?.namd_seed ?? job?.ensemble_seed
+    ?? job?.spawn_params?.seed ?? job?.prep_params?.seed
+  const seed = Number(value)
+  return Number.isInteger(seed) && seed > 0 ? seed : null
+}
+
+/** Other NAMD jobs for the open design that already own `seed`. Pure, for both the live
+ * warning icon and regression tests. */
+export function seedCollisionJobs(jobs, partPath, seed, { excludeJobId = null } = {}) {
+  const wantedPath = normalizedDesignPath(partPath)
+  const wantedSeed = Number(seed)
+  if (!wantedPath || !Number.isInteger(wantedSeed) || wantedSeed < 1) return []
+  return (jobs || []).filter(job =>
+    job?.job_id !== excludeJobId
+    && normalizedDesignPath(job?.design_source_path) === wantedPath
+    && namdSeedForJob(job) === wantedSeed)
 }
 
 /** Pure: the scope of one field — the plan's declaration wins, then the local table,
@@ -613,6 +661,7 @@ export function productionSteps(job) {
  * @param {object} job  a job record from `GET /md/jobs`
  * @returns {{available: boolean, mode: string, presetId: string|null, touched: object,
  *   stageOverrides: object, parentJobId: string|null, target: string, partition: string|null,
+ *   gresType: string|null,
  *   provenanceKnown: boolean}}
  */
 export function jobSettingsState(job, { forEdit = false } = {}) {
@@ -638,6 +687,11 @@ export function jobSettingsState(job, { forEdit = false } = {}) {
     if (value == null) continue
     touched[key] = value
   }
+  // The request records what was ASKED; these fields record what was ACTUALLY assigned.
+  // Auto-generated seeds were historically absent from spawn_params, which is why the
+  // read-only wizard showed a blank for a production that plainly had ensemble_seed.
+  const actualSeed = namdSeedForJob(job)
+  if (actualSeed != null) touched.seed = actualSeed
   const parentJobId = production ? (job?.parent_job_id || null) : null
   // A child created before spawn requests were recorded still has a viewable plan: the
   // protocol endpoint resolves a production run's inherited values from the ROOT
@@ -667,6 +721,7 @@ export function jobSettingsState(job, { forEdit = false } = {}) {
     // to Alpine from the panel after being created locally has moved since.
     target: job?.execution_target || 'local',
     partition: job?.partition || null,
+    gresType: job?.resources?.gres_type || job?.requested_resources?.gres_type || null,
     // An explicit-key list means nothing without the request it indexes: a child rebuilt
     // from its parent has no per-field provenance to report, whatever it carries.
     provenanceKnown: known && !!source,
@@ -1011,6 +1066,7 @@ export const UNDOABLE_KEYS = [
   // `target`/`partition` are step 1's answer. Unlike `tab`, WHERE a job runs is a
   // property of the run, so undo must restore it.
   'mode', 'presetId', 'touched', 'stageOverrides', 'parentJobId', 'target', 'partition',
+  'gresType',
 ]
 
 /** Pure: a deep-enough copy of the undoable state. `touched` and `stageOverrides` are the

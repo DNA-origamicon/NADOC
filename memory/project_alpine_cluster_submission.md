@@ -180,14 +180,14 @@ ami100, artxpro6000, atesting, dtn, gh200`.
 **Traps this encodes** (all now covered by tests):
 - **`ah200`/`artxpro6000` have NO `gpu-testing` QoS.** Offering it produces a rejected sbatch.
   That's why `allowed_qos` is per-partition, not per-kind.
-- **They are NOT billed at the A100 rate.** `ClusterProfile.su_per_gpu_hour` (108.2, A100) is
-  now overridable per partition (`Partition.su_per_gpu_hour`); ah200 ≈ 334, artxpro6000 ≈ 242,
+- **They are NOT billed at the A100 rate.** `ClusterProfile.su_per_gpu_hour` (108.6, A100) is
+  now overridable per partition (`Partition.su_per_gpu_hour`); ah200 = 370.4, artxpro6000 = 260.4,
   scaled from the published billing weights. Without this the review card under-quoted an H200
   job ~4×. Confirm against `sacctmgr`/`sreport` when next connected.
 - **Throughput is A100-anchored, and walltime is derived from throughput.** `_GPU_SPEED_FACTOR`
   in `cluster_resources.py` scales the guess per partition. This is not cosmetic: an H200 job
   that requests 2.5× the walltime it needs gets *worse* queue priority for nothing.
-  `cluster_throughput.py` is keyed `cluster:partition:bucket`, so a real measured ns/day
+  `cluster_throughput.py` is keyed by cluster, partition, exact GRES, and size bucket, so a real measured ns/day
   supersedes the guess automatically after one run.
 - **`gh200` is request-only** — surfaced in the popup as greyed/"request access", never as a
   submission target.
@@ -204,7 +204,7 @@ Head-to-head, our own GPU-resident NAMD 3 build, identical inputs/settings per s
 
 Four findings that changed the code:
 
-1. **artxpro6000 ≥ ah200 on every system size, and bills 242 vs 334 SU/GPU-h.** Blackwell is the
+1. **artxpro6000 ≥ ah200 on every system size, and bills 260.4 vs 370.4 SU/GPU-h.** Blackwell is the
    SU-efficient choice on *both* axes — not a trade-off. `_GPU_SPEED_FACTOR` holds both at 2.5.
    (Their ratio wanders 0.99–1.10 across the three sizes with no trend — they are equal.)
 2. **al40 was underrated ~2×.** The old 0.75 reasoned from fp64, which is irrelevant to NAMD3
@@ -371,10 +371,23 @@ is not close. Note ah200 has **no `gpu-testing`** — a 1-hour smoke test must s
 `ah200`: `h200`, `h200_2g.35gb`(MIG), `h200_3g.71gb`(MIG) · `artxpro6000`: `rtx_pro_6000`,
 `rtx_pro_6000_1g.24gb`(MIG), `rtx_pro_6000_2g.48gb`(MIG). All profile `gres_type` values correct.
 
-**MIG is the trap.** `CfgTRES gres/gpu` sums MIG slices with whole cards, so ah200's 8 nodes first
-read as **56 GPUs**. NADOC requests `--gres=gpu:h200:1` — a whole card — so free slices are
-unusable capacity. `cluster_queue.is_mig_type()` (matches `\d+g\.\d+gb`) splits them; the popup
-shows slices on a separate sub-line, never added to the whole-GPU count.
+**MIG is a counting trap, but is now a supported target.** `CfgTRES gres/gpu` sums MIG slices
+with whole cards, so ah200's 8 nodes first read as **56 GPUs**. NADOC splits typed resources with
+`cluster_queue.is_mig_type()` (matches `\d+g\.\d+gb`); the popup never adds slices to the
+whole-GPU count and can submit an explicitly selected slice with its exact typed `--gres` token.
+
+### Live RTX Pro 6000 MIG production benchmark (2026-08-27)
+
+`2hb_2xT` job `da4af0483372` / Slurm `31729706` was confirmed by `scontrol` on
+`c3gpu-e7-u9` with `AllocTRES ... gres/gpu:rtx_pro_6000_2g.48gb=1`, 8 CPUs and 7 GB RAM.
+At step 9,955,000 (39.82 ns; 2 h 46 min scheduler runtime), the 32,868-atom, 4 fs HMR
+GPU-resident production run sustained **316.521 ns/day** (1.09187 ms/step) across repeated
+live samples. The matched whole RTX Pro 6000 reference, job `029a76c6a59f` / Slurm
+`30964837`, measured **498.802 ns/day** (0.69286 ms/step). Thus the 2g.48gb slice retained
+**63.46%** of whole-card throughput and ran **1.85x faster** than NADOC's conservative
+171.139 ns/day estimate. A 500 ns trajectory projects to 37.91 h on the slice versus 24.06 h
+on the whole card. Treat this as provisional until completion; full provenance is in
+`experiments/exp56_namd_mig_benchmark/results/2hb_2xT_rtx_pro_6000_2g48_2026-08-27.json`.
 
 ### Re-verified live 2026-08-06 (second session, after the fixes)
 

@@ -107,6 +107,18 @@ def test_psfgen_segid_unique_and_four_chars() -> None:
     assert ids[40] == "D014"  # the chain that used to FATAL
 
 
+def test_design_strand_segids_follow_builder_chain_sort() -> None:
+    """Design order and PSF segment order diverge after strand Z."""
+    from backend.core.namd_topology import psfgen_dna_segids_for_design
+
+    segids = psfgen_dna_segids_for_design(40)
+    assert segids[0] == "D000"  # A is first in both orders
+    assert segids[26] == "D001"  # AA sorts immediately after A
+    assert segids[1] == "D00F"  # B follows AA..AN in a 40-strand design
+    assert len(set(segids)) == 40
+    assert all(len(segid) == 4 for segid in segids)
+
+
 def test_psfgen_pdb_record_serial_stays_five_wide_past_100k() -> None:
     """A serial > 99999 must stay in a 5-char field (hybrid-36) so the resid
     column never shifts."""

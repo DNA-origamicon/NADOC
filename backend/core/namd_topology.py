@@ -175,6 +175,29 @@ def _psfgen_segid(index: int) -> str:
     return f"D{a}{b}{c}"
 
 
+def psfgen_dna_segids_for_design(n_strands: int) -> list[str]:
+    """Return each design-order DNA strand's packaged PSF segment ID.
+
+    The atomistic builder assigns alphabetic chain IDs in design order (``A`` …
+    ``Z``, ``AA`` …), while :func:`_write_segment_pdbs` sorts those chain IDs
+    lexicographically before assigning base-36 psfgen segids.  Once a design has
+    more than 26 strands, neither decimal nor base-36 encoding of the strand index
+    identifies the packaged residue.  Reproduce both ordering steps here.
+    """
+    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+    def chain_id(strand_index: int) -> str:
+        if strand_index < 26:
+            return letters[strand_index]
+        return letters[strand_index // 26 - 1] + letters[strand_index % 26]
+
+    chain_ids = [chain_id(i) for i in range(n_strands)]
+    segid_by_chain = {
+        cid: _psfgen_segid(i) for i, cid in enumerate(sorted(chain_ids))
+    }
+    return [segid_by_chain[cid] for cid in chain_ids]
+
+
 def _psfgen_pdb_record(atom: Atom, serial: int, segid: str) -> str:
     atom_name = _psfgen_atom_name(atom)
     resname = _psfgen_resname(atom)

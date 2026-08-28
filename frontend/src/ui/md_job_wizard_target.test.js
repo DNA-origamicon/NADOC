@@ -128,6 +128,28 @@ describe('partition selection', () => {
     step.dispose()
   })
 
+  it('selects an available MIG slice when the whole RTX cards are unavailable', async () => {
+    const migAvailability = { partitions: [{
+      partition: 'artxpro6000', gpu_model: 'NVIDIA RTX Pro 6000',
+      gpu_resources: [
+        { gres_type: 'rtx_pro_6000', label: 'RTX Pro 6000', mig: false,
+          gpus_total: 0, gpus_free: 0, speed_factor: 2.5 },
+        { gres_type: 'rtx_pro_6000_2g.48gb', label: 'RTX Pro 6000 MIG 2g.48gb',
+          mig: true, gpus_total: 16, gpus_free: 7, speed_factor: 1.25 },
+      ],
+    }] }
+    const fetchAvailability = vi.fn(async () => migAvailability)
+    const { mount, step } = setup({ fetchAvailability })
+    clickTarget(mount, 'alpine')
+    connectCluster()
+    await vi.waitFor(() => expect(step.gresType).toBe('rtx_pro_6000_2g.48gb'))
+    expect(mount.textContent).toContain('MIG')
+    expect(step.payloadFields().slurm_resources).toEqual({
+      gres_type: 'rtx_pro_6000_2g.48gb',
+    })
+    step.dispose()
+  })
+
   it('drops the partition when the user leaves Alpine', async () => {
     const { mount, step } = setup()
     clickTarget(mount, 'alpine')

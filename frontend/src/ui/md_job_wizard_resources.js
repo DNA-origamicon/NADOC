@@ -36,6 +36,7 @@ const _INPUT_CSS =
  * @param {Element}  deps.mount            where the block renders (inside the Alpine card)
  * @param {Function} deps.getSlurmPreview  body => Promise<preview>  (POST /cluster/slurm-preview)
  * @param {Function} deps.getPartition     () => string|null  — the selected partition
+ * @param {Function} deps.getGresType      () => string|null — whole GPU or MIG profile
  * @param {Function} deps.getTotalNs       () => number — the plan's total simulated ns
  * @param {Function} [deps.onChange]       fired when an edit changes the payload
  * @param {Function} [deps.readOnly]       () => boolean — showing a job that already exists
@@ -46,19 +47,21 @@ const _INPUT_CSS =
  */
 export function initWizardResources({
   mount, getSlurmPreview, getPartition = () => null, getTotalNs = () => 0,
+  getGresType = () => null,
   onChange = () => {}, readOnly = () => false, getRecorded = () => null,
 } = {}) {
   const _ro = () => !!readOnly()
   let _preview = null
   let _busy = false
   let _error = ''
-  let _key = ''            // partition|total_ns — the sizing is only valid for one pair
+  let _key = ''            // partition|GRES|total_ns — valid for one exact resource
   // Only what the user typed. Survives a re-size on purpose: an explicit 48 h wall time
   // is a decision about this run, not about the partition that happened to be selected
   // when it was made.
   let _edited = {}
 
-  const _sizedKey = () => `${getPartition() || ''}|${Number(getTotalNs() || 0)}`
+  const _sizedKey = () => `${getPartition() || ''}|${getGresType() || ''}|${
+    Number(getTotalNs() || 0)}`
 
   /**
    * Size the request for the selected partition. Cheap to call: it no-ops unless the
@@ -78,7 +81,9 @@ export function initWizardResources({
     paint()
     try {
       _preview = await getSlurmPreview?.({
-        cluster_name: 'alpine', partition, total_ns: Number(getTotalNs() || 0),
+        cluster_name: 'alpine', partition,
+        ...(getGresType() ? { gres_type: getGresType() } : {}),
+        total_ns: Number(getTotalNs() || 0),
         job_name: 'nadoc_job',
       })
       if (!_preview) _error = 'Could not size this run on the cluster.'
@@ -140,7 +145,7 @@ export function initWizardResources({
     const head =
       '<div style="display:flex;align-items:baseline;gap:8px;margin:12px 0 6px">'
       + '<span style="font-size:12px;color:#c9d1d9;font-weight:600">Resources on '
-      + `${_esc(partition)}</span>`
+      + `${_esc(partition)}${getGresType() ? ` / ${_esc(getGresType())}` : ''}</span>`
       + (_edited && Object.keys(_edited).length
         ? '<button type="button" id="wiz-res-reset" style="background:none;border:0;'
           + 'color:#58a6ff;cursor:pointer;padding:0;font-size:10px">reset to recommended</button>'

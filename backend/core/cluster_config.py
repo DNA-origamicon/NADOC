@@ -22,6 +22,25 @@ from pathlib import Path
 
 
 @dataclass(frozen=True)
+class GpuResource:
+    """One schedulable GPU GRES within a partition.
+
+    Alpine exposes whole cards and MIG slices under the same SLURM partition. A MIG
+    profile therefore cannot be modelled as another :class:`Partition`: the sbatch
+    partition remains ``artxpro6000`` while only ``--gres`` changes. ``speed_factor``
+    is relative to a whole instance of the parent partition (1.0 = whole card).
+    """
+
+    gres_type: str
+    label: str
+    vram_gb: int
+    speed_factor: float = 1.0
+    max_cores: int = 0
+    su_per_gpu_hour: float = 0.0
+    mig: bool = False
+
+
+@dataclass(frozen=True)
 class Partition:
     """One SLURM partition's capabilities (used later by the resource decision tree)."""
 
@@ -44,6 +63,25 @@ class Partition:
     # core-hour vs 6.13 for aa100, so one profile-wide number under-quotes an H200 job
     # by ~4x.  0.0 → fall back to ``ClusterProfile.su_per_gpu_hour``.
     su_per_gpu_hour: float = 0.0
+    # Additional schedulable shapes on this partition (normally MIG instances). The
+    # whole-card resource remains represented by ``gres_type`` above for compatibility
+    # with existing profiles and saved jobs.
+    gpu_resources: list[GpuResource] = field(default_factory=list)
+
+    def gpu_resource(self, gres_type: str | None) -> GpuResource | None:
+        """Resolve a typed GRES accepted by this partition."""
+        wanted = gres_type or self.gres_type
+        if wanted == self.gres_type and self.kind == "gpu":
+            return GpuResource(
+                gres_type=self.gres_type,
+                label=self.gpu_model or self.gres_type,
+                vram_gb=0,
+                speed_factor=1.0,
+                max_cores=self.max_cores,
+                su_per_gpu_hour=self.su_per_gpu_hour,
+                mig=False,
+            )
+        return next((r for r in self.gpu_resources if r.gres_type == wanted), None)
 
 
 @dataclass(frozen=True)
@@ -228,6 +266,17 @@ def alpine_profile() -> ClusterProfile:
                 gpu_model="NVIDIA A100",
                 gres_type="a100-40gb",
                 allowed_qos=["gpu-normal", "gpu-long", "gpu-testing"],
+                gpu_resources=[
+                    GpuResource(
+                        "a100_3g.20gb",
+                        "A100 MIG 3g.20gb",
+                        20,
+                        speed_factor=3 / 7,
+                        max_cores=10,
+                        su_per_gpu_hour=54.3,
+                        mig=True,
+                    )
+                ],
             ),
             Partition(
                 "ami100",
@@ -262,7 +311,27 @@ def alpine_profile() -> ClusterProfile:
                 gpu_model="NVIDIA H200",
                 gres_type="h200",
                 allowed_qos=["gpu-normal", "gpu-long"],
-                su_per_gpu_hour=334.0,
+                su_per_gpu_hour=370.4,
+                gpu_resources=[
+                    GpuResource(
+                        "h200_3g.71gb",
+                        "H200 MIG 3g.71gb",
+                        71,
+                        speed_factor=3 / 7,
+                        max_cores=16,
+                        su_per_gpu_hour=185.2,
+                        mig=True,
+                    ),
+                    GpuResource(
+                        "h200_2g.35gb",
+                        "H200 MIG 2g.35gb",
+                        35,
+                        speed_factor=2 / 7,
+                        max_cores=10,
+                        su_per_gpu_hour=123.5,
+                        mig=True,
+                    ),
+                ],
             ),
             Partition(
                 "artxpro6000",
@@ -273,7 +342,27 @@ def alpine_profile() -> ClusterProfile:
                 gpu_model="NVIDIA RTX Pro 6000",
                 gres_type="rtx_pro_6000",
                 allowed_qos=["gpu-normal", "gpu-long"],
-                su_per_gpu_hour=242.0,
+                su_per_gpu_hour=260.4,
+                gpu_resources=[
+                    GpuResource(
+                        "rtx_pro_6000_2g.48gb",
+                        "RTX Pro 6000 MIG 2g.48gb",
+                        48,
+                        speed_factor=0.5,
+                        max_cores=16,
+                        su_per_gpu_hour=130.2,
+                        mig=True,
+                    ),
+                    GpuResource(
+                        "rtx_pro_6000_1g.24gb",
+                        "RTX Pro 6000 MIG 1g.24gb",
+                        24,
+                        speed_factor=0.25,
+                        max_cores=8,
+                        su_per_gpu_hour=65.1,
+                        mig=True,
+                    ),
+                ],
             ),
             Partition(
                 "atesting",
@@ -281,16 +370,6 @@ def alpine_profile() -> ClusterProfile:
                 max_cores=64,
                 mem_per_core_gb=3.75,
                 allowed_qos=["testing"],
-            ),
-            Partition(
-                "atesting_a100",
-                "gpu",
-                max_cores=64,
-                mem_per_core_gb=3.75,
-                gpus=1,
-                gpu_model="NVIDIA A100",
-                gres_type="a100-40gb",
-                allowed_qos=["gpu-testing"],
             ),
         ],
         qos_tiers=[
@@ -309,7 +388,7 @@ def alpine_profile() -> ClusterProfile:
             QoS("gpu-testing", max_walltime_h=1),
         ],
         su_per_core_hour=1.0,
-        su_per_gpu_hour=108.2,
+        su_per_gpu_hour=108.6,
     )
 
 
@@ -317,6 +396,14 @@ def alpine_profile() -> ClusterProfile:
 
 
 def _profile_from_dict(d: dict) -> ClusterProfile:
+    partitions = []
+    for raw in d.get("partitions", []):
+        values = dict(raw)
+        values["gpu_resources"] = [
+            item if isinstance(item, GpuResource) else GpuResource(**item)
+            for item in values.get("gpu_resources", [])
+        ]
+        partitions.append(Partition(**values))
     return ClusterProfile(
         name=d["name"],
         host=d["host"],
@@ -328,7 +415,7 @@ def _profile_from_dict(d: dict) -> ClusterProfile:
         gpu_namd_bin=d.get("gpu_namd_bin", ""),
         default_partition=d["default_partition"],
         default_qos=d["default_qos"],
-        partitions=[Partition(**p) for p in d.get("partitions", [])],
+        partitions=partitions,
         qos_tiers=[QoS(**q) for q in d.get("qos_tiers", [])],
         su_per_core_hour=d.get("su_per_core_hour", 1.0),
         su_per_gpu_hour=d.get("su_per_gpu_hour", 0.0),

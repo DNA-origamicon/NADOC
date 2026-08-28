@@ -187,11 +187,13 @@ def _design_residue_map(design: Any) -> dict[tuple[str, int], dict]:
     """Best-effort NADOC identity for ordinary and crossover-insert residues."""
 
     from backend.core import junction_topology as jt
+    from backend.core.namd_topology import psfgen_dna_segids_for_design
 
     junctions = jt._junction_index(design)
+    segids = psfgen_dna_segids_for_design(len(design.strands))
     out: dict[tuple[str, int], dict] = {}
     for strand_index, strand in enumerate(design.strands):
-        segid = f"D{strand_index:03d}"
+        segid = segids[strand_index]
         resid = 0
         for domain_index, domain in enumerate(strand.domains):
             step = 1 if domain.end_bp >= domain.start_bp else -1

@@ -179,6 +179,18 @@ def test_aggregate_counts_free_gpus_per_partition():
     assert ah200["gpus_alloc"] == 1
     assert ah200["gpus_free"] == 9
     assert ah200["mig_total"] == 6 and ah200["mig_free"] == 6
+    assert ah200["gpu_free_by_type"] == {"h200": 9, "h200_3g.71gb": 6}
+
+
+def test_summary_exposes_each_mig_profile_as_a_schedulable_resource(alpine):
+    rows = {r["partition"]: r for r in _summary(alpine)}
+    choices = {
+        c["gres_type"]: c for c in rows["ah200"]["gpu_resources"]
+    }
+    assert choices["h200"]["gpus_free"] == 9
+    assert choices["h200_3g.71gb"]["gpus_free"] == 6
+    assert choices["h200_3g.71gb"]["mig"] is True
+    assert choices["h200_3g.71gb"]["vram_gb"] == 71
 
 
 def test_aggregate_excludes_drained_node_capacity():
@@ -507,6 +519,10 @@ def test_probe_argument_is_interpolated_when_valid():
 
 def test_argless_probes_ignore_a_supplied_argument():
     assert cq.probe_command("os") == cq.probe_command("os", "ignored")
+
+
+def test_storage_probe_uses_curc_read_only_quota_report():
+    assert cq.probe_command("storage") == "curc-quota 2>&1"
 
 
 def test_every_probe_is_read_only():

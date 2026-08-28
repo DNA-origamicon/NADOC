@@ -81,6 +81,7 @@ def _start_post_connect_reconciliation(mgr) -> None:
 class SlurmPreviewRequest(BaseModel):
     cluster_name: str = "alpine"
     partition: str | None = None  # None → auto-pick
+    gres_type: str | None = None  # typed whole GPU or MIG profile
     total_ns: float = 0.0
     n_atoms: int | None = None  # None → estimate from the active design
     job_name: str = "nadoc_job"
@@ -317,7 +318,8 @@ async def cluster_probe(name: str, arg: str | None = None):
     Not a shell: ``name`` selects from a fixed registry in ``cluster_queue._PROBES``
     and ``arg`` is validated against a strict token pattern, so no caller-supplied
     string ever reaches a command line.  Every probe only reads state (``module
-    spider``, ``ldd``, ``nvidia-smi``, ``squeue``, ``scontrol show``, ``sinfo``).
+    spider``, ``ldd``, ``nvidia-smi``, ``squeue``, ``scontrol show``, ``sinfo``,
+    ``curc-quota``).
 
     Exists because diagnosing a cluster-side failure — an unknown module, a glibc
     floor, a job NADOC did not submit — otherwise required a code change per question.
@@ -399,6 +401,7 @@ async def cluster_slurm_preview(req: SlurmPreviewRequest):
             total_ns=float(req.total_ns),
             safety_factor=req.safety_factor,
             partition=req.partition,
+            gres_type=req.gres_type,
         )
     except ValueError as exc:  # unknown forced partition
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -437,7 +440,10 @@ def _job_shape(job_id: str, profile) -> dict | None:
         job = _load_job(job_id)
     except Exception:  # noqa: BLE001 — an unknown job just means "no job shape"
         return None
-    sizing = _size_prepared_job(job, profile, 1.5)
+    gres_type = (job.requested_resources or {}).get("gres_type") or (
+        job.resources or {}
+    ).get("gres_type")
+    sizing = _size_prepared_job(job, profile, 1.5, gres_type=gres_type)
     if sizing is None:
         return None
     res = sizing["resources"]
@@ -450,6 +456,7 @@ def _job_shape(job_id: str, profile) -> dict | None:
         "mem_gb": res.get("mem_gb", 32),
         "walltime": res.get("walltime", "24:00:00"),
         "qos": res.get("qos"),
+        "gres_type": res.get("gres_type"),
     }
 
 
@@ -478,10 +485,8 @@ async def cluster_availability(
 
     shape = _job_shape(job_id, profile) if job_id else None
 
-    def _throughput_for(partition: str):
-        """Learned ns/day for THIS partition, or None.  Per-partition on purpose —
-        reusing one measured number across partitions makes every row report the
-        same speed and cancels the comparison."""
+    def _throughput_for(partition: str, gres_type: str | None = None):
+        """Learned ns/day for this exact partition/GRES resource, or ``None``."""
         if not shape:
             return None
         return cluster_throughput.lookup_throughput(
@@ -489,6 +494,7 @@ async def cluster_availability(
             cluster=profile.name,
             partition=partition,
             n_atoms=shape["n_atoms"],
+            gres_type=gres_type,
         )
 
     try:

@@ -22,7 +22,7 @@ import json
 import math
 from pathlib import Path
 
-from backend.core.cluster_config import ClusterProfile, Partition
+from backend.core.cluster_config import ClusterProfile, GpuResource, Partition
 
 # ── Tunables ──────────────────────────────────────────────────────────────────
 
@@ -47,15 +47,15 @@ _GPU_NSDAY_ATOM_CONSTANT = 4.5e6
 # above is A100-anchored, so every other GPU needs a multiplier.  This is load-
 # bearing beyond cost display: walltime is derived from throughput, and an H200 job
 # that requests 2.5x the walltime it needs gets WORSE queue priority for no reason.
-# First-run guesses only — cluster_throughput.py is keyed cluster:partition:bucket,
-# so real measured ns/day per partition supersedes these as soon as one run lands.
+# First-run guesses only — cluster_throughput.py keys the exact partition/GRES/size,
+# so real measured ns/day for this accelerator supersedes these after one run lands.
 _GPU_SPEED_FACTOR = {
     "aa100": 1.0,  # the anchor
     "ah200": 2.5,  # H200: ~2-3x A100 on NAMD3 GPU-resident
     # MEASURED equal to the H200, not 1.6.  Head-to-head under identical settings
     # (2026-08-07): 2hb 650.0 vs 644.4 ns/day, 24hb 41.9 vs 38.2, VoltronCore 0.0761
     # vs 0.0753 s/step — Blackwell within ~10% either way across three system sizes.
-    # It also bills LESS (242 vs 334 SU/GPU-h), so it is the SU-efficient choice.
+    # It also bills LESS (260.4 vs 370.4 SU/GPU-h), so it is the SU-efficient choice.
     "artxpro6000": 2.5,
     # MEASURED 2026-08-07, not 0.75.  The old guess reasoned from fp64, which is
     # irrelevant to NAMD3 GPU-resident (single precision throughout).
@@ -78,6 +78,16 @@ _GPU_SPEED_FACTOR = {
     "atesting_a100": 1.0,
 }
 
+# Fraction of the parent card exposed by each Alpine MIG GRES.  Kept by GRES rather
+# than partition because several independently schedulable shapes share one partition.
+_MIG_SPEED_FRACTION = {
+    "a100_3g.20gb": 3 / 7,
+    "h200_3g.71gb": 3 / 7,
+    "h200_2g.35gb": 2 / 7,
+    "rtx_pro_6000_2g.48gb": 0.5,
+    "rtx_pro_6000_1g.24gb": 0.25,
+}
+
 # Above this atom count a single A100 is no longer the obvious choice; fall back
 # to a large CPU allocation.  A100 (80 GB) comfortably handles millions of atoms,
 # so this ceiling is high on purpose — CPU is the exception, not the rule.
@@ -88,6 +98,17 @@ _GPU_ATOM_CEILING = 3_000_000
 _GPU_ATOM_CEILING_BY_PARTITION = {
     "ah200": 6_000_000,
     "artxpro6000": 4_000_000,
+}
+
+# Conservative slice ceilings scaled from the parent-card limits.  These are a planning
+# guard, not a hard NAMD limit; the package's exact atom count still drives the final
+# preflight.  They intentionally leave much more headroom than raw VRAM arithmetic.
+_GPU_ATOM_CEILING_BY_GRES = {
+    "a100_3g.20gb": 1_500_000,
+    "h200_3g.71gb": 3_000_000,
+    "h200_2g.35gb": 1_500_000,
+    "rtx_pro_6000_2g.48gb": 2_000_000,
+    "rtx_pro_6000_1g.24gb": 1_000_000,
 }
 
 _DEFAULT_SAFETY_FACTOR = 1.5
@@ -119,24 +140,29 @@ _QUEUE_GUESS_MIN = {
 }
 
 
-def gpu_speed_factor(partition: str | None) -> float:
+def gpu_speed_factor(partition: str | None, gres_type: str | None = None) -> float:
     """Throughput of ``partition``'s GPU relative to an A100 (1.0 = A100)."""
-    return _GPU_SPEED_FACTOR.get(partition or "", 1.0)
+    whole = _GPU_SPEED_FACTOR.get(partition or "", 1.0)
+    return whole * _MIG_SPEED_FRACTION.get(gres_type or "", 1.0)
 
 
-def gpu_atom_ceiling(partition: str | None) -> int:
+def gpu_atom_ceiling(partition: str | None, gres_type: str | None = None) -> int:
     """Atom count above which ``partition``'s GPU stops being the obvious choice."""
+    if gres_type in _GPU_ATOM_CEILING_BY_GRES:
+        return _GPU_ATOM_CEILING_BY_GRES[gres_type]
     return _GPU_ATOM_CEILING_BY_PARTITION.get(partition or "", _GPU_ATOM_CEILING)
 
 
-def _gpu_nsday_guess(n_atoms: int, partition: str | None = None) -> float:
+def _gpu_nsday_guess(
+    n_atoms: int, partition: str | None = None, gres_type: str | None = None
+) -> float:
     """Conservative first-run GPU throughput guess (ns/day) for ``n_atoms``.
 
     Scaled by the partition's GPU speed relative to the A100 the constant is
     anchored to; ``None`` (or an unknown partition) means no scaling.
     """
     n = max(1, int(n_atoms))
-    return _GPU_NSDAY_ATOM_CONSTANT / n * gpu_speed_factor(partition)
+    return _GPU_NSDAY_ATOM_CONSTANT / n * gpu_speed_factor(partition, gres_type)
 
 
 def _mem_gb_for_atoms(n_atoms: int) -> int:
@@ -162,6 +188,7 @@ def estimate_cost_su(
     hours: float,
     profile: ClusterProfile,
     partition: Partition | None = None,
+    gpu_rate: float | None = None,
 ) -> float:
     """SU cost = cores·hours·su_per_core_hour + gpus·hours·su_per_gpu_hour.
 
@@ -169,10 +196,12 @@ def estimate_cost_su(
     artxpro6000 are billed well above the A100 rate the profile-wide value carries,
     so omitting it under-quotes those jobs several-fold.
     """
-    gpu_rate = profile.su_per_gpu_hour
+    resolved_gpu_rate = profile.su_per_gpu_hour
     if partition is not None and partition.su_per_gpu_hour:
-        gpu_rate = partition.su_per_gpu_hour
-    return cores * hours * profile.su_per_core_hour + gpus * hours * gpu_rate
+        resolved_gpu_rate = partition.su_per_gpu_hour
+    if gpu_rate is not None and gpu_rate > 0:
+        resolved_gpu_rate = gpu_rate
+    return cores * hours * profile.su_per_core_hour + gpus * hours * resolved_gpu_rate
 
 
 def estimate_queue_time_min(partition: str) -> int:
@@ -188,6 +217,7 @@ def recommend(
     measured_ns_per_day: float | None = None,
     safety_factor: float = _DEFAULT_SAFETY_FACTOR,
     partition: str | None = None,
+    gres_type: str | None = None,
 ) -> dict:
     """Recommend SLURM resources for a prepared job.
 
@@ -202,6 +232,8 @@ def recommend(
             QoS, throughput class, cost — is re-derived from it so the request stays
             self-consistent.  ``None`` = auto-pick (GPU by default).  Raises
             ``ValueError`` if the named partition is not in the profile.
+        gres_type: typed GPU resource within ``partition``. This is how a MIG slice is
+            selected without pretending it is a separate SLURM partition.
 
     Returns a dict: ``partition, kind, gpus, cores, mem_gb, walltime, walltime_h,
     qos, expected_ns_per_day, measured, est_queue_min, est_cost_su,
@@ -211,6 +243,7 @@ def recommend(
     n_atoms = max(1, int(n_atoms))
     total_ns = max(0.0, float(total_ns))
 
+    gpu_resource: GpuResource | None = None
     if partition is not None:
         # User forced a partition (e.g. acpu for a quick, fast-queueing CPU
         # validation run).  Derive the rest from its kind so we never pair, say, a
@@ -222,8 +255,17 @@ def recommend(
             )
         partition_name = part.name
         use_gpu = part.kind == "gpu"
+        if use_gpu:
+            gpu_resource = part.gpu_resource(gres_type)
+            if gpu_resource is None:
+                raise ValueError(
+                    f"GRES {gres_type!r} is not available on partition {partition_name!r}"
+                )
+        elif gres_type:
+            raise ValueError(f"CPU partition {partition_name!r} cannot use GPU GRES")
         gpus = 1 if use_gpu else 0
-        cores = _GPU_CORES if use_gpu else min(_CPU_CORES, part.max_cores)
+        resource_core_cap = gpu_resource.max_cores if gpu_resource else part.max_cores
+        cores = min(_GPU_CORES, resource_core_cap) if use_gpu else min(_CPU_CORES, part.max_cores)
         notes.append(f"Partition manually set to {partition_name} ({part.kind}).")
     else:
         atom_ceiling = gpu_atom_ceiling(profile.default_partition)
@@ -251,6 +293,7 @@ def recommend(
             gpus = 0
             cores = min(_CPU_CORES, cpu.max_cores if cpu else _CPU_CORES)
         part = profile.partition(partition_name)
+        gpu_resource = part.gpu_resource(None) if part and use_gpu else None
 
     kind = part.kind if part else ("gpu" if use_gpu else "cpu")
 
@@ -260,8 +303,9 @@ def recommend(
         notes.append(f"Using measured throughput {expected:.1f} ns/day.")
     else:
         if use_gpu:
-            expected = _gpu_nsday_guess(n_atoms, partition_name)
-            factor = gpu_speed_factor(partition_name)
+            resolved_gres = gpu_resource.gres_type if gpu_resource else gres_type
+            expected = _gpu_nsday_guess(n_atoms, partition_name, resolved_gres)
+            factor = gpu_speed_factor(partition_name, resolved_gres)
             scaled = "" if factor == 1.0 else f" x{factor:g} for {partition_name}"
         else:
             expected = _gpu_nsday_guess(n_atoms) * 0.15
@@ -316,14 +360,36 @@ def recommend(
                 f"Memory clamped to {mem_gb} GB (partition ceiling {part.mem_per_core_gb} GB/core × {cores})."
             )
 
-    est_cost = estimate_cost_su(cores, gpus, walltime_h, profile, part)
+    est_cost = estimate_cost_su(
+        cores,
+        gpus,
+        walltime_h,
+        profile,
+        part,
+        gpu_rate=gpu_resource.su_per_gpu_hour if gpu_resource else None,
+    )
     est_queue = estimate_queue_time_min(partition_name)
+
+    if gpu_resource and gpu_resource.mig:
+        atom_ceiling = gpu_atom_ceiling(partition_name, gpu_resource.gres_type)
+        notes.append(
+            f"Using {gpu_resource.label}; {gpu_resource.vram_gb} GB VRAM and "
+            f"~{gpu_resource.speed_factor:g} of the whole card."
+        )
+        if n_atoms > atom_ceiling:
+            notes.append(
+                f"{n_atoms:,} atoms exceeds this MIG profile's conservative "
+                f"{atom_ceiling:,}-atom planning ceiling; benchmark or use a larger GRES."
+            )
 
     return {
         "partition": partition_name,
         "kind": kind,
         "gpus": gpus,
-        "gres_type": (part.gres_type if part else "") if gpus else "",
+        "gres_type": (gpu_resource.gres_type if gpu_resource else "") if gpus else "",
+        "gpu_profile_label": gpu_resource.label if gpu_resource else "",
+        "gpu_vram_gb": gpu_resource.vram_gb if gpu_resource else 0,
+        "mig": bool(gpu_resource and gpu_resource.mig),
         "cores": cores,
         "mem_gb": mem_gb,
         "walltime": _format_walltime(walltime_h),

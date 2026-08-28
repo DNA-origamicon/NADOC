@@ -259,6 +259,7 @@ def stage_parameters(
                 ctx.name_stem,
                 ctx.box,
                 ctx.mgh_extrabonds,
+                seed=ctx.seed,
                 fast=ctx.fast,
                 carved=ctx.carved,
                 fill_fraction=ctx.fill_fraction,
@@ -295,6 +296,7 @@ def minimization_parameters(
                 ctx.mgh_extrabonds,
                 ctx.minimize_steps,
                 ctx.min_scale,
+                seed=ctx.seed,
                 enm_file=ctx.enm_file,
                 no_enm=ctx.no_enm,
                 anchors_file=ctx.anchors_file,
@@ -673,8 +675,9 @@ def relaxation_stages(
 
     prev_params = min_params
     for i, spec in enumerate(segments, start=1):
+        stage_ctx = replace(ctx, seed=_p.namd_stage_seed(ctx.seed, i))
         ov = _p.overrides_for_stage(stage_overrides, i)
-        params = stage_parameters(spec, ctx, ov)
+        params = stage_parameters(spec, stage_ctx, ov)
         rows.append(
             _stage_row(
                 i,
@@ -694,9 +697,9 @@ def relaxation_stages(
                 ),
                 params=params,
                 prev_params=prev_params,
-                conditional=conditional_keys(spec, ctx),
+                conditional=conditional_keys(spec, stage_ctx),
                 spec=spec,
-                protocol_params=stage_parameters(spec, ctx) if ov else None,
+                protocol_params=stage_parameters(spec, stage_ctx) if ov else None,
             )
         )
         prev_params = params

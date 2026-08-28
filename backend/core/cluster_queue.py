@@ -99,10 +99,9 @@ _MIG_RE = re.compile(r"\d+g\.\d+gb", re.IGNORECASE)
 def is_mig_type(gres_type: str) -> bool:
     """True for a MIG slice profile, false for a whole GPU.
 
-    Load-bearing: NADOC submits ``--gres=gpu:h200:1``, i.e. a **whole** GPU.  Free
-    MIG slices cannot serve that request, so counting them as available GPUs
-    advertises capacity a NAMD job can never get.  Alpine runs MIG on some ah200 /
-    artxpro6000 / aa100 nodes, which is why 8 four-GPU H200 nodes reported 56 "GPUs".
+    Load-bearing: whole GPUs and MIG slices are independent typed SLURM resources.
+    Counting slices in a whole-card row (or vice versa) advertises capacity that cannot
+    satisfy the selected ``--gres`` request.
     """
     return bool(_MIG_RE.search(gres_type or ""))
 
@@ -171,12 +170,26 @@ def parse_scontrol_nodes(text: str) -> list[dict]:
         if alloc_typed:
             whole_alloc = sum(n for t, n in alloc_typed.items() if not is_mig_type(t))
             mig_alloc = sum(n for t, n in alloc_typed.items() if is_mig_type(t))
+            alloc_by_type = {
+                gpu_type: min(int(alloc_typed.get(gpu_type, 0)), total)
+                for gpu_type, total in by_type.items()
+            }
         else:
             # Untyped AllocTRES: charge allocation to whole cards first.  This
             # UNDER-reports free capacity, which is the safe direction — promising a
             # whole GPU that is actually carved into MIG slices wastes a queue slot.
             whole_alloc = min(alloc_total, whole_total)
             mig_alloc = min(max(0, alloc_total - whole_alloc), mig_total)
+            # With no typed AllocTRES, charge allocations in the same conservative
+            # whole-card-first order used above.  Alpine's MIG-only nodes then resolve
+            # naturally, while mixed nodes never advertise a slice that may be occupied.
+            alloc_by_type = {}
+            remaining = alloc_total
+            ordered_types = sorted(by_type, key=lambda t: is_mig_type(t))
+            for gpu_type in ordered_types:
+                used = min(remaining, by_type[gpu_type])
+                alloc_by_type[gpu_type] = used
+                remaining -= used
 
         nodes.append(
             {
@@ -187,6 +200,8 @@ def parse_scontrol_nodes(text: str) -> list[dict]:
                 "gpus_alloc": min(whole_alloc, whole_total),
                 "mig_total": mig_total,
                 "mig_alloc": min(mig_alloc, mig_total),
+                "gpu_totals_by_type": by_type,
+                "gpu_alloc_by_type": alloc_by_type,
                 "gpu_model": _gres_model(gres),
                 "gres": gres,
                 "cpus_total": int(fields.get("CPUTot", 0) or 0),
@@ -248,6 +263,8 @@ def aggregate_nodes_by_partition(
             "mig_total": 0,
             "mig_free": 0,
             "gpu_model": "",
+            "gpu_totals_by_type": {},
+            "gpu_alloc_by_type": {},
         }
         for p in partitions
     }
@@ -275,10 +292,24 @@ def aggregate_nodes_by_partition(
                 row["mig_free"] += max(
                     0, node.get("mig_total", 0) - node.get("mig_alloc", 0)
                 )
+                for gpu_type, total in node.get("gpu_totals_by_type", {}).items():
+                    row["gpu_totals_by_type"][gpu_type] = (
+                        row["gpu_totals_by_type"].get(gpu_type, 0) + int(total)
+                    )
+                for gpu_type, used in node.get("gpu_alloc_by_type", {}).items():
+                    row["gpu_alloc_by_type"][gpu_type] = (
+                        row["gpu_alloc_by_type"].get(gpu_type, 0) + int(used)
+                    )
             if node["gpu_model"] and not row["gpu_model"]:
                 row["gpu_model"] = node["gpu_model"]
     for row in out.values():
         row["gpus_free"] = max(0, row["gpus_total"] - row["gpus_alloc"])
+        row["gpu_free_by_type"] = {
+            gpu_type: max(
+                0, total - row["gpu_alloc_by_type"].get(gpu_type, 0)
+            )
+            for gpu_type, total in row["gpu_totals_by_type"].items()
+        }
     return out
 
 
@@ -398,6 +429,11 @@ def parse_test_only(text: str) -> datetime | None:
     return _parse_slurm_time(m.group(1)) if m else None
 
 
+def _resource_key(partition: str, gres_type: str) -> str:
+    """Stable key for one accelerator shape within a scheduler partition."""
+    return f"{partition}|{gres_type}"
+
+
 def _fmt_minutes(minutes: float | None) -> str | None:
     """Humanise a wait in minutes ("~3 h 20 m"); ``None`` passes through."""
     if minutes is None:
@@ -431,12 +467,10 @@ def summarize_availability(
     long it would take **on that partition** — recomputed per partition, because a
     walltime derived from A100 throughput is simply wrong for an H200.
 
-    ``throughput_for(partition) -> ns/day | None`` supplies the *learned* throughput
-    for that specific partition.  A single measured number must NOT be reused across
-    partitions: doing so made every row report an identical ns/day (live 2026-08-06),
-    which silently cancels the speed comparison the table exists to make.  Where no
-    per-partition measurement exists we fall back to the size guess, which at least
-    applies the right speed factor.
+    ``throughput_for(partition, gres_type) -> ns/day | None`` supplies the *learned*
+    throughput for that exact accelerator shape. A whole card and its MIG slices must
+    never share one measured value: doing so would size a quarter-card slice as though it
+    had the whole card's throughput.
 
     Rows are sorted by estimated **time to result** (wait + runtime), not by wait
     alone: a faster GPU that starts later still finishes first surprisingly often,
@@ -463,7 +497,7 @@ def summarize_availability(
         # that job may be held by its owner's QoS cap for hours on a partition that is
         # wide open for us.  Live check 2026-08-06 showed exactly that — artxpro6000
         # read "13 h 39 m" from a stranger's queued job while 39 GPUs sat idle.
-        predicted = starts.get(part.name)
+        predicted = starts.get(_resource_key(part.name, part.gres_type), starts.get(part.name))
         slurm_wait_min = None
         if predicted is not None:
             slurm_wait_min = max(0.0, (predicted - now).total_seconds() / 60.0)
@@ -522,12 +556,93 @@ def summarize_availability(
             "su_per_gpu_hour": part.su_per_gpu_hour or profile.su_per_gpu_hour,
         }
 
+        # One UI choice per schedulable GRES. The partition itself is unchanged; selecting
+        # a MIG child changes only the typed --gres request. Counts come from live scontrol
+        # data and static metadata supplies the speed/VRAM/billing facts.
+        totals_by_type = occupancy.get("gpu_totals_by_type", {})
+        free_by_type = occupancy.get("gpu_free_by_type", {})
+        resources = [part.gpu_resource(part.gres_type), *part.gpu_resources]
+        gpu_choices = []
+        for resource in (r for r in resources if r is not None):
+            total = int(totals_by_type.get(resource.gres_type, 0) or 0)
+            free = int(free_by_type.get(resource.gres_type, 0) or 0)
+            resource_start = starts.get(_resource_key(part.name, resource.gres_type))
+            if free >= need and blocked == 0:
+                resource_wait, resource_basis = 0.0, "free now"
+            elif resource_start is not None:
+                resource_wait = max(
+                    0.0, (resource_start - now).total_seconds() / 60.0
+                )
+                resource_basis = "SLURM backfill estimate"
+            elif median is not None:
+                resource_wait = float(median)
+                resource_basis = (
+                    f"median of {past.get('n_samples')} recent jobs ({history_scope})"
+                )
+            else:
+                resource_wait, resource_basis = None, "unknown"
+            option = {
+                "partition": part.name,
+                "gres_type": resource.gres_type,
+                "label": resource.label,
+                "vram_gb": resource.vram_gb,
+                "mig": resource.mig,
+                "gpus_total": total,
+                "gpus_free": free,
+                "wait_min": None if resource_wait is None else round(resource_wait, 1),
+                "wait_label": _fmt_minutes(resource_wait) or "unknown",
+                "wait_basis": resource_basis,
+                "slurm_start": (
+                    resource_start.isoformat() if resource_start is not None else None
+                ),
+                "speed_factor": cluster_resources.gpu_speed_factor(
+                    part.name, resource.gres_type
+                ),
+                "su_per_gpu_hour": (
+                    resource.su_per_gpu_hour
+                    or part.su_per_gpu_hour
+                    or profile.su_per_gpu_hour
+                ),
+                "max_cores": resource.max_cores or part.max_cores,
+            }
+            if job_shape and job_shape.get("n_atoms") and job_shape.get("total_ns"):
+                measured = (
+                    throughput_for(part.name, resource.gres_type)
+                    if throughput_for
+                    else None
+                )
+                try:
+                    resource_rec = cluster_resources.recommend(
+                        profile,
+                        n_atoms=int(job_shape["n_atoms"]),
+                        total_ns=float(job_shape["total_ns"]),
+                        measured_ns_per_day=measured,
+                        partition=part.name,
+                        gres_type=resource.gres_type,
+                    )
+                except ValueError:
+                    resource_rec = None
+                if resource_rec is not None:
+                    option["job_ns_per_day"] = resource_rec["expected_ns_per_day"]
+                    option["job_ns_per_day_measured"] = bool(measured)
+                    option["job_walltime_h"] = resource_rec["walltime_h"]
+                    option["job_cost_su"] = resource_rec["est_cost_su"]
+                    option["job_su_per_ns"] = round(
+                        resource_rec["est_cost_su"] / float(job_shape["total_ns"]), 1
+                    )
+                    if resource_wait is not None:
+                        option["time_to_result_h"] = round(
+                            resource_wait / 60.0 + resource_rec["walltime_h"], 2
+                        )
+            gpu_choices.append(option)
+        row["gpu_resources"] = gpu_choices
+
         # Per-partition job projection: re-run the recommender against THIS partition
         # so ns/day, walltime and SU cost reflect its GPU, not the default's.
         if job_shape and job_shape.get("n_atoms") and job_shape.get("total_ns"):
             # Learned ns/day for THIS partition only — never the job's single measured
             # value, which was recorded on one specific GPU.
-            measured = throughput_for(part.name) if throughput_for else None
+            measured = throughput_for(part.name, part.gres_type) if throughput_for else None
             try:
                 rec = cluster_resources.recommend(
                     profile,
@@ -545,7 +660,7 @@ def summarize_availability(
                 row["job_cost_su"] = rec["est_cost_su"]
                 # SU per ns is what actually separates two equally-fast partitions.
                 # Measured 2026-08-07: ah200 and artxpro6000 run the same speed, but
-                # Blackwell bills 242 vs 334 SU/GPU-h — ~30% more science per SU.
+                # Blackwell bills 260.4 vs 370.4 SU/GPU-h — ~30% more science per SU.
                 if job_shape.get("total_ns"):
                     row["job_su_per_ns"] = round(
                         rec["est_cost_su"] / float(job_shape["total_ns"]), 1
@@ -623,6 +738,8 @@ _PROBES: dict[str, str] = {
     "cuda-compilers": "source /etc/profile >/dev/null 2>&1; module -t spider cuda 2>&1",
     # My own queue — the only way to see a job NADOC did not submit.
     "squeue-mine": "squeue -u $USER -o '%i|%P|%j|%T|%M|%L|%R' 2>&1",
+    # Official CURC quota report for home/projects/scratch. Argless and read-only.
+    "storage": "curc-quota 2>&1",
     "job": "scontrol show job {arg} 2>&1",
     "sinfo": "sinfo -o '%P|%D|%T|%G' 2>&1",
 }
@@ -682,7 +799,10 @@ def _cache_key(profile_name: str, job_shape: dict | None, history_days: int) -> 
     shape = (
         "generic"
         if not job_shape
-        else f"{job_shape.get('n_atoms')}:{job_shape.get('total_ns')}"
+        else (
+            f"{job_shape.get('n_atoms')}:{job_shape.get('total_ns')}:"
+            f"{job_shape.get('gres_type', '')}"
+        )
     )
     return f"{profile_name}|{shape}|{history_days}"
 
@@ -763,7 +883,9 @@ async def probe_availability(
         history_scope = "your jobs only"
     history = parse_sacct_waits(sacct_out)
 
-    # 4. SLURM's prediction for THIS job shape, one --test-only per partition.
+    # 4. SLURM's prediction for THIS job shape, one --test-only per accelerator
+    # resource. Whole cards and MIG instances share a partition but have different
+    # availability, so probing only the partition's default GRES hides the useful answer.
     slurm_starts: dict[str, datetime | None] = {}
     if job_shape:
         for name in gpu_parts:
@@ -773,17 +895,24 @@ async def probe_availability(
             qos_options = [q.name for q in profile.qos_tiers_for_partition(name)]
             qos = job_shape.get("qos") if job_shape.get("qos") in qos_options else None
             qos = qos or (qos_options[0] if qos_options else "gpu-normal")
-            cmd = build_test_only_cmd(
-                name,
-                gres=part.gres_type,
-                gpus=int(job_shape.get("gpus", 1) or 1),
-                cores=int(job_shape.get("cores", 8) or 8),
-                mem_gb=int(job_shape.get("mem_gb", 32) or 32),
-                walltime=str(job_shape.get("walltime", "24:00:00")),
-                qos=qos,
-            )
-            _, out, err = await _run(cmd)
-            slurm_starts[name] = parse_test_only(f"{err}\n{out}")
+            resources = [part.gpu_resource(part.gres_type), *part.gpu_resources]
+            for resource in (r for r in resources if r is not None):
+                cmd = build_test_only_cmd(
+                    name,
+                    gres=resource.gres_type,
+                    gpus=int(job_shape.get("gpus", 1) or 1),
+                    cores=min(
+                        int(job_shape.get("cores", 8) or 8),
+                        resource.max_cores or part.max_cores,
+                    ),
+                    mem_gb=int(job_shape.get("mem_gb", 32) or 32),
+                    walltime=str(job_shape.get("walltime", "24:00:00")),
+                    qos=qos,
+                )
+                _, out, err = await _run(cmd)
+                slurm_starts[_resource_key(name, resource.gres_type)] = parse_test_only(
+                    f"{err}\n{out}"
+                )
 
     rows = summarize_availability(
         profile,

@@ -344,6 +344,17 @@ PRODUCTION_LANGEVIN_DAMPING = 1.0
 #:                      keep one, and NADOC's did not.
 PRODUCTION_RECIPE_VERSION = 2
 
+# NAMD accepts positive signed 32-bit seeds.  A relaxation job exposes one random base
+# seed in the wizard, then advances it for each independently launched stage so a ladder
+# boundary never restarts the exact same Langevin stream.  Explicit replay seeds near the
+# upper limit wrap safely back to 1; ordinary random draws leave ample headroom.
+NAMD_SEED_MAX = 2**31 - 1
+
+
+def namd_stage_seed(base_seed: int, stage_index: int) -> int:
+    """Deterministic positive NAMD seed for one stage of a job (pure)."""
+    return ((int(base_seed) - 1 + int(stage_index)) % NAMD_SEED_MAX) + 1
+
 
 def protocol_fidelity(
     *,
@@ -1792,6 +1803,7 @@ def _segment_conf(
     box: tuple[float, float, float],
     mgh_extrabonds: bool,
     *,
+    seed: Optional[int] = None,
     minimize_steps: int = 0,
     fast: bool = False,
     carved: bool = False,
@@ -1940,6 +1952,8 @@ def _segment_conf(
             restart_freq=_restart_freq(spec.steps),
         )
     ]
+    if seed is not None:
+        lines.append(f"seed               {int(seed)}\n")
     lines.append(f"outputName         output/{spec.name}\n")
     lines.append(f"dcdFile            output/{spec.name}.dcd\n")
     lines.append(f"dcdFreq            {spec.dcd_freq}\n")
@@ -2025,6 +2039,7 @@ def _min_conf(
     minimize_steps: int,
     scale: float,
     *,
+    seed: Optional[int] = None,
     enm_file: Optional[str] = None,
     no_enm: bool = False,
     anchors_file: Optional[str] = None,
@@ -2056,6 +2071,8 @@ def _min_conf(
             name_stem, box, mgh_extrabonds, rigid_bonds="none", gbis=gbis, vacuum=vacuum
         )
     ]
+    if seed is not None:
+        lines.append(f"seed               {int(seed)}\n")
     lines.append(f"outputName         output/{min_name}\n")
     lines.append(f"dcdFile            output/{min_name}.dcd\n")
     lines.append("dcdFreq            0\n")
@@ -3936,6 +3953,7 @@ def prepare_mgh_slow_release(
             mgh_extrabonds,
             minimize_steps,
             min_scale,
+            seed=seed,
             enm_file=declash_enm_file,
             no_enm=rebuild_enm_from_min,
             anchors_file=anchors_file,
@@ -3961,6 +3979,9 @@ def prepare_mgh_slow_release(
                 name_stem,
                 box,
                 mgh_extrabonds,
+                # The wizard displays the job's base seed. Each separate NAMD process
+                # advances it so the Langevin stream does not restart at stage boundaries.
+                seed=namd_stage_seed(seed, idx),
                 fast=fast,
                 carved=False,
                 fill_fraction=1.0,
@@ -4018,6 +4039,14 @@ def prepare_mgh_slow_release(
         "protocol": protocol,
         "package_dir": str(package_dir.resolve()),
         "name_stem": name_stem,
+        "namd_seed": int(seed),
+        "stage_seeds": {
+            min_name: int(seed),
+            **{
+                spec.name: namd_stage_seed(seed, idx)
+                for idx, spec in enumerate(segments, start=1)
+            },
+        },
         "files": {
             "topology": f"{name_stem}.psf",
             "coordinates": f"{name_stem}.pdb",

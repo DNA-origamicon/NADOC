@@ -17,6 +17,7 @@ export function installTestApi({
   _anchorSelectionState,
   atomisticRenderer,
   selectionManager,
+  selectionController,
   _nucleotideTransformTool,
   bluntEnds,
   slicePlane,
@@ -42,9 +43,7 @@ export function installTestApi({
     isProteinGizmoAttached: () => proteinGizmo?.isAttached?.() ?? false,
     selectProteinForTest(id) {
       const ref = { kind: 'protein', id }
-      store.setState({
-        selection: { context: 'design', level: 'default', items: [ref], primary: ref },
-      })
+      selectionController?.replace([ref])
     },
     async importProteinForTest(content) {
       const response = await api.importPdbAuto({ content, name: 'e2e-protein' })

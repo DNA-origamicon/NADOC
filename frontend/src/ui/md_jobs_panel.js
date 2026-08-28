@@ -4545,9 +4545,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     for (const key of ['threads', 'devices', 'salt_mode', 'mg_conc_mM', 'ion_conc_mM',
                        'padding_nm', 'minimize_steps', 'fast',
                        'gpu_resident', 'early_stop_relax',
-                       'box_mode']) {
+                       'box_mode', 'seed']) {
       if (p[key] != null) out[key] = p[key]
     }
+    if (out.seed == null && job?.namd_seed != null) out.seed = job.namd_seed
     return { presetId: p.relax_preset || null, touched: out }
   }
 

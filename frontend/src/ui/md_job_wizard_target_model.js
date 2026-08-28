@@ -135,13 +135,15 @@ export function targetReadiness(target, {
  * empty edit set is sent as null so the backend keeps auto-recommending.
  */
 export function targetPayloadFields(target, {
-  partition = null, runpodGpuKey = null, runpodBudgetUsd = null, runpodVolumeId = null,
+  partition = null, gresType = null, runpodGpuKey = null, runpodBudgetUsd = null,
+  runpodVolumeId = null,
   runpodEstimatedCostUsd = null, runpodQuotedRateUsdPerHour = null,
   resources = null,
 } = {}) {
-  const edits = target === 'alpine' && resources && Object.keys(resources).length
-    ? resources
-    : null
+  const alpineResources = target === 'alpine'
+    ? { ...(resources || {}), ...(gresType ? { gres_type: gresType } : {}) }
+    : {}
+  const edits = Object.keys(alpineResources).length ? alpineResources : null
   const isRunpod = target === 'runpod'
   return {
     execution_target: TARGET_IDS.includes(target) ? target : 'local',
@@ -242,21 +244,33 @@ export function resourceNotes(preview) {
  */
 export function partitionChoices(availability, localFactor = null) {
   const rows = availability?.partitions || []
-  return rows.map(r => ({
-    partition: r.partition,
-    gpuModel: r.gpu_model || r.gres_type || '',
-    free: `${r.gpus_free ?? 0} / ${r.gpus_total ?? 0}`,
-    migNote: (r.mig_total ?? 0) ? `+${r.mig_free ?? 0} MIG slices (not usable by this job)` : '',
-    wait: r.request_only ? 'request access' : (r.wait_label || 'unknown'),
-    waitBasis: r.wait_basis || '',
-    speed: relativeSpeedLabel(r.speed_factor, localFactor),
-    // Two partitions can be equally fast and differ ~30% in cost — that is the real
-    // decision between ah200 and artxpro6000, so it belongs on screen.
-    suPerNs: r.job_su_per_ns != null ? `${Math.round(r.job_su_per_ns)} SU/ns` : '',
-    maxWalltimeH: r.max_walltime_h ?? null,
-    selectable: !r.request_only && (r.gpus_total ?? 0) > 0,
-    note: r.request_only ? 'Needs a CURC support request' : '',
-  }))
+  return rows.flatMap(r => {
+    const resources = Array.isArray(r.gpu_resources) && r.gpu_resources.length
+      ? r.gpu_resources
+      : [{
+          gres_type: r.gres_type, label: r.gpu_model || r.gres_type || '',
+          gpus_free: r.gpus_free, gpus_total: r.gpus_total,
+          wait_label: r.wait_label, wait_basis: r.wait_basis,
+          speed_factor: r.speed_factor, job_su_per_ns: r.job_su_per_ns,
+          max_cores: r.max_cores, mig: false,
+        }]
+    return resources.map(g => ({
+      id: `${r.partition}|${g.gres_type || ''}`,
+      partition: r.partition,
+      gresType: g.gres_type || null,
+      gpuModel: g.label || g.gres_type || r.gpu_model || '',
+      isMig: !!g.mig,
+      free: `${g.gpus_free ?? 0} / ${g.gpus_total ?? 0}`,
+      wait: r.request_only ? 'request access' : (g.wait_label || r.wait_label || 'unknown'),
+      waitBasis: g.wait_basis || r.wait_basis || '',
+      speed: relativeSpeedLabel(g.speed_factor ?? r.speed_factor, localFactor),
+      suPerNs: g.job_su_per_ns != null ? `${Math.round(g.job_su_per_ns)} SU/ns` : '',
+      maxWalltimeH: r.max_walltime_h ?? null,
+      maxCores: g.max_cores ?? null,
+      selectable: !r.request_only && (g.gpus_total ?? 0) > 0,
+      note: r.request_only ? 'Needs a CURC support request' : '',
+    }))
+  })
 }
 
 /**
@@ -265,6 +279,12 @@ export function partitionChoices(availability, localFactor = null) {
  */
 export function defaultPartition(choices) {
   return (choices || []).find(c => c.selectable)?.partition || null
+}
+
+/** Exact partition/GRES pair to preselect, including a MIG profile when it ranks first. */
+export function defaultGpuChoice(choices) {
+  const found = (choices || []).find(c => c.selectable)
+  return found ? { partition: found.partition, gresType: found.gresType } : null
 }
 
 const _esc = s => String(s ?? '').replace(/[&<>"]/g, c =>

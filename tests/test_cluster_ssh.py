@@ -323,6 +323,45 @@ def test_download_transport_error_expires_connection(tmp_path, monkeypatch):
     assert c.state == ConnState.EXPIRED
 
 
+def test_upload_generic_sftp_failure_does_not_expire_connection(tmp_path, monkeypatch):
+    c = ClusterConnection()
+    fake = _FakeConn()
+    fake.start_sftp_client = lambda: _FakeSftp(b"")
+    _run(c.connect("h", "u", "pw", connector=_connector_returning(fake)))
+    source = tmp_path / "source"
+    source.write_text("payload")
+
+    class SFTPFailure(Exception):
+        pass
+
+    async def rejected(*args, **kwargs):
+        raise SFTPFailure("Failure")
+
+    monkeypatch.setattr("backend.core.cluster_ssh._stream_put", rejected)
+    with pytest.raises(ClusterSSHError) as caught:
+        _run(c.sftp_put(str(source), "/projects/u/source"))
+    assert caught.value.kind == "filesystem"
+    assert c.is_connected()
+
+
+def test_upload_transport_error_expires_connection(tmp_path, monkeypatch):
+    c = ClusterConnection()
+    fake = _FakeConn()
+    fake.start_sftp_client = lambda: _FakeSftp(b"")
+    _run(c.connect("h", "u", "pw", connector=_connector_returning(fake)))
+    source = tmp_path / "source"
+    source.write_text("payload")
+
+    async def broken(*args, **kwargs):
+        raise BrokenPipeError("Broken pipe")
+
+    monkeypatch.setattr("backend.core.cluster_ssh._stream_put", broken)
+    with pytest.raises(ClusterSSHError) as caught:
+        _run(c.sftp_put(str(source), "/scratch/u/source"))
+    assert caught.value.kind == "network"
+    assert c.state == ConnState.EXPIRED
+
+
 def test_run_returns_result():
     c = ClusterConnection()
     fake = _FakeConn()
@@ -455,6 +494,17 @@ def test_mkdir_p_and_mirror_issue_expected_commands():
     assert "nadoc_jobs/md_1/'" in joined
 
 
+def test_remote_mkdir_failure_is_filesystem_error_without_expiring_connection():
+    c = ClusterConnection()
+    fake = _FakeConn()
+    fake.next_result = _FakeRunResult(1, "", "Disk quota exceeded")
+    _run(c.connect("h", "u", "pw", connector=_connector_returning(fake)))
+    with pytest.raises(ClusterSSHError) as caught:
+        _run(c.mkdir_p("/scratch/alpine/u/nadoc_jobs/md_1"))
+    assert caught.value.kind == "filesystem"
+    assert c.is_connected()
+
+
 def test_get_manager_is_singleton():
     a = cluster_ssh.get_manager()
     b = cluster_ssh.get_manager()
@@ -513,3 +563,20 @@ def test_alpine_operations_log_correlates_start_and_finish_without_secrets(tmp_p
     assert "squeue -j 42" in text
     assert "topsecret" not in text
     assert "654321" not in text
+
+
+def test_remote_command_error_log_keeps_bounded_diagnostic_preview(tmp_path):
+    log_file = alpine_operations.configure(tmp_path)
+    c = ClusterConnection()
+    fake = _FakeConn()
+    fake.next_result = _FakeRunResult(11, "", "rsync: Disk quota exceeded")
+    _run(c.connect("alpine.example", "jojo", "pw", connector=_connector_returning(fake)))
+    result = _run(c.run("rsync source/ destination/"))
+
+    assert result.rc == 11
+    records = [json.loads(line) for line in log_file.read_text().splitlines()]
+    finish = next(
+        r for r in records
+        if r["event"] == "command_finish" and r["outcome"] == "remote_error"
+    )
+    assert finish["error_preview"] == "rsync: Disk quota exceeded"

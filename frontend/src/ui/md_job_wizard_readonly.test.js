@@ -224,6 +224,49 @@ describe('read-only wizard', () => {
 })
 
 describe('live wizard commit', () => {
+  it('generates and displays a seed before the first plan request', async () => {
+    const { wiz, api } = setup()
+    await wiz.open('relaxation')
+    const seed = api.fetchProtocolPlan.mock.calls[0][0].seed
+    expect(Number.isInteger(seed)).toBe(true)
+    expect(seed).toBeGreaterThan(0)
+    ;[...modalRoot().querySelectorAll('.wizard-tab')][1].click()
+    expect(Number(fieldControl('Random seed').value)).toBe(seed)
+  })
+
+  it('submits the exact seed shown in the wizard', async () => {
+    const { wiz, launch } = setup()
+    await wiz.open('relaxation')
+    ;[...modalRoot().querySelectorAll('.wizard-tab')][1].click()
+    const input = fieldControl('Random seed')
+    input.value = '424242'
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    ;[...modalRoot().querySelectorAll('.wizard-tab')].at(-1).click()
+    const create = footerButtons().find(b => b.textContent.includes('Create job'))
+    await vi.waitFor(() => expect(create.disabled).toBe(false))
+    create.click()
+    await vi.waitFor(() => expect(launch).toHaveBeenCalledOnce())
+    expect(launch.mock.calls[0][0].seed).toBe(424242)
+  })
+
+  it('shows a warning icon when the seed matches another job for the open design', async () => {
+    const prior = {
+      job_id: 'prior', design_name: '6hb_demo', created_at: 1_785_000_000,
+      design_source_path: 'parts/demo.nadoc', namd_seed: 77,
+    }
+    const { wiz } = setup({
+      getJobs: () => [prior], getPartPath: () => 'workspace/parts/demo.nadoc',
+    })
+    await wiz.open('relaxation')
+    ;[...modalRoot().querySelectorAll('.wizard-tab')][1].click()
+    const input = fieldControl('Random seed')
+    input.value = '77'
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    const icon = modalRoot().querySelector('[aria-label="random seed matches another run"]')
+    expect(icon).not.toBeNull()
+    expect(icon.title).toContain('6hb_demo')
+  })
+
   it('shows Creating job for RunPod and stays open until the panel has a job id', async () => {
     let finishLaunch
     const launch = vi.fn(() => new Promise(resolve => { finishLaunch = resolve }))
