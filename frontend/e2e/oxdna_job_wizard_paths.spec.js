@@ -104,3 +104,44 @@ test('invalid protocol values block creation and explain the first error', async
   await expect(driver.modal.locator('.oxdna-wizard-validation')).toContainText('at least 0.01 M')
   await expect(driver.modal.locator('.modal__actions button', { hasText: 'Create job' })).toBeDisabled()
 })
+
+for (const target of ['alpine', 'runpod']) {
+  test(`${target} walks every wizard step and submits the prepared remote job`, async ({ page }) => {
+    test.setTimeout(120_000)
+    await stubRemotePaths(page)
+    const requests = []
+    await page.route('**/api/oxdna/jobs/estimate-disk', route => route.fulfill({ json: {
+      warn: false, free_bytes: 100 * 1024 ** 3, predicted_bytes: 1024,
+      free_after_bytes: 100 * 1024 ** 3,
+    } }))
+    await page.route(/\/api\/oxdna\/jobs$/, async route => {
+      if (route.request().method() !== 'POST') return route.continue()
+      const body = route.request().postDataJSON()
+      requests.push(body)
+      await route.fulfill({ status: 201, json: { job_id: `__e2e__remote-${target}`,
+        status: 'running', execution_target: target, stages: [], run_config: body } })
+    })
+
+    const driver = new OxdnaWizardDriver(page)
+    await driver.open(GENERATED, `__e2e__oxdna-submit-${target}`)
+    await driver.target(target) // step 1: connected target and hardware selection
+    await driver.tab('Parameters & options') // step 2
+    await expect(driver.modal.locator('[data-oxdna-field="salt_concentration"]')).toBeVisible()
+    await driver.field('salt_concentration', 0.3)
+    await driver.tab('Full configuration') // step 3
+    await expect(driver.modal.locator('.oxdna-wizard-config'))
+      .toContainText(`execution_target = ${target}`)
+    await driver.create()
+
+    await expect.poll(() => requests.length).toBe(1)
+    expect(requests[0]).toMatchObject({
+      execution_target: target, autostart: true, salt_concentration: 0.3,
+    })
+    if (target === 'alpine') {
+      expect(requests[0]).toMatchObject({ cluster_name: 'alpine', partition: 'ah200' })
+    } else {
+      expect(requests[0]).toMatchObject({ runpod_gpu_key: 'NVIDIA H200',
+        runpod_volume_id: 'vol-e2e', runpod_quoted_rate_usd_per_hour: 2 })
+    }
+  })
+}

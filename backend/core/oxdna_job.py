@@ -136,6 +136,14 @@ class OxdnaJob:
     runpod_gpu_key: Optional[str] = None
     runpod_budget_usd: Optional[float] = None
     runpod_final_cost_usd: Optional[float] = None
+    runpod_volume_id: Optional[str] = None
+    runpod_quoted_rate_usd_per_hour: Optional[float] = None
+    cluster_name: Optional[str] = None
+    partition: Optional[str] = None
+    requested_resources: Optional[dict] = None
+    resources: Optional[dict] = None
+    slurm_job_id: Optional[str] = None
+    remote_scratch_dir: Optional[str] = None
 
     # ── Paths ──────────────────────────────────────────────────────────────────
 
@@ -193,6 +201,14 @@ class OxdnaJob:
         data.setdefault("runpod_gpu_key", None)
         data.setdefault("runpod_budget_usd", None)
         data.setdefault("runpod_final_cost_usd", None)
+        data.setdefault("runpod_volume_id", None)
+        data.setdefault("runpod_quoted_rate_usd_per_hour", None)
+        data.setdefault("cluster_name", None)
+        data.setdefault("partition", None)
+        data.setdefault("requested_resources", None)
+        data.setdefault("resources", None)
+        data.setdefault("slurm_job_id", None)
+        data.setdefault("remote_scratch_dir", None)
         return cls(**data)
 
     @classmethod

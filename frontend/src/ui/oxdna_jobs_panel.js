@@ -1502,13 +1502,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // ── Launch ─────────────────────────────────────────────────────────────────
   async function _launchRelax(wizardPayload = null) {
     if (_launching || !_available) return
-    // The wizard deliberately lands before remote submission is wired. Never let an
-    // Alpine/Runpod selection fall through the legacy local create route and appear to
-    // have run remotely when Pydantic would simply ignore the target fields.
-    if (wizardPayload?.execution_target && wizardPayload.execution_target !== 'local') {
-      showToast(`${wizardPayload.execution_target === 'runpod' ? 'Runpod' : 'Alpine'} oxDNA submission is not wired yet`, 'info')
-      return null
-    }
+    const remoteTarget = wizardPayload?.execution_target && wizardPayload.execution_target !== 'local'
     const selectedBackend = wizardPayload?.backend || backendSel?.value || 'CUDA'
     const selectedDevice = wizardPayload?.device || deviceInput?.value || '0'
     _launching = true
@@ -1524,7 +1518,10 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       md_relax_steps:     wizardPayload?.md_relax_steps ?? parseInt(mdStepsInput?.value || '1000000', 10),
       equil_steps:        wizardPayload?.equil_steps ?? parseInt(equilStepsInput?.value || '100000', 10),
       min_bp_retained:    wizardPayload?.min_bp_retained ?? parseFloat(bpGateInput?.value || '0.5'),
-      autostart:          false,
+      // Remote targets are submitted as part of this one transaction. In particular,
+      // Alpine keeps the existing long-lived Duo-authenticated connection instead of
+      // closing/reopening the wizard for a separate submit-review round trip.
+      autostart:          !!remoteTarget,
       design_source_path: _currentPartPath(),
     }
     // Relax-on-a-surface: a structure relaxed free settles differently than one
@@ -1557,8 +1554,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     _updateButtons(_selectedJob())
     if (job?.job_id) {
       _selectedId = job.job_id
-      showToast('oxDNA job created — press Run when ready', 'ok')
-      _setStatus('Job ready to run.', _C.ok)
+      showToast(remoteTarget ? `oxDNA job submitted to ${wizardPayload.execution_target === 'runpod' ? 'RunPod' : 'Alpine'}` : 'oxDNA job created — press Run when ready', 'ok')
+      _setStatus(remoteTarget ? 'Remote job submitted.' : 'Job ready to run.', _C.ok)
       await _fetchJobs()
     } else {
       const detail = api.lastErrorMessage?.()

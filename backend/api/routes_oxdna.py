@@ -178,6 +178,15 @@ def _seed_geometry(design) -> list[dict]:
 
 
 class CreateOxdnaJobRequest(BaseModel):
+    execution_target: str = Field("local", pattern="^(local|alpine|runpod)$")
+    cluster_name: Optional[str] = None
+    partition: Optional[str] = None
+    slurm_resources: Optional[dict] = None
+    runpod_gpu_key: Optional[str] = None
+    runpod_budget_usd: Optional[float] = Field(None, gt=0)
+    runpod_volume_id: Optional[str] = None
+    runpod_estimated_cost_usd: Optional[float] = Field(None, ge=0)
+    runpod_quoted_rate_usd_per_hour: Optional[float] = Field(None, gt=0)
     backend: str = Field("CUDA", description="'CUDA' or 'CPU' for the MD stages")
     interaction_type: str = Field("DNA2", description="'DNA2' (oxDNA2) or 'DNA' (legacy oxDNA1)")
     engine_variant: str = Field(
@@ -812,7 +821,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
 
     protein = has_proteins(design)
 
-    if protein:
+    if protein and body.execution_target == "local":
         run_bin = find_oxdna()
         if run_bin and not oxdna_supports_dnanm(run_bin):
             raise HTTPException(
@@ -826,7 +835,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
     # NADOC resolved is CPU-only (e.g. a conda/apt oxDNA on PATH).  oxDNA would
     # otherwise run the cheap MC stage and only abort the long MD stage with the
     # cryptic "Backend 'CUDA' not supported".  Point the user at the fix instead.
-    if body.backend == "CUDA":
+    if body.backend == "CUDA" and body.execution_target == "local":
         run_bin = find_oxdna()
         if run_bin and not oxdna_supports_cuda(run_bin):
             engine = "oxDNA"
@@ -841,7 +850,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
                 f"on CPU anyway (much slower), choose the CPU backend.",
             )
     run_bin = find_oxdna()
-    if body.engine_variant == "adaptive-memory" and (
+    if body.execution_target == "local" and body.engine_variant == "adaptive-memory" and (
         not run_bin or oxdna_build_flavor(run_bin) != "adaptive-memory"
     ):
         raise HTTPException(
@@ -849,7 +858,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
             "NADOC adaptive-memory oxDNA was selected, but the resolved local binary "
             "is not an adaptive-memory build. Build it with scripts/build-oxdna.sh.",
         )
-    if body.engine_variant == "dnanm" and (
+    if body.execution_target == "local" and body.engine_variant == "dnanm" and (
         not run_bin or not oxdna_supports_dnanm(run_bin)
     ):
         raise HTTPException(
@@ -905,6 +914,27 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
             "surface_strands": surface_strands_in,
         },
     )
+    job.execution_target = body.execution_target
+    job.cluster_name = body.cluster_name if body.execution_target == "alpine" else None
+    job.partition = body.partition if body.execution_target == "alpine" else None
+    job.requested_resources = body.slurm_resources if body.execution_target == "alpine" else None
+    job.runpod_gpu_key = body.runpod_gpu_key if body.execution_target == "runpod" else None
+    job.runpod_budget_usd = body.runpod_budget_usd if body.execution_target == "runpod" else None
+    job.runpod_volume_id = body.runpod_volume_id if body.execution_target == "runpod" else None
+    job.runpod_quoted_rate_usd_per_hour = (
+        body.runpod_quoted_rate_usd_per_hour if body.execution_target == "runpod" else None
+    )
+    job.run_config.update({
+        "execution_target": body.execution_target,
+        "cluster_name": job.cluster_name,
+        "partition": job.partition,
+        "slurm_resources": job.requested_resources,
+        "runpod_gpu_key": job.runpod_gpu_key,
+        "runpod_budget_usd": job.runpod_budget_usd,
+        "runpod_volume_id": job.runpod_volume_id,
+        "runpod_estimated_cost_usd": body.runpod_estimated_cost_usd,
+        "runpod_quoted_rate_usd_per_hour": job.runpod_quoted_rate_usd_per_hour,
+    })
     job.status = OxdnaStatus.preparing
     job.save(_workspace())
     logger.info(
@@ -985,7 +1015,26 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
     job.save(_workspace())
 
     if body.autostart:
-        start_job(job, _workspace(), specs)
+        if body.execution_target == "local":
+            start_job(job, _workspace(), specs)
+        elif body.execution_target == "alpine":
+            from backend.core.oxdna_remote import submit_alpine
+            try:
+                await submit_alpine(job, _workspace(), specs)
+            except Exception as exc:  # submission remains retryable and visible
+                job.status = OxdnaStatus.queued
+                job.error = f"Alpine submission failed: {exc}"
+                job.save(_workspace())
+                raise HTTPException(502, str(exc)) from exc
+        else:
+            from backend.core.oxdna_remote import start_runpod
+            try:
+                start_runpod(job, _workspace(), specs)
+            except Exception as exc:
+                job.status = OxdnaStatus.queued
+                job.error = f"RunPod submission failed: {exc}"
+                job.save(_workspace())
+                raise HTTPException(502, str(exc)) from exc
 
     return job.to_dict()
 
