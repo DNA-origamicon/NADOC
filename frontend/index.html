@@ -4141,10 +4141,10 @@
                 </div>
               </div>
 
-              <!-- ── Cross-engine shape comparison (S5) — section-level: it compares ALL
-                   engines' predictions for the design, so it lives under the unified Jobs
-                   card rather than inside the oxDNA tab. -->
-              <div class="ox-card" style="margin-bottom:2px">
+              <!-- ARCHIVED 2026-08-27: cross-engine Shape Comparison remains dormant for
+                   possible revival. Restore GLOBAL_CARDS and initShapeCompareCard before
+                   removing display:none. -->
+              <div class="ox-card" style="display:none;margin-bottom:2px" aria-hidden="true">
                 <div id="shape-compare-toggle" class="ox-card__header" style="color:#c9d1d9">
                   <span id="shape-compare-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Shape comparison (cross-engine)</span>
                 </div>
@@ -4249,6 +4249,41 @@
                   <input id="oxdna-jobs-equil-steps" type="number" value="100000" min="100" step="10000" style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
                   <label style="font-size:var(--text-xs);color:#8b949e">Bp gate</label>
                   <input id="oxdna-jobs-bp-gate" type="number" value="0.5" min="0" max="1" step="0.05" style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                </div>
+              </div>
+
+              <!-- Run location for the next job. Mirrors NAMD's complete target card:
+                   Alpine session/availability and RunPod setup/preflight/GPU stock live
+                   here, while the selected destination also seeds the oxDNA wizard. -->
+              <div class="ox-card" id="oxdna-jobs-cluster-card" style="margin-bottom:6px">
+                <div id="oxdna-jobs-cluster-toggle" class="ox-card__header" style="color:#c9d1d9">
+                  <span id="oxdna-jobs-cluster-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Clusters</span>
+                </div>
+                <div id="oxdna-jobs-cluster-body" class="ox-card__body">
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:var(--text-xs);color:#8b949e">
+                    <span>Run on:</span>
+                    <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
+                      <input id="oxdna-run-target-local" type="radio" name="oxdna-run-target" value="local" checked style="accent-color:#3fb950">Local
+                    </label>
+                    <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
+                      <input id="oxdna-run-target-alpine" type="radio" name="oxdna-run-target" value="alpine" style="accent-color:#58a6ff">Alpine
+                    </label>
+                    <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
+                      <input id="oxdna-run-target-runpod" type="radio" name="oxdna-run-target" value="runpod" style="accent-color:#d29922">RunPod
+                    </label>
+                  </div>
+                  <div id="oxdna-jobs-local-pane" hidden></div>
+                  <div id="oxdna-jobs-alpine-pane" hidden>
+                    <div id="oxdna-cluster-connection-mount" style="margin-bottom:6px"></div>
+                    <div id="oxdna-jobs-alpine-availability" style="margin-bottom:6px"></div>
+                  </div>
+                  <div id="oxdna-jobs-runpod-pane" hidden>
+                    <div id="oxdna-runpod-setup-mount" style="margin-bottom:6px"></div>
+                    <div id="oxdna-jobs-runpod-status"
+                         style="border:1px solid #30363d;border-radius:3px;padding:6px;margin-bottom:6px;background:#0d1117"></div>
+                    <div id="oxdna-jobs-runpod-picker"
+                         style="border:1px solid #30363d;border-radius:3px;padding:6px;margin-bottom:6px;background:#0d1117"></div>
+                  </div>
                 </div>
               </div>
 

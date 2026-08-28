@@ -175,10 +175,8 @@ describe('engine capability descriptor — PARITY vs live index.html', () => {
     })
   }
 
-  it('the shared comparison card exists and is hosted once', () => {
-    expect(GLOBAL_CARDS.some(c => c.key === 'comparison')).toBe(true)
-    const cmp = GLOBAL_CARDS.find(c => c.key === 'comparison')
-    expect(idPresent(cmp.domAnchorId)).toBe(true)
+  it('has no active global cards after shape comparison was archived', () => {
+    expect(GLOBAL_CARDS).toEqual([])
   })
 })
 

@@ -20,13 +20,12 @@ import { resetControlsToDefaults } from './form_defaults.js'
 import { showToast } from './toast.js'
 import { selectionUpdatesVisualization } from './visualization_selection_policy.js'
 import { jobOutOfDate, ensureJobCurrent, restoreSubmittedDesign } from './job_staleness.js'
-import { filterJobsForPart, newestCompletedForPart } from './md_jobs_panel.js'
+import { filterJobsForPart } from './md_jobs_panel.js'
 import { isUndefinedSequenceError, showSequenceWarningModal } from './sequence_warning_modal.js'
 import { initOxdnaTrajectoryPlayer, fieldAtFrame } from './oxdna_trajectory_player.js'
 import { initOccupancyControls } from './occupancy_controls.js'
 import { initOxdnaMetricsCard } from './oxdna_metrics_card.js'
 import { initOxdnaExportCard } from './oxdna_export_card.js'
-import { initShapeCompareCard } from './shape_compare_card.js'
 import { showConfirm } from './primitives/confirm.js'
 import { createModal } from './primitives/modal.js'
 import { createButton } from './primitives/button.js'
@@ -40,6 +39,11 @@ import { formatJobTime } from '../scene/trajectory_range.js'
 import { formatBytes } from './format_bytes.js'
 import { initJobArchive } from './job_archive_action.js'
 import { initOxdnaJobWizard } from './oxdna_job_wizard.js'
+import { initClusterConnection } from './cluster_connection.js'
+import { initClusterAvailability } from './cluster_availability.js'
+import { initRunpodSetup } from './runpod_setup.js'
+import { initRunpodStatus } from './runpod_status.js'
+import { initRunpodGpuPicker } from './runpod_gpu_picker.js'
 import { helixDisplayLabel } from './design_display_labels.js'
 import { confirmNoConcurrentJob, confirmDiskSpaceOk } from './job_activity.js'
 import { shouldTearDownDisplays, shouldResumeDisplays } from './display_tab_policy.js'
@@ -601,6 +605,57 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   const equilStepsInput = document.getElementById('oxdna-jobs-equil-steps')
   const bpGateInput   = document.getElementById('oxdna-jobs-bp-gate')
   const showAllToggle = document.getElementById('oxdna-jobs-show-all')
+  const runTargetRadios = [...document.querySelectorAll('input[name="oxdna-run-target"]')]
+  const targetPanes = {
+    local: document.getElementById('oxdna-jobs-local-pane'),
+    alpine: document.getElementById('oxdna-jobs-alpine-pane'),
+    runpod: document.getElementById('oxdna-jobs-runpod-pane'),
+  }
+  const alpineConnectionMount = document.getElementById('oxdna-cluster-connection-mount')
+  const alpineAvailabilityMount = document.getElementById('oxdna-jobs-alpine-availability')
+  const runpodSetupMount = document.getElementById('oxdna-runpod-setup-mount')
+  const runpodStatusMount = document.getElementById('oxdna-jobs-runpod-status')
+  const runpodPickerMount = document.getElementById('oxdna-jobs-runpod-picker')
+
+  // These are the same live controls used by NAMD's Clusters card. Alpine chips share
+  // the backend session through `nadoc:cluster-state-change`; RunPod setup/preflight
+  // writes the shared backend session used by both this card and the job wizard.
+  const _clusterConnection = initClusterConnection({ mount: alpineConnectionMount })
+  const _clusterAvailability = initClusterAvailability({
+    mount: alpineAvailabilityMount,
+    fetchAvailability: opts => api.getClusterAvailability?.(opts),
+    getJobId: () => null,
+  })
+  const _runpodStatus = initRunpodStatus({ mount: runpodStatusMount })
+  initRunpodSetup({
+    mount: runpodSetupMount,
+    onConnected: () => _runpodStatus.refresh(),
+  })
+  let _selectedRunpodGpu = null
+  const _runpodPicker = initRunpodGpuPicker({
+    mount: runpodPickerMount,
+    fetchOptions: () => api.getRunpodGpuOptions?.(),
+    onSelect: row => { _selectedRunpodGpu = row },
+  })
+
+  const _currentRunTarget = () => runTargetRadios.find(radio => radio.checked)?.value || 'local'
+  let _previousRunTarget = null
+  const _syncTargetPane = () => {
+    const target = _currentRunTarget()
+    for (const [name, pane] of Object.entries(targetPanes)) if (pane) pane.hidden = name !== target
+    if (_previousRunTarget === 'runpod' && target !== 'runpod') {
+      _selectedRunpodGpu = null
+      _runpodPicker.clear()
+    }
+    if (target === 'alpine') void _clusterConnection.refresh()
+    if (target === 'runpod') {
+      void _runpodStatus.refresh()
+      void _runpodStatus.refreshBilling()
+    }
+    _previousRunTarget = target
+  }
+  runTargetRadios.forEach(radio => radio.addEventListener('change', _syncTargetPane))
+  _syncTargetPane()
 
   const listEl     = document.getElementById('oxdna-jobs-list')
   const detailEl   = document.getElementById('oxdna-jobs-detail')
@@ -1274,6 +1329,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     ['oxdna-jobs-list-toggle',   'oxdna-jobs-list-body',   'oxdna-jobs-list-arrow'],
     ['oxdna-jobs-viz-toggle',    'oxdna-jobs-viz-body',    'oxdna-jobs-viz-arrow'],
     ['oxdna-jobs-health-toggle', 'oxdna-jobs-health-body', 'oxdna-jobs-health-arrow'],
+    ['oxdna-jobs-cluster-toggle', 'oxdna-jobs-cluster-body', 'oxdna-jobs-cluster-arrow'],
   ]) {
     const t = document.getElementById(tid)
     const bd = document.getElementById(bid)
@@ -1536,6 +1592,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       equil_steps: parseInt(equilStepsInput?.value || '100000', 10),
       min_bp_retained: parseFloat(bpGateInput?.value || '0.5'),
     }),
+    getInitialTarget: _currentRunTarget,
     launch: payload => _launchRelax(payload),
   })
 
@@ -2867,7 +2924,6 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (oxdnaDisplay?.mode() === 'strain') _setStrainOff()
     if (_occupancyIsActive()) _setOccupancyOff()
     _metricsCard?.refresh()      // cached twist/curve/bp graphs no longer match the edited design
-    _compareCard?.refresh()      // cached cross-engine comparison no longer matches the edited design
     // Staleness is historical UI metadata, not part of applying the selected
     // Feature Log state. Coalesce rapid scrubs and let the scene paint first.
     clearTimeout(_designChangeRefreshTimer)
@@ -2906,47 +2962,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     getExportProgress: api.getOxdnaExportProgress,
   })
 
-  // Cross-engine Shape comparison card (S5) — engine-agnostic, hosted here.  `getSources`
-  // returns the per-engine {engine, descriptors, rmsf, shape_frame, field} bundles for the
-  // current design.  O1 wired the oxDNA column (the selected oxDNA job's relaxed-frame
-  // descriptors + RMSF); C5 adds the CanDo column (the selected CanDo job's FEM shape
-  // descriptors + free-free NMA RMSF — the RMSF reference); M5 adds the mrDNA column (the
-  // selected mrDNA job's relaxed-frame descriptors + CG-trajectory RMSF), and N4 adds the NAMD
-  // column (the selected MD job's time-mean-structure descriptors + trajectory RMSF — the
-  // GOLD-OVERRIDE reference), so the card shows all four live engines cross-validated
-  // (live cross-engine data = MV-21).
-  const _compareCard = initShapeCompareCard({
-    api: { start: api.startShapeCompare, poll: api.getShapeCompareRun },
-    getSources: async () => {
-      // Resolve each engine's job for the comparison: honour an explicit panel
-      // selection, else fall back to the newest COMPLETED job for the current design
-      // (via listFn) so a design where every engine ran compares all of them without
-      // the user hunting for a row to click in each of the four panels — this is what
-      // was silently dropping NAMD when its section had never been opened/selected.
-      const _resolveJob = async (getSelected, listFn) => {
-        const sel = getSelected?.()
-        if (sel?.job_id) return sel
-        const list = await listFn().catch(() => null)
-        return newestCompletedForPart(list, _currentPartPath())
-      }
-      // [get-selected, list-all, build-shape-source] per engine, oxDNA first (its
-      // relaxed shape is the default reference).
-      const engines = [
-        [_selectedJob, api.listOxdnaJobs, api.getOxdnaShapeSource],
-        [() => getCandoJob?.(), api.listCandoJobs, api.getCandoShapeSource],
-        [() => getMrdnaJob?.(), api.listMrdnaJobs, api.getMrdnaShapeSource],
-        [() => getMdJob?.(), api.listMdJobs, api.getMdShapeSource],
-      ]
-      const out = []
-      for (const [getSel, listFn, srcFn] of engines) {
-        const job = await _resolveJob(getSel, listFn)
-        if (!job?.job_id) continue
-        const src = await srcFn(job.job_id).catch(() => null)
-        if (src && src.ready) out.push(src)
-      }
-      return out
-    },
-  })
+  // Cross-engine Shape Comparison was archived on 2026-08-27. Its standalone
+  // implementation and tests remain in shape_compare_card.js for possible revival.
 
   // initial availability probe (cheap) so the status line is populated.
   _checkAvailable()

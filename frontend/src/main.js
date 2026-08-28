@@ -225,6 +225,7 @@ import { initMultiOverlay } from './ui/multi_overlay.js'
 import { applyComparisonRepresentation } from './ui/comparison_representations.js'
 import { initMdJobsPanel } from './ui/md_jobs_panel.js'
 import { initClusterConnection } from './ui/cluster_connection.js'
+import { standardizeSimulationCardOrder } from './ui/simulation_card_order.js'
 import { initBenchmarkPanel } from './ui/benchmark_panel.js'
 import { initAnchorGlow } from './scene/anchor_glow.js'
 import { anchorSelectionState } from './scene/efield_math.js'
@@ -1621,6 +1622,13 @@ async function main() {
     if (advBody && prodParams) { prodParams.style.gridColumn = '1 / -1'; advBody.prepend(prodParams) }
     if (advBody && statusLine) { statusLine.style.gridColumn = '1 / -1'; advBody.prepend(statusLine) }
   }
+
+  // Job setup → constraints/forces → output, in the same order on every engine tab.
+  // Run after relocation so initialized nodes/listeners move intact as complete cards.
+  for (const id of [
+    'oxdna-jobs-body', 'mrdna-jobs-body', 'cando-jobs-body',
+    'snupi-jobs-body', 'blade-jobs-body', 'md-jobs-panel-body',
+  ]) standardizeSimulationCardOrder(document.getElementById(id))
 
   // Relocate every engine's stage-timeline element to the ONE timeline host at the bottom
   // of the jobs card (each panel still populates its element by id; the master card shows

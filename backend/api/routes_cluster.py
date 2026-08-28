@@ -177,6 +177,18 @@ class NamdBuildRequest(BaseModel):
     walltime: str = "06:00:00"
 
 
+class OxdnaBuildRequest(BaseModel):
+    cluster_name: str = "alpine"
+    source_dir: str
+    name: str = "oxdna-adaptive"
+    modules: list[str] | None = None
+    architectures: list[int] | None = None
+    cores: int = 16
+    partition: str = "acpu"
+    qos: str = "cpu-normal"
+    walltime: str = "02:00:00"
+
+
 @router.post("/cluster/build/namd")
 async def cluster_build_namd(req: NamdBuildRequest):
     """Compile a CUDA / GPU-resident NAMD on the cluster as a batch job.
@@ -245,6 +257,56 @@ async def cluster_build_namd_status(tail: int = 40):
                 state["log_tail"] = out.stdout or out.stderr
         except Exception:  # noqa: BLE001 — status must never fail the poll
             logger.exception("build status poll failed")
+    return state
+
+
+@router.post("/cluster/build/oxdna")
+async def cluster_build_oxdna(req: OxdnaBuildRequest):
+    """Upload and batch-compile NADOC's patched adaptive-memory oxDNA on Alpine."""
+    from backend.core import cluster_oxdna_build
+
+    profile = cluster_config.load_profiles(_WORKSPACE_DIR).get(req.cluster_name)
+    if profile is None:
+        raise HTTPException(404, f"unknown cluster '{req.cluster_name}'")
+    mgr = cluster_ssh.get_manager()
+    if not mgr.is_connected():
+        raise HTTPException(409, "not connected to a cluster")
+    source = Path(req.source_dir).expanduser()
+    if not source.is_dir():
+        raise HTTPException(400, f"source_dir not found: {source}")
+    try:
+        return await cluster_oxdna_build.run_build(
+            mgr, profile, source_dir=source, name=req.name, modules=req.modules,
+            architectures=req.architectures, cores=req.cores,
+            partition=req.partition, qos=req.qos, walltime=req.walltime,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except cluster_ssh.ClusterSSHError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@router.get("/cluster/build/oxdna")
+async def cluster_build_oxdna_status(tail: int = 80):
+    from backend.core import cluster_oxdna_build, cluster_queue
+
+    state = cluster_oxdna_build.build_state()
+    mgr = cluster_ssh.get_manager()
+    job_id = state.get("slurm_job_id")
+    if job_id and mgr.is_connected():
+        try:
+            result = await mgr.run(cluster_queue.probe_command("job", job_id), timeout=30.0)
+            for token in (result.stdout or "").split():
+                if token.startswith("JobState="):
+                    state["slurm_state"] = token.split("=", 1)[1]
+            if state.get("log"):
+                result = await mgr.run(
+                    f"tail -n {max(1, min(int(tail), 400))} '{state['log']}' 2>&1",
+                    timeout=30.0,
+                )
+                state["log_tail"] = result.stdout or result.stderr
+        except Exception:
+            logger.exception("oxDNA build status poll failed")
     return state
 
 

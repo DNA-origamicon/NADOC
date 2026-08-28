@@ -49,9 +49,8 @@ export const ENGINE_LABELS = {
 }
 
 // The card universe (union across all panels), in unified-stack display order.
-// `comparison` is a GLOBAL card (one shared instance), not per-engine — see below.
 export const CARD_KEYS = [
-  'run', 'efield', 'anchors', 'surface', 'advanced', 'viz', 'metrics', 'joblist',
+  'run', 'joblist', 'advanced', 'anchors', 'efield', 'surface', 'viz', 'metrics',
 ]
 
 export const CARD_LABELS = {
@@ -65,10 +64,9 @@ export const CARD_LABELS = {
   joblist: 'Jobs',
 }
 
-// Shared cross-engine card(s) shown once regardless of the selected engine.
-export const GLOBAL_CARDS = [
-  { key: 'comparison', label: 'Shape comparison', domAnchorId: 'shape-compare-toggle' },
-]
+// Shape comparison was archived on 2026-08-27. Keep the stable selector contract;
+// archived global cards simply leave it empty.
+export const GLOBAL_CARDS = []
 
 // Small helpers to keep the per-engine literal below terse.
 const on = (id) => ({ enabled: true, domAnchorId: id, reason: null })

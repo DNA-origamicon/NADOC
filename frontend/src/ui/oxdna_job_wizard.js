@@ -44,7 +44,7 @@ const ROW_LABELS = {
   topology: 'Topology',
 }
 
-export function initOxdnaJobWizard({ api = {}, launch = async () => null, getInitialValues = () => ({}) } = {}) {
+export function initOxdnaJobWizard({ api = {}, launch = async () => null, getInitialValues = () => ({}), getInitialTarget = () => 'local' } = {}) {
   let modal, targetStep, currentTab = 'target', values = oxdnaWizardDefaults(), busy = false
   const panels = {}, tabs = {}
   let previousBtn, nextBtn, createBtn, configPre, stageSummary, stageTable, engineDetails, validationNote
@@ -264,6 +264,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, getIni
   function open() {
     if (!modal) build()
     values = oxdnaWizardDefaults(getInitialValues())
+    targetStep.setChoice({ target: getInitialTarget() || 'local' })
     currentTab = 'target'; targetStep.render(); renderSettings()
     void renderEngineDetails()
     renderConfig(); paint(); modal.open()

@@ -28,6 +28,19 @@ CG-to-atomistic handoff. Historical phases and experiments are in
   coverage traverses every engine variant plus Local, Alpine, and RunPod UI paths using a disposable
   two-helix design. Local prepared-job creation is wired; Alpine and RunPod selection/preview are wired,
   but remote creation is still deliberately blocked by the frontend launch boundary.
+- Alpine adaptive-memory oxDNA was built and compute-node verified on 2026-08-27 (SLURM
+  `31744722`, CUDA architectures 80/90). Remote submission should use
+  `/projects/jojo6687/nadoc_jobs/nadoc_builds/oxdna-adaptive/install/bin/oxDNA` and set
+  `LD_LIBRARY_PATH=/projects/jojo6687/nadoc_jobs/nadoc_builds/oxdna-adaptive/install/lib`.
+  `DNAnalysis` is installed beside `oxDNA`; both binaries were verified against the bundled GCC
+  runtime on an Alpine `acpu` compute node.
+- RunPod validation on 2026-08-27 established both capability and correctness for the adaptive
+  CUDA lists. Upstream allocated 140,997.86 MB and completed no step in 373 seconds for the
+  451,584-nt nonuniform BigO assembly, while adaptive initialized at about 219 MB and ran at
+  2.56054 ms/step. On a 597-nt control that forced capacity growth from 8 to 110, one-step
+  energies/positions/orientations matched upstream exactly and velocity differences were at
+  mixed-precision scale (maximum `2.98e-8`). Both completed a deterministic 10,000-step smoke
+  test with about 1.7% adaptive overhead. The isolated validation spent $1.14834 of a $2 cap.
 
 ## Binding invariants
 

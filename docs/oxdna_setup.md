@@ -173,6 +173,30 @@ The validated reference run used 32 copies of BigO (451,584 nucleotides) on an H
 is recorded under `workspace/runpod_oxdna_validation/`. Alpine submission remains a later
 phase and must reuse this build/chain contract rather than introduce another oxDNA runner.
 
+### Adaptive-memory validation (2026-08-27)
+
+The adaptive build was compared with unmodified upstream oxDNA at revision
+`8028cf33b3cba12992b771156085fa54879f50cd` on the same H200 and inputs.
+
+- On the 451,584-nucleotide BigO assembly, upstream derived a global capacity of 23,486
+  neighbours per particle from one dense cell. It allocated 140,997.86 MB of CUDA memory
+  and completed no MD step during a 373-second observation. The adaptive build initialized
+  with about 219 MB and completed a stable 100-step run at 2.56054 ms/step. This establishes
+  a practical large, nonuniform-geometry capability that the fixed-capacity build did not
+  provide under the benchmark constraints; it does not claim upstream could never finish.
+- A 597-nucleotide, 10-strand control exercised actual adaptive growth from 8 to 110 entries
+  per particle. In a deterministic one-step comparison, energies, positions, and orientations
+  matched exactly. Maximum velocity and angular-momentum differences were respectively
+  `2.98e-8` and `5.96e-8`, consistent with mixed-precision rounding.
+- Both variants also completed a 10,000-step constant-energy smoke test. Adaptive timing was
+  0.0560788 ms/step versus 0.0551406 ms/step upstream, about 1.7% overhead on this deliberately
+  small system. Long mixed-precision trajectories are chaotic and are therefore treated as a
+  stability test, not a pointwise equality test.
+
+The isolated small-system campaign spent $1.14834 of its $2 cap. Its machine-readable report
+is `workspace/runpod_oxdna_small_validation/validation_report.json`; RunPod workspace reports
+and spend ledgers are local evidence and intentionally remain outside version control.
+
 ## Install upstream oxDNA (`DNANM` included)
 
 The script checks out NADOC's pinned upstream revision and builds one engine for
