@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 import hmac
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,7 @@ import secrets
 import socket
 import time
 from typing import Optional
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from fastapi import APIRouter, Header, HTTPException, Request, Response
@@ -328,13 +330,39 @@ async def connect_peer(body: PairPeerBody) -> dict:
 @router.get("/peers/status")
 async def peer_statuses() -> dict:
     async def probe(peer):
+        candidates = [peer.base_url]
+        parsed = urlsplit(peer.base_url)
         try:
-            async with httpx.AsyncClient(base_url=peer.base_url, timeout=3) as client:
-                response = await client.get("/api/collaboration/identity")
-                response.raise_for_status()
+            address = ipaddress.ip_address(parsed.hostname or "")
+            if address.version == 4 and address in ipaddress.ip_network("100.64.0.0/10"):
+                import asyncio
+
+                hostname = (
+                    await asyncio.to_thread(socket.gethostbyaddr, str(address))
+                )[0].rstrip(".")
+                if hostname.endswith(".ts.net"):
+                    port = f":{parsed.port}" if parsed.port else ""
+                    candidates.append(
+                        urlunsplit((parsed.scheme, f"{hostname}{port}", "", "", ""))
+                    )
+        except (ValueError, OSError):
+            pass
+        for candidate in candidates:
+            try:
+                async with httpx.AsyncClient(base_url=candidate, timeout=3) as client:
+                    response = await client.get("/api/collaboration/identity")
+                    response.raise_for_status()
+                if candidate != peer.base_url:
+                    peer = PeerRegistry(_workspace()).register(
+                        peer_id=peer.id,
+                        name=peer.name,
+                        base_url=candidate,
+                        token=peer.token,
+                    )
                 return {**peer.public(), "online": True}
-        except httpx.HTTPError:
-            return {**peer.public(), "online": False}
+            except httpx.HTTPError:
+                continue
+        return {**peer.public(), "online": False}
 
     peers = PeerRegistry(_workspace()).list()
     import asyncio

@@ -269,3 +269,43 @@ def test_remote_checkout_streams_to_atomic_local_copy(monkeypatch, tmp_path):
     installed = tmp_path / "shared" / "Voltron.nadoc"
     assert Design.from_json(installed.read_text()).id == "remote-project"
     assert not list(installed.parent.glob(".nadoc-checkout-*"))
+
+
+def test_peer_status_migrates_legacy_tailscale_ip_to_magicdns(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path)
+    client.post(
+        "/api/collaboration/peers",
+        json={
+            "id": "wsl",
+            "name": "WSL Desktop",
+            "base_url": "http://100.99.71.2:5173",
+            "token": "remote-secret",
+        },
+    )
+    monkeypatch.setattr(
+        collaboration_routes.socket,
+        "gethostbyaddr",
+        lambda _address: ("desktop.example.ts.net.", [], []),
+    )
+    real_client = httpx.AsyncClient
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "100.99.71.2":
+            return httpx.Response(404)
+        return httpx.Response(200, json={"server_id": "wsl"})
+
+    def mock_client(**kwargs):
+        return real_client(transport=httpx.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(collaboration_routes.httpx, "AsyncClient", mock_client)
+    status = client.get("/api/collaboration/peers/status")
+    assert status.status_code == 200
+    assert status.json()["peers"][0] == {
+        "id": "wsl",
+        "name": "WSL Desktop",
+        "base_url": "http://desktop.example.ts.net:5173",
+        "online": True,
+    }
+    assert client.get("/api/collaboration/peers").json()["peers"][0][
+        "base_url"
+    ] == "http://desktop.example.ts.net:5173"

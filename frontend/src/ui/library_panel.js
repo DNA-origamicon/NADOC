@@ -146,6 +146,8 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   let _query   = ''
   let _showSimFolders = false
   let _refreshGeneration = 0
+  let _activePeerId = null
+  let _servers = [{ id: null, name: 'This computer', online: true }]
 
   // Per-design simulation activity: active MD/oxDNA jobs (polled) + a map from
   // workspace file path → the row's status <span>, so the spinner can be updated
@@ -188,6 +190,41 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
 
   actionsEl.append(newPartBtn, newAsmBtn, importBtn, newFolderBtn, simToggleLabel)
   mount.appendChild(actionsEl)
+
+  const serverTabsEl = document.createElement('div')
+  serverTabsEl.className = 'lib-server-tabs'
+  serverTabsEl.style.cssText = 'display:flex;gap:5px;overflow-x:auto;margin:8px 0 4px;padding-bottom:2px'
+  mount.appendChild(serverTabsEl)
+
+  function _updateActionVisibility() {
+    const remote = _activePeerId !== null
+    for (const item of [newPartBtn, newAsmBtn, importBtn, newFolderBtn, simToggleLabel]) {
+      item.style.display = remote ? 'none' : ''
+    }
+  }
+
+  function _renderServerTabs() {
+    serverTabsEl.replaceChildren()
+    for (const server of _servers) {
+      const active = server.id === _activePeerId
+      const tab = document.createElement('button')
+      tab.className = 'lib-btn-secondary'
+      tab.textContent = `${server.online ? '●' : '○'} ${server.name}`
+      tab.title = server.online ? `View files on ${server.name}` : `${server.name} is offline`
+      tab.disabled = !server.online
+      tab.style.cssText += `;white-space:nowrap;color:${server.online ? (active ? '#58a6ff' : '#c9d1d9') : '#6e7681'};border-color:${active ? '#58a6ff' : '#30363d'}`
+      tab.addEventListener('click', async () => {
+        _activePeerId = server.id
+        _query = ''
+        searchEl.value = ''
+        _expanded.clear()
+        _renderServerTabs()
+        _updateActionVisibility()
+        await refresh()
+      })
+      serverTabsEl.appendChild(tab)
+    }
+  }
 
   // ── Search bar ──────────────────────────────────────────────────────────────
   // Simple filename filter. Files matching the query (case-insensitive substring
@@ -273,16 +310,18 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     const generation = ++_refreshGeneration
     if (!_allEntries.length) treeEl.innerHTML = '<div class="lib-loading">Loading…</div>'
     try {
-      const files = await api.listLibraryFiles()
+      const files = _activePeerId
+        ? await api.listPeerLibraryFiles(_activePeerId)
+        : await api.listLibraryFiles()
       if (generation !== _refreshGeneration) return
       _allEntries = Array.isArray(files) ? files : []
     } catch {
       if (!_allEntries.length) treeEl.innerHTML = '<div class="lib-empty">Could not reach server.</div>'
       return
     }
-    _saveCachedEntries()
+    if (!_activePeerId) _saveCachedEntries()
     _render()
-    void _refreshDiskUsage(generation)
+    if (!_activePeerId) void _refreshDiskUsage(generation)
   }
 
   function _render() {
@@ -345,7 +384,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     nameEl.className   = 'lib-row-name'
     nameEl.textContent = folder.name
 
-    const actEl = _makeActionsEl([
+    const actEl = _makeActionsEl(_activePeerId ? [] : [
       { label: '+', title: 'New subfolder', fn: (e) => { e.stopPropagation(); childrenEl.style.display = ''; _expanded.add(folder.path); toggleEl.textContent = '▼'; _showNewFolderInput(childrenEl, folder.path, depth + 1) } },
       { label: '✎', title: 'Rename', fn: (e) => { e.stopPropagation(); _startRename(rowEl, nameEl, folder) } },
       { label: '×', title: 'Delete', danger: true, fn: async (e) => {
@@ -415,7 +454,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       sizeEl.title = `File ${formatBytes(diskBytes)}`
     }
 
-    const actEl = _makeActionsEl([
+    const actEl = _makeActionsEl(_activePeerId ? [] : [
       { label: '✎', title: 'Rename', fn: (e) => { e.stopPropagation(); _startRename(rowEl, nameEl, file) } },
       { label: '↗', title: 'Move',   fn: async (e) => { e.stopPropagation(); await _moveItem(file) } },
       { label: '×', title: 'Delete', danger: true, fn: async (e) => {
@@ -426,9 +465,22 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     ])
 
     rowEl.append(iconEl, nameEl, statusEl, mtimeEl, sizeEl, actEl)
-    rowEl.addEventListener('click', () => {
-      if (file.type === 'assembly') onOpenAssembly(file.path, file.name)
-      else                          onOpenPart(file.path, file.name)
+    rowEl.addEventListener('click', async () => {
+      let path = file.path
+      let name = file.name
+      if (_activePeerId) {
+        const server = _servers.find(item => item.id === _activePeerId)
+        showToast(`Copying ${file.name} from ${server?.name || 'remote server'}…`)
+        const checkout = await api.checkoutPeerLibraryFile(_activePeerId, file.path)
+        if (!checkout?.path) {
+          showToast('Remote file could not be opened. The server may have gone offline.', { severity: 'error' })
+          return
+        }
+        path = checkout.path
+        name = checkout.name
+      }
+      if (file.type === 'assembly') onOpenAssembly(path, name)
+      else                          onOpenPart(path, name)
     })
     container.appendChild(rowEl)
   }
@@ -702,8 +754,21 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   }
 
   _loadCachedEntries()
+  _renderServerTabs()
+  _updateActionVisibility()
   if (_allEntries.length) _render()
   refresh()
+  ;(async () => {
+    if (typeof api.getCollaborationPeerStatuses !== 'function') return
+    const status = await api.getCollaborationPeerStatuses()
+    _servers = [
+      _servers[0],
+      ...((status?.peers || []).map(peer => ({
+        id: peer.id, name: peer.name, online: !!peer.online,
+      }))),
+    ]
+    _renderServerTabs()
+  })()
   _startJobPolling()
   return { refresh, refreshJobStatuses: _refreshJobStatuses }
 }

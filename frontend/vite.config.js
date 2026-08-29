@@ -11,6 +11,9 @@ const API_PORT = process.env.VITE_API_PORT || '8000'
 export default {
   server: {
     port: 5173,
+    // Tailscale Serve forwards the original MagicDNS Host header. Keep the
+    // allowlist narrow so Vite's DNS-rebinding protection remains effective.
+    allowedHosts: ['.ts.net'],
     proxy: {
       '/api': {
         target: `http://localhost:${API_PORT}`,

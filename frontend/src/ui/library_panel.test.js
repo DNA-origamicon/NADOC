@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import {
   hasLargeSimulationData,
   mergeLibraryDiskUsage,
   readLibraryCache,
   writeLibraryCache,
+  initLibraryPanel,
 } from './library_panel.js'
+
+afterEach(() => { document.body.replaceChildren(); localStorage.clear(); vi.restoreAllMocks() })
 
 describe('hasLargeSimulationData', () => {
   const halfGb = 0.5 * 1024 ** 3
@@ -59,5 +62,33 @@ describe('library cache', () => {
 
   it('ignores corrupt cached data', () => {
     expect(readLibraryCache({ getItem: () => '{bad json' })).toEqual([])
+  })
+})
+
+describe('welcome workspace server tabs', () => {
+  it('browses and checks out an online peer directly from the welcome library', async () => {
+    document.body.innerHTML = '<div id="library-panel-mount"></div>'
+    const api = {
+      listLibraryFiles: vi.fn().mockResolvedValue([]),
+      libraryDiskUsage: vi.fn().mockResolvedValue({}),
+      getCollaborationPeerStatuses: vi.fn().mockResolvedValue({ peers: [
+        { id: 'remote', name: 'Laptop', online: true },
+      ] }),
+      listPeerLibraryFiles: vi.fn().mockResolvedValue([
+        { path: 'Voltron.nadoc', name: 'Voltron', type: 'part', size_bytes: 100, mtime_iso: new Date().toISOString() },
+      ]),
+      checkoutPeerLibraryFile: vi.fn().mockResolvedValue({ path: 'Voltron.nadoc', name: 'Voltron' }),
+    }
+    const onOpenPart = vi.fn()
+    initLibraryPanel({ api, onOpenPart, onOpenAssembly: vi.fn(), onNewPart: vi.fn(), onNewAssembly: vi.fn() })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    const tab = [...document.querySelectorAll('button')].find(item => item.textContent.includes('Laptop'))
+    expect(tab).toBeTruthy()
+    tab.click()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    document.querySelector('.lib-file-row').click()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(api.checkoutPeerLibraryFile).toHaveBeenCalledWith('remote', 'Voltron.nadoc')
+    expect(onOpenPart).toHaveBeenCalledWith('Voltron.nadoc', 'Voltron')
   })
 })

@@ -49,15 +49,15 @@ URL and that code. Both servers register one another automatically, and the code
 expires after five minutes and cannot be reused. Long-lived peer credentials are
 stored only by the two backends and are never shown in the browser.
 
-After pairing, choose **File → Open File…**. The file browser has one tab for
-this computer and one for every configured server, with live online/offline
-status. Selecting a remote part or assembly streams it through the authenticated
-server connection into an atomic local checkout and opens it using the normal
-NADOC loader. The local file appears only after validation and a complete
-transfer; interrupted downloads leave no partial workspace file. Reopening a
-shared project synchronizes its immutable branch history before replacing the
-local compatibility file, while unrelated same-name files are retained under a
-server-qualified conflict name.
+After pairing, the welcome-screen file library has one tab for this computer and
+one for every configured server, with live online/offline status. The same tabs
+also appear in **File → Open File…**. Selecting a remote part or assembly
+streams it through the authenticated server connection into an atomic local
+checkout and opens it using the normal NADOC loader. The local file appears only
+after validation and a complete transfer; interrupted downloads leave no partial
+workspace file. Reopening a shared project synchronizes its immutable branch
+history before replacing the local compatibility file, while unrelated same-name
+files are retained under a server-qualified conflict name.
 
 The Workspace Hub remains available for explicit Pull, Push, Sync, branch
 history, promotion, leases, and artifact controls. Each server's **Open

@@ -55,7 +55,14 @@ if [ "$TAILSCALE_MODE" -eq 1 ]; then
     FRONTEND_HOST="$TAILSCALE_IP"
   fi
   [ -n "$TAILSCALE_IP" ] || die "No Tailscale IPv4 address found. Is Tailscale connected?"
-  PUBLIC_URL="http://${TAILSCALE_IP}:5173"
+  if [ "$TAILSCALE_WINDOWS_PROXY" -eq 1 ]; then
+    TAILSCALE_DNS_NAME="$("${TAILSCALE_CMD[@]}" status --json 2>/dev/null \
+      | uv run python -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')"
+    [ -n "$TAILSCALE_DNS_NAME" ] || die "Could not determine this computer's Tailscale DNS name."
+    PUBLIC_URL="http://${TAILSCALE_DNS_NAME}:5173"
+  else
+    PUBLIC_URL="http://${TAILSCALE_IP}:5173"
+  fi
   export NADOC_PUBLIC_URL="$PUBLIC_URL"
   TOKEN_FILE=".nadoc-peer-token"
   if [ ! -f "$TOKEN_FILE" ]; then
@@ -101,7 +108,7 @@ info "Frontend → http://localhost:5173"
 FRONTEND_PID=$!
 
 if [ "$TAILSCALE_WINDOWS_PROXY" -eq 1 ]; then
-  info "Tailscale Serve → http://${TAILSCALE_IP}:5173"
+  info "Tailscale Serve → $PUBLIC_URL"
   "${TAILSCALE_CMD[@]}" serve --bg --http=5173 http://127.0.0.1:5173 \
     || die "Could not configure Windows Tailscale Serve."
   TAILSCALE_SERVE_CONFIGURED=1
