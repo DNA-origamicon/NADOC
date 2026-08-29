@@ -221,6 +221,7 @@ async def create_mrdna_job(body: CreateMrdnaJobRequest) -> dict:
         oxdna_design_fingerprint,
     )
     from backend.physics.oxdna_interface import _strand_nucleotide_order
+    from backend.core.project_revisions import record_simulation_revision
 
     job = new_mrdna_job(
         design_name=name,
@@ -236,6 +237,9 @@ async def create_mrdna_job(body: CreateMrdnaJobRequest) -> dict:
         design_fingerprint=oxdna_design_fingerprint(design),
         feature_log_position=effective_feature_log_position(design),
     )
+    provenance = record_simulation_revision(_workspace(), design, "mrdna", job.job_id)
+    job.project_id = provenance.project_id
+    job.design_revision_id = provenance.revision_id
     job.status = MrdnaStatus.preparing
     job.save(_workspace())
     logger.info(

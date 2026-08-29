@@ -214,6 +214,8 @@ class MdJob:
     #: says whether the structure has stopped moving away from what was drawn.
     design_rmsd_reports: list[dict] = field(default_factory=list)
     design_source_path: Optional[str] = None
+    project_id: Optional[str] = None
+    design_revision_id: Optional[str] = None
     seed_oxdna_job_id: Optional[str] = (
         None  # provenance: oxDNA job whose relaxed coords seeded this run
     )
@@ -451,6 +453,8 @@ class MdJob:
         data.setdefault("cell_settle_reports", [])
         data.setdefault("design_rmsd_reports", [])
         data.setdefault("design_source_path", None)
+        data.setdefault("project_id", None)
+        data.setdefault("design_revision_id", None)
         data.setdefault("seed_oxdna_job_id", None)
         data.setdefault("seed_mrdna_job_id", None)
         data.setdefault("seed_blade_job_id", None)
@@ -606,6 +610,8 @@ def new_job(
     threads: int = 16,
     devices: str = "0",
     design_source_path: Optional[str] = None,
+    project_id: Optional[str] = None,
+    design_revision_id: Optional[str] = None,
     seed_oxdna_job_id: Optional[str] = None,
     seed_mrdna_job_id: Optional[str] = None,
     seed_blade_job_id: Optional[str] = None,
@@ -627,6 +633,8 @@ def new_job(
         threads=threads,
         devices=devices,
         design_source_path=design_source_path,
+        project_id=project_id,
+        design_revision_id=design_revision_id,
         seed_oxdna_job_id=seed_oxdna_job_id,
         seed_mrdna_job_id=seed_mrdna_job_id,
         seed_blade_job_id=seed_blade_job_id,

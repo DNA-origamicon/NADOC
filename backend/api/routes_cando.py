@@ -164,6 +164,7 @@ async def create_cando_job(body: CreateCandoJobRequest) -> dict:
         oxdna_design_fingerprint,
     )
     from backend.physics.oxdna_interface import _strand_nucleotide_order
+    from backend.core.project_revisions import record_simulation_revision
 
     kind = body.kind if body.kind in ("predict", "autorefine") else "predict"
     job = new_cando_job(
@@ -185,6 +186,9 @@ async def create_cando_job(body: CreateCandoJobRequest) -> dict:
         # the feature-log entry lands on the right design in a multi-doc session.
         doc_id=doc_context.get_current_doc(),
     )
+    provenance = record_simulation_revision(_workspace(), design, "cando", job.job_id)
+    job.project_id = provenance.project_id
+    job.design_revision_id = provenance.revision_id
     job.status = CandoStatus.preparing
     job.save(_workspace())
     logger.info(

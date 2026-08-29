@@ -85,6 +85,8 @@ class BladeJob:
     # PID of the detached worker (backend.core.blade_worker) — see module docstring.
     pid: Optional[int] = None
     design_source_path: Optional[str] = None
+    project_id: Optional[str] = None
+    design_revision_id: Optional[str] = None
     doc_id: Optional[str] = None
     # Populated on completion — surfaced in the panel detail block.
     sim_seconds: Optional[float] = None  # wall time inside the relax
@@ -138,6 +140,8 @@ class BladeJob:
         data.setdefault("platform", "CUDA")
         data.setdefault("uncertainty", False)
         data.setdefault("design_source_path", None)
+        data.setdefault("project_id", None)
+        data.setdefault("design_revision_id", None)
         data.setdefault("doc_id", None)
         data.setdefault("sim_seconds", None)
         data.setdefault("n_atoms", None)
@@ -195,6 +199,8 @@ def new_blade_job(
     uncertainty: bool = False,
     n_nucleotides: int = 0,
     design_source_path: Optional[str] = None,
+    project_id: Optional[str] = None,
+    design_revision_id: Optional[str] = None,
     design_fingerprint: Optional[str] = None,
     feature_log_position: Optional[int] = None,
     doc_id: Optional[str] = None,
@@ -217,6 +223,8 @@ def new_blade_job(
         # Two stages: build the solute PDB/PSF in the uv env, then relax in the gpu env.
         stages=[BladeStageStatus(name="build"), BladeStageStatus(name="relax")],
         design_source_path=design_source_path,
+        project_id=project_id,
+        design_revision_id=design_revision_id,
         design_fingerprint=design_fingerprint,
         feature_log_position=feature_log_position,
         doc_id=doc_id,

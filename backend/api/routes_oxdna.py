@@ -914,6 +914,11 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
             "surface_strands": surface_strands_in,
         },
     )
+    from backend.core.project_revisions import record_simulation_revision
+
+    provenance = record_simulation_revision(_workspace(), design, "oxdna", job.job_id)
+    job.project_id = provenance.project_id
+    job.design_revision_id = provenance.revision_id
     job.execution_target = body.execution_target
     job.cluster_name = body.cluster_name if body.execution_target == "alpine" else None
     job.partition = body.partition if body.execution_target == "alpine" else None
@@ -1292,6 +1297,8 @@ async def roll_oxdna_job_design(job_id: str) -> dict:
         name,
         simulation_engine="oxdna",
         simulation_job_id=job.job_id,
+        project_id=job.project_id,
+        design_revision_id=job.design_revision_id,
     )
 
 
@@ -1354,6 +1361,8 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
         backend=parent.backend,
         salt_concentration=parent.salt_concentration,
         design_source_path=parent.design_source_path,
+        project_id=parent.project_id,
+        design_revision_id=parent.design_revision_id,
         parent_job_id=parent.job_id,
         design_fingerprint=parent.design_fingerprint,
         feature_log_position=parent.feature_log_position,
@@ -1519,6 +1528,8 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
         backend=parent.backend,
         salt_concentration=parent.salt_concentration,
         design_source_path=parent.design_source_path,
+        project_id=parent.project_id,
+        design_revision_id=parent.design_revision_id,
         parent_job_id=parent.job_id,
         design_fingerprint=parent.design_fingerprint,
         feature_log_position=parent.feature_log_position,
@@ -1673,6 +1684,8 @@ async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) 
         backend=parent.backend,
         salt_concentration=parent.salt_concentration,
         design_source_path=parent.design_source_path,
+        project_id=parent.project_id,
+        design_revision_id=parent.design_revision_id,
         parent_job_id=parent.job_id,
         design_fingerprint=parent.design_fingerprint,
         feature_log_position=parent.feature_log_position,

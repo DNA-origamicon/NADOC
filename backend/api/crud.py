@@ -8366,6 +8366,8 @@ def roll_active_to_job_state(
     *,
     simulation_engine: str,
     simulation_job_id: str,
+    project_id: str | None = None,
+    design_revision_id: str | None = None,
 ) -> dict:
     """Select an immutable, job-specific loadout containing the frozen run design.
 
@@ -8419,6 +8421,12 @@ def roll_active_to_job_state(
         protected=True,
         simulation_engine=simulation_engine,
         simulation_job_id=simulation_job_id,
+        head_revision_id=(
+            design_revision_id if project_id in (None, snapshot.id) else None
+        ),
+        base_revision_id=(
+            design_revision_id if project_id in (None, snapshot.id) else None
+        ),
     )
     loadouts = [l for l in loadouts if l.id != sim_id] + [sim_loadout]
     rolled = snapshot.copy_with(

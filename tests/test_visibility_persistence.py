@@ -36,6 +36,9 @@ def test_visibility_endpoint_persists_without_feature_log_entry(tmp_path, monkey
         "hidden_cluster_ids": ["cluster-a"],
     }
     with TestClient(app) as client:
+        # Lifespan startup may restore the default document; establish this
+        # test's design after startup so revision pointers match tmp_path.
+        design_state.set_design_branch(design, push_history=False)
         response = client.put("/api/design/visibility", json=body)
         assert response.status_code == 200
         saved_path = tmp_path / "visibility.nadoc"
@@ -43,7 +46,7 @@ def test_visibility_endpoint_persists_without_feature_log_entry(tmp_path, monkey
             "/api/design/save-workspace",
             json={"path": "visibility.nadoc", "overwrite": True},
         )
-        assert save.status_code == 200
+        assert save.status_code == 200, save.text
 
     restored = Design.from_json(saved_path.read_text())
     assert restored.visibility_state.model_dump() == body

@@ -30,6 +30,36 @@ To try it, click **File → Open File…** and load a design from `Examples/`
 
 See [START.md](START.md) for the day-to-day run commands and the WSL2 networking note.
 
+### Working across computers with Tailscale
+
+Run NADOC on each computer with:
+
+```bash
+./start.sh --tailscale
+```
+
+This binds the web UI only to that computer's Tailscale IPv4 address and keeps
+the backend on loopback behind the UI proxy. The first run creates a private,
+git-ignored `.nadoc-peer-token`; keep it secret. Use Tailscale ACLs so only your
+devices/users can reach TCP port 5173. Do not use `--lan` for untrusted networks.
+
+In NADOC, choose **File → Workspace Hub…**. Register the other server using the
+URL printed by its `start.sh --tailscale` process, its collaboration server ID,
+and its `.nadoc-peer-token`. The token is sent once to your local server, stored
+server-side, and never returned to the browser. Each server's **Open frontend**
+button opens that server's matching UI, while Pull, Push, and Sync transfer
+immutable design revisions and lightweight simulation metadata.
+
+Loadouts are collaborative branches: edit independent loadouts on different
+servers, name immutable versions, inspect revision history, and explicitly
+promote a branch when ready. Promotion preserves the replaced branch head as a
+recovery version. A single-writer lease prevents accidental simultaneous edits;
+if another machine holds it, work read-only or use **Auto-fork if busy**. Sync
+never silently overwrites divergent branch names—it preserves the incoming head
+under a conflict alias. Large simulation files remain on the machine that ran
+them unless explicitly fetched or included in a selected/full `.nadocpkg`;
+normal sync transfers only their provenance and locations.
+
 ## Architecture
 
 NADOC enforces a strict three-layer separation:

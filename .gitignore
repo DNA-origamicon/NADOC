@@ -197,6 +197,7 @@ experiments/*/results/longrun_result.json
 # `just test`/`test-all` record the SHA of the last FULL-suite pass here so
 # `just test-smart` can scope against it. Per-machine baseline; never synced.
 .nadoc-test-watermark
+.nadoc-peer-token
 
 # scripts/test_guard.sh exclusive-run lock (mkdir dir holding pid+label). Machine-local.
 .nadoc-test.lock/

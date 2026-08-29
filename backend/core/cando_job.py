@@ -77,6 +77,8 @@ class CandoJob:
     stages: list[CandoStageStatus] = dc_field(default_factory=list)
     error: Optional[str] = None
     design_source_path: Optional[str] = None
+    project_id: Optional[str] = None
+    design_revision_id: Optional[str] = None
     # Document the job's design lives in (multi-doc): the autorefine runner sets this so its
     # auto-apply lands on the right document's active design + feature log from its worker thread.
     doc_id: Optional[str] = None
@@ -148,6 +150,8 @@ class CandoJob:
         data.setdefault("anchors", None)
         data.setdefault("field", None)
         data.setdefault("design_source_path", None)
+        data.setdefault("project_id", None)
+        data.setdefault("design_revision_id", None)
         data.setdefault("doc_id", None)
         data.setdefault("refine_applied", False)
         data.setdefault("refine_before_rmsd", None)
@@ -213,6 +217,8 @@ def new_cando_job(
     field: Optional[dict] = None,
     n_nucleotides: int = 0,
     design_source_path: Optional[str] = None,
+    project_id: Optional[str] = None,
+    design_revision_id: Optional[str] = None,
     design_fingerprint: Optional[str] = None,
     feature_log_position: Optional[int] = None,
     doc_id: Optional[str] = None,
@@ -238,6 +244,8 @@ def new_cando_job(
         field=field,
         stages=[CandoStageStatus(name=stage_name)],
         design_source_path=design_source_path,
+        project_id=project_id,
+        design_revision_id=design_revision_id,
         design_fingerprint=design_fingerprint,
         feature_log_position=feature_log_position,
         doc_id=doc_id,

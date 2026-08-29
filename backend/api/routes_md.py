@@ -3337,7 +3337,43 @@ def _apply_run_dir(
     logger.info("run_dir: job %s archived-from-birth at %s", job.job_id, dest)
 
 
-def _spawn_draft_job(body: CreateJobRequest, *, name: str) -> MdJob:
+def _assign_job_revision_provenance(job: MdJob, body: CreateJobRequest, design) -> None:
+    """Bind a root MD job to the exact direct-design or seed-job revision."""
+    if design is not None:
+        from backend.core.project_revisions import record_simulation_revision
+
+        provenance = record_simulation_revision(_workspace(), design, "md", job.job_id)
+        job.project_id = provenance.project_id
+        job.design_revision_id = provenance.revision_id
+        return
+    seed = None
+    if body.oxdna_job_id:
+        from backend.core.oxdna_job import OxdnaJob
+
+        try:
+            seed = OxdnaJob.load(body.oxdna_job_id, _workspace())
+        except FileNotFoundError:
+            return
+    elif body.mrdna_job_id:
+        from backend.core.mrdna_job import MrdnaJob
+
+        try:
+            seed = MrdnaJob.load(body.mrdna_job_id, _workspace())
+        except FileNotFoundError:
+            return
+    elif body.blade_job_id:
+        from backend.core.blade_job import BladeJob
+
+        try:
+            seed = BladeJob.load(body.blade_job_id, _workspace())
+        except FileNotFoundError:
+            return
+    if seed is not None:
+        job.project_id = seed.project_id
+        job.design_revision_id = seed.design_revision_id
+
+
+def _spawn_draft_job(body: CreateJobRequest, *, name: str, design=None) -> MdJob:
     """Create a seeded job in the DRAFT state (no solvation yet).
 
     Records the seed source + provenance + the default advanced params so the panel
@@ -3359,6 +3395,7 @@ def _spawn_draft_job(body: CreateJobRequest, *, name: str) -> MdJob:
         seed_mrdna_job_id=body.mrdna_job_id,
         seed_blade_job_id=body.blade_job_id,
     )
+    _assign_job_revision_provenance(job, body, design)
     job.execution_target = body.execution_target
     job.cluster_name = body.cluster_name or (
         "alpine" if body.execution_target == "alpine" else None
@@ -3525,6 +3562,8 @@ def _spawn_prep_job(
         # solvated package + trajectory are built there.  A draft was already placed by
         # _spawn_draft_job; a refit keeps its existing location.
         _apply_run_dir(job, body.run_dir, execution_target=body.execution_target)
+    if job.project_id is None or job.design_revision_id is None:
+        _assign_job_revision_provenance(job, body, design)
     # Remote-execution tag (default "local"): submission itself happens later via
     # /md/jobs/{id}/submit-remote once the package is prepared and a cluster session
     # is connected.  Tagging here lets the UI show the intended target from creation.
@@ -5384,6 +5423,8 @@ async def _spawn_md_production_impl(
         threads=parent.threads,
         devices=parent.devices,
         design_source_path=parent.design_source_path,
+        project_id=parent.project_id,
+        design_revision_id=parent.design_revision_id,
         parent_job_id=parent.job_id,
         ensemble_seed=seed,
         ensemble_index=index,
@@ -5792,6 +5833,8 @@ async def stage_md_ensemble(parent_id: str, body: EnsembleProductionRequest) -> 
             threads=parent.threads,
             devices=parent.devices,
             design_source_path=parent.design_source_path,
+            project_id=parent.project_id,
+            design_revision_id=parent.design_revision_id,
             parent_job_id=parent.job_id,
             ensemble_seed=seed,
             namd_seed=seed,
@@ -5946,6 +5989,8 @@ async def roll_md_job_design(job_id: str) -> dict:
         name,
         simulation_engine="md",
         simulation_job_id=job.job_id,
+        project_id=job.project_id,
+        design_revision_id=job.design_revision_id,
     )
 
 

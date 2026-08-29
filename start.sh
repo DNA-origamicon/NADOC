@@ -7,6 +7,7 @@
 #
 # Usage:
 #   ./start.sh          # local machine only (default)
+#   ./start.sh --tailscale # expose the frontend only on this machine's tailnet IP
 #   ./start.sh --lan    # explicitly expose to a trusted local network
 #
 set -euo pipefail
@@ -16,14 +17,18 @@ info()  { printf '\033[1;34m›\033[0m %s\n' "$*"; }
 die()   { printf '\033[1;31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 have()  { command -v "$1" >/dev/null 2>&1; }
 
-HOST="127.0.0.1"
+BACKEND_HOST="127.0.0.1"
+FRONTEND_HOST="127.0.0.1"
+PUBLIC_URL="http://localhost:5173"
 LAN_MODE=0
+TAILSCALE_MODE=0
 case "${1:-}" in
   "") ;;
-  --lan) HOST="0.0.0.0"; LAN_MODE=1 ;;
-  *) die "Unknown option: $1 (supported: --lan)" ;;
+  --lan) BACKEND_HOST="0.0.0.0"; FRONTEND_HOST="0.0.0.0"; LAN_MODE=1 ;;
+  --tailscale) TAILSCALE_MODE=1 ;;
+  *) die "Unknown option: $1 (supported: --tailscale, --lan)" ;;
 esac
-[ "$#" -le 1 ] || die "Too many arguments (supported: --lan)"
+[ "$#" -le 1 ] || die "Too many arguments (supported: --tailscale, --lan)"
 
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PATH="$HOME/.local/bin:$PATH"
@@ -31,6 +36,20 @@ export PATH="$HOME/.local/bin:$PATH"
 have uv   || die "uv not found. Run ./setup.sh first."
 have node || die "Node.js not found. Run ./setup.sh first."
 [ -d frontend/node_modules ] || die "Frontend deps missing. Run ./setup.sh first."
+
+if [ "$TAILSCALE_MODE" -eq 1 ]; then
+  have tailscale || die "Tailscale CLI not found. Install and connect Tailscale first."
+  FRONTEND_HOST="$(tailscale ip -4 2>/dev/null | head -n 1)"
+  [ -n "$FRONTEND_HOST" ] || die "No Tailscale IPv4 address found. Is Tailscale connected?"
+  PUBLIC_URL="http://${FRONTEND_HOST}:5173"
+  TOKEN_FILE=".nadoc-peer-token"
+  if [ ! -f "$TOKEN_FILE" ]; then
+    umask 077
+    uv run python -c 'import secrets; print(secrets.token_urlsafe(32))' > "$TOKEN_FILE"
+  fi
+  chmod 600 "$TOKEN_FILE"
+  export NADOC_PEER_TOKEN="$(tr -d '\r\n' < "$TOKEN_FILE")"
+fi
 
 BACKEND_PID=""
 FRONTEND_PID=""
@@ -48,22 +67,25 @@ bold "Starting NADOC…"
 if [ "$LAN_MODE" -eq 1 ]; then
   printf '\033[1;33m⚠ LAN mode: NADOC has no user authentication. Use only on a trusted network.\033[0m\n' >&2
   info "Remote devices may connect to this computer's LAN address."
+elif [ "$TAILSCALE_MODE" -eq 1 ]; then
+  info "Tailscale-only mode. Tailnet ACLs control who can open NADOC."
+  info "The backend remains loopback-only; the frontend proxies API requests."
 else
-  info "Local-only mode (use ./start.sh --lan to opt in to trusted-LAN access)."
+  info "Local-only mode (use ./start.sh --tailscale for private remote access)."
 fi
 
 info "Backend  → http://localhost:8000"
-uv run uvicorn backend.api.main:app --host "$HOST" --port 8000 &
+uv run uvicorn backend.api.main:app --host "$BACKEND_HOST" --port 8000 &
 BACKEND_PID=$!
 
 info "Frontend → http://localhost:5173"
-( cd frontend && npm run dev -- --host "$HOST" ) &
+( cd frontend && npm run dev -- --host "$FRONTEND_HOST" ) &
 FRONTEND_PID=$!
 
 echo
 bold "NADOC is starting. Open this in your browser:"
 echo
-echo "    http://localhost:5173"
+echo "    $PUBLIC_URL"
 echo
 echo "(Give it a few seconds the first time. Press Ctrl-C here to stop.)"
 echo

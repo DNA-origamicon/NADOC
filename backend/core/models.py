@@ -2495,6 +2495,12 @@ class DesignLoadout(BaseModel):
     protected: bool = False
     simulation_engine: Optional[str] = None
     simulation_job_id: Optional[str] = None
+    # External project-history pointers.  Older .nadoc files omit these and keep
+    # using the embedded snapshot above; opening/saving them materializes an
+    # immutable revision in ``workspace/.nadoc-projects`` without making the file
+    # unreadable by older NADOC builds.
+    head_revision_id: Optional[str] = None
+    base_revision_id: Optional[str] = None
 
 
 # ── Protein attachment models (display-only; never part of the strand graph) ──

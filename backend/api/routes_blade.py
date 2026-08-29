@@ -182,6 +182,7 @@ async def create_blade_job(body: CreateBladeJobRequest) -> dict:
         oxdna_design_fingerprint,
     )
     from backend.physics.oxdna_interface import _strand_nucleotide_order
+    from backend.core.project_revisions import record_simulation_revision
 
     if body.mode != "relax":
         raise HTTPException(
@@ -234,6 +235,9 @@ async def create_blade_job(body: CreateBladeJobRequest) -> dict:
         feature_log_position=effective_feature_log_position(design),
         doc_id=doc_context.get_current_doc(),
     )
+    provenance = record_simulation_revision(_workspace(), design, "blade", job.job_id)
+    job.project_id = provenance.project_id
+    job.design_revision_id = provenance.revision_id
     job.status = BladeStatus.preparing
     job.save(_workspace())
     logger.info(

@@ -144,6 +144,9 @@ def _audit_workspace_design_identities(workspace_dir: Path | None = None) -> Non
                     reassign_job_snapshot_identity(
                         workspace_dir, rel, design.id, resolved.id
                     )
+    from backend.core.project_revisions import migrate_job_revision_provenance
+
+    migrate_job_revision_provenance(workspace_dir)
 
 
 def _schedule_workspace_identity_audit() -> None:
@@ -542,7 +545,12 @@ def get_library_file_content(path: str) -> dict:
 
 
 @router.get("/library/native-package")
-def download_native_package(path: str, background_tasks: BackgroundTasks) -> FileResponse:
+def download_native_package(
+    path: str,
+    background_tasks: BackgroundTasks,
+    mode: str = "full",
+    jobs: str | None = None,
+) -> FileResponse:
     """Download a portable .nadocpkg containing a part and all associated simulations."""
     from backend.core.native_part_package import create_package
 
@@ -550,7 +558,13 @@ def download_native_package(path: str, background_tasks: BackgroundTasks) -> Fil
         source = _safe_workspace_path(path)
         fd, temporary = tempfile.mkstemp(prefix="nadoc-part-", suffix=".nadocpkg")
         os.close(fd)
-        create_package(_asm._WORKSPACE_DIR, path, Path(temporary))
+        create_package(
+            _asm._WORKSPACE_DIR,
+            path,
+            Path(temporary),
+            mode=mode,
+            selected_job_ids={item for item in (jobs or "").split(",") if item},
+        )
     except (ValueError, OSError) as exc:
         if "temporary" in locals():
             Path(temporary).unlink(missing_ok=True)
@@ -776,12 +790,34 @@ def save_design_to_workspace(body: SaveDesignWorkspaceRequest) -> dict:
                     update={
                         "design_snapshot_gz_b64": payload,
                         "snapshot_size_bytes": size,
+                        # A Save As is a new project. Its branches start from
+                        # the copied content, never from the source project's
+                        # content-addressed ref namespace.
+                        "head_revision_id": None,
+                        "base_revision_id": None,
                     }
                 )
             except Exception:
                 pass
             migrated_loadouts.append(loadout)
         saved = saved.model_copy(update={"loadouts": migrated_loadouts})
+    # Mirror embedded loadout snapshots into immutable project revisions before
+    # publishing the compatibility .nadoc.  A stale branch pointer is a real
+    # multi-server conflict and must never degrade to last-writer-wins.
+    from backend.core.project_revisions import BranchConflict, refresh_active_revision
+
+    try:
+        saved = refresh_active_revision(_asm._WORKSPACE_DIR, saved)
+    except BranchConflict as exc:
+        raise HTTPException(
+            409,
+            detail={
+                "kind": "branch_diverged",
+                "loadout_id": exc.loadout_id,
+                "expected_head": exc.expected,
+                "current_head": exc.current,
+            },
+        ) from exc
     dest.write_text(saved.to_json(), encoding="utf-8")
     if saved != design:
         design_state.set_design_silent(saved)

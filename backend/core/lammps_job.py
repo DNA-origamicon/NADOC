@@ -54,6 +54,8 @@ class LammpsJob:
     lammps_pid: Optional[int] = None
     lammps_path: Optional[str] = None
     design_source_path: Optional[str] = None
+    project_id: Optional[str] = None
+    design_revision_id: Optional[str] = None
     parent_job_id: Optional[str] = None
     # External-force metadata for a steered run (from resolve_lammps_forces): the
     # applied E-field / surface wall / anchor summary, so the row/detail can show what
@@ -82,6 +84,8 @@ class LammpsJob:
         for k, v in (
             ("parent_job_id", None),
             ("design_source_path", None),
+            ("project_id", None),
+            ("design_revision_id", None),
             ("lammps_path", None),
             ("lammps_pid", None),
             ("frames", 0),
@@ -122,6 +126,8 @@ def new_lammps_job(
     salt_molar: float = 0.5,
     ranks: int = 1,
     design_source_path: Optional[str] = None,
+    project_id: Optional[str] = None,
+    design_revision_id: Optional[str] = None,
     parent_job_id: Optional[str] = None,
     forces: Optional[dict] = None,
 ) -> LammpsJob:
@@ -138,6 +144,8 @@ def new_lammps_job(
         salt_molar=salt_molar,
         ranks=ranks,
         design_source_path=design_source_path,
+        project_id=project_id,
+        design_revision_id=design_revision_id,
         parent_job_id=parent_job_id,
         forces=forces,
     )

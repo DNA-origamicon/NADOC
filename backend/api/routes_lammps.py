@@ -133,6 +133,11 @@ async def create_lammps_job(body: CreateLammpsJobRequest) -> dict:
         ranks=body.ranks,
         design_source_path=body.design_source_path,
     )
+    from backend.core.project_revisions import record_simulation_revision
+
+    provenance = record_simulation_revision(ws, design, "lammps", job.job_id)
+    job.project_id = provenance.project_id
+    job.design_revision_id = provenance.revision_id
     job.status = LammpsStatus.preparing
     job.save(ws)
 

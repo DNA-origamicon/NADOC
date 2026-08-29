@@ -4786,6 +4786,46 @@ export function subscribeLibraryEvents(onEvent) {
   return () => es.close()
 }
 
+// ── Collaborative workspaces ─────────────────────────────────────────────────
+
+export function getCollaborationIdentity() { return _request('GET', '/collaboration/identity') }
+export function listCollaborationProjects() { return _request('GET', '/collaboration/projects') }
+export function listCollaborationPeers() { return _request('GET', '/collaboration/peers') }
+export function getProjectOverview(projectId) {
+  return _request('GET', `/collaboration/projects/${encodeURIComponent(projectId)}/overview`)
+}
+export function registerCollaborationPeer(peer) { return _request('POST', '/collaboration/peers', peer) }
+export function removeCollaborationPeer(peerId) {
+  return _request('DELETE', `/collaboration/peers/${encodeURIComponent(peerId)}`)
+}
+export function syncCollaborationPeer(peerId, projectId, direction = 'sync') {
+  return _request('POST', `/collaboration/peers/${encodeURIComponent(peerId)}/projects/${encodeURIComponent(projectId)}/${direction}`)
+}
+export function getLoadoutHistory(projectId, loadoutId) {
+  return _request('GET', `/collaboration/projects/${encodeURIComponent(projectId)}/loadouts/${encodeURIComponent(loadoutId)}/history`)
+}
+export function compareProjectRevisions(projectId, left, right) {
+  const q = new URLSearchParams({ left, right })
+  return _request('GET', `/collaboration/projects/${encodeURIComponent(projectId)}/compare?${q}`)
+}
+export function createProjectVersion(projectId, body) {
+  return _request('POST', `/collaboration/projects/${encodeURIComponent(projectId)}/versions`, body)
+}
+export function promoteProjectBranch(projectId, body) {
+  return _request('POST', `/collaboration/projects/${encodeURIComponent(projectId)}/promote`, body)
+}
+export function acquireProjectLease(projectId, loadoutId, body) {
+  return _request('POST', `/collaboration/projects/${encodeURIComponent(projectId)}/loadouts/${encodeURIComponent(loadoutId)}/lease`, body)
+}
+export function releaseProjectLease(projectId, loadoutId, serverId, clientId, force = false) {
+  const q = new URLSearchParams({ server_id: serverId, client_id: clientId, force: String(force) })
+  return _request('DELETE', `/collaboration/projects/${encodeURIComponent(projectId)}/loadouts/${encodeURIComponent(loadoutId)}/lease?${q}`)
+}
+export function fetchPeerArtifacts(peerId, projectId, engine, jobId, body) {
+  const parts = [peerId, projectId, engine, jobId].map(encodeURIComponent)
+  return _request('POST', `/collaboration/peers/${parts[0]}/projects/${parts[1]}/artifacts/${parts[2]}/${parts[3]}/fetch`, body)
+}
+
 // ── Flatten to Design ─────────────────────────────────────────────────────────
 
 export async function validateAssembly() {

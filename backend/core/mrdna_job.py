@@ -81,6 +81,8 @@ class MrdnaJob:
     error: Optional[str] = None
     arbd_pid: Optional[int] = None
     design_source_path: Optional[str] = None
+    project_id: Optional[str] = None
+    design_revision_id: Optional[str] = None
     # Populated on completion — surfaced in the panel + used to gate the display.
     sim_seconds: Optional[float] = None  # wall time inside model.simulate()
     n_override: Optional[int] = None  # nucleotides whose position moved
@@ -121,6 +123,8 @@ class MrdnaJob:
         data["stages"] = [MrdnaStageStatus(**s) for s in data.get("stages", [])]
         data.setdefault("fine_steps", 0)
         data.setdefault("design_source_path", None)
+        data.setdefault("project_id", None)
+        data.setdefault("design_revision_id", None)
         data.setdefault("anchors", None)
         data.setdefault("e_field", None)
         data.setdefault("surface", None)
@@ -175,6 +179,8 @@ def new_mrdna_job(
     e_field: Optional[dict] = None,
     surface: Optional[dict] = None,
     design_source_path: Optional[str] = None,
+    project_id: Optional[str] = None,
+    design_revision_id: Optional[str] = None,
     design_fingerprint: Optional[str] = None,
     feature_log_position: Optional[int] = None,
 ) -> MrdnaJob:
@@ -196,6 +202,8 @@ def new_mrdna_job(
         surface=surface,
         stages=stages,
         design_source_path=design_source_path,
+        project_id=project_id,
+        design_revision_id=design_revision_id,
         design_fingerprint=design_fingerprint,
         feature_log_position=feature_log_position,
     )

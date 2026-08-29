@@ -79,6 +79,8 @@ class OxdnaJob:
     salt_concentration: float = 0.5  # molar
     health_samples: list[OxdnaHealthSample] = field(default_factory=list)
     design_source_path: Optional[str] = None
+    project_id: Optional[str] = None
+    design_revision_id: Optional[str] = None
     # Auto-retry budget: when a relax stage finishes but leaves the structure NOT
     # equil-ready (a backbone bond past oxDNA's FENE cliff), the runner re-runs the
     # md_relax stage with escalated parameters (longer + smaller dt + stronger force
@@ -185,6 +187,8 @@ class OxdnaJob:
             OxdnaHealthSample(**h) for h in data.get("health_samples", [])
         ]
         data.setdefault("design_source_path", None)
+        data.setdefault("project_id", None)
+        data.setdefault("design_revision_id", None)
         data.setdefault("parent_job_id", None)
         data.setdefault("efield", None)
         data.setdefault("run_config", None)
@@ -283,6 +287,8 @@ def new_oxdna_job(
     backend: str = "CUDA",
     salt_concentration: float = 0.5,
     design_source_path: Optional[str] = None,
+    project_id: Optional[str] = None,
+    design_revision_id: Optional[str] = None,
     parent_job_id: Optional[str] = None,
     efield: Optional[dict] = None,
     run_config: Optional[dict] = None,
@@ -301,6 +307,8 @@ def new_oxdna_job(
         backend=backend,
         salt_concentration=salt_concentration,
         design_source_path=design_source_path,
+        project_id=project_id,
+        design_revision_id=design_revision_id,
         parent_job_id=parent_job_id,
         efield=efield,
         run_config=run_config,

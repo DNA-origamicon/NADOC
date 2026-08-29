@@ -28,7 +28,16 @@ def associated_job_dirs(workspace: Path, source_path: str):
                     yield tree, job, directory
 
 
-def create_package(workspace: Path, source_path: str, output: Path) -> dict:
+def create_package(
+    workspace: Path,
+    source_path: str,
+    output: Path,
+    *,
+    mode: str = "full",
+    selected_job_ids: set[str] | None = None,
+) -> dict:
+    if mode not in {"thin", "selected", "full"}:
+        raise ValueError("package mode must be thin, selected, or full")
     part = (workspace / source_path).resolve()
     try:
         part.relative_to(workspace.resolve())
@@ -39,8 +48,22 @@ def create_package(workspace: Path, source_path: str, output: Path) -> dict:
     Design.from_json(part.read_text(encoding="utf-8"))
 
     jobs = list(associated_job_dirs(workspace, source_path))
+    selected_job_ids = set(selected_job_ids or ())
+    known_ids = {job.job_id for _, job, _ in jobs}
+    if mode == "selected":
+        unknown = sorted(selected_job_ids - known_ids)
+        if unknown:
+            raise ValueError("selected simulation jobs are not associated: " + ", ".join(unknown))
+        if not selected_job_ids:
+            raise ValueError("selected package mode needs at least one simulation job")
+    included_jobs = [
+        (tree, job, directory)
+        for tree, job, directory in jobs
+        if mode == "full" or (mode == "selected" and job.job_id in selected_job_ids)
+    ]
+    included_ids = {job.job_id for _, job, _ in included_jobs}
     active = [
-        job.job_id for _, job, _ in jobs
+        job.job_id for _, job, _ in included_jobs
         if str(getattr(getattr(job, "status", None), "value", getattr(job, "status", "")))
         in {"preparing", "running"}
     ]
@@ -49,17 +72,34 @@ def create_package(workspace: Path, source_path: str, output: Path) -> dict:
     manifest = {
         "format": FORMAT,
         "version": VERSION,
+        "mode": mode,
         "part": {"archive_path": f"part/{part.name}", "source_path": _norm(source_path)},
         "simulations": [
-            {"tree": tree, "job_id": job.job_id, "archive_path": f"simulations/{tree}/{job.job_id}"}
-            for tree, job, _ in jobs
+            {
+                "tree": tree,
+                "job_id": job.job_id,
+                "included": job.job_id in included_ids,
+                "archive_path": (
+                    f"simulations/{tree}/{job.job_id}"
+                    if job.job_id in included_ids
+                    else None
+                ),
+                "project_id": getattr(job, "project_id", None),
+                "design_revision_id": getattr(job, "design_revision_id", None),
+                "status": str(
+                    getattr(getattr(job, "status", None), "value", getattr(job, "status", ""))
+                ),
+                "design_name": getattr(job, "design_name", ""),
+                "created_at": getattr(job, "created_at", None),
+            }
+            for tree, job, _directory in jobs
         ],
     }
     output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(output, "w", allowZip64=True) as archive:
         archive.writestr("manifest.json", json.dumps(manifest, indent=2), compress_type=zipfile.ZIP_DEFLATED)
         archive.write(part, manifest["part"]["archive_path"], compress_type=zipfile.ZIP_DEFLATED)
-        for tree, job, directory in jobs:
+        for tree, job, directory in included_jobs:
             prefix = PurePosixPath("simulations", tree, job.job_id)
             for file in sorted(directory.rglob("*")):
                 if file.is_file():
@@ -114,6 +154,8 @@ def import_package(workspace: Path, package: Path, dest_path: str, *, overwrite_
         targets = []
         allowed_trees = {c.__module__.rsplit(".", 1)[-1].removesuffix("_job") + "_jobs" for c in _job_classes()}
         for sim in simulations:
+            if not sim.get("included", True):
+                continue
             tree, job_id, prefix = sim.get("tree"), sim.get("job_id"), sim.get("archive_path")
             if (tree not in allowed_trees or not isinstance(job_id, str) or not job_id
                     or "/" in job_id or "\\" in job_id or not isinstance(prefix, str)):
@@ -162,4 +204,26 @@ def import_package(workspace: Path, package: Path, dest_path: str, *, overwrite_
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.move(str(staged), str(target))
                 installed.append(str(target.relative_to(workspace)))
-    return {"path": _norm(dest_path), "name": destination.stem, "simulations": installed}
+    referenced = [
+        {
+            key: sim.get(key)
+            for key in (
+                "tree",
+                "job_id",
+                "included",
+                "project_id",
+                "design_revision_id",
+                "status",
+                "design_name",
+                "created_at",
+            )
+        }
+        for sim in simulations
+    ]
+    return {
+        "path": _norm(dest_path),
+        "name": destination.stem,
+        "simulations": installed,
+        "referenced_simulations": referenced,
+        "mode": manifest.get("mode", "full"),
+    }

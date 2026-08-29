@@ -20,6 +20,9 @@ def test_save_as_forks_identity_and_keeps_old_file(monkeypatch, tmp_path):
     )
     assert first.status_code == 200
     assert first.json()["design"]["id"] == "original"
+    assert first.json()["design"]["active_loadout_id"] == "main"
+    first_saved = Design.from_json((tmp_path / "a.nadoc").read_text())
+    assert first_saved.loadouts[0].head_revision_id
 
     second = client.post(
         "/api/design/save-workspace", json={"path": "b.nadoc", "overwrite": True}

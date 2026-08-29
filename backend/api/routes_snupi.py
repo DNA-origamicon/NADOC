@@ -210,6 +210,7 @@ async def create_snupi_job(body: CreateSnupiJobRequest) -> dict:
         oxdna_design_fingerprint,
     )
     from backend.physics.oxdna_interface import _strand_nucleotide_order
+    from backend.core.project_revisions import record_simulation_revision
 
     material = body.material if body.material in ("snupi", "cando") else "snupi"
 
@@ -282,6 +283,9 @@ async def create_snupi_job(body: CreateSnupiJobRequest) -> dict:
         feature_log_position=effective_feature_log_position(design),
         doc_id=doc_context.get_current_doc(),
     )
+    provenance = record_simulation_revision(_workspace(), design, "snupi", job.job_id)
+    job.project_id = provenance.project_id
+    job.design_revision_id = provenance.revision_id
     job.status = SnupiStatus.preparing
     job.save(_workspace())
     logger.info(

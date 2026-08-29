@@ -63,6 +63,7 @@ import { initScaffoldModal } from './ui/scaffold_modal.js'
 import { initStrandSequenceDialog } from './ui/strand_sequence_dialog.js'
 import { initAutoscaffoldPicker } from './ui/autoscaffold_picker.js'
 import { initNewDesignModal } from './ui/new_design_modal.js'
+import { initWorkspaceHub } from './ui/workspace_hub.js'
 import { initSliceHighlighter } from './scene/slice_highlighter.js'
 import { vecClose } from './scene/vec_math.js'
 import { initDomainEnds }            from './scene/domain_ends.js'
@@ -3182,6 +3183,7 @@ async function main() {
     getLibraryPanel: () => libraryPanel,
     spawnDocTabIfBusy: _docSpawn.spawnDocTabIfBusy,
   })
+  initWorkspaceHub()
 
   // Unified "Open File" — one picker shows both parts (.nadoc) and assemblies
   // (.nass); route to the right loader by extension.  Pick in this tab, but open
