@@ -63,6 +63,14 @@ function engineGroup(node) {
   return node?.engine === 'lammps' ? 'oxdna' : node?.engine
 }
 
+function _transferEta(seconds) {
+  const value = Number(seconds)
+  if (!Number.isFinite(value) || value < 0) return ''
+  if (value < 60) return `${Math.max(1, Math.round(value))}s`
+  if (value < 3600) return `${Math.round(value / 60)}m`
+  return `${Math.floor(value / 3600)}h ${Math.round((value % 3600) / 60)}m`
+}
+
 // ── Pure decisions (unit-tested) ──────────────────────────────────────────────
 
 /** Is a node in an in-progress state (active spinner + Stop)? */
@@ -661,12 +669,12 @@ export function initSimulateJobs({
     const node = _nodes.find((n) => n.job_id === jobId)
     const panel = node?.engine === 'namd' ? mdPanel
       : node?.engine === 'oxdna' ? oxdnaPanel : null
-    if (!panel?.copyJob) return
+    if (!panel?.copyJob && !node?.remote_only) return
     e.preventDefault()
     const items = [
       { type: 'header', label: `${node.design_name || 'job'} · ${formatJobTime(node.created_at)}` },
     ]
-    if (node.engine === 'namd' && mdPanel?.openJobSettings) {
+    if (!node.remote_only && node.engine === 'namd' && mdPanel?.openJobSettings) {
       items.push({
         label: mdPanel.hasJobSettings?.(jobId) === false
           ? 'Settings were not recorded for this run'
@@ -675,22 +683,71 @@ export function initSimulateJobs({
         onClick: () => { void mdPanel.openJobSettings(jobId) },
       })
       items.push({ type: 'separator' })
-    } else if (node.engine === 'oxdna' && oxdnaPanel?.openJobSettings) {
+    } else if (!node.remote_only && node.engine === 'oxdna' && oxdnaPanel?.openJobSettings) {
       items.push({
         label: oxdnaPanel.canEditJob?.(jobId) ? 'Edit…' : 'View settings…',
         onClick: () => { void oxdnaPanel.openJobSettings(jobId) },
       })
       items.push({ type: 'separator' })
     }
-    items.push({
-      label: 'Copy job (new seed)',
-      disabled: node.engine === 'namd' && mdPanel.hasJobSettings?.(jobId) === false,
-      onClick: () => { void panel.copyJob(jobId) },
-    })
+    if (node.remote_only && ['namd', 'oxdna'].includes(node.engine)) {
+      items.push({
+        label: `Transfer job to this computer${node.source_peer_name ? ` from ${node.source_peer_name}` : ''}`,
+        disabled: ['queued', 'preparing', 'running', 'paused'].includes(node.status),
+        onClick: () => { void _startPeerTransfer(node) },
+      })
+    } else {
+      items.push({
+        label: 'Copy job (new seed)',
+        disabled: node.engine === 'namd' && mdPanel.hasJobSettings?.(jobId) === false,
+        onClick: () => { void panel.copyJob(jobId) },
+      })
+    }
     createContextMenu({
       x: e.clientX, y: e.clientY,
       items,
     })
+  }
+
+  async function _startPeerTransfer(node) {
+    if (!node?.source_peer_id || !node?.project_id || _endTransfers.has(node.job_id)) return
+    const engine = node.engine === 'namd' ? 'md' : node.engine
+    _sel = { engine: node.engine, id: node.job_id }
+    _endTransfers.set(node.job_id, { phase: 'queued', pct: 0, moved: 0, total: 0 })
+    _renderMaster()
+    const started = await api.startPeerArtifactTransfer(
+      node.source_peer_id, node.project_id, engine, node.job_id,
+    )
+    if (!started?.transfer_id) {
+      _endTransfers.set(node.job_id, { phase: 'failed', error: api.lastErrorMessage?.() || 'Transfer could not be started' })
+      _renderMaster()
+      return
+    }
+    for (;;) {
+      const status = await api.getPeerArtifactTransfer(started.transfer_id)
+      if (!status) {
+        _endTransfers.set(node.job_id, { phase: 'failed', error: api.lastErrorMessage?.() || 'Transfer status is unavailable' })
+        _renderMaster()
+        return
+      }
+      const moved = Number(status.transferred_bytes) || 0
+      const total = Number(status.total_bytes) || 0
+      _endTransfers.set(node.job_id, {
+        ...status, phase: status.phase || status.state, moved, total,
+        pct: total > 0 ? Math.min(100, Math.round(moved / total * 100)) : 0,
+      })
+      _renderMaster()
+      if (status.state === 'done') {
+        showToast('Simulation job transferred and verified.', { severity: 'ok' })
+        await _fetch()
+        return
+      }
+      if (['failed', 'cancelled', 'interrupted'].includes(status.state)) {
+        showToast(status.error || 'Simulation transfer did not complete.', { severity: 'error' })
+        return
+      }
+      await new Promise((resolve) => setTimeout(resolve, 700))
+    }
   }
 
   function _renderMaster() {
@@ -710,19 +767,34 @@ export function initSimulateJobs({
         transfer = { phase: 'unverified', pct, ...(ds || {}) }
       }
     }
-    const transferText = transfer?.phase === 'downloading'
-      ? `Downloading results from Alpine${transfer.total ? ` · ${formatBytes(transfer.moved || 0)} / ${formatBytes(transfer.total)} (${transfer.pct || 0}%)` : ''}…`
+    const peerDetail = transfer?.peer_id
+      ? `${transfer.total ? ` · ${formatBytes(transfer.moved || 0)} / ${formatBytes(transfer.total)} (${transfer.pct || 0}%)` : ''}`
+        + `${transfer.file_count ? ` · ${transfer.files_completed || 0}/${transfer.file_count} files` : ''}`
+        + `${transfer.bytes_per_second ? ` · ${formatBytes(transfer.bytes_per_second)}/s` : ''}`
+        + `${_transferEta(transfer.eta_seconds) ? ` · ETA ${_transferEta(transfer.eta_seconds)}` : ''}`
+        + `${transfer.current_file ? ` · ${transfer.current_file}` : ''}`
+      : ''
+    const transferText = transfer?.phase === 'queued' ? 'Simulation transfer queued…'
+      : transfer?.phase === 'cancelling' ? 'Cancelling simulation transfer…'
+      : transfer?.phase === 'downloading'
+      ? (transfer.peer_id ? `Transferring simulation from ${transfer.source_peer_name || 'peer'}${peerDetail}…`
+        : `Downloading results from Alpine${transfer.total ? ` · ${formatBytes(transfer.moved || 0)} / ${formatBytes(transfer.total)} (${transfer.pct || 0}%)` : ''}…`)
       : transfer?.phase === 'moving'
         ? `Moving downloaded results · ${formatBytes(transfer.moved || 0)} / ${formatBytes(transfer.total || 0)} (${transfer.pct || 0}%)`
         : transfer?.phase === 'processing'
           ? 'Download verified — processing trajectory health and metrics…'
-        : transfer?.phase === 'done' ? 'Download verified complete — every Alpine result file matches its remote size.'
+        : transfer?.phase === 'verifying' ? `Transfer complete — verifying ${transfer.file_count || 0} files…`
+        : transfer?.phase === 'installing' ? 'Transfer verified — installing the local simulation job…'
+        : transfer?.phase === 'done' ? (transfer.peer_id
+          ? 'Transfer verified complete — every simulation file matches its remote size.'
+          : 'Download verified complete — every Alpine result file matches its remote size.')
+        : ['failed', 'cancelled', 'interrupted'].includes(transfer?.phase) ? `Transfer ${transfer.phase}: ${transfer.error || 'unknown error'}`
           : transfer?.phase === 'unverified' || transfer?.phase === 'interrupted'
             ? `Download incomplete locally${transfer.total_bytes ? ` · ${formatBytes(transfer.verified_bytes || 0)} / ${formatBytes(transfer.total_bytes)}` : ''}`
               + `${transfer.local_verification_error ? ` · ${transfer.local_verification_error}` : ''}. Retry to resume.` : ''
     _setStatus(statusEl, transferText || masterStatusText(node),
       transfer ? (transfer.phase === 'done' ? _C.ok
-        : ['unverified', 'interrupted'].includes(transfer.phase) ? _C.warn : _C.accent)
+        : ['unverified', 'interrupted', 'failed', 'cancelled'].includes(transfer.phase) ? _C.warn : _C.accent)
         : node?.status === 'failed' ? _C.err : node && nodeIsActive(node) ? _C.warn : _C.dim)
     if (allocationEl) {
       const allocation = slurmAllocationText(node)
@@ -740,7 +812,7 @@ export function initSimulateJobs({
       progressBar.style.background = opaquePrep
         ? 'repeating-linear-gradient(135deg,#4a9eff 0,#4a9eff 8px,#245f9c 8px,#245f9c 16px)'
         : transfer?.phase === 'done' ? _C.ok
-        : ['unverified', 'interrupted'].includes(transfer?.phase) ? _C.warn
+        : ['unverified', 'interrupted', 'failed', 'cancelled'].includes(transfer?.phase) ? _C.warn
         : transfer ? 'repeating-linear-gradient(135deg,#4a9eff 0,#4a9eff 8px,#2f6fae 8px,#2f6fae 16px)'
           : node ? masterProgressColor(node) : _C.accent
       progressBar.style.opacity = ['downloading', 'processing'].includes(transfer?.phase) ? '0.65' : '1'

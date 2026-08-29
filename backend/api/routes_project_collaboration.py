@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import asyncio
 import hmac
 import ipaddress
 import json
@@ -11,6 +12,7 @@ from pathlib import Path
 import secrets
 import socket
 import time
+import uuid
 from typing import Optional
 from urllib.parse import urlsplit, urlunsplit
 
@@ -119,6 +121,66 @@ class PairPeerBody(BaseModel):
 class ArtifactFetchBody(BaseModel):
     mode: str = Field(pattern="^(selected|full)$")
     paths: list[str] = Field(default_factory=list, max_length=10000)
+
+
+_ARTIFACT_TRANSFER_TASKS: dict[str, asyncio.Task] = {}
+_ARTIFACT_TRANSFER_CANCELLED: set[str] = set()
+
+
+def _artifact_transfer_path(transfer_id: str) -> Path:
+    if not transfer_id or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789-" for c in transfer_id):
+        raise ValueError("invalid transfer identity")
+    return _workspace() / ".nadoc-projects" / "artifact-transfers" / f"{transfer_id}.json"
+
+
+def _save_artifact_transfer(transfer_id: str, values: dict) -> dict:
+    path = _artifact_transfer_path(transfer_id)
+    current = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    current.update(values)
+    current["transfer_id"] = transfer_id
+    current["updated_at"] = time.time()
+    from backend.core.project_revisions import _atomic_json
+    _atomic_json(path, current)
+    return current
+
+
+def _load_artifact_transfer(transfer_id: str) -> dict:
+    path = _artifact_transfer_path(transfer_id)
+    if not path.is_file():
+        raise FileNotFoundError(transfer_id)
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+async def _run_artifact_transfer(
+    transfer_id: str, peer_id: str, project_id: str, engine: str, job_id: str
+) -> None:
+    try:
+        peer = PeerRegistry(_workspace()).get(peer_id)
+
+        async def progress(values: dict) -> None:
+            _save_artifact_transfer(transfer_id, {"state": values["phase"], **values})
+
+        result = await PeerSyncClient(_workspace(), peer).fetch_artifacts(
+            project_id, engine, job_id, mode="full", progress=progress,
+            cancelled=lambda: transfer_id in _ARTIFACT_TRANSFER_CANCELLED,
+        )
+        _save_artifact_transfer(
+            transfer_id, {"state": "done", "phase": "done", "result": result,
+                          "finished_at": time.time(), "eta_seconds": 0}
+        )
+    except InterruptedError:
+        _save_artifact_transfer(
+            transfer_id, {"state": "cancelled", "phase": "cancelled",
+                          "finished_at": time.time(), "error": "Transfer cancelled"}
+        )
+    except Exception as exc:  # noqa: BLE001 — failure is persisted for UI polling
+        _save_artifact_transfer(
+            transfer_id, {"state": "failed", "phase": "failed",
+                          "finished_at": time.time(), "error": str(exc)}
+        )
+    finally:
+        _ARTIFACT_TRANSFER_TASKS.pop(transfer_id, None)
+        _ARTIFACT_TRANSFER_CANCELLED.discard(transfer_id)
 
 
 class VersionBody(BaseModel):
@@ -556,6 +618,81 @@ async def fetch_peer_artifacts(
         raise HTTPException(status, f"Peer artifact fetch failed: {exc}") from exc
     except (httpx.HTTPError, ValueError) as exc:
         raise HTTPException(502, f"Peer artifact fetch failed: {exc}") from exc
+
+
+@router.post(
+    "/peers/{peer_id}/projects/{project_id}/artifacts/{engine}/{job_id}/transfer",
+    status_code=202,
+)
+async def start_peer_artifact_transfer(
+    peer_id: str, project_id: str, engine: str, job_id: str
+) -> dict:
+    """Start an observable, atomic full-job copy into the engine's local job store."""
+    if engine not in {"oxdna", "md"}:
+        raise HTTPException(400, "Only oxDNA and NAMD jobs can be transferred here.")
+    try:
+        peer = PeerRegistry(_workspace()).get(peer_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    destination = _workspace() / f"{engine}_jobs" / job_id
+    if destination.exists():
+        raise HTTPException(409, f"simulation job already exists: {engine}/{job_id}")
+    for path in (_workspace() / ".nadoc-projects" / "artifact-transfers").glob("*.json"):
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if (existing.get("project_id"), existing.get("engine"), existing.get("job_id")) == (
+            project_id, engine, job_id
+        ) and existing.get("state") in {"queued", "downloading", "verifying", "installing"}:
+            if existing.get("transfer_id") in _ARTIFACT_TRANSFER_TASKS:
+                return existing
+            _save_artifact_transfer(existing["transfer_id"], {
+                "state": "interrupted", "phase": "interrupted",
+                "error": "NADOC restarted before this transfer completed.",
+                "finished_at": time.time(),
+            })
+    transfer_id = str(uuid.uuid4())
+    status = _save_artifact_transfer(transfer_id, {
+        "state": "queued", "phase": "queued", "peer_id": peer_id,
+        "source_peer_name": peer.name,
+        "project_id": project_id, "engine": engine, "job_id": job_id,
+        "destination": f"{engine}_jobs/{job_id}", "created_at": time.time(),
+        "transferred_bytes": 0, "verified_bytes": 0, "total_bytes": 0,
+        "files_completed": 0, "file_count": 0,
+    })
+    _ARTIFACT_TRANSFER_TASKS[transfer_id] = asyncio.create_task(
+        _run_artifact_transfer(transfer_id, peer_id, project_id, engine, job_id)
+    )
+    return status
+
+
+@router.get("/artifact-transfers/{transfer_id}")
+def artifact_transfer_status(transfer_id: str) -> dict:
+    try:
+        status = _load_artifact_transfer(transfer_id)
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(404, "Unknown artifact transfer.") from exc
+    if status.get("state") in {"queued", "downloading", "verifying", "installing", "cancelling"} \
+            and transfer_id not in _ARTIFACT_TRANSFER_TASKS:
+        status = _save_artifact_transfer(transfer_id, {
+            "state": "interrupted", "phase": "interrupted",
+            "error": "NADOC restarted before this transfer completed. Start it again to retry.",
+            "finished_at": time.time(),
+        })
+    return status
+
+
+@router.delete("/artifact-transfers/{transfer_id}")
+def cancel_artifact_transfer(transfer_id: str) -> dict:
+    try:
+        status = _load_artifact_transfer(transfer_id)
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(404, "Unknown artifact transfer.") from exc
+    if status.get("state") not in {"done", "failed", "cancelled"}:
+        _ARTIFACT_TRANSFER_CANCELLED.add(transfer_id)
+        status = _save_artifact_transfer(transfer_id, {"state": "cancelling", "phase": "cancelling"})
+    return status
 
 
 @router.get("/projects/{project_id}/manifest", dependencies=[])

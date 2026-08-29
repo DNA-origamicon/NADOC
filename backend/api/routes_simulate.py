@@ -218,4 +218,54 @@ async def list_simulate_jobs(
             nodes.append(sim_jobs.normalize_md_job(d))
     except Exception:  # noqa: BLE001
         pass
+
+    # Simulation metadata is synchronized with project history even when its heavy
+    # artifact directory remains on another machine.  Surface those remote-only NAMD
+    # and oxDNA records in the same list so users can deliberately bring one local.
+    try:
+        from backend.core.collaboration_peers import PeerRegistry
+        from backend.core.project_artifacts import ProjectArtifactCatalog
+
+        design = design_state.get_or_404()
+        project_id = design.id
+        identity = PeerRegistry(ws).server_identity()
+        local_keys = {
+            (("md" if node.get("engine") == "namd" else node.get("engine")), node.get("job_id"))
+            for node in nodes
+        }
+        by_key = {
+            (("md" if node.get("engine") == "namd" else node.get("engine")), node.get("job_id")): node
+            for node in nodes
+        }
+        for record in ProjectArtifactCatalog(ws).project_metadata(project_id):
+            engine = record.get("engine")
+            if engine not in {"md", "oxdna"}:
+                continue
+            locations = record.get("locations") or []
+            remote = next(
+                (location for location in locations
+                 if location.get("available") and location.get("server_id") != identity["id"]),
+                None,
+            )
+            if remote is None:
+                continue
+            key = (engine, record.get("job_id"))
+            if key in by_key:
+                by_key[key]["artifact_locations"] = locations
+                continue
+            raw = {
+                **record,
+                "design_source_path": design_source_path,
+                "artifact_locations": locations,
+                "remote_only": True,
+                "source_peer_id": remote.get("server_id"),
+                "source_peer_name": remote.get("server_name"),
+                "size_bytes": record.get("size_bytes", 0),
+            }
+            node = sim_jobs.normalize_md_job(raw) if engine == "md" else sim_jobs.normalize_oxdna_job(raw)
+            node["viewable"] = False
+            nodes.append(node)
+            local_keys.add(key)
+    except Exception:  # noqa: BLE001 — collaboration metadata is advisory
+        pass
     return sim_jobs.filter_nodes(nodes, design_source_path, show_all)

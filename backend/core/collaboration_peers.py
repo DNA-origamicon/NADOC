@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import ipaddress
+import inspect
 import json
 import os
 from pathlib import Path
@@ -13,6 +14,7 @@ import socket
 from urllib.parse import urlparse
 import uuid
 import tempfile
+import time
 
 import httpx
 
@@ -331,6 +333,8 @@ class PeerSyncClient:
         *,
         mode: str,
         paths: list[str] | None = None,
+        progress=None,
+        cancelled=None,
     ) -> dict:
         """Explicitly fetch selected files or atomically install one complete job."""
         if mode not in {"selected", "full"}:
@@ -376,19 +380,71 @@ class PeerSyncClient:
             staging = Path(
                 tempfile.mkdtemp(prefix=f".{job_id}.", suffix=".fetch", dir=destination.parent)
             )
+            total_bytes = sum(int(available[path].get("size_bytes") or 0) for path in selected)
+            started = time.monotonic()
+
+            async def report(phase: str, **values) -> None:
+                if progress is None:
+                    return
+                result = progress({
+                    "phase": phase,
+                    "total_bytes": total_bytes,
+                    "file_count": len(selected),
+                    **values,
+                })
+                if inspect.isawaitable(result):
+                    await result
+
             try:
                 transferred = 0
-                for relative in selected:
-                    response = await client.get(
+                await report("downloading", transferred_bytes=0, files_completed=0)
+                for file_index, relative in enumerate(selected):
+                    if cancelled and cancelled():
+                        raise InterruptedError("artifact transfer cancelled")
+                    target = staging.joinpath(*PurePosixPath(relative).parts)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    current_bytes = 0
+                    async with client.stream(
+                        "GET",
                         f"/api/collaboration/projects/{project_id}/artifacts/"
                         f"{engine}/{job_id}/file/{relative}",
                         headers=self._headers(),
+                    ) as response:
+                        response.raise_for_status()
+                        with target.open("wb") as handle:
+                            async for chunk in response.aiter_bytes(chunk_size=1024 * 1024):
+                                if cancelled and cancelled():
+                                    raise InterruptedError("artifact transfer cancelled")
+                                handle.write(chunk)
+                                current_bytes += len(chunk)
+                                transferred += len(chunk)
+                                elapsed = max(time.monotonic() - started, 0.001)
+                                rate = transferred / elapsed
+                                await report(
+                                    "downloading",
+                                    transferred_bytes=transferred,
+                                    files_completed=file_index,
+                                    current_file=relative,
+                                    current_file_bytes=current_bytes,
+                                    bytes_per_second=rate,
+                                    eta_seconds=(max(total_bytes - transferred, 0) / rate)
+                                    if rate > 0 else None,
+                                )
+                    expected = int(available[relative].get("size_bytes") or 0)
+                    if current_bytes != expected:
+                        raise IOError(
+                            f"artifact size mismatch for {relative}: expected {expected}, "
+                            f"received {current_bytes}"
+                        )
+                    await report(
+                        "downloading", transferred_bytes=transferred,
+                        files_completed=file_index + 1, current_file=relative,
+                        current_file_bytes=current_bytes,
                     )
-                    response.raise_for_status()
-                    target = staging.joinpath(*PurePosixPath(relative).parts)
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_bytes(response.content)
-                    transferred += len(response.content)
+                await report(
+                    "verifying", transferred_bytes=transferred,
+                    verified_bytes=transferred, files_completed=len(selected),
+                )
                 if mode == "full":
                     job_json = staging / "job.json"
                     if not job_json.is_file():
@@ -402,12 +458,21 @@ class PeerSyncClient:
                             f"simulation job already exists: {engine}/{job_id}"
                         )
                     shutil.rmtree(destination)
+                await report(
+                    "installing", transferred_bytes=transferred,
+                    verified_bytes=transferred, files_completed=len(selected),
+                )
                 shutil.move(str(staging), str(destination))
             except Exception:
                 shutil.rmtree(staging, ignore_errors=True)
                 raise
             if mode == "full":
                 ProjectArtifactCatalog(self.workspace).publish_local_jobs(project_id)
+            await report(
+                "done", transferred_bytes=transferred, verified_bytes=transferred,
+                files_completed=len(selected), eta_seconds=0,
+                bytes_per_second=transferred / max(time.monotonic() - started, 0.001),
+            )
             return {
                 "project_id": project_id,
                 "engine": engine,

@@ -329,6 +329,38 @@ def test_selected_artifact_fetch_uses_isolated_cache_and_full_fetch_is_atomic(tm
     assert (installed / "trajectory.dat").read_bytes() == b"trajectory"
 
 
+def test_full_artifact_fetch_reports_alpine_grade_progress_and_verifies_sizes(tmp_path):
+    remote_ws = tmp_path / "remote"
+    local_ws = tmp_path / "local"
+    job = new_oxdna_job(
+        "Part", [], project_id="project-1", design_revision_id="a" * 64
+    )
+    job.status = OxdnaStatus.completed
+    job.save(remote_ws)
+    (job.job_dir(remote_ws) / "trajectory.dat").write_bytes(b"trajectory-data")
+    peer = Peer("remote", "Remote", "https://peer.example.ts.net", "secret")
+    http = httpx.AsyncClient(
+        base_url=peer.base_url,
+        transport=_artifact_transport(remote_ws, "project-1", job.job_id),
+    )
+    updates = []
+    result = asyncio.run(
+        PeerSyncClient(local_ws, peer, client=http).fetch_artifacts(
+            "project-1", "oxdna", job.job_id, mode="full", progress=updates.append
+        )
+    )
+    asyncio.run(http.aclose())
+
+    phases = [update["phase"] for update in updates]
+    assert phases[0] == "downloading"
+    assert phases[-3:] == ["verifying", "installing", "done"]
+    assert updates[-1]["transferred_bytes"] == updates[-1]["total_bytes"]
+    assert updates[-1]["verified_bytes"] == updates[-1]["total_bytes"]
+    assert updates[-1]["files_completed"] == updates[-1]["file_count"]
+    assert updates[-1]["bytes_per_second"] > 0
+    assert result["destination"] == f"oxdna_jobs/{job.job_id}"
+
+
 def test_active_remote_job_refuses_selected_and_full_copy(tmp_path):
     remote_ws = tmp_path / "remote"
     job = new_oxdna_job(

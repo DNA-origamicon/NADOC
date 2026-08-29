@@ -570,6 +570,37 @@ describe('unified list + master card', () => {
     expect(oxdnaPanel.copyJob).toHaveBeenCalledWith('ox1')
   })
 
+  it('transfers a remote oxDNA job from its context menu with detailed progress', async () => {
+    mount()
+    const remote = oxNode({
+      remote_only: true, project_id: 'project-1', source_peer_id: 'server-b',
+      source_peer_name: 'Compute PC', viewable: false,
+    })
+    const { sim, api } = make([remote], {
+      startPeerArtifactTransfer: vi.fn().mockResolvedValue({ transfer_id: 'tx-1' }),
+      getPeerArtifactTransfer: vi.fn().mockResolvedValue({
+        transfer_id: 'tx-1', peer_id: 'server-b', source_peer_name: 'Compute PC',
+        state: 'done', phase: 'done', total_bytes: 4096, transferred_bytes: 4096,
+        verified_bytes: 4096, file_count: 3, files_completed: 3,
+        bytes_per_second: 2048, eta_seconds: 0,
+      }),
+    })
+    await sim.refresh()
+    document.querySelector('[data-job-id="ox1"]').dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true, cancelable: true, clientX: 20, clientY: 30,
+    }))
+    const item = [...document.querySelectorAll('.context-menu__item')]
+      .find(el => el.textContent.includes('Transfer job to this computer'))
+    expect(item.textContent).toContain('Compute PC')
+    item.click()
+    for (let i = 0; i < 8; i++) await Promise.resolve()
+    expect(api.startPeerArtifactTransfer).toHaveBeenCalledWith(
+      'server-b', 'project-1', 'oxdna', 'ox1')
+    expect(api.getPeerArtifactTransfer).toHaveBeenCalledWith('tx-1')
+    expect(document.getElementById('simulate-jobs-status').textContent)
+      .toContain('every simulation file matches its remote size')
+  })
+
   it('labels safe unstarted oxDNA settings as Edit in the unified menu', async () => {
     mount()
     const { sim, oxdnaPanel } = make([oxNode({ status: 'queued' })])

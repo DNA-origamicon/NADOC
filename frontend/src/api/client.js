@@ -4839,6 +4839,17 @@ export function fetchPeerArtifacts(peerId, projectId, engine, jobId, body) {
   const parts = [peerId, projectId, engine, jobId].map(encodeURIComponent)
   return _request('POST', `/collaboration/peers/${parts[0]}/projects/${parts[1]}/artifacts/${parts[2]}/${parts[3]}/fetch`, body)
 }
+export function startPeerArtifactTransfer(peerId, projectId, engine, jobId) {
+  const parts = [peerId, projectId, engine, jobId].map(encodeURIComponent)
+  return _request('POST', `/collaboration/peers/${parts[0]}/projects/${parts[1]}/artifacts/${parts[2]}/${parts[3]}/transfer`)
+}
+export function getPeerArtifactTransfer(transferId) {
+  return _request('GET', `/collaboration/artifact-transfers/${encodeURIComponent(transferId)}`, undefined,
+    { suppressBusy: true })
+}
+export function cancelPeerArtifactTransfer(transferId) {
+  return _request('DELETE', `/collaboration/artifact-transfers/${encodeURIComponent(transferId)}`)
+}
 
 // ── Flatten to Design ─────────────────────────────────────────────────────────
 
