@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import httpx
 from fastapi.testclient import TestClient
 
 from backend.api import assembly
+from backend.api import routes_project_collaboration as collaboration_routes
 from backend.api.main import app
 from backend.core.models import Design
 from backend.core.project_revisions import ProjectRevisionStore
@@ -172,3 +174,98 @@ def test_peer_registry_rejects_plain_non_tailnet_http(monkeypatch, tmp_path):
     )
     assert response.status_code == 400
     assert "Tailscale" in response.text
+
+
+def test_pairing_code_registers_caller_once_and_returns_local_credentials(
+    monkeypatch, tmp_path
+):
+    client = _client(monkeypatch, tmp_path)
+    monkeypatch.setenv("NADOC_PUBLIC_URL", "http://100.99.71.2:5173")
+    started = client.post("/api/collaboration/pairing/start")
+    assert started.status_code == 200
+    code = started.json()["code"]
+    assert len(code) == 6
+    completed = client.post(
+        "/api/collaboration/pairing/complete",
+        json={
+            "code": code,
+            "peer_id": "laptop",
+            "peer_name": "Laptop",
+            "peer_base_url": "http://100.80.2.3:5173",
+            "peer_token": "laptop-secret",
+        },
+    )
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["token"] == "test-secret"
+    assert completed.json()["base_url"] == "http://100.99.71.2:5173"
+    assert client.get("/api/collaboration/peers").json()["peers"][0]["id"] == "laptop"
+    replay = client.post(
+        "/api/collaboration/pairing/complete",
+        json={
+            "code": code,
+            "peer_id": "attacker",
+            "peer_name": "Attacker",
+            "peer_base_url": "http://100.80.2.4:5173",
+            "peer_token": "stolen",
+        },
+    )
+    assert replay.status_code == 410
+
+
+def test_shared_library_requires_auth_and_blocks_path_escape(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path)
+    (tmp_path / "part.nadoc").write_text(Design(id="shared").to_json())
+    assert client.get("/api/collaboration/library/files").status_code == 401
+    auth = {"Authorization": "Bearer test-secret"}
+    entries = client.get("/api/collaboration/library/files", headers=auth)
+    assert entries.status_code == 200
+    assert any(item["path"] == "part.nadoc" for item in entries.json())
+    content = client.get(
+        "/api/collaboration/library/content",
+        params={"path": "part.nadoc"},
+        headers=auth,
+    )
+    assert content.status_code == 200
+    assert Design.from_json(content.text).id == "shared"
+    escaped = client.get(
+        "/api/collaboration/library/content",
+        params={"path": "../secret.nadoc"},
+        headers=auth,
+    )
+    assert escaped.status_code == 400
+
+
+def test_remote_checkout_streams_to_atomic_local_copy(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path)
+    client.post(
+        "/api/collaboration/peers",
+        json={
+            "id": "remote",
+            "name": "Laptop",
+            "base_url": "http://100.80.2.3:5173",
+            "token": "remote-secret",
+        },
+    )
+    remote_design = Design(id="remote-project")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["authorization"] == "Bearer remote-secret"
+        assert request.url.path == "/api/collaboration/library/content"
+        assert request.url.params["path"] == "shared/Voltron.nadoc"
+        return httpx.Response(200, content=remote_design.to_json().encode())
+
+    real_client = httpx.AsyncClient
+
+    def mock_client(**kwargs):
+        return real_client(transport=httpx.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(collaboration_routes.httpx, "AsyncClient", mock_client)
+    checked_out = client.post(
+        "/api/collaboration/peers/remote/library/checkout",
+        params={"path": "shared/Voltron.nadoc"},
+    )
+    assert checked_out.status_code == 200, checked_out.text
+    assert checked_out.json()["path"] == "shared/Voltron.nadoc"
+    installed = tmp_path / "shared" / "Voltron.nadoc"
+    assert Design.from_json(installed.read_text()).id == "remote-project"
+    assert not list(installed.parent.glob(".nadoc-checkout-*"))

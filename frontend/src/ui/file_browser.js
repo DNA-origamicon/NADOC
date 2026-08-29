@@ -69,6 +69,8 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
     let _sortKey = 'modified'
     let _sortDir = 'desc'
     let _showSimFolders = false
+    let _activePeerId = null
+    let _servers = [{ id: null, name: 'This computer', online: true }]
 
     // Track autodetection toggle state
     const _adState = { includeClusters: true, includeOverhangs: true }
@@ -104,6 +106,34 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
     const closeBtn = btn('×', `background:none;border:none;color:${S.muted};font-size:18px;cursor:pointer;line-height:1;padding:0`)
     closeBtn.addEventListener('click', () => _finish(null))
     headerEl.append(titleEl, closeBtn)
+
+    const serverTabsEl = document.createElement('div')
+    serverTabsEl.style.cssText = `display:flex;gap:4px;padding:10px 16px 0;overflow-x:auto;border-bottom:1px solid ${S.border2}`
+
+    function _renderServerTabs() {
+      serverTabsEl.replaceChildren()
+      for (const server of _servers) {
+        const active = server.id === _activePeerId
+        const tab = btn(`${server.online ? '●' : '○'} ${server.name}`, [
+          'padding:6px 10px;border-radius:5px 5px 0 0;white-space:nowrap;font-size:11px',
+          `border:1px solid ${active ? S.accent : S.border};border-bottom:none`,
+          `background:${active ? S.hover : S.input};color:${server.online ? (active ? S.accent : S.text) : S.dim}`,
+          `cursor:${server.online ? 'pointer' : 'not-allowed'}`,
+        ].join(';'))
+        tab.title = server.online ? `Browse ${server.name}` : `${server.name} is offline`
+        tab.disabled = !server.online || (mode === 'save' && server.id !== null)
+        tab.addEventListener('click', async () => {
+          _activePeerId = server.id
+          _dir = ''
+          _newFolderActive = false
+          _renderServerTabs()
+          _renderBreadcrumb()
+          await _reload()
+        })
+        serverTabsEl.append(tab)
+      }
+      if (typeof newFolderBtn !== 'undefined') newFolderBtn.style.display = _activePeerId ? 'none' : ''
+    }
 
     // ── Toolbar (breadcrumb + New Folder) ────────────────────────────────────
     const toolbarEl = document.createElement('div')
@@ -290,7 +320,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
       }
     }
 
-    modal.append(headerEl, ...(adPanelEl ? [adPanelEl] : []), toolbarEl, sortBarEl, listEl, ...(footerEl ? [footerEl] : []))
+    modal.append(headerEl, serverTabsEl, ...(adPanelEl ? [adPanelEl] : []), toolbarEl, sortBarEl, listEl, ...(footerEl ? [footerEl] : []))
     overlay.appendChild(modal)
     // Backdrop clicks are intentionally ignored — user must click Cancel or Save.
     document.body.appendChild(overlay)
@@ -356,7 +386,8 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
         return s
       }
 
-      breadcrumbEl.appendChild(crumb('workspace', '', parts.length > 0))
+      const server = _servers.find(item => item.id === _activePeerId)
+      breadcrumbEl.appendChild(crumb(server?.name || 'workspace', '', parts.length > 0))
       let acc = ''
       for (let i = 0; i < parts.length; i++) {
         acc = acc ? `${acc}/${parts[i]}` : parts[i]
@@ -468,7 +499,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
       }
 
       // New-folder input row
-      if (_newFolderActive) {
+      if (_newFolderActive && !_activePeerId) {
         const row = document.createElement('div')
         row.style.cssText = `display:flex;align-items:center;gap:8px;padding:3px 8px`
         const iconEl = document.createElement('span')
@@ -499,7 +530,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
         const folderName = folder.path.split('/').pop()
         const row = _makeRow({
           icon: '📁', label: folderName, dim: null,
-          actions: [
+          actions: _activePeerId ? [] : [
             { label: '✎', title: 'Rename', fn: () => _startRename(row, folder) },
             { label: '×', title: 'Delete', color: S.red, fn: async () => {
               const deleted = await confirmAndDeleteFile({ api, path: folder.path, name: folderName, isDir: true })
@@ -530,7 +561,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
 
         const row = _makeRow({
           icon, label: fileName, dim: ago,
-          actions: [
+          actions: _activePeerId ? [] : [
             { label: '✎', title: 'Rename', fn: () => _startRename(row, file) },
             { label: '↗', title: 'Move',   fn: () => _startMove(file) },
             { label: '×', title: 'Delete', color: S.red, fn: async () => {
@@ -539,7 +570,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
             }},
           ],
           onClick: mode === 'open'
-            ? () => _finish({ path: file.path, name: file.name })
+            ? () => _finish({ path: file.path, name: file.name, peer_id: _activePeerId })
             : () => {
                 if (nameInputEl)  nameInputEl.value  = file.name
                 if (extSelectEl)  extSelectEl.value  = file.path.endsWith('.nass') ? '.nass' : '.nadoc'
@@ -707,7 +738,9 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
     async function _reload() {
       listEl.innerHTML = `<div style="color:${S.dim};padding:20px 8px;text-align:center">Loading…</div>`
       try {
-        const files = await api.listLibraryFiles()
+        const files = _activePeerId
+          ? await api.listPeerLibraryFiles(_activePeerId)
+          : await api.listLibraryFiles()
         _entries = Array.isArray(files) ? files : []
       } catch {
         listEl.innerHTML = `<div style="color:${S.red};padding:20px 8px;text-align:center">Could not reach server.</div>`
@@ -719,6 +752,19 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
     // ── Boot ──────────────────────────────────────────────────────────────────
     _renderBreadcrumb()
     _renderSortBar()
-    _reload()
+    _renderServerTabs()
+    ;(async () => {
+      if (mode === 'open' && api.getCollaborationPeerStatuses) {
+        const status = await api.getCollaborationPeerStatuses()
+        _servers = [
+          _servers[0],
+          ...((status?.peers || []).map(peer => ({
+            id: peer.id, name: peer.name, online: !!peer.online,
+          }))),
+        ]
+        _renderServerTabs()
+      }
+      await _reload()
+    })()
   })
 }

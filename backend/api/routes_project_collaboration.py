@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from dataclasses import asdict
 import hmac
+import json
 import os
 from pathlib import Path
+import secrets
 import socket
+import time
 from typing import Optional
 
 import httpx
@@ -16,7 +19,11 @@ from pydantic import BaseModel, Field
 
 from backend.api import assembly
 from backend.core.project_collaboration import ProjectLeaseStore
-from backend.core.collaboration_peers import PeerRegistry, PeerSyncClient
+from backend.core.collaboration_peers import (
+    PeerRegistry,
+    PeerSyncClient,
+    validate_peer_url,
+)
 from backend.core.project_artifacts import ProjectArtifactCatalog
 from backend.core.project_revisions import (
     BranchConflict,
@@ -36,6 +43,26 @@ def _workspace() -> Path:
 
 def _peer_token() -> str | None:
     return (os.environ.get("NADOC_PEER_TOKEN") or "").strip() or None
+
+
+def _public_url() -> str | None:
+    return (os.environ.get("NADOC_PUBLIC_URL") or "").strip() or None
+
+
+def _pairing_path() -> Path:
+    return _workspace() / ".nadoc-projects" / "pairing.json"
+
+
+def _safe_library_path(path: str) -> Path:
+    candidate = (_workspace() / path).resolve()
+    root = _workspace().resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError as exc:
+        raise HTTPException(400, "Workspace path escapes the workspace.") from exc
+    if candidate.suffix.lower() not in {".nadoc", ".nass"}:
+        raise HTTPException(400, "Only NADOC part and assembly files are shared.")
+    return candidate
 
 
 def _require_peer(authorization: Optional[str] = Header(default=None)) -> None:
@@ -74,6 +101,19 @@ class PeerBody(BaseModel):
     token: str = Field(min_length=1, max_length=4096)
 
 
+class PairCompleteBody(BaseModel):
+    code: str = Field(min_length=6, max_length=12)
+    peer_id: str = Field(min_length=1, max_length=128)
+    peer_name: str = Field(min_length=1, max_length=200)
+    peer_base_url: str = Field(min_length=1, max_length=500)
+    peer_token: str = Field(min_length=1, max_length=4096)
+
+
+class PairPeerBody(BaseModel):
+    base_url: str = Field(min_length=1, max_length=500)
+    code: str = Field(min_length=6, max_length=12)
+
+
 class ArtifactFetchBody(BaseModel):
     mode: str = Field(pattern="^(selected|full)$")
     paths: list[str] = Field(default_factory=list, max_length=10000)
@@ -104,6 +144,7 @@ def collaboration_identity() -> dict:
         "server_id": identity["id"],
         "server_name": identity.get("name") or socket.gethostname(),
         "sync_enabled": _peer_token() is not None,
+        "public_url": _public_url(),
     }
 
 
@@ -206,6 +247,224 @@ def register_peer(body: PeerBody) -> dict:
 @router.delete("/peers/{peer_id}")
 def remove_peer(peer_id: str) -> dict:
     return {"removed": PeerRegistry(_workspace()).remove(peer_id)}
+
+
+@router.post("/pairing/start")
+def start_pairing() -> dict:
+    if _peer_token() is None or _public_url() is None:
+        raise HTTPException(503, "Start NADOC with --tailscale before pairing.")
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    path = _pairing_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"code": code, "expires_at": time.time() + 300}),
+        encoding="utf-8",
+    )
+    return {"code": code, "expires_in_seconds": 300, "public_url": _public_url()}
+
+
+@router.post("/pairing/complete")
+def complete_pairing(body: PairCompleteBody) -> dict:
+    path = _pairing_path()
+    try:
+        pending = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError) as exc:
+        raise HTTPException(410, "No active pairing request.") from exc
+    if pending.get("expires_at", 0) < time.time():
+        path.unlink(missing_ok=True)
+        raise HTTPException(410, "Pairing code expired.")
+    if not hmac.compare_digest(str(pending.get("code", "")), body.code):
+        raise HTTPException(401, "Incorrect pairing code.")
+    registry = PeerRegistry(_workspace())
+    registry.register(
+        peer_id=body.peer_id,
+        name=body.peer_name,
+        base_url=body.peer_base_url,
+        token=body.peer_token,
+    )
+    path.unlink(missing_ok=True)
+    identity = registry.server_identity()
+    return {
+        "server_id": identity["id"],
+        "server_name": identity.get("name") or socket.gethostname(),
+        "base_url": _public_url(),
+        "token": _peer_token(),
+    }
+
+
+@router.post("/pairing/connect")
+async def connect_peer(body: PairPeerBody) -> dict:
+    token = _peer_token()
+    public_url = _public_url()
+    if token is None or public_url is None:
+        raise HTTPException(503, "Start NADOC with --tailscale before pairing.")
+    base_url = validate_peer_url(body.base_url)
+    identity = PeerRegistry(_workspace()).server_identity()
+    try:
+        async with httpx.AsyncClient(base_url=base_url, timeout=20) as client:
+            response = await client.post(
+                "/api/collaboration/pairing/complete",
+                json={
+                    "code": body.code,
+                    "peer_id": identity["id"],
+                    "peer_name": identity.get("name") or socket.gethostname(),
+                    "peer_base_url": public_url,
+                    "peer_token": token,
+                },
+            )
+            response.raise_for_status()
+            remote = response.json()
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"Could not pair with server: {exc}") from exc
+    peer = PeerRegistry(_workspace()).register(
+        peer_id=remote["server_id"],
+        name=remote["server_name"],
+        base_url=remote["base_url"],
+        token=remote["token"],
+    )
+    return peer.public()
+
+
+@router.get("/peers/status")
+async def peer_statuses() -> dict:
+    async def probe(peer):
+        try:
+            async with httpx.AsyncClient(base_url=peer.base_url, timeout=3) as client:
+                response = await client.get("/api/collaboration/identity")
+                response.raise_for_status()
+                return {**peer.public(), "online": True}
+        except httpx.HTTPError:
+            return {**peer.public(), "online": False}
+
+    peers = PeerRegistry(_workspace()).list()
+    import asyncio
+
+    return {"peers": await asyncio.gather(*(probe(peer) for peer in peers))}
+
+
+@router.get("/library/files")
+def shared_library_files(
+    authorization: Optional[str] = Header(default=None),
+) -> list:
+    _require_peer(authorization)
+    from backend.api.routes_assembly_workspace import _workspace_entries
+
+    return _workspace_entries()
+
+
+@router.get("/library/content")
+def shared_library_content(
+    path: str, authorization: Optional[str] = Header(default=None)
+) -> FileResponse:
+    _require_peer(authorization)
+    source = _safe_library_path(path)
+    if not source.is_file():
+        raise HTTPException(404, "Remote workspace file does not exist.")
+    return FileResponse(source, media_type="application/json", filename=source.name)
+
+
+@router.get("/peers/{peer_id}/library/files")
+async def peer_library_files(peer_id: str) -> list:
+    try:
+        peer = PeerRegistry(_workspace()).get(peer_id)
+        async with httpx.AsyncClient(base_url=peer.base_url, timeout=20) as client:
+            response = await client.get(
+                "/api/collaboration/library/files",
+                headers={"Authorization": f"Bearer {peer.token}"},
+            )
+            response.raise_for_status()
+            return response.json()
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"Remote workspace is unavailable: {exc}") from exc
+
+
+@router.post("/peers/{peer_id}/library/checkout")
+async def checkout_peer_file(peer_id: str, path: str) -> dict:
+    import hashlib
+    import tempfile
+
+    from backend.core.models import Design
+    from backend.core.project_revisions import refresh_active_revision
+
+    try:
+        peer = PeerRegistry(_workspace()).get(peer_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    destination = _safe_library_path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary_name = tempfile.mkstemp(
+        prefix=".nadoc-checkout-", suffix=destination.suffix, dir=destination.parent
+    )
+    os.close(fd)
+    temporary = Path(temporary_name)
+    size = 0
+    digest = hashlib.sha256()
+    try:
+        async with httpx.AsyncClient(base_url=peer.base_url, timeout=300) as client:
+            async with client.stream(
+                "GET",
+                "/api/collaboration/library/content",
+                params={"path": path},
+                headers={"Authorization": f"Bearer {peer.token}"},
+            ) as response:
+                response.raise_for_status()
+                with temporary.open("wb") as handle:
+                    async for chunk in response.aiter_bytes():
+                        size += len(chunk)
+                        if size > MAX_SNAPSHOT_BYTES:
+                            raise ValueError("Remote file exceeds the checkout limit.")
+                        digest.update(chunk)
+                        handle.write(chunk)
+        install = destination
+        existing_digest = None
+        if destination.exists():
+            existing_hash = hashlib.sha256()
+            with destination.open("rb") as existing_handle:
+                for block in iter(lambda: existing_handle.read(1024 * 1024), b""):
+                    existing_hash.update(block)
+            existing_digest = existing_hash.hexdigest()
+        if destination.exists() and existing_digest != digest.hexdigest():
+            same_project = False
+            if destination.suffix.lower() == ".nadoc":
+                try:
+                    current = Design.from_json(destination.read_text(encoding="utf-8"))
+                    incoming = Design.from_json(temporary.read_text(encoding="utf-8"))
+                    same_project = current.id == incoming.id
+                    if same_project:
+                        refresh_active_revision(_workspace(), current)
+                        await PeerSyncClient(_workspace(), peer).pull(current.id)
+                except (OSError, ValueError):
+                    same_project = False
+            if not same_project:
+                safe_peer = "".join(
+                    char if char.isalnum() or char in "-_ " else "_"
+                    for char in peer.name
+                ).strip() or "Remote"
+                install = destination.with_name(
+                    f"{destination.stem} ({safe_peer}){destination.suffix}"
+                )
+                counter = 2
+                while install.exists():
+                    install = destination.with_name(
+                        f"{destination.stem} ({safe_peer} {counter}){destination.suffix}"
+                    )
+                    counter += 1
+        os.replace(temporary, install)
+        return {
+            "path": install.relative_to(_workspace()).as_posix(),
+            "name": install.stem,
+            "type": "assembly" if install.suffix.lower() == ".nass" else "part",
+            "source_peer": peer.public(),
+            "size_bytes": size,
+            "sha256": digest.hexdigest(),
+            "synchronized": True,
+        }
+    except (httpx.HTTPError, OSError, ValueError) as exc:
+        raise HTTPException(502, f"Remote checkout failed: {exc}") from exc
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 @router.post("/peers/{peer_id}/projects/{project_id}/pull")

@@ -4794,6 +4794,17 @@ export function subscribeLibraryEvents(onEvent) {
 export function getCollaborationIdentity() { return _request('GET', '/collaboration/identity') }
 export function listCollaborationProjects() { return _request('GET', '/collaboration/projects') }
 export function listCollaborationPeers() { return _request('GET', '/collaboration/peers') }
+export function getCollaborationPeerStatuses() { return _request('GET', '/collaboration/peers/status') }
+export function startCollaborationPairing() { return _request('POST', '/collaboration/pairing/start') }
+export function connectCollaborationPeer(baseUrl, code) {
+  return _request('POST', '/collaboration/pairing/connect', { base_url: baseUrl, code })
+}
+export function listPeerLibraryFiles(peerId) {
+  return _request('GET', `/collaboration/peers/${encodeURIComponent(peerId)}/library/files`)
+}
+export function checkoutPeerLibraryFile(peerId, path) {
+  return _request('POST', `/collaboration/peers/${encodeURIComponent(peerId)}/library/checkout?path=${encodeURIComponent(path)}`)
+}
 export function getProjectOverview(projectId) {
   return _request('GET', `/collaboration/projects/${encodeURIComponent(projectId)}/overview`)
 }

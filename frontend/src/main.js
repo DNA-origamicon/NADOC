@@ -64,6 +64,7 @@ import { initStrandSequenceDialog } from './ui/strand_sequence_dialog.js'
 import { initAutoscaffoldPicker } from './ui/autoscaffold_picker.js'
 import { initNewDesignModal } from './ui/new_design_modal.js'
 import { initWorkspaceHub } from './ui/workspace_hub.js'
+import { initTailscaleSetup } from './ui/tailscale_setup.js'
 import { initSliceHighlighter } from './scene/slice_highlighter.js'
 import { vecClose } from './scene/vec_math.js'
 import { initDomainEnds }            from './scene/domain_ends.js'
@@ -3184,13 +3185,26 @@ async function main() {
     spawnDocTabIfBusy: _docSpawn.spawnDocTabIfBusy,
   })
   initWorkspaceHub()
+  initTailscaleSetup()
 
   // Unified "Open File" — one picker shows both parts (.nadoc) and assemblies
   // (.nass); route to the right loader by extension.  Pick in this tab, but open
   // into a NEW tab when this space already holds content (multi-document).
   document.getElementById('menu-file-open')?.addEventListener('click', async () => {
-    const result = await openFileBrowser({ title: 'Open File', mode: 'open', fileType: 'all', api })
+    let result = await openFileBrowser({ title: 'Open File', mode: 'open', fileType: 'all', api })
     if (!result) return
+    if (result.peer_id) {
+      _showFileLoad('Opening Shared File')
+      _flSetProgress(5, 'Connecting to remote workspace…')
+      _flAppendLog(`Streaming ${result.path} into a synchronized local checkout…`)
+      const checkout = await api.checkoutPeerLibraryFile(result.peer_id, result.path)
+      if (!checkout?.path) {
+        _flShowError('Remote checkout failed. The server may have gone offline.')
+        return
+      }
+      _flSetProgress(45, `Local copy ready — ${Math.round((checkout.size_bytes || 0) / 1024)} KB`)
+      result = { ...result, path: checkout.path, name: checkout.name, peer_id: null }
+    }
     const isAssembly = /\.nass$/i.test(result.path || result.name || '')
     if (_docSpawn.spaceHasContent()) {
       const id = await mintDocId()

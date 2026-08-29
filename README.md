@@ -43,12 +43,25 @@ the backend on loopback behind the UI proxy. The first run creates a private,
 git-ignored `.nadoc-peer-token`; keep it secret. Use Tailscale ACLs so only your
 devices/users can reach TCP port 5173. Do not use `--lan` for untrusted networks.
 
-In NADOC, choose **File → Workspace Hub…**. Register the other server using the
-URL printed by its `start.sh --tailscale` process, its collaboration server ID,
-and its `.nadoc-peer-token`. The token is sent once to your local server, stored
-server-side, and never returned to the browser. Each server's **Open frontend**
-button opens that server's matching UI, while Pull, Push, and Sync transfer
-immutable design revisions and lightweight simulation metadata.
+In NADOC, choose **Help → Tailscale Workspace Setup…**. On either computer,
+show a one-time pairing code; on the other, enter the first computer's printed
+URL and that code. Both servers register one another automatically, and the code
+expires after five minutes and cannot be reused. Long-lived peer credentials are
+stored only by the two backends and are never shown in the browser.
+
+After pairing, choose **File → Open File…**. The file browser has one tab for
+this computer and one for every configured server, with live online/offline
+status. Selecting a remote part or assembly streams it through the authenticated
+server connection into an atomic local checkout and opens it using the normal
+NADOC loader. The local file appears only after validation and a complete
+transfer; interrupted downloads leave no partial workspace file. Reopening a
+shared project synchronizes its immutable branch history before replacing the
+local compatibility file, while unrelated same-name files are retained under a
+server-qualified conflict name.
+
+The Workspace Hub remains available for explicit Pull, Push, Sync, branch
+history, promotion, leases, and artifact controls. Each server's **Open
+frontend** button opens that server's matching UI.
 
 Loadouts are collaborative branches: edit independent loadouts on different
 servers, name immutable versions, inspect revision history, and explicitly

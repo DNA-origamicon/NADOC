@@ -56,6 +56,7 @@ if [ "$TAILSCALE_MODE" -eq 1 ]; then
   fi
   [ -n "$TAILSCALE_IP" ] || die "No Tailscale IPv4 address found. Is Tailscale connected?"
   PUBLIC_URL="http://${TAILSCALE_IP}:5173"
+  export NADOC_PUBLIC_URL="$PUBLIC_URL"
   TOKEN_FILE=".nadoc-peer-token"
   if [ ! -f "$TOKEN_FILE" ]; then
     umask 077
