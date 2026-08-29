@@ -1,6 +1,27 @@
 # The ChimeraX "stunning" combination — what it actually is, and what NADOC needs
 
-> ## STATUS (2026-07-28) — multishadow AO SHIPPED, and the scale rule that governs it
+> ## CURRENT IMPLEMENTATION (2026-08-28)
+>
+> The multishadow ambient-occlusion experiment described below is **not active**.
+> It was removed after origami-scale evaluation showed that its per-direction
+> resolution produced a broad wash rather than useful duplex-scale occlusion.
+> Shipping photomode has one shadow system: one camera-pinned directional key
+> light with one PCF shadow map. Studio Ambient is PMREM image-based illumination
+> only; diffuse ambient and fill lights cannot cast shadows. Runtime enforcement
+> disables `castShadow` on every non-key light, including lights added after
+> photomode activation, and restores their state on exit. Diagnostics expose
+> `shadowCastingLights`, environment binding, and outline/depth-cue state so
+> post-processing cannot be confused with a second shadow source.
+>
+> Assembly parity was audited on 2026-08-28. Shared assemblies now use the same
+> measured-positioning payload as individual parts; Full-representation bead,
+> cone, slab, and slab-connector transform multisets match BigO to five decimals.
+> Shared rendering also includes crossover arcs and crossover insertion meshes,
+> with live Strand/Cluster/Overhang-only coloring. See the regression tests in
+> `frontend/e2e/bigo_assembly_geometry_parity.spec.js` and
+> `frontend/e2e/assembly_photomode_shadow.spec.js`.
+
+> ## HISTORICAL STATUS (2026-07-28) — multishadow AO was briefly shipped
 >
 > The 64-direction port below is live in the Exp. Photomode tab, alongside a
 > camera-pinned key light with its own shadow map (§B.4a). It was briefly removed

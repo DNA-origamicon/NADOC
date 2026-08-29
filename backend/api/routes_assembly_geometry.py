@@ -38,7 +38,7 @@ URLs are unchanged from their previous home in assembly.py. Mounting is done in
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from backend.api import assembly_state
 from backend.api.assembly import (
@@ -72,7 +72,10 @@ def get_instance_design(instance_id: str) -> dict:
 
 
 @router.get("/assembly/instances/{instance_id}/geometry", status_code=200)
-def get_instance_geometry(instance_id: str) -> dict:
+def get_instance_geometry(
+    instance_id: str,
+    measured_positioning: bool = Query(False),
+) -> dict:
     """
     Compute and return nucleotide geometry for a PartInstance's Design.
 
@@ -102,7 +105,8 @@ def get_instance_geometry(instance_id: str) -> dict:
     assembly = assembly_state.get_or_404()
     inst = _find_instance(assembly, instance_id)
 
-    key = _geo_cache_key(inst)
+    base_key = _geo_cache_key(inst)
+    key = f"{base_key}:measured={int(measured_positioning)}" if base_key else None
     cached = _geo_cache_get(key) if key else None
     if cached:
         return {
@@ -114,7 +118,11 @@ def get_instance_geometry(instance_id: str) -> dict:
         }
 
     design = _display_design(_design_with_instance_overrides(inst))
-    nucleotides = _geometry_for_design(design, junction_balance=True)
+    nucleotides = _geometry_for_design(
+        design,
+        measured_positioning=measured_positioning,
+        junction_balance=True,
+    )
     axes = deformed_helix_axes(design)
     _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
     design_dict = design.to_dict()
@@ -219,7 +227,9 @@ def get_instance_surface_geometry(
 
 
 @router.get("/assembly/geometry", status_code=200)
-def get_assembly_geometry() -> dict:
+def get_assembly_geometry(
+    measured_positioning: bool = Query(False),
+) -> dict:
     """
     Batch geometry for all visible instances in one request.
 
@@ -258,7 +268,8 @@ def get_assembly_geometry() -> dict:
         # Reuse the geometry-cache key (file path + mtime suffix, or
         # inline-design id, plus cluster-transform overrides hash) so two
         # instances of the same part with no overrides share one source.
-        return _geo_cache_key(inst) or f"inst:{inst.id}"
+        base = _geo_cache_key(inst) or f"inst:{inst.id}"
+        return f"{base}:measured={int(measured_positioning)}"
 
     for inst in assembly.instances:
         if not inst.visible:
@@ -269,7 +280,8 @@ def get_assembly_geometry() -> dict:
             if src_key in sources:
                 continue  # already computed for an earlier identical-source instance
 
-            key = _geo_cache_key(inst)
+            base_key = _geo_cache_key(inst)
+            key = f"{base_key}:measured={int(measured_positioning)}" if base_key else None
             cached = _geo_cache_get(key) if key else None
             if cached:
                 sources[src_key] = {
@@ -282,7 +294,11 @@ def get_assembly_geometry() -> dict:
                 continue
 
             design = _display_design(_design_with_instance_overrides(inst))
-            nucleotides = _geometry_for_design(design, junction_balance=True)
+            nucleotides = _geometry_for_design(
+                design,
+                measured_positioning=measured_positioning,
+                junction_balance=True,
+            )
             axes = deformed_helix_axes(design)
             _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
             design_dict = design.to_dict()

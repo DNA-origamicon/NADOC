@@ -35,6 +35,27 @@ polymer. Current homes:
 The **stub-list audit rule below still applies** — `_SHARED_RENDERER_STUB_DEFAULTS` now lives in
 `assembly_renderer_shared.js`, so grep there when checking what is stubbed vs implemented.
 
+## Shared-renderer visual parity audit (2026-08-28)
+
+The shared assembly path must consume the same authoritative geometry mode as the individual
+design path. `getAssemblyGeometry()` and `getInstanceGeometry()` therefore send the explicit
+`measured_positioning` preference, and backend geometry cache/source keys include that flag.
+Without it, Full representation had matching primitive counts but different bead/slab transforms.
+
+Full shared sources also build the part renderer's crossover-specific geometry before applying the
+shared-instancing patch: extra beads, slabs, backbone connectors, slab connectors, and scaffold /
+staple / periodic-seam arc layers. Arc placement follows each assembly instance transform; periodic
+seams remain independently toggleable. Coloring-mode updates must repaint both arc vertex buffers
+and the extra-base GPU color textures. Cluster ownership follows the part rule: A/from endpoint,
+then B/to endpoint, then natural strand color; Overhang-only dims non-overhang crossovers.
+
+`frontend/e2e/bigo_assembly_geometry_parity.spec.js` is the source-level contract. For the one-unit
+BigO assembly it compares unordered transform multisets (compact assembly transport order differs
+from strand order) for backbone spheres/cubes, cones, slabs, and slab connectors to five decimal
+places. It also checks total crossover vertices and Cluster/Overhang-only RGB histograms against
+the individual part. Photomode shadow coverage additionally asserts that, with Studio Ambient off,
+there is exactly one visible shadow-casting light and it is the key.
+
 ## `getAssembly()` returns the RAW v2 wire shape — NEVER read `.instances` off it (2026-05-27)
 `api.getAssembly()` (and every `_syncFromAssemblyResponse`-backed call) RETURNS the raw backend
 JSON. The backend's `_assembly_response` ([assembly.py](../../NADOC/backend/api/assembly.py) ~L186)

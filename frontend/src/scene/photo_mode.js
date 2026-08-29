@@ -231,7 +231,9 @@ export function swapToFlatMaterials(root, presets = null) {
     // Assembly surfaces use ordinary instanceMatrix transforms and can safely
     // receive the selected surface material. Other shared-LOD meshes carry
     // custom texture-instancing shaders which a material replacement would drop.
-    if (obj.userData?.sharedLodImpostor && obj.name !== 'assemblySurface') return
+    if (obj.userData?.sharedLodImpostor
+        && obj.name !== 'assemblySurface'
+        && !obj.userData?.applySharedInstancing) return
     if (obj.userData?.photoFloor) return
     // A material flagged `visible:false` means "never draw this", and a fresh
     // material defaults to visible:true — the same class of bug as depthWrite
@@ -285,6 +287,12 @@ export function swapToFlatMaterials(root, presets = null) {
 
     saved.set(obj, src)
     obj.material = mat
+    // The shared assembly renderer composes source-local geometry with each
+    // assembly placement in an onBeforeCompile vertex patch. A fresh photo
+    // material drops that patch, collapsing Full/Beads geometry to the source
+    // origin (and in sufficiently large assemblies destabilising the GL pass).
+    // The renderer stores the exact reinstaller on every affected mesh.
+    obj.userData?.applySharedInstancing?.(mat)
   })
   return {
     count: saved.size,
@@ -305,7 +313,7 @@ export function swapToFlatMaterials(root, presets = null) {
  */
 export function createPhotoMode(sceneCtx) {
   const { scene, camera, renderer, controls, setRenderFn, resetRenderFn,
-          setResizeCallback, clearResizeCallback } = sceneCtx
+          setResizeCallback, clearResizeCallback, getPhotoBounds } = sceneCtx
   const bakeStudioEnvironment = sceneCtx.bakeStudioEnvironment ?? ((targetRenderer) => {
     // The jsdom unit harness intentionally supplies a renderer-shaped object,
     // not a WebGLRenderer. Production and offscreen export renderers carry this
@@ -331,7 +339,7 @@ export function createPhotoMode(sceneCtx) {
   let _lightGroup  = null
   let _lightTarget = null        // sits at the rig's local origin = scene centre
   let _keyLight    = null        // the one directional that casts the shadow
-  let _savedLights = []          // [{light, visible}] of the editor's own lights
+  let _savedLights = []          // [{light, visible, castShadow}] editor/late scene lights
   let _savedEnv    = undefined
   let _savedEnvIntensity = 1
   let _savedEnvRotation  = null
@@ -343,7 +351,7 @@ export function createPhotoMode(sceneCtx) {
   let _savedExposure     = null
   let _savedShadowEnabled = null
   let _savedShadowType    = null
-  const _savedMeshShadows = new Map()   // mesh → {cast, receive}
+  const _savedMeshShadows = new Map()   // mesh → {cast, receive, customDepthMaterial}
   let _bounds = null                    // {center, radius} the rig is fitted to
   let _figurePass = null
   let _savedFov   = null
@@ -355,6 +363,36 @@ export function createPhotoMode(sceneCtx) {
   let _sigFrame  = 0
   let _floor     = null                 // shadow catcher, created on activate
 
+  /** Convert an authoritative renderer-owned Box3 into the richer bounds shape
+   * used by the photo rig. The shared assembly renderer keeps placement
+   * transforms in GPU textures, so Three's generic setFromObject cannot measure
+   * those meshes (their instanceMatrix is intentionally collapsed to one row).
+   */
+  function _boundsFromBox(box) {
+    if (!box || box.isEmpty?.()) return null
+    const sphere = new THREE.Sphere()
+    box.getBoundingSphere(sphere)
+    if (!(sphere.radius > 0) || !Number.isFinite(sphere.radius)) return null
+    const b = box.clone()
+    const mn = b.min, mx = b.max
+    return {
+      center: sphere.center.clone(), radius: sphere.radius, box: b,
+      corners: [
+        new THREE.Vector3(mn.x, mn.y, mn.z), new THREE.Vector3(mx.x, mn.y, mn.z),
+        new THREE.Vector3(mn.x, mx.y, mn.z), new THREE.Vector3(mx.x, mx.y, mn.z),
+        new THREE.Vector3(mn.x, mn.y, mx.z), new THREE.Vector3(mx.x, mn.y, mx.z),
+        new THREE.Vector3(mn.x, mx.y, mx.z), new THREE.Vector3(mx.x, mx.y, mx.z),
+      ],
+      diagonal: b.getSize(new THREE.Vector3()).length(),
+      contributors: [], rejected: [], medianExtent: 0,
+    }
+  }
+
+  function _measureBounds() {
+    const authoritative = _boundsFromBox(getPhotoBounds?.())
+    return authoritative ?? computeShadowBounds(scene)
+  }
+
   // ── Scene state save / restore ─────────────────────────────────────────────
 
   function _hideEditorLights() {
@@ -362,13 +400,16 @@ export function createPhotoMode(sceneCtx) {
     scene.traverse(obj => {
       if (!obj.isLight) return
       if (_lightGroup && obj.parent === _lightGroup) return
-      _savedLights.push({ light: obj, visible: obj.visible })
+      _savedLights.push({ light: obj, visible: obj.visible, castShadow: obj.castShadow })
       obj.visible = false
     })
   }
 
   function _restoreEditorLights() {
-    for (const { light, visible } of _savedLights) light.visible = visible
+    for (const { light, visible, castShadow } of _savedLights) {
+      light.visible = visible
+      light.castShadow = castShadow
+    }
     _savedLights = []
   }
 
@@ -433,7 +474,7 @@ export function createPhotoMode(sceneCtx) {
     // no directional at all, silently disabling the whole key-shadow block).
     applyLighting(RIG_PRESET, _lightGroup)
 
-    _bounds = computeShadowBounds(scene)
+    _bounds = _measureBounds()
     _rejected = rejectedObjects(_bounds)
     _signature = sceneSignature(scene)
     _sigFrame = 0
@@ -502,7 +543,7 @@ export function createPhotoMode(sceneCtx) {
    */
   function _refitBounds() {
     if (!_lightGroup) return
-    _bounds    = computeShadowBounds(scene)
+    _bounds    = _measureBounds()
     _rejected  = rejectedObjects(_bounds)
     _signature = sceneSignature(scene)
     _sigFrame  = 0
@@ -551,10 +592,28 @@ export function createPhotoMode(sceneCtx) {
   }
 
   /**
-   * Give the key light a real shadow map. This is the SECOND shadow system in
-   * `lighting full`, entirely separate from ambient occlusion: three re-renders
-   * it every frame (so it tracks the camera-pinned light), while the occlusion
-   * bake stays cached. Exactly the asymmetry ChimeraX has.
+   * Photomode has exactly one real shadow source: the key DirectionalLight.
+   * Keep this as a runtime invariant rather than an assumption about whichever
+   * lights another scene subsystem may add after activate(). Editor lights are
+   * hidden on entry, but a late-added visible light must never start a second
+   * shadow map behind our back.
+   */
+  function _enforceSingleShadowSource() {
+    if (!_active) return
+    scene.traverse(light => {
+      if (!light.isLight || light === _keyLight) return
+      if (!_savedLights.some(saved => saved.light === light)) {
+        _savedLights.push({ light, visible: light.visible, castShadow: light.castShadow })
+      }
+      light.castShadow = false
+    })
+    if (_keyLight) _keyLight.castShadow = !!_settings.keyShadow
+  }
+
+  /**
+   * Give the key light the ONE real shadow map in photomode. There is no active
+   * ambient-occlusion/multishadow pass; studio environment and AmbientLight add
+   * illumination only and cannot cast or sample a second shadow.
    *
    * Deliberately NOT gated on a floor being present — self-shadowing across a
    * helix bundle is the point, and a ground plane is the last thing a figure
@@ -610,6 +669,7 @@ export function createPhotoMode(sceneCtx) {
         _keyLight.shadow.needsUpdate = true
       }
     }
+    _enforceSingleShadowSource()
     _applyMeshShadowFlags(want)
     _applyFloor()
   }
@@ -634,16 +694,46 @@ export function createPhotoMode(sceneCtx) {
       // on the one object whose entire job is to receive.
       if (obj.userData?.photoFloor) return
       if (_savedMeshShadows.has(obj)) return
-      _savedMeshShadows.set(obj, { cast: obj.castShadow, receive: obj.receiveShadow })
-      // Impostors and shared-LOD instancing cannot cast correctly: three drives
-      // its shadow pass with the built-in depth material, which has neither the
-      // billboard nor the composed instance transform. Let them RECEIVE (that is
-      // a fragment-side lookup and works) but not cast.
+      _savedMeshShadows.set(obj, {
+        cast: obj.castShadow,
+        receive: obj.receiveShadow,
+        customDepthMaterial: obj.customDepthMaterial,
+      })
+
+      // Three normally substitutes a stock MeshDepthMaterial for the shadow
+      // pass. Shared assembly meshes keep their placement matrices in textures,
+      // so that stock depth shader draws every copy at the source origin. Clone
+      // the live material's vertex/discard patch onto a depth material instead.
+      // This covers Full/Beads, cylinder/hull LODs and atom impostors; ordinary
+      // surfaces retain Three's normal instanceMatrix depth path.
+      const needsSharedDepth = (obj.userData?.sharedInstanced
+        || (obj.userData?.sharedLodImpostor && obj.name !== 'assemblySurface'))
+        && typeof obj.material?.onBeforeCompile === 'function'
+      if (needsSharedDepth && !obj.customDepthMaterial) {
+        const depth = new THREE.MeshDepthMaterial({
+          depthPacking: THREE.RGBADepthPacking,
+          side: obj.material.side,
+        })
+        const sourceCompile = obj.material.onBeforeCompile.bind(obj.material)
+        depth.onBeforeCompile = shader => {
+          sourceCompile(shader)
+          // Beauty shaders multiply/highlight RGB after positioning. On a depth
+          // material that RGB stores packed depth, so remove only those colour
+          // writes while retaining visibility/disc discard and gl_FragDepth.
+          shader.fragmentShader = shader.fragmentShader
+            .replace(/^\s*gl_FragColor\.rgb \*= [^;]+;\s*$/gm, '')
+            .replace(/\s*if \(u_activeInstanceIdx[^}]+\}\s*/g, '\n')
+        }
+        depth.customProgramCacheKey = () => `photoSharedDepth_${depth.uuid}`
+        obj.customDepthMaterial = depth
+      }
+
       const canCast = !isShadowExcluded(obj)
         && !_rejected.has(obj)            // a 100 µm plane would shadow everything
-        && !obj.material?.userData?.isImpostor
-        && obj.material?.userData?.impostorRadius == null
-        && !obj.userData?.sharedLodImpostor
+        && (!obj.material?.userData?.isImpostor || !!obj.customDepthMaterial)
+        && (obj.material?.userData?.impostorRadius == null || !!obj.customDepthMaterial)
+        && (!obj.userData?.sharedLodImpostor || !!obj.customDepthMaterial
+            || obj.name === 'assemblySurface')
       obj.castShadow    = canCast
       obj.receiveShadow = !isShadowExcluded(obj)
     })
@@ -653,6 +743,10 @@ export function createPhotoMode(sceneCtx) {
     for (const [obj, s] of _savedMeshShadows) {
       obj.castShadow    = s.cast
       obj.receiveShadow = s.receive
+      if (obj.customDepthMaterial !== s.customDepthMaterial) {
+        obj.customDepthMaterial?.dispose?.()
+        obj.customDepthMaterial = s.customDepthMaterial ?? undefined
+      }
     }
     _savedMeshShadows.clear()
   }
@@ -741,10 +835,10 @@ export function createPhotoMode(sceneCtx) {
    *
    * Camera-pinned rig: one quaternion copy. three then re-renders the key
    * light's shadow map itself every frame, because the light moved — exactly
-   * ChimeraX's per-frame `use_shadow_map`. The occlusion bake, by contrast, is
-   * view-INDEPENDENT and `ensureBaked` is a no-op after the first frame.
+   * ChimeraX's per-frame `use_shadow_map`.
    */
   function _perFrameSync() {
+    _enforceSingleShadowSource()
     if (_settings.pinLights) _syncRigToCamera()
     // The cue window's START tracks the camera, so it is pushed every frame.
     // The outline needs the same push for its scene-depth span.
@@ -1296,12 +1390,45 @@ export function createPhotoMode(sceneCtx) {
     const key = _keyLight
     const shadow = key?.shadow
     let casters = 0, receivers = 0, physical = 0, compiled = 0, withShadowDefine = 0
+    const shadowObjects = []
+    const lights = []
     scene.traverse(obj => {
+      if (obj.isLight) {
+        let effectivelyVisible = obj.visible
+        for (let parent = obj.parent; effectivelyVisible && parent; parent = parent.parent) {
+          effectivelyVisible = parent.visible
+        }
+        lights.push({
+          name: obj.name || '(unnamed)',
+          type: obj.type,
+          visible: !!effectivelyVisible,
+          intensity: obj.intensity,
+          castShadow: !!obj.castShadow,
+          isKey: obj === _keyLight,
+        })
+      }
       if (!obj.isMesh && !obj.isInstancedMesh) return
-      if (obj.castShadow) casters++
-      if (obj.receiveShadow) receivers++
       const m = obj.material
-      if (!m?.isMeshPhysicalMaterial) return
+      let effectivelyVisible = obj.visible && m?.visible !== false
+        && (!obj.isInstancedMesh || obj.count > 0)
+      for (let parent = obj.parent; effectivelyVisible && parent; parent = parent.parent) {
+        effectivelyVisible = parent.visible
+      }
+      if (effectivelyVisible && obj.castShadow) casters++
+      if (effectivelyVisible && obj.receiveShadow) receivers++
+      if (effectivelyVisible && (obj.castShadow || obj.receiveShadow)) shadowObjects.push({
+        name: obj.name || '(unnamed)',
+        type: obj.isInstancedMesh ? `InstancedMesh×${obj.count}` : obj.type,
+        material: m?.type ?? null,
+        cast: !!obj.castShadow,
+        receive: !!obj.receiveShadow,
+        customDepth: obj.customDepthMaterial?.type ?? null,
+        sharedInstanced: !!obj.userData?.sharedInstanced,
+        sharedLod: !!obj.userData?.sharedLodImpostor,
+        photoFloor: !!obj.userData?.photoFloor,
+        visible: !!obj.visible,
+      })
+      if (!effectivelyVisible || !m?.isMeshPhysicalMaterial) return
       physical++
       // `program` only exists once three has compiled the material; its cache
       // key carries the parameter list, so USE_SHADOWMAP presence is visible.
@@ -1314,10 +1441,61 @@ export function createPhotoMode(sceneCtx) {
     })
     const camQ = new THREE.Quaternion()
     camera.getWorldQuaternion(camQ)
+    let shadowGeometry = null
+    if (key && shadow?.camera && _bounds) {
+      // Measure the actual ray, not just the parent-group quaternion. This
+      // catches a detached DirectionalLight target and makes camera pinning
+      // directly comparable between a design and an assembly.
+      scene.updateMatrixWorld(true)
+      camera.updateMatrixWorld(true)
+      shadow.camera.updateMatrixWorld(true)
+      const lightPos = key.getWorldPosition(new THREE.Vector3())
+      const targetPos = key.target?.getWorldPosition(new THREE.Vector3()) ?? _bounds.center.clone()
+      const worldRay = targetPos.clone().sub(lightPos).normalize()
+      const cameraRay = worldRay.clone().applyQuaternion(camQ.clone().invert())
+      const shadowRay = shadow.camera.getWorldDirection(new THREE.Vector3())
+      const ndcCorners = (_bounds.corners ?? []).map(corner =>
+        corner.clone().project(shadow.camera))
+      const axisRange = axis => ndcCorners.length ? {
+        min: Math.min(...ndcCorners.map(v => v[axis])),
+        max: Math.max(...ndcCorners.map(v => v[axis])),
+      } : null
+      const ndc = { x: axisRange('x'), y: axisRange('y'), z: axisRange('z') }
+      const roundVec = vector => vector.toArray().map(v => +v.toFixed(5))
+      shadowGeometry = {
+        worldRay: roundVec(worldRay),
+        cameraRay: roundVec(cameraRay),
+        shadowCameraRay: roundVec(shadowRay),
+        shadowCameraAlignment: +worldRay.dot(shadowRay).toFixed(6),
+        targetCenterError: +targetPos.distanceTo(_bounds.center).toFixed(6),
+        ndc: Object.fromEntries(Object.entries(ndc).map(([axis, range]) => [axis,
+          range ? { min: +range.min.toFixed(5), max: +range.max.toFixed(5) } : null])),
+        outsideCorners: ndcCorners.filter(v =>
+          Math.abs(v.x) > 1.0001 || Math.abs(v.y) > 1.0001 || Math.abs(v.z) > 1.0001).length,
+        // Fraction of the map's width/height occupied by the authoritative box.
+        // Very small values expose an inflated assembly bound and lost precision.
+        occupancy: ndc.x && ndc.y ? {
+          x: +((ndc.x.max - ndc.x.min) / 2).toFixed(5),
+          y: +((ndc.y.max - ndc.y.min) / 2).toFixed(5),
+        } : null,
+      }
+    }
     return {
       active: _active,
       rendererShadowMapEnabled: renderer.shadowMap?.enabled,
       rendererShadowAutoUpdate: renderer.shadowMap?.autoUpdate,
+      shadowCastingLights: lights.filter(light => light.visible && light.castShadow),
+      allLights: lights,
+      studioEnvironment: {
+        enabled: _settings.studioEnvironment,
+        bound: scene.environment != null,
+        intensity: scene.environmentIntensity,
+      },
+      figureEffects: {
+        outline: !!_settings.outline,
+        depthCue: !!_settings.depthCue,
+        passEnabled: !!_figurePass?.enabled,
+      },
       keyLight: key ? {
         castShadow: key.castShadow,
         intensity:  key.intensity,
@@ -1340,7 +1518,8 @@ export function createPhotoMode(sceneCtx) {
       } : null,
       rigPinned: _settings.pinLights,
       rigMatchesCamera: _lightGroup ? _lightGroup.quaternion.angleTo(camQ) < 1e-3 : null,
-      meshes: { casters, receivers, physical, compiled, withShadowDefine },
+      shadowGeometry,
+      meshes: { casters, receivers, physical, compiled, withShadowDefine, shadowObjects },
       bake: getStatus(),
     }
   }
@@ -1388,22 +1567,40 @@ export function initPhotoMode({
   assemblyJointRenderer, bluntEnds, originAxes,
   player, exportPhotoVideo, trajectoryKeyframes = null,
 }) {
-  const mode = createPhotoMode(sceneCtx)
+  const mode = createPhotoMode({
+    ...sceneCtx,
+    // Shared assembly LODs compose placements in shader textures and therefore
+    // cannot be bounded correctly by Three's generic scene traversal. The
+    // assembly renderer already owns the authoritative world-space box.
+    getPhotoBounds: () => store.getState().assemblyActive
+      ? assemblyRenderer?.getBoundingBox?.()
+      : null,
+  })
   let _panel = null
   let _savedOriginAxesVisible = null
 
   function enter() {
     if (mode.isActive()) return
     if (!_panel) _panel = initPhotoPanel(mode, {
-      onExit: () => exit(),
+      onExit: () => {
+        exit()
+        // The button is labelled "Exit Photo Mode", so leave the Photo pane as
+        // well as removing its render override. The sidebar is initialized just
+        // after this controller; the lazy lookup avoids a construction cycle.
+        window.__leftSidebar?.selectTab?.('feature-log')
+      },
       store, player, exportPhotoVideo, trajectoryKeyframes,
     })
-
-    mode.activate()
 
     // Same gizmo suppression photo mode v1 used — an editor overlay in
     // a render being judged for its shading is noise, and the `toneMapped:false`
     // origin triad has a real artifact history (ANGLE/D3D11 + bloom).
+    //
+    // Hide these BEFORE activate(): activation computes the shadow/depth/floor
+    // bounds immediately. Assembly transform controls contain many small helper
+    // meshes; leaving them visible during that fit can make the actual assembly
+    // look like a gross outlier and produce a null/zero-radius rig. BigO-poly is
+    // the regression fixture that exposed this ordering dependency.
     designRenderer?.setAxisArrowsVisible?.(false)
     if (originAxes) {
       _savedOriginAxesVisible = originAxes.visible
@@ -1413,6 +1610,7 @@ export function initPhotoMode({
     assemblyRenderer?.setPhotoMode?.(true)
     assemblyJointRenderer?.setVisible?.(false)
 
+    mode.activate()
     _panel.onEnter()
   }
 

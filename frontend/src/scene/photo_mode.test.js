@@ -162,6 +162,37 @@ describe('swapToFlatMaterials', () => {
     expect(mesh.material.userData.instanceAlphaPatch).toBe(true)
   })
 
+  it('re-installs the shared assembly vertex patch on photo materials', () => {
+    const scene = new THREE.Scene()
+    const mesh = new THREE.InstancedMesh(box(), new THREE.MeshPhongMaterial(), 2)
+    const install = vi.fn(material => { material.userData.sharedPatchInstalled = true })
+    mesh.userData.applySharedInstancing = install
+    scene.add(mesh)
+
+    swapToFlatMaterials(scene)
+
+    expect(install).toHaveBeenCalledWith(mesh.material)
+    expect(mesh.material.userData.sharedPatchInstalled).toBe(true)
+  })
+
+  it('uses the photo material on a shared LOD when its shader can be reinstalled', () => {
+    const scene = new THREE.Scene()
+    const original = new THREE.MeshLambertMaterial()
+    const lod = new THREE.InstancedMesh(box(), original, 2)
+    lod.name = 'sharedLodMid'
+    lod.userData.sharedLodImpostor = true
+    lod.userData.applySharedInstancing = material => { material.userData.sharedPatchInstalled = true }
+    scene.add(lod)
+
+    const swapped = swapToFlatMaterials(scene)
+
+    expect(lod.material).not.toBe(original)
+    expect(lod.material.isMeshPhysicalMaterial).toBe(true)
+    expect(lod.material.userData.sharedPatchInstalled).toBe(true)
+    swapped.restore()
+    expect(lod.material).toBe(original)
+  })
+
   it('the re-installed patch is transparent AND still depth-writing', () => {
     // transparent: makeMaterial forces transparent:false for non-surface reps, and
     // the src.opacity < 1 carry-over never fires here (the fade is in the attribute,
@@ -413,6 +444,21 @@ describe('createPhotoMode', () => {
     expect(rig.children.some(c => c.isAmbientLight)).toBe(true)
   })
 
+  it('uses renderer-owned bounds for GPU-instanced assembly geometry', () => {
+    const authoritative = new THREE.Box3(
+      new THREE.Vector3(-10, -20, -30),
+      new THREE.Vector3(10, 20, 30),
+    )
+    const assemblyMode = createPhotoMode({
+      ...ctx,
+      getPhotoBounds: () => authoritative,
+    })
+
+    assemblyMode.activate()
+    expect(assemblyMode.getStatus().radius).toBeCloseTo(Math.sqrt(1400), 6)
+    assemblyMode.deactivate()
+  })
+
   it('activate() hides the editor lights and deactivate() restores them', () => {
     const editorLight = ctx.scene.children.find(c => c.isPointLight)
     expect(editorLight.visible).toBe(true)
@@ -422,6 +468,30 @@ describe('createPhotoMode', () => {
 
     mode.deactivate()
     expect(editorLight.visible).toBe(true)
+  })
+
+  it('enforces one visible shadow source and reports studio ambient separately', () => {
+    const editorLight = ctx.scene.children.find(c => c.isPointLight)
+    editorLight.castShadow = true
+    mode.activate()
+    mode.setStudioEnvironment(false)
+
+    // Simulate a subsystem adding a shadow-casting light after photo entry.
+    const late = new THREE.SpotLight(0xffffff, 1)
+    late.castShadow = true
+    ctx.scene.add(late)
+    mode.setKeyShadow(true)
+
+    const diagnostics = mode.getDiagnostics()
+    expect(diagnostics.shadowCastingLights).toHaveLength(1)
+    expect(diagnostics.shadowCastingLights[0].isKey).toBe(true)
+    expect(diagnostics.studioEnvironment).toMatchObject({ enabled: false, bound: false })
+    expect(diagnostics.figureEffects).toMatchObject({ outline: false, depthCue: false, passEnabled: false })
+    expect(late.castShadow).toBe(false)
+
+    mode.deactivate()
+    expect(editorLight.castShadow).toBe(true)
+    expect(late.castShadow).toBe(true)
   })
 
   it('deactivate() restores the render fn, tone mapping and scene environment', () => {
@@ -613,6 +683,49 @@ describe('createPhotoMode', () => {
     mode.activate()
     expect(imp.castShadow).toBe(false)
     expect(imp.receiveShadow).toBe(true)
+  })
+
+  it('gives shader-instanced assembly meshes a matching shadow-depth material', () => {
+    const material = new THREE.MeshLambertMaterial()
+    material.onBeforeCompile = shader => {
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <begin_vertex>',
+        'vec3 transformed = position + vec3(7.0, 0.0, 0.0);',
+      )
+    }
+    const shared = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), material, 2)
+    shared.name = 'sharedLodMid'
+    shared.userData.sharedLodImpostor = true
+    ctx.scene.add(shared)
+
+    mode.activate()
+
+    expect(shared.castShadow).toBe(true)
+    expect(shared.receiveShadow).toBe(true)
+    expect(shared.customDepthMaterial).toBeInstanceOf(THREE.MeshDepthMaterial)
+    const shader = {
+      uniforms: {},
+      vertexShader: '#include <begin_vertex>',
+      fragmentShader: '#include <dithering_fragment>',
+    }
+    shared.customDepthMaterial.onBeforeCompile(shader)
+    expect(shader.vertexShader).toContain('position + vec3(7.0')
+
+    mode.deactivate()
+    expect(shared.castShadow).toBe(false)
+    expect(shared.customDepthMaterial).toBeUndefined()
+  })
+
+  it('lets ordinary assembly surfaces use Three’s native instanced shadow pass', () => {
+    const surface = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial(), 2,
+    )
+    surface.name = 'assemblySurface'
+    surface.userData.sharedLodImpostor = true
+    ctx.scene.add(surface)
+    mode.activate()
+    expect(surface.castShadow).toBe(true)
+    expect(surface.customDepthMaterial).toBeUndefined()
   })
 
   it('forces a material recompile when the shadow flag flips', () => {

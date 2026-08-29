@@ -25,8 +25,9 @@ import {
   IMPOSTOR_FRAG_NORMAL,
 } from './impostor_material.js'
 import { ELEMENTS, DEFAULT_ELEMENT, BALL_RADIUS } from './atomistic_renderer/atom_palette.js'
-import { C, STAPLE_PALETTE, buildClusterLookup } from './helix_renderer/palette.js'
+import { C, STAPLE_PALETTE, buildClusterLookup, buildClusterColorLookup } from './helix_renderer/palette.js'
 import { buildOverhangMarkers } from './joint_renderer.js'
+import { buildCrossoverConnections } from './crossover_connections.js'
 import {
   computeInstanceBluntEnds as _computeInstanceBluntEnds,
   bendCenterRecordToWorld as _bendCenterRecordToWorld,
@@ -43,6 +44,76 @@ import {
 // At W=256 a single texture row holds 256 bp slots, so even a 65k-bp source
 // fits in 256 texture rows — well under WebGL's 16384 MAX_TEXTURE_SIZE.
 const _BP_TEX_TILE_W = 256
+const _XOVER_ARC_SEGS = 20
+
+function _buildSharedCrossoverArcs(connections, instances, matrixFromValues, showPeriodic = false) {
+  if (!connections?.length || !instances?.length) return null
+
+  const normal = connections.filter(c => !c.isPeriodicSeam)
+  const buckets = [
+    ['scaffold', normal.filter(c => c.fromNuc?.strand_type === 'scaffold')],
+    ['staple', normal.filter(c => c.fromNuc?.strand_type !== 'scaffold')],
+    ['periodic', connections.filter(c => c.isPeriodicSeam)],
+  ]
+  const root = new THREE.Group()
+  root.name = 'sharedCrossoverArcs'
+  root.userData.instanceGroups = new Map()
+
+  for (const inst of instances) {
+    const group = new THREE.Group()
+    group.name = `sharedInstanceXoverArcs_${inst.id}`
+    group.userData.assemblyInstance = inst.id
+    group.matrixAutoUpdate = false
+    group.matrix.copy(matrixFromValues(inst.transform?.values))
+    group.visible = inst.visible !== false && (inst.representation === 'full' || inst.representation === 'beads')
+
+    for (const [arcType, conns] of buckets) {
+      if (!conns.length) continue
+      const vertexCount = conns.length * (_XOVER_ARC_SEGS + 1)
+      const positions = new Float32Array(vertexCount * 3)
+      const colors = new Float32Array(vertexCount * 3)
+      const indexCount = conns.length * _XOVER_ARC_SEGS * 2
+      const indices = vertexCount > 65535 ? new Uint32Array(indexCount) : new Uint16Array(indexCount)
+      const color = new THREE.Color()
+      for (let a = 0; a < conns.length; a++) {
+        const { from, to } = conns[a]
+        color.setHex(conns[a].color ?? 0x00ccff)
+        const base = a * (_XOVER_ARC_SEGS + 1)
+        for (let s = 0; s < _XOVER_ARC_SEGS; s++) {
+          indices[(a * _XOVER_ARC_SEGS + s) * 2] = base + s
+          indices[(a * _XOVER_ARC_SEGS + s) * 2 + 1] = base + s + 1
+        }
+        for (let v = 0; v <= _XOVER_ARC_SEGS; v++) {
+          const t = v / _XOVER_ARC_SEGS
+          const p = (base + v) * 3
+          positions[p] = from.x + (to.x - from.x) * t
+          positions[p + 1] = from.y + (to.y - from.y) * t
+          positions[p + 2] = from.z + (to.z - from.z) * t
+          colors[p] = color.r; colors[p + 1] = color.g; colors[p + 2] = color.b
+        }
+      }
+      const geometry = new THREE.BufferGeometry()
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+      geometry.setIndex(new THREE.BufferAttribute(indices, 1))
+      const material = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85 })
+      const line = new THREE.LineSegments(geometry, material)
+      line.name = `instanceXoverArc_${arcType}`
+      line.frustumCulled = false
+      line.userData.arcConnections = conns
+      if (arcType === 'periodic') {
+        line.userData.isPeriodicSeam = true
+        line.visible = showPeriodic
+      }
+      group.add(line)
+    }
+    if (group.children.length) {
+      root.add(group)
+      root.userData.instanceGroups.set(inst.id, group)
+    }
+  }
+  return root.children.length ? root : null
+}
 
 // Per-instance representation → shared-renderer LOD floor.  Returns the
 // MINIMUM bucket an instance may occupy regardless of camera distance:
@@ -354,6 +425,32 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
           `,
         )
         .replace(
+          '#include <beginnormal_vertex>',
+          `
+          #include <beginnormal_vertex>
+          int normalInstanceIdx = int(floor(float(gl_InstanceID) / max(u_numBpPerInstance, 1.0)));
+          int normalBpIdx = gl_InstanceID - normalInstanceIdx * int(u_numBpPerInstance);
+          int normalBpCol = normalBpIdx % BP_TILE_W;
+          int normalBpRow = normalBpIdx / BP_TILE_W;
+          mat4 normalInstTransform = mat4(
+            texelFetch(u_instanceXform, ivec2(0, normalInstanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(1, normalInstanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(2, normalInstanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(3, normalInstanceIdx), 0)
+          );
+          mat4 normalBpTransform = mat4(
+            texelFetch(u_bpXform, ivec2(normalBpCol * 4 + 0, normalBpRow), 0),
+            texelFetch(u_bpXform, ivec2(normalBpCol * 4 + 1, normalBpRow), 0),
+            texelFetch(u_bpXform, ivec2(normalBpCol * 4 + 2, normalBpRow), 0),
+            texelFetch(u_bpXform, ivec2(normalBpCol * 4 + 3, normalBpRow), 0)
+          );
+          objectNormal = transpose(inverse(mat3(normalInstTransform * normalBpTransform))) * objectNormal;
+          #ifdef USE_TANGENT
+            objectTangent = mat3(normalInstTransform * normalBpTransform) * objectTangent;
+          #endif
+          `,
+        )
+        .replace(
           '#include <begin_vertex>',
           `
           // Compute instance index from the InstancedMesh's gl_InstanceID:
@@ -422,10 +519,16 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
           `,
         )
         .replace(
+          '#include <color_fragment>',
+          `
+          #include <color_fragment>
+          ${uniformsBundle.hasBpColor ? 'diffuseColor.rgb *= v_bpColor;' : ''}
+          `,
+        )
+        .replace(
           '#include <dithering_fragment>',
           `
           if (v_visible < 0.5) discard;
-          ${uniformsBundle.hasBpColor ? 'gl_FragColor.rgb *= v_bpColor;' : ''}
           if (u_activeInstanceIdx >= 0.0 && abs(float(v_instanceIdx) - u_activeInstanceIdx) < 0.5) {
             gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0, 1.0, 1.0), 0.35);
           }
@@ -700,9 +803,12 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
         .replace('#include <clipping_planes_fragment>',
           `#include <clipping_planes_fragment>\n${IMPOSTOR_FRAG_SPHERE_BODY}`)
         .replace('#include <normal_fragment_begin>', IMPOSTOR_FRAG_NORMAL)
+        .replace('#include <color_fragment>', `
+          #include <color_fragment>
+          diffuseColor.rgb *= v_atomColor;
+        `)
         .replace('#include <dithering_fragment>', `
           if (v_visible < 0.5) discard;
-          gl_FragColor.rgb *= v_atomColor;
           if (u_activeInstanceIdx >= 0.0 && abs(float(v_instanceIdx) - u_activeInstanceIdx) < 0.5) {
             gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0, 1.0, 1.0), 0.35);
           }
@@ -1076,6 +1182,11 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
       // (captures THIS mesh's uniforms + bp count) so photo_renderer can
       // re-inject the patch onto the swapped material; tag for skip-logic.
       obj.userData.sharedInstanced = true
+      obj.userData.sharedBaseCount = baseCount
+      // Exact source-local matrices uploaded to u_bpXform. Kept as a debug
+      // seam so the part/assembly parity harness can distinguish bad source
+      // transforms from bad GPU composition without a texture readback.
+      obj.userData.sharedBpXformData = bpData
       obj.userData.applySharedInstancing = (material) => {
         const list = Array.isArray(material) ? material : [material]
         for (const mm of list) _attachInstanceShader(mm, meshUniforms, baseCount)
@@ -1217,6 +1328,14 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     const helixCtrl = buildHelixObjects(
       nucleotides, design, helixGroup, customColors, [], helix_axes ?? null, rep,
     )
+    // Match the individual-part renderer: crossover insertions have their own
+    // bead/slab/connector meshes and must be present before shared-instancing
+    // patches every InstancedMesh in the source tree.
+    const stapleColorMap = buildStapleColorMap(nucleotides, design)
+    const xoverResult = buildCrossoverConnections(
+      design, nucleotides, stapleColorMap, customColors,
+    )
+    if (xoverResult) helixCtrl.root.add(xoverResult.group)
     // Assembly mode never needs the helix axis arrows — they're meant for
     // single-design editing (and were the only thing visible at default
     // zoom on large assemblies, which looked like clutter).  Hide them so
@@ -1303,6 +1422,15 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     xformTex.needsUpdate = true
     visTex.needsUpdate   = true
 
+    // Lines cannot use the InstancedMesh shader path. Keep one local-space
+    // line group per placement, sharing the exact crossover endpoints used by
+    // the part renderer and inheriting that placement's assembly transform.
+    const crossoverArcGroup = _buildSharedCrossoverArcs(
+      helixCtrl.getCrossHelixConnections(), instancesForKey, _instMat4,
+      store.getState().showPeriodicSeamArcs === true,
+    )
+    if (crossoverArcGroup) helixGroup.add(crossoverArcGroup)
+
     scene.add(helixGroup)
 
     const srcEntry = {
@@ -1330,6 +1458,8 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
       dirtyRows: new Set(),
       dirtyVisRows: new Set(),
       instBoundingBox,
+      crossoverArcGroup,
+      xoverResult,
     }
 
     // ── Phase 3f: build mid-LOD + far-LOD meshes for this source ─────────────
@@ -1446,15 +1576,25 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     try { _applyColorsToSource(srcEntry, null) }
     catch (err) { console.warn('[shared_renderer] initial colour seed failed:', err) }
 
-    // Phase 7d: the mid/hull LOD impostors carry their OWN custom shaders that
-    // compose instance transforms (per-helix cylinders, instanced hull solids).
-    // Photo mode's _swapMaterials must SKIP them — swapping in a stock
-    // MeshPhysicalMaterial would drop those shaders and collapse the impostors
-    // to the source origin. They're distance impostors anyway, so they don't
-    // need the PBR look (only the close-LOD bp meshes do — those get PBR + the
-    // re-applied instancing patch via userData.applySharedInstancing).
+    // The shared LODs carry custom shaders that compose placement transforms.
+    // Preserve that patch as a material-reinstaller so photo mode can use the
+    // SAME physical material as the equivalent single-design representation.
+    // Keeping the editor's Lambert material here made a one-instance assembly
+    // respond only half as strongly to the key and almost not at all to its
+    // shadow, despite a correct shadow map.
     for (const m of [srcEntry.midLod?.mesh, srcEntry.overhangLod?.mesh, srcEntry.hullLod?.mesh, srcEntry.hullMarkerLod?.mesh, srcEntry.curvedCylLod?.mesh]) {
-      if (m) m.userData.sharedLodImpostor = true
+      if (!m) continue
+      m.userData.sharedLodImpostor = true
+      const compileSharedLod = m.material?.onBeforeCompile
+      if (typeof compileSharedLod === 'function') {
+        m.userData.applySharedInstancing = material => {
+          const materials = Array.isArray(material) ? material : [material]
+          for (const target of materials) {
+            target.onBeforeCompile = compileSharedLod
+            target.customProgramCacheKey = () => `photoSharedLod_${m.name}_${target.uuid}`
+          }
+        }
+      }
     }
 
     // ── Phase C: atomistic sources → per-source atom-impostor batch ───────────
@@ -1639,7 +1779,11 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
   // iHelixCylinders assume that radius).  Unit height — matrix scale.y
   // sizes the cylinder to the domain it represents.  Reused across sources
   // so we don't dispose it in _disposeSource; tag userData.shared = true.
-  const _LOD_CYL_GEO = new THREE.CylinderGeometry(1.125, 1.125, 1, 12, 1, false)
+  // Must be byte-for-byte equivalent in shape to helix_renderer's
+  // GEO_UNIT_CYL. A former 12-vs-8 side mismatch changed facet normals,
+  // silhouette coverage and shadow-map rasterization even for one identity
+  // assembly instance.
+  const _LOD_CYL_GEO = new THREE.CylinderGeometry(1.125, 1.125, 1, 8, 1, false)
   _LOD_CYL_GEO.userData.shared = true
   // Half-cylinder for overhang segments — closed half-tube (180° wall +
   // rectangular cut-face cap), matching helix_renderer.js's GEO_HALF_CYL.
@@ -1648,7 +1792,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
   // overhang protrusions from full helix cylinders so users can spot
   // overhang domains / mate-point candidates at the cylinders LOD.
   const _LOD_HALF_CYL_GEO = (() => {
-    const wall = new THREE.CylinderGeometry(1.125, 1.125, 1, 12, 1, false, 0, Math.PI)
+    const wall = new THREE.CylinderGeometry(1.125, 1.125, 1, 8, 1, false, 0, Math.PI)
     const face = new THREE.PlaneGeometry(2.25, 1).rotateY(-Math.PI / 2)
     const merged = mergeGeometries([wall, face])
     wall.dispose()
@@ -1738,6 +1882,35 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
           `,
         )
         .replace(
+          '#include <beginnormal_vertex>',
+          `
+          #include <beginnormal_vertex>
+          // instanceMatrix is collapsed to identity, so reconstruct the same
+          // placement × segment transform used below for positions. Direct
+          // lighting and LightShadow.normalBias both depend on this normal.
+          int normalInstanceIdx = int(floor(float(gl_InstanceID) / max(u_numSegments, 1.0))) + int(u_instanceOffset);
+          int normalSegIdx = gl_InstanceID - (normalInstanceIdx - int(u_instanceOffset)) * int(u_numSegments);
+          int normalSegCol = normalSegIdx % BP_TILE_W;
+          int normalSegRow = normalSegIdx / BP_TILE_W;
+          mat4 normalInstTransform = mat4(
+            texelFetch(u_instanceXform, ivec2(0, normalInstanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(1, normalInstanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(2, normalInstanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(3, normalInstanceIdx), 0)
+          );
+          mat4 normalSegTransform = mat4(
+            texelFetch(u_segXform, ivec2(normalSegCol * 4 + 0, normalSegRow), 0),
+            texelFetch(u_segXform, ivec2(normalSegCol * 4 + 1, normalSegRow), 0),
+            texelFetch(u_segXform, ivec2(normalSegCol * 4 + 2, normalSegRow), 0),
+            texelFetch(u_segXform, ivec2(normalSegCol * 4 + 3, normalSegRow), 0)
+          );
+          objectNormal = transpose(inverse(mat3(normalInstTransform * normalSegTransform))) * objectNormal;
+          #ifdef USE_TANGENT
+            objectTangent = mat3(normalInstTransform * normalSegTransform) * objectTangent;
+          #endif
+          `,
+        )
+        .replace(
           '#include <begin_vertex>',
           `
           // Decompose gl_InstanceID = instanceIdx * numSegments + segmentIdx,
@@ -1779,12 +1952,18 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
           `,
         )
         .replace(
+          '#include <color_fragment>',
+          `
+          #include <color_fragment>
+          int colorCol = v_segIdx % BP_TILE_W;
+          int colorRow = v_segIdx / BP_TILE_W;
+          diffuseColor.rgb *= texelFetch(u_segColor, ivec2(colorCol, colorRow), 0).rgb;
+          `,
+        )
+        .replace(
           '#include <dithering_fragment>',
           `
           if (v_visible < 0.5) discard;
-          int scol = v_segIdx % BP_TILE_W;
-          int srow = v_segIdx / BP_TILE_W;
-          gl_FragColor.rgb *= texelFetch(u_segColor, ivec2(scol, srow), 0).rgb;
           #include <dithering_fragment>
           `,
         )
@@ -1808,6 +1987,10 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     // callback).  drawElementsInstanced with count=0 is a no-op.
     mesh.visible = true
     mesh.name = meshName
+    // CPU mirror used by the photomode parity audit; this is the exact texture
+    // payload consumed by u_segColor and lets us compare it with the source
+    // part's instanceColor without attempting a GPU readback.
+    mesh.userData.sharedSegmentColorData = colorData
     sourceGroup.add(mesh)
     return {
       mesh,
@@ -2045,6 +2228,23 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
   // overhang cylinder LODs, the shader does NOT rotate normals by instTransform,
   // so lighting on rotated instances is approximate (acceptable for opaque grey
   // boxes; matches shipped LOD precedent).
+  function _injectOuterInstanceNormal(vertexShader) {
+    return vertexShader.replace('#include <beginnormal_vertex>', `
+      #include <beginnormal_vertex>
+      int normalInstanceIdx = gl_InstanceID + int(u_instanceOffset);
+      mat4 normalInstTransform = mat4(
+        texelFetch(u_instanceXform, ivec2(0, normalInstanceIdx), 0),
+        texelFetch(u_instanceXform, ivec2(1, normalInstanceIdx), 0),
+        texelFetch(u_instanceXform, ivec2(2, normalInstanceIdx), 0),
+        texelFetch(u_instanceXform, ivec2(3, normalInstanceIdx), 0)
+      );
+      objectNormal = transpose(inverse(mat3(normalInstTransform))) * objectNormal;
+      #ifdef USE_TANGENT
+        objectTangent = mat3(normalInstTransform) * objectTangent;
+      #endif
+    `)
+  }
+
   function _buildHullLodMesh(srcEntry, hullGeo, sourceGroup) {
     const numInstances = srcEntry.instanceIds.length
     if (numInstances === 0 || !hullGeo) return null
@@ -2084,6 +2284,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
           vec3 transformed = (instTransform * vec4(position, 1.0)).xyz;
           `,
         )
+      shader.vertexShader = _injectOuterInstanceNormal(shader.vertexShader)
       shader.fragmentShader = shader.fragmentShader
         .replace(
           '#include <common>',
@@ -2201,6 +2402,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
           );
           vec3 transformed = (instTransform * vec4(position, 1.0)).xyz;
           `)
+      shader.vertexShader = _injectOuterInstanceNormal(shader.vertexShader)
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', `
           #include <common>
@@ -3166,6 +3368,79 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
   //
   // The bp-color mapping is implicit inside helix_renderer.js (option C in
   // the Phase 3d-A spec); we never inspect it directly.
+  function _applyCrossoverColorsToSource(srcEntry, mode) {
+    if (!srcEntry) return
+    const dimGray = 0xbbbbbb
+    const clusterColor = mode === 'cluster'
+      ? buildClusterColorLookup(srcEntry.design)
+      : null
+    const color = new THREE.Color()
+
+    // Arc lines use the same endpoint-owner rule as the individual design:
+    // fromNuc's cluster wins, then toNuc, then the natural strand colour.
+    srcEntry.crossoverArcGroup?.traverse(line => {
+      const conns = line.userData?.arcConnections
+      const attr = line.geometry?.getAttribute?.('color')
+      if (!conns || !attr) return
+      for (let a = 0; a < conns.length; a++) {
+        const conn = conns[a]
+        const isOverhang = conn.fromNuc?.overhang_id != null || conn.toNuc?.overhang_id != null
+        const clusterHex = clusterColor
+          ? (clusterColor(conn.fromNuc) ?? clusterColor(conn.toNuc))
+          : undefined
+        const hex = clusterHex
+          ?? ((mode === 'overhang-only' && !isOverhang) ? dimGray : (conn.color ?? 0x00ccff))
+        color.setHex(hex)
+        const start = a * (_XOVER_ARC_SEGS + 1) * 3
+        const end = start + (_XOVER_ARC_SEGS + 1) * 3
+        for (let i = start; i < end; i += 3) {
+          attr.array[i] = color.r; attr.array[i + 1] = color.g; attr.array[i + 2] = color.b
+        }
+      }
+      attr.needsUpdate = true
+    })
+
+    // Extra crossover bases are shared-instanced, so update their GPU colour
+    // textures rather than the now-collapsed instanceColor attributes.
+    const xr = srcEntry.xoverResult
+    if (!xr?.arcData) return
+    const activeFor = mesh => srcEntry.activeMeshes?.find(item => item.mesh === mesh)
+    const bead = activeFor(xr.beadsMesh)
+    const slab = activeFor(xr.slabsMesh)
+    const connector = activeFor(xr.connMesh)
+    const slabConnector = activeFor(xr.slabConnMesh)
+    const write = (active, index, hex) => {
+      if (!active?.bpColorData || index < 0 || index >= active.baseCount) return
+      color.setHex(hex)
+      const offset = index * 4
+      active.bpColorData[offset] = color.r
+      active.bpColorData[offset + 1] = color.g
+      active.bpColorData[offset + 2] = color.b
+      active.bpColorData[offset + 3] = 1
+    }
+    for (const arc of xr.arcData) {
+      const isOverhang = arc.nucA?.overhang_id != null || arc.nucB?.overhang_id != null
+      const clusterHex = clusterColor
+        ? (clusterColor(arc.nucA) ?? clusterColor(arc.nucB))
+        : undefined
+      const beadHex = clusterHex
+        ?? ((mode === 'overhang-only' && !isOverhang) ? dimGray : arc.beadBaseColor)
+      const slabHex = clusterHex
+        ?? ((mode === 'overhang-only' && !isOverhang) ? dimGray : arc.slabBaseColor)
+      for (let i = 0; i < arc.beadCount; i++) {
+        write(bead, arc.beadStartIdx + i, beadHex)
+        write(slab, arc.beadStartIdx + i, slabHex)
+        write(slabConnector, arc.beadStartIdx + i, slabHex)
+      }
+      for (let i = 0; i < arc.beadCount + 1; i++) {
+        write(connector, arc.connStartIdx + i, beadHex)
+      }
+    }
+    for (const active of [bead, slab, connector, slabConnector]) {
+      if (active?.bpColorTex) active.bpColorTex.needsUpdate = true
+    }
+  }
+
   // Re-paint one source's bp-color texture by running `buildHelixObjects`
   // against a throwaway Group (option C from the 3d-A spec). When
   // `modeOverride` is non-null OR the store's coloringMode is not 'strand',
@@ -3308,6 +3583,8 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
       }
     }
 
+    _applyCrossoverColorsToSource(srcEntry, mode)
+
     // (No far/billboard tint to update — the far tier was retired; distant
     // instances render as the flat-grey hull solid, not a coloured rectangle.)
 
@@ -3345,6 +3622,14 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
   store.subscribe?.((newState, prevState) => {
     if (newState.coloringMode !== prevState.coloringMode) {
       updateColoringMode(newState.coloringMode)
+    }
+    if (newState.showPeriodicSeamArcs !== prevState.showPeriodicSeamArcs) {
+      const show = newState.showPeriodicSeamArcs === true
+      for (const srcEntry of _sources.values()) {
+        srcEntry.crossoverArcGroup?.traverse(line => {
+          if (line.userData?.isPeriodicSeam) line.visible = show
+        })
+      }
     }
   })
 
@@ -3392,6 +3677,11 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     // Full upload of a 4×N RGBA32F texture is tiny (~64 bytes/instance)
     // and works uniformly across LODs.
     srcEntry.xformTex.needsUpdate = true
+    const arcGroup = srcEntry.crossoverArcGroup?.userData?.instanceGroups?.get(instanceId)
+    if (arcGroup) {
+      arcGroup.matrix.copy(matrix4)
+      arcGroup.matrixWorldNeedsUpdate = true
+    }
     // Keep the selection outline glued to the part as it drags.
     if (instanceId === _activeInstanceId) _refreshActiveBox()
     // Overhang label/ring sprites live in world space — drag them along too.
@@ -3569,6 +3859,8 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     srcEntry.visibility[row] = visible ? 1.0 : 0.0
     srcEntry.visData[row * 16 + 0] = srcEntry.visibility[row]
     srcEntry.dirtyVisRows.add(row)
+    const arcGroup = srcEntry.crossoverArcGroup?.userData?.instanceGroups?.get(id)
+    if (arcGroup) arcGroup.visible = visible
   }
 
   function _materializeInstance(id) {
@@ -3821,6 +4113,8 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
         srcEntry.visibility[row]        = vis ? 1.0 : 0.0
         srcEntry.visData[row * 16 + 0]  = srcEntry.visibility[row]
         srcEntry.dirtyVisRows.add(row)
+        const arcGroup = srcEntry.crossoverArcGroup?.userData?.instanceGroups?.get(id)
+        if (arcGroup) arcGroup.visible = vis
         if (sm) {
           if (vis) {
             for (let k = 0; k < 16; k++) _m.elements[k] = srcEntry.xformData[row * 16 + k]

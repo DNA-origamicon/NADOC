@@ -4320,7 +4320,7 @@ export function _expandCompactNucleotides(compact) {
 }
 
 export async function getInstanceGeometry(id) {
-  const json = await _request('GET', `/assembly/instances/${id}/geometry`)
+  const json = await _request('GET', `/assembly/instances/${id}/geometry${geometryQuerySuffix(false)}`)
   // Decode compact wire format → flat nuc list (legacy shape the renderer
   // expects). Server always ships compact for this endpoint now.
   if (json && !json.nucleotides && json.nucleotides_compact) {
@@ -4370,7 +4370,7 @@ export async function getInstancePeriodicClosure(id, count = 4) {
  * so V8 doesn't carry N copies of identical nucleotide lists.
  */
 export async function getAssemblyGeometry() {
-  const json = await _request('GET', '/assembly/geometry')
+  const json = await _request('GET', `/assembly/geometry${geometryQuerySuffix(false)}`)
   if (!json) return json
   if (!json.sources) return json  // pre-Phase-3 shape passthrough (legacy)
 

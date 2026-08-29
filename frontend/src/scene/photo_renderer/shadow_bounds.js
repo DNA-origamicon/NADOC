@@ -37,6 +37,10 @@ export function isShadowExcluded(obj) {
   return !!(
     obj.userData?.photoFloor
     || obj.userData?.noAO
+    // Three's 100000×100000 TransformControls ray-picking plane is editor
+    // infrastructure, not scene geometry. Its own visible flag can remain true
+    // even while the control is hidden or detached.
+    || obj.isTransformControlsPlane
     || obj.isSprite
     || m?.isLineBasicMaterial
     || m?.isLineDashedMaterial
@@ -46,6 +50,17 @@ export function isShadowExcluded(obj) {
     // objects that are enormous relative to the structure.
     || m?.depthWrite === false
   )
+}
+
+/** Three does not render a child of a hidden Group even when child.visible is
+ * true. Object3D.traverse still visits it, however, so bounds code must mirror
+ * the renderer's effective-visibility rule explicitly. */
+function isEffectivelyVisible(obj, root) {
+  for (let node = obj; node; node = node.parent) {
+    if (!node.visible) return false
+    if (node === root) break
+  }
+  return true
 }
 
 /**
@@ -71,7 +86,7 @@ export function sceneSignature(root) {
   let hash = 17
   let count = 0
   root.traverse(obj => {
-    if ((!obj.isMesh && !obj.isInstancedMesh) || !obj.visible) return
+    if ((!obj.isMesh && !obj.isInstancedMesh) || !isEffectivelyVisible(obj, root)) return
     if (isShadowExcluded(obj)) return
     count++
     hash = (Math.imul(hash, 31) + obj.id) | 0
@@ -111,7 +126,7 @@ export function computeShadowBounds(root, { rejectOutliers = true } = {}) {
   let any = false
 
   root.traverse(obj => {
-    if ((!obj.isMesh && !obj.isInstancedMesh) || !obj.visible) return
+    if ((!obj.isMesh && !obj.isInstancedMesh) || !isEffectivelyVisible(obj, root)) return
     if (isShadowExcluded(obj)) return
     // InstancedMesh caches `boundingBox` and does NOT invalidate it when
     // instance matrices are rewritten — which is exactly what a simulation

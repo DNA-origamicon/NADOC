@@ -188,6 +188,38 @@ describe('sceneSignature', () => {
 })
 
 describe('computeShadowBounds', () => {
+  it('ignores a huge helper below a hidden parent', () => {
+    const scene = new THREE.Scene()
+    const makeMesh = (size, name) => {
+      const object = new THREE.Mesh(
+        new THREE.BoxGeometry(size, size, size), new THREE.MeshBasicMaterial())
+      object.name = name
+      return object
+    }
+    const structure = makeMesh(10, 'structure')
+    const hiddenGizmo = new THREE.Group()
+    hiddenGizmo.visible = false
+    const dragPlane = makeMesh(100000, 'transform-controls-plane')
+    dragPlane.isTransformControlsPlane = true
+    hiddenGizmo.add(dragPlane)
+    scene.add(structure, hiddenGizmo)
+
+    const bounds = computeShadowBounds(scene)
+
+    expect(bounds.radius).toBeLessThan(20)
+    expect(bounds.contributors.map(c => c.name)).toEqual(['structure'])
+  })
+
+  it('ignores a visible TransformControls picking plane', () => {
+    const scene = new THREE.Scene()
+    const structure = new THREE.Mesh(new THREE.BoxGeometry(10, 10, 10), new THREE.MeshBasicMaterial())
+    const dragPlane = new THREE.Mesh(new THREE.PlaneGeometry(100000, 100000), new THREE.MeshBasicMaterial())
+    dragPlane.isTransformControlsPlane = true
+    scene.add(structure, dragPlane)
+
+    expect(computeShadowBounds(scene).radius).toBeLessThan(20)
+  })
+
   it('returns null for a scene with nothing to occlude', () => {
     expect(computeShadowBounds(new THREE.Scene())).toBeNull()
     const onlyLights = new THREE.Scene()
