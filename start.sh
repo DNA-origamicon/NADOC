@@ -22,6 +22,8 @@ FRONTEND_HOST="127.0.0.1"
 PUBLIC_URL="http://localhost:5173"
 LAN_MODE=0
 TAILSCALE_MODE=0
+TAILSCALE_WINDOWS_PROXY=0
+TAILSCALE_SERVE_CONFIGURED=0
 case "${1:-}" in
   "") ;;
   --lan) BACKEND_HOST="0.0.0.0"; FRONTEND_HOST="0.0.0.0"; LAN_MODE=1 ;;
@@ -38,10 +40,22 @@ have node || die "Node.js not found. Run ./setup.sh first."
 [ -d frontend/node_modules ] || die "Frontend deps missing. Run ./setup.sh first."
 
 if [ "$TAILSCALE_MODE" -eq 1 ]; then
-  have tailscale || die "Tailscale CLI not found. Install and connect Tailscale first."
-  FRONTEND_HOST="$(tailscale ip -4 2>/dev/null | head -n 1)"
-  [ -n "$FRONTEND_HOST" ] || die "No Tailscale IPv4 address found. Is Tailscale connected?"
-  PUBLIC_URL="http://${FRONTEND_HOST}:5173"
+  if have tailscale; then
+    TAILSCALE_CMD=(tailscale)
+  elif have tailscale.exe; then
+    # Recommended WSL2 layout: Tailscale runs once, on the Windows host.
+    # Windows Tailscale Serve reaches WSL through its localhost forwarding.
+    TAILSCALE_CMD=(tailscale.exe)
+    TAILSCALE_WINDOWS_PROXY=1
+  else
+    die "Tailscale CLI not found. Install and connect Tailscale first."
+  fi
+  TAILSCALE_IP="$("${TAILSCALE_CMD[@]}" ip -4 2>/dev/null | tr -d '\r' | head -n 1)"
+  if [ "$TAILSCALE_WINDOWS_PROXY" -eq 0 ]; then
+    FRONTEND_HOST="$TAILSCALE_IP"
+  fi
+  [ -n "$TAILSCALE_IP" ] || die "No Tailscale IPv4 address found. Is Tailscale connected?"
+  PUBLIC_URL="http://${TAILSCALE_IP}:5173"
   TOKEN_FILE=".nadoc-peer-token"
   if [ ! -f "$TOKEN_FILE" ]; then
     umask 077
@@ -58,6 +72,9 @@ cleanup() {
   info "Shutting down…"
   [ -n "$FRONTEND_PID" ] && { pkill -P "$FRONTEND_PID" 2>/dev/null || true; kill "$FRONTEND_PID" 2>/dev/null || true; }
   [ -n "$BACKEND_PID"  ] && kill "$BACKEND_PID" 2>/dev/null || true
+  if [ "$TAILSCALE_SERVE_CONFIGURED" -eq 1 ]; then
+    "${TAILSCALE_CMD[@]}" serve --http=5173 off >/dev/null 2>&1 || true
+  fi
   wait 2>/dev/null || true
 }
 trap cleanup INT TERM EXIT
@@ -81,6 +98,13 @@ BACKEND_PID=$!
 info "Frontend → http://localhost:5173"
 ( cd frontend && npm run dev -- --host "$FRONTEND_HOST" ) &
 FRONTEND_PID=$!
+
+if [ "$TAILSCALE_WINDOWS_PROXY" -eq 1 ]; then
+  info "Tailscale Serve → http://${TAILSCALE_IP}:5173"
+  "${TAILSCALE_CMD[@]}" serve --bg --http=5173 http://127.0.0.1:5173 \
+    || die "Could not configure Windows Tailscale Serve."
+  TAILSCALE_SERVE_CONFIGURED=1
+fi
 
 echo
 bold "NADOC is starting. Open this in your browser:"
