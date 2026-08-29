@@ -28,6 +28,7 @@ import { initOxdnaMetricsCard } from './oxdna_metrics_card.js'
 import { initOxdnaExportCard } from './oxdna_export_card.js'
 import { showConfirm } from './primitives/confirm.js'
 import { createModal } from './primitives/modal.js'
+import { createContextMenu } from './primitives/context_menu.js'
 import { createButton } from './primitives/button.js'
 import { runExclusive } from './primitives/button_busy.js'
 import { runControlState, RUN_ACTION } from './job_run_control.js'
@@ -298,6 +299,13 @@ export function hasTrajectory(job) {
 /** Pure: is the job in an in-progress state (a spinner should show)? */
 export function jobIsActive(job) {
   return ['queued', 'preparing', 'running'].includes(job?.status)
+}
+
+/** Settings may change only before local execution or remote submission owns the job. */
+export function oxdnaJobEditable(job) {
+  return job?.status === 'queued'
+    && !job?.slurm_job_id && !job?.runpod_pod_id
+    && (job?.stages || []).every(stage => stage.status === 'pending')
 }
 
 /** Pure: is the job actively running a RELAXATION stage (mc/md_relax/equil)? */
@@ -1591,6 +1599,26 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     }),
     getInitialTarget: _currentRunTarget,
     launch: payload => _launchRelax(payload),
+    updateJob: async (jobId, payload) => {
+      const current = _jobs.find(job => job.job_id === jobId)
+      if (!current) return null
+      const saved = await api.updateOxdnaJobSettings(jobId, {
+        ...(current.run_config || {}),
+        ...payload,
+        seed: current.random_seed ?? current.run_config?.seed,
+        autostart: false,
+        design_source_path: current.design_source_path || _currentPartPath(),
+      }).catch(() => null)
+      if (!saved?.job_id) {
+        showToast(api.lastErrorMessage?.() || 'Could not save oxDNA job settings', 'error')
+        return null
+      }
+      await _fetchJobs()
+      await _selectJob(jobId, { confirmTrajUnload: false })
+      showToast('oxDNA job settings saved', 'ok')
+      window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed'))
+      return saved
+    },
   })
 
   // ── List ─────────────────────────────────────────────────────────────────
@@ -1643,9 +1671,41 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
         const job = _jobs.find(j => j.job_id === jobId)
         if (job) void restoreSubmittedDesign({ job, rollFn: api.rollOxdnaJobDesign, refetch: _fetchJobs })
       },
+      onContextMenu: (jobId, event) => _openJobRowMenu(jobId, event),
       emptyText: 'No oxDNA jobs for this design yet.',
       dimColor: _C.dim,
       legendState: _legend,
+    })
+  }
+
+  async function _copyJob(jobId) {
+    const result = await api.copyOxdnaJob(jobId).catch(() => null)
+    const copied = result?.job
+    if (!copied?.job_id) {
+      showToast(api.lastErrorMessage?.() || 'Could not copy oxDNA job', 'error')
+      return null
+    }
+    showToast(`oxDNA job copied with new seed ${result.seed}`, 'ok')
+    await _fetchJobs()
+    await _selectJob(copied.job_id, { confirmTrajUnload: true })
+    window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed'))
+    return copied
+  }
+
+  function _openJobRowMenu(jobId, event) {
+    const job = _jobs.find(item => item.job_id === jobId)
+    if (!job) return
+    event.preventDefault()
+    const editable = oxdnaJobEditable(job)
+    createContextMenu({
+      x: event.clientX, y: event.clientY,
+      items: [
+        { type: 'header', label: `${job.design_name || 'job'} · ${formatJobTime(job.created_at)}` },
+        { label: editable ? 'Edit…' : 'View settings…',
+          onClick: () => (editable ? _wizard.openEditable(job) : _wizard.openReadOnly(job)) },
+        { type: 'separator' },
+        { label: 'Copy job (new seed)', onClick: () => { void _copyJob(jobId) } },
+      ],
     })
   }
 
@@ -2988,6 +3048,13 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (!_jobs.find((j) => j.job_id === jobId)) await _fetchJobs()
       return _selectJob(jobId, { confirmTrajUnload: true })
     },
+    copyJob: _copyJob,
+    openJobSettings: async (jobId) => {
+      if (!_jobs.find(job => job.job_id === jobId)) await _fetchJobs()
+      const job = _jobs.find(item => item.job_id === jobId)
+      if (job) (oxdnaJobEditable(job) ? _wizard.openEditable(job) : _wizard.openReadOnly(job))
+    },
+    canEditJob: (jobId) => oxdnaJobEditable(_jobs.find(job => job.job_id === jobId)),
     // Show a LAMMPS (CPU-fallback) run in this same viz card — same oxDNA2 bead model, so the
     // same display/RMSF/deviation/trajectory tools apply (driven by the LAMMPS controller).
     selectLammpsJob,

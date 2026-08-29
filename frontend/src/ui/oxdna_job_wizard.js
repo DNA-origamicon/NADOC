@@ -44,10 +44,13 @@ const ROW_LABELS = {
   topology: 'Topology',
 }
 
-export function initOxdnaJobWizard({ api = {}, launch = async () => null, getInitialValues = () => ({}), getInitialTarget = () => 'local' } = {}) {
+export function initOxdnaJobWizard({ api = {}, launch = async () => null,
+  updateJob = async () => null, getInitialValues = () => ({}), getInitialTarget = () => 'local' } = {}) {
   let modal, targetStep, currentTab = 'target', values = oxdnaWizardDefaults(), busy = false
+  let editJob = null, derivedEditor = null, derivedError = null
   const panels = {}, tabs = {}
-  let previousBtn, nextBtn, createBtn, configPre, stageSummary, stageTable, engineDetails, validationNote
+  let previousBtn, nextBtn, createBtn, closeBtn, configPre, stageSummary, stageTable,
+    engineDetails, validationNote, wizardShell, readOnlyPanel
 
   function renderSettings() {
     const grid = el('div', { className: 'wizard-field-grid' })
@@ -209,6 +212,13 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, getIni
       tabs[id].setAttribute('aria-selected', String(selected))
     }
     const index = TABS.findIndex(([id]) => id === currentTab)
+    if (derivedEditor) {
+      previousBtn.style.display = 'none'
+      nextBtn.style.display = 'none'
+      createBtn.style.display = ''
+      createBtn.disabled = busy
+      return
+    }
     previousBtn.style.display = index ? '' : 'none'
     nextBtn.style.display = index < TABS.length - 1 ? '' : 'none'
     createBtn.style.display = index === TABS.length - 1 ? '' : 'none'
@@ -228,9 +238,28 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, getIni
     selectTab(TABS[Math.max(0, Math.min(TABS.length - 1, i + delta))][0])
   }
   async function submit() {
-    if (busy || !targetStep.isReady()) return
+    if (busy || (!derivedEditor && !targetStep.isReady())) return
     busy = true; paint()
-    try { if (await launch(oxdnaWizardPayload(values, targetStep.payloadFields()))) modal.close() }
+    try {
+      let payload
+      if (derivedEditor) {
+        try {
+          payload = JSON.parse(derivedEditor.value)
+          derivedError.textContent = ''
+          derivedError.hidden = true
+        } catch {
+          derivedError.textContent = 'Enter valid JSON before saving.'
+          derivedError.hidden = false
+          return
+        }
+      } else {
+        payload = oxdnaWizardPayload(values, targetStep.payloadFields())
+      }
+      const saved = editJob
+        ? await updateJob(editJob.job_id, payload)
+        : await launch(payload)
+      if (saved) modal.close()
+    }
     finally { busy = false; paint() }
   }
 
@@ -238,7 +267,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, getIni
     previousBtn = createButton({ label: '← Previous', variant: 'ghost', onClick: () => step(-1) })
     nextBtn = createButton({ label: 'Next →', variant: 'primary', onClick: () => step(1) })
     createBtn = createButton({ label: 'Create job', variant: 'primary', onClick: () => void submit() })
-    const cancel = createButton({ label: 'Cancel', variant: 'ghost', onClick: () => modal.close() })
+    closeBtn = createButton({ label: 'Cancel', variant: 'ghost', onClick: () => modal.close() })
     panels.target = el('section', { className: 'wizard-pane wizard-tabpanel' })
     panels.settings = el('section', { className: 'wizard-pane wizard-tabpanel' })
     engineDetails = el('div', { className: 'wizard-note' })
@@ -255,19 +284,128 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null, getIni
       getJobPreview: api.getRunpodJobPreview, getVolumes: api.getRunpodVolumes, setVolume: api.setRunpodVolume,
       getPlanShape: () => oxdnaRunpodPlanShape(values), fsApi: api.fsApi,
       onChange: () => { renderSettings(); renderConfig(); paint() } })
-    modal = createModal({ title: 'New oxDNA job', size: 'xl', className: 'modal--wizard modal--oxdna-wizard',
-      body: el('div', { className: 'wizard', children: [el('div', { className: 'wizard-tabbar', children: [
+    wizardShell = el('div', { className: 'wizard', children: [el('div', { className: 'wizard-tabbar', children: [
         el('div', { className: 'wizard-tabs', attrs: { role: 'tablist' }, children: Object.values(tabs) })] }),
-      panels.target, panels.settings, panels.config] }), actions: [cancel, previousBtn, nextBtn, createBtn] })
+      panels.target, panels.settings, panels.config] })
+    readOnlyPanel = el('section', { className: 'wizard-pane oxdna-job-settings-view' })
+    readOnlyPanel.hidden = true
+    modal = createModal({ title: 'New oxDNA job', size: 'xl', className: 'modal--wizard modal--oxdna-wizard',
+      body: [wizardShell, readOnlyPanel], actions: [closeBtn, previousBtn, nextBtn, createBtn] })
   }
 
   function open() {
     if (!modal) build()
+    editJob = null
+    derivedEditor = null
+    modal.header.querySelector('.modal__title').textContent = 'New oxDNA job'
+    wizardShell.hidden = false
+    readOnlyPanel.hidden = true
+    closeBtn.textContent = 'Cancel'
+    createBtn.textContent = 'Create job'
     values = oxdnaWizardDefaults(getInitialValues())
     targetStep.setChoice({ target: getInitialTarget() || 'local' })
     currentTab = 'target'; targetStep.render(); renderSettings()
     void renderEngineDetails()
     renderConfig(); paint(); modal.open()
   }
-  return { open, close: () => modal?.close(), isOpen: () => !!modal?.isOpen?.(), currentValues: () => ({ ...values }) }
+
+  function openEditable(job = {}) {
+    if (!modal) build()
+    editJob = job
+    derivedEditor = null
+    modal.header.querySelector('.modal__title').textContent = 'Edit oxDNA job'
+    const kind = job.run_config?.kind || (job.parent_job_id ? 'run' : 'relax')
+    if (kind !== 'relax' || job.parent_job_id) {
+      wizardShell.hidden = true
+      readOnlyPanel.hidden = false
+      closeBtn.textContent = 'Cancel'
+      createBtn.textContent = 'Save changes'
+      currentTab = 'config'
+      const config = { ...(job.run_config || {}) }
+      if (config.surface_strands?.built) {
+        config.surface_strands = { ...config.surface_strands }
+        delete config.surface_strands.built
+      }
+      const editable = {
+        ...config,
+        execution_target: job.execution_target || config.execution_target || 'local',
+        cluster_name: job.cluster_name || config.cluster_name || null,
+        partition: job.partition || config.partition || null,
+        slurm_resources: job.requested_resources || config.slurm_resources || null,
+        runpod_gpu_key: job.runpod_gpu_key || config.runpod_gpu_key || null,
+        runpod_budget_usd: job.runpod_budget_usd || config.runpod_budget_usd || null,
+        runpod_volume_id: job.runpod_volume_id || config.runpod_volume_id || null,
+        backend: job.backend,
+        device: job.device,
+        salt_concentration: job.salt_concentration,
+        stages: (job.stages || []).map(stage => ({
+          name: stage.name, kind: stage.kind, steps: stage.steps,
+        })),
+      }
+      derivedError = el('div', { className: 'wizard-note oxdna-wizard-validation', attrs: { role: 'alert' } })
+      derivedError.hidden = true
+      derivedEditor = el('textarea', { className: 'oxdna-wizard-config', attrs: {
+        rows: 24, spellcheck: 'false', 'aria-label': 'Editable oxDNA job configuration',
+        style: 'box-sizing:border-box;width:100%;resize:vertical',
+      } })
+      derivedEditor.value = JSON.stringify(editable, null, 2)
+      readOnlyPanel.replaceChildren(
+        el('div', { className: 'wizard-note', text: 'Edit runtime, engine, target, or stage parameters below. The copied topology and force layout remain frozen.' }),
+        derivedError, derivedEditor,
+      )
+      paint(); modal.open()
+      return
+    }
+    wizardShell.hidden = false
+    readOnlyPanel.hidden = true
+    closeBtn.textContent = 'Cancel'
+    createBtn.textContent = 'Save changes'
+    values = oxdnaWizardDefaults(job.run_config || {})
+    targetStep.setChoice({
+      target: job.execution_target || job.run_config?.execution_target || 'local',
+      partition: job.partition || job.run_config?.partition || null,
+    })
+    currentTab = 'target'
+    targetStep.render(); renderSettings()
+    void renderEngineDetails()
+    renderConfig(); paint(); modal.open()
+  }
+
+  function openReadOnly(job = {}) {
+    if (!modal) build()
+    editJob = null
+    derivedEditor = null
+    modal.header.querySelector('.modal__title').textContent = 'oxDNA job settings'
+    wizardShell.hidden = true
+    readOnlyPanel.hidden = false
+    closeBtn.textContent = 'Close'
+    previousBtn.style.display = 'none'
+    nextBtn.style.display = 'none'
+    createBtn.style.display = 'none'
+    const config = { ...(job.run_config || {}) }
+    // Writer-resolved build output can contain thousands of capture-particle indices;
+    // the settings view shows the user's input, not that generated bookkeeping.
+    if (config.surface_strands?.built) {
+      config.surface_strands = { ...config.surface_strands }
+      delete config.surface_strands.built
+    }
+    readOnlyPanel.replaceChildren(
+      el('div', { className: 'wizard-note', text: 'Read-only snapshot of the settings recorded when this job was created.' }),
+      el('pre', { className: 'oxdna-wizard-config', text: JSON.stringify({
+        job_id: job.job_id,
+        kind: config.kind || (job.parent_job_id ? 'run' : 'relax'),
+        random_seed: job.random_seed ?? config.seed ?? 'not recorded',
+        execution_target: job.execution_target || config.execution_target || 'local',
+        backend: job.backend,
+        device: job.device,
+        salt_concentration: job.salt_concentration,
+        ...config,
+        stages: (job.stages || []).map(stage => ({
+          name: stage.name, kind: stage.kind, steps: stage.steps,
+        })),
+      }, null, 2) }),
+    )
+    modal.open()
+  }
+  return { open, openEditable, openReadOnly, close: () => modal?.close(), isOpen: () => !!modal?.isOpen?.(), currentValues: () => ({ ...values }) }
 }

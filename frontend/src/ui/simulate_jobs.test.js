@@ -404,10 +404,14 @@ function make(nodes, apiOverrides = {}, connectionOverrides = {}) {
   }
   const oxdnaPanel = { selectJob: vi.fn(), selectLammpsJob: vi.fn(), launchRelax: vi.fn(),
     autorefineJobIds: () => new Set(), deselectJob: vi.fn(),
+    openJobSettings: vi.fn(), canEditJob: vi.fn(() => false),
+    copyJob: vi.fn().mockResolvedValue({ job_id: 'ox-copy' }),
     deleteSelected: vi.fn().mockResolvedValue(true), archiveSelected: vi.fn().mockResolvedValue(undefined) }
   const mrdnaPanel = { selectJob: vi.fn(), deselectJob: vi.fn(), deleteSelected: vi.fn().mockResolvedValue(true) }
   const candoPanel = { selectJob: vi.fn(), deselectJob: vi.fn(), deleteSelected: vi.fn().mockResolvedValue(true) }
   const mdPanel = { selectJob: vi.fn(), deselectJob: vi.fn(),
+    openJobSettings: vi.fn(), hasJobSettings: vi.fn(() => true), canEditJob: vi.fn(() => false),
+    copyJob: vi.fn().mockResolvedValue({ job_id: 'md-copy' }),
     deleteSelected: vi.fn().mockResolvedValue(true), archiveSelected: vi.fn().mockResolvedValue(undefined) }
   const engineSelector = { select: vi.fn(), getSelected: () => 'oxdna' }
   const sim = initSimulateJobs({ api, getWorkspacePath: () => '/w/D.nadoc',
@@ -544,6 +548,40 @@ describe('unified list + master card', () => {
     sim.selectJob('ox1')
     expect(oxdnaPanel.selectJob).toHaveBeenCalledWith('ox1')
     expect(engineSelector.select).toHaveBeenCalledWith('oxdna')
+  })
+
+  it('right-clicking an oxDNA job offers View settings and Copy with a new seed', async () => {
+    mount()
+    const { sim, oxdnaPanel } = make([oxNode()])
+    await sim.refresh()
+    document.querySelector('[data-job-id="ox1"]').dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true, cancelable: true, clientX: 20, clientY: 30,
+    }))
+    const items = [...document.querySelectorAll('.context-menu__item')]
+    expect(items.map(item => item.textContent)).toEqual(['View settings…', 'Copy job (new seed)'])
+    items[0].click()
+    expect(oxdnaPanel.openJobSettings).toHaveBeenCalledWith('ox1')
+
+    document.querySelector('[data-job-id="ox1"]').dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true, cancelable: true, clientX: 20, clientY: 30,
+    }))
+    ;[...document.querySelectorAll('.context-menu__item')]
+      .find(item => item.textContent === 'Copy job (new seed)').click()
+    expect(oxdnaPanel.copyJob).toHaveBeenCalledWith('ox1')
+  })
+
+  it('labels safe unstarted oxDNA settings as Edit in the unified menu', async () => {
+    mount()
+    const { sim, oxdnaPanel } = make([oxNode({ status: 'queued' })])
+    oxdnaPanel.canEditJob.mockReturnValue(true)
+    await sim.refresh()
+    document.querySelector('[data-job-id="ox1"]').dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true, cancelable: true, clientX: 20, clientY: 30,
+    }))
+    const items = [...document.querySelectorAll('.context-menu__item')]
+    expect(items.map(item => item.textContent)).toEqual(['Edit…', 'Copy job (new seed)'])
+    items[0].click()
+    expect(oxdnaPanel.openJobSettings).toHaveBeenCalledWith('ox1')
   })
 
   it('run button is LAMMPS-only: hidden for oxDNA / no selection, shown to Stop an [L] run', async () => {

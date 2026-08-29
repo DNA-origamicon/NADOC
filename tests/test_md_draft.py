@@ -74,6 +74,26 @@ def test_spawn_draft_job_defers_prep(tmp_path, monkeypatch):
     assert loaded.package_subdir == ""
 
 
+def test_copy_draft_preserves_settings_and_changes_only_seed(tmp_path, monkeypatch):
+    monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+    monkeypatch.setattr(routes_md, "random_seed", lambda exclude=(): 246802468)
+    body = routes_md.CreateJobRequest(
+        oxdna_job_id="ox1", draft=True, seed=135791357,
+        design_source_path="part.nadoc", padding_nm=2.4,
+    )
+    source = routes_md._spawn_draft_job(body, name="D")
+
+    result = asyncio.run(routes_md.copy_md_job(source.job_id))
+    copied = MdJob.load(result["job"]["job_id"], tmp_path)
+
+    assert copied.status == MdStatus.draft
+    assert copied.job_id != source.job_id
+    assert copied.namd_seed == result["seed"] == 246802468
+    assert copied.prep_params["padding_nm"] == source.prep_params["padding_nm"]
+    assert copied.prep_params["oxdna_job_id"] == source.prep_params["oxdna_job_id"]
+    assert copied.prep_params["seed"] != source.prep_params["seed"]
+
+
 def test_editing_a_draft_updates_the_same_record_without_preparing(tmp_path, monkeypatch):
     """Save changes is an update, never clone-and-delete or an implicit launch."""
     monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)

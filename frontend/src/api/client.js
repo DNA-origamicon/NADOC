@@ -2553,6 +2553,8 @@ export const browseFiles         = (path, kind)  => {
   return _oxdnaJSON('GET', '/engines/browse' + (s ? `?${s}` : ''))
 }
 export const createOxdnaJob      = (body)        => _oxdnaJSON('POST', '/oxdna/jobs', body)
+export const copyOxdnaJob        = (id)          => _oxdnaJSON('POST', `/oxdna/jobs/${id}/copy`)
+export const updateOxdnaJobSettings = (id, body = {}) => _oxdnaJSON('PUT', `/oxdna/jobs/${id}/settings`, body)
 
 // ── LAMMPS (CG-DNA / parallel oxDNA) jobs ──────────────────────────────────────
 /** Is a CG-DNA-capable LAMMPS installed? → {available, lammps_bin, cgdna_capable}. */
@@ -3291,6 +3293,7 @@ export const getMdRemoteRecommendation = (id, { clusterName = 'alpine', safetyFa
 export const submitMdJobRemote   = (id, body = {}) => _oxdnaJSON('POST', `/md/jobs/${id}/submit-remote`, body)
 /** Replace settings and rebuild an unstarted draft/prepared job in place. */
 export const updateMdJobSettings = (id, body = {}) => _oxdnaJSON('PUT', `/md/jobs/${id}/settings`, body)
+export const copyMdJob           = (id)          => _oxdnaJSON('POST', `/md/jobs/${id}/copy`)
 /** Resume a timed-out remote job from its last checkpoint (new SLURM submission). */
 export const resumeMdJobRemote   = (id, body = {}) => _oxdnaJSON('POST', `/md/jobs/${id}/resume-remote`, body)
 export const finishMdJob = (id, destRoot) =>

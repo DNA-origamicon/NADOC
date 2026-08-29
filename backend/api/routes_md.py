@@ -4450,6 +4450,82 @@ async def get_md_job(job_id: str) -> dict:
     return d
 
 
+@router.post("/md/jobs/{job_id}/copy")
+async def copy_md_job(job_id: str) -> dict:
+    """Create a clean, queued copy of a NAMD job with one fresh base seed."""
+    source = _load_job(job_id)
+    used_seeds = [
+        seed
+        for job in MdJob.list_jobs(_workspace())
+        for seed in (job.namd_seed, job.ensemble_seed)
+        if seed is not None
+    ]
+    copied_seed = random_seed(exclude=used_seeds)
+
+    if source.run_kind == "production":
+        if not source.parent_job_id or not source.spawn_params:
+            raise HTTPException(409, "This production job has no recorded settings to copy.")
+        body = ProductionRunRequest.model_validate(source.spawn_params).model_copy(
+            update={"seed": copied_seed, "autostart": False}
+        )
+        result = await _spawn_md_production_impl(source.parent_job_id, body)
+        copied = result["job"]
+        copied_job = _load_job(copied["job_id"])
+        copied_job.spawn_params_set = (
+            list(source.spawn_params_set) if source.spawn_params_set is not None else None
+        )
+        copied_job.save(_workspace())
+        copied = copied_job.to_dict()
+    else:
+        if not source.prep_params:
+            raise HTTPException(409, "This NAMD job predates recorded settings and cannot be copied.")
+        body = CreateJobRequest.model_validate(source.prep_params).model_copy(
+            update={
+                "seed": copied_seed,
+                "autostart": False,
+                "draft": source.status == MdStatus.draft,
+            }
+        )
+        if source.status == MdStatus.draft:
+            job = _spawn_draft_job(body, name=source.design_name or "design")
+            job.awaiting_sequence = source.awaiting_sequence
+            job.save(_workspace())
+        else:
+            seeded = bool(body.oxdna_job_id or body.mrdna_job_id or body.blade_job_id)
+            design = None
+            if not seeded:
+                snapshot = source.job_dir(_workspace()) / "design.json"
+                if not snapshot.is_file():
+                    raise HTTPException(
+                        409,
+                        "This job has no frozen design snapshot and cannot be copied exactly.",
+                    )
+                from backend.core.models import Design  # noqa: PLC0415
+
+                design = Design.model_validate_json(snapshot.read_text())
+            job = _spawn_prep_job(
+                body,
+                design=design,
+                seeded=seeded,
+                name=source.design_name or "design",
+                size_factor=1.0 if seeded else design_size_factor(design),
+                parent_job_id=source.parent_job_id,
+            )
+        job.prep_params_set = (
+            list(source.prep_params_set) if source.prep_params_set is not None else None
+        )
+        job.save(_workspace())
+        copied = job.to_dict()
+
+    return {
+        "ok": True,
+        "job": copied,
+        "copied_from_job_id": source.job_id,
+        "previous_seed": source.namd_seed,
+        "seed": copied_seed,
+    }
+
+
 @router.get("/md/jobs/{job_id}/display")
 async def get_md_job_display(job_id: str) -> dict:
     """Return the manifest and latest segment suitable for DNA-only display."""

@@ -656,30 +656,40 @@ export function initSimulateJobs({
 
   /**
    * Right-click on a row of the unified list.
-   *
-   * NAMD only for now: the Job Wizard asks about two dozen things — protocol, ion
-   * chemistry, box padding, the integrator's three axes, the whole stage ladder — and once
-   * the job existed there was nowhere to read or edit it back. Other engines have no
-   * equivalent setup surface to reopen, so their rows get no menu and keep the browser's.
    */
   function _openRowMenu(jobId, e) {
     const node = _nodes.find((n) => n.job_id === jobId)
-    if (node?.engine !== 'namd' || !mdPanel?.openJobSettings) return
+    const panel = node?.engine === 'namd' ? mdPanel
+      : node?.engine === 'oxdna' ? oxdnaPanel : null
+    if (!panel?.copyJob) return
     e.preventDefault()
+    const items = [
+      { type: 'header', label: `${node.design_name || 'job'} · ${formatJobTime(node.created_at)}` },
+    ]
+    if (node.engine === 'namd' && mdPanel?.openJobSettings) {
+      items.push({
+        label: mdPanel.hasJobSettings?.(jobId) === false
+          ? 'Settings were not recorded for this run'
+          : (mdPanel.canEditJob?.(jobId) ? 'Edit…' : 'View settings…'),
+        disabled: mdPanel.hasJobSettings?.(jobId) === false,
+        onClick: () => { void mdPanel.openJobSettings(jobId) },
+      })
+      items.push({ type: 'separator' })
+    } else if (node.engine === 'oxdna' && oxdnaPanel?.openJobSettings) {
+      items.push({
+        label: oxdnaPanel.canEditJob?.(jobId) ? 'Edit…' : 'View settings…',
+        onClick: () => { void oxdnaPanel.openJobSettings(jobId) },
+      })
+      items.push({ type: 'separator' })
+    }
+    items.push({
+      label: 'Copy job (new seed)',
+      disabled: node.engine === 'namd' && mdPanel.hasJobSettings?.(jobId) === false,
+      onClick: () => { void panel.copyJob(jobId) },
+    })
     createContextMenu({
       x: e.clientX, y: e.clientY,
-      items: [
-        { type: 'header', label: `${node.design_name || 'job'} · ${formatJobTime(node.created_at)}` },
-        {
-          // A job created before its request was recorded has nothing to show, and the
-          // label says why rather than the item silently doing nothing.
-          label: mdPanel.hasJobSettings?.(jobId) === false
-            ? 'Settings were not recorded for this run'
-            : (mdPanel.canEditJob?.(jobId) ? 'Edit…' : 'View settings…'),
-          disabled: mdPanel.hasJobSettings?.(jobId) === false,
-          onClick: () => { void mdPanel.openJobSettings(jobId) },
-        },
-      ],
+      items,
     })
   }
 

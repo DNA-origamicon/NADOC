@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -77,6 +78,10 @@ class OxdnaJob:
     device: str = "0"  # CUDA device index
     backend: str = "CUDA"  # "CPU" | "CUDA"
     salt_concentration: float = 0.5  # molar
+    # Base oxDNA RNG seed.  Each stage receives a deterministic offset from this
+    # value; recording it makes a run reproducible and lets Copy guarantee a new
+    # independent stream while preserving every other setting.
+    random_seed: Optional[int] = None
     health_samples: list[OxdnaHealthSample] = field(default_factory=list)
     design_source_path: Optional[str] = None
     project_id: Optional[str] = None
@@ -189,6 +194,7 @@ class OxdnaJob:
         data.setdefault("design_source_path", None)
         data.setdefault("project_id", None)
         data.setdefault("design_revision_id", None)
+        data.setdefault("random_seed", None)
         data.setdefault("parent_job_id", None)
         data.setdefault("efield", None)
         data.setdefault("run_config", None)
@@ -293,6 +299,7 @@ def new_oxdna_job(
     efield: Optional[dict] = None,
     run_config: Optional[dict] = None,
     max_relax_retries: int = 3,
+    random_seed: Optional[int] = None,
     design_fingerprint: Optional[str] = None,
     feature_log_position: Optional[int] = None,
 ) -> OxdnaJob:
@@ -306,6 +313,7 @@ def new_oxdna_job(
         device=device,
         backend=backend,
         salt_concentration=salt_concentration,
+        random_seed=random_seed,
         design_source_path=design_source_path,
         project_id=project_id,
         design_revision_id=design_revision_id,
@@ -316,3 +324,17 @@ def new_oxdna_job(
         design_fingerprint=design_fingerprint,
         feature_log_position=feature_log_position,
     )
+
+
+OXDNA_SEED_MAX = 2**31 - 1
+_OXDNA_SEED_CEILING = OXDNA_SEED_MAX - 4096
+
+
+def random_oxdna_seed(exclude=()) -> int:
+    """Draw a recorded oxDNA RNG seed that does not collide with ``exclude``."""
+    taken = {int(seed) for seed in exclude if seed is not None}
+    for _ in range(64):
+        seed = secrets.randbelow(_OXDNA_SEED_CEILING) + 1
+        if seed not in taken:
+            return seed
+    raise RuntimeError("Could not draw a distinct oxDNA random seed")

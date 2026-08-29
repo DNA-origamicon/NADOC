@@ -33,7 +33,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from backend.core.oxdna_job import OxdnaStageStatus
+from backend.core.oxdna_job import OXDNA_SEED_MAX, OxdnaStageStatus
 
 
 # ── Stage spec ────────────────────────────────────────────────────────────────
@@ -51,6 +51,10 @@ class OxdnaStageSpec:
     max_backbone_force_far: float | None = None
     salt_concentration: float = 0.5
     device: str = "0"  # CUDA device index
+    # Explicit engine RNG seed.  Historically NADOC omitted this and oxDNA drew from
+    # /dev/urandom, which made runs independent but left no reproducibility record.
+    # A copied job assigns a fresh base seed and derives one distinct stream per stage.
+    seed: int | None = None
     # Monte Carlo keys (sim_type == MC)
     ensemble: str = "NVT"
     delta_translation: float = 0.1
@@ -112,6 +116,16 @@ DEFAULT_EQUIL_STEPS: int = 100_000  # short unbiased settle
 # escalate-and-retry is the quality half (it tries to remove the over-stretch first).
 DEFAULT_EQUIL_BACKBONE_FORCE: float = 50.0
 DEFAULT_EQUIL_BACKBONE_FORCE_FAR: float = 100.0
+
+
+def assign_stage_seeds(
+    specs: list[OxdnaStageSpec], base_seed: int
+) -> list[OxdnaStageSpec]:
+    """Return specs with distinct, reproducible RNG streams derived from one job seed."""
+    return [
+        replace(spec, seed=((int(base_seed) - 1 + index) % OXDNA_SEED_MAX) + 1)
+        for index, spec in enumerate(specs)
+    ]
 
 
 def build_relaxation_stages(
@@ -335,6 +349,8 @@ def render_stage_input(
     # ── Simulation ──────────────────────────────────────────────────────────────
     lines.append("")
     lines.append(f"sim_type = {spec.sim_type}")
+    if spec.seed is not None:
+        lines.append(f"seed = {spec.seed}")
     lines.append(f"steps = {spec.steps}")
     lines.append("restart_step_counter = true")
     lines.append("verlet_skin = 0.20")

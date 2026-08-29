@@ -4285,23 +4285,44 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     e.preventDefault()
     const view = jobSettingsState(job)
     const editable = mdJobEditable(job)
+    const items = [
+      { type: 'header', label: `${job.design_name || 'job'} · ${_fmtJobTime(job.created_at)}` },
+      {
+        // Jobs created before their request was recorded have nothing to show, and the
+        // label says why rather than the item silently doing nothing.
+        label: view.available
+          ? (editable ? 'Edit…' : 'View settings…')
+          : 'Settings were not recorded for this run',
+        disabled: !view.available,
+        onClick: () => {
+          void (editable ? _wizard.openEditable(job) : _wizard.openReadOnly(job))
+        },
+      },
+      { type: 'separator' },
+      {
+        label: 'Copy job (new seed)',
+        disabled: !view.available,
+        onClick: () => { void _copyJob(jobId) },
+      },
+    ]
     createContextMenu({
       x: e.clientX, y: e.clientY,
-      items: [
-        { type: 'header', label: `${job.design_name || 'job'} · ${_fmtJobTime(job.created_at)}` },
-        {
-          // Jobs created before their request was recorded have nothing to show, and the
-          // label says why rather than the item silently doing nothing.
-          label: view.available
-            ? (editable ? 'Edit…' : 'View settings…')
-            : 'Settings were not recorded for this run',
-          disabled: !view.available,
-          onClick: () => {
-            void (editable ? _wizard.openEditable(job) : _wizard.openReadOnly(job))
-          },
-        },
-      ],
+      items,
     })
+  }
+
+  async function _copyJob(jobId) {
+    const result = await api.copyMdJob(jobId).catch(() => null)
+    const copied = result?.job
+    if (!copied?.job_id) {
+      showToast(api.lastErrorMessage?.() || 'Could not copy NAMD job', 'error')
+      return null
+    }
+    showToast(`NAMD job copied with new seed ${result.seed}`, 'ok')
+    await _fetchJobs()
+    await _selectJob(copied.job_id)
+    window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed'))
+    return copied
   }
 
   /** Toggle a parent's collapsed state and force a list rebuild (bypassing the
@@ -5329,6 +5350,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     hasJobSettings: (jobId) =>
       jobSettingsState(_jobs.find((j) => j.job_id === jobId)).available,
     canEditJob: (jobId) => mdJobEditable(_jobs.find((j) => j.job_id === jobId)),
+    copyJob: _copyJob,
     isRunpodConnected: () => runpodConnected(_runpod.preflight),
     // Consolidated Archive/Delete (the section-level #simulate-job-actions dispatches to the
     // selected node's engine panel; both operate on this panel's currently-selected job).

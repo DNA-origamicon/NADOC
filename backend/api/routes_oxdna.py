@@ -32,6 +32,8 @@ import struct
 import shutil
 import asyncio
 import threading
+from copy import deepcopy
+from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 
@@ -42,9 +44,16 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from backend.api import state as design_state
 from backend.api.assembly import _WORKSPACE_DIR
-from backend.core.oxdna_job import OxdnaJob, OxdnaStatus, new_oxdna_job
+from backend.core.oxdna_job import (
+    OXDNA_SEED_MAX,
+    OxdnaJob,
+    OxdnaStatus,
+    new_oxdna_job,
+    random_oxdna_seed,
+)
 from backend.core.oxdna_protocol import (
     apply_stage_overrides,
+    assign_stage_seeds,
     build_field_stage,
     build_production_stage,
     hybridize_stage,
@@ -110,6 +119,24 @@ _OCC_PROGRESS: dict[str, dict] = {}
 # the view-trajectory build so an export and a scrub can't clobber each other's progress. Each
 # entry carries a "phase" ('align' | 'write') the export card renders.
 _EXPORT_PROGRESS: dict[str, dict] = {}
+
+
+def _fresh_oxdna_seed(requested: Optional[int] = None, *, exclude=()) -> int:
+    if requested is not None:
+        return int(requested)
+    recorded = [job.random_seed for job in OxdnaJob.list_jobs(_workspace())]
+    return random_oxdna_seed([*recorded, *exclude])
+
+
+def oxdna_job_settings_editable(job: OxdnaJob) -> bool:
+    """A prepared job is editable only until a local/remote executor owns it."""
+    return (
+        job.status == OxdnaStatus.queued
+        and not is_running(job.job_id)
+        and not job.slurm_job_id
+        and not job.runpod_pod_id
+        and all(stage.status == "pending" for stage in job.stages)
+    )
 
 
 def _wall_axis_position_nm(wall_meta: dict) -> float:
@@ -224,6 +251,12 @@ class CreateOxdnaJobRequest(BaseModel):
         "capped equil.",
     )
     autostart: bool = Field(True)
+    seed: Optional[int] = Field(
+        None,
+        ge=1,
+        le=OXDNA_SEED_MAX,
+        description="Base oxDNA random seed. Omit to draw and record a fresh seed.",
+    )
     # Relax-on-a-surface: optional hard surface ({dir, offset_nm, stiff}) + fixed
     # strands held throughout relaxation.  NO electric field here — a field-relaxed
     # structure is not how it would settle, so the field is production-only.
@@ -245,6 +278,7 @@ class ProductionRequest(BaseModel):
     steps: int = Field(
         5_000_000, ge=1000, le=200_000_000, description="Unbiased MD production steps"
     )
+    seed: Optional[int] = Field(None, ge=1, le=OXDNA_SEED_MAX)
 
 
 class AnchorRef(BaseModel):
@@ -289,6 +323,7 @@ class FieldRequest(BaseModel):
         description="oxDNA trap stiffness per anchored nucleotide "
         "(default pins anchors effectively immobile)",
     )
+    seed: Optional[int] = Field(None, ge=1, le=OXDNA_SEED_MAX)
 
 
 class FieldElement(BaseModel):
@@ -351,6 +386,7 @@ class RunRequest(BaseModel):
     #   {"subjectToField": false}         → production-time force choice, overrides the parent's.
     # Omitted → inherit the parent's strands and its own subjectToField, unchanged.
     surface_strands: Optional[dict] = Field(None)
+    seed: Optional[int] = Field(None, ge=1, le=OXDNA_SEED_MAX)
 
 
 class SurfaceDepositionRequest(BaseModel):
@@ -369,6 +405,7 @@ class SurfaceDepositionRequest(BaseModel):
     equil_steps: int = Field(250_000, ge=1000, le=200_000_000)
     steps_per_frame: int = Field(DEFAULT_STEPS_PER_FRAME, ge=1, le=200_000_000)
     anchor_stiff: float = Field(1.0, gt=0.0, le=100.0)
+    seed: Optional[int] = Field(None, ge=1, le=OXDNA_SEED_MAX)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -866,6 +903,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
             "Protein-capable DNANM oxDNA was selected, but the resolved binary has no DNANM support.",
         )
 
+    job_seed = _fresh_oxdna_seed(body.seed)
     specs = build_relaxation_stages(
         mc_steps=body.mc_steps,
         md_relax_steps=body.md_relax_steps,
@@ -884,6 +922,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         specs = apply_stage_overrides(specs, body.stage_overrides)
     except (TypeError, ValueError) as exc:
         raise HTTPException(400, f"Invalid oxDNA stage override: {exc}") from exc
+    specs = assign_stage_seeds(specs, job_seed)
 
     job = new_oxdna_job(
         design_name=name,
@@ -891,6 +930,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         device=body.device,
         backend=body.backend,
         salt_concentration=body.salt_concentration,
+        random_seed=job_seed,
         design_source_path=body.design_source_path,
         max_relax_retries=body.max_relax_retries,
         # Echo the relaxation conditions so selecting this job repopulates the
@@ -908,6 +948,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
             "equil_steps": body.equil_steps,
             "min_bp_retained": body.min_bp_retained,
             "max_relax_retries": body.max_relax_retries,
+            "seed": job_seed,
             "surface": surface_in,
             "anchors": anchors_in,
             "surface_anchors": surface_anchors_in,
@@ -1066,6 +1107,271 @@ async def get_oxdna_job(job_id: str) -> dict:
     d = job.to_dict()
     d["out_of_date"] = _job_is_out_of_date(job, _current_design_fingerprint())
     return d
+
+
+@router.post("/oxdna/jobs/{job_id}/copy")
+async def copy_oxdna_job(job_id: str) -> dict:
+    """Create a clean, queued copy with identical inputs and a fresh RNG seed."""
+    source = _load_job(job_id)
+    ws = _workspace()
+    source_dir = source.job_dir(ws)
+    specs = load_stage_specs(source_dir)
+    if not specs:
+        raise HTTPException(409, "This job has no recorded protocol to copy.")
+    for required in ("topology.top", "conf.dat", "design.json"):
+        if not (source_dir / required).is_file():
+            raise HTTPException(409, f"This job is missing {required}; it cannot be copied.")
+
+    copied_seed = _fresh_oxdna_seed(exclude=[source.random_seed])
+    copied_specs = assign_stage_seeds(specs, copied_seed)
+    copied_config = deepcopy(source.run_config) if source.run_config else None
+    if copied_config is not None:
+        copied_config["seed"] = copied_seed
+    copied = new_oxdna_job(
+        design_name=source.design_name,
+        stages=[spec.to_status() for spec in copied_specs],
+        n_nucleotides=source.n_nucleotides,
+        device=source.device,
+        backend=source.backend,
+        salt_concentration=source.salt_concentration,
+        random_seed=copied_seed,
+        design_source_path=source.design_source_path,
+        parent_job_id=source.parent_job_id,
+        efield=deepcopy(source.efield),
+        run_config=copied_config,
+        max_relax_retries=source.max_relax_retries,
+        design_fingerprint=source.design_fingerprint,
+        feature_log_position=source.feature_log_position,
+    )
+    copied.max_production_retries = source.max_production_retries
+    copied.execution_target = source.execution_target
+    copied.cluster_name = source.cluster_name
+    copied.partition = source.partition
+    copied.requested_resources = deepcopy(source.requested_resources)
+    copied.runpod_gpu_key = source.runpod_gpu_key
+    copied.runpod_budget_usd = source.runpod_budget_usd
+    copied.runpod_volume_id = source.runpod_volume_id
+    copied.runpod_quoted_rate_usd_per_hour = source.runpod_quoted_rate_usd_per_hour
+
+    copied_dir = copied.job_dir(ws)
+    copied_dir.mkdir(parents=True, exist_ok=False)
+    files = {"topology.top", "conf.dat", "design.json", "forces.txt", "equil_forces.txt"}
+    files.update(spec.forces_file for spec in copied_specs if spec.forces_file)
+    files.update(spec.parfile for spec in copied_specs if spec.parfile)
+    try:
+        for name in files:
+            if name and (source_dir / name).is_file():
+                shutil.copy2(source_dir / name, copied_dir / name)
+        (copied_dir / "stages_spec.json").write_text(
+            json.dumps([asdict(spec) for spec in copied_specs], indent=2),
+            encoding="utf-8",
+        )
+        copied.status = OxdnaStatus.queued
+        copied.save(ws)
+    except Exception:
+        shutil.rmtree(copied_dir, ignore_errors=True)
+        raise
+
+    return {
+        "ok": True,
+        "job": copied.to_dict(),
+        "copied_from_job_id": source.job_id,
+        "previous_seed": source.random_seed,
+        "seed": copied_seed,
+    }
+
+
+@router.put("/oxdna/jobs/{job_id}/settings")
+async def update_oxdna_job_settings(job_id: str, updates: dict) -> dict:
+    """Update an unstarted job in place while preserving its frozen simulation inputs."""
+    from pydantic import ValidationError
+    from backend.physics.oxdna_protein import has_proteins
+
+    job = _load_job(job_id)
+    if not oxdna_job_settings_editable(job):
+        raise HTTPException(
+            409,
+            "Only prepared jobs that have not been submitted or started can be edited.",
+        )
+    recorded = dict(job.run_config or {})
+    if recorded.get("kind", "relax") != "relax" or job.parent_job_id is not None:
+        specs = load_stage_specs(job.job_dir(_workspace()))
+        if not specs:
+            raise HTTPException(409, "This job has no recorded protocol to edit.")
+        mutable = {
+            "autostart", "backend", "cluster_name", "design_source_path", "device",
+            "execution_target", "kind", "partition", "runpod_budget_usd",
+            "runpod_gpu_key", "runpod_quoted_rate_usd_per_hour", "runpod_volume_id",
+            "salt_concentration", "seed", "slurm_resources", "stage_overrides",
+            "stages", "steps",
+        }
+        def _frozen_value(key: str, value):
+            value = deepcopy(value)
+            if key == "surface_strands" and isinstance(value, dict):
+                value.pop("built", None)
+            return value
+
+        changed_immutable = [
+            key for key, value in updates.items()
+            if key not in mutable
+            and (
+                key not in recorded
+                or _frozen_value(key, recorded[key]) != _frozen_value(key, value)
+            )
+        ]
+        if changed_immutable:
+            raise HTTPException(
+                409,
+                "The copied run's frozen force/topology settings cannot be changed in place: "
+                + ", ".join(sorted(changed_immutable)),
+            )
+        backend = updates.get("backend", job.backend)
+        device = str(updates.get("device", job.device))
+        salt = float(updates.get("salt_concentration", job.salt_concentration))
+        if backend not in {"CPU", "CUDA"} or salt <= 0:
+            raise HTTPException(422, "Choose CPU/CUDA and a positive salt concentration.")
+        overrides = deepcopy(updates.get("stage_overrides") or {})
+        stage_rows = updates.get("stages") or []
+        if not isinstance(stage_rows, list):
+            raise HTTPException(422, "stages must be a list.")
+        for row in stage_rows:
+            if not isinstance(row, dict) or not row.get("name"):
+                raise HTTPException(422, "Each stage edit needs its recorded name.")
+            editable = {
+                key: value for key, value in row.items()
+                if key not in {"name", "kind", "status"}
+            }
+            if editable:
+                overrides.setdefault(row["name"], {}).update(editable)
+        if "steps" in updates:
+            if len(specs) != 1:
+                raise HTTPException(422, "Edit each stage's steps separately for this protocol.")
+            overrides.setdefault(specs[0].name, {})["steps"] = updates["steps"]
+        for spec in specs:
+            if spec.sim_type == "MD":
+                overrides.setdefault(spec.name, {}).update({
+                    "backend": backend,
+                    "device": device,
+                    "salt_concentration": salt,
+                })
+        try:
+            specs = apply_stage_overrides(specs, overrides)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(400, f"Invalid oxDNA stage override: {exc}") from exc
+        seed = job.random_seed or _fresh_oxdna_seed(updates.get("seed"))
+        specs = assign_stage_seeds(specs, seed)
+        (job.job_dir(_workspace()) / "stages_spec.json").write_text(
+            json.dumps([asdict(spec) for spec in specs], indent=2), encoding="utf-8"
+        )
+        job.stages = [spec.to_status() for spec in specs]
+        job.current_stage_idx = 0
+        job.error = None
+        job.backend = backend
+        job.device = device
+        job.salt_concentration = salt
+        job.random_seed = seed
+        target = updates.get("execution_target", job.execution_target)
+        if target not in {"local", "alpine", "runpod"}:
+            raise HTTPException(422, "Unknown execution target.")
+        job.execution_target = target
+        job.cluster_name = updates.get("cluster_name") if target == "alpine" else None
+        job.partition = updates.get("partition") if target == "alpine" else None
+        job.requested_resources = updates.get("slurm_resources") if target == "alpine" else None
+        job.runpod_gpu_key = updates.get("runpod_gpu_key") if target == "runpod" else None
+        job.runpod_budget_usd = updates.get("runpod_budget_usd") if target == "runpod" else None
+        job.runpod_volume_id = updates.get("runpod_volume_id") if target == "runpod" else None
+        job.runpod_quoted_rate_usd_per_hour = (
+            updates.get("runpod_quoted_rate_usd_per_hour") if target == "runpod" else None
+        )
+        job.run_config = {
+            **recorded,
+            **{
+                key: value for key, value in updates.items()
+                if key in mutable and key not in {"kind", "seed", "stages"}
+            },
+            "kind": recorded.get("kind", "run"),
+            "seed": seed,
+            "autostart": False,
+            "stage_overrides": overrides,
+        }
+        if len(specs) == 1:
+            job.run_config["steps"] = specs[0].steps
+        job.save(_workspace())
+        return job.to_dict()
+
+    merged = {**recorded, **updates, "autostart": False}
+    merged.pop("kind", None)
+    # Generated capture-particle bookkeeping is output, not a request setting.
+    if isinstance(merged.get("surface_strands"), dict):
+        merged["surface_strands"] = dict(merged["surface_strands"])
+        merged["surface_strands"].pop("built", None)
+    try:
+        body = CreateOxdnaJobRequest.model_validate(merged)
+    except ValidationError as exc:
+        raise HTTPException(422, detail=exc.errors()) from exc
+
+    design = _load_snapshot_design(job.job_dir(_workspace()))
+    if design is None:
+        raise HTTPException(409, "This job has no frozen design snapshot and cannot be edited exactly.")
+    relax_has_forces = bool(
+        body.surface or body.anchors or body.surface_anchors or body.surface_strands
+    )
+    specs = build_relaxation_stages(
+        mc_steps=body.mc_steps,
+        md_relax_steps=body.md_relax_steps,
+        equil_steps=body.equil_steps,
+        backend=body.backend,
+        device=body.device,
+        salt_concentration=body.salt_concentration,
+        min_bp_retained=body.min_bp_retained,
+        surface_present=relax_has_forces,
+        protein=has_proteins(design),
+    )
+    if not has_proteins(design):
+        for spec in specs:
+            spec.interaction = body.interaction_type
+    try:
+        specs = apply_stage_overrides(specs, body.stage_overrides)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(400, f"Invalid oxDNA stage override: {exc}") from exc
+    seed = job.random_seed or _fresh_oxdna_seed(body.seed)
+    specs = assign_stage_seeds(specs, seed)
+    (job.job_dir(_workspace()) / "stages_spec.json").write_text(
+        json.dumps([asdict(spec) for spec in specs], indent=2), encoding="utf-8"
+    )
+
+    job.stages = [spec.to_status() for spec in specs]
+    job.current_stage_idx = 0
+    job.error = None
+    job.backend = body.backend
+    job.device = body.device
+    job.salt_concentration = body.salt_concentration
+    job.max_relax_retries = body.max_relax_retries
+    job.random_seed = seed
+    job.execution_target = body.execution_target
+    job.cluster_name = body.cluster_name if body.execution_target == "alpine" else None
+    job.partition = body.partition if body.execution_target == "alpine" else None
+    job.requested_resources = body.slurm_resources if body.execution_target == "alpine" else None
+    job.runpod_gpu_key = body.runpod_gpu_key if body.execution_target == "runpod" else None
+    job.runpod_budget_usd = body.runpod_budget_usd if body.execution_target == "runpod" else None
+    job.runpod_volume_id = body.runpod_volume_id if body.execution_target == "runpod" else None
+    job.runpod_quoted_rate_usd_per_hour = (
+        body.runpod_quoted_rate_usd_per_hour if body.execution_target == "runpod" else None
+    )
+    surface_strands = deepcopy(body.surface_strands)
+    built_capture = (recorded.get("surface_strands") or {}).get("built")
+    if surface_strands is not None and built_capture:
+        surface_strands["built"] = built_capture
+    job.run_config = {
+        **recorded,
+        **body.model_dump(),
+        "kind": "relax",
+        "seed": seed,
+        "autostart": False,
+        "surface_strands": surface_strands,
+    }
+    job.save(_workspace())
+    return job.to_dict()
 
 
 @router.get("/oxdna/jobs/{job_id}/error-log")
@@ -1249,6 +1555,7 @@ async def append_oxdna_production(job_id: str, body: ProductionRequest) -> dict:
         raise HTTPException(500, "stages_spec.json missing; cannot append production.")
     # Unique stage name (1-based position prefix) so a re-run continues from the
     # previous stage's last_conf.dat instead of clobbering "4_production".
+    stage_seed = _fresh_oxdna_seed(body.seed, exclude=[job.random_seed])
     prod = build_production_stage(
         name=f"{len(specs) + 1}_production",
         steps=body.steps,
@@ -1256,6 +1563,7 @@ async def append_oxdna_production(job_id: str, body: ProductionRequest) -> dict:
         device=job.device,
         salt_concentration=job.salt_concentration,
     )
+    prod = assign_stage_seeds([prod], stage_seed)[0]
     prod = hybridize_stage(prod, protein=any(s.parfile for s in specs))
     specs.append(prod)
 
@@ -1340,6 +1648,7 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
 
     field_oxdna = pn_to_oxdna_force(body.field_pN)
     anchors = [a.model_dump(by_alias=False) for a in body.anchors]
+    job_seed = _fresh_oxdna_seed(body.seed, exclude=[parent.random_seed])
     stage = build_field_stage(
         name="1_field",
         field_oxdna=field_oxdna,
@@ -1350,6 +1659,7 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
         device=parent.device,
         salt_concentration=parent.salt_concentration,
     )
+    stage = assign_stage_seeds([stage], job_seed)[0]
     from backend.physics.oxdna_protein import has_proteins
 
     stage = hybridize_stage(stage, protein=has_proteins(design))
@@ -1360,6 +1670,7 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
         device=parent.device,
         backend=parent.backend,
         salt_concentration=parent.salt_concentration,
+        random_seed=job_seed,
         design_source_path=parent.design_source_path,
         project_id=parent.project_id,
         design_revision_id=parent.design_revision_id,
@@ -1373,6 +1684,7 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
         },
         run_config={
             "kind": "field",
+            "seed": job_seed,
             "steps": body.steps,
             "field": {"field_pN": body.field_pN, "dir": list(body.dir)},
             "surface": None,
@@ -1485,6 +1797,7 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
         field_in or wall_in or ordinary_anchors or surface_anchors or cap_particles
     )
 
+    job_seed = _fresh_oxdna_seed(body.seed, exclude=[parent.random_seed])
     stage = build_run_stage(
         name="1_production",
         steps=body.steps,
@@ -1502,6 +1815,7 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
         salt_concentration=parent.salt_concentration,
         steps_per_frame=body.steps_per_frame,
     )
+    stage = assign_stage_seeds([stage], job_seed)[0]
     from backend.physics.oxdna_protein import has_proteins
 
     stage = hybridize_stage(stage, protein=has_proteins(design))
@@ -1527,6 +1841,7 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
         device=parent.device,
         backend=parent.backend,
         salt_concentration=parent.salt_concentration,
+        random_seed=job_seed,
         design_source_path=parent.design_source_path,
         project_id=parent.project_id,
         design_revision_id=parent.design_revision_id,
@@ -1536,6 +1851,7 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
         efield=efield_rec or {},
         run_config={
             "kind": "run",
+            "seed": job_seed,
             "steps": body.steps,
             "field": {"field_pN": body.field.field_pN, "dir": list(body.field.dir)}
             if body.field
@@ -1654,6 +1970,7 @@ async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) 
     anchors = [
         a.model_dump(by_alias=False, exclude_none=True) for a in body.surface_anchors
     ]
+    job_seed = _fresh_oxdna_seed(body.seed, exclude=[parent.random_seed])
     stages = build_surface_deposition_stages(
         backend=parent.backend,
         device=parent.device,
@@ -1663,6 +1980,7 @@ async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) 
         equil_steps=body.equil_steps,
         steps_per_frame=body.steps_per_frame,
     )
+    stages = assign_stage_seeds(stages, job_seed)
     from backend.physics.oxdna_protein import has_proteins
 
     stages = [
@@ -1683,6 +2001,7 @@ async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) 
         device=parent.device,
         backend=parent.backend,
         salt_concentration=parent.salt_concentration,
+        random_seed=job_seed,
         design_source_path=parent.design_source_path,
         project_id=parent.project_id,
         design_revision_id=parent.design_revision_id,
@@ -1691,6 +2010,7 @@ async def start_surface_deposition(job_id: str, body: SurfaceDepositionRequest) 
         feature_log_position=parent.feature_log_position,
         run_config={
             "kind": "surface_deposition",
+            "seed": job_seed,
             "surface": wall,
             "surface_anchors": [
                 a.model_dump(by_alias=True, exclude_none=True)

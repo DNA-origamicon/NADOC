@@ -14,6 +14,8 @@ import json
 import math
 import stat
 import time
+import asyncio
+from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
@@ -28,6 +30,7 @@ from backend.core.oxdna_health import (
 from backend.core.oxdna_job import OxdnaJob, OxdnaStatus, new_oxdna_job
 from backend.core.oxdna_protocol import (
     apply_stage_overrides,
+    assign_stage_seeds,
     build_relaxation_stages,
     expected_energy_lines,
     render_stage_input,
@@ -52,12 +55,160 @@ def test_stage_overrides_are_scoped_and_reject_runner_identity_fields():
         apply_stage_overrides(specs, {"2_md_relax": {"name": "wrong"}})
 
 
+def test_stage_input_records_the_assigned_rng_seed():
+    spec = assign_stage_seeds(build_relaxation_stages(), 314159)[1]
+    text = render_stage_input(spec, "topology.top", "conf.dat")
+    assert spec.seed == 314160
+    assert "seed = 314160\n" in text
+
+
+def test_copy_job_preserves_frozen_inputs_but_draws_a_new_seed(tmp_path, monkeypatch):
+    import backend.api.routes_oxdna as routes
+
+    monkeypatch.setattr(routes, "_workspace", lambda: tmp_path)
+    monkeypatch.setattr(routes, "random_oxdna_seed", lambda _exclude=(): 222222)
+    specs = assign_stage_seeds(build_relaxation_stages(), 111111)
+    source = new_oxdna_job(
+        "demo", [spec.to_status() for spec in specs], random_seed=111111,
+        run_config={"kind": "relax", "seed": 111111, "mc_steps": 1000},
+    )
+    source.status = OxdnaStatus.completed
+    source.save(tmp_path)
+    source_dir = source.job_dir(tmp_path)
+    for name, text in {
+        "topology.top": "topology", "conf.dat": "coordinates",
+        "design.json": "{}", "forces.txt": "forces",
+    }.items():
+        (source_dir / name).write_text(text)
+    (source_dir / "stages_spec.json").write_text(
+        json.dumps([asdict(spec) for spec in specs])
+    )
+
+    result = asyncio.run(routes.copy_oxdna_job(source.job_id))
+    copied = OxdnaJob.load(result["job"]["job_id"], tmp_path)
+    copied_specs = routes.load_stage_specs(copied.job_dir(tmp_path))
+
+    assert copied.status == OxdnaStatus.queued
+    assert copied.random_seed == result["seed"] == 222222
+    assert copied.run_config == {"kind": "relax", "seed": 222222, "mc_steps": 1000}
+    assert [spec.seed for spec in copied_specs] == [222222, 222223, 222224]
+    assert (copied.job_dir(tmp_path) / "conf.dat").read_text() == "coordinates"
+    assert not (copied.job_dir(tmp_path) / "1_mc_relax").exists()
+
+
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 
 @pytest.fixture
 def design():
     return make_6hb_design()
+
+
+def test_edit_unstarted_job_rebuilds_protocol_in_place(tmp_path, monkeypatch, design):
+    import backend.api.routes_oxdna as routes
+
+    monkeypatch.setattr(routes, "_workspace", lambda: tmp_path)
+    config = routes.CreateOxdnaJobRequest(
+        backend="CUDA", mc_steps=1000, md_relax_steps=1_000_000,
+        equil_steps=100_000, autostart=False, seed=123456,
+    ).model_dump()
+    specs = assign_stage_seeds(build_relaxation_stages(), 123456)
+    job = new_oxdna_job(
+        "demo", [spec.to_status() for spec in specs], random_seed=123456,
+        run_config={**config, "kind": "relax"},
+    )
+    job.status = OxdnaStatus.queued
+    job.save(tmp_path)
+    job_dir = job.job_dir(tmp_path)
+    (job_dir / "design.json").write_text(design.model_dump_json())
+    (job_dir / "stages_spec.json").write_text(
+        json.dumps([asdict(spec) for spec in specs])
+    )
+
+    out = asyncio.run(routes.update_oxdna_job_settings(job.job_id, {
+        "backend": "CPU", "mc_steps": 2500, "salt_concentration": 0.75,
+        "execution_target": "alpine", "cluster_name": "alpine",
+        "partition": "amilan", "autostart": True,
+    }))
+
+    saved = OxdnaJob.load(job.job_id, tmp_path)
+    saved_specs = routes.load_stage_specs(job_dir)
+    assert out["job_id"] == job.job_id
+    assert saved.status == OxdnaStatus.queued
+    assert saved.backend == "CPU"
+    assert saved.salt_concentration == pytest.approx(0.75)
+    assert saved.execution_target == "alpine"
+    assert saved.partition == "amilan"
+    assert saved.random_seed == 123456
+    assert saved.run_config["autostart"] is False
+    assert [spec.seed for spec in saved_specs] == [123456, 123457, 123458]
+    assert saved_specs[0].steps == 2500
+    assert all(stage.status == "pending" for stage in saved.stages)
+
+
+def test_edit_rejects_a_submitted_oxdna_job(tmp_path, monkeypatch):
+    import backend.api.routes_oxdna as routes
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(routes, "_workspace", lambda: tmp_path)
+    specs = assign_stage_seeds(build_relaxation_stages(), 123456)
+    job = new_oxdna_job(
+        "demo", [spec.to_status() for spec in specs], random_seed=123456,
+        run_config={"kind": "relax", "seed": 123456},
+    )
+    job.status = OxdnaStatus.queued
+    job.slurm_job_id = "123"
+    job.save(tmp_path)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(routes.update_oxdna_job_settings(job.job_id, {"mc_steps": 2500}))
+    assert exc.value.status_code == 409
+
+
+def test_edit_unstarted_derived_run_updates_runtime_but_keeps_frozen_forces(
+    tmp_path, monkeypatch
+):
+    import backend.api.routes_oxdna as routes
+    from backend.core.oxdna_protocol import build_run_stage
+
+    monkeypatch.setattr(routes, "_workspace", lambda: tmp_path)
+    spec = assign_stage_seeds(
+        [build_run_stage(name="1_production", steps=10_000)], 234567
+    )[0]
+    job = new_oxdna_job(
+        "demo · production", [spec.to_status()], random_seed=234567,
+        parent_job_id="parent", backend="CUDA",
+        run_config={
+            "kind": "run", "seed": 234567, "steps": 10_000,
+            "field": {"field_pN": 1.0, "dir": [0, 1, 0]},
+        },
+    )
+    job.status = OxdnaStatus.queued
+    job.save(tmp_path)
+    job_dir = job.job_dir(tmp_path)
+    (job_dir / "stages_spec.json").write_text(json.dumps([asdict(spec)]))
+    (job_dir / "run_forces.txt").write_text("frozen-force-layout")
+
+    out = asyncio.run(routes.update_oxdna_job_settings(job.job_id, {
+        **job.run_config,
+        "backend": "CPU",
+        "steps": 25_000,
+        "execution_target": "local",
+        "stages": [{"name": spec.name, "kind": spec.kind, "steps": 25_000}],
+    }))
+
+    saved = OxdnaJob.load(job.job_id, tmp_path)
+    saved_spec = routes.load_stage_specs(job_dir)[0]
+    assert out["job_id"] == job.job_id
+    assert saved.status == OxdnaStatus.queued
+    assert saved.backend == "CPU"
+    assert saved.random_seed == 234567
+    assert saved.run_config["steps"] == 25_000
+    assert saved.run_config["field"] == job.run_config["field"]
+    assert saved_spec.steps == 25_000
+    assert saved_spec.backend == "CPU"
+    assert saved_spec.seed == 234567
+    assert (job_dir / "run_forces.txt").read_text() == "frozen-force-layout"
 
 
 def test_load_stage_specs_ignores_removed_fields(tmp_path):

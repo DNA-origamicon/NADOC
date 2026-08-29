@@ -14,6 +14,10 @@ vi.mock('../api/client.js', () => ({
   getOxdnaRmsf: vi.fn().mockResolvedValue({ ready: true, n_frames: 10, positions: [], min_rmsf: 0.1, max_rmsf: 1.4, mean_rmsf: 0.7 }),
   getOxdnaTrajectory: vi.fn().mockResolvedValue({ ready: true, n_frames: 4, keys: [], frames: [[]], markers: [], stages: [] }),
   createMdJob: vi.fn().mockResolvedValue({ job_id: 'md1', status: 'queued' }),
+  copyOxdnaJob: vi.fn().mockResolvedValue({
+    job: { job_id: 'j-copy', status: 'queued' }, seed: 987654,
+  }),
+  updateOxdnaJobSettings: vi.fn().mockResolvedValue({ job_id: 'j1', status: 'queued' }),
   getOxdnaErrorLog: vi.fn().mockResolvedValue({
     error: 'Health gate failed after 2_md_relax: base-pair retention 24% below gate 50%',
     stage: '2_md_relax', log: 'INFO: END OF THE SIMULATION, everything went OK!',
@@ -51,8 +55,29 @@ import {
   runConfigForJob, healthForDisplay, productionRunAnchors, runElements, runIndicatorTags, runRowLabel, runChildTitle,
   jobHasFailure, errorLogText, jobOutOfDate, jobSelectionSignature,
   trajectoryFrameEstimate, relaxIndexMap, relaxRowLabel,
-  captureStrandRunPlan, renderLammpsDisplayProgress,
+  captureStrandRunPlan, renderLammpsDisplayProgress, oxdnaJobEditable,
 } from './oxdna_jobs_panel.js'
+
+describe('oxdnaJobEditable', () => {
+  const queued = (over = {}) => ({
+    status: 'queued', parent_job_id: null, run_config: { kind: 'relax' },
+    stages: [{ status: 'pending' }], ...over,
+  })
+
+  it('allows local and unsubmitted remote relaxation jobs', () => {
+    expect(oxdnaJobEditable(queued({ execution_target: 'local' }))).toBe(true)
+    expect(oxdnaJobEditable(queued({ execution_target: 'alpine' }))).toBe(true)
+    expect(oxdnaJobEditable(queued({ execution_target: 'runpod' }))).toBe(true)
+  })
+
+  it('allows an unstarted derived run and rejects submitted or started jobs', () => {
+    expect(oxdnaJobEditable(queued({ parent_job_id: 'parent', run_config: { kind: 'run' } }))).toBe(true)
+    expect(oxdnaJobEditable(queued({ slurm_job_id: '123' }))).toBe(false)
+    expect(oxdnaJobEditable(queued({ runpod_pod_id: 'pod-1' }))).toBe(false)
+    expect(oxdnaJobEditable(queued({ status: 'running' }))).toBe(false)
+    expect(oxdnaJobEditable(queued({ stages: [{ status: 'running' }] }))).toBe(false)
+  })
+})
 
 describe('relaxIndexMap / relaxRowLabel (root job naming)', () => {
   const j = (id, created_at, over = {}) =>
