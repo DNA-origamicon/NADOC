@@ -331,6 +331,16 @@ Rows sort by **time-to-result** (wait + runtime at that partition's throughput),
 a faster GPU that starts later often finishes first. Both axes are shown (SU cost and ns/day)
 per [[feedback-gpu-value-is-two-axes]].
 
+**Maintenance truth fix (2026-08-29).** The availability probe now reads
+`scontrol -o show reservation` and returns active/upcoming reservations carrying SLURM's
+explicit `MAINT` flag. The wizard and Cluster card show the downtime window immediately
+after Alpine connects, plus the selected resource's `sbatch --test-only` next start when
+available. A future SLURM start now outranks raw idle-GPU counts: before this fix, 14 idle
+MIG slices were painted "free now" even though seven-day jobs `31786854` and `31796572`
+both reported `Reason=ReqNodeNotAvail,_Reserved_for_maintenance` and
+`StartTime=2026-09-03T06:30:00`. Physical vacancy is no longer presented as scheduler
+eligibility.
+
 Frontend: `ui/cluster_availability.js` (factory) + `ui/cluster_availability_rows.js` (pure,
 tested), button + mount `#md-jobs-alpine-availability` in the Clusters card, wired from
 `md_jobs_panel.js` — **`main.js` LOC Δ = 0**. Polls only while the popup is open AND the tab is

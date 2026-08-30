@@ -25,6 +25,7 @@ import {
   availabilityMessage,
   bestPartitionHint,
   renderAvailabilityRows,
+  renderSchedulerWarning,
 } from './cluster_availability_rows.js'
 
 const REFRESH_MS = 60_000
@@ -83,8 +84,10 @@ export function initClusterAvailability({
     if (!_bodyEl) return
     const rows = _resp ? renderAvailabilityRows(_resp.partitions) : ''
     const hint = _resp ? bestPartitionHint(_resp.partitions) : ''
+    const scheduler = _resp ? renderSchedulerWarning(_resp) : ''
     const msg = availabilityMessage(_resp, { busy: _busy, error: _error })
     _bodyEl.innerHTML = `
+      ${scheduler ? `<div style="margin-bottom:10px">${scheduler}</div>` : ''}
       ${
         hint
           ? `<div style="margin-bottom:10px;padding:7px 10px;border-radius:5px;
@@ -160,7 +163,9 @@ export function initClusterAvailability({
     const title = disabled
       ? 'Connect to Alpine first — availability needs a live session'
       : 'Free GPUs, queue depth and estimated wait per partition'
+    const scheduler = _connected && _resp ? renderSchedulerWarning(_resp) : ''
     mount.innerHTML = `
+      ${scheduler ? `<div style="margin-bottom:6px">${scheduler}</div>` : ''}
       <button id="alpine-availability-btn" ${disabled ? 'disabled' : ''} title="${title}" style="
         font-size:11px;padding:4px 10px;background:#161b22;border:1px solid #30363d;
         color:${disabled ? '#6e7681' : '#c9d1d9'};border-radius:4px;
@@ -174,8 +179,14 @@ export function initClusterAvailability({
   // The connection chip already polls /api/cluster/status every 15 s and broadcasts
   // this event — subscribe rather than adding a second poll of the same endpoint.
   const _onClusterState = e => {
-    _connected = e?.detail?.state === 'connected'
+    const connected = e?.detail?.state === 'connected'
+    const becameConnected = connected && !_connected
+    _connected = connected
+    if (!connected) { _resp = null; _error = '' }
     _renderButton()
+    // One read-only sync per login makes maintenance visible in the Cluster card
+    // without requiring the user to discover and open the availability popup.
+    if (becameConnected) void refresh()
   }
   window.addEventListener('nadoc:cluster-state-change', _onClusterState)
   const _onVisibility = () => _syncPolling()

@@ -45,6 +45,111 @@ export function formatSu(su) {
   return `${su.toFixed(1)} SU`
 }
 
+/** SLURM timestamps are cluster-local and arrive without an offset. Keep that fact visible. */
+export function formatSchedulerTime(value) {
+  const text = String(value || '').trim()
+  if (!text) return ''
+  const [date, clock = ''] = text.split('T')
+  return `${date}${clock ? ` ${clock.slice(0, 5)}` : ''} (Alpine time)`
+}
+
+function _resourceFor(resp, partition, gresType) {
+  const rows = resp?.partitions || []
+  const row = partition ? rows.find(r => r.partition === partition) : rows[0]
+  if (!row) return { row: null, resource: null }
+  const choices = Array.isArray(row.gpu_resources) ? row.gpu_resources : []
+  const resource = gresType
+    ? choices.find(g => g.gres_type === gresType)
+    : (choices[0] || null)
+  return { row, resource }
+}
+
+function _isFutureSchedulerStart(resp, start) {
+  if (!start) return false
+  const checked = String(resp?.checked_at || '').trim()
+  // Both values are second-resolution, cluster-local ISO timestamps. Lexical order is
+  // therefore timezone-free and exact; it also works against an older backend that
+  // supplied a future slurm_start while incorrectly retaining wait_min=0 / "free now".
+  return checked ? String(start) > checked : false
+}
+
+/**
+ * Scheduler-level status shown without opening the availability popup.
+ * Maintenance comes from ``scontrol show reservation``; the next start comes from
+ * SLURM's shape-specific ``sbatch --test-only`` result when one is available.
+ */
+export function schedulerWarning(resp, { partition = null, gresType = null } = {}) {
+  if (!resp) return null
+  const maintenance = (resp.maintenance || [])[0] || null
+  const { row, resource } = _resourceFor(resp, partition, gresType)
+  const slurmStart = resource?.slurm_start || row?.slurm_start || null
+  const maintenanceHold = (resp.partitions || []).find(candidate =>
+    /reserved for maintenance/i.test(String(candidate.top_reason || '')))
+
+  if (maintenance) {
+    const start = formatSchedulerTime(maintenance.start)
+    const end = formatSchedulerTime(maintenance.end)
+    const window = maintenance.active
+      ? `Alpine maintenance is active until ${end}.`
+      : `Alpine maintenance is scheduled ${start}–${end}.`
+    const next = slurmStart
+      ? `SLURM's next available start${partition ? ` for ${partition}` : ''}: `
+        + `${formatSchedulerTime(slurmStart)}.`
+      : `Earliest post-maintenance start: ${end}; SLURM has not placed a specific job shape.`
+    return {
+      kind: 'maintenance',
+      title: 'Alpine maintenance affects scheduling',
+      message: `${window} ${next} `
+        + 'Idle GPUs can still be unavailable to jobs that overlap this downtime.',
+      nextStart: slurmStart || maintenance.end,
+    }
+  }
+
+  // Compatibility with an already-running backend from before reservation windows
+  // were added to the response. The pending reason is still SLURM's explicit report,
+  // so surface it now; the next reconnect after a backend restart adds exact dates.
+  if (maintenanceHold) {
+    const next = slurmStart
+      ? ` SLURM's next available start${partition ? ` for ${partition}` : ''}: `
+        + `${formatSchedulerTime(slurmStart)}.`
+      : ' Reconnect after the backend reloads to read the downtime window and next start.'
+    return {
+      kind: 'maintenance',
+      title: 'Alpine maintenance affects scheduling',
+      message: `Alpine reports GPU nodes reserved for maintenance.${next} `
+        + 'Idle GPUs can still be unavailable to jobs that overlap the downtime.',
+      nextStart: slurmStart,
+    }
+  }
+
+  if (slurmStart && (
+    _isFutureSchedulerStart(resp, slurmStart)
+    || (resource?.wait_min ?? row?.wait_min ?? 0) > 1
+  )) {
+    return {
+      kind: 'scheduled',
+      title: 'SLURM scheduled a later start',
+      message: `Next available start${partition ? ` for ${partition}` : ''}: `
+        + `${formatSchedulerTime(slurmStart)}. Idle GPUs do not guarantee that this job shape can start now.`,
+      nextStart: slurmStart,
+    }
+  }
+  return null
+}
+
+/** Escaped warning markup shared by the wizard, Cluster card, and popup. */
+export function renderSchedulerWarning(resp, options = {}) {
+  const warning = schedulerWarning(resp, options)
+  if (!warning) return ''
+  return (
+    `<div class="alpine-scheduler-warning" data-kind="${_esc(warning.kind)}" style="` +
+    'padding:7px 9px;border-radius:5px;background:rgba(210,153,34,.12);' +
+    'border:1px solid rgba(210,153,34,.4);color:#d29922;font-size:11px;line-height:1.45">' +
+    `<strong>⚠ ${_esc(warning.title)}</strong><br>` +
+    `<span style="color:#c9d1d9">${_esc(warning.message)}</span></div>`
+  )
+}
+
 /**
  * Availability dot for a partition: green when it could start now, amber when
  * something is free but queued behind other work, red when nothing is free.
@@ -53,6 +158,9 @@ export function availabilityBadge(row) {
   if (row.request_only) return { text: 'request-only', color: '#8b949e' }
   const free = row.gpus_free ?? 0
   if (!free) return { text: 'full', color: '#f85149' }
+  if ((row.wait_min ?? 0) > 1 && row.wait_basis === 'SLURM backfill estimate') {
+    return { text: 'scheduled later', color: '#d29922' }
+  }
   if ((row.pending_gpus ?? 0) > 0) return { text: 'contended', color: '#d29922' }
   return { text: 'free', color: '#3fb950' }
 }
@@ -77,6 +185,7 @@ export function availabilityView(row) {
     reason: row.top_reason || '',
     wait: row.request_only ? 'request access' : formatWait(row.wait_min),
     waitBasis: row.wait_basis || '',
+    nextStart: formatSchedulerTime(row.slurm_start),
     ttr: formatHours(row.time_to_result_h),
     cost: formatSu(row.job_cost_su),
     // Cost EFFICIENCY, not just total: equally-fast partitions can differ ~30%.
@@ -118,7 +227,8 @@ export function renderAvailabilityRows(rows) {
                  `title="MIG slices — a whole-GPU job cannot use these">${_esc(v.mig)}</span>` : '') +
         `</span>` +
         `<span style="color:#8b949e" title="${_esc(v.reason)}">${_esc(v.pending)}</span>` +
-        `<span style="color:#c9d1d9" title="${_esc(v.waitBasis)}">${_esc(v.wait)}</span>` +
+        `<span style="color:#c9d1d9" title="${_esc(v.waitBasis)}` +
+        `${v.nextStart ? ` · next start ${_esc(v.nextStart)}` : ''}">${_esc(v.wait)}</span>` +
         `<span style="color:#8b949e" title="${_esc(v.nsday)}">${_esc(v.cost)}` +
         (v.suPerNs ? `<br><span style="color:#6e7681;font-size:9px">${_esc(v.suPerNs)}</span>` : '') +
         `</span>` +

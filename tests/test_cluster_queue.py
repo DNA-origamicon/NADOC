@@ -54,6 +54,12 @@ aa100|2026-08-01T10:00:00|2026-08-01T18:00:00|COMPLETED
 aa100|2026-08-02T10:00:00|Unknown|CANCELLED
 """
 
+RESERVATIONS_OUT = """\
+ReservationName=alpine-maint StartTime=2026-08-31T06:00:00 EndTime=2026-09-03T06:30:00 Duration=3-00:30:00 Nodes=ALL NodeCnt=480 Flags=MAINT,ALL_NODES State=INACTIVE
+ReservationName=classroom StartTime=2026-08-07T08:00:00 EndTime=2026-08-07T12:00:00 Duration=04:00:00 Nodes=c3gpu-c2-u17 NodeCnt=1 Flags=SPEC_NODES State=INACTIVE
+ReservationName=old-maint StartTime=2026-08-01T00:00:00 EndTime=2026-08-02T00:00:00 Duration=1-00:00:00 Nodes=ALL NodeCnt=480 Flags=MAINT,ALL_NODES State=INACTIVE
+"""
+
 
 @pytest.fixture
 def alpine():
@@ -233,6 +239,26 @@ def test_parse_squeue_pending_ignores_malformed_rows():
     assert cq.parse_squeue_pending("garbage without pipes\n") == {}
 
 
+def test_parse_maintenance_reservations_is_explicit_and_drops_expired():
+    reservations = cq.parse_maintenance_reservations(RESERVATIONS_OUT, now=NOW)
+    assert reservations == [
+        {
+            "name": "alpine-maint",
+            "start": "2026-08-31T06:00:00",
+            "end": "2026-09-03T06:30:00",
+            "active": False,
+            "state": "INACTIVE",
+            "node_count": 480,
+            "all_nodes": True,
+        }
+    ]
+
+
+def test_parse_maintenance_reservations_marks_active_window():
+    now = datetime(2026, 9, 1, 12, 0, 0)
+    assert cq.parse_maintenance_reservations(RESERVATIONS_OUT, now=now)[0]["active"] is True
+
+
 # ── parse_sacct_waits ─────────────────────────────────────────────────────────
 
 
@@ -386,6 +412,28 @@ def test_slurm_estimate_beats_history(alpine):
     assert ah200["wait_basis"] == "SLURM backfill estimate"
 
 
+def test_future_slurm_start_beats_physically_free_gpus(alpine):
+    """Idle MIGs are not 'ready' when the requested walltime overlaps maintenance."""
+    rows = {
+        r["partition"]: r
+        for r in _summary(
+            alpine,
+            pending={},
+            slurm_starts={
+                "ah200": datetime(2026, 9, 3, 6, 30, 0),
+                "ah200|h200_3g.71gb": datetime(2026, 9, 3, 6, 30, 0),
+            },
+        )
+    }
+    ah200 = rows["ah200"]
+    assert ah200["gpus_free"] == 9
+    assert ah200["wait_basis"] == "SLURM backfill estimate"
+    assert ah200["wait_min"] > 0
+    mig = next(g for g in ah200["gpu_resources"] if g["gres_type"] == "h200_3g.71gb")
+    assert mig["wait_basis"] == "SLURM backfill estimate"
+    assert mig["slurm_start"] == "2026-09-03T06:30:00"
+
+
 def test_unknown_wait_stays_unknown_not_zero(alpine):
     """No free GPUs, no SLURM estimate, no history → must not claim 'now'."""
     rows = {
@@ -501,6 +549,7 @@ def test_probe_registry_is_named_not_freeform():
         cq.probe_command("rm -rf /")
     with pytest.raises(ValueError, match="unknown probe"):
         cq.probe_command("")
+    assert cq.probe_command("reservations") == "scontrol -o show reservation 2>&1"
 
 
 def test_probe_argument_is_strictly_validated():

@@ -51,6 +51,23 @@ describe('the button', () => {
     expect(mount.querySelector('#alpine-availability-btn').disabled).toBe(true)
     api.dispose()
   })
+
+  it('checks once on connect and shows maintenance directly in the Cluster card', async () => {
+    const maintenance = {
+      ...RESP,
+      maintenance: [{
+        name: 'alpine-maint', start: '2026-08-31T06:00:00',
+        end: '2026-09-03T06:30:00', active: false,
+      }],
+    }
+    const fetchAvailability = vi.fn(async () => maintenance)
+    const { api, mount } = setup({ fetchAvailability })
+    connect()
+    await vi.waitFor(() => expect(fetchAvailability).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(mount.textContent).toContain('Alpine maintenance affects scheduling'))
+    expect(mount.textContent).toContain('Earliest post-maintenance start')
+    api.dispose()
+  })
 })
 
 describe('refresh', () => {

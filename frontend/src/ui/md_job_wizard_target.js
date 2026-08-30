@@ -23,6 +23,7 @@ import { initClusterConnection } from './cluster_connection.js'
 import { getRunDir, mountDirectoryButton, runDirLabel } from './run_location.js'
 import { initWizardResources } from './md_job_wizard_resources.js'
 import { initWizardRunpod } from './md_job_wizard_runpod.js'
+import { renderSchedulerWarning } from './cluster_availability_rows.js'
 import {
   TARGETS, UNWIRED_TARGETS,
   atomCapLabel, defaultGpuChoice, localGpuSpeedFactor, localHardwareSummary,
@@ -207,6 +208,14 @@ export function initWizardTargetStep({
   function _paintAlpine() {
     const box = _bodies.alpine
     if (!box) return
+    const warningEl = box.querySelector('#wiz-target-alpine-scheduler-warning')
+    if (warningEl) {
+      const warning = !_ro() && _clusterState === 'connected' && _avail
+        ? renderSchedulerWarning(_avail, { partition: _partition, gresType: _gresType })
+        : ''
+      warningEl.innerHTML = warning
+      warningEl.hidden = !warning
+    }
     if (_ro()) {
       // The recorded node, on its own. A live availability table here would show today's
       // queue beside a choice made against a queue picture that is long gone.
@@ -379,6 +388,10 @@ export function initWizardTargetStep({
       if (t.id === 'alpine') {
         const chip = el('div', { attrs: { style: 'margin-bottom:8px' } })
         body.appendChild(chip)
+        body.appendChild(el('div', {
+          id: 'wiz-target-alpine-scheduler-warning',
+          attrs: { style: 'margin-bottom:8px', hidden: true },
+        }))
         body.appendChild(el('div', {
           html: '<div style="display:grid;grid-template-columns:1.4fr .8fr .9fr 1fr;gap:10px;'
               + 'padding:2px 9px;font-size:9px;color:#6e7681;text-transform:uppercase">'

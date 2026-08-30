@@ -6,9 +6,12 @@ import {
   availabilityView,
   bestPartitionHint,
   formatHours,
+  formatSchedulerTime,
   formatSu,
   formatWait,
   renderAvailabilityRows,
+  renderSchedulerWarning,
+  schedulerWarning,
 } from './cluster_availability_rows.js'
 
 const row = (over = {}) => ({
@@ -66,11 +69,82 @@ describe('formatSu', () => {
   })
 })
 
+describe('scheduler maintenance warning', () => {
+  const response = {
+    maintenance: [{
+      name: 'alpine-maint', start: '2026-08-31T06:00:00',
+      end: '2026-09-03T06:30:00', active: false,
+    }],
+    partitions: [row({
+      partition: 'ah200', slurm_start: '2026-09-03T06:30:00', wait_min: 7080,
+    })],
+  }
+
+  it('reports the explicit downtime and the selected partition next start', () => {
+    const warning = schedulerWarning(response, { partition: 'ah200' })
+    expect(warning.kind).toBe('maintenance')
+    expect(warning.message).toContain('2026-08-31 06:00 (Alpine time)')
+    expect(warning.message).toContain("SLURM's next available start for ah200: 2026-09-03 06:30")
+  })
+
+  it('renders escaped warning markup shared by the card and wizard', () => {
+    const html = renderSchedulerWarning({
+      ...response,
+      maintenance: [{ ...response.maintenance[0], name: '<img src=x>' }],
+    })
+    expect(html).toContain('alpine-scheduler-warning')
+    expect(html).not.toContain('<img src=x>')
+  })
+
+  it('formats cluster-local timestamps without pretending they carry an offset', () => {
+    expect(formatSchedulerTime('2026-09-03T06:30:00'))
+      .toBe('2026-09-03 06:30 (Alpine time)')
+  })
+
+  it('warns from a future SLURM timestamp even when an older backend says free now', () => {
+    const warning = schedulerWarning({
+      checked_at: '2026-08-30T10:49:24',
+      partitions: [row({
+        wait_min: 0, wait_basis: 'free now', slurm_start: '2026-09-03T06:30:00',
+        gpu_resources: [{
+          gres_type: 'h200_3g.71gb', wait_min: 0, wait_basis: 'free now',
+          slurm_start: '2026-09-03T06:30:00',
+        }],
+      })],
+    }, { partition: 'ah200', gresType: 'h200_3g.71gb' })
+    expect(warning.kind).toBe('scheduled')
+    expect(warning.message).toContain('2026-09-03 06:30')
+  })
+
+  it('surfaces an older backend\'s explicit maintenance queue reason', () => {
+    const warning = schedulerWarning({
+      checked_at: '2026-08-30T10:49:24',
+      partitions: [row({
+        top_reason: 'ReqNodeNotAvail, Reserved for maintenance (4)',
+        wait_min: 0, wait_basis: 'free now', slurm_start: null,
+      })],
+    })
+    expect(warning.kind).toBe('maintenance')
+    expect(warning.message).toContain('GPU nodes reserved for maintenance')
+  })
+})
+
 describe('availabilityBadge', () => {
   it('free only when nothing is queued ahead', () => {
-    expect(availabilityBadge(row({ pending_gpus: 0 })).text).toBe('free')
-    expect(availabilityBadge(row({ pending_gpus: 3 })).text).toBe('contended')
+    expect(availabilityBadge(row({
+      pending_gpus: 0, wait_min: 0, wait_basis: 'free now',
+    })).text).toBe('free')
+    expect(availabilityBadge(row({
+      pending_gpus: 3, wait_min: 0, wait_basis: 'free now',
+    })).text).toBe('contended')
     expect(availabilityBadge(row({ gpus_free: 0 })).text).toBe('full')
+  })
+
+  it('does not call idle hardware free when SLURM schedules it later', () => {
+    expect(availabilityBadge(row({
+      gpus_free: 7, pending_gpus: 0, wait_min: 7080,
+      wait_basis: 'SLURM backfill estimate',
+    })).text).toBe('scheduled later')
   })
 
   it('request-only hardware gets its own badge', () => {

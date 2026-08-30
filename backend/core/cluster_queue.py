@@ -365,6 +365,50 @@ def parse_squeue_pending(text: str) -> dict[str, dict]:
     return out
 
 
+def parse_maintenance_reservations(
+    text: str, *, now: datetime | None = None
+) -> list[dict]:
+    """Parse active/upcoming SLURM maintenance reservations.
+
+    ``scontrol -o show reservation`` emits one flat ``Key=Value`` record per
+    reservation.  Maintenance is authoritative only when SLURM marks the
+    reservation with the ``MAINT`` flag; names containing "maint" are not enough.
+    Expired windows are dropped so a stale reservation can never leave the UI in a
+    permanent warning state.
+    """
+    current = now or datetime.now()
+    reservations: list[dict] = []
+    for raw in (text or "").splitlines():
+        line = raw.strip()
+        if not line or "ReservationName=" not in line:
+            continue
+        fields = dict(re.findall(r"([A-Za-z][A-Za-z0-9_]*)=([^\s]+)", line))
+        flags = {flag.strip().upper() for flag in fields.get("Flags", "").split(",")}
+        if "MAINT" not in flags:
+            continue
+        start = _parse_slurm_time(fields.get("StartTime", ""))
+        end = _parse_slurm_time(fields.get("EndTime", ""))
+        if start is None or end is None or end <= current:
+            continue
+        reservations.append(
+            {
+                "name": fields.get("ReservationName", "maintenance"),
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+                "active": start <= current < end,
+                "state": fields.get("State", ""),
+                "node_count": (
+                    int(fields["NodeCnt"])
+                    if fields.get("NodeCnt", "").isdigit()
+                    else 0
+                ),
+                "all_nodes": "ALL_NODES" in flags,
+            }
+        )
+    reservations.sort(key=lambda item: item["start"])
+    return reservations
+
+
 def parse_sacct_waits(text: str, *, min_samples: int = 3) -> dict[str, dict]:
     """``sacct -X -P -n -o Partition,Submit,Start,State`` → per-partition wait stats.
 
@@ -509,7 +553,12 @@ def summarize_availability(
         starts_now = gpus_free >= need and blocked == 0
 
         median = past.get("median_wait_min")
-        if starts_now:
+        # SLURM's shape-specific placement wins whenever it is in the future.  Idle
+        # hardware can still be unschedulable for a job whose walltime overlaps a
+        # maintenance reservation (live Alpine failure, 2026-08-29).
+        if slurm_wait_min is not None and slurm_wait_min > 1.0:
+            wait_min, basis = slurm_wait_min, "SLURM backfill estimate"
+        elif starts_now:
             wait_min, basis = 0.0, "free now"
         elif slurm_wait_min is not None:
             wait_min, basis = slurm_wait_min, "SLURM backfill estimate"
@@ -567,7 +616,15 @@ def summarize_availability(
             total = int(totals_by_type.get(resource.gres_type, 0) or 0)
             free = int(free_by_type.get(resource.gres_type, 0) or 0)
             resource_start = starts.get(_resource_key(part.name, resource.gres_type))
-            if free >= need and blocked == 0:
+            resource_slurm_wait = None
+            if resource_start is not None:
+                resource_slurm_wait = max(
+                    0.0, (resource_start - now).total_seconds() / 60.0
+                )
+            if resource_slurm_wait is not None and resource_slurm_wait > 1.0:
+                resource_wait = resource_slurm_wait
+                resource_basis = "SLURM backfill estimate"
+            elif free >= need and blocked == 0:
                 resource_wait, resource_basis = 0.0, "free now"
             elif resource_start is not None:
                 resource_wait = max(
@@ -738,6 +795,7 @@ _PROBES: dict[str, str] = {
     "cuda-compilers": "source /etc/profile >/dev/null 2>&1; module -t spider cuda 2>&1",
     # My own queue — the only way to see a job NADOC did not submit.
     "squeue-mine": "squeue -u $USER -o '%i|%P|%j|%T|%M|%L|%R' 2>&1",
+    "reservations": "scontrol -o show reservation 2>&1",
     # Official CURC quota report for home/projects/scratch. Argless and read-only.
     "storage": "curc-quota 2>&1",
     "job": "scontrol show job {arg} 2>&1",
@@ -865,13 +923,18 @@ async def probe_availability(
     nodes = parse_scontrol_nodes(nodes_out)
     node_rows = aggregate_nodes_by_partition(nodes, gpu_parts)
 
-    # 2. Pending demand + SLURM's predicted starts for queued work.
+    # 2. Scheduled maintenance.  Node occupancy alone cannot reveal a future
+    # reservation: GPUs can be idle while a long job is barred from starting.
+    _, reservations_out, _ = await _run("scontrol -o show reservation")
+    maintenance = parse_maintenance_reservations(reservations_out, now=now)
+
+    # 3. Pending demand + SLURM's predicted starts for queued work.
     _, squeue_out, _ = await _run(
         f"squeue -h -p {part_list} -t PD -o '%P|%i|%b|%r|%V|%S|%u'"
     )
     pending = parse_squeue_pending(squeue_out)
 
-    # 3. Recent history.  `-a` (all users) gives a far better sample but many sites
+    # 4. Recent history.  `-a` (all users) gives a far better sample but many sites
     #    restrict it; fall back to the caller's own jobs and label the scope so the
     #    UI never presents one as the other.
     sacct_fmt = "-X -P -n -o Partition,Submit,Start,State"
@@ -883,7 +946,7 @@ async def probe_availability(
         history_scope = "your jobs only"
     history = parse_sacct_waits(sacct_out)
 
-    # 4. SLURM's prediction for THIS job shape, one --test-only per accelerator
+    # 5. SLURM's prediction for THIS job shape, one --test-only per accelerator
     # resource. Whole cards and MIG instances share a partition but have different
     # availability, so probing only the partition's default GRES hides the useful answer.
     slurm_starts: dict[str, datetime | None] = {}
@@ -941,6 +1004,7 @@ async def probe_availability(
         "history_days": history_days,
         "history_scope": history_scope,
         "job_shape": job_shape,
+        "maintenance": maintenance,
         "partitions": rows,
         "observed_partitions": live_partitions,
         "observed_gres": {p: observed_gres(nodes, p) for p in gpu_parts},

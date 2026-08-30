@@ -128,6 +128,28 @@ describe('partition selection', () => {
     step.dispose()
   })
 
+  it('shows Alpine maintenance and the next start after connecting', async () => {
+    const fetchAvailability = vi.fn(async () => ({
+      ...AVAIL,
+      maintenance: [{
+        name: 'alpine-maint', start: '2026-08-31T06:00:00',
+        end: '2026-09-03T06:30:00', active: false,
+      }],
+      partitions: AVAIL.partitions.map((r, i) => ({
+        ...r,
+        slurm_start: i === 0 ? '2026-09-03T06:30:00' : r.slurm_start,
+        wait_min: i === 0 ? 7080 : r.wait_min,
+      })),
+    }))
+    const { mount, step } = setup({ fetchAvailability })
+    clickTarget(mount, 'alpine')
+    connectCluster()
+    await vi.waitFor(() => expect(mount.textContent).toContain('Alpine maintenance affects scheduling'))
+    expect(mount.textContent).toContain("SLURM's next available start for ah200")
+    expect(mount.textContent).toContain('2026-09-03 06:30')
+    step.dispose()
+  })
+
   it('selects an available MIG slice when the whole RTX cards are unavailable', async () => {
     const migAvailability = { partitions: [{
       partition: 'artxpro6000', gpu_model: 'NVIDIA RTX Pro 6000',
