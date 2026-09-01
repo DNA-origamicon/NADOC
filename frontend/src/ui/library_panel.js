@@ -160,6 +160,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   const _statusEls = new Map()
   let _jobPollTimer = null
   let _peerPollTimer = null
+  let _peerPollInFlight = false
 
   // ── Action buttons ──────────────────────────────────────────────────────────
 
@@ -254,7 +255,8 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   }
 
   async function _refreshServerStatuses() {
-    if (typeof api.getCollaborationPeerStatuses !== 'function') return
+    if (_peerPollInFlight || typeof api.getCollaborationPeerStatuses !== 'function') return
+    _peerPollInFlight = true
     try {
       const status = await api.getCollaborationPeerStatuses()
       _servers = [
@@ -266,6 +268,8 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       _renderServerTabs()
     } catch {
       // A failed status probe must not hide the cached workspace or break refresh.
+    } finally {
+      _peerPollInFlight = false
     }
   }
 

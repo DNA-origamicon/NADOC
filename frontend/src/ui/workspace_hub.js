@@ -8,6 +8,28 @@ export function activeProjectContext(state = store.getState()) {
   return { projectId: design.id, loadoutId: loadout?.id || design.active_loadout_id || 'main' }
 }
 
+/** Stable per-browser identity that cannot make the optional hub abort app boot. */
+export function collaborationClientId(storage = globalThis.localStorage, cryptoApi = globalThis.crypto) {
+  const key = 'nadoc.collaboration.clientId'
+  try {
+    const saved = storage?.getItem(key)
+    if (saved) return saved
+  } catch { /* private/blocked storage — continue with an in-memory id */ }
+
+  let id
+  if (typeof cryptoApi?.randomUUID === 'function') {
+    id = cryptoApi.randomUUID()
+  } else if (typeof cryptoApi?.getRandomValues === 'function') {
+    const bytes = cryptoApi.getRandomValues(new Uint8Array(16))
+    id = [...bytes].map(value => value.toString(16).padStart(2, '0')).join('')
+  } else {
+    id = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  }
+
+  try { storage?.setItem(key, id) } catch { /* identity remains valid for this page */ }
+  return id
+}
+
 function el(tag, text, attrs = {}) {
   const node = document.createElement(tag)
   if (text != null) node.textContent = text
@@ -35,8 +57,7 @@ export function initWorkspaceHub() {
   document.body.append(overlay)
   overlay.addEventListener('click', e => { if (e.target === overlay) close() })
 
-  const clientId = localStorage.getItem('nadoc.collaboration.clientId') || crypto.randomUUID()
-  localStorage.setItem('nadoc.collaboration.clientId', clientId)
+  const clientId = collaborationClientId()
   let identity = null
   let notice = ''
 
@@ -82,7 +103,7 @@ export function initWorkspaceHub() {
       controls.push(button('Remove', () => act('Remove peer', () => api.removeCollaborationPeer(peer.id)), true))
       panel.append(row(...controls))
     }
-    const peerId = input('server ID'), peerName = input('server name'), peerUrl = input('http://machine:5173'), peerToken = input('peer token', 'password')
+    const peerId = input('server ID'), peerName = input('server name'), peerUrl = input('https://machine.tailnet.ts.net:5173'), peerToken = input('peer token', 'password')
     panel.append(row(peerId, peerName, peerUrl, peerToken, button('Register server', () => act('Register peer', () => api.registerCollaborationPeer({ id: peerId.value, name: peerName.value, base_url: peerUrl.value, token: peerToken.value })))))
 
     panel.append(el('h3', 'Active project'))

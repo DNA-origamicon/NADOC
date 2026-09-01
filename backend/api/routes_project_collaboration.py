@@ -394,21 +394,28 @@ async def peer_statuses() -> dict:
     async def probe(peer):
         candidates = [peer.base_url]
         parsed = urlsplit(peer.base_url)
+        magicdns_host = None
+        if (parsed.hostname or "").casefold().endswith(".ts.net"):
+            magicdns_host = parsed.hostname
         try:
             address = ipaddress.ip_address(parsed.hostname or "")
             if address.version == 4 and address in ipaddress.ip_network("100.64.0.0/10"):
-                import asyncio
-
-                hostname = (
+                magicdns_host = (
                     await asyncio.to_thread(socket.gethostbyaddr, str(address))
                 )[0].rstrip(".")
-                if hostname.endswith(".ts.net"):
-                    port = f":{parsed.port}" if parsed.port else ""
-                    candidates.append(
-                        urlunsplit((parsed.scheme, f"{hostname}{port}", "", "", ""))
-                    )
         except (ValueError, OSError):
             pass
+        if magicdns_host and magicdns_host.endswith(".ts.net"):
+            port = f":{parsed.port}" if parsed.port else ""
+            authority = f"{magicdns_host}{port}"
+            # New launchers publish HTTPS. Try that immediately after the saved
+            # address, then retain the same-scheme MagicDNS fallback while one
+            # computer is still running an older launcher.
+            secure = urlunsplit(("https", authority, "", "", ""))
+            same_scheme = urlunsplit((parsed.scheme, authority, "", "", ""))
+            for candidate in (secure, same_scheme):
+                if candidate not in candidates:
+                    candidates.append(candidate)
         for candidate in candidates:
             try:
                 async with httpx.AsyncClient(base_url=candidate, timeout=3) as client:
@@ -427,8 +434,6 @@ async def peer_statuses() -> dict:
         return {**peer.public(), "online": False}
 
     peers = PeerRegistry(_workspace()).list()
-    import asyncio
-
     return {"peers": await asyncio.gather(*(probe(peer) for peer in peers))}
 
 

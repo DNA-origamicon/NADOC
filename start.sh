@@ -7,7 +7,7 @@
 #
 # Usage:
 #   ./start.sh          # local machine only (default)
-#   ./start.sh --tailscale # expose the frontend only on this machine's tailnet IP
+#   ./start.sh --tailscale # expose localhost through private Tailscale HTTPS
 #   ./start.sh --lan    # explicitly expose to a trusted local network
 #
 set -euo pipefail
@@ -22,7 +22,6 @@ FRONTEND_HOST="127.0.0.1"
 PUBLIC_URL="http://localhost:5173"
 LAN_MODE=0
 TAILSCALE_MODE=0
-TAILSCALE_WINDOWS_PROXY=0
 TAILSCALE_SERVE_CONFIGURED=0
 case "${1:-}" in
   "") ;;
@@ -44,25 +43,17 @@ if [ "$TAILSCALE_MODE" -eq 1 ]; then
     TAILSCALE_CMD=(tailscale)
   elif have tailscale.exe; then
     # Recommended WSL2 layout: Tailscale runs once, on the Windows host.
-    # Windows Tailscale Serve reaches WSL through its localhost forwarding.
+    # Windows Tailscale Serve reaches WSL through localhost forwarding.
     TAILSCALE_CMD=(tailscale.exe)
-    TAILSCALE_WINDOWS_PROXY=1
   else
     die "Tailscale CLI not found. Install and connect Tailscale first."
   fi
   TAILSCALE_IP="$("${TAILSCALE_CMD[@]}" ip -4 2>/dev/null | tr -d '\r' | head -n 1)"
-  if [ "$TAILSCALE_WINDOWS_PROXY" -eq 0 ]; then
-    FRONTEND_HOST="$TAILSCALE_IP"
-  fi
   [ -n "$TAILSCALE_IP" ] || die "No Tailscale IPv4 address found. Is Tailscale connected?"
-  if [ "$TAILSCALE_WINDOWS_PROXY" -eq 1 ]; then
-    TAILSCALE_DNS_NAME="$("${TAILSCALE_CMD[@]}" status --json 2>/dev/null \
-      | uv run python -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')"
-    [ -n "$TAILSCALE_DNS_NAME" ] || die "Could not determine this computer's Tailscale DNS name."
-    PUBLIC_URL="http://${TAILSCALE_DNS_NAME}:5173"
-  else
-    PUBLIC_URL="http://${TAILSCALE_IP}:5173"
-  fi
+  TAILSCALE_DNS_NAME="$("${TAILSCALE_CMD[@]}" status --json 2>/dev/null \
+    | uv run python -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')"
+  [ -n "$TAILSCALE_DNS_NAME" ] || die "Could not determine this computer's Tailscale DNS name."
+  PUBLIC_URL="https://${TAILSCALE_DNS_NAME}:5173"
   export NADOC_PUBLIC_URL="$PUBLIC_URL"
   TOKEN_FILE=".nadoc-peer-token"
   if [ ! -f "$TOKEN_FILE" ]; then
@@ -95,7 +86,7 @@ cleanup() {
   terminate_tree "$FRONTEND_PID"
   terminate_tree "$BACKEND_PID"
   if [ "$TAILSCALE_SERVE_CONFIGURED" -eq 1 ]; then
-    "${TAILSCALE_CMD[@]}" serve --http=5173 off >/dev/null 2>&1 || true
+    "${TAILSCALE_CMD[@]}" serve --https=5173 off >/dev/null 2>&1 || true
   fi
   wait 2>/dev/null || true
   if [ -n "$TTY_STATE" ]; then
@@ -156,10 +147,10 @@ info "Frontend → http://localhost:5173"
 ( cd frontend && npm run dev -- --host "$FRONTEND_HOST" ) &
 FRONTEND_PID=$!
 
-if [ "$TAILSCALE_WINDOWS_PROXY" -eq 1 ]; then
+if [ "$TAILSCALE_MODE" -eq 1 ]; then
   info "Tailscale Serve → $PUBLIC_URL"
-  "${TAILSCALE_CMD[@]}" serve --bg --http=5173 http://127.0.0.1:5173 \
-    || die "Could not configure Windows Tailscale Serve."
+  "${TAILSCALE_CMD[@]}" serve --bg --https=5173 http://127.0.0.1:5173 \
+    || die "Could not configure Tailscale HTTPS Serve."
   TAILSCALE_SERVE_CONFIGURED=1
 fi
 
@@ -167,6 +158,9 @@ echo
 bold "NADOC is starting. Open this in your browser:"
 echo
 echo "    $PUBLIC_URL"
+if [ "$TAILSCALE_MODE" -eq 1 ]; then
+  echo "    http://localhost:5173  (this computer only)"
+fi
 echo
 echo "(Give it a few seconds the first time. Press Ctrl-C here to stop.)"
 echo

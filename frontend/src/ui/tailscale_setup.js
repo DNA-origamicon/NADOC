@@ -47,7 +47,7 @@ export function initTailscaleSetup() {
       panel.append(button('Show one-time pairing code', async () => { pairing = await api.startCollaborationPairing(); await render() }))
     }
     panel.append(node('h3', 'Connect to another computer'))
-    const url = input('Other server URL, e.g. http://100.x.y.z:5173')
+    const url = input('Other server URL, e.g. https://computer.tailnet.ts.net:5173')
     const code = input('6-digit code')
     code.maxLength = 6
     panel.append(row(url, code, button('Pair both servers', async () => {

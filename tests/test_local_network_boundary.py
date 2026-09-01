@@ -21,7 +21,10 @@ def test_combined_launcher_defaults_to_loopback_and_requires_explicit_lan_flag()
     assert 'elif have tailscale.exe' in script
     assert 'TAILSCALE_IP="$("${TAILSCALE_CMD[@]}" ip -4' in script
     assert '["Self"]["DNSName"]' in script
-    assert 'serve --bg --http=5173 http://127.0.0.1:5173' in script
+    assert 'PUBLIC_URL="https://${TAILSCALE_DNS_NAME}:5173"' in script
+    assert 'serve --bg --https=5173 http://127.0.0.1:5173' in script
+    assert 'serve --https=5173 off' in script
+    assert 'FRONTEND_HOST="$TAILSCALE_IP"' not in script
     assert '--host "$BACKEND_HOST" --port 8000' in script
     assert 'npm run dev -- --host "$FRONTEND_HOST"' in script
     assert "NADOC has no user authentication" in script

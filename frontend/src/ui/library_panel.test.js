@@ -66,6 +66,34 @@ describe('library cache', () => {
 })
 
 describe('welcome workspace server tabs', () => {
+  it('keeps local files usable while a configured peer is offline', async () => {
+    document.body.innerHTML = '<div id="library-panel-mount"></div>'
+    const api = {
+      listLibraryFiles: vi.fn().mockResolvedValue([
+        { path: 'Local.nadoc', name: 'Local', type: 'part', size_bytes: 10, mtime_iso: new Date().toISOString() },
+      ]),
+      libraryDiskUsage: vi.fn().mockResolvedValue({}),
+      getCollaborationPeerStatuses: vi.fn().mockResolvedValue({ peers: [
+        { id: 'remote', name: 'Laptop', online: false },
+      ] }),
+    }
+    const onOpenPart = vi.fn()
+    initLibraryPanel({
+      api, onOpenPart, onOpenAssembly: vi.fn(),
+      onNewPart: vi.fn(), onNewAssembly: vi.fn(),
+    })
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    const localTab = [...document.querySelectorAll('button')]
+      .find(item => item.textContent.includes('This computer'))
+    const remoteTab = [...document.querySelectorAll('button')]
+      .find(item => item.textContent.includes('Laptop'))
+    expect(localTab.disabled).toBe(false)
+    expect(remoteTab.disabled).toBe(true)
+    document.querySelector('.lib-file-row').click()
+    expect(onOpenPart).toHaveBeenCalledWith('Local.nadoc', 'Local')
+  })
+
   it('browses and checks out an online peer directly from the welcome library', async () => {
     document.body.innerHTML = '<div id="library-panel-mount"></div>'
     const api = {

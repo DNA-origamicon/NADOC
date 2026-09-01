@@ -16,6 +16,32 @@ From the `NADOC` folder:
 Then open **http://localhost:5173** in your browser. Press **Ctrl-C** in the
 terminal to stop.
 
+## Use NADOC across the two Tailscale computers
+
+Run this on each computer whose workspace should be available:
+
+```bash
+./start.sh --tailscale
+```
+
+NADOC itself remains bound to localhost. The launcher publishes it privately
+through Tailscale Serve using a URL like:
+
+```text
+https://computer-name.your-tailnet.ts.net:5173
+```
+
+Open the URL printed by the launcher for the computer you want to use as the
+active host. The welcome Library always keeps **This computer** available. A
+paired computer appears as a separate server tab and is refreshed automatically;
+it can be offline without affecting local work and becomes selectable shortly
+after its own NADOC server starts.
+
+Both computers must be paired once from **Help → Tailscale Workspace Setup**.
+Saved Tailscale HTTP/IP peers are upgraded automatically to HTTPS MagicDNS when
+the updated remote server is detected. If an unusually configured legacy peer
+does not upgrade, remove it and pair the computers again.
+
 ## Run it (two terminals, if you prefer separate logs)
 
 ```bash
