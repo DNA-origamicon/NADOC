@@ -163,7 +163,7 @@ export const DEFAULT_PHOTO_SETTINGS = Object.freeze({
   floorOffset:  0,            // nm OUTWARD from the chosen face; 0 = flush
   floorAxis:    DEFAULT_FLOOR_AXIS,   // which bbox face it sits against: ±x/±y/±z
   keyShadowMapSize: 2048,     // ChimeraX shadow_map_size; one map, so it is cheap
-  keyShadowBias: 1.0,         // × the texel-scaled normalBias; raise to kill acne
+  keyShadowBias: 1.0,         // × one-tenth-texel normalBias; raise to kill acne
   shadowStrength:   1.0,      // three's LightShadow.intensity; 1 = physical
 
   // Per-light intensities — ChimeraX's `lighting intensity / fillIntensity /
@@ -663,7 +663,14 @@ export function createPhotoMode(sceneCtx) {
         // frustum is the physically motivated unit and stays sane at any scale.
         const texel = (2 * R) / mapPx
         _keyLight.shadow.bias       = -0.0005
-        _keyLight.shadow.normalBias = texel * _settings.keyShadowBias
+        // A whole-texel normal offset is much too coarse for DNA. On a long
+        // design such as VoltronCoreArm (roughly 425 nm), a 2048 map has
+        // ~0.21 nm texels: offsetting by one full texel erases the 0.15–0.3 nm
+        // backbone/base geometry from the shadow pass, while a bulky protein
+        // continues to cast and makes the rig look selectively broken. A tenth
+        // of a texel is still scale-aware and suppresses acne without stepping
+        // clean past the thin caster.
+        _keyLight.shadow.normalBias = texel * 0.1 * _settings.keyShadowBias
         _keyLight.shadow.intensity  = _settings.shadowStrength
         _keyLight.shadow.intensity  = _settings.shadowStrength
         _keyLight.shadow.needsUpdate = true

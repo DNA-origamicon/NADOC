@@ -757,19 +757,18 @@ describe('createPhotoMode', () => {
   })
 
   it('scales the shadow bias to the shadow-map TEXEL, not the scene radius', () => {
-    // A radius-proportional bias reaches several bead diameters on a real
-    // origami (0.24 nm at R=60 nm vs a 0.10 nm bead) and erases the shadow
-    // rather than de-acneing it.
+    // Even a whole-texel bias reaches several bead radii on a long origami;
+    // use a tenth of that scale so thin DNA remains in the shadow pass.
     mode.activate()
     const key = mode._getKeyLight()
     const R = key.shadow.camera.right          // ortho half-width == bounds radius
     const texel = (2 * R) / key.shadow.mapSize.width
-    expect(key.shadow.normalBias).toBeCloseTo(texel, 9)
+    expect(key.shadow.normalBias).toBeCloseTo(texel * 0.1, 9)
     // ...and stays a small fraction of a CG bead (0.10 nm) at origami scale.
     expect(key.shadow.normalBias).toBeLessThan(0.10)
 
     mode.setKeyShadowBias(3)
-    expect(key.shadow.normalBias).toBeCloseTo(texel * 3, 9)
+    expect(key.shadow.normalBias).toBeCloseTo(texel * 0.3, 9)
   })
 
   // ── Figure effects ────────────────────────────────────────────────────────

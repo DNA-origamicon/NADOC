@@ -25,6 +25,8 @@ import * as THREE from 'three'
  */
 const OUTLIER_MIN_MESHES = 5
 const OUTLIER_RATIO      = 8
+const OUTLIER_COHORT_RATIO = 2
+const OUTLIER_COHORT_MIN   = 2
 
 /**
  * True when `obj` must not cast shadows: the photo-mode floor (a ground plane
@@ -155,9 +157,34 @@ export function computeShadowBounds(root, { rejectOutliers = true } = {}) {
   const limit   = median * OUTLIER_RATIO
   const canReject = rejectOutliers && contributors.length >= OUTLIER_MIN_MESHES && median > 0
 
+  // A real structure is commonly represented by several coextensive meshes
+  // (backbone, bases, connectors, cones). An attached protein can contribute
+  // enough smaller element meshes to pull the unweighted median below the DNA
+  // span. In that case every DNA mesh clears `limit`, but they corroborate one
+  // another and are not outliers. Only reject the oversized tail when its
+  // largest scale is represented by a single contributor. Explicit overlay
+  // types are already removed by isShadowExcluded() above.
+  const oversized = canReject
+    ? contributors.filter(c => c.extent > limit).sort((a, b) => b.extent - a.extent)
+    : []
+  const preservedOversized = new Set()
+  for (const candidate of oversized) {
+    const cohort = oversized.filter(other => {
+      const ratio = Math.max(candidate.extent, other.extent)
+        / Math.max(1e-9, Math.min(candidate.extent, other.extent))
+      return ratio <= OUTLIER_COHORT_RATIO
+    })
+    if (cohort.length >= OUTLIER_COHORT_MIN) {
+      for (const member of cohort) preservedOversized.add(member)
+    }
+  }
+
   const rejected = []
   for (let i = 0; i < contributors.length; i++) {
-    if (canReject && contributors[i].extent > limit) { rejected.push(contributors[i]); continue }
+    if (canReject && contributors[i].extent > limit
+        && !preservedOversized.has(contributors[i])) {
+      rejected.push(contributors[i]); continue
+    }
     box.union(boxes[i])
   }
   if (box.isEmpty()) return null

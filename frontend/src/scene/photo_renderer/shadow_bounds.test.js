@@ -107,6 +107,36 @@ describe('bounds outlier detection', () => {
     expect(b.rejected).toHaveLength(0)
   })
 
+  it('keeps a coherent large DNA mesh family when smaller protein meshes dominate the median', () => {
+    // VoltronCoreArm has five ~425 nm DNA representations plus several ~17 nm
+    // protein element meshes. The old unweighted-median rule rejected all DNA
+    // as oversized and consequently set castShadow=false on it.
+    const scene = new THREE.Scene()
+    for (let i = 0; i < 6; i++) scene.add(mesh(17, `protein-${i}`))
+    for (const [i, size] of [425, 426, 427, 428, 429].entries()) {
+      scene.add(mesh(size, `dna-${i}`))
+    }
+
+    const b = computeShadowBounds(scene)
+
+    expect(b.medianExtent).toBeLessThan(40)
+    expect(b.rejected).toHaveLength(0)
+    expect(b.radius).toBeGreaterThan(300)
+  })
+
+  it('still rejects an isolated overlay above a corroborated large structure family', () => {
+    const scene = new THREE.Scene()
+    for (let i = 0; i < 6; i++) scene.add(mesh(17, `protein-${i}`))
+    for (let i = 0; i < 5; i++) scene.add(mesh(425 + i, `dna-${i}`))
+    scene.add(mesh(100000, 'rogue-overlay'))
+
+    const b = computeShadowBounds(scene)
+
+    expect(b.rejected.map(row => row.name)).toEqual(['rogue-overlay'])
+    expect(b.radius).toBeGreaterThan(300)
+    expect(b.radius).toBeLessThan(1000)
+  })
+
   it('does not cry outlier on a single-mesh scene', () => {
     const scene = new THREE.Scene()
     scene.add(mesh(100, 'only'))
