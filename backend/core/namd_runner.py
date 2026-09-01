@@ -660,6 +660,7 @@ _JSONL_SUBSTANTIVE_KEYS = (
     "wc_ref_relative_fraction",  # health.jsonl
     "temperature_k",
     "pressure_bar",
+    "total_energy_kcal",
     "ns_per_day",
     "volume_ang3",  # metrics.jsonl
 )
@@ -1943,6 +1944,7 @@ def _append_metrics_jsonl(
         "gpressure_bar": m.gpressure_bar,
         "gpressure_avg_bar": m.gpressure_avg_bar,
         "volume_ang3": m.volume_ang3,
+        "total_energy_kcal": m.total_energy_kcal,
         "n_energy_lines": m.n_energy_lines,
     }
     output_dir.mkdir(parents=True, exist_ok=True)

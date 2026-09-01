@@ -126,7 +126,13 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
   wrap.style.cssText = 'display:flex;gap:0;position:relative'
 
   const loadoutBar = document.createElement('div')
-  loadoutBar.style.cssText = 'display:flex;align-items:center;gap:5px;margin-bottom:8px'
+  loadoutBar.className = 'fl-loadout-bar'
+  loadoutBar.style.cssText = [
+    'display:flex;align-items:center;gap:5px',
+    'position:sticky;top:0;z-index:6;isolation:isolate',
+    'background:#0d1117;padding:2px 0 4px;margin-bottom:2px',
+    'border-bottom:1px solid #21262d',
+  ].join(';')
 
   const assemblyTargetBar = document.createElement('div')
   assemblyTargetBar.style.cssText = 'display:none;align-items:center;gap:6px;margin-bottom:8px'
@@ -210,6 +216,29 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
   // position:relative so the Fine-Routing collapse spine (an absolutely
   // positioned connector between the top + bottom triangles) anchors to it.
   list.style.cssText = 'flex:1;min-width:0;position:relative'
+
+  // Row variants are assembled in several branches below. Normalize their final
+  // geometry in one place so top-level, assembly, and expanded sub-rows stay equally
+  // dense without duplicating spacing constants through every button builder.
+  function _compactFeatureRows() {
+    list.querySelectorAll('[data-fl-row]').forEach(row => {
+      row.style.gap = '6px'
+      row.style.padding = '1px 4px'
+      row.style.lineHeight = '1.2'
+      for (const child of row.children) {
+        if (child.tagName !== 'BUTTON') continue
+        // Border-box height is the load-bearing constraint: padding alone still let
+        // the inherited font line box hold every entry open.
+        child.style.height = '15px'
+        child.style.minHeight = '15px'
+        child.style.padding = '0 3px'
+        child.style.lineHeight = '1'
+        child.style.display = 'inline-flex'
+        child.style.alignItems = 'center'
+        child.style.justifyContent = 'center'
+      }
+    })
+  }
 
   wrap.append(rail, list)
   panelBody.innerHTML = ''
@@ -844,6 +873,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     list.appendChild(f0Row)
 
     if (!log.length) {
+      _compactFeatureRows()
       _schedulePositionRail()
       return
     }
@@ -1501,6 +1531,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
       list.appendChild(row)
     })
 
+    _compactFeatureRows()
     _schedulePositionRail()
     _applyHighlights()
   }
@@ -1635,6 +1666,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
     list.appendChild(f0)
 
     if (!log.length) {
+      _compactFeatureRows()
       _schedulePositionRail()
       return
     }
@@ -1768,6 +1800,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
       list.appendChild(row)
     })
 
+    _compactFeatureRows()
     _schedulePositionRail()
   }
 

@@ -295,6 +295,23 @@ def test_namd_scalar_series_reads_energy_pressure_and_deduplicates_resume(tmp_pa
     assert [s.pressure_bar for s in out] == [2, 2.6, 3]
 
 
+def test_health_card_metrics_record_persists_total_energy(tmp_path):
+    import json
+
+    from backend.core.namd_runner import _append_metrics_jsonl
+
+    log = tmp_path / "prod.log"
+    log.write_text(
+        "ETITLE: TS TOTAL TEMP PRESSURE\n"
+        "ENERGY: 100 -199108.1 300.5 1.2\n"
+    )
+
+    _append_metrics_jsonl(tmp_path / "output", "prod", "production", log)
+
+    record = json.loads((tmp_path / "output" / "metrics.jsonl").read_text())
+    assert record["total_energy_kcal"] == -199108.1
+
+
 def test_job_scalar_series_uses_simulated_ns_and_appends_segments(tmp_path):
     from backend.api.routes_md_metrics import _job_scalar_series
 

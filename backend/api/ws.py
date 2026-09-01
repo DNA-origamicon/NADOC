@@ -2395,6 +2395,7 @@ async def md_job_status_ws(websocket: WebSocket, job_id: str) -> None:
                             "gpressure_bar": m.gpressure_bar,
                             "gpressure_avg_bar": m.gpressure_avg_bar,
                             "volume_ang3": m.volume_ang3,
+                            "total_energy_kcal": m.total_energy_kcal,
                             "ns_per_day": m.ns_per_day,
                             "n_energy_lines": m.n_energy_lines,
                             "timestep": m.timestep,

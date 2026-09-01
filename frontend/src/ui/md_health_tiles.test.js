@@ -34,7 +34,7 @@ const ctx = (over = {}) => ({
 
 describe('hasValue', () => {
   it('treats 0 as a real reading, not an absence', () => {
-    // Broken bp = 0 is the GOOD answer — it must never be mistaken for "no data".
+    // Zero remains a legitimate scalar reading — it must never mean "no data".
     expect(hasValue(0)).toBe(true)
     expect(hasValue(0.0)).toBe(true)
     expect(hasValue(null)).toBe(false)
@@ -45,7 +45,7 @@ describe('hasValue', () => {
 
 describe('mdHealthTileState — a present value always wins', () => {
   it('classifies any non-null raw as VALUE regardless of probe state', () => {
-    const s = mdHealthTileState('brokenBp', 3, ctx({
+    const s = mdHealthTileState('energy', -199108, ctx({
       probe: { enabled: false, reason: 'disabled' },
     }))
     expect(s.state).toBe(TILE_STATE.VALUE)
@@ -76,7 +76,7 @@ describe('mdHealthTileState — the probe will never run', () => {
   })
 
   it('still shows a spinner for the LOG-derived tiles, which do not need the probe', () => {
-    // Temp/Pressure/Speed are parsed from the NAMD log by the WebSocket, independently
+    // Temp/Pressure/Speed/Energy are parsed from the NAMD log independently
     // of the runner's health probe — that asymmetry is the original symptom.
     const s = mdHealthTileState('temp', null, ctx({ probe: { enabled: false, reason: 'x' } }))
     expect(s.state).toBe(TILE_STATE.PENDING)
@@ -97,15 +97,13 @@ describe('mdHealthTileState — per-frame diagnostics provenance', () => {
   it('an OLD sample (diagnostics absent) is UNAVAILABLE — the regression that mattered', () => {
     // Samples written before the field existed round-trip through MdHealthSample(**h)
     // as diagnostics: null. They must read "—", never spin.
-    for (const key of ['brokenBp', 'shellCharge']) {
-      const s = mdHealthTileState(key, null, ctx({ health: { stage: 'x' } }))
-      expect(s.state).toBe(TILE_STATE.UNAVAILABLE)
-      expect(s.reason).toMatch(/not recorded/i)
-    }
+    const s = mdHealthTileState('shellCharge', null, ctx({ health: { stage: 'x' } }))
+    expect(s.state).toBe(TILE_STATE.UNAVAILABLE)
+    expect(s.reason).toMatch(/not recorded/i)
   })
 
   it('a captured diagnostics error is FAILED with that text', () => {
-    const s = mdHealthTileState('brokenBp', null, ctx({
+    const s = mdHealthTileState('shellCharge', null, ctx({
       health: { stage: 'x', diagnostics: 'frame 812: truncated DCD' },
     }))
     expect(s.state).toBe(TILE_STATE.FAILED)
@@ -190,7 +188,7 @@ describe('mdHealthTileState — the overdue watchdogs', () => {
 describe('mdHealthTileStates — the whole card', () => {
   it('reproduces the reported bug shape: log tiles have values, health tiles do not', () => {
     // Temp/Pressure/Speed populate from live_metrics while the runner samples nothing —
-    // this is exactly what the user saw, and the five health tiles must not all spin.
+    // this is exactly what the user saw, and the health-derived tiles must not spin.
     const job = runningJob({
       health_probe: { enabled: false, reason: 'adopted after an orchestrator restart' },
     })
@@ -198,17 +196,18 @@ describe('mdHealthTileStates — the whole card', () => {
       job,
       health: null,
       raws: {
-        temp: 310.2, pressure: 1.01, speed: 42.7,
+        temp: 310.2, pressure: 1.01, speed: 42.7, energy: -199108,
         basePairs: null, wcHealth: null, latest: '500ns production',
-        brokenBp: null, shellCharge: null,
+        shellCharge: null,
       },
       nowMs: NOW,
     })
     expect(states.temp.state).toBe(TILE_STATE.VALUE)
     expect(states.pressure.state).toBe(TILE_STATE.VALUE)
     expect(states.speed.state).toBe(TILE_STATE.VALUE)
+    expect(states.energy.state).toBe(TILE_STATE.VALUE)
     expect(states.latest.state).toBe(TILE_STATE.VALUE)
-    for (const k of ['basePairs', 'wcHealth', 'brokenBp', 'shellCharge']) {
+    for (const k of ['basePairs', 'wcHealth', 'shellCharge']) {
       expect(states[k].state).toBe(TILE_STATE.UNAVAILABLE)
       expect(states[k].reason).toBeTruthy()
     }

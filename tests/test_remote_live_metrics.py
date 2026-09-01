@@ -62,6 +62,7 @@ def test_parses_speed_from_the_benchmark_line():
 def test_parses_scalars_from_the_energy_line():
     m = rlm.parse_log_text(ENERGY)
     assert m["temperature_k"] == 300.6518
+    assert m["total_energy_kcal"] == -199108.1187
     assert m["pressure_bar"] == -14.0723
     assert m["volume_ang3"] == 614380.7687
 

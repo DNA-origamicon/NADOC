@@ -38,11 +38,11 @@ const PROBE_SILENT_INTERVALS = 2
 const NO_SAMPLE_INTERVALS = 10
 
 /** The tiles whose values come from a health sample rather than the NAMD log. */
-const HEALTH_TILES = new Set(['basePairs', 'wcHealth', 'brokenBp', 'shellCharge'])
+const HEALTH_TILES = new Set(['basePairs', 'wcHealth', 'shellCharge'])
 
-/** The two tiles that ride the per-frame diagnostics loop, and so depend on the
+/** Tiles that ride the per-frame diagnostics loop, and so depend on the
  *  sample's `diagnostics` provenance field rather than just on the value. */
-const DIAGNOSTIC_TILES = new Set(['brokenBp', 'shellCharge'])
+const DIAGNOSTIC_TILES = new Set(['shellCharge'])
 
 /** Pure: minutes-and-seconds phrasing for an overdue interval. */
 function _ago(ms) {

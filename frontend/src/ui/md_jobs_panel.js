@@ -1468,6 +1468,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   let _mdFrameShown = false       // has a real MD frame been displayed for the current display job?
   let _earlyStopBusy = false      // a live early-stop POST is in flight (locks the toggle until the server confirms)
   const _metricsByJob = new Map()
+  // Short live ENERGY history for the hover graph. Completed segment endpoints come
+  // from metrics.jsonl; this fills the otherwise-empty graph while a segment is active.
+  const _energyTrendByJob = new Map()
   let _pendingAlpineReview = null   // jobId to announce as ready once its prep finishes
 
   // Alpine submit-review card (Phase 4): fetches the auto-recommended SLURM
@@ -5021,6 +5024,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     metricsEl.innerHTML = ''
 
     const scalar = liveMx ?? persisted ?? {}
+    // New collectors use the unit-bearing name. Keep the old remote key readable so
+    // jobs launched before this update do not lose their current energy reading.
+    const totalEnergy = scalar?.total_energy_kcal ?? scalar?.total_energy ?? null
     const pressure = scalar?.pressure_avg_bar ?? scalar?.gpressure_avg_bar ?? scalar?.pressure_bar ?? null
     const pressureTitle = scalar?.pressure_avg_bar != null
       ? `PRESSAVG ${_fmt(scalar.pressure_avg_bar, 2, ' bar')}${scalar.pressure_bar != null ? ` · instant ${_fmt(scalar.pressure_bar, 2, ' bar')}` : ''}`
@@ -5044,7 +5050,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       wcHealth:    health?.wc_ref_relative_fraction ?? null,
       speed:       scalar?.ns_per_day ?? null,
       latest:      null,   // filled below — derived, never pending
-      brokenBp:    health?.broken_bp_count ?? null,
+      energy:      totalEnergy,
       shellCharge: health?.charge_within_shell_e ?? null,
     }
     const latestLabel = mdLatestStageLabel(job, health, persisted)
@@ -5063,14 +5069,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // Falls back to a RUNNING minimisation: it produces no health sample, so a job
       // spending its first half-hour minimising otherwise reads "Latest —".
       { key: 'latest',       label: 'Latest',     value: latestLabel, color: _C.muted },
-      // The two published equilibration criteria NADOC used to compute nowhere.
-      // Broken pairs is the citable count (their 3 Å + 140° definition), distinct from
-      // the WC card above, which is NADOC's own ref-relative gate.
-      { key: 'brokenBp',     label: 'Broken bp',  value: health?.broken_bp_count == null ? '—' : String(health.broken_bp_count),
-        color: (health?.broken_bp_count ?? 0) > 0 ? _C.warn : _C.text,
-        title: 'Broken base pairs, Aksimentiev definition: the central Watson-Crick '
-             + 'bond beyond 3 Å or bent past 140°. Their hextube holds near zero once '
-             + 'equilibrated.' },
+      { key: 'energy',       label: 'Energy',     value: _fmt(totalEnergy, 0, ' kcal/mol'), color: _C.text, energyTrend: true,
+        title: 'Total energy from NAMD’s latest ENERGY record. Hover for the trend during the current stage.' },
       // The ion atmosphere. It starts at the bare backbone charge and rises toward zero
       // as counterions condense; a trace that never flattens means the cloud has not
       // converged — which is exactly what a slow-diffusing Mg(H₂O)₆ does if it was
@@ -5081,7 +5081,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
              + 'a stable value once the counterion atmosphere has equilibrated.' },
     ]
 
-    cards.forEach(({ key, label, value, color, wcTrend, title }) => {
+    if (liveMx && totalEnergy != null) _rememberLiveEnergy(job, liveMx, totalEnergy)
+
+    cards.forEach(({ key, label, value, color, wcTrend, energyTrend, title }) => {
       const { state, reason } = states[key] ?? { state: TILE_STATE.VALUE, reason: null }
       const card = document.createElement('div')
       card.style.cssText = `background:${_C.bg2};border:1px solid ${_C.border};border-radius:3px;padding:4px 6px;position:relative`
@@ -5117,8 +5119,115 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
           card.addEventListener('mouseleave', () => { trend.style.display = 'none' })
         }
       }
+      if (energyTrend) {
+        card.style.cursor = 'default'
+        const trend = _buildEnergyTrendTooltip(job, totalEnergy)
+        if (trend) {
+          card.appendChild(trend)
+          card.addEventListener('mouseenter', () => { trend.style.display = 'block' })
+          card.addEventListener('mouseleave', () => { trend.style.display = 'none' })
+        }
+      }
       metricsEl.appendChild(card)
     })
+  }
+
+  function _energyValue(record) {
+    return record?.total_energy_kcal ?? record?.total_energy ?? null
+  }
+
+  function _rememberLiveEnergy(job, live, value) {
+    if (!Number.isFinite(Number(value))) return
+    const seg = job.segments?.[job.current_segment_idx ?? -1]
+    const point = {
+      stage: seg?.stage ?? live?.stage ?? '',
+      segment: seg?.name ?? live?.segment ?? '',
+      step: live?.timestep ?? live?.step ?? null,
+      value: Number(value),
+    }
+    const points = _energyTrendByJob.get(job.job_id) ?? []
+    const last = points[points.length - 1]
+    // ENERGY may be unchanged across several UI refreshes. Store one point per NAMD
+    // record, not one point per paint, or a quiet log becomes a fake plateau.
+    if (last && last.segment === point.segment && last.step === point.step) {
+      last.value = point.value
+    } else {
+      points.push(point)
+      if (points.length > 200) points.splice(0, points.length - 200)
+    }
+    _energyTrendByJob.set(job.job_id, points)
+  }
+
+  function _buildEnergyTrendTooltip(job, currentEnergy) {
+    const seg = job.segments?.[job.current_segment_idx ?? -1]
+    const stage = seg?.stage ?? ''
+    const persisted = (_metricsByJob.get(job.job_id) ?? [])
+      .filter(m => m.stage === stage && _energyValue(m) != null)
+      .map(m => Number(_energyValue(m)))
+    const live = (_energyTrendByJob.get(job.job_id) ?? [])
+      .filter(p => p.stage === stage)
+      .map(p => p.value)
+    const values = [...persisted, ...live].filter(Number.isFinite)
+    if (!values.length && currentEnergy != null) values.push(Number(currentEnergy))
+    if (!stage || !values.length) return null
+
+    const first = values[0]
+    const last = values[values.length - 1]
+    const delta = last - first
+    const trend = values.length < 2
+      ? 'single point'
+      : `${delta >= 0 ? '+' : ''}${delta.toLocaleString(undefined, { maximumFractionDigits: 0 })} kcal/mol`
+    const tip = document.createElement('div')
+    tip.style.cssText = [
+      'display:none',
+      'position:absolute',
+      'z-index:30',
+      'right:0',
+      'top:calc(100% + 6px)',
+      `background:${_C.bg}`,
+      `border:1px solid ${_C.border}`,
+      'border-radius:4px',
+      'padding:6px',
+      'width:156px',
+      'box-shadow:0 8px 20px rgba(0,0,0,0.35)',
+      'pointer-events:none',
+    ].join(';')
+    tip.style.display = 'none'
+    tip.innerHTML = `
+      <div style="font-size:9px;color:${_C.muted};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px">${_escapeHtml(stage)}</div>
+      ${_energySparkline(values)}
+      <div style="display:flex;justify-content:space-between;gap:6px;margin-top:3px;font-size:9px;font-family:var(--font-mono)">
+        <span style="color:${_C.muted}">${values.length} pts</span>
+        <span style="color:${_C.accent}">${trend}</span>
+      </div>
+      <div style="margin-top:2px;font-size:9px;color:${_C.muted};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+        now ${_fmt(last, 0, ' kcal/mol')}
+      </div>
+    `
+    return tip
+  }
+
+  function _energySparkline(values) {
+    const w = 140
+    const h = 42
+    const pad = 4
+    const usableW = w - pad * 2
+    const usableH = h - pad * 2
+    const minV = Math.min(...values)
+    const maxV = Math.max(...values)
+    const span = Math.max(1, maxV - minV)
+    const xFor = (i) => values.length === 1 ? w / 2 : pad + (i / (values.length - 1)) * usableW
+    const yFor = (v) => maxV === minV ? h / 2 : pad + (1 - ((v - minV) / span)) * usableH
+    const points = values.map((v, i) => `${xFor(i).toFixed(1)},${yFor(v).toFixed(1)}`).join(' ')
+    const dots = values.map((v, i) =>
+      `<circle cx="${xFor(i).toFixed(1)}" cy="${yFor(v).toFixed(1)}" r="2" fill="${_C.accent}"/>`
+    ).join('')
+    return `
+      <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Total energy trend">
+        <polyline points="${points}" fill="none" stroke="${_C.accent}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        ${dots}
+      </svg>
+    `
   }
 
   function _buildWcTrendTooltip(job, latestHealth) {

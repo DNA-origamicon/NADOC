@@ -1951,7 +1951,7 @@ describe('initMdJobsPanel — minimisation timeline row', () => {
 // ── The Health card must never spin on data that is not coming ────────────────
 // The reported bug, end to end: on a local production run Temp/Pressure/Speed filled
 // in (the WebSocket parses the NAMD log itself) while Base pairs / WC health / Latest /
-// Broken bp / Shell charge spun forever — the runner's health probe was disabled by an
+// Shell charge spun forever — the runner's health probe was disabled by an
 // orphaning dev-server reload and nothing on screen could say so. The renderer turned
 // ANY missing value on an active job into a spinner, so "not coming" looked identical
 // to "arriving shortly". These drive the REAL panel and count actual spinner nodes.
@@ -1969,7 +1969,8 @@ describe('initMdJobsPanel — Health card tile states', () => {
                  percent: 100, steps: 1000, status: 'running', skipped: false }],
     health_samples: [],
     // Exactly what the WS pushes while the runner samples nothing.
-    live_metrics: { temperature_k: 310.4, pressure_avg_bar: 1.2, ns_per_day: 44.1 },
+    live_metrics: { temperature_k: 310.4, pressure_avg_bar: 1.2, ns_per_day: 44.1,
+                    total_energy_kcal: -199108.1, timestep: 100 },
   }
 
   beforeEach(async () => {
@@ -2007,7 +2008,7 @@ describe('initMdJobsPanel — Health card tile states', () => {
     expect(byLabel['Speed']).toMatch(/44/)
     expect(byLabel['Base pairs']).toBe('—')         // and the rest say "no", not "wait"
     expect(byLabel['WC geometry']).toBe('—')
-    expect(byLabel['Broken bp']).toBe('—')
+    expect(byLabel['Energy']).toMatch(/-199108/)
     expect(byLabel['Shell charge']).toBe('—')
     // "Latest" is derived from the running segment, so it is never unknown mid-run.
     expect(byLabel['Latest']).toBe('500 ns production run')
@@ -2039,7 +2040,7 @@ describe('initMdJobsPanel — Health card tile states', () => {
     expect(spinners()).toBe(0)
     const byLabel = Object.fromEntries(tiles())
     expect(byLabel['Base pairs']).toMatch(/95/)
-    expect(byLabel['Broken bp']).toBe('—')
+    expect(byLabel['Energy']).toMatch(/-199108/)
     expect(byLabel['Shell charge']).toBe('—')
   })
 
@@ -2072,8 +2073,26 @@ describe('initMdJobsPanel — Health card tile states', () => {
     })
     expect(spinners()).toBe(0)
     const byLabel = Object.fromEntries(tiles())
-    expect(byLabel['Broken bp']).toBe('0')      // zero is a reading, not an absence
+    expect(byLabel['Energy']).toMatch(/-199108/)
     expect(byLabel['Shell charge']).toMatch(/-244/)
+  })
+
+  it('shows the total-energy trend graph on hover', async () => {
+    mdApi.getMdJobMetrics.mockResolvedValue([
+      { stage: PRODUCTION.segments[0].stage, total_energy_kcal: -198000 },
+      { stage: PRODUCTION.segments[0].stage, total_energy_kcal: -198500 },
+    ])
+    const el = await openWith(PRODUCTION)
+    const energy = [...el.children].find(c => c.children[0].textContent === 'Energy')
+    const graph = energy.querySelector('svg[aria-label="Total energy trend"]')
+    expect(graph).toBeTruthy()
+    const tooltip = graph.parentElement
+    expect(tooltip.style.display).toBe('none')
+    energy.dispatchEvent(new MouseEvent('mouseenter'))
+    expect(tooltip.style.display).toBe('block')
+    expect(tooltip.textContent).toContain('3 pts')
+    energy.dispatchEvent(new MouseEvent('mouseleave'))
+    expect(tooltip.style.display).toBe('none')
   })
 })
 

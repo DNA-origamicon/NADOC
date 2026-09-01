@@ -118,7 +118,7 @@ def parse_log_text(text):
         out["step"] = int(_float(tok, _E_TS) or 0)
         for key, idx in (
             ("temperature_k", _E_TEMP),
-            ("total_energy", _E_TOTAL),
+            ("total_energy_kcal", _E_TOTAL),
             ("pressure_bar", _E_PRESSURE),
             ("volume_ang3", _E_VOLUME),
             ("gpressure_avg_bar", _E_GPRESSAVG),
