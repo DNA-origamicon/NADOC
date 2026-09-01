@@ -229,12 +229,6 @@ textarea:focus-visible,
     padding-inline: 8px;
   }
 
-  .lib-show-sim-folders {
-    grid-column: 1 / -1;
-    justify-self: end;
-    margin-left: 0 !important;
-  }
-
   .lib-row-path,
   .lib-row-size {
     display: none;

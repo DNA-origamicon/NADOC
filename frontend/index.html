@@ -2106,7 +2106,7 @@
     .lib-actions {
       display: flex;
       gap: 8px;
-      margin-bottom: 20px;
+      margin-bottom: 14px;
       justify-content: center;
       flex-wrap: wrap;
     }
@@ -2130,6 +2130,104 @@
       border-color: #30363d !important;
     }
     .lib-btn-secondary:hover { background: #30363d; }
+    .lib-library-nav {
+      display: flex;
+      align-items: stretch;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+      margin-bottom: 8px;
+    }
+    .lib-server-tabs {
+      display: flex;
+      flex: 1 1 auto;
+      gap: 4px;
+      min-width: 0;
+      overflow-x: auto;
+      padding: 2px 0;
+      scrollbar-width: thin;
+    }
+    .lib-server-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex: 0 0 auto;
+      min-height: 28px;
+      padding: 4px 10px;
+      border: 1px solid #30363d;
+      border-radius: 999px;
+      background: #161b22;
+      color: #8b949e;
+      font: 11px monospace;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .lib-server-tab:hover:not(:disabled) { background: #21262d; color: #c9d1d9; }
+    .lib-server-tab[aria-selected="true"] {
+      border-color: #58a6ff;
+      background: rgba(56, 139, 253, 0.12);
+      color: #58a6ff;
+    }
+    .lib-server-tab:disabled { color: #6e7681; cursor: default; opacity: .75; }
+    .lib-server-status {
+      width: 6px;
+      height: 6px;
+      flex: 0 0 6px;
+      border-radius: 50%;
+      background: #6e7681;
+    }
+    .lib-server-status.online { background: #3fb950; }
+    .lib-show-sim-folders {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      flex: 0 0 auto;
+      color: #8b949e;
+      font: 11px monospace;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .lib-library-options {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-left: auto;
+      padding-left: 10px;
+      flex: 0 0 auto;
+    }
+    .lib-trash-icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      background: transparent;
+      color: #8b949e;
+      font-size: 13px;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .lib-trash-icon-btn:hover { background: #21262d; color: #c9d1d9; }
+    .lib-trash-icon-btn svg {
+      width: 15px;
+      height: 15px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .lib-show-sim-folders input {
+      width: 14px;
+      height: 14px;
+      margin: 0;
+      accent-color: #58a6ff;
+      cursor: pointer;
+    }
     .lib-section-header {
       font-size: var(--text-xs);
       letter-spacing: 2px;
@@ -2204,6 +2302,11 @@
       background-color: #161b22;
       transform: none;
     }
+    .lib-tree-row[aria-selected="true"] {
+      background: rgba(56, 139, 253, 0.14);
+      box-shadow: inset 2px 0 #58a6ff;
+    }
+    .lib-tree-row:focus-visible { outline-offset: -2px; }
     .lib-folder-row { user-select: none; }
     .lib-folder-toggle {
       font-size: 8px;
@@ -2282,6 +2385,7 @@
       background: #161b22;
     }
     .lib-tree-row:hover .lib-row-actions { display: flex; }
+    .lib-tree-row:focus-within .lib-row-actions { display: flex; }
     .lib-row-btn {
       background: none;
       border: none;
@@ -2308,6 +2412,81 @@
       flex: 1;
       min-width: 60px;
     }
+    .lib-bulk-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 30px;
+      margin: 2px 0 6px;
+      padding: 4px 7px;
+      border: 1px solid rgba(56, 139, 253, .45);
+      border-radius: 5px;
+      background: rgba(56, 139, 253, .09);
+      color: #8b949e;
+      font: 11px monospace;
+    }
+    .lib-bulk-actions[hidden] { display: none; }
+    .lib-bulk-actions > span { flex: 1; color: #58a6ff; }
+    .lib-bulk-btn {
+      padding: 4px 8px;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      background: #21262d;
+      color: #c9d1d9;
+      font: 11px monospace;
+      cursor: pointer;
+    }
+    .lib-context-menu {
+      position: fixed;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      width: 200px;
+      padding: 5px;
+      border: 1px solid #30363d;
+      border-radius: 7px;
+      background: #161b22;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+    }
+    .lib-context-menu button {
+      padding: 7px 9px;
+      border: 0;
+      border-radius: 4px;
+      background: transparent;
+      color: #c9d1d9;
+      font: 12px monospace;
+      text-align: left;
+      cursor: pointer;
+    }
+    .lib-context-menu button:hover,
+    .lib-context-menu button:focus-visible { background: #21262d; }
+    .lib-context-menu button.danger { color: #f85149; }
+    .lib-trash-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 900;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, .68);
+    }
+    .lib-trash-dialog {
+      width: min(560px, calc(100vw - 24px));
+      max-height: min(560px, calc(100vh - 24px));
+      overflow: auto;
+      padding: 10px;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      background: #161b22;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, .5);
+    }
+    .lib-trash-header,
+    .lib-trash-row { display: flex; align-items: center; gap: 8px; }
+    .lib-trash-header { padding: 4px 4px 10px; border-bottom: 1px solid #21262d; }
+    .lib-trash-header strong { flex: 1; color: #e6edf3; }
+    .lib-trash-row { padding: 8px 4px; border-bottom: 1px solid #21262d; }
+    .lib-trash-row > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #c9d1d9; font: 12px monospace; }
+    .lib-trash-delete { color: #f85149; }
     .lib-inline-input:focus { border-color: #388bfd; }
     .lib-new-folder-row { cursor: default; }
     .lib-new-folder-row:hover { background: none; }
@@ -2316,6 +2495,9 @@
       align-items: center;
       gap: 0;
       padding: 2px 4px 8px;
+      overflow-x: auto;
+      white-space: nowrap;
+      scrollbar-width: thin;
     }
     .lib-sort-label {
       font-size: var(--text-xs);

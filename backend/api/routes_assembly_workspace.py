@@ -38,11 +38,13 @@ URLs are unchanged from their previous home in assembly.py. Mounting is done in
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import shutil
 import tempfile
 import threading
 import zipfile
+import uuid
 from datetime import datetime as _dt, timezone as _tz
 from pathlib import Path
 from typing import Optional
@@ -322,6 +324,14 @@ class RenameRequest(BaseModel):
 class MoveRequest(BaseModel):
     path: str  # current workspace-relative path
     dest_folder: str  # destination folder (workspace-relative), "" = workspace root
+
+
+class TrashRequest(BaseModel):
+    path: str
+
+
+class RestoreTrashRequest(BaseModel):
+    trash_id: str
 
 
 # ── Internal helper (workspace-only; moved out of assembly.py) ─────────────────
@@ -675,6 +685,59 @@ def library_move(body: MoveRequest) -> dict:
     _sign_managed_relocation(dest, old_rel, new_rel, is_dir)
     remap_design_source_paths(_asm._WORKSPACE_DIR, old_rel, new_rel, old_is_dir=is_dir)
     return {"old_path": old_rel, "new_path": new_rel, "patched_assemblies": patched}
+
+
+@router.post("/library/trash", status_code=200)
+def library_trash(body: TrashRequest) -> dict:
+    """Move a file/folder into NADOC's hidden trash so it can be restored."""
+    src = _safe_workspace_path(body.path)
+    if not src.exists():
+        raise HTTPException(404, detail=f"Not found: {body.path!r}")
+    trash_id = uuid.uuid4().hex
+    trash_dir = _asm._WORKSPACE_DIR / ".nadoc-trash" / trash_id
+    trash_dir.mkdir(parents=True, exist_ok=False)
+    dest = trash_dir / src.name
+    shutil.move(str(src), str(dest))
+    metadata = {
+        "id": trash_id,
+        "original_path": body.path,
+        "name": src.name,
+        "type": "folder" if dest.is_dir() else "file",
+        "deleted_at": _dt.now(_tz.utc).isoformat(),
+    }
+    (trash_dir / "metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
+    return metadata
+
+
+@router.get("/library/trash", status_code=200)
+def library_trash_list() -> dict:
+    root = _asm._WORKSPACE_DIR / ".nadoc-trash"
+    items = []
+    if root.is_dir():
+        for metadata_path in root.glob("*/metadata.json"):
+            try:
+                items.append(json.loads(metadata_path.read_text(encoding="utf-8")))
+            except (OSError, ValueError):
+                continue
+    items.sort(key=lambda item: item.get("deleted_at", ""), reverse=True)
+    return {"items": items}
+
+
+@router.post("/library/trash/restore", status_code=200)
+def library_trash_restore(body: RestoreTrashRequest) -> dict:
+    trash_dir = _safe_workspace_path(f".nadoc-trash/{body.trash_id}")
+    metadata_path = trash_dir / "metadata.json"
+    if not metadata_path.is_file():
+        raise HTTPException(404, detail="Trash item not found.")
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    source = trash_dir / metadata["name"]
+    destination = _safe_workspace_path(metadata["original_path"])
+    if destination.exists():
+        raise HTTPException(409, detail=f"Restore destination already exists: {metadata['original_path']!r}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(source), str(destination))
+    shutil.rmtree(trash_dir)
+    return {"path": metadata["original_path"]}
 
 
 def _job_running(kind: str, job) -> bool:

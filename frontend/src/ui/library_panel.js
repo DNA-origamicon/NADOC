@@ -12,6 +12,7 @@ import { confirmAndDeleteFile } from './file_deletion.js'
 import { formatBytes } from './format_bytes.js'
 import { fetchActiveJobs, activeJobForPath, jobActivityTooltip, jobLocationTag, normPath } from './job_activity.js'
 import { visibleWorkspaceEntries } from './sim_folders.js'
+import { showConfirm } from './primitives/confirm.js'
 
 const _JOB_POLL_MS = 4000   // welcome-screen activity-spinner refresh cadence
 const _PEER_POLL_MS = 4000  // keep remote tabs in sync with current reachability
@@ -148,6 +149,8 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   let _showSimFolders = false
   let _refreshGeneration = 0
   let _activePeerId = null
+  const _selectedPaths = new Set()
+  let _lastSelectedPath = null
   let _servers = [{ id: null, name: 'This computer', online: true }]
 
   // Per-design simulation activity: active MD/oxDNA jobs (polled) + a map from
@@ -170,33 +173,49 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   const newAsmBtn     = _mkBtn('New Assembly', 'lib-btn-secondary')
   const importBtn     = _mkBtn('Import…',      'lib-btn-secondary')
   const newFolderBtn  = _mkBtn('+ Folder',     'lib-btn-secondary')
+  const trashBtn      = _mkBtn('',              'lib-trash-icon-btn')
+  trashBtn.innerHTML = `
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
+    </svg>`
+  trashBtn.title = 'Trash'
+  trashBtn.setAttribute('aria-label', 'Open Trash')
 
   newPartBtn.addEventListener('click', () => onNewPart())
   newAsmBtn.addEventListener('click', () => onNewAssembly())
   importBtn.addEventListener('click', _handleImport)
   newFolderBtn.addEventListener('click', () => _showNewFolderInput(treeEl, '', 0))
+  trashBtn.addEventListener('click', _showTrash)
 
   const simToggleLabel = document.createElement('label')
   simToggleLabel.className = 'lib-show-sim-folders'
-  simToggleLabel.style.cssText = 'display:flex;align-items:center;gap:4px;margin-left:auto;white-space:nowrap;cursor:pointer;color:var(--color-text-secondary);font-size:var(--text-xs)'
   const simToggle = document.createElement('input')
   simToggle.type = 'checkbox'
   simToggle.checked = false
   simToggle.dataset.role = 'show-sim-folders'
-  simToggle.style.cssText = 'margin:0;cursor:pointer;accent-color:var(--color-accent-primary)'
   simToggle.addEventListener('change', () => {
     _showSimFolders = simToggle.checked
     _render()
   })
-  simToggleLabel.append(simToggle, document.createTextNode('show sim folders'))
+  simToggleLabel.append(simToggle, document.createTextNode('Show sim folders'))
 
-  actionsEl.append(newPartBtn, newAsmBtn, importBtn, newFolderBtn, simToggleLabel)
+  actionsEl.append(newPartBtn, newAsmBtn, importBtn, newFolderBtn)
   mount.appendChild(actionsEl)
+
+  const libraryNavEl = document.createElement('div')
+  libraryNavEl.className = 'lib-library-nav'
 
   const serverTabsEl = document.createElement('div')
   serverTabsEl.className = 'lib-server-tabs'
-  serverTabsEl.style.cssText = 'display:flex;gap:5px;overflow-x:auto;margin:8px 0 4px;padding-bottom:2px'
-  mount.appendChild(serverTabsEl)
+  serverTabsEl.setAttribute('role', 'tablist')
+  serverTabsEl.setAttribute('aria-label', 'Workspace location')
+  libraryNavEl.append(serverTabsEl)
+  mount.appendChild(libraryNavEl)
+
+  const bulkEl = document.createElement('div')
+  bulkEl.className = 'lib-bulk-actions'
+  bulkEl.hidden = true
+  mount.appendChild(bulkEl)
 
   function _updateActionVisibility() {
     const remote = _activePeerId !== null
@@ -210,11 +229,17 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     for (const server of _servers) {
       const active = server.id === _activePeerId
       const tab = document.createElement('button')
-      tab.className = 'lib-btn-secondary'
-      tab.textContent = `${server.online ? '●' : '○'} ${server.name}`
+      tab.className = 'lib-server-tab'
+      tab.setAttribute('role', 'tab')
+      tab.setAttribute('aria-selected', String(active))
+      const statusDot = document.createElement('span')
+      statusDot.className = `lib-server-status ${server.online ? 'online' : 'offline'}`
+      statusDot.setAttribute('aria-hidden', 'true')
+      const name = document.createElement('span')
+      name.textContent = server.name
+      tab.append(statusDot, name)
       tab.title = server.online ? `View files on ${server.name}` : `${server.name} is offline`
       tab.disabled = !server.online
-      tab.style.cssText += `;white-space:nowrap;color:${server.online ? (active ? '#58a6ff' : '#c9d1d9') : '#6e7681'};border-color:${active ? '#58a6ff' : '#30363d'}`
       tab.addEventListener('click', async () => {
         _activePeerId = server.id
         _query = ''
@@ -302,6 +327,10 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       })
       sortBarEl.appendChild(el)
     }
+    const libraryOptionsEl = document.createElement('span')
+    libraryOptionsEl.className = 'lib-library-options'
+    libraryOptionsEl.append(simToggleLabel, trashBtn)
+    sortBarEl.appendChild(libraryOptionsEl)
   }
   _renderSortBar()
 
@@ -309,6 +338,8 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
 
   const treeEl = document.createElement('div')
   treeEl.className = 'lib-tree'
+  treeEl.setAttribute('role', 'tree')
+  treeEl.setAttribute('aria-label', 'Workspace files')
   mount.appendChild(treeEl)
 
   // ── Refresh ─────────────────────────────────────────────────────────────────
@@ -354,10 +385,14 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     // Apply search filter: include files matching the query, plus every folder
     // explicitly. _buildTree will only create folders for ancestors of kept files.
     const visibleEntries = visibleWorkspaceEntries(_allEntries, _showSimFolders)
-    const entries = !_query ? visibleEntries : visibleEntries.filter(e => {
-      if (e.type === 'folder') return true
-      return (e.name?.toLowerCase().includes(_query)) ||
-             (e.path?.toLowerCase().includes(_query))
+    const matchesQuery = entry => (entry.name?.toLowerCase().includes(_query)) ||
+      (entry.path?.toLowerCase().includes(_query))
+    const matchingFiles = _query
+      ? visibleEntries.filter(entry => entry.type !== 'folder' && matchesQuery(entry))
+      : []
+    const entries = !_query ? visibleEntries : visibleEntries.filter(entry => {
+      if (entry.type !== 'folder') return matchesQuery(entry)
+      return matchesQuery(entry) || matchingFiles.some(file => file.path.startsWith(entry.path + '/'))
     })
     const tree = _buildTree(entries, { sortKey: _sortKey, sortDir: _sortDir })
     if (!tree.children.length && !tree.files.length) {
@@ -380,6 +415,44 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       }
     }
     _renderLevel(tree, treeEl, 0)
+    _renderBulkActions()
+  }
+
+  function _renderBulkActions() {
+    bulkEl.replaceChildren()
+    const selected = _allEntries.filter(entry => _selectedPaths.has(entry.path))
+    bulkEl.hidden = selected.length === 0
+    if (!selected.length) return
+    const count = document.createElement('span')
+    count.textContent = `${selected.length} selected`
+    const move = _mkBtn('Move to…', 'lib-bulk-btn')
+    move.addEventListener('click', async () => {
+      const dest = await _pickFolderModal(`Move ${selected.length} selected item${selected.length === 1 ? '' : 's'} to…`, null, selected.map(item => item.path))
+      if (dest === null) return
+      for (const item of selected) await api.moveLibrary(item.path, dest)
+      _selectedPaths.clear()
+      await refresh()
+    })
+    const trash = _mkBtn('Trash', 'lib-bulk-btn lib-trash-delete')
+    trash.addEventListener('click', async () => {
+      const ok = await showConfirm({ title: 'Move selected items to Trash', message: `Move ${selected.length} selected item${selected.length === 1 ? '' : 's'} to Trash?`, confirmLabel: 'Move to Trash', danger: true })
+      if (!ok) return
+      for (const item of selected) await api.trashLibraryItem(item.path)
+      _selectedPaths.clear()
+      await refresh()
+    })
+    const clear = _mkBtn('Clear', 'lib-bulk-btn')
+    clear.addEventListener('click', () => { _selectedPaths.clear(); _render() })
+    bulkEl.append(count, move, trash, clear)
+  }
+
+  function _toggleSelection(entry, additive = true) {
+    if (!additive) _selectedPaths.clear()
+    if (additive && _selectedPaths.has(entry.path)) _selectedPaths.delete(entry.path)
+    else _selectedPaths.add(entry.path)
+    _lastSelectedPath = entry.path
+    _render()
+    treeEl.querySelector(`[data-library-path="${CSS.escape(entry.path)}"]`)?.focus()
   }
 
   function _renderLevel(node, container, depth) {
@@ -394,6 +467,10 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
 
     const rowEl = document.createElement('div')
     rowEl.className = 'lib-tree-row lib-folder-row'
+    rowEl.dataset.libraryPath = folder.path
+    rowEl.tabIndex = 0
+    rowEl.setAttribute('role', 'treeitem')
+    rowEl.setAttribute('aria-selected', String(_selectedPaths.has(folder.path)))
     rowEl.style.paddingLeft = `${depth * 16 + 4}px`
 
     const toggleEl = document.createElement('span')
@@ -411,10 +488,10 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     const actEl = _makeActionsEl(_activePeerId ? [] : [
       { label: '+', title: 'New subfolder', fn: (e) => { e.stopPropagation(); childrenEl.style.display = ''; _expanded.add(folder.path); toggleEl.textContent = '▼'; _showNewFolderInput(childrenEl, folder.path, depth + 1) } },
       { label: '✎', title: 'Rename', fn: (e) => { e.stopPropagation(); _startRename(rowEl, nameEl, folder) } },
-      { label: '×', title: 'Delete', danger: true, fn: async (e) => {
+      { label: '↗', title: 'Move', fn: async (e) => { e.stopPropagation(); await _moveItem(folder) } },
+      { label: '×', title: 'Move to Trash', danger: true, fn: async (e) => {
         e.stopPropagation()
-        const deleted = await confirmAndDeleteFile({ api, path: folder.path, name: folder.name, isDir: true })
-        if (deleted) await refresh()
+        await _trashItem(folder)
       }},
     ])
 
@@ -424,11 +501,14 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     childrenEl.style.display = expanded ? '' : 'none'
     if (expanded) _renderLevel(folder, childrenEl, depth + 1)
 
-    rowEl.addEventListener('click', () => {
+    rowEl.addEventListener('click', (e) => {
+      if (e.ctrlKey || e.metaKey) { _toggleSelection(folder, true); return }
       const isExpanded = _expanded.has(folder.path)
       if (isExpanded) { _expanded.delete(folder.path); childrenEl.style.display = 'none'; toggleEl.textContent = '▶' }
       else            { _expanded.add(folder.path);    childrenEl.style.display = '';     toggleEl.textContent = '▼'; if (!childrenEl.children.length) _renderLevel(folder, childrenEl, depth + 1) }
     })
+    rowEl.addEventListener('contextmenu', e => { e.preventDefault(); _showContextMenu(e, folder) })
+    rowEl.addEventListener('keydown', e => _onRowKeydown(e, folder, () => rowEl.click()))
 
     container.appendChild(rowEl)
     container.appendChild(childrenEl)
@@ -439,6 +519,10 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   function _renderFileRow(file, container, depth) {
     const rowEl = document.createElement('div')
     rowEl.className = `lib-tree-row lib-file-row${file.type === 'assembly' ? ' lib-file-assembly' : ''}`
+    rowEl.dataset.libraryPath = file.path
+    rowEl.tabIndex = 0
+    rowEl.setAttribute('role', 'treeitem')
+    rowEl.setAttribute('aria-selected', String(_selectedPaths.has(file.path)))
     rowEl.style.paddingLeft = `${depth * 16 + 4}px`
     rowEl.title = file.path
 
@@ -481,15 +565,15 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     const actEl = _makeActionsEl(_activePeerId ? [] : [
       { label: '✎', title: 'Rename', fn: (e) => { e.stopPropagation(); _startRename(rowEl, nameEl, file) } },
       { label: '↗', title: 'Move',   fn: async (e) => { e.stopPropagation(); await _moveItem(file) } },
-      { label: '×', title: 'Delete', danger: true, fn: async (e) => {
+      { label: '×', title: 'Move to Trash', danger: true, fn: async (e) => {
         e.stopPropagation()
-        const deleted = await confirmAndDeleteFile({ api, path: file.path, name: file.name })
-        if (deleted) await refresh()
+        await _trashItem(file)
       }},
     ])
 
     rowEl.append(iconEl, nameEl, statusEl, mtimeEl, sizeEl, actEl)
-    rowEl.addEventListener('click', async () => {
+    rowEl.addEventListener('click', async (e) => {
+      if (e.ctrlKey || e.metaKey) { _toggleSelection(file, true); return }
       let path = file.path
       let name = file.name
       if (_activePeerId) {
@@ -506,7 +590,148 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       if (file.type === 'assembly') onOpenAssembly(path, name)
       else                          onOpenPart(path, name)
     })
+    rowEl.addEventListener('contextmenu', e => { e.preventDefault(); _showContextMenu(e, file) })
+    rowEl.addEventListener('keydown', e => _onRowKeydown(e, file, () => rowEl.click()))
     container.appendChild(rowEl)
+  }
+
+  function _onRowKeydown(e, entry, open) {
+    if (e.key === ' ' || (e.key.toLowerCase() === 'a' && (e.ctrlKey || e.metaKey))) {
+      e.preventDefault()
+      if (e.key.toLowerCase() === 'a') {
+        for (const item of _allEntries) _selectedPaths.add(item.path)
+        _render()
+      } else _toggleSelection(entry, e.ctrlKey || e.metaKey)
+      return
+    }
+    if (e.key === 'Enter') { e.preventDefault(); open(); return }
+    if (e.key === 'F2' && !_activePeerId) { e.preventDefault(); _startRename(e.currentTarget, e.currentTarget.querySelector('.lib-row-name'), entry); return }
+    if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+      e.preventDefault(); const box = e.currentTarget.getBoundingClientRect(); _showContextMenu({ clientX: box.left + 24, clientY: box.bottom }, entry)
+      return
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      const rows = [...treeEl.querySelectorAll('.lib-tree-row[tabindex="0"]')]
+      const next = rows[rows.indexOf(e.currentTarget) + (e.key === 'ArrowDown' ? 1 : -1)]
+      next?.focus()
+    }
+  }
+
+  async function _duplicateFile(entry) {
+    if (entry.type === 'folder') return
+    const result = await api.getLibraryFileContent(entry.path)
+    if (!result?.content) return
+    const slash = entry.path.lastIndexOf('/')
+    const dir = slash >= 0 ? entry.path.slice(0, slash + 1) : ''
+    const filename = entry.path.slice(slash + 1)
+    const dot = filename.lastIndexOf('.')
+    const stem = dot >= 0 ? filename.slice(0, dot) : filename
+    const ext = dot >= 0 ? filename.slice(dot) : ''
+    let n = 1
+    let dest
+    do { dest = `${dir}${stem} copy${n > 1 ? ` ${n}` : ''}${ext}`; n++ } while (_allEntries.some(item => item.path === dest))
+    await api.uploadLibraryFile(result.content, filename, { destPath: dest, overwrite: false })
+    showToast(`Created ${dest}`)
+    await refresh()
+  }
+
+  async function _downloadFile(entry) {
+    const result = await api.getLibraryFileContent(entry.path)
+    if (!result?.content) return
+    const url = URL.createObjectURL(new Blob([result.content], { type: 'application/json' }))
+    const link = document.createElement('a')
+    link.href = url; link.download = entry.path.split('/').pop(); link.click()
+    setTimeout(() => URL.revokeObjectURL(url), 0)
+  }
+
+  function _showContextMenu(e, entry) {
+    document.querySelector('.lib-context-menu')?.remove()
+    const menu = document.createElement('div')
+    menu.className = 'lib-context-menu'
+    menu.setAttribute('role', 'menu')
+    const add = (label, fn, danger = false) => {
+      const button = document.createElement('button')
+      button.textContent = label; button.setAttribute('role', 'menuitem')
+      if (danger) button.className = 'danger'
+      button.addEventListener('click', async () => { menu.remove(); await fn() })
+      menu.append(button)
+    }
+    add(entry.type === 'folder' ? 'Open folder' : 'Open', () => treeEl.querySelector(`[data-library-path="${CSS.escape(entry.path)}"]`)?.click())
+    if (!_activePeerId) {
+      add('Rename', () => { const row = treeEl.querySelector(`[data-library-path="${CSS.escape(entry.path)}"]`); _startRename(row, row.querySelector('.lib-row-name'), entry) })
+      add('Move to…', () => _moveItem(entry))
+      if (entry.type !== 'folder') {
+        add('Duplicate', () => _duplicateFile(entry))
+        add('Download', () => _downloadFile(entry))
+        if (entry.type === 'part' && typeof api.downloadNativePartPackage === 'function') add('Download with simulations', () => api.downloadNativePartPackage(entry.path))
+      }
+      add('Move to Trash…', () => _trashItem(entry), true)
+    }
+    menu.style.left = `${Math.min(e.clientX, innerWidth - 210)}px`
+    menu.style.top = `${Math.min(e.clientY, innerHeight - menu.childElementCount * 34 - 12)}px`
+    document.body.append(menu)
+    const close = event => { if (!menu.contains(event.target)) { menu.remove(); document.removeEventListener('pointerdown', close) } }
+    setTimeout(() => document.addEventListener('pointerdown', close), 0)
+    menu.querySelector('button')?.focus()
+  }
+
+  async function _trashItem(entry) {
+    if (typeof api.trashLibraryItem !== 'function') {
+      const deleted = await confirmAndDeleteFile({ api, path: entry.path, name: entry.name, isDir: entry.type === 'folder' })
+      if (deleted) await refresh()
+      return
+    }
+    const ok = await showConfirm({
+      title: 'Move to Trash',
+      message: `Move "${entry.name}" to Trash? You can restore it from the welcome screen.`,
+      confirmLabel: 'Move to Trash',
+      danger: true,
+    })
+    if (!ok) return
+    if (await api.trashLibraryItem(entry.path)) {
+      _selectedPaths.delete(entry.path)
+      showToast(`${entry.name} moved to Trash.`)
+      await refresh()
+    }
+  }
+
+  async function _showTrash() {
+    if (typeof api.listLibraryTrash !== 'function') return
+    const response = await api.listLibraryTrash()
+    const overlay = document.createElement('div')
+    overlay.className = 'lib-trash-overlay'
+    const dialog = document.createElement('div')
+    dialog.className = 'lib-trash-dialog'
+    dialog.setAttribute('role', 'dialog')
+    dialog.setAttribute('aria-label', 'Trash')
+    const header = document.createElement('div')
+    header.className = 'lib-trash-header'
+    const title = document.createElement('strong'); title.textContent = 'Trash'
+    const close = _mkBtn('Close', 'lib-bulk-btn')
+    const finish = () => overlay.remove()
+    close.addEventListener('click', finish)
+    header.append(title, close); dialog.append(header)
+    const items = response?.items || []
+    if (!items.length) {
+      const empty = document.createElement('div'); empty.className = 'lib-empty'; empty.textContent = 'Trash is empty.'; dialog.append(empty)
+    }
+    for (const item of items) {
+      const row = document.createElement('div'); row.className = 'lib-trash-row'
+      const label = document.createElement('span'); label.textContent = item.original_path
+      const restore = _mkBtn('Restore', 'lib-bulk-btn')
+      restore.addEventListener('click', async () => { if (await api.restoreLibraryTrashItem(item.id)) { finish(); await refresh() } })
+      const remove = _mkBtn('Delete permanently', 'lib-bulk-btn lib-trash-delete')
+      remove.addEventListener('click', async () => {
+        const ok = await showConfirm({ title: 'Delete permanently', message: `Permanently delete "${item.name}"? This cannot be undone.`, confirmLabel: 'Delete permanently', danger: true })
+        if (ok && await api.deleteLibraryItem(`.nadoc-trash/${item.id}`)) { row.remove(); if (!dialog.querySelector('.lib-trash-row')) finish() }
+      })
+      row.append(label, restore, remove); dialog.append(row)
+    }
+    overlay.append(dialog)
+    overlay.addEventListener('click', e => { if (e.target === overlay) finish() })
+    document.body.append(overlay)
+    close.focus()
   }
 
   // ── Actions helper ────────────────────────────────────────────────────────────
@@ -519,6 +744,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       b.className   = 'lib-row-btn' + (danger ? ' lib-row-btn-danger' : '')
       b.textContent = label
       b.title       = title
+      b.setAttribute('aria-label', title)
       b.addEventListener('click', fn)
       el.appendChild(b)
     }
@@ -646,7 +872,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     if (result) await refresh()
   }
 
-  function _pickFolderModal(title, excludePath) {
+  function _pickFolderModal(title, excludePath, excludePaths = []) {
     return new Promise(resolve => {
       const seen = new Set([''])
       for (const e of _allEntries) {
@@ -654,11 +880,12 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
         const parts = e.path.split('/')
         for (let i = 1; i < parts.length; i++) seen.add(parts.slice(0, i).join('/'))
       }
-      const currentParent = excludePath.includes('/') ? excludePath.slice(0, excludePath.lastIndexOf('/')) : ''
+      const currentParent = excludePath?.includes('/') ? excludePath.slice(0, excludePath.lastIndexOf('/')) : ''
       const folders = [...seen].filter(fp =>
         fp !== currentParent &&
         fp !== excludePath &&
-        !fp.startsWith(excludePath + '/')
+        !(excludePath && fp.startsWith(excludePath + '/')) &&
+        !excludePaths.some(path => fp === path || fp.startsWith(path + '/'))
       ).sort()
 
       const overlay = document.createElement('div')

@@ -4834,6 +4834,18 @@ export async function moveLibrary(path, destFolder) {
   return _request('POST', '/library/move', { path, dest_folder: destFolder })
 }
 
+export async function trashLibraryItem(path) {
+  return _request('POST', '/library/trash', { path })
+}
+
+export async function listLibraryTrash() {
+  return _request('GET', '/library/trash')
+}
+
+export async function restoreLibraryTrashItem(trashId) {
+  return _request('POST', '/library/trash/restore', { trash_id: trashId })
+}
+
 export async function deleteLibraryItem(path, deleteJobs = false) {
   const q = deleteJobs ? '&delete_jobs=true' : ''
   return _request('DELETE', `/library/file?path=${encodeURIComponent(path)}${q}`)
