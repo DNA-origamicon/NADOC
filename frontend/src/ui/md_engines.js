@@ -28,6 +28,7 @@ import {
   statusTone, sectionSummary, gateMessage, degradedNote,
 } from './md_engines_logic.js'
 import { openFilePicker } from './file_picker.js'
+import { webSocketUrl } from '../shared/websocket_url.js'
 
 // Per-engine config for the "finish a downloaded package" block: the browse `kind`
 // (highlights likely files) + a placeholder. NAMD extracts a binary; ARBD builds source.
@@ -157,7 +158,7 @@ export function initMdEngines({ api }) {
 
     modal.open()
     try {
-      ws = new WebSocket(`ws://${location.host}/ws/engines/install`)
+      ws = new WebSocket(webSocketUrl('/ws/engines/install'))
     } catch (e) {
       modal.close(); onError && onError('Could not open a connection to the install service.'); return
     }

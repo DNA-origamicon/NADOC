@@ -59,6 +59,7 @@ import { initRunpodSetup } from './runpod_setup.js'
 import { initRunpodGpuPicker } from './runpod_gpu_picker.js'
 import { initClusterAvailability } from './cluster_availability.js'
 import { shouldStopLiveSession, shouldResumeDisplays, displayTabIds } from './display_tab_policy.js'
+import { webSocketUrl } from '../shared/websocket_url.js'
 import { initJobWizard } from './md_job_wizard.js'
 import { isProductionParent, jobSettingsState } from './md_job_wizard_model.js'
 import { createContextMenu } from './primitives/context_menu.js'
@@ -4626,7 +4627,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       return
     }
     _closeWs()
-    const url = `ws://${location.host}/ws/md-jobs/${jobId}`
+    const url = webSocketUrl(`/ws/md-jobs/${jobId}`)
     _mdDebug(`[${_ts()}] md-jobs: opening WS ${url}`)
     const ws = new WebSocket(url)
     _ws = ws

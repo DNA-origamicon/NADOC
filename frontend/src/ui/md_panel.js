@@ -43,8 +43,9 @@ import {
   zipAtomIdentity,
   toBondPairs,
 } from './md_display_state.js'
+import { webSocketUrl } from '../shared/websocket_url.js'
 
-const _WS_URL  = `ws://${location.host}/ws/md-run`
+const _WS_URL  = webSocketUrl('/ws/md-run')
 const _BASE_FPS = 10   // target fps at 1× speed
 const _MAX_LOG  = 200  // max output lines retained
 
