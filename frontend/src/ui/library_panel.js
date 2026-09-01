@@ -14,6 +14,7 @@ import { fetchActiveJobs, activeJobForPath, jobActivityTooltip, jobLocationTag, 
 import { visibleWorkspaceEntries } from './sim_folders.js'
 
 const _JOB_POLL_MS = 4000   // welcome-screen activity-spinner refresh cadence
+const _PEER_POLL_MS = 4000  // keep remote tabs in sync with current reachability
 const _LIBRARY_CACHE_KEY = 'nadoc:library-files:v1'
 const _LARGE_SIM_DATA_BYTES = 0.5 * 1024 ** 3
 
@@ -155,6 +156,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   let _activeJobs = []
   const _statusEls = new Map()
   let _jobPollTimer = null
+  let _peerPollTimer = null
 
   // ── Action buttons ──────────────────────────────────────────────────────────
 
@@ -224,6 +226,28 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       })
       serverTabsEl.appendChild(tab)
     }
+  }
+
+  async function _refreshServerStatuses() {
+    if (typeof api.getCollaborationPeerStatuses !== 'function') return
+    try {
+      const status = await api.getCollaborationPeerStatuses()
+      _servers = [
+        _servers[0],
+        ...((status?.peers || []).map(peer => ({
+          id: peer.id, name: peer.name, online: !!peer.online,
+        }))),
+      ]
+      _renderServerTabs()
+    } catch {
+      // A failed status probe must not hide the cached workspace or break refresh.
+    }
+  }
+
+  function _startPeerPolling() {
+    if (_peerPollTimer != null || typeof api.getCollaborationPeerStatuses !== 'function') return
+    void _refreshServerStatuses()
+    _peerPollTimer = setInterval(_refreshServerStatuses, _PEER_POLL_MS)
   }
 
   // ── Search bar ──────────────────────────────────────────────────────────────
@@ -758,17 +782,8 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   _updateActionVisibility()
   if (_allEntries.length) _render()
   refresh()
-  ;(async () => {
-    if (typeof api.getCollaborationPeerStatuses !== 'function') return
-    const status = await api.getCollaborationPeerStatuses()
-    _servers = [
-      _servers[0],
-      ...((status?.peers || []).map(peer => ({
-        id: peer.id, name: peer.name, online: !!peer.online,
-      }))),
-    ]
-    _renderServerTabs()
-  })()
+  _startPeerPolling()
+  window.addEventListener('nadoc:collaboration-peers-changed', _refreshServerStatuses)
   _startJobPolling()
   return { refresh, refreshJobStatuses: _refreshJobStatuses }
 }

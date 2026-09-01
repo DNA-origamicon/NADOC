@@ -13,7 +13,11 @@ vi.mock('./job_activity.js', () => ({
   confirmNoConcurrentJob: vi.fn(async () => true),
 }))
 vi.mock('./toast.js', () => ({ showToast: vi.fn() }))
-vi.mock('./md_jobs_panel.js', () => ({ filterJobsForPart: (jobs) => jobs }))
+vi.mock('./md_jobs_panel.js', () => ({
+  filterJobsForPart: (jobs, workspacePath) => workspacePath
+    ? jobs.filter((job) => job.design_source_path === workspacePath)
+    : jobs,
+}))
 vi.mock('./cando_metrics_card.js', () => ({
   initCandoMetricsCard: () => ({ sync() {}, refresh() {} }),
 }))
@@ -49,6 +53,11 @@ function mountDom() {
         <input id="cando-jobs-n-steps" value="20">
         <input id="cando-jobs-with-rmsf" type="checkbox" checked>
         <div id="cando-jobs-list"></div>
+        <div id="cando-jobs-detail"></div>
+        <label><input class="cando-display-mode" type="radio" name="cando-mode" value="off" checked>Off</label>
+        <label><input class="cando-display-mode" type="radio" name="cando-mode" value="deform">Predicted shape</label>
+        <label><input class="cando-display-mode" type="radio" name="cando-mode" value="flex">Flexibility</label>
+        <label><input class="cando-display-mode" type="radio" name="cando-mode" value="deviation">Deviation</label>
       </div>
     </div>`
 }
@@ -100,5 +109,24 @@ describe('CanDo launch guard (double-click)', () => {
     coarse.click()
     await flush(); await flush()
     expect(createCandoJob).toHaveBeenCalledTimes(2)
+  })
+
+  it('enables visualizations when the unified list selects a completed assembly job', async () => {
+    _jobsOnServer = [{
+      job_id: 'assembly-job', status: 'completed', nonlinear: false,
+      design_name: 'BigO-poly', design_source_path: null, rmsf_max_nm: 0.7,
+    }]
+    const candoDisplay = { deformActive: () => false, mode: () => null }
+    const panel = initCandoJobsPanel({
+      candoDisplay,
+      getWorkspacePath: () => '/designs/BigO-poly.nass',
+    })
+
+    await panel.selectJob('assembly-job')
+
+    expect(panel.getSelectedJob()?.job_id).toBe('assembly-job')
+    for (const radio of document.querySelectorAll('.cando-display-mode')) {
+      expect(radio.disabled).toBe(false)
+    }
   })
 })

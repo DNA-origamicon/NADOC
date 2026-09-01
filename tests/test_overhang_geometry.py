@@ -90,6 +90,58 @@ def test_sparse_overhang_helix_does_not_fill_its_empty_middle():
             design, helix, bp, Direction.REVERSE, 18, 27
         ) is None
 
+
+def test_voltron_protein_overhang_cylinder_matches_bead_orientation():
+    """The OH7 duplex uses its binder as the canonical axis segment.
+
+    That segment has no ovhg_id, so cylinder reconciliation must recognize it
+    through domain_ids. Its endpoints must match ovhg_axes and its orientation
+    must match the paired nucleotide backbone centerline used by Full/Beads.
+    """
+    from backend.core.deformation import (
+        _apply_ovhg_rotations_to_axes,
+        deformed_helix_axes,
+    )
+    from backend.core.design_geometry import _geometry_for_design
+
+    path = Path("workspace/VoltronCoreArm.nadoc")
+    if not path.exists():
+        pytest.skip("requires local workspace fixture VoltronCoreArm.nadoc")
+    design = Design.from_dict(json.loads(path.read_text()))
+    overhang_id = "ovhg_inline_sc_strand_167_3p"
+    domain_ref = {"strand_id": "sc_strand_167", "domain_index": 4}
+    moved_refs = {
+        ("sc_strand_167", 4),
+        ("ohbind_ovhg_inline_sc_strand_167_3p_1d0852bc", 0),
+    }
+    nucleotides = _geometry_for_design(design, junction_balance=True)
+    axes = deformed_helix_axes(design)
+    _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
+    axis = next(item for item in axes if item["helix_id"] == "h_sc_55")
+    segment = next(item for item in axis["segments"] if domain_ref in item["domain_ids"])
+    overhang_axis = axis["ovhg_axes"][overhang_id]
+
+    assert segment["start"] == pytest.approx(overhang_axis["start"], abs=1.0e-6)
+    assert segment["end"] == pytest.approx(overhang_axis["end"], abs=1.0e-6)
+
+    backbone_by_bp: dict[int, list[list[float]]] = {}
+    for nucleotide in nucleotides:
+        ref = (nucleotide.get("strand_id"), nucleotide.get("domain_index"))
+        if ref in moved_refs:
+            backbone_by_bp.setdefault(nucleotide["bp_index"], []).append(
+                nucleotide["backbone_position"]
+            )
+    bead_centers = np.asarray(
+        [np.mean(points, axis=0) for _, points in sorted(backbone_by_bp.items())]
+    )
+    cylinder_direction = np.asarray(segment["end"]) - np.asarray(segment["start"])
+    bead_direction = bead_centers[-1] - bead_centers[0]
+    cosine = abs(
+        float(np.dot(cylinder_direction, bead_direction))
+        / float(np.linalg.norm(cylinder_direction) * np.linalg.norm(bead_direction))
+    )
+    assert cosine > 0.99
+
 # ── 6HB cell layout ───────────────────────────────────────────────────────────
 
 CELLS_6HB = [(0, 1), (0, 2), (0, 3), (1, 1), (1, 2), (1, 3)]

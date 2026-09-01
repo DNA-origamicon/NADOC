@@ -54,6 +54,7 @@ export function initTailscaleSetup() {
       message = 'Pairing…'; await render()
       const peer = await api.connectCollaborationPeer(url.value.trim(), code.value.trim())
       message = peer ? `Connected to ${peer.name}.` : 'Pairing failed. Check the URL, code, and server status.'
+      if (peer) window.dispatchEvent(new Event('nadoc:collaboration-peers-changed'))
       pairing = null
       await render()
     })))

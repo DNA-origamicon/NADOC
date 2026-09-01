@@ -264,7 +264,7 @@ function _stepTotal(node) {
   const values = parts.map(p => Number(p.steps ?? p.total_steps ?? p.num_steps ?? p.n_steps) || 0)
   const sum = values.reduce((a, b) => a + b, 0)
   if (sum > 0) return sum
-  if (node?.engine === 'mrdna') return (Number(node.coarse_steps) || 0) + (Number(node.fine_steps) || 0)
+  if (node?.engine === 'mrdna') return (Number(node.coarse_steps) || 0) + 2 * (Number(node.fine_steps) || 0)
   // Linear FEM solves are one solve step; nonlinear CanDo/SNUPI normally expose n_steps.
   if (node?.engine === 'cando' || node?.engine === 'snupi' || node?.engine === 'blade') return 1
   return 0
@@ -315,6 +315,18 @@ export function masterStepText(node) {
     const completed = Math.max(0, Math.min(total, Math.round(liveMinStep)))
     const phasePct = _pct1(completed / total)
     return `${phasePct}% minimization · ${completed.toLocaleString()} / ${total.toLocaleString()} steps`
+      + ` · ${(total - completed).toLocaleString()} left${_etaSuffix(node)}`
+  }
+  // Local NAMD runs persist minimisation.percent but do not populate the remote-only
+  // live_metrics object.  Use that phase-local value rather than multiplying the
+  // whole-job fraction by the ladder's step total, which produces a plausible-looking
+  // but unrelated counter while minimisation is running.
+  const persistedMinPct = Number(min?.percent)
+  if (min?.status === 'running' && Number(min.steps) > 0 && Number.isFinite(persistedMinPct)) {
+    const total = Number(min.steps)
+    const phasePct = Math.max(0, Math.min(100, persistedMinPct))
+    const completed = Math.max(0, Math.min(total, Math.round(total * phasePct / 100)))
+    return `${_pct1(phasePct / 100)}% minimization · ${completed.toLocaleString()} / ${total.toLocaleString()} steps`
       + ` · ${(total - completed).toLocaleString()} left${_etaSuffix(node)}`
   }
   const total = _stepTotal(node)
@@ -383,6 +395,15 @@ export function masterStatusText(node) {
     const parts = [`${eng} · running · ${masterStepText(node)}`]
     if (node.phase) parts.push(node.phase)
     return parts.join(' · ')
+  }
+  if (node.engine === 'mrdna' && ['preparing', 'queued', 'running'].includes(node.status)) {
+    const parts = [`${eng} · ${node.status} · ${masterStepText(node)}`]
+    if (node.phase || node.stage_name) parts.push(node.phase || node.stage_name)
+    return parts.join(' · ')
+  }
+  if (node.engine === 'cando' && ['preparing', 'queued', 'running'].includes(node.status)) {
+    return [`${eng} · ${node.status} · ${masterStepText(node)}`, node.progress_label]
+      .filter(Boolean).join(' · ')
   }
   const stages = node.stages || node.segments || []
   const stageText = stages.length
@@ -645,7 +666,19 @@ export function initSimulateJobs({
     if (sig === _listSig && listEl.childElementCount > 0) return
     _listSig = sig
     renderJobList(listEl, buildJobListModel(nodes, ctx), {
-      onClick: (jobId) => (jobId === _sel.id ? _deselect() : _select(jobId)),
+      onClick: (jobId) => {
+        if (jobId !== _sel.id) { _select(jobId); return }
+        const node = _selectedNode()
+        // A freshly launched SNUPI job remains highlighted while it transitions
+        // preparing → running → completed. The user's first click after completion
+        // is an intent to open its visualization controls, not to silently deselect
+        // the already-highlighted row and disable every visualization radio.
+        if (node?.engine === 'mrdna' || (node?.engine === 'snupi' && node.status === 'completed')) {
+          _dispatchDetail(node)
+          return
+        }
+        _deselect()
+      },
       onWarning: (jobId) => {
         const node = _nodes.find(n => n.job_id === jobId)
         const panel = _panelFor(node)
@@ -1157,7 +1190,23 @@ export function initSimulateJobs({
   // list) must WAKE the master: its poll re-arms only while it already has an active
   // node, so a launch made while the master is idle would otherwise not surface until a
   // manual refresh. _fetch() picks up the new job AND re-arms the poll from there.
-  window.addEventListener('nadoc:sim-jobs-changed', () => _fetch())
+  window.addEventListener('nadoc:sim-jobs-changed', (event) => {
+    const removeJobId = event.detail?.removeJobId
+    if (removeJobId) {
+      _nodes = _nodes.filter(n => n.job_id !== removeJobId)
+      if (_sel.id === removeJobId) _sel = { engine: null, id: null }
+    }
+    const optimistic = event.detail?.node
+    if (optimistic?.job_id) {
+      _nodes = [optimistic, ..._nodes.filter(n => n.job_id !== optimistic.job_id)]
+      if (event.detail?.select) _sel = { engine: optimistic.engine, id: optimistic.job_id }
+      _renderList()
+      _renderMaster()
+      _schedulePoll()
+      return
+    }
+    _fetch()
+  })
   // Cluster authentication completes before the backend's post-login reconciliation:
   // that background pass may discover that an Alpine run finished while NADOC was
   // disconnected and immediately start a large result download.  Wake this visible

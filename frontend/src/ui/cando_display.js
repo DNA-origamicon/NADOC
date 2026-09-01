@@ -201,7 +201,8 @@ export function thermalCylinderAxis(base, axis) {
 }
 
 export function initCandoDisplay({
-  designRenderer, api, cylinderOverlay = null, setDesignVisible = null, flexScale = null,
+  designRenderer, api, cylinderOverlay = null, setDesignVisible = null,
+  restoreDesignVisible = null, flexScale = null,
 }) {
   let _epoch = 0            // bumps on every request → stale responses ignored
   let _loadAbort = null
@@ -280,7 +281,8 @@ export function initCandoDisplay({
     cylinderOverlay?.clear()
     designRenderer.clearScalarColors?.()
     designRenderer.clearExternalGeometry?.()   // rebuilds the live model (no-op if not external)
-    _nativeVisible(true)
+    if (restoreDesignVisible) restoreDesignVisible()
+    else _nativeVisible(true)
   }
 
   // Prepare the scene for an external (job-snapshot) render: clear the previous mode's

@@ -23,7 +23,8 @@ import { initFrameSteppers } from './frame_steppers.js'
 import { parseCandoRepresentativeBin } from '../scene/cando_representative_bin.js'
 
 export function initSnupiDisplay({
-  designRenderer, api, cylinderOverlay = null, setDesignVisible = null, flexScale = null,
+  designRenderer, api, cylinderOverlay = null, setDesignVisible = null,
+  restoreDesignVisible = null, flexScale = null,
 }) {
   let _epoch = 0            // bumps on every request → stale responses ignored
   let _loadAbort = null
@@ -84,13 +85,17 @@ export function initSnupiDisplay({
     if (setDesignVisible) setDesignVisible(v)
     else designRenderer?.setDesignVisible?.(v)
   }
+  function _restoreNative() {
+    if (restoreDesignVisible) restoreDesignVisible()
+    else _nativeVisible(true)
+  }
 
   function _clearAll() {
     flexScale?.hide()
     cylinderOverlay?.clear()
     designRenderer.clearScalarColors?.()
     designRenderer.clearExternalGeometry?.()
-    _nativeVisible(true)
+    _restoreNative()
   }
 
   function _prepareForExternal() {

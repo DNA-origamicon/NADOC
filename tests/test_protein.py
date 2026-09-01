@@ -32,6 +32,7 @@ from backend.core.models import (
     PartSourceInline,
     ProteinAttachment,
     ProteinTargetDesign,
+    ProteinTargetFree,
     RoutingClusterLogEntry,
     Strand,
     StrandType,
@@ -141,6 +142,30 @@ def test_asset_to_atomistic_applies_pose():
     assert abs(m0.y - a0.y) < 1e-9
 
 
+def test_default_surface_contains_imported_protein_atoms():
+    """The viewer's default coarse request must not collapse to a DNA-only cloud."""
+    from backend.api.routes_display_geometry import _build_design_surface_mesh
+
+    asset = parse_protein_pdb(_SYNTH_PDB)
+    design = Design(
+        protein_assets=[asset],
+        protein_attachments=[
+            ProteinAttachment(asset_id=asset.id, target=ProteinTargetFree())
+        ],
+    )
+    mesh = _build_design_surface_mesh(
+        design,
+        grid_spacing=0.10,
+        probe_radius=0.14,
+        radius_inflate=1.0,
+        smooth=0,
+        detail="coarse",
+    )
+    assert len(mesh.vertices) > 0
+    assert len(mesh.faces) > 0
+    assert any(sid.startswith(PROTEIN_SENTINEL_PREFIX) for sid in mesh.vertex_strand_ids)
+
+
 def test_design_roundtrip_with_protein():
     asset = parse_protein_pdb(_SYNTH_PDB)
     att = ProteinAttachment(
@@ -170,6 +195,29 @@ def test_assembly_roundtrip_v2_preserves_proteins():
     assert len(asm2.protein_assets) == 1
     assert asm2.protein_assets[0].id == asset.id
     assert asm2.protein_attachments[0].asset_id == asset.id
+
+
+def test_assembly_full_trace_endpoint_returns_only_protein_atoms():
+    from backend.api import assembly_state
+
+    asset = parse_protein_pdb(_SYNTH_PDB)
+    design = Design(
+        protein_assets=[asset],
+        protein_attachments=[
+            ProteinAttachment(asset_id=asset.id, target=ProteinTargetFree())
+        ],
+    )
+    instance = PartInstance(id="protein-part", source=PartSourceInline(design=design))
+    assembly_state.set_assembly(Assembly(instances=[instance]))
+    try:
+        response = client.get("/api/assembly/instances/protein-part/protein-geometry")
+        assert response.status_code == 200, response.text
+        atoms = response.json()["atoms"]
+        assert len(atoms) == len(asset.atoms)
+        assert all(atom["helix_id"].startswith(PROTEIN_SENTINEL_PREFIX) for atom in atoms)
+        assert sum(atom["name"] == "CA" for atom in atoms) == 2
+    finally:
+        assembly_state.close_session()
 
 
 def test_three_layer_law_protein_does_not_touch_topology():
@@ -1536,6 +1584,18 @@ def test_conjugated_protein_move_clamps_and_co_rotates_bound_oligos(_clean_state
     assert moved.json()["partial_geometry"] is True
     assert moved.json()["changed_helix_ids"] == ["oh_helix"]
     assert moved.json()["nucleotides_compact"]
+    moved_axis = moved.json()["helix_axes"][0]
+    moved_segment = next(
+        seg for seg in moved_axis["segments"] if seg.get("ovhg_id") == "oh_5p"
+    )
+    # Cylinder geometry consumes segments ahead of ovhg_axes. Both records must
+    # carry the same constrained pose or cylinders remain at the pre-move pose.
+    assert moved_segment["start"] == pytest.approx(
+        moved_axis["ovhg_axes"]["oh_5p"]["start"], abs=1.0e-6
+    )
+    assert moved_segment["end"] == pytest.approx(
+        moved_axis["ovhg_axes"]["oh_5p"]["end"], abs=1.0e-6
+    )
 
     after, root1, term1, joint1, _ = _conjugate_joint_state()
     assert after.binder_strand_id == created.json()["binder_strand_id"]
@@ -1565,6 +1625,69 @@ def test_conjugated_protein_move_clamps_and_co_rotates_bound_oligos(_clean_state
     assert np.linalg.norm(redo_joint - redo_term) <= 1.0e-4
 
 
+def test_voltron_protein_move_returns_cylinder_aligned_with_moved_beads():
+    """Real-design regression for the binder-owned OH7 cylinder segment."""
+    import json
+    from pathlib import Path
+
+    path = Path("workspace/VoltronCoreArm.nadoc")
+    if not path.exists():
+        pytest.skip("requires local workspace fixture VoltronCoreArm.nadoc")
+    design = Design.from_dict(json.loads(path.read_text()))
+    design_state.set_design(design)
+    try:
+        attachment = design.protein_attachments[0]
+        constraint = client.get("/api/design/protein/atomistic").json()[
+            "protein_constraints"
+        ][0]
+        angle = np.deg2rad(30.0)
+        moved = client.patch(
+            f"/api/design/protein/attachments/{attachment.id}",
+            json={
+                "gizmo_move": {
+                    "pivot": constraint["joint"],
+                    "translation": [2.0, 1.0, 0.5],
+                    "rotation": [0.0, 0.0, np.sin(angle / 2), np.cos(angle / 2)],
+                }
+            },
+        )
+        assert moved.status_code == 200, moved.text
+        body = moved.json()
+        axis = next(a for a in body["helix_axes"] if a["helix_id"] == "h_sc_55")
+        domain_ref = {"strand_id": "sc_strand_167", "domain_index": 4}
+        segment = next(s for s in axis["segments"] if domain_ref in s["domain_ids"])
+        overhang_axis = axis["ovhg_axes"]["ovhg_inline_sc_strand_167_3p"]
+        assert segment["start"] == pytest.approx(overhang_axis["start"], abs=1.0e-6)
+        assert segment["end"] == pytest.approx(overhang_axis["end"], abs=1.0e-6)
+
+        refs = {
+            (ref["strand_id"], ref["domain_index"])
+            for ref in constraint["domain_ids"]
+        }
+        centers_by_bp: dict[int, list[list[float]]] = {}
+        for directions in body["nucleotides_compact"].values():
+            for compact in directions.values():
+                for index, (strand_id, domain_index) in enumerate(
+                    zip(compact["sid"], compact["did"])
+                ):
+                    if (strand_id, domain_index) in refs:
+                        centers_by_bp.setdefault(compact["bp"][index], []).append(
+                            compact["bb"][index]
+                        )
+        centers = np.asarray(
+            [np.mean(points, axis=0) for _, points in sorted(centers_by_bp.items())]
+        )
+        cylinder_direction = np.asarray(segment["end"]) - np.asarray(segment["start"])
+        bead_direction = centers[-1] - centers[0]
+        cosine = abs(
+            float(np.dot(cylinder_direction, bead_direction))
+            / float(np.linalg.norm(cylinder_direction) * np.linalg.norm(bead_direction))
+        )
+        assert cosine > 0.99
+    finally:
+        design_state.close_session()
+
+
 def test_conjugated_protein_live_preview_matches_saved_apply(_clean_state):
     """The browser preview oracle and persisted constrained solve are coordinate-identical."""
     from backend.core.design_geometry import _geometry_for_design
@@ -1581,6 +1704,7 @@ def test_conjugated_protein_live_preview_matches_saved_apply(_clean_state):
     before_atoms = client.get("/api/design/protein/atomistic").json()["atoms"]
     before_xyz = np.asarray([[a["x"], a["y"], a["z"]] for a in before_atoms])
     before_geometry = _geometry_for_design(design_state.get_design())
+    before_design_atoms = client.get("/api/design/atomistic").json()["atoms"]
 
     # Mirrors constrainCentroidTransform + proteinPreviewMatrix exactly.
     angle = np.deg2rad(73.0)
@@ -1605,6 +1729,12 @@ def test_conjugated_protein_live_preview_matches_saved_apply(_clean_state):
         (ref["strand_id"], ref["domain_index"])
         for ref in constraint["domain_ids"]
     }
+    moved_strand_ids = {strand_id for strand_id, _domain_index in moved_refs}
+    before_overhang_atoms = np.asarray([
+        [a["x"], a["y"], a["z"]]
+        for a in before_design_atoms
+        if a["strand_id"] in moved_strand_ids
+    ])
     preview_nucs = {
         (n["strand_id"], n["domain_index"], n["bp_index"], n["direction"]):
         root + link_rot @ (np.asarray(n["backbone_position"]) - root)
@@ -1637,6 +1767,21 @@ def test_conjugated_protein_live_preview_matches_saved_apply(_clean_state):
     assert saved_nucs.keys() == preview_nucs.keys()
     for key, expected in preview_nucs.items():
         assert np.allclose(saved_nucs[key], expected, atol=2.0e-5), key
+
+    # Ball-and-stick / stick / VDW all consume this atomistic payload.  Every
+    # atom belonging to the constrained overhang + binder must receive the same
+    # rigid swing as the CG nucleotide geometry used by the live preview.
+    after_design_atoms = client.get("/api/design/atomistic").json()["atoms"]
+    after_overhang_atoms = np.asarray([
+        [a["x"], a["y"], a["z"]]
+        for a in after_design_atoms
+        if a["strand_id"] in moved_strand_ids
+    ])
+    expected_overhang_atoms = (
+        link_rot @ (before_overhang_atoms - root).T
+    ).T + root
+    assert after_overhang_atoms.shape == before_overhang_atoms.shape
+    assert np.allclose(after_overhang_atoms, expected_overhang_atoms, atol=2.0e-5)
 
 
 def test_conjugated_protein_rotates_freely_about_protein_joint(_clean_state):

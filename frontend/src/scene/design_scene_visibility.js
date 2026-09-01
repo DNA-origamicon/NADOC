@@ -1,7 +1,7 @@
 /** Owns design-scene visibility and its crossover diagnostics. */
 export function initDesignSceneVisibility({
   scene, store, designRenderer, bluntEnds, endExtrudeArrows,
-  jointRenderer, unfoldView, overhangLinkArcs,
+  jointRenderer, unfoldView, overhangLinkArcs, surfaceStrandsOverlay,
 }) {
   /**
    * Show or hide ALL design-level scene geometry.
@@ -31,6 +31,7 @@ export function initDesignSceneVisibility({
     unfoldView.setArcsVisible(visible)  // arc lines (_arcGroup); LOD/rep gating is per-arc (refreshArcVisibility)
     unfoldView.refreshArcVisibility()
     overhangLinkArcs?.setVisible?.(visible)
+    surfaceStrandsOverlay?.setVisible?.(visible)
   }
 
   /**

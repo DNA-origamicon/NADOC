@@ -68,6 +68,7 @@ export function renderCandoDisplayProgress(el, phases) {
     el.appendChild(row)
   }
 }
+
 import { initForcesCard } from './forces_card.js'
 import { initOxdnaAnchorsSetup } from './oxdna_anchors_setup.js'
 import * as api from '../api/client.js'
@@ -97,7 +98,10 @@ export function jobDisplayName(job) {
     const stem = String(src).split('/').pop().replace(/\.[^.]+$/, '')
     if (stem) return stem
   }
-  return job.design_name || 'design'
+  // Older assembly jobs recorded the internal materialization label as
+  // "Flattened:_Name". Flattening is an implementation detail, not the user's
+  // design name; keep those persisted jobs readable too.
+  return String(job.design_name || 'design').replace(/^Flattened:\s*_?/i, '') || 'design'
 }
 
 /** Is the job in an in-progress state (spinner / keep-polling)? */
@@ -308,7 +312,6 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
   const arrow = $('cando-jobs-arrow')
   const coarseBtn = $('cando-jobs-coarse-btn')
   const fineBtn = $('cando-jobs-fine-btn')
-  const progressEl = $('cando-jobs-progress')
   const advToggle = $('cando-jobs-adv-toggle')
   const advArrow = $('cando-jobs-adv-arrow')
   const advBody = $('cando-jobs-adv-body')
@@ -320,8 +323,6 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
   const showAll = $('cando-jobs-show-all')
   const listEl = $('cando-jobs-list')
   const detail = $('cando-jobs-detail')
-  const detailStatus = $('cando-jobs-detail-status')
-  const timeline = $('cando-jobs-timeline')
   const summaryEl = $('cando-jobs-summary')
   const detailError = $('cando-jobs-detail-error')
   const stopBtn = $('cando-jobs-stop-btn')
@@ -436,13 +437,39 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
         anchors: anchors.length ? anchors : null,
         field:   fieldOn ? { field_pN: fieldSpec.field_pN, dir: fieldSpec.dir } : null,
       }
+      // Assembly materialization happens before POST /cando/jobs inside the shared API
+      // client. Put a real-looking temporary row on screen before that potentially long
+      // request so the click is acknowledged immediately and its current process is clear.
+      const optimisticId = `preparing-${Date.now()}`
+      const optimistic = {
+        job_id: optimisticId, design_name: getWorkspacePath?.() || 'assembly',
+        design_source_path: getWorkspacePath?.() || null, nonlinear,
+        status: 'preparing', created_at: Date.now() / 1000,
+        stages: [{ name: nonlinear ? 'nonlinear' : 'linear', status: 'pending' }],
+      }
+      _jobs = [optimistic, ..._jobs]
+      _selectedId = optimisticId
+      _progress = { overall: 0, phases: [
+        { name: 'materialize', label: 'Materialize complete assembly', fraction: 0 },
+        { name: 'register', label: 'Register CanDo job', fraction: 0 },
+      ] }
+      _renderList()
+      _renderDetail()
+      window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed', { detail: {
+        node: { ...optimistic, engine: 'cando', progress_fraction: 0 }, select: true,
+      } }))
       const job = await api.createCandoJob(body_)
       if (!job) {
+        _jobs = _jobs.filter(j => j.job_id !== optimisticId)
+        _selectedId = null
+        _progress = null
+        _renderList(); _renderDetail()
         showToast(api.lastErrorMessage() || 'Failed to start CanDo FEM prediction', { severity: 'error' })
         return
       }
       _selectedId = job.job_id
       await _fetchJobs()
+      window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed'))
     } finally {
       _launching = false
       _updateLaunchButtons()   // stays disabled if the new job is now active
@@ -553,6 +580,11 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
     const all = await api.listCandoJobs()
     if (!Array.isArray(all)) return
     _jobs = filterJobsForPart(all, getWorkspacePath?.() || null, showAll?.checked)
+    // A freshly launched assembly job may have no source path because its input is a
+    // transient flattened projection. Never let the part-path filter hide the job the
+    // user just launched while it is running (or after it completes).
+    const selected = all.find(j => j.job_id === _selectedId)
+    if (selected && !_jobs.some(j => j.job_id === selected.job_id)) _jobs.unshift(selected)
     _renderList()
     _updateLaunchButtons()   // re-enable Coarse/Fine once no job is active
     if (_selectedId) {
@@ -649,17 +681,10 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
     if (!detail) return
     if (!job) { detail.style.display = 'none'; _syncDisplayStatus(); return }
     detail.style.display = ''
-    if (detailStatus) detailStatus.textContent = detailStatusText(job, _progress)
-    if (timeline) timeline.textContent = stageChip(job)
     if (summaryEl) {
       const html = formatSummary(job)
       summaryEl.style.display = html ? '' : 'none'
       summaryEl.innerHTML = html
-    }
-    if (progressEl) {
-      const pct = _progress?.overall != null ? Math.round(_progress.overall * 100) : 0
-      progressEl.style.display = job.status === 'running' ? '' : 'none'
-      progressEl.querySelector('.bar')?.style.setProperty('width', `${pct}%`)
     }
     if (detailError) {
       detailError.style.display = job.status === 'failed' ? '' : 'none'
@@ -802,6 +827,11 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
   // job isn't listed yet.
   async function selectJob(jobId) {
     if (!jobId) return
+    // Mark the requested job before refetching. Assembly CanDo jobs are built from a
+    // transient flattened projection and therefore have no design_source_path; the
+    // normal workspace-path filter would otherwise discard the job before
+    // _selectJob() can populate the Display card, leaving every mode disabled.
+    _selectedId = jobId
     if (!_jobs.find((j) => j.job_id === jobId)) await _fetchJobs()
     return _selectJob(jobId)
   }

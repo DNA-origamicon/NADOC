@@ -199,7 +199,7 @@ def _job_design(job, workspace_dir: Path):
         path = job.job_dir(workspace_dir) / "design.json"
         if not path.exists():
             return None
-        return Design.model_validate_json(path.read_text())
+        return Design.from_json(path.read_text())
     except Exception:  # noqa: BLE001
         return None
 

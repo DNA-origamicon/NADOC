@@ -133,7 +133,7 @@ def _load_snapshot_design(job_dir: Path) -> Optional[Design]:
     if not snap.exists():
         return None
     try:
-        return Design.model_validate_json(snap.read_text())
+        return Design.from_json(snap.read_text())
     except Exception:  # noqa: BLE001
         return None
 
@@ -418,8 +418,27 @@ def solve_and_cache(job: SnupiJob, workspace_dir: Path) -> None:
         _last = [-1.0]
         _phase_seen = [""]
 
-        def _progress(fraction: float, phase: str, info: dict | None = None) -> None:
-            info = info or {}
+        def _progress(first, second, third=None) -> None:
+            # predict_shape's structural phases report (phase, local_fraction,
+            # message), while the Langevin integrator reports
+            # (fraction, phase, info). Normalize both contracts here and map the
+            # structural phase-local counters onto one monotonic job-wide bar.
+            if isinstance(first, str):
+                phase = first
+                local_fraction = float(second)
+                info = {"message": third} if isinstance(third, str) else (third or {})
+                spans = {
+                    "mesh": (0.02, 0.12),
+                    "solve": (0.12, 0.72),
+                    "rmsf": (0.72, 0.94),
+                    "thermal": (0.94, 0.99),
+                }
+                lo, hi = spans.get(phase, (0.02, 0.99))
+                fraction = lo + max(0.0, min(1.0, local_fraction)) * (hi - lo)
+            else:
+                fraction = float(first)
+                phase = str(second)
+                info = third or {}
             moved = fraction - _last[0] >= 0.01 or fraction >= 1.0
             new_phase = phase != _phase_seen[0]
             if not (moved or new_phase):
@@ -462,9 +481,9 @@ def solve_and_cache(job: SnupiJob, workspace_dir: Path) -> None:
 
         result = predict_shape(
             design,
-            # Only the dynamics path reports; the static solve is a single sparse solve with no
-            # natural fraction, so it keeps the wall-clock estimate.
-            progress_cb=_progress if getattr(job, "dynamics", False) else None,
+            # Both static FEM phases and dynamics steps report into the one job-wide
+            # progress stream consumed by the unified Jobs card.
+            progress_cb=_progress,
             nonlinear=job.nonlinear,
             n_steps=job.n_steps,
             with_rmsf=job.with_rmsf,

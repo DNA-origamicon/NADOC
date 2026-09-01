@@ -61,6 +61,8 @@ describe('jobDisplayName', () => {
   })
   it('falls back to design_name', () => {
     expect(jobDisplayName({ design_name: 'my6hb' })).toBe('my6hb')
+    expect(jobDisplayName({ design_name: 'Flattened:_BigO-poly' })).toBe('BigO-poly')
+    expect(jobDisplayName({ design_name: 'Flattened: BigO-poly' })).toBe('BigO-poly')
     expect(jobDisplayName({})).toBe('design')
   })
 })

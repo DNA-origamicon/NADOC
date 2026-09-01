@@ -1344,7 +1344,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         if (/__(a|b)$/.test(strand.id)) _dsBridgeHelixIds.add(dom.helix_id)
         continue   // bridge: ds → one cyl per helix (counted below); ss → no cyl
       }
-      if (isLinker && !onBridge) { _bindingCylCount++; continue }   // binding half-cyl
+      const isBinding = isLinker || strand.strand_type === 'oh_binder' || dom.binds_overhang_id != null
+      if (isBinding && !onBridge) { _bindingCylCount++; continue }   // binding half-cyl
       const arrowC = _arrowByHelixId.get(dom.helix_id)
       const curved = arrowC?.isCurved ?? false
       if (dom.overhang_id != null) {
@@ -1731,7 +1732,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
         // Linker binding (complement) domain: defer — drawn as a half-cylinder
         // opposite its overhang half, in the linker colour, after this loop.
-        if (isLinker) {
+        const isBinding = isLinker || strand.strand_type === 'oh_binder' || dom.binds_overhang_id != null
+        if (isBinding) {
           _deferredBindings.push({ helixId: dom.helix_id, strandId: strand.id, domainIndex: domIdx, lo, hi, color: strandColor, arrow })
           continue
         }
@@ -4578,14 +4580,38 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       // 5b. Straight-helix overhang cylinders (LOD) — same approach.
       for (const dom of _overhangCylData) {
         const sa  = straightAxesMap?.get(dom.helixId)
-        const lx0 = sa ? sa.start.x + (dom.arrow.aStart.x - sa.start.x) * t : dom.arrow.aStart.x
-        const ly0 = sa ? sa.start.y + (dom.arrow.aStart.y - sa.start.y) * t : dom.arrow.aStart.y
-        const lz0 = sa ? sa.start.z + (dom.arrow.aStart.z - sa.start.z) * t : dom.arrow.aStart.z
-        const lx1 = sa ? sa.end.x   + (dom.arrow.aEnd.x   - sa.end.x)   * t : dom.arrow.aEnd.x
-        const ly1 = sa ? sa.end.y   + (dom.arrow.aEnd.y   - sa.end.y)   * t : dom.arrow.aEnd.y
-        const lz1 = sa ? sa.end.z   + (dom.arrow.aEnd.z   - sa.end.z)   * t : dom.arrow.aEnd.z
-        const d0x = lx0 + (lx1 - lx0) * dom.t0, d0y = ly0 + (ly1 - ly0) * dom.t0, d0z = lz0 + (lz1 - lz0) * dom.t0
-        const d1x = lx0 + (lx1 - lx0) * dom.t1, d1y = ly0 + (ly1 - ly0) * dom.t1, d1z = lz0 + (lz1 - lz0) * dom.t1
+        let d0x, d0y, d0z, d1x, d1y, d1z
+        if (dom.wsStart && dom.wsEnd) {
+          // Protein/overhang rotations carry authoritative per-domain endpoints.
+          // The old lerp path discarded them and rebuilt from the parent helix,
+          // snapping VoltronCoreArm OH7 back to its pre-move cylinder pose.
+          if (sa) {
+            const s0x = sa.start.x + (sa.end.x - sa.start.x) * dom.t0
+            const s0y = sa.start.y + (sa.end.y - sa.start.y) * dom.t0
+            const s0z = sa.start.z + (sa.end.z - sa.start.z) * dom.t0
+            const s1x = sa.start.x + (sa.end.x - sa.start.x) * dom.t1
+            const s1y = sa.start.y + (sa.end.y - sa.start.y) * dom.t1
+            const s1z = sa.start.z + (sa.end.z - sa.start.z) * dom.t1
+            d0x = s0x + (dom.wsStart.x - s0x) * t
+            d0y = s0y + (dom.wsStart.y - s0y) * t
+            d0z = s0z + (dom.wsStart.z - s0z) * t
+            d1x = s1x + (dom.wsEnd.x - s1x) * t
+            d1y = s1y + (dom.wsEnd.y - s1y) * t
+            d1z = s1z + (dom.wsEnd.z - s1z) * t
+          } else {
+            d0x = dom.wsStart.x; d0y = dom.wsStart.y; d0z = dom.wsStart.z
+            d1x = dom.wsEnd.x;   d1y = dom.wsEnd.y;   d1z = dom.wsEnd.z
+          }
+        } else {
+          const lx0 = sa ? sa.start.x + (dom.arrow.aStart.x - sa.start.x) * t : dom.arrow.aStart.x
+          const ly0 = sa ? sa.start.y + (dom.arrow.aStart.y - sa.start.y) * t : dom.arrow.aStart.y
+          const lz0 = sa ? sa.start.z + (dom.arrow.aStart.z - sa.start.z) * t : dom.arrow.aStart.z
+          const lx1 = sa ? sa.end.x   + (dom.arrow.aEnd.x   - sa.end.x)   * t : dom.arrow.aEnd.x
+          const ly1 = sa ? sa.end.y   + (dom.arrow.aEnd.y   - sa.end.y)   * t : dom.arrow.aEnd.y
+          const lz1 = sa ? sa.end.z   + (dom.arrow.aEnd.z   - sa.end.z)   * t : dom.arrow.aEnd.z
+          d0x = lx0 + (lx1 - lx0) * dom.t0; d0y = ly0 + (ly1 - ly0) * dom.t0; d0z = lz0 + (lz1 - lz0) * dom.t0
+          d1x = lx0 + (lx1 - lx0) * dom.t1; d1y = ly0 + (ly1 - ly0) * dom.t1; d1z = lz0 + (lz1 - lz0) * dom.t1
+        }
         _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
         _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
         const cLen = _physDir.length()
@@ -6003,6 +6029,27 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
     /** Return fluorophore entries for raycasting and selection. */
     getFluoroEntries() { return fluoroEntries },
+
+    /** Inspect the exact world endpoints currently stored in an overhang's
+     * cylinder instance matrix. Intended for visual-regression diagnostics. */
+    getOverhangCylinderDiagnostics(overhangId) {
+      const rows = []
+      for (const dom of _overhangCylData) {
+        if (dom.overhangId !== overhangId) continue
+        const matrix = new THREE.Matrix4()
+        _ovhgCylMesh(dom).getMatrixAt(dom.cylIdx, matrix)
+        rows.push({
+          overhangId,
+          strandId: dom.strandId,
+          domainIndex: dom.domainIndex,
+          start: new THREE.Vector3(0, -0.5, 0).applyMatrix4(matrix).toArray(),
+          end: new THREE.Vector3(0, 0.5, 0).applyMatrix4(matrix).toArray(),
+          expectedStart: dom.wsStart?.toArray?.() ?? null,
+          expectedEnd: dom.wsEnd?.toArray?.() ?? null,
+        })
+      }
+      return rows
+    },
 
     /** Returns the live rendered position of a nucleotide entry, or null if not found.
      *  Used by unfold_view to update arc endpoints after cluster transforms.

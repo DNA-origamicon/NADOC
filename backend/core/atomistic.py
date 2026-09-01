@@ -4327,7 +4327,15 @@ def _build_extension_atoms(
         bow_dir = _normalise(bow_dir)
 
         n = len(ext.sequence)
-        arc_len = n * SSDNA_CONTOUR_PER_NT_NM
+        # A contour-length-spaced CG tail is valid for oxDNA, but stamping atomistic
+        # sugars at that full spacing leaves essentially no allowance for their local
+        # C3'/C5' offsets.  Some orientations then ask the linker optimiser to span
+        # more than a phosphodiester can reach; it stretches O5'-C5' and can pull that
+        # bond through the same nucleotide's base ring.  NAMD seeds use a moderately
+        # coiled ssDNA conformation instead.  Keep the same arc and orientation while
+        # capping the per-residue seed spacing below the all-trans contour length.
+        atomistic_step_nm = min(SSDNA_CONTOUR_PER_NT_NM, 0.45)
+        arc_len = n * atomistic_step_nm
         p2 = p0 + radial * arc_len
         ctrl = (p0 + p2) * 0.5 + bow_dir * (arc_len * 0.30)
 
@@ -4340,8 +4348,6 @@ def _build_extension_atoms(
         chain_id = strand_to_chain.get(strand.id, "A")
         strand_id = strand.id
 
-        # Base orientation target, mirroring the extra-base rule.
-        avg_axis = _normalise(_np.asarray(nuc.axis_tangent, dtype=float))
         tail_sugars: list[dict[str, int]] = []
 
         for i in range(n):  # i = distance rank from the anchor
@@ -4392,9 +4398,6 @@ def _build_extension_atoms(
             base_char = ext.sequence[i] if not five else ext.sequence[n - 1 - i]
             residue = _BASE_CHAR_TO_RESIDUE.get(base_char.upper(), "DT")
 
-            z_sign = float(_np.dot(_np.cross(bow_dir, chain_dir), avg_axis))
-            target_c1n = avg_axis if z_sign > 0.0 else -avg_axis
-
             tail_seq_num[chain_id] = tail_seq_num.get(chain_id, 0) + 1
             seq_num = tail_seq_num[chain_id]
 
@@ -4442,19 +4445,13 @@ def _build_extension_atoms(
                     atom_name, element, _np.array([n_c, y_c, z_c])
                 )
 
-            if sim_frame is None:
-                # Same phosphate-stranding guard as the crossover placer: a position-only
-                # override tail (sim set, no frame) skips the bridge minimiser, so rotate the
-                # phosphate rigidly with its sugar; a geometric tail (sim is None) keeps it
-                # fixed (byte-unchanged) for the minimiser to place.
-                _align_glycosidic(
-                    atoms,
-                    residue,
-                    sugar_name_to_serial,
-                    base_name_to_serial,
-                    target_c1n,
-                    rotate_phosphate=sim is not None,
-                )
+            # The crossover-insert glycosidic alignment rotates the ribose around C2'.
+            # That is appropriate for a two-ended junction, but not for a freely curving
+            # terminal tail: a near-180-degree correction can move C3'/C5' by more than a
+            # nucleotide spacing and make the next phosphodiester physically unreachable.
+            # `_extra_base_frame` already co-orients the complete nucleotide template with
+            # the tail tangent and outward normal, so keep its sugar rigid here.  Relaxed
+            # frame overrides likewise provide the complete residue orientation directly.
 
             for a_name, b_name in _SUGAR_BONDS:
                 sa, sb = (

@@ -38,6 +38,7 @@ import { showToast } from '../ui/toast.js'
 import { showOpProgress, hideOpProgress, setOpProgressLabel } from '../ui/op_progress.js'
 import { notifyRequestFailure, notifyRequestSuccess, pokeProbe } from '../shared/connection_monitor.js'
 import { docHeaders, docHeadersFor, docKey, docKeyFor } from '../shared/doc_id.js'
+import { createAssemblySimulationContext } from './simulation_context.js'
 import { activeOperationTiming, beginOperationTiming, finishOperationAfterRender, markOperationTiming, whenOperationIdle } from '../perf/operation_timing.js'
 import { buildVRJobSnapshot, VR_JOB_SNAPSHOT_LIMIT } from '../scene/vr_job_snapshot.js'
 
@@ -331,7 +332,32 @@ export function errorDetailToMessage(detail, fallback = 'Server error') {
   return fallback
 }
 
-export async function _request(method, path, body, { signal, suppressBusy = false, docId, timeoutMs = _REQUEST_TIMEOUT_MS, protectedRetry = true } = {}) {
+const _assemblySimulationContext = createAssemblySimulationContext()
+
+async function _ensureAssemblySimulation(path, { timeoutMs = _REQUEST_TIMEOUT_MS, protectedRetry = true } = {}) {
+  const state = store.getState()
+  await _assemblySimulationContext.ensure({
+    path,
+    assemblyActive: state.assemblyActive,
+    assembly: state.currentAssembly,
+    materialize: async () => {
+      const projection = await _request('POST', '/assembly/flatten/load-as-design', undefined, {
+        suppressBusy: false,
+        timeoutMs,
+        protectedRetry,
+        skipSimulationPrepare: true,
+      })
+      // The projection is physical simulation state, not a replacement for the
+      // assembly document currently open in the editor.
+      await _syncFromDesignResponse(projection, { transient: true, simulationProjection: true })
+    },
+  })
+}
+
+export async function _request(method, path, body, { signal, suppressBusy = false, docId, timeoutMs = _REQUEST_TIMEOUT_MS, protectedRetry = true, skipSimulationPrepare = false } = {}) {
+  if (!skipSimulationPrepare && docId === undefined) {
+    await _ensureAssemblySimulation(path, { timeoutMs, protectedRetry })
+  }
   const diagnosticId = ++_diagnosticRequestSeq
   _emitRequestDiagnostic({ phase: 'start', id: diagnosticId, method, path, suppressBusy })
   const isTimedOperation = method !== 'GET' && (
@@ -532,6 +558,7 @@ export async function _syncFromDesignResponse(json, {
   skipGeometry = false,
   transient = false,
   crossTabMetadataOnly = false,
+  simulationProjection = false,
 } = {}) {
   if (!json) return null
   if (_isStaleDesignResponse(json)) return json   // superseded by a newer response → skip (rapid-edit race)
@@ -747,13 +774,13 @@ export async function _syncFromDesignResponse(json, {
     }
   }
   // Notify other tabs (cadnano editor, second 3D windows) that the design changed.
-  if (json.design) _signalDesignChanged({
+  if (json.design && !simulationProjection) _signalDesignChanged({
     geometryUnchanged: skipGeometry,
     changedHelixIds: json.partial_geometry ? (json.changed_helix_ids ?? null) : null,
     metadataOnly: crossTabMetadataOnly,
   })
   // Persist design to localStorage for session recovery on refresh/restart.
-  if (json.design) persistDesign()
+  if (json.design && !simulationProjection) persistDesign()
   if (json.design) _clearStaleSelections()
   _designSyncTransient = false
   return json
@@ -2427,6 +2454,12 @@ async function _oxdnaJSON(method, path, body = undefined, { signal } = {}) {
 }
 
 async function _oxdnaJSONRequest(method, path, body = undefined, { signal } = {}) {
+  // Job endpoints intentionally use a lightweight transport, but assembly jobs still
+  // need the same flattened Design projection as ordinary simulation requests.  Without
+  // this, the first job launched from a newly opened assembly either used the previous
+  // document's Design or failed with "no active design"; merely visiting another engine
+  // happened to hide the bug by materializing first.
+  await _ensureAssemblySimulation(path)
   const diagnosticId = ++_diagnosticRequestSeq
   const diagnosticStarted = performance.now()
   _emitRequestDiagnostic({
@@ -4365,6 +4398,10 @@ export async function getInstanceSurfaceGeometry(id, colorMode = 'strand', probe
 
 export async function getInstanceAtomisticGeometry(id) {
   return _request('GET', `/assembly/instances/${id}/atomistic-geometry`)
+}
+
+export async function getInstanceProteinGeometry(id) {
+  return _request('GET', `/assembly/instances/${id}/protein-geometry`)
 }
 
 /**

@@ -38,6 +38,13 @@ the carve-up's extraction, applied *before* the code is ever written instead of 
      correct point in `main()`; reordering silently breaks position-overlay invariants. See `main-init.md`.
    - **Frame-callback / TDZ** landmines (a frame callback that reads a later-declared `const` kills the
      render loop) — `main-init.md`.
+5. **Does an equivalent feature already exist in part or assembly mode?**
+   → Treat the existing behavior as the parity specification, not merely as visual inspiration. Inventory
+   its full user-visible and persisted contract before coding: controls and advanced options, defaults,
+   enablement, validation, progress/cancel/resume, results and visualization, errors, undo/history,
+   save/reload, export, and downstream job behavior. Put reusable behavior behind one shared domain or
+   controller API; add a thin host adapter for design vs selected assembly target. See
+   `memory/project_assembly_feature_parity.md`.
 
 ## Gate (same bar as the carve-up + fix loops)
 
@@ -82,6 +89,11 @@ returns); just don't let *new cohesive logic* join it.
   row, `[x]` if fixed same session). **A gesture/visual you ship without a live hand-check** → push an
   `MV-N` row into `manual_validation_debt.md`. (Same cross-loop intake the carve-up uses — see
   `issues_ledger.md` "Intake" + `manual_validation_debt.md` "Intake".)
+
+An existing mode guard is not a specification. In particular, do not preserve or add
+`if (assemblyActive) return`, disabled assembly controls, or “not available in assembly mode” solely
+because the assembly adapter has not been written yet. Establish whether there is a real ownership,
+topology, or measured scale constraint. Otherwise wire the shared behavior through the assembly host.
 
 ## The design-automation loop (a feature loop that runs ON this law)
 

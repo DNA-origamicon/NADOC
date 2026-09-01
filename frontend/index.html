@@ -4820,16 +4820,6 @@
           <div class="panel-section" id="mrdna-jobs-panel">
             <div id="mrdna-jobs-body" style="margin-top:2px">
 
-              <!-- availability badge — HIDDEN: install state shows as a ⚠ on the mrDNA tab. -->
-              <div id="mrdna-jobs-status" style="display:none;font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
-
-              <!-- running job's progress bar -->
-              <div id="mrdna-jobs-progress" style="display:none;margin-bottom:6px">
-                <div style="height:4px;background:#161b22;border-radius:2px;overflow:hidden">
-                  <div class="bar" style="height:100%;width:0%;background:#4a9eff;transition:width .3s"></div>
-                </div>
-              </div>
-
               <!-- two run buttons: Coarse (fast, global shape) + Fine (curvature).
                    Relocated above the jobs card at init (see main.js run-control move). -->
               <div id="mrdna-launch-row" style="display:flex;gap:5px;margin-bottom:6px">
@@ -5004,7 +4994,6 @@
 
               <!-- ── Detail (selected job) ─────────────────────────────────── -->
               <div id="mrdna-jobs-detail" style="display:none;margin-top:6px;border-top:1px solid #21262d;padding-top:6px">
-                <div id="mrdna-jobs-detail-status" style="font-size:var(--text-xs);color:#c9d1d9;margin-bottom:4px;min-height:14px"></div>
                 <div id="mrdna-jobs-timeline" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:4px;font-family:var(--font-mono, monospace)"></div>
                 <!-- curvature readout: designed (Dietz) vs simulated (mrDNA) -->
                 <div id="mrdna-jobs-curvature" style="display:none;font-size:var(--text-xs);margin-bottom:6px;padding:5px 6px;background:#12161c;border:1px solid #21262d;border-radius:3px"></div>
@@ -5029,13 +5018,6 @@
           <!-- ── CanDo FEM (native shape predictor: linear/nonlinear solve) ──── -->
           <div class="panel-section" id="cando-jobs-panel">
             <div id="cando-jobs-body" style="margin-top:2px">
-
-              <!-- running job's progress bar -->
-              <div id="cando-jobs-progress" style="display:none;margin-bottom:6px">
-                <div style="height:4px;background:#161b22;border-radius:2px;overflow:hidden">
-                  <div class="bar" style="height:100%;width:0%;background:#4a9eff;transition:width .3s"></div>
-                </div>
-              </div>
 
               <!-- two run buttons: Coarse (linear preview) + Fine (nonlinear).
                    Relocated above the jobs card at init (see main.js run-control move). -->
@@ -5162,8 +5144,6 @@
 
               <!-- ── Detail (selected job) ─────────────────────────────────── -->
               <div id="cando-jobs-detail" style="display:none;margin-top:6px;border-top:1px solid #21262d;padding-top:6px">
-                <div id="cando-jobs-detail-status" style="font-size:var(--text-xs);color:#c9d1d9;margin-bottom:4px;min-height:14px"></div>
-                <div id="cando-jobs-timeline" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:4px;font-family:var(--font-mono, monospace)"></div>
                 <!-- completed-job summary: solver / nodes / RMSF range -->
                 <div id="cando-jobs-summary" style="display:none;font-size:var(--text-xs);color:#c9d1d9;margin-bottom:6px;padding:5px 6px;background:#12161c;border:1px solid #21262d;border-radius:3px"></div>
                 <div id="cando-jobs-detail-error" style="display:none;font-size:var(--text-xs);color:#ff7b72;margin-bottom:4px"></div>

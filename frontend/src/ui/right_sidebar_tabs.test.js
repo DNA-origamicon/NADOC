@@ -74,6 +74,18 @@ describe('right sidebar tabs', () => {
     expect(tabs.isCollapsed()).toBe(false)
   })
 
+  it('does not restore the hidden assembly tab in a part frontend', () => {
+    const storage = {
+      getItem: () => JSON.stringify({ activeTab: 'assembly', collapsed: false }),
+      setItem: () => {},
+    }
+    const tabs = initRightSidebarTabs({ document, storage })
+    expect(tabs.getActiveTab()).toBe('properties')
+    expect(document.querySelector('[data-tab="assembly"]').hidden).toBe(true)
+    expect(document.getElementById('right-tab-content-assembly').hidden).toBe(true)
+    expect(document.getElementById('right-tab-content-properties').hidden).toBe(false)
+  })
+
   it('keeps the assembly overview separate from overhang-related sections', () => {
     const tabs = initRightSidebarTabs({ document, storage: null })
     const button = document.querySelector('[data-tab="assembly"]')

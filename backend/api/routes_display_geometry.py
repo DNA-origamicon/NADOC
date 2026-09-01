@@ -374,7 +374,15 @@ def _build_design_surface_mesh(
 
     if detail == "chimerax":
         return _build_chimerax_surface(design)
-    if detail == "coarse":
+    # The CG bead cloud only describes nucleotides.  Imported proteins live in
+    # ``protein_attachments`` and therefore require the atom model; otherwise a
+    # design that visibly contains a protein silently produces a DNA-only
+    # surface under the default (coarse) setting.
+    has_proteins = any(
+        getattr(attachment, "visible", True)
+        for attachment in getattr(design, "protein_attachments", [])
+    )
+    if detail == "coarse" and not has_proteins:
         from backend.core.design_geometry import _geometry_for_design
 
         beads = []
@@ -423,7 +431,10 @@ def _build_design_surface_mesh(
     # DISPLAY surface: cheap interpolated phosphate bridges (fast_bridges — 6× faster
     # build; the VdW envelope is unaffected) + adaptive grid coarsening.
     model = build_atomistic_model(
-        design, nuc_frame_override=_flexible_display_override(design), fast_bridges=True
+        design,
+        nuc_frame_override=_flexible_display_override(design),
+        fast_bridges=True,
+        include_proteins=True,
     )
     mesh = compute_surface(
         model.atoms,
@@ -460,6 +471,7 @@ def _build_chimerax_surface(design):
             design,
             nuc_frame_override=_flexible_display_override(design),
             fast_bridges=True,
+            include_proteins=True,
         )
         pos = np.array([[a.x, a.y, a.z] for a in model.atoms], dtype=float)
         radii = np.array(
@@ -476,6 +488,11 @@ def _can_use_surface_cloud(design) -> bool:
     for designs without flexible-ssDNA display frames, extra-base crossovers, or 5'/3' extension
     tails (it stamps the standard nucleotide templates + phosphate bridges).  Those designs fall
     back to the exact Atom-object build — no speedup, but no envelope regression."""
+    if any(
+        getattr(attachment, "visible", True)
+        for attachment in getattr(design, "protein_attachments", [])
+    ):
+        return False
     if getattr(design, "flexible_connections", None):
         return False
     if getattr(design, "extensions", None):

@@ -125,6 +125,18 @@ test('BigO assembly supports the complete photomode control surface', async ({ p
       contextLost: window.__NADOC_DBG__.renderer.getContext().isContextLost(),
       contextLossEvents: window.__photoContextLosses,
       render: { ...window.__NADOC_DBG__.renderer.info.render },
+      visibleMeshes: (() => {
+        const rows = []
+        window.__NADOC_DBG__.scene.traverse(object => {
+          if ((!object.isMesh && !object.isInstancedMesh) || !object.visible) return
+          let visible = object.material?.visible !== false
+          for (let parent = object.parent; visible && parent; parent = parent.parent) visible = parent.visible
+          if (visible && (!object.isInstancedMesh || object.count > 0)) {
+            rows.push({ name: object.name || '(unnamed)', count: object.count ?? 1 })
+          }
+        })
+        return rows
+      })(),
     }), representation))
     console.log(`[assembly-photomode] ${representation} rendered`)
   }
@@ -139,6 +151,29 @@ test('BigO assembly supports the complete photomode control surface', async ({ p
     expect(diagnostic.contextLost, JSON.stringify(diagnostic)).toBe(false)
     expect(diagnostic.contextLossEvents, JSON.stringify(diagnostic)).toBe(0)
     expect(diagnostic.render.calls, JSON.stringify(diagnostic)).toBeGreaterThan(0)
+    const names = diagnostic.visibleMeshes.map(mesh => mesh.name)
+    const has = name => names.includes(name)
+    const hasPrefix = prefix => names.some(name => name.startsWith(prefix))
+    if (diagnostic.representation === 'hull-prism') expect(has('sharedLodHull'), JSON.stringify(diagnostic)).toBe(true)
+    if (diagnostic.representation === 'beads') {
+      expect(has('backboneSpheres'), JSON.stringify(diagnostic)).toBe(true)
+      expect(has('baseSlabs'), JSON.stringify(diagnostic)).toBe(false)
+    }
+    if (diagnostic.representation === 'full') expect(has('baseSlabs'), JSON.stringify(diagnostic)).toBe(true)
+    if (diagnostic.representation === 'surface') expect(has('assemblySurface'), JSON.stringify(diagnostic)).toBe(true)
+    if (diagnostic.representation === 'vdw' || diagnostic.representation === 'ballstick') {
+      expect(hasPrefix('atomImpostor_'), JSON.stringify(diagnostic)).toBe(true)
+      expect(has('sharedLodHull'), JSON.stringify(diagnostic)).toBe(false)
+    }
+    if (diagnostic.representation === 'vdw') expect(hasPrefix('atomBond_'), JSON.stringify(diagnostic)).toBe(false)
+    if (diagnostic.representation === 'ballstick') expect(hasPrefix('atomBond_'), JSON.stringify(diagnostic)).toBe(true)
+    if (diagnostic.representation === 'stick') {
+      expect(hasPrefix('atomBond_'), JSON.stringify(diagnostic)).toBe(true)
+      expect(has('sharedLodHull'), JSON.stringify(diagnostic)).toBe(false)
+    }
+    if (diagnostic.representation === 'cylinders') {
+      expect(has('sharedLodMid') || has('sharedLodCurvedCyl'), JSON.stringify(diagnostic)).toBe(true)
+    }
   }
 
   // Let multiple composed frames and the periodic geometry signature check run.

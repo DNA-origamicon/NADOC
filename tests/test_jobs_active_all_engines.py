@@ -82,3 +82,35 @@ def test_collect_active_skips_non_busy_new_engines(tmp_path, monkeypatch):
 
     active = routes_jobs._collect_active()
     assert active == []
+
+def test_activity_source_path_recovers_unique_legacy_flattened_assembly(tmp_path):
+    ws = tmp_path
+    (ws / "assemblies").mkdir()
+    (ws / "assemblies" / "polymer.nass").write_text(
+        '{"metadata":{"name":"polymer"}}', encoding="utf-8"
+    )
+    job_dir = ws / "md_jobs" / "legacy"
+    job_dir.mkdir(parents=True)
+    (job_dir / "design.json").write_text('{"id":"flat_assembly-id"}')
+    job = type("LegacyJob", (), {
+        "design_source_path": None,
+        "project_id": "flat_assembly-id",
+        "design_name": "polymer",
+        "job_dir": lambda self, root: root / "md_jobs" / "legacy",
+    })()
+
+    assert routes_jobs._activity_source_path(job, ws) == "assemblies/polymer.nass"
+
+
+def test_activity_source_path_refuses_ambiguous_assembly_name(tmp_path):
+    for folder in ("a", "b"):
+        path = tmp_path / folder
+        path.mkdir()
+        (path / "polymer.nass").write_text('{"metadata":{"name":"polymer"}}')
+    job = type("LegacyJob", (), {
+        "design_source_path": None,
+        "project_id": "flat_assembly-id",
+        "design_name": "polymer",
+    })()
+
+    assert routes_jobs._activity_source_path(job, tmp_path) is None

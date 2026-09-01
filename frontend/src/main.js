@@ -243,7 +243,7 @@ import { buildCreatePayload as buildLammpsPayload } from './ui/lammps_jobs_logic
 import { initCandoJobsPanel } from './ui/cando_jobs_panel.js'
 import { initSnupiJobsPanel } from './ui/snupi_jobs_panel.js'
 import { initBladeJobsPanel } from './ui/blade_jobs_panel.js'
-import { initEngineSelector } from './ui/engine_selector.js'
+import { initEngineSelector, reconcileSelectedEngine, bindEngineSelectorToSimulationTab } from './ui/engine_selector.js'
 import { initSimulateLaunch } from './ui/simulate_launch.js'
 import { fetchActiveJobs, runningEngineForPath } from './ui/job_activity.js'
 import { initJobsPanelBase } from './ui/jobs_panel_base.js'
@@ -360,6 +360,11 @@ async function main() {
     addFrameCallback,
   })
 
+  // Simulation visualizations replace the native assembly with the flattened job
+  // snapshot rendered by designRenderer.  Keep this flag outside the clipping
+  // closure so its bounds source follows what actually owns the viewport.
+  let _simulationVisualizationActive = false
+
   // ── Adaptive camera clipping for large assemblies ─────────────────────────
   // The camera's far plane is a fixed 2000 nm (sized for a single design — see
   // scene.js). A large assembly spans far more, so instances past 2000 nm from
@@ -415,7 +420,19 @@ async function main() {
         return
       }
       if ((_clipTick++ % 15) === 0) {
-        const box = assemblyRenderer.getBoundingBox?.()
+        let box
+        if (_simulationVisualizationActive) {
+          // The native assembly is hidden while a simulation visualization owns
+          // the viewport. Its renderer therefore has either empty bounds (classic
+          // renderer) or stale native bounds (shared renderer). Build bounds from
+          // the live snapshot positions instead; applyFemPositions mutates entry.pos.
+          box = new THREE.Box3()
+          for (const entry of designRenderer.getBackboneEntries?.() || []) {
+            if (entry.pos) box.expandByPoint(entry.pos)
+          }
+        } else {
+          box = assemblyRenderer.getBoundingBox?.()
+        }
         if (box && !box.isEmpty()) {
           box.getCenter(_clipCtr)
           _clipRadius = box.getSize(_clipSize).length() * 0.5
@@ -615,6 +632,13 @@ async function main() {
   let _atomSurface = null
   let visibilityController = null
   let selectionManager = null
+  // Part-edit mode imports its design during boot, before the lower UI sections
+  // are composed. Store subscribers can run synchronously during that import, so
+  // every value they touch must already be initialized (optional chaining does
+  // not protect a binding that is still in its temporal dead zone).
+  let spreadsheet = null
+  let clusterPanel = null
+  let _currentRepr = 'full'
   const selectionController = createSelectionController({ store })
   selectionManager = initSelectionManager(canvas, camera, designRenderer, {
     selectionController,
@@ -1194,6 +1218,8 @@ async function main() {
   // ── oxDNA relaxation panel + display (deforms NADOC model to relaxed CG) ──────
   const oxdnaDisplay = initOxdnaDisplay({
     designRenderer, api, proteinRenderer,
+    setDesignVisible: _setSimulationVisualizationVisible,
+    restoreDesignVisible: _restoreNativeAfterSimulation,
     getAtomisticRenderer: () => atomisticRenderer,
     getSurfaceRenderer:   () => surfaceRenderer,   // const declared ~1918 (resolved lazily)
     getCurrentRepr:       () => _currentRepr,       // let declared ~2976 (resolved lazily)
@@ -1295,6 +1321,8 @@ async function main() {
   // reused for NAMD jobs without touching the validated oxDNA controller.
   const mdViz = initOxdnaDisplay({
     designRenderer, api: mdVizApiAdapter(api), proteinRenderer,
+    setDesignVisible: _setSimulationVisualizationVisible,
+    restoreDesignVisible: _restoreNativeAfterSimulation,
     onOccupancyClear:     () => occupancyOverlay.clear(),
     getAtomisticRenderer: () => atomisticRenderer,
     getSurfaceRenderer:   () => surfaceRenderer,
@@ -1320,7 +1348,9 @@ async function main() {
   // mappers as oxdnaDisplay, pointed at the LAMMPS endpoints).
   const lammpsDisplay = initLammpsDisplay({ designRenderer })
   oxdnaPanel = initOxdnaJobsPanel({
-    oxdnaDisplay, lammpsDisplay, oxdnaLive, getWorkspacePath: () => _workspacePath,
+    oxdnaDisplay, lammpsDisplay, oxdnaLive,
+    getWorkspacePath: () => store.getState().assemblyActive
+      ? _assemblyWorkspacePath : _workspacePath,
     getOccupancyOverlay: () => occupancyOverlay, getAnchorSelection: _anchorSelectionState,
     flexScale,
     getRunElements: _oxdnaRunElements,
@@ -1358,23 +1388,55 @@ async function main() {
     beadOverlay:       mrdnaBeadOverlay,
     connectionOverlay: mrdnaConnOverlay,
     oxdnaInputOverlay,
-    setDesignVisible:  (v) => _setDesignGeometryVisible(v),  // hoisted fn decl (defined below)
+    setDesignVisible: _setSimulationVisualizationVisible,
+    restoreDesignVisible: _restoreNativeAfterSimulation,
     flexScale,
   })
-  const mrdnaPanel = initMrdnaJobsPanel({ mrdnaDisplay, getWorkspacePath: () => _workspacePath, getSelection: _anchorSelectionState })
+  const mrdnaPanel = initMrdnaJobsPanel({
+    mrdnaDisplay,
+    getWorkspacePath: () => store.getState().assemblyActive
+      ? _assemblyWorkspacePath : _workspacePath,
+    getSelection: _anchorSelectionState,
+  })
   // CanDo FEM (native shape predictor) — sibling of the mrDNA panel, in-process
   // solver. The "Predicted shape (deform model)" toggle deforms the NADOC model to
   // the FEM-predicted positions via applyFemPositions (display-only, Three-Layer).
   // "CanDo style output" toggle draws the predicted shape as CanDo's jointed-cylinder
   // tubes (a standalone rep — native model hidden, like the mrDNA CG-beads mode).
   const candoCylinderOverlay = initCandoCylinders(scene)
+  // A CanDo visualization owns the viewport. In assembly mode its native renderer
+  // must be hidden while the flattened/job-snapshot Design is shown; toggling Off
+  // reverses that ownership without changing authored instance visibility.
+  function _setSimulationVisualizationVisible(visible) {
+    _simulationVisualizationActive = true
+    _setDesignGeometryVisible(visible)
+    if (store.getState().assemblyActive) {
+      assemblyRenderer.setVisible?.(false)
+      assemblyJointRenderer.setVisible(false)
+    }
+  }
+  function _restoreNativeAfterSimulation() {
+    _simulationVisualizationActive = false
+    const assemblyActive = store.getState().assemblyActive
+    _setDesignGeometryVisible(!assemblyActive)
+    if (assemblyActive) {
+      assemblyRenderer.setVisible?.(true)
+      assemblyJointRenderer.setVisible(true)
+    }
+  }
   const candoDisplay = initCandoDisplay({
     designRenderer, api,
     cylinderOverlay:  candoCylinderOverlay,
-    setDesignVisible: (v) => _setDesignGeometryVisible(v),
+    setDesignVisible: _setSimulationVisualizationVisible,
+    restoreDesignVisible: _restoreNativeAfterSimulation,
     flexScale,
   })
-  const candoPanel = initCandoJobsPanel({ candoDisplay, getWorkspacePath: () => _workspacePath, getSelection: _anchorSelectionState })
+  const candoPanel = initCandoJobsPanel({
+    candoDisplay,
+    getWorkspacePath: () => store.getState().assemblyActive
+      ? _assemblyWorkspacePath : _workspacePath,
+    getSelection: _anchorSelectionState,
+  })
   // SNUPI FEM — the SAME in-process solver as CanDo, run with the anisotropic SNUPI
   // material law (predict_shape material="snupi"; validated ≥ CanDo vs MD at $0). Its own
   // display controller + cylinder overlay (independent instance) so its viz modes never
@@ -1383,18 +1445,29 @@ async function main() {
   const snupiDisplay = initSnupiDisplay({
     designRenderer, api,
     cylinderOverlay:  snupiCylinderOverlay,
-    setDesignVisible: (v) => _setDesignGeometryVisible(v),
+    setDesignVisible: _setSimulationVisualizationVisible,
+    restoreDesignVisible: _restoreNativeAfterSimulation,
     flexScale,
   })
-  const snupiPanel = initSnupiJobsPanel({ snupiDisplay, getWorkspacePath: () => _workspacePath, getSelection: _anchorSelectionState })
+  const snupiPanel = initSnupiJobsPanel({
+    snupiDisplay,
+    getWorkspacePath: () => store.getState().assemblyActive
+      ? _assemblyWorkspacePath : _workspacePath,
+    getSelection: _anchorSelectionState,
+  })
   // BLADE — box-free implicit-solvent atomistic relax (OpenMM in the gpu env via a detached
   // worker). No cylinder overlay and no flex scale: it drives no scalar-colour channel, only
   // bead positions (relaxed shape + trajectory playback). Display-only (Three-Layer Law).
   const bladeDisplay = initBladeDisplay({
     designRenderer, api,
-    setDesignVisible: (v) => _setDesignGeometryVisible(v),
+    setDesignVisible: _setSimulationVisualizationVisible,
+    restoreDesignVisible: _restoreNativeAfterSimulation,
   })
-  const bladePanel = initBladeJobsPanel({ bladeDisplay, getWorkspacePath: () => _workspacePath })
+  const bladePanel = initBladeJobsPanel({
+    bladeDisplay,
+    getWorkspacePath: () => store.getState().assemblyActive
+      ? _assemblyWorkspacePath : _workspacePath,
+  })
   // (Editing OR seeking the design refetches the oxDNA/MD job lists so the out-of-date
   // ⚠ markers update immediately — driven by the client's `nadoc:design-changed` event
   // on every design sync; both panels self-listen, so no store subscription here.)
@@ -1675,6 +1748,10 @@ async function main() {
       if (namdLiveHost) namdLiveHost.style.display = engine === 'namd' ? '' : 'none'
     },
   })
+  // Opening Simulations is the authoritative visibility boundary. Re-apply the
+  // current engine there so the default oxDNA panel cannot retain a stale hidden
+  // style from startup/previous tab state; switching engines already does this.
+  bindEngineSelectorToSimulationTab(engineSelector)
 
   // "Use as NAMD seed" (oxDNA / mrDNA panels) creates a NAMD job — surface it by
   // switching the Simulate selector to the NAMD tab. The panels are tab-fronted now,
@@ -1701,7 +1778,8 @@ async function main() {
   // Constructed after the panels so it can hold their handles.
   simulateJobs = initSimulateJobs({
     api,
-    getWorkspacePath: () => _workspacePath,
+    getWorkspacePath: () => store.getState().assemblyActive
+      ? _assemblyWorkspacePath : _workspacePath,
     oxdnaPanel,
     mrdnaPanel,
     candoPanel,
@@ -1742,6 +1820,10 @@ async function main() {
       simulateLaunch?.refresh?.()
     }
   })
+  // A fast click can activate Simulations before this late composition-root wiring
+  // subscribes to the tab event. Reconcile the already-active state once at init so
+  // the resource recommendation/status line never remains blank until another click.
+  _refreshSimPolicy()
 
   // The Simulate section collapses as one (its header owns the collapse; each engine
   // header is a static label). Reuse the shared jobs-panel base for persist + arrow.
@@ -1754,6 +1836,11 @@ async function main() {
     },
     arrowStyle: 'class',
   }).initCollapsed(false)   // default expanded
+  // oxDNA is selected before the unified jobs controller and section-level cards
+  // finish composing. Re-apply the authoritative selection once all of them exist;
+  // otherwise the first Simulations open can retain stale hidden panel/card styles
+  // until an engine switch happens to perform this same render pass.
+  reconcileSelectedEngine(engineSelector)
 
   // ── Surface renderer (VdW / SES) ─────────────────────────────────────────────
   const surfaceRenderer = initSurfaceRenderer(scene)
@@ -2796,9 +2883,13 @@ async function main() {
     _showWelcome()
   })
 
-  // ── Part-edit init — ?part-instance=<id> opens this tab as a part editor ────
-  {
-    const _partInstanceParam = new URLSearchParams(window.location.search).get('part-instance')
+  // ── Part-edit boot action — ?part-instance=<id> opens this tab as a part editor ──
+  const _partInstanceParam = new URLSearchParams(window.location.search).get('part-instance')
+  if (_partInstanceParam) {
+    _needsWelcomeOnBoot = false
+    document.getElementById('welcome-screen')?.classList.add('hidden')
+  }
+  async function _openPartEditorFromAssembly() {
     // The assembly lives in ITS OWN doc (the assembly tab's). This part-editor
     // tab runs on its own isolated doc (so multiple open parts never clobber one
     // another's design slot) but must reach into the assembly's doc to fetch its
@@ -2860,6 +2951,11 @@ async function main() {
       if (partDesign) {
         _flSetProgress(50, 'Importing design…')
         _flAppendLog('Parsing and validating design…')
+        // Use the same fully-composed part-mode reset as a workspace/welcome
+        // open. Running this import midway through main() used to bypass several
+        // visibility owners, leaving TransformControls helpers from design-only
+        // overlays in an inconsistent state.
+        _resetForNewDesign()
         // Import into THIS tab's own (isolated) doc — the editable working copy.
         await api.importDesign(JSON.stringify(partDesign))
         const partName = partDesign?.metadata?.name ?? 'Part'
@@ -2868,6 +2964,7 @@ async function main() {
         _setFileName(partName)
         _needsWelcomeOnBoot = false
         _hideWelcome()
+        _revealWorkspaceForEmptyPart()
         document.title = `NADOC 3D — ${partName} [part edit]`
         document.getElementById('mode-indicator').textContent = `PART EDIT — ${partName}`
         _flAppendLog(`Part "${partName}" loaded successfully.`, 'success')
@@ -2902,7 +2999,6 @@ async function main() {
   // hull-prism). Tracked so e.g. the deform tool can drop the hull-prism solid for
   // an edit (its coarse envelope can't show the live preview and would persist
   // under the full-rep preview). Set by _setRepresentation.
-  let _currentRepr      = 'full'
 
   /** Clear per-file state (slice plane, store) and return to workspace. */
   function _resetForNewDesign() {
@@ -2947,6 +3043,11 @@ async function main() {
     candoDisplay.stopAndRestore()
     snupiDisplay.stopAndRestore()
     bladeDisplay.stopAndRestore()
+    // Surface-strand placement is a per-design editing tool. Reset both its card
+    // state and scene owner before importing another file; otherwise a preview or
+    // simulation result can be rebound to the next design's geometry.
+    oxdnaSurfaceStrandsSetup?.applyConfig?.(null)
+    surfaceStrandsOverlay?.clear?.()
     // Reset representation to Full — deactivates atomistic/surface renderers,
     // resets the representation radio, and hides mode-specific option rows.
     _setRepresentation('full')
@@ -4059,7 +4160,7 @@ async function main() {
     getBeltFillCount: (riderId) => _beltPolymerize?.beltFillInfo(riderId),
     onPolymerizeBelt: (riderId, count) => _beltPolymerize?.polymerizeBelt(riderId, count),
   })
-  const spreadsheet = initSpreadsheet(store, {
+  spreadsheet = initSpreadsheet(store, {
     designRenderer,
     selectionManager,
     visibilityController,
@@ -5061,7 +5162,7 @@ async function main() {
 
   const designSceneVisibility = initDesignSceneVisibility({
     scene, store, designRenderer, bluntEnds, endExtrudeArrows,
-    jointRenderer, unfoldView, overhangLinkArcs,
+    jointRenderer, unfoldView, overhangLinkArcs, surfaceStrandsOverlay,
   })
   function _setDesignGeometryVisible(visible) {
     designSceneVisibility.setVisible(visible)
@@ -5335,7 +5436,6 @@ async function main() {
 
   // Drive assembly panel + assembly renderer only after all pointer/overlay
   // dependencies exist. The subscriber may run synchronously on registration.
-  let clusterPanel = null
   initAssemblyModeSync({
     store, animPanel, setDesignGeometryVisible: _setDesignGeometryVisible,
     assemblyPanel, applyAssemblyLoadDefaults: _applyAssemblyLoadDefaults,
@@ -6666,7 +6766,9 @@ async function main() {
   // ── Run the boot action for a New/Open-spawned tab (?new / ?open) ────────────
   // This tab owns a fresh ?doc=<id>, so the action targets its own document.
   // Strip the action params afterward (keep ?doc=) so a reload doesn't re-run it.
-  if (_bootDocAction) {
+  if (_partInstanceParam) {
+    await _openPartEditorFromAssembly()
+  } else if (_bootDocAction) {
     const { newKind, openPath, openType, openName } = _bootDocAction
     const docId = getDocId()
     if (docId) history.replaceState({}, '', `/?doc=${encodeURIComponent(docId)}`)

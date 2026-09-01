@@ -23,7 +23,8 @@ import {
   enabledCardKeys, supportsCard, cardReason,
 } from './engine_capabilities.js'
 import {
-  panelVisibility, selectedEngineCards, isEngine, initEngineSelector,
+  panelVisibility, selectedEngineCards, isEngine, initEngineSelector, reconcileSelectedEngine,
+  bindEngineSelectorToSimulationTab,
 } from './engine_selector.js'
 
 describe('U4 pure selector state — driven by the U1 descriptor', () => {
@@ -192,5 +193,29 @@ describe('U4 factory — wires the pure state to the DOM', () => {
     sel.select('namd')
     expect(runControlEls.namd.style.display).not.toBe('none')
     expect(runControlEls.oxdna.style.display).toBe('none')
+  })
+
+  it('reconciles the initial engine after late panel composition', () => {
+    const { selectorMount, panelEls } = harness()
+    const sel = initEngineSelector({ selectorMount, panelEls, initial: 'oxdna' })
+    // A late initializer/move leaves the default panel with a stale hidden style.
+    panelEls.oxdna.style.display = 'none'
+    reconcileSelectedEngine(sel)
+    expect(panelEls.oxdna.style.display).not.toBe('none')
+    expect(panelEls.mrdna.style.display).toBe('none')
+  })
+
+  it('reconciles stale panel visibility whenever Simulations opens', () => {
+    const { selectorMount, panelEls } = harness()
+    const sel = initEngineSelector({ selectorMount, panelEls, initial: 'oxdna' })
+    bindEngineSelectorToSimulationTab(sel)
+    panelEls.oxdna.style.display = 'none'
+
+    window.dispatchEvent(new CustomEvent('nadoc:left-tab-change', {
+      detail: { activeTab: 'dynamics', collapsed: false },
+    }))
+
+    expect(panelEls.oxdna.style.display).not.toBe('none')
+    expect(panelEls.namd.style.display).toBe('none')
   })
 })

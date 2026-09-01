@@ -66,6 +66,18 @@ Detailed extraction verification lives in the path-scoped [main-init rule](.clau
 - Before completing a behavior change, read the relevant project head and any clearly matching feedback file. Update stale current-state claims that the change resolves.
 - Before adding a feature, read [FEATURE_DEVELOPMENT.md](FEATURE_DEVELOPMENT.md). Cohesive behavior belongs in a tested module; composition roots such as `main.js` receive only imports, initialization, and thin wiring.
 
+### Part/assembly feature parity
+
+Assembly mode is a different host and scaling regime, **not a reduced product tier**. When the user
+asks to port, match, or make an assembly feature the same as individual-part editing, interpret that
+as comprehensive behavioral parity: controls, defaults, validation, status/progress, errors, undo,
+feature history, persistence, export, job lifecycle, visualization, and relevant advanced options.
+Reuse the same domain logic and adapt only target resolution, commit/refresh wiring, layout, and
+scale-sensitive execution. Do not treat an existing `assemblyActive` guard, missing assembly route,
+or historical “part-only” note as product intent. Any exception must identify a concrete assembly
+semantic or measured scale constraint, preserve the closest practical behavior, and be reported
+explicitly. Read [assembly feature parity](memory/project_assembly_feature_parity.md).
+
 Do not pre-load unrelated areas. Assembly work does not need cadnano-editor context; physics work does not need scaffold-routing context.
 
 ## Git and shared-worktree safety

@@ -701,7 +701,7 @@ def _composite_inputs(job: OxdnaJob, scope: str = "lineage"):
     snap = jd / "design.json"
     if not snap.exists():
         raise HTTPException(500, "design.json snapshot missing for this job")
-    design = Design.model_validate_json(snap.read_text())
+    design = Design.from_json(snap.read_text())
     ref = _design_ref_conf(jd, design)
     return design, stages, ref
 
@@ -2285,7 +2285,7 @@ async def get_oxdna_rmsd(job_id: str) -> dict:
         if cand.exists():
             ref_conf = cand
 
-    design = Design.model_validate_json((jd / "design.json").read_text())
+    design = Design.from_json((jd / "design.json").read_text())
     result = await run_in_threadpool(production_rmsd, design, traj, ref_conf)
     return {"ready": result["n_frames"] > 0, **result}
 
@@ -2335,7 +2335,7 @@ async def get_oxdna_rmsf(job_id: str, align: bool = True) -> dict:
     # route's Kabsch reference, so the flexibility map and the relaxed display sit
     # in the same place.  Must be _design_ref_conf (not the job's conf.dat): for a
     # field/production child conf.dat is the parent's drifted relaxed structure.
-    design = Design.model_validate_json((jd / "design.json").read_text())
+    design = Design.from_json((jd / "design.json").read_text())
     ref_conf = _design_ref_conf(jd, design)
 
     # copies=True → a per-loop-copy flexibility value so every loop bead recolours.
@@ -2386,7 +2386,7 @@ async def get_oxdna_deviation(job_id: str, align: bool = True) -> dict:
         trajs.extend(_stage_trajectories(job.stage_dir(_workspace(), s.name)))
     if not trajs:
         return {"ready": False, "reason": "sampling starting — no frames yet"}
-    design = Design.model_validate_json((jd / "design.json").read_text())
+    design = Design.from_json((jd / "design.json").read_text())
     ref_conf = _design_ref_conf(jd, design)
 
     def _compute():
@@ -2462,7 +2462,7 @@ async def get_oxdna_strain(
         trajs.extend(_stage_trajectories(job.stage_dir(_workspace(), s.name)))
     if not trajs:
         return {"ready": False, "reason": "sampling starting — no frames yet"}
-    design = Design.model_validate_json((jd / "design.json").read_text())
+    design = Design.from_json((jd / "design.json").read_text())
     ref_conf = _design_ref_conf(jd, design)
 
     def _compute():
@@ -3564,7 +3564,7 @@ def _relaxed_full_map(
     snap = jd / "design.json"
     if not snap.exists():
         raise HTTPException(500, "design.json snapshot missing for this job")
-    design = Design.model_validate_json(snap.read_text())
+    design = Design.from_json(snap.read_text())
 
     # A job written by an older build can have FEWER particles than the design now
     # walks to (strand extensions add one per extension base).  The reader cannot
@@ -3828,7 +3828,7 @@ async def get_oxdna_atomistic_model(job_id: str) -> dict:
     snap = job.job_dir(_workspace()) / "design.json"
     if not snap.exists():
         raise HTTPException(500, "design.json snapshot missing for this job")
-    design = Design.model_validate_json(snap.read_text())
+    design = Design.from_json(snap.read_text())
     # Display topology only — the relaxed positions overwrite these coords via
     # applyPositionLerp, so use the cheap interpolated phosphate bridges (6× faster
     # build on large structures; the exact MD-seed geometry would be discarded anyway).
@@ -3858,7 +3858,7 @@ async def get_oxdna_atomistic_stamp(job_id: str) -> dict:
     snap = job.job_dir(_workspace()) / "design.json"
     if not snap.exists():
         raise HTTPException(500, "design.json snapshot missing for this job")
-    design = Design.model_validate_json(snap.read_text())
+    design = Design.from_json(snap.read_text())
     desc = await run_in_threadpool(atomistic_stamp_descriptor, design)
     # Flatten atom_local (3*n_atoms) for a compact wire; nuc_keys as [h,bp,dir,copy].
     atom_local_flat: list = []
@@ -3887,7 +3887,7 @@ def _atomistic_bundle_ctx(job_id: str):
     snap = jd / "design.json"
     if not snap.exists():
         raise HTTPException(500, "design.json snapshot missing for this job")
-    design = Design.model_validate_json(snap.read_text())
+    design = Design.from_json(snap.read_text())
     return design, atomistic_reference_topology_hash(design), jd
 
 
@@ -4240,7 +4240,7 @@ def _rmsf_average_frame(job, align: bool = True):
         trajs.extend(_stage_trajectories(job.stage_dir(_workspace(), s.name)))
     if not trajs:
         return (None, None, None)
-    design = Design.model_validate_json((jd / "design.json").read_text())
+    design = Design.from_json((jd / "design.json").read_text())
     ref_conf = _design_ref_conf(jd, design)
     result = production_rmsf_cached(
         design,

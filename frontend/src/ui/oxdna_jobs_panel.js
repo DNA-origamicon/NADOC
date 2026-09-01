@@ -1509,7 +1509,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
 
   // ── Launch ─────────────────────────────────────────────────────────────────
   async function _launchRelax(wizardPayload = null) {
-    if (_launching || !_available) return
+    if (_launching || !_available) return null
     const remoteTarget = wizardPayload?.execution_target && wizardPayload.execution_target !== 'local'
     const selectedBackend = wizardPayload?.backend || backendSel?.value || 'CUDA'
     const selectedDevice = wizardPayload?.device || deviceInput?.value || '0'
@@ -1554,7 +1554,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
         runBtn.disabled = false
         _setStatus('', _C.muted)
         _updateButtons(_selectedJob())
-        return
+        return null
       }
     } catch { /* forecast is best-effort — never block a launch on it */ }
     const job = await api.createOxdnaJob(body).catch(() => null)
@@ -1576,6 +1576,10 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
         _setStatus(detail || 'Failed to start relaxation (see console)', _C.err)
       }
     }
+    // Wizard contract: a truthy saved record closes the modal; null keeps it
+    // open so the user can correct a failed/cancelled submission. Do not discard
+    // the successfully-created job after updating the panel.
+    return job?.job_id ? job : null
   }
 
   const _wizard = initOxdnaJobWizard({

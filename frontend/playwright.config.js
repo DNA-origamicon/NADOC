@@ -18,8 +18,8 @@ const REPO_ROOT = path.resolve(FRONTEND_DIR, '..')
 // isolation is NOT used: the assembly harness saves parts to a cwd-relative
 // workspace/ path but loads them relative to the backend's workspace, so an override
 // would split those apart.)
-const BACKEND_PORT = '8002'
-const FRONTEND_PORT = '5175'
+const BACKEND_PORT = process.env.NADOC_E2E_BACKEND_PORT || '8002'
+const FRONTEND_PORT = process.env.NADOC_E2E_FRONTEND_PORT || '5175'
 
 // Specs/helpers that call the API directly (scene_harness.js) must hit this
 // throwaway backend, not the proxied dev one.

@@ -8,7 +8,6 @@ prevents the local and remote coordinate-column rewrites from drifting apart.
 import argparse
 import struct
 from pathlib import Path
-from typing import List
 
 
 def retarget_pdb_coordinates(coor_path: Path, src_pdb: Path, dst_pdb: Path) -> int:

@@ -76,7 +76,12 @@ def _load_snapshot_design(job_dir: Path) -> Optional[Design]:
     if not snap.exists():
         return None
     try:
-        return Design.model_validate_json(snap.read_text())
+        # Use the canonical loader, not raw Pydantic validation. Design.from_json
+        # reconstructs derived crossover/ligation topology from the strand graph;
+        # bypassing it made assembly jobs lose every ordinary crossover after the
+        # snapshot boundary (smallO-poly: 78 -> 0), so CanDo solved six independent
+        # helices instead of one mechanically coupled 6HB.
+        return Design.from_json(snap.read_text())
     except Exception:  # noqa: BLE001
         return None
 
@@ -285,6 +290,11 @@ def _estimate_seconds(job: CandoJob) -> float:
 
 def job_progress(job: CandoJob, workspace_dir: Path) -> dict:
     """Overall progress fraction + ETA for the panel."""
+    progress_path = job.job_dir(workspace_dir) / "progress.json"
+    try:
+        live = json.loads(progress_path.read_text())
+    except (OSError, ValueError, TypeError):
+        live = None
     stage = job.stages[0] if job.stages else None
     overall = 0.0
     eta_seconds: float | None = None
@@ -297,13 +307,34 @@ def job_progress(job: CandoJob, workspace_dir: Path) -> dict:
         est = _estimate_seconds(job)
         overall = min(0.97, elapsed / est)
         eta_seconds = max(0.0, est - elapsed)
-    return {
+    payload = {
         "overall": overall,
         "status": job.status.value,
         "stage_status": stage.status if stage else None,
         "eta_seconds": eta_seconds,
         "sim_seconds": job.sim_seconds,
     }
+    if isinstance(live, dict):
+        payload.update(live)
+    return payload
+
+
+def _write_progress(job: CandoJob, workspace_dir: Path, phases: list[dict]) -> None:
+    """Atomically publish retained preparation/solve phases for UI polling."""
+    jd = job.job_dir(workspace_dir)
+    weights = [float(p.get("weight", 1.0)) for p in phases]
+    total = sum(weights) or 1.0
+    overall = (
+        sum(
+            w * max(0.0, min(1.0, float(p.get("fraction", 0.0))))
+            for p, w in zip(phases, weights)
+        )
+        / total
+    )
+    public = [{k: v for k, v in p.items() if k != "weight"} for p in phases]
+    tmp = jd / f"progress.json.{threading.get_ident()}.tmp"
+    tmp.write_text(json.dumps({"overall": overall, "phases": public}))
+    tmp.replace(jd / "progress.json")
 
 
 # ── Execution ─────────────────────────────────────────────────────────────────
@@ -361,9 +392,67 @@ def _run_job(job: CandoJob, workspace_dir: Path) -> None:
         return handle is not None and handle.cancelled
 
     try:
+        phases = [
+            {
+                "name": "snapshot",
+                "label": "Load design snapshot",
+                "fraction": 0.0,
+                "weight": 0.03,
+            },
+            {
+                "name": "mesh",
+                "label": "Build assembly FEM mesh",
+                "fraction": 0.0,
+                "weight": 0.12,
+            },
+            {
+                "name": "solve",
+                "label": "Solve elastic deformation",
+                "fraction": 0.0,
+                "weight": 0.35,
+            },
+        ]
+        if job.with_rmsf:
+            phases.append(
+                {
+                    "name": "rmsf",
+                    "label": "Compute normal modes and RMSF",
+                    "fraction": 0.0,
+                    "weight": 0.38,
+                }
+            )
+        if job.with_rmsf and getattr(job, "with_thermal_fluctuations", True):
+            phases.append(
+                {
+                    "name": "thermal",
+                    "label": "Build thermal conformations",
+                    "fraction": 0.0,
+                    "weight": 0.08,
+                }
+            )
+        phases.append(
+            {
+                "name": "cache",
+                "label": "Cache display results",
+                "fraction": 0.0,
+                "weight": 0.04,
+            }
+        )
+
+        def report(name: str, fraction: float, label: str | None = None) -> None:
+            for phase in phases:
+                if phase["name"] == name:
+                    phase["fraction"] = fraction
+                    if label:
+                        phase["label"] = label
+                    break
+            _write_progress(job, workspace_dir, phases)
+
+        report("snapshot", 0.2)
         design = _load_snapshot_design(jd)
         if design is None:
             raise RuntimeError("job design snapshot (design.json) missing")
+        report("snapshot", 1.0)
 
         from backend.physics.fem_solver import predict_shape
 
@@ -390,13 +479,16 @@ def _run_job(job: CandoJob, workspace_dir: Path) -> None:
             # falls back to the free centroid-pinned solve if a selection resolves to nothing.
             anchors=getattr(job, "anchors", None),
             field=getattr(job, "field", None),
+            progress_cb=report,
         )
         sim_seconds = time.monotonic() - t0
 
         if _cancelled():
             raise _Cancelled()
 
+        report("cache", 0.1)
         _cache_fem_analysis(job, jd, result)
+        report("cache", 1.0)
         job.sim_seconds = round(sim_seconds, 2)
         for st in job.stages:
             st.status = "done"

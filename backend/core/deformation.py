@@ -1212,6 +1212,8 @@ def apply_overhang_rotation_if_needed(
     arrs: dict,
     helix: "Helix",
     design: "Design",
+    *,
+    pivot_by_overhang_id: dict[str, list[float]] | None = None,
 ) -> dict:
     """Apply ball-joint rotation for overhangs on this helix.
 
@@ -1285,7 +1287,13 @@ def apply_overhang_rotation_if_needed(
 
         nuc_mask = (arrs["bp_indices"] == junction_bp) & (arrs["directions"] == dir_int)
         pivot: list[float] = (
-            arrs["positions"][nuc_mask][0].tolist() if nuc_mask.any() else ovhg.pivot
+            pivot_by_overhang_id[ovhg.id]
+            if pivot_by_overhang_id and ovhg.id in pivot_by_overhang_id
+            else (
+                arrs["positions"][nuc_mask][0].tolist()
+                if nuc_mask.any()
+                else ovhg.pivot
+            )
         )
 
         # ── Layer 1: whole-overhang rotation (legacy) + rigid translation ──
@@ -1800,7 +1808,26 @@ def apply_deformations_to_atoms(atoms: list, design: "Design") -> None:
 
     Atoms with empty helix_id are skipped (no frame available).
     """
-    if not design.deformations and not design.cluster_transforms:
+    # Overhang rotations/translations are authored geometry too.  In
+    # particular, moving a conjugated protein writes the constrained swing to
+    # OverhangSpec.rotation without creating a bend or cluster transform.
+    # Do not take the old fast exit in that case or atomistic representations
+    # leave the attached oligos at their pre-move coordinates.
+    has_overhang_transforms = any(
+        ovhg.rotation != _IDENTITY_QUAT
+        or any(abs(float(t)) > 1e-12 for t in (ovhg.translation or (0.0, 0.0, 0.0)))
+        or any(
+            abs(float(getattr(sd, "rotation_theta_deg", 0.0))) > 1e-12
+            or abs(float(getattr(sd, "rotation_phi_deg", 0.0))) > 1e-12
+            for sd in (getattr(ovhg, "sub_domains", None) or ())
+        )
+        for ovhg in design.overhangs
+    )
+    if (
+        not design.deformations
+        and not design.cluster_transforms
+        and not has_overhang_transforms
+    ):
         return
 
     helix_map = {h.id: h for h in design.helices}
@@ -1826,7 +1853,10 @@ def apply_deformations_to_atoms(atoms: list, design: "Design") -> None:
         )
         has_cluster = bool(clusters)
 
-        if not has_deform and not has_cluster:
+        has_helix_overhang = has_overhang_transforms and any(
+            ovhg.helix_id == helix_id for ovhg in design.overhangs
+        )
+        if not has_deform and not has_cluster and not has_helix_overhang:
             continue
 
         N = len(atom_indices)
@@ -1883,7 +1913,7 @@ def apply_deformations_to_atoms(atoms: list, design: "Design") -> None:
             nuc_locals = positions - axis_origs  # (N, 3)
             positions = spine_n + np.einsum("mij,mj->mi", R_n, nuc_locals + cs_offset)
 
-        if has_cluster:
+        if has_cluster or has_helix_overhang:
             arrs = {
                 "helix_id": helix_id,
                 "bp_indices": bp_indices_arr,
@@ -1894,8 +1924,55 @@ def apply_deformations_to_atoms(atoms: list, design: "Design") -> None:
                 "base_normals": np.zeros((N, 3)),  # placeholder
                 "axis_tangents": np.zeros((N, 3)),  # placeholder
             }
-            out = _apply_cluster_transforms_domain_aware(arrs, clusters, helix, design)
-            positions = out["positions"]
+            if has_cluster:
+                arrs = _apply_cluster_transforms_domain_aware(
+                    arrs, clusters, helix, design
+                )
+            if has_helix_overhang:
+                # An atom array has many rows at the junction bp; its first row
+                # is an arbitrary chemical atom, not the CG backbone bead used
+                # as the rotation joint everywhere else.  Resolve the pivots
+                # from the pre-overhang nucleotide geometry so all-atom and CG
+                # representations rotate about the identical physical joint.
+                cg_arrs = deformed_nucleotide_arrays(helix_raw, design)
+                strand_by_id = {s.id: s for s in design.strands}
+                pivot_overrides: dict[str, list[float]] = {}
+                for ovhg in design.overhangs:
+                    if ovhg.helix_id != helix_id:
+                        continue
+                    strand = strand_by_id.get(ovhg.strand_id)
+                    if strand is None:
+                        continue
+                    dom_idx = next(
+                        (
+                            i
+                            for i, domain in enumerate(strand.domains)
+                            if domain.overhang_id == ovhg.id
+                        ),
+                        None,
+                    )
+                    if dom_idx is None:
+                        continue
+                    domain = strand.domains[dom_idx]
+                    junction_bp = (
+                        domain.end_bp if dom_idx == 0 else domain.start_bp
+                    )
+                    dir_int = 0 if domain.direction == Direction.FORWARD else 1
+                    mask = (
+                        (cg_arrs["bp_indices"] == junction_bp)
+                        & (cg_arrs["directions"] == dir_int)
+                    )
+                    if mask.any():
+                        pivot_overrides[ovhg.id] = (
+                            cg_arrs["positions"][mask][0].tolist()
+                        )
+                arrs = apply_overhang_rotation_if_needed(
+                    arrs,
+                    helix,
+                    design,
+                    pivot_by_overhang_id=pivot_overrides,
+                )
+            positions = arrs["positions"]
 
         # Write back
         for j, idx in enumerate(atom_indices):
@@ -2177,12 +2254,30 @@ def _apply_ovhg_rotations_to_axes(
             hi_orig = orig_s + hi_frac * (orig_e - orig_s)
             if "ovhg_axes" not in ax:
                 ax["ovhg_axes"] = {}
-            ax["ovhg_axes"][ovhg.id] = {
+            transformed_axis = {
                 "bp_min": domain_min,
                 "bp_max": domain_max,
                 "start": (R @ (lo_orig - pivot_arr) + pivot_arr + trans).tolist(),
                 "end": (R @ (hi_orig - pivot_arr) + pivot_arr + trans).tolist(),
             }
+            ax["ovhg_axes"][ovhg.id] = transformed_axis
+
+            # Cylinder rendering prefers the domain-level ``segments`` payload
+            # when it is present.  Keep the owning segment synchronized with
+            # ovhg_axes; otherwise protein-constrained moves update beads and
+            # atomistic representations but redraw the cylinder at its old pose.
+            domain_ref = {"strand_id": ovhg.strand_id, "domain_index": dom_idx}
+            for segment in ax.get("segments") or []:
+                # A paired duplex segment may be represented by its binder
+                # domain, whose ovhg_id is null (VoltronCoreArm OH7). In that
+                # case domain_ids is the authoritative ownership record.
+                owns_overhang = (
+                    segment.get("ovhg_id") == ovhg.id
+                    or domain_ref in (segment.get("domain_ids") or [])
+                )
+                if owns_overhang:
+                    segment["start"] = list(transformed_axis["start"])
+                    segment["end"] = list(transformed_axis["end"])
 
             # Sub-domain chain check (Phase 4): even when ovhg.rotation is
             # identity we still need to walk sub-domains.

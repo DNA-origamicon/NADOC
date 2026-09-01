@@ -32,6 +32,8 @@ export const MESH_NAME_TO_REPR = {
   sharedLodMid:              'cylinders',
   sharedLodOverhangs:        'cylinders',
   sharedLodCurvedCyl:        'cylinders',
+  proteinTrace:              'full',
+  proteinOvoid:              'cylinders',
   'dna-surface':             'surface',
   'dna-surface-region':      'surface',
   assemblySurface:           'surface',

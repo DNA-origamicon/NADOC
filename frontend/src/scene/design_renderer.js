@@ -817,7 +817,7 @@ export function initDesignRenderer(scene, storeRef) {
     return false
   }
 
-  function _tryPatchInPlace(changedHelixIds, newGeo, prevGeo, newState) {
+  function _tryPatchInPlace(changedHelixIds, newGeo, prevGeo, newState, prevHelixAxes) {
     if (!_helixCtrl || _ghostOpacity !== null) {
       markOperationTiming('partial-patch-rejected', { reason: !_helixCtrl ? 'no-controller' : 'ghost-active' })
       return false
@@ -826,6 +826,18 @@ export function initDesignRenderer(scene, storeRef) {
     if (realIds.length === 0) {
       markOperationTiming('partial-patch-rejected', { reason: 'synthetic-only' })
       return false
+    }
+
+    // Protein-constrained moves can translate/rotate an attached overhang's
+    // helix axis without changing its nucleotide count.  Cylinder geometry is
+    // built from these axes, so an in-place nucleotide patch would leave it at
+    // the old transform.  Let the normal structural rebuild consume new axes.
+    for (const hid of realIds) {
+      if (JSON.stringify(prevHelixAxes?.[hid] ?? null) !==
+          JSON.stringify(newState.currentHelixAxes?.[hid] ?? null)) {
+        markOperationTiming('partial-patch-rejected', { reason: 'helix-axis-changed', helixId: hid })
+        return false
+      }
     }
 
     // 1. Check nucleotide counts match for every real changed helix.
@@ -1155,6 +1167,7 @@ export function initDesignRenderer(scene, storeRef) {
         newState.currentGeometry,
         prevState.currentGeometry,
         newState,
+        prevState.currentHelixAxes,
       )) {
         // In-place patch succeeded — no rebuild needed.
         // Still run post-rebuild side-effects that depend on design state.

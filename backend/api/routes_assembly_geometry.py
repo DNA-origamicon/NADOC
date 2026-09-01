@@ -182,7 +182,20 @@ def get_instance_atomistic_geometry(instance_id: str) -> dict:
     assembly = assembly_state.get_or_404()
     inst = _find_instance(assembly, instance_id)
     design = _display_design(_load_design_from_source(inst.source))
-    return atomistic_to_json(build_atomistic_model(design))
+    return atomistic_to_json(build_atomistic_model(design, include_proteins=True))
+
+
+@router.get("/assembly/instances/{instance_id}/protein-geometry", status_code=200)
+def get_instance_protein_geometry(instance_id: str) -> dict:
+    """Return only placed protein atoms for a part's lightweight Full trace."""
+    from backend.core.atomistic import AtomisticModel, atomistic_to_json
+    from backend.core.protein import build_protein_attachment_atoms
+
+    assembly = assembly_state.get_or_404()
+    inst = _find_instance(assembly, instance_id)
+    design = _display_design(_load_design_from_source(inst.source))
+    atoms, bonds, _ = build_protein_attachment_atoms(design)
+    return atomistic_to_json(AtomisticModel(atoms=atoms, bonds=bonds))
 
 
 @router.get("/assembly/instances/{instance_id}/surface-geometry", status_code=200)
@@ -213,7 +226,7 @@ def get_instance_surface_geometry(
     assembly = assembly_state.get_or_404()
     inst = _find_instance(assembly, instance_id)
     design = _display_design(_load_design_from_source(inst.source))
-    model = build_atomistic_model(design)
+    model = build_atomistic_model(design, include_proteins=True)
     t0 = time.perf_counter()
     mesh = compute_surface(
         model.atoms,

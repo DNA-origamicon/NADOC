@@ -94,7 +94,11 @@ geometry nucleotide stream (`helix_id, bp_index, direction, strand_type`), so co
   **Gotcha:** a plain cluster click AUTO-OPENS Move/Rotate (`decideSelectionAction`). The
   additive branch in `main.js`'s `onClusterClick` must therefore bypass the tool entirely;
   nulling `selectedObject` inside the promote is what auto-closes (auto-commits) it.
-- `keyboard_shortcuts.js` — Ctrl+C / Ctrl+V, `blockedWhen: assemblyActive || isDeformActive`.
+- `keyboard_shortcuts.js` — Ctrl+C / Ctrl+V currently use
+  `blockedWhen: assemblyActive || isDeformActive`. **The assembly block records missing host wiring,
+  not intended product scope.** Per `project_assembly_feature_parity.md`, an assembly port should reuse
+  the same copy/graft core and explicitly choose shared-source edit vs instance fork; do not cite this
+  historical guard as a reason to omit parity.
   Ctrl+C yields to the browser's text copy when no cluster is selected (no `preventDefault`).
   Escape cancels the ghost first.
 

@@ -32,17 +32,22 @@ from backend.core.models import (
     Design,
     DesignMetadata,
     Domain,
+    ForcedLigation,
     Helix,
     LatticeType,
     PartSourceFile,
     PartSourceInline,
     Strand,
+    StrandExtension,
     Vec3,
 )
+from backend.core.constants import BDNA_RISE_PER_BP
+from backend.core.sequences import domain_bp_range
 
 # Project root — two levels above this file: core/ → backend/ → root
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _LIBRARY_DIR = _PROJECT_ROOT / "parts-library"
+_WORKSPACE_DIR = _PROJECT_ROOT / "workspace"
 
 
 def _load_design(source) -> Design:
@@ -50,10 +55,15 @@ def _load_design(source) -> Design:
     if isinstance(source, PartSourceInline):
         return source.design
     if isinstance(source, PartSourceFile):
-        # Resolve relative to project root then parts-library
+        # Match the assembly API's source semantics: ordinary .nass files store
+        # workspace-relative part paths (for example ``BigO.nadoc``).  The old
+        # flatten path omitted workspace and silently produced an empty Design.
+        raw = Path(source.path)
         candidates = [
-            _PROJECT_ROOT / source.path,
-            _LIBRARY_DIR / source.path,
+            raw,
+            _WORKSPACE_DIR / raw,
+            _PROJECT_ROOT / raw,
+            _LIBRARY_DIR / raw,
         ]
         for p in candidates:
             if p.exists():
@@ -112,6 +122,14 @@ def _prefix_overhang(overhang, prefix: str):
     )
 
 
+def _prefix_extension(extension: StrandExtension, prefix: str) -> StrandExtension:
+    """Namespace a part's authored terminal extension with its owning strand."""
+    return extension.model_copy(update={
+        "id": f"{prefix}{extension.id}",
+        "strand_id": f"{prefix}{extension.strand_id}",
+    })
+
+
 def _remap_assembly_domain(domain: Domain, real_instance_ids: set[str]) -> Domain:
     """Rewrite an assembly-strand domain's ``helix_id`` for the flattened Design.
 
@@ -143,6 +161,205 @@ def _prefix_strand(strand: Strand, strand_prefix: str, helix_prefix: str) -> Str
             "id": f"{strand_prefix}{strand.id}",
             "domains": [_prefix_domain(d, helix_prefix) for d in strand.domains],
         }
+    )
+
+
+def _strand_slice_sequence(strand: Strand, start: int, stop: int) -> str | None:
+    """Sequence belonging to ``strand.domains[start:stop]`` (or ``None``).
+
+    Periodic polymerization staples are split at their seam before being rejoined to a
+    neighbouring instance. Keeping the sequence slices with the domain slices prevents a
+    cross-instance strand from silently retaining the sequence of only one repeat.
+    """
+    if strand.sequence is None:
+        return None
+    offsets = [0]
+    for dm in strand.domains:
+        offsets.append(offsets[-1] + len(list(domain_bp_range(dm))))
+    return strand.sequence[offsets[start] : offsets[stop]]
+
+
+def _domain_axis_point(design: Design, mat4: np.ndarray, helix_id: str, bp: int) -> np.ndarray:
+    """World-space helix-axis point for a seam endpoint."""
+    helix = next(h for h in design.helices if h.id == helix_id)
+    a = np.array([helix.axis_start.x, helix.axis_start.y, helix.axis_start.z], float)
+    b = np.array([helix.axis_end.x, helix.axis_end.y, helix.axis_end.z], float)
+    axis = b - a
+    unit = axis / (np.linalg.norm(axis) or 1.0)
+    local = a + unit * ((bp - helix.bp_start) * BDNA_RISE_PER_BP)
+    return (mat4 @ np.array([*local, 1.0]))[:3]
+
+
+def _periodic_owner(design: Design, seam: ForcedLigation) -> tuple[Strand, int] | None:
+    """Return ``(strand, cut)`` whose domain transition is the periodic seam.
+
+    ``cut`` is the first domain on the seam's 5' side. This intentionally requires an
+    exact 3'-domain-end → 5'-domain-start match: a scaffold can cover both endpoint
+    coordinates without being the polymerization staple that crosses the seam.
+    """
+    for strand in design.strands:
+        for cut in range(1, len(strand.domains)):
+            left, right = strand.domains[cut - 1], strand.domains[cut]
+            if (
+                left.helix_id == seam.three_prime_helix_id
+                and left.end_bp == seam.three_prime_bp
+                and left.direction == seam.three_prime_direction
+                and right.helix_id == seam.five_prime_helix_id
+                and right.start_bp == seam.five_prime_bp
+                and right.direction == seam.five_prime_direction
+            ):
+                return strand, cut
+    return None
+
+
+def _materialize_periodic_strands(
+    assembly: Assembly,
+    instance_designs: dict[str, Design],
+    instance_mats: dict[str, np.ndarray],
+    helices: list[Helix],
+    strands: list[Strand],
+    overhangs: list,
+    extensions: list[StrandExtension],
+) -> tuple[list[Helix], list[Strand], list, list[StrandExtension], list[ForcedLigation]]:
+    """Replace within-repeat periodic jumps with physical inter-repeat strands.
+
+    A periodic part stores each polymerization staple as ``far-domain → near-domain``
+    inside one Design. Literal instance copying therefore draws a covalent jump across the
+    *same* origami. Assembly seam joints instead pair the far fragment of one repeat with
+    the near fragment of its neighbour. The two unused boundary fragments are retained as
+    full-length staples by supplying their missing half as an explicitly tagged ssDNA tail.
+
+    Returns additional forced ligations for the cross-instance domain transitions. They are
+    topology records (and are consumed by the FEM); terminal tail transitions are already
+    present in the strand path but do not join two duplex FEM nodes.
+    """
+    periodic_joints = [
+        j for j in assembly.joints
+        if j.connector_a_label == "seam0:3p" and j.connector_b_label == "seam0:5p"
+        and j.instance_a_id in instance_designs and j.instance_b_id in instance_designs
+    ]
+    if not periodic_joints:
+        return helices, strands, overhangs, extensions, []
+
+    visible_ids = set(instance_designs)
+    neighbour_ids: dict[str, set[str]] = {iid: set() for iid in visible_ids}
+    for joint in periodic_joints:
+        neighbour_ids[joint.instance_a_id].add(joint.instance_b_id)
+        neighbour_ids[joint.instance_b_id].add(joint.instance_a_id)
+
+    # Process a seam signature once. Periodic copies share a source Design; the signature
+    # remains stable even when instance IDs and strand IDs are namespaced.
+    signatures: dict[tuple, ForcedLigation] = {}
+    for design in instance_designs.values():
+        for seam in design.forced_ligations:
+            if seam.is_periodic_seam:
+                sig = (
+                    seam.three_prime_helix_id, seam.three_prime_bp,
+                    seam.three_prime_direction.value, seam.five_prime_helix_id,
+                    seam.five_prime_bp, seam.five_prime_direction.value,
+                )
+                signatures.setdefault(sig, seam)
+
+    added_strands: list[Strand] = []
+    added_extensions: list[StrandExtension] = []
+    added_ligations: list[ForcedLigation] = []
+    remove_ids: set[str] = set()
+
+    for seam_idx, seam in enumerate(signatures.values()):
+        fragments: dict[tuple[str, str], dict] = {}
+        for iid, design in instance_designs.items():
+            owned = _periodic_owner(design, seam)
+            if owned is None:
+                continue
+            source, cut = owned
+            remove_ids.add(f"inst-{iid}::{source.id}")
+            hp = f"inst-{iid}::"
+            for side, lo, hi in (("pre", 0, cut), ("post", cut, len(source.domains))):
+                fragments[(iid, side)] = {
+                    "source": source,
+                    "domains": [_prefix_domain(d, hp) for d in source.domains[lo:hi]],
+                    "sequence": _strand_slice_sequence(source, lo, hi),
+                }
+
+        used: set[tuple[str, str]] = set()
+        for joint_idx, joint in enumerate(periodic_joints):
+            a, b = joint.instance_a_id, joint.instance_b_id
+            if not all((iid, side) in fragments for iid in (a, b) for side in ("pre", "post")):
+                continue
+            da, db = instance_designs[a], instance_designs[b]
+            ma, mb = instance_mats[a], instance_mats[b]
+            # Strand polarity alternates across a bundle. Select the direction whose actual
+            # 3'/5' axis points meet at this physical joint; for reverse strands this is
+            # B(3') → A(5'), not the assembly joint record's aggregate A→B label.
+            options = [
+                (a, b, np.linalg.norm(
+                    _domain_axis_point(da, ma, seam.three_prime_helix_id, seam.three_prime_bp)
+                    - _domain_axis_point(db, mb, seam.five_prime_helix_id, seam.five_prime_bp)
+                )),
+                (b, a, np.linalg.norm(
+                    _domain_axis_point(db, mb, seam.three_prime_helix_id, seam.three_prime_bp)
+                    - _domain_axis_point(da, ma, seam.five_prime_helix_id, seam.five_prime_bp)
+                )),
+            ]
+            three_iid, five_iid, _ = min(options, key=lambda row: row[2])
+            pre, post = fragments[(three_iid, "pre")], fragments[(five_iid, "post")]
+            if (three_iid, "pre") in used or (five_iid, "post") in used:
+                continue
+            used.update(((three_iid, "pre"), (five_iid, "post")))
+            source = pre["source"]
+            sid = f"polymer::{seam_idx}::{joint.id}"
+            seq = None if pre["sequence"] is None or post["sequence"] is None else pre["sequence"] + post["sequence"]
+            domains = [*pre["domains"], *post["domains"]]
+            added_strands.append(source.model_copy(update={"id": sid, "domains": domains, "sequence": seq}))
+            left, right = domains[len(pre["domains"]) - 1], domains[len(pre["domains"])]
+            added_ligations.append(ForcedLigation(
+                id=f"polymer-ligation::{seam_idx}::{joint.id}",
+                three_prime_helix_id=left.helix_id, three_prime_bp=left.end_bp,
+                three_prime_direction=left.direction,
+                five_prime_helix_id=right.helix_id, five_prime_bp=right.start_bp,
+                five_prime_direction=right.direction,
+            ))
+
+        # Exactly two fragments remain per open chain and seam. Complete each strand with
+        # the missing sequence as a real StrandExtension.  This is deliberately NOT a
+        # synthetic one-strand Helix/Domain: all-atom preparation has dedicated terminal
+        # ssDNA placement which roots the tail on C3'/C5', repairs each phosphodiester,
+        # and threads residues in chemical order.  Treating the tail like duplex DNA
+        # bypassed that path and produced ring-pierced NAMD seeds at polymer ends.
+        for (iid, side), fragment in fragments.items():
+            if (iid, side) in used:
+                continue
+            other = fragments[(iid, "post" if side == "pre" else "pre")]
+            tail_sid = f"polymer-terminal::{seam_idx}::{iid}::{side}"
+            own_seq, missing_seq = fragment["sequence"], other["sequence"]
+            # Unknown source sequence stays explicit as N bases: every simulation
+            # engine can include the physical tail while still reporting undefined
+            # chemistry through its normal sequence validation.
+            if missing_seq is None:
+                tail_n = sum(len(list(domain_bp_range(d))) for d in other["domains"])
+                missing_seq = "N" * max(1, tail_n)
+            source = fragment["source"]
+            added_strands.append(source.model_copy(update={
+                "id": tail_sid,
+                "domains": fragment["domains"],
+                "sequence": own_seq,
+            }))
+            added_extensions.append(StrandExtension(
+                id=f"polymer-extension::{seam_idx}::{iid}::{side}",
+                strand_id=tail_sid,
+                end="three_prime" if side == "pre" else "five_prime",
+                sequence=missing_seq,
+                label="Polymer end",
+            ))
+
+    if not remove_ids:
+        return helices, strands, overhangs, extensions, []
+    return (
+        helices,
+        [s for s in strands if s.id not in remove_ids] + added_strands,
+        overhangs,
+        [*extensions, *added_extensions],
+        added_ligations,
     )
 
 
@@ -236,6 +453,9 @@ def flatten_assembly(assembly: Assembly) -> Design:
     all_helices: list[Helix] = []
     all_strands: list[Strand] = []
     all_overhangs: list = []
+    all_extensions: list[StrandExtension] = []
+    instance_designs: dict[str, Design] = {}
+    instance_mats: dict[str, np.ndarray] = {}
 
     # Every instance whose helices are emitted below — used to remap the
     # namespaced complement-domain references on assembly linker strands onto
@@ -245,14 +465,16 @@ def flatten_assembly(assembly: Assembly) -> Design:
     for inst in assembly.instances:
         if not inst.visible:
             continue
-        try:
-            design = _load_design(inst.source)
-        except FileNotFoundError:
-            continue  # skip missing file sources
+        # A visible missing part must abort flattening. Silently omitting it can
+        # launch a scientifically meaningless partial/empty simulation while the
+        # assembly viewport still shows the complete structure.
+        design = _load_design(inst.source)
+        instance_designs[inst.id] = design
 
         hp = f"inst-{inst.id}::"  # helix/domain prefix
         sp = f"inst-{inst.id}::"  # strand prefix
         mat4 = _mat4_from_values(inst.transform.values)
+        instance_mats[inst.id] = mat4
 
         for helix in design.helices:
             all_helices.append(_prefix_helix(helix, hp, mat4))
@@ -262,6 +484,8 @@ def flatten_assembly(assembly: Assembly) -> Design:
 
         for overhang in design.overhangs:
             all_overhangs.append(_prefix_overhang(overhang, hp))
+        for extension in design.extensions:
+            all_extensions.append(_prefix_extension(extension, sp))
 
     # Assembly-level helices and strands (linkers, VSC dashed lines)
     asm_hp = "asm::"
@@ -270,6 +494,11 @@ def flatten_assembly(assembly: Assembly) -> Design:
         all_helices.append(_prefix_helix(helix, asm_hp, identity))
     for strand in assembly.assembly_strands:
         all_strands.append(_prefix_assembly_strand(strand, real_instance_ids))
+
+    all_helices, all_strands, all_overhangs, all_extensions, periodic_ligations = _materialize_periodic_strands(
+        assembly, instance_designs, instance_mats, all_helices, all_strands,
+        all_overhangs, all_extensions,
+    )
 
     # Validate ID uniqueness
     helix_ids = [h.id for h in all_helices]
@@ -292,8 +521,12 @@ def flatten_assembly(assembly: Assembly) -> Design:
         helices=all_helices,
         strands=all_strands,
         overhangs=all_overhangs,
+        extensions=all_extensions,
+        forced_ligations=periodic_ligations,
         lattice_type=LatticeType.HONEYCOMB,
-        metadata=DesignMetadata(name=f"Flattened: {name}"),
+        # This is a derived simulation projection, but its user-facing identity
+        # remains the assembly name. Provenance is already explicit in the flat_ id.
+        metadata=DesignMetadata(name=name),
     )
 
     # Materialize direct cross-part Watson-Crick pairs (AssemblyDuplex) into real

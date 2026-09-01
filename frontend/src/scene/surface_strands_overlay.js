@@ -96,9 +96,12 @@ export function initSurfaceStrandsOverlay({
   tc.setSpace('world')
   tc.setSize(0.8)
   const helper = tc.getHelper ? tc.getHelper() : tc
-  helper.visible = false
   scene.add(helper)
-  tc.attach(dummy)
+  // Unlike a normal scene mesh, TransformControls owns DOM listeners and may
+  // change its helper visibility internally. It must not be attached merely
+  // because the overlay exists; attachment is reserved for an actionable preview.
+  tc.enabled = false
+  helper.visible = false
 
   // Constrain the handle to the surface plane: hide the world axis along the (axis-aligned)
   // surface normal so only the two in-plane DOF remain (arrows + the in-plane square handle).
@@ -110,10 +113,12 @@ export function initSurfaceStrandsOverlay({
   }
 
   let _axis = '-y'
+  let _sceneVisible = true
   let _positionNm = null
   let _basis = _planeBasis(_axis)
   let _baseCenter = new THREE.Vector3()    // patch centre at zero offset (design centre on plane)
   let _dragging = false
+  let _gizmoAttached = false
   let _lastSpec = null
   let _lastEnabled = false
   let _results = null   // real simulated strands (world nm bead lists) — set once a job is displayed
@@ -123,6 +128,29 @@ export function initSurfaceStrandsOverlay({
                              // so it belongs to the preview identity (see _previewKey)
   const _emitStrands = createSurfaceStrandEmitter(onStrands)
   _constrainGizmoToPlane()   // default (-y) → in-plane (X,Z) only
+
+  function _deactivateGizmo() {
+    if (_dragging) {
+      _dragging = false
+      if (controls) controls.enabled = true
+    }
+    tc.enabled = false
+    if (_gizmoAttached) {
+      tc.detach()
+      _gizmoAttached = false
+    }
+    helper.visible = false
+  }
+
+  function _activateGizmo(centre) {
+    if (!_dragging && centre) dummy.position.copy(centre)
+    if (!_gizmoAttached) {
+      tc.attach(dummy)
+      _gizmoAttached = true
+    }
+    tc.enabled = true
+    helper.visible = true
+  }
 
   // Bbox centre with the normal-axis coordinate replaced by the plane's absolute position
   // (mirrors view_tool_buttons._placeSurfaceGrid absolute mode).
@@ -213,7 +241,7 @@ export function initSurfaceStrandsOverlay({
     const inResults = !!(_results && _results.length)
     const haveSpec = !!(spec && spec.sizeNm > 0)
     const active = inResults || (_lastEnabled && haveSpec)
-    group.visible = active
+    group.visible = _sceneVisible && active
 
     // Coverage patch — positioned from the spec + plane; shown per the shape toggle (in
     // results too, so the coverage area can overlay the real strands for a figure).
@@ -245,18 +273,23 @@ export function initSurfaceStrandsOverlay({
     // identity, so emit only when chains or effective highlight actually changed.
     _emitStrands(chains, emittedHighlight, key)
 
-    // Centre gizmo — only while setting up (preview) with the coverage shape shown.
-    helper.visible = active && !inResults && _lastEnabled && haveSpec && _shapePreview
-    if (helper.visible && centre && !_dragging) dummy.position.copy(centre)
+    // Centre gizmo — only while setting up an actionable preview. Detaching is
+    // part of hiding: a merely invisible TransformControls still owns listeners
+    // and can re-show its helper or intercept input.
+    const gizmoActive = _sceneVisible && active && !inResults
+      && _lastEnabled && haveSpec && _shapePreview
+    if (gizmoActive) _activateGizmo(centre)
+    else _deactivateGizmo()
   }
 
   // ── Drag: read the dummy back onto the plane basis → new (X,Y) offset ──
   tc.addEventListener('dragging-changed', (e) => {
+    if (!_gizmoAttached && e.value) return
     _dragging = !!e.value
     if (controls) controls.enabled = !e.value
   })
   tc.addEventListener('objectChange', () => {
-    if (!_dragging) return
+    if (!_gizmoAttached || !_dragging) return
     const rel = dummy.position.clone().sub(_baseCenter)
     onCenterMove?.(rel.dot(_basis.u), rel.dot(_basis.v))
   })
@@ -288,9 +321,16 @@ export function initSurfaceStrandsOverlay({
     _color = String(hex)
     patchMat.color.setHex((typeof hex === 'string') ? new THREE.Color(hex).getHex() : hex)
   }
+  // Surface strands are design-only. _draw owns both visual visibility and the
+  // TransformControls attachment lifecycle, so every exit path is identical.
+  function setVisible(on) {
+    _sceneVisible = !!on
+    _draw()
+  }
   function clear() { _lastSpec = null; _lastEnabled = false; _results = null; _draw() }
   function dispose() {
-    tc.detach(); helper.parent?.remove(helper); tc.dispose?.()
+    _deactivateGizmo()
+    helper.parent?.remove(helper); tc.dispose?.()
     dummy.parent?.remove(dummy)
     if (patchMesh) patchMesh.geometry.dispose()
     patchMat.dispose()
@@ -301,9 +341,9 @@ export function initSurfaceStrandsOverlay({
     visible: group.visible, hasPatch: !!patchMesh,
     patchVisible: !!(patchMesh && patchMesh.visible), mode: _results ? 'results' : 'preview',
     highlight: _highlight, shapePreview: _shapePreview, patchColor: '#' + patchMat.color.getHexString(),
-    gizmoVisible: helper.visible,
+    gizmoVisible: helper.visible, gizmoAttached: _gizmoAttached, gizmoEnabled: tc.enabled,
     baseCenter: [Math.round(_baseCenter.x * 100) / 100, Math.round(_baseCenter.y * 100) / 100, Math.round(_baseCenter.z * 100) / 100],
     patchPos: patchMesh ? [Math.round(patchMesh.position.x * 100) / 100, Math.round(patchMesh.position.y * 100) / 100, Math.round(patchMesh.position.z * 100) / 100] : null,
   })
-  return { setPlane, update, setResults, setHighlight, setShapePreview, setColor, clear, dispose, debug }
+  return { setPlane, update, setResults, setHighlight, setShapePreview, setColor, setVisible, clear, dispose, debug }
 }

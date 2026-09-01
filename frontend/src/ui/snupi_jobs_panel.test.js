@@ -15,7 +15,12 @@ import {
   formatSummary,
   snupiRunConfig,
   renderSnupiDisplayProgress,
+  SNUPI_LAUNCH_RESOURCE,
 } from './snupi_jobs_panel.js'
+
+it('classifies Coarse/Fine launches as CPU work', () => {
+  expect(SNUPI_LAUNCH_RESOURCE).toEqual({ usesGpu: false })
+})
 
 describe('renderSnupiDisplayProgress', () => {
   it('retains one named row per visualization subprocess', () => {

@@ -108,6 +108,20 @@ describe('initCandoDisplay controller', () => {
     expect(c.deformJobId()).toBe(null)
   })
 
+  it('assembly Off hides the flattened design projection after clearing the overlay', async () => {
+    const { designRenderer, api } = makeDeps()
+    const restoreDesignVisible = vi.fn()
+    const c = initCandoDisplay({ designRenderer, api, restoreDesignVisible })
+    await c.showDeform('assembly-job')
+
+    c.stopDeform()
+
+    expect(designRenderer.clearScalarColors).toHaveBeenCalled()
+    expect(designRenderer.clearExternalGeometry).toHaveBeenCalled()
+    expect(restoreDesignVisible).toHaveBeenCalledOnce()
+    expect(c.mode()).toBe(null)
+  })
+
   it('reuses the live scene when the selected job fingerprint is current', async () => {
     const { designRenderer, api } = makeDeps()
     api.getCandoThermalRepresentative = vi.fn(async () => ({

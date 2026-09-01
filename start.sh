@@ -75,15 +75,32 @@ fi
 
 BACKEND_PID=""
 FRONTEND_PID=""
+# Some dev-server children temporarily alter terminal flags. Preserve the
+# caller's exact state so Ctrl-C cannot leave VS Code's integrated terminal
+# with input echo disabled or in a raw-ish mode.
+TTY_STATE="$(stty -g 2>/dev/null || true)"
+terminate_tree() {
+  local pid="$1" child
+  [ -n "$pid" ] || return 0
+  if have pgrep; then
+    for child in $(pgrep -P "$pid" 2>/dev/null || true); do
+      terminate_tree "$child"
+    done
+  fi
+  kill "$pid" 2>/dev/null || true
+}
 cleanup() {
   trap - INT TERM EXIT
   info "Shutting down…"
-  [ -n "$FRONTEND_PID" ] && { pkill -P "$FRONTEND_PID" 2>/dev/null || true; kill "$FRONTEND_PID" 2>/dev/null || true; }
-  [ -n "$BACKEND_PID"  ] && kill "$BACKEND_PID" 2>/dev/null || true
+  terminate_tree "$FRONTEND_PID"
+  terminate_tree "$BACKEND_PID"
   if [ "$TAILSCALE_SERVE_CONFIGURED" -eq 1 ]; then
     "${TAILSCALE_CMD[@]}" serve --http=5173 off >/dev/null 2>&1 || true
   fi
   wait 2>/dev/null || true
+  if [ -n "$TTY_STATE" ]; then
+    stty "$TTY_STATE" 2>/dev/null || stty sane 2>/dev/null || true
+  fi
 }
 trap cleanup INT TERM EXIT
 
@@ -102,6 +119,38 @@ fi
 info "Backend  → http://localhost:8000"
 uv run uvicorn backend.api.main:app --host "$BACKEND_HOST" --port 8000 &
 BACKEND_PID=$!
+
+# Uvicorn opens the health endpoint only after FastAPI's lifespan startup has
+# completed. Do not expose the Vite app before that point: its one-shot welcome
+# library request otherwise sees the proxy/backend as unavailable and paints an
+# empty workspace until the user manually refreshes.
+info "Waiting for backend startup…"
+uv run python - "http://127.0.0.1:8000/api/health" "$BACKEND_PID" <<'PY'
+import os
+import sys
+import time
+import urllib.request
+
+url = sys.argv[1]
+pid = int(sys.argv[2])
+deadline = time.monotonic() + 120.0
+while time.monotonic() < deadline:
+    try:
+        with urllib.request.urlopen(url, timeout=0.5) as response:
+            if response.status == 200:
+                raise SystemExit(0)
+    except Exception:
+        pass
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        print("Backend exited before becoming ready.", file=sys.stderr)
+        raise SystemExit(1)
+    time.sleep(0.2)
+print("Backend did not become ready within 120 seconds.", file=sys.stderr)
+raise SystemExit(1)
+PY
+info "Backend ready."
 
 info "Frontend → http://localhost:5173"
 ( cd frontend && npm run dev -- --host "$FRONTEND_HOST" ) &

@@ -445,6 +445,8 @@ export function initOxdnaDisplay({
   getAtomisticRenderer = null, getSurfaceRenderer = null,
   getCurrentRepr = null, onRestoreDesignHeavy = null, onHeavyStatus = null,
   applyOxdnaFrame = null,
+  setDesignVisible = null,
+  restoreDesignVisible = null,
   onFrame = null,
   // Called from stopAndRestore() so the occupancy overlay drops its ghost copies at the
   // same moment the real model reverts — otherwise turning the view off leaves the
@@ -469,6 +471,7 @@ export function initOxdnaDisplay({
   // arc-layout pass can't leave extra-base / extension beads stranded at native positions.
   let _lastCgUpdates = null
   const _applyFem = (updates) => {
+    if (updates) setDesignVisible?.(true)
     _lastCgUpdates = updates
     const handledByOxdna = getCurrentRepr?.() === 'oxdna' && applyOxdnaFrame?.(updates) === true
     if (!handledByOxdna) designRenderer?.applyFemPositions(updates)
@@ -1249,6 +1252,7 @@ export function initOxdnaDisplay({
     onSurfaceStrands?.(null)
     proteinRenderer?.clearOxdnaTransforms?.()
     releaseHeavyToDesign()
+    restoreDesignVisible?.()
     // KEPT: _traj, _jobId, _mode, _bakedAtom, _bakedSurf, _pendingTopoModel, _atomSerials.
   }
 
@@ -1825,6 +1829,7 @@ export function initOxdnaDisplay({
     onSurfaceStrands?.(null)   // drop the real strands → seed preview resumes
     proteinRenderer?.clearOxdnaTransforms?.()   // proteins back to design pose
     _restoreHeavy()   // atomistic/surface back to the plain design (rebuild from design)
+    restoreDesignVisible?.()
     _rmsfResp = null
     _strainResp = null
     _photoproductResp = null

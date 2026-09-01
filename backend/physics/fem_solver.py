@@ -571,6 +571,46 @@ def build_fem_mesh(design: Design, material: str = "cando") -> FEMMesh:
             )
         )  # G3: single vs double CO
 
+    # Assembly-periodic polymer seams are ordinary axial DNA steps, not infinitely
+    # rigid crossover constraints.  Their endpoints live on namespaced helices from
+    # different part instances, so the normal per-helix element walk cannot see the
+    # consecutive bp pair. Restore that missing beam explicitly. This is what makes
+    # an N-repeat polymer mechanically equivalent to one N-times-long bundle.
+    for ligation in design.forced_ligations:
+        if not ligation.id.startswith("polymer-ligation::"):
+            continue
+        ni = _resolve_node(
+            ligation.three_prime_helix_id, ligation.three_prime_bp
+        )
+        nj = _resolve_node(ligation.five_prime_helix_id, ligation.five_prime_bp)
+        if ni is None or nj is None or ni == nj:
+            continue
+        n_extra = len(ligation.extra_bases or "")
+        if n_extra:
+            contour = n_extra * RISE_SS
+            mesh.springs.append(FEMSpring(
+                node_i=ni, node_j=nj,
+                k_trans=3.0 * KBT / (2.0 * contour * L_P_SS), k_rot=0.0,
+            ))
+            continue
+        chord = mesh.nodes[nj].position - mesh.nodes[ni].position
+        chord_length = float(np.linalg.norm(chord))
+        if chord_length < 1e-9:
+            continue
+        nicked = (
+            ligation.three_prime_bp
+            in nick_bp.get(ligation.three_prime_helix_id, set())
+            or ligation.five_prime_bp
+            in nick_bp.get(ligation.five_prime_helix_id, set())
+        )
+        mesh.elements.append(FEMElement(
+            node_i=ni, node_j=nj, length=FEM_RISE_PER_BP,
+            R=_frame_from_helix_axis(chord / chord_length),
+            ei=EI_DS * (NICK_FACTOR if nicked else 1.0),
+            gj=GJ_DS * (NICK_FACTOR if nicked else 1.0),
+            motif_family="nicked_bp" if nicked else "regular_bp",
+        ))
+
     # ── ssDNA helix hops (the general ssDNA-connected-block coupling) ────────────
     # The duplex-core mesh only nodes PAIRED regions, so a strand that leaves a duplex,
     # threads through UNMESHED single-stranded domains (a ssDNA stub / overhang / linker),
@@ -2596,6 +2636,152 @@ def deformed_positions_with_axis(
         for m, p, n, t in zip(meta, aligned, nrm_aligned, tan_aligned)
     ]
 
+    # Polymerized assembly ends are real, full polymerization strands whose missing
+    # neighbour-facing domains become free ssDNA. CanDo has no free-chain mechanics,
+    # but dropping those nucleotides from its position/thermal payload makes the ends
+    # disappear as soon as a visualization owns the viewport. Carry each synthetic
+    # terminal tail rigidly with its adjacent simulated duplex nucleotide instead.
+    # This preserves the native tail conformation and the covalent anchor bond while
+    # making no false claim that static FEM equilibrated the tail internally. SNUPI's
+    # dynamics path below supersedes these records with explicitly simulated coils.
+    if tail_positions is None:
+        predicted_by_key = {
+            (p["helix_id"], int(p["bp_index"]), str(p["direction"])): p
+            for p in positions
+            if int(p.get("copy", 0)) == 0
+        }
+        shown_by_key: Dict[tuple, object] = {}
+        polymer_tail_helices = {
+            dm.helix_id
+            for strand in design.strands
+            if strand.id.startswith("polymer-terminal::")
+            for dm in strand.domains
+            if dm.overhang_id
+        }
+        for helix_id in polymer_tail_helices:
+            helix = helix_by_id.get(helix_id)
+            if helix is None:
+                continue
+            for nuc in deformed_nucleotide_positions(helix, design):
+                shown_by_key[(helix_id, int(nuc.bp_index), nuc.direction.value)] = nuc
+
+        for strand in design.strands:
+            if not strand.id.startswith("polymer-terminal::"):
+                continue
+            tail_indices = [i for i, dm in enumerate(strand.domains) if dm.overhang_id]
+            if len(tail_indices) != 1:
+                continue
+            tail_index = tail_indices[0]
+            core_index = tail_index + 1 if tail_index == 0 else tail_index - 1
+            if not 0 <= core_index < len(strand.domains):
+                continue
+            tail_domain = strand.domains[tail_index]
+            core_domain = strand.domains[core_index]
+            core_bps = list(domain_bp_range(core_domain))
+            if not core_bps:
+                continue
+            anchor_bp = core_bps[0] if tail_index == 0 else core_bps[-1]
+            anchor_key = (
+                core_domain.helix_id,
+                int(anchor_bp),
+                core_domain.direction.value,
+            )
+            predicted_anchor = predicted_by_key.get(anchor_key)
+            anchor_helix = helix_by_id.get(core_domain.helix_id)
+            if predicted_anchor is None or anchor_helix is None:
+                continue
+            native_anchor = next(
+                (
+                    nuc
+                    for nuc in deformed_nucleotide_positions(anchor_helix, design)
+                    if int(nuc.bp_index) == int(anchor_bp)
+                    and nuc.direction == core_domain.direction
+                ),
+                None,
+            )
+            if native_anchor is None:
+                continue
+            delta = np.asarray(predicted_anchor["backbone_position"], dtype=float) - np.asarray(
+                native_anchor.position, dtype=float
+            )
+            for bp in domain_bp_range(tail_domain):
+                key = (tail_domain.helix_id, int(bp), tail_domain.direction.value)
+                nuc = shown_by_key.get(key)
+                if nuc is None:
+                    continue
+                p = np.asarray(nuc.position, dtype=float) + delta
+                n = np.asarray(nuc.base_normal, dtype=float)
+                t = np.asarray(nuc.axis_tangent, dtype=float)
+                positions.append({
+                    "helix_id": tail_domain.helix_id,
+                    "bp_index": int(bp),
+                    "direction": tail_domain.direction.value,
+                    "copy": 0,
+                    "backbone_position": p.tolist(),
+                    "nx": float(n[0]), "ny": float(n[1]), "nz": float(n[2]),
+                    "tx": float(t[0]), "ty": float(t[1]), "tz": float(t[2]),
+                })
+
+        # Authored StrandExtensions (including assembly polymer ends) use the same
+        # passive-follower contract.  They are deliberately absent from the duplex
+        # mesh, but must remain in CanDo's visualization payload and ride rigidly with
+        # their terminal FEM anchor.  Build their native curved geometry once, then
+        # apply the anchor's measured FEM displacement without admitting the floppy
+        # tail into the core Kabsch fit.
+        if design.extensions:
+            from backend.core.design_geometry import _strand_extension_geometry
+
+            strand_by_id = {s.id: s for s in design.strands}
+            extension_by_id = {ext.id: ext for ext in design.extensions}
+            native_nucs: Dict[tuple, object] = {}
+            for helix in design.helices:
+                for nuc in deformed_nucleotide_positions(helix, design):
+                    native_nucs[(helix.id, int(nuc.bp_index), nuc.direction)] = nuc
+            for bead in _strand_extension_geometry(design, native_nucs):
+                if bead.get("is_modification"):
+                    continue
+                ext_id = bead.get("extension_id")
+                extension = extension_by_id.get(ext_id)
+                strand = strand_by_id.get(extension.strand_id) if extension else None
+                if extension is None or strand is None or not strand.domains:
+                    continue
+                core_domain = (
+                    strand.domains[0]
+                    if extension.end == "five_prime"
+                    else strand.domains[-1]
+                )
+                anchor_bp = (
+                    core_domain.start_bp
+                    if extension.end == "five_prime"
+                    else core_domain.end_bp
+                )
+                anchor_key = (
+                    core_domain.helix_id,
+                    int(anchor_bp),
+                    core_domain.direction.value,
+                )
+                predicted_anchor = predicted_by_key.get(anchor_key)
+                native_anchor = native_nucs.get(
+                    (core_domain.helix_id, int(anchor_bp), core_domain.direction)
+                )
+                if predicted_anchor is None or native_anchor is None:
+                    continue
+                delta = np.asarray(predicted_anchor["backbone_position"], dtype=float) - np.asarray(
+                    native_anchor.position, dtype=float
+                )
+                p = np.asarray(bead["backbone_position"], dtype=float) + delta
+                n = np.asarray(bead["base_normal"], dtype=float)
+                t = np.asarray(bead["axis_tangent"], dtype=float)
+                positions.append({
+                    "helix_id": bead["helix_id"],
+                    "bp_index": int(bead["bp_index"]),
+                    "direction": bead["direction"],
+                    "copy": 0,
+                    "backbone_position": p.tolist(),
+                    "nx": float(n[0]), "ny": float(n[1]), "nz": float(n[2]),
+                    "tx": float(t[0]), "ty": float(t[1]), "tz": float(t[2]),
+                })
+
     # SIMULATED free ssDNA tails (SS-4) — appended AFTER the Kabsch fit, which stays core-only.
     positions.extend(_tail_bead_entries(design, tail_positions, tail_nodes, cs, cd, R))
 
@@ -2919,7 +3105,11 @@ def predict_shape(
     A beam FEM needs at least one element (two nodes); an empty mesh otherwise crashes deep
     in the solver with a cryptic ``AxisError``.  The job runner surfaces this message.
     """
+    if progress_cb:
+        progress_cb("mesh", 0.05, "Build assembly FEM mesh")
     mesh = build_fem_mesh(design, material=material)
+    if progress_cb:
+        progress_cb("mesh", 1.0, f"Built FEM mesh · {len(mesh.nodes)} nodes")
     if len(mesh.nodes) < _MIN_FEM_NODES:
         raise ValueError(
             f"CanDo FEM shape prediction needs a double-helical (duplex) core of at least "
@@ -2966,6 +3156,8 @@ def predict_shape(
     n_components, comp_labels = _mesh_component_labels(mesh)
     fixed_nodes = _ensure_components_pinned(mesh, fixed_nodes, comp_labels)
 
+    if progress_cb:
+        progress_cb("solve", 0.05, "Solve elastic deformation")
     if nonlinear:
         # SHAPE solve uses the DIAGONAL SNUPI material (anisotropic rigidities, twist–stretch and other
         # off-diagonal couplings dropped). The couplings drive the equilibrium shape unphysically when
@@ -2992,7 +3184,11 @@ def predict_shape(
         K_free, f_free, free = apply_boundary_conditions(K, f, mesh, fixed_nodes)
         u = solve_equilibrium(K_free, f_free, K.shape[0], free)
 
+    if progress_cb:
+        progress_cb("solve", 0.9, "Transform solved FEM geometry")
     positions, axis = deformed_positions_with_axis(design, mesh, u)
+    if progress_cb:
+        progress_cb("solve", 1.0, "Elastic deformation solved")
     out: dict = {
         "solver": "nonlinear" if nonlinear else "linear",
         "positions": positions,
@@ -3000,6 +3196,8 @@ def predict_shape(
         "anchor_keys": [[hid, bp] for (hid, bp) in anchor_keys],
     }
     if with_rmsf:
+        if progress_cb:
+            progress_cb("rmsf", 0.05, "Assemble normal-mode stiffness matrix")
         # G2: the RMSF NMA uses the bp-registered element frame (snupi only) — orients EIy≠EIz
         # per bp. The shape solve above keeps its co-rotational (reframed) frames.
         K, _ = assemble_global_stiffness(
@@ -3025,6 +3223,8 @@ def predict_shape(
         # Drop 6 rigid-body modes PER connected component (a 2-body mesh has 12, not 6) —
         # otherwise a disconnected body's residual rigid modes blow its RMSF up to µm scale.
         n_rigid = 6 * max(1, n_components)
+        if progress_cb:
+            progress_cb("rmsf", 0.25, "Solve normal modes and RMSF")
         if with_thermal_fluctuations and material == "cando":
             rmsf, thermal_u = compute_thermal_nma(
                 K, len(mesh.nodes), M=M, n_rigid=n_rigid
@@ -3032,13 +3232,17 @@ def predict_shape(
         else:
             rmsf = compute_rmsf_nma(K, len(mesh.nodes), M=M, n_rigid=n_rigid)
             thermal_u = np.empty((0, 6 * len(mesh.nodes)), dtype=float)
+        if progress_cb:
+            progress_cb("rmsf", 1.0, "Normal modes and RMSF complete")
         if len(thermal_u):
+            if progress_cb:
+                progress_cb("thermal", 0.05, "Reconstruct thermal conformations")
             # Compact oxDNA/SNUPI-compatible trajectory encoding.  Every frame is an
             # independent equilibrium draw about the relaxed shape; it deliberately has
             # no dt/time metadata because this is NMA sampling, not molecular dynamics.
             keys = None
             frames = []
-            for du in thermal_u:
+            for frame_index, du in enumerate(thermal_u):
                 frame_positions, _ = deformed_positions_with_axis(design, mesh, u + du)
                 if keys is None:
                     keys = [
@@ -3048,6 +3252,12 @@ def predict_shape(
                 frames.append(
                     [coord for p in frame_positions for coord in p["backbone_position"]]
                 )
+                if progress_cb and (frame_index + 1) % 5 == 0:
+                    progress_cb(
+                        "thermal",
+                        (frame_index + 1) / len(thermal_u),
+                        "Reconstruct thermal conformations",
+                    )
 
             # Report the fluctuation of the RECONSTRUCTED nucleotide geometry, not just
             # the translational part of the FEM axis DOF.  The displayed slabs sit off
@@ -3107,6 +3317,8 @@ def predict_shape(
                 # distinction that fixed mrDNA reconstruction.
                 "representative_axis": representative_axis,
             }
+            if progress_cb:
+                progress_cb("thermal", 1.0, "Thermal conformations complete")
         out["rmsf"] = [
             {
                 "helix_id": node.helix_id,

@@ -21,12 +21,23 @@ const rendererStub = () => ({
   setMode: vi.fn(),
   update: vi.fn(),
   getMode: vi.fn(() => 'off'),
+  raycastPick: vi.fn(),
+  applyOxdnaTransforms: vi.fn(),
+  clearOxdnaTransforms: vi.fn(),
+  dispose: vi.fn(),
 })
 let _lastRenderer = null
+let _lastTraceRenderer = null
 let _lastGizmo = null
 
 vi.mock('./atomistic_renderer.js', () => ({
   initAtomisticRenderer: vi.fn(() => { _lastRenderer = rendererStub(); return _lastRenderer }),
+}))
+vi.mock('./protein_trace_renderer.js', () => ({
+  initProteinTraceRenderer: vi.fn(() => {
+    _lastTraceRenderer = { ...rendererStub(), dispose: vi.fn(), applyOxdnaTransforms: vi.fn(), clearOxdnaTransforms: vi.fn(), raycastPick: vi.fn() }
+    return _lastTraceRenderer
+  }),
 }))
 vi.mock('./protein_gizmo.js', () => ({
   initProteinGizmo: vi.fn((store, controls, cbs) => {
@@ -64,6 +75,7 @@ const flush = () => new Promise(r => setTimeout(r, 0))
 describe('initProteinSubsystem', () => {
   beforeEach(() => {
     _lastRenderer = null
+    _lastTraceRenderer = null
     _lastGizmo = null
     global.fetch = vi.fn()
     global.window = global.window || {}
@@ -73,7 +85,8 @@ describe('initProteinSubsystem', () => {
   it('returns the renderer + gizmo + refresh + syncSelectionVisual api', () => {
     const deps = makeDeps()
     const sub = initProteinSubsystem(deps)
-    expect(sub.renderer).toBe(_lastRenderer)
+    expect(sub.renderer).not.toBe(_lastRenderer)
+    expect(typeof sub.renderer.raycastPick).toBe('function')
     expect(sub.gizmo).toBe(_lastGizmo)
     expect(typeof sub.refresh).toBe('function')
     expect(typeof sub.syncSelectionVisual).toBe('function')
@@ -92,8 +105,46 @@ describe('initProteinSubsystem', () => {
       '/api/design/protein/atomistic',
       { headers: { 'X-NADOC-Doc': 'test' } },
     )
-    expect(_lastRenderer.setMode).toHaveBeenCalledWith('vdw')
+    expect(_lastTraceRenderer.setMode).toHaveBeenCalledWith('trace')
+    expect(_lastRenderer.setMode).toHaveBeenCalledWith('off')
     expect(_lastRenderer.update).toHaveBeenCalledWith({ atoms: [{ helix_id: '__protein__p1' }] })
+    expect(_lastTraceRenderer.update).toHaveBeenCalledWith({ atoms: [{ helix_id: '__protein__p1' }] })
+  })
+
+  it('applies stick and yields protein geometry to the global surface renderer', async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ atoms: [{ helix_id: '__protein__p1' }], bonds: [[0, 1]] }),
+    })
+    const deps = makeDeps()
+    const sub = initProteinSubsystem(deps)
+    await sub.refresh()
+
+    window.dispatchEvent(new CustomEvent('nadoc:representation-change', {
+      detail: { representation: 'stick' },
+    }))
+    expect(_lastRenderer.setMode).toHaveBeenLastCalledWith('stick')
+
+    window.dispatchEvent(new CustomEvent('nadoc:representation-change', {
+      detail: { representation: 'surface' },
+    }))
+    expect(_lastRenderer.setMode).toHaveBeenLastCalledWith('off')
+    sub.dispose()
+  })
+
+  it('uses the protein ovoid renderer for cylinders', async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ atoms: [{ helix_id: '__protein__p1' }] }),
+    })
+    const sub = initProteinSubsystem(makeDeps())
+    await sub.refresh()
+    window.dispatchEvent(new CustomEvent('nadoc:representation-change', {
+      detail: { representation: 'cylinders' },
+    }))
+    expect(_lastRenderer.setMode).toHaveBeenLastCalledWith('off')
+    expect(_lastTraceRenderer.setMode).toHaveBeenLastCalledWith('ovoid')
+    sub.dispose()
   })
 
   it('clears proteins (mode off + empty update) when the fetch returns no atoms', async () => {
@@ -101,10 +152,11 @@ describe('initProteinSubsystem', () => {
     const deps = makeDeps()
     const sub = initProteinSubsystem(deps)
     // renderer currently shows something → removal path fires even with no attachments
-    _lastRenderer.getMode.mockReturnValue('vdw')
+    _lastTraceRenderer.getMode.mockReturnValue('trace')
     deps.store._emit({ currentDesign: { protein_attachments: [] } })
     await flush()
     expect(_lastRenderer.setMode).toHaveBeenCalledWith('off')
+    expect(_lastTraceRenderer.setMode).toHaveBeenCalledWith('off')
     expect(_lastRenderer.update).toHaveBeenCalledWith({ atoms: [] })
     void sub
   })
@@ -124,7 +176,7 @@ describe('initProteinSubsystem', () => {
       context: 'design', level: 'default',
       items: [{ kind: 'protein', id: 'p1' }], primary: { kind: 'protein', id: 'p1' },
     } })
-    expect(_lastRenderer.centroidOf).toHaveBeenCalled()
+    expect(_lastTraceRenderer.centroidOf).toHaveBeenCalled()
     expect(_lastGizmo.attach).toHaveBeenCalledWith('p1', deps.scene, deps.camera, deps.canvas, [1, 2, 3], null)
     expect(_lastRenderer.highlight).toHaveBeenCalledWith({ type: 'protein', id: 'p1', data: { attachment_id: 'p1' } })
   })
@@ -198,7 +250,7 @@ describe('initProteinSubsystem', () => {
     // which would move sibling overhang domains on the same helix.
     expect(locations.captureClusterBase).not.toHaveBeenCalled()
     expect(locations.applyClusterTransform).not.toHaveBeenCalled()
-    expect(_lastRenderer.applyLiveTransform).toHaveBeenCalledWith('protein-matrix')
+    expect(_lastTraceRenderer.applyLiveTransform).toHaveBeenCalledWith('protein-matrix')
     expect(global.fetch).toHaveBeenCalledTimes(1) // selection fetch only; drag frames stay local
   })
 
@@ -257,11 +309,11 @@ describe('initProteinSubsystem', () => {
     const deps = makeDeps()
     initProteinSubsystem(deps)
     _lastGizmo._cbs.onLiveStart('p1')
-    expect(_lastRenderer.beginLiveTransform).toHaveBeenCalled()
+    expect(_lastTraceRenderer.beginLiveTransform).toHaveBeenCalled()
     _lastGizmo._cbs.onLive('MATRIX')
-    expect(_lastRenderer.applyLiveTransform).toHaveBeenCalledWith('MATRIX')
+    expect(_lastTraceRenderer.applyLiveTransform).toHaveBeenCalledWith('MATRIX')
     _lastGizmo._cbs.onLiveEnd()
-    expect(_lastRenderer.endLiveTransform).toHaveBeenCalled()
+    expect(_lastTraceRenderer.endLiveTransform).toHaveBeenCalled()
   })
 
   it('coalesces overlapping refreshes (one in-flight fetch at a time)', async () => {

@@ -130,6 +130,20 @@ describe('instanceAlpha coverage', () => {
     expect(push.slice(0, 300)).toContain('domainIndex')
   })
 
+  it('renders conjugate oh_binder strands as the opposite cylinder half', () => {
+    // VoltronCoreArm OH7 uses an oh_binder rather than a linker strand. Treating
+    // it as an ordinary domain produced a second stale full cylinder.
+    expect(HR).toContain("strand.strand_type === 'oh_binder'")
+    expect(HR).toContain('dom.binds_overhang_id != null')
+  })
+
+  it('preserves authoritative moved-overhang endpoints during deform lerp', () => {
+    const body = HR.slice(HR.indexOf('// 5b. Straight-helix overhang cylinders (LOD) — same approach.'))
+    expect(body.slice(0, 4500)).toContain('dom.wsStart && dom.wsEnd')
+    expect(body.slice(0, 4500)).toContain('dom.wsStart.x')
+    expect(HR).toContain('getOverhangCylinderDiagnostics(overhangId)')
+  })
+
   it('the installer covers every mesh the alpha writers drive', () => {
     // Cross-list agreement: a mesh written but never installed is a silent no-op,
     // because _setCylAlpha/_setEntryAlpha return early with no attribute.

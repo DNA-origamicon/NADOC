@@ -71,6 +71,13 @@ describe('structural partial reconciliation', () => {
     expect(finishCalls.length).toBeGreaterThanOrEqual(3)
   })
 
+  it('rejects nucleotide-only patching when a moved protein changes cylinder axes', () => {
+    const body = functionBody(SRC, '_tryPatchInPlace')
+    expect(body).toContain('prevHelixAxes')
+    expect(body).toContain('newState.currentHelixAxes')
+    expect(body).toContain("reason: 'helix-axis-changed'")
+  })
+
   it('bounds the overlay fast path and preserves a full-rebuild fallback', () => {
     const body = functionBody(SRC, '_tryStructuralOverlay')
     expect(body).not.toBeNull()

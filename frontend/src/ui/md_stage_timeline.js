@@ -32,7 +32,13 @@ export function mdMinimizationRow(job) {
   if (anySegmentStarted) status = 'done'
   else if (status === 'pending' && job?.status === 'running') status = 'running'
   else if (status !== 'done' && job?.status === 'failed') status = 'failed'
-  return { name: min.name, stage: min.stage || 'Minimization', steps: min.steps ?? 0, status }
+  return {
+    name: min.name,
+    stage: min.stage || 'Minimization',
+    steps: min.steps ?? 0,
+    percent: min.percent,
+    status,
+  }
 }
 
 /** Pure: shorten a stage name for the narrow "Latest" stat card. */

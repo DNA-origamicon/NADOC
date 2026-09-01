@@ -1,6 +1,6 @@
 ---
 name: project-protein-attachment
-description: Protein import (PDB) + attachment/conjugation to DNA overhangs, display layer. SHIPPED and live; only Phase 3 (assembly scope) remains. Rank P2.
+description: Protein import, conjugation, and representation parity across designs, assemblies, and photomode. SHIPPED and live.
 metadata: 
   node_type: memory
   type: project
@@ -9,11 +9,10 @@ metadata:
 
 # Protein import + attachment to DNA overhangs
 
-**Status (probed 2026-07-30, `/audit-plan`): SHIPPED AND LIVE.** Import → free placement →
-attach-to-overhang → gizmo move → SASA-based conjugation-atom picking all work end to end,
-under the feature log, with ~92 backend + 5 frontend tests. **Rank: P2** — one open phase
-(assembly-scope proteins) that is real and user-scoped, but wholly unstarted and gated on
-assembly render work; everything else the old plan listed as "remaining" has since shipped.
+**Status (updated 2026-09-01): SHIPPED AND LIVE.** Import → free placement →
+attach-to-overhang → gizmo move → SASA-based conjugation-atom picking work end to end.
+Imported proteins now participate in Full, Cylinders, Surface, VDW, Ball & Stick, and Stick
+representations in design view, legacy/shared assemblies, and photomode.
 
 History (Phases 1–2, free proteins, gizmo, lifecycle/delete fixes) → `project_protein_attachment_archive.md`.
 The MD/simulation side of proteins is a **different doc**: [[project-proteins-in-simulation]]
@@ -69,15 +68,41 @@ fallback was deliberately removed so undo/delete/move stay correct. Frontend mir
 single `store.subscribe` on `currentDesign` identity (`protein_subsystem.js:76-81`) drives
 `_refreshProteins`; a second subscription `:85` handles selection visuals.
 
-## Open items (rewritten against the probe — these are what's actually left)
+## Representation parity and cylinder invariants (2026-09-01)
 
-1. **Phase 3 — assembly-scope proteins (the rank driver).** `ProteinTargetAssembly` exists in
-   the model and is explicitly skipped at render: `routes_protein.py:132`
-   `if kind not in ("free","overhang") …  # assembly-scope (Phase 3) / hidden`. Nothing else
-   references it: zero `protein` hits across `backend/api/assembly.py`, all
-   `routes_assembly_*.py`, `backend/core/assembly*.py`, and every frontend `scene/assembly*.js`
-   / `ui/assembly*.js`. Needs: anchor through `PartInstance.transform` (row-major → Three.js
-   transpose) and per-instance render via `initAtomisticRenderer(entry.group)`. Gated on
+- **Full:** C-alpha tube/trace (`scene/protein_trace_renderer.js`), replacing the visually
+  noisy all-atom default while retaining exact all-atom centroids, picking, and transforms.
+- **Cylinders:** one padded atom-bounds ovoid per protein attachment. Conjugated DNA uses
+  paired half-cylinders: the overhang and its `oh_binder` complement share one pose.
+- **Surface:** protein atoms are included in the molecular-surface payload.
+- **Atomistic:** VDW, Ball & Stick, and Stick use the dedicated protein atomistic renderer.
+- **Assembly + photomode:** legacy and shared-instancing assembly renderers support the same
+  abstract/atomistic modes; `proteinTrace` and `proteinOvoid` have explicit photo mappings.
+
+### Authoritative overhang-cylinder geometry
+
+Protein-constrained moves return partial nucleotide geometry plus partial helix axes. The
+frontend must reject nucleotide-only patches whenever `currentHelixAxes` changes. Backend
+`ovhg_axes` and the owning domain `segments` must carry identical transformed endpoints.
+Segment ownership is determined by either `ovhg_id` or `domain_ids`: VoltronCoreArm OH7 is
+represented by its binder domain and therefore has a null segment `ovhg_id`.
+
+The deformation-lerp pass must preserve `_overhangCylData.wsStart/wsEnd`; rebuilding from the
+whole parent helix axis snaps an inline overhang back to its old pose. `oh_binder` strands must
+be routed through the complementary binding-half cylinder path, not emitted as an additional
+ordinary full cylinder. `getOverhangCylinderDiagnostics(overhangId)` exposes endpoints decoded
+from the actual rendered instance matrix for future visual regression work.
+
+Permanent real-design regressions load `workspace/VoltronCoreArm.nadoc`, apply a protein
+rotation plus translation, and compare the final cylinder vector with the paired nucleotide
+backbone centerline (cosine > 0.99), as well as exact `segments`/`ovhg_axes` endpoint parity.
+
+## Open items (rewritten against the probe)
+
+1. **Assembly-owned attachment authoring.** Proteins embedded in part designs now render in
+   assemblies in every applicable representation. The distinct `ProteinTargetAssembly` model
+   still lacks authoring UI/API for attaching a protein directly to an assembly-level target;
+   this is separate from the now-shipped part-protein assembly rendering path. Gated on
    [[project-path-to-thousands]] (shared-renderer default) before touching assembly render code.
 2. **`.nass` carries the slot but not the feature.** `Assembly.protein_assets/_attachments`
    serialize (pydantic) yet have no producer or consumer — a save/load round-trip preserves

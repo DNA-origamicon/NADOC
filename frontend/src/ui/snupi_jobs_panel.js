@@ -38,6 +38,7 @@ import { initOxdnaAnchorsSetup } from './oxdna_anchors_setup.js'
 import * as api from '../api/client.js'
 
 const POLL_MS = 1500
+export const SNUPI_LAUNCH_RESOURCE = Object.freeze({ usesGpu: false })
 
 const _C = { ok: '#5cb85c', warn: '#e0a800', err: '#d9534f', accent: '#4a9eff', dim: '#8a8a8a' }
 
@@ -439,8 +440,23 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
     if (launchBlocked(_launching, _jobs, _selectedJob())) return
     _launching = true
     _updateLaunchButtons()
+    let optimisticId = null
     try {
-      if (!(await confirmNoConcurrentJob())) return
+      // SNUPI is a CPU FEM solve. Treating it as the guard's default GPU job made
+      // a running oxDNA/NAMD job intercept Coarse/Fine clicks with an irrelevant
+      // GPU-contention prompt, so no SNUPI request was submitted unless that hidden
+      // prompt was explicitly accepted.
+      if (!(await confirmNoConcurrentJob(SNUPI_LAUNCH_RESOURCE))) return
+      optimisticId = `snupi-launch-${Date.now()}`
+      window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed', { detail: {
+        select: true,
+        node: {
+          engine: 'snupi', job_id: optimisticId, status: 'preparing',
+          nonlinear, design_name: 'SNUPI', design_source_path: getWorkspacePath?.() || null,
+          progress_fraction: 0, phase: 'Creating job',
+          stages: [{ name: nonlinear ? 'nonlinear' : 'linear', status: 'preparing' }],
+        },
+      } }))
       const anchors = _anchorsCard.getAnchors()
       const fieldSpec = _efieldCard.getFieldSpec()
       const fieldOn = _efieldCard.isEnabled()
@@ -466,12 +482,25 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
       }
       const job = await api.createSnupiJob(body_)
       if (!job) {
+        window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed', {
+          detail: { removeJobId: optimisticId },
+        }))
+        optimisticId = null
         showToast(api.lastErrorMessage() || 'Failed to start SNUPI FEM prediction', { severity: 'error' })
         return
       }
       _selectedId = job.job_id
+      window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed', { detail: {
+        removeJobId: optimisticId, node: { ...job, engine: 'snupi' }, select: true,
+      } }))
+      optimisticId = null
       await _fetchJobs()
     } finally {
+      if (optimisticId) {
+        window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed', {
+          detail: { removeJobId: optimisticId },
+        }))
+      }
       _launching = false
       _updateLaunchButtons()
     }
@@ -483,7 +512,15 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
   async function _fetchJobs() {
     const all = await api.listSnupiJobs()
     if (!Array.isArray(all)) return
+    const selectedBefore = _selectedJob()
     _jobs = filterJobsForPart(all, getWorkspacePath?.() || null, showAll?.checked)
+    // Assembly launches historically have design_source_path=null because the
+    // editor's part workspace path is intentionally unset in assembly mode. A job
+    // selected by the unified card is still authoritative by id; retain it across
+    // polls even though the part-path filter cannot classify it.
+    if (selectedBefore && !_jobs.some(job => job.job_id === selectedBefore.job_id)) {
+      _jobs.unshift(selectedBefore)
+    }
     _renderList()
     _updateLaunchButtons()
     if (_selectedId) {
@@ -733,7 +770,11 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
   // the unified Simulate list to route a SNUPI node's selection here.
   async function selectJob(jobId) {
     if (!jobId) return
-    if (!_jobs.find((j) => j.job_id === jobId)) await _fetchJobs()
+    if (!_jobs.find((j) => j.job_id === jobId)) {
+      const job = await api.getSnupiJob(jobId)
+      if (job) _jobs.unshift(job)
+      else await _fetchJobs()
+    }
     return _selectJob(jobId)
   }
   return { refresh: _fetchJobs, getSelectedJob: _selectedJob, selectJob, deleteSelected,

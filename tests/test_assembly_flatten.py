@@ -11,6 +11,8 @@ so the linker bridge silently connected to nothing.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -28,11 +30,270 @@ from backend.core.models import (
     Mat4x4,
     OverhangSpec,
     PartInstance,
+    PartSourceFile,
     PartSourceInline,
     Strand,
     StrandType,
     Vec3,
 )
+
+
+def test_flatten_resolves_workspace_relative_file_source():
+    """Current v2 .nass files store file sources relative to workspace/."""
+    source = PartSourceFile(path="BigO.nadoc")
+    asm = Assembly(instances=[PartInstance(id="bigo", name="BigO", source=source)])
+    flat = flatten_assembly(asm)
+    assert flat.helices
+    assert flat.strands
+    assert all(h.id.startswith("inst-bigo::") for h in flat.helices)
+
+
+def test_flatten_keeps_the_user_facing_assembly_name():
+    asm = Assembly(metadata={"name": "BigO-poly"})
+    flat = flatten_assembly(asm)
+    assert flat.id.startswith("flat_")
+    assert flat.metadata.name == "BigO-poly"
+
+
+def test_bigo_periodic_flatten_stitches_repeats_and_keeps_full_ssdna_ends():
+    """BigO's 56 seam staples must bridge repeats, never jump across one copy.
+
+    Three repeats have two physical junctions, hence 56*2 internal polymer staples.
+    Each of the 56 strand families also has two open polymer ends; those terminal
+    strands retain the source staple's full nucleotide count, with the absent
+    neighbour half represented as a true terminal ssDNA extension.
+    """
+    root = Path(__file__).resolve().parents[1]
+    assembly = Assembly.from_json((root / "workspace" / "BigO-poly.nass").read_text())
+    part = Design.from_json((root / "workspace" / "BigO.nadoc").read_text())
+    flat = flatten_assembly(assembly)
+
+    periodic = [fl for fl in part.forced_ligations if fl.is_periodic_seam]
+    internal = [s for s in flat.strands if s.id.startswith("polymer::")]
+    terminal = [s for s in flat.strands if s.id.startswith("polymer-terminal::")]
+    assert len(periodic) == 56
+    assert len(internal) == len(periodic) * (len(assembly.instances) - 1)
+    assert len(terminal) == len(periodic) * 2
+    assert len(flat.forced_ligations) == len(internal)
+
+    source_lengths = {
+        sum(len(list(range(min(d.start_bp, d.end_bp), max(d.start_bp, d.end_bp) + 1))) for d in s.domains)
+        for s in part.strands
+        if any(
+            d.end_bp == fl.three_prime_bp
+            and d.helix_id == fl.three_prime_helix_id
+            and i + 1 < len(s.domains)
+            and s.domains[i + 1].start_bp == fl.five_prime_bp
+            and s.domains[i + 1].helix_id == fl.five_prime_helix_id
+            for fl in periodic
+            for i, d in enumerate(s.domains)
+        )
+    }
+    assert source_lengths
+    extensions_by_strand = {ext.strand_id: ext for ext in flat.extensions}
+    for strand in terminal:
+        extension = extensions_by_strand[strand.id]
+        assert (
+            sum(abs(d.end_bp - d.start_bp) + 1 for d in strand.domains)
+            + len(extension.sequence)
+        ) in source_lengths
+        assert extension.end in {"five_prime", "three_prime"}
+        assert extension.label == "Polymer end"
+
+    # Export walks the materialized strand objects directly: the 112 seam strands
+    # therefore remain covalently threaded across their domain/instance boundary,
+    # and the 112 terminal ssDNA halves contribute real particles.
+    from backend.physics.oxdna_interface import topology_rows
+
+    rows, n_strands = topology_rows(flat)
+    assert n_strands == len(flat.strands) == 587
+    assert len(rows) == 43120
+
+
+def test_bigo_periodic_flatten_has_one_fem_component_and_registered_seams():
+    """Scientific regression: all inter-repeat seam atoms remain co-located and
+    every BigO repeat belongs to one mechanically connected CanDo mesh."""
+    import numpy as np
+
+    from backend.core.deformation import deformed_nucleotide_positions
+    from backend.physics.fem_solver import _mesh_component_labels, build_fem_mesh
+
+    root = Path(__file__).resolve().parents[1]
+    assembly = Assembly.from_json((root / "workspace" / "BigO-poly.nass").read_text())
+    # Round-trip matches the job-registration boundary and derives ordinary
+    # within-part crossover records from the stitched strand graph.
+    flat = Design.from_json(flatten_assembly(assembly).to_json())
+    positions = {
+        (h.id, int(p["bp_index"]), p["direction"].value): np.asarray(
+            p["backbone_position"], dtype=float
+        )
+        for h in flat.helices
+        for p in deformed_nucleotide_positions(h, flat)
+    }
+    seam_distances = []
+    for ligation in flat.forced_ligations:
+        if not ligation.id.startswith("polymer-ligation::"):
+            continue
+        a = positions[(
+            ligation.three_prime_helix_id, ligation.three_prime_bp,
+            ligation.three_prime_direction.value,
+        )]
+        b = positions[(
+            ligation.five_prime_helix_id, ligation.five_prime_bp,
+            ligation.five_prime_direction.value,
+        )]
+        seam_distances.append(float(np.linalg.norm(a - b)))
+    assert len(seam_distances) == 112
+    assert max(seam_distances) < 0.8  # one normal backbone step (measured: 0.678 nm)
+
+    mesh = build_fem_mesh(flat)
+    n_components, _ = _mesh_component_labels(mesh)
+    assert len(mesh.nodes) == 21168
+    assert n_components == 1
+
+
+def test_smallo_polymer_seams_are_normal_beams_not_rigid_links():
+    """Each repeat boundary continues all six duplex axes by one ordinary bp step."""
+    from backend.physics.fem_solver import FEM_RISE_PER_BP, build_fem_mesh
+
+    root = Path(__file__).resolve().parents[1]
+    assembly = Assembly.from_json((root / "workspace" / "smallO-poly.nass").read_text())
+    flat = Design.from_json(flatten_assembly(assembly).to_json())
+    mesh = build_fem_mesh(flat)
+    node_at = {(n.helix_id, n.global_bp): i for i, n in enumerate(mesh.nodes)}
+    element_pairs = {
+        frozenset((element.node_i, element.node_j)): element
+        for element in mesh.elements
+    }
+    rigid_pairs = {
+        frozenset((link.node_i, link.node_j)) for link in mesh.rigid_links
+    }
+
+    seams = [fl for fl in flat.forced_ligations if fl.id.startswith("polymer-ligation::")]
+    assert len(seams) == 12  # six helices across two repeat boundaries
+    for seam in seams:
+        pair = frozenset((
+            node_at[(seam.three_prime_helix_id, seam.three_prime_bp)],
+            node_at[(seam.five_prime_helix_id, seam.five_prime_bp)],
+        ))
+        assert pair in element_pairs
+        assert element_pairs[pair].length == pytest.approx(FEM_RISE_PER_BP)
+        assert pair not in rigid_pairs
+
+
+def test_smallo_polymer_fingerprint_is_stable_across_materialization():
+    """Reloading an unchanged assembly must not mark its simulation jobs stale."""
+    from backend.core.oxdna_staleness import oxdna_design_fingerprint
+
+    root = Path(__file__).resolve().parents[1]
+    assembly = Assembly.from_json((root / "workspace" / "smallO-poly.nass").read_text())
+    first = Design.from_json(flatten_assembly(assembly).to_json())
+    second = Design.from_json(flatten_assembly(assembly).to_json())
+
+    assert oxdna_design_fingerprint(first) == oxdna_design_fingerprint(second)
+    assert [sd.id for o in first.overhangs for sd in o.sub_domains] == [
+        sd.id for o in second.overhangs for sd in o.sub_domains
+    ]
+
+
+def test_smallo_polymer_ends_survive_oxdna_mrdna_and_cando_boundaries():
+    """The two free ends of every polymerization-strand family are simulation sites.
+
+    CanDo cannot equilibrate a free ssDNA coil, so its records are passive followers
+    of the terminal duplex anchor; oxDNA/mrDNA model them as ordinary unpaired sites.
+    """
+    import numpy as np
+
+    from backend.core.mrdna_manifest import build_mrdna_nucleotide_manifest
+    from backend.core.oxdna_staleness import oxdna_design_fingerprint
+    from backend.physics.fem_solver import build_fem_mesh, deformed_positions_with_axis
+    from backend.physics.oxdna_interface import _strand_nucleotide_order, topology_rows
+
+    root = Path(__file__).resolve().parents[1]
+    assembly = Assembly.from_json((root / "workspace" / "smallO-poly.nass").read_text())
+    flat = Design.from_json(flatten_assembly(assembly).to_json())
+    terminal_ids = {
+        strand.id for strand in flat.strands if strand.id.startswith("polymer-terminal::")
+    }
+    assert len(terminal_ids) == 12
+
+    # oxDNA/LAMMPS both consume this exact ordered particle topology.
+    order = _strand_nucleotide_order(flat)
+    rows, _ = topology_rows(flat)
+    assert len(order) == len(rows) == 2394
+
+    # mrDNA's identity manifest must retain the same total plus all 126 terminal
+    # extension nucleotides (the remaining 126 terminal-strand nts are duplex).
+    manifest = build_mrdna_nucleotide_manifest(
+        flat, design_fingerprint=oxdna_design_fingerprint(flat)
+    )
+    assert len(manifest.records) == 2394
+    terminal_records = [
+        record for record in manifest.records if record.identity.strand_id in terminal_ids
+    ]
+    assert len(terminal_records) == 252
+    assert sum(record.identity.segment_kind == "extension" for record in terminal_records) == 126
+
+    # The CanDo/SNUPI display contract now also covers those 126 tail addresses.
+    mesh = build_fem_mesh(flat)
+    positions, _ = deformed_positions_with_axis(
+        flat, mesh, np.zeros(6 * len(mesh.nodes), dtype=float)
+    )
+    assert len(positions) == 2394
+    assert sum(row["helix_id"].startswith("__ext_") for row in positions) == 126
+
+
+@pytest.mark.slow
+def test_smallo_poly_namd_seed_has_no_ring_piercings():
+    """Polymer ends use the reviewed terminal-extension atom placement.
+
+    The former fake-helix representation produced eight permanent topological defects
+    in this exact NAMD seed, including a 1.588 nm O3'-P bond through its own rings.
+    """
+    from backend.core.atomistic import build_atomistic_model
+    from backend.core.ring_piercing import piercing_report
+
+    root = Path(__file__).resolve().parents[1]
+    assembly = Assembly.from_json((root / "workspace" / "smallO-poly.nass").read_text())
+    flat = Design.from_json(flatten_assembly(assembly).to_json())
+    report = piercing_report(flat, model=build_atomistic_model(flat))
+    assert report["n_pierced"] == 0, report["pierced"]
+
+
+@pytest.mark.parametrize(
+    "runner_module",
+    [
+        "backend.core.oxdna_runner",
+        "backend.core.mrdna_runner",
+        "backend.core.snupi_runner",
+        "backend.core.blade_runner",
+    ],
+)
+def test_every_engine_snapshot_loader_reconstructs_polymer_topology(
+    tmp_path, runner_module,
+):
+    """Every worker must retain the derived crossovers CanDo previously lost."""
+    import importlib
+
+    root = Path(__file__).resolve().parents[1]
+    assembly = Assembly.from_json((root / "workspace" / "smallO-poly.nass").read_text())
+    flat = flatten_assembly(assembly)
+    assert flat.crossovers == []  # derived at the persisted JSON boundary
+    (tmp_path / "design.json").write_text(flat.model_dump_json())
+
+    runner = importlib.import_module(runner_module)
+    loaded = runner._load_snapshot_design(tmp_path)
+    assert loaded is not None
+    assert len(loaded.crossovers) == 78
+    assert len(loaded.forced_ligations) == len(flat.forced_ligations) == 12
+
+
+def test_flatten_rejects_missing_visible_file_source():
+    asm = Assembly(instances=[PartInstance(
+        id="missing", name="Missing", source=PartSourceFile(path="does-not-exist.nadoc"),
+    )])
+    with pytest.raises(FileNotFoundError, match="does-not-exist"):
+        flatten_assembly(asm)
 
 client = TestClient(app)
 

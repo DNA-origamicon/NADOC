@@ -24,7 +24,9 @@ import {
   IMPOSTOR_FRAG_SPHERE_BODY,
   IMPOSTOR_FRAG_NORMAL,
 } from './impostor_material.js'
-import { ELEMENTS, DEFAULT_ELEMENT, BALL_RADIUS } from './atomistic_renderer/atom_palette.js'
+import { ELEMENTS, DEFAULT_ELEMENT, BALL_RADIUS, BOND_RADIUS } from './atomistic_renderer/atom_palette.js'
+import { CYLINDER_GEO } from './atomistic_renderer/geometry_builder.js'
+import { proteinOvoidSpec, proteinTraceChains } from './protein_trace_renderer.js'
 import { C, STAPLE_PALETTE, buildClusterLookup, buildClusterColorLookup } from './helix_renderer/palette.js'
 import { buildOverhangMarkers } from './joint_renderer.js'
 import { buildCrossoverConnections } from './crossover_connections.js'
@@ -242,6 +244,8 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
   const _linkerGroup = new THREE.Group()
   _linkerGroup.name = 'assembly_linkers'
   scene.add(_linkerGroup)
+  let _externallyVisible = true
+  let _groupHiddenInstanceIds = new Set()
 
   // Local copy of the legacy `_axesArrayToMap` (pure; see initAssemblyRenderer).
   function _axesArrayToMap(raw) {
@@ -875,6 +879,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
 
     const batch = []
     for (const [el, list] of byEl) {
+      if (atomRep === 'stick') continue
       const numAtoms = list.length
       const posFlat = new Float32Array(numAtoms * 3)
       for (let i = 0; i < numAtoms; i++) {
@@ -915,6 +920,66 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
       mesh.userData.sharedLodImpostor = true
       helixGroup.add(mesh)
       batch.push({ mesh, posTex: atomPosTex, colorTex: atomColorTex, atomList: list })
+    }
+
+    // Ball+Stick and Stick both require real covalent bond cylinders. Build one
+    // source-local transform/color texture and instance it across placements
+    // through the same segment shader as cylinder LODs. VDW intentionally has
+    // no bonds. The 1 nm cutoff mirrors the individual atomistic renderer's
+    // pathological-bond guard.
+    if (atomRep !== 'vdw' && atomData?.bonds?.length) {
+      const atomColors = _computeAtomColorRGB(atoms, mode, ctx)
+      const matrices = []
+      const colors = []
+      const yAxis = new THREE.Vector3(0, 1, 0)
+      const start = new THREE.Vector3(), end = new THREE.Vector3()
+      const dir = new THREE.Vector3(), mid = new THREE.Vector3()
+      const quat = new THREE.Quaternion(), scale = new THREE.Vector3()
+      const matrix = new THREE.Matrix4()
+      for (const pair of atomData.bonds) {
+        const ai = pair?.[0], bi = pair?.[1]
+        const a = atoms[ai], b = atoms[bi]
+        if (!a || !b) continue
+        start.set(a.x, a.y, a.z); end.set(b.x, b.y, b.z)
+        dir.subVectors(end, start)
+        const length = dir.length()
+        if (length < 1e-9 || length > 1.0) continue
+        mid.addVectors(start, end).multiplyScalar(0.5)
+        quat.setFromUnitVectors(yAxis, dir.normalize())
+        scale.set(BOND_RADIUS, length, BOND_RADIUS)
+        matrix.compose(mid, quat, scale)
+        matrices.push(...matrix.elements)
+        colors.push(
+          (atomColors[ai * 3] + atomColors[bi * 3]) * 0.5,
+          (atomColors[ai * 3 + 1] + atomColors[bi * 3 + 1]) * 0.5,
+          (atomColors[ai * 3 + 2] + atomColors[bi * 3 + 2]) * 0.5,
+        )
+      }
+      const numBonds = matrices.length / 16
+      const bondLod = _buildSegmentLodMesh({
+        srcEntry,
+        matrixArray: new Float32Array(matrices),
+        colorArrayRGB: new Float32Array(colors),
+        numSegments: numBonds,
+        geometry: CYLINDER_GEO,
+        meshName: 'atomBond_shared',
+        sourceGroup: helixGroup,
+      })
+      if (bondLod) {
+        bondLod.mesh.count = numBonds * numInstances
+        bondLod.mesh.userData.sharedLodImpostor = true
+        const compileSharedBond = bondLod.mesh.material?.onBeforeCompile
+        if (typeof compileSharedBond === 'function') {
+          bondLod.mesh.userData.applySharedInstancing = material => {
+            const materials = Array.isArray(material) ? material : [material]
+            for (const target of materials) {
+              target.onBeforeCompile = compileSharedBond
+              target.customProgramCacheKey = () => `photoSharedAtomBonds_${target.uuid}`
+            }
+          }
+        }
+        srcEntry.atomBondLod = bondLod
+      }
     }
 
     srcEntry.atomBatch = batch
@@ -1005,6 +1070,80 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     }
     _recolorSurface(srcEntry, store.getState().coloringMode)
     return true
+  }
+
+  async function _buildProteinTraceBatch(srcEntry, instId, helixGroup, instancesForKey) {
+    let data
+    try {
+      data = await api.getInstanceProteinGeometry(instId)
+    } catch (err) {
+      console.warn('[shared_renderer] protein trace fetch failed:', err)
+      return false
+    }
+    const atoms = data?.atoms ?? []
+    const geometrySets = new Map()
+    if (instancesForKey.some(inst => (inst.representation ?? 'full') === 'full')) {
+      const traces = []
+      for (const chain of proteinTraceChains(atoms)) {
+        const points = chain.atoms.map(atom => new THREE.Vector3(atom.x, atom.y, atom.z))
+        if (points.length === 1) {
+          const geo = new THREE.SphereGeometry(0.16, 12, 8)
+          geo.translate(points[0].x, points[0].y, points[0].z)
+          traces.push(geo)
+        } else if (points.length > 1) {
+          traces.push(new THREE.TubeGeometry(
+            new THREE.CatmullRomCurve3(points, false, 'centripetal'),
+            Math.max(8, (points.length - 1) * 6), 0.16, 8, false,
+          ))
+        }
+      }
+      geometrySets.set('full', { geometries: traces, name: 'proteinTrace' })
+    }
+    if (instancesForKey.some(inst => inst.representation === 'cylinders')) {
+      const byAttachment = new Map()
+      for (const atom of atoms) {
+        if (!byAttachment.has(atom.helix_id)) byAttachment.set(atom.helix_id, [])
+        byAttachment.get(atom.helix_id).push(atom)
+      }
+      const ovoids = []
+      for (const attachmentAtoms of byAttachment.values()) {
+        const spec = proteinOvoidSpec(attachmentAtoms)
+        if (!spec) continue
+        const geo = new THREE.SphereGeometry(1, 20, 14)
+        geo.scale(spec.radii.x, spec.radii.y, spec.radii.z)
+        geo.translate(spec.center.x, spec.center.y, spec.center.z)
+        ovoids.push(geo)
+      }
+      geometrySets.set('cylinders', { geometries: ovoids, name: 'proteinOvoid' })
+    }
+    srcEntry.proteinAbstractBatches = []
+    for (const [representation, spec] of geometrySets) {
+      if (!spec.geometries.length) continue
+      const geo = mergeGeometries(spec.geometries, false)
+      spec.geometries.forEach(item => item.dispose())
+      if (!geo) continue
+      geo.computeBoundingBox()
+      if (geo.boundingBox && !geo.boundingBox.isEmpty()) srcEntry.instBoundingBox?.union(geo.boundingBox)
+      const mesh = new THREE.InstancedMesh(
+        geo, new THREE.MeshPhongMaterial({ color: 0x58a6ff, shininess: 24 }), instancesForKey.length)
+      const index = new Map()
+      const visibleIds = new Set()
+      const hidden = new THREE.Matrix4().makeScale(0, 0, 0)
+      instancesForKey.forEach((inst, row) => {
+        index.set(inst.id, row)
+        const matches = (inst.representation ?? 'full') === representation
+        if (matches) visibleIds.add(inst.id)
+        mesh.setMatrixAt(row, matches && inst.visible !== false ? _instMat4(inst.transform?.values) : hidden)
+      })
+      mesh.instanceMatrix.needsUpdate = true
+      mesh.frustumCulled = false
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+      mesh.name = spec.name
+      helixGroup.add(mesh)
+      srcEntry.proteinAbstractBatches.push({ mesh, index, visibleIds })
+    }
+    return srcEntry.proteinAbstractBatches.length > 0
   }
 
   // Walk a helixCtrl.root and patch every InstancedMesh's material with the
@@ -1603,15 +1742,18 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     // hide the CG/hull geometry. Mixed-rep sources fall back to the per-instance
     // LOD cap (vdw/ballstick → hull) as before.
     const _allAtomistic = numInstances > 0 && instancesForKey.every(
-      i => i.representation === 'vdw' || i.representation === 'ballstick')
+      i => i.representation === 'vdw' || i.representation === 'ballstick' || i.representation === 'stick')
     const _allSurface = numInstances > 0 && instancesForKey.every(
       i => i.representation === 'surface')
     if (_allSurface) {
       // Molecular surface — one mesh per source, instanced at each placement.
       await _buildSurfaceBatch(srcEntry, instancesForKey[0].id, numInstances, helixGroup, instancesForKey)
     } else if (_allAtomistic) {
-      const atomRep = instancesForKey[0].representation   // 'vdw' | 'ballstick'
+      const atomRep = instancesForKey[0].representation   // 'vdw' | 'ballstick' | 'stick'
       await _buildAtomImpostorBatch(srcEntry, instancesForKey[0].id, uniformsBundle, numInstances, helixGroup, atomRep)
+    }
+    if (instancesForKey.some(i => ['full', 'cylinders'].includes(i.representation ?? 'full'))) {
+      await _buildProteinTraceBatch(srcEntry, instancesForKey[0].id, helixGroup, instancesForKey)
     }
 
     return srcEntry
@@ -1643,6 +1785,8 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     srcEntry.midLod?.segColorTex?.dispose()
     srcEntry.overhangLod?.segXformTex?.dispose()
     srcEntry.overhangLod?.segColorTex?.dispose()
+    srcEntry.atomBondLod?.segXformTex?.dispose()
+    srcEntry.atomBondLod?.segColorTex?.dispose()
     for (const id of srcEntry.instanceIds) _instToSrc.delete(id)
   }
 
@@ -3677,6 +3821,13 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     // Full upload of a 4×N RGBA32F texture is tiny (~64 bytes/instance)
     // and works uniformly across LODs.
     srcEntry.xformTex.needsUpdate = true
+    for (const batch of srcEntry.proteinAbstractBatches ?? []) {
+      const batchRow = batch.index.get(instanceId)
+      if (batchRow != null) {
+        batch.mesh.setMatrixAt(batchRow, batch.visibleIds.has(instanceId) ? matrix4 : new THREE.Matrix4().makeScale(0, 0, 0))
+        batch.mesh.instanceMatrix.needsUpdate = true
+      }
+    }
     const arcGroup = srcEntry.crossoverArcGroup?.userData?.instanceGroups?.get(instanceId)
     if (arcGroup) {
       arcGroup.matrix.copy(matrix4)
@@ -4103,13 +4254,15 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     const hidden = hiddenInstanceIds instanceof Set
       ? hiddenInstanceIds
       : new Set(hiddenInstanceIds || [])
+    _groupHiddenInstanceIds = hidden
     const instances = store.getState().currentAssembly?.instances ?? []
     const selfVisible = new Map(instances.map(i => [i.id, i.visible !== false]))
     const _m = new THREE.Matrix4()
     for (const srcEntry of _sources.values()) {
       const sm = srcEntry.surfaceMesh?.mesh
+      const proteinBatches = srcEntry.proteinAbstractBatches ?? []
       for (const [id, row] of srcEntry.instanceIndex.entries()) {
-        const vis = (selfVisible.get(id) ?? true) && !hidden.has(id)
+        const vis = _externallyVisible && (selfVisible.get(id) ?? true) && !hidden.has(id)
         srcEntry.visibility[row]        = vis ? 1.0 : 0.0
         srcEntry.visData[row * 16 + 0]  = srcEntry.visibility[row]
         srcEntry.dirtyVisRows.add(row)
@@ -4123,9 +4276,28 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
             sm.setMatrixAt(row, _m.makeScale(0, 0, 0))
           }
         }
+        for (const batch of proteinBatches) {
+          const batchRow = batch.index.get(id)
+          if (batchRow != null && vis && batch.visibleIds.has(id)) {
+            for (let k = 0; k < 16; k++) _m.elements[k] = srcEntry.xformData[row * 16 + k]
+            batch.mesh.setMatrixAt(batchRow, _m)
+          } else if (batchRow != null) {
+            batch.mesh.setMatrixAt(batchRow, _m.makeScale(0, 0, 0))
+          }
+        }
       }
       if (sm) sm.instanceMatrix.needsUpdate = true
+      for (const batch of proteinBatches) batch.mesh.instanceMatrix.needsUpdate = true
     }
+  }
+
+  /** Hide/restore the complete native assembly without changing instance or group state. */
+  function setVisible(visible) {
+    _externallyVisible = !!visible
+    _linkerGroup.visible = _externallyVisible
+    if (_renderDataGroup) _renderDataGroup.visible = _externallyVisible
+    if (_matInst?.group) _matInst.group.visible = _externallyVisible
+    applyGroupVisibilityOverlay(_groupHiddenInstanceIds)
   }
 
   // ── Public: onRebuildComplete ─────────────────────────────────────────────
@@ -4161,6 +4333,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     rebuild,
     dispose,
     setActiveInstance,
+    setVisible,
     applyGroupVisibilityOverlay,
     getBoundingBox,
     getInstanceCenters,

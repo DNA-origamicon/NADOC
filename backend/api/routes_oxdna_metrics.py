@@ -66,7 +66,7 @@ def _job_inputs(job, ws: Path):
         trajs.extend(_stage_trajectories(job.stage_dir(ws, s.name)))
     if not trajs:
         return None
-    design = Design.model_validate_json((jd / "design.json").read_text())
+    design = Design.from_json((jd / "design.json").read_text())
     ref_conf = _design_ref_conf(jd, design)
     return design, ref_conf, trajs
 

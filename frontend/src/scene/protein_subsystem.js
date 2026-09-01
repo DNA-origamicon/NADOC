@@ -9,6 +9,7 @@
 // distinct so proteins draw regardless of the DNA representation mode.
 import * as THREE from 'three'
 import { initAtomisticRenderer } from './atomistic_renderer.js'
+import { initProteinTraceRenderer } from './protein_trace_renderer.js'
 import { initProteinGizmo } from './protein_gizmo.js'
 import { docHeaders } from '../shared/doc_id.js'
 import { primaryRefOfKind } from './selection_model.js'
@@ -20,7 +21,51 @@ export function initProteinSubsystem({
 }) {
   // Protein renderer (imported proteins; independent of the DNA atomistic
   // mode so proteins coexist with cylinders/beads/atomistic DNA).
-  const proteinRenderer = initAtomisticRenderer(scene)
+  const atomisticProteinRenderer = initAtomisticRenderer(scene)
+  const traceProteinRenderer = initProteinTraceRenderer(scene)
+  let _representation = 'full'
+  const _activeRenderer = () => _representation === 'full' || _representation === 'cylinders'
+    ? traceProteinRenderer : atomisticProteinRenderer
+  // Stable public renderer contract consumed by picking, oxDNA display, and
+  // the protein gizmo. Representation changes swap the active implementation
+  // without making those callers representation-aware.
+  const proteinRenderer = {
+    update(data) {
+      atomisticProteinRenderer.update(data)
+      traceProteinRenderer.update(data)
+    },
+    setMode(mode) {
+      if (mode === 'trace' || mode === 'ovoid') {
+        atomisticProteinRenderer.setMode('off')
+        traceProteinRenderer.setMode(mode)
+      } else {
+        traceProteinRenderer.setMode('off')
+        atomisticProteinRenderer.setMode(mode)
+      }
+    },
+    getMode: () => _activeRenderer().getMode(),
+    centroidOf: (...args) => _activeRenderer().centroidOf(...args),
+    raycastPick: (...args) => _activeRenderer().raycastPick(...args),
+    highlight(selection) {
+      atomisticProteinRenderer.highlight(selection)
+      traceProteinRenderer.highlight(selection)
+    },
+    beginLiveTransform: (...args) => _activeRenderer().beginLiveTransform(...args),
+    applyLiveTransform: (...args) => _activeRenderer().applyLiveTransform(...args),
+    endLiveTransform: (...args) => _activeRenderer().endLiveTransform(...args),
+    applyOxdnaTransforms(transforms) {
+      atomisticProteinRenderer.applyOxdnaTransforms(transforms)
+      traceProteinRenderer.applyOxdnaTransforms(transforms)
+    },
+    clearOxdnaTransforms() {
+      atomisticProteinRenderer.clearOxdnaTransforms()
+      traceProteinRenderer.clearOxdnaTransforms()
+    },
+    dispose() {
+      atomisticProteinRenderer.dispose()
+      traceProteinRenderer.dispose()
+    },
+  }
   const _proteinCentroid = (id) =>
     proteinRenderer.centroidOf(a => a.helix_id === `__protein__${id}`)
   let _constraints = new Map()
@@ -155,7 +200,18 @@ export function initProteinSubsystem({
         (data?.protein_constraints ?? []).map(item => [item.attachment_id, item])
       )
       if (data?.atoms?.length) {
-        proteinRenderer.setMode('vdw')
+        // Imported proteins participate in the scene representation.  The
+        // molecular surface is owned by the global surface renderer (whose
+        // backend payload now includes proteins); atom modes use this dedicated
+        // renderer so protein picking and the transform gizmo keep working.
+        const proteinMode = _representation === 'full'
+          ? 'trace'
+          : _representation === 'cylinders'
+          ? 'ovoid'
+          : ['vdw', 'ballstick', 'stick'].includes(_representation)
+          ? _representation
+          : (_representation === 'surface' ? 'off' : 'vdw')
+        proteinRenderer.setMode(proteinMode)
         proteinRenderer.update(data)
       } else {
         proteinRenderer.setMode('off')
@@ -180,6 +236,20 @@ export function initProteinSubsystem({
     if (hasProteins || proteinRenderer.getMode() !== 'off') _refreshProteins()
   })
 
+  function _onRepresentationChange(event) {
+    _representation = event?.detail?.representation ?? 'full'
+    const mode = _representation === 'full'
+      ? 'trace'
+      : _representation === 'cylinders'
+      ? 'ovoid'
+      : ['vdw', 'ballstick', 'stick'].includes(_representation)
+      ? _representation
+      : (_representation === 'surface' ? 'off' : 'vdw')
+    proteinRenderer.setMode(mode)
+    _syncProteinSelectionVisual()
+  }
+  window.addEventListener('nadoc:representation-change', _onRepresentationChange)
+
   // Selection change → update the gizmo/highlight (without a server round-trip).
   store.subscribe((newState, prevState) => {
     if (newState.selection !== prevState.selection) _syncProteinSelectionVisual()
@@ -199,6 +269,11 @@ export function initProteinSubsystem({
     setMoveRotatePanel(panel) {
       _moveRotatePanel = panel
       _moveRotatePanel?.setProteinController?.(proteinGizmo.isAttached() ? proteinGizmo : null)
+    },
+    dispose() {
+      window.removeEventListener('nadoc:representation-change', _onRepresentationChange)
+      proteinRenderer.dispose?.()
+      proteinGizmo.detach?.()
     },
   }
 }

@@ -638,7 +638,7 @@ def _md_snapshot_design(job: MdJob):
         p = cur.job_dir(ws) / "design.json"
         if p.exists():
             try:
-                return Design.model_validate_json(p.read_text())
+                return Design.from_json(p.read_text())
             except Exception:  # noqa: BLE001
                 return None
         pid = getattr(cur, "parent_job_id", None)
@@ -2754,7 +2754,7 @@ async def set_md_job_forces(job_id: str, body: JobForcesRequest) -> dict:
             )
         from backend.core.models import Design  # noqa: PLC0415
 
-        design = Design.model_validate_json(snapshot.read_text())
+        design = Design.from_json(snapshot.read_text())
         full_topology = bool(
             (manifest.get("charge_audit") or {}).get("topology_builder")
         )
@@ -3046,6 +3046,7 @@ async def estimate_md_disk(body: CreateJobRequest) -> dict:
     from backend.core.md_protocols import mgh_slow_release_segments
     from backend.core.md_vram import estimate_profile_from_design
 
+    body = _apply_relax_preset(body)
     target = Path(body.run_dir).expanduser() if body.run_dir else _workspace()
     if body.oxdna_job_id or body.mrdna_job_id or body.blade_job_id:
         # A seeded job's design is resolved later from the source job's snapshot, not the
@@ -3058,7 +3059,7 @@ async def estimate_md_disk(body: CreateJobRequest) -> dict:
         )
         if not profile:
             return {**forecast(target, 0), "skipped": True}
-        n_atoms = (
+        n_atoms = profile["dna_atoms"] if body.protocol == IMPLICIT_GBIS_PROTOCOL else (
             profile["dna_atoms"] + profile["full_water"] * 3 + profile["ion_atoms"]
         )
         # Mirrors prepare_mgh_slow_release's RE-AUDIT CONCLUDED resolution: declash
@@ -3104,9 +3105,15 @@ async def preflight_md_vram(body: CreateJobRequest) -> dict:
         # pre-flight cannot size it. Preparation still builds only a full solvent box.
         return {"skipped": True, "tier": "ok"}
     try:
-        design = design_state.get_or_404().without_reference_geometry()
         # Judge the resolved request exactly as preparation will, including preset padding.
         resolved = _apply_relax_preset(body)
+        if resolved.protocol == IMPLICIT_GBIS_PROTOCOL:
+            return {
+                "skipped": True,
+                "tier": "ok",
+                "reason": "implicit_solvent_has_no_water_box",
+            }
+        design = design_state.get_or_404().without_reference_geometry()
         advice = await run_in_threadpool(
             preflight_vram_advice,
             design,
@@ -4020,21 +4027,36 @@ def _namd_live_progress(job: MdJob, ws) -> tuple[float | None, float | None, boo
     eta = None
     estimated = False
 
-    # The minimisation precedes ``segments`` and remote runners leave its persisted
-    # status pending.  Its live-metrics segment name is definitive.  Previously this
-    # branch was absent, so a multi-hour Alpine minimisation collected an exact step
-    # while the job card remained at 0 % with no ETA.
+    # The minimisation precedes ``segments``.  Local runners persist its running status,
+    # while remote runners can leave it pending and identify it through live_metrics.
+    # Do not require remote telemetry here: local jobs deliberately have none, and doing
+    # so counted their still-running minimisation as one fully completed progress unit.
     live = job.live_metrics or {}
     min_running = (
         job.status == MdStatus.running
         and min_row is not None
-        and live.get("segment") == min_row.name
+        and (
+            min_row.status == "running"
+            or live.get("segment") == min_row.name
+        )
         and not any(s.status in {"running", "done", "failed"} for s in segs)
     )
     if min_running:
         steps = int(min_row.steps or 0)
-        ts, estimated = _remote_projected_step(job, steps)
+        pkg = job.package_dir(ws)
+        try:
+            ts = live_segment_step(pkg, min_row.name)
+        except Exception:  # noqa: BLE001 — progress/ETA are advisory, never fatal
+            ts = None
+        projected, is_estimate = _remote_projected_step(job, steps)
+        if projected is not None and (ts is None or projected > ts):
+            ts, estimated = projected, is_estimate
         rate = live.get("s_per_step")
+        if not rate:
+            try:
+                rate = benchmark_s_per_step(pkg / f"{min_row.name}.log")
+            except Exception:  # noqa: BLE001 — an absent benchmark only hides the ETA
+                rate = None
         eta = eta_seconds(max(0, steps - int(ts or 0)), rate) if steps else None
         min_fraction = min(1.0, max(0.0, float(ts or 0) / steps)) if steps else 0.0
         return min_fraction / units, eta, estimated
@@ -4502,7 +4524,7 @@ async def copy_md_job(job_id: str) -> dict:
                     )
                 from backend.core.models import Design  # noqa: PLC0415
 
-                design = Design.model_validate_json(snapshot.read_text())
+                design = Design.from_json(snapshot.read_text())
             job = _spawn_prep_job(
                 body,
                 design=design,
@@ -5350,7 +5372,7 @@ def _resolve_child_anchors(
         resolve_anchor_atom_map,
     )
 
-    design = Design.model_validate_json(snapshot.read_text())
+    design = Design.from_json(snapshot.read_text())
     full_topology = bool((manifest.get("charge_audit") or {}).get("topology_builder"))
     # Per-anchor atom sets; anchor_atoms is the fallback for anchors that carry none.
     indices = resolve_anchor_atom_map(

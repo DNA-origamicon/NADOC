@@ -235,6 +235,13 @@ async def list_cando_jobs() -> list[dict]:
             p = job_progress(j, ws)
             d["progress_fraction"] = round(float(p.get("overall") or 0.0), 4)
             d["eta_seconds"] = p.get("eta_seconds")
+            phases = p.get("phases") or []
+            current = next(
+                (phase for phase in phases if float(phase.get("fraction", 0.0)) < 1.0),
+                phases[-1] if phases else None,
+            )
+            if current:
+                d["progress_label"] = current.get("label") or current.get("name")
         out.append(d)
     return out
 

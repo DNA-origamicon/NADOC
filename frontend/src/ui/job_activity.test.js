@@ -218,11 +218,13 @@ describe('activeJobForPath', () => {
   const jobs = [
     { job_id: '1', engine: 'md', status: 'running', design_source_path: 'parts/a.nadoc' },
     { job_id: '2', engine: 'oxdna', status: 'preparing', design_source_path: 'b.nadoc' },
+    { job_id: '3', engine: 'md', status: 'running', design_source_path: 'assemblies/polymer.nass' },
   ]
   it('matches by normalized design source path', () => {
     expect(activeJobForPath(jobs, 'parts/a.nadoc').job_id).toBe('1')
     expect(activeJobForPath(jobs, 'parts\\a.nadoc/').job_id).toBe('1')
     expect(activeJobForPath(jobs, 'b.nadoc').job_id).toBe('2')
+    expect(activeJobForPath(jobs, 'assemblies/polymer.nass').job_id).toBe('3')
   })
   it('returns null for no match or empty path', () => {
     expect(activeJobForPath(jobs, 'parts/missing.nadoc')).toBeNull()

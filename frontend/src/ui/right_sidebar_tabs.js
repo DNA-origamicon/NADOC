@@ -96,6 +96,13 @@ export function initRightSidebarTabs({ document, storage = globalThis.localStora
     if (tabs.includes(saved?.activeTab)) activeTab = saved.activeTab
     if (typeof saved?.collapsed === 'boolean') collapsed = saved.collapsed
   } catch { /* storage may be unavailable */ }
+  // localStorage is shared by every NADOC tab. A part editor opened from an
+  // assembly therefore inherits `activeTab: assembly`, even though its Assembly
+  // button is correctly unavailable. Never render a hidden mode-only tab: fall
+  // back to the canonical part-mode Properties view. Entering assembly mode later
+  // calls setAssemblyMode(true), which explicitly opens Assembly again.
+  const restoredButton = buttons.find(button => button.dataset.tab === activeTab)
+  if (restoredButton?.hidden) activeTab = 'properties'
 
   function persist() {
     try { storage?.setItem('nadoc.rightSidebar.v1', JSON.stringify({ activeTab, collapsed })) } catch { /* storage may be unavailable */ }

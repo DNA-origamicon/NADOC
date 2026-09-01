@@ -65,6 +65,8 @@ import { buildHelixObjects, buildStapleColorMap, CG_LOD } from './helix_renderer
 import { buildCrossoverConnections, updateExtraBaseInstances, setExtraBaseSlabConnectors } from './crossover_connections.js'
 import { crossoverControlPoint as arcControlPoint } from './crossover_extra_placement.js'
 import { initAtomisticRenderer } from './atomistic_renderer.js'
+import { initSurfaceRenderer } from './surface_renderer.js'
+import { initProteinTraceRenderer } from './protein_trace_renderer.js'
 import {
   computeInstanceBluntEnds as _computeInstanceBluntEnds,
   bendCenterRecordToWorld as _bendCenterRecordToWorld,
@@ -387,6 +389,7 @@ function _buildHullGroupsForDesign(design, helixAxes, targetGroup) {
 
 export function initAssemblyRenderer(scene, store, api) {
   // instId → { group, transformKey, sourceKey, reprKey, helixCtrl, atomisticRenderer,
+  //            surfaceRenderer,
   //            hullGroups, design, helixAxes }
   const _cache        = new Map()
   let _boxHelper      = null
@@ -450,6 +453,8 @@ export function initAssemblyRenderer(scene, store, api) {
       _boxHelperGroup = null
     }
     entry.atomisticRenderer?.dispose()
+    entry.surfaceRenderer?.dispose()
+    entry.proteinTraceRenderer?.dispose()
     for (const grp of (entry.hullGroups ?? [])) {
       grp.traverse(o => {
         if (o.geometry && !o.geometry.userData?.shared) o.geometry.dispose()
@@ -634,6 +639,14 @@ export function initAssemblyRenderer(scene, store, api) {
       entry.atomisticRenderer.dispose()
       entry.atomisticRenderer = null
     }
+    if (repr !== 'surface' && entry.surfaceRenderer) {
+      entry.surfaceRenderer.dispose()
+      entry.surfaceRenderer = null
+    }
+    if (repr !== 'full' && repr !== 'cylinders' && entry.proteinTraceRenderer) {
+      entry.proteinTraceRenderer.dispose()
+      entry.proteinTraceRenderer = null
+    }
     if (repr !== 'hull-prism') {
       _disposeHullGroups(entry)
     }
@@ -651,6 +664,20 @@ export function initAssemblyRenderer(scene, store, api) {
         // for batch rep changes.
         _inPlaceHelixLodRebuild(entry, repr)
       }
+      if (repr === 'full' || repr === 'cylinders') {
+        try {
+          const proteinData = await api.getInstanceProteinGeometry(instId)
+          entry.proteinTraceRenderer?.dispose()
+          if (proteinData?.atoms?.length) {
+            const trace = initProteinTraceRenderer(entry.group)
+            trace.setMode(repr === 'full' ? 'trace' : 'ovoid')
+            trace.update(proteinData)
+            entry.proteinTraceRenderer = trace
+          }
+        } catch (err) {
+          console.warn(`[assembly_renderer] protein trace fetch failed for ${instId}:`, err)
+        }
+      }
 
     } else if (repr === 'hull-prism') {
       // Hull-prism — hide CG beads, build hull meshes from cluster data.
@@ -658,6 +685,19 @@ export function initAssemblyRenderer(scene, store, api) {
       _disposeHullGroups(entry)
       entry.hullGroups = _buildHullGroupsForDesign(entry.design, entry.helixAxes, entry.group)
 
+    } else if (repr === 'surface') {
+      let surfaceData
+      try {
+        surfaceData = await api.getInstanceSurfaceGeometry(instId)
+      } catch (err) {
+        console.warn(`[assembly_renderer] surface geometry fetch failed for ${instId}:`, err)
+        return
+      }
+      entry.surfaceRenderer?.dispose()
+      if (entry.helixCtrl?.root) entry.helixCtrl.root.visible = false
+      const sr = initSurfaceRenderer(entry.group)
+      sr.update(surfaceData, 'strand')
+      entry.surfaceRenderer = sr
     } else {
       // Atomistic repr ('vdw' | 'ballstick' | 'stick') — fetch geometry and build renderer.
       let atomData
@@ -1034,8 +1074,17 @@ export function initAssemblyRenderer(scene, store, api) {
     for (const [id, entry] of _cache) {
       const inst = instById.get(id)
       const baseVisible = inst ? inst.visible !== false : true
-      entry.group.visible = baseVisible && !next.has(id)
+      entry.group.visible = _externallyVisible && baseVisible && !next.has(id)
     }
+  }
+
+  let _externallyVisible = true
+
+  /** Hide/restore the complete native assembly without mutating authored visibility. */
+  function setVisible(visible) {
+    _externallyVisible = !!visible
+    _linkerGroup.visible = _externallyVisible
+    applyGroupVisibilityOverlay(_groupHiddenInstanceIds)
   }
 
   function pickPartJoint(ndc, camera) {
@@ -1233,7 +1282,8 @@ export function initAssemblyRenderer(scene, store, api) {
       const reprKey = inst.representation ?? 'full'
       const entry   = {
         group: instanceGroup, transformKey, sourceKey, reprKey,
-        helixCtrl, atomisticRenderer: null, hullGroups: [],
+        helixCtrl, atomisticRenderer: null, surfaceRenderer: null,
+        proteinTraceRenderer: null, hullGroups: [],
         design, helixAxes, nucleotides, labelGroup, overhangNameGroup, arcGroup, xoverResult,
       }
       _cache.set(inst.id, entry)
@@ -1776,6 +1826,7 @@ export function initAssemblyRenderer(scene, store, api) {
     rebuild,
     rebuildLinkers,
     setActiveInstance,
+    setVisible,
     applyGroupVisibilityOverlay,
     setLiveTransform,
     getLiveTransform,

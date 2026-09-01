@@ -286,6 +286,9 @@ async def list_mrdna_jobs() -> list[dict]:
             p = job_progress(j, ws)
             d["progress_fraction"] = round(float(p.get("overall") or 0.0), 4)
             d["eta_seconds"] = p.get("eta_seconds")
+            d["stage_name"] = p.get("stage_name")
+            d["stage_fraction"] = p.get("stage_fraction")
+            d["phase"] = p.get("stage_name")
         out.append(d)
     return out
 

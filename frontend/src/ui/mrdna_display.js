@@ -86,7 +86,8 @@ function _confidence(resp) {
 
 export function initMrdnaDisplay({
   designRenderer, api, beadOverlay = null, connectionOverlay = null,
-  setDesignVisible = null, flexScale = null, oxdnaInputOverlay = null,
+  setDesignVisible = null, restoreDesignVisible = null, flexScale = null,
+  oxdnaInputOverlay = null,
 }) {
   let _epoch = 0                 // bumps on every request → stale responses ignored
   let _deformJobId = null        // job whose relaxed positions are applied (or null)
@@ -115,6 +116,10 @@ export function initMrdnaDisplay({
     if (setDesignVisible) setDesignVisible(v)
     else designRenderer?.setDesignVisible?.(v)
   }
+  function _restoreNative() {
+    if (restoreDesignVisible) restoreDesignVisible()
+    else _nativeVisible(true)
+  }
 
   function _snapshotReady(snap) {
     return !!(snap?.ready && snap.design && snap.nucleotides?.length)
@@ -137,7 +142,7 @@ export function initMrdnaDisplay({
     designRenderer.applyFemPositions?.(null)
     designRenderer.clearScalarColors?.()
     designRenderer.clearExternalGeometry?.()
-    _nativeVisible(true)
+    _restoreNative()
     _deformJobId = null
     _beadsJobId = null
     _mode = null

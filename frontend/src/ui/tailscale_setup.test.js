@@ -20,4 +20,22 @@ describe('Tailscale setup', () => {
     expect(document.body.textContent).toContain('123456')
     expect(document.body.textContent).toContain('expires in five minutes')
   })
+
+  it('notifies the welcome library after pairing succeeds', async () => {
+    document.body.innerHTML = '<button id="menu-help-tailscale-setup"></button>'
+    vi.spyOn(api, 'getCollaborationIdentity').mockResolvedValue({ sync_enabled: true, public_url: 'http://100.1.2.3:5173', server_name: 'Desktop' })
+    vi.spyOn(api, 'getCollaborationPeerStatuses').mockResolvedValue({ peers: [] })
+    vi.spyOn(api, 'connectCollaborationPeer').mockResolvedValue({ id: 'compy', name: 'Compy5000' })
+    const changed = vi.fn()
+    window.addEventListener('nadoc:collaboration-peers-changed', changed, { once: true })
+    initTailscaleSetup()
+    document.getElementById('menu-help-tailscale-setup').click()
+    await tick(); await tick()
+    const inputs = document.querySelectorAll('input')
+    inputs[0].value = 'http://100.1.2.4:5173'
+    inputs[1].value = '123456'
+    ;[...document.querySelectorAll('button')].find(item => item.textContent === 'Pair both servers').click()
+    await tick(); await tick(); await tick()
+    expect(changed).toHaveBeenCalledOnce()
+  })
 })

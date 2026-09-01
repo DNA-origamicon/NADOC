@@ -631,7 +631,7 @@ def _load_snapshot_design(job_dir: Path) -> Optional[Design]:
     if not snap.exists():
         return None
     try:
-        return Design.model_validate_json(snap.read_text())
+        return Design.from_json(snap.read_text())
     except Exception:  # noqa: BLE001
         return None
 

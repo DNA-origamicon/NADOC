@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from backend.core.md_presets import (
@@ -285,3 +287,29 @@ def test_explicit_presets_never_probe_the_toolchain(monkeypatch):
     monkeypatch.setattr(runner, "find_namd", _boom)
     for pid in (STANDARD, FULL_PHYSICS):
         assert preset_availability(PRESETS[pid]) == (True, "")
+
+
+def test_implicit_preset_skips_explicit_water_vram_preflight(monkeypatch):
+    """The wizard sends relax_preset, not its derived protocol.
+
+    A GBIS request must therefore resolve the preset before deciding whether to size a
+    water box. Otherwise Create displays an explicit-solvent refusal over an implicit
+    plan and never issues POST /md/jobs (reproduced with the assembly Playwright flow).
+    """
+    from backend.api import routes_md
+
+    monkeypatch.setattr(
+        routes_md.design_state,
+        "get_or_404",
+        lambda: pytest.fail("GBIS preflight must not build or solvate the live design"),
+    )
+    result = asyncio.run(
+        routes_md.preflight_md_vram(
+            routes_md.CreateJobRequest(relax_preset=IMPLICIT_GBIS)
+        )
+    )
+    assert result == {
+        "skipped": True,
+        "tier": "ok",
+        "reason": "implicit_solvent_has_no_water_box",
+    }

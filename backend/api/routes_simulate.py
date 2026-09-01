@@ -230,11 +230,17 @@ async def list_simulate_jobs(
         project_id = design.id
         identity = PeerRegistry(ws).server_identity()
         local_keys = {
-            (("md" if node.get("engine") == "namd" else node.get("engine")), node.get("job_id"))
+            (
+                ("md" if node.get("engine") == "namd" else node.get("engine")),
+                node.get("job_id"),
+            )
             for node in nodes
         }
         by_key = {
-            (("md" if node.get("engine") == "namd" else node.get("engine")), node.get("job_id")): node
+            (
+                ("md" if node.get("engine") == "namd" else node.get("engine")),
+                node.get("job_id"),
+            ): node
             for node in nodes
         }
         for record in ProjectArtifactCatalog(ws).project_metadata(project_id):
@@ -243,8 +249,12 @@ async def list_simulate_jobs(
                 continue
             locations = record.get("locations") or []
             remote = next(
-                (location for location in locations
-                 if location.get("available") and location.get("server_id") != identity["id"]),
+                (
+                    location
+                    for location in locations
+                    if location.get("available")
+                    and location.get("server_id") != identity["id"]
+                ),
                 None,
             )
             if remote is None:
@@ -262,10 +272,25 @@ async def list_simulate_jobs(
                 "source_peer_name": remote.get("server_name"),
                 "size_bytes": record.get("size_bytes", 0),
             }
-            node = sim_jobs.normalize_md_job(raw) if engine == "md" else sim_jobs.normalize_oxdna_job(raw)
+            node = (
+                sim_jobs.normalize_md_job(raw)
+                if engine == "md"
+                else sim_jobs.normalize_oxdna_job(raw)
+            )
             node["viewable"] = False
             nodes.append(node)
             local_keys.add(key)
     except Exception:  # noqa: BLE001 — collaboration metadata is advisory
         pass
+    if not show_all and not design_source_path:
+        # Assembly projections intentionally have no part-file path. Their stable
+        # identity is the flattened Design/project id; filtering on a missing path
+        # made a newly launched job disappear as soon as its optimistic row was
+        # replaced by the persisted backend record.
+        try:
+            project_id = design_state.get_or_404().id
+            if str(project_id).startswith("flat_"):
+                return [n for n in nodes if n.get("project_id") == project_id]
+        except Exception:  # noqa: BLE001 — list filtering must remain advisory
+            pass
     return sim_jobs.filter_nodes(nodes, design_source_path, show_all)

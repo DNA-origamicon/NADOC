@@ -79,7 +79,7 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 
 **Selection:** **[mature_selection_model](project_selection_model.md)** (SHIPPED contract — normalized refs, sole-writer controller; read before changing selection)
 
-**Display / representation:** **[native_vr](project_native_vr.md)** (ACTIVE)·[ssdna_ball_joints](project_ssdna_ball_joints.md)·[photo_mode](project_photo_mode.md)·[hull_prism](project_hull_prism.md)·**[mixed_representation](project_mixed_representation.md)** (impostors uncovered)·[strand_animations](project_strand_animations.md)·[reference_geometry](project_reference_geometry.md)·[protein_attachment](project_protein_attachment.md)·[headless_build](project_headless_build.md)·[sphere_impostors](project_sphere_impostors.md)
+**Display / representation:** **[native_vr](project_native_vr.md)** (ACTIVE)·[ssdna_ball_joints](project_ssdna_ball_joints.md)·[photo_mode](project_photo_mode.md)·[hull_prism](project_hull_prism.md)·**[mixed_representation](project_mixed_representation.md)** (impostors uncovered)·[strand_animations](project_strand_animations.md)·[reference_geometry](project_reference_geometry.md)·**[protein_attachment](project_protein_attachment.md)** (all representations + assembly parity; Voltron cylinder invariant)·[headless_build](project_headless_build.md)·[sphere_impostors](project_sphere_impostors.md)
 
 **Sequences:** **[strand_sequence_edit](project_strand_sequence_edit.md)** (hand-edit a strand's bases; targeted vs design-wide re-derive)
 
@@ -134,7 +134,7 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 
 **Imports / validation:** [sq_importer_fix](project_sq_importer_fix.md)·[crossover_distance_script](project_crossover_distance_script.md)·[clash_detector](project_clash_detector.md)·[corner_primitive](project_corner_primitive.md)
 
-**Assembly overhaul:** **[path_to_thousands](project_path_to_thousands.md)** (renderer DEFAULT)·[assembly_part_context](project_assembly_part_context.md) (anim PLAYBACK unbuilt)·[assembly_groups](project_assembly_groups.md) (`representation` dead)·[gear_relations](project_gear_relations.md)·[belt_paths](project_belt_paths.md)·[route_for_polymerization](project_route_for_polymerization.md)·[polymerize_origami](project_polymerize_origami.md)·[session_recovery](project_session_recovery.md)
+**Assembly overhaul:** **[assembly_feature_parity](project_assembly_feature_parity.md)** (binding default: assemblies match parts comprehensively; exceptions need evidence)·**[path_to_thousands](project_path_to_thousands.md)** (renderer DEFAULT)·[assembly_part_context](project_assembly_part_context.md) (anim PLAYBACK unbuilt)·[assembly_groups](project_assembly_groups.md) (`representation` dead)·[gear_relations](project_gear_relations.md)·[belt_paths](project_belt_paths.md)·[route_for_polymerization](project_route_for_polymerization.md)·[polymerize_origami](project_polymerize_origami.md)·[session_recovery](project_session_recovery.md)
 
 ## Supporting and historical topics
 

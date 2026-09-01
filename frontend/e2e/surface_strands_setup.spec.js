@@ -74,6 +74,31 @@ async function openSurfaceStrandsCard(page, doc) {
   return headers
 }
 
+test('surface-strand TransformControls are detached until a preview is actionable', async ({ page }) => {
+  await page.goto('/?doc=__e2e__surfstrands_lifecycle')
+  await page.waitForFunction(() => !!window.__nadocSurfStrands)
+  const initial = await overlay(page)
+  expect(initial.gizmoVisible).toBe(false)
+  expect(initial.gizmoAttached).toBe(false)
+  expect(initial.gizmoEnabled).toBe(false)
+
+  await page.evaluate(() => window.__nadocSurfStrands.update({
+    enabled: true, sequence: 'GCTA', attachEnd: "5'", shape: 'circle',
+    sizeNm: 100, densityPerUm2: 1000, offsetXNm: 0, offsetYNm: 0,
+    seed: 1, subjectToField: true,
+  }, true))
+  const active = await overlay(page)
+  expect(active.gizmoVisible).toBe(true)
+  expect(active.gizmoAttached).toBe(true)
+  expect(active.gizmoEnabled).toBe(true)
+
+  await page.evaluate(() => window.__nadocSurfStrands.clear())
+  const cleared = await overlay(page)
+  expect(cleared.gizmoVisible).toBe(false)
+  expect(cleared.gizmoAttached).toBe(false)
+  expect(cleared.gizmoEnabled).toBe(false)
+})
+
 test('every surface-strand parameter drives the rendered 3D', async ({ page }) => {
   test.setTimeout(120_000)
   const errors = trackConsoleErrors(page)
@@ -143,6 +168,40 @@ test('every surface-strand parameter drives the rendered 3D', async ({ page }) =
   // The mrDNA job listing 500s on a stale shared-workspace job dir; unrelated to this card.
   const ours = errors.filter(e => !/500 \(Internal Server Error\)/.test(e))
   expect(ours, ours.join('\n')).toEqual([])
+})
+
+test('surface-strand gizmo is removed when entering an assembly', async ({ page }) => {
+  test.setTimeout(60_000)
+  const errors = trackConsoleErrors(page)
+  await page.goto('/?doc=__e2e__surfstrands_assembly_gate')
+  await page.waitForSelector('#canvas')
+  // Reproduce the leaked state directly: an active design-only placement
+  // preview exists when assembly mode begins. The setup card itself is already
+  // exercised above; this test isolates the assembly visibility boundary.
+  await page.evaluate(() => {
+    window.__nadocSurfStrands.setShapePreview(true)
+    window.__nadocSurfStrands.update({
+      enabled: true, sequence: 'GCTA', attachEnd: "5'", shape: 'circle',
+      sizeNm: 100, densityPerUm2: 1000, offsetXNm: 0, offsetYNm: 0,
+      seed: 1, subjectToField: true,
+    }, true)
+  })
+  expect((await overlay(page)).gizmoVisible).toBe(true)
+
+  const doc = '__e2e__surfstrands_assembly_gate'
+  const response = await page.request.post(`${API}/assembly`, {
+    data: { name: '__e2e__SurfaceStrandsAssembly' },
+    headers: { 'Content-Type': 'application/json', 'X-NADOC-Doc': doc },
+  })
+  expect(response.ok()).toBe(true)
+  await page.evaluate(() => window.__nadocTest.enterAssemblyMode())
+  await expect(page.locator('#mode-indicator')).toContainText('ASSEMBLY', { timeout: 10_000 })
+  await expect.poll(async () => (await overlay(page)).gizmoVisible).toBe(false)
+  const hidden = await overlay(page)
+  expect(hidden.visible).toBe(false)
+  expect(hidden.gizmoAttached).toBe(false)
+  expect(hidden.gizmoEnabled).toBe(false)
+  expect(errors).toEqual([])
 })
 
 test('an active visualization survives a surface-strand edit', async ({ page }) => {

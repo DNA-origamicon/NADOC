@@ -49,10 +49,14 @@ def get_assembly_flatten() -> dict:
     Does not alter any state — preview only.
     """
     from backend.core.assembly_flatten import flatten_assembly
+    from backend.core.models import Design
 
     assembly = assembly_state.get_or_create()
     try:
-        design = flatten_assembly(assembly)
+        # Canonicalize at the assembly/simulation boundary.  Derived crossover
+        # records are reconstructed by Design.from_json from the stitched strand
+        # graph, so every engine sees the same inter-repeat topology.
+        design = Design.from_json(flatten_assembly(assembly).to_json())
     except (ValueError, FileNotFoundError) as exc:
         raise HTTPException(400, detail=str(exc))
     return {"design": design.to_dict()}
@@ -65,11 +69,12 @@ def flatten_load_as_design() -> dict:
     Clears assembly mode flag on the frontend side (response includes assemblyActive=False).
     """
     from backend.core.assembly_flatten import flatten_assembly
+    from backend.core.models import Design
     from backend.core.validator import validate_design
 
     assembly = assembly_state.get_or_create()
     try:
-        design = flatten_assembly(assembly)
+        design = Design.from_json(flatten_assembly(assembly).to_json())
     except (ValueError, FileNotFoundError) as exc:
         raise HTTPException(400, detail=str(exc))
     design_state.set_design(design)

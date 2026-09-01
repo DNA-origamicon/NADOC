@@ -74,6 +74,30 @@ def test_job_persistence_roundtrip(tmp_path):
     assert job.job_id in ids
 
 
+def test_snapshot_loader_reconstructs_derived_polymer_crossovers(tmp_path):
+    """The worker must cross the JSON boundary through Design.from_json.
+
+    Raw model validation accepts the snapshot but leaves derived crossover topology
+    empty, turning a routed 6HB assembly into independent helices during CanDo.
+    """
+    from backend.core import cando_runner as cr
+    from backend.core.assembly_flatten import flatten_assembly
+    from backend.core.cando_job import new_cando_job
+    from backend.core.models import Assembly, Design
+
+    root = Path(__file__).resolve().parents[1]
+    assembly = Assembly.from_json((root / "workspace" / "smallO-poly.nass").read_text())
+    design = flatten_assembly(assembly)
+    assert design.crossovers == []  # reconstructed only after the persisted boundary
+
+    job = new_cando_job("smallO-poly", nonlinear=False, with_rmsf=False)
+    cr.prepare_cando_job(design, job, tmp_path)
+    loaded = cr._load_snapshot_design(job.job_dir(tmp_path))
+
+    assert isinstance(loaded, Design)
+    assert len(loaded.crossovers) == 78
+
+
 def test_new_job_stage_name_tracks_solver(tmp_path):
     from backend.core.cando_job import new_cando_job
 

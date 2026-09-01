@@ -60,6 +60,26 @@ export function isEngine(engineKey) {
   return ENGINE_KEYS.includes(engineKey)
 }
 
+/** Re-apply the selected engine after late composition-root wiring has moved or
+ * initialized panel nodes. Initial selection happens before those consumers exist;
+ * without this final pass the default panel can retain stale hidden styles until the
+ * user switches engines. */
+export function reconcileSelectedEngine(selector) {
+  const selected = selector?.getSelected?.()
+  if (selected) selector.select?.(selected)
+}
+
+/** Reconcile panel visibility at the actual Simulations-tab open boundary. */
+export function bindEngineSelectorToSimulationTab(selector, target = window) {
+  const onTabChange = event => {
+    if (event.detail?.activeTab === 'dynamics' && !event.detail?.collapsed) {
+      reconcileSelectedEngine(selector)
+    }
+  }
+  target.addEventListener('nadoc:left-tab-change', onTabChange)
+  return () => target.removeEventListener('nadoc:left-tab-change', onTabChange)
+}
+
 // ── Stateful factory (wires the pure decisions to the DOM) ────────────────────
 
 /**

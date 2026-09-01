@@ -4009,7 +4009,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
     if (isLocalRun && !(await confirmNoConcurrentJob())) return
     // Only warn about a busy GPU when this run actually targets the GPU.
-    const runsOnGpu = deviceStr.toLowerCase() !== 'cpu' && deviceStr.toLowerCase() !== 'none'
+    // Wizard requests name the preset and deliberately omit its derived protocol.
+    // Treat GBIS as CPU-only at this boundary too; otherwise the visible implicit plan
+    // still enters the explicit-water VRAM gate before the backend can resolve the preset.
+    const implicitRun = isImplicitSolventProtocol(proto.protocol)
+      || proto.relax_preset === 'implicit_gbis'
+    const runsOnGpu = !implicitRun
+      && deviceStr.toLowerCase() !== 'cpu'
+      && deviceStr.toLowerCase() !== 'none'
     if (isLocalRun && runsOnGpu && !(await confirmGpuNotBusy(deviceStr || '0'))) return
     _launching = true
     _paintRunControl()

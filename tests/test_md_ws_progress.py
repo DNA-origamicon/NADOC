@@ -248,6 +248,34 @@ def test_running_remote_minimization_has_live_progress_and_eta(tmp_path):
     assert estimated is False
 
 
+def test_running_local_minimization_reads_log_without_live_metrics(tmp_path):
+    """A local minimisation is partial work, not a completed progress unit."""
+    from backend.api.routes_md import _namd_live_progress
+
+    job = _running_job(tmp_path)
+    job.execution_target = "local"
+    job.current_segment_idx = 0
+    for seg in job.segments:
+        seg.status = "pending"
+    job.minimization = MdSegmentStatus(
+        name="VoltronCore_00_min", stage="Minimization", percent=25.0,
+        steps=1000, status="running",
+    )
+    job.live_metrics = None
+    package = job.package_dir(tmp_path)
+    package.mkdir(parents=True, exist_ok=True)
+    (package / "VoltronCore_00_min.log").write_text(
+        "ENERGY: 250 0 0 0 0 0 0 0\n"
+    )
+
+    fraction, eta, estimated = _namd_live_progress(job, tmp_path)
+
+    # 25% of minimisation, which is one of five total units (min + 4 segments).
+    assert fraction == 0.05
+    assert eta is None
+    assert estimated is False
+
+
 def test_fresh_production_child_starts_at_zero_progress(tmp_path):
     """Its zero-step velocity reseed is plumbing, not half of the production work."""
     from backend.api.routes_md import _namd_live_progress

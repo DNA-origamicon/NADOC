@@ -1015,15 +1015,38 @@ def identify_unpaired_residues(
     ``namd_topology.extra_base_segid_resids`` match against the PSF's NATOM segid
     token, where last-char keys would alias many segids.
     """
-    import MDAnalysis as mda  # noqa: PLC0415
-
-    u = mda.Universe(str(psf_path), str(pdb_path))
-    c1 = u.select_atoms("name C1' C1X")
-    if not len(c1):
+    # Only the C1' identity and coordinate columns are needed here.  Reading the
+    # complete PSF through MDAnalysis is both needlessly expensive and fails once
+    # a solvated system crosses the legacy PSF 8-column serial limit (10 million
+    # atoms): adjacent connectivity indices then look like one enormous integer.
+    # The packaged PDB carries the same segid/resid identity in fixed columns, so
+    # stream those records directly.  This also keeps the helper usable while an
+    # oversized PSF is being diagnosed instead of hiding the real package limit
+    # behind ``Python int too large to convert to C long``.
+    del psf_path  # retained in the public signature for existing callers
+    positions: list[tuple[float, float, float]] = []
+    segments: list[str] = []
+    resids: list[str] = []
+    with pdb_path.open(errors="replace") as handle:
+        for line in handle:
+            if not line.startswith(("ATOM  ", "HETATM")):
+                continue
+            if line[12:16].strip() not in {"C1'", "C1X"}:
+                continue
+            try:
+                positions.append(
+                    (float(line[30:38]), float(line[38:46]), float(line[46:54]))
+                )
+            except ValueError:
+                continue
+            segid = line[72:76].strip() or line[21:22].strip()
+            segments.append(segid)
+            resids.append(line[22:26].strip())
+    if not positions:
         return set()
-    pos = c1.positions
-    seg = c1.segids
-    resid = c1.resids
+    pos = np.asarray(positions, dtype=float)
+    seg = np.asarray(segments, dtype=object)
+    resid = np.asarray(resids, dtype=object)
     tree = cKDTree(pos)
     ss: set[tuple[str, str]] = set()
     for k in range(len(pos)):

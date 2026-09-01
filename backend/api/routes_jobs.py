@@ -14,6 +14,7 @@ GET /api/jobs/active   every currently-busy (running/preparing) MD or oxDNA job,
 from __future__ import annotations
 
 import importlib
+import json
 import logging
 import os
 import time as _time
@@ -41,6 +42,47 @@ _BUSY = {"running", "preparing"}
 # frequently-polled /jobs/active doesn't hammer the API.
 _REMOTE_POD_CACHE: dict = {"t": -1e9, "names": None}
 _REMOTE_POD_TTL_S = 30.0
+
+
+def _activity_source_path(job, ws: Path) -> str | None:
+    """Workspace source path used to attach an active job to its welcome-screen row.
+
+    Current launchers persist ``design_source_path`` for parts and assemblies. Older
+    assembly launchers flattened the assembly into a transient Design and stored null,
+    leaving a live job impossible to associate with its ``.nass`` row. Recover only
+    definitive flattened snapshots and only on a unique assembly-name match, avoiding a
+    guess when two folders contain assemblies with the same display name.
+    """
+    source = getattr(job, "design_source_path", None)
+    if source:
+        return source
+    project_id = str(getattr(job, "project_id", "") or "")
+    if not project_id.startswith("flat_"):
+        try:
+            snapshot = json.loads((job.job_dir(ws) / "design.json").read_text())
+            project_id = str(snapshot.get("id") or "")
+        except (OSError, ValueError, TypeError):
+            return None
+    if not project_id.startswith("flat_"):
+        return None
+    wanted = str(getattr(job, "design_name", "") or "")
+    matches: list[str] = []
+    try:
+        for path in ws.rglob("*.nass"):
+            rel = path.relative_to(ws)
+            if any(part.startswith((".", "__")) for part in rel.parts):
+                continue
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError, TypeError):
+                continue
+            if str((payload.get("metadata") or {}).get("name") or "") == wanted:
+                matches.append(str(rel).replace("\\", "/"))
+                if len(matches) > 1:
+                    return None
+    except OSError:
+        return None
+    return matches[0] if len(matches) == 1 else None
 
 
 def _live_remote_pod_names() -> "set[str] | None":
@@ -240,7 +282,7 @@ def _collect_active() -> list[dict]:
                     "engine": "md",
                     "job_id": j.job_id,
                     "design_name": j.design_name,
-                    "design_source_path": j.design_source_path,
+                    "design_source_path": _activity_source_path(j, ws),
                     "status": j.status.value,
                     # Epoch seconds — lets the frontend break ties by most-recent job
                     # (e.g. defaulting the Simulate engine dropdown to the newest run).
@@ -279,7 +321,7 @@ def _collect_active() -> list[dict]:
                     "engine": "oxdna",
                     "job_id": j.job_id,
                     "design_name": j.design_name,
-                    "design_source_path": j.design_source_path,
+                    "design_source_path": _activity_source_path(j, ws),
                     "status": j.status.value,
                     "created_at": getattr(j, "created_at", None),
                     # oxDNA has no remote backend — every oxDNA job runs locally.
@@ -357,7 +399,7 @@ def _collect_active() -> list[dict]:
                         "engine": engine,
                         "job_id": j.job_id,
                         "design_name": j.design_name,
-                        "design_source_path": j.design_source_path,
+                        "design_source_path": _activity_source_path(j, ws),
                         "status": j.status.value,
                         "created_at": getattr(j, "created_at", None),
                         "execution_target": "local",

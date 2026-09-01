@@ -248,7 +248,7 @@ describe('pure helpers', () => {
       stages: [{ status: 'running', steps: 2000 }] })))
       .toBe('50% · 1,000 / 2,000 steps · 1,000 left')
     expect(masterStepText({ engine: 'mrdna', status: 'running', progress_fraction: 0.25,
-      coarse_steps: 1000, fine_steps: 1000 })).toBe('25% · 500 / 2,000 steps · 1,500 left')
+      coarse_steps: 1000, fine_steps: 1000 })).toBe('25% · 750 / 3,000 steps · 2,250 left')
     expect(masterStepText({ engine: 'cando', status: 'running', progress_fraction: 0.4, n_steps: 20 }))
       .toBe('40% · 8 / 20 steps · 12 left')
     expect(masterStepText({ engine: 'snupi', status: 'running', progress_fraction: 0.5, n_steps: 20 }))
@@ -265,6 +265,14 @@ describe('pure helpers', () => {
       live_metrics: { segment: 'V_00_min', step: 250 }, eta_seconds: 1500 }
     expect(masterStepText(node)).toBe('25% minimization · 250 / 1,000 steps · 750 left · ~25m 00s remaining')
     expect(masterProgressTooltip(node)).toContain('250 / 1,000 steps')
+  })
+  it('shows persisted local minimization progress when remote live metrics are absent', () => {
+    const node = { engine: 'namd', status: 'running', progress_fraction: 0.0125,
+      minimization: { name: 'V_00_min', stage: 'Minimization', steps: 4800,
+        status: 'running', percent: 25 },
+      segments: [{ name: 's1', status: 'pending', steps: 240000 }] }
+    expect(masterProgressPct(node)).toBe(1.3)
+    expect(masterStepText(node)).toBe('25% minimization · 1,200 / 4,800 steps · 3,600 left')
   })
   it('masterStatusText carries the SNUPI %, ETA and phase under the one master bar', () => {
     // SNUPI has a SINGLE stage, so the stage-count fallback would read 0% for the whole solve —

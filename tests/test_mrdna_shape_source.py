@@ -248,7 +248,9 @@ def test_trajectory_rmsf_subsamples_guards_and_feeds_ensemble(monkeypatch, tmp_p
                         "classification": "duplex",
                     }
                 )
-        return {"positions": out, "quality": {"usable": True}}
+        # The deliberately unrelaxed seed frame is not part of the fluctuation
+        # ensemble; later valid frames must still make the completed job usable.
+        return {"positions": out, "quality": {"usable": frame != 0}}
 
     monkeypatch.setattr(mrdna_decoder, "decode_mrdna_frame", _fake_decode)
 
@@ -257,7 +259,7 @@ def test_trajectory_rmsf_subsamples_guards_and_feeds_ensemble(monkeypatch, tmp_p
     d = make_6hb_design(length_bp=12)
     out = mrdna_trajectory_rmsf(d, tmp_path, max_frames=10)
     assert out is not None
-    assert 2 <= out["n_frames"] <= 10  # 100 frames subsampled to <= max_frames
+    assert 2 <= out["n_frames"] < 10  # sampled seed frame was rejected, not fatal
     assert out["n"] == 8  # all keys shared across every frame
     assert all(
         np.isfinite(p["rmsf_nm"]) and p["rmsf_nm"] >= 0.0 for p in out["positions"]

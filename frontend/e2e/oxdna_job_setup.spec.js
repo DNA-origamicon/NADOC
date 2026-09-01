@@ -96,6 +96,7 @@ test('New job assembles a prepared payload without running oxDNA', async ({ page
   await wizard.locator('.wizard-tab', { hasText: 'Full configuration' }).click()
   await wizard.locator('.modal__actions button', { hasText: 'Create job' }).click()
   await expect.poll(() => payloads.filter(entry => entry.kind === 'create').length).toBe(1)
+  await expect(wizard).toBeHidden()
 
   const estimate = payloads.find(entry => entry.kind === 'estimate').body
   const create = payloads.find(entry => entry.kind === 'create').body

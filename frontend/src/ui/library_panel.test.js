@@ -91,4 +91,29 @@ describe('welcome workspace server tabs', () => {
     expect(api.checkoutPeerLibraryFile).toHaveBeenCalledWith('remote', 'Voltron.nadoc')
     expect(onOpenPart).toHaveBeenCalledWith('Voltron.nadoc', 'Voltron')
   })
+
+  it('updates a stale offline tab when peer reachability changes', async () => {
+    document.body.innerHTML = '<div id="library-panel-mount"></div>'
+    const api = {
+      listLibraryFiles: vi.fn().mockResolvedValue([]),
+      libraryDiskUsage: vi.fn().mockResolvedValue({}),
+      getCollaborationPeerStatuses: vi.fn()
+        .mockResolvedValueOnce({ peers: [{ id: 'remote', name: 'Compy5000', online: false }] })
+        .mockResolvedValueOnce({ peers: [{ id: 'remote', name: 'Compy5000', online: true }] }),
+    }
+    initLibraryPanel({
+      api,
+      onOpenPart: vi.fn(), onOpenAssembly: vi.fn(),
+      onNewPart: vi.fn(), onNewAssembly: vi.fn(),
+    })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    let tab = [...document.querySelectorAll('button')].find(item => item.textContent.includes('Compy5000'))
+    expect(tab.disabled).toBe(true)
+
+    window.dispatchEvent(new Event('nadoc:collaboration-peers-changed'))
+    await new Promise(resolve => setTimeout(resolve, 0))
+    tab = [...document.querySelectorAll('button')].find(item => item.textContent.includes('Compy5000'))
+    expect(tab.disabled).toBe(false)
+    expect(tab.textContent).toContain('●')
+  })
 })

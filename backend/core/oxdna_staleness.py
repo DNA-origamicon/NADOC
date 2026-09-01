@@ -43,7 +43,7 @@ _FINGERPRINT_FIELDS = {
     "photoproduct_junctions",
 }
 
-_FINGERPRINT_VERSION = "v3"
+_FINGERPRINT_VERSION = "v4"
 
 # Job cards ask for the current fingerprint on every status refresh.  Serialising a
 # multi-thousand-strand design can take seconds (and holds the GIL), so doing the same
@@ -70,6 +70,21 @@ def oxdna_design_fingerprint(design: Design) -> str:
     # domains and sequence), and remove only the presentation field.
     for strand in payload.get("strands", []):
         strand.pop("color", None)
+    # Sub-domain ids are editor identity only. Older assembly flattening generated
+    # a fresh UUID for each polymer-end sub-domain on every materialization, making
+    # an unchanged assembly look edited after a server reload even though every
+    # simulation-relevant field was identical.
+    for overhang in payload.get("overhangs", []):
+        for sub_domain in overhang.get("sub_domains", []):
+            sub_domain.pop("id", None)
+    # Crossovers and derived ligations are reconstructed from strand adjacency on
+    # canonical load. Their UUIDs are regenerated, but their endpoint topology is
+    # stable and is what simulation inputs actually consume.
+    for connection in (
+        *payload.get("crossovers", []),
+        *payload.get("forced_ligations", []),
+    ):
+        connection.pop("id", None)
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return f"{_FINGERPRINT_VERSION}:{hashlib.sha256(raw).hexdigest()}"
 
@@ -100,11 +115,7 @@ def job_out_of_date(
     # cosmetic colour, or there may be no difference at all after an upgrade.
     # Callers with a frozen job snapshot derive a v2 hash before reaching here;
     # callers without one degrade to "unknown" instead of showing a false alert.
-    if (
-        current_fingerprint.startswith(f"{_FINGERPRINT_VERSION}:")
-        and len(job_fingerprint) == 64
-        and not job_fingerprint.startswith(f"{_FINGERPRINT_VERSION}:")
-    ):
+    if ":" in current_fingerprint and len(job_fingerprint) == 64 and ":" not in job_fingerprint:
         return False
     # A version bump means the canonical projection changed. Hashes produced by
     # different algorithms are incomparable; old jobs degrade to unknown rather

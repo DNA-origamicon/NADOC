@@ -27,7 +27,9 @@
 import { framesToUpdates } from './oxdna_display.js'
 import { initFrameSteppers } from './frame_steppers.js'
 
-export function initBladeDisplay({ designRenderer, api, setDesignVisible = null }) {
+export function initBladeDisplay({
+  designRenderer, api, setDesignVisible = null, restoreDesignVisible = null,
+}) {
   let _epoch = 0            // bumps on every request → stale responses ignored
   let _loadAbort = null
   function _beginLoad() {
@@ -44,11 +46,15 @@ export function initBladeDisplay({ designRenderer, api, setDesignVisible = null 
     if (setDesignVisible) setDesignVisible(v)
     else designRenderer?.setDesignVisible?.(v)
   }
+  function _restoreNative() {
+    if (restoreDesignVisible) restoreDesignVisible()
+    else _nativeVisible(true)
+  }
 
   function _clearAll() {
     designRenderer.clearScalarColors?.()
     designRenderer.clearExternalGeometry?.()
-    _nativeVisible(true)
+    _restoreNative()
   }
 
   function _prepareForExternal() {

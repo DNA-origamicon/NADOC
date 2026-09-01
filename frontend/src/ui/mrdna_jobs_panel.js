@@ -207,10 +207,8 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
   if (!panel || !body) return { refresh: () => {}, getSelectedJob: () => null }   // heading optional (removed; tab names the engine)
 
   const arrow = $('mrdna-jobs-arrow')
-  const statusEl = $('mrdna-jobs-status')
   const coarseBtn = $('mrdna-jobs-coarse-btn')
   const fineBtn = $('mrdna-jobs-fine-btn')
-  const progressEl = $('mrdna-jobs-progress')
   const advToggle = $('mrdna-jobs-adv-toggle')
   const advArrow = $('mrdna-jobs-adv-arrow')
   const advBody = $('mrdna-jobs-adv-body')
@@ -220,7 +218,6 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
   const showAll = $('mrdna-jobs-show-all')
   const listEl = $('mrdna-jobs-list')
   const detail = $('mrdna-jobs-detail')
-  const detailStatus = $('mrdna-jobs-detail-status')
   const timeline = $('mrdna-jobs-timeline')
   const curvatureEl = $('mrdna-jobs-curvature')
   const detailError = $('mrdna-jobs-detail-error')
@@ -241,6 +238,7 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
   let _selectedId = null
   let _progress = null
   let _available = null
+  let _launching = false
   let _listSig = null            // last-rendered list signature (avoids spinner-restart churn)
   const _legend = { el: null }   // status-symbol legend, inserted once after the list
 
@@ -310,21 +308,35 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
       engine: 'mrdna', ok, reason: `${missing} not installed.` } }))
     if (coarseBtn) coarseBtn.disabled = !ok
     if (fineBtn) fineBtn.disabled = !ok
-    if (!statusEl) return
-    if (ok) {
-      statusEl.textContent = 'mrDNA + ARBD ready (GPU).'
-      statusEl.style.color = _C.ok
-    } else {
-      statusEl.textContent = `${missing} not installed — open Help ▸ MD Engines to set up.`
-      statusEl.style.color = _C.warn
-    }
   }
 
   // ── Run (Coarse = fast/global shape; Fine = curvature via twist) ───────────────
   const FINE_DEFAULT_STEPS = 200000
+  function _syncLaunchButtons() {
+    const disabled = _launching || !_available?.available || _jobs.some(mrdnaJobIsActive)
+    if (coarseBtn) coarseBtn.disabled = disabled
+    if (fineBtn) fineBtn.disabled = disabled
+  }
   async function _launch(fineSteps) {
+    if (_launching || _jobs.some(mrdnaJobIsActive)) return
+    _launching = true
+    let optimisticId = null
+    coarseBtn && (coarseBtn.disabled = true)
+    fineBtn && (fineBtn.disabled = true)
+    try {
     if (!(await confirmNoConcurrentJob())) return
     if (!(await confirmGpuNotBusy())) return
+    optimisticId = `mrdna-launch-${Date.now()}`
+    window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed', { detail: {
+      select: true,
+      node: {
+        engine: 'mrdna', job_id: optimisticId, status: 'preparing',
+        design_name: 'mrDNA', design_source_path: getWorkspacePath?.() || null,
+        progress_fraction: 0, phase: 'Preparing mrDNA inputs',
+        coarse_steps: Number(stepsInput?.value) || 100000, fine_steps: fineSteps,
+        stages: [{ name: fineSteps > 0 ? 'coarse + fine' : 'coarse', status: 'preparing' }],
+      },
+    } }))
     const anchors = _anchorsCard.getAnchors()
     const fieldSpec = _efieldCard.getFieldSpec()
     const fieldOn = _efieldCard.isEnabled()
@@ -344,17 +356,28 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
       device: deviceInput?.value, sourcePath: getWorkspacePath?.() || null,
       anchors, fieldSpec, fieldOn, surfaceSpec, surfaceOn,
     })
-    if (coarseBtn) coarseBtn.disabled = true
-    if (fineBtn) fineBtn.disabled = true
     const job = await api.createMrdnaJob(body_)
-    if (coarseBtn) coarseBtn.disabled = false
-    if (fineBtn) fineBtn.disabled = false
     if (!job) {
+      window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed', {
+        detail: { removeJobId: optimisticId },
+      }))
+      optimisticId = null
       showToast(api.lastErrorMessage() || 'Failed to start mrDNA relaxation', { severity: 'error' })
       return
     }
     _selectedId = job.job_id
+    window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed', { detail: {
+      removeJobId: optimisticId, node: { ...job, engine: 'mrdna' }, select: true,
+    } }))
+    optimisticId = null
     await _fetchJobs()
+    } finally {
+      if (optimisticId) window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed', {
+        detail: { removeJobId: optimisticId },
+      }))
+      _launching = false
+      _syncLaunchButtons()
+    }
   }
   coarseBtn?.addEventListener('click', () => _launch(0))
   fineBtn?.addEventListener('click', () => _launch(FINE_DEFAULT_STEPS))
@@ -363,7 +386,12 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
   async function _fetchJobs() {
     const all = await api.listMrdnaJobs()
     if (!Array.isArray(all)) return
+    const selectedBefore = _selectedJob()
     _jobs = filterJobsForPart(all, getWorkspacePath?.() || null, showAll?.checked)
+    if (selectedBefore && !_jobs.some(job => job.job_id === selectedBefore.job_id)) {
+      _jobs.unshift(selectedBefore)
+    }
+    _syncLaunchButtons()
     _renderList()
     if (_selectedId) {
       _progress = await api.getMrdnaProgress(_selectedId)
@@ -441,13 +469,7 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
     if (!detail) return
     if (!job) { detail.style.display = 'none'; return }
     detail.style.display = ''
-    if (detailStatus) detailStatus.textContent = detailStatusText(job, _progress)
     if (timeline) timeline.textContent = coarseStageChip(job, _progress)
-    if (progressEl) {
-      const pct = _progress?.overall != null ? Math.round(_progress.overall * 100) : 0
-      progressEl.style.display = job.status === 'running' ? '' : 'none'
-      progressEl.querySelector('.bar')?.style.setProperty('width', `${pct}%`)
-    }
     if (detailError) {
       detailError.style.display = job.status === 'failed' ? '' : 'none'
       detailError.textContent = job.status === 'failed' ? (job.error || 'Run failed.') : ''
@@ -617,7 +639,12 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
   // job isn't listed yet.
   async function selectJob(jobId) {
     if (!jobId) return
-    if (!_jobs.find((j) => j.job_id === jobId)) await _fetchJobs()
+    // The unified card can learn completion from its poll before this hidden
+    // engine panel's own cached row does. Always refresh the explicitly selected
+    // job by id so visualization gating never reads a stale preparing/running copy.
+    const job = await api.getMrdnaJob(jobId)
+    if (job) _jobs = [job, ..._jobs.filter(candidate => candidate.job_id !== jobId)]
+    else await _fetchJobs()
     return _selectJob(jobId)
   }
   return { refresh: _fetchJobs, getSelectedJob: _selectedJob, selectJob, deleteSelected,

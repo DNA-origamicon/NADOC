@@ -150,7 +150,7 @@ def _load_snapshot_design(job_dir: Path) -> Optional[Design]:
     if not snap.exists():
         return None
     try:
-        return Design.model_validate_json(snap.read_text())
+        return Design.from_json(snap.read_text())
     except Exception:  # noqa: BLE001
         return None
 
@@ -551,9 +551,13 @@ def mrdna_trajectory_rmsf(
     contribution to the cross-engine comparison card (M5).
 
     Reconstructs the per-nucleotide relaxed backbone frame at each DCD timestep (the SAME
-    actual-relaxed-axis reconstruction the display uses, per frame) and feeds the ensemble to
-    the shared ``rmsf_from_ensemble`` (Kabsch-aligned to strip the CG bundle's box diffusion/
-    tumbling, so what's left is site fluctuation).  Returns the ``rmsf_from_ensemble`` payload
+    actual-relaxed-axis reconstruction the display uses, per frame) and feeds the usable
+    portion of the ensemble to the shared ``rmsf_from_ensemble`` (Kabsch-aligned to strip the
+    CG bundle's box diffusion/tumbling, so what's left is site fluctuation).  An early coarse
+    frame may still contain the deliberately stretched seed junctions that the relaxation is
+    resolving; exclude such frames from a fluctuation ensemble instead of making a validated
+    completed job's whole shape-source endpoint fail.  The final display frame remains subject
+    to the strict usability gate in ``_display_positions``.  Returns the RMSF payload
     (``{positions:[{helix_id,bp_index,direction,copy,rmsf_nm,...}], n_frames, ...}``) or None
     when there is no trajectory / fewer than two frames.  Frames are evenly subsampled to
     ``max_frames`` (each reconstruction re-reads the DCD, so this bounds the cost).
@@ -585,9 +589,11 @@ def mrdna_trajectory_rmsf(
     for i in idxs:
         decoded = decode_mrdna_frame(job_dir, psf, dcd, design=design, frame=i)
         if not decoded["quality"]["usable"]:
-            raise RuntimeError(
-                f"mrDNA trajectory frame {i} failed structural validation"
+            logger.warning(
+                "excluding unusable mrDNA trajectory frame %s from RMSF ensemble",
+                i,
             )
+            continue
         frames.append(decoded["positions"])
     if len([f for f in frames if f]) < 2:
         return None
