@@ -67,7 +67,9 @@ export function oxdnaWizardPayload(values, targetFields = {}) {
     salt_concentration: Number(v.salt_concentration),
     mc_steps: Number(v.mc_steps), md_relax_steps: Number(v.md_relax_steps), equil_steps: Number(v.equil_steps),
     min_bp_retained: Number(v.min_bp_retained), max_relax_retries: Number(v.max_relax_retries),
-    stage_overrides: v.stage_overrides || {}, ...targetFields }
+    stage_overrides: v.stage_overrides || {},
+    ...(Number.isInteger(Number(v.seed)) && Number(v.seed) > 0 ? { seed: Number(v.seed) } : {}),
+    ...targetFields }
 }
 
 export function oxdnaConfigDocument(values, targetFields = {}) {
@@ -76,6 +78,7 @@ export function oxdnaConfigDocument(values, targetFields = {}) {
     `engine_variant = ${payload.engine_variant}`,
     ...(payload.partition ? [`partition = ${payload.partition}`] : []),
     ...(payload.runpod_gpu_key ? [`runpod_gpu_key = ${payload.runpod_gpu_key}`] : []),
+    ...(payload.seed ? [`seed = ${payload.seed}`] : []),
     `max_relax_retries = ${payload.max_relax_retries}`]
   const blocks = oxdnaStagePlan(values).map(stage => {
     const lines = Object.entries(stage).filter(([key, value]) => key !== 'purpose' && value != null)

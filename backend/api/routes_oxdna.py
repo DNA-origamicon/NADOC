@@ -1190,6 +1190,8 @@ async def copy_oxdna_job(job_id: str) -> dict:
         salt_concentration=source.salt_concentration,
         random_seed=copied_seed,
         design_source_path=source.design_source_path,
+        project_id=source.project_id,
+        design_revision_id=source.design_revision_id,
         parent_job_id=source.parent_job_id,
         efield=deepcopy(source.efield),
         run_config=copied_config,

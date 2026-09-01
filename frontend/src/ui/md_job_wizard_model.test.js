@@ -1330,6 +1330,13 @@ describe('jobSettingsState — a created job back into the wizard\'s own vocabul
     expect(v.touched).not.toHaveProperty('relax_hmr') // null still means automatic
   })
 
+  it('shows the job-assigned seed in both view and edit even if the request seed is stale', () => {
+    const job = relaxJob({ namd_seed: 246802468,
+      prep_params: { ...relaxJob().prep_params, seed: 135791357 } })
+    expect(jobSettingsState(job).touched.seed).toBe(246802468)
+    expect(jobSettingsState(job, { forEdit: true }).touched.seed).toBe(246802468)
+  })
+
   it('keeps the protocol the job actually ran', () => {
     expect(jobSettingsState(relaxJob()).presetId).toBe('literature')
   })

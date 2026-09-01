@@ -437,11 +437,12 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
    *  first plan would fire with no parent and the table would come back empty. */
   function ensureParent() {
     if (state.mode !== 'production') return
-    // A job being VIEWED records the parent it actually continued. Re-deriving it from the
-    // panel's current list would repoint the plan at the newest relaxation — or, if that
-    // list is filtered to another part, null it out and leave the step reading "no
-    // completed relaxation for this part yet" about a run that plainly has one.
-    if (readOnly) return
+    // An existing job being viewed or edited records the parent it actually continued.
+    // Re-deriving it from the panel's current list would repoint the plan at the newest
+    // relaxation — or, if that list is filtered to another part, null it out and leave
+    // the step reading "no completed relaxation for this part yet" about a run that
+    // plainly has one.
+    if (readOnly || state.editJobId) return
     const choices = productionParents(getJobs?.() || [], getPartPath?.(),
                                       { includeJobId: state.parentJobId })
     if (!choices.length) { state.parentJobId = null; return }
@@ -845,12 +846,16 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
   }
 
   function renderProductionFields() {
-    // A locked view states the parent from the PLAN, which is the run the stage table was
-    // actually built against — not from a picker over the panel's current list. That list
-    // may not contain it at all (archived, filtered to another part, or since deleted), and
-    // a <select> whose value matches no option silently displays its FIRST one: an Alpine
-    // replica was captioned with a completely different run's name and time.
-    if (readOnly) { renderRecordedParent(); renderProductionSettings(); return }
+    // An existing view/edit states the parent from the PLAN, which is the run the stage
+    // table was actually built against — not from a picker over the panel's current list.
+    // That list may not contain it at all (archived, filtered to another part, or since
+    // deleted), and a <select> whose value matches no option silently displays its FIRST
+    // one: an Alpine replica was captioned with a completely different run's name/time.
+    if (readOnly || state.editJobId) {
+      renderRecordedParent()
+      renderProductionSettings()
+      return
+    }
     const choices = productionParents(getJobs?.() || [], getPartPath?.(),
                                       { includeJobId: state.parentJobId })
     if (!choices.length) {
@@ -2051,7 +2056,9 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     // A production session starts clean: the previous session's settings describe a
     // different parent package, so carrying them over would present another run's
     // integrator choice as this one's.
-    if (state.mode === 'production' && !prefill && !readOnly) state.touched = {}
+    if (state.mode === 'production' && !prefill && !readOnly && !editableJob) {
+      state.touched = {}
+    }
     // A fresh session starts on the first tab with nothing to undo — the previous run's
     // history describes settings this wizard is no longer showing.
     state.tab = 'target'

@@ -79,7 +79,12 @@ def test_copy_draft_preserves_settings_and_changes_only_seed(tmp_path, monkeypat
     monkeypatch.setattr(routes_md, "random_seed", lambda exclude=(): 246802468)
     body = routes_md.CreateJobRequest(
         oxdna_job_id="ox1", draft=True, seed=135791357,
-        design_source_path="part.nadoc", padding_nm=2.4,
+        design_source_path="part.nadoc", protocol="mgh_slow_release",
+        threads=7, devices="0,1", padding_nm=2.4, box_mode="bbox",
+        salt_mode="custom", ion_conc_mM=125.0, mg_conc_mM=8.0,
+        minimize_steps=7200, force_soft=True, fast=False,
+        execution_target="alpine", cluster_name="alpine", partition="aa100",
+        slurm_resources={"nodes": 2, "tasks_per_node": 4},
     )
     source = routes_md._spawn_draft_job(body, name="D")
 
@@ -89,9 +94,34 @@ def test_copy_draft_preserves_settings_and_changes_only_seed(tmp_path, monkeypat
     assert copied.status == MdStatus.draft
     assert copied.job_id != source.job_id
     assert copied.namd_seed == result["seed"] == 246802468
-    assert copied.prep_params["padding_nm"] == source.prep_params["padding_nm"]
-    assert copied.prep_params["oxdna_job_id"] == source.prep_params["oxdna_job_id"]
-    assert copied.prep_params["seed"] != source.prep_params["seed"]
+    expected_params = {
+        **source.prep_params,
+        "seed": 246802468,
+        "autostart": False,
+        "draft": True,
+    }
+    assert copied.prep_params == expected_params
+    assert copied.prep_params_set == source.prep_params_set
+    assert (
+        copied.protocol,
+        copied.threads,
+        copied.devices,
+        copied.execution_target,
+        copied.cluster_name,
+        copied.partition,
+        copied.requested_resources,
+        copied.seed_oxdna_job_id,
+    ) == (
+        source.protocol,
+        source.threads,
+        source.devices,
+        source.execution_target,
+        source.cluster_name,
+        source.partition,
+        source.requested_resources,
+        source.seed_oxdna_job_id,
+    )
+    assert result["previous_seed"] == 135791357
 
 
 def test_editing_a_draft_updates_the_same_record_without_preparing(tmp_path, monkeypatch):

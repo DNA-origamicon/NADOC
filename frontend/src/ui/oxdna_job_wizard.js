@@ -15,6 +15,8 @@ const FIELDS = [
   { key: 'equil_steps', label: 'Equilibration', unit: 'steps', type: 'number', min: 100, step: 10000 },
   { key: 'min_bp_retained', label: 'Base-pair retention gate', type: 'number', min: 0, max: 1, step: .05, help: 'Stops a stage when retained designed base pairs fall below this fraction.' },
   { key: 'max_relax_retries', label: 'Escalating MD retries', type: 'number', min: 0, max: 3, step: 1, help: 'Retries a stuck backbone with longer runs and stronger force caps.' },
+  { key: 'seed', label: 'Random seed', type: 'number', min: 1, step: 1, readOnly: true,
+    help: 'This is the recorded base seed for the job. Copied jobs receive a new seed, which is preserved when their settings are edited.' },
 ]
 
 const ENGINE_VARIANTS = [
@@ -68,11 +70,17 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null,
     }), el('h3', { text: 'Protocol options' }), grid)
     for (const field of FIELDS) {
       if (field.local && targetStep?.target !== 'local') continue
+      if (field.readOnly && values[field.key] == null) continue
       const input = field.type === 'select' ? el('select') : el('input', { attrs: { type: field.type, min: field.min, max: field.max, step: field.step } })
       input.dataset.oxdnaField = field.key
       if (field.options) for (const [value, label] of field.options) input.append(el('option', { text: label, attrs: { value } }))
       input.value = values[field.key]
+      if (field.readOnly) {
+        input.readOnly = true
+        input.setAttribute('aria-readonly', 'true')
+      }
       input.addEventListener('input', () => {
+        if (field.readOnly) return
         values[field.key] = field.type === 'number' ? Number(input.value) : input.value
         renderConfig(); paintValidation(); targetStep?.refreshSizing?.()
       })
@@ -328,6 +336,7 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null,
       }
       const editable = {
         ...config,
+        seed: job.random_seed ?? config.seed ?? null,
         execution_target: job.execution_target || config.execution_target || 'local',
         cluster_name: job.cluster_name || config.cluster_name || null,
         partition: job.partition || config.partition || null,
@@ -360,7 +369,10 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null,
     readOnlyPanel.hidden = true
     closeBtn.textContent = 'Cancel'
     createBtn.textContent = 'Save changes'
-    values = oxdnaWizardDefaults(job.run_config || {})
+    values = oxdnaWizardDefaults({
+      ...(job.run_config || {}),
+      seed: job.random_seed ?? job.run_config?.seed,
+    })
     targetStep.setChoice({
       target: job.execution_target || job.run_config?.execution_target || 'local',
       partition: job.partition || job.run_config?.partition || null,
@@ -394,12 +406,12 @@ export function initOxdnaJobWizard({ api = {}, launch = async () => null,
       el('pre', { className: 'oxdna-wizard-config', text: JSON.stringify({
         job_id: job.job_id,
         kind: config.kind || (job.parent_job_id ? 'run' : 'relax'),
-        random_seed: job.random_seed ?? config.seed ?? 'not recorded',
         execution_target: job.execution_target || config.execution_target || 'local',
         backend: job.backend,
         device: job.device,
         salt_concentration: job.salt_concentration,
         ...config,
+        seed: job.random_seed ?? config.seed ?? 'not recorded',
         stages: (job.stages || []).map(stage => ({
           name: stage.name, kind: stage.kind, steps: stage.steps,
         })),

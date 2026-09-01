@@ -1,5 +1,7 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
 import { oxdnaConfigDocument, oxdnaRunpodPlanShape, oxdnaStagePlan, oxdnaWizardPayload, validateOxdnaWizard } from './oxdna_job_wizard_model.js'
+import { initOxdnaJobWizard } from './oxdna_job_wizard.js'
 
 describe('oxDNA job wizard model', () => {
   it('resolves the documented three-stage relaxation protocol', () => {
@@ -17,13 +19,15 @@ describe('oxDNA job wizard model', () => {
   })
 
   it('prints every stage and resolved control in the final document', () => {
-    const text = oxdnaConfigDocument({ max_relax_retries: 2 }, { execution_target: 'alpine', partition: 'aa100' })
+    const text = oxdnaConfigDocument({ max_relax_retries: 2, seed: 246802468 }, { execution_target: 'alpine', partition: 'aa100' })
     expect(text).toContain('execution_target = alpine')
     expect(text).toContain('partition = aa100')
     expect(text).toContain('# 1_mc_relax:')
     expect(text).toContain('# 3_equil:')
     expect(text).toContain('max_relax_retries = 2')
+    expect(text).toContain('seed = 246802468')
     expect(text).toContain('print_conf_interval = 10000')
+    expect(oxdnaWizardPayload({ seed: 246802468 })).toHaveProperty('seed', 246802468)
   })
 
   it('prices all scheduled steps in the Runpod preview shape', () => {
@@ -50,5 +54,49 @@ describe('oxDNA job wizard model', () => {
   it('accepts every supported engine build with the default protocol', () => {
     for (const engine_variant of ['auto', 'adaptive-memory', 'dnanm', 'upstream'])
       expect(validateOxdnaWizard({ engine_variant })).toEqual({ valid: true, errors: {} })
+  })
+})
+
+describe('oxDNA copied-job seed display', () => {
+  const copiedJob = (over = {}) => ({
+    job_id: 'copy-1', status: 'queued', execution_target: 'local',
+    backend: 'CUDA', device: '0', salt_concentration: 0.5,
+    random_seed: 246802468,
+    run_config: {
+      kind: 'relax', seed: 135791357, backend: 'CUDA', device: '0',
+      salt_concentration: 0.5, mc_steps: 1000, md_relax_steps: 1_000_000,
+      equil_steps: 100_000, min_bp_retained: 0.5, max_relax_retries: 3,
+    },
+    stages: [{ name: '1_mc_relax', kind: 'mc', steps: 1000, status: 'pending' }],
+    ...over,
+  })
+  const makeWizard = () => initOxdnaJobWizard({
+    api: {
+      fetchHardware: async () => ({}),
+      getOxdnaAvailable: async () => ({ available: false }),
+      fetchAvailability: async () => ({}),
+      getSlurmPreview: async () => ({}),
+      getRunpodJobPreview: async () => ({}),
+      getRunpodVolumes: async () => ({ volumes: [] }),
+    },
+  })
+
+  it('shows the newly assigned seed, not the source request seed, while editing', () => {
+    const wizard = makeWizard()
+    wizard.openEditable(copiedJob())
+    const input = document.querySelector('[data-oxdna-field="seed"]')
+    expect(input.value).toBe('246802468')
+    expect(input.readOnly).toBe(true)
+    expect(wizard.currentValues().seed).toBe(246802468)
+    wizard.close()
+  })
+
+  it('shows the newly assigned seed in the read-only settings snapshot', () => {
+    const wizard = makeWizard()
+    wizard.openReadOnly(copiedJob())
+    const text = document.querySelector('.oxdna-job-settings-view').textContent
+    expect(text).toContain('"seed": 246802468')
+    expect(text).not.toContain('"seed": 135791357')
+    wizard.close()
   })
 })

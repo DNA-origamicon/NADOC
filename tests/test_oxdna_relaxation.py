@@ -68,10 +68,32 @@ def test_copy_job_preserves_frozen_inputs_but_draws_a_new_seed(tmp_path, monkeyp
     monkeypatch.setattr(routes, "_workspace", lambda: tmp_path)
     monkeypatch.setattr(routes, "random_oxdna_seed", lambda _exclude=(): 222222)
     specs = assign_stage_seeds(build_relaxation_stages(), 111111)
+    specs[1].dt = 0.0015
+    run_config = {
+        "kind": "relax", "seed": 111111, "mc_steps": 1000,
+        "md_relax_steps": 2_500_000, "equil_steps": 250_000,
+        "backend": "CPU", "device": "2", "salt_concentration": 0.75,
+        "stage_overrides": {"2_md_relax": {"dt": 0.0015}},
+        "surface": {"dir": [0, 1, 0], "offset_nm": 1.5, "stiff": 4.0},
+    }
     source = new_oxdna_job(
-        "demo", [spec.to_status() for spec in specs], random_seed=111111,
-        run_config={"kind": "relax", "seed": 111111, "mc_steps": 1000},
+        "demo", [spec.to_status() for spec in specs], n_nucleotides=4321,
+        backend="CPU", device="2", salt_concentration=0.75,
+        random_seed=111111, design_source_path="parts/demo.nadoc",
+        project_id="project-1", design_revision_id="revision-7",
+        parent_job_id="parent-1", efield={"force_pN": 2.5, "dir": [1, 0, 0]},
+        run_config=run_config, max_relax_retries=4,
+        design_fingerprint="fingerprint", feature_log_position=17,
     )
+    source.max_production_retries = 5
+    source.execution_target = "runpod"
+    source.cluster_name = "alpine"
+    source.partition = "aa100"
+    source.requested_resources = {"nodes": 2, "tasks_per_node": 8}
+    source.runpod_gpu_key = "NVIDIA A100"
+    source.runpod_budget_usd = 12.5
+    source.runpod_volume_id = "volume-1"
+    source.runpod_quoted_rate_usd_per_hour = 1.25
     source.status = OxdnaStatus.completed
     source.save(tmp_path)
     source_dir = source.job_dir(tmp_path)
@@ -90,9 +112,62 @@ def test_copy_job_preserves_frozen_inputs_but_draws_a_new_seed(tmp_path, monkeyp
 
     assert copied.status == OxdnaStatus.queued
     assert copied.random_seed == result["seed"] == 222222
-    assert copied.run_config == {"kind": "relax", "seed": 222222, "mc_steps": 1000}
+    assert copied.run_config == {**run_config, "seed": 222222}
     assert [spec.seed for spec in copied_specs] == [222222, 222223, 222224]
+    for source_spec, copied_spec in zip(specs, copied_specs, strict=True):
+        source_params = {**asdict(source_spec), "seed": None}
+        copied_params = {**asdict(copied_spec), "seed": None}
+        assert copied_params == source_params
+    assert (
+        copied.design_name,
+        copied.n_nucleotides,
+        copied.backend,
+        copied.device,
+        copied.salt_concentration,
+        copied.design_source_path,
+        copied.project_id,
+        copied.design_revision_id,
+        copied.parent_job_id,
+        copied.efield,
+        copied.max_relax_retries,
+        copied.max_production_retries,
+        copied.design_fingerprint,
+        copied.feature_log_position,
+        copied.execution_target,
+        copied.cluster_name,
+        copied.partition,
+        copied.requested_resources,
+        copied.runpod_gpu_key,
+        copied.runpod_budget_usd,
+        copied.runpod_volume_id,
+        copied.runpod_quoted_rate_usd_per_hour,
+    ) == (
+        source.design_name,
+        source.n_nucleotides,
+        source.backend,
+        source.device,
+        source.salt_concentration,
+        source.design_source_path,
+        source.project_id,
+        source.design_revision_id,
+        source.parent_job_id,
+        source.efield,
+        source.max_relax_retries,
+        source.max_production_retries,
+        source.design_fingerprint,
+        source.feature_log_position,
+        source.execution_target,
+        source.cluster_name,
+        source.partition,
+        source.requested_resources,
+        source.runpod_gpu_key,
+        source.runpod_budget_usd,
+        source.runpod_volume_id,
+        source.runpod_quoted_rate_usd_per_hour,
+    )
     assert (copied.job_dir(tmp_path) / "conf.dat").read_text() == "coordinates"
+    assert (copied.job_dir(tmp_path) / "topology.top").read_text() == "topology"
+    assert (copied.job_dir(tmp_path) / "forces.txt").read_text() == "forces"
     assert not (copied.job_dir(tmp_path) / "1_mc_relax").exists()
 
 

@@ -4543,7 +4543,7 @@ async def copy_md_job(job_id: str) -> dict:
         "ok": True,
         "job": copied,
         "copied_from_job_id": source.job_id,
-        "previous_seed": source.namd_seed,
+        "previous_seed": source.namd_seed or source.ensemble_seed,
         "seed": copied_seed,
     }
 

@@ -346,6 +346,41 @@ describe('editable existing job', () => {
     expect(launch).not.toHaveBeenCalled()
     expect(spawnProduction).not.toHaveBeenCalled()
   })
+
+  it('keeps every copied production parameter and its new seed when editing', async () => {
+    const { wiz, api } = setup()
+    await wiz.openEditable({
+      job_id: 'production-copy', design_name: '2hb_1xT · production',
+      created_at: 1_785_000_100, status: 'queued', execution_target: 'alpine',
+      partition: 'aa100', parent_job_id: 'parent1', run_kind: 'production',
+      namd_seed: 246802468, ensemble_seed: 246802468,
+      spawn_params: {
+        length_ns: 250, steps: 125_000_000, seed: 246802468,
+        dcd_freq: 25000, enm_restraints: 'on', langevin_damping: 2,
+        production_timestep_fs: 2, rigid_bonds: 'all', hmr: false,
+        execution_target: 'alpine', partition: 'aa100', autostart: false,
+      },
+      spawn_params_set: [
+        'length_ns', 'steps', 'seed', 'dcd_freq', 'enm_restraints',
+        'langevin_damping', 'production_timestep_fs', 'rigid_bonds', 'hmr',
+        'execution_target', 'partition', 'autostart',
+      ],
+    })
+
+    const body = api.fetchProtocolPlan.mock.calls[0][0]
+    expect(body).toMatchObject({
+      kind: 'production', parent_job_id: 'parent1', length_ns: 250,
+      steps: 125_000_000, seed: 246802468, dcd_freq: 25000,
+      enm_restraints: 'on', langevin_damping: 2,
+    })
+    ;[...modalRoot().querySelectorAll('.wizard-tab')][1].click()
+    expect(fieldControl('Random seed')?.value).toBe('246802468')
+    expect(fieldControl('Run length')?.value).toBe('250')
+    expect(fieldControl('Trajectory interval')?.value).toBe('25000')
+    expect(fieldControl('Timestep')?.value).toBe('2')
+    expect(fieldControl('Rigid bonds')?.checked).toBe(true)
+    expect(fieldControl('H-mass repartitioning')?.checked).toBe(false)
+  })
 })
 
 describe('a child rebuilt from its parent', () => {
