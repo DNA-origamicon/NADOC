@@ -445,6 +445,151 @@ def test_prepare_stages_select_upstream_dnanm():
     assert all(s.interaction is None and s.parfile is None for s in dna)
 
 
+def test_hybrid_field_targets_only_dna_and_offsets_anchors(tmp_path):
+    """The force-per-nucleotide field must skip leading DNANM protein beads."""
+    import re
+
+    from backend.api.crud import _geometry_for_design
+    from backend.physics.oxdna_interface import (
+        _strand_nucleotide_order,
+        resolve_anchor_particles,
+        write_field_forces,
+    )
+    from backend.physics.oxdna_protein import (
+        build_protein_blocks,
+        hybrid_configuration_text,
+        hybrid_topology_text,
+        protein_bead_count,
+    )
+
+    design = _protein_design()
+    geometry = _geometry_for_design(design)
+    _attachments, blocks = build_protein_blocks(design, geometry)
+    n_protein = protein_bead_count(blocks)
+    (tmp_path / "topology.top").write_text(hybrid_topology_text(design, blocks))
+    conf = tmp_path / "conf.dat"
+    conf.write_text(hybrid_configuration_text(design, geometry, blocks))
+
+    hid, bp, direction = _strand_nucleotide_order(design)[0][:3]
+    anchor = {
+        "kind": "base",
+        "helix_id": hid,
+        "bp": bp,
+        "direction": direction,
+    }
+    local_particles, _keys = resolve_anchor_particles(design, [anchor])
+    assert len(local_particles) == 1
+    info = write_field_forces(
+        tmp_path / "field_forces.txt",
+        design,
+        conf,
+        field_oxdna=0.04,
+        field_dir=[0, 0, 1],
+        anchors=[anchor],
+    )
+
+    text = (tmp_path / "field_forces.txt").read_text()
+    selected = [
+        int(value)
+        for value in re.search(r"type = string\nparticle = ([0-9,]+)", text)
+        .group(1)
+        .split(",")
+    ]
+    assert selected[0] == n_protein
+    assert selected[-1] == info["n_total"] - 1
+    assert all(p not in selected for p in range(n_protein))
+    shifted_anchor = n_protein + local_particles[0]
+    assert f"type = trap\nparticle = {shifted_anchor}\n" in text
+    assert info["anchor_particles"] == [shifted_anchor]
+
+
+def _charged_hybrid_topology(tmp_path):
+    """Two three-residue chains followed by two DNA nucleotides."""
+    top = tmp_path / "topology.top"
+    top.write_text(
+        "8 3 2 6 1\n"
+        "-1 K -1 1\n"
+        "-1 A 0 2\n"
+        "-1 D 1\n"
+        "-1 E -1 4\n"
+        "-1 R 3 5\n"
+        "-1 H 4\n"
+        "1 A 7 -1\n"
+        "1 T -1 6\n"
+    )
+    return top
+
+
+def test_fixed_ph8_charge_audit_is_particle_resolved(tmp_path):
+    from backend.physics.oxdna_protein import fixed_charge_audit_from_topology
+
+    audit = fixed_charge_audit_from_topology(_charged_hybrid_topology(tmp_path))
+    assert audit["pH"] == 8.0
+    assert audit["n_protein"] == 6
+    assert audit["net_charge_e"] == 0
+    # K at an N terminus is +2; D at a C terminus is -2.  E/N-terminal
+    # and H/C-terminal demonstrate that terminal and side-chain charges combine.
+    assert [p["charge_e"] for p in audit["particles"]] == [2, 0, -2, 0, 1, -1]
+    assert audit["charge_groups"] == {
+        "2": [0],
+        "-2": [2],
+        "1": [4],
+        "-1": [5],
+    }
+
+
+def test_physical_field_blocks_apply_qe_and_skip_neutral_residues(tmp_path):
+    import re
+
+    from backend.physics.oxdna_interface import physical_electric_field_blocks
+
+    text, audit = physical_electric_field_blocks(
+        _charged_hybrid_topology(tmp_path),
+        field_v_per_m=1_000_000,
+        field_dir=[1, 0, 0],
+    )
+    assert audit["mode"] == "physical_electric_field"
+    groups = audit["force_groups"]
+    dna = next(g for g in groups if g["kind"] == "dna")
+    assert dna["particle_indices"] == [6, 7]
+    assert dna["charge_e"] == -0.25
+    assert dna["force_pN"] == pytest.approx(0.04005441585)
+    assert dna["dir"] == [-1.0, -0.0, -0.0]
+
+    protein = {g["charge_e"]: g for g in groups if g["kind"] == "protein"}
+    assert protein[2.0]["particle_indices"] == [0]
+    assert protein[-2.0]["particle_indices"] == [2]
+    assert protein[1.0]["particle_indices"] == [4]
+    assert protein[-1.0]["particle_indices"] == [5]
+    assert protein[1.0]["force_pN"] == pytest.approx(0.1602176634)
+    assert protein[-1.0]["dir"] == [-1.0, -0.0, -0.0]
+    assert "particle = 1" not in text and "particle = 3" not in text
+    assert len(re.findall(r"type = string", text)) == 5
+
+
+def test_physical_field_api_is_distinct_from_legacy_force_mode():
+    from pydantic import ValidationError
+
+    from backend.api.routes_oxdna import FieldElement, resolve_oxdna_field_api
+
+    with pytest.raises(ValidationError, match="exactly one"):
+        FieldElement(dir=[1, 0, 0])
+    with pytest.raises(ValidationError, match="exactly one"):
+        FieldElement(field_pN=1, field_V_per_m=1e6, dir=[1, 0, 0])
+
+    physical = resolve_oxdna_field_api(
+        FieldElement(field_V_per_m=1e6, dir=[1, 0, 0])
+    )
+    assert physical["mode"] == "physical"
+    assert physical["config"]["dna_effective_charge_e"] == -0.25
+    assert physical["record"]["protein_charge_model"] == "fixed_pH8"
+    assert physical["record"]["dna_force_pN"] == pytest.approx(0.04005441585)
+
+    legacy = resolve_oxdna_field_api(FieldElement(field_pN=2, dir=[1, 0, 0]))
+    assert legacy["mode"] == "force_per_nucleotide"
+    assert legacy["config"] == {"field_pN": 2.0, "dir": [1.0, 0.0, 0.0]}
+
+
 def test_hybridize_sampling_stage_keeps_protein_contract():
     from backend.core.oxdna_protocol import build_production_stage, hybridize_stage
 

@@ -40,7 +40,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from backend.api import state as design_state
 from backend.api.assembly import _WORKSPACE_DIR
@@ -86,6 +86,8 @@ from backend.physics.oxdna_interface import (
     is_extension_key,
     designed_pair_complementarity,
     max_crossover_backbone_stretch,
+    DEFAULT_DNA_EFFECTIVE_CHARGE_E,
+    electric_force_pn,
     oxdna_backbone_site,
     oxdna_base_site,
     pn_to_oxdna_force,
@@ -310,11 +312,37 @@ class AnchorRef(BaseModel):
     k: Optional[int] = None
 
 
-class FieldRequest(BaseModel):
-    field_pN: float = Field(..., gt=0.0, description="Force per nucleotide (pN)")
+class FieldElement(BaseModel):
+    """One of two intentionally distinct field contracts.
+
+    ``field_pN`` is the legacy phenomenological DNA force. ``field_V_per_m`` is
+    a physical electric-field magnitude that couples to fixed pH-8 protein
+    charges and the configured effective DNA phosphate charge.
+    """
+
+    field_pN: Optional[float] = Field(
+        None, gt=0.0, description="Legacy force per DNA nucleotide (pN)"
+    )
+    field_V_per_m: Optional[float] = Field(
+        None, gt=0.0, description="Physical electric-field magnitude (V/m)"
+    )
+    dna_effective_charge_e: float = Field(
+        DEFAULT_DNA_EFFECTIVE_CHARGE_E,
+        lt=0.0,
+        description="Effective DNA phosphate charge in elementary-charge units",
+    )
     dir: list[float] = Field(
         ..., min_length=3, max_length=3, description="Field direction (auto-normalized)"
     )
+
+    @model_validator(mode="after")
+    def exactly_one_field_mode(self):
+        if (self.field_pN is None) == (self.field_V_per_m is None):
+            raise ValueError("specify exactly one of field_pN or field_V_per_m")
+        return self
+
+
+class FieldRequest(FieldElement):
     anchors: list[AnchorRef] = Field(default_factory=list)
     steps: int = Field(2_000_000, ge=1000, le=200_000_000, description="Field MD steps")
     anchor_stiff: float = Field(
@@ -324,17 +352,6 @@ class FieldRequest(BaseModel):
         "(default pins anchors effectively immobile)",
     )
     seed: Optional[int] = Field(None, ge=1, le=OXDNA_SEED_MAX)
-
-
-class FieldElement(BaseModel):
-    """The electric-field element of a composed run (uniform per-nucleotide force)."""
-
-    field_pN: float = Field(..., gt=0.0, description="Force per nucleotide (pN)")
-    dir: list[float] = Field(
-        ..., min_length=3, max_length=3, description="Field direction (auto-normalized)"
-    )
-
-
 class SurfaceElement(BaseModel):
     """The hard-surface element of a composed run (one-sided repulsion plane).
 
@@ -387,6 +404,43 @@ class RunRequest(BaseModel):
     # Omitted → inherit the parent's strands and its own subjectToField, unchanged.
     surface_strands: Optional[dict] = Field(None)
     seed: Optional[int] = Field(None, ge=1, le=OXDNA_SEED_MAX)
+
+
+def resolve_oxdna_field_api(field: FieldElement) -> dict:
+    """Pure API-to-engine mapping shared by routes and regression tests."""
+    if field.field_V_per_m is not None:
+        dna_force_pn = abs(
+            electric_force_pn(field.field_V_per_m, field.dna_effective_charge_e)
+        )
+        config = {
+            "field_V_per_m": field.field_V_per_m,
+            "dna_effective_charge_e": field.dna_effective_charge_e,
+            "dir": list(field.dir),
+        }
+        return {
+            "mode": "physical",
+            "stage_force_oxdna": pn_to_oxdna_force(dna_force_pn),
+            "writer": dict(config),
+            "config": config,
+            "record": {
+                **config,
+                "dna_force_pN": dna_force_pn,
+                "protein_charge_model": "fixed_pH8",
+            },
+        }
+    config = {"field_pN": field.field_pN, "dir": list(field.dir)}
+    force_oxdna = pn_to_oxdna_force(float(field.field_pN))
+    return {
+        "mode": "force_per_nucleotide",
+        "stage_force_oxdna": force_oxdna,
+        "writer": {"force_oxdna": force_oxdna, "dir": list(field.dir)},
+        "config": config,
+        "record": {
+            "force_pN": field.field_pN,
+            "force_oxdna": force_oxdna,
+            "dir": list(field.dir),
+        },
+    }
 
 
 class SurfaceDepositionRequest(BaseModel):
@@ -1646,7 +1700,8 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
     if relaxed_conf is None:
         raise HTTPException(400, "No relaxed configuration to seed the field run from.")
 
-    field_oxdna = pn_to_oxdna_force(body.field_pN)
+    resolved_field = resolve_oxdna_field_api(body)
+    field_oxdna = resolved_field["stage_force_oxdna"]
     anchors = [a.model_dump(by_alias=False) for a in body.anchors]
     job_seed = _fresh_oxdna_seed(body.seed, exclude=[parent.random_seed])
     stage = build_field_stage(
@@ -1677,16 +1732,12 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
         parent_job_id=parent.job_id,
         design_fingerprint=parent.design_fingerprint,
         feature_log_position=parent.feature_log_position,
-        efield={
-            "force_pN": body.field_pN,
-            "force_oxdna": field_oxdna,
-            "dir": list(body.dir),
-        },
+        efield=resolved_field["record"],
         run_config={
             "kind": "field",
             "seed": job_seed,
             "steps": body.steps,
-            "field": {"field_pN": body.field_pN, "dir": list(body.dir)},
+            "field": resolved_field["config"],
             "surface": None,
             "anchors": [
                 a.model_dump(by_alias=True, exclude_none=True) for a in body.anchors
@@ -1706,7 +1757,13 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
             cjd / "field_forces.txt",
             design,
             cjd / "conf.dat",
-            field_oxdna=field_oxdna,
+            field_oxdna=(
+                field_oxdna if resolved_field["mode"] == "force_per_nucleotide" else None
+            ),
+            field_v_per_m=(
+                body.field_V_per_m if resolved_field["mode"] == "physical" else None
+            ),
+            dna_effective_charge_e=body.dna_effective_charge_e,
             field_dir=body.dir,
             anchors=anchors,
             anchor_stiff=body.anchor_stiff,
@@ -1718,6 +1775,8 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
     child.efield["anchor_keys"] = info[
         "anchor_keys"
     ]  # display aligns on these (positional frame)
+    if info.get("physical_field") is not None:
+        child.efield["charge_audit"] = info["physical_field"]
     child.n_nucleotides = info["n_total"]
     (cjd / "stages_spec.json").write_text(json.dumps([asdict(stage)], indent=2))
     child.status = OxdnaStatus.queued
@@ -1764,14 +1823,12 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
     # Resolve the enabled elements into the writer's input dicts.
     field_in = None
     efield_rec = None
+    field_config = None
     if body.field:
-        f_oxdna = pn_to_oxdna_force(body.field.field_pN)
-        field_in = {"force_oxdna": f_oxdna, "dir": body.field.dir}
-        efield_rec = {
-            "dir": list(body.field.dir),
-            "force_oxdna": f_oxdna,
-            "force_pN": body.field.field_pN,
-        }
+        resolved_field = resolve_oxdna_field_api(body.field)
+        field_in = resolved_field["writer"]
+        efield_rec = resolved_field["record"]
+        field_config = resolved_field["config"]
     wall_in = None
     if body.surface:
         wall_in = {
@@ -1853,9 +1910,7 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
             "kind": "run",
             "seed": job_seed,
             "steps": body.steps,
-            "field": {"field_pN": body.field.field_pN, "dir": list(body.field.dir)}
-            if body.field
-            else None,
+            "field": field_config,
             "surface": {
                 "dir": body.surface.dir,
                 "offset_nm": body.surface.offset_nm,
@@ -1929,6 +1984,8 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
     if efield_rec is not None:
         child.efield["n_anchored"] = info["n_anchored"]
         child.efield["anchor_keys"] = info["anchor_keys"]
+        if info.get("field", {}).get("mode") == "physical_electric_field":
+            child.efield["charge_audit"] = info["field"]
     child.n_nucleotides = info["n_total"]
     if info.get("wall") and child.run_config.get("surface"):
         child.run_config["surface"]["position_nm"] = _wall_axis_position_nm(

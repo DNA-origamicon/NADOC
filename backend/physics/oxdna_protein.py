@@ -27,6 +27,7 @@ the ``n3``/``n5`` neighbour columns and any trap/anchor reference — is offset 
 from __future__ import annotations
 
 from collections import defaultdict
+from pathlib import Path
 
 import numpy as np
 
@@ -48,6 +49,103 @@ from backend.physics.oxdna_interface import (
     resolved_nuc_map,
     topology_rows,
 )
+
+
+# ── Fixed-charge model for physical electric fields ─────────────────────────
+
+FIXED_PROTEIN_PH: float = 8.0
+SIDECHAIN_CHARGE_PH8: dict[str, int] = {
+    "D": -1,
+    "E": -1,
+    "K": 1,
+    "R": 1,
+}
+
+
+def fixed_residue_charge_ph8(
+    aa: str, *, n_terminal: bool = False, c_terminal: bool = False
+) -> int:
+    """Integer charge (in elementary-charge units) for the fixed pH-8 model.
+
+    Asp/Glu are deprotonated, Lys/Arg protonated, and His/Cys/Tyr are neutral.
+    Each polypeptide chain contributes a protonated N terminus (+1) and a
+    deprotonated C terminus (-1).  Charges are fixed for the whole trajectory;
+    this deliberately does not implement constant-pH or charge regulation.
+    """
+    charge = SIDECHAIN_CHARGE_PH8.get(str(aa).upper(), 0)
+    if n_terminal:
+        charge += 1
+    if c_terminal:
+        charge -= 1
+    return charge
+
+
+def fixed_charge_audit_from_topology(top_path: str | Path) -> dict:
+    """Return the reproducible pH-8 charge assignment for a DNANM topology.
+
+    This is the public regression/validation seam for the fixed-charge model.
+    It reports every protein particle's residue, terminal flags and assigned
+    charge plus charge-group and net-charge summaries.  A DNA-only topology
+    returns an empty, valid audit.  Malformed hybrid counts fail loudly.
+    """
+    lines = Path(top_path).read_text(encoding="utf-8").splitlines()
+    if not lines:
+        raise ValueError("empty oxDNA topology")
+    header = lines[0].split()
+    if len(header) < 5:
+        return {
+            "model": "fixed_residue_charges",
+            "pH": FIXED_PROTEIN_PH,
+            "n_protein": 0,
+            "net_charge_e": 0,
+            "charge_groups": {},
+            "particles": [],
+        }
+    try:
+        n_total, n_dna, n_protein = int(header[0]), int(header[2]), int(header[3])
+    except (ValueError, IndexError) as exc:
+        raise ValueError("invalid DNANM topology header") from exc
+    if n_total != n_dna + n_protein or len(lines) < 1 + n_protein:
+        raise ValueError("inconsistent DNANM topology particle counts")
+
+    rows: list[tuple[str, int]] = []
+    for particle, line in enumerate(lines[1 : 1 + n_protein]):
+        fields = line.split()
+        if len(fields) < 3:
+            raise ValueError(f"invalid DNANM protein topology row {particle}")
+        try:
+            prev = int(fields[2])
+        except ValueError as exc:
+            raise ValueError(f"invalid DNANM protein predecessor at {particle}") from exc
+        rows.append((fields[1].upper(), prev))
+
+    starts = {i for i, (_aa, prev) in enumerate(rows) if prev < 0}
+    ends = set(range(n_protein)) - {prev for _aa, prev in rows if prev >= 0}
+    particles = []
+    groups: dict[str, list[int]] = defaultdict(list)
+    for particle, (aa, _prev) in enumerate(rows):
+        charge = fixed_residue_charge_ph8(
+            aa, n_terminal=particle in starts, c_terminal=particle in ends
+        )
+        particles.append(
+            {
+                "particle": particle,
+                "aa": aa,
+                "n_terminal": particle in starts,
+                "c_terminal": particle in ends,
+                "charge_e": charge,
+            }
+        )
+        if charge:
+            groups[str(charge)].append(particle)
+    return {
+        "model": "fixed_residue_charges",
+        "pH": FIXED_PROTEIN_PH,
+        "n_protein": n_protein,
+        "net_charge_e": sum(p["charge_e"] for p in particles),
+        "charge_groups": dict(groups),
+        "particles": particles,
+    }
 
 # Default conjugation-link spring (oxDNA units), from the ANM-oxDNA tetrahedron
 # example (a click linker fitted to atomistic data).  Tunable as advanced params.

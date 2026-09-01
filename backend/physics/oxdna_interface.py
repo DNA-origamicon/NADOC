@@ -2714,6 +2714,8 @@ def max_crossover_backbone_stretch(design: Design, geometry: list[dict]) -> floa
 # ── Electric-field forces (uniform string force + anchor traps) ─────────────────
 
 OXDNA_FORCE_PN: float = 48.63  # 1 oxDNA simulation force unit ≈ 48.63 pN
+ELEMENTARY_CHARGE_C: float = 1.602176634e-19
+DEFAULT_DNA_EFFECTIVE_CHARGE_E: float = -0.25
 # Anchor-trap stiffness (oxDNA units).  Chosen high so an anchored nucleotide is
 # EFFECTIVELY IMMOBILE: trap thermal jitter scales as ⟨dx²⟩≈kT/stiff, so 1000
 # pins each anchored bead to ~0.03 nm RMS (≈10× below normal bead motion) while
@@ -2729,6 +2731,11 @@ DEFAULT_SURFACE_ANCHOR_STIFF: float = 1.0
 def pn_to_oxdna_force(pn: float) -> float:
     """Force per nucleotide: pN → oxDNA simulation force units."""
     return float(pn) / OXDNA_FORCE_PN
+
+
+def electric_force_pn(field_v_per_m: float, charge_e: float) -> float:
+    """Signed force in pN for charge ``charge_e`` in a uniform physical field."""
+    return float(charge_e) * ELEMENTARY_CHARGE_C * float(field_v_per_m) * 1e12
 
 
 def _normalize3(v) -> list[float]:
@@ -3010,6 +3017,95 @@ def field_string_block(
     )
 
 
+def physical_electric_field_blocks(
+    top_path: str | Path,
+    *,
+    field_v_per_m: float,
+    field_dir,
+    dna_effective_charge_e: float = DEFAULT_DNA_EFFECTIVE_CHARGE_E,
+    exclude_trailing_dna: int = 0,
+) -> tuple[str, dict]:
+    """Build charge-aware force blocks for a uniform physical electric field.
+
+    DNA nucleotides use the documented effective phosphate charge (default
+    ``-0.25e``).  DNANM protein particles use the fixed pH-8 residue/terminal
+    assignment returned by ``fixed_charge_audit_from_topology``.  Opposite charge
+    signs receive opposite force directions; neutral protein residues receive no
+    block.  Returns force text and a complete audit suitable for regression tests.
+    """
+    top_path = Path(top_path)
+    lines = top_path.read_text(encoding="utf-8").splitlines()
+    if not lines:
+        raise ValueError("empty oxDNA topology")
+    fields = lines[0].split()
+    try:
+        n_total = int(fields[0])
+        if len(fields) >= 5:
+            n_dna, n_protein = int(fields[2]), int(fields[3])
+        else:
+            n_dna, n_protein = n_total, 0
+    except (ValueError, IndexError) as exc:
+        raise ValueError("invalid oxDNA topology header") from exc
+    if n_total != n_dna + n_protein:
+        raise ValueError("inconsistent oxDNA topology particle counts")
+
+    from backend.physics.oxdna_protein import fixed_charge_audit_from_topology
+
+    charge_audit = fixed_charge_audit_from_topology(top_path)
+    direction = _normalize3(field_dir)
+    if direction == [0.0, 0.0, 0.0]:
+        raise ValueError("electric-field direction must be non-zero")
+    blocks: list[str] = []
+    force_groups: list[dict] = []
+
+    def add_group(charge_e: float, indices: list[int], kind: str) -> None:
+        if not indices or abs(charge_e) <= 1e-15:
+            return
+        signed_pn = electric_force_pn(field_v_per_m, charge_e)
+        force_dir = direction if signed_pn >= 0 else [-x for x in direction]
+        force_oxdna = pn_to_oxdna_force(abs(signed_pn))
+        blocks.append(
+            field_string_block(
+                force_oxdna, force_dir, particle_indices=indices
+            )
+        )
+        force_groups.append(
+            {
+                "kind": kind,
+                "charge_e": float(charge_e),
+                "particle_indices": list(indices),
+                "force_pN": abs(signed_pn),
+                "dir": force_dir,
+            }
+        )
+
+    exclude = int(exclude_trailing_dna or 0)
+    if exclude < 0 or exclude >= n_dna:
+        if exclude:
+            raise ValueError("physical-field trailing exclusion removes all DNA")
+        exclude = 0
+    add_group(
+        float(dna_effective_charge_e),
+        list(range(n_protein, n_protein + n_dna - exclude)),
+        "dna",
+    )
+    for charge_text, indices in sorted(
+        charge_audit["charge_groups"].items(), key=lambda item: int(item[0])
+    ):
+        add_group(float(charge_text), list(indices), "protein")
+
+    audit = {
+        "mode": "physical_electric_field",
+        "field_V_per_m": float(field_v_per_m),
+        "dir": direction,
+        "dna_effective_charge_e": float(dna_effective_charge_e),
+        "excluded_trailing_dna": exclude,
+        "protein_charge_model": charge_audit,
+        "force_groups": force_groups,
+    }
+    return "\n".join(blocks), audit
+
+
 def write_surface_deposition_approach_forces(
     path: str | Path,
     design: Design,
@@ -3228,13 +3324,15 @@ def write_field_forces(
     design: Design,
     conf_path: str | Path,
     *,
-    field_oxdna: float,
+    field_oxdna: float | None = None,
+    field_v_per_m: float | None = None,
+    dna_effective_charge_e: float = DEFAULT_DNA_EFFECTIVE_CHARGE_E,
     field_dir,
     anchors: list[dict],
     anchor_stiff: float = DEFAULT_ANCHOR_STIFF,
 ) -> dict:
     """Write the external-forces file for an electric-field stage: one uniform
-    ``string`` force on all nucleotides + a static ``trap`` pinning every anchored
+    ``string`` force on all DNA nucleotides + a static ``trap`` pinning every anchored
     nucleotide to its position in ``conf_path`` (the configuration the field stage
     starts from).
 
@@ -3250,17 +3348,71 @@ def write_field_forces(
     )
     cm = read_cm_positions_oxdna(conf_path)
     n_total = len(cm)
-    blocks: list[str] = [field_string_block(field_oxdna, field_dir)]
-    for p in particles:
-        if p < n_total:
+
+    # DNANM hybrid topologies put all protein beads before the DNA block.  The
+    # field value exposed by NADOC is a force per nucleotide, not an electric
+    # field strength, so protein beads must not inherit that force.  Read the
+    # authoritative five-field hybrid header instead of trying to reconstruct
+    # the protein bead count from the mutable design.
+    protein_offset = 0
+    n_dna = n_total
+    top_path = Path(conf_path).with_name("topology.top")
+    if top_path.exists():
+        first = top_path.read_text(encoding="utf-8").splitlines()[:1]
+        fields = first[0].split() if first else []
+        if len(fields) >= 5:
+            try:
+                header_total, n_dna, protein_offset = (
+                    int(fields[0]), int(fields[2]), int(fields[3])
+                )
+            except (ValueError, IndexError):
+                protein_offset, n_dna = 0, n_total
+            else:
+                if (
+                    header_total != n_total
+                    or protein_offset < 0
+                    or n_dna < 0
+                    or protein_offset + n_dna > n_total
+                ):
+                    raise ValueError(
+                        "hybrid topology particle counts do not match the field-stage "
+                        "configuration"
+                    )
+
+    if (field_oxdna is None) == (field_v_per_m is None):
+        raise ValueError("specify exactly one of field_oxdna or field_v_per_m")
+    physical_audit = None
+    if field_v_per_m is not None:
+        field_text, physical_audit = physical_electric_field_blocks(
+            top_path,
+            field_v_per_m=field_v_per_m,
+            field_dir=field_dir,
+            dna_effective_charge_e=dna_effective_charge_e,
+        )
+        blocks = [field_text]
+    else:
+        field_indices = (
+            list(range(protein_offset, protein_offset + n_dna))
+            if protein_offset
+            else None
+        )
+        blocks = [
+            field_string_block(
+                float(field_oxdna), field_dir, particle_indices=field_indices
+            )
+        ]
+    shifted_particles = [protein_offset + p for p in particles]
+    for p in shifted_particles:
+        if p < protein_offset + n_dna:
             blocks.append(anchor_trap_block(p, cm[p], anchor_stiff))
     Path(path).write_text("\n".join(blocks), encoding="utf-8")
     return {
         "n_anchored": len(particles),
         "n_total": n_total,
-        "field_oxdna": float(field_oxdna),
+        "field_oxdna": None if field_oxdna is None else float(field_oxdna),
+        "physical_field": physical_audit,
         "dir": _normalize3(field_dir),
-        "anchor_particles": particles,
+        "anchor_particles": shifted_particles,
         # 3-tuple nucleotide keys (helix, bp, direction) of the anchored beads —
         # the display uses these as a positional (non-rotational) alignment frame.
         "anchor_keys": [list(k[:3]) for k in anchor_keys],
@@ -3358,7 +3510,9 @@ def write_run_forces(
     of a uniform ``string`` field, a ``repulsion_plane`` hard surface (all
     nucleotides), and ``trap`` anchors pinning selected nucleotides.
 
-    ``field`` is ``{"force_oxdna": f, "dir": [x,y,z]}`` or None; ``wall`` is
+    ``field`` is either legacy ``{"force_oxdna": f, "dir": [...]}`` or physical
+    ``{"field_V_per_m": E, "dir": [...], "dna_effective_charge_e": -0.25}``;
+    ``wall`` is
     ``{"dir": [x,y,z], "offset_nm": d, "stiff": s}`` or None; ``anchors`` is the
     ordinary, fully-fixed anchor list. ``surface_anchors`` are restrained only along
     the wall normal, leaving both in-plane dimensions free. Each element is
@@ -3375,6 +3529,7 @@ def write_run_forces(
     sa_text, info = surface_anchor_forces_text(
         design, conf_path, wall=wall, anchors=anchors, anchor_stiff=anchor_stiff
     )
+    protein_offset = int(info.get("protein_offset", 0))
 
     # Surface anchors retain only their height after deposition.  They must remain
     # free to diffuse in the two tangential directions in every continuation run.
@@ -3388,8 +3543,9 @@ def write_run_forces(
         )
         ordinary = set(info["anchor_particles"])
         cm = read_cm_positions_oxdna(conf_path)
+        shifted_resolved = [protein_offset + p for p in resolved_particles]
         surface_particles = [
-            p for p in resolved_particles if p not in ordinary and p < len(cm)
+            p for p in shifted_resolved if p not in ordinary and p < len(cm)
         ]
         surface_text = "\n".join(
             surface_normal_trap_block(p, cm[p], wall.get("dir"), anchor_stiff)
@@ -3397,7 +3553,7 @@ def write_run_forces(
         )
         info["surface_anchor_particles"] = surface_particles
         info["surface_anchor_keys"] = [
-            list(k[:3]) for p, k in zip(resolved_particles, surface_keys)
+            list(k[:3]) for p, k in zip(shifted_resolved, surface_keys)
             if p in surface_particles
         ]
         info["n_anchored"] += len(surface_particles)
@@ -3405,21 +3561,54 @@ def write_run_forces(
     field_text = ""
     field_meta = None
     if field:
-        f_oxdna = float(field.get("force_oxdna", 0.0))
-        if f_oxdna > 0:
+        field_v_per_m = field.get("field_V_per_m")
+        if field_v_per_m is not None:
+            field_text, field_meta = physical_electric_field_blocks(
+                Path(conf_path).with_name("topology.top"),
+                field_v_per_m=float(field_v_per_m),
+                field_dir=field.get("dir"),
+                dna_effective_charge_e=float(
+                    field.get(
+                        "dna_effective_charge_e", DEFAULT_DNA_EFFECTIVE_CHARGE_E
+                    )
+                ),
+                exclude_trailing_dna=int(field_exclude_trailing or 0),
+            )
+        else:
+            f_oxdna = float(field.get("force_oxdna", 0.0))
+            if f_oxdna <= 0:
+                f_oxdna = 0.0
+        if field_v_per_m is None and f_oxdna > 0:
             # Restrict the field to origami particles [0, K) only when the caller asks
             # to exclude trailing caps AND that leaves a non-empty, strict subset.
             n_field = None
             exclude = int(field_exclude_trailing or 0)
-            if 0 < exclude < info["n_total"]:
+            top_path = Path(conf_path).with_name("topology.top")
+            protein_offset = 0
+            n_dna = info["n_total"] - exclude
+            if top_path.exists():
+                header = top_path.read_text(encoding="utf-8").splitlines()[0].split()
+                if len(header) >= 5:
+                    protein_offset, n_dna = int(header[3]), int(header[2])
+            particle_indices = None
+            if protein_offset:
+                particle_indices = list(
+                    range(protein_offset, protein_offset + n_dna - exclude)
+                )
+            elif 0 < exclude < info["n_total"]:
                 n_field = info["n_total"] - exclude
             field_text = field_string_block(
-                f_oxdna, field.get("dir"), n_particles=n_field
+                f_oxdna,
+                field.get("dir"),
+                n_particles=n_field,
+                particle_indices=particle_indices,
             )
             field_meta = {
                 "force_oxdna": f_oxdna,
                 "dir": _normalize3(field.get("dir")),
-                "particle_count": n_field,
+                "particle_count": (
+                    len(particle_indices) if particle_indices is not None else n_field
+                ),
             }
 
     parts = [t for t in (field_text, sa_text, surface_text) if t]
@@ -3451,6 +3640,23 @@ def surface_anchor_forces_text(
         particles, anchor_keys = [], []
     cm = read_cm_positions_oxdna(conf_path)
     n_total = len(cm)
+    protein_offset = 0
+    top_path = Path(conf_path).with_name("topology.top")
+    if top_path.exists():
+        first = top_path.read_text(encoding="utf-8").splitlines()[:1]
+        fields = first[0].split() if first else []
+        if len(fields) >= 5:
+            try:
+                header_total, n_dna, protein_offset = (
+                    int(fields[0]), int(fields[2]), int(fields[3])
+                )
+            except (ValueError, IndexError) as exc:
+                raise ValueError("invalid DNANM topology header") from exc
+            if header_total != n_total or protein_offset + n_dna > n_total:
+                raise ValueError(
+                    "hybrid topology particle counts do not match the run configuration"
+                )
+    particles = [protein_offset + p for p in particles]
 
     blocks: list[str] = []
     wall_meta = None
@@ -3492,6 +3698,7 @@ def surface_anchor_forces_text(
         if not wall:
             raise ValueError("Surface anchors require a hard surface.")
         resolved, resolved_keys = resolve_anchor_particles(design, surface_anchors)
+        resolved = [protein_offset + p for p in resolved]
         ordinary = set(particles)
         kept = [
             (p, key)
@@ -3508,6 +3715,7 @@ def surface_anchor_forces_text(
     return "\n".join(blocks), {
         "n_anchored": len(particles) + len(surface_particles),
         "n_total": n_total,
+        "protein_offset": protein_offset,
         "anchor_particles": particles,
         "anchor_keys": [list(k[:3]) for k in anchor_keys],
         "surface_anchor_particles": surface_particles,
