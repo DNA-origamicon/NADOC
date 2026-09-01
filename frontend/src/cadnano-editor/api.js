@@ -7,6 +7,7 @@
 
 import { editorStore } from './store.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
+import { recordNameEdit } from '../ui/name_edit_audit.js'
 import { notifyRequestFailure, notifyRequestSuccess } from '../shared/connection_monitor.js'
 import { docHeaders, getDocId } from '../shared/doc_id.js'
 
@@ -394,11 +395,34 @@ export async function batchDeleteForcedLigations(flIds) {
  * color: '#RRGGBB' hex string, or null to reset to palette.
  * sequence: a full 5'→3' ATGCN string to set by hand, or null to clear.
  */
-export async function patchStrand(strandId, { color = undefined, notes = undefined, sequence = undefined } = {}) {
+export async function patchStrand(strandId, { name = undefined, color = undefined, notes = undefined, sequence = undefined } = {}) {
   const body = {}
+  if (name     !== undefined) body.name     = name
   if (color    !== undefined) body.color    = color
   if (notes    !== undefined) body.notes    = notes
   if (sequence !== undefined) body.sequence = sequence
+  if (name !== undefined && color === undefined && notes === undefined && sequence === undefined) {
+    const before = editorStore.getState().design
+    if (!before) return null
+    const cleanName = String(name ?? '').trim() || null
+    const strand = before.strands?.find(s => s.id === strandId)
+    const ownedIds = new Set((strand?.domains ?? []).map(d => d.overhang_id).filter(Boolean))
+    editorStore.setState({ design: {
+      ...before,
+      strands: before.strands.map(s => s.id === strandId ? { ...s, name: cleanName } : s),
+      overhangs: (before.overhangs ?? []).map(o => ownedIds.has(o.id) ? { ...o, label: cleanName } : o),
+    } })
+    recordNameEdit('editor-request-start', { strandId, value: cleanName })
+    const json = await _request('PATCH', `/design/strand/${strandId}`, body)
+    if (!json) {
+      editorStore.setState({ design: before })
+      recordNameEdit('editor-request-failure', { strandId, value: cleanName })
+    } else {
+      nadocBroadcast.emit('design-changed', { geometry_unchanged: true, metadata_only: true })
+      recordNameEdit('editor-request-success', { strandId, value: cleanName })
+    }
+    return json
+  }
   return mutate(req => req('PATCH', `/design/strand/${strandId}`, body))
 }
 

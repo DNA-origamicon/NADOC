@@ -934,6 +934,7 @@ class Strand(BaseModel):
     strand_type: StrandType = StrandType.STAPLE
     sequence: Optional[str] = None
     color: Optional[str] = None  # "#RRGGBB" hex; None → use STAPLE_PALETTE
+    name: Optional[str] = None  # user-defined oligo/order name; blank by default
     notes: Optional[str] = None  # user-defined notes (shown in spreadsheet panel)
     # Reference geometry: when True this strand is an inactive "backdrop" — a
     # frozen part the user is designing against.  ALL generative features

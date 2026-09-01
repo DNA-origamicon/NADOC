@@ -12,6 +12,7 @@
 import { store } from '../state/store.js'
 import { geometryQuerySuffix, isNewPositioningOn } from '../ui/new_positioning.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
+import { recordNameEdit } from '../ui/name_edit_audit.js'
 
 // Signal that the active design's content changed: cross-TAB (BroadcastChannel) so
 // other browser tabs re-fetch, AND in-PAGE (window event) so the oxDNA/MD job panels
@@ -2199,11 +2200,36 @@ export async function relaxFlexibleSegments(transforms, label) {
   return _syncFromDesignResponse(json)
 }
 
-export async function patchStrand(strandId, { notes, color, sequence } = {}) {
+export async function patchStrand(strandId, { name, notes, color, sequence } = {}) {
   const body = {}
+  if (name     !== undefined) body.name     = name
   if (notes    !== undefined) body.notes    = notes
   if (color    !== undefined) body.color    = color
   if (sequence !== undefined) body.sequence = sequence
+  if (name !== undefined && notes === undefined && color === undefined && sequence === undefined) {
+    const before = store.getState().currentDesign
+    if (!before) return null
+    const cleanName = String(name ?? '').trim() || null
+    const strand = before.strands?.find(s => s.id === strandId)
+    const ownedIds = new Set((strand?.domains ?? []).map(d => d.overhang_id).filter(Boolean))
+    const optimistic = {
+      ...before,
+      strands: before.strands.map(s => s.id === strandId ? { ...s, name: cleanName } : s),
+      overhangs: (before.overhangs ?? []).map(o => ownedIds.has(o.id) ? { ...o, label: cleanName } : o),
+    }
+    store.setState({ currentDesign: optimistic })
+    persistDesign()
+    recordNameEdit('request-start', { strandId, value: cleanName })
+    const json = await _request('PATCH', `/design/strand/${encodeURIComponent(strandId)}`, body)
+    if (!json) {
+      store.setState({ currentDesign: before })
+      recordNameEdit('request-failure', { strandId, value: cleanName })
+    } else {
+      _signalDesignChanged({ geometryUnchanged: true, metadataOnly: true })
+      recordNameEdit('request-success', { strandId, value: cleanName })
+    }
+    return json
+  }
   const json = await _request('PATCH', `/design/strand/${encodeURIComponent(strandId)}`, body)
   // notes/color/sequence are pure metadata — no nucleotide moves.
   return _syncFromDesignResponse(json, { skipGeometry: true })

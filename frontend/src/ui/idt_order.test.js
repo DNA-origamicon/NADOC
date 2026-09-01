@@ -44,4 +44,13 @@ describe('buildIdtStrandNames', () => {
       body1: 'Body_1', cap1: 'Cap_1', body2: 'Body_2', cap2: 'Cap_2',
     })
   })
+
+  it('uses explicit strand names ahead of overhang labels and groups', () => {
+    const design = {
+      strands: [{ id: 'named', strand_type: 'staple', name: 'Custom oligo' }],
+      overhangs: [{ id: 'oh1', strand_id: 'named', label: 'Sidebar name' }],
+    }
+    const groups = [{ name: 'Group name', strandIds: ['named'] }]
+    expect(buildIdtStrandNames(design, groups)).toEqual({ named: 'Custom oligo' })
+  })
 })

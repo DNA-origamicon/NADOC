@@ -205,6 +205,26 @@ describe('Strand display IDs', () => {
   })
 })
 
+describe('Strand name editing', () => {
+  it('allows uninterrupted typing and preserves the draft across table rebuilds', () => {
+    openSheet()
+    const selector = 'tr[data-strand-id="stap"] td[data-col="name"] input'
+    const input = document.querySelector(selector)
+    input.focus()
+    for (const value of ['V', 'Vo', 'Vol', 'Volt', 'Voltron']) {
+      input.value = value
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      expect(document.activeElement).toBe(input)
+      expect(document.querySelector(selector)).toBe(input)
+    }
+
+    // An unrelated design response may rebuild the spreadsheet while editing;
+    // the in-progress draft must be restored instead of reverting to blank.
+    store.setState({ currentDesign: { ...DESIGN, metadata: { touched: true } } })
+    expect(document.querySelector(selector).value).toBe('Voltron')
+  })
+})
+
 /**
  * This file used to declare its OWN `STAPLE_PALETTE` with entirely different colours
  * (an editor syntax theme) under a comment claiming it mirrored helix_renderer. Because

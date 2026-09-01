@@ -2411,8 +2411,8 @@ initLigationDebug()
   let _renderedPlateLayoutSig = _plateLayoutSig(null)
   const _sig = (d) => d ? JSON.stringify([
     d.id,
-    (d.strands ?? []).filter(s => s.strand_type === 'staple' && !s.is_reference)
-      .map(s => `${s.id}:${s.color || ''}:${s.domains?.length ?? 0}`),
+    (d.strands ?? []).filter(s => ['staple', 'linker', 'oh_binder'].includes(s.strand_type) && !s.is_reference)
+      .map(s => `${s.id}:${s.name || ''}:${s.color || ''}:${s.domains?.length ?? 0}`),
     (d.extensions ?? []).map(e => `${e.strand_id}:${e.modification || ''}`),
   ]) : 'null'
   function _refreshPlates() {
@@ -2433,7 +2433,7 @@ initLigationDebug()
     const records = []
     let idx = 0
     for (const s of design.strands ?? []) {
-      if (s.strand_type !== 'staple' || s.is_reference) continue
+      if (!['staple', 'linker', 'oh_binder'].includes(s.strand_type) || s.is_reference) continue
       idx += 1
       const lengthNt = (s.domains ?? []).reduce((sum, d) => {
         const h = helixById[d.helix_id]

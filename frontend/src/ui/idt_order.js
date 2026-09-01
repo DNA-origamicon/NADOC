@@ -21,7 +21,7 @@ export function buildIdtStrandNames(design, strandGroups = [], layout = design?.
   const counters = new Map()
   const names = {}
   const staples = (design?.strands ?? []).filter(
-    strand => strand.strand_type === 'staple' && !strand.is_reference,
+    strand => ['staple', 'linker', 'oh_binder'].includes(strand.strand_type) && !strand.is_reference,
   )
   const stapleById = new Map(staples.map(strand => [strand.id, strand]))
   const orderedIds = []
@@ -40,6 +40,11 @@ export function buildIdtStrandNames(design, strandGroups = [], layout = design?.
   for (const strandId of orderedIds) {
     const strand = stapleById.get(strandId)
     stapleNumber += 1
+    const explicitName = String(strand.name ?? '').trim()
+    if (explicitName) {
+      names[strand.id] = explicitName
+      continue
+    }
     const base = overhangNameByStrand.get(strand.id) || groupNameByStrand.get(strand.id)
     if (!base) {
       names[strand.id] = `S${stapleNumber}`

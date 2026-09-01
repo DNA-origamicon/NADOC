@@ -13,11 +13,13 @@ import { showToast } from '../ui/toast.js'
 import { createContextMenu } from '../ui/primitives/context_menu.js'
 import { ensureStapleColors, stapleColorOf } from './pathview/palette.js'
 import { buildStrandDisplayIdMap } from '../ui/design_display_labels.js'
+import { recordNameEdit } from '../ui/name_edit_audit.js'
 
 // ── Column definitions ────────────────────────────────────────────────────
 
 const COLUMNS = [
   { key: 'id',       label: 'ID',          toggleable: false, editable: false },
+  { key: 'name',     label: 'Name',        toggleable: false, editable: true  },
   { key: 'start',    label: 'Start',       toggleable: false, editable: false },
   { key: 'end',      label: 'End',         toggleable: false, editable: false },
   { key: 'ovhg_5p',  label: "5' Overhang", toggleable: true,  editable: true  },
@@ -203,6 +205,8 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
   const theadRow    = document.getElementById('spreadsheet-thead-row')
   const tbody       = document.getElementById('spreadsheet-tbody')
   const toggleBar   = document.getElementById('spreadsheet-col-toggles')
+  const nameDrafts = new Map()
+  const nameCommits = new Map()
   const sheetEdge   = document.getElementById('sheet-edge')
   const sheetToggle = document.getElementById('sheet-toggle')
 
@@ -333,6 +337,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
     _rebuildHeader()
 
     const design = _design
+    recordNameEdit('editor-rebuild', { activeStrandId: document.activeElement?.closest?.('tr')?.dataset?.strandId ?? null })
     tbody.innerHTML = ''
     if (!design?.strands?.length) return
 
@@ -367,6 +372,10 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
             td.className = 'sheet-col-id'
             td.textContent = displayIds.get(strand.id) ?? '—'
             td.title = strand.id
+            break
+          }
+          case 'name': {
+            td.appendChild(_makeNameCell(strand, ovhg5p ?? ovhg3p))
             break
           }
           case 'start': {
@@ -600,6 +609,40 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
     return wrap
   }
 
+  function _makeNameCell(strand, overhang) {
+    const input = document.createElement('input')
+    input.type = 'text'
+    input.className = 'sheet-cell-input'
+    input.dataset.strandNameInput = 'true'
+    input.value = nameDrafts.has(strand.id) ? nameDrafts.get(strand.id) : (strand.name ?? overhang?.label ?? '')
+    let lastVal = strand.name ?? overhang?.label ?? ''
+    async function save() {
+      const val = input.value.trim()
+      if (val === lastVal) return
+      lastVal = val
+      nameDrafts.set(strand.id, val)
+      recordNameEdit('editor-commit-start', { strandId: strand.id, value: val })
+      const previous = nameCommits.get(strand.id) ?? Promise.resolve()
+      const commit = previous.catch(() => {}).then(() => patchStrand(strand.id, { name: val || null }))
+      nameCommits.set(strand.id, commit)
+      const result = await commit
+      if (nameCommits.get(strand.id) === commit) nameCommits.delete(strand.id)
+      if (result && nameDrafts.get(strand.id) === val) nameDrafts.delete(strand.id)
+      recordNameEdit(result ? 'editor-commit-success' : 'editor-commit-failure', { strandId: strand.id, value: val })
+    }
+    input.addEventListener('focus', () => recordNameEdit('editor-focus', { strandId: strand.id }))
+    input.addEventListener('input', () => {
+      nameDrafts.set(strand.id, input.value)
+      recordNameEdit('editor-input', { strandId: strand.id, value: input.value })
+    })
+    input.addEventListener('blur', save)
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); input.blur() }
+      if (e.key === 'Escape') { input.value = lastVal; input.blur() }
+    })
+    return input
+  }
+
   // ── Notes editable cell ───────────────────────────────────────────
   function _makeNotesCell(strand) {
     const input = document.createElement('input')
@@ -646,6 +689,10 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
 
     /** Set which strand IDs are highlighted (from pathview selection). */
     setSelectedStrands(strandIds) {
+      const activeName = document.activeElement?.matches?.('[data-strand-name-input="true"]')
+        ? document.activeElement : null
+      const activeStrandId = activeName?.closest('tr')?.dataset.strandId
+      if (activeName && activeStrandId && !strandIds.includes(activeStrandId)) activeName.blur()
       _selectedStrandIds = new Set(strandIds)
       if (!isOpen) return
       _applyHighlights()

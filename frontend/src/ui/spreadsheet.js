@@ -21,11 +21,13 @@ import { STAPLE_PALETTE, buildStapleColorMap } from '../scene/helix_renderer/pal
 import { canonicalSelection, selectedStrandIds } from '../scene/selection_model.js'
 import { parseBaseKey } from '../scene/base_ref.js'
 import { buildStrandDisplayIdMap } from './design_display_labels.js'
+import { recordNameEdit } from './name_edit_audit.js'
 
 // ── Column definitions ────────────────────────────────────────────────────
 
 const COLUMNS = [
   { key: 'id',       label: 'ID',          toggleable: false, editable: false },
+  { key: 'name',     label: 'Name',        toggleable: false, editable: true  },
   { key: 'start',    label: 'Start',       toggleable: false, editable: false },
   { key: 'end',      label: 'End',         toggleable: false, editable: false },
   { key: 'show',     label: 'Show',        toggleable: false, editable: false },
@@ -508,6 +510,8 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
   const toggleBar   = document.getElementById('spreadsheet-col-toggles')
   const sheetEdge   = document.getElementById('sheet-edge')
   const sheetToggle = document.getElementById('sheet-toggle')
+  const nameDrafts = new Map()
+  const nameCommits = new Map()
 
   if (!panel || !body) return
 
@@ -767,6 +771,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     for (const strandId of selectedBases.keys()) highlightedIds.add(strandId)
 
     _updateDatalist(strandGroups)
+    recordNameEdit('rebuild', { activeStrandId: document.activeElement?.closest?.('tr')?.dataset?.strandId ?? null })
     tbody.innerHTML = ''
     if (!design) {
       _appendAssemblyLinkerRows(state, highlightedIds)
@@ -814,6 +819,10 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
             td.className = 'sheet-col-id'
             td.textContent = displayIds.get(strand.id) ?? '—'
             td.title = strand.id
+            break
+          }
+          case 'name': {
+            td.appendChild(_makeNameCell(strand, ovhg5p ?? ovhg3p))
             break
           }
           case 'show': {
@@ -1376,6 +1385,40 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     return wrap
   }
 
+  function _makeNameCell(strand, overhang) {
+    const input = document.createElement('input')
+    input.type = 'text'
+    input.className = 'sheet-cell-input'
+    input.dataset.strandNameInput = 'true'
+    input.value = nameDrafts.has(strand.id) ? nameDrafts.get(strand.id) : (strand.name ?? overhang?.label ?? '')
+    let lastVal = strand.name ?? overhang?.label ?? ''
+    async function save() {
+      const val = input.value.trim()
+      if (val === lastVal) return
+      lastVal = val
+      nameDrafts.set(strand.id, val)
+      recordNameEdit('commit-start', { strandId: strand.id, value: val })
+      const previous = nameCommits.get(strand.id) ?? Promise.resolve()
+      const commit = previous.catch(() => {}).then(() => api.patchStrand(strand.id, { name: val || null }))
+      nameCommits.set(strand.id, commit)
+      const result = await commit
+      if (nameCommits.get(strand.id) === commit) nameCommits.delete(strand.id)
+      if (result && nameDrafts.get(strand.id) === val) nameDrafts.delete(strand.id)
+      recordNameEdit(result ? 'commit-success' : 'commit-failure', { strandId: strand.id, value: val })
+    }
+    input.addEventListener('focus', () => recordNameEdit('focus', { strandId: strand.id }))
+    input.addEventListener('input', () => {
+      nameDrafts.set(strand.id, input.value)
+      recordNameEdit('input', { strandId: strand.id, value: input.value })
+    })
+    input.addEventListener('blur', save)
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); input.blur() }
+      if (e.key === 'Escape') { input.value = lastVal; input.blur() }
+    })
+    return input
+  }
+
   // ── Notes editable cell ───────────────────────────────────────────
   function _makeNotesCell(strand) {
     const input = document.createElement('input')
@@ -1405,6 +1448,10 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
   // ── Highlight helpers ──────────────────────────────────────────────
   function _applyHighlights(selectedIds) {
     if (!isOpen) return
+    const activeName = document.activeElement?.matches?.('[data-strand-name-input="true"]')
+      ? document.activeElement : null
+    const activeStrandId = activeName?.closest('tr')?.dataset.strandId
+    if (activeName && activeStrandId && !selectedIds.has(activeStrandId)) activeName.blur()
     const design = store.getState().currentDesign
     if (!design) return
     const state = store.getState()
@@ -1434,6 +1481,14 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     const groupsChanged  = newState.strandGroups   !== prevState.strandGroups
     const colorsChanged  = newState.strandColors   !== prevState.strandColors
     const selChanged     = newState.selection !== prevState.selection
+    if (selChanged) {
+      const activeName = document.activeElement?.matches?.('[data-strand-name-input="true"]')
+        ? document.activeElement : null
+      const activeStrandId = activeName?.closest('tr')?.dataset.strandId
+      if (activeName && activeStrandId && !new Set(selectedStrandIds(newState)).has(activeStrandId)) {
+        activeName.blur()
+      }
+    }
     const assemblyChanged       = newState.currentAssembly !== prevState.currentAssembly
     const assemblyActiveChanged = newState.assemblyActive  !== prevState.assemblyActive
     const assemblyStrandsChanged = newState.currentAssembly?.assembly_strands

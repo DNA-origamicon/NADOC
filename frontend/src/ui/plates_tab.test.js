@@ -61,6 +61,35 @@ describe('initPlatesTab', () => {
     ], null)
   })
 
+  it('includes linker and overhang-binding oligos in autofill records', () => {
+    let subscriber
+    const state = {
+      currentDesign: {
+        id: 'd1',
+        helices: [{ id: 'h1' }],
+        strands: [
+          { id: 'linker-1', strand_type: 'linker', sequence: 'AAAA', domains: [{ helix_id: 'h1', start_bp: 0, end_bp: 3 }] },
+          { id: 'binder-1', strand_type: 'oh_binder', sequence: 'TTTTT', domains: [{ helix_id: 'h1', start_bp: 4, end_bp: 8 }] },
+          { id: 'scaffold-1', strand_type: 'scaffold', sequence: 'CCCC', domains: [{ helix_id: 'h1', start_bp: 9, end_bp: 12 }] },
+        ],
+        extensions: [],
+      },
+      currentGeometry: [], strandColors: {}, strandGroups: [],
+    }
+    initPlatesTab({
+      api: { savePlateLayout: vi.fn() },
+      designRenderer: { getHelixCtrl: () => null },
+      selectionManager: {},
+      store: { getState: () => state, subscribe: handler => { subscriber = handler } },
+    })
+
+    subscriber(state)
+
+    const records = mocks.plateView.setData.mock.calls.at(-1)[0]
+    expect(records.map(record => record.strandId)).toEqual(['linker-1', 'binder-1'])
+    expect(records.map(record => record.lengthNt)).toEqual([4, 5])
+  })
+
   it('routes well selection through the canonical selection manager', () => {
     const selectionManager = { selectStrand: vi.fn(), clearSelection: vi.fn() }
     initPlatesTab({

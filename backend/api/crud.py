@@ -5189,7 +5189,16 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
     updated, spec_updates, new_spec = _build_overhang_patch(design, overhang_id, body)
 
     sequence_was_set = "sequence" in body.model_fields_set
-    label_was_set = body.label is not None
+    label_was_set = "label" in body.model_fields_set
+
+    # The strand spreadsheet's Name and the owning overhang's sidebar label are
+    # two views of the same oligo name.
+    if "label" in body.model_fields_set:
+        synced_name = body.label.strip() if body.label and body.label.strip() else None
+        updated = updated.model_copy(update={"strands": [
+            s.model_copy(update={"name": synced_name}) if s.id == new_spec.strand_id else s
+            for s in updated.strands
+        ]})
 
     # Auto-assign on set: _build_overhang_patch cleared the parent strand's
     # sequence, so re-derive real bases for it AND any complement / binder domain
@@ -5756,6 +5765,7 @@ _IDENTITY_QUAT_LIST = [0.0, 0.0, 0.0, 1.0]
 
 
 class StrandPatchRequest(BaseModel):
+    name: str | None = None
     notes: str | None = None
     color: str | None = None  # "#RRGGBB" hex string, or None to reset to palette
     # A full 5'→3' ATGCN sequence to SET by hand, or null to CLEAR back to the
@@ -5807,6 +5817,8 @@ def patch_strand(strand_id: str, body: StrandPatchRequest) -> dict:
     clearing_sequence = "sequence" in body.model_fields_set and body.sequence is None
 
     patch: dict = {}
+    if body.name is not None or "name" in body.model_fields_set:
+        patch["name"] = body.name.strip() if body.name and body.name.strip() else None
     if body.notes is not None or "notes" in body.model_fields_set:
         patch["notes"] = body.notes
     if body.color is not None or "color" in body.model_fields_set:
@@ -5836,6 +5848,15 @@ def patch_strand(strand_id: str, body: StrandPatchRequest) -> dict:
     ]
 
     new_overhangs = design.overhangs
+    if "name" in patch:
+        owned_overhang_ids = {
+            d.overhang_id for d in strand.domains if d.overhang_id is not None
+        }
+        new_overhangs = [
+            o.model_copy(update={"label": patch["name"]})
+            if o.id in owned_overhang_ids else o
+            for o in new_overhangs
+        ]
     if clearing_sequence:
         strand_overhang_ids = {
             d.overhang_id for d in strand.domains if d.overhang_id is not None
@@ -5874,6 +5895,8 @@ def patch_strand(strand_id: str, body: StrandPatchRequest) -> dict:
         bits.append(f"color={patch['color']}")
     if "notes" in patch:
         bits.append("notes")
+    if "name" in patch:
+        bits.append("name")
     if clearing_sequence:
         bits.append("seq cleared")
 
@@ -5898,7 +5921,27 @@ def patch_strand(strand_id: str, body: StrandPatchRequest) -> dict:
         },
         fn=lambda _d: updated,
     )
-    return _design_response(updated, report)
+    if body.model_fields_set == {"name"}:
+        # A VoltronCoreArm response is ~3 MB even after feature-log stripping.
+        # Name edits need no topology payload: the clients apply this tiny patch
+        # optimistically and autosave their updated local design.
+        named = updated.find_strand(strand_id)
+        owned_ids = {
+            d.overhang_id for d in (named.domains if named else [])
+            if d.overhang_id is not None
+        }
+        return {
+            "strand_id": strand_id,
+            "name": named.name if named else None,
+            "overhang_labels": {
+                o.id: o.label for o in updated.overhangs if o.id in owned_ids
+            },
+            "geometry_unchanged": True,
+        }
+    payload = _design_response(updated, report)
+    # Name/notes/color are metadata-only. Let both clients skip geometry rebuilds.
+    payload["geometry_unchanged"] = True
+    return payload
 
 
 class BulkColorRequest(BaseModel):

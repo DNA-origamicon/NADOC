@@ -84,7 +84,7 @@ export function initPlatesTab({ api, designRenderer, selectionManager, store }) 
       const records = []
       let stapleIdx = 0
       for (const s of design.strands ?? []) {
-        if (s.strand_type !== 'staple' || s.is_reference) continue
+        if (!['staple', 'linker', 'oh_binder'].includes(s.strand_type) || s.is_reference) continue
         stapleIdx += 1
         // Resolve exactly as the scene's nucColor: override (strandColors +
         // groups) wins, else the palette slot. Never falls back to a flat grey
@@ -121,8 +121,8 @@ export function initPlatesTab({ api, designRenderer, selectionManager, store }) 
     function _inputsSig(design, strandColors, strandGroups) {
       if (!design) return 'null'
       const strands = (design.strands ?? [])
-        .filter(s => s.strand_type === 'staple' && !s.is_reference)
-        .map(s => `${s.id}:${s.color || ''}:${s.domains?.length ?? 0}`)
+        .filter(s => ['staple', 'linker', 'oh_binder'].includes(s.strand_type) && !s.is_reference)
+        .map(s => `${s.id}:${s.name || ''}:${s.color || ''}:${s.domains?.length ?? 0}`)
       const exts = (design.extensions ?? []).map(e => `${e.strand_id}:${e.modification || ''}`)
       return JSON.stringify([design.id, strands, exts,
         strandGroups, Object.entries(strandColors ?? {})])
