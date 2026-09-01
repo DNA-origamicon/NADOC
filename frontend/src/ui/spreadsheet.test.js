@@ -225,6 +225,85 @@ describe('Strand name editing', () => {
   })
 })
 
+describe('Sequence search', () => {
+  it('highlights and scrolls to the first matching sequence as the user types', () => {
+    const scrollTo = vi.fn()
+    openSheet()
+    document.querySelector('#spreadsheet-body').scrollTo = scrollTo
+
+    const input = document.querySelector('#spreadsheet-sequence-search')
+    input.value = 'gggg'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+
+    const cell = document.querySelector('tr[data-strand-id="stap"] td[data-col="sequence"]')
+    expect(cell.classList.contains('sheet-search-match')).toBe(true)
+    expect([...cell.querySelectorAll('mark.sheet-search-highlight')]
+      .map(mark => mark.textContent).join('')).toBe('GGGG')
+    expect(document.querySelector('.sheet-search-status').textContent).toBe('1/1')
+    expect(scrollTo).toHaveBeenCalled()
+  })
+
+  it('advances through every possible occurrence on repeated Enter presses', () => {
+    openSheet()
+    document.querySelector('#spreadsheet-body').scrollTo = vi.fn()
+
+    const input = document.querySelector('#spreadsheet-sequence-search')
+    input.value = 'g'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    expect(document.querySelector('mark.sheet-search-highlight').dataset.searchStart).toBe('0')
+
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    expect(document.querySelector('mark.sheet-search-highlight').dataset.searchStart).toBe('1')
+    expect(document.querySelector('.sheet-search-status').textContent).toBe('2/4')
+  })
+
+  it('moves to the next matching strand when Enter is pressed again', () => {
+    openSheet()
+    document.querySelector('#spreadsheet-body').scrollTo = vi.fn()
+    store.setState({
+      currentDesign: {
+        ...DESIGN,
+        strands: DESIGN.strands.map(strand =>
+          strand.id === 'stap' ? { ...strand, sequence: 'CCCCGGGG' } : strand
+        ),
+      },
+    })
+
+    const input = document.querySelector('#spreadsheet-sequence-search')
+    input.value = 'CCCC'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    expect(document.querySelector('.sheet-search-match').closest('tr').dataset.strandId).toBe('scaf')
+
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    expect(document.querySelector('.sheet-search-match').closest('tr').dataset.strandId).toBe('stap')
+    expect(document.querySelector('.sheet-search-status').textContent).toBe('2/2')
+  })
+
+  it('contains typed keys before document-level shortcuts can handle them', () => {
+    openSheet()
+    const globalShortcut = vi.fn()
+    document.addEventListener('keydown', globalShortcut)
+
+    document.querySelector('#spreadsheet-sequence-search')
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'b', bubbles: true }))
+
+    expect(globalShortcut).not.toHaveBeenCalled()
+    document.removeEventListener('keydown', globalShortcut)
+  })
+
+  it('reports no matches and clears the highlight when the query is absent', () => {
+    openSheet()
+
+    const input = document.querySelector('#spreadsheet-sequence-search')
+    input.value = 'ACGTACGT'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+
+    expect(document.querySelector('.sheet-search-match')).toBeNull()
+    expect(document.querySelector('.sheet-search-status').textContent).toBe('No matches')
+    expect(input.getAttribute('aria-invalid')).toBe('true')
+  })
+})
+
 /**
  * This file used to declare its OWN `STAPLE_PALETTE` with entirely different colours
  * (an editor syntax theme) under a comment claiming it mirrored helix_renderer. Because

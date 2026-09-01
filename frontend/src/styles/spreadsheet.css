@@ -1,0 +1,370 @@
+/*
+ * Shared compact strand-spreadsheet presentation.
+ *
+ * Loaded after each app's legacy inline styles so this file is authoritative
+ * for both the 3D viewer and the cadnano editor.
+ */
+#sheet-edge {
+  height: 8px;
+  background: #1a2030;
+  border-top: 1px solid #30363d;
+  cursor: ns-resize;
+  flex-shrink: 0;
+  position: relative;
+  overflow: visible;
+  z-index: 25;
+}
+
+#sheet-toggle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 16px;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  background: #1c2128;
+  box-shadow: var(--shadow-sm);
+  color: #8b949e;
+  cursor: pointer;
+  font-size: var(--text-xs);
+  line-height: 1;
+  z-index: 1;
+}
+
+#sheet-toggle:hover {
+  border-color: #484f58;
+  background: #30363d;
+  color: #c9d1d9;
+}
+
+#spreadsheet-panel {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  height: 0;
+  overflow: hidden;
+  background: #0d1117;
+}
+
+#spreadsheet-tab {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 28px;
+  gap: 8px;
+  padding: 0 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-bottom: 1px solid #30363d;
+  background: #1a2030;
+  color: #c9d1d9;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  user-select: none;
+}
+
+#spreadsheet-title {
+  flex: 0 0 auto;
+  color: #58a6ff;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.sheet-search-wrap,
+.sheet-sort-wrap,
+#spreadsheet-col-toggles,
+.sheet-col-toggle {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.sheet-search-wrap {
+  flex: 0 0 auto;
+  gap: 5px;
+}
+
+#spreadsheet-tab .sheet-search-input[type="search"] {
+  width: 150px;
+  height: 21px;
+  min-height: 0;
+  padding: 1px 6px;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  outline: none;
+  background: #0d1117;
+  color: #c9d1d9;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 1.4;
+  user-select: text;
+}
+
+#spreadsheet-tab .sheet-search-input[type="search"]:focus { border-color: #58a6ff; }
+#spreadsheet-tab .sheet-search-input[type="search"][aria-invalid="true"] { border-color: #f85149; }
+
+.sheet-search-status {
+  min-width: 38px;
+  color: #8b949e;
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.sheet-sort-wrap {
+  flex: 0 0 auto;
+  gap: 3px;
+  padding-right: 7px;
+  border-right: 1px solid #30363d;
+}
+
+.sheet-sort-label {
+  color: #8b949e;
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+}
+
+#spreadsheet-tab .sheet-sort-select {
+  height: 20px;
+  min-height: 0;
+  padding: 0 2px;
+  border: 1px solid #30363d;
+  border-radius: 3px;
+  background: #0d1117;
+  color: #c9d1d9;
+  cursor: pointer;
+  font-size: var(--text-xs);
+}
+
+#spreadsheet-tab .sheet-sort-select:hover,
+#spreadsheet-tab .sheet-sort-select:focus { border-color: #58a6ff; }
+
+#spreadsheet-col-toggles {
+  min-width: 0;
+  gap: 8px;
+  overflow: visible;
+}
+
+.sheet-col-toggle {
+  flex: 0 0 auto;
+  gap: 3px;
+  color: #8b949e;
+  cursor: pointer;
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+#spreadsheet-tab .sheet-col-toggle input[type="checkbox"] {
+  flex: 0 0 13px;
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: #58a6ff;
+  cursor: pointer;
+}
+
+#spreadsheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border-top: 1px solid #30363d;
+  background: #0d1117;
+}
+
+#spreadsheet-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: #c9d1d9;
+  font-family: var(--font-ui);
+  font-size: 11px;
+}
+
+#spreadsheet-table thead {
+  position: sticky;
+  top: 0;
+  background: #161b22;
+  z-index: 2;
+}
+
+#spreadsheet-table th {
+  position: relative;
+  padding: 5px 8px;
+  border-right: 1px solid #21262d;
+  border-bottom: 1px solid #30363d;
+  color: #8b949e;
+  font-weight: 400;
+  text-align: left;
+  white-space: nowrap;
+}
+
+#spreadsheet-table td {
+  max-width: 200px;
+  padding: 3px 8px;
+  overflow: hidden;
+  border-right: 1px solid #21262d;
+  border-bottom: 1px solid #161b22;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+#spreadsheet-table tr:hover td { background: #161b22; }
+
+#spreadsheet-table tr.sheet-selected td {
+  background: #1a2f1a;
+  outline: 1px solid #3fb950;
+}
+
+#spreadsheet-table td.sheet-search-result {
+  background: rgba(210, 153, 34, 0.13) !important;
+}
+
+#spreadsheet-table td.sheet-search-match {
+  background: rgba(210, 153, 34, 0.3) !important;
+  outline: 2px solid #d29922;
+  outline-offset: -2px;
+}
+
+#spreadsheet-table mark.sheet-search-highlight {
+  border-radius: 2px;
+  background: #f2cc60;
+  color: #0d1117;
+  font: inherit;
+}
+
+#spreadsheet-table tr.sheet-scaffold td { color: #29b6f6; }
+#spreadsheet-table tr.sheet-oh-binder td { color: #d96fe6; }
+
+#spreadsheet-table tr.sheet-linker td {
+  background: #14191e;
+  color: #c9d1d9;
+  font-style: italic;
+}
+
+#spreadsheet-table .sheet-col-endpoint {
+  max-width: 70px;
+  padding: 3px 4px;
+}
+
+#spreadsheet-table .sheet-col-id {
+  width: 42px;
+  max-width: 42px;
+  padding: 3px 6px;
+  color: #e6edf3;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.sheet-col-grip {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.sheet-col-grip:hover,
+.sheet-col-grip:active { background: #58a6ff; }
+
+.sheet-cell-input,
+.sheet-group-input {
+  width: 100%;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.sheet-group-input { cursor: pointer; }
+
+.sheet-cell-input:focus,
+.sheet-group-input:focus {
+  padding: 1px 3px;
+  border-radius: 2px;
+  background: #21262d;
+}
+
+.sheet-group-input:focus { cursor: text; }
+
+.sheet-seq {
+  color: #e6edf3;
+  letter-spacing: 0.02em;
+}
+
+.sheet-seq-selected-base {
+  padding: 0 1px;
+  border-radius: 2px;
+  background: #f2cc60;
+  color: #111820;
+}
+
+.sheet-seq-none {
+  color: #8b949e;
+  font-style: italic;
+}
+
+.sheet-gen-btn {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border: 1px solid #30363d;
+  border-radius: 3px;
+  background: #21262d;
+  color: #8b949e;
+  cursor: pointer;
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+.sheet-gen-btn:hover {
+  background: #30363d;
+  color: #e6edf3;
+}
+
+.sheet-gen-btn:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.sheet-color-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 1px solid #3a414c;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+
+#spreadsheet-table td.sheet-col-color {
+  min-width: 28px;
+  padding: 2px 4px;
+}
+
+.sheet-color-input {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.sheet-color-input::-webkit-color-swatch-wrapper { padding: 0; }
+.sheet-color-input::-webkit-color-swatch,
+.sheet-color-input::-moz-color-swatch {
+  border: none;
+  border-radius: 2px;
+}

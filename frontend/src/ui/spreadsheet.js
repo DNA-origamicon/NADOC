@@ -25,20 +25,17 @@ import { recordNameEdit } from './name_edit_audit.js'
 
 // ── Column definitions ────────────────────────────────────────────────────
 
-const COLUMNS = [
-  { key: 'id',       label: 'ID',          toggleable: false, editable: false },
-  { key: 'name',     label: 'Name',        toggleable: false, editable: true  },
-  { key: 'start',    label: 'Start',       toggleable: false, editable: false },
-  { key: 'end',      label: 'End',         toggleable: false, editable: false },
-  { key: 'show',     label: 'Show',        toggleable: false, editable: false },
-  { key: 'ovhg_5p',  label: "5' Overhang", toggleable: true,  editable: true,  resizable: true },
-  { key: 'sequence',  label: 'Sequence',    toggleable: true,  editable: false, resizable: true },
-  { key: 'ovhg_3p',  label: "3' Overhang", toggleable: true,  editable: true,  resizable: true },
-  { key: 'group',     label: 'Group',       toggleable: true,  editable: false },
-  { key: 'color',     label: 'Color',       toggleable: true,  editable: false },
-  { key: 'length',    label: 'Length',      toggleable: true,  editable: false },
-  { key: 'notes',     label: 'Notes',       toggleable: true,  editable: true  },
-]
+import { initSequenceSearch } from './sequence_search.js'
+import { spreadsheetColumns } from './spreadsheet_schema.js'
+import {
+  DEFAULT_SPREADSHEET_SORT_ORDER,
+  initSpreadsheetSort,
+  readSpreadsheetSortOrder,
+} from './spreadsheet_sort.js'
+
+// ── Column definitions ────────────────────────────────────────────────────
+
+const COLUMNS = spreadsheetColumns({ includeViewerOnly: true })
 
 const LS_HEIGHT_KEY  = 'spreadsheet_height'
 const LS_COLS_KEY    = 'spreadsheet_cols'
@@ -49,11 +46,6 @@ const LS_WIDTHS_KEY  = 'spreadsheet_col_widths'
 // Resizable-column bounds (px). Widths persist per-column in localStorage.
 const MIN_COL_WIDTH = 60
 const MAX_COL_WIDTH = 1400
-
-// Strand sort: three priority slots, each picks one of these keys.
-const SORT_KEYS = ['group', 'color', 'length']
-const SORT_LABELS = { group: 'Group', color: 'Color', length: 'Length' }
-const DEFAULT_SORT_ORDER = ['group', 'color', 'length']
 
 const MIN_HEIGHT = 28   // tab only
 const TAB_HEIGHT = 28
@@ -358,7 +350,7 @@ function _renderHighlightedSequence(container, displaySeq, strand, design, selec
   }
 }
 
-function sortedStrands(design, strandColors, strandGroups, sortOrder = DEFAULT_SORT_ORDER, pins = null) {
+function sortedStrands(design, strandColors, strandGroups, sortOrder = DEFAULT_SPREADSHEET_SORT_ORDER, pins = null) {
   const strands  = design?.strands ?? []
   const scaffold = strands.filter(s => s.strand_type === 'scaffold')
   const staples  = strands.filter(s => s.strand_type !== 'scaffold')
@@ -404,8 +396,7 @@ export function getStapleColorOrder(state) {
   const design       = state?.currentDesign
   const strandColors = state?.strandColors ?? {}
   const strandGroups = state?.strandGroups ?? []
-  const stored       = (() => { try { return JSON.parse(localStorage.getItem(LS_SORT_KEY) ?? 'null') } catch { return null } })()
-  const sortOrder    = Array.isArray(stored) && stored.length ? stored : DEFAULT_SORT_ORDER
+  const sortOrder    = readSpreadsheetSortOrder(LS_SORT_KEY)
   const pins         = stapleColorPins(state)
   const ordered      = sortedStrands(design, strandColors, strandGroups, sortOrder, pins)
   const staples      = ordered.filter(s => s.strand_type !== 'scaffold')
@@ -515,49 +506,12 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
 
   if (!panel || !body) return
 
-  // ── Persistent sort priorities ────────────────────────────────────
-  // Three slots; each picks one of SORT_KEYS. Duplicates allowed
-  // (a later slot with the same key is just a tie-break no-op).
-  let sortOrder = [...DEFAULT_SORT_ORDER]
-  try {
-    const saved = JSON.parse(localStorage.getItem(LS_SORT_KEY) ?? 'null')
-    if (Array.isArray(saved) && saved.length === 3 && saved.every(k => SORT_KEYS.includes(k))) {
-      sortOrder = saved
-    }
-  } catch (_) { /* ignore */ }
-
-  function saveSortOrder() {
-    localStorage.setItem(LS_SORT_KEY, JSON.stringify(sortOrder))
-  }
-
-  // Sort-priority dropdowns: rendered before the column-toggle checkboxes.
-  const sortWrap = document.createElement('div')
-  sortWrap.className = 'sheet-sort-wrap'
-  const sortLabel = document.createElement('span')
-  sortLabel.className   = 'sheet-sort-label'
-  sortLabel.textContent = 'Sort:'
-  sortWrap.appendChild(sortLabel)
-  const sortSelects = []
-  for (let i = 0; i < 3; i++) {
-    const sel = document.createElement('select')
-    sel.className = 'sheet-sort-select'
-    sel.title     = `Sort priority ${i + 1}`
-    for (const key of SORT_KEYS) {
-      const opt = document.createElement('option')
-      opt.value       = key
-      opt.textContent = SORT_LABELS[key]
-      sel.appendChild(opt)
-    }
-    sel.value = sortOrder[i]
-    sel.addEventListener('change', () => {
-      sortOrder[i] = sel.value
-      saveSortOrder()
-      _rebuildTable(store.getState())
-    })
-    sortSelects.push(sel)
-    sortWrap.appendChild(sel)
-  }
-  toggleBar.parentNode.insertBefore(sortWrap, toggleBar)
+  const { order: sortOrder, element: sortWrap } = initSpreadsheetSort({
+    toolbar: toggleBar.parentNode,
+    before: toggleBar,
+    storageKey: LS_SORT_KEY,
+    onChange: () => _rebuildTable(store.getState()),
+  })
 
   // ── Shared datalist for group comboboxes ──────────────────────────
   const datalist = document.createElement('datalist')
@@ -633,6 +587,13 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     label.appendChild(document.createTextNode(col.label))
     toggleBar.appendChild(label)
   }
+
+  const sequenceSearch = initSequenceSearch({
+    toolbar: toggleBar.parentNode,
+    before: sortWrap,
+    tbody,
+    scrollContainer: body,
+  })
 
   // ── Panel height ──────────────────────────────────────────────────
   let panelHeight = 200
@@ -775,6 +736,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     tbody.innerHTML = ''
     if (!design) {
       _appendAssemblyLinkerRows(state, highlightedIds)
+      sequenceSearch.refresh()
       return
     }
 
@@ -855,6 +817,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
           }
           case 'ovhg_5p': {
             const d5 = strand.domains[0]
+            if (ovhg5p?.sequence) td.dataset.searchSequence = ovhg5p.sequence
             td.appendChild(_makeOverhangCell(ovhg5p, d5 ? domainLength(d5) : 0))
             td.addEventListener('contextmenu', e => {
               e.stopPropagation()
@@ -871,7 +834,8 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
             const displaySeq = _strandDisplaySequence(strand, design)
             if (displaySeq) {
               const span = document.createElement('span')
-              span.className = 'sheet-seq'
+              span.className = 'sheet-seq sheet-search-text'
+              td.dataset.searchSequence = displaySeq
               _renderHighlightedSequence(span, displaySeq, strand, design, selectedBases.get(strand.id))
               span.title = displaySeq
               td.appendChild(span)
@@ -927,6 +891,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
           }
           case 'ovhg_3p': {
             const d3 = strand.domains[strand.domains.length - 1]
+            if (ovhg3p?.sequence) td.dataset.searchSequence = ovhg3p.sequence
             td.appendChild(_makeOverhangCell(ovhg3p, d3 ? domainLength(d3) : 0))
             td.addEventListener('contextmenu', e => {
               e.stopPropagation()
@@ -966,6 +931,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
 
     _appendConnectionVersionRows(state)
     _appendAssemblyLinkerRows(state, highlightedIds)
+    sequenceSearch.refresh()
   }
 
   // ── Connection-version rows (design-mode candidate connections) ────────
@@ -1001,7 +967,12 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
           case 'end':   td.className = 'sheet-col-endpoint'; td.textContent = _label(v.overhang_b_id); break
           case 'sequence': {
             const span = document.createElement('span')
-            if (seq) { span.className = 'sheet-seq'; span.textContent = seq; span.title = seq }
+            if (seq) {
+              span.className = 'sheet-seq sheet-search-text'
+              span.textContent = seq
+              span.title = seq
+              td.dataset.searchSequence = seq
+            }
             else     { span.className = 'sheet-seq-none'; span.textContent = '(no sequence)' }
             td.appendChild(span)
             break
@@ -1110,9 +1081,10 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
             const seq = strand.sequence ?? ''
             if (seq) {
               const span = document.createElement('span')
-              span.className = 'sheet-seq'
+              span.className = 'sheet-seq sheet-search-text'
               span.textContent = seq
               span.title = seq
+              td.dataset.searchSequence = seq
               td.appendChild(span)
             } else {
               const span = document.createElement('span')

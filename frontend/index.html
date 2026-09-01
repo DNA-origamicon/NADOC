@@ -948,6 +948,32 @@
       align-items: center;
       flex-wrap: nowrap;
     }
+    .sheet-search-wrap {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex: 0 0 auto;
+    }
+    .sheet-search-input {
+      width: 150px;
+      height: 21px;
+      padding: 1px 6px;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      outline: none;
+      background: #0d1117;
+      color: #c9d1d9;
+      font: inherit;
+      user-select: text;
+    }
+    .sheet-search-input:focus { border-color: #58a6ff; }
+    .sheet-search-input[aria-invalid="true"] { border-color: #f85149; }
+    .sheet-search-status {
+      min-width: 38px;
+      color: #8b949e;
+      font-size: var(--text-xs);
+      white-space: nowrap;
+    }
     .sheet-sort-wrap {
       display: flex;
       align-items: center;
@@ -1046,6 +1072,20 @@
     #spreadsheet-table tr.sheet-selected td {
       background: #1a2f1a;
       outline: 1px solid #3fb950;
+    }
+    #spreadsheet-table td.sheet-search-result {
+      background: rgba(210, 153, 34, 0.13) !important;
+    }
+    #spreadsheet-table td.sheet-search-match {
+      background: rgba(210, 153, 34, 0.3) !important;
+      outline: 2px solid #d29922;
+      outline-offset: -2px;
+    }
+    #spreadsheet-table mark.sheet-search-highlight {
+      border-radius: 2px;
+      background: #f2cc60;
+      color: #0d1117;
+      font: inherit;
     }
     #spreadsheet-table tr.sheet-scaffold td {
       color: #29b6f6;
@@ -3192,6 +3232,7 @@
     .ohc-row-delete:hover { color: #f85149; }
   </style>
   <link rel="stylesheet" href="./src/styles/accessibility.css" />
+  <link rel="stylesheet" href="./src/styles/spreadsheet.css" />
 </head>
 <body>
 

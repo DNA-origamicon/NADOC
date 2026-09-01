@@ -17,23 +17,18 @@ import { recordNameEdit } from '../ui/name_edit_audit.js'
 
 // ── Column definitions ────────────────────────────────────────────────────
 
-const COLUMNS = [
-  { key: 'id',       label: 'ID',          toggleable: false, editable: false },
-  { key: 'name',     label: 'Name',        toggleable: false, editable: true  },
-  { key: 'start',    label: 'Start',       toggleable: false, editable: false },
-  { key: 'end',      label: 'End',         toggleable: false, editable: false },
-  { key: 'ovhg_5p',  label: "5' Overhang", toggleable: true,  editable: true  },
-  { key: 'sequence',  label: 'Sequence',    toggleable: true,  editable: false },
-  { key: 'ovhg_3p',  label: "3' Overhang", toggleable: true,  editable: true  },
-  { key: 'group',     label: 'Group',       toggleable: true,  editable: false },
-  { key: 'color',     label: 'Color',       toggleable: true,  editable: false },
-  { key: 'length',    label: 'Length',      toggleable: true,  editable: false },
-  { key: 'notes',     label: 'Notes',       toggleable: true,  editable: true  },
-]
+import { initSequenceSearch } from '../ui/sequence_search.js'
+import { spreadsheetColumns } from '../ui/spreadsheet_schema.js'
+import { DEFAULT_SPREADSHEET_SORT_ORDER, initSpreadsheetSort } from '../ui/spreadsheet_sort.js'
+
+// ── Column definitions ────────────────────────────────────────────────────
+
+const COLUMNS = spreadsheetColumns()
 
 const LS_HEIGHT_KEY  = 'editor_spreadsheet_height'
 const LS_COLS_KEY    = 'editor_spreadsheet_cols'
 const LS_OPEN_KEY    = 'editor_spreadsheet_open'
+const LS_SORT_KEY    = 'editor_spreadsheet_sort_order'
 
 const MIN_HEIGHT = 28   // tab only
 const TAB_HEIGHT = 28
@@ -166,7 +161,7 @@ function _strandDisplaySequence(strand, design) {
   return result || null
 }
 
-function sortedStrands(design) {
+function sortedStrands(design, sortOrder = DEFAULT_SPREADSHEET_SORT_ORDER) {
   ensureStapleColors(design)   // pin per-id colours before sorting by colour
   const strands  = design?.strands ?? []
   const scaffold = strands.filter(s => s.strand_type === 'scaffold')
@@ -177,9 +172,15 @@ function sortedStrands(design) {
     length: strandLength(s, design),
   }))
   withMeta.sort((a, b) => {
-    if (a.color < b.color) return -1
-    if (a.color > b.color) return 1
-    return a.length - b.length
+    for (const key of sortOrder) {
+      let cmp = 0
+      // The cadnano editor has no strand-group model, so every row is tied for
+      // the shared Group priority and falls through to the next priority.
+      if (key === 'color') cmp = a.color < b.color ? -1 : a.color > b.color ? 1 : 0
+      else if (key === 'length') cmp = a.length - b.length
+      if (cmp !== 0) return cmp
+    }
+    return 0
   })
   return [...scaffold, ...withMeta.map(m => m.strand)]
 }
@@ -211,6 +212,13 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
   const sheetToggle = document.getElementById('sheet-toggle')
 
   if (!panel || !body) return { update() {}, setSelectedStrands() {}, toggle() {} }
+
+  const { order: sortOrder, element: sortWrap } = initSpreadsheetSort({
+    toolbar: toggleBar.parentNode,
+    before: toggleBar,
+    storageKey: LS_SORT_KEY,
+    onChange: () => _rebuildTable(),
+  })
 
   // ── Track selected strand IDs (from pathview) ──────────────────
   let _selectedStrandIds = new Set()
@@ -245,6 +253,13 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
     label.appendChild(document.createTextNode(col.label))
     toggleBar.appendChild(label)
   }
+
+  const sequenceSearch = initSequenceSearch({
+    toolbar: toggleBar.parentNode,
+    before: sortWrap,
+    tbody,
+    scrollContainer: body,
+  })
 
   // ── Panel height ──────────────────────────────────────────────────
   let panelHeight = 200
@@ -325,6 +340,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
       if (col.toggleable && hiddenCols.has(col.key)) continue
       const th = document.createElement('th')
       th.textContent = col.label
+      th.dataset.col = col.key
       if (col.key === 'id') th.className = 'sheet-col-id'
       if (col.key === 'start' || col.key === 'end') th.className = 'sheet-col-endpoint'
       theadRow.appendChild(th)
@@ -339,9 +355,12 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
     const design = _design
     recordNameEdit('editor-rebuild', { activeStrandId: document.activeElement?.closest?.('tr')?.dataset?.strandId ?? null })
     tbody.innerHTML = ''
-    if (!design?.strands?.length) return
+    if (!design?.strands?.length) {
+      sequenceSearch.refresh()
+      return
+    }
 
-    const strands = sortedStrands(design)
+    const strands = sortedStrands(design, sortOrder)
     const displayIds = buildStrandDisplayIdMap(design.strands)
     const helixIndex = Object.fromEntries((design.helices ?? []).map((h, i) => [h.id, h.label ?? i]))
 
@@ -366,6 +385,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
       for (const col of COLUMNS) {
         if (col.toggleable && hiddenCols.has(col.key)) continue
         const td = document.createElement('td')
+        td.dataset.col = col.key
 
         switch (col.key) {
           case 'id': {
@@ -394,6 +414,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
           }
           case 'ovhg_5p': {
             const d5 = strand.domains[0]
+            if (ovhg5p?.sequence) td.dataset.searchSequence = ovhg5p.sequence
             td.appendChild(_makeOverhangCell(ovhg5p, d5 ? domainLength(d5) : 0))
             break
           }
@@ -401,9 +422,10 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
             const displaySeq = _strandDisplaySequence(strand, design)
             if (displaySeq) {
               const span = document.createElement('span')
-              span.className = 'sheet-seq'
+              span.className = 'sheet-seq sheet-search-text'
               span.textContent = displaySeq
               span.title = displaySeq
+              td.dataset.searchSequence = displaySeq
               td.appendChild(span)
             } else {
               const len = strandLength(strand, design)
@@ -434,6 +456,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
           }
           case 'ovhg_3p': {
             const d3 = strand.domains[strand.domains.length - 1]
+            if (ovhg3p?.sequence) td.dataset.searchSequence = ovhg3p.sequence
             td.appendChild(_makeOverhangCell(ovhg3p, d3 ? domainLength(d3) : 0))
             break
           }
@@ -462,6 +485,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
 
       tbody.appendChild(tr)
     })
+    sequenceSearch.refresh()
   }
 
   // ── Color picker cell ─────────────────────────────────────────────
@@ -672,7 +696,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
   // ── Highlight selected rows ───────────────────────────────────────
   function _applyHighlights() {
     if (!_design?.strands?.length) return
-    const strands = sortedStrands(_design)
+    const strands = sortedStrands(_design, sortOrder)
     for (let i = 0; i < strands.length; i++) {
       const row = tbody.children[i]
       if (!row) continue
@@ -698,7 +722,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEd
       _applyHighlights()
       // Scroll the first selected row into view
       if (strandIds.length > 0) {
-        const strands = sortedStrands(_design)
+        const strands = sortedStrands(_design, sortOrder)
         for (let i = 0; i < strands.length; i++) {
           if (_selectedStrandIds.has(strands[i].id)) {
             const row = tbody.children[i]
