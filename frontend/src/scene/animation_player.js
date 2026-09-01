@@ -203,12 +203,13 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   }
 
   /** Apply a spin to (position, up) about (center, axis) for the given angle in radians. */
-  function _applySpinTo(position, up, center, axis, angleRad) {
+  function _applySpinTo(position, target, up, center, axis, angleRad) {
     const e = new THREE.Vector3(0, 0, 0)
     e[axis] = 1
     const rel = position.clone().sub(center).applyAxisAngle(e, angleRad).add(center)
+    const newTarget = target.clone().sub(center).applyAxisAngle(e, angleRad).add(center)
     const newUp = up.clone().applyAxisAngle(e, angleRad).normalize()
-    return { position: rel, up: newUp }
+    return { position: rel, target: newTarget, up: newUp }
   }
 
   /** Resolve a keyframe's target state using stored camera poses and feature log replay. */
@@ -270,22 +271,25 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       const holdDur  = Math.max(0, kf.hold_duration_s)
       const toFLI    = kf.feature_log_index ?? prevFLI   // carry forward if null
 
-      // Spin: camera orbits _spinCenter for the full segment. Pre-compute the
-      // endpoint pose so subsequent keyframes lerp from the post-spin position.
+      // Spin composes on top of the keyframe's selected camera pose. Pre-compute
+      // the endpoint so subsequent keyframes start from the posed + spun camera.
       let spin = null
       if (kf.spin_axis && Number.isFinite(kf.spin_rotations) && kf.spin_rotations !== 0) {
         const center  = _spinCenter ?? controls.target.clone()
-        const basePos = prevState.position.clone()
-        const baseUp  = (prevState.up ?? camera.up).clone()
+        const basePos = (toState.position ?? prevState.position).clone()
+        const baseTarget = (toState.target ?? prevState.target).clone()
+        const baseUp  = (toState.up ?? prevState.up ?? camera.up).clone()
         const totalAngle = kf.spin_rotations * 2 * Math.PI * (kf.spin_invert ? -1 : 1)
-        spin = { axis: kf.spin_axis, totalAngle, center, basePos, baseUp }
-        const end = _applySpinTo(basePos, baseUp, center, kf.spin_axis, totalAngle)
-        // Overwrite toState's camera fields with the post-spin pose so the
-        // following segment's "from" state is the spin endpoint, not a saved pose.
+        spin = {
+          axis: kf.spin_axis, totalAngle, center,
+          posePosition: basePos.clone(), poseTarget: baseTarget.clone(), poseUp: baseUp.clone(),
+          poseFov: toState.fov ?? prevState.fov,
+        }
+        const end = _applySpinTo(basePos, baseTarget, baseUp, center, kf.spin_axis, totalAngle)
         toState.position = end.position
-        toState.target   = center.clone()
+        toState.target   = end.target
         toState.up       = end.up
-        toState.fov      = prevState.fov   // hold fov across spin
+        toState.fov      = toState.fov ?? prevState.fov
       }
 
       // Trajectory keyframe: play frames [start,end] of a simulation job across this
@@ -859,18 +863,26 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     // freely while the design topology + clusters keep playing.
     if (!_disablePoses) {
       if (seg.spin) {
-        // Spin: linear orbit around the model centroid for the entire segment
-        // (transition + hold). Override pose lerp.
+        // First resolve the ordinary saved-pose transition, then rotate that
+        // camera state about the model centroid. Pose and spin are independent.
         const segDur = Math.max(0, seg.endT - seg.startT)
         const spinT  = segDur > 0 ? Math.min(1, Math.max(0, (elapsed - seg.startT) / segDur)) : 1
         const angle  = seg.spin.totalAngle * spinT
-        const out    = _applySpinTo(seg.spin.basePos, seg.spin.baseUp, seg.spin.center, seg.spin.axis, angle)
+        const basePos = seg.spin.posePosition
+          ? new THREE.Vector3().lerpVectors(fromState.position, seg.spin.posePosition, t)
+          : fromState.position.clone()
+        const baseTarget = seg.spin.poseTarget
+          ? new THREE.Vector3().lerpVectors(fromState.target, seg.spin.poseTarget, t)
+          : fromState.target.clone()
+        const baseUp = seg.spin.poseUp
+          ? new THREE.Vector3().lerpVectors(fromState.up, seg.spin.poseUp, t).normalize()
+          : fromState.up.clone()
+        const out = _applySpinTo(basePos, baseTarget, baseUp, seg.spin.center, seg.spin.axis, angle)
         camera.position.copy(out.position)
-        controls.target.copy(seg.spin.center)
+        controls.target.copy(out.target)
         camera.up.copy(out.up)
-        // fov: hold whatever the previous keyframe ended on
-        if (!_lockFov && fromState.fov != null) {
-          camera.fov = fromState.fov
+        if (!_lockFov && seg.spin.poseFov != null && fromState.fov != null) {
+          camera.fov = fromState.fov + (seg.spin.poseFov - fromState.fov) * t
           camera.updateProjectionMatrix()
         }
       } else {

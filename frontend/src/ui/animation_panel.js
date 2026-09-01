@@ -1190,14 +1190,14 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     poseLbl.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0'
 
     const poseSelect = document.createElement('select')
+    poseSelect.dataset.role = 'keyframe-pose'
     poseSelect.style.cssText = [
       'flex:1;min-width:0;box-sizing:border-box',
       'background:#0d1117;border:1px solid #30363d;border-radius:3px',
       'color:#c9d1d9;padding:3px 3px;font-size:var(--text-xs)',
     ].join(';')
 
-    // Build options: blank "none" + all saved poses + spin (centroid orbit)
-    const SPIN_VALUE = '__spin__'
+    // Pose and spin are independent channels: this selector controls framing only.
     const noneOpt = document.createElement('option')
     noneOpt.value = ''; noneOpt.textContent = '— no camera move —'
     poseSelect.appendChild(noneOpt)
@@ -1206,15 +1206,26 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       opt.value = p.id; opt.textContent = p.name
       poseSelect.appendChild(opt)
     }
-    const spinOpt = document.createElement('option')
-    spinOpt.value = SPIN_VALUE; spinOpt.textContent = 'Spin (model centroid)'
-    poseSelect.appendChild(spinOpt)
     const _isSpin = (k) => k.spin_axis != null
-    poseSelect.value = _isSpin(kf) ? SPIN_VALUE : (kf.camera_pose_id ?? '')
+    poseSelect.value = kf.camera_pose_id ?? ''
 
-    // ── Spin sub-controls (axis + rotations) — visible only when Spin chosen ─
+    // ── Independent spin toggle + controls ─────────────────────────────────
+    const spinToggleRow = document.createElement('label')
+    spinToggleRow.className = 'anim-kf-spin-toggle'
+    spinToggleRow.style.cssText = 'display:flex;align-items:center;gap:6px;padding-left:18px;font-size:var(--text-xs);color:#8b949e;cursor:pointer'
+    spinToggleRow.title = 'Orbit the camera around the model while retaining the selected pose perspective'
+    const spinEnabled = document.createElement('input')
+    spinEnabled.type = 'checkbox'
+    spinEnabled.dataset.role = 'keyframe-spin-enabled'
+    spinEnabled.checked = _isSpin(kf)
+    spinEnabled.style.cssText = 'margin:0;cursor:pointer'
+    const spinToggleText = document.createElement('span')
+    spinToggleText.textContent = 'Spin'
+    spinToggleRow.append(spinEnabled, spinToggleText)
+
     const spinRow = document.createElement('div')
-    spinRow.style.cssText = 'display:flex;align-items:center;gap:5px;padding-left:18px'
+    spinRow.className = 'anim-kf-spin-controls'
+    spinRow.style.cssText = 'display:flex;align-items:center;gap:5px;padding-left:38px'
     spinRow.style.display = _isSpin(kf) ? 'flex' : 'none'
 
     const spinAxisLbl = document.createElement('span')
@@ -1299,25 +1310,33 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     poseSelect.addEventListener('keydown', e => e.stopPropagation())
     poseSelect.addEventListener('change', async () => {
       const val = poseSelect.value
-      let patch
-      if (val === SPIN_VALUE) {
-        // Enable spin: clear camera_pose_id, default axis/rotations if blank.
-        const newAxis = kf.spin_axis ?? 'z'
-        const newRots = (kf.spin_rotations && kf.spin_rotations !== 0) ? kf.spin_rotations : 1.0
-        patch = { camera_pose_id: null, spin_axis: newAxis, spin_rotations: newRots }
-        axisSel.value = newAxis
-        rotsInp.value = String(newRots)
-        spinRow.style.display = 'flex'
-      } else {
-        // Disable spin and either clear (val='') or set a saved pose id.
-        patch = { camera_pose_id: val || null, spin_axis: null, spin_rotations: 0 }
-        spinRow.style.display = 'none'
-      }
+      const patch = { camera_pose_id: val || null }
       if (_partMode) {
         await _partPatchFn(d => {
           const a = d.animations?.find(a => a.id === _activeAnimId)
           if (!a) return
           const k = a.keyframes?.find(k => k.id === kf.id)
+          if (k) Object.assign(k, patch)
+        })
+      } else {
+        await _api(api.updateKeyframe, api.updateAssemblyKeyframe)(_activeAnimId, kf.id, patch)
+      }
+    })
+
+    spinEnabled.addEventListener('keydown', e => e.stopPropagation())
+    spinEnabled.addEventListener('change', async () => {
+      const enabled = spinEnabled.checked
+      const newAxis = kf.spin_axis ?? axisSel.value ?? 'z'
+      const newRots = (kf.spin_rotations && kf.spin_rotations !== 0) ? kf.spin_rotations : 1.0
+      const patch = enabled
+        ? { spin_axis: newAxis, spin_rotations: newRots }
+        : { spin_axis: null }
+      spinRow.style.display = enabled ? 'flex' : 'none'
+      if (enabled) { axisSel.value = newAxis; rotsInp.value = String(newRots) }
+      if (_partMode) {
+        await _partPatchFn(d => {
+          const a = d.animations?.find(a => a.id === _activeAnimId)
+          const k = a?.keyframes?.find(k => k.id === kf.id)
           if (k) Object.assign(k, patch)
         })
       } else {
@@ -1509,7 +1528,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       }
     }
 
-    row.append(topRow, poseRow, spinRow, cfgRow)
+    row.append(topRow, poseRow, spinToggleRow, spinRow, cfgRow)
     if (bindingsRow) row.append(bindingsRow)
     row.append(timingRow)
     return row

@@ -31,7 +31,7 @@ function geoAt(pos) {
   return { nucleotides_compact: compact, helix_axes }
 }
 
-function makeHarness({ design, clusterTransforms = [] } = {}) {
+function makeHarness({ design, clusterTransforms = [], cameraPoses = [] } = {}) {
   const calls = { arc: [], extArc: [], xover: [], lerp: [], order: [] }
 
   const helixCtrl = {
@@ -65,7 +65,7 @@ function makeHarness({ design, clusterTransforms = [] } = {}) {
   const player = initAnimationPlayer({
     camera,
     controls,
-    getCameraPoses:       () => [],
+    getCameraPoses:       () => cameraPoses,
     getDesign:            () => design,
     getClusterTransforms: () => clusterTransforms,
     getHelixCtrl:         () => helixCtrl,
@@ -87,17 +87,46 @@ function makeHarness({ design, clusterTransforms = [] } = {}) {
     onTextOverlayUpdate: () => {},
   })
 
-  return { player, calls, helixCtrl, unfoldView, designRenderer, trajectoryKeyframes }
+  return { player, calls, helixCtrl, unfoldView, designRenderer, trajectoryKeyframes, camera, controls }
 }
 
-const design = (cursor = 3) => ({
-  helices: HELICES.map(id => ({ id })),
-  feature_log: [],
-  feature_log_cursor: cursor,
-  cluster_transforms: [],
-  strands: [],
-  overhang_connections: [],
+describe('independent pose + spin camera channels', () => {
+  it('uses the selected pose as the spin perspective instead of clearing/ignoring it', async () => {
+    const pose = { id: 'perspective', position: [10, 0, 0], target: [0, 0, 0], up: [0, 1, 0], fov: 30 }
+    const h = makeHarness({ design: design(0), cameraPoses: [pose] })
+    const animation = {
+      id: 'a', name: 'A', fps: 30, loop: false,
+      keyframes: [{
+        id: 'k', camera_pose_id: 'perspective', feature_log_index: 0,
+        transition_duration_s: 1, hold_duration_s: 1, easing: 'linear',
+        spin_axis: 'z', spin_rotations: 0.25, spin_invert: false,
+      }],
+    }
+
+    await h.player.play(animation)
+    h.player.seekTo(2)
+
+    // Baked centroid is [0.5, 0.5, 0]. A quarter-turn of the selected pose
+    // around it produces these values; spinning the live/default camera cannot.
+    expect(h.camera.position.x).toBeCloseTo(1, 5)
+    expect(h.camera.position.y).toBeCloseTo(10, 5)
+    expect(h.controls.target.x).toBeCloseTo(1, 5)
+    expect(h.controls.target.y).toBeCloseTo(0, 5)
+    expect(h.camera.fov).toBeCloseTo(30, 5)
+    h.player.stop()
+  })
 })
+
+function design(cursor = 3) {
+  return {
+    helices: HELICES.map(id => ({ id })),
+    feature_log: [],
+    feature_log_cursor: cursor,
+    cluster_transforms: [],
+    strands: [],
+    overhang_connections: [],
+  }
+}
 
 const kf = (extra = {}) => ({
   id: `kf${Math.random()}`.slice(0, 8),

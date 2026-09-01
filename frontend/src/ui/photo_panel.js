@@ -8,11 +8,34 @@
  */
 
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
+import { showConfirm } from './primitives/confirm.js'
 import { PRESET_LABELS } from '../scene/photo_renderer/material_presets.js'
 import { trajectoryJobs } from '../scene/trajectory_keyframes.js'
 import { trajectorySamplingPlan } from '../scene/trajectory_range.js'
 import { planExportPhases, beginExportSession, endExportSession }
   from '../scene/export_progress.js'
+
+const PROFILES_KEY = 'nadoc.photoProfiles.v1'
+const ACTIVE_PROFILE_KEY = 'nadoc.photoActiveProfile.v1'
+
+export function loadPhotoProfiles() {
+  try {
+    const value = JSON.parse(localStorage.getItem(PROFILES_KEY) || '{}')
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+  } catch { return {} }
+}
+
+function _savePhotoProfiles(profiles) {
+  try { localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles)) } catch {}
+}
+
+function _activeProfileName() {
+  try { return localStorage.getItem(ACTIVE_PROFILE_KEY) || '' } catch { return '' }
+}
+
+function _setActiveProfileName(name) {
+  try { localStorage.setItem(ACTIVE_PROFILE_KEY, name) } catch {}
+}
 
 /** B-DNA duplex diameter — the feature a shadow map has to resolve to be useful. */
 export const DUPLEX_NM = 2.0
@@ -208,9 +231,172 @@ export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVi
     videoBtn:    $('photo-video-btn'),
     bgType:  $('photo-bg-type'),
     bgColor: $('photo-bg-color'),
+    profileSelect: $('photo-profile-select'),
+    profileNew:    $('photo-profile-new'),
+    profileRename: $('photo-profile-rename'),
+    profileDelete: $('photo-profile-delete'),
+    profileReset:  $('photo-profile-reset'),
+    profileStatus: $('photo-profile-status'),
   }
 
   let _statusTimer = null
+  let _persistTimer = null
+  const factorySettings = photoMode.getSettings()
+
+  function _applyProfile(settings) {
+    if (!settings) return
+    const call = (key, method, ...args) => {
+      if (settings[key] !== undefined) photoMode[method]?.(settings[key], ...args)
+    }
+    for (const repr of ['full', 'cylinders', 'surface', 'atomistic']) {
+      if (settings[repr] !== undefined) photoMode.setMaterialPreset(repr, settings[repr])
+    }
+    if (settings.bgType !== undefined || settings.bgColor !== undefined) {
+      photoMode.setBackground(settings.bgType, settings.bgColor)
+    }
+    call('pinLights', 'setPinLights')
+    call('studioEnvironment', 'setStudioEnvironment')
+    call('studioEnvironmentIntensity', 'setStudioEnvironmentIntensity')
+    call('studioEnvironmentRotation', 'setStudioEnvironmentRotation')
+    call('keyShadowMapSize', 'setKeyShadowMapSize')
+    call('keyShadowBias', 'setKeyShadowBias')
+    call('shadowStrength', 'setShadowStrength')
+    call('keyAzimuth', 'setKeyAzimuth')
+    call('keyElevation', 'setKeyElevation')
+    call('keyIntensity', 'setKeyIntensity')
+    call('fillIntensity', 'setFillIntensity')
+    call('ambientIntensity', 'setAmbientIntensity')
+    call('keyShadow', 'setKeyShadow')
+    call('floorAxis', 'setFloorAxis')
+    call('floorOpacity', 'setFloorOpacity')
+    call('floorOffset', 'setFloorOffset')
+    call('floor', 'setFloor')
+    call('outlineColor', 'setOutlineColor')
+    call('outlineStrength', 'setOutlineStrength')
+    call('outlineThickness', 'setOutlineThickness')
+    call('outlineDepthJump', 'setOutlineDepthJump')
+    call('outline', 'setOutline')
+    call('depthCueColor', 'setDepthCueColor')
+    call('depthCueStrength', 'setDepthCueStrength')
+    call('depthCue', 'setDepthCue')
+    if (settings.fov != null) photoMode.setFOV(settings.fov)
+    else if (settings.parallel !== undefined) photoMode.setParallel(settings.parallel)
+    if (settings.exportWidth !== undefined || settings.exportHeight !== undefined) {
+      photoMode.setExportSize(settings.exportWidth, settings.exportHeight)
+    }
+    syncToState()
+  }
+
+  function _populateProfiles() {
+    if (!els.profileSelect) return
+    const profiles = loadPhotoProfiles()
+    const active = _activeProfileName()
+    els.profileSelect.innerHTML = ''
+    for (const name of Object.keys(profiles).sort((a, b) => a.localeCompare(b))) {
+      const option = document.createElement('option')
+      option.value = name
+      option.textContent = name
+      option.selected = name === active
+      els.profileSelect.appendChild(option)
+    }
+    if (els.profileStatus) els.profileStatus.textContent = active ? `Active: ${active} · changes save automatically` : ''
+  }
+
+  function _ensureProfile() {
+    const profiles = loadPhotoProfiles()
+    const names = Object.keys(profiles)
+    if (!names.length) {
+      profiles.Default = { ...factorySettings }
+      _savePhotoProfiles(profiles)
+      _setActiveProfileName('Default')
+    } else if (!profiles[_activeProfileName()]) {
+      _setActiveProfileName(names.sort()[0])
+    }
+    _populateProfiles()
+  }
+
+  function _persistActiveProfile() {
+    const name = _activeProfileName()
+    if (!name) return
+    const profiles = loadPhotoProfiles()
+    profiles[name] = photoMode.getSettings()
+    _savePhotoProfiles(profiles)
+    if (els.profileStatus) els.profileStatus.textContent = `Active: ${name} · saved`
+  }
+
+  function _schedulePersist() {
+    clearTimeout(_persistTimer)
+    _persistTimer = setTimeout(() => { _persistTimer = null; _persistActiveProfile() }, 250)
+  }
+
+  _ensureProfile()
+
+  els.profileSelect?.addEventListener('change', () => {
+    const name = els.profileSelect.value
+    if (!name) return
+    _setActiveProfileName(name)
+    _applyProfile(loadPhotoProfiles()[name])
+    _populateProfiles()
+  })
+
+  els.profileNew?.addEventListener('click', async () => {
+    const profiles = loadPhotoProfiles()
+    const name = prompt('New profile name:', `Profile ${Object.keys(profiles).length + 1}`)?.trim()
+    if (!name) return
+    if (profiles[name] && !await showConfirm({ title: 'Overwrite profile', message: `Profile "${name}" already exists. Overwrite?`, confirmLabel: 'Overwrite' })) return
+    profiles[name] = photoMode.getSettings()
+    _savePhotoProfiles(profiles)
+    _setActiveProfileName(name)
+    _populateProfiles()
+  })
+
+  els.profileRename?.addEventListener('click', async () => {
+    const oldName = _activeProfileName()
+    const name = prompt(`Rename "${oldName}" to:`, oldName)?.trim()
+    if (!oldName || !name || name === oldName) return
+    const profiles = loadPhotoProfiles()
+    if (profiles[name] && !await showConfirm({ title: 'Overwrite profile', message: `Profile "${name}" already exists. Overwrite?`, confirmLabel: 'Overwrite' })) return
+    profiles[name] = profiles[oldName]
+    delete profiles[oldName]
+    _savePhotoProfiles(profiles)
+    _setActiveProfileName(name)
+    _populateProfiles()
+  })
+
+  els.profileDelete?.addEventListener('click', async () => {
+    const name = _activeProfileName()
+    if (!name || !await showConfirm({ title: 'Delete profile', message: `Delete profile "${name}"?`, confirmLabel: 'Delete', danger: true })) return
+    const profiles = loadPhotoProfiles()
+    delete profiles[name]
+    const next = Object.keys(profiles).sort()[0]
+    if (next) {
+      _setActiveProfileName(next)
+      _applyProfile(profiles[next])
+    } else {
+      profiles.Default = { ...factorySettings }
+      _setActiveProfileName('Default')
+      _applyProfile(profiles.Default)
+    }
+    _savePhotoProfiles(profiles)
+    _populateProfiles()
+  })
+
+  els.profileReset?.addEventListener('click', async () => {
+    if (!await showConfirm({ title: 'Reset Photomode profile', message: 'Reset the active profile to Photomode defaults?', confirmLabel: 'Reset' })) return
+    _applyProfile(factorySettings)
+    _persistActiveProfile()
+  })
+
+  // All ordinary controls bubble input/change after their renderer setter runs.
+  // This keeps the active profile current without duplicating persistence in
+  // every individual control handler.
+  const _persistFromControl = event => {
+    if (!event.target?.id?.startsWith('photo-') || event.target.id.startsWith('photo-profile-')) return
+    _schedulePersist()
+  }
+  for (const eventName of ['input', 'change']) {
+    document.addEventListener(eventName, _persistFromControl)
+  }
 
   function _refreshStatus() {
     if (els.status) els.status.textContent = formatShadowStatus(photoMode.getStatus())
@@ -462,6 +648,7 @@ export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVi
     photoMode.setFillIntensity(0)
     photoMode.setAmbientIntensity(0.15)
     syncToState()
+    _schedulePersist()
   })
 
   els.bgType?.addEventListener('change', () => {
@@ -771,12 +958,18 @@ export function initPhotoPanel(photoMode, { onExit, store, player, exportPhotoVi
   els.keyDirReset?.addEventListener('click', () => {
     photoMode.resetKeyDirection()
     syncToState()
+    _schedulePersist()
   })
 
   return {
     syncToState,
-    onEnter: () => { syncToState(); _refreshAnimList(); _startStatusPolling() },
+    applyActiveProfile: () => _applyProfile(loadPhotoProfiles()[_activeProfileName()]),
+    onEnter: () => { _applyProfile(loadPhotoProfiles()[_activeProfileName()]); _refreshAnimList(); _startStatusPolling() },
     onExit:  () => { _stopStatusPolling() },
-    dispose: _stopStatusPolling,
+    dispose: () => {
+      _stopStatusPolling()
+      clearTimeout(_persistTimer)
+      for (const eventName of ['input', 'change']) document.removeEventListener(eventName, _persistFromControl)
+    },
   }
 }

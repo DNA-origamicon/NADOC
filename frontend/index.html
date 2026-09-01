@@ -2080,10 +2080,22 @@
       pointer-events: all;
     }
     #welcome-screen.hidden { display: none; }
+    .welcome-animation-bg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      pointer-events: none;
+      user-select: none;
+    }
+    #welcome-box { position: relative; z-index: 1; }
     #welcome-box {
       display: flex;
       flex-direction: column;
       align-items: center;
+      width: min(520px, calc(100% - 24px));
       gap: 10px;
       font-family: monospace;
     }
@@ -2101,7 +2113,18 @@
     }
     /* ── Library panel (mounts inside #welcome-box) ─── */
     #library-panel-mount {
-      width: 520px;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 18px;
+      border: 1px solid rgba(139, 148, 158, 0.42);
+      border-radius: 12px;
+      background: rgba(13, 17, 23, 0.62);
+      -webkit-backdrop-filter: blur(28px) saturate(0.72);
+      backdrop-filter: blur(28px) saturate(0.72);
+      box-shadow:
+        0 22px 60px rgba(0, 0, 0, 0.68),
+        inset 0 1px 0 rgba(255, 255, 255, 0.07),
+        0 0 0 1px rgba(0, 0, 0, 0.38);
     }
     .lib-actions {
       display: flex;
@@ -2117,6 +2140,7 @@
       border-radius: 5px;
       cursor: pointer;
       border: 1px solid transparent;
+      opacity: 1;
     }
     .lib-btn-primary {
       background: #1f6feb;
@@ -2205,7 +2229,7 @@
       padding: 0;
       border: 1px solid #30363d;
       border-radius: 4px;
-      background: transparent;
+      background: #0d1117;
       color: #8b949e;
       font-size: 13px;
       line-height: 1;
@@ -2284,7 +2308,7 @@
       border: 1px solid #21262d;
       border-radius: 5px;
       padding: 4px;
-      background: rgba(0, 0, 0, 0.18);
+      background: #0d1117;
     }
     .lib-tree-row {
       display: flex;
@@ -2933,6 +2957,7 @@
     }
     @media (prefers-reduced-motion: reduce) {
       .ox-export-bar--indeterminate { animation: none; }
+      .welcome-animation-bg { display: none; }
     }
 
     /* ── Autostaple progress popup ───────────────────────────────────── */
@@ -6733,6 +6758,23 @@
             inactive
           </div>
 
+          <!-- Named settings profiles. The active profile is auto-saved as the
+               controls change and restored on the next browser reload. -->
+          <div style="padding:8px 14px;border-bottom:1px solid #21262d;display:flex;flex-direction:column;gap:4px">
+            <div class="pxr-row">
+              <span class="pxr-lbl">Profile</span>
+              <select id="photo-profile-select" class="pxr-sel" title="Saved Photomode settings profile"></select>
+              <button id="photo-profile-new" class="pxr-btn" title="Create a profile from the current settings">+</button>
+              <button id="photo-profile-rename" class="pxr-btn" title="Rename the current profile">✎</button>
+              <button id="photo-profile-delete" class="pxr-btn" title="Delete the current profile">×</button>
+            </div>
+            <div class="pxr-row">
+              <span class="pxr-lbl"></span>
+              <button id="photo-profile-reset" class="pxr-btn" style="flex:1" title="Reset the active profile to Photomode defaults">Reset to defaults</button>
+            </div>
+            <div id="photo-profile-status" class="pxr-note"></div>
+          </div>
+
           <!-- Cards use the SAME .ox-card component as the Simulations tab
                (styles/components.css): a transparent border with a double
                background — a faint fill on padding-box plus a top→bottom
@@ -7350,6 +7392,7 @@
 
           <!-- Library screen — shown on startup and when no session is active -->
           <div id="welcome-screen">
+            <img class="welcome-animation-bg" src="/assets/welcome-background.gif" alt="" aria-hidden="true">
             <div id="welcome-box">
               <div id="welcome-logo">NADOC</div>
               <div id="welcome-sub">Not Another DNA Origami CAD</div>

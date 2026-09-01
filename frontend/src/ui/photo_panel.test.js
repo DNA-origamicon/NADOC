@@ -117,6 +117,12 @@ describe('VIDEO_RES_PRESETS', () => {
 const PANEL_IDS = {
   'photo-exit-btn':               'button',
   'photo-status':                 'div',
+  'photo-profile-select':         'select',
+  'photo-profile-new':            'button',
+  'photo-profile-rename':         'button',
+  'photo-profile-delete':         'button',
+  'photo-profile-reset':          'button',
+  'photo-profile-status':         'div',
   'photo-pin-lights':             'input',
   'photo-studio-environment':     'input',
   'photo-studio-environment-controls': 'div',
@@ -247,6 +253,8 @@ describe('initPhotoPanel', () => {
 
   beforeEach(() => {
     vi.useFakeTimers()
+    localStorage.removeItem('nadoc.photoProfiles.v1')
+    localStorage.removeItem('nadoc.photoActiveProfile.v1')
     els = mountIds(PANEL_IDS)
     for (const id of ['photo-pin-lights', 'photo-studio-environment', 'photo-key-shadow',
                       'photo-outline', 'photo-depthcue',
@@ -288,6 +296,40 @@ describe('initPhotoPanel', () => {
     expect(els['photo-studio-environment'].checked).toBe(true)
     expect(els['photo-studio-environment-intensity-label'].textContent).toBe('1.00')
     expect(els['photo-studio-environment-rotation-label'].textContent).toBe('0°')
+  })
+
+  it('creates a durable default profile on first use', () => {
+    const profiles = JSON.parse(localStorage.getItem('nadoc.photoProfiles.v1'))
+    expect(profiles.Default.keyIntensity).toBe(2)
+    expect(localStorage.getItem('nadoc.photoActiveProfile.v1')).toBe('Default')
+    expect(els['photo-profile-select'].value).toBe('Default')
+  })
+
+  it('restores the active profile through the current Photomode setters', () => {
+    localStorage.setItem('nadoc.photoProfiles.v1', JSON.stringify({ Saved: {
+      keyIntensity: 3.25, keyAzimuth: -45, full: 'metallic',
+      outline: true, fov: 24, bgType: 'transparent', bgColor: '#123456',
+    } }))
+    localStorage.setItem('nadoc.photoActiveProfile.v1', 'Saved')
+
+    panel.applyActiveProfile()
+
+    expect(mode.setKeyIntensity).toHaveBeenLastCalledWith(3.25)
+    expect(mode.setKeyAzimuth).toHaveBeenLastCalledWith(-45)
+    expect(mode.setMaterialPreset).toHaveBeenLastCalledWith('full', 'metallic')
+    expect(mode.setOutline).toHaveBeenLastCalledWith(true)
+    expect(mode.setFOV).toHaveBeenLastCalledWith(24)
+    expect(mode.setBackground).toHaveBeenLastCalledWith('transparent', '#123456')
+  })
+
+  it('auto-saves changed settings into the active profile', () => {
+    mode.getSettings = () => ({ ...makeMode().getSettings(), keyIntensity: 3.5 })
+    els['photo-key-intensity'].dispatchEvent(new Event('input', { bubbles: true }))
+    vi.advanceTimersByTime(250)
+
+    const profiles = JSON.parse(localStorage.getItem('nadoc.photoProfiles.v1'))
+    expect(profiles.Default.keyIntensity).toBe(3.5)
+    expect(els['photo-profile-status'].textContent).toContain('saved')
   })
 
   it('wires studio ambient reflections, strength, and rotation', () => {

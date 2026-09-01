@@ -17,6 +17,10 @@ test('welcome library controls are spaced as actions, location tabs, and sort ut
   await page.setViewportSize({ width: 1280, height: 900 })
   await openWelcomeWithPeers(page)
 
+  const background = page.locator('.welcome-animation-bg')
+  await expect(background).toHaveAttribute('aria-hidden', 'true')
+  await expect(background).toHaveAttribute('src', '/assets/welcome-background.gif')
+  await expect.poll(() => background.evaluate(image => image.complete && image.naturalWidth > 0)).toBe(true)
   const actions = page.locator('.lib-actions')
   const nav = page.locator('.lib-library-nav')
   const sortBar = page.locator('.lib-sort-bar')
@@ -38,6 +42,35 @@ test('welcome library controls are spaced as actions, location tabs, and sort ut
   const tabBoxes = await tabs.evaluateAll(items => items.map(item => item.getBoundingClientRect().toJSON()))
   expect(new Set(tabBoxes.map(box => box.y)).size).toBe(1)
   expect(tabBoxes.every(box => box.height >= 28)).toBe(true)
+
+  const [welcomeBox, backgroundBox, treeBg, primaryBg, trashBg] = await Promise.all([
+    page.locator('#welcome-screen').boundingBox(),
+    background.boundingBox(),
+    page.locator('.lib-tree').evaluate(el => getComputedStyle(el).backgroundColor),
+    page.locator('.lib-btn-primary').evaluate(el => getComputedStyle(el).backgroundColor),
+    page.locator('.lib-trash-icon-btn').evaluate(el => getComputedStyle(el).backgroundColor),
+  ])
+  expect(backgroundBox.width).toBeCloseTo(welcomeBox.width, 0)
+  expect(backgroundBox.height).toBeCloseTo(welcomeBox.height, 0)
+  expect(treeBg).toBe('rgb(13, 17, 23)')
+  expect(primaryBg).not.toBe('rgba(0, 0, 0, 0)')
+  expect(trashBg).toBe('rgb(13, 17, 23)')
+
+  const frameStyle = await page.locator('#library-panel-mount').evaluate(el => {
+    const style = getComputedStyle(el)
+    return {
+      background: style.backgroundColor,
+      backdropFilter: style.backdropFilter || style.webkitBackdropFilter,
+      borderWidth: style.borderTopWidth,
+      radius: style.borderRadius,
+      shadow: style.boxShadow,
+    }
+  })
+  expect(frameStyle.background).toBe('rgba(13, 17, 23, 0.62)')
+  expect(frameStyle.backdropFilter).toContain('blur(28px)')
+  expect(frameStyle.borderWidth).toBe('1px')
+  expect(frameStyle.radius).toBe('12px')
+  expect(frameStyle.shadow).not.toBe('none')
 })
 
 test('welcome library navigation stacks cleanly on a narrow screen', async ({ page }) => {

@@ -2042,7 +2042,8 @@ class AnimationKeyframe(BaseModel):
     trajectory_stride: Optional[int] = None
 
     # Spin = camera orbits the model centroid for the full keyframe duration.
-    # Mutually exclusive with camera_pose_id at the UI layer.
+    # Independent of camera_pose_id: the saved pose supplies the framing/lens,
+    # then spin is composed on top of that perspective.
     spin_axis: Optional[Literal["x", "y", "z"]] = None
     spin_rotations: float = 0.0
     spin_invert: bool = False  # negate rotation direction about the chosen axis

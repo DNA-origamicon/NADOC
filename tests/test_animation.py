@@ -302,6 +302,41 @@ def test_keyframe_binding_states_defaults_empty():
     assert anim["keyframes"][-1]["binding_states"] == {}
 
 
+def test_keyframe_camera_pose_and_spin_roundtrip_independently():
+    """A saved viewpoint and an orbit can coexist on the same keyframe."""
+    design_state.set_design(_demo_design())
+    a = client.post("/api/design/animations", json={"name": "Pose + spin"})
+    assert a.status_code == 200, a.text
+    anim_id = a.json()["design"]["animations"][-1]["id"]
+
+    k = client.post(
+        f"/api/design/animations/{anim_id}/keyframes",
+        json={
+            "camera_pose_id": "perspective-pose",
+            "spin_axis": "z",
+            "spin_rotations": 1.5,
+            "spin_invert": True,
+        },
+    )
+    assert k.status_code == 200, k.text
+    anim = next(an for an in k.json()["design"]["animations"] if an["id"] == anim_id)
+    kf = anim["keyframes"][-1]
+    assert kf["camera_pose_id"] == "perspective-pose"
+    assert kf["spin_axis"] == "z"
+    assert kf["spin_rotations"] == 1.5
+    assert kf["spin_invert"] is True
+
+    p = client.patch(
+        f"/api/design/animations/{anim_id}/keyframes/{kf['id']}",
+        json={"spin_axis": None},
+    )
+    assert p.status_code == 200, p.text
+    anim = next(an for an in p.json()["design"]["animations"] if an["id"] == anim_id)
+    patched = next(x for x in anim["keyframes"] if x["id"] == kf["id"])
+    assert patched["camera_pose_id"] == "perspective-pose"
+    assert patched["spin_axis"] is None
+
+
 # ── Keyframe strand_anim_phi (rich un/hybridization φ on the timeline) ───────
 
 
