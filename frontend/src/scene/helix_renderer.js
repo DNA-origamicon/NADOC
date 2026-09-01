@@ -154,6 +154,23 @@ export function syncPatchedBeadPosition(entry, backbonePosition) {
   return entry.pos
 }
 
+/**
+ * Change only an instance's scale, preserving its currently rendered position
+ * and orientation.  Appearance controls must use the live matrix as their
+ * authority: entry.pos / build-time slab fields can legitimately lag while a
+ * simulation, unfold, deformation, or animation owns the display pose.
+ */
+export function rescaleInstanceInPlace(
+  mesh, id, scale, matrix = new THREE.Matrix4(), position = new THREE.Vector3(),
+  quaternion = new THREE.Quaternion(), currentScale = new THREE.Vector3(),
+) {
+  mesh.getMatrixAt(id, matrix)
+  matrix.decompose(position, quaternion, currentScale)
+  matrix.compose(position, quaternion, scale)
+  mesh.setMatrixAt(id, matrix)
+  return position
+}
+
 // Modification type → Three.js hex color (display color in the 3D scene)
 const MODIFICATION_COLORS = {
   cy3:     0xff8c00,
@@ -250,8 +267,13 @@ function _setInstColor(entry, hexColor) {
  * compose(pos, identity, (s,s,s)).
  */
 function _setBeadScale(entry, s) {
-  _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(s, s, s))
-  entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+  // Scaling is presentation-only. Re-composing from entry.pos used to teleport
+  // a bead when another visualization had updated its matrix but not that cache.
+  // Read the live instance and synchronize the cache to the pose we preserved.
+  entry.pos.copy(rescaleInstanceInPlace(
+    entry.instMesh, entry.id, _tScale.set(s, s, s), _tMatrix, _tPos,
+    _slabRescaleQ, _physDir,
+  ))
   entry.instMesh.instanceMatrix.needsUpdate = true
 }
 
@@ -1950,10 +1972,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
   function applySlabParams() {
     for (const entry of slabEntries) {
-      _slabAxisDir.set(...entry.nuc.axis_tangent).normalize()
-      const center = _slabCenterAt(entry, _slabAxisDir, null, null, _slabCenterD)
-      _tMatrix.compose(center, entry.quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
-      iSlabs.setMatrixAt(entry.id, _tMatrix)
+      rescaleInstanceInPlace(
+        iSlabs, entry.id,
+        _tScale.set(slabParams.length, slabParams.width, slabParams.thickness),
+        _tMatrix, _tPos, _slabRescaleQ, _physDir,
+      )
     }
     iSlabs.instanceMatrix.needsUpdate = true
     _refreshSlabConnectors()
@@ -3785,15 +3808,21 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       }
       for (const entry of slabEntries) {
         if (entry.nuc.strand_type === 'scaffold') continue
-        const s = slabParams
-        _slabAxisDir.set(...entry.nuc.axis_tangent).normalize()
-        const center = _slabCenterAt(entry, _slabAxisDir, null, null, _slabCenterD)
-        if (visible) {
-          _tMatrix.compose(center, entry.quat, _tScale.set(s.length, s.width, s.thickness))
-        } else {
-          _tMatrix.compose(center, entry.quat, _tScale.set(0, 0, 0))
+        if (!visible) {
+          // A zero-scale matrix cannot later yield its orientation, so retain the
+          // exact live pose. This is display state, never authored geometry.
+          iSlabs.getMatrixAt(entry.id, _tMatrix)
+          _tMatrix.decompose(_tPos, _slabRescaleQ, _physDir)
+          if (_physDir.lengthSq() > 1e-12) entry._preHideSlabMatrix = _tMatrix.clone()
+          _tMatrix.compose(_tPos, _slabRescaleQ, _tScale.set(0, 0, 0))
+          iSlabs.setMatrixAt(entry.id, _tMatrix)
+        } else if (entry._preHideSlabMatrix) {
+          entry._preHideSlabMatrix.decompose(_tPos, _slabRescaleQ, _physDir)
+          _tMatrix.compose(_tPos, _slabRescaleQ,
+            _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+          iSlabs.setMatrixAt(entry.id, _tMatrix)
+          entry._preHideSlabMatrix = null
         }
-        iSlabs.setMatrixAt(entry.id, _tMatrix)
       }
       iSlabs.instanceMatrix.needsUpdate = true
       _refreshSlabConnectors()

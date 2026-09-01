@@ -371,16 +371,23 @@ export function initDesignRenderer(scene, storeRef) {
    */
   function _applyXoverClusterAlpha() {
     if (!_xoverArcData || !_xoverBeadsMesh || !_xoverSlabsMesh) return
-    if (!_clusterAlphaKeys.size && !_xoverBeadsMesh._instanceAlpha) return
+    const design = storeRef.getState().currentDesign
+    const refIds = new Set((design?.strands ?? []).filter(s => s.is_reference).map(s => s.id))
+    const state = storeRef.getState()
+    const refHidden = state.showReferenceGeometry === false || state.simulationTabActive === true
+    const hasHidden = _hiddenCrossoverIds.size > 0 || (refHidden && refIds.size > 0)
+    if (!_clusterAlphaKeys.size && !hasHidden && !_xoverBeadsMesh._instanceAlpha) return
     installInstanceAlpha(_xoverBeadsMesh)
     installInstanceAlpha(_xoverSlabsMesh)
     if (_xoverConnMesh) installInstanceAlpha(_xoverConnMesh)
     if (_xoverSlabConnMesh) installInstanceAlpha(_xoverSlabConnMesh)
     for (const ad of _xoverArcData) {
-      const a = _clusterAlphaKeys.size
+      const hidden = _hiddenCrossoverIds.has(ad.xoId) ||
+        (refHidden && (refIds.has(ad.nucA?.strand_id) || refIds.has(ad.nucB?.strand_id)))
+      const a = hidden ? 0 : (_clusterAlphaKeys.size
         ? Math.min(clusterAlphaForNuc(_clusterAlphaKeys, ad.nucA),
                    clusterAlphaForNuc(_clusterAlphaKeys, ad.nucB))
-        : 1
+        : 1)
       for (let i = 0; i < ad.beadCount; i++) {
         setInstanceAlpha(_xoverBeadsMesh, ad.beadStartIdx + i, a)
         setInstanceAlpha(_xoverSlabsMesh, ad.beadStartIdx + i, a)
@@ -394,99 +401,19 @@ export function initDesignRenderer(scene, storeRef) {
     }
   }
 
-  /** Zero the InstancedMesh scale for every extra-base bead/slab whose crossover
-   *  ID is in _hiddenCrossoverIds.  Called after rebuild and after setHiddenCrossovers. */
+  /** Apply alpha visibility for extra bases in hidden crossovers. */
   function _applyXoverVisibility() {
     if (!_xoverArcData || !_xoverBeadsMesh || !_xoverSlabsMesh) return
-    const m4   = new THREE.Matrix4()
-    const pos  = new THREE.Vector3()
-    const qid  = new THREE.Quaternion()
-    const zero = new THREE.Vector3(0, 0, 0)
-    const design = storeRef.getState().currentDesign
-    const refIds = new Set((design?.strands ?? []).filter(s => s.is_reference).map(s => s.id))
-    const state = storeRef.getState()
-    const refHidden = state.showReferenceGeometry === false || state.simulationTabActive === true
-    let dirty = false
-    for (const ad of _xoverArcData) {
-      const hide = _hiddenCrossoverIds.has(ad.xoId) ||
-        (refHidden && (refIds.has(ad.nucA?.strand_id) || refIds.has(ad.nucB?.strand_id)))
-      if (hide) {
-        for (let i = 0; i < ad.beadCount; i++) {
-          const bi = ad.beadStartIdx + i
-          _xoverBeadsMesh.getMatrixAt(bi, m4)
-          pos.setFromMatrixPosition(m4)
-          _xoverBeadsMesh.setMatrixAt(bi, m4.compose(pos, qid, zero))
-          _xoverSlabsMesh.getMatrixAt(bi, m4)
-          pos.setFromMatrixPosition(m4)
-          _xoverSlabsMesh.setMatrixAt(bi, m4.compose(pos, qid, zero))
-        }
-      } else {
-        const posA = _liveXoverPos(ad.nucA, _clusterXoverPosA)
-        const posB = _liveXoverPos(ad.nucB, _clusterXoverPosB)
-        if (!posA || !posB) continue
-        arcControlPoint(posA, posB, ad.nucA, ad.nucB, _clusterXoverCtrl)
-        updateExtraBaseInstances(
-          _xoverBeadsMesh, _xoverSlabsMesh,
-          ad.beadStartIdx, ad.beadCount,
-          posA, _clusterXoverCtrl, posB, ad.avgAx,
-          ad.simReversed, ad.localFrameReversed, ad.savedTransforms, ad.sequence,
-        )
-      }
-      dirty = true
-    }
-    if (dirty) {
-      _xoverBeadsMesh.instanceMatrix.needsUpdate = true
-      _xoverSlabsMesh.instanceMatrix.needsUpdate = true
-    }
-    _syncExtraBaseConnectors()
+    // Visibility is presentation state, not geometry. The former zero-scale /
+    // rebuild path destroyed slab orientation and snapped simulated insert beads
+    // back onto a native Bezier when they became visible again.
+    _applyXoverClusterAlpha()
   }
 
-  /** Hide (zero-scale) or restore (reposition) extra-base beads/slabs for every
-   *  crossover touching a reference strand. Mixed-ownership records are still
-   *  comparison geometry and must not leak onto the Simulate tab. */
+  /** Apply alpha visibility to extra bases touching a reference strand. */
   function _applyReferenceXoverVisibility() {
     if (!_xoverArcData || !_xoverBeadsMesh || !_xoverSlabsMesh) return
-    const design = storeRef.getState().currentDesign
-    const refIds = new Set((design?.strands ?? []).filter(s => s.is_reference).map(s => s.id))
-    if (!refIds.size) return
-    const state = storeRef.getState()
-    const hidden = state.showReferenceGeometry === false || state.simulationTabActive === true
-    const m4 = new THREE.Matrix4()
-    const pos = new THREE.Vector3()
-    const qid = new THREE.Quaternion()
-    const zero = new THREE.Vector3(0, 0, 0)
-    let dirty = false
-    for (const ad of _xoverArcData) {
-      if (!(refIds.has(ad.nucA?.strand_id) || refIds.has(ad.nucB?.strand_id))) continue
-      if (_hiddenCrossoverIds.has(ad.xoId)) continue   // already hidden by a cluster toggle
-      if (hidden) {
-        for (let i = 0; i < ad.beadCount; i++) {
-          const bi = ad.beadStartIdx + i
-          _xoverBeadsMesh.getMatrixAt(bi, m4); pos.setFromMatrixPosition(m4)
-          _xoverBeadsMesh.setMatrixAt(bi, m4.compose(pos, qid, zero))
-          _xoverSlabsMesh.getMatrixAt(bi, m4); pos.setFromMatrixPosition(m4)
-          _xoverSlabsMesh.setMatrixAt(bi, m4.compose(pos, qid, zero))
-        }
-        dirty = true
-      } else {
-        const posA = _liveXoverPos(ad.nucA, _clusterXoverPosA)
-        const posB = _liveXoverPos(ad.nucB, _clusterXoverPosB)
-        if (!posA || !posB) continue
-        arcControlPoint(posA, posB, ad.nucA, ad.nucB, _clusterXoverCtrl)
-        updateExtraBaseInstances(
-          _xoverBeadsMesh, _xoverSlabsMesh,
-          ad.beadStartIdx, ad.beadCount,
-          posA, _clusterXoverCtrl, posB, ad.avgAx,
-          ad.simReversed, ad.localFrameReversed, ad.savedTransforms, ad.sequence,
-        )
-        dirty = true
-      }
-    }
-    if (dirty) {
-      _xoverBeadsMesh.instanceMatrix.needsUpdate = true
-      _xoverSlabsMesh.instanceMatrix.needsUpdate = true
-    }
-    _syncExtraBaseConnectors()
+    _applyXoverClusterAlpha()
   }
 
   const _clusterXoverPosA = new THREE.Vector3()

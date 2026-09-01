@@ -6,8 +6,8 @@
 // "stop the display" literally means "revert the model the user is looking at to
 // equilibrium geometry". Each panel used to do that on leaving Dynamics, which is
 // right for the editing tabs (a deformed model must not linger where you edit
-// topology) but wrong for Photo: the whole point of the Photo tab is to render the
-// simulated result the user is currently looking at.
+// topology) but wrong for view-only tabs: they must show the result the user is
+// currently looking at without silently restoring equilibrium geometry.
 //
 // The rule lives here, not in six copies, because all the panels must agree — a
 // single panel that still tears down turns a photo of an oxDNA frame into a photo
@@ -19,6 +19,8 @@ export const DISPLAY_HOME_TAB = 'dynamics'
 /** Tabs that must not disturb a display already painted into the scene.
  *
  *  - `photo` — renders what is on screen, which includes an oxDNA/NAMD frame.
+ *  - `plates` — view/order UI only. Selecting wells may highlight strands, but the
+ *    tab does not edit molecular geometry and therefore has no authority to reset it.
  *  - `scene` (the ANIMATIONS tab) — a trajectory keyframe paints its frames through
  *    the very same `oxdnaDisplay` / `mdViz` controller (see
  *    `scene/trajectory_keyframes.js`). Tearing displays down on arrival here would
@@ -29,7 +31,7 @@ export const DISPLAY_HOME_TAB = 'dynamics'
  *    keyframes shared that controller, `isActive()` was false here and the teardown
  *    was a silent no-op — which is why this only became reachable in 2026-08.
  */
-export const DISPLAY_PRESERVING_TABS = Object.freeze(['photo', 'scene'])
+export const DISPLAY_PRESERVING_TABS = Object.freeze(['photo', 'scene', 'plates'])
 
 /** Tabs a LIVE (streaming) session may keep running on. Stricter than the painted
  *  set: a painted overlay is static and can sit on the Animations tab, but a live

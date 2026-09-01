@@ -111,7 +111,7 @@ export function initLeftSidebar({
 
     // Arriving on Animations: put a surviving authoring preview back on screen. No-op
     // unless the user actually left one running. Fire-and-forget — the only async path
-    // is re-taking a hold the Feature Log / Plates policy dropped, and that resolves
+    // is re-taking a hold the Feature Log policy dropped, and that resolves
     // out of the still-resident cache.
     function _enterAnimationsTab() {
       animPanel?.resumePreview?.()?.catch?.(() => {})
