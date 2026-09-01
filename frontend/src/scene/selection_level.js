@@ -15,7 +15,8 @@
 // (backbone/5′ cubes/extension tails, fluorophore tips, extra crossover bases, flexible
 // ssDNA arcs, ss-linker bridges). It has its own key-based pool — see `base_ref.js`.
 //
-// Tab cycles strand → domain → end → xover → base → none(default) → strand. Escape
+// E cycles forward and Q backward through strand → domain → end → xover → base →
+// none(default). Escape
 // returns to `default`. The #select-filter level buttons drive the SAME state
 // (clust/strand/line/ends/xover/base); no button lit = `default`. CLUSTER is reached via
 // its button ONLY — removed from the Tab cycle 2026-06-07 (rarely used: only for
@@ -28,7 +29,7 @@
 // Everything here is pure (no DOM / scene / store) so it unit-tests directly.
 
 export const LEVELS    = ['default', 'cluster', 'strand', 'domain', 'end', 'xover', 'base']
-// Tab cycles strand → domain → end → xover → base → none(default) → strand. Cluster is
+// The E/Q cycle is strand → domain → end → xover → base → none(default) → strand. Cluster is
 // NOT in the cycle (button-only access, 2026-06-07). `base` sits last, immediately before
 // the wrap: it is the finest grain there is, and the position mirrors its button sitting
 // to the right of xover. `default` = no button engaged = the drill ladder (2026-06-06).
@@ -49,6 +50,11 @@ export function normalizeLevel(level) {
 export function nextTabLevel(cur) {
   const i = TAB_CYCLE.indexOf(cur)
   return i < 0 ? TAB_CYCLE[0] : TAB_CYCLE[(i + 1) % TAB_CYCLE.length]
+}
+
+export function previousTabLevel(cur) {
+  const i = TAB_CYCLE.indexOf(cur)
+  return i < 0 ? TAB_CYCLE[TAB_CYCLE.length - 1] : TAB_CYCLE[(i - 1 + TAB_CYCLE.length) % TAB_CYCLE.length]
 }
 
 /** Filter-button toggle: clicking the engaged level turns it off (→ default). */

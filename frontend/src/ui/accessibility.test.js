@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearShortcuts, registerShortcut } from '../input/shortcuts.js'
-import { initAccessibility, populateShortcutHelp } from './accessibility.js'
+import { initAccessibility, populateShortcutHelp, shortcutWorkflows } from './accessibility.js'
 
 describe('accessibility wiring', () => {
   beforeEach(() => {
@@ -52,5 +52,25 @@ describe('accessibility wiring', () => {
     populateShortcutHelp()
     expect(document.querySelector('.hk-desc').textContent).toBe('Undo')
     expect(document.querySelector('.hk-key').textContent).toBe('Ctrl Z')
+  })
+
+  it('clusters shortcuts by workflow across two columns', () => {
+    const groups = shortcutWorkflows([
+      { key: 'F1', ctrl: false, description: 'Representation: Full' },
+      { key: '2', ctrl: false, description: 'Full Autostaple' },
+      { key: 'e', ctrl: false, description: 'Cycle selectable forward' },
+      { key: 'g', ctrl: false, description: 'Toggle grid' },
+    ])
+    expect(groups.map(group => group.title)).toEqual([
+      'Representations', 'Automation & sequencing', 'Selection', 'View & display',
+    ])
+    for (const shortcut of [
+      { key: 'F1', description: 'Representation: Full' },
+      { key: '2', description: 'Full Autostaple' },
+    ]) registerShortcut({ ...shortcut, handler() {} })
+    populateShortcutHelp()
+    expect(document.querySelectorAll('.hk-column')).toHaveLength(2)
+    expect([...document.querySelectorAll('.hk-section-title')].map(el => el.textContent))
+      .toEqual(['Representations', 'Automation & sequencing'])
   })
 })

@@ -145,7 +145,6 @@ import { openFileBrowser }          from './ui/file_browser.js'
 import { initFileIo, initFileOpen, initFileSave } from './ui/file_io.js'
 import { initSyncBadge } from './ui/sync_badge.js'
 import { createAssemblyRenderer }   from './scene/assembly_renderer.js'
-import { initNavController }        from './scene/nav_controller.js'
 import { initAssemblyJointRenderer } from './scene/assembly_joint_renderer.js'
 import { initKinematicsTicker }      from './scene/kinematics_ticker.js'
 import { beltCurvePoints, beltLoopLength } from './scene/belt_geometry.js'
@@ -351,14 +350,7 @@ async function main() {
     getActiveControls, api,
   })
 
-  // ── Camera nav: OrbitControls + always-on smooth WASD pan ───────────────
-  // (Removed: auto-transition to fly mode at high zoom-out — was distracting
-  // when fitting large polymer chains in view.)
-  const navController = initNavController({
-    scene, camera, controls, canvas,
-    store, assemblyRenderer, designRenderer,
-    addFrameCallback,
-  })
+  // Camera navigation is handled by OrbitControls. Keyboard flight/pan is disabled.
 
   // Simulation visualizations replace the native assembly with the flattened job
   // snapshot rendered by designRenderer.  Keep this flag outside the clipping
@@ -4077,7 +4069,7 @@ async function main() {
   // ── Keyboard shortcuts ────────────────────────────────────────────────────────
   // All design-editor keyboard shortcuts are registered by
   // ui/keyboard_shortcuts.js (file/edit, view/tool toggles, number hotkeys,
-  // Delete, Escape). 's'/'d' are reserved for WASD pan; the dispatch registry +
+  // Delete and Escape); the dispatch registry +
   // matcher live in input/shortcuts.js. The factory also attaches the single
   // document 'keydown' listener.
   initKeyboardShortcuts({

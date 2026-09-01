@@ -37,9 +37,8 @@
  */
 import { registerShortcut, dispatchKeyEvent } from '../input/shortcuts.js'
 import { showToast } from './toast.js'
-import { nextTabLevel } from '../scene/selection_level.js'
+import { nextTabLevel, previousTabLevel } from '../scene/selection_level.js'
 import { nearestWorkspaceAxis, signedAlong } from '../scene/axis_snap.js'
-import { isValidPair, ligationArgs } from '../scene/force_crossover_tool.js'
 import { canonicalSelection } from '../scene/selection_model.js'
 import { parseBaseKey } from '../scene/base_ref.js'
 
@@ -261,9 +260,6 @@ export function initKeyboardShortcuts(deps) {
     },
   })
 
-  // 's' is reserved for WASD pan-down — spreadsheet toggle removed.
-  // Use the sidebar tab or command palette instead.
-
   // ── View / tool toggles + number hotkeys ─────────────────────────────────
 
   registerShortcut({
@@ -297,44 +293,68 @@ export function initKeyboardShortcuts(deps) {
     },
   })
 
-  // Tab — cycle the unified selectionLevel: cluster → strand → domain → end →
-  // xover → none(default) → cluster. `default` = no button engaged = the drill
-  // ladder. The filter row reflects it via the emitted level.
-  // Skipped when the move/rotate gizmo is active (cluster_gizmo.js owns Tab there).
+  function cycleSelectionLevel(direction) {
+    const cur = selectionManager.getSelectionLevel?.() ?? 'default'
+    const next = direction > 0 ? nextTabLevel(cur) : previousTabLevel(cur)
+    selectionManager.setSelectionLevel?.(next)
+    flashSelectionLevel?.(cur, next)
+    showToast(next === 'default' ? 'Selection level: drill (default)' : `Selection level: ${next}`)
+  }
+
   registerShortcut({
-    key: 'Tab', ctrl: false,
-    description: 'Cycle selection level (cluster → strand → domain → end → xover → drill)',
+    key: 'e', ctrl: false, shift: false, alt: false,
+    description: 'Cycle selectable forward',
     blockedInInput: true,
     canvasOnly: true,
     blockedWhen: () => isTranslateRotateActive() || isProteinMoveActive?.(),
     handler(e) {
       e.preventDefault()
-      const cur  = selectionManager.getSelectionLevel?.() ?? 'default'
-      const next = nextTabLevel(cur)
-      selectionManager.setSelectionLevel?.(next)
-      // Flash the collapsed selectable menu open and slide its highlight cur→next.
-      flashSelectionLevel?.(cur, next)
-      showToast(next === 'default' ? 'Selection level: drill (default)' : `Selection level: ${next}`)
+      cycleSelectionLevel(1)
     },
   })
 
   registerShortcut({
-    key: 'q', ctrl: false,
-    description: 'Toggle expanded helix spacing',
+    key: 'q', ctrl: false, shift: false, alt: false,
+    description: 'Cycle selectable backward',
     blockedInInput: true,
-    handler() {
-      if (isUnfoldActive() || slicePlane.isVisible()) {
-        showToast('Expanded spacing not available while unfold or slice plane is active')
-        return
-      }
-      const { currentDesign } = store.getState()
-      if (!currentDesign?.helices?.length) return
-      expandedSpacing.toggle()
+    canvasOnly: true,
+    blockedWhen: () => isTranslateRotateActive() || isProteinMoveActive?.(),
+    handler(e) {
+      e.preventDefault()
+      cycleSelectionLevel(-1)
     },
   })
 
-  // 'd' is reserved for WASD pan-right — deform-view toggle removed.
-  // Use the View menu or assign a different key.
+  registerShortcut({
+    key: 's', ctrl: false, shift: false, alt: false,
+    description: 'Cycle pickable strands (staples only → scaffold only → both)',
+    blockedInInput: true, noRepeat: true,
+    handler(e) {
+      e.preventDefault()
+      const st = store.getState().selectableTypes ?? {}
+      const next = st.staples && !st.scaffold
+        ? { scaffold: true, staples: false }
+        : st.scaffold && !st.staples
+          ? { scaffold: true, staples: true }
+          : { scaffold: false, staples: true }
+      store.setState({ selectableTypes: {
+        ...st, loops: false, skips: false, extensions: false, overhangs: false, ...next,
+      } })
+    },
+  })
+
+  for (const [key, selector, description] of [
+    ['x', '.vt-btn[data-vt="expanded"]', 'Quick expand'],
+    ['g', '.vt-btn[data-vt="grid"]', 'Toggle grid'],
+    ['c', '.vt-btn[data-vt="clashes"]', 'Toggle clash highlighting'],
+    ['p', '.vt-btn[data-vt="loopSkips"]', 'Toggle loop/skip view'],
+  ]) {
+    registerShortcut({
+      key, ctrl: false, shift: false, alt: false,
+      description, blockedInInput: true, noRepeat: true,
+      handler(e) { e.preventDefault(); document.querySelector(selector)?.click() },
+    })
+  }
 
   registerShortcut({
     key: 'd', ctrl: false, shift: true,
@@ -491,39 +511,6 @@ export function initKeyboardShortcuts(deps) {
         const posA = selectionManager.getCtrlBeadPos(0)
         const posB = selectionManager.getCtrlBeadPos(1)
         measurementTool.show(posA, posB)
-      }
-    },
-  })
-
-  // 'x' — forced ligation. Multi-select a 5′ end and a 3′ end at the End
-  // selection level (the End filter button / Tab-to-ends), using the NORMAL
-  // selection gestures — lasso the two ends, or Ctrl-click / Shift-click each —
-  // then press x to merge the two strands into one. Those gestures create canonical
-  // End refs; Alt-picked measurement anchors are a separate tool pool. Reuses the
-  // force-crossover tool's pure validators (one 5′ + one 3′, on different
-  // strands) and the /design/forced-ligation backend. Any 3′↔5′ pair is allowed
-  // regardless of helix adjacency, matching the toolbar fxover tool + the
-  // cadnano pencil.
-  registerShortcut({
-    key: 'x', ctrl: false, shift: false, alt: false,
-    description: 'Forced ligation (select a 5′ and a 3′ end, then x)',
-    blockedInInput: true,
-    async handler(e) {
-      if (store.getState().assemblyActive) return   // design-mode only
-      const endBeads = selectionManager.getSelectedEndBeads?.() ?? []
-      if (endBeads.length !== 2) return
-      e.preventDefault()
-      const [a, b] = endBeads
-      if (!isValidPair(a.nuc, b.nuc)) {
-        showToast('Forced ligation needs one 5′ and one 3′ end on different strands')
-        return
-      }
-      const { three_prime_strand_id, five_prime_strand_id } = ligationArgs(a.nuc, b.nuc)
-      selectionManager.clearEndSelection?.()
-      const ok = await api.forcedLigation(three_prime_strand_id, five_prime_strand_id)
-      if (!ok) {
-        const err = store.getState().lastError
-        showToast(`Forced ligation failed: ${err?.message ?? 'unknown error'}`)
       }
     },
   })

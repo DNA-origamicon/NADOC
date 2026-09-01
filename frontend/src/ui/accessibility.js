@@ -18,30 +18,53 @@ function shortcutLabel(shortcut) {
     .filter(Boolean).join(' ')
 }
 
+const WORKFLOWS = [
+  ['Representations', s => /^F[1-8]$/i.test(s.key)],
+  ['Automation & sequencing', s => /^[1-6]$/.test(s.key)],
+  ['Selection', s => ['e', 'q', 's'].includes(s.key.toLowerCase()) && !s.ctrl],
+  ['View & display', s => ['f', 'n', 'v', 'x', 'g', 'c', 'p', 'u', 'k', '/', 'l', '`'].includes(s.key.toLowerCase()) && !s.ctrl],
+  ['Tools & interaction', s => /measure|blunt|overhang|ligat|translate|rotate|delete selected/i.test(s.description)],
+  ['File & editing', s => !!s.ctrl && !/command palette/i.test(s.description)],
+  ['Workspace', s => true],
+]
+
+export function shortcutWorkflows(shortcuts) {
+  const groups = WORKFLOWS.map(([title]) => ({ title, shortcuts: [] }))
+  for (const shortcut of shortcuts) {
+    groups[WORKFLOWS.findIndex(([, matches]) => matches(shortcut))].shortcuts.push(shortcut)
+  }
+  return groups.filter(group => group.shortcuts.length)
+}
+
 export function populateShortcutHelp(root = document) {
   const body = root.querySelector('#help-modal .hk-body')
   if (!body) return
   const shortcuts = getShortcuts().filter(s => s.description)
   body.replaceChildren()
-  const section = document.createElement('div')
-  section.className = 'hk-section'
-  const title = document.createElement('div')
-  title.className = 'hk-section-title'
-  title.textContent = 'Available commands'
-  section.appendChild(title)
-  for (const shortcut of shortcuts) {
-    const row = document.createElement('div')
-    row.className = 'hk-row'
-    const description = document.createElement('span')
-    description.className = 'hk-desc'
-    description.textContent = shortcut.description
-    const key = document.createElement('span')
-    key.className = 'hk-key'
-    key.textContent = shortcutLabel(shortcut)
-    row.append(description, key)
-    section.appendChild(row)
-  }
-  body.appendChild(section)
+  const columns = [document.createElement('div'), document.createElement('div')]
+  for (const column of columns) column.className = 'hk-column'
+  shortcutWorkflows(shortcuts).forEach((group, groupIndex) => {
+    const section = document.createElement('div')
+    section.className = 'hk-section'
+    const title = document.createElement('div')
+    title.className = 'hk-section-title'
+    title.textContent = group.title
+    section.appendChild(title)
+    for (const shortcut of group.shortcuts) {
+      const row = document.createElement('div')
+      row.className = 'hk-row'
+      const description = document.createElement('span')
+      description.className = 'hk-desc'
+      description.textContent = shortcut.description
+      const key = document.createElement('span')
+      key.className = 'hk-key'
+      key.textContent = shortcutLabel(shortcut)
+      row.append(description, key)
+      section.appendChild(row)
+    }
+    columns[groupIndex % 2].appendChild(section)
+  })
+  body.append(...columns)
 }
 
 const NATIVE_INTERACTIVE = 'button, a[href], input, select, textarea, summary, label'

@@ -183,23 +183,11 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
     expect(e.preventDefault).not.toHaveBeenCalled()
   })
 
-  it("'q' toggles expanded spacing only when a design is loaded and unfold/slice are off", async () => {
+  it("'q' cycles the selectable level backward", async () => {
     const d = makeDeps()
     initKeyboardShortcuts(d)
-    await press('q')
-    expect(d.expandedSpacing.toggle).toHaveBeenCalledTimes(1)
-
-    // Blocked while unfold active.
-    d.expandedSpacing.toggle.mockClear()
-    d.isUnfoldActive.mockReturnValue(true)
-    await press('q')
-    expect(d.expandedSpacing.toggle).not.toHaveBeenCalled()
-
-    // No design → no-op (no throw).
-    d.isUnfoldActive.mockReturnValue(false)
-    d.store.setState({ currentDesign: { helices: [] } })
-    await press('q')
-    expect(d.expandedSpacing.toggle).not.toHaveBeenCalled()
+    await press('q', { tag: 'CANVAS' })
+    expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('base')
   })
 
   it("'v' captures a camera pose named by count", async () => {
@@ -279,18 +267,15 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
     expect(document.getElementById('mode-indicator').textContent).toMatch(/not available/i)
   })
 
-  it("'x' forced-ligates a valid 5′/3′ end pair (order-independent → 3p→three, 5p→five)", async () => {
+  it("'x' activates quick expand", async () => {
     const d = makeDeps()
-    // The two ends the user multi-selected at End level (lasso / Ctrl / Shift-click
-    // all land in the same end-bead set): a 5′ on strand A + a 3′ on strand B.
-    d.selectionManager.getSelectedEndBeads.mockReturnValue([
-      { nuc: { strand_id: 'A', is_five_prime: true } },
-      { nuc: { strand_id: 'B', is_three_prime: true } },
-    ])
+    const button = document.createElement('button')
+    button.className = 'vt-btn'; button.dataset.vt = 'expanded'
+    const clicked = vi.fn(); button.addEventListener('click', clicked); document.body.append(button)
     initKeyboardShortcuts(d)
     await press('x')
-    expect(d.api.forcedLigation).toHaveBeenCalledWith('B', 'A')   // 3′=B, 5′=A
-    expect(d.selectionManager.clearEndSelection).toHaveBeenCalled()
+    expect(clicked).toHaveBeenCalledTimes(1)
+    expect(d.api.forcedLigation).not.toHaveBeenCalled()
   })
 
   it("'x' rejects an invalid pair (same polarity / same strand) without calling the api", async () => {
@@ -689,7 +674,7 @@ describe('initKeyboardShortcuts — Group 2 file/edit + Delete/Escape', () => {
   })
 })
 
-describe('initKeyboardShortcuts — drill v2 (selectionLevel) Tab/Escape', () => {
+describe('initKeyboardShortcuts — drill v2 (selectionLevel) E/Q/Escape', () => {
   beforeEach(() => { clearShortcuts(); clearDom(); mountIds({ 'mode-indicator': 'div' }) })
 
   const makeV2Deps = (level = 'default') => {
@@ -699,31 +684,31 @@ describe('initKeyboardShortcuts — drill v2 (selectionLevel) Tab/Escape', () =>
     return d
   }
 
-  it('Tab cycles the unified selectionLevel default→strand→domain→… (cluster excluded)', async () => {
+  it('E cycles the unified selectionLevel default→strand→domain→… (cluster excluded)', async () => {
     const d = makeV2Deps('default')
     initKeyboardShortcuts(d)
-    await press('Tab', { tag: 'CANVAS' })
+    await press('e', { tag: 'CANVAS' })
     expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('strand')
   })
 
-  it('Tab from cluster restarts at strand (cluster is button-only, not in the cycle)', async () => {
+  it('E from cluster restarts at strand (cluster is button-only, not in the cycle)', async () => {
     const d = makeV2Deps('cluster')
     initKeyboardShortcuts(d)
-    await press('Tab', { tag: 'CANVAS' })
+    await press('e', { tag: 'CANVAS' })
     expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('strand')
   })
 
-  it('Tab steps xover→base (base is the finest grain, last stop before the wrap)', async () => {
+  it('E steps xover→base (base is the finest grain, last stop before the wrap)', async () => {
     const d = makeV2Deps('xover')
     initKeyboardShortcuts(d)
-    await press('Tab', { tag: 'CANVAS' })
+    await press('e', { tag: 'CANVAS' })
     expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('base')
   })
 
-  it('Tab wraps base→none(default)', async () => {
+  it('E wraps base→none(default)', async () => {
     const d = makeV2Deps('base')
     initKeyboardShortcuts(d)
-    await press('Tab', { tag: 'CANVAS' })
+    await press('e', { tag: 'CANVAS' })
     expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('default')
   })
 
