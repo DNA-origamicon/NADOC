@@ -570,11 +570,27 @@ def _geometry_for_helices(
         arrs = deformed_nucleotide_arrays(
             helix, design, compact_skips=compact_skips, phase_roll_rad=roll
         )
+        axis_line = _measured_axes.get(helix.id)
+        if measured_positioning and axis_line is not None:
+            # Measured placement belongs to the nucleotide's native helix frame.
+            # Apply it BEFORE the overhang's rigid transform.  Doing this afterward
+            # makes a legitimately rotated overhang appear off its parent axis, so
+            # apply_measured_positioning's safety guard skips it and leaves a legacy
+            # bead/slab arrangement beside measured geometry (VoltronCoreArm OH7).
+            from backend.core.measured_positioning import apply_measured_positioning
+            from backend.core.constants import HELIX_RADIUS
+
+            arrs = apply_measured_positioning(
+                arrs,
+                axis_origin=axis_line[0],
+                axis_hat=axis_line[1],
+                legacy_radius=HELIX_RADIUS,
+            )
         arrs = apply_overhang_rotation_if_needed(arrs, helix, design)
         _emit_arrs(
             arrs,
             arrs["helix_id"],
-            _measured_axes.get(helix.id),
+            None,
         )
 
         # Render nucleotides outside the physical helix span (ss-scaffold loops).
@@ -1094,11 +1110,22 @@ def _positions_for_design(
             continue  # virtual linker helix has no real geometry of its own
 
         arrs = deformed_nucleotide_arrays(helix, design, phase_roll_rad=roll)
+        axis_line = _measured_axes.get(helix.id)
+        if measured_positioning and axis_line is not None:
+            from backend.core.measured_positioning import apply_measured_positioning
+            from backend.core.constants import HELIX_RADIUS
+
+            arrs = apply_measured_positioning(
+                arrs,
+                axis_origin=axis_line[0],
+                axis_hat=axis_line[1],
+                legacy_radius=HELIX_RADIUS,
+            )
         arrs = apply_overhang_rotation_if_needed(arrs, helix, design)
         _emit_compact(
             arrs,
             arrs["helix_id"],
-            _measured_axes.get(helix.id),
+            None,
         )
 
         norm_helix = None

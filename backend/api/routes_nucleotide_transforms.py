@@ -27,8 +27,6 @@ class NucleotideTransformBody(BaseModel):
     pivot: list[float] = Field(min_length=3, max_length=3)
     translation: list[float] = Field(min_length=3, max_length=3)
     rotation: list[float] = Field(min_length=4, max_length=4)
-    display_slab_offset: Optional[list[float]] = Field(None, min_length=3, max_length=3)
-    display_slab_rotation: Optional[list[float]] = Field(None, min_length=4, max_length=4)
     compose: bool = False
 
 
@@ -60,8 +58,6 @@ def _compose(existing: NucleotideTransform, delta: NucleotideTransform) -> Nucle
     q = Rotation.from_matrix(r).as_quat().tolist()
     return delta.model_copy(update={
         "pivot": [0.0, 0.0, 0.0], "translation": b.tolist(), "rotation": q,
-        "display_slab_offset": existing.display_slab_offset or delta.display_slab_offset,
-        "display_slab_rotation": existing.display_slab_rotation or delta.display_slab_rotation,
     })
 
 

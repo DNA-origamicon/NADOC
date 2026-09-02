@@ -340,14 +340,9 @@ export function installTestApi({
       if (!info?.slabMatrix) return null
       const bead = new THREE.Vector3().setFromMatrixPosition(info.beadMatrix)
       const slab = new THREE.Vector3().setFromMatrixPosition(info.slabMatrix)
-      const savedPose = store.getState().currentDesign?.nucleotide_transforms?.find(t =>
-        t.kind === 'base' && t.helix_id === target.helix_id && t.bp_index === target.bp_index &&
-        t.direction === target.direction && (t.copy_k ?? 0) === (target.copy ?? 0))
       return {
         key: keys[0], bead: bead.toArray(), slab: slab.toArray(),
         offset: slab.clone().sub(bead).toArray(), distance: slab.distanceTo(bead),
-        independentPose: !!info.slab?.independentPose,
-        savedDisplayOffset: savedPose?.display_slab_offset ?? null,
       }
     },
     /** Live bead-to-slab offsets for every rendered standard nucleotide. */
@@ -363,9 +358,17 @@ export function installTestApi({
         const info = designRenderer.residueTransformInfo?.(target)
         if (!info?.beadMatrix || !info?.slabMatrix) continue
         const bead = new THREE.Vector3().setFromMatrixPosition(info.beadMatrix)
-        const slab = new THREE.Vector3().setFromMatrixPosition(info.slabMatrix)
+        const slab = new THREE.Vector3()
+        const slabQuat = new THREE.Quaternion()
+        const slabScale = new THREE.Vector3()
+        info.slabMatrix.decompose(slab, slabQuat, slabScale)
         const key = `${target.helix_id}:${target.bp_index}:${target.direction}:${target.copy}`
-        out[key] = { offset: slab.sub(bead).toArray() }
+        const offset = slab.clone().sub(bead)
+        out[key] = {
+          offset: offset.toArray(),
+          localOffset: offset.applyQuaternion(slabQuat.clone().invert()).toArray(),
+          slabScale: slabScale.toArray(),
+        }
       }
       return out
     },

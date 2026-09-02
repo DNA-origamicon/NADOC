@@ -1803,7 +1803,8 @@ export async function getDeformDebug() {
  * straightHelixAxes without touching currentGeometry.
  */
 export async function getStraightGeometry() {
-  const json = await _request('GET', '/design/geometry?apply_deformations=false')
+  const base = '/design/geometry?apply_deformations=false'
+  const json = await _request('GET', base + geometryQuerySuffix(true))
   if (!json) return null
   const nucleotides = json.nucleotides ?? json
   const helixAxesMap = {}

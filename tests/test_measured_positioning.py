@@ -501,3 +501,57 @@ def test_the_oxdna_seed_restores_the_cm_radius_and_is_a_legacy_no_op():
     assert radii(_oxdna_cm_radius_map(design, measured)) == pytest.approx(
         HELIX_RADIUS, abs=1e-6
     )
+
+
+def test_rotated_oh7_keeps_the_same_measured_bead_to_base_geometry():
+    """Rigid overhang rotation must happen after measured native placement.
+
+    VoltronCoreArm OH7 used to fail the measured-placement axis guard after it had
+    already been rotated, leaving its slabs in legacy placement beside measured slabs.
+    """
+    from pathlib import Path
+
+    from backend.core.design_geometry import _geometry_for_design
+    from backend.core.models import Design
+
+    path = Path("workspace/VoltronCoreArm.nadoc")
+    if not path.exists():
+        pytest.skip("requires local workspace fixture VoltronCoreArm.nadoc")
+    design = Design.model_validate_json(path.read_text())
+    geometry = _geometry_for_design(
+        design, junction_balance=True, measured_positioning=True
+    )
+
+    def slab_local_center_offset(helix_id, bp_index, strand_id):
+        pair = [
+            n for n in geometry
+            if n["helix_id"] == helix_id and n["bp_index"] == bp_index
+        ]
+        nuc = next(n for n in pair if n["strand_id"] == strand_id)
+        mate = next(n for n in pair if n["direction"] != nuc["direction"])
+        bead = np.asarray(nuc["backbone_position"], dtype=float)
+        center = np.asarray(nuc["base_position"], dtype=float).copy()
+        tangent = np.asarray(nuc["axis_tangent"], dtype=float)
+        tangent /= np.linalg.norm(tangent)
+        normal = np.asarray(nuc["base_normal"], dtype=float)
+        local_z = normal - tangent * np.dot(normal, tangent)
+        local_z /= np.linalg.norm(local_z)
+        local_x = np.cross(tangent, local_z)
+        local_x /= np.linalg.norm(local_x)
+        mate_base = np.asarray(mate["base_position"], dtype=float)
+        center += tangent * (np.dot(mate_base, tangent) - np.dot(center, tangent)) * 0.5
+        radial = bead - center
+        radial -= tangent * np.dot(radial, tangent)
+        distance = np.linalg.norm(radial)
+        radial /= distance
+        support = abs(np.dot(radial, local_x)) * 0.15 + abs(np.dot(radial, local_z)) * 0.35
+        center += radial * max(0.0, distance - support + 0.02)
+        offset = center - bead
+        return np.array([
+            np.dot(offset, local_x), np.dot(offset, tangent), np.dot(offset, local_z)
+        ])
+
+    oh7 = slab_local_center_offset("h_sc_55", 40, "sc_strand_167")
+    ordinary_duplex = slab_local_center_offset("h_sc_44", 72, "sc_strand_205")
+    assert oh7 == pytest.approx(ordinary_duplex, abs=1e-12)
+    assert oh7 == pytest.approx([0.053483996701, 0.0155, 0.344734740832], abs=1e-12)

@@ -184,6 +184,12 @@ describe('instanceAlpha coverage', () => {
     expect(HR).toContain('dom.binds_overhang_id != null')
   })
 
+  it('has one canonical native bead-to-slab placement path', () => {
+    expect(HR).not.toContain('display_slab_offset')
+    expect(HR).not.toContain('display_slab_rotation')
+    expect(HR).not.toContain('independentPose')
+  })
+
   it('preserves authoritative moved-overhang endpoints during deform lerp', () => {
     const body = HR.slice(HR.indexOf('// 5b. Straight-helix overhang cylinders (LOD) — same approach.'))
     expect(body.slice(0, 4500)).toContain('dom.wsStart && dom.wsEnd')

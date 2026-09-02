@@ -6,11 +6,30 @@ import {
   pairedSlabCenter,
   oxdnaBaseCenterFromInteractionSite,
   slabConnectionCorner,
+  slabCenterFromLocalOffset,
   slabQuaternion,
   translatedBasePosition,
 } from './helix_renderer.js'
 
 describe('base slab coordinate abstraction', () => {
+  it('makes native bead-to-slab registration independent of operation order', () => {
+    const local = new THREE.Vector3(0.053484, 0.0155, 0.344735)
+    const bead = new THREE.Vector3(4, -2, 7)
+    const q1 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.7)
+    const q2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.4)
+    const translation = new THREE.Vector3(9, 3, -5)
+    const combined = q2.clone().multiply(q1)
+
+    const rotateThenTranslate = slabCenterFromLocalOffset(
+      bead.clone().applyQuaternion(q1).applyQuaternion(q2).add(translation),
+      local, combined,
+    )
+    const nativeCenter = slabCenterFromLocalOffset(bead, local, new THREE.Quaternion())
+    const transformWholeResidue = nativeCenter.applyQuaternion(q1)
+      .applyQuaternion(q2).add(translation)
+
+    expect(rotateThenTranslate.distanceTo(transformWholeResidue)).toBeLessThan(1e-12)
+  })
   it('anchors the bead connector on the N3-side slab corner, not an edge midpoint', () => {
     const center = new THREE.Vector3(2, 3, 4)
     const quat = new THREE.Quaternion()
