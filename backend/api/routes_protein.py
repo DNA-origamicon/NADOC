@@ -353,6 +353,15 @@ def repair_protein_duplicate(body: ProteinDuplicateRepairRequest) -> dict:
             for attachment in d.protein_attachments
             if attachment.id != body.free_attachment_id
         ]
+        for override in d.representation_overrides:
+            override.protein_attachment_ids = [
+                item for item in override.protein_attachment_ids
+                if item != body.free_attachment_id
+            ]
+        d.representation_overrides = [
+            override for override in d.representation_overrides
+            if override.segments or override.protein_attachment_ids
+        ]
 
     updated, report, _entry = design_state.mutate_with_feature_log(
         "protein-attach-delete",
@@ -901,6 +910,15 @@ def delete_protein_attachment(attachment_id: str) -> dict:
     def _fn(d: Design) -> None:
         d.protein_attachments = [
             a for a in d.protein_attachments if a.id != attachment_id
+        ]
+        for override in d.representation_overrides:
+            override.protein_attachment_ids = [
+                item for item in override.protein_attachment_ids
+                if item != attachment_id
+            ]
+        d.representation_overrides = [
+            override for override in d.representation_overrides
+            if override.segments or override.protein_attachment_ids
         ]
         if binder_id is not None:
             d.strands = [strand for strand in d.strands if strand.id != binder_id]

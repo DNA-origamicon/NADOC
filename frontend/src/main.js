@@ -130,7 +130,7 @@ import { initSurfaceRenderer }     from './scene/surface_renderer.js'
 import { initAtomSurfaceDisplay }  from './scene/atom_surface_display.js'
 import { installAtomisticLoadingProbe } from './scene/debug/atomistic_loading_probe.js'
 import { installSharedRendererDebug } from './scene/debug/shared_renderer_debug.js'
-import { overhangsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './scene/representation_overrides.js'
+import { overhangsToSegments, editOverridesForSegments, editOverridesForProteins, createRepresentationMenuItem } from './scene/representation_overrides.js'
 import { initSpreadsheet } from './ui/spreadsheet.js'
 import { initVisibilityController } from './scene/visibility_controller.js'
 import { initExportMenu }          from './ui/export_menu.js'
@@ -1081,7 +1081,20 @@ async function main() {
     if (!assetId) return
     e.preventDefault()
     e.stopPropagation()
-    conjugateManager.showConjugateMenu({ x: e.clientX, y: e.clientY, assetId, attachmentId: attId })
+    let dismissProteinMenu = () => {}
+    const representationItem = createRepresentationMenuItem({
+      includePartReps: true,
+      dismiss: () => dismissProteinMenu(),
+      apply: rep => {
+        const design = store.getState().currentDesign
+        const next = editOverridesForProteins(design?.representation_overrides ?? [], [attId], rep)
+        void api.saveRepresentationOverrides(next)
+      },
+    })
+    conjugateManager.showConjugateMenu({
+      x: e.clientX, y: e.clientY, assetId, attachmentId: attId, representationItem,
+      onDismiss: fn => { dismissProteinMenu = fn },
+    })
   }, { capture: true }), { capture: true })
 
 

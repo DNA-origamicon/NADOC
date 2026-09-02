@@ -152,13 +152,19 @@ def save_representation_overrides(body: RepresentationOverridesSaveRequest) -> d
     """
     design = design_state.get_or_404()
     valid_helices = {h.id for h in design.helices}
+    valid_proteins = {a.id for a in design.protein_attachments}
     for ov in body.overrides:
-        if not ov.segments:
-            raise HTTPException(422, detail=f"Override {ov.id!r} covers no segments.")
+        if not ov.segments and not ov.protein_attachment_ids:
+            raise HTTPException(422, detail=f"Override {ov.id!r} covers no elements.")
         missing_h = {seg.helix_id for seg in ov.segments} - valid_helices
         if missing_h:
             raise HTTPException(
                 404, detail=f"Helix id(s) not found: {sorted(missing_h)}"
+            )
+        missing_p = set(ov.protein_attachment_ids) - valid_proteins
+        if missing_p:
+            raise HTTPException(
+                404, detail=f"Protein attachment id(s) not found: {sorted(missing_p)}"
             )
 
     def _apply(d: Design) -> None:

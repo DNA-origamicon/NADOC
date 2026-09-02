@@ -1169,9 +1169,10 @@ class RepresentationOverride(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = ""
     representation: Literal[
-        "full", "cylinders", "surface", "vdw", "ballstick", "stick"
+        "full", "beads", "cylinders", "hull-prism", "surface", "vdw", "ballstick", "stick"
     ] = "full"
     segments: List[RepresentationSegment] = Field(default_factory=list)
+    protein_attachment_ids: List[str] = Field(default_factory=list)
 
 
 # ── Deformation models (geometric layer, Phase 6) ─────────────────────────────

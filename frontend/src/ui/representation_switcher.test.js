@@ -40,6 +40,7 @@ function makeDeps(initialState = {}) {
   const api = {
     batchPatchInstances: vi.fn().mockResolvedValue({}),
     clearRepresentationOverrides: vi.fn().mockResolvedValue({}),
+    saveRepresentationOverrides: vi.fn().mockResolvedValue({}),
   }
   const atomisticRenderer = { getMode: vi.fn(() => 'off'), setMode: vi.fn() }
   const designRenderer = { setDetailLevel: vi.fn() }
@@ -256,6 +257,23 @@ describe('setRepresentation — design-mode activation', () => {
 })
 
 describe('menu click — design mode', () => {
+  it('assigns the sidebar/menu representation to a selected protein, not the whole part', async () => {
+    mountIds(DOM)
+    const deps = makeDeps({
+      currentDesign: { representation_overrides: [], protein_attachments: [{ id: 'p1' }] },
+      selection: { items: [{ kind: 'protein', id: 'p1' }] },
+      assemblyActive: false,
+    })
+    initRepresentationSwitcher(deps)
+    document.getElementById('menu-view-detail-beads').click()
+    await new Promise(r => setTimeout(r, 0))
+    expect(deps.api.saveRepresentationOverrides).toHaveBeenCalledWith([
+      expect.objectContaining({ representation: 'beads', protein_attachment_ids: ['p1'] }),
+    ])
+    expect(deps.api.clearRepresentationOverrides).not.toHaveBeenCalled()
+    expect(deps.setCurrentRepr).not.toHaveBeenCalled()
+  })
+
   it('toasts + bails when no design is loaded', async () => {
     mountIds(DOM)
     const deps = makeDeps({ currentDesign: null, assemblyActive: false })
