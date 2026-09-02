@@ -22,6 +22,8 @@ from pathlib import Path
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
+from backend.core.workspace import is_internal_workspace_path
+
 _subscribers: list[asyncio.Queue] = []
 _lock = threading.Lock()
 _observer: Observer | None = None
@@ -67,10 +69,9 @@ class _WorkspaceHandler(FileSystemEventHandler):
             rel = str(p.relative_to(self._workspace))
         except ValueError:
             return
-        # The session-cache autosave (.session/active_design.nadoc etc.) writes
-        # .nadoc/.nass files inside the workspace; those are recovery artifacts,
-        # not library files — never surface them as file-changed events.
-        if ".session" in p.parts:
+        # Engine output, diagnostics, test fixtures, and session recovery files
+        # are not library documents and must not update the welcome screen.
+        if is_internal_workspace_path(rel):
             return
         _push(
             {

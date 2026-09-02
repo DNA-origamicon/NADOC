@@ -145,17 +145,26 @@ class TestRoutes:
         assert usage.status_code == 200
         assert usage.json()["a.nadoc"] >= 4096
 
-    def test_library_listing_prunes_simulation_tree_contents(self, client) -> None:
+    def test_library_listing_hides_internal_workspace_trees(self, client) -> None:
         c, ws = client
         jobs = ws / "md_jobs"
         (jobs / "job-1" / "nested").mkdir(parents=True)
         (jobs / "job-1" / "nested" / "misleading.nadoc").write_text("{}")
+        (ws / "logs").mkdir()
+        (ws / "playwright_tests").mkdir()
+        (ws / "bench_fixtures").mkdir()
+        (ws / "builder_tests").mkdir()
         (ws / "real.nadoc").write_text("{}")
 
         paths = {entry["path"] for entry in c.get("/api/library/files").json()}
-        assert "md_jobs" in paths
         assert "real.nadoc" in paths
-        assert not any(path.startswith("md_jobs/") for path in paths)
+        assert not paths & {
+            "md_jobs",
+            "logs",
+            "playwright_tests",
+            "bench_fixtures",
+            "builder_tests",
+        }
 
     def test_about_aggregates(self, client) -> None:
         c, ws = client

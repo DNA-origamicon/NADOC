@@ -22,6 +22,41 @@ from pathlib import Path
 from backend.core.models import Assembly, PartSourceFile
 
 
+# Workspace roots owned by NADOC's engines or development tooling.  They live beside
+# user documents for compatibility and persistence, but are not part of the user's
+# design library and must not be advertised by the welcome screen or its event feed.
+INTERNAL_WORKSPACE_ROOTS = frozenset(
+    {
+        "autorefine",
+        "benchmark_runs",
+        "bench_fixtures",
+        "blade_jobs",
+        "builder_tests",
+        "cando_autorefine",
+        "cando_jobs",
+        "lammps_jobs",
+        "live_sessions",
+        "logs",
+        "md_chains",
+        "md_jobs",
+        "mrdna_jobs",
+        "oxdna_jobs",
+        "playwright_tests",
+        "propagator_pilot",
+        "snupi_jobs",
+    }
+)
+
+
+def is_internal_workspace_path(rel_path: str | Path) -> bool:
+    """Return whether a workspace-relative path belongs to an internal tree."""
+    parts = Path(rel_path).parts
+    if not parts:
+        return False
+    root = parts[0]
+    return root.startswith((".", "__")) or root.endswith("_jobs") or root in INTERNAL_WORKSPACE_ROOTS
+
+
 def safe_workspace_path(rel_path: str, workspace_dir: Path) -> Path:
     """Resolve rel_path within workspace_dir, rejecting path-traversal attempts.
 

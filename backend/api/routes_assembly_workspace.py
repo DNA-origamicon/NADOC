@@ -79,19 +79,6 @@ from backend.api.assembly import _safe_workspace_path, _assembly_response
 
 router = APIRouter()
 
-_SIM_TREE_NAMES = {
-    "autorefine",
-    "benchmark_runs",
-    "cando_autorefine",
-    "cando_jobs",
-    "lammps_jobs",
-    "live_sessions",
-    "md_chains",
-    "md_jobs",
-    "mrdna_jobs",
-    "oxdna_jobs",
-    "snupi_jobs",
-}
 _identity_audit_lock = threading.Lock()
 _identity_auditing: set[str] = set()
 _identity_audited: set[str] = set()
@@ -179,15 +166,11 @@ def _workspace_entries() -> list[dict]:
     for root, dirs, files in os.walk(workspace):
         root_path = Path(root)
         rel_root = root_path.relative_to(workspace)
-        dirs[:] = sorted(d for d in dirs if not d.startswith((".", "__")))
-
-        # The root folder was emitted by its parent. Do not enumerate or descend
-        # any of its job/run children.
-        if rel_root.parts and (
-            rel_root.parts[0].endswith("_jobs") or rel_root.parts[0] in _SIM_TREE_NAMES
-        ):
-            dirs[:] = []
-            continue
+        dirs[:] = sorted(
+            d
+            for d in dirs
+            if not _ws.is_internal_workspace_path(rel_root / d)
+        )
 
         for dirname in dirs:
             p = root_path / dirname
@@ -359,7 +342,7 @@ def _patch_references(old_ref: str, new_ref: str) -> list[str]:
 
 @router.get("/library/files", status_code=200)
 def list_library_files() -> list:
-    """Quickly list design files and folders, excluding simulation-tree contents.
+    """Quickly list user design files and folders, excluding internal trees.
 
     Disk usage is deliberately served by ``/library/disk-usage`` so this response
     can paint the welcome screen without waiting for job-folder accounting.

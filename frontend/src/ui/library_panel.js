@@ -149,6 +149,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   let _showSimFolders = false
   let _refreshGeneration = 0
   let _activePeerId = null
+  let _renderedFolderPaths = []
   const _selectedPaths = new Set()
   let _lastSelectedPath = null
   let _servers = [{ id: null, name: 'This computer', online: true }]
@@ -174,6 +175,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   const newAsmBtn     = _mkBtn('New Assembly', 'lib-btn-secondary')
   const importBtn     = _mkBtn('Import…',      'lib-btn-secondary')
   const newFolderBtn  = _mkBtn('+ Folder',     'lib-btn-secondary')
+  const expandAllBtn  = _mkBtn('',             'lib-trash-icon-btn lib-expand-all-btn')
   const trashBtn      = _mkBtn('',              'lib-trash-icon-btn')
   trashBtn.innerHTML = `
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -187,6 +189,13 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   importBtn.addEventListener('click', _handleImport)
   newFolderBtn.addEventListener('click', () => _showNewFolderInput(treeEl, '', 0))
   trashBtn.addEventListener('click', _showTrash)
+  expandAllBtn.addEventListener('click', () => {
+    const allExpanded = _renderedFolderPaths.length > 0 &&
+      _renderedFolderPaths.every(path => _expanded.has(path))
+    if (allExpanded) _expanded.clear()
+    else for (const path of _renderedFolderPaths) _expanded.add(path)
+    _render()
+  })
 
   const simToggleLabel = document.createElement('label')
   simToggleLabel.className = 'lib-show-sim-folders'
@@ -309,6 +318,11 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
 
   function _renderSortBar() {
     sortBarEl.innerHTML = ''
+    const leadingActionsEl = document.createElement('span')
+    leadingActionsEl.className = 'lib-sort-leading-actions'
+    leadingActionsEl.append(trashBtn, expandAllBtn)
+    sortBarEl.appendChild(leadingActionsEl)
+
     const prefix = document.createElement('span')
     prefix.className = 'lib-sort-label'
     prefix.textContent = 'Sort:'
@@ -333,7 +347,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     }
     const libraryOptionsEl = document.createElement('span')
     libraryOptionsEl.className = 'lib-library-options'
-    libraryOptionsEl.append(simToggleLabel, trashBtn)
+    libraryOptionsEl.append(simToggleLabel)
     sortBarEl.appendChild(libraryOptionsEl)
   }
   _renderSortBar()
@@ -399,6 +413,26 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       return matchesQuery(entry) || matchingFiles.some(file => file.path.startsWith(entry.path + '/'))
     })
     const tree = _buildTree(entries, { sortKey: _sortKey, sortDir: _sortDir })
+    _renderedFolderPaths = []
+    const collectFolderPaths = (node) => {
+      for (const folder of node.children) {
+        _renderedFolderPaths.push(folder.path)
+        collectFolderPaths(folder)
+      }
+    }
+    collectFolderPaths(tree)
+    const allFoldersExpanded = _renderedFolderPaths.length > 0 &&
+      _renderedFolderPaths.every(path => _expanded.has(path))
+    expandAllBtn.innerHTML = allFoldersExpanded
+      ? `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M7 4l5 5 5-5M7 20l5-5 5 5" />
+        </svg>`
+      : `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M7 9l5-5 5 5M7 15l5 5 5-5" />
+        </svg>`
+    expandAllBtn.title = allFoldersExpanded ? 'Collapse all folders' : 'Expand all folders'
+    expandAllBtn.setAttribute('aria-label', expandAllBtn.title)
+    expandAllBtn.disabled = _renderedFolderPaths.length === 0
     if (!tree.children.length && !tree.files.length) {
       const empty = document.createElement('div')
       empty.className = 'lib-empty'
