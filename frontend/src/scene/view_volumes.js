@@ -42,6 +42,11 @@ export function resolveViewVolumeLayers(volumes, points) {
   }))
 }
 
+/** Disabled volumes remain editable/outlined but contribute no representation layer. */
+export function activeViewVolumes(volumes) {
+  return (volumes ?? []).filter(volume => volume.enabled !== false)
+}
+
 export function segmentsForKeys(keys) {
   const byHelix = new Map()
   for (const key of keys ?? []) {
@@ -111,7 +116,8 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
   const boxIcon = '<svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><rect x="3" y="3" width="12" height="12" rx="1" fill="none" stroke="currentColor" stroke-width="2"/><path d="M18 13v8M14 17h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
   const hexIcon = '<svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path d="M8 3h7l4 6-4 6H8L4 9z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M18 14v8M14 18h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
   const eyeIcon = '<svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/></svg>'
-  section.innerHTML = `<h2 id="view-volume-heading" aria-expanded="true" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer"><span style="display:inline-flex;align-items:center;gap:7px"><span class="section-arrow">▼</span><span>View Volumes</span><span id="view-volume-busy" class="nadoc-spinner" role="status" aria-label="View volume representation loading" title="Building view volume representation…" style="display:none"></span></span><span style="display:inline-flex;gap:4px"><button id="view-volume-toggle-all" type="button" title="Hide all volume outlines" aria-label="Hide all volume outlines" aria-pressed="true" style="width:28px;height:26px;display:grid;place-items:center">${eyeIcon}</button><button id="view-volume-add-box" type="button" title="Add square view volume" aria-label="Add square view volume" style="width:28px;height:26px;display:grid;place-items:center">${boxIcon}</button><button id="view-volume-add-hexagonal" type="button" title="Add hexagonal view volume" aria-label="Add hexagonal view volume" style="width:28px;height:26px;display:grid;place-items:center">${hexIcon}</button></span></h2><div id="view-volume-body"><div class="view-volume-tool-row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:7px"><button type="button" data-volume-tool="translate" class="xover-mode-btn active" title="Move the selected volume without changing its shape (Tab)">Move</button><button type="button" data-volume-tool="scale" class="xover-mode-btn" title="Resize the selected volume about its center (Tab)">Resize</button><button type="button" data-volume-tool="rotate" class="xover-mode-btn" title="Rotate the selected volume (Tab)">Rotate</button></div><div id="view-volume-list" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div></div>`
+  const powerIcon = '<svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path d="M12 2v9M7 5.5a8 8 0 1 0 10 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>'
+  section.innerHTML = `<h2 id="view-volume-heading" aria-expanded="true" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer"><span style="display:inline-flex;align-items:center;gap:7px"><span class="section-arrow">▼</span><span>View Volumes</span><span id="view-volume-busy" class="nadoc-spinner" role="status" aria-label="View volume representation loading" title="Building view volume representation…" style="display:none"></span></span><span style="display:inline-flex;gap:4px"><button id="view-volume-enable-all" type="button" title="Disable all volume representations" aria-label="Disable all volume representations" aria-pressed="true" style="width:28px;height:26px;display:grid;place-items:center">${powerIcon}</button><button id="view-volume-toggle-all" type="button" title="Hide all volume outlines" aria-label="Hide all volume outlines" aria-pressed="true" style="width:28px;height:26px;display:grid;place-items:center">${eyeIcon}</button><button id="view-volume-add-box" type="button" title="Add square view volume" aria-label="Add square view volume" style="width:28px;height:26px;display:grid;place-items:center">${boxIcon}</button><button id="view-volume-add-hexagonal" type="button" title="Add hexagonal view volume" aria-label="Add hexagonal view volume" style="width:28px;height:26px;display:grid;place-items:center">${hexIcon}</button></span></h2><div id="view-volume-body"><div class="view-volume-tool-row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:7px"><button type="button" data-volume-tool="translate" class="xover-mode-btn active" title="Move the selected volume without changing its shape (Tab)">Move</button><button type="button" data-volume-tool="scale" class="xover-mode-btn" title="Resize the selected volume about its center (Tab)">Resize</button><button type="button" data-volume-tool="rotate" class="xover-mode-btn" title="Rotate the selected volume (Tab)">Rotate</button></div><div id="view-volume-list" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div></div>`
   pane.append(section)
   const list = section.querySelector('#view-volume-list')
   const heading = section.querySelector('#view-volume-heading'), body = section.querySelector('#view-volume-body')
@@ -170,7 +176,7 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
   }
   function computeLayers(sourceVolumes = volumes()) {
     const started = performance.now(), sourcePoints = points()
-    const layers = resolveViewVolumeLayers(sourceVolumes, sourcePoints).map(layer => ({
+    const layers = resolveViewVolumeLayers(activeViewVolumes(sourceVolumes), sourcePoints).map(layer => ({
       id: layer.volume.id, name: layer.volume.name, representation: layer.volume.representation,
       opacity: layer.volume.opacity, keys: [...layer.keys], segments: segmentsForKeys(layer.keys),
     }))
@@ -301,11 +307,15 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
       const top = document.createElement('div'); top.style.cssText = 'display:flex;gap:5px;align-items:center;margin-bottom:5px'
       const name = document.createElement('input'); name.className = 'view-volume-name'; name.value = volume.name; name.title = 'Rename volume'; name.style.cssText = 'min-width:0;flex:1;background:#161b22;color:#c9d1d9;border:1px solid #30363d;border-radius:3px;padding:3px'
       const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'view-volume-delete'; remove.textContent = '×'; remove.title = 'Delete volume'
+      const enabled = document.createElement('button'); enabled.type = 'button'; enabled.className = 'view-volume-enabled-toggle'
+      enabled.innerHTML = powerIcon; enabled.title = volume.enabled === false ? 'Enable volume representation' : 'Disable volume representation'
+      enabled.setAttribute('aria-label', enabled.title); enabled.setAttribute('aria-pressed', String(volume.enabled !== false))
+      if (volume.enabled === false) enabled.style.opacity = '.4'
       const outline = document.createElement('button'); outline.type = 'button'; outline.className = 'view-volume-outline-toggle'
       outline.innerHTML = eyeIcon; outline.title = volume.outline_visible === false ? 'Show volume outline' : 'Hide volume outline'
       outline.setAttribute('aria-label', outline.title); outline.setAttribute('aria-pressed', String(volume.outline_visible !== false))
       if (volume.outline_visible === false) outline.style.opacity = '.4'
-      top.append(name, outline, remove)
+      top.append(name, enabled, outline, remove)
       const controlsRow = document.createElement('div'); controlsRow.style.cssText = 'display:grid;grid-template-columns:1fr 74px;gap:5px'
       const rep = document.createElement('select'); rep.className = 'view-volume-representation'; rep.title = 'Representation'
       rep.style.cssText = 'min-width:0;background:#161b22;color:#c9d1d9;border:1px solid #30363d;border-radius:3px;padding:3px'
@@ -314,10 +324,11 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
       const opacity = document.createElement('input'); opacity.className = 'view-volume-opacity'; opacity.type = 'range'; opacity.min = '0'; opacity.max = '1'; opacity.step = '0.05'; opacity.value = String(volume.opacity); opacity.title = `Opacity ${Math.round(volume.opacity * 100)}%`
       controlsRow.append(rep, opacity); row.append(top, controlsRow); list.append(row)
       row.addEventListener('click', () => { selectedId = selectedId === volume.id ? null : volume.id; render() })
-      for (const control of [name, rep, opacity, outline, remove]) control.addEventListener('click', event => event.stopPropagation())
+      for (const control of [name, rep, opacity, enabled, outline, remove]) control.addEventListener('click', event => event.stopPropagation())
       name.addEventListener('change', e => save(volumes().map(v => v.id === volume.id ? { ...v, name: e.target.value.trim() || 'View Volume' } : v)))
       rep.addEventListener('change', e => save(volumes().map(v => v.id === volume.id ? { ...v, representation: e.target.value } : v)))
       opacity.addEventListener('change', e => save(volumes().map(v => v.id === volume.id ? { ...v, opacity: Number(e.target.value) } : v)))
+      enabled.addEventListener('click', () => save(volumes().map(v => v.id === volume.id ? { ...v, enabled: v.enabled === false } : v)))
       outline.addEventListener('click', () => save(volumes().map(v => v.id === volume.id ? { ...v, outline_visible: v.outline_visible === false } : v)))
       remove.addEventListener('click', e => { e.stopPropagation(); if (selectedId === volume.id) selectedId = null; save(volumes().filter(v => v.id !== volume.id)) })
     }
@@ -326,6 +337,11 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     master.style.opacity = allVisible ? '1' : '.4'
     master.title = allVisible ? 'Hide all volume outlines' : 'Show all volume outlines'
     master.setAttribute('aria-label', master.title); master.setAttribute('aria-pressed', String(allVisible))
+    const allEnabled = volumes().length > 0 && volumes().every(volume => volume.enabled !== false)
+    const enableMaster = section.querySelector('#view-volume-enable-all')
+    enableMaster.style.opacity = allEnabled ? '1' : '.4'
+    enableMaster.title = allEnabled ? 'Disable all volume representations' : 'Enable all volume representations'
+    enableMaster.setAttribute('aria-label', enableMaster.title); enableMaster.setAttribute('aria-pressed', String(allEnabled))
     attachSelected(); requestPreview()
   }
   function addVolume(shape) {
@@ -340,8 +356,12 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     selectedId = id
     // Start as Full: creating a box must stay instantaneous even for an 80 MB
     // design. The user explicitly opts into surface/atomistic computation.
-    save([...volumes(), { id, name: `${shape === 'hexagonal' ? 'Hex Volume' : 'Volume'} ${volumes().length + 1}`, shape, ...bounds, rotation: [0, 0, 0, 1], representation: 'full', opacity: 1, outline_visible: true }])
+    save([...volumes(), { id, name: `${shape === 'hexagonal' ? 'Hex Volume' : 'Volume'} ${volumes().length + 1}`, shape, ...bounds, rotation: [0, 0, 0, 1], representation: 'full', opacity: 1, outline_visible: true, enabled: true }])
   }
+  section.querySelector('#view-volume-enable-all').addEventListener('click', () => {
+    const enable = volumes().some(volume => volume.enabled === false)
+    save(volumes().map(volume => ({ ...volume, enabled: enable })))
+  })
   section.querySelector('#view-volume-toggle-all').addEventListener('click', () => {
     const show = volumes().some(volume => volume.outline_visible === false)
     save(volumes().map(volume => ({ ...volume, outline_visible: show })))
@@ -453,11 +473,21 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
   }
   window.addEventListener('keydown', onWindowKeyDown)
   let previousDesign = store.getState().currentDesign
-  const unsubscribe = store.subscribe(state => { if (state.currentDesign === previousDesign) return; previousDesign = state.currentDesign; render() })
+  let previousGeometry = store.getState().currentGeometry
+  const unsubscribe = store.subscribe(state => {
+    const designChanged = state.currentDesign !== previousDesign
+    const geometryChanged = state.currentGeometry !== previousGeometry
+    if (!designChanged && !geometryChanged) return
+    previousDesign = state.currentDesign
+    previousGeometry = state.currentGeometry
+    // design_renderer subscribed before this module, so a geometry notification
+    // reaches us after its synchronous rebuild has populated backbone entries.
+    render()
+  })
   render()
   const apiDebug = {
     add: (shape = 'box') => section.querySelector(shape === 'hexagonal' ? '#view-volume-add-hexagonal' : '#view-volume-add-box').click(),
-    layers: () => resolveViewVolumeLayers(volumes(), points()),
+    layers: () => resolveViewVolumeLayers(activeViewVolumes(volumes()), points()),
     select: id => { selectedId = id; render() },
     handles: () => {
       const rect = canvas.getBoundingClientRect()

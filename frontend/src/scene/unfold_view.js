@@ -28,6 +28,7 @@ import { buildClusterColorLookup } from './helix_renderer/palette.js'
 import { clusterAlphaForNuc, clusterAlphaKeys, clusterDisplaySignature } from './cluster_entries.js'
 import { baseKey } from './base_ref.js'
 import { selectedStrandIds } from './selection_model.js'
+import { crossoverArcHiddenForRepresentations } from './view_volume_rules.js'
 
 const ANIM_DURATION_MS = 500   // linear lerp duration
 const ARC_SEGS         = 20    // bezier sample count per arc line
@@ -355,17 +356,15 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     }
   }
 
-  /** Mixed-representation gate: a crossover arc belongs to the full/beads rep.
-   *  Hide it when BOTH endpoints render coarse (cylinders) or as surface/atomistic
-   *  — i.e. globally in cylinder LOD, and per-region for cylinder/surface columns.
-   *  An arc with at least one full-rendered endpoint stays visible (so a region
-   *  pinned to full shows its crossovers even under a global cylinder LOD). */
+  /** Mixed-representation gate: a crossover arc belongs to the full rep.
+   *  Both endpoint columns must be full; otherwise an arc crossing a volume
+   *  boundary leaks into cylinders/surface/atomistic geometry. */
   function _colRepForNuc(nuc) {
     if (!nuc) return 'full'
     return designRenderer.columnRepAt?.(nuc.helix_id, nuc.bp_index) ?? 'full'
   }
   function _arcRepHidden(e) {
-    return _colRepForNuc(e.fromNuc) !== 'full' && _colRepForNuc(e.toNuc) !== 'full'
+    return crossoverArcHiddenForRepresentations(_colRepForNuc(e.fromNuc), _colRepForNuc(e.toNuc))
   }
 
   function _clearArcs() {

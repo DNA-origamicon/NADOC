@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createLatestFrameScheduler, normalizeBounds, pointInVolume, resolveViewVolumeLayers, segmentsForKeys } from './view_volumes.js'
+import { activeViewVolumes, createLatestFrameScheduler, normalizeBounds, pointInVolume, resolveViewVolumeLayers, segmentsForKeys } from './view_volumes.js'
 
 describe('view volume spatial resolution', () => {
   const a = { id: 'a', min_corner: [0, 0, 0], max_corner: [5, 5, 5], representation: 'surface', opacity: .4 }
@@ -27,6 +27,23 @@ describe('view volume spatial resolution', () => {
     expect(pointInVolume([0, 1.7, 1.9], volume)).toBe(true)
     expect(pointInVolume([1.9, 1, 0], volume)).toBe(false)
     expect(pointInVolume([0, 0, 3.1], volume)).toBe(false)
+  })
+  it('applies rotation before testing hexagonal prism boundaries', () => {
+    const quarterTurnZ = [0, 0, Math.sin(Math.PI / 4), Math.cos(Math.PI / 4)]
+    const volume = { shape: 'hexagonal', min_corner: [-3, -3, -1], max_corner: [3, 3, 1], rotation: quarterTurnZ }
+    expect(pointInVolume([-Math.sqrt(2), Math.sqrt(2), 1], volume)).toBe(true)
+    expect(pointInVolume([-2.2, 2.2, 0], volume)).toBe(false)
+  })
+  it('keeps disabled volumes editable but excludes them from representation work', () => {
+    expect(activeViewVolumes([{ id: 'legacy' }, { id: 'on', enabled: true }, { id: 'off', enabled: false }]).map(v => v.id))
+      .toEqual(['legacy', 'on'])
+    expect(activeViewVolumes()).toEqual([])
+  })
+  it('separates helices, removes duplicate bases, and ignores malformed keys', () => {
+    expect(segmentsForKeys(new Set(['h1:3', 'h2:1', 'h1:2', 'h1:2', 'bad', 'h2:nope']))).toEqual([
+      { helix_id: 'h1', bp_start: 2, bp_end: 3 },
+      { helix_id: 'h2', bp_start: 1, bp_end: 1 },
+    ])
   })
   it('coalesces rapid preview work and aborts the superseded revision', async () => {
     const frames = new Map(), seen = []

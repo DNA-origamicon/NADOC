@@ -376,7 +376,10 @@ export function initDesignRenderer(scene, storeRef) {
     const state = storeRef.getState()
     const refHidden = state.showReferenceGeometry === false || state.simulationTabActive === true
     const hasHidden = _hiddenCrossoverIds.size > 0 || (refHidden && refIds.size > 0)
-    if (!_clusterAlphaKeys.size && !hasHidden && !_xoverBeadsMesh._instanceAlpha) return
+    const repVisible = ad => _helixCtrl?.columnRepAt?.(ad.nucA?.helix_id, ad.nucA?.bp_index) === 'full' &&
+      _helixCtrl?.columnRepAt?.(ad.nucB?.helix_id, ad.nucB?.bp_index) === 'full'
+    const hasRepHidden = _xoverArcData.some(ad => !repVisible(ad))
+    if (!_clusterAlphaKeys.size && !hasHidden && !hasRepHidden && !_xoverBeadsMesh._instanceAlpha) return
     installInstanceAlpha(_xoverBeadsMesh)
     installInstanceAlpha(_xoverSlabsMesh)
     if (_xoverConnMesh) installInstanceAlpha(_xoverConnMesh)
@@ -384,7 +387,7 @@ export function initDesignRenderer(scene, storeRef) {
     for (const ad of _xoverArcData) {
       const hidden = _hiddenCrossoverIds.has(ad.xoId) ||
         (refHidden && (refIds.has(ad.nucA?.strand_id) || refIds.has(ad.nucB?.strand_id)))
-      const a = hidden ? 0 : (_clusterAlphaKeys.size
+      const a = hidden || !repVisible(ad) ? 0 : (_clusterAlphaKeys.size
         ? Math.min(clusterAlphaForNuc(_clusterAlphaKeys, ad.nucA),
                    clusterAlphaForNuc(_clusterAlphaKeys, ad.nucB))
         : 1)
@@ -1186,6 +1189,7 @@ export function initDesignRenderer(scene, storeRef) {
       }
       _helixCtrl.setDetailLevel(_detailLevel)
       _helixCtrl.applyRepOverrides(columnRep)
+      _applyXoverClusterAlpha()
     },
     setMode(mode) {
       _currentMode = mode

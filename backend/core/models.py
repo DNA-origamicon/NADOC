@@ -1195,6 +1195,7 @@ class ViewVolume(BaseModel):
     ] = "full"
     opacity: float = Field(default=1.0, ge=0.0, le=1.0)
     outline_visible: bool = True
+    enabled: bool = True
 
     @field_validator("rotation")
     @classmethod

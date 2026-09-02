@@ -82,6 +82,11 @@ and transform gizmo while leaving its representation active. The eye button in t
 card header shows or hides every outline. Outline visibility and the card's collapsed
 state persist across reloads.
 
+The power button on each row independently enables or disables that volume's
+representation layer without hiding its editable outline. The power button in the
+card header enables or disables every layer, making it quick to compare combinations
+of representations at different locations. Enabled state is saved with the design.
+
 Volume membership is evaluated per base-pair column. Cylinder representation clips
 domains into contiguous in-volume runs, including boundaries that fall in the middle
 of a domain, so the cylinder length follows the spatial boundary instead of dropping

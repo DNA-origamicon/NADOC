@@ -25,6 +25,12 @@ describe('view-volume cylinder clipping', () => {
   })
 })
 
+describe('view-volume crossover visibility', () => {
+  it('requires both cross-helix connector endpoints to remain full detail', () => {
+    expect(HR).toMatch(/e\.isCrossHelix\s*\?\s*\(beadVis\(e\.fromNuc\)\s*&&\s*beadVis\(e\.toNuc\)/)
+  })
+})
+
 describe('pose-preserving presentation edits', () => {
   it('changes instance scale without changing its live position or orientation', () => {
     const mesh = new THREE.InstancedMesh(

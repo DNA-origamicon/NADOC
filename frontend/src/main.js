@@ -917,6 +917,7 @@ async function main() {
   // ── 2D Unfold view ──────────────────────────────────────────────────────────
   // bluntEnds is initialized below; use a getter so unfoldView can call it lazily.
   const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds, () => loopSkipHighlight, () => sequenceOverlay, () => overhangLocations, null)
+  window.addEventListener('nadoc:view-volume-layers', () => unfoldView.refreshArcVisibility())
   visibilityController = initVisibilityController({
     store, designRenderer, unfoldView,
     onPersist: (visibilityState) => api.saveVisibilityState(visibilityState),

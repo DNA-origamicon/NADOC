@@ -12,7 +12,7 @@ def setup_function():
 
 def test_view_volume_round_trip_and_old_default():
     design = _demo_design()
-    design.view_volumes = [ViewVolume(name="Focus", shape="hexagonal", min_corner=(0, 1, 2), max_corner=(3, 4, 5), rotation=(0, 0, 0.70710678, 0.70710678), representation="surface", opacity=.35)]
+    design.view_volumes = [ViewVolume(name="Focus", shape="hexagonal", min_corner=(0, 1, 2), max_corner=(3, 4, 5), rotation=(0, 0, 0.70710678, 0.70710678), representation="surface", opacity=.35, outline_visible=False, enabled=False)]
     restored = Design.from_json(design.to_json())
     assert restored.view_volumes == design.view_volumes
     assert Design.from_json(_demo_design().to_json()).view_volumes == []
@@ -26,6 +26,7 @@ def test_put_view_volumes_persists_and_validates():
     assert response.status_code == 200
     saved = response.json()["view_volumes"][0]
     assert saved["outline_visible"] is True
+    assert saved["enabled"] is True
     assert response.json()["revision"] > revision_before
     assert saved["name"] == "Atomistic window"
     assert saved["opacity"] == .7
@@ -36,3 +37,6 @@ def test_put_view_volumes_persists_and_validates():
     assert client.put("/api/design/view-volumes", json={"volumes": [{**body["volumes"][0], "opacity": 1.2}]}).status_code == 422
     assert client.put("/api/design/view-volumes", json={"volumes": [{**body["volumes"][0], "min_corner": [3, 0, 0]}]}).status_code == 422
     assert client.put("/api/design/view-volumes", json={"volumes": [{**body["volumes"][0], "rotation": [0, 0, 1, 1]}]}).status_code == 422
+    assert client.put("/api/design/view-volumes", json={"volumes": [{**body["volumes"][0], "shape": "cylinder"}]}).status_code == 422
+    assert client.put("/api/design/view-volumes", json={"volumes": [{**body["volumes"][0], "representation": "wireframe"}]}).status_code == 422
+    assert client.put("/api/design/view-volumes", json={"volumes": [{**body["volumes"][0], "max_corner": [-2, 2, 2]}]}).status_code == 422

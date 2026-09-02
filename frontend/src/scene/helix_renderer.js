@@ -3183,7 +3183,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     for (const e of slabEntries)     _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc) * _clusterAlphaFor(e.nuc) * _hiddenAlphaFor(e.nuc, e._copy ?? 0))
     for (const e of fluoroEntries)   _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc) * _clusterAlphaFor(e.nuc) * _hiddenAlphaFor(e.nuc, e._copy ?? 0))
     for (const e of coneEntries) {
-      const vis = e.isCrossHelix ? 1 : beadVis(e.fromNuc)
+      const vis = e.isCrossHelix
+        ? (beadVis(e.fromNuc) && beadVis(e.toNuc) ? 1 : 0)
+        : beadVis(e.fromNuc)
       _setEntryAlpha(e, _refAlphaFor(e.strandId) * vis * _clusterAlphaFor(e.fromNuc) * _hiddenAlphaFor(e.fromNuc))
     }
     for (const dom of _domainCylData)   _setCylAlpha(iHelixCylinders, dom.cylIdx, _cylFactor(dom))
