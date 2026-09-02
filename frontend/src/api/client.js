@@ -73,6 +73,15 @@ function _isStaleDesignResponse(json) {
   return false
 }
 
+/** Advance the stale-response watermark for a lightweight metadata response. */
+function _acceptMetadataRevision(json) {
+  const rev = json?.revision
+  if (typeof rev !== 'number') return true
+  if (rev < _lastAppliedRevision) return false
+  _lastAppliedRevision = rev
+  return true
+}
+
 /** Reset the stale-response watermark. MUST be called when the backend restarts
  *  (its per-session revision resets low, so post-restart responses would
  *  otherwise be dropped as "stale"). Called from the restart-recovery handler. */
@@ -904,6 +913,7 @@ export function _syncFromAssemblyResponse(json) {
 export async function getDesign({ metadataOnly = false } = {}) {
   const json = await _request('GET', '/design')
   if (!json) return null
+  if (_isStaleDesignResponse(json)) return json
   if (metadataOnly) {
     // A sibling tab told us its mutation cannot affect geometry/topology-derived
     // renderer state (for example, an overhang label rename).  Keep the existing
@@ -1026,6 +1036,13 @@ export async function saveRepresentationOverrides(overrides) {
 export async function clearRepresentationOverrides() {
   const json = await _request('DELETE', '/design/representation-overrides')
   return _syncFromDesignResponse(json)
+}
+
+/** Replace display-only spatial view volumes persisted with the part. */
+export async function saveViewVolumes(volumes) {
+  const json = await _request('PUT', '/design/view-volumes', { volumes }, { suppressBusy: true })
+  if (!json || !_acceptMetadataRevision(json)) return null
+  return json
 }
 
 /** Persist display-only nucleotide/cluster visibility in the .nadoc file. */

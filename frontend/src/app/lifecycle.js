@@ -164,19 +164,33 @@ export function initAutosaveSync({
   let _partSaveTimer = null
   let _libRefreshTimer = null
 
+  const _viewVolumeOnly = (next, previous) => {
+    if (!next || !previous || next === previous || next.view_volumes === previous.view_volumes) return false
+    const keys = new Set([...Object.keys(next), ...Object.keys(previous)])
+    keys.delete('view_volumes')
+    for (const key of keys) if (next[key] !== previous[key]) return false
+    return true
+  }
+
   store.subscribeSlice('design', (newState, prevState) => {
     // Skip non-persistent syncs: transient deform previews AND protected simulation
     // loadout selections. The latter must remain selected for viewing; attempting to
     // autosave a protected branch invokes the 409 recovery path, which activates the
     // editable branch and silently undoes the warning-icon rollback.
     if (newState.currentDesign !== prevState.currentDesign && api.wasLastDesignSyncTransient()) return
+    const viewVolumeOnly = _viewVolumeOnly(newState.currentDesign, prevState.currentDesign)
+    // The dedicated PUT has already persisted this metadata in server state.
+    // Delay the large portable-file flush until a representation/opacity gesture
+    // has been idle, otherwise Voltron serializes ~82 MB between consecutive card
+    // changes and blocks their tiny PUTs behind CPU/lock contention.
+    const saveDelay = viewVolumeOnly ? 10_000 : 1_500
     if (getPartEditContext()) {
       if (newState.currentDesign === prevState.currentDesign) return
       syncBadge.setSyncStatus('yellow', 'auto-saving…')
       clearTimeout(_partSaveTimer)
       _partSaveTimer = setTimeout(() => {
         fileIo.savePartToAssembly({ silent: true })
-      }, 900)
+      }, viewVolumeOnly ? 10_000 : 900)
       return
     }
     if (!getWorkspacePath() || _reloadingFromSSE) return
@@ -198,7 +212,7 @@ export function initAutosaveSync({
         syncBadge.syncLog('err', 'SAVE', `failed: ${err?.message ?? err}`)
         setTimeout(() => _selfSavedPaths.delete(path), 5000)
       }
-    }, 1500)
+    }, saveDelay)
   })
 
   store.subscribeSlice('assembly', (newState, prevState) => {

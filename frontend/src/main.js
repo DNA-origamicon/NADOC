@@ -269,6 +269,7 @@ import { initPhotoMode }      from './scene/photo_mode.js'
 import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
 import { getSectionCollapsed, setSectionCollapsed } from './ui/section_collapse_state.js'
 import { initRightSidebarTabs } from './ui/right_sidebar_tabs.js'
+import { initViewVolumes } from './scene/view_volumes.js'
 
 // Inflate any [data-icon] markup in static HTML and watch for new ones in
 // dynamically-added DOM (modals, context menus, panel rebuilds).
@@ -322,6 +323,8 @@ async function main() {
 
   // ── Design renderer (reactive — shows helices when store has geometry) ───────
   const designRenderer = initDesignRenderer(scene, store)
+  const viewVolumes = initViewVolumes({ document, scene, camera, canvas, controls, store, api, designRenderer })
+  window.__NADOC_VIEW_VOLUMES__ = viewVolumes?.debug
 
   // ── Assembly renderer (shows PartInstance geometry when assembly mode active) ─
   // Phase 7e (2026-05-20): the shared-instancing renderer is now the DEFAULT

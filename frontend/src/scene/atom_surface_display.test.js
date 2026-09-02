@@ -16,6 +16,7 @@ function makeAtomStub() {
     highlight: vi.fn(),
     setColorMode: vi.fn(),
     setVdwScale: vi.fn(),
+    setUniformOpacity: vi.fn(),
     _setMode: (m) => { mode = m },
   }
   return stub
@@ -48,7 +49,7 @@ vi.mock('./representation_overrides.js', () => ({
   repColumnsByRep: vi.fn(() => ({ vdw: new Set(), ballstick: new Set(), stick: new Set() })),
 }))
 
-import { initAtomSurfaceDisplay, regionSurfaceSignature, atomSelectionForState } from './atom_surface_display.js'
+import { initAtomSurfaceDisplay, regionSurfaceSignature, atomSelectionForState, isViewVolumeOnlyDesignChange } from './atom_surface_display.js'
 import { surfaceSegments } from './design_queries.js'
 
 const DOM = [
@@ -170,6 +171,20 @@ describe('regionSurfaceSignature (pure)', () => {
   it('empty segments → empty string', () => {
     surfaceSegments.mockReturnValueOnce([])
     expect(regionSurfaceSignature({})).toBe('')
+  })
+})
+
+describe('isViewVolumeOnlyDesignChange', () => {
+  it('accepts a spread update that changes only view_volumes', () => {
+    const previous = { helices: [], strands: [], metadata: { name: 'large' }, view_volumes: [] }
+    const next = { ...previous, view_volumes: [{ id: 'v1', representation: 'stick' }] }
+    expect(isViewVolumeOnlyDesignChange(next, previous)).toBe(true)
+  })
+
+  it('rejects structural or unrelated display changes', () => {
+    const previous = { helices: [], strands: [], view_volumes: [] }
+    expect(isViewVolumeOnlyDesignChange({ ...previous, helices: [{}], view_volumes: [{}] }, previous)).toBe(false)
+    expect(isViewVolumeOnlyDesignChange({ ...previous, view_volumes: previous.view_volumes }, previous)).toBe(false)
   })
 })
 
@@ -474,6 +489,23 @@ describe('initAtomSurfaceDisplay', () => {
     // subscriber re-applies on design change (designChanged path); allow microtasks
     await Promise.resolve()
     expect(global.fetch.mock.calls.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('view-volume-only card saves retain the atom cache and wait for the layer event', async () => {
+    mountIds(DOM)
+    const original = { helices: [], strands: [], view_volumes: [] }
+    const store = createMockStore({ currentDesign: original, currentGeometry: null })
+    const deps = makeDeps({ store })
+    const api = initAtomSurfaceDisplay(deps)
+    await api.applyAtomisticMode('vdw')
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+
+    deps.atomisticRenderer._setMode('vdw')
+    store.setState({ currentDesign: {
+      ...original, view_volumes: [{ id: 'v1', representation: 'beads' }],
+    } })
+    await Promise.resolve()
+    expect(global.fetch).toHaveBeenCalledTimes(1)
   })
 
   it('discards a pre-edit atom response that finishes after the post-edit model', async () => {

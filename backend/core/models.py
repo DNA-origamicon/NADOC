@@ -1175,6 +1175,40 @@ class RepresentationOverride(BaseModel):
     protein_attachment_ids: List[str] = Field(default_factory=list)
 
 
+class ViewVolume(BaseModel):
+    """Oriented, display-only spatial representation region.
+
+    Bounds store the box centre and local dimensions in design/world nanometres;
+    rotation is a normalized Three.js quaternion. Volumes deliberately remain
+    independent records: intersecting volumes contribute independent render
+    layers instead of using the last-wins rule of topological overrides.
+    """
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = "View Volume"
+    min_corner: tuple[float, float, float]
+    max_corner: tuple[float, float, float]
+    rotation: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)
+    representation: Literal[
+        "full", "beads", "cylinders", "surface", "vdw", "ballstick", "stick"
+    ] = "full"
+    opacity: float = Field(default=1.0, ge=0.0, le=1.0)
+
+    @field_validator("rotation")
+    @classmethod
+    def _rotation_is_unit_quaternion(cls, value: tuple[float, float, float, float]):
+        norm = sum(component * component for component in value) ** 0.5
+        if not 0.999 <= norm <= 1.001:
+            raise ValueError("rotation must be a normalized quaternion")
+        return value
+
+    @model_validator(mode="after")
+    def _ordered_nonzero_bounds(self) -> "ViewVolume":
+        if any(lo >= hi for lo, hi in zip(self.min_corner, self.max_corner)):
+            raise ValueError("min_corner must be strictly below max_corner on every axis")
+        return self
+
+
 # ── Deformation models (geometric layer, Phase 6) ─────────────────────────────
 
 
@@ -2702,6 +2736,7 @@ class Design(BaseModel):
     # selected strands or clusters so a focal region can show full detail against a
     # coarser background. Display-only; never affects topology or geometry.
     representation_overrides: List[RepresentationOverride] = Field(default_factory=list)
+    view_volumes: List[ViewVolume] = Field(default_factory=list)
     visibility_state: VisibilityState = Field(default_factory=VisibilityState)
     photoproduct_junctions: List[PhotoproductJunction] = Field(default_factory=list)
     crossovers: List[Crossover] = Field(default_factory=list)

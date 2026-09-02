@@ -299,6 +299,22 @@ describe('initAutosaveSync', () => {
     expect(sync.selfSavedPaths.has('/ws/d.nadoc')).toBe(false)
   })
 
+  it('defers a view-volume-only workspace flush until the card interaction is idle', async () => {
+    const original = { id: 'd1', helices: [], view_volumes: [] }
+    const { store, deps } = makeAutosaveDeps({
+      state: { currentDesign: original },
+      deps: { getWorkspacePath: () => '/ws/large.nadoc' },
+    })
+    initAutosaveSync(deps)
+    store._emitSlice('design', {
+      currentDesign: { ...original, view_volumes: [{ id: 'v1', representation: 'stick' }] },
+    })
+    await vi.advanceTimersByTimeAsync(9_999)
+    expect(deps.api.saveDesignToWorkspace).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(deps.api.saveDesignToWorkspace).toHaveBeenCalledOnce()
+  })
+
   it('part-edit context routes to savePartToAssembly (900ms, silent), not a workspace save', async () => {
     const { store, deps } = makeAutosaveDeps({
       deps: { getPartEditContext: () => ({ instanceId: 'i1' }), getWorkspacePath: () => '/ws/d.nadoc' },

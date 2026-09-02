@@ -45,6 +45,7 @@ from backend.core.models import (
     Design,
     PlateLayout,
     RepresentationOverride,
+    ViewVolume,
     StapleGroup,
     TubeAssignment,
     VisibilityState,
@@ -79,8 +80,22 @@ class RepresentationOverridesSaveRequest(BaseModel):
     overrides: List[RepresentationOverride]
 
 
+class ViewVolumesSaveRequest(BaseModel):
+    volumes: List[ViewVolume]
+
+
 class StapleGroupsSaveRequest(BaseModel):
     groups: List[StapleGroup]
+
+
+@router.get("/design/view-volumes", status_code=200)
+def get_view_volumes() -> dict:
+    """Return only persisted view volumes for fast UI/test verification."""
+    design = design_state.get_or_404()
+    return {
+        "view_volumes": [volume.model_dump(mode="json") for volume in design.view_volumes],
+        "revision": design_state.revision(),
+    }
 
 
 @router.put("/design/staple-groups", status_code=200)
@@ -184,6 +199,24 @@ def clear_representation_overrides() -> dict:
 
     design, report = design_state.mutate_and_validate(_apply)
     return _design_response(design, report)
+
+
+@router.put("/design/view-volumes", status_code=200)
+def save_view_volumes(body: ViewVolumesSaveRequest) -> dict:
+    """Replace spatial view-volume metadata without validating/returning a huge design.
+
+    The request body has already validated every ViewVolume. Revalidating and then
+    serializing the complete Design made a pointer-up on VoltronCoreArm transfer an
+    82 MB response. This display-only assignment cannot invalidate topology.
+    """
+    def _apply(design: Design) -> None:
+        design.view_volumes = [volume.model_copy(deep=True) for volume in body.volumes]
+
+    design, revision = design_state.mutate_display_metadata(_apply)
+    return {
+        "view_volumes": [volume.model_dump(mode="json") for volume in design.view_volumes],
+        "revision": revision,
+    }
 
 
 @router.put("/design/visibility", status_code=200)

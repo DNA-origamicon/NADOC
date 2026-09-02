@@ -325,6 +325,23 @@ def mutate_and_validate(
         return s.design, report
 
 
+def mutate_display_metadata(fn: Callable[[Design], None]) -> tuple[Design, int]:
+    """Apply a display-only mutation atomically without topology validation.
+
+    Display metadata cannot invalidate the design, but it still has to advance
+    the session revision. Otherwise an older in-flight design response can land
+    after this mutation and erase the metadata in the browser.
+    """
+    with _lock:
+        s = _session()
+        if s.design is None:
+            raise HTTPException(status_code=404, detail="No active design.")
+        _assert_active_loadout_editable(s.design)
+        fn(s.design)
+        _bump_revision(s)
+        return s.design, s.revision
+
+
 def mutate_with_reconcile(
     fn: Callable[[Design], MutationReport | None],
 ) -> tuple[Design, ValidationReport]:

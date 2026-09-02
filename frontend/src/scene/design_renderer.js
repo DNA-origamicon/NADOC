@@ -1173,6 +1173,20 @@ export function initDesignRenderer(scene, storeRef) {
   }
 
   return {
+    applyViewVolumeLayers(layers = []) {
+      if (!_helixCtrl?.applyRepOverrides) return
+      const { columnRep } = resolveRepOverrides(storeRef.getState().currentDesign)
+      // A spatial volume overrides the global/coarse representation in its
+      // footprint. Independent heavy layers are retained in the event payload;
+      // the CG visibility channel only needs to know whether to show full/beads,
+      // cylinders, or yield the column to a heavy overlay.
+      for (const layer of layers) {
+        const rep = layer.representation === 'beads' ? 'full' : layer.representation
+        for (const key of layer.keys ?? []) columnRep.set(key, rep)
+      }
+      _helixCtrl.setDetailLevel(_detailLevel)
+      _helixCtrl.applyRepOverrides(columnRep)
+    },
     setMode(mode) {
       _currentMode = mode
       _helixCtrl?.setMode(mode)
