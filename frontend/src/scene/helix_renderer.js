@@ -95,6 +95,27 @@ export function coalesceCylinderRuns(domains = []) {
   return runs
 }
 
+/** Maximal inclusive bp runs for which a domain resolves to cylinders. */
+export function clippedCylinderRuns(bpLo, bpHi, isCylinder) {
+  const runs = []
+  let start = null
+  for (let bp = bpLo; bp <= bpHi; bp++) {
+    if (isCylinder(bp)) {
+      if (start === null) start = bp
+    } else if (start !== null) {
+      runs.push([start, bp - 1]); start = null
+    }
+  }
+  if (start !== null) runs.push([start, bpHi])
+  return runs
+}
+
+/** Half-base-aligned fractions of a domain cylinder occupied by one bp run. */
+export function clippedCylinderFractions(domainLo, domainHi, runLo, runHi) {
+  const count = domainHi - domainLo + 1
+  return [(runLo - domainLo) / count, (runHi - domainLo + 1) / count]
+}
+
 const Y_HAT       = new THREE.Vector3(0, 1, 0)
 const ID_QUAT     = new THREE.Quaternion()
 
@@ -1368,6 +1389,18 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   iHelixCylinders.name = 'helixCylinders'
   root.add(iHelixCylinders)
 
+  // Override-only cylinders clipped to contiguous bp runs. The regular mesh is
+  // retained as the whole-domain fast path.
+  let _clippedCylCapacity = 1
+  let iClippedHelixCylinders = new THREE.InstancedMesh(
+    GEO_UNIT_CYL, new THREE.MeshLambertMaterial({ color: 0xffffff }), _clippedCylCapacity,
+  )
+  iClippedHelixCylinders.count = 0
+  iClippedHelixCylinders.frustumCulled = false
+  iClippedHelixCylinders.visible = false
+  iClippedHelixCylinders.name = 'clippedHelixCylinders'
+  root.add(iClippedHelixCylinders)
+
   // Same geometry, but regrouped into maximal adjacent same-colour runs. The
   // per-domain mesh remains visible to raycasting through material.visible=false.
   const iMergedHelixCylinders = new THREE.InstancedMesh(
@@ -1400,6 +1433,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   _curvedCylGroup.name = 'curvedCylGroup'
   _curvedCylGroup.visible = false
   root.add(_curvedCylGroup)
+  const _clippedCurvedCylGroup = new THREE.Group()
+  _clippedCurvedCylGroup.name = 'clippedCurvedCylGroup'
+  _clippedCurvedCylGroup.visible = false
+  root.add(_clippedCurvedCylGroup)
 
   // Half-cylinder mesh for single-stranded overhang domains (amber, DoubleSide so
   // the inside of the curved surface is visible when viewed at oblique angles).
@@ -2919,6 +2956,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     _installInstanceAlpha(iSlabs)
     _installInstanceAlpha(iSlabConnectors)
     _installInstanceAlpha(iHelixCylinders)
+    _installInstanceAlpha(iClippedHelixCylinders)
     // The curved proxies and the linker BINDING cylinders were the last three
     // cylinder families with no alpha channel. Their material.opacity is owned by
     // the deform cross-fade (proxies) or nothing at all (binding), so a per-instance
@@ -2965,6 +3003,81 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   /** The full alpha for one cylinder instance: ghosting x override x cluster. */
   function _cylFactor(dom) {
     return _refAlphaFor(dom.strandId) * _cylRepVis(dom) * _clusterAlphaForCyl(dom) * _hiddenAlphaForCyl(dom)
+  }
+
+  function _replaceClippedCylinderMesh(capacity) {
+    const previous = iClippedHelixCylinders
+    const mesh = new THREE.InstancedMesh(
+      GEO_UNIT_CYL, new THREE.MeshLambertMaterial({ color: 0xffffff }), capacity,
+    )
+    mesh.count = 0; mesh.frustumCulled = false; mesh.visible = false
+    mesh.name = 'clippedHelixCylinders'
+    root.add(mesh); previous.removeFromParent()
+    previous.material.dispose()
+    if (!previous.geometry.userData?.shared) previous.geometry.dispose()
+    iClippedHelixCylinders = mesh; _clippedCylCapacity = capacity
+    if (_repAlphaReady) _installInstanceAlpha(mesh)
+  }
+
+  /** Replace a partially overridden straight-domain cylinder with one instance
+   * per maximal cylinder bp run. This lets a spatial boundary cut a domain
+   * without either drawing the whole domain or leaving a hole. */
+  function _rebuildClippedCylinderRuns() {
+    const clipped = []
+    for (const dom of _domainCylData) {
+      const runs = clippedCylinderRuns(dom.bp_lo, dom.bp_hi,
+        bp => _effCol(dom.helixId, bp) === 'cylinders')
+      if (runs.length === 1 && runs[0][0] === dom.bp_lo && runs[0][1] === dom.bp_hi) continue
+      for (const [bpLo, bpHi] of runs) clipped.push({ dom, bpLo, bpHi })
+    }
+    if (clipped.length > _clippedCylCapacity) {
+      let capacity = _clippedCylCapacity
+      while (capacity < clipped.length) capacity *= 2
+      _replaceClippedCylinderMesh(capacity)
+    }
+    if (!iClippedHelixCylinders._instanceAlpha) _installInstanceAlpha(iClippedHelixCylinders)
+    const p0 = new THREE.Vector3(), p1 = new THREE.Vector3()
+    const pos = new THREE.Vector3(), dir = new THREE.Vector3(), quat = new THREE.Quaternion()
+    for (let index = 0; index < clipped.length; index++) {
+      const { dom, bpLo, bpHi } = clipped[index]
+      const [f0, f1] = clippedCylinderFractions(dom.bp_lo, dom.bp_hi, bpLo, bpHi)
+      const t0 = THREE.MathUtils.lerp(dom.t0, dom.t1, f0)
+      const t1 = THREE.MathUtils.lerp(dom.t0, dom.t1, f1)
+      p0.copy(dom.arrow.aStart).lerp(dom.arrow.aEnd, t0)
+      p1.copy(dom.arrow.aStart).lerp(dom.arrow.aEnd, t1)
+      pos.copy(p0).add(p1).multiplyScalar(.5); dir.copy(p1).sub(p0)
+      const length = dir.length()
+      quat.setFromUnitVectors(Y_HAT, length > .001 ? dir.divideScalar(length) : Y_HAT)
+      _tMatrix.compose(pos, quat, _tScale.set(_cylRadiusScale, length, _cylRadiusScale))
+      iClippedHelixCylinders.setMatrixAt(index, _tMatrix)
+      iClippedHelixCylinders.setColorAt(index, _tColor.setHex(dom.defaultColor))
+      _setCylAlpha(iClippedHelixCylinders, index,
+        _refAlphaFor(dom.strandId) * _clusterAlphaForCyl(dom) * _hiddenAlphaForCyl(dom))
+    }
+    iClippedHelixCylinders.count = clipped.length
+    iClippedHelixCylinders.visible = _repActive && clipped.length > 0
+    iClippedHelixCylinders.instanceMatrix.needsUpdate = true
+    if (iClippedHelixCylinders.instanceColor) iClippedHelixCylinders.instanceColor.needsUpdate = true
+
+    for (const mesh of [..._clippedCurvedCylGroup.children]) {
+      mesh.removeFromParent(); mesh.geometry.dispose(); mesh.material.dispose()
+    }
+    for (const dom of _curvedDomainCylData) {
+      const runs = clippedCylinderRuns(dom.bp_lo, dom.bp_hi,
+        bp => _effCol(dom.helixId, bp) === 'cylinders')
+      if (runs.length === 1 && runs[0][0] === dom.bp_lo && runs[0][1] === dom.bp_hi) continue
+      for (const [bpLo, bpHi] of runs) {
+        const built = _buildDomainTubeGeo(dom.arrow, bpLo, bpHi, CYL_TUBE_R, 2 * Math.PI)
+        if (!built) continue
+        const alpha = _refAlphaFor(dom.strandId) * _clusterAlphaForCyl(dom) * _hiddenAlphaForCyl(dom)
+        const mesh = new THREE.Mesh(built.geo, new THREE.MeshLambertMaterial({
+          color: dom.defaultColor, transparent: alpha < 1, opacity: alpha, depthWrite: alpha >= 1,
+        }))
+        mesh.userData = { ...dom, bp_lo: bpLo, bp_hi: bpHi, clippedCylinder: true }
+        _clippedCurvedCylGroup.add(mesh)
+      }
+    }
+    _clippedCurvedCylGroup.visible = _repActive && _clippedCurvedCylGroup.children.length > 0
   }
 
   let _mergedCylActive = false
@@ -3051,12 +3164,19 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   function _applyRepOverrides() {
     _disableMergedCylinders()
     if (!_repActive) {
+      iClippedHelixCylinders.count = 0
+      iClippedHelixCylinders.visible = false
+      for (const mesh of [..._clippedCurvedCylGroup.children]) {
+        mesh.removeFromParent(); mesh.geometry.dispose(); mesh.material.dispose()
+      }
+      _clippedCurvedCylGroup.visible = false
       // Overrides off — hand the channel back to its other two factors.
       _applyAlphaChannel()
       _reapplyDetailVisibility()
       return
     }
     _ensureAlphaInstalled()
+    _rebuildClippedCylinderRuns()
     // A bead (either strand) shows only where its column resolves to 'full'.
     const beadVis = (nuc) => (nuc && _effCol(nuc.helix_id, nuc.bp_index) === 'full' ? 1 : 0)
     for (const e of backboneEntries) _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc) * _clusterAlphaFor(e.nuc) * _hiddenAlphaFor(e.nuc, e._copy ?? 0))

@@ -12,7 +12,7 @@ def setup_function():
 
 def test_view_volume_round_trip_and_old_default():
     design = _demo_design()
-    design.view_volumes = [ViewVolume(name="Focus", min_corner=(0, 1, 2), max_corner=(3, 4, 5), rotation=(0, 0, 0.70710678, 0.70710678), representation="surface", opacity=.35)]
+    design.view_volumes = [ViewVolume(name="Focus", shape="hexagonal", min_corner=(0, 1, 2), max_corner=(3, 4, 5), rotation=(0, 0, 0.70710678, 0.70710678), representation="surface", opacity=.35)]
     restored = Design.from_json(design.to_json())
     assert restored.view_volumes == design.view_volumes
     assert Design.from_json(_demo_design().to_json()).view_volumes == []
@@ -25,6 +25,7 @@ def test_put_view_volumes_persists_and_validates():
     response = client.put("/api/design/view-volumes", json=body)
     assert response.status_code == 200
     saved = response.json()["view_volumes"][0]
+    assert saved["outline_visible"] is True
     assert response.json()["revision"] > revision_before
     assert saved["name"] == "Atomistic window"
     assert saved["opacity"] == .7

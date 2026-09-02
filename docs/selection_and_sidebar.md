@@ -12,7 +12,7 @@ The right sidebar is divided into four vertical tabs:
 | Tab | Sections |
 |---|---|
 | **Properties** | Properties, Strand Lengths, Staple Groups |
-| **Visualization** | Representation toggles, Representation Options, Reset Camera, Unhide All, Multi-view, Multi-overlay |
+| **Visualization** | Representation toggles, Representation Options, Reset Camera, Unhide All, Multi-view, Multi-overlay, View Volumes |
 | **Clustering** | Movable Clusters, Joints |
 | **Overhangs** | Overhangs, Overhang Connections, Strand Animation |
 
@@ -65,6 +65,27 @@ mode and restores the prior workspace camera.
 The same mrDNA Coarse and mrDNA Fine choices are available for every overlay layer,
 so simulation output can be compared directly with native representations or with
 the other mrDNA resolution.
+
+### View volumes
+
+The collapsible **View Volumes** card applies a representation and opacity to a
+spatial region without changing the design topology. Use the square-plus button for
+an oriented box or the hexagon-plus button for a regular hexagonal prism suited to
+honeycomb helix bundles. A hexagonal volume has two resize dimensions: the red radial
+arm changes both cross-section axes together, while the blue Z arm changes its length.
+
+Hovering a volume edge highlights its outline. Clicking the highlighted edge selects
+only the volume and does not also snap-select a nearby strand. Dragging empty viewport
+space to orbit preserves the volume selection; a stationary empty-space click clears
+it. The eye button on a volume row hides that volume's outline, handles, hover target,
+and transform gizmo while leaving its representation active. The eye button in the
+card header shows or hides every outline. Outline visibility and the card's collapsed
+state persist across reloads.
+
+Volume membership is evaluated per base-pair column. Cylinder representation clips
+domains into contiguous in-volume runs, including boundaries that fall in the middle
+of a domain, so the cylinder length follows the spatial boundary instead of dropping
+the complete domain. Overlapping volumes remain independent representation layers.
 
 ## Selection levels
 

@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
+import { getSectionCollapsed, setSectionCollapsed } from '../ui/section_collapse_state.js'
 
 export const VIEW_VOLUME_REPRESENTATIONS = [
   ['Full', 'full'], ['Beads', 'beads'], ['Cylinders', 'cylinders'],
@@ -19,6 +20,17 @@ export function pointInVolume(point, volume) {
   const local = new THREE.Vector3(...point).sub(center)
     .applyQuaternion(new THREE.Quaternion(...(volume.rotation ?? [0, 0, 0, 1])).invert())
   const half = max.clone().sub(min).multiplyScalar(.5)
+  if (volume.shape === 'hexagonal') {
+    // Hexagonal prisms run along local Z, matching NADOC helix axes. The stored
+    // X/Y span is the circumdiameter, preserving the bounds persistence contract as
+    // boxes. This flat-top test is the intersection of three pairs of slabs.
+    const radius = Math.min(half.x, half.y)
+    const x = Math.abs(local.x), y = Math.abs(local.y)
+    return Math.abs(local.z) <= half.z
+      && x <= radius
+      && y <= Math.sqrt(3) * radius / 2
+      && Math.sqrt(3) * x + y <= Math.sqrt(3) * radius
+  }
   return Math.abs(local.x) <= half.x && Math.abs(local.y) <= half.y && Math.abs(local.z) <= half.z
 }
 
@@ -96,15 +108,39 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
   if (!pane) return null
   const section = document.createElement('div')
   section.id = 'view-volumes-section'; section.className = 'panel-section ox-card'
-  section.innerHTML = `<h2 style="display:flex;align-items:center;justify-content:space-between"><span style="display:inline-flex;align-items:center;gap:7px"><span>View Volumes</span><span id="view-volume-busy" class="nadoc-spinner" role="status" aria-label="View volume representation loading" title="Building view volume representation…" style="display:none"></span></span><button id="view-volume-add" type="button" title="Add view volume" aria-label="Add view volume" style="width:26px;height:24px;font-size:19px;line-height:18px">+</button></h2><div class="view-volume-tool-row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:7px"><button type="button" data-volume-tool="translate" class="xover-mode-btn active" title="Move the selected volume without changing its shape (Tab)">Move</button><button type="button" data-volume-tool="scale" class="xover-mode-btn" title="Resize the selected volume about its center (Tab)">Resize</button><button type="button" data-volume-tool="rotate" class="xover-mode-btn" title="Rotate the selected volume (Tab)">Rotate</button></div><div id="view-volume-list" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>`
+  const boxIcon = '<svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><rect x="3" y="3" width="12" height="12" rx="1" fill="none" stroke="currentColor" stroke-width="2"/><path d="M18 13v8M14 17h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
+  const hexIcon = '<svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path d="M8 3h7l4 6-4 6H8L4 9z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M18 14v8M14 18h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
+  const eyeIcon = '<svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/></svg>'
+  section.innerHTML = `<h2 id="view-volume-heading" aria-expanded="true" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer"><span style="display:inline-flex;align-items:center;gap:7px"><span class="section-arrow">▼</span><span>View Volumes</span><span id="view-volume-busy" class="nadoc-spinner" role="status" aria-label="View volume representation loading" title="Building view volume representation…" style="display:none"></span></span><span style="display:inline-flex;gap:4px"><button id="view-volume-toggle-all" type="button" title="Hide all volume outlines" aria-label="Hide all volume outlines" aria-pressed="true" style="width:28px;height:26px;display:grid;place-items:center">${eyeIcon}</button><button id="view-volume-add-box" type="button" title="Add square view volume" aria-label="Add square view volume" style="width:28px;height:26px;display:grid;place-items:center">${boxIcon}</button><button id="view-volume-add-hexagonal" type="button" title="Add hexagonal view volume" aria-label="Add hexagonal view volume" style="width:28px;height:26px;display:grid;place-items:center">${hexIcon}</button></span></h2><div id="view-volume-body"><div class="view-volume-tool-row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:7px"><button type="button" data-volume-tool="translate" class="xover-mode-btn active" title="Move the selected volume without changing its shape (Tab)">Move</button><button type="button" data-volume-tool="scale" class="xover-mode-btn" title="Resize the selected volume about its center (Tab)">Resize</button><button type="button" data-volume-tool="rotate" class="xover-mode-btn" title="Rotate the selected volume (Tab)">Rotate</button></div><div id="view-volume-list" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div></div>`
   pane.append(section)
   const list = section.querySelector('#view-volume-list')
+  const heading = section.querySelector('#view-volume-heading'), body = section.querySelector('#view-volume-body')
+  const collapseArrow = heading.querySelector('.section-arrow')
+  let collapsed = getSectionCollapsed('visualization', 'view-volumes-section', false)
+  function applyCollapsed() {
+    body.hidden = collapsed
+    heading.setAttribute('aria-expanded', String(!collapsed))
+    collapseArrow.classList.toggle('is-collapsed', collapsed)
+  }
+  heading.addEventListener('click', () => {
+    collapsed = !collapsed; applyCollapsed()
+    setSectionCollapsed('visualization', 'view-volumes-section', collapsed)
+  })
+  for (const button of heading.querySelectorAll('button')) button.addEventListener('click', event => event.stopPropagation())
+  applyCollapsed()
   const root = new THREE.Group(); root.name = 'view-volumes'; scene.add(root)
-  const visualById = new Map(), handles = [], pickTargets = []
+  const visualById = new Map(), handles = [], edgeTargets = []
   const transform = new TransformControls(camera, canvas)
   transform.setMode('translate'); transform.setSpace('world'); transform.setSize(0.8)
+  // TransformControls has no API for disabling only its planar scale picker.
+  // Keep references so hex resize can fold XZ into the disabled XYZ group;
+  // this removes it from both drawing and raycasting while retaining X and Z.
+  const hexDisabledScaleHandles = [
+    ...transform._gizmo.gizmo.scale.children,
+    ...transform._gizmo.picker.scale.children,
+  ].filter(handle => handle.name === 'XZ')
   scene.add(transform.getHelper())
-  let selectedId = null, draftVolumes = null, transformStart = null
+  let selectedId = null, hoveredId = null, draftVolumes = null, transformStart = null, dragStartScale = null, draggingHexagonal = false
   const timing = { events: [], counters: { previewRequested: 0, previewApplied: 0, previewAborted: 0, commits: 0, persisted: 0 }, last: {} }
   const note = (type, detail = {}) => {
     const item = { type, at: performance.now(), ...detail }
@@ -197,15 +233,22 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
   function makeVisual(volume) {
     const group = new THREE.Group(); group.userData.volumeId = volume.id
     const material = new THREE.LineBasicMaterial({ color: 0x45b6fe, transparent: true, opacity: 0.9, depthTest: false })
-    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), material)
+    const geometry = volume.shape === 'hexagonal'
+      ? new THREE.CylinderGeometry(.5, .5, 1, 6, 1, false, Math.PI / 2).rotateX(Math.PI / 2)
+      : new THREE.BoxGeometry(1, 1, 1)
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geometry), material)
+    edges.userData = { volumeId: volume.id, volumeEdges: true }; edgeTargets.push(edges)
     edges.renderOrder = 19; group.add(edges)
-    const hitbox = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({
+    const hitbox = new THREE.Mesh(geometry.clone(), new THREE.MeshBasicMaterial({
       transparent: true, opacity: 0, depthWrite: false, colorWrite: false, side: THREE.DoubleSide,
     }))
-    hitbox.userData = { volumeId: volume.id, volumeHitbox: true }; group.add(hitbox); pickTargets.push(hitbox)
-    for (let index = 0; index < 8; index++) {
+    hitbox.userData = { volumeId: volume.id, volumeHitbox: true }; group.add(hitbox)
+    const handlePositions = volume.shape === 'hexagonal'
+      ? [[0, 0, -.5], [0, 0, .5], [.5, 0, 0]]
+      : Array.from({ length: 8 }, (_, index) => [index & 1 ? .5 : -.5, index & 2 ? .5 : -.5, index & 4 ? .5 : -.5])
+    for (let index = 0; index < handlePositions.length; index++) {
       const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 6), new THREE.MeshBasicMaterial({ color: 0xffd54a, depthTest: false }))
-      mesh.position.set(index & 1 ? .5 : -.5, index & 2 ? .5 : -.5, index & 4 ? .5 : -.5)
+      mesh.position.fromArray(handlePositions[index])
       mesh.userData = { volumeId: volume.id, cornerIndex: index }; mesh.renderOrder = 20
       group.add(mesh)
     }
@@ -218,21 +261,36 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     group.position.copy(min).add(max).multiplyScalar(.5)
     group.scale.copy(max).sub(min).max(new THREE.Vector3(.05, .05, .05))
     group.quaternion.fromArray(volume.rotation ?? [0, 0, 0, 1]).normalize()
-    group.children[0].material.color.set(volume.id === selectedId ? 0xffd54a : 0x45b6fe)
-    for (const child of group.children.slice(2)) child.visible = volume.id === selectedId
+    const outlineVisible = volume.outline_visible !== false
+    group.children[0].visible = outlineVisible
+    group.children[0].material.color.set(volume.id === selectedId || volume.id === hoveredId ? 0xffd54a : 0x45b6fe)
+    group.children[0].material.opacity = volume.id === hoveredId ? 1 : 0.9
+    for (const child of group.children.slice(2)) child.visible = outlineVisible && volume.id === selectedId
     return group
   }
   function attachSelected() {
-    const visual = selectedId && visualById.get(selectedId)
+    const selected = volumes().find(volume => volume.id === selectedId)
+    const visual = selected && selected.outline_visible !== false ? visualById.get(selectedId) : null
     if (visual) transform.attach(visual); else transform.detach()
     handles.splice(0, handles.length, ...(visual?.children.slice(2) ?? []))
+    configureTransformAxes()
+  }
+  function configureTransformAxes() {
+    const selected = volumes().find(volume => volume.id === selectedId)
+    const hexResize = selected?.shape === 'hexagonal' && transform.getMode() === 'scale'
+    transform.showX = true
+    transform.showY = !hexResize
+    transform.showZ = true
+    for (const handle of hexDisabledScaleHandles) handle.name = hexResize ? 'XYZ' : 'XZ'
+    transform.setSpace(hexResize ? 'local' : transform.getMode() === 'translate' ? 'world' : 'local')
   }
   function render() {
+    if (hoveredId && volumes().find(volume => volume.id === hoveredId)?.outline_visible === false) hoveredId = null
     const ids = new Set(volumes().map(volume => volume.id))
     for (const [id, visual] of visualById) if (!ids.has(id)) {
-      const hitbox = visual.children.find(child => child.userData?.volumeHitbox)
-      const pickIndex = hitbox ? pickTargets.indexOf(hitbox) : -1
-      if (pickIndex >= 0) pickTargets.splice(pickIndex, 1)
+      const edges = visual.children.find(child => child.userData?.volumeEdges)
+      const edgeIndex = edges ? edgeTargets.indexOf(edges) : -1
+      if (edgeIndex >= 0) edgeTargets.splice(edgeIndex, 1)
       visual.removeFromParent(); visualById.delete(id)
     }
     list.replaceChildren()
@@ -243,7 +301,11 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
       const top = document.createElement('div'); top.style.cssText = 'display:flex;gap:5px;align-items:center;margin-bottom:5px'
       const name = document.createElement('input'); name.className = 'view-volume-name'; name.value = volume.name; name.title = 'Rename volume'; name.style.cssText = 'min-width:0;flex:1;background:#161b22;color:#c9d1d9;border:1px solid #30363d;border-radius:3px;padding:3px'
       const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'view-volume-delete'; remove.textContent = '×'; remove.title = 'Delete volume'
-      top.append(name, remove)
+      const outline = document.createElement('button'); outline.type = 'button'; outline.className = 'view-volume-outline-toggle'
+      outline.innerHTML = eyeIcon; outline.title = volume.outline_visible === false ? 'Show volume outline' : 'Hide volume outline'
+      outline.setAttribute('aria-label', outline.title); outline.setAttribute('aria-pressed', String(volume.outline_visible !== false))
+      if (volume.outline_visible === false) outline.style.opacity = '.4'
+      top.append(name, outline, remove)
       const controlsRow = document.createElement('div'); controlsRow.style.cssText = 'display:grid;grid-template-columns:1fr 74px;gap:5px'
       const rep = document.createElement('select'); rep.className = 'view-volume-representation'; rep.title = 'Representation'
       rep.style.cssText = 'min-width:0;background:#161b22;color:#c9d1d9;border:1px solid #30363d;border-radius:3px;padding:3px'
@@ -252,32 +314,60 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
       const opacity = document.createElement('input'); opacity.className = 'view-volume-opacity'; opacity.type = 'range'; opacity.min = '0'; opacity.max = '1'; opacity.step = '0.05'; opacity.value = String(volume.opacity); opacity.title = `Opacity ${Math.round(volume.opacity * 100)}%`
       controlsRow.append(rep, opacity); row.append(top, controlsRow); list.append(row)
       row.addEventListener('click', () => { selectedId = selectedId === volume.id ? null : volume.id; render() })
-      for (const control of [name, rep, opacity, remove]) control.addEventListener('click', event => event.stopPropagation())
+      for (const control of [name, rep, opacity, outline, remove]) control.addEventListener('click', event => event.stopPropagation())
       name.addEventListener('change', e => save(volumes().map(v => v.id === volume.id ? { ...v, name: e.target.value.trim() || 'View Volume' } : v)))
       rep.addEventListener('change', e => save(volumes().map(v => v.id === volume.id ? { ...v, representation: e.target.value } : v)))
       opacity.addEventListener('change', e => save(volumes().map(v => v.id === volume.id ? { ...v, opacity: Number(e.target.value) } : v)))
+      outline.addEventListener('click', () => save(volumes().map(v => v.id === volume.id ? { ...v, outline_visible: v.outline_visible === false } : v)))
       remove.addEventListener('click', e => { e.stopPropagation(); if (selectedId === volume.id) selectedId = null; save(volumes().filter(v => v.id !== volume.id)) })
     }
+    const allVisible = volumes().length > 0 && volumes().every(volume => volume.outline_visible !== false)
+    const master = section.querySelector('#view-volume-toggle-all')
+    master.style.opacity = allVisible ? '1' : '.4'
+    master.title = allVisible ? 'Hide all volume outlines' : 'Show all volume outlines'
+    master.setAttribute('aria-label', master.title); master.setAttribute('aria-pressed', String(allVisible))
     attachSelected(); requestPreview()
   }
-  section.querySelector('#view-volume-add').addEventListener('click', () => {
+  function addVolume(shape) {
     const bounds = defaultBounds(entries()), id = crypto.randomUUID()
+    if (shape === 'hexagonal') {
+      const centerX = (bounds.min_corner[0] + bounds.max_corner[0]) / 2
+      const centerY = (bounds.min_corner[1] + bounds.max_corner[1]) / 2
+      const radius = Math.max((bounds.max_corner[0] - bounds.min_corner[0]) / 2, (bounds.max_corner[1] - bounds.min_corner[1]) / 2)
+      bounds.min_corner[0] = centerX - radius; bounds.max_corner[0] = centerX + radius
+      bounds.min_corner[1] = centerY - radius; bounds.max_corner[1] = centerY + radius
+    }
     selectedId = id
     // Start as Full: creating a box must stay instantaneous even for an 80 MB
     // design. The user explicitly opts into surface/atomistic computation.
-    save([...volumes(), { id, name: `Volume ${volumes().length + 1}`, ...bounds, rotation: [0, 0, 0, 1], representation: 'full', opacity: 1 }])
+    save([...volumes(), { id, name: `${shape === 'hexagonal' ? 'Hex Volume' : 'Volume'} ${volumes().length + 1}`, shape, ...bounds, rotation: [0, 0, 0, 1], representation: 'full', opacity: 1, outline_visible: true }])
+  }
+  section.querySelector('#view-volume-toggle-all').addEventListener('click', () => {
+    const show = volumes().some(volume => volume.outline_visible === false)
+    save(volumes().map(volume => ({ ...volume, outline_visible: show })))
   })
+  section.querySelector('#view-volume-add-box').addEventListener('click', () => addVolume('box'))
+  section.querySelector('#view-volume-add-hexagonal').addEventListener('click', () => addVolume('hexagonal'))
   for (const button of section.querySelectorAll('[data-volume-tool]')) button.addEventListener('click', () => {
     transform.setMode(button.dataset.volumeTool)
+    configureTransformAxes()
     for (const other of section.querySelectorAll('[data-volume-tool]')) other.classList.toggle('active', other === button)
   })
   transform.addEventListener('mouseDown', () => {
     if (!selectedId) return
     draftVolumes = volumes().map(volume => ({ ...volume, min_corner: [...volume.min_corner], max_corner: [...volume.max_corner] }))
-    transformStart = performance.now(); controls.enabled = false; note('interaction-start', { mode: transform.getMode(), id: selectedId })
+    const selected = volumes().find(volume => volume.id === selectedId)
+    transformStart = performance.now(); controls.enabled = false
+    dragStartScale = visualById.get(selectedId)?.scale.clone()
+    draggingHexagonal = selected?.shape === 'hexagonal'
+    note('interaction-start', { mode: transform.getMode(), id: selectedId })
   })
   transform.addEventListener('objectChange', () => {
     if (!draftVolumes || !selectedId) return
+    if (draggingHexagonal && dragStartScale && transform.getMode() === 'scale') {
+      const start = dragStartScale, radialFactor = visualById.get(selectedId).scale.x / start.x
+      visualById.get(selectedId).scale.y = start.y * radialFactor
+    }
     const visual = visualById.get(selectedId), half = visual.scale.clone()
     half.set(Math.abs(half.x), Math.abs(half.y), Math.abs(half.z)).multiplyScalar(.5)
     half.max(new THREE.Vector3(.025, .025, .025)); visual.scale.copy(half).multiplyScalar(2)
@@ -292,23 +382,73 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     note('interaction-commit', { durationMs: timing.last.interactionMs, id: selectedId })
     save(committed)
   })
-  const pickRaycaster = new THREE.Raycaster(), pickPointer = new THREE.Vector2()
-  const onCanvasPointerDown = event => {
-    if (transform.dragging || transform.axis) return
+  const edgeWorldA = new THREE.Vector3(), edgeWorldB = new THREE.Vector3()
+  function edgeAtPointer(event, tolerancePx = 8) {
     const rect = canvas.getBoundingClientRect()
-    pickPointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
-    pickRaycaster.setFromCamera(pickPointer, camera)
-    const hit = pickRaycaster.intersectObjects([...pickTargets, ...handles], false)[0]
-    const nextId = hit?.object?.userData?.volumeId ?? null
-    if (nextId !== selectedId) { selectedId = nextId; render() }
+    let bestId = null, bestDistance = tolerancePx
+    for (const edges of edgeTargets) {
+      if (!edges.visible) continue
+      const positions = edges.geometry.attributes.position
+      for (let index = 0; index < positions.count; index += 2) {
+        edgeWorldA.fromBufferAttribute(positions, index); edges.localToWorld(edgeWorldA); edgeWorldA.project(camera)
+        edgeWorldB.fromBufferAttribute(positions, index + 1); edges.localToWorld(edgeWorldB); edgeWorldB.project(camera)
+        const ax = rect.left + (edgeWorldA.x + 1) * rect.width / 2, ay = rect.top + (1 - edgeWorldA.y) * rect.height / 2
+        const bx = rect.left + (edgeWorldB.x + 1) * rect.width / 2, by = rect.top + (1 - edgeWorldB.y) * rect.height / 2
+        const dx = bx - ax, dy = by - ay, length2 = dx * dx + dy * dy
+        const t = length2 ? Math.max(0, Math.min(1, ((event.clientX - ax) * dx + (event.clientY - ay) * dy) / length2)) : 0
+        const distance = Math.hypot(event.clientX - (ax + t * dx), event.clientY - (ay + t * dy))
+        if (distance < bestDistance) { bestDistance = distance; bestId = edges.userData.volumeId }
+      }
+    }
+    return bestId
   }
-  canvas.addEventListener('pointerdown', onCanvasPointerDown)
+  function setHovered(nextId) {
+    if (nextId === hoveredId) return
+    hoveredId = nextId
+    for (const volume of volumes()) syncVisual(volume)
+    canvas.style.cursor = hoveredId ? 'pointer' : ''
+  }
+  let pendingEmptyPointer = null
+  const onCanvasPointerMove = event => {
+    if (pendingEmptyPointer?.pointerId === event.pointerId
+      && Math.hypot(event.clientX - pendingEmptyPointer.x, event.clientY - pendingEmptyPointer.y) > 4) {
+      pendingEmptyPointer = null
+    }
+    setHovered(transform.dragging || transform.axis ? null : edgeAtPointer(event))
+  }
+  const onCanvasPointerDown = event => {
+    if (event.button !== 0 || transform.dragging || transform.axis) return
+    const nextId = edgeAtPointer(event)
+    if (!nextId) {
+      pendingEmptyPointer = selectedId
+        ? { pointerId: event.pointerId, x: event.clientX, y: event.clientY }
+        : null
+      return
+    }
+    pendingEmptyPointer = null
+    event.preventDefault(); event.stopImmediatePropagation()
+    selectedId = nextId; hoveredId = nextId; render()
+  }
+  const onCanvasPointerUp = event => {
+    if (!pendingEmptyPointer || pendingEmptyPointer.pointerId !== event.pointerId) return
+    const moved = Math.hypot(event.clientX - pendingEmptyPointer.x, event.clientY - pendingEmptyPointer.y)
+    pendingEmptyPointer = null
+    if (moved <= 4 && selectedId) { selectedId = null; render() }
+  }
+  const onCanvasPointerCancel = event => {
+    if (pendingEmptyPointer?.pointerId === event.pointerId) pendingEmptyPointer = null
+  }
+  canvas.addEventListener('pointermove', onCanvasPointerMove)
+  canvas.addEventListener('pointerdown', onCanvasPointerDown, { capture: true })
+  canvas.addEventListener('pointerup', onCanvasPointerUp, { capture: true })
+  canvas.addEventListener('pointercancel', onCanvasPointerCancel, { capture: true })
   const onWindowKeyDown = event => {
     if (event.key === 'Escape' && selectedId) { selectedId = null; transform.detach(); render(); return }
     if (event.key !== 'Tab' || !selectedId || /^(INPUT|SELECT|TEXTAREA)$/.test(event.target?.tagName)) return
     event.preventDefault()
     const modes = ['translate', 'scale', 'rotate'], next = modes[(modes.indexOf(transform.getMode()) + 1) % modes.length]
     transform.setMode(next)
+    configureTransformAxes()
     for (const button of section.querySelectorAll('[data-volume-tool]')) button.classList.toggle('active', button.dataset.volumeTool === next)
   }
   window.addEventListener('keydown', onWindowKeyDown)
@@ -316,7 +456,7 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
   const unsubscribe = store.subscribe(state => { if (state.currentDesign === previousDesign) return; previousDesign = state.currentDesign; render() })
   render()
   const apiDebug = {
-    add: () => section.querySelector('#view-volume-add').click(),
+    add: (shape = 'box') => section.querySelector(shape === 'hexagonal' ? '#view-volume-add-hexagonal' : '#view-volume-add-box').click(),
     layers: () => resolveViewVolumeLayers(volumes(), points()),
     select: id => { selectedId = id; render() },
     handles: () => {
@@ -333,6 +473,17 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
         return { id, x: rect.left + (projected.x + 1) * rect.width / 2, y: rect.top + (1 - projected.y) * rect.height / 2 }
       })
     },
+    outlinePoint: id => {
+      const edges = visualById.get(id)?.children.find(child => child.userData?.volumeEdges)
+      if (!edges) return null
+      const rect = canvas.getBoundingClientRect(), positions = edges.geometry.attributes.position
+      edgeWorldA.fromBufferAttribute(positions, 0); edges.localToWorld(edgeWorldA); edgeWorldA.project(camera)
+      edgeWorldB.fromBufferAttribute(positions, 1); edges.localToWorld(edgeWorldB); edgeWorldB.project(camera)
+      return {
+        x: rect.left + ((edgeWorldA.x + edgeWorldB.x) / 2 + 1) * rect.width / 2,
+        y: rect.top + (1 - (edgeWorldA.y + edgeWorldB.y) / 2) * rect.height / 2,
+      }
+    },
     backboneTargets: (limit = 100) => entries().slice(0, Math.max(0, limit)).map(entry => ({
       key: `${entry.nuc.helix_id}:${entry.nuc.bp_index}`,
       position: entry.pos.toArray(),
@@ -348,9 +499,14 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     },
     volumes: () => structuredClone(volumes()),
     isDragging: () => transform.dragging,
-    setMode: mode => { transform.setMode(mode); return transform.getMode() },
+    setMode: mode => { transform.setMode(mode); configureTransformAxes(); return transform.getMode() },
     mode: () => transform.getMode(),
+    scaleGizmoAxes: () => {
+      transform.getHelper().updateMatrixWorld(true)
+      return [...new Set(transform._gizmo.picker.scale.children.filter(handle => handle.visible).map(handle => handle.name))].sort()
+    },
     selected: () => selectedId,
+    hovered: () => hoveredId,
     gizmoVisible: () => !!transform.object && transform.getHelper().visible,
     representationBusy: () => busyKinds.size > 0,
     begin: () => { transform.dispatchEvent({ type: 'mouseDown' }); return !!draftVolumes },
@@ -392,5 +548,5 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     timing: () => structuredClone(timing),
     abort: () => previewScheduler.abort('debug-abort'),
   }
-  return { render, debug: apiDebug, dispose: () => { unsubscribe?.(); window.removeEventListener('nadoc:view-volume-stage', onStage); window.removeEventListener('keydown', onWindowKeyDown); canvas.removeEventListener('pointerdown', onCanvasPointerDown); previewScheduler.abort('dispose'); if (representationTimer !== null) clearTimeout(representationTimer); transform.dispose(); transform.getHelper().removeFromParent(); root.removeFromParent() } }
+  return { render, debug: apiDebug, dispose: () => { unsubscribe?.(); window.removeEventListener('nadoc:view-volume-stage', onStage); window.removeEventListener('keydown', onWindowKeyDown); canvas.removeEventListener('pointermove', onCanvasPointerMove); canvas.removeEventListener('pointerdown', onCanvasPointerDown, { capture: true }); canvas.removeEventListener('pointerup', onCanvasPointerUp, { capture: true }); canvas.removeEventListener('pointercancel', onCanvasPointerCancel, { capture: true }); previewScheduler.abort('dispose'); if (representationTimer !== null) clearTimeout(representationTimer); transform.dispose(); transform.getHelper().removeFromParent(); root.removeFromParent() } }
 }

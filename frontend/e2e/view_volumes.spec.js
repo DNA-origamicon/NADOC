@@ -9,8 +9,20 @@ test('view volumes add, overlap, edit, persist, and expose validation layers', a
   await page.locator('.right-tab-btn[data-tab="visualization"]').click()
   await expect(page.locator('#view-volumes-section')).toBeVisible()
 
-  await page.locator('#view-volume-add').click()
+  await page.locator('#view-volume-add-box').click()
   await expect(page.locator('.view-volume-row')).toHaveCount(1)
+  await page.locator('.view-volume-outline-toggle').click()
+  await expect(page.locator('.view-volume-outline-toggle')).toHaveAttribute('aria-pressed', 'false')
+  await expect(page.locator('#view-volume-toggle-all')).toHaveAttribute('aria-pressed', 'false')
+  expect(await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.gizmoVisible())).toBe(false)
+  await page.locator('#view-volume-toggle-all').click()
+  await expect(page.locator('.view-volume-outline-toggle')).toHaveAttribute('aria-pressed', 'true')
+  expect(await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.gizmoVisible())).toBe(true)
+  await page.locator('#view-volume-heading').click()
+  await expect(page.locator('#view-volume-body')).toBeHidden()
+  await expect(page.locator('#view-volume-heading')).toHaveAttribute('aria-expanded', 'false')
+  await page.locator('#view-volume-heading').click()
+  await expect(page.locator('#view-volume-body')).toBeVisible()
   await page.evaluate(() => window.dispatchEvent(new CustomEvent('nadoc:view-volume-stage', {
     detail: { stage: 'atom-scheduled', viewVolume: true },
   })))
@@ -30,6 +42,18 @@ test('view volumes add, overlap, edit, persist, and expose validation layers', a
   await page.keyboard.press('Escape')
   expect(await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.selected())).toBeNull()
   expect(await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.gizmoVisible())).toBe(false)
+  const outline = await page.evaluate(() => {
+    const debug = window.__NADOC_VIEW_VOLUMES__, id = debug.volumes()[0].id
+    window.__volumeLeakedPointerDowns = 0
+    document.querySelector('#canvas').addEventListener('pointerdown', () => { window.__volumeLeakedPointerDowns += 1 })
+    return { id, ...debug.outlinePoint(id) }
+  })
+  await page.mouse.move(outline.x, outline.y)
+  expect(await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.hovered())).toBe(outline.id)
+  await page.mouse.click(outline.x, outline.y)
+  expect(await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.selected())).toBe(outline.id)
+  expect(await page.evaluate(() => window.__volumeLeakedPointerDowns)).toBe(0)
+  await page.keyboard.press('Escape')
   await page.locator('.view-volume-row').click()
   await page.evaluate(() => {
     const debug = window.__NADOC_VIEW_VOLUMES__
@@ -41,6 +65,12 @@ test('view volumes add, overlap, edit, persist, and expose validation layers', a
   expect(await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.selected())).toBeNull()
   await page.locator('.view-volume-row').click()
   expect(await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.selected())).not.toBeNull()
+  const selectedBeforeOrbit = await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.selected())
+  await page.mouse.move(60, 100)
+  await page.mouse.down()
+  await page.mouse.move(110, 140, { steps: 4 })
+  await page.mouse.up()
+  expect(await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.selected())).toBe(selectedBeforeOrbit)
   await page.mouse.click(60, 100)
   expect(await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.selected())).toBeNull()
   await page.locator('.view-volume-row').click()
@@ -50,12 +80,24 @@ test('view volumes add, overlap, edit, persist, and expose validation layers', a
   await page.locator('.view-volume-opacity').fill('0.4')
   await page.locator('.view-volume-opacity').dispatchEvent('change')
 
-  await page.locator('#view-volume-add').click()
+  await page.locator('#view-volume-add-hexagonal').click()
   await expect(page.locator('.view-volume-row')).toHaveCount(2)
+  await page.locator('#view-volume-toggle-all').click()
+  await expect(page.locator('.view-volume-outline-toggle[aria-pressed="false"]')).toHaveCount(2)
+  await page.locator('#view-volume-toggle-all').click()
+  await expect(page.locator('.view-volume-outline-toggle[aria-pressed="true"]')).toHaveCount(2)
   await page.locator('.view-volume-row').nth(1).locator('.view-volume-representation').selectOption('stick')
+  await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.setMode('scale'))
+  expect(await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.scaleGizmoAxes())).toEqual(['X', 'Z'])
+  const hexBefore = await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.volumes()[1])
+  await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.resizeSelected([1.4, 1, 1]))
+  const hexAfter = await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.volumes()[1])
+  expect(hexAfter.max_corner[0] - hexAfter.min_corner[0]).toBeCloseTo((hexBefore.max_corner[0] - hexBefore.min_corner[0]) * 1.4)
+  expect(hexAfter.max_corner[1] - hexAfter.min_corner[1]).toBeCloseTo((hexBefore.max_corner[1] - hexBefore.min_corner[1]) * 1.4)
+  expect(hexAfter.max_corner[2] - hexAfter.min_corner[2]).toBeCloseTo(hexBefore.max_corner[2] - hexBefore.min_corner[2])
 
-  // Selecting a row exposes all eight independently raycastable corner handles.
-  expect(await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.handles().length)).toBe(8)
+  // A selected hex volume exposes two length ends and one radius handle.
+  expect(await page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.handles().length)).toBe(3)
 
   await expect.poll(async () => page.evaluate(() => {
     const layers = window.__NADOC_VIEW_VOLUMES__.layers()
@@ -78,7 +120,7 @@ test('latest persisted volume survives a stale rebuild response during move comm
   const doc = `view-volume-rebuild-race-${Date.now()}`
   await loadScaffoldedPart(page, { doc, name: 'view-volume-rebuild-race' })
   await page.locator('.right-tab-btn[data-tab="visualization"]').click()
-  await page.locator('#view-volume-add').click()
+  await page.locator('#view-volume-add-box').click()
   await expect.poll(() => page.evaluate(() =>
     window.__NADOC_VIEW_VOLUMES__.timing().counters.persisted)).toBeGreaterThanOrEqual(1)
 

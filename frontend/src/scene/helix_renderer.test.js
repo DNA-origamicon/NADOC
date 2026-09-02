@@ -3,9 +3,27 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import * as THREE from 'three'
 import {
-  coalesceCylinderRuns, directConnectedOverhangIds, orderStrandNucleotides,
+  clippedCylinderFractions, clippedCylinderRuns, coalesceCylinderRuns, directConnectedOverhangIds, orderStrandNucleotides,
   rescaleInstanceInPlace, syncPatchedBeadPosition,
 } from './helix_renderer.js'
+
+describe('view-volume cylinder clipping', () => {
+  it('partitions a domain into maximal cylinder runs at mid-domain boundaries', () => {
+    const cylinderBps = new Set([3, 4, 5, 8, 9])
+    expect(clippedCylinderRuns(0, 11, bp => cylinderBps.has(bp))).toEqual([[3, 5], [8, 9]])
+  })
+
+  it('preserves empty and complete-domain fast paths', () => {
+    expect(clippedCylinderRuns(4, 7, () => false)).toEqual([])
+    expect(clippedCylinderRuns(4, 7, () => true)).toEqual([[4, 7]])
+  })
+
+  it('maps inclusive bp runs to exact half-base-aligned cylinder lengths', () => {
+    expect(clippedCylinderFractions(0, 9, 3, 6)).toEqual([.3, .7])
+    const [start, end] = clippedCylinderFractions(10, 29, 15, 19)
+    expect((end - start) * 20 * .334).toBeCloseTo(5 * .334)
+  })
+})
 
 describe('pose-preserving presentation edits', () => {
   it('changes instance scale without changing its live position or orientation', () => {

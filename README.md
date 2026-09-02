@@ -165,6 +165,9 @@ navigation, plus a mutually exclusive Multi-overlay mode for compositing up to f
 representations with independent opacity and dimension-scaled separation.
 Both comparison modes can also preview the current design in mrDNA's unsimulated
 coarse (five base pairs per bead) and fine (one site per base pair) abstractions.
+Spatial View Volumes add independently persisted box or honeycomb-friendly hexagonal
+regions with per-volume representation, opacity, outline visibility, and clipped
+mid-domain cylinder boundaries.
 
 ### Cluster system & animation
 Helices grouped into named clusters; per-cluster deformation ops; feature log

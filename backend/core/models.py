@@ -1186,6 +1186,7 @@ class ViewVolume(BaseModel):
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = "View Volume"
+    shape: Literal["box", "hexagonal"] = "box"
     min_corner: tuple[float, float, float]
     max_corner: tuple[float, float, float]
     rotation: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)
@@ -1193,6 +1194,7 @@ class ViewVolume(BaseModel):
         "full", "beads", "cylinders", "surface", "vdw", "ballstick", "stick"
     ] = "full"
     opacity: float = Field(default=1.0, ge=0.0, le=1.0)
+    outline_visible: bool = True
 
     @field_validator("rotation")
     @classmethod

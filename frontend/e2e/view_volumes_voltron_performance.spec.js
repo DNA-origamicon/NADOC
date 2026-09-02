@@ -18,7 +18,7 @@ test('VoltronCoreArm Volume 1 changes representation once without an operation c
   await page.locator('.right-tab-btn[data-tab="visualization"]').click()
   let volumeCount = await page.locator('.view-volume-row').count()
   if (!volumeCount) {
-    await page.locator('#view-volume-add').click()
+    await page.locator('#view-volume-add-box').click()
     await expect(page.locator('.view-volume-row')).toHaveCount(1)
     await expect.poll(() => page.evaluate(() => window.__NADOC_VIEW_VOLUMES__.timing().counters.persisted), { timeout: 60_000 }).toBeGreaterThanOrEqual(1)
     volumeCount = 1

@@ -22,6 +22,12 @@ describe('view volume spatial resolution', () => {
     expect(pointInVolume([0, 1.8, 0], volume)).toBe(true)
     expect(pointInVolume([1.8, 0, 0], volume)).toBe(false)
   })
+  it('tests membership in a regular hexagonal prism', () => {
+    const volume = { shape: 'hexagonal', min_corner: [-3, -2, -2], max_corner: [3, 2, 2] }
+    expect(pointInVolume([0, 1.7, 1.9], volume)).toBe(true)
+    expect(pointInVolume([1.9, 1, 0], volume)).toBe(false)
+    expect(pointInVolume([0, 0, 3.1], volume)).toBe(false)
+  })
   it('coalesces rapid preview work and aborts the superseded revision', async () => {
     const frames = new Map(), seen = []
     let id = 0
