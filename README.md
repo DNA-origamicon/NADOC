@@ -183,6 +183,19 @@ as an undoable Feature Log entry. See
 [Protein conjugation and constrained movement](docs/protein_conjugate_movement.md)
 for kinematics, transaction semantics, performance targets, and regression tests.
 
+### Gold nanoparticle conjugation
+
+**Tools → Nanoparticle → Gold nanosphere** creates a persisted, selectable gold
+nanoparticle with an editable diameter, metallic Photo Mode material, Feature Log
+history, and the same move/rotate interaction used for proteins. Its conjugation
+manager creates first-class, uniformly named and colored thiolated ssDNA handles.
+The Overhang Connections sidebar can create multiple applied or unapplied
+handle–overhang connection versions and collectively relax an anchored particle.
+Only reverse-complementary direct geometries are permitted; molecularly invalid
+root/free-end combinations are visibly disabled and rejected by the API. See
+[Gold nanoparticles and thiol conjugation](docs/nanoparticle_conjugation.md) for
+the authoring workflow, molecular/export model, automation API, and validation.
+
 ### Loop/skip topological deformation
 Implements the Dietz, Douglas & Shih (Science 2009) mechanism for bending and
 twisting bundles by inserting/deleting base pairs. Enforces physical limits

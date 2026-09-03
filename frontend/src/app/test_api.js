@@ -30,6 +30,8 @@ export function installTestApi({
   _clusterBackboneEntries,
   clusterGizmo,
   proteinGizmo,
+  nanoparticleSubsystem,
+  nanoparticleConjugateManager,
   api,
   _enterAssemblyMode,
   _exitAssemblyMode,
@@ -44,6 +46,68 @@ export function installTestApi({
     selectProteinForTest(id) {
       const ref = { kind: 'protein', id }
       selectionController?.replace([ref])
+    },
+    nanoparticles: {
+      create: diameterNm => api.createGoldNanosphere(diameterNm),
+      resize: (id, diameterNm) => api.patchNanoparticle(id, { diameter_nm: diameterNm }),
+      move: (id, gizmoMove) => api.patchNanoparticle(id, { gizmo_move: gizmoMove }),
+      remove: id => api.deleteNanoparticle(id),
+      conjugation: {
+        estimate: (id, scheme = 'direct_thiol') => api.estimateNanoparticleConjugation(id, scheme),
+        get: id => api.getNanoparticleConjugation(id),
+        apply: (id, spec) => api.putNanoparticleConjugation(id, spec),
+        remove: id => api.deleteNanoparticleConjugation(id),
+        validate: id => api.validateNanoparticleConjugation(id),
+        bind: (id, strandId, overhangId) => api.bindNanoparticleStrand(id, strandId, overhangId),
+        versions: id => api.getNanoparticleConnectionVersions(id),
+        createVersion: (id, spec) => api.createNanoparticleConnectionVersion(id, spec),
+        patchVersion: (id, versionId, patch) => api.patchNanoparticleConnectionVersion(id, versionId, patch),
+        deleteVersion: (id, versionId) => api.deleteNanoparticleConnectionVersion(id, versionId),
+        relaxConnections: id => api.relaxNanoparticleConnectionVersions(id),
+        open: id => nanoparticleConjugateManager?.open(id),
+        close: () => nanoparticleConjugateManager?.close(),
+        isOpen: () => nanoparticleConjugateManager?.isOpen() ?? false,
+        previewCamera: () => nanoparticleConjugateManager?.previewCamera?.() ?? null,
+        fullHandleCensus: () => nanoparticleConjugateManager?.fullHandleCensus?.() ?? null,
+        loadDesign: path => api.loadDesign(path),
+        saveDesign: path => api.saveDesign(path),
+      },
+      select: id => nanoparticleSubsystem?.select(id),
+      rendered: () => [...(nanoparticleSubsystem?.meshes?.entries?.() ?? [])].map(([id, mesh]) => ({
+        id, diameterNm: mesh.geometry?.parameters?.radius * 2,
+        position: mesh.getWorldPosition(new THREE.Vector3()).toArray(),
+        metalness: mesh.material?.metalness, color: mesh.material?.color?.getHex(),
+      })),
+      gizmoSetTransform: (translation, rotation) =>
+        nanoparticleSubsystem?.gizmo?.setTransform?.(translation, rotation) ?? false,
+      gizmoApply: () => nanoparticleSubsystem?.gizmo?.commit?.() ?? false,
+      screenPosition(id) {
+        const mesh = nanoparticleSubsystem?.meshes?.get(id)
+        if (!mesh) return null
+        const point = mesh.getWorldPosition(new THREE.Vector3()).project(camera)
+        const rect = canvas.getBoundingClientRect()
+        return {
+          x: rect.left + (point.x + 1) * rect.width / 2,
+          y: rect.top + (1 - point.y) * rect.height / 2,
+        }
+      },
+      hitAt({ x, y }) {
+        const rect = canvas.getBoundingClientRect()
+        const raycaster = new THREE.Raycaster()
+        raycaster.setFromCamera(new THREE.Vector2(
+          ((x - rect.left) / rect.width) * 2 - 1,
+          -((y - rect.top) / rect.height) * 2 + 1,
+        ), camera)
+        return nanoparticleSubsystem?.raycastPick?.(raycaster) ?? null
+      },
+      selected: () => store.getState().selection?.primary ?? null,
+      gizmoAttached: () => nanoparticleSubsystem?.gizmo?.isAttached?.() ?? false,
+      conjugationRender: () => ({
+        connectors: nanoparticleSubsystem?.connectorRoot?.children?.length ?? 0,
+        linkerAtoms: (nanoparticleSubsystem?.linkerAtomRoot?.children ?? []).map(atom => ({ name: atom.name, element: atom.userData?.element, strandId: atom.userData?.strandId })),
+        linkerAtomsVisible: Boolean(nanoparticleSubsystem?.linkerAtomRoot?.visible),
+        surfaceBonds: (nanoparticleSubsystem?.linkerAtomRoot?.children ?? []).filter(item => item.userData?.surfaceAttachment).length,
+      }),
     },
     async importProteinForTest(content) {
       const response = await api.importPdbAuto({ content, name: 'e2e-protein' })

@@ -11,7 +11,7 @@ import { parseBaseKey } from './base_ref.js'
 
 export const STABLE_SELECTION_KINDS = Object.freeze([
   'cluster', 'strand', 'domain', 'base', 'end', 'bond', 'crossover',
-  'overhang', 'extension', 'protein',
+  'overhang', 'extension', 'protein', 'nanoparticle',
 ])
 
 export const CROSSOVER_SUBTYPES = Object.freeze(['crossover', 'forced_ligation'])
@@ -124,6 +124,7 @@ export function isSelectionRefLive(input, design) {
     case 'extension': return !!design.extensions?.some(item => item.id === ref.id)
     case 'cluster': return !!design.cluster_transforms?.some(item => item.id === ref.id)
     case 'protein': return !!design.protein_attachments?.some(item => item.id === ref.id)
+    case 'nanoparticle': return !!design.nanoparticles?.some(item => item.id === ref.id)
     case 'crossover': {
       const collection = ref.subtype === 'forced_ligation' ? design.forced_ligations : design.crossovers
       return !!collection?.some(item => item.id === ref.id)

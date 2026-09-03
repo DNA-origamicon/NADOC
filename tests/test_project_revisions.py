@@ -138,6 +138,31 @@ def test_refresh_active_revision_advances_history_and_updates_embedded_fallback(
     ).metadata.name == "Changed"
 
 
+def test_refresh_identical_autosave_is_idempotent(tmp_path):
+    first = refresh_active_revision(tmp_path, _design())
+    head = first.loadouts[0].head_revision_id
+    again = refresh_active_revision(tmp_path, first)
+
+    assert again.loadouts[0].head_revision_id == head
+    objects = tmp_path / ".nadoc-projects" / first.id / "objects"
+    assert len(list(objects.iterdir())) == 1
+
+
+def test_overlapping_identical_autosave_adopts_winning_head(tmp_path):
+    """A second save holding the pre-save embedded head must not report divergence."""
+    baseline = ProjectRevisionStore(tmp_path).materialize_loadouts(_design())
+    changed = baseline.model_copy(
+        update={"metadata": baseline.metadata.model_copy(update={"name": "NP_test edited"})}
+    )
+    winner = refresh_active_revision(tmp_path, changed)
+    loser_retry = refresh_active_revision(tmp_path, changed)
+
+    assert loser_retry.loadouts[0].head_revision_id == winner.loadouts[0].head_revision_id
+    assert ProjectRevisionStore(tmp_path).load_design(
+        winner.id, winner.loadouts[0].head_revision_id
+    ).metadata.name == "NP_test edited"
+
+
 def test_simulation_revision_is_protected_exact_and_idempotent(tmp_path):
     design = _design()
     first = record_simulation_revision(tmp_path, design, "oxdna", "job-1")

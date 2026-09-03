@@ -235,7 +235,7 @@ export function initImportMenu(deps) {
   async function runPdbImport(args) {
     const json = await api.importPdbAuto({
       ...args,
-      expectedRevision: api.currentRevisionWatermark?.() ?? null,
+      expectedRevision: args.expectedRevision ?? api.currentRevisionWatermark?.() ?? null,
     })
     // A response can win the network race with AbortController. Never apply a
     // result after the user cancelled/closed the import dialog.

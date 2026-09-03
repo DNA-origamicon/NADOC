@@ -234,14 +234,18 @@ def vel_force_dcd_block(out_prefix: str, freq: int, *, capture: bool) -> str:
 
 
 def _render_namd_conf(
-    name: str, has_protein: bool = False, *, capture_vel_force: bool = False
+    name: str, has_protein: bool = False, *, capture_vel_force: bool = False,
+    has_nanoparticle: bool = False,
 ) -> str:
     # When proteins are attached, layer the CHARMM36m protein parameters on top
     # of the NA set and turn on extraBonds (the Cα elastic network + click linker
     # emitted by protein_enm.py keep the protein folded + tethered to the DNA).
     protein_params = (
-        "parameters         forcefield/par_all36m_prot.prm\n" if has_protein else ""
+        "parameters         forcefield/par_all36m_prot.prm\n"
+        if (has_protein or has_nanoparticle) else ""
     )
+    if has_nanoparticle:
+        protein_params += "parameters         forcefield/par_np_thiol.prm\n"
     vf_block = vel_force_dcd_block(f"output/{name}", 500, capture=capture_vel_force)
     extrabonds_block = (
         "\n# ── Protein Cα elastic network + DNA-handle click linker ─────────────────────\n"
@@ -262,7 +266,7 @@ outputName         output/{name}
 
 paraTypeCharmm     on
 parameters         forcefield/par_all36_na.prm
-{protein_params}{extrabonds_block}# toppar_water_ions_cufix.str is included in the forcefield/ directory.
+{protein_params}{extrabonds_block}{("constraints        on\nconsref            " + name + ".pdb\nconskfile          nanoparticle_anchors.pdb\nconskcol           B\nconstraintScaling  1.0\ntclForces          on\ntclForcesScript    nanoparticle_surface.tcl\n\n") if has_nanoparticle else ""}# toppar_water_ions_cufix.str is included in the forcefield/ directory.
 # Uncomment the line below only when running explicit-solvent simulations
 # that include Na+/K+/Mg2+ ion atoms — not needed for GBIS implicit solvent.
 #parameters         forcefield/toppar_water_ions_cufix.str

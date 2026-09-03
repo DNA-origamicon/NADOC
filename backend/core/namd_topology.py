@@ -19,6 +19,7 @@ from backend.core.pdb_export import _chain_char, _cryst1_record, _h36
 _FF_DIR = Path(__file__).parent.parent / "data" / "forcefield"
 _TOP_ALL36_NA = _FF_DIR / "top_all36_na.rtf"
 _TOP_ALL36_PROT = _FF_DIR / "top_all36_prot.rtf"
+_TOP_NP_THIOL = _FF_DIR / "top_np_thiol.rtf"
 
 from backend.core.protein import PROTEIN_SENTINEL_PREFIX
 
@@ -278,6 +279,15 @@ def _write_segment_pdbs(
                 "resids": residues,
             }
         )
+        np_atom = next((a for a in atoms if a.name == "SNP"), None)
+        if np_atom is not None:
+            attachment_end = "5p"
+            for conjugation in design.nanoparticle_conjugations:
+                if any(r.strand_id == np_atom.strand_id for r in conjugation.surface_strands):
+                    attachment_end = conjugation.attach_end
+                    break
+            segments[-1]["nanoparticle_patch"] = "NP5C" if attachment_end == "5p" else "NP3C"
+            segments[-1]["nanoparticle_resid"] = np_atom.seq_num
 
     full_lines.append("END")
     return segments, "\n".join(full_lines) + "\n"
@@ -562,6 +572,7 @@ def resolve_anchor_residue_indices(
 
 def _psfgen_script(segments: list[dict], output_prefix: Path) -> str:
     has_protein = any(seg.get("is_protein") for seg in segments)
+    has_nanoparticle = any(seg.get("nanoparticle_patch") for seg in segments)
     lines = [
         "package require psfgen",
         "resetpsf",
@@ -570,6 +581,11 @@ def _psfgen_script(segments: list[dict], output_prefix: Path) -> str:
     if has_protein:
         lines.append(f"topology {_TOP_ALL36_PROT}")
         lines.extend(_PROT_PDBALIASES)
+    if has_nanoparticle:
+        # The linker uses aliphatic/sulfur atom types from CHARMM36 protein.
+        if not has_protein:
+            lines.append(f"topology {_TOP_ALL36_PROT}")
+        lines.append(f"topology {_TOP_NP_THIOL}")
     for seg in segments:
         segid = seg["segid"]
         path = seg["path"]
@@ -608,6 +624,13 @@ def _psfgen_script(segments: list[dict], output_prefix: Path) -> str:
                 f"coordpdb {path} {segid}",
             ]
         )
+        if seg.get("nanoparticle_patch"):
+            lines.append(
+                f"patch {seg['nanoparticle_patch']} {segid}:{seg['nanoparticle_resid']}"
+            )
+            # Linker heavy atoms were present in the source PDB before the patch
+            # created their topology records; load their authored coordinates now.
+            lines.append(f"coordpdb {path} {segid}")
     lines.extend(
         [
             "regenerate angles dihedrals",
@@ -681,6 +704,9 @@ def build_charmm_psfgen_topology(
             psf_text,
             require_dna_hydrogens=True,
             require_dna_residue_charge=True,
+            dna_residue_charge_bounds=(-1.55, -0.25) if any(
+                seg.get("nanoparticle_patch") for seg in segments
+            ) else (-1.25, -0.25),
         )
         if not audit.passed:
             raise RuntimeError(

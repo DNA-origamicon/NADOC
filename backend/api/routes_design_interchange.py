@@ -186,6 +186,10 @@ async def import_pdb_auto(body: PdbAutoImportRequest, request: Request) -> dict:
                 "needs_dna_decision": True,
                 "has_dna": True,
                 "has_protein": True,
+                # Pin the follow-up mutation to the design version inspected
+                # for this decision. A tab's local watermark can lag behind a
+                # background save, which made the choice fail with a 409.
+                "revision": design_state.revision(),
                 **decision_source,
                 "process_metrics": _import_process_metrics(
                     operation_id, started, stages_ms, "needs_dna_decision"

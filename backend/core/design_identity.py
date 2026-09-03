@@ -69,7 +69,10 @@ def prepare_workspace_save(
     if previous is None:
         return _stamp(design, dest, new_id=False), "claimed", None
     if previous == dest:
-        return _stamp(design, dest, new_id=False), "confirmed", previous
+        # An in-place autosave is an acknowledgement, not an identity change.
+        # Refreshing this timestamp made byte-identical saves produce distinct
+        # project snapshots and needlessly race each other at the branch CAS.
+        return design, "confirmed", previous
     return _stamp(design, dest, new_id=True), "save_as", previous
 
 

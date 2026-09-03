@@ -88,7 +88,19 @@ def build_namd_package(
     from backend.core.ring_piercing import gate_seed_piercing  # noqa: PLC0415
 
     gate_seed_piercing(design, model=model, allow=allow_ring_pierced_seed)
-    pdb_text = export_pdb(design, model=model)
+    has_nanoparticle = bool(design.nanoparticle_conjugations)
+    if has_nanoparticle:
+        from backend.core.nanoparticle_atomistic import namd_readiness
+        from backend.core.namd_topology import build_charmm_psfgen_topology
+
+        readiness = namd_readiness(design)
+        if not readiness["passed"]:
+            raise ValueError("Nanoparticle NAMD readiness failed: " + "; ".join(readiness["errors"]))
+        topology = build_charmm_psfgen_topology(design, atomistic_model=model)
+        pdb_text = topology.pdb_text
+        psf_text = topology.psf_text
+    else:
+        pdb_text = export_pdb(design, model=model)
     identity_json = export_identity_json(design, model=model)
     identity_tsv = export_identity_tsv(design, model=model)
     design_maps_json = export_design_maps_json(design, model=model)
@@ -99,7 +111,8 @@ def build_namd_package(
     dry_restraints = export_dry_implicit_restraints(design, model=model)
 
     try:
-        psf_text = complete_psf(design, model=model)
+        if not has_nanoparticle:
+            psf_text = complete_psf(design, model=model)
     except Exception as exc:
         # Fall back to stub PSF with a warning header if parmed fails
         stub = export_psf(design, model=model)
@@ -113,7 +126,9 @@ def build_namd_package(
     extrabonds_text = build_protein_extrabonds(design, model)
     has_protein = bool(extrabonds_text)
 
-    conf_text = _render_namd_conf(name, has_protein=has_protein)
+    conf_text = _render_namd_conf(
+        name, has_protein=has_protein, has_nanoparticle=has_nanoparticle
+    )
     readme_text = _README.format(name=name)
     prompt_text = _AI_PROMPT.replace("{name}", name)
 
@@ -133,12 +148,54 @@ def build_namd_package(
         zf.writestr(prefix + "namd.conf", conf_text)
         zf.writestr(prefix + "README.txt", readme_text)
         zf.writestr(prefix + "AI_ASSISTANT_PROMPT.txt", prompt_text)
+        if has_nanoparticle:
+            marker = []
+            for line in pdb_text.splitlines():
+                if line.startswith(("ATOM  ", "HETATM")):
+                    beta = "25.00" if line[12:16].strip() == "SNP" else " 0.00"
+                    line = f"{line[:60]}{beta:>6s}{line[66:]}"
+                marker.append(line)
+            zf.writestr(prefix + "nanoparticle_anchors.pdb", "\n".join(marker) + "\n")
+            atom_count = sum(1 for line in pdb_text.splitlines() if line.startswith(("ATOM  ", "HETATM")))
+            centers = []
+            for particle in design.nanoparticles:
+                if not particle.visible:
+                    continue
+                center = particle.pose.to_array()[:3, 3] * 10.0
+                centers.append((*map(float, center), float(particle.diameter_nm * 5.0)))
+            center_text = " ".join("{%g %g %g %g}" % item for item in centers)
+            surface_tcl = f"""# NADOC implicit fixed-gold excluded-volume boundary (Å, kcal/mol)
+set np_centers {{{center_text}}}
+set np_k 10.0
+set np_atoms {{}}
+for {{set i 1}} {{$i <= {atom_count}}} {{incr i}} {{ addatom $i; lappend np_atoms $i }}
+proc calcforces {{}} {{
+  global np_centers np_k np_atoms
+  loadcoords p
+  foreach atom $np_atoms {{
+    set xyz $p($atom)
+    foreach sphere $np_centers {{
+      lassign $sphere cx cy cz radius
+      lassign $xyz x y z
+      set dx [expr {{$x-$cx}}]; set dy [expr {{$y-$cy}}]; set dz [expr {{$z-$cz}}]
+      set r [expr {{sqrt($dx*$dx+$dy*$dy+$dz*$dz)}}]
+      if {{$r > 1.0e-8 && $r < $radius}} {{
+        set mag [expr {{$np_k*($radius-$r)/$r}}]
+        addforce $atom [list [expr {{$mag*$dx}}] [expr {{$mag*$dy}}] [expr {{$mag*$dz}}]]
+      }}
+    }}
+  }}
+}}
+"""
+            zf.writestr(prefix + "nanoparticle_surface.tcl", surface_tcl)
         if has_protein:
             zf.writestr(prefix + "extrabonds.txt", extrabonds_text)
 
         ff_files = list(_FF_FILES)
-        if has_protein:
+        if has_protein or has_nanoparticle:
             ff_files += _PROTEIN_FF_FILES
+        if has_nanoparticle:
+            ff_files += ["top_np_thiol.rtf", "par_np_thiol.prm"]
         for ff_file in ff_files:
             ff_path = _FF_DIR / ff_file
             zf.writestr(prefix + f"forcefield/{ff_file}", ff_path.read_bytes())

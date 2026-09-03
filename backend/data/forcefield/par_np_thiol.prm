@@ -1,0 +1,22 @@
+* NADOC C3 thiolate linker cross-terms
+*
+
+BONDS
+ON2  CT2         340.0000    1.4300
+
+ANGLES
+CT2 ON2 P       20.0000  120.0000  35.0000  2.3300
+HA2 CT2 ON2     60.0000  109.5000
+CT2 CT2 ON2     75.7000  110.1000
+
+DIHEDRALS
+X    CT2 ON2 X   0.2000    3       0.00
+ON2  P   ON2 CT2  1.2000    1     180.00
+ON2  P   ON2 CT2  0.1000    2     180.00
+ON2  P   ON2 CT2  0.1000    3     180.00
+ON2  P   ON2 CT2  0.0000    6       0.00
+ON3  P   ON2 CT2  0.1000    3       0.00
+
+IMPROPERS
+
+END

@@ -89,6 +89,8 @@ _FF_FILES = [
     "par_all36_na.prm",
     "toppar_water_ions_cufix.str",  # includes Yoo/Aksimentiev Na+/Mg2+ CUFIX terms
     "par_stub_ions_nbfix.str",  # stub vdW for protein/lipid types in cufix NBFIX
+    "par_all36m_prot.prm",  # also supplies alkyl/thiolate CHARMM types
+    "par_np_thiol.prm",
 ]
 
 # ── Ion parameters (CHARMM36 / toppar_water_ions_cufix.str) ───────────────────
@@ -2264,6 +2266,8 @@ outputName         output/{name}
 
 paraTypeCharmm     on
 parameters         forcefield/par_all36_na.prm
+parameters         forcefield/par_all36m_prot.prm
+parameters         forcefield/par_np_thiol.prm
 parameters         forcefield/toppar_water_ions_cufix.str
 parameters         forcefield/par_stub_ions_nbfix.str
 {("extraBonds         on\nextraBondsFile     mgh_extrabonds.txt\n") if mg_hexahydrate else ""}
@@ -2400,6 +2404,8 @@ outputName         output/{name}_fast
 
 paraTypeCharmm     on
 parameters         forcefield/par_all36_na.prm
+parameters         forcefield/par_all36m_prot.prm
+parameters         forcefield/par_np_thiol.prm
 parameters         forcefield/toppar_water_ions_cufix.str
 parameters         forcefield/par_stub_ions_nbfix.str
 {("extraBonds         on\nextraBondsFile     mgh_extrabonds.txt\n") if mg_hexahydrate else ""}

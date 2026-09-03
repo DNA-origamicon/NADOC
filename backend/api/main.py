@@ -94,6 +94,7 @@ from backend.api.routes_vr import router as vr_router
 from backend.api.routes_simulate import router as simulate_router
 from backend.api.routes_primitives import router as primitives_router
 from backend.api.routes_protein import router as protein_router
+from backend.api.routes_nanoparticles import router as nanoparticles_router
 from backend.api.routes_project_collaboration import router as project_collaboration_router
 from backend.api.routes_assign_sequences import router as assign_sequences_router
 from backend.api.routes_scaffold_routing import router as scaffold_routing_router
@@ -427,6 +428,7 @@ app.include_router(engines_router, prefix="/api")
 app.include_router(primitives_router, prefix="/api")
 app.include_router(fs_router, prefix="/api")
 app.include_router(protein_router, prefix="/api")
+app.include_router(nanoparticles_router, prefix="/api")
 app.include_router(project_collaboration_router, prefix="/api")
 app.include_router(ws_router)  # WebSocket routes have no /api prefix
 

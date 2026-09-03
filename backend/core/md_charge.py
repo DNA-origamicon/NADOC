@@ -104,6 +104,7 @@ def audit_psf(
     require_dna_hydrogens: bool = False,
     require_dna_residue_charge: bool = False,
     integer_tolerance: float = 1.0e-3,
+    dna_residue_charge_bounds: tuple[float, float] = (-1.25, -0.25),
 ) -> ChargeAudit:
     """Return production-readiness diagnostics for a PSF topology."""
     atoms = parse_psf_atoms(psf_text)
@@ -152,10 +153,11 @@ def audit_psf(
             "DNA topology has zero hydrogens; production NAMD requires a full all-atom DNA topology."
         )
     if require_dna_residue_charge and residue_charge:
+        low, high = dna_residue_charge_bounds
         bad = [
             charge
             for charge in residue_charge.values()
-            if not (-1.25 <= charge <= -0.25)
+            if not (low <= charge <= high)
         ]
         if bad:
             audit.errors.append(

@@ -786,6 +786,9 @@
       box-shadow: none;
     }
     #right-panel.hidden { width:0 !important; min-width:0; overflow:hidden; border-left:none; }
+    /* Lift fixed connection pickers above the adjacent vertical tab strip
+       without changing their established viewport placement. */
+    #right-panel.connection-popover-open { z-index: 12; }
     #right-tab-strip {
       position: relative;
       width: 40px;
@@ -3500,6 +3503,8 @@
         }
         .ct-option:hover { border-color: #6e7681; }
         .ct-option.is-selected { border-color: #1f6feb; }
+        .ct-option.is-forbidden { cursor: not-allowed; opacity: 0.72; }
+        .ct-option.is-forbidden:hover { border-color: #d29922; }
         /* Neon highlight colors for the Connection Types overhang lists.
            LEFT-list selection = neon cyan, RIGHT-list selection = neon
            magenta. The same two colors paint the LEFT/RIGHT overhang
@@ -4018,6 +4023,13 @@
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-tools-overhangs-manager">Overhangs Manager…</button>
           <button class="dropdown-item" id="menu-tools-conjugate-manager">Conjugate Manager…</button>
+          <div class="submenu-item">Nanoparticle <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
+            <div class="submenu">
+              <button class="dropdown-item" id="menu-tools-gold-nanosphere">Gold nanosphere…</button>
+              <button class="dropdown-item" id="menu-tools-gold-nanorod" disabled>Gold nanorod <span class="dim">(coming soon)</span></button>
+              <button class="dropdown-item" id="menu-tools-quantum-dot" disabled>Quantum dot <span class="dim">(coming soon)</span></button>
+            </div>
+          </div>
           <div class="submenu-item">Proteins <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
             <div class="submenu">
               <button class="dropdown-item" id="menu-file-attach-protein">Attach Protein to Overhang…</button>
@@ -7945,7 +7957,17 @@
              .ct-option / .ct-tile styles defined globally near the Overhangs
              Manager modal. Placed directly below the Overhangs section. -->
         <style>
-          #oconn-generate:disabled, #oconn-secondary:disabled, #oconn-apply:disabled { background:#21262d; border-color:#30363d; color:#6e7681; cursor:not-allowed; }
+          #oconn-generate, #oconn-np-add { background:#1f6feb; border:1px solid #1f6feb; }
+          #oconn-apply, #oconn-np-apply { background:#8957e5; border:1px solid #8957e5; }
+          #oconn-secondary, #oconn-np-relax { background:#238636; border:1px solid #238636; }
+          :is(#oconn-generate, #oconn-apply, #oconn-secondary, #oconn-np-add, #oconn-np-apply, #oconn-np-relax) {
+            flex:1; min-width:0; box-sizing:border-box; padding:6px 4px;
+            border-radius:4px; color:#fff; font-family:var(--font-ui);
+            font-size:12px; cursor:pointer;
+          }
+          :is(#oconn-generate, #oconn-secondary, #oconn-apply, #oconn-np-add, #oconn-np-apply, #oconn-np-relax):disabled {
+            background:#21262d; border-color:#30363d; color:#6e7681; cursor:not-allowed;
+          }
           .oconn-group-header { padding:4px 6px; margin-bottom:2px; font-size:11px; color:#c9d1d9; font-weight:600; border-bottom:1px solid #21262d; cursor:pointer; user-select:none; display:flex; align-items:center; gap:5px; }
           .oconn-group-header:hover { color:#fff; }
           .oconn-chevron { color:#8b949e; font-size:9px; width:9px; display:inline-block; }
@@ -8003,12 +8025,9 @@
               <div id="oconn-pair-warning" hidden
                 style="width:100%;box-sizing:border-box;color:#f0883e;font-size:11px;line-height:1.3"></div>
               <div style="display:flex;gap:6px;width:100%">
-                <button id="oconn-generate" type="button" disabled
-                  style="flex:1;min-width:0;box-sizing:border-box;padding:6px 4px;background:#1f6feb;border:1px solid #1f6feb;border-radius:4px;color:#fff;font-family:var(--font-ui);font-size:12px;cursor:pointer">Connect</button>
-                <button id="oconn-apply" type="button" disabled
-                  style="flex:1;min-width:0;box-sizing:border-box;padding:6px 4px;background:#8957e5;border:1px solid #8957e5;border-radius:4px;color:#fff;font-family:var(--font-ui);font-size:12px;cursor:pointer">Apply</button>
-                <button id="oconn-secondary" type="button" disabled
-                  style="flex:1;min-width:0;box-sizing:border-box;padding:6px 4px;background:#238636;border:1px solid #238636;border-radius:4px;color:#fff;font-family:var(--font-ui);font-size:12px;cursor:pointer">Relax</button>
+                <button id="oconn-generate" type="button" disabled>Connect</button>
+                <button id="oconn-apply" type="button" disabled>Apply</button>
+                <button id="oconn-secondary" type="button" disabled>Relax</button>
               </div>
             </div>
             <!-- Interactive list of created linkers + direct bindings (scrollable field). -->

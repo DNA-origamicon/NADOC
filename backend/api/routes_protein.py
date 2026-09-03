@@ -547,6 +547,12 @@ def conjugate_protein_to_overhang(body: ProteinConjugateRequest) -> dict:
     binder = next((s for s in binder_design.strands if s.id not in existing_ids), None)
     if binder is None:
         raise HTTPException(500, detail="Binder strand was not created.")
+    from backend.core.conjugate_strands import assign_conjugate_group
+
+    assigned_binders, conjugate_group = assign_conjugate_group(
+        design, [binder], prefix=asset.name, fallback="Protein"
+    )
+    binder = assigned_binders[0]
     stages_ms["build_binder"] = (time.perf_counter() - stage_started) * 1000.0
 
     stage_started = time.perf_counter()
@@ -615,6 +621,7 @@ def conjugate_protein_to_overhang(body: ProteinConjugateRequest) -> dict:
                 ),
                 attachment,
             ],
+            staple_groups=[*d.staple_groups, conjugate_group],
         )
 
     # Validate the complete proposed element before touching shared design
@@ -922,6 +929,9 @@ def delete_protein_attachment(attachment_id: str) -> dict:
         ]
         if binder_id is not None:
             d.strands = [strand for strand in d.strands if strand.id != binder_id]
+            from backend.core.conjugate_strands import groups_without_strands
+
+            d.staple_groups = groups_without_strands(d, {binder_id})
 
     updated, report, _entry = design_state.mutate_with_feature_log(
         "protein-attach-delete",

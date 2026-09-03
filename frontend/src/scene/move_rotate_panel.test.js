@@ -110,10 +110,13 @@ beforeEach(() => { clearDom() })
 
 describe('initMoveRotatePanel — view setters', () => {
   it('accepts an entity-neutral protein transform controller', () => {
+    const els = mountPanelDom()
     const api = initMoveRotatePanel(makeDeps())
-    const controller = { isAttached: () => true, setTransform() {} }
+    const controller = { isAttached: () => true, setTransform() {}, commit: vi.fn() }
     api.setProteinController(controller)
     expect(api.getProteinController()).toBe(controller)
+    els['mr-apply-btn'].click()
+    expect(controller.commit).toHaveBeenCalledOnce()
   })
 
   it('no-ops gracefully when DOM is absent', () => {

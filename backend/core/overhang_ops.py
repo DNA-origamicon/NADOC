@@ -34,6 +34,31 @@ def _overhang_end(ovhg_id: str) -> Optional[str]:
     return None
 
 
+def overhang_free_end_polarity(design: Design, ovhg_id: str) -> Optional[str]:
+    """Return the physical free terminus (``5p``/``3p``) of an overhang.
+
+    Canonical ids encode this explicitly. For older/custom ids, infer it from
+    which terminal domain carries the overhang: the first domain exposes its
+    5' end and the last exposes its 3' end. A single-domain strand has no
+    embedded root and is therefore ambiguous unless its id is tagged.
+    """
+    tagged = _overhang_end(ovhg_id)
+    if tagged is not None:
+        return tagged
+    for strand in design.strands:
+        for index, domain in enumerate(strand.domains):
+            if domain.overhang_id != ovhg_id:
+                continue
+            if len(strand.domains) < 2:
+                return None
+            if index == 0:
+                return "5p"
+            if index == len(strand.domains) - 1:
+                return "3p"
+            return None
+    return None
+
+
 def _used_overhang_ends(
     design: Design,
     exclude_conn_id: Optional[str] = None,

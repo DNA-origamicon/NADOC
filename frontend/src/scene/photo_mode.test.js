@@ -31,6 +31,27 @@ describe('swapToFlatMaterials', () => {
     expect(mesh.material.envMapIntensity).toBe(0)
   })
 
+  it('keeps a gold nanoparticle metallic regardless of the Full preset', () => {
+    const scene = new THREE.Scene()
+    const original = new THREE.MeshPhysicalMaterial({ color: 0xd4af37 })
+    const particle = new THREE.Mesh(box(), original)
+    particle.name = 'gold-nanosphere:np-1'
+    particle.userData.photoMaterialKind = 'gold-nanoparticle'
+    scene.add(particle)
+
+    const swap = swapToFlatMaterials(scene, {
+      full: 'flat', cylinders: 'flat', surface: 'flat', atomistic: 'cpk-flat',
+    })
+
+    expect(particle.material.name).toBe('photoGoldNanoparticle')
+    expect(particle.material.color.getHex()).toBe(0xd4af37)
+    expect(particle.material.metalness).toBe(1)
+    expect(particle.material.roughness).toBeCloseTo(0.16)
+    expect(particle.material.envMapIntensity).toBeGreaterThan(1)
+    swap.restore()
+    expect(particle.material).toBe(original)
+  })
+
   it('applies the preset for each mesh\'s OWN representation', () => {
     const scene = new THREE.Scene()
     const beads = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshPhongMaterial(), 4)

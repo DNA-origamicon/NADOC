@@ -547,6 +547,11 @@ _SLOW_CLASSES = {
     "TestSyntheticRoundTrip",
     "TestRoutedPrimitiveIntegration",
     "TestMinimize3ExtraBase",
+    # Nine smoke assertions each launch a real OpenMM CPU minimization + NVT run
+    # (21-bp all-atom DNA, Amber14/GBNeck2), measured at 25.59--40.84 s apiece.
+    # The class is intentionally integration coverage; keep it together in the MD
+    # slow group rather than letting its setup/runtime hop between sibling methods.
+    "TestOpenMMSmoke",
 }
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
@@ -862,6 +867,16 @@ _SLOW_TESTS = {
     # test_oxdna_relaxation.py: constructs and serializes an imported-scale 18×388 bp
     # skipped design (~14k nucleotides), 5.70 s.
     "test_large_structure_oxdna_files_self_consistent",
+    # Same imported-scale 18x388-bp fixture as the consistency check above. It builds
+    # measured geometry twice and scans >13k backbone bonds each time to prove skip
+    # compaction stays inside oxDNA's FENE window (7.32 s).
+    "test_large_structure_skip_compaction_no_fene_violation",
+    # Real VoltronCoreArm artifact: full measured-position geometry reconstruction
+    # followed by the OH7-vs-duplex bead/base placement audit (6.74 s).
+    "test_rotated_oh7_keeps_the_same_measured_bead_to_base_geometry",
+    # Real VoltronCoreArm artifact: protein move endpoint rebuilds compact nucleotide
+    # geometry, then checks the moved cylinder against all constrained beads (5.11 s).
+    "test_voltron_protein_move_returns_cylinder_aligned_with_moved_beads",
     # test_headless_corner_build.py: builds both uniform and length-optimized 12-helix
     # corners, then performs the full steric-clash scan, 5.02 s.
     "test_length_optimizer_does_not_worsen_steric_clashes",
@@ -904,6 +919,10 @@ def _slow_area_for(module: str) -> str:
         return "namd"
     if "mrdna" in module:
         return "mrdna"
+    # Protein attachment geometry is selected by the protein leaf rule alongside the
+    # oxDNA protein-fork integration coverage.
+    if module == "test_protein":
+        return "oxdna"
     # pdb_export builds a full atomistic model then writes the PDB — same heavy
     # reconstruction stack as the atomistic tests, so its slow tests belong there.
     if (
@@ -911,6 +930,7 @@ def _slow_area_for(module: str) -> str:
         or "pdb_export" in module
         or "ring_piercing" in module
         or "two_base_default" in module
+        or "measured_positioning" in module
     ):
         return "atomistic"
     if module.startswith("test_md") or "openmm" in module or "benchmark" in module:

@@ -1674,7 +1674,7 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
  * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldAssignSequence?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onEditStrandSequence, onHideSelection, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, getDomainEndTable, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getAtomisticRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionStickRenderer, getRegionSurfaceRenderer, onDrillLevel, selectionController } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onEditStrandSequence, onHideSelection, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, getDomainEndTable, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getNanoparticleRenderer, getAtomisticRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionStickRenderer, getRegionSurfaceRenderer, onDrillLevel, selectionController } = opts
   if (!selectionController) throw new TypeError('selection manager requires the canonical selection controller')
   _onEditStrandSequence = onEditStrandSequence ?? null
   _onHideSelection = onHideSelection ?? null
@@ -4036,10 +4036,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // Skip when the CG root is hidden (atomistic/surface mode): Three.js r172 does not check
     // visible in Raycaster.intersectObjects, so hidden InstancedMeshes would still register
     // hits and incorrectly disable controls.
+    _setNdc(e.clientX, e.clientY)
+    raycaster.setFromCamera(_ndc, _cam())
+    const nanoparticleHit = Boolean(getNanoparticleRenderer?.()?.raycastPick?.(raycaster))
     const cgRootVisible = designRenderer.getHelixCtrl()?.root?.visible !== false
     if (controls && cgRootVisible) {
-      _setNdc(e.clientX, e.clientY)
-      raycaster.setFromCamera(_ndc, _cam())
       // Filter to visible meshes only — Three.js r172+ ignores .visible in
       // intersectObjects, so hidden meshes (e.g. iHelixCylinders in full-detail
       // mode, or iSpheres/iCubes in cylinder-LOD mode) would otherwise register
@@ -4061,7 +4062,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         const domain = designRenderer.getCylinderDomainAt(hit.instanceId)
         return domain && !_isHiddenReferenceStrand(domain.strandId)
       })
-      if (beadHit || coneHit || cylHit) controls.enabled = false
+      if (nanoparticleHit || beadHit || coneHit || cylHit) controls.enabled = false
+    } else if (controls && nanoparticleHit) {
+      controls.enabled = false
     }
   })
 
@@ -4323,6 +4326,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     const beadDist = beadHit0?.distance ?? Infinity
     const coneDist = coneHit0?.distance ?? Infinity
+
+    // ── Nanoparticle hit ────────────────────────────────────────────────────
+    // Same persistent, closest-visible-object selection rule as proteins.
+    const nanoparticleHit = getNanoparticleRenderer?.()?.raycastPick?.(raycaster)
+    if (nanoparticleHit && nanoparticleHit.distance <= Math.min(beadDist, coneDist)) {
+      selectionController.select({ kind: 'nanoparticle', id: nanoparticleHit.id })
+      return
+    }
 
     // ── Protein hit ──────────────────────────────────────────────────────────
     // Click-to-select a free-standing or attached protein. Takes precedence

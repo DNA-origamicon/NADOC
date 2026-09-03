@@ -79,7 +79,7 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 
 **Selection:** **[mature_selection_model](project_selection_model.md)** (SHIPPED contract — normalized refs, sole-writer controller; read before changing selection)
 
-**Display / representation:** **[native_vr](project_native_vr.md)** (ACTIVE)·[ssdna_ball_joints](project_ssdna_ball_joints.md)·[photo_mode](project_photo_mode.md)·[hull_prism](project_hull_prism.md)·**[mixed_representation](project_mixed_representation.md)** (impostors uncovered)·[strand_animations](project_strand_animations.md)·[reference_geometry](project_reference_geometry.md)·**[protein_attachment](project_protein_attachment.md)** (all representations + assembly parity; Voltron cylinder invariant)·[headless_build](project_headless_build.md)·[sphere_impostors](project_sphere_impostors.md)
+**Display / representation:** **[native_vr](project_native_vr.md)** (ACTIVE)·[ssdna_ball_joints](project_ssdna_ball_joints.md)·[photo_mode](project_photo_mode.md)·[hull_prism](project_hull_prism.md)·**[mixed_representation](project_mixed_representation.md)** (impostors uncovered)·[strand_animations](project_strand_animations.md)·[reference_geometry](project_reference_geometry.md)·**[protein_attachment](project_protein_attachment.md)** (all representations + assembly parity; Voltron cylinder invariant)·[nanoparticles](project_nanoparticles.md)·[headless_build](project_headless_build.md)·[sphere_impostors](project_sphere_impostors.md)
 
 **Sequences:** **[strand_sequence_edit](project_strand_sequence_edit.md)** (hand-edit a strand's bases; targeted vs design-wide re-derive)
 

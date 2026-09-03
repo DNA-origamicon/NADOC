@@ -50,6 +50,14 @@ The app is at `http://localhost:5173` when both servers run. See [START.md](STAR
 - Frontend behavior change → run `just test-frontend` and exercise the feature in the running app. If that is impossible, lead the final report with `NOT VERIFIED IN APP` and explain why.
 - Geometry/topology change → also load a representative `.nadoc` design and inspect it visually.
 - Never claim a test or app check passed unless it was actually run.
+- **Playwright artifact-cleanup gate (binding for every agent):** before invoking Playwright,
+  explicitly inventory every file/directory the test can persist outside Playwright's own
+  configured report/output directories and identify its cleanup mechanism. Workspace parts and
+  assemblies created by a test must use the `__e2e__` filename/name prefix so
+  `frontend/e2e/global-teardown.js` removes them even after failure or timeout. Any other persistent
+  artifact needs an exact, failure-safe `afterEach`/global-teardown cleanup. After the run, query the
+  relevant paths and verify that no test-created artifact remains; if cleanup cannot be proven, the
+  Playwright run is not complete. Never rely on a successful test body to perform cleanup.
 - Heavy tests (`just test`, `just test-slow`, real simulations/solves/benchmarks) run only in a user-opened `just test-session`. Never bypass `scripts/test_guard.sh`, create its session marker, or set force/budget escape hatches.
 - If the guard identifies an unmarked test over its per-test budget or a fast-suite overrun, use the `triage-slow-tests` skill. Do not raise the budget.
 

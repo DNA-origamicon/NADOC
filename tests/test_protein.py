@@ -467,6 +467,11 @@ def test_conjugate_creates_binder_and_attachment(_clean_state):
     assert binder.strand_type == StrandType.OH_BINDER
     assert any(dom.binds_overhang_id == "oh_5p" for dom in binder.domains)
     assert binder.sequence and len(binder.sequence) == 8  # RC of the 8-nt overhang
+    assert binder.color == "#c050d0"
+    assert binder.name == "synth-1:S1"
+    conjugate_group = next(g for g in d.staple_groups if binder.id in g.strand_ids)
+    assert conjugate_group.name == "synth-1"
+    assert conjugate_group.color == binder.color
     # (2) the protein is attached at the chosen site, asset embedded
     assert len(d.protein_attachments) == 1
     att = d.protein_attachments[0]
@@ -1186,6 +1191,7 @@ def test_pdb_auto_complex_needs_dna_decision_then_imports(_clean_state):
     assert body.get("needs_dna_decision") is True
     assert body["has_dna"] and body["has_protein"]
     assert body["imported"] == {"dna": False, "protein": False}
+    assert isinstance(body["revision"], int)
     content = body["content"]
     assert (
         len(design_state.get_design().protein_attachments) == 0
@@ -1214,6 +1220,7 @@ def test_rcsb_complex_decision_reuses_id_without_echoing_pdb(
     payload = decision.json()
     assert payload["needs_dna_decision"] is True
     assert payload["pdb_id"] == "8SCP"
+    assert isinstance(payload["revision"], int)
     assert "content" not in payload
 
     imported = client.post(

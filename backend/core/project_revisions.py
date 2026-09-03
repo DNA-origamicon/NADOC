@@ -538,6 +538,26 @@ class ProjectRevisionStore:
                 migrated.append(loadout)
                 continue
             if loadout.head_revision_id and head != loadout.head_revision_id:
+                # Two autosaves may start from the same embedded head.  If the
+                # winner only persisted the exact embedded fallback snapshot,
+                # adopting its head is safe and makes the operation idempotent.
+                # A content difference remains a real branch divergence.
+                same_snapshot = False
+                if head and self.object_path(design.id, loadout.head_revision_id).is_file():
+                    try:
+                        current = self.load_design(design.id, head)
+                        same_snapshot = (
+                            current.model_dump_json()
+                            == snapshot.model_copy(
+                                update={"loadouts": [], "active_loadout_id": None,
+                                        "last_editable_loadout_id": None}
+                            ).model_dump_json()
+                        )
+                    except (FileNotFoundError, ValueError, OSError):
+                        same_snapshot = False
+                if same_snapshot:
+                    migrated.append(loadout.model_copy(update={"head_revision_id": head}))
+                    continue
                 raise BranchConflict(loadout.id, loadout.head_revision_id, head)
             revision = self.commit(
                 snapshot,
@@ -577,6 +597,27 @@ def refresh_active_revision(workspace: Path, design: Design) -> Design:
     if active is None or active.protected:
         return materialized
     head = store.branch_head(materialized.id, active.id)
+    # Do not create a child revision when only the portable-file wrapper is
+    # being re-saved.  Besides avoiding history noise, this closes the race
+    # where overlapping autosaves made one another spuriously stale.
+    if head:
+        current_record = store.read_revision(materialized.id, head)
+        stripped = materialized.model_copy(
+            update={"loadouts": [], "active_loadout_id": None,
+                    "last_editable_loadout_id": None}
+        )
+        current_sha = hashlib.sha256(stripped.model_dump_json().encode("utf-8")).hexdigest()
+        if current_sha == current_record.snapshot_sha256:
+            payload, size = encode_snapshot(materialized)
+            loadouts = [
+                item.model_copy(update={
+                    "head_revision_id": head,
+                    "design_snapshot_gz_b64": payload,
+                    "snapshot_size_bytes": size,
+                }) if item.id == active.id else item
+                for item in materialized.loadouts
+            ]
+            return materialized.model_copy(update={"loadouts": loadouts})
     revision = store.commit(
         materialized,
         loadout_id=active.id,

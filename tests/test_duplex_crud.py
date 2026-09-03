@@ -91,6 +91,31 @@ def _create(left, right, **kw):
     return client.post(API, json={"left": left, "right": right, **kw})
 
 
+def test_connect_register_uses_the_requested_end_of_a_longer_domain():
+    from backend.core.duplex import connect_register
+
+    design = _seed()
+    strand = design.find_strand("st_a")
+    longer_domain = strand.domains[0].model_copy(update={"end_bp": 5})
+    longer_strand = strand.model_copy(update={"domains": [longer_domain]})
+    longer_spec = next(o for o in design.overhangs if o.id == "ohA").model_copy(
+        update={
+            "sequence": "AACCGG",
+            "sub_domains": [SubDomain(
+                id="sdA", start_bp_offset=0, length_bp=6,
+            )],
+        }
+    )
+    design = design.model_copy(update={
+        "strands": [longer_strand if s.id == "st_a" else s for s in design.strands],
+        "overhangs": [longer_spec if o.id == "ohA" else o for o in design.overhangs],
+    })
+    root_end, _ = connect_register(design, "ohA", "root", "ohB", "root")
+    free_end, _ = connect_register(design, "ohA", "free_end", "ohB", "root")
+    assert (root_end.start_bp, root_end.end_bp) == (0, 3)
+    assert (free_end.start_bp, free_end.end_bp) == (2, 5)
+
+
 # ── Create ────────────────────────────────────────────────────────────────────
 
 

@@ -43,7 +43,7 @@ selection: {
   cross-window sync.
 
 Stable design kinds are `cluster`, `strand`, `domain`, `base`, `end`, `bond`,
-`crossover`, `overhang`, `extension`, and `protein`. Forced ligation is a crossover
+`crossover`, `overhang`, `extension`, `protein`, and `nanoparticle`. Forced ligation is a crossover
 subtype.
 
 ## Binding invariants

@@ -1208,6 +1208,16 @@ export function initDesignRenderer(scene, storeRef) {
       return _helixCtrl?.slabEntries ?? []
     },
 
+    captureClusterBase(helixIds, domainIds = null) {
+      return _helixCtrl?.captureClusterBase?.(helixIds, domainIds)
+    },
+
+    applyClusterTransform(helixIds, center, position, rotation, domainIds = null) {
+      return _helixCtrl?.applyClusterTransform?.(
+        helixIds, center, position, rotation, domainIds, { forceAxes: true },
+      )
+    },
+
     residueTransformInfo(target) {
       return _helixCtrl?.residueTransformInfo?.(target) ?? null
     },

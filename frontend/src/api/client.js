@@ -1999,6 +1999,74 @@ export async function deleteProteinAttachment(attachmentId) {
   return _syncFromDesignResponse(json)
 }
 
+/** Create, resize/move, and delete display-layer nanoparticles. */
+export async function createGoldNanosphere(diameterNm) {
+  const json = await _request('POST', '/design/nanoparticles/gold-nanospheres', { diameter_nm: diameterNm })
+  if (json) _syncFromDesignResponse(json)
+  return json
+}
+
+export async function patchNanoparticle(id, patch) {
+  const json = await _request('PATCH', `/design/nanoparticles/${id}`, patch)
+  return _syncFromDesignResponse(json)
+}
+
+export async function deleteNanoparticle(id) {
+  const json = await _request('DELETE', `/design/nanoparticles/${id}`)
+  return _syncFromDesignResponse(json)
+}
+
+export async function estimateNanoparticleConjugation(id, scheme) {
+  return _request('POST', `/design/nanoparticles/${id}/conjugation/estimate`, { scheme })
+}
+
+export async function getNanoparticleConjugation(id) {
+  return _request('GET', `/design/nanoparticles/${id}/conjugation`)
+}
+
+export async function putNanoparticleConjugation(id, spec) {
+  const json = await _request('PUT', `/design/nanoparticles/${id}/conjugation`, spec)
+  return _syncFromDesignResponse(json)
+}
+
+export async function deleteNanoparticleConjugation(id) {
+  const json = await _request('DELETE', `/design/nanoparticles/${id}/conjugation`)
+  return _syncFromDesignResponse(json)
+}
+
+export async function validateNanoparticleConjugation(id) {
+  return _request('GET', `/design/nanoparticles/${id}/conjugation/validate`)
+}
+
+export async function bindNanoparticleStrand(id, strandId, overhangId) {
+  const json = await _request('POST', `/design/nanoparticles/${id}/strands/${strandId}/bind`, { overhang_id: overhangId })
+  return _syncFromDesignResponse(json)
+}
+
+export async function getNanoparticleConnectionVersions(id) {
+  return _request('GET', `/design/nanoparticles/${id}/connection-versions`)
+}
+
+export async function createNanoparticleConnectionVersion(id, spec) {
+  const json = await _request('POST', `/design/nanoparticles/${id}/connection-versions`, spec)
+  return _syncFromDesignResponse(json)
+}
+
+export async function patchNanoparticleConnectionVersion(id, versionId, patch) {
+  const json = await _request('PATCH', `/design/nanoparticles/${id}/connection-versions/${versionId}`, patch)
+  return _syncFromDesignResponse(json)
+}
+
+export async function deleteNanoparticleConnectionVersion(id, versionId) {
+  const json = await _request('DELETE', `/design/nanoparticles/${id}/connection-versions/${versionId}`)
+  return _syncFromDesignResponse(json)
+}
+
+export async function relaxNanoparticleConnectionVersions(id) {
+  const json = await _request('POST', `/design/nanoparticles/${id}/connection-versions/relax`, {})
+  return _syncFromDesignResponse(json)
+}
+
 export async function saveDesign(path) {
   return _request('POST', '/design/save', { path })
 }

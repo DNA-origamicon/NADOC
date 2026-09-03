@@ -74,6 +74,19 @@ describe('initOverhangConnectionsPanel', () => {
     expect(els['oconn-body'].style.display).toBe('none')
   })
 
+  it('preserves the established four-column OH-OH picker placement', () => {
+    els['oconn-button-box'].getBoundingClientRect = () => ({ left: 620, right: 808, top: 50, bottom: 150 })
+    Object.defineProperty(els['oconn-popover'], 'offsetWidth', { configurable: true, get: () => 798 })
+
+    els['oconn-button-box'].click()
+
+    expect(els['oconn-popover'].style.gridTemplateColumns).toBe('repeat(4, 188px)')
+    expect(els['oconn-popover'].style.left).toBe('10px')
+    expect(els['oconn-popover'].style.top).toBe('156px')
+    expect(els['oconn-button-box'].getAttribute('aria-expanded')).toBe('true')
+    els['oconn-button-box'].click()
+  })
+
   it('linker variant shows the length field + an enabled Generate Linker button', () => {
     // Pick a valid linker variant for the 5p/3p pair (ss is valid when ends differ).
     els['oconn-popover'].querySelector('[data-variant="end-to-end-ssdna-linker"]')

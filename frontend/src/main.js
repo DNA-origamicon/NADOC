@@ -108,7 +108,10 @@ import { initBeltPathPanel }       from './ui/belt_path_panel.js'
 import { initStrandAnimPanel }     from './ui/strand_anim_panel.js'
 import { openProteinAttachModal }  from './ui/protein_attach_modal.js'
 import { initProteinSubsystem }    from './scene/protein_subsystem.js'
+import { initNanoparticleSubsystem } from './scene/nanoparticle_subsystem.js'
+import { promptGoldNanosphereDiameter } from './ui/nanoparticle_dialog.js'
 import { initConjugateManager }    from './ui/conjugate_manager.js'
+import { initNanoparticleConjugateManager } from './ui/nanoparticle_conjugate_manager.js'
 import { initUnfoldView }          from './scene/unfold_view.js'
 import { initCadnanoView }         from './scene/cadnano_view.js'
 import { initDeformView }          from './scene/deform_view.js'
@@ -646,6 +649,7 @@ async function main() {
       visibilityController?.hide(refs)
     },
     getProteinRenderer: () => proteinRenderer,
+    getNanoparticleRenderer: () => nanoparticleSubsystem,
     getAtomisticRenderer: () => atomisticRenderer,
     // Per-region overlay renderers (mixed rep) — lazy getters resolve after they're
     // created below; used for atom/surface picking in atomistic/surface regions.
@@ -1133,8 +1137,19 @@ async function main() {
     rightSidebar,
   })
   const proteinRenderer = proteinSubsystem.renderer
-  const proteinGizmo = proteinSubsystem.gizmo
+  const proteinAttachmentGizmo = proteinSubsystem.gizmo
   const _refreshProteins = proteinSubsystem.refresh
+  const nanoparticleConjugateManager = initNanoparticleConjugateManager({ api, store })
+  const nanoparticleSubsystem = initNanoparticleSubsystem({
+    scene, store, controls, camera, canvas, selectionController, designRenderer, rightSidebar,
+    openConjugateManager: id => nanoparticleConjugateManager.open(id),
+  })
+  const nanoparticleGizmo = nanoparticleSubsystem.gizmo
+  // Entity-neutral adapter keeps the existing Move/Rotate controls shared.
+  const proteinGizmo = new Proxy({}, { get: (_target, key) => (...args) => {
+    const active = nanoparticleGizmo.isAttached?.() ? nanoparticleGizmo : proteinAttachmentGizmo
+    return active[key]?.(...args)
+  } })
   // Conjugate Manager — isolated modal showing azide-oligo attachment sites on a
   // protein. Opened from Tools ▸ Conjugate Manager… and the protein right-click.
   const conjugateManager = initConjugateManager({ api, store })
@@ -3718,6 +3733,13 @@ async function main() {
     conjugateManager.open(assetId, { sourceAttachmentId })
   })
 
+  document.getElementById('menu-tools-gold-nanosphere')?.addEventListener('click', async () => {
+    const diameter = await promptGoldNanosphereDiameter()
+    if (diameter == null) return
+    const response = await api.createGoldNanosphere(diameter)
+    if (response?.nanoparticle_id) nanoparticleSubsystem.select(response.nanoparticle_id)
+  })
+
   initAssemblyOverhangsManagerPopup({ store })
   document.getElementById('menu-assembly-overhangs-manager')?.addEventListener('click', () => {
     const { currentAssembly } = store.getState()
@@ -4453,6 +4475,7 @@ async function main() {
     setClusterRotationPoint:      api.setClusterRotationPoint,
   })
   proteinSubsystem.setMoveRotatePanel(_moveRotatePanel)
+  nanoparticleSubsystem.setMoveRotatePanel(_moveRotatePanel)
   const _mrPanel                        = _moveRotatePanel.panel
   const _mrPivotSel                     = _moveRotatePanel.pivotSel
   const _mrSetTransformValues           = _moveRotatePanel.setTransformValues
@@ -5579,6 +5602,16 @@ async function main() {
       seekInstanceFeatures: _seekInstanceFeaturesFast,
     },
     onEditFeature: _onEditFeature,
+    onEditNanoparticle: async id => {
+      const particle = store.getState().currentDesign?.nanoparticles?.find(item => item.id === id)
+      if (!particle) return
+      const diameter = await promptGoldNanosphereDiameter({
+        current: particle.diameter_nm, title: 'Edit gold nanosphere diameter',
+      })
+      if (diameter != null && diameter !== particle.diameter_nm) {
+        await api.patchNanoparticle(id, { diameter_nm: diameter })
+      }
+    },
     onAnimateConfiguration: _animateAssemblyConfiguration,
     // Linker-add log entries delegate their ✎ click here so the user lands
     // directly in the Overhangs Manager with the linker's two overhangs
@@ -6750,6 +6783,8 @@ async function main() {
       _clusterBackboneEntries,
       clusterGizmo,
       proteinGizmo,
+      nanoparticleSubsystem,
+      nanoparticleConjugateManager,
       api,
       _enterAssemblyMode,
       _exitAssemblyMode,

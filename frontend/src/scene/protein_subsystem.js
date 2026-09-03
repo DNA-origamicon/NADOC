@@ -225,7 +225,9 @@ export function initProteinSubsystem({
       // Clicking away is Cancel, never Apply. Restore the pre-move snapshot
       // before dropping the gizmo so an uncommitted preview cannot persist.
       if (proteinGizmo.isAttached()) proteinGizmo.cancel?.()
-      _moveRotatePanel?.setProteinController?.(null)
+      if (_moveRotatePanel?.getProteinController?.() === proteinGizmo) {
+        _moveRotatePanel.setProteinController(null)
+      }
       proteinRenderer.highlight(null)
       const panel = document.getElementById('move-rotate-panel')
       if (panel?.dataset.proteinActive === 'true') {

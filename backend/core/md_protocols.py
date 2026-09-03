@@ -1395,6 +1395,8 @@ coordinates        {name_stem}.pdb
 seed               {seed}
 paraTypeCharmm     on
 parameters         forcefield/par_all36_na.prm
+parameters         forcefield/par_all36m_prot.prm
+parameters         forcefield/par_np_thiol.prm
 parameters         forcefield/toppar_water_ions_cufix.str
 parameters         forcefield/par_stub_ions_nbfix.str
 {extras}
@@ -1497,6 +1499,8 @@ coordinates        {name_stem}.pdb
 seed               {seed}
 paraTypeCharmm     on
 parameters         forcefield/par_all36_na.prm
+parameters         forcefield/par_all36m_prot.prm
+parameters         forcefield/par_np_thiol.prm
 parameters         forcefield/toppar_water_ions_cufix.str
 parameters         forcefield/par_stub_ions_nbfix.str
 {extras}
@@ -1650,6 +1654,8 @@ coordinates        {name_stem}.pdb
 
 paraTypeCharmm     on
 parameters         forcefield/par_all36_na.prm
+parameters         forcefield/par_all36m_prot.prm
+parameters         forcefield/par_np_thiol.prm
 parameters         forcefield/toppar_water_ions_cufix.str
 parameters         forcefield/par_stub_ions_nbfix.str
 {solvent_block}

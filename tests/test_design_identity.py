@@ -49,6 +49,14 @@ def test_save_as_forks_but_in_place_save_does_not():
     assert fork.id != "d" and fork_disposition == "save_as"
 
 
+def test_in_place_save_does_not_churn_identity_timestamp():
+    claimed, _, _ = prepare_workspace_save(Design(id="d"), "NP_test.nadoc")
+    confirmed, disposition, _ = prepare_workspace_save(claimed, "NP_test.nadoc")
+    assert disposition == "confirmed"
+    assert confirmed is claimed
+    assert confirmed.metadata.identity_confirmed_at == claimed.metadata.identity_confirmed_at
+
+
 def test_managed_relocation_retains_id_and_updates_signoff():
     claimed, _, _ = prepare_workspace_save(Design(id="d"), "a.nadoc")
     moved = relocate_identity(claimed, "a.nadoc", "sub/a.nadoc")

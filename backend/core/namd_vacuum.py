@@ -94,6 +94,8 @@ _FF_FILES = [
     "par_all36_na.prm",
     "toppar_water_ions_cufix.str",
     "par_stub_ions_nbfix.str",
+    "par_all36m_prot.prm",
+    "par_np_thiol.prm",
 ]
 
 

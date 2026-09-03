@@ -319,6 +319,11 @@ class OverhangSpec(BaseModel):
     # no per-domain color field is needed.
     parent_overhang_id: Optional[str] = None
 
+    # Internal overhang endpoints let non-origami ssDNA (currently AuNP
+    # surface handles) participate in the canonical Duplex model without
+    # appearing as ordinary user-authored overhangs in pickers/managers.
+    auxiliary_endpoint: bool = False
+
     # Display-only "Strand Animation" setup captured from the right-sidebar panel.
     # Permissive dict mirroring frontend/src/strand-anim/params.js keys (mode, form,
     # meltBp, thetaDeg, invaderSplayDeg, exitAngleDeg, armPull, unwindScale, dispGap,
@@ -1769,6 +1774,16 @@ SnapshotOpKind = Literal[
     "protein-attach-patch",
     "protein-attach-delete",
     "protein-conjugate",
+    "nanoparticle-create",
+    "nanoparticle-patch",
+    "nanoparticle-delete",
+    "nanoparticle-conjugate",
+    "nanoparticle-conjugation-delete",
+    "nanoparticle-strand-bind",
+    "nanoparticle-connection-version-create",
+    "nanoparticle-connection-version-patch",
+    "nanoparticle-connection-version-delete",
+    "nanoparticle-connection-relax",
     "assembly-create-group",
     "assembly-ungroup",
     "assembly-patch-group",
@@ -2700,6 +2715,82 @@ class VisibilityState(BaseModel):
     hidden_cluster_ids: List[str] = Field(default_factory=list)
 
 
+class Nanoparticle(BaseModel):
+    """A rigid, display-only nanoparticle placed in the design scene."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    kind: Literal["gold_nanosphere"] = "gold_nanosphere"
+    diameter_nm: float = Field(gt=0.0, le=1000.0)
+    pose: Mat4x4 = Field(default_factory=Mat4x4)
+    visible: bool = True
+
+
+class NanoparticleSurfaceStrand(BaseModel):
+    """One real DNA strand grafted to a nanoparticle surface.
+
+    ``site_local`` is a unit direction in nanoparticle-local coordinates.  The
+    strand itself remains a normal ``Design.strands`` entry on ``helix_id``;
+    this record only supplies ownership and the surface attachment chemistry.
+    Gold is intentionally not atomized, so ``sulfur_local_nm`` terminates at
+    the mathematical particle surface.
+    """
+
+    strand_id: str
+    helix_id: str
+    overhang_id: Optional[str] = None
+    site_local: Tuple[float, float, float]
+    sulfur_local_nm: Tuple[float, float, float]
+    # Exact terminal backbone bead in the nanoparticle's local frame.  This
+    # includes helix radius/phase and lets the browser use the identical joint
+    # as the committed backend constraint solver.
+    backbone_attachment_local_nm: Optional[Tuple[float, float, float]] = None
+    bound_overhang_id: Optional[str] = None
+
+
+class NanoparticleConjugation(BaseModel):
+    """A thiol-DNA surface functionalization owned by one nanoparticle."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    nanoparticle_id: str
+    scheme: Literal[
+        "direct_thiol", "alkyl_thiol", "peg_thiol", "peg_backfill"
+    ] = "direct_thiol"
+    sequence: str
+    attach_end: Literal["5p", "3p"] = "5p"
+    spacer_nm: float = Field(default=0.7, ge=0.0, le=100.0)
+    requested_count: int = Field(ge=1, le=10000)
+    estimated_capacity: int = Field(ge=1)
+    density_per_nm2: float = Field(gt=0.0)
+    distribution_seed: int = 1
+    model_version: str = "thiol-au-v1"
+    literature_key: str = "hurst-2006"
+    surface_strands: List[NanoparticleSurfaceStrand] = Field(default_factory=list)
+
+
+class NanoparticleConnectionVersion(BaseModel):
+    """Saved candidate joining one nanoparticle handle to one overhang."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = ""
+    created_at: float = Field(default_factory=time.time)
+    nanoparticle_id: str
+    strand_id: str
+    overhang_id: str
+    connection_type: Literal["direct"] = "direct"
+    direct_variant: Literal["end-to-root", "root-to-root"] = "end-to-root"
+    # Canonical 5'/3'-aware endpoint mapping used to create the Duplex. NP
+    # "root" is the thiol-bound surface end, so its canonical attach value
+    # depends on whether the conjugation chemistry is 5' or 3'.
+    nanoparticle_attach: Optional[Literal["root", "free_end"]] = None
+    target_attach: Literal["root", "free_end"] = "root"
+    applied: bool = False
+    relaxed: bool = False
+    residual_nm: Optional[float] = None
+    duplex_id: Optional[str] = None
+    constraint_root_nm: Optional[Tuple[float, float, float]] = None
+    constraint_radius_nm: Optional[float] = None
+
+
 class Design(BaseModel):
     """
     Top-level design object.  This is the ground truth for a DNA origami
@@ -2731,6 +2822,9 @@ class Design(BaseModel):
     flexible_connections: List[FlexibleConnection] = Field(default_factory=list)
     protein_assets: List[ProteinAsset] = Field(default_factory=list)
     protein_attachments: List[ProteinAttachment] = Field(default_factory=list)
+    nanoparticles: List[Nanoparticle] = Field(default_factory=list)
+    nanoparticle_conjugations: List[NanoparticleConjugation] = Field(default_factory=list)
+    nanoparticle_connection_versions: List[NanoparticleConnectionVersion] = Field(default_factory=list)
     tm_settings: TmSettings = Field(default_factory=TmSettings)
     extensions: List[StrandExtension] = Field(default_factory=list)
     staple_groups: List[StapleGroup] = Field(default_factory=list)

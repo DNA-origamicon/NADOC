@@ -72,6 +72,26 @@ export function initMoveRotatePanel({
   let   _mrAssemblyCtx   = null
   let   _proteinController = null
 
+  // Attachment controllers (proteins and nanoparticles) are installed on the
+  // panel after subsystem construction.  Handle their buttons here, where the
+  // active controller is authoritative; the general translate/rotate tool's
+  // later listeners remain the fallback for clusters and nucleotides.
+  document.getElementById('mr-apply-btn')?.addEventListener('click', event => {
+    if (!_proteinController?.isAttached?.()) return
+    event.stopImmediatePropagation()
+    _proteinController.commit?.()
+  })
+  document.getElementById('mr-cancel-btn')?.addEventListener('click', event => {
+    if (!_proteinController?.isAttached?.()) return
+    event.stopImmediatePropagation()
+    _proteinController.cancel?.()
+  })
+  document.getElementById('mr-reset-btn')?.addEventListener('click', event => {
+    if (!_proteinController?.isAttached?.()) return
+    event.stopImmediatePropagation()
+    _proteinController.reset?.()
+  })
+
   function _mrSetSessionMode(sessionMode = 'cluster') {
     const gizmoOnly = sessionMode === 'nucleotide' || sessionMode === 'waiting'
     const fieldIds = ['mr-tx', 'mr-ty', 'mr-tz', 'mr-rx', 'mr-ry', 'mr-rz', 'mr-ja',

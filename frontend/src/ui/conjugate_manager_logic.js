@@ -30,6 +30,10 @@ export function candidateLabel(c) {
 
 // ── ssDNA handle helpers ─────────────────────────────────────────────────────
 
+export const SSDNA_PREVIEW_RISE_NM = 0.334
+export const SSDNA_PREVIEW_RADIUS_NM = 1.0
+export const SSDNA_PREVIEW_TWIST_RAD = 34.3 * Math.PI / 180
+
 const _COMPLEMENT = { A: 'T', T: 'A', G: 'C', C: 'G', N: 'N' }
 
 /** Reverse complement of a DNA sequence (the handle that hybridizes an overhang).
@@ -80,6 +84,41 @@ export function ssdnaBackbonePoints(start, dir, count, rise = 0.5) {
     pts.push({ x: start.x + dir.x * rise * i, y: start.y + dir.y * rise * i, z: start.z + dir.z * rise * i })
   }
   return pts
+}
+
+/** B-form frames for an ssDNA preview around an arbitrary axis.  These are the
+ * same rise, radius, phase, and twist used by the overhang/surface preview. */
+export function ssdnaHelixFrames(start, dir, count, {
+  rise = SSDNA_PREVIEW_RISE_NM,
+  radius = SSDNA_PREVIEW_RADIUS_NM,
+  twist = SSDNA_PREVIEW_TWIST_RAD,
+  phase = Math.PI / 2 + SSDNA_PREVIEW_TWIST_RAD / 2,
+} = {}) {
+  const n = Math.max(1, count | 0)
+  const u = perpendicular(dir)
+  const v = {
+    x: dir.y * u.z - dir.z * u.y,
+    y: dir.z * u.x - dir.x * u.z,
+    z: dir.x * u.y - dir.y * u.x,
+  }
+  const out = []
+  for (let i = 0; i < n; i++) {
+    const angle = phase + i * twist
+    const ca = Math.cos(angle), sa = Math.sin(angle)
+    const rx = u.x * ca + v.x * sa
+    const ry = u.y * ca + v.y * sa
+    const rz = u.z * ca + v.z * sa
+    out.push({
+      position: {
+        x: start.x + dir.x * rise * i + radius * rx,
+        y: start.y + dir.y * rise * i + radius * ry,
+        z: start.z + dir.z * rise * i + radius * rz,
+      },
+      baseNormal: { x: -rx, y: -ry, z: -rz },
+      axisTangent: { x: dir.x, y: dir.y, z: dir.z },
+    })
+  }
+  return out
 }
 
 /** Counts per chemistry for the legend: [{chemistry, name, site, color, css, count}]
