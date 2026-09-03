@@ -179,6 +179,14 @@ describe('live solvent side-channel', () => {
     return { c, ws }
   }
 
+  it('does not send the open design when a job id resolves the frozen snapshot', () => {
+    store.setState({ currentDesign: { id: 'large', loadouts: [{ design_snapshot_gz_b64: 'x'.repeat(1024) }] } })
+    const { ws } = connected()
+    const load = ws.lastOf('load')
+    expect(load.job_id).toBe('j1')
+    expect(load.design).toBeNull()
+  })
+
   it('sends set_solvent over an open socket', () => {
     const { c, ws } = connected()
     expect(c.setSolvent({ water: true, ions: true, box: false, shell_ang: 5 })).toBe(true)
@@ -225,14 +233,8 @@ describe('live solvent side-channel', () => {
     })
   })
 
-  it('reapplies the last downloaded frame on toggle-on without reopening', () => {
+  it('releases the trajectory socket on toggle-off', () => {
     const applyFemPositions = vi.fn()
-    const states = []
-    const processes = []
-    const onState = e => states.push(e.detail)
-    const onProcess = e => processes.push(e.detail)
-    window.addEventListener('nadoc:md-display-state', onState)
-    window.addEventListener('nadoc:md-display-process', onProcess)
     const { c, ws } = connected({
       designRenderer: {
         setDesignVisible: vi.fn(),
@@ -250,26 +252,8 @@ describe('live solvent side-channel', () => {
     ws.onmessage({ data: JSON.stringify(frame) })
     applyFemPositions.mockClear()
 
-    expect(c.stopDisplayKeepWarm()).toBe(true)
-    applyFemPositions.mockClear() // ignore the toggle-off equilibrium restore
-    c.displayLatest('/tmp/run.json', { forceReload: false, live: false, jobId: 'j1' })
-
-    expect(sockets).toHaveLength(1)
-    expect(applyFemPositions).toHaveBeenCalledTimes(1)
-    expect(applyFemPositions.mock.calls[0][0]).toEqual([
-      expect.objectContaining({
-        helix_id: 'h1', bp_index: 0, direction: 'FORWARD',
-        backbone_position: [1, 2, 3],
-      }),
-    ])
-    expect(processes.at(-1)).toMatchObject({
-      phase: 'frame-applied', jobId: 'j1', source: 'memory-cache',
-    })
-    expect(states.at(-1)).toMatchObject({
-      state: 'frame', jobId: 'j1', source: 'memory-cache',
-    })
-    window.removeEventListener('nadoc:md-display-state', onState)
-    window.removeEventListener('nadoc:md-display-process', onProcess)
+    expect(c.stopDisplayKeepWarm()).toBe(false)
+    expect(ws.readyState).toBe(3)
   })
 
   it('does not send anything when the overlay was never turned on', () => {

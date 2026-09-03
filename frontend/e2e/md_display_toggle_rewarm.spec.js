@@ -1,15 +1,14 @@
 /**
- * ONE-OFF browser test: toggling Display MD off must NOT re-warm.
+ * ONE-OFF browser test: toggling Display MD off must release the trajectory.
  *
- * Previously, toggling the display off closed the warm WS socket and the background
- * prewarm then re-parsed the 143 MB PSF from scratch — so the readiness dot sat at
- * "warming…" for ~5-10 s even though the latest frame was already in hand.  The fix
- * keeps the socket + cached frame warm on toggle-off (stopDisplayKeepWarm), so the
- * dot stays "ready" and a re-toggle is instant.
+ * Keeping a display WebSocket warm also keeps its DCD reader alive. For very large
+ * trajectories that prevents disk space from being reclaimed after deletion. The
+ * backend now caches only the expensive parsed PSF topology; toggle-off closes the
+ * trajectory socket and a later toggle reconnects without pinning the old DCD.
  *
  * This drives the real app for the running 3x6x200 job: toggle on → off → on, and
- * asserts that after toggling OFF the indicator stays "ready", no fresh load
- * ("loading" state) fires, and re-toggling streams a frame quickly.
+ * asserts that after toggling OFF the indicator is off, no background re-warm is
+ * started, and re-toggling explicitly loads and streams a frame again.
  *
  * Environment-dependent: SKIPS unless a NAMD job is running.  Run explicitly:
  *   npx playwright test e2e/md_display_toggle_rewarm.spec.js --reporter=list
@@ -31,7 +30,7 @@ if (!fs.existsSync(DESIGN)) {
   execSync('uv run python -m scripts.build_3x6x200_test', { cwd: REPO_ROOT, stdio: 'inherit' })
 }
 
-test('toggling Display MD off keeps it ready (no re-warm)', async ({ page }) => {
+test('toggling Display MD off releases its trajectory socket', async ({ page }) => {
   test.setTimeout(300_000)
 
   const jobsRes = await page.request.get(`${API}/md/jobs`)
@@ -99,9 +98,9 @@ test('toggling Display MD off keeps it ready (no re-warm)', async ({ page }) => 
   expect(labels.join('|'), 'indicator should never show warming after toggle-off').not.toMatch(
     /warming/i,
   )
-  await expect(label).toHaveText(/ready/i)
+  await expect(label).toHaveText(/off/i)
 
-  // ── 3) Re-toggle ON → a frame should stream quickly (warm socket reused). ──────
+  // ── 3) Re-toggle ON → a new socket loads using the cached PSF topology. ─────────
   const nAtReOn = await page.evaluate(() => window.__mdStates.length)
   const tRe = Date.now()
   await toggle.check()
@@ -109,7 +108,7 @@ test('toggling Display MD off keeps it ready (no re-warm)', async ({ page }) => 
     .poll(
       () =>
         page.evaluate((n) => (window.__mdStates || []).slice(n).includes('frame'), nAtReOn),
-      { timeout: 30_000, message: 're-toggle should stream a frame quickly (no PSF re-parse)' },
+      { timeout: 180_000, message: 're-toggle should load and stream a frame' },
     )
     .toBe(true)
   console.log(`[rewarm] re-toggle → frame in ${((Date.now() - tRe) / 1000).toFixed(1)}s`)

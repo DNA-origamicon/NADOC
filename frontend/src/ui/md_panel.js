@@ -509,10 +509,11 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
         mode:            _repr,
         binary_atom_frames: _repr === 'ballstick',
         job_id:          socketJobId,
-        // Fallback only — the backend prefers the run's own design (resolved from
-        // job_id) so the trajectory maps onto the right topology even when a
-        // different design is open in the editor.
-        design:          store?.getState?.().currentDesign ?? null,
+        // A job load resolves its frozen design server-side. Do not also serialize the
+        // open document: large designs carry compressed loadout snapshots and can exceed
+        // the WebSocket message limit before the backend ever receives this request.
+        // Manual config loads have no job_id, so they retain the open-design fallback.
+        design:          socketJobId ? null : (store?.getState?.().currentDesign ?? null),
       }))
       _emitMdProcess('load-sent', { configPath: _configPath, mode: _repr }, socketJobId)
       if (statusLine) statusLine.textContent = 'Loading…'
@@ -1291,10 +1292,10 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
       _autoDisplayActive = false
     },
 
-    // Toggle-off variant of stopAndRestore: revert the scene to native positions but
-    // KEEP the display socket + cached frame warm.  Switching back to prewarm then
-    // shows 'ready' instantly (no 143 MB PSF re-parse) and re-toggling re-applies the
-    // cached frame with no reload.  Returns true when a warm socket was retained.
+    // Toggle-off variant of stopAndRestore. Close the socket so the backend closes its
+    // trajectory reader: otherwise an unlinked 100+ GB DCD remains allocated until the
+    // server exits. The backend retains only the parsed topology, so reopening avoids
+    // the expensive PSF parse without pinning trajectory storage.
     stopDisplayKeepWarm() {
       _setPlaying(false)
       _setLive(false)
@@ -1302,9 +1303,17 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
       _autoDisplayActive = false
       _latestOnReady = false
       _latestOnceOnReady = false
-      _restoreDesign()   // reverts positions; does not touch _ws / _lastFrameMsg
-      return !!(_ws && (_ws.readyState === WebSocket.OPEN ||
-                        _ws.readyState === WebSocket.CONNECTING))
+      if (_reopenTimer) { clearTimeout(_reopenTimer); _reopenTimer = null }
+      _wsSig = null
+      if (_ws) {
+        try {
+          _ws.onclose = null
+          _ws.close()
+        } catch { /* ok */ }
+        _ws = null
+      }
+      _restoreDesign()
+      return false
     },
 
     /** True only while a received NAMD frame is actually driving the scene. */

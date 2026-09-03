@@ -2714,35 +2714,18 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // Kill any in-flight backend trajectory/RMSF/surface analysis for this job so a
     // heavy MDAnalysis read of the live DCD can't keep running after the user
     // toggles the view off (the run-away that used to wedge the server).
-    const stoppedDisplayJob = _jobs.find(j => j.job_id === _displayJobId) ?? null
     if (_displayJobId) api.cancelMdAnalysis(_displayJobId)
     _displayJobId = null
-    const displayKeyBefore = _displayKey
     _displayKey = null
     if (displayToggle) displayToggle.checked = false
     _mdFrameShown = false
     _clearInheritedSeed()             // drop any inherited oxDNA-seed overlay too (restore native)
-    // Revert the scene to native but KEEP the display socket + cached frame warm, so
-    // the indicator stays 'ready' and a re-toggle is instant (no PSF re-parse).  Only
-    // fall back to a fresh warm-up when there was no warm socket to keep.
-    const keptWarm = mdDisplayController?.stopDisplayKeepWarm?.()
+    // Revert and close the display socket. The backend keeps the parsed topology but
+    // releases the trajectory descriptor, allowing deleted multi-GB DCDs to be reclaimed.
+    mdDisplayController?.stopDisplayKeepWarm?.()
     _setDisplayStatus(status, _C.dim)
-    if (keptWarm) {
-      _prewarmKey = displayKeyBefore  // so the next (non-forced) refresh reuses the socket
-      if (mdIsRemoteJob(stoppedDisplayJob)) {
-        // Remote jobs must never be polled/prewarmed while Display MD is off, but
-        // the frame the user explicitly downloaded is already in local memory.
-        // Preserve that warm socket + `_lastFrameMsg`; starting the generic prewarm
-        // loop here would enter `_refreshMdPrewarm`'s remote guard and close it,
-        // defeating the promise that toggle-on shows the last downloaded frame.
-        _setDisplayIndicator('off')
-      } else {
-        _setDisplayIndicator('ready')
-        _startMdPrewarm(false)        // non-forced → decideReload 'reuse-open', no re-warm
-      }
-    } else {
-      _startMdPrewarm()               // no warm socket → fresh background warm-up
-    }
+    _prewarmKey = null
+    _setDisplayIndicator('off')
     _syncVizOffRadio()
   }
 
