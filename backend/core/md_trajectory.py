@@ -2366,6 +2366,44 @@ def _md_composite_trajectory_data(
 
     write_phase("initialize", 0, 1)
 
+    # A graphene-only control has a real all-atom trajectory but intentionally no NADOC
+    # nucleotides.  Its scrubber still drives the solvent/ion/periodic-box companion, so
+    # return one empty CG frame per selected DCD frame instead of entering phosphate
+    # alignment with empty arrays (which fails while subtracting a 3-vector centroid).
+    if hasattr(design, "strands") and not design.strands:
+        counts = [
+            (name, stage, _dcd_complete_frame_count(dcd))
+            for name, stage, dcd in segments
+        ]
+        picked = _composite_indices([row[2] for row in counts], max_frames, stride)
+        stages: list[dict] = []
+        markers: list[dict] = []
+        n_out = 0
+        for (name, stage, count), keep in zip(counts, picked):
+            if count <= 0:
+                continue
+            same = bool(stages and stages[-1]["name"] == name)
+            if n_out and not same:
+                markers.append(
+                    {"frame": n_out, "label": f"→ {name}", "kind": stage or "md",
+                     "stage_name": name}
+                )
+            if same:
+                stages[-1]["n_frames"] += len(keep)
+            else:
+                stages.append({"name": name, "kind": stage or "md", "n_frames": len(keep)})
+            n_out += len(keep)
+        write_phase("initialize", 1, 1)
+        frames = np.empty((n_out, 0), dtype="<f4") if binary else [[] for _ in range(n_out)]
+        return {
+            "n_frames": n_out,
+            "n_nucleotides": 0,
+            "keys": [],
+            "frames": frames,
+            "stages": stages,
+            "markers": markers,
+        }
+
     seg_paths = [s[2] for s in segments]
     # with_termini: recover each strand's 5'-terminal base (no P atom) so the scrubbable
     # trajectory positions + colours every nucleotide, matching the flexibility map + the
