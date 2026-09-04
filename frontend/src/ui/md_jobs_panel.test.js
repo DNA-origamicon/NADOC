@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { DEFAULT_PRODUCTION_TIMESTEP_FS, mdAnchorAtomNames, mdAnchorStiffness, mdCanReuseStatusSocket, mdForcesProvenance, mdHardSurfacePayload, mdInheritedPrepParams, DEFAULT_TRAJ_INTERVAL, MD_PRODUCTION_MARKER, TRAJ_FRAME_CONFIRM, effectiveProductionTimestepFs, filterJobsForPart, jobProductionTimestepFs, mdHasProductionRun, mdIsLocalTarget, mdIsRemoteJob, mdJobEditable, mdRunTargetForJob, mdSegGlyphKind, newestCompletedForPart, normalizeWorkspacePath, photoproductProgressView, productionNsFromSteps, seededBadge, selectCreatedMdJob, stridedFrameCount } from './md_jobs_panel.js'
+import { DEFAULT_PRODUCTION_TIMESTEP_FS, grapheneOnlyTrajectoryPlan, mdAnchorAtomNames, mdAnchorStiffness, mdCanReuseStatusSocket, mdForcesProvenance, mdHardSurfacePayload, mdInheritedPrepParams, DEFAULT_TRAJ_INTERVAL, MD_PRODUCTION_MARKER, TRAJ_FRAME_CONFIRM, effectiveProductionTimestepFs, filterJobsForPart, jobProductionTimestepFs, mdHasProductionRun, mdIsLocalTarget, mdIsRemoteJob, mdJobEditable, mdRunTargetForJob, mdSegGlyphKind, newestCompletedForPart, normalizeWorkspacePath, photoproductProgressView, productionNsFromSteps, seededBadge, selectCreatedMdJob, stridedFrameCount } from './md_jobs_panel.js'
 
 describe('hard-surface new-job payload', () => {
   it('transfers every visible graphene option with numeric types', () => {
@@ -31,6 +31,20 @@ describe('mdInheritedPrepParams', () => {
     }
     const child = { job_id: 'prod', parent_job_id: 'relax', run_kind: 'production' }
     expect(mdInheritedPrepParams(child, [child, parent])).toEqual(parent.prep_params)
+  })
+})
+
+describe('grapheneOnlyTrajectoryPlan', () => {
+  it('uses every raw DCD frame and opens on the latest one', () => {
+    expect(grapheneOnlyTrajectoryPlan({ ready: true, n_frames: 275 })).toEqual({
+      nFrames: 275, frameIdx: 274, stride: 1,
+    })
+  })
+
+  it('waits safely when the DCD has no complete frame yet', () => {
+    expect(grapheneOnlyTrajectoryPlan({ ready: false })).toEqual({
+      nFrames: 0, frameIdx: 0, stride: 1,
+    })
   })
 })
 

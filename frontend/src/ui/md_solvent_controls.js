@@ -459,11 +459,14 @@ export function initMdSolventControls({
 
   return {
     /** Point the controls at a job + its trajectory density. */
-    async setJob(jobId, { stride = null, nFrames = 0 } = {}) {
+    async setJob(jobId, { stride = null, nFrames = 0, frameIdx = null } = {}) {
       const changed = jobId !== _jobId
       _jobId = jobId
       _stride = stride
       _nFrames = nFrames
+      if (frameIdx !== null && Number.isFinite(Number(frameIdx))) {
+        _frameIdx = Math.max(0, Number(frameIdx) | 0)
+      }
       if (changed) {
         _meta = null
         _measuredSpecies = null

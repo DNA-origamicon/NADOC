@@ -39,6 +39,21 @@ def _write_dcd(path, n_frames, start_time, dt=100.0, n_atoms=4):
     return path
 
 
+def test_composite_meta_counts_complete_frames_past_stale_header(tmp_path):
+    """A growing NAMD DCD must not look like its old one-frame header in the UI."""
+    import struct
+
+    from backend.core.md_trajectory import md_composite_meta
+
+    dcd = _write_dcd(tmp_path / "live.dcd", 5, 0.0)
+    with dcd.open("r+b") as fh:
+        fh.seek(8)  # NSET in the CORD header
+        fh.write(struct.pack("<i", 1))
+    meta = md_composite_meta([("production", "md", dcd)], stride=1)
+    assert meta["n_frames"] == 5
+    assert meta["total_raw"] == 5
+
+
 @pytest.fixture
 def job(tmp_path, monkeypatch):
     """A one-segment job whose package dir is a tmp dir."""

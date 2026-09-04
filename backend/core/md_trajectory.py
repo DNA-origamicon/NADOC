@@ -1819,17 +1819,28 @@ def count_md_frames(segments) -> int:
     """Total DCD frame count across every segment (DCD header only, no coordinate
     read) — sizes the "Graphs and Metrics" ETA/progress bar without a full parse.
     Mirrors :func:`oxdna_health.count_trajectory_frames` for the MD side."""
-    from MDAnalysis.coordinates.DCD import DCDReader  # type: ignore
-
     total = 0
     for _name, _kind, dcd in segments:
         if not Path(dcd).exists():
             continue
-        try:
-            total += len(DCDReader(str(dcd)))
-        except Exception:
-            pass
+        total += _dcd_complete_frame_count(dcd)
     return total
+
+
+def _dcd_complete_frame_count(path) -> int:
+    """Complete frames on disk, including frames beyond a stale live NSET header."""
+    try:
+        from backend.core.dcd_fast import read_layout
+
+        return int(read_layout(path).n_frames)
+    except Exception:
+        try:
+            from MDAnalysis.coordinates.DCD import DCDReader  # type: ignore
+
+            with DCDReader(str(path)) as reader:
+                return len(reader)
+        except Exception:
+            return 0
 
 
 def aligned_rmsd_nm(mobile, reference) -> float:
@@ -2157,14 +2168,9 @@ def md_composite_meta(
     ``stages`` entries also carry ``n_raw`` (the segment's undownsampled DCD frame
     count) and the payload carries ``total_raw``, so a caller can show "N of M frames"
     or recompute the count for a different ``stride`` without another request."""
-    from MDAnalysis.coordinates.DCD import DCDReader  # type: ignore
-
     counts = []
     for name, kind, dcd in segments:
-        try:
-            n = len(DCDReader(str(dcd)))
-        except Exception:
-            n = 0
+        n = _dcd_complete_frame_count(dcd)
         counts.append((name, kind, n))
     total = sum(c for _, _, c in counts)
     if total == 0:

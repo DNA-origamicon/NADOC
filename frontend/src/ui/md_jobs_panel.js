@@ -797,6 +797,14 @@ export function mdInheritedPrepParams(job, jobs = []) {
   return { ...(current?.prep_params || {}) }
 }
 
+/** Raw-frame plan for a graphene-only Display MD view. There is no DNA trajectory to
+ * align, but solvent/ions/box still follow the complete DCD and should open on its latest
+ * complete frame. */
+export function grapheneOnlyTrajectoryPlan(meta) {
+  const nFrames = meta?.ready ? Math.max(0, Number(meta.n_frames) || 0) : 0
+  return { nFrames, frameIdx: Math.max(0, nFrames - 1), stride: 1 }
+}
+
 /** Canonical hard-surface request fields shared by fresh and draft launches. */
 export function mdHardSurfacePayload({
   enabled = false, grapheneOnly = false, poreDiameterNm = 2.1, layers = 1,
@@ -2563,10 +2571,23 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         mdDisplayController.stopDisplayKeepWarm?.()
         _displayJobId = job.job_id
         _displayKey = `graphene-only|${d.trajectory_path ?? ''}`
+        // Ask explicitly for stride 1. The metadata endpoint otherwise applies its
+        // normal 200-frame visualization budget, while this solvent-only route uses
+        // raw composite indices. This also re-reads a growing DCD on every display poll.
+        const meta = await api.getMdTrajectoryMeta(job.job_id, { stride: 1 }).catch(() => null)
+        const plan = grapheneOnlyTrajectoryPlan(meta)
+        await solvent?.setJob(job.job_id, {
+          stride: plan.stride, nFrames: plan.nFrames, frameIdx: plan.frameIdx,
+        })
         solvent?.setEnabled(true, 'traj')
-        await solvent?.setJob(job.job_id, { nFrames: 1 })
-        solvent?.showFrame(0)
-        _setDisplayStatus('Graphene control ready · use Water, Ions and Periodic box', _C.ok)
+        solvent?.showFrame(plan.frameIdx)
+        const frameText = plan.nFrames
+          ? ` · frame ${plan.frameIdx + 1}/${plan.nFrames}`
+          : ' · waiting for first complete frame'
+        _setDisplayStatus(
+          `Graphene control ready${frameText} · use Water, Ions and Periodic box`,
+          plan.nFrames ? _C.ok : _C.warn,
+        )
         _updateLiveFrameControls(job)
         return
       }
