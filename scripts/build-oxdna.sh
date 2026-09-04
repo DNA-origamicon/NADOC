@@ -4,6 +4,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
 OXDNA_URL="${NADOC_OXDNA_URL:-https://github.com/lorenzo-rovigatti/oxDNA.git}"
 OXDNA_REV="${NADOC_OXDNA_REV:-8028cf33b3cba12992b771156085fa54879f50cd}"
@@ -17,6 +18,7 @@ INSTALL_DIR="$ENGINE_ROOT/$OXDNA_REV-$BUILD_FLAVOR"
 CURRENT="$ENGINE_ROOT/current"
 BUILD_DIR="$SOURCE_DIR/build-nadoc-$BUILD_FLAVOR"
 JOBS="${NADOC_BUILD_JOBS:-$(nproc)}"
+OXPY_PYTHON="${NADOC_OXPY_PYTHON:-$PROJECT_ROOT/.venv/bin/python}"
 
 echo "==> upstream oxDNA $OXDNA_REV"
 echo "    source:  $OXDNA_URL"
@@ -47,7 +49,22 @@ else
   fi
 fi
 
-cmake_args=(-S "$SOURCE_DIR" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release)
+OXPY_PATCH="$SCRIPT_DIR/../tools/oxdna_live/oxpy-field-steering.patch"
+if git -C "$SOURCE_DIR" apply --reverse --check "$OXPY_PATCH" >/dev/null 2>&1; then
+  echo "==> oxpy live-steering patch already applied"
+else
+  git -C "$SOURCE_DIR" apply --check "$OXPY_PATCH"
+  git -C "$SOURCE_DIR" apply "$OXPY_PATCH"
+  echo "==> applied oxpy live-steering bindings"
+fi
+
+if [ ! -x "$OXPY_PYTHON" ]; then
+  echo "ERROR: NADOC Python not found at $OXPY_PYTHON" >&2
+  echo "Run 'uv sync', or set NADOC_OXPY_PYTHON to the backend interpreter." >&2
+  exit 2
+fi
+
+cmake_args=(-S "$SOURCE_DIR" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DPython=ON)
 if [ "${NADOC_OXDNA_CPU_ONLY:-0}" != "1" ]; then
   if ! command -v nvcc >/dev/null 2>&1; then
     echo "ERROR: CUDA build requested but nvcc is not on PATH." >&2
@@ -60,8 +77,8 @@ if [ "${NADOC_OXDNA_CPU_ONLY:-0}" != "1" ]; then
   fi
 fi
 
-cmake "${cmake_args[@]}"
-cmake --build "$BUILD_DIR" -j"$JOBS" --target oxDNA DNAnalysis
+PATH="$(dirname "$OXPY_PYTHON"):$PATH" cmake "${cmake_args[@]}"
+cmake --build "$BUILD_DIR" -j"$JOBS" --target oxDNA DNAnalysis core
 
 mkdir -p "$INSTALL_DIR/bin" "$INSTALL_DIR/lib"
 install -m 0755 "$BUILD_DIR/bin/oxDNA" "$INSTALL_DIR/bin/oxDNA"
@@ -76,5 +93,12 @@ printf '%s\n' "$OXDNA_REV" > "$INSTALL_DIR/source-revision"
 printf '%s\n' "$BUILD_FLAVOR" > "$INSTALL_DIR/build-flavor"
 ln -sfn "$INSTALL_DIR" "$CURRENT"
 
+if command -v uv >/dev/null 2>&1; then
+  uv pip install --python "$OXPY_PYTHON" --reinstall "$BUILD_DIR/python"
+else
+  "$OXPY_PYTHON" -m pip install --reinstall "$BUILD_DIR/python"
+fi
+
 echo "==> installed: $CURRENT/bin/oxDNA"
+echo "==> installed: oxpy into $OXPY_PYTHON"
 echo "==> source revision: $OXDNA_REV"

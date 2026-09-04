@@ -67,6 +67,14 @@ the card's own toggle off, so the user got neither the strands nor a reason.
   `oxdna_surface_strands_setup.test.js` (gate, submit spec, echo-back on/off, debounce, throwing
   onChange). `just test-smart` FAST 7120 pass; 5766 vitest.
 
+**Live continuation parity — FIXED 2026-09-03.** The Live button now submits the
+currently selected job together with every current continuation card: field, absolute hard-surface
+position, ordinary anchors, surface-deposition anchors, and inherited capture-strand field
+participation. The live backend uses the same `capture_run_decision` contract as persisted runs,
+re-pins inherited attach ends, excludes trailing capture beads from the field when requested, and
+retains that parent metadata for mid-session recomposition. The selected job is re-read after a
+stale-job roll/refetch so the launch cannot use the pre-dialog selection snapshot.
+
 **Every card edit reverted the user's visualization — FIXED 2026-08-18.** With a simulation
 frame displayed, changing any surface-strand setting snapped the structure back to NADOC native
 positions (plus: flexibility map back to strand colours, anchor/selection/clash halos gone).

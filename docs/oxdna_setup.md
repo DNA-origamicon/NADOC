@@ -18,7 +18,8 @@ build script instead of an older release package.
 2. Install build tools: `sudo apt-get install -y build-essential cmake git`.
    For a GPU build, also install the CUDA toolkit (provides `nvcc`).
 3. Run `scripts/build-oxdna.sh`. It pins a reviewed upstream revision, builds
-   `oxDNA` and `DNAnalysis`, and installs them under NADOC's engine directory.
+   `oxDNA`, `DNAnalysis`, and the patched `oxpy` bindings required by Live, installs
+   the binaries under NADOC's engine directory, and installs oxpy into NADOC's `.venv`.
 
 ---
 
@@ -54,6 +55,28 @@ alongside oxDNA and is found **next to** the resolved oxDNA binary (or via
 
 See [external_tools.md](external_tools.md) for the full environment-variable
 reference shared across all simulation back-ends.
+
+`oxpy` is built from the same pinned source and installed into the interpreter that
+runs NADOC. By default that is `<repo>/.venv/bin/python`; set `NADOC_OXPY_PYTHON`
+only when the backend intentionally uses a different interpreter. The managed build
+also applies NADOC's `BaseForce.F0`/`BaseForce.dir` steering patch required by Live.
+
+## Live continuation
+
+**Live** always starts from the currently selected completed oxDNA job, using that
+job's last configuration as its initial coordinates. At launch—and whenever the
+cards are changed during a Live session—NADOC composes the current enabled simulation
+settings into the ephemeral run:
+
+- the current electric-field magnitude and direction;
+- the hard-surface normal, stiffness, offset, and absolute position;
+- ordinary structure anchors and surface-deposition anchors; and
+- inherited surface capture strands, including whether those beads participate in
+  the electric field.
+
+Changing the selected job before pressing **Live** changes the parent configuration;
+the launch path re-reads that selection after any stale-job refresh. Live does not
+modify the selected job or its saved output.
 
 ---
 
@@ -255,6 +278,8 @@ ox = find_oxdna()
 print('oxDNA     ', ox or '(not found)', '[CUDA]' if ox and oxdna_supports_cuda(ox) else '[CPU-only]')
 print('DNAnalysis', find_dnanalysis() or '(not found)')
 "
+
+.venv/bin/python -c "from backend.core.engines import oxpy_live_info; print(oxpy_live_info())"
 ```
 
 Then restart the NADOC backend (`just dev`) and open the **Dynamics** sidebar —
@@ -335,6 +360,7 @@ elements fixed; the surface deposition designation remains independently editabl
 | Wrong GPU selected on a multi-GPU box | Set `OXDNA_DEVICE` to the device index you want. |
 | Protein job fails / "DNANM not available" | The resolved binary predates upstream PR #192. Run `scripts/build-oxdna.sh`; do not use the older v3.7.0 release package. |
 | Health check shows no H-bond count | `DNAnalysis` not found. It builds with `make … DNAnalysis`; ensure it sits next to the oxDNA binary, or set `$DNANALYSIS_BIN`. |
+| Live says `oxpy not built` or the engine panel reports missing Live bindings | From the NADOC repository run `scripts/build-oxdna.sh` (or `NADOC_OXDNA_ADAPTIVE_MEMORY=1 scripts/build-oxdna.sh` for the adaptive flavor), then restart the backend. This now builds and installs patched oxpy into NADOC's `.venv`; no separate package is required. |
 | Surface deposition never reaches settle | Inspect the reported remaining-anchor count and maximum gap. The runner automatically captures arrivals and ramps the remaining anchors up to the configured ceiling; increase the window count or force ceiling only if the structure remains healthy. |
 | Deposited anchors stretch nearby backbone bonds | Use the surface-specific normal restraint (default stiffness `1.0`), not the generic immobile structure-anchor stiffness. Restart settle from the last healthy approach checkpoint if an older run used stiff traps. |
 | Override ignored | `$OXDNA_BIN` must point at an **executable** file (or PATH-resolvable name). A bad path is silently skipped and resolution falls through. |

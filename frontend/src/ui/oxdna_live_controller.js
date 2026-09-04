@@ -43,11 +43,37 @@ const RECONFIG_MS = 350     // debounce live recomposition POSTs (engine rebuild
  *  reconfigure.  Two element sets with the same signature → only a field re-aim is
  *  ever needed; a changed signature → recompose the engine. */
 export function reconfigSig(el = {}) {
-  const f = el.field, s = el.surface, a = el.anchors || []
+  const f = el.field, s = el.surface
+  const a = [...(el.anchors || []), ...(el.surfaceAnchors || [])]
   const fieldOn = !!(f?.enabled && f.field_pN > 0)
-  const surf = s?.enabled ? { dir: s.dir, off: s.offsetNm, stiff: s.stiff } : null
+  const surf = s?.enabled
+    ? { dir: s.dir, off: s.offsetNm, position: s.positionNm, stiff: s.stiff }
+    : null
   const anchors = a.map((x) => JSON.stringify(x)).sort()
-  return JSON.stringify({ fieldOn, surf, anchors })
+  const capture = el.surfaceStrands?.enabled
+    ? { enabled: true, subjectToField: el.surfaceStrands.subjectToField !== false }
+    : null
+  return JSON.stringify({ fieldOn, surf, anchors, capture })
+}
+
+/** Build Live's continuation payload from the same current cards as Full Sim. */
+export function liveStartBody(job, el = {}) {
+  const body = { job_id: job?.job_id }
+  const field = el.field
+  if (field?.enabled && field.field_pN > 0) {
+    body.field = { field_pN: field.field_pN, dir: field.dir }
+  }
+  if (el.surface?.enabled) body.surface = {
+    dir: el.surface.dir, offset_nm: el.surface.offsetNm,
+    position_nm: el.surface.positionNm, stiff: el.surface.stiff,
+  }
+  if (el.anchors?.length) body.anchors = el.anchors
+  if (el.surfaceAnchors?.length) body.surface_anchors = el.surfaceAnchors
+  if (el.surfaceStrands?.enabled) body.surface_strands = {
+    enabled: true,
+    subjectToField: el.surfaceStrands.subjectToField !== false,
+  }
+  return body
 }
 
 /** Pure: can a selected job seed a live continuation? Prepared jobs use their
@@ -150,7 +176,7 @@ export function initOxdnaLive({
   // ── Start / poll / stop ─────────────────────────────────────────────────────
   async function start() {
     if (_busy || _on) return
-    const job = getSelectedJob?.() || null
+    let job = getSelectedJob?.() || null
     if (!liveJobEligible(job)) { showToast('Select a prepared or previously run oxDNA job first', 'warn'); return }
 
     // Stale-design guard: if the design changed since this job was relaxed, offer to
@@ -159,22 +185,18 @@ export function initOxdnaLive({
     // topology and errors.  Delegated to the panel (it owns the job list + roll).
     if (ensureJobCurrent && !(await ensureJobCurrent('a live session'))) return
 
+    // The stale-job dialog may roll/refetch the list. Re-read the selection so the
+    // session always starts from the job that is current at the instant of launch.
+    job = getSelectedJob?.() || null
+    if (!liveJobEligible(job)) { showToast('Select a prepared or previously run oxDNA job first', 'warn'); return }
+
     // Compose whatever the run cards have enabled (like the "Full Sim" run); any
     // combination is allowed. A field with no anchor drifts the whole structure (COM
     // drift) — the E-field card warns, but the live session is not blocked.
     const el = getRunElements?.() || {}
     const field = el.field
-    const surface = el.surface
-    const anchors = el.anchors || []
     const hasField = !!(field?.enabled && field.field_pN > 0)
-
-    const body = { job_id: job.job_id }
-    if (hasField) body.field = { field_pN: field.field_pN, dir: field.dir }
-    if (surface?.enabled) body.surface = {
-      dir: surface.dir, offset_nm: surface.offsetNm,
-      position_nm: surface.positionNm, stiff: surface.stiff,
-    }
-    if (anchors.length) body.anchors = anchors
+    const body = liveStartBody(job, el)
 
     _busy = true
     _hasField = hasField
@@ -287,14 +309,8 @@ export function initOxdnaLive({
   }
 
   async function _sendReconfigure(el) {
-    const field = el.field, surface = el.surface, anchors = el.anchors || []
-    const body = {}
-    if (field?.enabled && field.field_pN > 0) body.field = { field_pN: field.field_pN, dir: field.dir }
-    if (surface?.enabled) body.surface = {
-      dir: surface.dir, offset_nm: surface.offsetNm,
-      position_nm: surface.positionNm, stiff: surface.stiff,
-    }
-    if (anchors.length) body.anchors = anchors
+    const body = liveStartBody({ job_id: undefined }, el)
+    delete body.job_id
     _setStatus('Updating live run…', _C.accent)
     const r = await api.reconfigureOxdnaLive(_sid, body).catch(() => null)
     if (!_on || !_sid) return

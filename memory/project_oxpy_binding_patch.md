@@ -1,15 +1,17 @@
 ---
 name: oxpy-binding-patch
-description: "The user's ~/oxDNA oxpy build is locally patched to expose BaseForce.F0/.dir read-write (needed for NADOC live-field steering); reapply after any clean rebuild."
+description: "NADOC's managed oxDNA build installs oxpy with BaseForce.F0/.dir read-write bindings required for live-field steering."
 metadata: 
   node_type: memory
   type: project
   originSessionId: e4528887-ebff-427d-83cc-f00bd959c679
 ---
 
-NADOC's live oxDNA engine (`backend/physics/oxdna_live.py`, AF-21, shipped 2026-06-23) re-aims a uniform electric field LIVE between simulation bursts by mutating `force.F0` / `force.dir` on the field's `ConstantRateForce` handle. Stock oxpy does **not** expose those — only `stiff`/`rate`/`pos0` are bound on `BaseForce`, and `dir` only on `MovingTrap`. (The earlier idea of `ConfigInfo.subscribe("end_of_step", cb)` + `particle.force` injection does NOT work: oxDNA's MD backend fires no per-step event, so the callback never runs.)
+NADOC's live oxDNA engine (`backend/physics/oxdna_live.py`, AF-21, shipped 2026-06-23) re-aims a uniform electric field LIVE between simulation bursts by mutating `force.F0` / `force.dir` on the field's `ConstantRateForce` handle. Stock oxpy does **not** expose those — only `stiff`/`rate`/`pos0` are bound on `BaseForce`, and `dir` only on `MovingTrap`. As of 2026-09-03, `scripts/build-oxdna.sh` applies the tracked `tools/oxdna_live/oxpy-field-steering.patch`, builds the `core` target, and installs oxpy into NADOC's `.venv`; this is no longer an untracked manual source edit. The MD Engines status includes an `oxpy (Live bindings)` capability and separate `live_ready` state.
 
-**The patch (git-untracked in the user's `~/oxDNA` tree — reapply after any clean clone/rebuild):** two lines added in `~/oxDNA/src/oxpy/bindings_includes/Forces/BaseForce.h`, beside the existing `stiff`/`rate`/`pos0` bindings:
+**The tracked patch:** `tools/oxdna_live/oxpy-field-steering.patch` adds two bindings
+in `src/oxpy/bindings_includes/Forces/BaseForce.h`, beside the existing
+`stiff`/`rate`/`pos0` bindings:
 ```cpp
 force.def_readwrite("F0", &BaseForce::_F0, "...");
 force.def_readwrite("dir", &BaseForce::_direction, "...");

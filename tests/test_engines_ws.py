@@ -70,6 +70,10 @@ def stub_host_probes(monkeypatch):
     monkeypatch.setattr(engines, "_gpu_arch", lambda: "75")
     monkeypatch.setattr(engines, "_mpi_build_usable", lambda: True)
     monkeypatch.setattr(engines, "lammps_supports_cgdna", lambda _p: True)
+    monkeypatch.setattr(
+        engines, "oxpy_live_info",
+        lambda: {"available": True, "path": "/o/oxpy/__init__.py", "reason": "ready"},
+    )
     monkeypatch.setattr(engines.shutil, "which", lambda c: "/usr/bin/" + c)
 
 

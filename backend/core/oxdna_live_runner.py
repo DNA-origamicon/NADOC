@@ -94,6 +94,7 @@ class LiveSession:
         rundir: Path | None = None,
         design=None,
         design_ref=None,
+        parent_run_config=None,
     ):
         self.session_id = session_id
         self._session = session
@@ -105,6 +106,7 @@ class LiveSession:
         # GPU-free fake-engine tests, which inject their own rebuild callable.
         self.design = design
         self.design_ref = Path(design_ref) if design_ref is not None else None
+        self.parent_run_config = parent_run_config or {}
 
         self._lock = threading.Lock()
         self._pending: tuple | None = None  # (field_oxdna|None, dir|None)

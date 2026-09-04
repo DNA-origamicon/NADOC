@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 import { initOxdnaLive, liveJobEligible, liveButtonState,
-         backendLabel, liveStatusLine, liveFallbackNotice, reconfigSig } from './oxdna_live_controller.js'
+         backendLabel, liveStatusLine, liveFallbackNotice, reconfigSig,
+         liveStartBody } from './oxdna_live_controller.js'
 
 vi.mock('./toast.js', () => ({ showToast: vi.fn() }))
 vi.mock('../api/client.js', () => ({
@@ -119,14 +120,33 @@ describe('reconfigSig', () => {
   })
 })
 
+describe('liveStartBody', () => {
+  it('carries every current continuation card while retaining the selected job', () => {
+    expect(liveStartBody({ job_id: 'selected' }, {
+      field: { enabled: true, field_pN: 7, dir: [1, 0, 0] },
+      surface: { enabled: true, dir: [0, 0, 1], offsetNm: 2, positionNm: -4, stiff: 5 },
+      anchors: [{ kind: 'overhang', id: 'o1' }],
+      surfaceAnchors: [{ kind: 'domain', strandId: 's1', domainIndex: 0 }],
+      surfaceStrands: { enabled: true, subjectToField: false },
+    })).toEqual({
+      job_id: 'selected',
+      field: { field_pN: 7, dir: [1, 0, 0] },
+      surface: { dir: [0, 0, 1], offset_nm: 2, position_nm: -4, stiff: 5 },
+      anchors: [{ kind: 'overhang', id: 'o1' }],
+      surface_anchors: [{ kind: 'domain', strandId: 's1', domainIndex: 0 }],
+      surface_strands: { enabled: true, subjectToField: false },
+    })
+  })
+})
+
 describe('initOxdnaLive factory', () => {
-  let els, display, job, field, surface, anchors
+  let els, display, job, field, surface, anchors, surfaceAnchors
 
   function make() {
     return initOxdnaLive({
       oxdnaDisplay: display,
       getSelectedJob: () => job,
-      getRunElements: () => ({ field, surface, anchors }),
+      getRunElements: () => ({ field, surface, anchors, surfaceAnchors }),
     })
   }
 
@@ -137,6 +157,7 @@ describe('initOxdnaLive factory', () => {
     field = { enabled: true, field_pN: 4, dir: [0, 1, 0] }
     surface = { enabled: false }
     anchors = [{ kind: 'overhang', id: 'o1' }]
+    surfaceAnchors = [{ kind: 'domain', strandId: 's1', domainIndex: 0 }]
     api.oxdnaLiveAvailable.mockResolvedValue({ available: true, reason: 'ready' })
     api.startOxdnaLive.mockResolvedValue({ session_id: 's1', status: 'starting' })
     api.getOxdnaLiveFrame.mockResolvedValue({ ready: false, status: 'starting', positions: [], n_positions: 0, n_bursts: 0 })
@@ -168,7 +189,12 @@ describe('initOxdnaLive factory', () => {
 
     expect(started).toBe(true)   // panel overlays get cleared before the first live frame
     expect(api.startOxdnaLive).toHaveBeenCalledWith(
-      expect.objectContaining({ job_id: 'j1', field: { field_pN: 4, dir: [0, 1, 0] }, anchors }))
+      expect.objectContaining({
+        job_id: 'j1',
+        field: { field_pN: 4, dir: [0, 1, 0] },
+        anchors,
+        surface_anchors: surfaceAnchors,
+      }))
     expect(ctl.isOn()).toBe(true)
     expect(els['oxdna-jobs-live-btn'].textContent).toContain('Stop')
     ctl.stop()

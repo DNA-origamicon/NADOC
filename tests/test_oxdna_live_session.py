@@ -479,6 +479,34 @@ def test_prepare_live_rundir_composes_elements(tmp_path):
     assert "type = string" not in forces  # no field
     assert "external_forces = true" in (rd1 / "input").read_text()
 
+    # (c) the complete current-card composition reaches one ephemeral run: electric
+    # field + hard surface + both anchor cards. This is the Live-button contract.
+    rd2 = tmp_path / "all-current-cards"
+    surface_anchor = {
+        "kind": "domain",
+        "strand_id": d.strands[0].id,
+        "domain_index": 0,
+    }
+    info2, _be2 = _prepare_live_rundir(
+        d,
+        seed,
+        rd2,
+        field={"force_oxdna": 0.05, "dir": [0, 1, 0]},
+        wall={"dir": [0, 1, 0], "offset_nm": 1.0, "stiff": 5.0},
+        anchors=[anchor],
+        surface_anchors=[surface_anchor],
+        anchor_stiff=1000.0,
+        steps=300,
+        backend="CPU",
+    )
+    assert info2["has_forces"] is True
+    assert info2["n_anchored"] > info1["n_anchored"]
+    forces = (rd2 / "field_forces.txt").read_text()
+    assert "type = string" in forces
+    assert "type = repulsion_plane" in forces
+    assert "type = trap" in forces
+    assert "type = lowdim_trap" in forces
+
 
 def test_prepare_live_rundir_stages_cuda_with_cpu_fallback(tmp_path):
     """A CUDA-backed live rundir stages a CUDA primary ``input`` AND a CPU
@@ -509,3 +537,40 @@ def test_prepare_live_rundir_stages_cuda_with_cpu_fallback(tmp_path):
     assert (rd / "input_cpu").exists()
     assert "backend = CPU" in (rd / "input_cpu").read_text()
     assert "CUDA" not in (rd / "input_cpu").read_text()
+
+
+def test_live_request_accepts_updated_surface_cards():
+    """Live has parity with the continuation cards added to the oxDNA tab."""
+    from backend.api.routes_oxdna_live import LiveStartRequest, _resolve_live_elements
+
+    body = LiveStartRequest(
+        job_id="selected",
+        surface={"dir": [0, 0, 1], "offset_nm": 2, "position_nm": -4, "stiff": 5},
+        surface_anchors=[{"kind": "domain", "strandId": "s1", "domainIndex": 0}],
+        surface_strands={"enabled": True, "subjectToField": False},
+    )
+    (
+        _field,
+        _force,
+        _direction,
+        wall,
+        anchors,
+        surface_anchors,
+    ) = _resolve_live_elements(body)
+    assert anchors == []
+    assert surface_anchors == [
+        {
+            "kind": "domain",
+            "id": None,
+            "strand_id": "s1",
+            "domain_index": 0,
+            "helix_id": None,
+            "bp": None,
+            "direction": None,
+            "crossover_id": None,
+            "extension_id": None,
+            "k": None,
+        }
+    ]
+    assert wall["position_nm"] == -4
+    assert body.surface_strands == {"enabled": True, "subjectToField": False}

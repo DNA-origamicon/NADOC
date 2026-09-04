@@ -54,6 +54,7 @@ def diagnose() -> dict:
     st = engines.engines_status()
     gpu, tools = st["gpu"], st["toolchain"]
     ox = st["engines"]["oxdna"]
+    oxpy = st["engines"]["oxpy"]
 
     print("oxDNA full-speed doctor")
     print("=" * 60)
@@ -82,9 +83,19 @@ def diagnose() -> dict:
               f"oxDNA binary: {path}")
         print(f"    backend support: {'CUDA + CPU' if cuda else 'CPU only'}")
 
+    print(
+        f"{_mark(oxpy['installed'])} oxpy Live bindings: "
+        f"{oxpy['path'] if oxpy['installed'] else 'MISSING'}"
+    )
+    if not oxpy["installed"]:
+        print(f"    {oxpy.get('required_note') or 'Build oxDNA with Python bindings enabled.'}")
+
     print("-" * 60)
 
-    if ox.get("degraded"):
+    if not oxpy["installed"] and path:
+        print(f"{_WARN} DEGRADED — batch oxDNA works, but Live needs patched oxpy.")
+        print("    Re-run with --fix to build and install oxpy into NADOC's environment.")
+    elif ox.get("degraded"):
         print(f"{_WARN} DEGRADED — installed but not full-speed.")
         print(f"    {ox.get('degraded_note', '')}")
     elif not path:
@@ -101,8 +112,9 @@ def _fix(st: dict) -> int:
     """Run the auto-build for a CUDA oxDNA, streaming output. Returns exit code."""
     gpu, tools = st["gpu"], st["toolchain"]
     ox = st["engines"]["oxdna"]
+    oxpy = st["engines"]["oxpy"]
 
-    if ox.get("cuda_capable") and not ox.get("degraded"):
+    if ox.get("cuda_capable") and not ox.get("degraded") and oxpy.get("installed"):
         print(f"\n{_OK} Already CUDA-capable — nothing to fix.")
         return 0
 
@@ -137,7 +149,8 @@ def _fix(st: dict) -> int:
     # Re-verify against fresh detection (the capability cache keys on mtime, so
     # the freshly built binary is re-probed, not served stale).
     new_path = find_oxdna()
-    if new_path and oxdna_supports_cuda(new_path):
+    new_status = engines.engines_status()
+    if new_path and oxdna_supports_cuda(new_path) and new_status["engines"]["oxpy"]["installed"]:
         print(f"\n{_OK} Done — NADOC now resolves a CUDA oxDNA: {new_path}")
         print("    Restart the NADOC backend (just dev) to pick it up.")
         return 0
@@ -160,8 +173,8 @@ def main() -> int:
     if args.fix:
         return _fix(st)
     ox = st["engines"]["oxdna"]
-    if ox.get("degraded") or not ox["path"]:
-        print("\nRun with --fix to build the GPU engine automatically.")
+    if ox.get("degraded") or not ox["path"] or not st["engines"]["oxpy"]["installed"]:
+        print("\nRun with --fix to build the GPU engine and Live bindings automatically.")
     return 0
 
 
