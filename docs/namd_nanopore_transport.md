@@ -25,6 +25,13 @@ introduced. It is not a calibration of a specific experimental chip unless the
 graphene model, thickness, ion parameters, voltage, and reservoir dimensions match
 that experiment.
 
+Historically, published all-atom origami calculations usually converted a caDNAno
+design directly to an idealized atomistic PDB/PSF and then relaxed it in NAMD. An
+oxDNA seed is an optional NADOC refinement, not a requirement imposed by NAMD: it
+allows atomistic relaxation to start from an already bent, twisted, or
+surface-deposited conformation. For a rigorous comparison, retain a direct-build
+control when the coarse-grained preparation history could affect conductance.
+
 ## Preparation and relaxation
 
 An oxDNA seed is backmapped from the current native oxDNA sites, including simulated
@@ -46,6 +53,29 @@ The same rule is emitted into local, Alpine, and RunPod execution. DNA-containin
 jobs keep the stricter energy-plus-Watson–Crick early-stop rule. GPU-resident NAMD is
 used when selected and compatible; harmonic positional restraints are used for the
 graphene and inherited anchors so the control does not require NAMD `fixedAtoms`.
+
+Surface deposition does not by itself guarantee that an unrestrained origami will
+remain registered over the aperture during zero-field relaxation. Internal DNA/ENM
+restraints preserve structure but do not restrain center-of-mass translation, sliding,
+tilt, or separation from graphene. The recommended physical workflow is therefore:
+
+1. inherit the oxDNA structure and surface anchors for backmapping and equilibration;
+2. release the origami's external positional anchors before the primary production
+   trajectory;
+3. apply the field with the polarity that electrophoretically docks the negatively
+   charged origami against the membrane; and
+4. retain harmonic restraints on the graphene throughout production.
+
+Keep origami anchors in production only when they represent experimental tethers or
+when deliberately running a restrained stability control. A useful intermediate
+control is a weak lateral/tilt or flat-bottom restraint that prevents loss of pore
+registration without suppressing vertical contact, bending, or pore breathing.
+
+Changing the physical graphene pore diameter requires a new package and relaxation.
+It changes the carbon topology, atom ordering, pore-edge forces, excluded waters, and
+local ion distribution, so an old binary checkpoint is not topology-compatible. A
+different analysis-only crossing radius does not require relaxation, although it
+should normally remain tied to the physical aperture.
 
 ## Manual UI workflow
 
@@ -72,6 +102,14 @@ placed at the scene origin and solvent/ions receive the identical transform. A w
 hydration shell is undefined without DNA; graphene-only water display therefore uses
 the whole cell, subject to the viewer's safety cap.
 
+**View trajectory** also supports graphene-only systems. Such a run has zero
+nucleotide keys by design; the trajectory slider is driven by complete DCD frames and
+the synchronized graphene/solvent/ion/cell representation rather than by fabricated
+DNA coordinates. Growing DCDs are counted from their complete fixed-size records so a
+temporarily stale DCD header cannot make a live run appear to contain one frame.
+Selecting a production child after reload inherits the relaxation parent's hard-
+surface controls and nanopore descriptor.
+
 When the selected design contains a nanopore, the Metrics card exposes the ion
 transport plot. NADOC reports species-resolved current, total current, cumulative
 positive/negative/net crossings, pore occupancy, cumulative transported charge, and
@@ -95,6 +133,33 @@ box dimensions, electrolyte census, random seed, restraint mechanism, protocol
 fidelity, and execution settings. Preserve the package manifest and generated
 `ion_transport_analysis.json` with any reported result.
 
+## Production voltage and duration
+
+Experimental electrophoretic docking commonly uses about **100 mV**. Atomistic MD
+often uses a larger bias to accumulate enough transported charge in tens of
+nanoseconds, but elevated fields can introduce nonlinear deformation, concentration
+polarization, or detachment. NADOC records user-facing voltage and derives the uniform
+periodic field from `V = -E_z L_z`; changing reservoir padding or the equilibrated box
+height therefore changes the required NAMD `eField` for the same voltage.
+
+Use these as practical sampling tiers rather than universal constants:
+
+| Purpose | Bias | Production sampling |
+|---|---:|---:|
+| Pipeline/debug | 0.5–1 V | 2–10 ns |
+| Initial graphene control | 0.25, 0.5, and 1 V | 20–40 ns each |
+| Origami conductance comparison | 0.1, 0.25, and 0.5 V | 40–50 ns each |
+| Accelerated high-field control | 1–2 V | 20–40 ns |
+
+A 10 ns trajectory is a functional control, not normally a precise conductance
+estimate. For a serious comparison, prefer at least three independent 20–50 ns
+productions per condition, separate the first 2–5 ns after field application as a
+transient, and block-average current over 0.1–1 ns windows. Verify that current remains
+approximately linear across the lower-voltage points before interpreting a high-field
+trajectory as accelerated sampling of the same regime. Published reference protocols
+include [48 ns at 100–500 mV](https://pmc.ncbi.nlm.nih.gov/articles/PMC4469488/)
+and [40 ns per bias for graphene–origami hybrid pores](https://pmc.ncbi.nlm.nih.gov/articles/PMC6636640/).
+
 ## Interpretation and controls
 
 - Run the graphene-only open pore before the DNA-blocked pore.
@@ -102,6 +167,8 @@ fidelity, and execution settings. Preserve the package manifest and generated
   between control and DNA runs.
 - Discard equilibration before estimating current and uncertainty.
 - Use independent velocity/random seeds for replicate productions.
+- Report both aggregate sampling and per-replica duration; replicas expose
+  between-run variability that one long trajectory hides.
 - Check ion trajectories visually for periodic-image or membrane-bypass artifacts.
 - A single graphene layer with neutral Lennard-Jones carbon sites is a modeling choice,
   not a generic solid-state nanopore. Report it explicitly.
