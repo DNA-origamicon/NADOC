@@ -5649,6 +5649,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // The panel's external surface: the currently-selected job (consumed by the shared
   // comparison card's getSources and by the Plan-Run overlay's default root, P4).
   return {
+    // Shared with trajectory keyframes so playback uses this controller's cache and
+    // the same overlays as the Dynamics tab.
+    trajectorySolvent: solvent,
     /** Binary solvent frame from the live MD WebSocket → the overlay. Wired in
      *  main.js, because md_panel owns the socket and this panel owns the toggles. */
     acceptLiveSolvent: (buf) => solvent?.liveBlob(buf),

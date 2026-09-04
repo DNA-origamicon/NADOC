@@ -973,6 +973,7 @@ async function main() {
   const _trajPlan = initTrajPrebuildPlan({ api })
   const trajectoryKeyframes = initTrajectoryKeyframes({
     getController: (engine) => (engine === 'namd' ? mdViz : oxdnaDisplay),
+    getCompanion:  (engine) => (engine === 'namd' ? mdPanel?.trajectorySolvent : null),
     planPrebuild:  (ctrl) => _trajPlan.planFor(ctrl),
     // Only oxDNA exposes a live frames-processed counter for the build; NAMD's
     // loader has no equivalent route, so it reports start/end only.

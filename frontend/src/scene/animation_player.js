@@ -301,7 +301,8 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         const nFrames = trajectoryKeyframes?.frameCount(kf.trajectory_job_id) ?? 0
         const { start, end } = clampRange(kf.trajectory_frame_start, kf.trajectory_frame_end, nFrames)
         trajectory = { jobId: kf.trajectory_job_id, engine: kf.trajectory_engine || 'oxdna',
-                       frameStart: start, frameEnd: end, nFrames }
+                       frameStart: start, frameEnd: end, nFrames,
+                       ions: !!kf.trajectory_show_ions, box: !!kf.trajectory_show_box }
       }
 
       segments.push({
@@ -916,7 +917,9 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
           nFrames - 1,
           frameAtProgress(seg.trajectory.frameStart, seg.trajectory.frameEnd, p),
         ))
-        trajectoryKeyframes.show(seg.trajectory.jobId, seg.trajectory.engine, fIdx)
+        trajectoryKeyframes.show(seg.trajectory.jobId, seg.trajectory.engine, fIdx, {
+          ions: seg.trajectory.ions, box: seg.trajectory.box,
+        })
       }
       return
     }
@@ -1338,6 +1341,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     ))
   }
   function getTotalDuration() { return _totalDur }
+  function settleFrame() { return trajectoryKeyframes?.settle?.() ?? Promise.resolve(true) }
 
   /** Synchronous read of the current overlay state — used by the export pipeline. */
   function getActiveTextOverlay() { return _textOverlayAt(getCurrentTime()) }
@@ -1351,5 +1355,5 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         || getSurfaceRenderer?.()?.getMode?.()   !== 'off'
   }
 
-  return { play, pause, resume, stop, seekTo, cancelBake, setBounce, getBounce, setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, setLockFov, getLockFov, isPlaying, getDirection, getCurrentTime, getTotalDuration, getActiveTextOverlay, hasHeavyRep }
+  return { play, pause, resume, stop, seekTo, settleFrame, cancelBake, setBounce, getBounce, setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, setLockFov, getLockFov, isPlaying, getDirection, getCurrentTime, getTotalDuration, getActiveTextOverlay, hasHeavyRep }
 }

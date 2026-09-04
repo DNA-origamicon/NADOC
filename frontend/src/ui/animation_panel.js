@@ -719,7 +719,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     const bar = initFrameRangeSlider({
       // Per pointer move: label only. Saving here PATCHed the keyframe on every pixel and
       // each save re-rendered this row, so the bar was rebuilt mid-drag.
-      onRangeChange: ({ start, end }) => { _setLabel(start, end, _nFrames) },
+      onRangeChange: ({ start, end }) => { _syncRangeInputs(start, end); _setLabel(start, end, _nFrames) },
       // Once, on release.
       // Saved on release. `NoRebuild` because the bar you just let go of IS the current
       // state — repainting the row from the store would throw the widget away and take
@@ -735,6 +735,45 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       },
     })
 
+    const rangeInputs = document.createElement('div')
+    rangeInputs.style.cssText = 'display:flex;align-items:center;gap:5px'
+    const makeFrameInput = (label, role) => {
+      const lab = document.createElement('label')
+      lab.style.cssText = 'display:flex;align-items:center;gap:4px;flex:1;font-size:var(--text-xs);color:#8b949e'
+      const input = document.createElement('input')
+      input.type = 'number'; input.min = '0'; input.step = '1'; input.dataset.role = role
+      input.style.cssText = 'width:68px;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 3px;font-size:var(--text-xs)'
+      input.addEventListener('keydown', e => e.stopPropagation())
+      input.addEventListener('change', async () => {
+        if (!_nFrames) return
+        const current = bar.getRange()
+        const value = Math.max(0, Math.min(_nFrames - 1, Math.floor(Number(input.value) || 0)))
+        const next = role === 'trajectory-frame-start'
+          ? { start: value, end: Math.max(value, current.end) }
+          : { start: Math.min(current.start, value), end: value }
+        bar.setRange(next.start, next.end)
+        _syncRangeInputs(next.start, next.end)
+        _setLabel(next.start, next.end, _nFrames)
+        kf.trajectory_frame_start = next.start
+        kf.trajectory_frame_end = next.end
+        await _patchKfNoRebuild(kf, {
+          trajectory_frame_start: next.start, trajectory_frame_end: next.end,
+        })
+      })
+      lab.append(document.createTextNode(label), input)
+      return { lab, input }
+    }
+    const startBox = makeFrameInput('Start', 'trajectory-frame-start')
+    const endBox = makeFrameInput('End', 'trajectory-frame-end')
+    rangeInputs.append(startBox.lab, endBox.lab)
+
+    function _syncRangeInputs(start, end) {
+      startBox.input.value = String(start)
+      endBox.input.value = String(end)
+      startBox.input.max = endBox.input.max = String(Math.max(0, _nFrames - 1))
+      startBox.input.disabled = endBox.input.disabled = !_nFrames
+    }
+
     const rangeLbl = document.createElement('div')
     rangeLbl.style.cssText = 'font-size:var(--text-xs);color:#8b949e;text-align:center;display:flex;align-items:center;justify-content:center;gap:5px;min-height:14px'
     rangeLbl.textContent = '—'
@@ -744,7 +783,28 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     heavyNote.textContent = 'Atomistic / surface reps re-build each frame — playback + export are slower.'
     heavyNote.style.cssText = 'font-size:var(--text-xs);color:#6e7681;font-style:italic;line-height:1.3'
 
-    wrap.append(jobRow, resRow, bar.el, rangeLbl, heavyNote)
+    const companionRow = document.createElement('div')
+    companionRow.style.cssText = 'display:none;align-items:center;gap:12px;font-size:var(--text-xs);color:#8b949e'
+    const companionToggle = (label, field, title) => {
+      const lab = document.createElement('label')
+      lab.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer'
+      lab.title = title
+      const input = document.createElement('input')
+      input.type = 'checkbox'; input.checked = !!kf[field]
+      input.addEventListener('change', async () => {
+        kf[field] = input.checked
+        await _patchKfNoRebuild(kf, { [field]: input.checked })
+        if (_previewing()) _scrubTo(bar.getPlayhead())
+      })
+      lab.append(input, document.createTextNode(label))
+      return lab
+    }
+    companionRow.append(
+      companionToggle('Ions', 'trajectory_show_ions', 'Show ions for this NAMD trajectory keyframe'),
+      companionToggle('Bounding box', 'trajectory_show_box', 'Show the periodic cell for this NAMD trajectory keyframe'),
+    )
+
+    wrap.append(jobRow, resRow, companionRow, rangeInputs, bar.el, rangeLbl, heavyNote)
 
     let _nFrames = 0
 
@@ -771,6 +831,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     function _syncResolutionControls() {
       const spec = _spec()
       const isMd = spec.engine === 'namd'
+      companionRow.style.display = isMd ? 'flex' : 'none'
       scopeSel.style.display = isMd ? 'none' : ''
       strideWrap.style.display = isMd ? 'flex' : 'none'
       scopeSel.value = spec.scope
@@ -803,6 +864,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       const e0 = Number.isFinite(kf.trajectory_frame_end)   ? Math.max(0, Math.min(n - 1, kf.trajectory_frame_end))   : n - 1
       bar.setFrames(n, meta.markers)
       bar.setRange(s0, e0)
+      _syncRangeInputs(s0, e0)
       bar.setEnabled(true)
       _setLabel(s0, e0, n)
     }
@@ -820,7 +882,10 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     function _scrubTo(i) {
       if (!_previewing() || i == null) return
       _previewFrame = i
-      trajectoryKeyframes?.previewShow(kf.trajectory_job_id, _spec().engine, i)
+      trajectoryKeyframes?.previewShow(kf.trajectory_job_id, _spec().engine, i, {
+        ions: !!kf.trajectory_show_ions,
+        box: !!kf.trajectory_show_box,
+      })
     }
 
     function _renderPreviewBtn() {
@@ -1577,6 +1642,8 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       // Full per-job resolution by default — every frame the run wrote, not the
       // ~200-frame whole-lineage preview the animation path used to be pinned to.
       trajectory_scope:      'job',
+      trajectory_show_ions:  false,
+      trajectory_show_box:   false,
     }
     if (_partMode) {
       await _partPatchFn(d => {
@@ -1627,6 +1694,8 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         k.spin_axis ?? 'null',
         k.spin_rotations ?? 0,
         k.spin_invert ? '1' : '0',
+        k.trajectory_show_ions ? '1' : '0',
+        k.trajectory_show_box ? '1' : '0',
         k.text_overlay?.text ?? '',
         JSON.stringify(k.binding_states ?? {}),
       ].join(':'))

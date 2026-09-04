@@ -182,6 +182,7 @@ export function initMdSolventControls({
   let _enabled = false
   let _measuredWater = null     // real molecule count, once a frame has landed
   let _live = false             // driven by the WS stream rather than the REST route
+  let _keyframeOptions = false  // authored companions may exist without a DNA rep
 
   // ── settings ──────────────────────────────────────────────────────────────
   const _read = (k, d) => { try { return localStorage.getItem(k) ?? d } catch { return d } }
@@ -213,7 +214,10 @@ export function initMdSolventControls({
     const v = parseFloat(shellInput?.value ?? '')
     return Number.isFinite(v) && v > 0 ? Math.min(30, v) : 5
   }
-  const _repMode = () => solventRepMode(getCurrentRepr?.())
+  const _repMode = () => {
+    const normal = solventRepMode(getCurrentRepr?.())
+    return _keyframeOptions && normal === 'off' ? 'sphere' : normal
+  }
   const _anyOn = () => !!(waterToggle?.checked || ionsToggle?.checked || boxToggle?.checked)
 
   function _requestSig() {
@@ -467,6 +471,16 @@ export function initMdSolventControls({
   })
 
   return {
+    /** Apply companions authored on an animation keyframe. Water stays off. The
+     * sphere fallback is required by graphene-only documents, which have no native
+     * DNA representation to select an ordinary solvent draw mode. */
+    setKeyframeOptions({ ions = false, box = false } = {}) {
+      _keyframeOptions = true
+      if (waterToggle) waterToggle.checked = false
+      if (ionsToggle) ionsToggle.checked = !!ions
+      if (boxToggle) boxToggle.checked = !!box
+      _refresh()
+    },
     /** Point the controls at a job + its trajectory density. */
     async setJob(jobId, { stride = null, nFrames = 0, frameIdx = null } = {}) {
       const changed = jobId !== _jobId
@@ -500,6 +514,7 @@ export function initMdSolventControls({
       const was = _enabled
       const wasLive = _live
       _enabled = !!on
+      if (!_enabled) _keyframeOptions = false
       _live = _enabled && transport === 'live'
       if (_live !== wasLive) { _cache = new Map(); _measuredWater = null }
       // Only ask for the representation when it can matter. The panel gates these
@@ -543,6 +558,22 @@ export function initMdSolventControls({
       if (!_enabled || !_anyOn() || _repMode() === 'off') return
       if (!_draw(_frameIdx)) _fetchAround(_frameIdx)
       else if (_window(_frameIdx).length > SOLVENT_CHUNK / 2) _fetchAround(_frameIdx)
+    },
+
+    /** Wait until the requested companion frame is drawable. Video exporters call
+     * this after seeking so they never capture before an async solvent chunk lands. */
+    async settleFrame(i, timeoutMs = 120_000) {
+      const frame = i | 0
+      if (!_enabled || !_anyOn() || _repMode() === 'off') return true
+      if (_draw(frame)) return true
+      _frameIdx = frame
+      void _fetchAround(frame)
+      const deadline = Date.now() + timeoutMs
+      while (Date.now() < deadline) {
+        if (_draw(frame)) return true
+        await new Promise(resolve => setTimeout(resolve, 25))
+      }
+      return false
     },
 
     /**

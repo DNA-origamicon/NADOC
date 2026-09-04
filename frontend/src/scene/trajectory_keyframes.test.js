@@ -406,6 +406,26 @@ describe('initTrajectoryKeyframes.show', () => {
     expect(ox.shown).toEqual([1, 2, 1])
   })
 
+  it('drives NAMD ions and periodic box from the keyframe while frames advance', async () => {
+    const md = makeCtrl()
+    const companion = {
+      setEnabled: vi.fn(), setJob: vi.fn(async () => {}),
+      setKeyframeOptions: vi.fn(), showFrame: vi.fn(),
+    }
+    const tk = initTrajectoryKeyframes({
+      getController: () => md,
+      getCompanion: () => companion,
+    })
+    await tk.prepare(anim(trajKf('A', 'namd', { trajectory_stride: 2 })))
+    md.shown.length = 0
+    tk.show('A', 'namd', 3, { ions: true, box: false })
+    await Promise.resolve(); await Promise.resolve()
+    expect(companion.setJob).toHaveBeenCalledWith('A', { stride: 2, nFrames: 100, frameIdx: 3 })
+    expect(companion.setKeyframeOptions).toHaveBeenCalledWith({ ions: true, box: false })
+    tk.show('A', 'namd', 4, { ions: true, box: false })
+    expect(companion.showFrame).toHaveBeenLastCalledWith(4)
+  })
+
   it('re-applies the same index after invalidate()', async () => {
     const { ox, tk } = await prepared()
     tk.show('A', 'oxdna', 4)

@@ -84,7 +84,7 @@ export function trajectoryJobs(animation) {
  * @param {number} [opts.pollMs]
  */
 export function initTrajectoryKeyframes({
-  getController, planPrebuild = null, pollLoadProgress = null,
+  getController, getCompanion = null, planPrebuild = null, pollLoadProgress = null,
   timer = { set: (fn, ms) => setInterval(fn, ms), clear: (h) => clearInterval(h) },
   pollMs = 400,
 } = {}) {
@@ -106,6 +106,8 @@ export function initTrajectoryKeyframes({
   let _lastJob   = null
   let _lastFrame = -1
   let _swapping  = null
+  let _companionSetup = null
+  let _companionJob = null
 
   function _remember(ctrl) {
     if (_prev.has(ctrl)) return
@@ -269,18 +271,40 @@ export function initTrajectoryKeyframes({
    * the controller's showFrame does a full CG position sweep plus a heavy-rep apply,
    * which is not something to run per rAF for an unchanged frame.
    */
-  function show(jobId, engine, frameIdx) {
+  function show(jobId, engine, frameIdx, companions = null) {
     const ctrl = getController?.(engine)
     if (!ctrl) return
     if (_loaded.get(ctrl) !== jobId) { _swap(ctrl, jobId, engine); return }
-    if (_lastJob === jobId && _lastFrame === frameIdx) return
+    const companion = getCompanion?.(engine)
+    const companionSig = companions
+      ? `${companions.ions ? 1 : 0}|${companions.box ? 1 : 0}` : '0|0'
+    if (_lastJob === jobId && _lastFrame === frameIdx && show._companionSig === companionSig) return
+    const companionChanged = _companionJob !== jobId || show._companionSig !== companionSig
+    if (!companion) show._companionSig = companionSig
+    if (companion && companionChanged) {
+      _companionJob = jobId
+      show._companionSig = companionSig
+      companion.setEnabled?.(true, 'traj')
+      _companionSetup = Promise.resolve(companion.setJob?.(jobId, {
+        stride: _specs.get(jobId)?.stride ?? null,
+        nFrames: _frames.get(jobId) ?? 0,
+        frameIdx,
+      })).then(() => {
+        companion.setKeyframeOptions?.({ ions: !!companions?.ions, box: !!companions?.box })
+        companion.showFrame?.(_lastFrame)
+      }).finally(() => { _companionSetup = null })
+    }
     _lastJob = jobId; _lastFrame = frameIdx
     ctrl.showFrame?.(frameIdx)
+    if (companion && !companionChanged && !_companionSetup) companion.showFrame?.(frameIdx)
   }
 
   /** Drop the frame-change guard — something other than us moved the model, so the next
    *  show() must re-apply even if the index is unchanged. */
-  function invalidate() { _lastJob = null; _lastFrame = -1 }
+  function invalidate() {
+    _lastJob = null; _lastFrame = -1; show._companionSig = null
+    _companionJob = null; _companionSetup = null
+  }
 
   /**
    * Step aside for a segment that is NOT a trajectory: hand the heavy rep back to the
@@ -296,6 +320,7 @@ export function initTrajectoryKeyframes({
     if (_lastJob === null && _lastFrame < 0) return   // nothing of ours is showing
     invalidate()
     for (const ctrl of _loaded.keys()) ctrl.releaseHeavyToDesign?.()
+    getCompanion?.('namd')?.setEnabled?.(false, 'traj')
   }
 
   /** Tell the controllers playback is running: while it is, heavy reps are forced to the
@@ -334,6 +359,7 @@ export function initTrajectoryKeyframes({
       }
     }
     _prev.clear(); _loaded.clear(); _frames.clear(); _specs.clear(); _bakes.clear()
+    getCompanion?.('namd')?.setEnabled?.(false, 'traj')
     invalidate()
   }
 
@@ -357,13 +383,22 @@ export function initTrajectoryKeyframes({
   }
 
   /** Scrub the preview to a composite frame index. Same frame-change guard as `show`. */
-  function previewShow(jobId, engine, frameIdx) { show(jobId, engine, frameIdx) }
+  function previewShow(jobId, engine, frameIdx, companions = null) {
+    show(jobId, engine, frameIdx, companions)
+  }
+
+  async function settle() {
+    if (_companionSetup) await _companionSetup
+    if (_lastJob == null || _lastFrame < 0) return true
+    const companion = getCompanion?.(_specs.get(_lastJob)?.engine)
+    return await (companion?.settleFrame?.(_lastFrame) ?? true)
+  }
 
   /** True when this module is holding a controller for preview (nothing is playing). */
   function isPreviewing() { return _prev.size > 0 }
 
   return {
     prepare, frameCount, heavyBake, show, invalidate, suspend, setPlaying, cancel, release,
-    hasJobs, previewLoad, previewShow, isPreviewing,
+    hasJobs, previewLoad, previewShow, isPreviewing, settle,
   }
 }
