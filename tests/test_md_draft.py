@@ -177,6 +177,13 @@ def test_copy_draft_preserves_settings_and_changes_only_seed(tmp_path, monkeypat
         threads=7, devices="0,1", padding_nm=2.4, box_mode="bbox",
         salt_mode="custom", ion_conc_mM=125.0, mg_conc_mM=8.0,
         minimize_steps=7200, force_soft=True, fast=False,
+        graphene_nanopore=True, graphene_only=False,
+        graphene_pore_diameter_nm=2.6, graphene_layers=3,
+        graphene_layer_spacing_nm=0.34,
+        graphene_atomistic_clearance_nm=0.36,
+        graphene_water_clearance_nm=0.29,
+        graphene_sheet_margin_nm=2.2,
+        surface_anchors=[{"kind": "surface", "id": "sheet-edge"}],
         execution_target="alpine", cluster_name="alpine", partition="aa100",
         slurm_resources={"nodes": 2, "tasks_per_node": 4},
     )
@@ -195,6 +202,13 @@ def test_copy_draft_preserves_settings_and_changes_only_seed(tmp_path, monkeypat
         "draft": True,
     }
     assert copied.prep_params == expected_params
+    for key in (
+        "graphene_nanopore", "graphene_only", "graphene_pore_diameter_nm",
+        "graphene_layers", "graphene_layer_spacing_nm",
+        "graphene_atomistic_clearance_nm", "graphene_water_clearance_nm",
+        "graphene_sheet_margin_nm", "surface_anchors",
+    ):
+        assert copied.prep_params[key] == source.prep_params[key]
     assert copied.prep_params_set == source.prep_params_set
     assert (
         copied.protocol,

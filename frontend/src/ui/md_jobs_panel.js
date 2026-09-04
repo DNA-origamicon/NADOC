@@ -784,6 +784,24 @@ export function mdDraftLaunchPayload(job) {
   return { ...(job?.prep_params || {}) }
 }
 
+/** Canonical hard-surface request fields shared by fresh and draft launches. */
+export function mdHardSurfacePayload({
+  enabled = false, grapheneOnly = false, poreDiameterNm = 2.1, layers = 1,
+  layerSpacingNm = 0.335, atomisticClearanceNm = 0.32,
+  waterClearanceNm = 0.30, sheetMarginNm = 1.5,
+} = {}) {
+  return {
+    graphene_nanopore: !!enabled,
+    graphene_only: !!grapheneOnly,
+    graphene_pore_diameter_nm: Number(poreDiameterNm),
+    graphene_layers: Number(layers),
+    graphene_layer_spacing_nm: Number(layerSpacingNm),
+    graphene_atomistic_clearance_nm: Number(atomisticClearanceNm),
+    graphene_water_clearance_nm: Number(waterClearanceNm),
+    graphene_sheet_margin_nm: Number(sheetMarginNm),
+  }
+}
+
 /** Pure: is any Alpine job submitted-and-in-flight (so the panel should keep polling
  *  SLURM status)?  Gates the remote-poll timer — false when nothing remote is active,
  *  so idle panels don't hit the network. */
@@ -4066,16 +4084,19 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       surface_anchors: surfaceAnchors.length ? surfaceAnchors : null,
       // The ladder pins hard regardless of the stiffness select (its constraints channel
       // is spent on the slow-release restraint), but the ATOM filter applies to both.
-      anchor_atoms:   anchors.length ? mdAnchorAtomNames(anchorAtomsSel?.value) : null,
+      anchor_atoms:   (anchors.length || surfaceAnchors.length)
+        ? mdAnchorAtomNames(anchorAtomsSel?.value) : null,
       field:          fieldOn ? { field_pN: fieldSpec.field_pN, dir: fieldSpec.dir } : null,
-      graphene_nanopore: !!surfaceEnableChk?.checked,
-      graphene_only: !!surfaceGrapheneOnlyChk?.checked,
-      graphene_pore_diameter_nm: Number(surfaceDiameterEl?.value || 2.1),
-      graphene_layers: Number(surfaceLayersEl?.value || 1),
-      graphene_layer_spacing_nm: Number(surfaceSpacingEl?.value || 0.335),
-      graphene_atomistic_clearance_nm: Number(surfaceDnaClearEl?.value || 0.32),
-      graphene_water_clearance_nm: Number(surfaceWaterClearEl?.value || 0.30),
-      graphene_sheet_margin_nm: Number(surfaceMarginEl?.value || 1.5),
+      ...mdHardSurfacePayload({
+        enabled: surfaceEnableChk?.checked,
+        grapheneOnly: surfaceGrapheneOnlyChk?.checked,
+        poreDiameterNm: surfaceDiameterEl?.value || 2.1,
+        layers: surfaceLayersEl?.value || 1,
+        layerSpacingNm: surfaceSpacingEl?.value || 0.335,
+        atomisticClearanceNm: surfaceDnaClearEl?.value || 0.32,
+        waterClearanceNm: surfaceWaterClearEl?.value || 0.30,
+        sheetMarginNm: surfaceMarginEl?.value || 1.5,
+      }),
       run_dir:        getRunDir(),   // shared run-location: write this run into the chosen folder
     }
 

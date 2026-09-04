@@ -1,5 +1,22 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { DEFAULT_PRODUCTION_TIMESTEP_FS, mdAnchorAtomNames, mdAnchorStiffness, mdCanReuseStatusSocket, mdForcesProvenance, DEFAULT_TRAJ_INTERVAL, MD_PRODUCTION_MARKER, TRAJ_FRAME_CONFIRM, effectiveProductionTimestepFs, filterJobsForPart, jobProductionTimestepFs, mdHasProductionRun, mdIsLocalTarget, mdIsRemoteJob, mdJobEditable, mdRunTargetForJob, mdSegGlyphKind, newestCompletedForPart, normalizeWorkspacePath, photoproductProgressView, productionNsFromSteps, seededBadge, selectCreatedMdJob, stridedFrameCount } from './md_jobs_panel.js'
+import { DEFAULT_PRODUCTION_TIMESTEP_FS, mdAnchorAtomNames, mdAnchorStiffness, mdCanReuseStatusSocket, mdForcesProvenance, mdHardSurfacePayload, DEFAULT_TRAJ_INTERVAL, MD_PRODUCTION_MARKER, TRAJ_FRAME_CONFIRM, effectiveProductionTimestepFs, filterJobsForPart, jobProductionTimestepFs, mdHasProductionRun, mdIsLocalTarget, mdIsRemoteJob, mdJobEditable, mdRunTargetForJob, mdSegGlyphKind, newestCompletedForPart, normalizeWorkspacePath, photoproductProgressView, productionNsFromSteps, seededBadge, selectCreatedMdJob, stridedFrameCount } from './md_jobs_panel.js'
+
+describe('hard-surface new-job payload', () => {
+  it('transfers every visible graphene option with numeric types', () => {
+    expect(mdHardSurfacePayload({
+      enabled: true, grapheneOnly: true, poreDiameterNm: '2.6', layers: '3',
+      layerSpacingNm: '0.34', atomisticClearanceNm: '0.36',
+      waterClearanceNm: '0.29', sheetMarginNm: '2.2',
+    })).toEqual({
+      graphene_nanopore: true, graphene_only: true,
+      graphene_pore_diameter_nm: 2.6, graphene_layers: 3,
+      graphene_layer_spacing_nm: 0.34,
+      graphene_atomistic_clearance_nm: 0.36,
+      graphene_water_clearance_nm: 0.29,
+      graphene_sheet_margin_nm: 2.2,
+    })
+  })
+})
 
 describe('photoproductProgressView', () => {
   it('reports every loading phase with the appropriate work unit', () => {
