@@ -6792,6 +6792,25 @@ async def start_md_job(job_id: str) -> dict:
     if job.status in (MdStatus.running, MdStatus.completed):
         raise HTTPException(400, f"Job is {job.status.value} — cannot start")
 
+    # Repair production packages made before nanopore metadata inheritance was added.
+    # This precedes both local and RunPod launch, so an already-queued child gets the
+    # persisted pore geometry without rebuilding coordinates or changing its seed.
+    if job.run_kind == "production":
+        root = root_relaxation(job)
+        root_manifest_path = root.package_dir(_workspace()) / "manifest.json"
+        child_manifest_path = job.package_dir(_workspace()) / "manifest.json"
+        if root_manifest_path.is_file() and child_manifest_path.is_file():
+            root_manifest = json.loads(root_manifest_path.read_text())
+            surface = root_manifest.get("graphene_nanopore")
+            if surface:
+                child_manifest = json.loads(child_manifest_path.read_text())
+                child_manifest["graphene_nanopore"] = surface
+                child_manifest["anchor_groups"] = root_manifest.get("anchor_groups")
+                child_manifest_path.write_text(json.dumps(child_manifest, indent=2))
+                descriptor = root.package_dir(_workspace()) / "graphene_nanopore.json"
+                if descriptor.is_file():
+                    shutil.copy2(descriptor, job.package_dir(_workspace()) / descriptor.name)
+
     # ── RunPod: rent a GPU, run the ladder there, destroy the pod ─────────────
     # Must come BEFORE find_namd(): a RunPod job runs NAMD on the POD (the patched
     # sm_89 build on the network volume), so requiring a LOCAL NAMD would refuse to

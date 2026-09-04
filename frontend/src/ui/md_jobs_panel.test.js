@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { DEFAULT_PRODUCTION_TIMESTEP_FS, mdAnchorAtomNames, mdAnchorStiffness, mdCanReuseStatusSocket, mdForcesProvenance, mdHardSurfacePayload, DEFAULT_TRAJ_INTERVAL, MD_PRODUCTION_MARKER, TRAJ_FRAME_CONFIRM, effectiveProductionTimestepFs, filterJobsForPart, jobProductionTimestepFs, mdHasProductionRun, mdIsLocalTarget, mdIsRemoteJob, mdJobEditable, mdRunTargetForJob, mdSegGlyphKind, newestCompletedForPart, normalizeWorkspacePath, photoproductProgressView, productionNsFromSteps, seededBadge, selectCreatedMdJob, stridedFrameCount } from './md_jobs_panel.js'
+import { DEFAULT_PRODUCTION_TIMESTEP_FS, mdAnchorAtomNames, mdAnchorStiffness, mdCanReuseStatusSocket, mdForcesProvenance, mdHardSurfacePayload, mdInheritedPrepParams, DEFAULT_TRAJ_INTERVAL, MD_PRODUCTION_MARKER, TRAJ_FRAME_CONFIRM, effectiveProductionTimestepFs, filterJobsForPart, jobProductionTimestepFs, mdHasProductionRun, mdIsLocalTarget, mdIsRemoteJob, mdJobEditable, mdRunTargetForJob, mdSegGlyphKind, newestCompletedForPart, normalizeWorkspacePath, photoproductProgressView, productionNsFromSteps, seededBadge, selectCreatedMdJob, stridedFrameCount } from './md_jobs_panel.js'
 
 describe('hard-surface new-job payload', () => {
   it('transfers every visible graphene option with numeric types', () => {
@@ -15,6 +15,22 @@ describe('hard-surface new-job payload', () => {
       graphene_water_clearance_nm: 0.29,
       graphene_sheet_margin_nm: 2.2,
     })
+  })
+})
+
+describe('mdInheritedPrepParams', () => {
+  it('restores hard-surface controls for a reloaded production child', () => {
+    const parent = {
+      job_id: 'relax',
+      prep_params: {
+        graphene_nanopore: true, graphene_only: true,
+        graphene_pore_diameter_nm: 2.1, graphene_layers: 2,
+        graphene_water_clearance_nm: 0.4,
+        surface_anchors: [{ kind: 'surface', axis: 'z' }],
+      },
+    }
+    const child = { job_id: 'prod', parent_job_id: 'relax', run_kind: 'production' }
+    expect(mdInheritedPrepParams(child, [child, parent])).toEqual(parent.prep_params)
   })
 })
 

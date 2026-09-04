@@ -784,6 +784,19 @@ export function mdDraftLaunchPayload(job) {
   return { ...(job?.prep_params || {}) }
 }
 
+/** Preparation settings represented by a selected job. Production children deliberately
+ * store their own controls in spawn_params, so inherit immutable system-build controls
+ * (nanopore geometry, surface anchors, solvation) from the relaxation ancestor. */
+export function mdInheritedPrepParams(job, jobs = []) {
+  let current = job
+  const seen = new Set()
+  while (current && !current.prep_params && current.parent_job_id && !seen.has(current.job_id)) {
+    seen.add(current.job_id)
+    current = jobs.find(candidate => candidate.job_id === current.parent_job_id) || null
+  }
+  return { ...(current?.prep_params || {}) }
+}
+
 /** Canonical hard-surface request fields shared by fresh and draft launches. */
 export function mdHardSurfacePayload({
   enabled = false, grapheneOnly = false, poreDiameterNm = 2.1, layers = 1,
@@ -4531,7 +4544,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _selectedId = jobId
     _metricsCard?.sync?.()
     _syncRunTargetToJob(selectedJob)
-    const prep = selectedJob?.prep_params || {}
+    const prep = mdInheritedPrepParams(selectedJob, _jobs)
     if (surfaceEnableChk) surfaceEnableChk.checked = !!prep.graphene_nanopore
     if (surfaceGrapheneOnlyChk) surfaceGrapheneOnlyChk.checked = !!prep.graphene_only
     if (surfaceDiameterEl) surfaceDiameterEl.value = String(prep.graphene_pore_diameter_nm ?? 2.1)

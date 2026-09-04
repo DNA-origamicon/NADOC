@@ -280,6 +280,18 @@ def build_replica_package(
     if (parent_pkg / "charge_audit.json").exists():
         _link_or_copy(parent_pkg / "charge_audit.json", child_pkg / "charge_audit.json")
 
+    # The graphene membrane is part of the simulated system, not merely preparation UI.
+    # Carry its machine-readable descriptor into every production child just as we carry
+    # the PSF/PDB.  Previously only graphene_fixed.pdb happened to survive through the
+    # anchors path: NAMD could restrain the atoms, but the child manifest/reloaded UI said
+    # there was no nanopore and downstream transport analysis lost its pore geometry.
+    graphene_nanopore = manifest.get("graphene_nanopore")
+    if graphene_nanopore and (parent_pkg / "graphene_nanopore.json").is_file():
+        shutil.copy2(
+            parent_pkg / "graphene_nanopore.json",
+            child_pkg / "graphene_nanopore.json",
+        )
+
     ff = parent_pkg / "forcefield"
     if ff.is_dir():
         for f in sorted(ff.rglob("*")):
@@ -488,9 +500,12 @@ def build_replica_package(
         "files": {
             **manifest.get("files", {}),
             **({"anchors": anchors_file} if anchors_file else {"anchors": None}),
+            **({"graphene_nanopore": "graphene_nanopore.json"} if graphene_nanopore else {}),
         },
         "box_ang": list(box),
         "mgh_extrabonds": mgh_extrabonds,
+        "graphene_nanopore": graphene_nanopore,
+        "anchor_groups": manifest.get("anchor_groups"),
         # The child's OWN external forces, so the run record states what it ran under
         # instead of leaving an analysis to assume "production = unrestrained".
         "field": field,

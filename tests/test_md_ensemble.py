@@ -180,6 +180,51 @@ def test_replica_package_layout(tmp_path):
     assert manifest["ensemble"]["reinit_velocities"] is True
 
 
+def test_replica_persists_graphene_surface_descriptor(tmp_path):
+    """A production child remains recognisably the same nanopore after reload."""
+    parent = _make_parent(tmp_path)
+    parent_pkg = parent.package_dir(tmp_path)
+    descriptor = {
+        "material": "graphene",
+        "pore_diameter_nm": 2.1,
+        "pore_center_nm": [5.0, 5.05, 3.0],
+        "dir": [0.0, 0.0, 1.0],
+        "restraint_k_kcal_mol_A2": 50.0,
+    }
+    marker = _anchor_pdb_lines(6, set(range(6)))
+    (parent_pkg / "graphene_nanopore.json").write_text(json.dumps(descriptor))
+    (parent_pkg / "graphene_fixed.pdb").write_text(marker)
+    _write_namd_coor(
+        parent_pkg / "output" / f"{READY}.coor",
+        [[float(i), 0.0, 0.0] for i in range(6)],
+    )
+    manifest = json.loads((parent_pkg / "manifest.json").read_text())
+    manifest["graphene_nanopore"] = descriptor
+    manifest["anchor_groups"] = {"structure": [], "surface": []}
+    manifest["files"]["anchors"] = "graphene_fixed.pdb"
+    (parent_pkg / "manifest.json").write_text(json.dumps(manifest))
+
+    child = new_job(
+        "demo", "mgh_slow_release", name_stem="", package_subdir="",
+        parent_job_id=parent.job_id, ensemble_seed=7, ensemble_index=0,
+    )
+    me.build_replica_package(
+        parent, child, seed=7, index=0, total_steps=1000, length_ns=0.001,
+        timestep_fs=1.0, fast=False, ready_checkpoint=READY, workspace=tmp_path,
+        anchors_file="graphene_fixed.pdb", anchor_k=10.0,
+    )
+    pkg = child.package_dir(tmp_path)
+    saved = json.loads((pkg / "manifest.json").read_text())
+    assert saved["graphene_nanopore"] == descriptor
+    assert saved["anchor_groups"] == {"structure": [], "surface": []}
+    assert json.loads((pkg / "graphene_nanopore.json").read_text()) == descriptor
+    conf = next(pkg.glob("demo_01_production_*.conf")).read_text()
+    assert "constraints        on" in conf
+    assert "consref            graphene_fixed.pdb" in conf
+    assert "conskfile          graphene_fixed.pdb" in conf
+    assert "conskcol           B" in conf
+
+
 def test_reseed_conf_reinits_from_root_equilibrated(tmp_path):
     parent = _make_parent(tmp_path)
     child = _build_replica(tmp_path, parent, seed=77777)
