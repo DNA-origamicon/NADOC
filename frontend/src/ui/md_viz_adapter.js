@@ -52,6 +52,11 @@ export function mdVizApiAdapter(api) {
       getOxdnaTrajectoryBin: (id, { signal, stride, onProgress } = {}) =>
         api.getMdTrajectoryBin(id, signal, { stride, onProgress }),
     } : {}),
+    // The shared controller asks for a lightweight companion display before applying
+    // frame 0 (surface capture strands / hybrid proteins on oxDNA). A graphene control
+    // has neither, but the method must still exist so its metadata-only bead trajectory
+    // can proceed to the solvent/ion/box renderer.
+    getOxdnaDisplay: (id) => api.getMdDisplayMeta(id),
     getOxdnaRmsf:       (id, { signal } = {}) => api.getMdRmsf(id, signal),
     getOxdnaRmsfAtomistic: (id) => api.getMdRmsfAtomistic(id),
     getOxdnaRmsfSurface: (id, params = {}) => api.getMdRmsfSurface(id, params),

@@ -332,6 +332,8 @@ export function initMdSolventControls({
     if (!want.length) return
     const p = _plan()
     const sig = _requestSig()
+    const requestedFrame = i | 0
+    let retryLatest = false
     const ionsOn = !!ionsToggle?.checked
     _inflight = true
     _setStatus(`Loading solvent (${want.length} frames)…`, '#58a6ff')
@@ -346,7 +348,7 @@ export function initMdSolventControls({
         maxWaters: p.maxWaters,
       })
       // A toggle/rep/shell change mid-flight makes this payload the wrong shape.
-      if (sig !== _requestSig()) return
+      if (sig !== _requestSig()) { retryLatest = true; return }
       const parsed = parseSolventBin(buf)
       if (!parsed) { _setStatus('No solvent for this frame', '#d29922'); return }
       getSolventOverlay?.()?.setIonSpecies(parsed.ionSpecies)
@@ -369,6 +371,13 @@ export function initMdSolventControls({
       _setStatus('Solvent load failed', '#d29922')
     } finally {
       _inflight = false
+      // A toggle/representation change invalidates the response above, and scrubbing can
+      // move the playhead outside the window while that response is in flight. Retry once
+      // from the current state; otherwise the overlay stays forever at "Loading solvent"
+      // even though the discarded request returned 200.
+      if (retryLatest || _frameIdx !== requestedFrame) {
+        queueMicrotask(() => _fetchAround(_frameIdx))
+      }
     }
   }
 

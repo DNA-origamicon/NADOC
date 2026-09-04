@@ -3317,7 +3317,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       await solvent?.setJob(_selectedId, { stride: interval, nFrames: r.n_frames })
       weld?.setJob(_selectedId)
       solvent?.showFrame(0)
-      await _prebuildTrajHeavy(v, base)
+      // A graphene control has no DNA heavy model to prebuild. Its visible trajectory is
+      // graphene + solvent/ions/box; sending it through the nucleotide-aligned atomistic
+      // frame endpoint produces an avoidable empty-DNA 500 after the trajectory itself
+      // has loaded successfully.
+      const grapheneOnly = !!mdInheritedPrepParams(_selectedJob(), _jobs).graphene_only
+      if (!grapheneOnly) await _prebuildTrajHeavy(v, base)
     } else {
       if (trajToggle) trajToggle.checked = false
       if (trajControls) trajControls.style.display = 'none'
