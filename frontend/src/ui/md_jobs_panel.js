@@ -30,7 +30,9 @@ import { renderJobList } from './jobs_panel_render.js'
 import { shouldForceDisplayReload, mdReadinessIndicator, mdDisplayReadinessFromMeta } from './md_display_state.js'
 import { initMdSolventControls } from './md_solvent_controls.js'
 import { initMdWeldControls } from './md_weld_controls.js'
-import { initOxdnaAnchorsSetup } from './oxdna_anchors_setup.js'
+import {
+  initOxdnaAnchorsSetup, initAnchorTransferControls, setAnchorSectionEnabled,
+} from './oxdna_anchors_setup.js'
 import { atomNamesFromValue } from '../scene/efield_math.js'
 import { initForcesCard } from './forces_card.js'
 import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
@@ -776,6 +778,12 @@ export function mdDraftRunLabel(job) {
   return '▶ Relax from oxDNA'
 }
 
+/** Saved protocol used by the one-click draft run control. A copy prevents the launch
+ * merger from mutating the job record cached by the panel. */
+export function mdDraftLaunchPayload(job) {
+  return { ...(job?.prep_params || {}) }
+}
+
 /** Pure: is any Alpine job submitted-and-in-flight (so the panel should keep polling
  *  SLURM status)?  Gates the remote-poll timer — false when nothing remote is active,
  *  so idle panels don't hit the network. */
@@ -1340,6 +1348,17 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const forcesProvenanceEl = document.getElementById('md-anchors-provenance')
   const anchorAtomsSel     = document.getElementById('md-anchors-atoms')
   const anchorStiffnessSel = document.getElementById('md-anchors-stiffness')
+  const surfaceEnableChk   = document.getElementById('md-surface-enable')
+  const surfaceGrapheneOnlyChk = document.getElementById('md-surface-graphene-only')
+  const surfaceDiameterEl  = document.getElementById('md-surface-pore-diameter')
+  const surfaceLayersEl    = document.getElementById('md-surface-layers')
+  const surfaceSpacingEl   = document.getElementById('md-surface-layer-spacing')
+  const surfaceDnaClearEl  = document.getElementById('md-surface-dna-clearance')
+  const surfaceWaterClearEl = document.getElementById('md-surface-water-clearance')
+  const surfaceMarginEl    = document.getElementById('md-surface-sheet-margin')
+  const surfaceReadyEl     = document.getElementById('md-surface-ready')
+  const surfaceControlsEl  = document.getElementById('md-surface-controls')
+  let surfaceSeedSpec = null
   const earlyStopChk  = document.getElementById('md-jobs-early-stop')
   const displayToggle = document.getElementById('md-jobs-display-toggle')
   const displayStatus = document.getElementById('md-jobs-display-status')
@@ -2505,6 +2524,22 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         return
       }
 
+      // A graphene control intentionally has no DNA atoms.  Display MD still has
+      // useful work to do (water, ions and the periodic cell), but opening the DNA
+      // websocket would repeatedly fail while trying to align an empty phosphate
+      // selection.  Use the trajectory-backed solvent renderer directly.
+      if (d.graphene_only) {
+        mdDisplayController.stopDisplayKeepWarm?.()
+        _displayJobId = job.job_id
+        _displayKey = `graphene-only|${d.trajectory_path ?? ''}`
+        solvent?.setEnabled(true, 'traj')
+        await solvent?.setJob(job.job_id, { nFrames: 1 })
+        solvent?.showFrame(0)
+        _setDisplayStatus('Graphene control ready · use Water, Ions and Periodic box', _C.ok)
+        _updateLiveFrameControls(job)
+        return
+      }
+
       // The DCD exists.  Stream MD frames — the first real frame overwrites the seed
       // placeholder and clears the overlay flag (md-display-state 'frame').  Until then
       // the inherited positions stay visible (an empty DCD yields no 'frame' event).
@@ -2594,6 +2629,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
         const v = mdDisplayReadinessFromMeta(d)
         _setDisplayIndicator(v.state, v.title, job.job_id)
         return false
+      }
+      if (d.graphene_only) {
+        // There is no DNA model to prewarm.  The lightweight solvent/cell request
+        // is made only when Display MD is actually enabled.
+        mdDisplayController.stopPrewarm?.()
+        _prewarmKey = null
+        _setDisplayIndicator('ready', 'Graphene solvent/cell display ready', job.job_id)
+        return true
       }
       const key = `${d.config_path}|${d.trajectory_path ?? ''}|${d.segment_name ?? ''}`
       const forceReload = force || key !== _prewarmKey
@@ -3773,12 +3816,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       if (_remoteSubmitting) return       // a package is already uploading
       return _submitReview.open(sel.job_id)
     }
-    // A seeded draft solvates from its source job's coordinates. Send it through the
-    // wizard too, prefilled with what the draft recorded — solvating from a seed is
-    // still a whole protocol's worth of choices, and it used to reveal a drawer of
-    // controls that no longer exists.
+    // The wizard already ran when this draft was created. "Relax from oxDNA" is the
+    // commitment step: prepare in place from its saved protocol plus the physical
+    // elements currently shown in the NAMD cards. Never surprise the user with the
+    // same wizard a second time.
     if (mdJobIsDraft(sel)) {
-      return _wizard.open('relaxation', { draftId: sel.job_id, prefill: _draftPrefill(sel) })
+      return _launchRelax(mdDraftLaunchPayload(sel), { draftId: sel.job_id })
     }
     // Renting is a start, not a submit — POST /md/jobs/{id}/start dispatches to
     // _start_runpod_job, which pre-flights and provisions. This line is what makes the
@@ -3851,6 +3894,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // even an anchored parent lost them, because the replica builder never passed them
       // through. Sending [] (an empty card) means "explicitly unanchored".
       anchors:      _anchorsCard?.getAnchors?.() ?? [],
+      surface_anchors: _surfaceAnchorsCard?.getAnchors?.() ?? [],
       anchor_atoms: mdAnchorAtomNames(anchorAtomsSel?.value),
       anchor_k:     mdAnchorStiffness(anchorStiffnessSel?.value),
     }
@@ -3983,6 +4027,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const deviceStr = String(proto.devices ?? '0').trim()
 
     const anchors = _anchorsCard?.getAnchors?.() ?? []
+    const surfaceAnchors = _surfaceAnchorsCard?.getAnchors?.() ?? []
     const fieldSpec = _efieldCard?.getFieldSpec?.()
     const fieldOn = !!_efieldCard?.isEnabled?.() && (fieldSpec?.field_pN ?? 0) > 0
     // A uniform field with no anchor just streams the whole structure (COM drift) —
@@ -4018,10 +4063,19 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       runpod_gpu_key: mdRunpodGpuKeyFor({
         runTarget, requested: proto.runpod_gpu_key }),
       anchors:        anchors.length ? anchors : null,
+      surface_anchors: surfaceAnchors.length ? surfaceAnchors : null,
       // The ladder pins hard regardless of the stiffness select (its constraints channel
       // is spent on the slow-release restraint), but the ATOM filter applies to both.
       anchor_atoms:   anchors.length ? mdAnchorAtomNames(anchorAtomsSel?.value) : null,
       field:          fieldOn ? { field_pN: fieldSpec.field_pN, dir: fieldSpec.dir } : null,
+      graphene_nanopore: !!surfaceEnableChk?.checked,
+      graphene_only: !!surfaceGrapheneOnlyChk?.checked,
+      graphene_pore_diameter_nm: Number(surfaceDiameterEl?.value || 2.1),
+      graphene_layers: Number(surfaceLayersEl?.value || 1),
+      graphene_layer_spacing_nm: Number(surfaceSpacingEl?.value || 0.335),
+      graphene_atomistic_clearance_nm: Number(surfaceDnaClearEl?.value || 0.32),
+      graphene_water_clearance_nm: Number(surfaceWaterClearEl?.value || 0.30),
+      graphene_sheet_margin_nm: Number(surfaceMarginEl?.value || 1.5),
       run_dir:        getRunDir(),   // shared run-location: write this run into the chosen folder
     }
 
@@ -4454,7 +4508,29 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       trajectory: trajToggle?.checked,
     })
     _selectedId = jobId
+    _metricsCard?.sync?.()
     _syncRunTargetToJob(selectedJob)
+    const prep = selectedJob?.prep_params || {}
+    if (surfaceEnableChk) surfaceEnableChk.checked = !!prep.graphene_nanopore
+    if (surfaceGrapheneOnlyChk) surfaceGrapheneOnlyChk.checked = !!prep.graphene_only
+    if (surfaceDiameterEl) surfaceDiameterEl.value = String(prep.graphene_pore_diameter_nm ?? 2.1)
+    if (surfaceLayersEl) surfaceLayersEl.value = String(prep.graphene_layers ?? 1)
+    if (surfaceSpacingEl) surfaceSpacingEl.value = String(prep.graphene_layer_spacing_nm ?? 0.335)
+    if (surfaceDnaClearEl) surfaceDnaClearEl.value = String(prep.graphene_atomistic_clearance_nm ?? 0.32)
+    if (surfaceWaterClearEl) surfaceWaterClearEl.value = String(prep.graphene_water_clearance_nm ?? 0.30)
+    if (surfaceMarginEl) surfaceMarginEl.value = String(prep.graphene_sheet_margin_nm ?? 1.5)
+    _anchorsCard?.applyConfig?.(prep.anchors || [])
+    _surfaceAnchorsCard?.applyConfig?.(prep.surface_anchors || [])
+    _syncSurfaceCard()
+    surfaceSeedSpec = null
+    if (selectedJob?.seed_oxdna_job_id) {
+      void api.getOxdnaJob(selectedJob.seed_oxdna_job_id).then(source => {
+        if (jobId !== _selectedId) return
+        const s = source?.run_config?.surface
+        surfaceSeedSpec = s ? { dir: s.dir, positionNm: s.position_nm } : null
+        _syncSurfaceCard()
+      }).catch(() => {})
+    }
     if (visualizationAction === 'display') {
       _displayMeta = null
       _resetDisplayIndicator()
@@ -4515,8 +4591,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (!d || jobId !== _selectedId) return      // selection moved on while in flight
     // `atom_names` is the job-level filter — the only place a job prepared before
     // per-anchor holds recorded the choice, so it seeds rows that carry no `atoms`.
-    _anchorsCard?.applyConfig?.(d.anchors?.requested ?? [],
+    _anchorsCard?.applyConfig?.(d.structure_anchors ?? d.anchors?.requested ?? [],
                                { defaultAtoms: d.anchors?.atom_names ?? null })
+    _surfaceAnchorsCard?.applyConfig?.(d.surface_anchors ?? [],
+                                      { defaultAtoms: d.anchors?.atom_names ?? null })
     _efieldCard?.applyConfig?.(d.field ?? null)
     _paintForcesProvenance(d)
   }
@@ -5385,6 +5463,64 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       atoms: 'md-anchors-atoms',
     },
   })
+
+  // A deposited membrane has a second attachment set, matching oxDNA's structure vs
+  // surface anchors. Both resolve through the same 3D selection picker; keeping the
+  // descriptors separate records physical intent even though NAMD holds both sets at
+  // their prepared coordinates.
+  const _surfaceAnchorsCard = initOxdnaAnchorsSetup({
+    engine: 'namd-surface',
+    getSelection: () => (getSelection ? getSelection() : null),
+    ids: {
+      toggle: 'md-anchors-toggle', arrow: 'md-anchors-arrow', body: 'md-anchors-body',
+      add: 'md-surface-anchors-add', clear: 'md-surface-anchors-clear',
+      list: 'md-surface-anchors-list', status: 'md-surface-anchors-status',
+      glow: 'md-surface-anchors-glow', atoms: 'md-anchors-atoms',
+    },
+  })
+  const _anchorTransfers = initAnchorTransferControls({
+    structure: _anchorsCard, surface: _surfaceAnchorsCard,
+    toSurfaceId: 'md-anchors-to-surface', toStructureId: 'md-anchors-to-structure',
+  })
+  function _syncSurfaceCard() {
+    const enabled = !!surfaceEnableChk?.checked
+    if (surfaceControlsEl) surfaceControlsEl.style.display = enabled ? 'flex' : 'none'
+    if (surfaceReadyEl) {
+      const layers = Math.max(1, Number(surfaceLayersEl?.value || 1))
+      const thickness = (layers - 1) * Number(surfaceSpacingEl?.value || 0.335)
+      surfaceReadyEl.textContent = enabled
+        ? `Surface on · ${Number(surfaceDiameterEl?.value || 2.1).toFixed(2)} nm pore · ${layers} layer${layers === 1 ? '' : 's'}${layers > 1 ? ` · ${thickness.toFixed(3)} nm thick` : ''}.`
+        : 'Off — tick “Apply hard surface”.'
+      surfaceReadyEl.style.color = enabled ? '#e0a800' : '#8b949e'
+    }
+    setAnchorSectionEnabled(document.getElementById('md-surface-anchors-section'), enabled)
+    _anchorTransfers.setSurfaceEnabled(enabled)
+    window.dispatchEvent(new CustomEvent('nadoc:graphene-nanopore-preview', { detail: {
+      enabled, poreDiameterNm: Number(surfaceDiameterEl?.value || 2.1),
+      layers: Number(surfaceLayersEl?.value || 1),
+      layerSpacingNm: Number(surfaceSpacingEl?.value || 0.335),
+      surface: surfaceGrapheneOnlyChk?.checked
+        ? { dir: [0, 0, 1], positionNm: 0 } : surfaceSeedSpec,
+    }}))
+    window.dispatchEvent(new CustomEvent('nadoc:anchors-change', { detail: {
+      engine: 'namd-surface', highlighted: _surfaceAnchorsCard.getHighlighted?.() || [],
+    }}))
+  }
+  surfaceEnableChk?.addEventListener('change', _syncSurfaceCard)
+  surfaceGrapheneOnlyChk?.addEventListener('change', _syncSurfaceCard)
+  for (const el of [surfaceDiameterEl, surfaceLayersEl, surfaceSpacingEl,
+                    surfaceDnaClearEl, surfaceWaterClearEl, surfaceMarginEl]) {
+    el?.addEventListener('input', _syncSurfaceCard)
+  }
+  const surfaceToggle = document.getElementById('md-surface-toggle')
+  const surfaceBody = document.getElementById('md-surface-body')
+  const surfaceArrow = document.getElementById('md-surface-arrow')
+  surfaceToggle?.addEventListener('click', () => {
+    const open = surfaceBody?.style.display === 'none'
+    if (surfaceBody) surfaceBody.style.display = open ? '' : 'none'
+    surfaceArrow?.classList.toggle('is-collapsed', !open)
+  })
+  _syncSurfaceCard()
 
   // Electric-field card — the shared numeric field factory (same one the CanDo panel
   // binds), feeding NAMD's native eFieldOn/eField.  `field_pN` is the cross-engine

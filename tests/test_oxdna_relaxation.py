@@ -4922,6 +4922,14 @@ def test_build_namd_seed_uses_snapshot_and_backbone_site(tmp_path, geometry):
     # The snapshot drove the model: same nucleotide count as the snapshot design.
     assert len(seed.atomistic_model.atoms) > 0
     assert seed.design.metadata is not None
+    assert seed.backmap_report["schema"] == "nadoc.oxdna_seed_backmap.v1"
+    assert seed.backmap_report["mapping"] == "oxdna2_pair_frame_topology_safe_projection"
+    assert seed.backmap_report["ring_piercings"] == 0
+    assert seed.backmap_report["steric_clashes"] == 0
+    assert seed.backmap_report["min_bond_ratio"] >= 0.5 - 1e-9
+    # Coarse-grained crossover gaps may need the dedicated soft minimisation to close,
+    # but the projector caps them well below the legacy spline seed's ~12.5x maximum.
+    assert seed.backmap_report["max_bond_ratio"] <= 6.0 + 1e-9
 
     # The seed must carry a WIDER cross-pair duplex than the raw oxDNA centre of
     # mass — proving the backbone-site reconstruction (§18) is in the path, not
@@ -4974,6 +4982,32 @@ def test_build_namd_seed_recenters_far_from_origin_conf(tmp_path):
     # Recentered near the origin (not ~600 nm out) → PDB coords stay well within the
     # ±9999 Å (~1000 nm) an 8-char coordinate field can hold.
     assert np.abs(pts).max() < 100.0, float(np.abs(pts).max())
+    assert np.allclose(pts.mean(axis=0), 0.0, atol=1e-6)
+
+
+def test_deposited_namd_seed_recenters_plane_with_structure(tmp_path):
+    """A deposited seed keeps its surface registered while DNA COM is recentered."""
+    from backend.core.oxdna_runner import build_namd_seed
+
+    design = _sequence_for_oxdna(make_6hb_design())
+    geom = __import__(
+        "backend.api.crud", fromlist=["_geometry_for_design"]
+    )._geometry_for_design(design)
+    job = _stage_a_relaxed_job(tmp_path, design, geom)
+    job.run_config = {
+        "kind": "surface_deposition",
+        "surface": {"dir": [0, 2, 0], "position_nm": -4.0, "stiff": 5.0},
+    }
+    job.save(tmp_path)
+
+    seed = build_namd_seed(job.job_id, tmp_path)
+    surf = seed.deposition_surface
+    assert surf is not None
+    assert np.allclose(surf["dir"], [0, 1, 0])
+    assert np.allclose(
+        surf["pore_center_nm"], np.asarray(surf["dir"]) * surf["position_nm"]
+    )
+    pts = np.array([[a.x, a.y, a.z] for a in seed.atomistic_model.atoms])
     assert np.allclose(pts.mean(axis=0), 0.0, atol=1e-6)
 
 

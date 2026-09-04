@@ -3357,6 +3357,10 @@ export const getMdSolventMeta = (id) =>
 export const startMdMetrics      = (id, body)    => _oxdnaJSON('POST', `/md/jobs/${id}/metrics/start`, body)
 /** Poll an MD metric run → {state, progress, eta_s, frames_done, frames_total, result?}. */
 export const getMdMetricsRun     = (runId)       => _oxdnaJSON('GET',  `/md/metrics/${runId}`)
+/** Analyze a voltage-driven production trajectory: current, conductance, aperture
+ * crossings and pore occupancy. The backend caches the JSON beside the package. */
+export const getMdIonTransportAnalysis = (id) =>
+  _oxdnaJSON('GET', `/md/ion-transport/${id}/analysis`)
 
 // NAMD MD job lifecycle (routes_md.py).  All go through _oxdnaJSON so the tab's
 // X-NADOC-Doc header is ALWAYS stamped — the staleness/out-of-date checks read the

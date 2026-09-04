@@ -6054,10 +6054,51 @@
                     referenced to its own equilibrated coordinates.
                   </div>
                   <div id="md-anchors-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
+                  <div style="display:grid;grid-template-columns:1fr;gap:5px;border-top:1px solid #21262d;margin-top:8px;padding-top:8px">
+                    <button id="md-anchors-to-surface" title="Move every structure anchor into Surface Anchors"
+                            style="font-size:11px;padding:4px;background:#161b22;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Send all to surface anchors</button>
+                    <button id="md-anchors-to-structure" title="Move every surface anchor into Structure Anchors"
+                            style="font-size:11px;padding:4px;background:#161b22;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Send all to structure anchors</button>
+                  </div>
+                  <div id="md-surface-anchors-section" aria-disabled="true" style="margin-top:9px;opacity:.45">
+                    <div style="font-size:var(--text-xs);color:#c9d1d9;font-weight:600;margin-bottom:5px">Surface Anchors</div>
+                    <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">Selected DNA held at its deposited attachment coordinates on the graphene support.</div>
+                    <div style="display:flex;align-items:center;gap:5px">
+                      <button id="md-surface-anchors-add" style="flex:1;font-size:var(--text-xs);padding:4px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer">Add selection as anchor</button>
+                      <button id="md-surface-anchors-clear" style="font-size:var(--text-xs);padding:4px 8px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Clear</button>
+                    </div>
+                    <div id="md-surface-anchors-list" style="max-height:110px;overflow-y:auto;border:1px solid #21262d;border-radius:3px;background:#010409;padding:3px;margin-top:5px"></div>
+                    <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;margin-top:6px"><input type="checkbox" id="md-surface-anchors-glow" checked> Highlight all anchors</label>
+                    <div id="md-surface-anchors-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
+                  </div>
                   <!-- Provenance: whether the chips above are forces the SELECTED job actually
                        holds, or a selection that will apply on Run. The card was write-only for
                        its whole life, so the same chips could mean either — and did. -->
                   <div id="md-anchors-provenance" style="font-size:var(--text-xs);color:#6e7681;margin-top:4px;min-height:14px;line-height:1.35"></div>
+                </div>
+              </div>
+
+              <!-- ── Hard surface (graphene nanopore inherited from an oxDNA deposition) ── -->
+              <div class="ox-card">
+                <div id="md-surface-toggle" class="ox-card__header" style="color:#c9d1d9">
+                  <span id="md-surface-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Hard surface</span>
+                </div>
+                <div id="md-surface-body" class="ox-card__body" style="display:none">
+                  <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">The same deposited plane used by oxDNA, materialized as neutral graphene atoms held by near-fixed harmonic restraints that remain compatible with GPU-resident NAMD.</div>
+                  <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;margin-bottom:6px"><input type="checkbox" id="md-surface-enable"> Apply hard surface</label>
+                  <div id="md-surface-controls" style="display:none;flex-direction:column;gap:5px">
+                    <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer"><input type="checkbox" id="md-surface-graphene-only"> Graphene-only control (no DNA)</label>
+                    <label style="display:grid;grid-template-columns:1fr 110px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs)">Material model<select id="md-surface-material" disabled style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"><option value="graphene">Neutral restrained graphene</option></select></label>
+                    <label style="display:grid;grid-template-columns:1fr 80px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs)">Pore diameter (nm)<input id="md-surface-pore-diameter" type="number" value="2.1" min="0.1" max="100" step="0.1" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"></label>
+                    <label style="display:grid;grid-template-columns:1fr 80px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs)">Layers<input id="md-surface-layers" type="number" value="1" min="1" max="6" step="1" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"></label>
+                    <label style="display:grid;grid-template-columns:1fr 80px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs)">Layer spacing (nm)<input id="md-surface-layer-spacing" type="number" value="0.335" min="0.1" max="1" step="0.005" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"></label>
+                    <label style="display:grid;grid-template-columns:1fr 80px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs)">DNA clearance (nm)<input id="md-surface-dna-clearance" type="number" value="0.32" min="0" max="2" step="0.01" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"></label>
+                    <label style="display:grid;grid-template-columns:1fr 80px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs)">Water clearance (nm)<input id="md-surface-water-clearance" type="number" value="0.30" min="0" max="1" step="0.01" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"></label>
+                    <label style="display:grid;grid-template-columns:1fr 80px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs)">Sheet margin (nm)<input id="md-surface-sheet-margin" type="number" value="1.5" min="0.5" max="10" step="0.1" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"></label>
+                    <div id="md-surface-ready" style="font-size:var(--text-xs);color:#8b949e;line-height:1.35">Off — tick “Apply hard surface”.</div>
+                    <div style="font-size:10px;color:#8fb3ff;line-height:1.35">Water reservoir padding and NaCl/MgCl₂ concentrations are run settings: choose them in <strong>＋ New job → 2 Setup → Settings</strong> (Water padding and Ionic conditions).</div>
+                    <div style="font-size:10px;color:#6e7681;line-height:1.35">With DNA, orientation and position are inherited from the deposited oxDNA seed. A graphene-only control instead builds an XY sheet centered at z=0. Additional layers extend toward −z.</div>
+                  </div>
                 </div>
               </div>
 
@@ -6388,6 +6429,13 @@
                   <label style="display:flex;gap:5px;align-items:center;margin:-2px 0 8px;font-size:var(--text-xs);color:#8b949e;cursor:pointer" title="Analyze every trajectory frame. Leave off for a fast 64-point uniform preview.">
                     <input type="checkbox" id="md-metrics-all-frames"> Analyze all frames (exact)
                   </label>
+                  <div id="md-metrics-ion-transport-row" style="display:none;margin-bottom:10px;padding:7px;border:1px solid #30363d;border-radius:4px;background:#0d1117">
+                    <div style="display:flex;align-items:center;gap:6px">
+                      <span style="flex:1;font-size:var(--text-xs);color:#c9d1d9">Ion transport through nanopore</span>
+                      <button id="md-metrics-ion-transport-display" style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Plot ion transport</button>
+                    </div>
+                    <div id="md-metrics-ion-transport-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:12px"></div>
+                  </div>
                   <!-- Twist -->
                   <div style="margin-bottom:8px">
                     <div style="display:flex;align-items:center;gap:5px">

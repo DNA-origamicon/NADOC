@@ -365,7 +365,7 @@ def render_chain_script(
     stall_timeout_s: int = STALL_TIMEOUT_S,
     max_lifetime_s: Optional[int] = None,
     watchdog_poll_s: int = WATCHDOG_POLL_S,
-    manifest: Optional[dict] = None,  # noqa: ARG001 — kept for caller signature parity
+    manifest: Optional[dict] = None,
     early_stop_relax: bool = False,
     name_stem: str = "",
     health_python: str = "python3",
@@ -564,6 +564,12 @@ def render_chain_script(
     ]
 
     chain = [s.name for s in steps]
+    manifest = manifest or {}
+    graphene_only = bool(
+        manifest.get("graphene_only")
+        or (manifest.get("charge_audit") or {}).get("graphene_only")
+        or (manifest.get("graphene_nanopore") or {}).get("control") == "graphene_only"
+    )
 
     for i, step in enumerate(steps):
         kind = "minimization" if step.is_minimization else "segment"
@@ -582,12 +588,13 @@ def render_chain_script(
                 "fi",
             ]
         if early_stop_relax and _early_stop_eligible(chain, i):
-            last = _stage_last_chunk_index(chain, i)
+            last = len(chain) - 1 if graphene_only else _stage_last_chunk_index(chain, i)
             lines += _early_stop_block(
                 step.name,
                 chain[i + 1 : last + 1],
                 name_stem=name_stem,
                 health_python=health_python,
+                energy_only=graphene_only,
             )
 
     lines += [

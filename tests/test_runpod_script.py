@@ -637,6 +637,22 @@ class TestRelaxationEarlyStop:
         assert proc.returncode == 0, proc.stdout + proc.stderr
         assert ran == [s.name for s in self.STEPS], ran
 
+    def test_graphene_only_uses_energy_gate_and_bridges_whole_chain(self):
+        manifest = {**self.MANIFEST, "graphene_only": True}
+        script = render_chain_script(
+            steps=self.STEPS,
+            remote_dir="/workspace/job",
+            namd_bin="namd3",
+            threads=2,
+            manifest=manifest,
+            early_stop_relax=True,
+            name_stem="s",
+        )
+        assert "--energy-only" in script
+        assert "nadoc_health_eval.py --seg" not in script
+        first = script.index('--log "s_01_k0p5_p10.log" --energy-only')
+        assert script.index('"s_02_k0p01_p100"', first) > first
+
     def test_off_by_default_emits_no_evaluator_call(self):
         """A job that didn't opt in must render the exact script it rendered before."""
         s = render_chain_script(

@@ -44,6 +44,7 @@ from backend.core.disk_guard import (
     wait_proc_with_disk_guard,
 )
 from backend.core.md_health import (
+    HealthCheckResult,
     _latest_segment_dcd,
     run_health_check,
     append_health_jsonl,
@@ -53,7 +54,7 @@ from backend.core.namd_metrics import (
     parse_namd_log,
     parse_namd_log_frames,
 )
-from backend.core.md_cutoff import should_early_stop_stage
+from backend.core.md_cutoff import energy_plateaued, should_early_stop_stage
 from backend.core.md_protocols import minimization_status, segments_from_manifest
 from backend.core.md_vram import (
     FAILURE_CELL_SHRINK,
@@ -424,7 +425,17 @@ def _segment_pid(segment_name: str) -> Optional[int]:
 def _external_pid(job: MdJob) -> Optional[int]:
     """PID of a detached/restarted NAMD process for this job's current segment, or None.
 
+    Minimization is not in ``job.segments``; check its dedicated timeline row first.
+    Without this, a server reload during a long seeded minimization made Stop cancel
+    only the adopter task and leave NAMD alive, after which the supervisor adopted it
+    again and the UI appeared to restart the job.
+
     Returns the PID so the caller can both detect AND stop/re-adopt the orphan."""
+    minimization = getattr(job, "minimization", None)
+    if minimization is not None and minimization.status == "running":
+        pid = _segment_pid(minimization.name)
+        if pid is not None:
+            return pid
     if not (0 <= job.current_segment_idx < len(job.segments)):
         return None
     return _segment_pid(job.segments[job.current_segment_idx].name)
@@ -886,6 +897,13 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
         job.save(workspace_dir)
         return job
 
+    reconcile_manifest = json.loads(manifest_path.read_text())
+    graphene_only = bool(
+        reconcile_manifest.get("graphene_only")
+        or (reconcile_manifest.get("charge_audit") or {}).get("graphene_only")
+        or (reconcile_manifest.get("graphene_nanopore") or {}).get("control")
+        == "graphene_only"
+    )
     _, specs = segments_from_manifest(manifest_path)
     spec_by_name = {s.name: s for s in specs}
     spec = spec_by_name.get(active.name)
@@ -906,12 +924,20 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
     if not _jsonl_has_segment(health_path, active.name) and _segment_outputs_complete(
         output_dir, active.name
     ):
-        hresult = run_health_check(
-            package_dir,
-            active.name,
-            job.name_stem,
-            min_c1_paired=spec.min_c1_paired,
-            min_wc_ref_relative=spec.min_wc_ref_relative,
+        hresult = (
+            HealthCheckResult(
+                passed=True,
+                blocking=False,
+                reason="DNA structural metrics are not applicable to a graphene-only control.",
+            )
+            if graphene_only
+            else run_health_check(
+                package_dir,
+                active.name,
+                job.name_stem,
+                min_c1_paired=spec.min_c1_paired,
+                min_wc_ref_relative=spec.min_wc_ref_relative,
+            )
         )
         append_health_jsonl(output_dir, active.name, active.stage, hresult)
         job.health_samples.append(
@@ -2048,6 +2074,11 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
         return
 
     manifest = json.loads(manifest_path.read_text())
+    graphene_only = bool(
+        manifest.get("graphene_only")
+        or (manifest.get("charge_audit") or {}).get("graphene_only")
+        or (manifest.get("graphene_nanopore") or {}).get("control") == "graphene_only"
+    )
     min_name = manifest["minimization"]["name"]
     _, segments = segments_from_manifest(manifest_path)
     # Jobs prepared before job.minimization existed get their timeline row here, so an
@@ -2642,12 +2673,20 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
         run_check = spec.percent >= 10.0
         if run_check:
             logger.info("[%s] Health check: %s", job.job_id, spec.name)
-            hresult = run_health_check(
-                package_dir,
-                spec.name,
-                job.name_stem,
-                min_c1_paired=spec.min_c1_paired,
-                min_wc_ref_relative=spec.min_wc_ref_relative,
+            hresult = (
+                HealthCheckResult(
+                    passed=True,
+                    blocking=False,
+                    reason="DNA structural metrics are not applicable to a graphene-only control.",
+                )
+                if graphene_only
+                else run_health_check(
+                    package_dir,
+                    spec.name,
+                    job.name_stem,
+                    min_c1_paired=spec.min_c1_paired,
+                    min_wc_ref_relative=spec.min_wc_ref_relative,
+                )
             )
             logger.info(
                 "[%s] Health: c1=%.3f wc=%.3f passed=%s%s",
@@ -2718,8 +2757,22 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
             last_idx = _stage_last_chunk_idx(segments, idx)
             if last_idx > idx:
                 frames = parse_namd_log_frames(seg_log)
-                decision, diag = should_early_stop_stage(frames, hresult.wc_per_frame)
+                if graphene_only:
+                    decision = energy_plateaued(frames)
+                    diag = {
+                        "n_energy_frames": len(frames),
+                        "energy_plateaued": decision,
+                        "dna_metrics": "not_applicable",
+                    }
+                else:
+                    decision, diag = should_early_stop_stage(frames, hresult.wc_per_frame)
                 if decision:
+                    # Every remaining graphene rung differs only in DNA restraint
+                    # files that are empty for this control, so one stable energy
+                    # plateau completes relaxation rather than entering three more
+                    # physically identical stages.
+                    if graphene_only:
+                        last_idx = len(segments) - 1
                     skipped_names = []
                     for j in range(idx + 1, last_idx + 1):
                         if j < len(job.segments):
@@ -2825,6 +2878,12 @@ def apply_user_stop(job: MdJob) -> None:
     for seg in job.segments:
         if seg.status == "running":
             seg.status = "pending"
+    # Minimization has no periodic restart coordinates. A resume deliberately reruns
+    # it from the beginning, so show it as pending rather than leaving a stopped job
+    # with a spinning minimization row or a misleading partial percentage.
+    if job.minimization is not None and job.minimization.status == "running":
+        job.minimization.status = "pending"
+        job.minimization.percent = 0.0
 
 
 def set_early_stop(job_id: str, enabled: bool, workspace_dir: Path) -> bool:
@@ -2896,10 +2955,15 @@ def stop_job(job_id: str, workspace_dir: Path) -> bool:
     if pid is not None:
         _kill_process_group(pid)
 
-    # When a live runner thread exists it persists the stopped state itself on
-    # task-cancel (see run_job's thread finally).  Only the orphan/no-handle path
-    # needs to write it here.
-    if job is not None and not live_handle:
+    # Persist synchronously for BOTH spawned and adopted runs. Deferring this to the
+    # runner thread left a race with the periodic interrupted-job supervisor: it could
+    # observe no handle + status=running and relaunch minimization before the thread's
+    # finally block recorded the user's stop.
+    if job is not None:
+        try:
+            job = MdJob.load(job_id, workspace_dir)
+        except Exception:  # noqa: BLE001 — retain the already-loaded record
+            pass
         apply_user_stop(job)
         job.namd_pid = None
         job.save(workspace_dir)

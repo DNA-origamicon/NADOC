@@ -651,6 +651,10 @@ class NamdSeed:
     stage_name: str  # oxDNA stage the coords came from (e.g. "3_equil")
     conf_path: Path  # the last_conf.dat used
     source_job_id: str
+    backmap_report: Optional[dict] = None
+    # Deposited oxDNA runs carry their physical plane into the atomistic handoff.
+    # Coordinates below are in the SAME recentered world-nm frame as atomistic_model.
+    deposition_surface: Optional[dict] = None
 
 
 def _latest_relaxed_conf(
@@ -692,9 +696,18 @@ def build_namd_seed(job_id: str, workspace_dir: Path) -> NamdSeed:
 
     # Lazy import: cg_to_atomistic pulls scipy + atomistic; keep it off the
     # module import path (the runner is imported by lightweight route code).
-    from backend.core.cg_to_atomistic import build_atomistic_model_from_cg_spline
+    from dataclasses import asdict
+    from backend.core.cg_to_atomistic import build_topology_safe_oxdna_seed
 
-    model = build_atomistic_model_from_cg_spline(design, conf_path)
+    model, _canonical_target, projection = build_topology_safe_oxdna_seed(
+        design, conf_path
+    )
+    backmap_report = {
+        "schema": "nadoc.oxdna_seed_backmap.v1",
+        "mapping": "oxdna2_pair_frame_topology_safe_projection",
+        "source_conf": str(conf_path),
+        **asdict(projection),
+    }
 
     # Recenter the seed on the origin.  oxDNA does NOT fix the centre of mass, so a
     # relaxed conf can sit hundreds of nm out (COM diffusion over the run); the
@@ -702,13 +715,46 @@ def build_namd_seed(job_id: str, workspace_dir: Path) -> NamdSeed:
     # is irrelevant for a boxed MD seed, but the exported PDB's 8-char coordinate
     # fields overflow past ~±1000 Å — the file silently corrupts and the downstream
     # ENM base-ring scan finds no atoms.  Translate every atom by the model centroid.
+    deposition_surface = None
+    if (job.run_config or {}).get("kind") == "surface_deposition":
+        raw_surface = (job.run_config or {}).get("surface") or {}
+        if raw_surface.get("position_nm") is not None and len(raw_surface.get("dir") or []) == 3:
+            deposition_surface = {
+                "dir": [float(v) for v in raw_surface["dir"]],
+                "position_nm": float(raw_surface["position_nm"]),
+                "stiff": float(raw_surface.get("stiff", 0.0)),
+                "source": "oxdna_surface_deposition",
+            }
+
     if model.atoms:
         import numpy as _np
 
         coords = _np.asarray([[a.x, a.y, a.z] for a in model.atoms], dtype=float)
-        coords -= coords.mean(axis=0)
+        centroid = coords.mean(axis=0)
+        coords -= centroid
         for a, (x, y, z) in zip(model.atoms, coords):
             a.x, a.y, a.z = float(x), float(y), float(z)
+        if deposition_surface is not None:
+            # Plane equation is n.r = position. Translating r' = r-centroid gives
+            # n.r' = position-n.centroid. This preserves DNA/surface separation while
+            # keeping the combined deposited assembly close to the origin.
+            normal = _np.asarray(deposition_surface["dir"], dtype=float)
+            normal /= _np.linalg.norm(normal)
+            deposition_surface["dir"] = normal.tolist()
+            axis = int(_np.argmax(_np.abs(normal)))
+            plane_point = _np.zeros(3, dtype=float)
+            # position_nm is the UI/world coordinate along the selected Cartesian axis,
+            # not the signed plane scalar (important for -x/-y/-z normals).
+            plane_point[axis] = deposition_surface["position_nm"]
+            plane_point -= centroid
+            deposition_surface["position_nm"] = float(plane_point[axis])
+            deposition_surface["plane_point_nm"] = plane_point.tolist()
+            plane_scalar = float(_np.dot(normal, plane_point))
+            # Default pore centre is the projection of the pre-translation DNA COM onto
+            # the plane; after recentering that is simply position*n.
+            deposition_surface["pore_center_nm"] = (
+                normal * plane_scalar
+            ).tolist()
         # (Geometry sanity — the reconstruction must preserve the CG extent — is
         # enforced inside build_atomistic_model_from_cg_spline, which raises before
         # we get here if the all-atom placer exploded a heavily-deformed seed.)
@@ -719,6 +765,8 @@ def build_namd_seed(job_id: str, workspace_dir: Path) -> NamdSeed:
         stage_name=stage_name,
         conf_path=conf_path,
         source_job_id=job_id,
+        backmap_report=backmap_report,
+        deposition_surface=deposition_surface,
     )
 
 

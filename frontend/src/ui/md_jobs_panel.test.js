@@ -308,7 +308,7 @@ describe('newestCompletedForPart (cross-engine compare fallback)', () => {
   })
 })
 
-import { mdJobIsActive, mdJobIsRunning, mdJobOccupiesLocalMachine, mdRequestedRunTarget, mdRunpodGpuKeyFor, mdJobIsStartable, mdJobIsResumable, mdRunControl, mdRunControlForSelection, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob, mdWatchdogDecision, mdRemoteReconnectPrompt, mdJobIsDraft, mdDraftRunLabel, mdJobRowSig, mdJobRowCtx, gpuFallbackFromToggle, mdQueueable, mdQueueRowLabel, mdRunpodStartable, mdRunpodPhase, preferredMdSelection } from './md_jobs_panel.js'
+import { mdJobIsActive, mdJobIsRunning, mdJobOccupiesLocalMachine, mdRequestedRunTarget, mdRunpodGpuKeyFor, mdJobIsStartable, mdJobIsResumable, mdRunControl, mdRunControlForSelection, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob, mdWatchdogDecision, mdRemoteReconnectPrompt, mdJobIsDraft, mdDraftRunLabel, mdDraftLaunchPayload, mdJobRowSig, mdJobRowCtx, gpuFallbackFromToggle, mdQueueable, mdQueueRowLabel, mdRunpodStartable, mdRunpodPhase, preferredMdSelection } from './md_jobs_panel.js'
 
 describe('preferredMdSelection', () => {
   const jobs = [
@@ -326,6 +326,12 @@ describe('preferredMdSelection', () => {
 })
 
 describe('mdJobIsDraft / mdDraftRunLabel (deferred-prep seed)', () => {
+  it('launches a draft from a copy of its saved settings without another wizard', () => {
+    const job = { prep_params: { relax_preset: 'standard', seed: 17 } }
+    const payload = mdDraftLaunchPayload(job)
+    expect(payload).toEqual(job.prep_params)
+    expect(payload).not.toBe(job.prep_params)
+  })
   it('mdJobIsDraft is true only for status "draft"', () => {
     expect(mdJobIsDraft({ status: 'draft' })).toBe(true)
     for (const s of ['queued', 'preparing', 'running', 'completed', 'failed', 'stopped']) {

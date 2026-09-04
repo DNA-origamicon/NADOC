@@ -54,6 +54,8 @@ import zipfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
 
+import numpy as np
+
 # progress(phase_key, frac_within_phase | None, message) — see md_prep_progress.
 # frac=None just enters/holds an opaque phase that the heartbeat time-fills.
 ProgressCb = Callable[[str, Optional[float], str], None]
@@ -102,6 +104,110 @@ _ION_PARAMS = {
     "MG": ("MG", 2.00, 24.30500),
     "CLA": ("CLA", -1.00, 35.45000),
 }
+
+_GRAPHENE_PARAMS = ("CA", 0.0, 12.01100)
+
+
+def _graphene_identity(index: int) -> tuple[str, int]:
+    """Unique PDB/PSF ``(segid, resid)`` for a zero-based graphene atom index.
+
+    PDB residue numbers are four columns.  A realistic origami-sized sheet readily
+    exceeds 9,999 carbon sites, so continuing one GRPH segment corrupts the coordinate
+    columns at residue 10000.  Split deterministically into GR00, GR01, ... segments.
+    """
+    segment, local = divmod(index, 9999)
+    if segment >= 100:
+        raise ValueError("graphene sheet exceeds the supported 999,900 carbon sites")
+    return f"GR{segment:02d}", local + 1
+
+
+def _graphene_pdb_atoms(dna_pdb: str, spec: dict) -> list[str]:
+    """Generate a neutral graphene-like honeycomb sheet in the deposited plane.
+
+    The sheet is held fixed by the protocol, so its atomistic role is a calibrated
+    Lennard-Jones steric/electrolyte boundary. CA uses the bundled CHARMM aromatic-carbon
+    nonbonded parameters; no bonded terms are required for immobile atoms.
+    """
+    import numpy as np
+
+    n = np.asarray(spec["dir"], dtype=float)
+    n /= np.linalg.norm(n)
+    center = np.asarray(spec["pore_center_nm"], dtype=float)
+    radius = float(spec.get("pore_diameter_nm", 2.1)) / 2.0
+    pts = np.asarray(_dna_atom_positions_nm(dna_pdb), dtype=float)
+    # The oxDNA hard wall acts on coarse-grained particle sites; an atomistic sugar or
+    # base can protrude through that mathematical plane after backmapping. Move the
+    # physical carbon sheet just far enough outward to leave a normal heavy-atom contact
+    # distance. This preserves lateral pore registration and records the correction.
+    clearance = float(spec.get("atomistic_clearance_nm", 0.32))
+    side = 1.0
+    if len(pts):
+        signed = (pts - center) @ n
+        side = 1.0 if float(np.median(signed)) >= 0 else -1.0
+        nearest = float(np.min(side * signed))
+        shift = max(0.0, clearance - nearest)
+        center = center - side * n * shift
+        spec["atomistic_clearance_shift_nm"] = shift
+        spec["pore_center_nm"] = center.tolist()
+        spec["plane_point_nm"] = center.tolist()
+    margin = float(spec.get("sheet_margin_nm", 1.5))
+    extent = max(5.0, float(np.ptp(pts, axis=0).max() / 2 + margin)) if len(pts) else 5.0
+    trial = np.array([1.0, 0.0, 0.0]) if abs(n[0]) < 0.8 else np.array([0.0, 1.0, 0.0])
+    u = np.cross(n, trial); u /= np.linalg.norm(u)
+    v = np.cross(n, u)
+    bond = 0.142  # nm
+    dy = np.sqrt(3.0) * bond / 2.0
+    atoms: list[str] = []
+    resid = 0
+    # Brick representation of the honeycomb lattice: alternating rows are shifted and
+    # every third site is absent, producing threefold rather than square packing.
+    rows = int(np.ceil(extent / dy)) + 2
+    cols = int(np.ceil(extent / bond)) + 2
+    layers = int(spec.get("layers", 1))
+    spacing = float(spec.get("layer_spacing_nm", 0.335))
+    spec["thickness_nm"] = (layers - 1) * spacing
+    for layer in range(layers):
+        layer_center = center - side * n * layer * spacing
+        for iy in range(-rows, rows + 1):
+            y = iy * dy
+            for ix in range(-cols, cols + 1):
+                if (ix - iy) % 3 == 0:
+                    continue
+                x = ix * bond + (0.5 * bond if iy & 1 else 0.0)
+                if abs(x) > extent or abs(y) > extent or x * x + y * y < radius * radius:
+                    continue
+                resid += 1
+                p = layer_center + x * u + y * v
+                segid, local_resid = _graphene_identity(resid - 1)
+                atoms.append(_hetatm_record(resid, "C", "GRP", "G", local_resid,
+                    *(p * 10.0), segname=segid))
+    return atoms
+
+
+def _exclude_waters_near_graphene(
+    waters: list["_Water"], pdb_text: str, *, clearance_nm: float = 0.30
+) -> tuple[list["_Water"], int]:
+    """Remove waters whose oxygen overlaps the fixed graphene LJ surface."""
+    import numpy as np
+
+    if not waters:
+        return waters, 0
+    graph = np.asarray(
+        [
+            [float(line[30:38]) / 10, float(line[38:46]) / 10, float(line[46:54]) / 10]
+            for line in pdb_text.splitlines()
+            if line.startswith("HETATM") and line[72:76].strip().startswith("GR")
+        ],
+        dtype=float,
+    )
+    if not len(graph):
+        return waters, 0
+    from scipy.spatial import cKDTree
+
+    oxygens = np.asarray([[w.ox, w.oy, w.oz] for w in waters], dtype=float)
+    keep = cKDTree(graph).query(oxygens, k=1)[0] >= clearance_nm
+    filtered = [water for water, retain in zip(waters, keep, strict=True) if retain]
+    return filtered, len(waters) - len(filtered)
 
 # TIP3P water parameters (CHARMM36 / toppar_water_ions_cufix.str)
 _TIP3_PARAMS = {
@@ -566,7 +672,8 @@ def resolve_box_mode(
 
 
 def _recenter_pdb_in_padded_box(
-    pdb_text: str, padding_nm: float, box_mode: str = DEFAULT_BOX_MODE
+    pdb_text: str, padding_nm: float, box_mode: str = DEFAULT_BOX_MODE,
+    padding_xyz_nm: "tuple[float, float, float] | None" = None,
 ) -> tuple[str, tuple[float, float, float]]:
     """Translate every ATOM/HETATM so the structure's bounding box is centred in a
     rectangular ``[0, L]`` cell of size ``span + 2·padding`` per axis.
@@ -584,7 +691,8 @@ def _recenter_pdb_in_padded_box(
     """
     import numpy as np  # noqa: PLC0415
 
-    pad_a = padding_nm * 10.0  # nm → Å
+    pad = np.asarray(padding_xyz_nm or (padding_nm, padding_nm, padding_nm), dtype=float)
+    pad_a = pad * 10.0  # nm → Å
 
     xs: list[float] = []
     ys: list[float] = []
@@ -652,6 +760,7 @@ def _gmx_solvate(
     progress: Optional[ProgressCb] = None,
     *,
     box_mode: str = DEFAULT_BOX_MODE,
+    padding_xyz_nm: "tuple[float, float, float] | None" = None,
 ) -> tuple[list[_Water], tuple[float, float, float], str]:
     """Place TIP3P water around the DNA using GROMACS.
 
@@ -666,7 +775,9 @@ def _gmx_solvate(
 
     # Centre the DNA ourselves in a rectangular box, then tell editconf NOT to move
     # it (-noc) — so the DNA we hand back and the water gmx places share one frame.
-    pdb_text, box_nm = _recenter_pdb_in_padded_box(pdb_text, padding_nm, box_mode)
+    pdb_text, box_nm = _recenter_pdb_in_padded_box(
+        pdb_text, padding_nm, box_mode, padding_xyz_nm
+    )
     bx, by, bz = box_nm
 
     (tmpdir / "dry.pdb").write_text(pdb_text)
@@ -1765,6 +1876,7 @@ def _extend_psf(
     mg_pos: list[tuple[float, float, float]] | None = None,
     mgh_clusters: list[_MgHexahydrate] | None = None,
     progress: Optional[ProgressCb] = None,
+    graphene_atoms: int = 0,
 ) -> str:
     """Extend a complete DNA PSF with TIP3P water and ions.
 
@@ -1780,6 +1892,13 @@ def _extend_psf(
     new_angles: list[tuple[int, int, int]] = []
 
     serial = base_serial
+
+    for index in range(graphene_atoms):
+        serial += 1
+        segid, resid = _graphene_identity(index)
+        new_atom_lines.append(
+            _psf_atom_line(serial, segid, resid, "GRP", "C", *_GRAPHENE_PARAMS)
+        )
 
     n_waters = len(waters) or 1
     for wi, w in enumerate(waters):
@@ -2641,6 +2760,8 @@ def build_namd_solvated_package(
     seed: int = 42,
     atomistic_model: "AtomisticModel | None" = None,
     solute_coords: "np.ndarray | None" = None,
+    graphene_nanopore: "dict | None" = None,
+    graphene_only: bool = False,
     # Compute target, used ONLY to size the box against the right memory ceiling
     # (see _box_mode_atom_cap).  "cpu"/"none" sizes to host RAM instead of VRAM.
     devices: str = "0",
@@ -2695,7 +2816,13 @@ def build_namd_solvated_package(
     # topology has hydrogens and CHARMM terminal/deoxy patches.
     topology_metadata: dict = {"topology_builder": "nadoc_legacy_heavy_atom_psf"}
     _emit(progress, "topology", None, "Building DNA topology (PSF/PDB)…")
-    if require_full_topology:
+    if graphene_only:
+        if not graphene_nanopore:
+            raise ValueError("graphene_only requires a graphene_nanopore descriptor")
+        dna_psf = complete_psf(Design())
+        dna_pdb = "END\n"
+        topology_metadata = {"topology_builder": "graphene_control_no_dna"}
+    elif require_full_topology:
         topology_build = build_charmm_psfgen_topology(
             design, atomistic_model=atomistic_model
         )
@@ -2707,12 +2834,27 @@ def build_namd_solvated_package(
         dna_psf = complete_psf(design)
     if solute_coords is not None:
         dna_pdb = _overwrite_solute_coords(dna_pdb, solute_coords)
+    graphene_count = 0
+    graphene_centroid_before = None
+    graphene_pore_before = None
+    if graphene_nanopore:
+        graphene_lines = _graphene_pdb_atoms(dna_pdb, graphene_nanopore)
+        graphene_count = len(graphene_lines)
+        if graphene_lines:
+            graphene_centroid_before = np.asarray(
+                [[float(line[30:38]) / 10, float(line[38:46]) / 10,
+                  float(line[46:54]) / 10] for line in graphene_lines], dtype=float
+            ).mean(axis=0)
+            graphene_pore_before = np.asarray(
+                graphene_nanopore["pore_center_nm"], dtype=float
+            ).copy()
+        dna_pdb = dna_pdb.rstrip().removesuffix("END").rstrip() + "\n" + "\n".join(graphene_lines) + "\nEND\n"
     dry_audit = audit_psf(
         dna_psf,
-        require_dna_hydrogens=require_full_topology,
-        require_dna_residue_charge=require_full_topology,
+        require_dna_hydrogens=require_full_topology and not graphene_only,
+        require_dna_residue_charge=require_full_topology and not graphene_only,
     )
-    if require_full_topology and not dry_audit.passed:
+    if require_full_topology and not graphene_only and not dry_audit.passed:
         raise RuntimeError(
             "Dry DNA topology audit failed; cannot start equilibrium-aware NAMD. "
             + "; ".join(dry_audit.errors)
@@ -2747,8 +2889,43 @@ def build_namd_solvated_package(
             padding_nm,
             tmpdir,
             progress=progress,
-            box_mode=box_mode,
+            box_mode="bbox" if graphene_only else box_mode,
+            # The sheet must tile the XY periodic boundary; ordinary isotropic
+            # padding leaves an open annulus around its edge and ions bypass the pore.
+            # 0.08 nm per side is narrower than a carbon LJ diameter, while Z retains
+            # the requested water reservoir on both sides.
+            padding_xyz_nm=(0.08, 0.08, padding_nm) if graphene_only else None,
         )
+        if graphene_nanopore and graphene_count:
+            waters, removed = _exclude_waters_near_graphene(
+                waters, dna_pdb,
+                clearance_nm=float(graphene_nanopore.get("water_clearance_nm", 0.30)),
+            )
+            graphene_nanopore["excluded_overlapping_waters"] = removed
+            graph_xyz = []
+            for line in dna_pdb.splitlines():
+                if line.startswith("HETATM") and line[72:76].strip().startswith("GR"):
+                    graph_xyz.append([float(line[30:38]) / 10, float(line[38:46]) / 10,
+                                      float(line[46:54]) / 10])
+            if graph_xyz:
+                graphene_centroid_after = np.asarray(graph_xyz, dtype=float).mean(axis=0)
+                # Solvation translates the whole solute into [0,L].  Propagate that
+                # rigid translation to the aperture centre.  The carbon centroid is
+                # not itself the aperture centre (a cut lattice/finite edge/multilayer
+                # sheet need not have a perfectly symmetric remaining atom census).
+                center = (
+                    graphene_pore_before
+                    + graphene_centroid_after
+                    - graphene_centroid_before
+                    if graphene_pore_before is not None
+                    and graphene_centroid_before is not None
+                    else graphene_centroid_after
+                )
+                normal = np.asarray(graphene_nanopore["dir"], dtype=float)
+                normal /= np.linalg.norm(normal)
+                graphene_nanopore["pore_center_nm"] = center.tolist()
+                graphene_nanopore["plane_point_nm"] = center.tolist()
+                graphene_nanopore["position_nm"] = float(center[int(np.argmax(np.abs(normal)))])
 
     # 3. Count DNA net charge (1 phosphate = -1 charge) and calculate ion counts.
     #    Under the Aksimentiev recipe the counterion is Mg(H₂O)₆²⁺, not Na⁺ — see
@@ -2794,6 +2971,7 @@ def build_namd_solvated_package(
     dna_n_atoms = _find_last_atom_serial(dna_psf)
     n_total = (
         dna_n_atoms
+        + graphene_count
         + len(waters) * 3
         + n_na
         + len(mg_pos)
@@ -2810,12 +2988,13 @@ def build_namd_solvated_package(
         mg_pos=mg_pos,
         mgh_clusters=mgh_clusters,
         progress=progress,
+        graphene_atoms=graphene_count,
     )
     final_audit = audit_psf(
         solvated_psf,
         require_neutral=require_full_topology,
-        require_dna_hydrogens=require_full_topology,
-        require_dna_residue_charge=require_full_topology,
+        require_dna_hydrogens=require_full_topology and not graphene_only,
+        require_dna_residue_charge=require_full_topology and not graphene_only,
     )
     if require_full_topology and not final_audit.passed:
         raise RuntimeError(
@@ -2830,7 +3009,7 @@ def build_namd_solvated_package(
         na_pos,
         cl_pos,
         box_nm,
-        dna_n_atoms,
+        dna_n_atoms + graphene_count,
         mg_pos=mg_pos,
         mgh_clusters=mgh_clusters,
         progress=progress,
@@ -2880,12 +3059,13 @@ def build_namd_solvated_package(
         "topology_builder": topology_metadata.get("topology_builder", "unknown"),
         "topology_metadata": topology_metadata,
         "production_ready": final_audit.passed
-        and final_audit.dna_hydrogens > 0
+        and (graphene_only or final_audit.dna_hydrogens > 0)
         and abs(final_audit.total_charge) <= 1.0e-3,
         "requirements": {
-            "full_dna_topology_required": require_full_topology,
+            "full_dna_topology_required": require_full_topology and not graphene_only,
             "neutral_final_psf_required": require_full_topology,
         },
+        "graphene_only": graphene_only,
         "dry_dna": dry_audit.to_dict(),
         "final_solvated": final_audit.to_dict(),
         "ionization": {

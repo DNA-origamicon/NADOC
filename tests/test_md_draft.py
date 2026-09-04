@@ -9,10 +9,104 @@ as its own state and that the local status-reconciler never disturbs it.
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 import backend.api.routes_md as routes_md
+from backend.core.oxdna_job import OxdnaJob
 from backend.core.md_job import MdJob, MdStatus, new_job
 from backend.core.namd_runner import reconcile_job_status
+
+
+def test_oxdna_seed_inherits_ordinary_and_surface_anchors_without_graphene(monkeypatch):
+    ordinary = {"kind": "strand", "strandId": "s1"}
+    surface = {"kind": "base", "strandId": "s2", "baseIndex": 4}
+    monkeypatch.setattr(
+        OxdnaJob, "load",
+        lambda *_: SimpleNamespace(run_config={
+            "anchors": [ordinary], "surface_anchors": [surface],
+        }),
+    )
+    body = routes_md.CreateJobRequest(oxdna_job_id="ox1", anchors=None)
+
+    inherited = routes_md._inherit_oxdna_seed_anchors(body)
+
+    assert inherited.anchors == [ordinary, surface]
+    assert inherited.surface_anchors is None
+
+
+def test_oxdna_seed_keeps_surface_anchor_group_with_graphene(monkeypatch):
+    surface = {"kind": "base", "strandId": "s2", "baseIndex": 4}
+    monkeypatch.setattr(
+        OxdnaJob, "load",
+        lambda *_: SimpleNamespace(run_config={"surface_anchors": [surface]}),
+    )
+    body = routes_md.CreateJobRequest(
+        oxdna_job_id="ox1", graphene_nanopore=True, surface_anchors=None,
+    )
+
+    inherited = routes_md._inherit_oxdna_seed_anchors(body)
+
+    assert inherited.anchors is None
+    assert inherited.surface_anchors == [surface]
+
+
+def test_explicit_empty_anchor_list_opts_out_of_seed_inheritance(monkeypatch):
+    surface = {"kind": "base", "strandId": "s2", "baseIndex": 4}
+    monkeypatch.setattr(
+        OxdnaJob, "load",
+        lambda *_: SimpleNamespace(run_config={"surface_anchors": [surface]}),
+    )
+    body = routes_md.CreateJobRequest(oxdna_job_id="ox1", anchors=[])
+
+    inherited = routes_md._inherit_oxdna_seed_anchors(body)
+
+    assert inherited.anchors == []
+    assert inherited.surface_anchors is None
+
+
+def test_namd_hard_surface_atomistic_options_validate():
+    body = routes_md.CreateJobRequest(
+        graphene_nanopore=True,
+        graphene_pore_diameter_nm=2.1,
+        graphene_layers=3,
+        graphene_layer_spacing_nm=0.34,
+        graphene_atomistic_clearance_nm=0.35,
+        graphene_water_clearance_nm=0.31,
+        graphene_sheet_margin_nm=2.0,
+    )
+    assert body.graphene_layers == 3
+    assert body.graphene_layer_spacing_nm == 0.34
+    assert body.graphene_sheet_margin_nm == 2.0
+
+
+def test_seed_anchor_harmonic_composition_keeps_anchor_constant(tmp_path):
+    pkg = tmp_path
+    pdb_lines = [
+        "ATOM      1  P    DA A   1       0.000   0.000   0.000  1.00  1.00          P \n",
+        "HETATM    2  C   GRP G   1       1.000   0.000   0.000  1.00  0.00          C GR00\n",
+    ]
+    (pkg / "demo.pdb").write_text("".join(pdb_lines))
+    (pkg / "release.pdb").write_text("".join(pdb_lines))
+    marker = [pdb_lines[0][:60] + "  0.00" + pdb_lines[0][66:],
+              pdb_lines[1][:60] + "  1.00" + pdb_lines[1][66:]]
+    (pkg / "anchors.pdb").write_text("".join(marker))
+    (pkg / "stage.conf").write_text(
+        "coordinates        demo.pdb\nconstraints on\nconsref release.pdb\n"
+        "conskfile release.pdb\nconskcol B\nconstraintScaling 0.25\nrun 100\n"
+    )
+    (pkg / "manifest.json").write_text('{"files":{"anchors":"anchors.pdb"}}')
+
+    routes_md._harmonicize_seed_anchors(
+        pkg, name_stem="demo", force_constant=50.0, force_gpu_resident=True,
+    )
+
+    conf = (pkg / "stage.conf").read_text()
+    combined = (pkg / "restraints_combined_stage.pdb").read_text().splitlines()
+    assert "GPUresident        on" in conf
+    assert "fixedAtoms" not in conf
+    assert "constraintScaling  1" in conf
+    assert float(combined[0][60:66]) == 0.25
+    assert float(combined[1][60:66]) == 50.0
 
 
 def test_draft_status_roundtrips(tmp_path):

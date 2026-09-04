@@ -23,11 +23,13 @@ Exit-code contract (consumed by the sbatch ``if python3 …; then bridge; fi``):
   1  -> HOLD:    not plateaued; run the remaining chunks normally.
   2  -> HOLD:    insufficient data / parse or usage error (fail safe = run).
 
-No energy-only mode: ``--wc <json>`` is required, and a chunk only skips once BOTH
+For DNA systems, ``--wc <json>`` is required and a chunk only skips once BOTH
 the energy(+volume) series AND the WC base-pairing series (a JSON list of
 per-frame fractions produced by the node health step) are flat — exactly
 ``should_early_stop_stage``, matching the local runner's decision precisely, on
 every eligible chunk, with no restraint-scale exception.
+``--energy-only`` is reserved for explicitly tagged graphene-only controls, where
+no DNA pairing series exists and energy/volume are the applicable convergence data.
 """
 
 # NB: NO `from __future__ import annotations` — Alpine compute nodes run an OLD
@@ -171,7 +173,7 @@ _EXIT_HOLD = 1  # not plateaued -> run remaining chunks
 _EXIT_ERR = 2  # insufficient data / error -> fail safe (run)
 
 
-def decide(log_text, wc_per_frame, params=CutoffParams()):
+def decide(log_text, wc_per_frame, params=CutoffParams(), energy_only=False):
     """(exit_code, diagnostics) for one chunk — energy AND WC, i.e.
     ``should_early_stop_stage``.  Matches the local runner exactly: there is no
     energy-only mode, so a chunk can only skip once BOTH series are flat."""
@@ -181,7 +183,15 @@ def decide(log_text, wc_per_frame, params=CutoffParams()):
             "reason": "insufficient_frames",
             "n_energy_frames": len(frames),
         }
-    decision, diag = should_early_stop_stage(frames, wc_per_frame, params)
+    if energy_only:
+        decision = energy_plateaued(frames, params)
+        diag = {
+            "n_energy_frames": len(frames),
+            "energy_plateaued": decision,
+            "dna_metrics": "not_applicable",
+        }
+    else:
+        decision, diag = should_early_stop_stage(frames, wc_per_frame, params)
     return (_EXIT_SKIP if decision else _EXIT_HOLD), diag
 
 
@@ -190,9 +200,9 @@ def main(argv=None):
         description="NADOC relaxation early-stop plateau evaluator (node-side)."
     )
     ap.add_argument("--log", required=True, help="chunk NAMD .log path")
-    ap.add_argument(
-        "--wc", required=True, help="JSON file with a list of per-frame WC fractions"
-    )
+    gate = ap.add_mutually_exclusive_group(required=True)
+    gate.add_argument("--wc", help="JSON file with per-frame WC fractions")
+    gate.add_argument("--energy-only", action="store_true")
     args = ap.parse_args(argv)
 
     try:
@@ -203,16 +213,21 @@ def main(argv=None):
         return _EXIT_ERR
 
     try:
-        with open(args.wc, encoding="utf-8") as fh:
-            loaded = json.load(fh)
-        wc = [float(x) for x in loaded]
+        if args.energy_only:
+            wc = []
+        elif not args.wc:
+            raise ValueError("--wc is required unless --energy-only is set")
+        else:
+            with open(args.wc, encoding="utf-8") as fh:
+                loaded = json.load(fh)
+            wc = [float(x) for x in loaded]
     except (OSError, ValueError, TypeError) as exc:
         # WC unreadable -> fail safe (hold), never skip on energy alone (that's
         # exactly the unsafe case the WC criterion exists to prevent).
         print(f"[nadoc-cutoff] cannot read wc {args.wc}: {exc}", file=sys.stderr)
         return _EXIT_ERR
 
-    code, diag = decide(log_text, wc)
+    code, diag = decide(log_text, wc, energy_only=args.energy_only)
     print(f"[nadoc-cutoff] {json.dumps(diag)}", file=sys.stderr)
     return code
 

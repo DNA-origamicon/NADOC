@@ -22,6 +22,13 @@ boundaries.  At crossover junctions, the CG equilibrium positions are used
 directly — these are ~0.6-1.4 nm apart vs ~0.05 nm in ideal B-DNA,
 eliminating the 10^13 kJ/mol LJ spike.
 
+Phase 3c — paired-frame target + topology-safe projection (production NAMD seed)
+--------------------------------------------------------------------------------
+Maps intact Watson--Crick pairs with proper rigid transforms derived from oxDNA2
+backbone/a1/a3 frames, rejects melted-pair frames, and projects the result toward a
+known-valid atomistic structure until ring topology and bounded-bond gates pass.  The
+subsequent NAMD handoff always uses the 1 fs no-RATTLE declash/minimisation ladder.
+
 Pipeline
 --------
 1. Export oxDNA package from the current design.
@@ -37,6 +44,7 @@ Pipeline
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import dataclass
 
 import numpy as np
 from scipy.ndimage import gaussian_filter1d
@@ -49,6 +57,25 @@ from backend.physics.oxdna_interface import (
     oxdna_backbone_site,
 )
 from backend.core.sequences import domain_bp_range
+
+
+@dataclass(frozen=True)
+class SeedProjectionReport:
+    """Audit trail for the topology-safe projection of an oxDNA target."""
+
+    iterations: int
+    fully_mapped_units: int
+    backed_off_units: int
+    mean_target_fraction: float
+    min_bond_ratio: float
+    max_bond_ratio: float
+    min_bond_nm: float
+    max_bond_nm: float
+    ring_piercings: int
+    steric_clashes: int
+    steric_cutoff_nm: float
+    target_rmsd_nm: float
+    target_p95_nm: float
 
 
 # ── Phase 3b: per-domain smoothed position override ──────────────────────────
@@ -368,6 +395,295 @@ def build_atomistic_model_from_cg_spline(
                 f"relaxation, or seed from a conformation that fits within one box."
             )
     return model
+
+
+def build_atomistic_model_from_cg_pair_frames(
+    design: Design,
+    conf_path: str | Path,
+    sigma: float = 2.0,
+    *,
+    max_formed_pair_backbone_distance_nm: float = 2.5,
+) -> AtomisticModel:
+    """Topology-safe oxDNA backmap that moves each formed WC pair as a rigid unit.
+
+    The legacy spline mapper independently places the two nucleotides of a pair from
+    noisy backbone sites. On a relaxed origami this can fold neighbouring atomistic
+    rings through one another. Here a chemically valid ideal atomistic model supplies
+    every residue, and one proper rotation/translation maps each complete base pair
+    onto the relaxed oxDNA pair frame. Thus internal sugar/base geometry, chirality and
+    Watson--Crick separation cannot be damaged by the coarse-grained mapping itself.
+
+    A designed pair is only treated as formed when its two oxDNA backbone sites remain
+    within ``max_formed_pair_backbone_distance_nm``.  This distinction matters after a
+    real relaxation: a frayed/melted designed pair has no meaningful duplex frame and
+    must never drag an atomistic residue across the structure.  Unformed, unpaired and
+    synthetic-insert residues deliberately remain in the valid ideal seed for now.
+    """
+    from backend.physics.oxdna_interface import oxdna_backbone_site
+
+    full = read_configuration_full_unwrapped(
+        conf_path, design, include_extra_bases=True
+    )
+    # Start from the known-valid atomistic topology/geometry. This is intentionally not
+    # the old calibrated oxDNA rigid stamp.
+    model = build_atomistic_model(design, apply_design_geometry=False)
+    axes = deformed_helix_axes(design, full, sigma=sigma, base_orient="oxdna_a3")
+    helix_z = {}
+    for h in design.helices:
+        z = np.asarray([h.axis_end.x-h.axis_start.x, h.axis_end.y-h.axis_start.y,
+                        h.axis_end.z-h.axis_start.z], float)
+        helix_z[h.id] = z / (np.linalg.norm(z) + 1e-14)
+
+    groups = {}
+    for atom in model.atoms:
+        if atom.helix_id is not None and atom.bp_index is not None:
+            groups.setdefault((atom.helix_id, atom.bp_index, atom.direction), []).append(atom)
+
+    # Put the complete chemically valid seed into the relaxed conformation's global
+    # frame before applying local pair frames.  Without this fit, residues that are
+    # unpaired/frayed (and therefore intentionally not locally mapped) remain near the
+    # design origin while their bonded neighbours move into oxDNA's translated/rotated
+    # frame, creating enormous artificial bonds at the paired/unpaired boundary.
+    source_centres, target_centres = [], []
+    for h, bp in {(k[0], k[1]) for k in groups}:
+        gf, gr = groups.get((h, bp, "FORWARD")), groups.get((h, bp, "REVERSE"))
+        rf, rr = full.get((h, bp, "FORWARD")), full.get((h, bp, "REVERSE"))
+        if not gf or not gr or rf is None or rr is None:
+            continue
+        sf = next((a for a in gf if a.name == "C1'"), None)
+        sr = next((a for a in gr if a.name == "C1'"), None)
+        if sf is None or sr is None:
+            continue
+        bf = oxdna_backbone_site(rf["backbone_position"], rf["a1"], rf["a3"])
+        br = oxdna_backbone_site(rr["backbone_position"], rr["a1"], rr["a3"])
+        if np.linalg.norm(bf - br) > max_formed_pair_backbone_distance_nm:
+            continue
+        source_centres.append(
+            0.5
+            * np.asarray(
+                [[sf.x, sf.y, sf.z], [sr.x, sr.y, sr.z]], dtype=float
+            ).sum(axis=0)
+        )
+        target_centres.append(0.5 * (bf + br))
+    global_R = np.eye(3)
+    if len(source_centres) >= 3:
+        source_arr, target_arr = np.asarray(source_centres), np.asarray(target_centres)
+        source_mean, target_mean = source_arr.mean(0), target_arr.mean(0)
+        u, _, vt = np.linalg.svd((source_arr - source_mean).T @ (target_arr - target_mean))
+        global_R = vt.T @ u.T
+        if np.linalg.det(global_R) < 0:
+            vt[-1] *= -1
+            global_R = vt.T @ u.T
+        for atom in model.atoms:
+            p = target_mean + global_R @ (
+                np.asarray([atom.x, atom.y, atom.z]) - source_mean
+            )
+            atom.x, atom.y, atom.z = p.tolist()
+        helix_z = {h: global_R @ z for h, z in helix_z.items()}
+
+    def basis(x, z):
+        z = np.asarray(z, float)
+        zn = float(np.linalg.norm(z))
+        if zn < 1e-8:
+            raise ValueError("oxDNA pair frame has a degenerate stacking axis")
+        z /= zn
+        x = np.asarray(x, float)
+        x -= np.dot(x, z) * z
+        xn = float(np.linalg.norm(x))
+        if xn < 1e-8:
+            raise ValueError("oxDNA pair frame has collinear pairing/stacking axes")
+        x /= xn
+        return np.column_stack([x, np.cross(z, x), z])
+
+    for h, bp in {(k[0], k[1]) for k in groups}:
+        kf, kr = (h, bp, "FORWARD"), (h, bp, "REVERSE")
+        gf, gr = groups.get(kf), groups.get(kr)
+        rf, rr = full.get(kf), full.get(kr)
+        if not gf or not gr or rf is None or rr is None or (h, bp) not in axes:
+            continue
+        sf = next((a for a in gf if a.name == "C1'"), None)
+        sr = next((a for a in gr if a.name == "C1'"), None)
+        if sf is None or sr is None:
+            continue
+        psf = np.asarray([sf.x, sf.y, sf.z]); psr = np.asarray([sr.x, sr.y, sr.z])
+        source_c = 0.5 * (psf + psr)
+        source_B = basis(psf - psr, helix_z[h])
+
+        bf = oxdna_backbone_site(rf["backbone_position"], rf["a1"], rf["a3"])
+        br = oxdna_backbone_site(rr["backbone_position"], rr["a1"], rr["a3"])
+        if np.linalg.norm(bf - br) > max_formed_pair_backbone_distance_nm:
+            continue
+        target_c = 0.5 * (bf + br)
+        target_z = axes[(h, bp)][1]
+        target_B = basis(bf - br, target_z)
+        R = target_B @ source_B.T
+        for atom in (*gf, *gr):
+            p = np.asarray([atom.x, atom.y, atom.z])
+            atom.x, atom.y, atom.z = (target_c + R @ (p - source_c)).tolist()
+    return model
+
+
+def build_topology_safe_oxdna_seed(
+    design: Design,
+    conf_path: str | Path,
+    *,
+    sigma: float = 2.0,
+    min_bond_ratio: float = 0.5,
+    max_bond_ratio: float = 6.0,
+    min_interunit_heavy_nm: float = 0.12,
+    max_iterations: int = 64,
+) -> tuple[AtomisticModel, AtomisticModel, SeedProjectionReport]:
+    """Return a safe MD start, the canonical oxDNA target, and an audit report.
+
+    The canonical pair-frame backmap is returned verbatim as a diagnostic target.  It
+    is *not* assumed to be a legal covalent starting structure.  A rigidly aligned ideal
+    atomistic model supplies the known-valid end of a homotopy, and paired nucleotides
+    are advanced toward the target as shared repair units.  Units implicated in an
+    overstretched bond or ring piercing are deterministically backed off until both
+    gates pass.  This never claims that minimisation can undo a topological defect.
+    """
+    from backend.core.ring_piercing import model_piercings
+
+    safe = build_atomistic_model(design, apply_design_geometry=False)
+    target = build_atomistic_model_from_cg_pair_frames(design, conf_path, sigma=sigma)
+    if len(safe.atoms) != len(target.atoms):
+        raise ValueError("oxDNA seed target does not match the atomistic topology")
+
+    p0 = np.asarray([[a.x, a.y, a.z] for a in safe.atoms], dtype=float)
+    p1 = np.asarray([[a.x, a.y, a.z] for a in target.atoms], dtype=float)
+    c0, c1 = p0.mean(0), p1.mean(0)
+    u, _, vt = np.linalg.svd((p0 - c0).T @ (p1 - c1))
+    rigid = vt.T @ u.T
+    if np.linalg.det(rigid) < 0:
+        vt[-1] *= -1
+        rigid = vt.T @ u.T
+    p0 = (p0 - c0) @ rigid.T + c1
+
+    # A complete designed pair is one repair unit, ensuring collision repair cannot
+    # independently squash its two bases. Other residues remain individual units.
+    present = {(a.helix_id, a.bp_index, a.direction) for a in safe.atoms}
+    unit_for_atom = []
+    for a in safe.atoms:
+        opposite = "REVERSE" if a.direction == "FORWARD" else "FORWARD"
+        if (a.helix_id, a.bp_index, opposite) in present and a.extra_base_k is None:
+            unit_for_atom.append(("pair", a.helix_id, a.bp_index))
+        else:
+            unit_for_atom.append(("residue", a.chain_id, a.seq_num))
+    units = sorted(set(unit_for_atom), key=repr)
+    weight = {unit: 1.0 for unit in units}
+    unit_indices = {
+        unit: np.asarray([i for i, value in enumerate(unit_for_atom) if value == unit])
+        for unit in units
+    }
+    # Store one proper rigid transform per repair unit. Interpolating Cartesian atom
+    # coordinates directly is invalid: halfway between two opposed rotations collapses
+    # a nucleotide through its own centre. Rotation-vector interpolation keeps every
+    # sugar/base (and every paired duplex rung) chemically rigid at all repair weights.
+    from scipy.spatial.transform import Rotation
+
+    unit_transforms = {}
+    for unit, indices in unit_indices.items():
+        source, dest = p0[indices], p1[indices]
+        source_c, dest_c = source.mean(0), dest.mean(0)
+        u, _, vt = np.linalg.svd((source - source_c).T @ (dest - dest_c))
+        rotation = vt.T @ u.T
+        if np.linalg.det(rotation) < 0:
+            vt[-1] *= -1
+            rotation = vt.T @ u.T
+        unit_transforms[unit] = (
+            indices,
+            source_c,
+            dest_c,
+            Rotation.from_matrix(rotation).as_rotvec(),
+        )
+    heavy_indices = np.asarray(
+        [i for i, atom in enumerate(safe.atoms) if atom.element != "H"], dtype=int
+    )
+    bonded = {tuple(sorted(pair)) for pair in safe.bonds}
+
+    baseline = np.asarray(
+        [max(float(np.linalg.norm(p0[i] - p0[j])), 0.05) for i, j in safe.bonds]
+    )
+
+    final_min_ratio = 0.0
+    final_max_ratio = float("inf")
+    hits = []
+    steric_pairs: list[tuple[int, int]] = []
+    for iteration in range(1, max_iterations + 1):
+        coords = p0.copy()
+        for unit, (indices, source_c, dest_c, rotvec) in unit_transforms.items():
+            fraction = weight[unit]
+            rotation = Rotation.from_rotvec(fraction * rotvec).as_matrix()
+            centre = source_c + fraction * (dest_c - source_c)
+            coords[indices] = (p0[indices] - source_c) @ rotation.T + centre
+        for atom, xyz in zip(safe.atoms, coords, strict=True):
+            atom.x, atom.y, atom.z = xyz.tolist()
+        lengths = np.asarray(
+            [np.linalg.norm(coords[i] - coords[j]) for i, j in safe.bonds]
+        )
+        ratios = lengths / baseline
+        final_min_ratio = float(ratios.min(initial=1.0))
+        final_max_ratio = float(ratios.max(initial=1.0))
+        bad_units = set()
+        for bond_index in np.flatnonzero(
+            (ratios < min_bond_ratio) | (ratios > max_bond_ratio)
+        ):
+            i, j = safe.bonds[int(bond_index)]
+            bad_units.update((unit_for_atom[i], unit_for_atom[j]))
+        # Ring/steric scans dominate large-origami validation. Resolve gross covalent
+        # discontinuities first; their moving segments would only create transient,
+        # uninformative ring intersections.
+        steric_pairs = []
+        if not bad_units and len(heavy_indices):
+            from scipy.spatial import cKDTree
+
+            local_pairs = cKDTree(coords[heavy_indices]).query_pairs(
+                min_interunit_heavy_nm, output_type="ndarray"
+            )
+            for local_i, local_j in local_pairs:
+                i, j = int(heavy_indices[local_i]), int(heavy_indices[local_j])
+                if unit_for_atom[i] == unit_for_atom[j] or tuple(sorted((i, j))) in bonded:
+                    continue
+                # The ideal origami builder has known crossover-junction contacts that
+                # the established no-ENM declash minimisation resolves. This projection
+                # gate prevents the oxDNA handoff from introducing *new* overlaps; it
+                # does not pretend to repair baseline construction contacts here.
+                if np.linalg.norm(p0[i] - p0[j]) < min_interunit_heavy_nm:
+                    continue
+                steric_pairs.append((i, j))
+                bad_units.update((unit_for_atom[i], unit_for_atom[j]))
+        hits = [] if bad_units else model_piercings(safe)
+        for hit in hits:
+            bad_units.update(unit_for_atom[i] for i in hit["bond_serials"])
+            bad_units.update(unit_for_atom[i] for i in hit["ring_serials"])
+        if not bad_units:
+            break
+        for unit in bad_units:
+            weight[unit] = 0.0 if weight[unit] <= 1 / 256 else weight[unit] * 0.5
+    else:
+        raise ValueError(
+            "oxDNA topology-safe projection did not converge within "
+            f"{max_iterations} iterations"
+        )
+
+    values = np.asarray(list(weight.values()), dtype=float)
+    target_delta = np.linalg.norm(coords - p1, axis=1)
+    report = SeedProjectionReport(
+        iterations=iteration,
+        fully_mapped_units=int(np.count_nonzero(values == 1.0)),
+        backed_off_units=int(np.count_nonzero(values < 1.0)),
+        mean_target_fraction=float(values.mean()),
+        min_bond_ratio=final_min_ratio,
+        max_bond_ratio=final_max_ratio,
+        min_bond_nm=float(lengths.min(initial=np.inf)),
+        max_bond_nm=float(lengths.max(initial=0.0)),
+        ring_piercings=len(hits),
+        steric_clashes=len(steric_pairs),
+        steric_cutoff_nm=min_interunit_heavy_nm,
+        target_rmsd_nm=float(np.sqrt(np.mean(target_delta**2))),
+        target_p95_nm=float(np.quantile(target_delta, 0.95)),
+    )
+    return safe, target, report
 
 
 def read_backbone_positions(

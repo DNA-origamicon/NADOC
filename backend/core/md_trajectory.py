@@ -1334,6 +1334,59 @@ def md_frames_solvent(
     include_dna = bool(o.get("include_dna"))
 
     seg_paths = [s[2] for s in segments]
+    # Membrane-only controls deliberately contain no DNA.  Do not enter the DNA
+    # backmapper merely to draw water, ions, and the periodic cell: its alignment
+    # reference is undefined for an empty phosphate selection.  Keep these jobs in
+    # the simulation frame, centred on the graphene (or the cell when unavailable).
+    design_strands = (
+        design.get("strands") if isinstance(design, dict) else getattr(design, "strands", None)
+    )
+    graphene_only = design_strands is not None and not any(design_strands)
+    if graphene_only:
+        import MDAnalysis as mda  # type: ignore
+
+        paths = [str(p) for p in seg_paths]
+        trajectory_arg = paths if len(paths) > 1 else paths[0]
+        u = mda.Universe(str(topology_path), trajectory_arg)
+        sctx = build_solvent_ctx(u)
+        n = len(u.trajectory)
+        raw_of = composite_raw_frame_map(segments, max_frames, stride)
+        frames: dict[int, dict] = {}
+        for idx in sorted(set(int(i) for i in frame_indices)):
+            if idx < 0 or idx >= len(raw_of):
+                continue
+            gidx = raw_of[idx]
+            if gidx >= n:
+                continue
+            u.trajectory[gidx]
+            dims = getattr(u, "dimensions", None)
+            if dims is None or float(dims[0]) <= 0:
+                continue
+            box_nm = np.asarray(dims[:3], dtype=float) / 10.0
+            # GROMACS writes the membrane-only control into a [0,L] orthorhombic
+            # cell with its pore at L/2.  Carbon centroid is NOT a pore centre: the
+            # circular deletion, finite lattice edge and multiple layers can all
+            # bias it.  Move the actual cell/pore centre to the NADOC scene origin,
+            # matching the static graphene preview.
+            c_box = box_nm / 2.0
+            xf = DisplayXform.build(
+                T_dyn=-c_box, c_box=c_box, box_nm=box_nm,
+                mob_c=None, eq_centroid=None, R=None,
+            )
+            frames[idx] = extract_solvent_frame_for(
+                u, sctx,
+                {"pos_raw": np.empty((0, 3)), "pos_pre": np.empty((0, 3))},
+                xf,
+                water=bool(o.get("water", True)),
+                ions=bool(o.get("ions", True)),
+                box=bool(o.get("box", True)),
+                # A hydration shell is meaningless without DNA; show the cell.
+                shell_nm=None,
+                atomistic=bool(o.get("atomistic")),
+                max_waters=o.get("max_waters"),
+            )
+        return pack_solvent_bin(frames) if frames else empty_solvent_bin()
+
     ctx = _build_md_nadoc_ctx(
         topology_path, seg_paths, coordinate_path, design, with_atoms=True
     )

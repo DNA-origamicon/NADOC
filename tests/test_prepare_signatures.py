@@ -106,3 +106,10 @@ def test_the_seed_kwargs_branch_stays_protocol_aware():
     src = ROUTES.read_text()
     assert "if body.protocol != IMPLICIT_GBIS_PROTOCOL:" in src
     assert 'seed_kwargs["allow_ring_pierced_seed"]' in src
+
+
+def test_oxdna_seed_forces_conservative_declash_ladder():
+    """A CG seed cannot enter rigid/HMR dynamics before atomistic declashing."""
+    src = ROUTES.read_text()
+    assert "declash=True if body.oxdna_job_id else body.declash" in src
+    assert "force_soft=bool(body.force_soft or body.oxdna_job_id)" in src

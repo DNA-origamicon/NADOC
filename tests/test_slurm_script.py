@@ -456,6 +456,18 @@ def test_early_stop_emits_health_step_and_wc_gate_for_every_nonfinal_chunk(
     assert "6hb_demo_00_min_enm_k0p5.wc.json" not in script
 
 
+def test_graphene_only_alpine_uses_energy_gate_and_bridges_whole_control_chain(
+    alpine, gpu_resources
+):
+    m = _ladder_manifest(early_stop=True)
+    m["graphene_only"] = True
+    script = _gen(alpine, gpu_resources, m)
+    block = _extract_block(script, "6hb_demo_01_300K_NPT_ENM_k0p5_p10")
+    assert "--energy-only" in block
+    assert ss.ALPINE_WC_EVAL_NAME not in block
+    assert "6hb_demo_04_300K_NPT_MGHH_only_p100" in block
+
+
 def test_early_stop_bridge_targets_are_dot_safe(alpine, gpu_resources):
     script = _gen(alpine, gpu_resources, _ladder_manifest(early_stop=True))
     # the k=0.5 p10 block must bridge BOTH remaining chunks by FULL name (never a

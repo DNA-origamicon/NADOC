@@ -166,6 +166,7 @@ def build_replica_package(
     field: Optional[dict] = None,
     orientation_restraint: bool = False,
     orientation_force_constant: float = 500.0,
+    force_nvt: bool = False,
 ) -> Path:
     """Build a production-only package for one ensemble replica; returns its package dir.
 
@@ -349,7 +350,7 @@ def build_replica_package(
     # ── Reseed (velocity reinit for a replica; velocity-PRESERVING for a continuation) ──
     # A carved cell (vacuum corners) must stay at constant volume — the parent package's
     # manifest is the record of how it was solvated.  The replica inherits that.
-    npt_allowed = package_npt_allowed(parent_pkg)
+    npt_allowed = package_npt_allowed(parent_pkg) and not force_nvt
     reseed_name = f"{name_stem}_00_reseed"
     (child_pkg / f"{reseed_name}.conf").write_text(
         build_reseed_conf(

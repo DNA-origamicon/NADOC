@@ -1097,6 +1097,22 @@ class TestProductionAppend:
         assert meta["production_ready"] is False
         assert meta["production_from_seed"] is False
 
+    def test_display_meta_marks_graphene_only_without_opening_dna_viewer(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import asyncio
+
+        routes_md = self._routes_md(tmp_path, monkeypatch)
+        job = self._seeded_job(tmp_path)
+        job.seed_oxdna_job_id = None
+        job.prep_params = {"graphene_only": True, "graphene_nanopore": True}
+        job.save(tmp_path)
+
+        meta = asyncio.run(routes_md.get_md_job_display(job.job_id))
+        assert meta["graphene_only"] is True
+
     def test_unseeded_job_without_checkpoint_still_blocks_production(
         self,
         tmp_path: Path,
@@ -1612,6 +1628,64 @@ class TestOrphanStop:
 
         assert namd_runner.stop_job(job.job_id, tmp_path) is True
         assert killed == [7777]
+
+    def test_stop_orphaned_minimization_finds_its_separate_pid(self, tmp_path, monkeypatch):
+        """Seeded minimization precedes segment 0 and must still be stoppable after
+        a server reload, when the in-memory PID registry has been lost."""
+        from backend.core import namd_runner
+        from backend.core.md_job import MdJob, MdSegmentStatus, MdStatus
+
+        job = self._running_job(tmp_path)
+        job.minimization = MdSegmentStatus(
+            name="S_00_min_enm_k0p5", stage="Minimization", percent=12, steps=1000,
+        )
+        job.minimization.status = "running"
+        job.save(tmp_path)
+        killed = []
+        monkeypatch.setattr(
+            namd_runner, "_segment_pid",
+            lambda name: 6060 if name == "S_00_min_enm_k0p5" else None,
+        )
+        monkeypatch.setattr(namd_runner, "_kill_process_group", lambda pid, **k: killed.append(pid))
+
+        assert namd_runner.stop_job(job.job_id, tmp_path) is True
+        stopped = MdJob.load(job.job_id, tmp_path)
+        assert killed == [6060]
+        assert stopped.status == MdStatus.stopped
+        assert stopped.user_stopped is True
+        assert stopped.minimization.status == "pending"
+        assert stopped.minimization.percent == 0.0
+
+    def test_live_stop_is_persisted_before_endpoint_returns(self, tmp_path, monkeypatch):
+        """The supervisor must never see a gap where the task is gone but the job is
+        still auto-resumable as running."""
+        import threading
+        from backend.core import namd_runner
+        from backend.core.md_job import MdJob, MdStatus
+
+        job = self._running_job(tmp_path)
+        alive = threading.Event()
+        thread = threading.Thread(target=alive.wait, daemon=True)
+        thread.start()
+
+        class _Loop:
+            def call_soon_threadsafe(self, fn): fn()
+        class _Task:
+            def cancel(self): pass
+
+        monkeypatch.setitem(namd_runner._RUNNING, job.job_id, namd_runner._RunningHandle(thread=thread, loop=_Loop(), task=_Task()))
+        monkeypatch.setitem(namd_runner._ACTIVE_PIDS, job.job_id, 7070)
+        monkeypatch.setattr(namd_runner, "_kill_process_group", lambda *a, **k: None)
+        try:
+            assert namd_runner.stop_job(job.job_id, tmp_path) is True
+            stopped = MdJob.load(job.job_id, tmp_path)
+            assert stopped.status == MdStatus.stopped
+            assert stopped.user_stopped is True
+            assert namd_runner.resume_interrupted_jobs(tmp_path) == []
+        finally:
+            alive.set(); thread.join(timeout=2)
+            namd_runner._RUNNING.pop(job.job_id, None)
+            namd_runner._ACTIVE_PIDS.pop(job.job_id, None)
 
     def test_stop_adopted_orphan_kills_via_proc_scan(self, tmp_path, monkeypatch):
         """Regression: after a dev-server reload the new worker *adopts* the surviving

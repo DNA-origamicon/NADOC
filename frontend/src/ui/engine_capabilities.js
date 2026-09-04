@@ -175,7 +175,7 @@ export const ENGINE_CAPABILITIES = {
       run: on('md-jobs-run-btn'),
       efield: on('md-efield-toggle'),
       anchors: on('md-anchors-toggle'),
-      surface: off('NAMD hard-surface / wall restraints are not wired yet.'),
+      surface: on('md-surface-toggle'),
       // NAMD has no Advanced drawer any more: every job parameter moved into the Job
       // Wizard (＋ New job), where it is shown per stage with the difference from the
       // previous stage and where its value came from.  The anchor is that button.

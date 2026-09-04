@@ -262,6 +262,7 @@ import { initMdEngines }   from './ui/md_engines.js'
 import { initEfieldGizmo } from './scene/efield_gizmo.js'
 import { initForcesCard } from './ui/forces_card.js'
 import { initOxdnaFloorSetup } from './ui/oxdna_floor_setup.js'
+import { initGrapheneNanoporeOverlay } from './scene/graphene_nanopore_overlay.js'
 import { initOxdnaSurfaceStrandsSetup } from './ui/oxdna_surface_strands_setup.js'
 import { initSurfaceStrandsOverlay } from './scene/surface_strands_overlay.js'
 import { captureNucleotidesFromChains } from './scene/surface_strands_math.js'
@@ -1527,6 +1528,8 @@ async function main() {
     anchorGlow.setAnchors([...(_anchorsByEngine[engine] || []),
                            ...(engine === 'oxdna' && oxdnaFloorSetup?.isEnabled?.()
                              ? (_anchorsByEngine['oxdna-surface'] || []) : []),
+                           ...(engine === 'namd' && document.getElementById('md-surface-enable')?.checked
+                             ? (_anchorsByEngine['namd-surface'] || []) : []),
                            ...(_anchorsByEngine.occupancy || []),
                            ...(_anchorsByEngine['md-occupancy'] || [])])
   }
@@ -1597,6 +1600,15 @@ async function main() {
       _syncSurfaceAnchorsGate()
       oxdnaPanel?.refreshControls?.()
     },
+  })
+  const grapheneNanoporeOverlay = initGrapheneNanoporeOverlay(scene)
+  window.addEventListener('nadoc:graphene-nanopore-preview', (event) => {
+    const surface = event.detail?.surface || oxdnaFloorSetup?.getSurfaceSpec?.()
+    grapheneNanoporeOverlay.update({
+      ...event.detail,
+      surface: surface ? { dir: surface.dir, positionNm: surface.positionNm } : null,
+      bounds: _oxdnaStructureBounds(),
+    })
   })
   // Surface capture strands — sub-section of the Hard-surface card (immobilization).
   // See memory/project_surface_strands.md.

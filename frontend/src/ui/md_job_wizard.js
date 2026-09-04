@@ -215,6 +215,16 @@ export function fieldAppliesToTarget(field, target = 'local') {
  * axes on the way out (see its comment).
  */
 const PRODUCTION_FIELD_DEFS = [
+  { key: 'ion_transport_mode', label: 'Production protocol', type: 'select', group: 'run',
+    options: [{ value: 'off', label: 'Standard molecular dynamics' },
+              { value: 'voltage', label: 'Voltage-driven ion transport' }],
+    help: 'Uses equal bulk electrolyte on both sides, a voltage drop normal to the membrane, and charge-displacement current analysis. Requires a parent with a NAMD hard surface.' },
+  { key: 'ion_transport_voltage_mV', label: 'Transmembrane voltage', unit: 'mV',
+    type: 'number', step: 25, min: -2000, group: 'run',
+    help: 'Voltage across the periodic cell, emitted with NAMD eFieldNormalized so cell fluctuations do not change it or add field forces to the pressure.' },
+  { key: 'ion_transport_current_stride_ps', label: 'Current sampling', unit: 'ps',
+    type: 'number', step: 1, min: 0.1, group: 'run',
+    help: 'Analysis interval recorded in ion_transport.json. The established default is 10 ps; trajectory frames must be at least this frequent for offline analysis.' },
   { key: 'length_ns', label: 'Run length', unit: 'ns', type: 'number', step: 1, min: 0.001,
     group: 'run',
     help: 'Amount of simulated time to produce. The solvent cell was fixed during preparation; the review step warns if an unrestrained run may rotate beyond the available cell.' },

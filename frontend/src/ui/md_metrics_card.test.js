@@ -11,9 +11,15 @@ import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 
 const start = vi.fn()
 const poll = vi.fn()
+const analyzeTransport = vi.fn()
 vi.mock('../api/client.js', () => ({
   startMdMetrics: (...a) => start(...a),
   getMdMetricsRun: (...a) => poll(...a),
+  getMdIonTransportAnalysis: (...a) => analyzeTransport(...a),
+}))
+const openTransport = vi.fn()
+vi.mock('./ion_transport_popup.js', () => ({
+  openIonTransportPopup: (...a) => openTransport(...a),
 }))
 const openPopup = vi.fn()
 vi.mock('./metric_graph_popup.js', () => ({
@@ -37,6 +43,9 @@ const IDS = {
   'md-metrics-scope-latest': 'input',
   'md-metrics-scope-chain': 'input',
   'md-metrics-all-frames': 'input',
+  'md-metrics-ion-transport-row': 'div',
+  'md-metrics-ion-transport-display': 'button',
+  'md-metrics-ion-transport-status': 'div',
 }
 for (const tok of ['twist', 'curve', 'bp', 'rmsd', 'energy', 'pressure']) {
   IDS[`md-metrics-${tok}-gen`] = 'button'
@@ -66,7 +75,7 @@ function makeResult() {
 
 beforeEach(() => {
   clearDom(); mountIds(IDS)
-  start.mockReset(); poll.mockReset(); openPopup.mockReset(); downloadText.mockReset()
+  start.mockReset(); poll.mockReset(); analyzeTransport.mockReset(); openTransport.mockReset(); openPopup.mockReset(); downloadText.mockReset()
 })
 
 describe('initMdMetricsCard', () => {
@@ -133,5 +142,21 @@ describe('initMdMetricsCard', () => {
     const chain = document.getElementById('md-metrics-scope-chain')
     chain.checked = true; chain.dispatchEvent(new Event('change'))
     expect(disp.disabled).toBe(true)
+  })
+
+  it('shows and plots transport only for a nanopore production job', async () => {
+    const job = { job_id: 'prod1', run_kind: 'production', spawn_params: { ion_transport_mode: 'voltage' } }
+    analyzeTransport.mockResolvedValue({ mean_current_nA: 0.2, frames: 50, series: {} })
+    initMdMetricsCard({ getSelectedJob: () => job, getJobs: () => [] })
+    expect(document.getElementById('md-metrics-ion-transport-row').style.display).toBe('')
+    document.getElementById('md-metrics-ion-transport-display').click()
+    await vi.waitFor(() => expect(openTransport).toHaveBeenCalledTimes(1))
+    expect(analyzeTransport).toHaveBeenCalledWith('prod1')
+  })
+
+  it('shows a disabled transport action on a nanopore relaxation', () => {
+    initMdMetricsCard({ getSelectedJob: () => ({ prep_params: { graphene_nanopore: true } }), getJobs: () => [] })
+    expect(document.getElementById('md-metrics-ion-transport-row').style.display).toBe('')
+    expect(document.getElementById('md-metrics-ion-transport-display').disabled).toBe(true)
   })
 })

@@ -731,11 +731,20 @@ def namd_efield_vector(field: Optional[dict]) -> Optional[tuple[float, float, fl
     """
     if not field:
         return None
-    mag_pn = float(field.get("field_pN", field.get("force_pN", 0.0)) or 0.0)
+    voltage_mv = field.get("voltage_mV")
+    if voltage_mv is not None:
+        mag_pn = None
+        voltage_kcal_mol_e = float(voltage_mv) * 1e-3 * 23.060547830619
+    else:
+        mag_pn = float(field.get("field_pN", field.get("force_pN", 0.0)) or 0.0)
     dx, dy, dz = (float(c) for c in (field.get("dir") or (0.0, 0.0, 0.0)))
     dnorm = math.sqrt(dx * dx + dy * dy + dz * dz)
-    if mag_pn == 0.0 or dnorm <= 1e-12:
+    if ((voltage_mv is not None and voltage_kcal_mol_e == 0.0)
+            or (voltage_mv is None and mag_pn == 0.0) or dnorm <= 1e-12):
         return None
+    if voltage_mv is not None:
+        scale = voltage_kcal_mol_e / dnorm
+        return (dx * scale, dy * scale, dz * scale)
     # F = q·E  ⇒  E = F / q.  q < 0, so E is antiparallel to the requested force.
     scale = mag_pn / (KCAL_MOL_A_IN_PN * NAMD_DNA_CHARGE_PER_NUCLEOTIDE_E * dnorm)
     return (dx * scale, dy * scale, dz * scale)
@@ -746,10 +755,13 @@ def _efield_lines(field: Optional[dict]) -> list[str]:
     vec = namd_efield_vector(field)
     if vec is None:
         return []
-    return [
+    lines = [
         "eFieldOn           on\n",
         "eField             {:.8g} {:.8g} {:.8g}\n".format(*vec),
     ]
+    if field and field.get("voltage_mV") is not None:
+        lines.append("eFieldNormalized   yes\n")
+    return lines
 
 
 def external_forces_block(
@@ -3316,8 +3328,8 @@ def mgh_slow_release_segments(
     ``nvt_only=True`` forces every stage to run with the barostat off.  This is
     required when the package was built with a water-shell carve: the carved cell
     has vacuum corners, and an NPT piston would compress the box until the DNA
-    overlaps its own periodic image.  Stage names keep their ``NPT`` label (to
-    preserve manifest/resume continuity) but the cell is held fixed.
+    overlaps its own periodic image.  On-disk segment names keep their historical
+    ``NPT`` token for resume continuity, while the user-facing stage label says NVT.
     """
     min_name = f"{name_stem}_00_min_enm_k0p5"
 
@@ -3417,7 +3429,12 @@ def mgh_slow_release_segments(
         previous = seg_name
 
     for scale, total_steps, label in npt_ladder:
-        stage_str = "300K NPT k=0" if scale is None else f"300K NPT ENM k={scale}"
+        ensemble = "NVT" if nvt_only else "NPT"
+        stage_str = (
+            f"300K {ensemble} k=0"
+            if scale is None
+            else f"300K {ensemble} ENM k={scale}"
+        )
         for i, (pct, frac) in enumerate(pcts):
             seg_steps = _round_up_to_cycle(max(100, int(total_steps * frac)))
             seg_name = f"{name_stem}_{stage_idx:02d}_{label}_p{int(pct)}"
@@ -3572,6 +3589,8 @@ def prepare_mgh_slow_release(
     devices: str = "0",
     early_stop_relax: bool = False,
     stage_overrides: Optional[dict] = None,
+    graphene_nanopore: Optional[dict] = None,
+    graphene_only: bool = False,
 ) -> tuple[str, str, list[SegmentSpec]]:
     """Build the solvated package and all stage configs in job_dir.
 
@@ -3607,7 +3626,7 @@ def prepare_mgh_slow_release(
     # reference (the 6hbx100_90deg poly-T incident). Shared choke point for BOTH the local
     # (create_md_job) and RunPod (prep_*) paths. Only for full-topology MD builds; display
     # / coarse paths legitimately render poly-T as a placeholder.
-    if require_full_topology:
+    if require_full_topology and not graphene_only:
         from backend.core.md_sequence_guard import require_sequenced_scaffold  # noqa: PLC0415
 
         require_sequenced_scaffold(design)
@@ -3667,6 +3686,8 @@ def prepare_mgh_slow_release(
         # it verbatim and cannot re-solvate, so run length must not silently change it.
         free_ns=None,
         progress=progress,
+        graphene_nanopore=graphene_nanopore,
+        graphene_only=graphene_only,
     )
 
     # Extract ZIP — inner folder is "{name}_namd_solvated/"
@@ -3743,13 +3764,32 @@ def prepare_mgh_slow_release(
         pdb_path,
         sort_chains=require_full_topology,
     )
-    enm_report = write_aksimentiev_enm_files(
-        pdb_path,
-        package_dir,
-        name_stem,
-        exclude_residues=_ladder_enm_exclude or None,
-        progress=progress,
-    )
+    if graphene_only:
+        # The relaxation ladder's segment schema references the usual ENM filenames.
+        # Keep zero-length placeholders so one package path remains usable, while
+        # accurately recording that this membrane/electrolyte control has no DNA ENM.
+        _empty_enm_files = {}
+        for _scale in (0.5, 0.1, 0.01):
+            _name = f"{name_stem}_k{_scale:g}.enm.extra"
+            (package_dir / _name).write_text("")
+            _empty_enm_files[_name] = 0
+        enm_report = {
+            "schema": "nadoc.aksimentiev_enm.v1",
+            "source_pdb": str(pdb_path),
+            "n_residues_with_base_atoms": 0,
+            "n_base_atoms": 0,
+            "n_bonds": 0,
+            "files": _empty_enm_files,
+            "not_applicable": "graphene-only control contains no DNA",
+        }
+    else:
+        enm_report = write_aksimentiev_enm_files(
+            pdb_path,
+            package_dir,
+            name_stem,
+            exclude_residues=_ladder_enm_exclude or None,
+            progress=progress,
+        )
 
     # Anchors (optional): resolve the shared anchor scopes to DNA residues and write a
     # fixedAtoms marker PDB the whole ladder reads.  A JOB-REQUEST annotation resolved
@@ -3903,10 +3943,20 @@ def prepare_mgh_slow_release(
         name_stem,
         soft=force_soft,
         gentle=gentle_ladder,
-        nvt_only=False,
+        # A restrained solid membrane must not be pulled against a rescaling
+        # barostat. The graphene-only control equilibrates the already-sized cell.
+        nvt_only=graphene_only,
         timestep_fs=ladder_dt,
         high_aspect_ratio=high_aspect_ratio,
     )
+    if graphene_only and segments:
+        # There is no DNA ENM or Mg-hexahydrate restraint to release.  Retain one
+        # NVT equilibration stage (chunked so the energy plateau accelerator can
+        # stop it early), rather than running four numerically identical stages.
+        control_stage = segments[0].stage
+        segments = [s for s in segments if s.stage == control_stage]
+        for control_segment in segments:
+            control_segment.stage = "300 K NVT graphene/solvent equilibration"
 
     # The HMR PSF enters at the first hard, rigid-bond segment; minimisation and
     # the soft strain-relief first segment keep the unmodified PSF.
@@ -4072,6 +4122,7 @@ def prepare_mgh_slow_release(
             ),
         },
         "capture_vel_force": capture_vel_force,
+        "graphene_only": bool(graphene_only),
         # How the cell was solvated.  Production and reseed confs READ this back: a
         # carved cell contains vacuum, so its stages must run at constant volume or the
         # barostat collapses the box onto the solute.  Without it recorded, the
