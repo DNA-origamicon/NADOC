@@ -267,8 +267,9 @@ adjustable in-workspace scale (draggable bounds, live recolor). A completed job
 feeds NAMD via **"Use as NAMD seed"**: the relaxed coordinates (reconstructed at
 the true backbone site, ~1.6 nm cross-pair) seed the all-atom run so it starts
 pre-relaxed instead of from ideal B-DNA — for seeded jobs the NAMD relaxation
-ladder is optional and production can run minimize-then-produce directly from the
-seeded structure. Crossover-extra particles are retained during this backmapping:
+protocol starts with an atomistic declash/minimization and a restrained release
+ladder; it does not jump directly from a coarse-grained seed into production.
+Crossover-extra particles are retained during this backmapping:
 the atomistic trajectory display and NAMD seed consume the same simulated
 `(__xb__, crossover_id, index)` position/orientation override. NAMD then applies only
 a global recentering, which changes the coordinate origin but not the insert's pose
@@ -294,6 +295,12 @@ flexibility (RMSF) map mirror the oxDNA display controls. Atomistic trajectory f
 negotiate a topology-stable binary stream and, for the standard DNA-first NAMD layout,
 read only the displayed DNA prefix of each DCD record. Desktop and native-VR
 play/pause/step/scrub controls share one authoritative trajectory state.
+
+Explicit-solvent displays can independently show water, ions, and the periodic
+cell. Graphene-only controls bypass the DNA mapper and render directly in the
+membrane-centred simulation frame. See
+[NAMD nanopore ion transport](docs/namd_nanopore_transport.md) for the seeded and
+graphene-only workflows, remote execution behavior, and transport analysis.
 
 ### FEM structural analysis
 Euler-Bernoulli beam model; RMSF heatmap via eigenvalue decomposition; real-time
