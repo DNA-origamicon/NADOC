@@ -328,6 +328,7 @@ def _fake_solvate(
     progress=None,
     *,
     box_mode=None,
+    padding_xyz_nm=None,
 ):
     """Stand-in for gmx solvation (mirror test_md_prep_wiring): psfgen still runs on
     the real DNA, so the built {stem}.pdb the anchor mark is written against is real."""

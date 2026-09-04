@@ -2,18 +2,43 @@ import { buildChartSpec, drawChart, SERIES_COLORS } from './metric_graph.js'
 
 let root = null
 
+function chronologicalRuns(time) {
+  if (!time.length) return []
+  const runs = [[0]]
+  for (let i = 1; i < time.length; i += 1) {
+    if (Number(time[i]) < Number(time[i - 1])) runs.push([])
+    runs.at(-1).push(i)
+  }
+  return runs.sort((a, b) => Number(time[a[0]]) - Number(time[b[0]]))
+}
+
+function chronologicalPoints(time, values, { cumulative = false } = {}) {
+  const runs = chronologicalRuns(time)
+  if (!cumulative) return runs.flatMap(run => run.map(i => [time[i], values?.[i]]))
+  let offset = 0
+  return runs.flatMap(run => {
+    const baseline = Number(values?.[run[0]]) || 0
+    const points = run.map(i => [time[i], offset + (Number(values?.[i]) || 0) - baseline])
+    if (points.length) offset = points.at(-1)[1]
+    return points
+  })
+}
+
 export function ionTransportSeries(result) {
   const time = result?.series?.time_ns || []
   const current = result?.series?.current_nA || {}
   const crossings = result?.series?.cumulative_crossings || {}
+  const present = name => name === 'total'
+    || result?.species?.[name]?.n_ions == null
+    || Number(result.species[name].n_ions) > 0
   return {
-    current: Object.entries(current).map(([name, values], i) => ({
+    current: Object.entries(current).filter(([name]) => present(name)).map(([name, values], i) => ({
       label: name, color: SERIES_COLORS[i % SERIES_COLORS.length],
-      points: (values || []).map((value, j) => [time[j], value]),
+      points: chronologicalPoints(time, values),
     })),
-    crossings: Object.entries(crossings).map(([name, values], i) => ({
+    crossings: Object.entries(crossings).filter(([name]) => present(name)).map(([name, values], i) => ({
       label: `${name} net`, color: SERIES_COLORS[i % SERIES_COLORS.length],
-      points: (values?.net || []).map((value, j) => [time[j], value]),
+      points: chronologicalPoints(time, values?.net || [], { cumulative: true }),
     })),
   }
 }

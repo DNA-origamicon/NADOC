@@ -6037,21 +6037,16 @@
                     Writes to every anchor above. Blank means the anchors hold different atoms —
                     set them per row.
                   </div>
-                  <!-- Hard vs soft. A hard pin is a Dirichlet boundary: it propagates strain
-                       into nearby structure, kills local fluctuation, and is not rescaled by
-                       the barostat. Soft restraints apply to PRODUCTION only — the relax
-                       ladder's constraints channel is spent on the slow-release restraint. -->
-                  <label style="display:block;color:#8b949e;font-size:var(--text-xs);margin-top:6px">Stiffness (production)
+                  <label style="display:block;color:#8b949e;font-size:var(--text-xs);margin-top:6px">Anchor stiffness
                     <select id="md-anchors-stiffness" style="width:100%;margin-top:2px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:3px;font-size:var(--text-xs)">
                       <option value="0.02">Soft 0.02 kcal/mol/Å² — damps tumbling only</option>
                       <option value="0.1">Medium 0.1 kcal/mol/Å²</option>
                       <option value="1">Stiff 1.0 kcal/mol/Å²</option>
-                      <option value="">Hard pin (fixedAtoms — immobile)</option>
                     </select>
                   </label>
                   <div style="font-size:var(--text-xs);color:#6e7681;margin-top:4px;line-height:1.35">
-                    Relax always uses a hard pin. Production applies the stiffness above,
-                    referenced to its own equilibrated coordinates.
+                    Harmonic in relaxation and production, so GPU-resident dynamics remain available.
+                    Production references its own equilibrated coordinates.
                   </div>
                   <div id="md-anchors-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
                   <div style="display:grid;grid-template-columns:1fr;gap:5px;border-top:1px solid #21262d;margin-top:8px;padding-top:8px">
@@ -6085,19 +6080,20 @@
                 </div>
                 <div id="md-surface-body" class="ox-card__body" style="display:none">
                   <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">The same deposited plane used by oxDNA, materialized as neutral graphene atoms held by near-fixed harmonic restraints that remain compatible with GPU-resident NAMD.</div>
-                  <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;margin-bottom:6px"><input type="checkbox" id="md-surface-enable"> Apply hard surface</label>
+                  <label style="display:grid;grid-template-columns:1fr 110px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs);margin-bottom:5px">Design face<select id="md-surface-axis" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"><option value="">Inherited / auto</option><option value="-y">−Y (bottom)</option><option value="+y">+Y (top)</option><option value="-x">−X</option><option value="+x">+X</option><option value="-z">−Z</option><option value="+z">+Z</option></select></label>
+                  <label style="display:grid;grid-template-columns:1fr 80px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs);margin-bottom:7px" title="Persistent outward displacement from the selected design face; atomistic clearance remains the minimum separation.">Face offset (nm)<input id="md-surface-offset" type="number" value="0" min="0" max="100" step="0.1" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"></label>
+                  <label style="display:grid;grid-template-columns:1fr 80px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs);margin-bottom:7px">DNA clearance (nm)<input id="md-surface-dna-clearance" type="number" value="0.32" min="0" max="2" step="0.01" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"></label>
+                  <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;margin-bottom:6px"><input type="checkbox" id="md-surface-enable"> Add graphene nanopore</label>
                   <div id="md-surface-controls" style="display:none;flex-direction:column;gap:5px">
-                    <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer"><input type="checkbox" id="md-surface-graphene-only"> Graphene-only control (no DNA)</label>
                     <label style="display:grid;grid-template-columns:1fr 110px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs)">Material model<select id="md-surface-material" disabled style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"><option value="graphene">Neutral restrained graphene</option></select></label>
                     <label style="display:grid;grid-template-columns:1fr 80px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs)">Pore diameter (nm)<input id="md-surface-pore-diameter" type="number" value="2.1" min="0.1" max="100" step="0.1" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"></label>
                     <label style="display:grid;grid-template-columns:1fr 80px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs)">Layers<input id="md-surface-layers" type="number" value="1" min="1" max="6" step="1" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"></label>
                     <label style="display:grid;grid-template-columns:1fr 80px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs)">Layer spacing (nm)<input id="md-surface-layer-spacing" type="number" value="0.335" min="0.1" max="1" step="0.005" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"></label>
-                    <label style="display:grid;grid-template-columns:1fr 80px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs)">DNA clearance (nm)<input id="md-surface-dna-clearance" type="number" value="0.32" min="0" max="2" step="0.01" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"></label>
                     <label style="display:grid;grid-template-columns:1fr 80px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs)">Water clearance (nm)<input id="md-surface-water-clearance" type="number" value="0.30" min="0" max="1" step="0.01" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"></label>
                     <label style="display:grid;grid-template-columns:1fr 80px;gap:6px;align-items:center;color:#8b949e;font-size:var(--text-xs)">Sheet margin (nm)<input id="md-surface-sheet-margin" type="number" value="1.5" min="0.5" max="10" step="0.1" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)"></label>
-                    <div id="md-surface-ready" style="font-size:var(--text-xs);color:#8b949e;line-height:1.35">Off — tick “Apply hard surface”.</div>
+                    <div id="md-surface-ready" style="font-size:var(--text-xs);color:#8b949e;line-height:1.35">Off — tick “Add graphene nanopore”.</div>
                     <div style="font-size:10px;color:#8fb3ff;line-height:1.35">Water reservoir padding and NaCl/MgCl₂ concentrations are run settings: choose them in <strong>＋ New job → 2 Setup → Settings</strong> (Water padding and Ionic conditions).</div>
-                    <div style="font-size:10px;color:#6e7681;line-height:1.35">With DNA, orientation and position are inherited from the deposited oxDNA seed. A graphene-only control instead builds an XY sheet centered at z=0. Additional layers extend toward −z.</div>
+                    <div style="font-size:10px;color:#6e7681;line-height:1.35">Additional layers extend away from the DNA. If the design contains no DNA, NADOC automatically builds the graphene-only membrane-control protocol.</div>
                   </div>
                 </div>
               </div>

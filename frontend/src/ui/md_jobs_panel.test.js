@@ -5,10 +5,12 @@ describe('hard-surface new-job payload', () => {
   it('transfers every visible graphene option with numeric types', () => {
     expect(mdHardSurfacePayload({
       enabled: true, grapheneOnly: true, poreDiameterNm: '2.6', layers: '3',
+      surfaceAxis: '+z', surfaceOffsetNm: '1.25',
       layerSpacingNm: '0.34', atomisticClearanceNm: '0.36',
       waterClearanceNm: '0.29', sheetMarginNm: '2.2',
     })).toEqual({
       graphene_nanopore: true, graphene_only: true,
+      graphene_surface_axis: '+z', graphene_surface_offset_nm: 1.25,
       graphene_pore_diameter_nm: 2.6, graphene_layers: 3,
       graphene_layer_spacing_nm: 0.34,
       graphene_atomistic_clearance_nm: 0.36,
@@ -393,7 +395,7 @@ describe('mdJobIsDraft / mdDraftRunLabel (deferred-prep seed)', () => {
     expect(mdDraftRunLabel({ status: 'draft', seed_oxdna_job_id: 'ox1' })).toBe('▶ Relax from oxDNA')
     expect(mdDraftRunLabel({ status: 'draft', seed_mrdna_job_id: 'mr1' })).toBe('▶ Relax from mrDNA')
     expect(mdDraftRunLabel({ status: 'draft', seed_blade_job_id: 'bl1' })).toBe('▶ Relax from BLADE')
-    expect(mdDraftRunLabel({ status: 'draft' })).toBe('▶ Relax from oxDNA')  // default
+    expect(mdDraftRunLabel({ status: 'draft' })).toBe('▶ Run')
   })
 })
 

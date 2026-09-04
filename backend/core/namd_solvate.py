@@ -130,11 +130,30 @@ def _graphene_pdb_atoms(dna_pdb: str, spec: dict) -> list[str]:
     """
     import numpy as np
 
-    n = np.asarray(spec["dir"], dtype=float)
+    axis_normals = {
+        "-x": [1.0, 0.0, 0.0], "+x": [-1.0, 0.0, 0.0],
+        "-y": [0.0, 1.0, 0.0], "+y": [0.0, -1.0, 0.0],
+        "-z": [0.0, 0.0, 1.0], "+z": [0.0, 0.0, -1.0],
+    }
+    axis = spec.get("surface_axis")
+    n = np.asarray(axis_normals.get(axis, spec.get("dir", [0.0, 0.0, 1.0])), dtype=float)
     n /= np.linalg.norm(n)
-    center = np.asarray(spec["pore_center_nm"], dtype=float)
     radius = float(spec.get("pore_diameter_nm", 2.1)) / 2.0
     pts = np.asarray(_dna_atom_positions_nm(dna_pdb), dtype=float)
+    if axis is not None or "pore_center_nm" not in spec:
+        if len(pts):
+            lo, hi = pts.min(axis=0), pts.max(axis=0)
+            center = (lo + hi) / 2.0
+            plane_projection = float(np.min(pts @ n)) - float(spec.get("surface_offset_nm", 0.0))
+            center += n * (plane_projection - float(center @ n))
+        else:
+            center = -n * float(spec.get("surface_offset_nm", 0.0))
+        spec["dir"] = n.tolist()
+        spec["pore_center_nm"] = center.tolist()
+        spec["plane_point_nm"] = center.tolist()
+        spec["position_nm"] = float(center[int(np.argmax(np.abs(n)))])
+    else:
+        center = np.asarray(spec["pore_center_nm"], dtype=float)
     # The oxDNA hard wall acts on coarse-grained particle sites; an atomistic sugar or
     # base can protrude through that mathematical plane after backmapping. Move the
     # physical carbon sheet just far enough outward to leave a normal heavy-atom contact

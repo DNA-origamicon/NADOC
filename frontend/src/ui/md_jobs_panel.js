@@ -46,7 +46,7 @@ import { formatBytes } from './format_bytes.js'
 import { initJobArchive } from './job_archive_action.js'
 import { initMdMetricsCard } from './md_metrics_card.js'
 import {
-  confirmNoConcurrentJob, confirmGpuNotBusy, confirmDiskSpaceOk, confirmBigRunOk,
+  confirmNoConcurrentJob, confirmDiskSpaceOk, confirmBigRunOk,
   isUndersizedCellRefusal, confirmUndersizedCell,
 } from './job_activity.js'
 import { initMdSubmitReview, remoteJobBadge, alpineTargetDisabledReason } from './md_submit_review.js'
@@ -775,7 +775,8 @@ export function mdRunTargetForJob(job) {
 export function mdDraftRunLabel(job) {
   if (job?.seed_blade_job_id) return '▶ Relax from BLADE'
   if (job?.seed_mrdna_job_id) return '▶ Relax from mrDNA'
-  return '▶ Relax from oxDNA'
+  if (job?.seed_oxdna_job_id) return '▶ Relax from oxDNA'
+  return '▶ Run'
 }
 
 /** Saved protocol used by the one-click draft run control. A copy prevents the launch
@@ -808,12 +809,15 @@ export function grapheneOnlyTrajectoryPlan(meta) {
 /** Canonical hard-surface request fields shared by fresh and draft launches. */
 export function mdHardSurfacePayload({
   enabled = false, grapheneOnly = false, poreDiameterNm = 2.1, layers = 1,
+  surfaceAxis = null, surfaceOffsetNm = 0,
   layerSpacingNm = 0.335, atomisticClearanceNm = 0.32,
   waterClearanceNm = 0.30, sheetMarginNm = 1.5,
 } = {}) {
   return {
     graphene_nanopore: !!enabled,
     graphene_only: !!grapheneOnly,
+    graphene_surface_axis: surfaceAxis || null,
+    graphene_surface_offset_nm: Number(surfaceOffsetNm),
     graphene_pore_diameter_nm: Number(poreDiameterNm),
     graphene_layers: Number(layers),
     graphene_layer_spacing_nm: Number(layerSpacingNm),
@@ -939,10 +943,8 @@ export function mdForcesProvenance(d) {
  *  as the panel's name for it (3 senders + its tests import it from here). */
 export const mdAnchorAtomNames = atomNamesFromValue
 
-/** Pure: the Stiffness select's value → the `anchor_k` request field (kcal/mol/Å²).
- *  '' (Hard pin) → null, which selects NAMD fixedAtoms. A number selects harmonic
- *  restraints. 0 is NOT a hard pin — it is a restraint of zero strength — so it maps to
- *  null too rather than emitting a conskfile that restrains nothing. */
+/** Pure: the Stiffness select's value → the harmonic `anchor_k` request field
+ * (kcal/mol/Å²). Blank/invalid legacy values defer to the server's safe 0.02 default. */
 export function mdAnchorStiffness(value) {
   if (value === '' || value == null) return null
   const k = Number(value)
@@ -1388,7 +1390,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   const anchorAtomsSel     = document.getElementById('md-anchors-atoms')
   const anchorStiffnessSel = document.getElementById('md-anchors-stiffness')
   const surfaceEnableChk   = document.getElementById('md-surface-enable')
-  const surfaceGrapheneOnlyChk = document.getElementById('md-surface-graphene-only')
+  const surfaceAxisEl      = document.getElementById('md-surface-axis')
+  const surfaceOffsetEl    = document.getElementById('md-surface-offset')
   const surfaceDiameterEl  = document.getElementById('md-surface-pore-diameter')
   const surfaceLayersEl    = document.getElementById('md-surface-layers')
   const surfaceSpacingEl   = document.getElementById('md-surface-layer-spacing')
@@ -3935,7 +3938,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // whichever informational pane happens to be selected in the Clusters card.
     const runTarget = mdRequestedRunTarget(body)
     const isLocalRun = mdIsLocalTarget(runTarget)
-    if (isLocalRun && !(await confirmNoConcurrentJob({ excludeJobId: parentId }))) return null
+    if (isLocalRun && body.autostart
+        && !(await confirmNoConcurrentJob({ excludeJobId: parentId }))) return null
 
     const full = {
       ...body,
@@ -4028,7 +4032,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     launch: (payload, opts) => _launchRelax(payload, opts),
     spawnProduction: _spawnProductionFromWizard,
     updateJob: async (jobId, payload) => {
-      const job = await api.updateMdJobSettings(jobId, payload)
+      // The physical controls live beside the wizard, but are part of the job just as
+      // much as its protocol. Saving the wizard must snapshot their CURRENT values;
+      // otherwise the backend preserves the previous values and the UI appears to save
+      // a surface/anchor/field change that never reaches either remote package.
+      const job = await api.updateMdJobSettings(jobId, {
+        ...payload,
+        ..._physicalRelaxPayload(),
+        draft: true,
+      })
       if (!job) {
         showToast(api.lastErrorMessage?.() || 'Could not save job settings', 'error')
         return null
@@ -4057,13 +4069,41 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     onOptimizeMount: mount => _wireOptimize(mount),
   })
 
+  function _physicalRelaxPayload() {
+    const anchors = _anchorsCard?.getAnchors?.() ?? []
+    const surfaceAnchors = _surfaceAnchorsCard?.getAnchors?.() ?? []
+    const fieldSpec = _efieldCard?.getFieldSpec?.()
+    const fieldOn = !!_efieldCard?.isEnabled?.() && (fieldSpec?.field_pN ?? 0) > 0
+    return {
+      anchors: anchors.length ? anchors : null,
+      surface_anchors: surfaceAnchors.length ? surfaceAnchors : null,
+      anchor_atoms: (anchors.length || surfaceAnchors.length)
+        ? mdAnchorAtomNames(anchorAtomsSel?.value) : null,
+      anchor_k: (anchors.length || surfaceAnchors.length)
+        ? mdAnchorStiffness(anchorStiffnessSel?.value) : null,
+      field: fieldOn ? { field_pN: fieldSpec.field_pN, dir: fieldSpec.dir } : null,
+      ...mdHardSurfacePayload({
+        enabled: surfaceEnableChk?.checked,
+        grapheneOnly: false,
+        surfaceAxis: surfaceAxisEl?.value || null,
+        surfaceOffsetNm: surfaceOffsetEl?.value || 0,
+        poreDiameterNm: surfaceDiameterEl?.value || 2.1,
+        layers: surfaceLayersEl?.value || 1,
+        layerSpacingNm: surfaceSpacingEl?.value || 0.335,
+        atomisticClearanceNm: surfaceDnaClearEl?.value || 0.32,
+        waterClearanceNm: surfaceWaterClearEl?.value || 0.30,
+        sheetMarginNm: surfaceMarginEl?.value || 1.5,
+      }),
+    }
+  }
+
   /**
    * Launch a relaxation from a protocol payload, running every gate on the way.
    *
    * `protocolPayload` carries only the protocol settings — from the Advanced form or from
    * the Job Wizard. Everything environmental (run target, anchors, electric field, run
    * directory, GPU device string) is merged in HERE, so both callers inherit the same
-   * concurrency confirms, VRAM pre-flight, disk forecast and big-run confirmation rather
+   * VRAM pre-flight, disk forecast and big-run confirmation rather
    * than each growing its own copy.
    */
   async function _launchRelax(protocolPayload, { draftId = null } = {}) {
@@ -4071,9 +4111,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       _mdDebug(`[${_ts()}] md-jobs: Relax clicked but already launching`)
       return
     }
-    // Alpine runs on the remote cluster — it can't contend for the local GPU/disk,
-    // so the local-resource guards (concurrent NADOC job, external GPU hog, local
-    // disk space) don't apply and would wrongly block a submit while a local job runs.
+    // Creating a job does not consume the selected compute resource: it prepares and
+    // queues a record. The Run control owns the eventual execution-time contention guard.
     const runTarget = mdRequestedRunTarget(protocolPayload)
     const isLocalRun = mdIsLocalTarget(runTarget)
 
@@ -4096,7 +4135,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       return
     }
 
-    if (isLocalRun && !(await confirmNoConcurrentJob())) return
     // Only warn about a busy GPU when this run actually targets the GPU.
     // Wizard requests name the preset and deliberately omit its derived protocol.
     // Treat GBIS as CPU-only at this boundary too; otherwise the visible implicit plan
@@ -4106,7 +4144,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     const runsOnGpu = !implicitRun
       && deviceStr.toLowerCase() !== 'cpu'
       && deviceStr.toLowerCase() !== 'none'
-    if (isLocalRun && runsOnGpu && !(await confirmGpuNotBusy(deviceStr || '0'))) return
     _launching = true
     _paintRunControl()
 
@@ -4119,25 +4156,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       // availability/connectivity and cannot substitute a different GPU into the run.
       runpod_gpu_key: mdRunpodGpuKeyFor({
         runTarget, requested: proto.runpod_gpu_key }),
-      anchors:        anchors.length ? anchors : null,
-      surface_anchors: surfaceAnchors.length ? surfaceAnchors : null,
-      // The ladder pins hard regardless of the stiffness select (its constraints channel
-      // is spent on the slow-release restraint), but the ATOM filter applies to both.
-      anchor_atoms:   (anchors.length || surfaceAnchors.length)
-        ? mdAnchorAtomNames(anchorAtomsSel?.value) : null,
-      field:          fieldOn ? { field_pN: fieldSpec.field_pN, dir: fieldSpec.dir } : null,
-      ...mdHardSurfacePayload({
-        enabled: surfaceEnableChk?.checked,
-        grapheneOnly: surfaceGrapheneOnlyChk?.checked,
-        poreDiameterNm: surfaceDiameterEl?.value || 2.1,
-        layers: surfaceLayersEl?.value || 1,
-        layerSpacingNm: surfaceSpacingEl?.value || 0.335,
-        atomisticClearanceNm: surfaceDnaClearEl?.value || 0.32,
-        waterClearanceNm: surfaceWaterClearEl?.value || 0.30,
-        sheetMarginNm: surfaceMarginEl?.value || 1.5,
-      }),
+      ..._physicalRelaxPayload(),
       run_dir:        getRunDir(),   // shared run-location: write this run into the chosen folder
     }
+
+    // Creating is deliberately cheap: record every choice as a draft and leave topology,
+    // solvation, upload, and execution to the selected job's Run button. On Run, prepare
+    // this same id once using the latest cards and request immediate execution afterward.
+    payload.draft = !draftId
+    payload.autostart = !!draftId
 
     _mdDebug(`[${_ts()}] md-jobs: Relax clicked`, payload)
     if (detailEl) detailEl.style.display = ''
@@ -4146,11 +4173,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // ~26 s on a 6-helix bundle.  Awaiting that first left the button looking dead for
     // half a minute ("I click Relax and nothing happens"), because the only feedback
     // came afterwards.  Feedback first, work second.
-    showOpProgress('Relax', 'Sizing the solvated system…', { indeterminate: true })
+    showOpProgress(draftId ? 'Relax' : 'Create job',
+      draftId ? 'Sizing the solvated system…' : 'Saving job settings…',
+      { indeterminate: true })
 
     // Gate A — verify that the fully solvated system fits before starting the build.
     // Seeded drafts are sized later because their atomistic model is not available yet.
-    if (isLocalRun && !draftId && runsOnGpu) {
+    if (isLocalRun && draftId && runsOnGpu) {
       try {
         const adv = await preflightMdVram(payload)
         const gate = gateAMessage(adv)
@@ -4165,7 +4194,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // trajectory on the cluster's scratch, not this machine's disk.  A seeded draft's
     // size isn't known until it solvates, so skip the forecast (parity with the old
     // seed flow, which never forecast either).
-    if (isLocalRun && !draftId) {
+    if (isLocalRun && draftId) {
       try {
         const fc = await estimateMdDisk(payload)
         // If the run won't fit, offer to archive it to a roomier drive and run THERE.
@@ -4221,6 +4250,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       }
 
       _mdDebug(`[${_ts()}] md-jobs: job created OK job_id=${job.job_id} status=${job.status}`)
+      if (job.status === 'draft') {
+        showToast('Job created — adjust the surface, anchors, or field, then press Run', 'ok')
+        await _fetchJobs()
+        _reselectJob(job.job_id)
+        return job
+      }
       if (job.awaiting_sequence) {
         showToast('Job created — assign scaffold and staple sequences before Run', 'warn')
         await _fetchJobs()
@@ -4572,7 +4607,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _syncRunTargetToJob(selectedJob)
     const prep = mdInheritedPrepParams(selectedJob, _jobs)
     if (surfaceEnableChk) surfaceEnableChk.checked = !!prep.graphene_nanopore
-    if (surfaceGrapheneOnlyChk) surfaceGrapheneOnlyChk.checked = !!prep.graphene_only
+    if (surfaceAxisEl) surfaceAxisEl.value = prep.graphene_surface_axis || ''
+    if (surfaceOffsetEl) surfaceOffsetEl.value = String(prep.graphene_surface_offset_nm ?? 0)
     if (surfaceDiameterEl) surfaceDiameterEl.value = String(prep.graphene_pore_diameter_nm ?? 2.1)
     if (surfaceLayersEl) surfaceLayersEl.value = String(prep.graphene_layers ?? 1)
     if (surfaceSpacingEl) surfaceSpacingEl.value = String(prep.graphene_layer_spacing_nm ?? 0.335)
@@ -5550,7 +5586,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       const thickness = (layers - 1) * Number(surfaceSpacingEl?.value || 0.335)
       surfaceReadyEl.textContent = enabled
         ? `Surface on · ${Number(surfaceDiameterEl?.value || 2.1).toFixed(2)} nm pore · ${layers} layer${layers === 1 ? '' : 's'}${layers > 1 ? ` · ${thickness.toFixed(3)} nm thick` : ''}.`
-        : 'Off — tick “Apply hard surface”.'
+        : 'Off — tick “Add graphene nanopore”.'
       surfaceReadyEl.style.color = enabled ? '#e0a800' : '#8b949e'
     }
     setAnchorSectionEnabled(document.getElementById('md-surface-anchors-section'), enabled)
@@ -5559,16 +5595,27 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       enabled, poreDiameterNm: Number(surfaceDiameterEl?.value || 2.1),
       layers: Number(surfaceLayersEl?.value || 1),
       layerSpacingNm: Number(surfaceSpacingEl?.value || 0.335),
-      surface: surfaceGrapheneOnlyChk?.checked
-        ? { dir: [0, 0, 1], positionNm: 0 } : surfaceSeedSpec,
+      // Auto inherits a deposited seed when one exists; a native NAMD design uses the
+      // backend's standard -Y face, so it must still have an immediate preview.
+      surface: _selectedSurfaceSpec() || surfaceSeedSpec || {
+        dir: [0, 1, 0], positionNm: Number(surfaceOffsetEl?.value || 0), faceRelative: true,
+      },
     }}))
     window.dispatchEvent(new CustomEvent('nadoc:anchors-change', { detail: {
       engine: 'namd-surface', highlighted: _surfaceAnchorsCard.getHighlighted?.() || [],
     }}))
   }
+  function _selectedSurfaceSpec() {
+    const normals = {
+      '-x': [1, 0, 0], '+x': [-1, 0, 0], '-y': [0, 1, 0],
+      '+y': [0, -1, 0], '-z': [0, 0, 1], '+z': [0, 0, -1],
+    }
+    const dir = normals[surfaceAxisEl?.value]
+    return dir ? { dir, positionNm: Number(surfaceOffsetEl?.value || 0), faceRelative: true } : null
+  }
   surfaceEnableChk?.addEventListener('change', _syncSurfaceCard)
-  surfaceGrapheneOnlyChk?.addEventListener('change', _syncSurfaceCard)
-  for (const el of [surfaceDiameterEl, surfaceLayersEl, surfaceSpacingEl,
+  surfaceAxisEl?.addEventListener('change', _syncSurfaceCard)
+  for (const el of [surfaceOffsetEl, surfaceDiameterEl, surfaceLayersEl, surfaceSpacingEl,
                     surfaceDnaClearEl, surfaceWaterClearEl, surfaceMarginEl]) {
     el?.addEventListener('input', _syncSurfaceCard)
   }

@@ -16,7 +16,10 @@ export function initGrapheneNanoporeOverlay(scene) {
     const ctr = bounds
       ? new THREE.Vector3(...bounds.min).add(new THREE.Vector3(...bounds.max)).multiplyScalar(0.5)
       : new THREE.Vector3()
-    ctr.addScaledVector(n, Number(surface.positionNm) - ctr.dot(n))
+    const planeProjection = surface.faceRelative && bounds
+      ? Math.min(...boundsCorners(bounds).map(p => p.dot(n))) - Number(surface.positionNm)
+      : Number(surface.positionNm)
+    ctr.addScaledVector(n, planeProjection - ctr.dot(n))
     const span = bounds
       ? Math.max(...bounds.max.map((v, i) => Number(v) - Number(bounds.min[i]))) + 4
       : 12
@@ -43,4 +46,13 @@ export function initGrapheneNanoporeOverlay(scene) {
     scene.add(mesh)
   }
   return { update, clear, dispose: clear, mesh: () => mesh }
+}
+
+function boundsCorners(bounds) {
+  const corners = []
+  for (const x of [bounds.min[0], bounds.max[0]])
+    for (const y of [bounds.min[1], bounds.max[1]])
+      for (const z of [bounds.min[2], bounds.max[2]])
+        corners.push(new THREE.Vector3(Number(x), Number(y), Number(z)))
+  return corners
 }

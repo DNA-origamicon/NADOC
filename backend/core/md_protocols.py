@@ -2352,6 +2352,7 @@ def retarget_anchor_pdb(
     *,
     coords=None,
     k: Optional[float] = None,
+    graphene_k: Optional[float] = None,
 ) -> int:
     """Re-point an existing anchor PDB at new reference coordinates and/or a new column-B
     weight.  Returns the number of anchored (B > 0) atoms.
@@ -2394,7 +2395,14 @@ def retarget_anchor_pdb(
             if b > 0:
                 n_anchored += 1
                 if k is not None:
-                    raw = _set_bfactor(raw, float(k))
+                    is_graphene = (
+                        raw[17:21].strip() == "GRP"
+                        or raw[72:76].strip().startswith("GR")
+                    )
+                    raw = _set_bfactor(
+                        raw,
+                        float(graphene_k if is_graphene and graphene_k is not None else k),
+                    )
         out.append(raw)
     if coords is not None and row + 1 != len(coords):
         raise ValueError(

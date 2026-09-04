@@ -9,6 +9,7 @@ as its own state and that the local status-reconciler never disturbs it.
 from __future__ import annotations
 
 import asyncio
+import json
 from types import SimpleNamespace
 
 import backend.api.routes_md as routes_md
@@ -79,25 +80,80 @@ def test_namd_hard_surface_atomistic_options_validate():
     assert body.graphene_sheet_margin_nm == 2.0
 
 
+def test_native_draft_freezes_surface_anchors_and_field_at_run(tmp_path, monkeypatch):
+    """Run, not Create, is the native design/package freeze boundary."""
+    monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+    monkeypatch.setattr(routes_md, "find_namd", lambda: "/bin/namd3")
+    monkeypatch.setattr(routes_md, "find_gmx", lambda: "/bin/gmx")
+    design = SimpleNamespace(strands=[object()], without_reference_geometry=lambda: design)
+    monkeypatch.setattr(routes_md.design_state, "get_or_404", lambda: design)
+    monkeypatch.setattr(routes_md, "design_size_factor", lambda _design: 0.1)
+    captured = {}
+
+    def fake_spawn(body, **kwargs):
+        captured.update(body=body, **kwargs)
+        return kwargs["existing_job"]
+
+    monkeypatch.setattr(routes_md, "_spawn_prep_job", fake_spawn)
+    draft = routes_md._spawn_draft_job(
+        routes_md.CreateJobRequest(draft=True, execution_target="runpod"),
+        name="native",
+    )
+    final = routes_md.CreateJobRequest(
+        draft=False,
+        autostart=True,
+        execution_target="runpod",
+        graphene_nanopore=True,
+        graphene_surface_axis="+z",
+        graphene_surface_offset_nm=1.25,
+        graphene_pore_diameter_nm=2.1,
+        anchors=[{"kind": "strand", "strandId": "s1"}],
+        surface_anchors=[{"kind": "base", "strandId": "s2", "baseIndex": 4}],
+        field={"field_pN": 2.0, "dir": [0, 0, 1]},
+    )
+
+    asyncio.run(routes_md.prepare_draft_job(draft.job_id, final))
+
+    body = captured["body"]
+    assert captured["design"] is design
+    assert captured["seeded"] is False
+    assert captured["existing_job"].job_id == draft.job_id
+    assert body.graphene_nanopore is True
+    assert body.graphene_surface_axis == "+z"
+    assert body.graphene_surface_offset_nm == 1.25
+    assert body.anchors == [{"kind": "strand", "strandId": "s1"}]
+    assert body.surface_anchors == [
+        {"kind": "base", "strandId": "s2", "baseIndex": 4}
+    ]
+    assert body.field == {"field_pN": 2.0, "dir": [0, 0, 1]}
+    assert body.autostart is True
+
+
 def test_seed_anchor_harmonic_composition_keeps_anchor_constant(tmp_path):
     pkg = tmp_path
     pdb_lines = [
         "ATOM      1  P    DA A   1       0.000   0.000   0.000  1.00  1.00          P \n",
-        "HETATM    2  C   GRP G   1       1.000   0.000   0.000  1.00  0.00          C GR00\n",
+        "ATOM      2  P    DT A   2       0.500   0.000   0.000  1.00  1.00          P \n",
+        "HETATM    3  C   GRP G   1       1.000   0.000   0.000  1.00  0.00          C GR00\n",
     ]
     (pkg / "demo.pdb").write_text("".join(pdb_lines))
     (pkg / "release.pdb").write_text("".join(pdb_lines))
     marker = [pdb_lines[0][:60] + "  0.00" + pdb_lines[0][66:],
-              pdb_lines[1][:60] + "  1.00" + pdb_lines[1][66:]]
+              pdb_lines[1][:60] + "  1.00" + pdb_lines[1][66:],
+              pdb_lines[2][:60] + "  1.00" + pdb_lines[2][66:]]
     (pkg / "anchors.pdb").write_text("".join(marker))
     (pkg / "stage.conf").write_text(
         "coordinates        demo.pdb\nconstraints on\nconsref release.pdb\n"
         "conskfile release.pdb\nconskcol B\nconstraintScaling 0.25\nrun 100\n"
     )
-    (pkg / "manifest.json").write_text('{"files":{"anchors":"anchors.pdb"}}')
+    (pkg / "manifest.json").write_text(
+        '{"files":{"anchors":"anchors.pdb"},"gpu_resident_mode":"on",'
+        '"graphene_nanopore":{"material":"graphene"}}'
+    )
 
     routes_md._harmonicize_seed_anchors(
-        pkg, name_stem="demo", force_constant=50.0, force_gpu_resident=True,
+        pkg, name_stem="demo", force_constant=0.02,
+        graphene_force_constant=50.0,
     )
 
     conf = (pkg / "stage.conf").read_text()
@@ -106,7 +162,25 @@ def test_seed_anchor_harmonic_composition_keeps_anchor_constant(tmp_path):
     assert "fixedAtoms" not in conf
     assert "constraintScaling  1" in conf
     assert float(combined[0][60:66]) == 0.25
-    assert float(combined[1][60:66]) == 50.0
+    assert float(combined[1][60:66]) == 0.02
+    assert float(combined[2][60:66]) == 50.0
+    manifest = json.loads((pkg / "manifest.json").read_text())
+    assert manifest["anchors"]["force_constant_kcal_mol_A2"] == 0.02
+    assert manifest["graphene_nanopore"]["restraint_k_kcal_mol_A2"] == 50.0
+    routes_md._audit_external_force_configs(pkg)
+
+
+def test_final_package_audit_rejects_remote_fatal_fixed_resident_pair(tmp_path):
+    (tmp_path / "manifest.json").write_text(
+        '{"files":{"anchors":"restraints_anchors.pdb"}}'
+    )
+    (tmp_path / "bad.conf").write_text(
+        "GPUresident on\nfixedAtoms on\nfixedAtomsFile restraints_anchors.pdb\n"
+    )
+    import pytest
+
+    with pytest.raises(RuntimeError, match="GPUresident with fixedAtoms"):
+        routes_md._audit_external_force_configs(tmp_path)
 
 
 def test_draft_status_roundtrips(tmp_path):
@@ -179,6 +253,7 @@ def test_copy_draft_preserves_settings_and_changes_only_seed(tmp_path, monkeypat
         minimize_steps=7200, force_soft=True, fast=False,
         graphene_nanopore=True, graphene_only=False,
         graphene_pore_diameter_nm=2.6, graphene_layers=3,
+        graphene_surface_axis="+y", graphene_surface_offset_nm=0.75,
         graphene_layer_spacing_nm=0.34,
         graphene_atomistic_clearance_nm=0.36,
         graphene_water_clearance_nm=0.29,
@@ -204,6 +279,7 @@ def test_copy_draft_preserves_settings_and_changes_only_seed(tmp_path, monkeypat
     assert copied.prep_params == expected_params
     for key in (
         "graphene_nanopore", "graphene_only", "graphene_pore_diameter_nm",
+        "graphene_surface_axis", "graphene_surface_offset_nm",
         "graphene_layers", "graphene_layer_spacing_nm",
         "graphene_atomistic_clearance_nm", "graphene_water_clearance_nm",
         "graphene_sheet_margin_nm", "surface_anchors",
@@ -230,6 +306,34 @@ def test_copy_draft_preserves_settings_and_changes_only_seed(tmp_path, monkeypat
         source.seed_oxdna_job_id,
     )
     assert result["previous_seed"] == 135791357
+
+
+def test_hard_surface_settings_survive_job_save_and_reload(tmp_path, monkeypatch):
+    monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+    body = routes_md.CreateJobRequest(
+        draft=True,
+        graphene_nanopore=True,
+        graphene_surface_axis="+z",
+        graphene_surface_offset_nm=1.25,
+        graphene_pore_diameter_nm=3.4,
+        graphene_layers=4,
+        graphene_layer_spacing_nm=0.345,
+        graphene_atomistic_clearance_nm=0.41,
+        graphene_water_clearance_nm=0.28,
+        graphene_sheet_margin_nm=2.75,
+    )
+    job = routes_md._spawn_draft_job(body, name="native_surface")
+
+    saved = MdJob.load(job.job_id, tmp_path).prep_params
+    assert saved["graphene_nanopore"] is True
+    assert saved["graphene_surface_axis"] == "+z"
+    assert saved["graphene_surface_offset_nm"] == 1.25
+    assert saved["graphene_pore_diameter_nm"] == 3.4
+    assert saved["graphene_layers"] == 4
+    assert saved["graphene_layer_spacing_nm"] == 0.345
+    assert saved["graphene_atomistic_clearance_nm"] == 0.41
+    assert saved["graphene_water_clearance_nm"] == 0.28
+    assert saved["graphene_sheet_margin_nm"] == 2.75
 
 
 def test_editing_a_draft_updates_the_same_record_without_preparing(tmp_path, monkeypatch):

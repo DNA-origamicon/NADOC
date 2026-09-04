@@ -1,9 +1,22 @@
 # NAMD nanopore ion transport
 
-NADOC can prepare an explicit-solvent graphene nanopore either beneath a
-surface-deposited oxDNA seed or as a membrane-only control. Both workflows use the
+NADOC can prepare an explicit-solvent graphene nanopore against a fresh NAMD design,
+beneath a surface-deposited oxDNA seed, or as a membrane-only control. All workflows use the
 same CHARMM/CUFIX electrolyte model, periodic cell, field configuration, transport
 analysis, and local/Alpine/RunPod execution paths.
+
+## Job creation and the package freeze boundary
+
+Creating a relaxation job records a lightweight draft; it does not build or solvate a
+package. The user may continue changing the hard surface, pore geometry, structural and
+surface anchors, electric field, protocol, and compute target. Pressing **Run** freezes
+the live design and those saved controls, builds the package once, and then starts it
+locally or stages it to Alpine/RunPod. Consequently a topology-changing pore edit never
+causes a throwaway first solvation, and the remote target receives the same manifest,
+restraint marker, and NAMD configuration that the local package inspector displays.
+
+Once preparation begins, topology-changing controls are locked for that run. Create a
+new draft to change the pore geometry of a package that has already started.
 
 ## Choose the experiment
 
@@ -13,9 +26,20 @@ choose **Use as NAMD seed**, and enable the graphene hard surface in the NAMD se
 The deposited pose, ordinary anchors, and surface anchors are inherited. They remain
 editable before launch.
 
-Use **Graphene only** for the open-pore control. Enable **Apply hard surface** and
-**Graphene-only control** without selecting a DNA seed. The default aperture is
-2.1 nm in diameter. Reservoir padding controls the water depth normal to the sheet;
+For a fresh design, open **Hard surface** and choose the intended **Design face**
+(`-X`, `+X`, `-Y`, `+Y`, `-Z`, or `+Z`). The aperture is centered on that face's
+bounding-box projection. **Face offset** moves the first graphene layer outward from
+the face and is persisted in the job, so subsequent recentering, reload, retry, copy,
+and production derivation retain the same placement. **DNA clearance** is an
+independent minimum atom-to-sheet separation; the larger of clearance and face offset
+governs the final contact distance. Leave the face on **Inherited / auto** to reuse a
+resolved oxDNA deposition plane, then enable **Add graphene nanopore** to reveal its
+aperture, layer, clearance, and margin settings.
+
+Use an empty design for the open-pore control and enable **Add graphene nanopore**.
+NADOC detects that the design contains no DNA strands and automatically selects the
+graphene-only preparation and relaxation path. The default aperture is 2.1 nm in
+diameter. Reservoir padding controls the water depth normal to the sheet;
 salt mode and concentrations are properties of the explicit-solvent job rather than
 of the hard-surface card.
 
@@ -43,16 +67,19 @@ override is selected.
 
 A graphene-only package contains no DNA elastic network. Its relaxation therefore
 uses one chunked **300 K NVT graphene/solvent equilibration** stage rather than the
-DNA `k=0.5 → 0.1 → 0.01 → 0` release ladder. The graphene sites retain their hard
-surface restraints. Early stopping uses potential-energy stability (and volume when
+DNA `k=0.5 → 0.1 → 0.01 → 0` release ladder. The graphene sites retain stiff
+harmonic positional restraints. Early stopping uses potential-energy stability (and volume when
 an applicable ensemble supplies it); C1′ and Watson–Crick metrics are marked not
 applicable. Once stable, remaining control chunks are bridged from the accepted
 checkpoint.
 
 The same rule is emitted into local, Alpine, and RunPod execution. DNA-containing
 jobs keep the stricter energy-plus-Watson–Crick early-stop rule. GPU-resident NAMD is
-used when selected and compatible; harmonic positional restraints are used for the
-graphene and inherited anchors so the control does not require NAMD `fixedAtoms`.
+used when selected and compatible; harmonic positional restraints are used for every
+graphene and DNA anchor combination, whether native or seeded. DNA anchors default to
+0.02 kcal/mol/Å² while graphene defaults to 50 kcal/mol/Å²; sharing a marker does not
+make them share a force constant. The final-package audit rejects `GPUresident on`
+together with active `fixedAtoms` before local execution or remote staging.
 
 Surface deposition does not by itself guarantee that an unrestrained origami will
 remain registered over the aperture during zero-field relaxation. Internal DNA/ENM
@@ -80,9 +107,9 @@ should normally remain tied to the physical aperture.
 ## Manual UI workflow
 
 1. Open **Dynamics → NAMD** and create a relaxation job.
-2. In the hard-surface card, enable **Apply hard surface**.
-3. For an open-pore control, enable **Graphene-only control**. For an origami run,
-   start from the completed surface-deposited oxDNA job instead.
+2. In the hard-surface card, choose the face/offset and enable **Add graphene nanopore**.
+3. For an open-pore control, use an empty design; NADOC detects the absence of DNA.
+   For an origami run, use either the native design or a completed deposited oxDNA seed.
 4. Set pore diameter, layer count and spacing, water clearance, and sheet margin.
 5. In the Job Wizard set reservoir padding and the salt mode/concentrations. These
    controls determine the solvated cell and electrolyte, so they are intentionally

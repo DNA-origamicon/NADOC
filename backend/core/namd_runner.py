@@ -732,7 +732,16 @@ def _reconcile_preparing(job: MdJob, workspace_dir: Path) -> MdJob:
     reloaded mid-solvation), so the job would otherwise sit in `preparing`
     forever.  Mark it failed with an actionable message instead.
     """
-    from backend.core.md_prep_progress import PREP_PROGRESS_FILENAME  # noqa: PLC0415
+    from backend.core.md_prep_progress import (  # noqa: PLC0415
+        PREP_PROGRESS_FILENAME,
+        is_active_preparation,
+    )
+
+    # The task registry is authoritative inside this server process. Heartbeat age is
+    # only a crash/restart heuristic and can be stale while GIL-heavy atomistic assembly
+    # prevents the event loop from scheduling its one-second writer.
+    if is_active_preparation(job.job_id):
+        return job
 
     sidecar = job.job_dir(workspace_dir) / PREP_PROGRESS_FILENAME
     try:

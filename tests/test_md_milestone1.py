@@ -1968,6 +1968,31 @@ class TestReconcilePreparing:
         out = runner.reconcile_job_status(job, tmp_path)
         assert out.status == MdStatus.preparing  # live heartbeat → untouched
 
+    def test_registered_prep_task_wins_over_stale_heartbeat(self, tmp_path, monkeypatch):
+        import os
+        import time as _time
+        from backend.core.md_job import MdStatus
+        from backend.core.md_prep_progress import (
+            PREP_PROGRESS_FILENAME,
+            register_active_preparation,
+            unregister_active_preparation,
+            write_prep_progress,
+        )
+        import backend.core.namd_runner as runner
+
+        job = self._preparing_job(tmp_path)
+        write_prep_progress(job.job_dir(tmp_path), {"phase": "topology", "fraction": 0.2})
+        sidecar = job.job_dir(tmp_path) / PREP_PROGRESS_FILENAME
+        old = _time.time() - runner._PREP_STALE_S - 10
+        os.utime(sidecar, (old, old))
+        register_active_preparation(job.job_id)
+        try:
+            out = runner.reconcile_job_status(job, tmp_path)
+            assert out.status == MdStatus.preparing
+            assert out.error is None
+        finally:
+            unregister_active_preparation(job.job_id)
+
     def test_completed_package_heals_false_interruption_verdict(self, tmp_path):
         from backend.core.md_job import MdStatus, new_job
         import backend.core.namd_runner as runner

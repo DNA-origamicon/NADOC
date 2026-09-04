@@ -1606,7 +1606,10 @@ async function main() {
     const surface = event.detail?.surface || oxdnaFloorSetup?.getSurfaceSpec?.()
     grapheneNanoporeOverlay.update({
       ...event.detail,
-      surface: surface ? { dir: surface.dir, positionNm: surface.positionNm } : null,
+      surface: surface ? {
+        dir: surface.dir, positionNm: surface.positionNm,
+        faceRelative: !!surface.faceRelative,
+      } : null,
       bounds: _oxdnaStructureBounds(),
     })
   })
@@ -1741,6 +1744,19 @@ async function main() {
     'snupi-jobs-body', 'blade-jobs-body', 'md-jobs-panel-body',
   ]) standardizeSimulationCardOrder(document.getElementById(id))
 
+  // Scene adornments are job-scoped even though the renderer is shared by every engine
+  // tab.  Never let the previous engine's restraints/surface/field imply that the newly
+  // opened engine will run with them.  Its own panel will restore the applicable visuals
+  // when the user explicitly selects one of that engine's jobs.
+  let _sceneVisualEngine = null
+  const _resetSimulationSceneVisuals = () => {
+    anchorGlow.clear?.()
+    _viewToolButtons?.setSurfaceGrid?.({ enabled: false })
+    grapheneNanoporeOverlay.clear?.()
+    surfaceStrandsOverlay?.clear?.()
+    efieldSetup?.detachGizmo?.()
+  }
+
   // Relocate every engine's stage-timeline element to the ONE timeline host at the bottom
   // of the jobs card (each panel still populates its element by id; the master card shows
   // only the selected engine's + hides the block otherwise).
@@ -1779,7 +1795,20 @@ async function main() {
     // visibility rides the tab here. The card inside stays hidden unless a local relaxation
     // is actually live (md_jobs_panel.js owns that gate).
     onSelect: (engine) => {
-      simulateJobs?.setActiveEngine?.(engine); _refreshAnchorGlow()
+      if (_sceneVisualEngine !== null && engine !== _sceneVisualEngine) {
+        // Panels intentionally retain cached displays on an ordinary row deselect. At
+        // an ENGINE boundary the contract is stricter: clear any retained selection in
+        // the destination panel, otherwise its already-highlighted row would require a
+        // misleading deselect/reselect double click before its visuals could return.
+        const destinationPanel = {
+          oxdna: oxdnaPanel, mrdna: mrdnaPanel, cando: candoPanel,
+          snupi: snupiPanel, blade: bladePanel, namd: mdPanel,
+        }[engine]
+        destinationPanel?.deselectJob?.()
+        _resetSimulationSceneVisuals()
+      }
+      _sceneVisualEngine = engine
+      simulateJobs?.setActiveEngine?.(engine)
       const namdLiveHost = document.getElementById('namd-live-controls-host')
       if (namdLiveHost) namdLiveHost.style.display = engine === 'namd' ? '' : 'none'
     },

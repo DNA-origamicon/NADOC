@@ -1,6 +1,28 @@
 import numpy as np
 
 
+def test_empty_design_automatically_selects_graphene_control_protocol():
+    from backend.api.routes_md import CreateJobRequest, _infer_graphene_only
+    from backend.core.models import Design
+
+    body = CreateJobRequest(graphene_nanopore=True)
+    inferred = _infer_graphene_only(body, Design())
+    assert inferred.graphene_only is True
+    assert inferred.graphene_nanopore is True
+
+    ordinary = _infer_graphene_only(CreateJobRequest(), Design())
+    assert ordinary.graphene_only is False
+
+
+def test_unsequenced_dna_is_not_mistaken_for_graphene_only():
+    from types import SimpleNamespace
+    from backend.api.routes_md import CreateJobRequest, _infer_graphene_only
+
+    design = SimpleNamespace(strands=[SimpleNamespace(sequence=None)])
+    inferred = _infer_graphene_only(CreateJobRequest(graphene_nanopore=True), design)
+    assert inferred.graphene_only is False
+
+
 def test_graphene_sheet_has_requested_hole_and_plane():
     from backend.core.namd_solvate import _graphene_pdb_atoms
 
@@ -88,3 +110,25 @@ def test_graphene_only_sheet_builds_without_dna_and_tiles_xy_cell():
     assert box[2] >= 6.0
     assert xyz[:, 0].min() < 0.1 and box[0] - xyz[:, 0].max() < 0.1
     assert xyz[:, 1].min() < 0.1 and box[1] - xyz[:, 1].max() < 0.1
+
+
+def test_graphene_surface_axis_and_offset_select_requested_design_face():
+    from backend.core.namd_solvate import _graphene_pdb_atoms
+
+    dna = "\n".join([
+        "ATOM      1  P    DA A   1     -10.000 -20.000 -30.000  1.00  0.00",
+        "ATOM      2  P    DA A   2      40.000  50.000  60.000  1.00  0.00",
+    ]) + "\n"
+    for axis, coord_index, expected in (
+        ("-x", 0, -1.5), ("+x", 0, 4.5),
+        ("-y", 1, -2.5), ("+y", 1, 5.5),
+        ("-z", 2, -3.5), ("+z", 2, 6.5),
+    ):
+        spec = {"surface_axis": axis, "surface_offset_nm": 0.5,
+                "atomistic_clearance_nm": 0.32, "pore_diameter_nm": 2.1}
+        lines = _graphene_pdb_atoms(dna, spec)
+        coords = np.asarray([[float(line[30:38]) / 10, float(line[38:46]) / 10,
+                              float(line[46:54]) / 10] for line in lines])
+        assert np.allclose(coords[:, coord_index], expected, atol=1e-3)
+        assert spec["surface_axis"] == axis
+        assert spec["surface_offset_nm"] == 0.5

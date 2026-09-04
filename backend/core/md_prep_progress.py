@@ -44,6 +44,28 @@ from typing import Callable, Optional
 # start/finish writes.
 PREP_PROGRESS_FILENAME = "prep_progress.json"
 
+# Process-local liveness registry. A Python-heavy topology/assembly phase can hold the
+# GIL long enough to starve the asyncio heartbeat, but it cannot make its owning task
+# disappear. Reconciliation consults this authoritative signal first; after a server
+# restart the set is naturally empty, so stale sidecars still detect truly lost work.
+_ACTIVE_PREPARATIONS: set[str] = set()
+_ACTIVE_LOCK = threading.Lock()
+
+
+def register_active_preparation(job_id: str) -> None:
+    with _ACTIVE_LOCK:
+        _ACTIVE_PREPARATIONS.add(str(job_id))
+
+
+def unregister_active_preparation(job_id: str) -> None:
+    with _ACTIVE_LOCK:
+        _ACTIVE_PREPARATIONS.discard(str(job_id))
+
+
+def is_active_preparation(job_id: str) -> bool:
+    with _ACTIVE_LOCK:
+        return str(job_id) in _ACTIVE_PREPARATIONS
+
 
 @dataclasses.dataclass
 class PrepPhase:

@@ -162,6 +162,7 @@ def build_replica_package(
     #: already-completed children still pointed at.
     anchors_src: "Optional[Path]" = None,
     anchor_k: Optional[float] = None,
+    graphene_anchor_k: Optional[float] = None,
     anchors_requested: Optional[list] = None,
     field: Optional[dict] = None,
     orientation_restraint: bool = False,
@@ -348,7 +349,11 @@ def build_replica_package(
 
             coords = read_namd_coor(child_pkg / "equilibrated.coor")
             n_anchor_atoms = retarget_anchor_pdb(
-                src_anchor, dst_anchor, coords=coords, k=anchor_k
+                src_anchor,
+                dst_anchor,
+                coords=coords,
+                k=anchor_k,
+                graphene_k=graphene_anchor_k,
             )
         logger.info(
             "[%s] anchors: %d atom(s) %s",
@@ -515,6 +520,7 @@ def build_replica_package(
                 "file": anchors_file,
                 "n_atoms_anchored": n_anchor_atoms,
                 "k_kcal_mol_a2": anchor_k,
+                "graphene_k_kcal_mol_a2": graphene_anchor_k,
                 "mechanism": (
                     "fixedAtoms (fixedAtomsCol B); held immobile"
                     if anchor_k is None

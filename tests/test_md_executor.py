@@ -1335,7 +1335,19 @@ def test_remote_submit_uses_the_wizard_request(tmp_path, monkeypatch):
 
     # An explicit override from the review card still wins over the stored request.
     body = routes_md.SubmitRemoteRequest(resources={"walltime": "02:00:00", "cores": 4})
-    assert routes_md._remote_resources(job, profile, body)["walltime"] == "02:00:00"
+    resources = routes_md._remote_resources(job, profile, body)
+    assert resources["walltime"] == "02:00:00"
+    assert resources["cores"] == 4
+    assert resources["partition"]
+    assert resources["mem_gb"]
+    assert resources["qos"]
+
+    # GPU model is also a sparse wizard choice; it must not discard required fields.
+    body = routes_md.SubmitRemoteRequest(resources={"gres_type": "rtx_pro_6000"})
+    resources = routes_md._remote_resources(job, profile, body)
+    assert resources["gres_type"] == "rtx_pro_6000"
+    assert resources["partition"]
+    assert resources["gpus"] >= 1
 
 
 def test_wizard_request_ignores_blank_fields(tmp_path, monkeypatch):

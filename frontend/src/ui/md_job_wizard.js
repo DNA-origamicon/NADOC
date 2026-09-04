@@ -804,7 +804,9 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
           // and "what does this setting do" — and the reason used to REPLACE the help.
           // Harmless while most reasons were empty; once production gave every field one,
           // every production control lost its explanation to a one-line provenance note.
-          reason ? el('div', { className: 'wizard-field__why', text: reason }) : null,
+          // Reserve the explanation row even before the plan supplies a reason. Without
+          // the placeholder, typing a value inserts a row and shifts every card below it.
+          el('div', { className: 'wizard-field__why', text: reason || '\u00a0' }),
           field.help
             ? el('div', { className: 'wizard-field__help', text: helpText(field) })
             : null,
