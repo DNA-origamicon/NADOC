@@ -223,6 +223,8 @@ def test_replica_persists_graphene_surface_descriptor(tmp_path):
     assert "consref            graphene_fixed.pdb" in conf
     assert "conskfile          graphene_fixed.pdb" in conf
     assert "conskcol           B" in conf
+    assert "langevinPistonPeriod  10000.0" in conf
+    assert "langevinPistonDecay   5000.0" in conf
 
 
 def test_reseed_conf_reinits_from_root_equilibrated(tmp_path):

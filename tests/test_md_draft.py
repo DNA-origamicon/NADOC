@@ -144,7 +144,9 @@ def test_seed_anchor_harmonic_composition_keeps_anchor_constant(tmp_path):
     (pkg / "anchors.pdb").write_text("".join(marker))
     (pkg / "stage.conf").write_text(
         "coordinates        demo.pdb\nconstraints on\nconsref release.pdb\n"
-        "conskfile release.pdb\nconskcol B\nconstraintScaling 0.25\nrun 100\n"
+        "conskfile release.pdb\nconskcol B\nconstraintScaling 0.25\n"
+        "langevinPiston on\nlangevinPistonPeriod 1000\n"
+        "langevinPistonDecay 500\nrun 100\n"
     )
     (pkg / "manifest.json").write_text(
         '{"files":{"anchors":"anchors.pdb"},"gpu_resident_mode":"on",'
@@ -161,12 +163,16 @@ def test_seed_anchor_harmonic_composition_keeps_anchor_constant(tmp_path):
     assert "GPUresident        on" in conf
     assert "fixedAtoms" not in conf
     assert "constraintScaling  1" in conf
+    assert "langevinPistonPeriod 10000.0" in conf
+    assert "langevinPistonDecay 5000.0" in conf
     assert float(combined[0][60:66]) == 0.25
     assert float(combined[1][60:66]) == 0.02
     assert float(combined[2][60:66]) == 50.0
     manifest = json.loads((pkg / "manifest.json").read_text())
     assert manifest["anchors"]["force_constant_kcal_mol_A2"] == 0.02
     assert manifest["graphene_nanopore"]["restraint_k_kcal_mol_A2"] == 50.0
+    assert manifest["relax_protocol_settings"]["ladder_piston_period_decay_fs"] == [10000.0, 5000.0]
+    assert manifest["relax_protocol_settings"]["production_piston_period_decay_fs"] == [10000.0, 5000.0]
     routes_md._audit_external_force_configs(pkg)
 
 

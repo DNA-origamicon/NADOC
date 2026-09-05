@@ -2083,6 +2083,15 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
         return
 
     manifest = json.loads(manifest_path.read_text())
+    from backend.core.namd_graphene import validate_graphene_wall_package
+
+    try:
+        await asyncio.to_thread(validate_graphene_wall_package, package_dir)
+    except (ValueError, OSError) as exc:
+        job.status = MdStatus.failed
+        job.error = str(exc)
+        job.save(workspace_dir)
+        return
     graphene_only = bool(
         manifest.get("graphene_only")
         or (manifest.get("charge_audit") or {}).get("graphene_only")

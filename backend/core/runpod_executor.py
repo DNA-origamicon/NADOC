@@ -362,6 +362,11 @@ async def submit_job(
     remote = remote_dir_for(job)
     pkg = job.package_dir(workspace_dir)
 
+    import asyncio
+    from backend.core.namd_graphene import validate_graphene_wall_package
+
+    await asyncio.to_thread(validate_graphene_wall_package, pkg)
+
     # Prepared packages can predate adaptive minimisation. Upgrade the tiny config
     # before stage_plan computes file sizes, so a stopped job (including the current
     # expensive 3.24M-atom run) gets the controller on its next submission and only
@@ -815,6 +820,9 @@ async def run_job_on_pod(
     """
     import asyncio
 
+    from backend.core.namd_graphene import validate_graphene_wall_package
+
+    await asyncio.to_thread(validate_graphene_wall_package, job.package_dir(workspace_dir))
     sleep = sleep or asyncio.sleep
     from backend.core import runpod_s3
 

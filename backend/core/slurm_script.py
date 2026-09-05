@@ -44,6 +44,8 @@ LIVE_HEALTH_NAME = "nadoc_live_health.py"
 LIVE_HEALTH_FILE = "output/live_health.json"
 LIVE_HEALTH_INTERVAL_S = 300
 SETTLE_RETARGET_NAME = "nadoc_settle_retarget.py"
+CELL_RECOVERY_NAME = "nadoc_cell_recovery.py"
+RESUME_CONF_NAME = "nadoc_resume_conf.py"
 
 # RunPod's node WC health step + the verbatim md_health copy it imports. Alpine uses
 # the portable pair-plan evaluator below because its bare Python has no MDAnalysis.
@@ -511,9 +513,32 @@ def generate_sbatch(
         lines.append(f'  echo "[NADOC] {verb} {conf}"')
         lines.append(f"  NADOC_CURRENT_STAGE='{conf}'")
         lines.append(f"  NADOC_CURRENT_LOG='{log}'")
-        lines.append(
-            "  " + _exec_line(run_conf, log, resources, gpu, profile.namd_command(gpu))
-        )
+        total = next((int(s.get("steps", 0)) for s in manifest.get("segments", [])
+                      if s["name"] == conf), 0)
+        if total:
+            # Recovery happens inside this allocation, never by submitting another
+            # Slurm job. Other NAMD failures still reach the diagnostic EXIT trap.
+            lines += [
+                "  nadoc_attempt=0",
+                "  while true; do",
+                "    nadoc_rc=0",
+                '    if [ "$nadoc_attempt" -eq 0 ]; then',
+                "      " + _exec_line(run_conf, log, resources, gpu, profile.namd_command(gpu)) + " || nadoc_rc=$?",
+                "    else",
+                "      " + _exec_line(conf + ".cell_retry", log, resources, gpu, profile.namd_command(gpu)) + " || nadoc_rc=$?",
+                "    fi",
+                f'    if [ "$nadoc_rc" -eq 0 ] && [ -f "output/{conf}.coor" ]; then break; fi',
+                '    [ "$nadoc_rc" -ne 0 ] || nadoc_rc=1',
+                f'    if ! grep -q "Periodic cell has become too small" "{log}" || [ "$nadoc_attempt" -ge 4 ]; then exit "$nadoc_rc"; fi',
+                "    nadoc_attempt=$((nadoc_attempt + 1))",
+                f'    cp "{log}" "output/{conf}.cell_failure_${{nadoc_attempt}}.log"',
+                f'    python3 {CELL_RECOVERY_NAME} --segment {conf} --source {run_conf} --total {total} --attempt "$nadoc_attempt" >> "{log}" 2>&1 || exit "$nadoc_rc"',
+                "  done",
+            ]
+        else:
+            lines.append(
+                "  " + _exec_line(run_conf, log, resources, gpu, profile.namd_command(gpu))
+            )
         lines.append("fi")
         # Local and RunPod retarget the restrained settle reference to the completed
         # minimization coordinates. Alpine must do the identical stdlib rewrite before

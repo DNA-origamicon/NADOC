@@ -1,4 +1,4 @@
-* NADOC C3 thiolate linker cross-terms
+* NADOC C3 thiolate linker and restrained graphene-wall parameters
 *
 
 BONDS
@@ -18,5 +18,15 @@ ON2  P   ON2 CT2  0.0000    6       0.00
 ON3  P   ON2 CT2  0.1000    3       0.00
 
 IMPROPERS
+
+! NGRC is a neutral restrained wall site. Its cross interactions retain CHARMM CA
+! epsilon/Rmin; it is deliberately distinct from CA in proteins. No bonded graphene
+! terms are present, so wall-wall LJ must be suppressed explicitly at lattice spacing.
+NONBONDED
+NGRC  0.000000  -0.070000  1.992400
+
+NBFIX
+! type1 type2 epsilon Rmin epsilon14 Rmin14
+NGRC NGRC  0.000000  3.984800  0.000000  3.984800
 
 END

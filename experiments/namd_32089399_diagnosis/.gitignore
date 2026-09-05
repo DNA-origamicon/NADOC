@@ -1,0 +1,3 @@
+# Generated recovery package contains machine-local links to multi-GB job inputs.
+/recovery_package/
+/slow-worker-stack*.txt

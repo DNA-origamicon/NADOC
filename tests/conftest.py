@@ -556,6 +556,11 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    # Full six-helix topology-safe atomistic projection: 9.8–10.9 s each in the
+    # 2026-09-04 fast gate. Retain the complete geometry assertions in slow/oxdna.
+    "test_build_namd_seed_uses_snapshot_and_backbone_site",
+    "test_build_namd_seed_recenters_far_from_origin_conf",
+    "test_deposited_namd_seed_recenters_plane_with_structure",
     # N2 NAMD anchors: real psfgen topology build (stubbed solvate) + conf writing.
     "test_prepare_writes_anchor_restraints_end_to_end",
     # N2 NAMD anchors: 176-strand routed design build + real export_pdb (~30 s).

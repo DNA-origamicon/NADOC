@@ -84,6 +84,7 @@ from backend.core.md_protocols import write_hmr_psf
 from backend.core.pdb_export import export_pdb
 from backend.core.namd_package import complete_psf
 from backend.core.namd_topology import build_charmm_psfgen_topology
+from backend.core.namd_graphene import GRAPHENE_PARAMS as _GRAPHENE_PARAMS
 
 _FF_DIR = Path(__file__).parent.parent / "data" / "forcefield"
 _FF_FILES = [
@@ -104,8 +105,6 @@ _ION_PARAMS = {
     "MG": ("MG", 2.00, 24.30500),
     "CLA": ("CLA", -1.00, 35.45000),
 }
-
-_GRAPHENE_PARAMS = ("CA", 0.0, 12.01100)
 
 
 def _graphene_identity(index: int) -> tuple[str, int]:
@@ -2857,6 +2856,9 @@ def build_namd_solvated_package(
     graphene_centroid_before = None
     graphene_pore_before = None
     if graphene_nanopore:
+        from backend.core.namd_graphene import describe_graphene_wall
+
+        describe_graphene_wall(graphene_nanopore)
         graphene_lines = _graphene_pdb_atoms(dna_pdb, graphene_nanopore)
         graphene_count = len(graphene_lines)
         if graphene_lines:

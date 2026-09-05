@@ -512,9 +512,18 @@ export function mdRunControl(selectedJob, {
     }
   }
   if (mdJobIsDraft(selectedJob)) {
+    const target = mdRunTargetForJob(selectedJob)
+    const blocked = target === 'alpine' ? alpineTargetDisabledReason(clusterState)
+      : target === 'runpod' && !runpodReady
+        ? runpodBlocked || 'Connect to RunPod and choose an available GPU before submitting.'
+        : ''
     return {
-      action: RUN_ACTION.RUN, label: mdDraftRunLabel(selectedJob), disabled: busy,
-      title: 'Solvate this seeded job and start it.',
+      // Drafts still need preparation before a package can be submitted.
+      action: RUN_ACTION.RUN, label: mdDraftRunLabel(selectedJob), disabled: busy || !!blocked,
+      title: blocked || (target === 'alpine'
+        ? 'Prepare this job and submit it to Alpine using its saved SLURM resources.'
+        : target === 'runpod' ? 'Prepare this job and submit it to RunPod using its saved GPU choice.'
+          : 'Prepare this job and start it locally.'),
     }
   }
   // An Alpine job's whole local phase exists to produce a package to upload, so the
@@ -770,9 +779,10 @@ export function mdRunTargetForJob(job) {
     : 'local'
 }
 
-/** Pure: the run-button label for a selected draft — names the seed engine so the
- *  user knows the run starts from those relaxed coordinates. */
+/** Pure: draft launch label follows its saved target; local seeds name their engine. */
 export function mdDraftRunLabel(job) {
+  if (mdRunTargetForJob(job) === 'alpine') return '☁ Submit to Alpine'
+  if (mdRunTargetForJob(job) === 'runpod') return '☁ Submit to RunPod'
   if (job?.seed_blade_job_id) return '▶ Relax from BLADE'
   if (job?.seed_mrdna_job_id) return '▶ Relax from mrDNA'
   if (job?.seed_oxdna_job_id) return '▶ Relax from oxDNA'
@@ -2083,6 +2093,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   function _clearSelectedJob() {
+    if (_selectedId) {
+      if (surfaceEnableChk) surfaceEnableChk.checked = false
+      surfaceSeedSpec = null
+      _syncSurfaceCard()
+    }
     _stopLiveFrameTimer()   // no selection ⇒ no pod to snapshot
     _selectedId = null
     _userDeselected = false   // a forced clear (design switch / empty list), not a user deselect
@@ -2114,6 +2129,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // defaults on every open, which is the same guarantee without a reset to remember.
   function _resetControlsToDefaults() {
     resetControlsToDefaults([trajInterval])
+    if (surfaceEnableChk) surfaceEnableChk.checked = false
+    surfaceSeedSpec = null
+    _syncSurfaceCard()
     _checkEngines()
     _renderTrajFramesHint()
   }
@@ -3606,12 +3624,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     if (_launching) {
       return { action: RUN_ACTION.PREPARING, label: 'Preparing…', disabled: true, spinner: true }
     }
-    // A selected DRAFT (deferred-prep seed) relabels the launcher "Relax from oxDNA"
-    // and, when clicked, solvates-from-seed + starts THIS job (POST …/prepare).
     const sel = _selectedJob()
-    if (mdJobIsDraft(sel)) {
-      return { action: RUN_ACTION.RUN, label: mdDraftRunLabel(sel), disabled: _launching }
-    }
     return mdRunControlForSelection(_jobs, _selectedId, {
       busy: _launching,
       runTarget: _currentRunTarget(),
@@ -4710,6 +4723,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
    *  picking a DIFFERENT job unloads them.  The status WebSocket does close — it streams
    *  detail for a job that's no longer being shown — and reopens on re-selection. */
   function _deselectJob() {
+    if (surfaceEnableChk) surfaceEnableChk.checked = false
+    surfaceSeedSpec = null
+    _syncSurfaceCard()
     _userDeselected = true
     _selectedId = null
     _displayMeta = null
@@ -4747,7 +4763,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
    *  NAMD actually runs.  Force `_openDetailForJob` in that case (it reopens the WS
    *  for a now-live job); a different id takes the normal `_selectJob` path. */
   function _reselectJob(jobId) {
-    if (_selectedId === jobId) _openDetailForJob(jobId)
+    if (_selectedId === jobId) {
+      // Settings edits preserve the job id but can change its execution environment.
+      _syncRunTargetToJob(_selectedJob())
+      _paintRunpodGate()
+      _openDetailForJob(jobId)
+    }
     else _selectJob(jobId)
   }
 

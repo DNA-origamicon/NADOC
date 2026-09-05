@@ -498,6 +498,23 @@ describe('mdJobIsRunning / mdJobIsStartable / mdJobIsResumable (what the one con
 })
 
 describe('mdRunControl (ONE control for the selected job: Run / Stop / Resume)', () => {
+  it('uses the saved target for a copied draft, including remote connection gates', () => {
+    const copy = { job_id: 'copy', status: 'draft', execution_target: 'local' }
+    expect(mdRunControl(copy)).toMatchObject({ label: '▶ Run', disabled: false })
+    const alpine = { ...copy, execution_target: 'alpine',
+      prep_params: { execution_target: 'alpine', partition: 'ah200' } }
+    expect(mdRunControl(alpine, { clusterState: 'connected', machineBusy: true }))
+      .toMatchObject({ action: 'run', label: '☁ Submit to Alpine', disabled: false })
+    expect(mdRunControl(alpine, { clusterState: 'disconnected' }))
+      .toMatchObject({ label: '☁ Submit to Alpine', disabled: true })
+    expect(mdDraftLaunchPayload(alpine)).toMatchObject({ execution_target: 'alpine', partition: 'ah200' })
+    expect(mdRunControl({ ...alpine, seed_oxdna_job_id: 'seed' }, { clusterState: 'connected' }).label)
+      .toBe('☁ Submit to Alpine')
+    expect(mdRunControl({ ...copy, execution_target: 'runpod' }, { runpodReady: false }))
+      .toMatchObject({ label: '☁ Submit to RunPod', disabled: true })
+    expect(mdRunControl(copy, { runTarget: 'alpine' }).label).toBe('▶ Run')
+  })
+
   it('offers Run for a sequence-deferred job so the click can show the sequence refusal', () => {
     const job = { status: 'draft', execution_target: 'local', awaiting_sequence: true }
     expect(mdJobIsDraft(job)).toBe(false)

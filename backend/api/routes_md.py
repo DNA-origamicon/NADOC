@@ -1980,7 +1980,12 @@ def _conservative_production_conf(
     # seed=None keeps build_production_conf's own default, which the pure-builder tests
     # pin byte-for-byte; the append route passes an explicit random draw.
     seed_kw = {} if seed is None else {"seed": int(seed)}
-    return build_production_conf(
+    anchor_k = None
+    if package_dir is not None and anchors_file:
+        from backend.core.md_anchor_settings import production_anchor_file
+
+        anchors_file, anchor_k = production_anchor_file(package_dir, anchors_file)
+    conf = build_production_conf(
         spec,
         name_stem,
         box,
@@ -1991,6 +1996,7 @@ def _conservative_production_conf(
         rigid_bonds=rigid_bonds,
         hmr=hmr,
         anchors_file=anchors_file,
+        anchor_k=anchor_k,
         field=field,
         colvars_file=colvars_file,
         n_atoms=n_atoms,
@@ -1998,6 +2004,14 @@ def _conservative_production_conf(
         npt=package_npt_allowed(package_dir) if package_dir else True,
         **seed_kw,
     )
+    from backend.core.namd_graphene import graphene_pressure_conf
+
+    manifest_path = package_dir / "manifest.json" if package_dir else None
+    wall = (
+        json.loads(manifest_path.read_text()).get("graphene_nanopore")
+        if manifest_path and manifest_path.exists() else None
+    )
+    return graphene_pressure_conf(conf, enabled=bool(wall and anchor_k is not None))
 
 
 def _seed_production_conf(
@@ -2655,12 +2669,28 @@ def _harmonicize_seed_anchors(
         restore_resident = force_gpu_resident or manifest.get("gpu_resident_mode") == "on"
         if restore_resident and not re.search(r"^\s*GPUresident\b", "".join(kept), re.MULTILINE | re.IGNORECASE):
             kept.insert(0, "GPUresident        on\n")
-        conf_path.write_text("".join(kept), encoding="utf-8")
+        from backend.core.namd_graphene import graphene_pressure_conf
+
+        conf_path.write_text(
+            graphene_pressure_conf(
+                "".join(kept), enabled=bool(manifest.get("graphene_nanopore"))
+            ),
+            encoding="utf-8",
+        )
 
     manifest.setdefault("anchors", {})["mechanism"] = "harmonic_positional"
     manifest["anchors"]["force_constant_kcal_mol_A2"] = force_constant
     manifest["anchors"]["fixed_equivalent_rms_A_300K"] = (0.596161 / (2 * force_constant)) ** 0.5
     if manifest.get("graphene_nanopore"):
+        from backend.core.namd_graphene import (
+            GRAPHENE_PISTON_DECAY_FS,
+            GRAPHENE_PISTON_PERIOD_FS,
+        )
+
+        piston_defaults = [GRAPHENE_PISTON_PERIOD_FS, GRAPHENE_PISTON_DECAY_FS]
+        settings = manifest.setdefault("relax_protocol_settings", {})
+        settings["ladder_piston_period_decay_fs"] = piston_defaults
+        settings["production_piston_period_decay_fs"] = piston_defaults
         manifest["graphene_nanopore"]["restraint_mechanism"] = "harmonic_positional"
         manifest["graphene_nanopore"]["restraint_k_kcal_mol_A2"] = graphene_force_constant
         manifest["graphene_nanopore"]["model"] = (
@@ -3119,8 +3149,9 @@ async def set_md_job_forces(job_id: str, body: JobForcesRequest) -> dict:
 async def prepare_draft_job(job_id: str, body: CreateJobRequest) -> dict:
     """Freeze and prepare a DRAFT job with its final user-selected settings.
 
-    Seeded drafts retain their recorded source; native drafts snapshot the live design
-    at this boundary, and graphene-only drafts construct the empty control design here.
+    Seeded drafts retain their recorded source; native wizard drafts snapshot the live
+    design here, while copies use their retained snapshot. Graphene-only drafts
+    construct the empty control design here.
     In every case the package is built into the SAME job id.
     """
     job = _load_job(job_id)
@@ -3175,9 +3206,15 @@ async def prepare_draft_job(job_id: str, body: CreateJobRequest) -> dict:
 
             design = Design(metadata=DesignMetadata(name="graphene_control"))
         else:
-            # The request carries the document-context header, so this is the live design
-            # from the tab whose Run button was pressed, not a process-global fallback.
-            design = design_state.get_or_404().without_reference_geometry()
+            # Copies retain their source's frozen design. Ordinary wizard drafts have
+            # no snapshot yet and freeze the active document when Run is pressed.
+            snapshot = job.job_dir(_workspace()) / "design.json"
+            if snapshot.is_file():
+                from backend.core.models import Design  # noqa: PLC0415
+
+                design = Design.from_json(snapshot.read_text())
+            else:
+                design = design_state.get_or_404().without_reference_geometry()
             new_body = _infer_graphene_only(new_body, design)
         size_factor = design_size_factor(design)
 
@@ -4938,7 +4975,7 @@ async def get_md_job(job_id: str) -> dict:
 
 @router.post("/md/jobs/{job_id}/copy")
 async def copy_md_job(job_id: str) -> dict:
-    """Create a clean, queued copy of a NAMD job with one fresh base seed."""
+    """Copy settings without launching; relaxation copies remain unprepared drafts."""
     source = _load_job(job_id)
     used_seeds = [
         seed
@@ -4969,34 +5006,25 @@ async def copy_md_job(job_id: str) -> dict:
             update={
                 "seed": copied_seed,
                 "autostart": False,
-                "draft": source.status == MdStatus.draft,
+                "draft": True,
             }
         )
-        if source.status == MdStatus.draft:
-            job = _spawn_draft_job(body, name=source.design_name or "design")
-            job.awaiting_sequence = source.awaiting_sequence
-            job.save(_workspace())
-        else:
-            seeded = bool(body.oxdna_job_id or body.mrdna_job_id or body.blade_job_id)
-            design = None
-            if not seeded:
-                snapshot = source.job_dir(_workspace()) / "design.json"
-                if not snapshot.is_file():
-                    raise HTTPException(
-                        409,
-                        "This job has no frozen design snapshot and cannot be copied exactly.",
-                    )
-                from backend.core.models import Design  # noqa: PLC0415
-
-                design = Design.from_json(snapshot.read_text())
-            job = _spawn_prep_job(
-                body,
-                design=design,
-                seeded=seeded,
-                name=source.design_name or "design",
-                size_factor=1.0 if seeded else design_size_factor(design),
-                parent_job_id=source.parent_job_id,
+        seeded = bool(body.oxdna_job_id or body.mrdna_job_id or body.blade_job_id)
+        snapshot = source.job_dir(_workspace()) / "design.json"
+        if source.status != MdStatus.draft and not seeded and not snapshot.is_file():
+            raise HTTPException(
+                409,
+                "This job has no frozen design snapshot and cannot be copied exactly.",
             )
+        job = _spawn_draft_job(body, name=source.design_name or "design")
+        job.awaiting_sequence = source.awaiting_sequence
+        job.project_id = source.project_id
+        job.design_revision_id = source.design_revision_id
+        job.parent_job_id = source.parent_job_id
+        job.design_fingerprint = source.design_fingerprint
+        job.feature_log_position = source.feature_log_position
+        if snapshot.is_file():
+            shutil.copy2(snapshot, job.job_dir(_workspace()) / "design.json")
         job.prep_params_set = (
             list(source.prep_params_set) if source.prep_params_set is not None else None
         )
@@ -6190,7 +6218,12 @@ async def _spawn_md_production_impl(
         )
     # NAMD 3 GPU-resident does not support fixedAtoms. Transport production uses the
     # manual's harmonic-restraint workaround for the membrane marker instead.
-    effective_anchor_k = (body.anchor_k or 0.02) if ion_transport is not None else body.anchor_k
+    from backend.core.md_anchor_settings import harmonic_anchor_k
+
+    parent_anchor_manifest = _read_manifest(parent)
+    effective_anchor_k = (body.anchor_k or 0.02) if ion_transport is not None else (
+        body.anchor_k if body.anchor_k is not None else harmonic_anchor_k(parent_anchor_manifest)
+    )
     graphene_anchor_k = 10.0 if ion_transport is not None else (
         float((root_manifest.get("graphene_nanopore") or {}).get(
             "restraint_k_kcal_mol_A2", 50.0

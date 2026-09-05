@@ -1,0 +1,1039 @@
+{
+  "audited_at": "2026-09-05T21:11:46.936606+00:00",
+  "job_id": "e75ffd56c6f8",
+  "status": "running",
+  "slurm_job_id": "32108809",
+  "remote_scratch_dir": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8",
+  "config_count": 24,
+  "npt_configs": 22,
+  "configs": [
+    {
+      "file": "namd.conf",
+      "bytes": 4376,
+      "sha256": "5848b3721532a1514116215eec5bc0a34319d424fb5171b1df3e2ba1b0359da3",
+      "npt": false,
+      "piston_period_fs": "200.0",
+      "piston_decay_fs": "100.0",
+      "timestep_fs": "1.0",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_namd.pdb",
+      "coordinates": null,
+      "cell": null
+    },
+    {
+      "file": "namd_fast.conf",
+      "bytes": 3694,
+      "sha256": "67709aec5326e73c23a9f51e41c47bd8dbeb0f2aa10b3edb7fc79eeb00a13aed",
+      "npt": true,
+      "piston_period_fs": "10000.0",
+      "piston_decay_fs": "5000.0",
+      "timestep_fs": "4.0",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_namd_fast.pdb",
+      "coordinates": null,
+      "cell": null
+    },
+    {
+      "file": "small_plate_00_min_enm_k0p5.conf",
+      "bytes": 3735,
+      "sha256": "0f592ee12ba7cf2662fe355f5347592a43a1351ce7ad3414171b98350ebd3e3c",
+      "npt": false,
+      "piston_period_fs": null,
+      "piston_decay_fs": null,
+      "timestep_fs": "2",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_small_plate_00_min_enm_k0p5.pdb",
+      "coordinates": null,
+      "cell": null
+    },
+    {
+      "file": "small_plate_01_300K_NPT_ENM_k0p5_p10.conf",
+      "bytes": 2107,
+      "sha256": "d4c719c853815d9343db00cd3a61c29586af285f217398bc96646efbc4fcf72e",
+      "npt": true,
+      "piston_period_fs": "10000.0",
+      "piston_decay_fs": "5000.0",
+      "timestep_fs": "2",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_small_plate_01_300K_NPT_ENM_k0p5_p10.pdb",
+      "coordinates": "output/small_plate_0S_300K_NPT_settle_fixed_dna_p100.coor",
+      "cell": "output/small_plate_0S_300K_NPT_settle_fixed_dna_p100.xsc"
+    },
+    {
+      "file": "small_plate_01_300K_NPT_ENM_k0p5_p100.conf",
+      "bytes": 2087,
+      "sha256": "26a316ef64d77dfe87aeb75b420c9c75c98f5f5444fdd2e1e24e581127ed2807",
+      "npt": true,
+      "piston_period_fs": "10000.0",
+      "piston_decay_fs": "5000.0",
+      "timestep_fs": "4",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_small_plate_01_300K_NPT_ENM_k0p5_p100.pdb",
+      "coordinates": "output/small_plate_01_300K_NPT_ENM_k0p5_p75.coor",
+      "cell": "output/small_plate_01_300K_NPT_ENM_k0p5_p75.xsc"
+    },
+    {
+      "file": "small_plate_01_300K_NPT_ENM_k0p5_p25.conf",
+      "bytes": 2080,
+      "sha256": "65f871dce8955ea6b6af88269878f384757c0b264190adedcda5709c97e82435",
+      "npt": true,
+      "piston_period_fs": "10000.0",
+      "piston_decay_fs": "5000.0",
+      "timestep_fs": "4",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_small_plate_01_300K_NPT_ENM_k0p5_p25.pdb",
+      "coordinates": "output/small_plate_01_300K_NPT_ENM_k0p5_p10.coor",
+      "cell": "output/small_plate_01_300K_NPT_ENM_k0p5_p10.xsc"
+    },
+    {
+      "file": "small_plate_01_300K_NPT_ENM_k0p5_p50.conf",
+      "bytes": 2083,
+      "sha256": "03155199a521c8ad0c1356d7a14f32103f565285fa24840106576087edd1e82d",
+      "npt": true,
+      "piston_period_fs": "10000.0",
+      "piston_decay_fs": "5000.0",
+      "timestep_fs": "4",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_small_plate_01_300K_NPT_ENM_k0p5_p50.pdb",
+      "coordinates": "output/small_plate_01_300K_NPT_ENM_k0p5_p25.coor",
+      "cell": "output/small_plate_01_300K_NPT_ENM_k0p5_p25.xsc"
+    },
+    {
+      "file": "small_plate_01_300K_NPT_ENM_k0p5_p75.conf",
+      "bytes": 2083,
+      "sha256": "c2d01e512419ae9f8d4daa5f850abc03525d532cb19ef60ad834be61deeea126",
+      "npt": true,
+      "piston_period_fs": "10000.0",
+      "piston_decay_fs": "5000.0",
+      "timestep_fs": "4",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_small_plate_01_300K_NPT_ENM_k0p5_p75.pdb",
+      "coordinates": "output/small_plate_01_300K_NPT_ENM_k0p5_p50.coor",
+      "cell": "output/small_plate_01_300K_NPT_ENM_k0p5_p50.xsc"
+    },
+    {
+      "file": "small_plate_02_300K_NPT_ENM_k0p1_p10.conf",
+      "bytes": 2083,
+      "sha256": "a118f005dc4438dbda339f1a0d2d2e8e345c8103097542b12f7507472c6c8891",
+      "npt": true,
+      "piston_period_fs": "10000.0",
+      "piston_decay_fs": "5000.0",
+      "timestep_fs": "4",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_small_plate_02_300K_NPT_ENM_k0p1_p10.pdb",
+      "coordinates": "output/small_plate_01_300K_NPT_ENM_k0p5_p100.coor",
+      "cell": "output/small_plate_01_300K_NPT_ENM_k0p5_p100.xsc"
+    },
+    {
+      "file": "small_plate_02_300K_NPT_ENM_k0p1_p100.conf",
+      "bytes": 2087,
+      "sha256": "2524b840f302392ea712871fe381c603249a418805ed1fa31079d172dd4e8f17",
+      "npt": true,
+      "piston_period_fs": "10000.0",
+      "piston_decay_fs": "5000.0",
+      "timestep_fs": "4",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_small_plate_02_300K_NPT_ENM_k0p1_p100.pdb",
+      "coordinates": "output/small_plate_02_300K_NPT_ENM_k0p1_p75.coor",
+      "cell": "output/small_plate_02_300K_NPT_ENM_k0p1_p75.xsc"
+    },
+    {
+      "file": "small_plate_02_300K_NPT_ENM_k0p1_p25.conf",
+      "bytes": 2080,
+      "sha256": "e96aeff5aff8847cc4d81e258cc4fc21669d4a648236fb7a572ac6ca2e8f9927",
+      "npt": true,
+      "piston_period_fs": "10000.0",
+      "piston_decay_fs": "5000.0",
+      "timestep_fs": "4",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_small_plate_02_300K_NPT_ENM_k0p1_p25.pdb",
+      "coordinates": "output/small_plate_02_300K_NPT_ENM_k0p1_p10.coor",
+      "cell": "output/small_plate_02_300K_NPT_ENM_k0p1_p10.xsc"
+    },
+    {
+      "file": "small_plate_02_300K_NPT_ENM_k0p1_p50.conf",
+      "bytes": 2083,
+      "sha256": "71a0775c7085a45acd86b335d5d12db7f035f8621e429749238d6b1067af0220",
+      "npt": true,
+      "piston_period_fs": "10000.0",
+      "piston_decay_fs": "5000.0",
+      "timestep_fs": "4",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_small_plate_02_300K_NPT_ENM_k0p1_p50.pdb",
+      "coordinates": "output/small_plate_02_300K_NPT_ENM_k0p1_p25.coor",
+      "cell": "output/small_plate_02_300K_NPT_ENM_k0p1_p25.xsc"
+    },
+    {
+      "file": "small_plate_02_300K_NPT_ENM_k0p1_p75.conf",
+      "bytes": 2083,
+      "sha256": "d0889a0830d960e04efaf191fcf3dbd114a6c486d4cbcaab213276275bfc252e",
+      "npt": true,
+      "piston_period_fs": "10000.0",
+      "piston_decay_fs": "5000.0",
+      "timestep_fs": "4",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_small_plate_02_300K_NPT_ENM_k0p1_p75.pdb",
+      "coordinates": "output/small_plate_02_300K_NPT_ENM_k0p1_p50.coor",
+      "cell": "output/small_plate_02_300K_NPT_ENM_k0p1_p50.xsc"
+    },
+    {
+      "file": "small_plate_03_300K_NPT_ENM_k0p01_p10.conf",
+      "bytes": 2088,
+      "sha256": "edc72e1ecb3d43de0b6b0944e64e52b394519a7e3659aa5a33bb63fa844cb422",
+      "npt": true,
+      "piston_period_fs": "10000.0",
+      "piston_decay_fs": "5000.0",
+      "timestep_fs": "4",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_small_plate_03_300K_NPT_ENM_k0p01_p10.pdb",
+      "coordinates": "output/small_plate_02_300K_NPT_ENM_k0p1_p100.coor",
+      "cell": "output/small_plate_02_300K_NPT_ENM_k0p1_p100.xsc"
+    },
+    {
+      "file": "small_plate_03_300K_NPT_ENM_k0p01_p100.conf",
+      "bytes": 2095,
+      "sha256": "fecb704ba9c4a156f26ca3186dcdd7f8c8e4adf3b1c751e40db504340de97fef",
+      "npt": true,
+      "piston_period_fs": "10000.0",
+      "piston_decay_fs": "5000.0",
+      "timestep_fs": "4",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_small_plate_03_300K_NPT_ENM_k0p01_p100.pdb",
+      "coordinates": "output/small_plate_03_300K_NPT_ENM_k0p01_p75.coor",
+      "cell": "output/small_plate_03_300K_NPT_ENM_k0p01_p75.xsc"
+    },
+    {
+      "file": "small_plate_03_300K_NPT_ENM_k0p01_p25.conf",
+      "bytes": 2088,
+      "sha256": "f752df6c79d8cf3ed63d38666c46b779b9b44dbd5d1d6eadef10865ed916b776",
+      "npt": true,
+      "piston_period_fs": "10000.0",
+      "piston_decay_fs": "5000.0",
+      "timestep_fs": "4",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_small_plate_03_300K_NPT_ENM_k0p01_p25.pdb",
+      "coordinates": "output/small_plate_03_300K_NPT_ENM_k0p01_p10.coor",
+      "cell": "output/small_plate_03_300K_NPT_ENM_k0p01_p10.xsc"
+    },
+    {
+      "file": "small_plate_03_300K_NPT_ENM_k0p01_p50.conf",
+      "bytes": 2091,
+      "sha256": "979e2a1fbbf27766fa41578d7e2078da0809b00d0d0ea7f36291e9bb42af7e64",
+      "npt": true,
+      "piston_period_fs": "10000.0",
+      "piston_decay_fs": "5000.0",
+      "timestep_fs": "4",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_small_plate_03_300K_NPT_ENM_k0p01_p50.pdb",
+      "coordinates": "output/small_plate_03_300K_NPT_ENM_k0p01_p25.coor",
+      "cell": "output/small_plate_03_300K_NPT_ENM_k0p01_p25.xsc"
+    },
+    {
+      "file": "small_plate_03_300K_NPT_ENM_k0p01_p75.conf",
+      "bytes": 2091,
+      "sha256": "ece7682220e28a7d5af72159c5f409e182eb5cdfad390c3c6a4ebff910f7999f",
+      "npt": true,
+      "piston_period_fs": "10000.0",
+      "piston_decay_fs": "5000.0",
+      "timestep_fs": "4",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_small_plate_03_300K_NPT_ENM_k0p01_p75.pdb",
+      "coordinates": "output/small_plate_03_300K_NPT_ENM_k0p01_p50.coor",
+      "cell": "output/small_plate_03_300K_NPT_ENM_k0p01_p50.xsc"
+    },
+    {
+      "file": "small_plate_04_300K_NPT_MGHH_only_p10.conf",
+      "bytes": 2022,
+      "sha256": "f6f7a114a6179ac83d74bf2f82fa4834f925a78a0b2d4d02bd6a2e0c11ffed6d",
+      "npt": true,
+      "piston_period_fs": "10000.0",
+      "piston_decay_fs": "5000.0",
+      "timestep_fs": "4",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_small_plate_04_300K_NPT_MGHH_only_p10.pdb",
+      "coordinates": "output/small_plate_03_300K_NPT_ENM_k0p01_p100.coor",
+      "cell": "output/small_plate_03_300K_NPT_ENM_k0p01_p100.xsc"
+    },
+    {
+      "file": "small_plate_04_300K_NPT_MGHH_only_p100.conf",
+      "bytes": 2026,
+      "sha256": "ca376ecd3e6d984827fe693d318ccbb3cba1f198e7498671e52cba146a89fd5f",
+      "npt": true,
+      "piston_period_fs": "10000.0",
+      "piston_decay_fs": "5000.0",
+      "timestep_fs": "4",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_small_plate_04_300K_NPT_MGHH_only_p100.pdb",
+      "coordinates": "output/small_plate_04_300K_NPT_MGHH_only_p75.coor",
+      "cell": "output/small_plate_04_300K_NPT_MGHH_only_p75.xsc"
+    },
+    {
+      "file": "small_plate_04_300K_NPT_MGHH_only_p25.conf",
+      "bytes": 2019,
+      "sha256": "e5d3d46c5648aeee38f8410cccfed330050ff368ff4947240d1998cae44749bf",
+      "npt": true,
+      "piston_period_fs": "10000.0",
+      "piston_decay_fs": "5000.0",
+      "timestep_fs": "4",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_small_plate_04_300K_NPT_MGHH_only_p25.pdb",
+      "coordinates": "output/small_plate_04_300K_NPT_MGHH_only_p10.coor",
+      "cell": "output/small_plate_04_300K_NPT_MGHH_only_p10.xsc"
+    },
+    {
+      "file": "small_plate_04_300K_NPT_MGHH_only_p50.conf",
+      "bytes": 2022,
+      "sha256": "486f9d7fbfd803fccaa5b1cb76dee41022eede5732aadf653f087b18668a737c",
+      "npt": true,
+      "piston_period_fs": "10000.0",
+      "piston_decay_fs": "5000.0",
+      "timestep_fs": "4",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_small_plate_04_300K_NPT_MGHH_only_p50.pdb",
+      "coordinates": "output/small_plate_04_300K_NPT_MGHH_only_p25.coor",
+      "cell": "output/small_plate_04_300K_NPT_MGHH_only_p25.xsc"
+    },
+    {
+      "file": "small_plate_04_300K_NPT_MGHH_only_p75.conf",
+      "bytes": 2022,
+      "sha256": "32309ebec17668c16d4f1b66fa1f39721503e3662fa12ab01d8bdcde236fc311",
+      "npt": true,
+      "piston_period_fs": "10000.0",
+      "piston_decay_fs": "5000.0",
+      "timestep_fs": "4",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_small_plate_04_300K_NPT_MGHH_only_p75.pdb",
+      "coordinates": "output/small_plate_04_300K_NPT_MGHH_only_p50.coor",
+      "cell": "output/small_plate_04_300K_NPT_MGHH_only_p50.xsc"
+    },
+    {
+      "file": "small_plate_0S_300K_NPT_settle_fixed_dna_p100.conf",
+      "bytes": 2027,
+      "sha256": "4eb2280aab347fefd852567ec3e29e20e07e16b8e5ca3c884cfbaf38cfb46095",
+      "npt": true,
+      "piston_period_fs": "10000.0",
+      "piston_decay_fs": "5000.0",
+      "timestep_fs": "4",
+      "gpu_resident": "on",
+      "restraints": "restraints_combined_small_plate_0S_300K_NPT_settle_fixed_dna_p100.pdb",
+      "coordinates": "output/small_plate_00_min_enm_k0p5.coor",
+      "cell": "output/small_plate_00_min_enm_k0p5.xsc"
+    }
+  ],
+  "uploaded_configs": [
+    {
+      "file": "namd.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:07:27.602-06:00",
+        "epoch": 1788642447.602094,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "29b428afab6c",
+        "outcome": "success",
+        "duration_ms": 564.11,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/namd.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/namd.conf",
+        "bytes": 4376
+      }
+    },
+    {
+      "file": "namd_fast.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:07:28.204-06:00",
+        "epoch": 1788642448.204654,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "8761ed83e687",
+        "outcome": "success",
+        "duration_ms": 596.906,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/namd_fast.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/namd_fast.conf",
+        "bytes": 3694
+      }
+    },
+    {
+      "file": "small_plate_00_min_enm_k0p5.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:09:55.691-06:00",
+        "epoch": 1788642595.691516,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "29355bea7e63",
+        "outcome": "success",
+        "duration_ms": 605.081,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_00_min_enm_k0p5.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/small_plate_00_min_enm_k0p5.conf",
+        "bytes": 3735
+      }
+    },
+    {
+      "file": "small_plate_01_300K_NPT_ENM_k0p5_p10.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:09:57.204-06:00",
+        "epoch": 1788642597.204294,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "ce4b7f937d7a",
+        "outcome": "success",
+        "duration_ms": 1505.796,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_01_300K_NPT_ENM_k0p5_p10.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/small_plate_01_300K_NPT_ENM_k0p5_p10.conf",
+        "bytes": 2107
+      }
+    },
+    {
+      "file": "small_plate_01_300K_NPT_ENM_k0p5_p100.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:09:59.023-06:00",
+        "epoch": 1788642599.024017,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "952a0e7a0aa5",
+        "outcome": "success",
+        "duration_ms": 600.036,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_01_300K_NPT_ENM_k0p5_p100.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/small_plate_01_300K_NPT_ENM_k0p5_p100.conf",
+        "bytes": 2087
+      }
+    },
+    {
+      "file": "small_plate_01_300K_NPT_ENM_k0p5_p25.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:09:59.603-06:00",
+        "epoch": 1788642599.603746,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "a2191ee6bf08",
+        "outcome": "success",
+        "duration_ms": 574.683,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_01_300K_NPT_ENM_k0p5_p25.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/small_plate_01_300K_NPT_ENM_k0p5_p25.conf",
+        "bytes": 2080
+      }
+    },
+    {
+      "file": "small_plate_01_300K_NPT_ENM_k0p5_p50.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:10:02.042-06:00",
+        "epoch": 1788642602.042354,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "75fb539b29a9",
+        "outcome": "success",
+        "duration_ms": 2432.195,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_01_300K_NPT_ENM_k0p5_p50.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/small_plate_01_300K_NPT_ENM_k0p5_p50.conf",
+        "bytes": 2083
+      }
+    },
+    {
+      "file": "small_plate_01_300K_NPT_ENM_k0p5_p75.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:10:04.401-06:00",
+        "epoch": 1788642604.4012,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "976ac889a188",
+        "outcome": "success",
+        "duration_ms": 2355.846,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_01_300K_NPT_ENM_k0p5_p75.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/small_plate_01_300K_NPT_ENM_k0p5_p75.conf",
+        "bytes": 2083
+      }
+    },
+    {
+      "file": "small_plate_02_300K_NPT_ENM_k0p1_p10.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:10:04.995-06:00",
+        "epoch": 1788642604.995594,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "b05d8980fb0e",
+        "outcome": "success",
+        "duration_ms": 588.174,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_02_300K_NPT_ENM_k0p1_p10.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/small_plate_02_300K_NPT_ENM_k0p1_p10.conf",
+        "bytes": 2083
+      }
+    },
+    {
+      "file": "small_plate_02_300K_NPT_ENM_k0p1_p100.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:10:05.623-06:00",
+        "epoch": 1788642605.623713,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "5bdb6131e217",
+        "outcome": "success",
+        "duration_ms": 622.525,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_02_300K_NPT_ENM_k0p1_p100.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/small_plate_02_300K_NPT_ENM_k0p1_p100.conf",
+        "bytes": 2087
+      }
+    },
+    {
+      "file": "small_plate_02_300K_NPT_ENM_k0p1_p25.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:10:07.121-06:00",
+        "epoch": 1788642607.12192,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "400e8dc15328",
+        "outcome": "success",
+        "duration_ms": 1492.438,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_02_300K_NPT_ENM_k0p1_p25.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/small_plate_02_300K_NPT_ENM_k0p1_p25.conf",
+        "bytes": 2080
+      }
+    },
+    {
+      "file": "small_plate_02_300K_NPT_ENM_k0p1_p50.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:10:07.794-06:00",
+        "epoch": 1788642607.794865,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "69081e59a499",
+        "outcome": "success",
+        "duration_ms": 670.125,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_02_300K_NPT_ENM_k0p1_p50.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/small_plate_02_300K_NPT_ENM_k0p1_p50.conf",
+        "bytes": 2083
+      }
+    },
+    {
+      "file": "small_plate_02_300K_NPT_ENM_k0p1_p75.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:10:08.444-06:00",
+        "epoch": 1788642608.444873,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "751157bf0646",
+        "outcome": "success",
+        "duration_ms": 646.149,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_02_300K_NPT_ENM_k0p1_p75.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/small_plate_02_300K_NPT_ENM_k0p1_p75.conf",
+        "bytes": 2083
+      }
+    },
+    {
+      "file": "small_plate_03_300K_NPT_ENM_k0p01_p10.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:10:09.916-06:00",
+        "epoch": 1788642609.916197,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "e45b7e5d344a",
+        "outcome": "success",
+        "duration_ms": 1467.538,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_03_300K_NPT_ENM_k0p01_p10.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/small_plate_03_300K_NPT_ENM_k0p01_p10.conf",
+        "bytes": 2088
+      }
+    },
+    {
+      "file": "small_plate_03_300K_NPT_ENM_k0p01_p100.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:10:10.587-06:00",
+        "epoch": 1788642610.587922,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "a062b01d8f98",
+        "outcome": "success",
+        "duration_ms": 660.291,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_03_300K_NPT_ENM_k0p01_p100.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/small_plate_03_300K_NPT_ENM_k0p01_p100.conf",
+        "bytes": 2095
+      }
+    },
+    {
+      "file": "small_plate_03_300K_NPT_ENM_k0p01_p25.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:10:11.340-06:00",
+        "epoch": 1788642611.340647,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "c284d9d65a27",
+        "outcome": "success",
+        "duration_ms": 726.372,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_03_300K_NPT_ENM_k0p01_p25.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/small_plate_03_300K_NPT_ENM_k0p01_p25.conf",
+        "bytes": 2088
+      }
+    },
+    {
+      "file": "small_plate_03_300K_NPT_ENM_k0p01_p50.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:10:12.923-06:00",
+        "epoch": 1788642612.923193,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "febc10452521",
+        "outcome": "success",
+        "duration_ms": 1579.653,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_03_300K_NPT_ENM_k0p01_p50.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/small_plate_03_300K_NPT_ENM_k0p01_p50.conf",
+        "bytes": 2091
+      }
+    },
+    {
+      "file": "small_plate_03_300K_NPT_ENM_k0p01_p75.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:10:13.910-06:00",
+        "epoch": 1788642613.91026,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "563fb22ed20f",
+        "outcome": "success",
+        "duration_ms": 980.631,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_03_300K_NPT_ENM_k0p01_p75.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/small_plate_03_300K_NPT_ENM_k0p01_p75.conf",
+        "bytes": 2091
+      }
+    },
+    {
+      "file": "small_plate_04_300K_NPT_MGHH_only_p10.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:10:14.584-06:00",
+        "epoch": 1788642614.584161,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "1fafcec34b6b",
+        "outcome": "success",
+        "duration_ms": 669.079,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_04_300K_NPT_MGHH_only_p10.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/small_plate_04_300K_NPT_MGHH_only_p10.conf",
+        "bytes": 2022
+      }
+    },
+    {
+      "file": "small_plate_04_300K_NPT_MGHH_only_p100.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:10:16.100-06:00",
+        "epoch": 1788642616.100949,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "56e130138070",
+        "outcome": "success",
+        "duration_ms": 1514.258,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_04_300K_NPT_MGHH_only_p100.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/small_plate_04_300K_NPT_MGHH_only_p100.conf",
+        "bytes": 2026
+      }
+    },
+    {
+      "file": "small_plate_04_300K_NPT_MGHH_only_p25.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:10:16.725-06:00",
+        "epoch": 1788642616.725971,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "589995017b53",
+        "outcome": "success",
+        "duration_ms": 620.003,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_04_300K_NPT_MGHH_only_p25.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/small_plate_04_300K_NPT_MGHH_only_p25.conf",
+        "bytes": 2019
+      }
+    },
+    {
+      "file": "small_plate_04_300K_NPT_MGHH_only_p50.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:10:17.318-06:00",
+        "epoch": 1788642617.318218,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "31303e4b1fe9",
+        "outcome": "success",
+        "duration_ms": 587.105,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_04_300K_NPT_MGHH_only_p50.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/small_plate_04_300K_NPT_MGHH_only_p50.conf",
+        "bytes": 2022
+      }
+    },
+    {
+      "file": "small_plate_04_300K_NPT_MGHH_only_p75.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:10:19.037-06:00",
+        "epoch": 1788642619.037643,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "3c562b5bd3ae",
+        "outcome": "success",
+        "duration_ms": 1715.725,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_04_300K_NPT_MGHH_only_p75.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/small_plate_04_300K_NPT_MGHH_only_p75.conf",
+        "bytes": 2022
+      }
+    },
+    {
+      "file": "small_plate_0S_300K_NPT_settle_fixed_dna_p100.conf",
+      "transferred": true,
+      "byte_count_matches": true,
+      "receipt": {
+        "timestamp": "2026-09-05T15:10:19.662-06:00",
+        "epoch": 1788642619.663018,
+        "event": "upload_finish",
+        "pid": 46027,
+        "operation_id": "2ed95d0059f1",
+        "outcome": "success",
+        "duration_ms": 622.491,
+        "local_path": "/home/joshua/NADOC/workspace/md_jobs/e75ffd56c6f8/package/small_plate_namd_solvated/small_plate_0S_300K_NPT_settle_fixed_dna_p100.conf",
+        "remote_path": "/scratch/alpine/jojo6687/nadoc_jobs/e75ffd56c6f8/small_plate_0S_300K_NPT_settle_fixed_dna_p100.conf",
+        "bytes": 2027
+      }
+    }
+  ],
+  "package_transfers": [
+    {
+      "file": "AI_ASSISTANT_PROMPT.txt",
+      "byte_count_matches": true
+    },
+    {
+      "file": "README.txt",
+      "byte_count_matches": true
+    },
+    {
+      "file": "charge_audit.json",
+      "byte_count_matches": true
+    },
+    {
+      "file": "forcefield/par_all36_na.prm",
+      "byte_count_matches": true
+    },
+    {
+      "file": "forcefield/par_all36m_prot.prm",
+      "byte_count_matches": true
+    },
+    {
+      "file": "forcefield/par_np_thiol.prm",
+      "byte_count_matches": true
+    },
+    {
+      "file": "forcefield/par_stub_ions_nbfix.str",
+      "byte_count_matches": true
+    },
+    {
+      "file": "forcefield/top_all36_na.rtf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "forcefield/toppar_water_ions_cufix.str",
+      "byte_count_matches": true
+    },
+    {
+      "file": "graphene_fixed.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "graphene_nanopore.json",
+      "byte_count_matches": true
+    },
+    {
+      "file": "launch.sh",
+      "byte_count_matches": true
+    },
+    {
+      "file": "manifest.json",
+      "byte_count_matches": true
+    },
+    {
+      "file": "nadoc_md_run.json",
+      "byte_count_matches": true
+    },
+    {
+      "file": "nadoc_wc_plan.json",
+      "byte_count_matches": true
+    },
+    {
+      "file": "namd.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "namd_fast.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_namd.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_namd_fast.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_small_plate_00_min_enm_k0p5.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_small_plate_01_300K_NPT_ENM_k0p5_p10.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_small_plate_01_300K_NPT_ENM_k0p5_p100.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_small_plate_01_300K_NPT_ENM_k0p5_p25.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_small_plate_01_300K_NPT_ENM_k0p5_p50.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_small_plate_01_300K_NPT_ENM_k0p5_p75.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_small_plate_02_300K_NPT_ENM_k0p1_p10.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_small_plate_02_300K_NPT_ENM_k0p1_p100.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_small_plate_02_300K_NPT_ENM_k0p1_p25.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_small_plate_02_300K_NPT_ENM_k0p1_p50.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_small_plate_02_300K_NPT_ENM_k0p1_p75.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_small_plate_03_300K_NPT_ENM_k0p01_p10.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_small_plate_03_300K_NPT_ENM_k0p01_p100.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_small_plate_03_300K_NPT_ENM_k0p01_p25.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_small_plate_03_300K_NPT_ENM_k0p01_p50.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_small_plate_03_300K_NPT_ENM_k0p01_p75.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_small_plate_04_300K_NPT_MGHH_only_p10.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_small_plate_04_300K_NPT_MGHH_only_p100.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_small_plate_04_300K_NPT_MGHH_only_p25.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_small_plate_04_300K_NPT_MGHH_only_p50.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_small_plate_04_300K_NPT_MGHH_only_p75.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_combined_small_plate_0S_300K_NPT_settle_fixed_dna_p100.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_dna_heavy.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "restraints_settle.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "scripts/monitor.py",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate.pdb",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate.psf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_00_min_enm_k0p5.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_01_300K_NPT_ENM_k0p5_p10.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_01_300K_NPT_ENM_k0p5_p100.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_01_300K_NPT_ENM_k0p5_p25.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_01_300K_NPT_ENM_k0p5_p50.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_01_300K_NPT_ENM_k0p5_p75.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_02_300K_NPT_ENM_k0p1_p10.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_02_300K_NPT_ENM_k0p1_p100.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_02_300K_NPT_ENM_k0p1_p25.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_02_300K_NPT_ENM_k0p1_p50.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_02_300K_NPT_ENM_k0p1_p75.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_03_300K_NPT_ENM_k0p01_p10.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_03_300K_NPT_ENM_k0p01_p100.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_03_300K_NPT_ENM_k0p01_p25.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_03_300K_NPT_ENM_k0p01_p50.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_03_300K_NPT_ENM_k0p01_p75.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_04_300K_NPT_MGHH_only_p10.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_04_300K_NPT_MGHH_only_p100.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_04_300K_NPT_MGHH_only_p25.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_04_300K_NPT_MGHH_only_p50.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_04_300K_NPT_MGHH_only_p75.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_0S_300K_NPT_settle_fixed_dna_p100.conf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_aksimentiev_enm.report.json",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_hmr.psf",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_k0.01.enm.extra",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_k0.1.enm.extra",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_k0.5.enm.extra",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_ss_exclusion.json",
+      "byte_count_matches": true
+    },
+    {
+      "file": "small_plate_wc_pairs.json",
+      "byte_count_matches": true
+    }
+  ],
+  "package_files_verified": 75,
+  "successful_uploads": 82,
+  "upload_errors": [],
+  "verification_limit": "SFTP completion receipts and byte counts; no independent remote hash readback."
+}

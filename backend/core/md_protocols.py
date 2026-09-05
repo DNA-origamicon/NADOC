@@ -654,9 +654,16 @@ def package_npt_allowed(package_dir: "str | Path") -> bool:
     if not mpath.exists():
         return True
     try:
-        sol = json.loads(mpath.read_text()).get("solvation") or {}
+        manifest = json.loads(mpath.read_text())
+        sol = manifest.get("solvation") or {}
     except (json.JSONDecodeError, OSError):
         return True
+    if (
+        manifest.get("graphene_only")
+        or (manifest.get("charge_audit") or {}).get("graphene_only")
+        or (manifest.get("graphene_nanopore") or {}).get("control") == "graphene_only"
+    ):
+        return False
     if "npt_allowed" in sol:
         return bool(sol["npt_allowed"])
     return not bool(sol.get("carved", False))
@@ -4138,7 +4145,7 @@ def prepare_mgh_slow_release(
         "solvation": {
             "padding_nm": float(padding_nm),
             "carved": False,
-            "npt_allowed": True,
+            "npt_allowed": not graphene_only,
             # Unrestrained ns the cell was sized for.  A production child re-uses this
             # cell verbatim, so this is the record of the decision every descendant
             # inherits — without it, a package that cannot host a long free run is

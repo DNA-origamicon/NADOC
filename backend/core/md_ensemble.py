@@ -464,32 +464,38 @@ def build_replica_package(
     # builds, so it needs the same size gate + explicit override as every other conf
     # writer.  Without n_atoms this fell to "unknown" and forced resident ON, which is
     # why turning the Advanced-card dropdown off changed nothing for a production run.
+    from backend.core.namd_graphene import graphene_pressure_conf
+
+    production_conf = build_production_conf(
+        prod,
+        name_stem,
+        box,
+        mgh_extrabonds,
+        seed=seed,
+        fast=use_fast,
+        timestep_fs=eff_timestep_fs,
+        # The third axis. Without it a child that asked for 2 fs with rigid bonds OFF
+        # got `rigidBonds all` anyway, because the writer derived it from the timestep.
+        rigid_bonds=("none" if hmr_build_failed else rigid_bonds),
+        hmr=use_fast,
+        structure_psf=structure_psf,
+        n_atoms=psf_atom_count(child_pkg / f"{name_stem}.psf"),
+        force_resident=force_resident,
+        npt=npt_allowed,
+        damping=damping,
+        enm_file=enm_file,
+        # Stage 0 of a production child is the velocity reseed (which takes no
+        # overrides — it runs zero steps); the production stage itself is 1.
+        overrides=overrides_for_stage(stage_overrides, 1),
+        anchors_file=anchors_file,
+        anchor_k=anchor_k,
+        field=field,
+        colvars_file=colvars_file,
+    )
     (child_pkg / f"{prod_name}.conf").write_text(
-        build_production_conf(
-            prod,
-            name_stem,
-            box,
-            mgh_extrabonds,
-            seed=seed,
-            fast=use_fast,
-            timestep_fs=eff_timestep_fs,
-            # The third axis. Without it a child that asked for 2 fs with rigid bonds OFF
-            # got `rigidBonds all` anyway, because the writer derived it from the timestep.
-            rigid_bonds=("none" if hmr_build_failed else rigid_bonds),
-            hmr=use_fast,
-            structure_psf=structure_psf,
-            n_atoms=psf_atom_count(child_pkg / f"{name_stem}.psf"),
-            force_resident=force_resident,
-            npt=npt_allowed,
-            damping=damping,
-            enm_file=enm_file,
-            # Stage 0 of a production child is the velocity reseed (which takes no
-            # overrides — it runs zero steps); the production stage itself is 1.
-            overrides=overrides_for_stage(stage_overrides, 1),
-            anchors_file=anchors_file,
-            anchor_k=anchor_k,
-            field=field,
-            colvars_file=colvars_file,
+        graphene_pressure_conf(
+            production_conf,
+            enabled=bool(graphene_nanopore and anchor_k is not None),
         )
     )
 

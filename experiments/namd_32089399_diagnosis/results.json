@@ -1,0 +1,166 @@
+{
+  "margin4": {
+    "last_energy_step": 10,
+    "completed": false,
+    "boundary_min_max": [
+      34817.691,
+      21510029.2558
+    ],
+    "temperature_min_max": [
+      297.2689,
+      330.3169
+    ],
+    "volume_min_max": [
+      8028996.9351,
+      8613391.0151
+    ],
+    "fatal": "FATAL ERROR: Low global CUDA exclusion count!  (880397 vs 880403)  System unstable or pairlistdist or cutoff too small."
+  },
+  "baseline": {
+    "last_energy_step": 10,
+    "completed": false,
+    "boundary_min_max": [
+      34817.691,
+      21510031.7494
+    ],
+    "temperature_min_max": [
+      297.2689,
+      330.3169
+    ],
+    "volume_min_max": [
+      8028996.9351,
+      8613391.0498
+    ],
+    "fatal": "FATAL ERROR: Low global CUDA exclusion count!  (880397 vs 880403)  System unstable or pairlistdist or cutoff too small."
+  },
+  "enm_control": {
+    "last_energy_step": 10,
+    "completed": false,
+    "boundary_min_max": [
+      34817.691,
+      16839025.2186
+    ],
+    "temperature_min_max": [
+      297.2689,
+      322.1395
+    ],
+    "volume_min_max": [
+      8028996.9351,
+      8544530.7411
+    ],
+    "fatal": "FATAL ERROR: SequencerCUDA: Atoms moving too fast"
+  },
+  "trace": {
+    "last_energy_step": 12,
+    "completed": false,
+    "boundary_min_max": [
+      34682.3578,
+      752109712.364
+    ],
+    "temperature_min_max": [
+      -99999999999.9999,
+      1292.0314
+    ],
+    "volume_min_max": [
+      5104989.3897,
+      8613391.184
+    ],
+    "fatal": "FATAL ERROR: Low global CUDA exclusion count!  (880397 vs 880403)  System unstable or pairlistdist or cutoff too small."
+  },
+  "offload": {
+    "last_energy_step": 10,
+    "completed": false,
+    "boundary_min_max": [
+      34817.691,
+      21791815.8406
+    ],
+    "temperature_min_max": [
+      297.2689,
+      331.2587
+    ],
+    "volume_min_max": [
+      8028996.9351,
+      8617323.4142
+    ],
+    "fatal": "FATAL ERROR: Exiting prematurely; see error messages above."
+  },
+  "piston10ps": {
+    "last_energy_step": 5000,
+    "completed": true,
+    "boundary_min_max": [
+      34396.14,
+      35195.7523
+    ],
+    "temperature_min_max": [
+      296.7347,
+      298.7819
+    ],
+    "volume_min_max": [
+      8028996.9351,
+      8037876.9337
+    ],
+    "fatal": null
+  },
+  "independent_trace_graphene": [
+    {
+      "step": 1,
+      "graphene_restraint_kcal": 34748.9538406409,
+      "graphene_rms_reference_A": 0.1341518292161804
+    },
+    {
+      "step": 2,
+      "graphene_restraint_kcal": 34714.18421085451,
+      "graphene_rms_reference_A": 0.13408469659344416
+    },
+    {
+      "step": 3,
+      "graphene_restraint_kcal": 34682.34322164347,
+      "graphene_rms_reference_A": 0.13402318904357746
+    },
+    {
+      "step": 4,
+      "graphene_restraint_kcal": 35061.31918423913,
+      "graphene_rms_reference_A": 0.13475343914647944
+    },
+    {
+      "step": 5,
+      "graphene_restraint_kcal": 35048.049388869826,
+      "graphene_rms_reference_A": 0.13472793640116762
+    },
+    {
+      "step": 6,
+      "graphene_restraint_kcal": 49413.48891089199,
+      "graphene_rms_reference_A": 0.15997366375504743
+    },
+    {
+      "step": 7,
+      "graphene_restraint_kcal": 48292.517053298245,
+      "graphene_rms_reference_A": 0.15814870959866098
+    },
+    {
+      "step": 8,
+      "graphene_restraint_kcal": 591749.9510968968,
+      "graphene_rms_reference_A": 0.5535984265761634
+    },
+    {
+      "step": 9,
+      "graphene_restraint_kcal": 547847.3398167879,
+      "graphene_rms_reference_A": 0.5326666545103962
+    },
+    {
+      "step": 10,
+      "graphene_restraint_kcal": 21510041.69470314,
+      "graphene_rms_reference_A": 3.337692769122786
+    },
+    {
+      "step": 11,
+      "graphene_restraint_kcal": 19785570.96528139,
+      "graphene_rms_reference_A": 3.2011057795415274
+    },
+    {
+      "step": 12,
+      "graphene_restraint_kcal": 752109710.5210214,
+      "graphene_rms_reference_A": 19.736326890413697
+    }
+  ]
+}

@@ -311,6 +311,8 @@ def test_no_early_stop_staging_when_off(tmp_path, alpine, resources):
     conn = _submit(job, tmp_path, alpine, resources)
     staged = {r for r in conn.put_contents}
     assert not any("nadoc_cutoff_eval.py" in r for r in staged)
+    assert any(r.endswith("/nadoc_cell_recovery.py") for r in staged)
+    assert any(r.endswith("/nadoc_resume_conf.py") for r in staged)
 
 
 def test_early_stop_on_stages_portable_wc_scripts(tmp_path, alpine, resources):
@@ -888,6 +890,8 @@ def test_resume_job_mid_segment_from_checkpoint(tmp_path, alpine):
     assert out.download_status is None
     assert out.fetch_attempts == 0
     assert any(k.endswith("/nadoc_settle_retarget.py") for k in conn.put_contents)
+    assert any(k.endswith("/nadoc_cell_recovery.py") for k in conn.put_contents)
+    assert any(k.endswith("/nadoc_resume_conf.py") for k in conn.put_contents)
     # A resume conf was uploaded, continuing from step 144000 for the remainder, and
     # GPUresident stripped (CPU target).
     resume = next(

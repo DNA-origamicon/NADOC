@@ -42,6 +42,8 @@ from backend.core.slurm_script import (
     LIVE_METRICS_NAME,
     LIVE_HEALTH_FILE,
     SETTLE_RETARGET_NAME,
+    CELL_RECOVERY_NAME,
+    RESUME_CONF_NAME,
     EARLY_STOP_HEALTH_NAME,
     STAGED_MD_HEALTH_NAME,
     ALPINE_WC_EVAL_NAME,
@@ -430,6 +432,10 @@ async def submit_job(
         raise RuntimeError(f"prepared package not found at {package_dir}")
     manifest = _read_manifest(package_dir)
 
+    from backend.core.namd_graphene import validate_graphene_wall_package
+
+    await asyncio.to_thread(validate_graphene_wall_package, package_dir)
+
     # Build the sbatch first — a declash / bad-partition manifest raises here,
     # before we touch the network.
     early_stop = _early_stop_on(job, manifest)
@@ -553,7 +559,10 @@ async def submit_job(
 
     # Same implementation imported by the local runner and staged by RunPod. Keeping
     # this outside the prepared package prevents target choice from changing physics.
-    from backend.core import remote_settle_retarget  # noqa: PLC0415
+    from backend.core import remote_settle_retarget, remote_cell_recovery, remote_resume_conf  # noqa: PLC0415
+
+    for module, filename in ((remote_cell_recovery, CELL_RECOVERY_NAME), (remote_resume_conf, RESUME_CONF_NAME)):
+        await _put_text(conn, Path(module.__file__).read_text(), f"{scratch_dir}/{filename}", workspace_dir, job)
 
     await _put_text(
         conn,
@@ -843,6 +852,10 @@ async def resume_job(
     package_dir = job.package_dir(workspace_dir)
     manifest = _read_manifest(package_dir)
 
+    from backend.core.namd_graphene import validate_graphene_wall_package
+
+    await asyncio.to_thread(validate_graphene_wall_package, package_dir)
+
     # 1) which segments finished on the cluster.
     ls = await conn.run(
         f"cd {_shq(scratch)} && ls -1 output/*.coor 2>/dev/null; ls -1 *.log 2>/dev/null"
@@ -901,7 +914,10 @@ async def resume_job(
     # Re-stage transition helpers straight into scratch. A recovery must not depend on
     # the original helper surviving scratch cleanup or on the exact source version
     # uploaded by the failed attempt.
-    from backend.core import remote_settle_retarget  # noqa: PLC0415
+    from backend.core import remote_settle_retarget, remote_cell_recovery, remote_resume_conf  # noqa: PLC0415
+
+    for module, filename in ((remote_cell_recovery, CELL_RECOVERY_NAME), (remote_resume_conf, RESUME_CONF_NAME)):
+        await _put_text(conn, Path(module.__file__).read_text(), f"{scratch}/{filename}", workspace_dir, job)
 
     await _put_text(
         conn,
