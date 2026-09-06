@@ -1603,6 +1603,9 @@ async function main() {
     },
   })
   const grapheneNanoporeOverlay = initGrapheneNanoporeOverlay(scene)
+  window.addEventListener("nadoc:graphene-md-active", (event) => {
+    grapheneNanoporeOverlay.setSimulationActive(event.detail?.active)
+  })
   window.addEventListener('nadoc:graphene-nanopore-preview', (event) => {
     const surface = event.detail?.surface || oxdnaFloorSetup?.getSurfaceSpec?.()
     grapheneNanoporeOverlay.update({

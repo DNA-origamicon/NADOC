@@ -278,6 +278,12 @@ export function initMdSolventOverlay(scene) {
       if (!frame || _mode === 'off') { this.clear(); return }
       _drawWater(frame)
       _drawIons(frame)
+      const nCarbon = (frame.graphene?.length ?? 0) / 3
+      if (nCarbon) {
+        const radius = ELEMENTS.C.vdw
+        _writeSpheres(_sphereMesh("graphene", radius, nCarbon, false, 0x4b5563),
+          frame.graphene, nCarbon, 3, 0, atomInstanceScale(radius))
+      } else _hide("graphene")
       _stats = { nWater: _waterVisible ? (frame.nWater | 0) : 0,
                  nIons: _ionsVisible ? (frame.ions.length / 3) | 0 : 0 }
     },

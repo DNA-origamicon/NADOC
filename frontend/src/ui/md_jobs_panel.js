@@ -1857,7 +1857,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // declared further down would be in its temporal dead zone there, and `?.` does
   // not save you from that.
   const solvent = initMdSolventControls({
-    api, getSolventOverlay, getBoxOverlay, getCurrentRepr,
+    api, getSolventOverlay, getBoxOverlay, getCurrentRepr, simulationGraphene: true,
     getLiveDisplay: () => mdDisplayController,
     // Synchronous read of the same MemAvailable cache the DNA prebuild uses, so
     // both price against ONE budget. Null until it has been read once, which is

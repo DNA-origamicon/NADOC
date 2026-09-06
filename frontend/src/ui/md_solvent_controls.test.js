@@ -227,6 +227,17 @@ describe('live transport', () => {
 
   afterEach(() => { document.body.innerHTML = '' })
 
+  it('requests simulation graphene with all optional overlays off and stops on disable', () => {
+    const controls = initMdSolventControls({
+      api, simulationGraphene: true, getCurrentRepr: () => 'full',
+      getLiveDisplay: () => ({ setSolvent }),
+    })
+    controls.setEnabled(true, 'live')
+    expect(setSolvent.mock.calls.at(-1)[0]).toMatchObject({ water: false, ions: false, box: true })
+    controls.setEnabled(false)
+    expect(setSolvent.mock.calls.at(-1)[0]).toBeNull()
+  })
+
   it('requests solvent over the socket instead of fetching', () => {
     made.setEnabled(true, 'live')
     document.getElementById('md-jobs-box-toggle').checked = true

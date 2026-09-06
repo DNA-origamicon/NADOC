@@ -16,3 +16,16 @@ describe('graphene nanopore preview', () => {
     expect(view.mesh()).toBeNull()
   })
 })
+
+it('suppresses the design preview throughout MD display, including preview edits', () => {
+  const view = initGrapheneNanoporeOverlay(new THREE.Scene())
+  const spec = { enabled: true, surface: { dir: [0, 1, 0], positionNm: -2 } }
+  view.update(spec)
+  view.setSimulationActive(true)
+  expect(view.mesh().visible).toBe(false)
+  view.update(spec)
+  expect(view.mesh().visible).toBe(false)
+  view.setSimulationActive(false)
+  expect(view.mesh().visible).toBe(true)
+  view.dispose()
+})

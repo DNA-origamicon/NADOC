@@ -3,6 +3,7 @@ import * as THREE from 'three'
 /** Display-only preview of the graphene build descriptor used by an oxDNA-seeded NAMD job. */
 export function initGrapheneNanoporeOverlay(scene) {
   let mesh = null
+  let simulationActive = false
   function clear() {
     if (!mesh) return
     scene.remove(mesh)
@@ -38,6 +39,7 @@ export function initGrapheneNanoporeOverlay(scene) {
       geometry,
       new THREE.MeshStandardMaterial({ color: 0x4b5563, metalness: 0.45, roughness: 0.48,
         transparent: true, opacity: 0.72, side: THREE.DoubleSide }))
+    mesh.visible = !simulationActive
     mesh.name = 'Graphene nanopore preview'
     mesh.userData.grapheneNanopore = true
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n)
@@ -45,7 +47,11 @@ export function initGrapheneNanoporeOverlay(scene) {
     mesh.renderOrder = 12
     scene.add(mesh)
   }
-  return { update, clear, dispose: clear, mesh: () => mesh }
+  function setSimulationActive(active) {
+    simulationActive = !!active
+    if (mesh) mesh.visible = !simulationActive
+  }
+  return { update, clear, setSimulationActive, dispose: clear, mesh: () => mesh }
 }
 
 function boundsCorners(bounds) {

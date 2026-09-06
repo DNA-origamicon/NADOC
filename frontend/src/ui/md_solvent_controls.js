@@ -150,7 +150,7 @@ export function solventFetchPlan({
 const _LIMIT_WHY = { ram: 'free RAM', heap: 'browser memory limit', budget: 'memory budget' }
 
 export function initMdSolventControls({
-  api, getSolventOverlay = null, getBoxOverlay = null,
+  api, getSolventOverlay = null, getBoxOverlay = null, simulationGraphene = false,
   getCurrentRepr = null, getAvailableBytes = () => null,
   // The live "Display MD" stream. Its frames arrive over the job WebSocket rather
   // than the REST route, so solvent for that view is requested with `setSolvent`
@@ -216,9 +216,10 @@ export function initMdSolventControls({
   }
   const _repMode = () => {
     const normal = solventRepMode(getCurrentRepr?.())
-    return _keyframeOptions && normal === 'off' ? 'sphere' : normal
+    return (_keyframeOptions || simulationGraphene) && normal === 'off' ? 'sphere' : normal
   }
-  const _anyOn = () => !!(waterToggle?.checked || ionsToggle?.checked || boxToggle?.checked)
+  // Graphene rides the cell channel even when the optional box outline is hidden.
+  const _anyOn = () => !!(simulationGraphene || waterToggle?.checked || ionsToggle?.checked || boxToggle?.checked)
 
   function _requestSig() {
     return [_jobId, _repMode(), _scope(), _shellAng(), _stride,
@@ -233,7 +234,7 @@ export function initMdSolventControls({
   function _plan() {
     return solventFetchPlan({
       repMode: _repMode(),
-      water: !!waterToggle?.checked, ions: !!ionsToggle?.checked, box: !!boxToggle?.checked,
+      water: !!waterToggle?.checked, ions: !!ionsToggle?.checked, box: simulationGraphene || !!boxToggle?.checked,
       scope: _scope(), shellAng: _shellAng(),
       nWatersTotal: _meta?.n_waters ?? 0, nIons: _meta?.n_ions ?? 0,
       nFrames: _nFrames || 1, availableBytes: getAvailableBytes?.() ?? null,
@@ -293,7 +294,7 @@ export function initMdSolventControls({
     return {
       water: !!waterToggle?.checked,
       ions: !!ionsToggle?.checked,
-      box: !!boxToggle?.checked,
+      box: simulationGraphene || !!boxToggle?.checked,
       shellAng: _scope() === 'all' ? null : _shellAng(),
       atomistic: p.atomistic,
       maxWaters: p.maxWaters,
@@ -346,7 +347,7 @@ export function initMdSolventControls({
         stride: _stride,
         water: !!waterToggle?.checked,
         ions: ionsOn,
-        box: !!boxToggle?.checked,
+        box: simulationGraphene || !!boxToggle?.checked,
         shellAng: _scope() === 'all' ? null : _shellAng(),
         atomistic: p.atomistic,
         maxWaters: p.maxWaters,
@@ -514,6 +515,8 @@ export function initMdSolventControls({
       const was = _enabled
       const wasLive = _live
       _enabled = !!on
+      if (simulationGraphene) window.dispatchEvent(new CustomEvent(
+        "nadoc:graphene-md-active", { detail: { active: _enabled } }))
       if (!_enabled) _keyframeOptions = false
       _live = _enabled && transport === 'live'
       if (_live !== wasLive) { _cache = new Map(); _measuredWater = null }

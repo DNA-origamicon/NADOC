@@ -34,13 +34,14 @@ function packSolventBin(frames, header = {}) {
     blocks.push(f.water, f.ions)
     if (h.has_box) blocks.push(f.box)
     if (h.n_serials) blocks.push(f.dna)
+    if (h.n_graphene) blocks.push(f.graphene)
   }
   const floatBytes = blocks.reduce((n, b) => n + b.length * 4, 0)
 
   const buf = new ArrayBuffer(20 + hb.length + pad + floatBytes)
   const dv = new DataView(buf)
   dv.setUint32(0, MAGIC, true)
-  dv.setUint32(4, 2, true)
+  dv.setUint32(4, h.n_graphene ? 3 : 2, true)
   dv.setUint32(8, ids.length, true)
   dv.setUint32(12, 0, true)
   dv.setUint32(16, hb.length, true)
@@ -303,4 +304,17 @@ describe('the reported regression, against real backend bytes', () => {
     new DataView(buf).setUint32(4, 1, true)      // pretend it is the old format
     expect(parseSolventBin(buf)).toBeNull()
   })
+})
+
+
+it('reads graphene after DNA across multiple frames and rejects a truncated carbon block', () => {
+  const frame = oneFrame({ dna: f32(7, 8, 9), graphene: f32(1, 2, 3, 4, 5, 6) })
+  const buf = packSolventBin({ 0: frame, 1: frame }, { n_ions: 1, n_serials: 1, n_graphene: 2 })
+  const parsed = parseSolventBin(buf)
+  for (const f of parsed.frames.values()) {
+    expect(Array.from(f.dna)).toEqual([7, 8, 9])
+    expect(Array.from(f.graphene)).toEqual([1, 2, 3, 4, 5, 6])
+    expect(f.graphene.buffer).toBe(buf)
+  }
+  expect(parseSolventBin(buf.slice(0, -4))).toBeNull()
 })
