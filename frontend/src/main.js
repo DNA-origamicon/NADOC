@@ -14,6 +14,7 @@
  */
 
 import * as THREE from 'three'
+import { initSectionView } from './scene/section_view.js'
 import { initScene }                 from './scene/scene.js'
 import { initVRSession }             from './scene/vr_session.js'
 import { buildVRVisualizationSnapshot } from './scene/vr_visualization_snapshot.js'
@@ -224,7 +225,7 @@ import { initMdPanel }    from './ui/md_panel.js'
 import { initReprOptionSliders } from './ui/repr_option_sliders.js'
 import { initColoringOptionsPanel } from './ui/coloring_options_panel.js'
 import { initRepresentationSwitcher } from './ui/representation_switcher.js'
-import { initMultiView } from './ui/multi_view.js'
+import { initMultiView, multiViewDesignCentroid } from './ui/multi_view.js'
 import { initMultiOverlay } from './ui/multi_overlay.js'
 import { applyComparisonRepresentation } from './ui/comparison_representations.js'
 import { initMdJobsPanel } from './ui/md_jobs_panel.js'
@@ -302,6 +303,9 @@ async function main() {
     addFrameCallback, removeFrameCallback,
     setRenderFn, resetRenderFn,
   } = initScene(canvas)
+
+  initSectionView({ scene, camera, renderer, controls, addFrameCallback, removeFrameCallback, getRenderCamera,
+    getPartCentroid: fallback => multiViewDesignCentroid(store.getState(), fallback), document })
 
   // Bundle scene context for cadnano_view (and future modules that need camera/renderer switching).
   const sceneCtx = { scene, camera, renderer, controls, setRenderCamera, restoreRenderCamera, getRenderCamera, getActiveControls, setResizeCallback, clearResizeCallback, pushControls, popControls, captureCurrentCamera, animateCameraTo, setRenderFn, resetRenderFn }

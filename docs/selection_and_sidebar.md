@@ -12,7 +12,7 @@ The right sidebar is divided into four vertical tabs:
 | Tab | Sections |
 |---|---|
 | **Properties** | Properties, Strand Lengths, Staple Groups |
-| **Visualization** | Representation toggles, Representation Options, Reset Camera, Unhide All, Multi-view, Multi-overlay, View Volumes |
+| **Visualization** | Representation toggles, Representation Options, View Actions (Reset Camera, Unhide All, Section view), Multi-view, Multi-overlay, View Volumes |
 | **Clustering** | Movable Clusters, Joints |
 | **Overhangs** | Overhangs, Overhang Connections, Strand Animation |
 
@@ -20,6 +20,40 @@ Each section uses the same grey-gradient card treatment as the left sidebar. Use
 chevron at the top of the tab strip to collapse or restore the sidebar. Drag the divider
 between the tab strip and viewport to resize it. The Blunt End and empty Measurements
 cards are intentionally absent.
+
+### Section view
+
+In **Visualization → View Actions**, toggle **Section view** to cut through the
+current representation. Intersected solids have closed, diagonally hatched cut
+faces. Toggle it off to restore the full representation without editing the design.
+
+The framed **Section plane** controls provide:
+
+- **Move / Rotate:** choose the canvas gizmo mode. Move slides along the plane's
+  local normal; Rotate changes its orientation.
+- **Position (nm):** enter world X, Y, and Z coordinates, or use each row's
+  **−2 / +2** buttons for 2 nm increments.
+- **Rotation (°):** enter X, Y, and Z Euler angles (XYZ order), or use
+  **−5° / +5°** for 5° increments. Enter applies a field; arrow keys use the
+  same increments as the buttons. Gizmo changes update the fields.
+- **Flip:** reverse the side retained by the cut.
+- **Reset:** move the plane to the part's current nucleotide-position centroid,
+  set rotation to **180°, 0°, 0°**, and clear Flip. If nucleotide geometry is
+  unavailable, or an assembly is active, use the visible content's bounding-box
+  center instead.
+- **Hide controls:** hide the canvas gizmo and plane outline while keeping the
+  section and numeric controls active.
+
+On activation the plane starts at the visible content's center, oriented to the
+current viewing direction. Reset uses the fixed rotation described above. Section
+settings last for the current view session and are not saved into the design.
+
+The renderer clips surfaces and uses winding stencils to fill solid intersections.
+Invisible picking meshes and open sheets do not contribute hatched fills. Open
+circular tube/cylinder ends are closed in temporary stencil geometry; source meshes
+remain unchanged. This requires the main renderer's stencil buffer. Coverage lives
+in `frontend/e2e/section_view.spec.js` and the `section_view` / `section_geometry`
+unit tests, including stray-fill regressions and restoration after disabling.
 
 ### Multi-view
 

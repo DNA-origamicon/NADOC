@@ -167,7 +167,10 @@ Both comparison modes can also preview the current design in mrDNA's unsimulated
 coarse (five base pairs per bead) and fine (one site per base pair) abstractions.
 Spatial View Volumes add independently persisted box or honeycomb-friendly hexagonal
 regions with per-volume representation, opacity, outline visibility, and clipped
-mid-domain cylinder boundaries.
+mid-domain cylinder boundaries. **View Actions → Section view** adds a movable
+cutting plane with closed, hatched solid intersections, numeric position/rotation
+controls, and a reset to the part centroid at 180°, 0°, 0° rotation. Toggle it off
+to restore the representation.
 
 ### Cluster system & animation
 Helices grouped into named clusters; per-cluster deformation ops; feature log

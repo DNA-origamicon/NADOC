@@ -37,7 +37,7 @@ export function initScene(canvas) {
   function _w() { return container.clientWidth  || window.innerWidth  }
   function _h() { return container.clientHeight || window.innerHeight }
 
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true })
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, stencil: true })
   renderer.setSize(_w(), _h())
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   renderer.setClearColor(0x000000, 0)
