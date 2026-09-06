@@ -103,13 +103,22 @@ def mesh_area(mesh) -> float:
 
 
 def fine_surface(
-    design, grid_spacing=0.20, probe_radius=0.28, radius_inflate=1.30, smooth=15
+    design,
+    grid_spacing=0.20,
+    probe_radius=0.28,
+    radius_inflate=1.30,
+    smooth=15,
+    *,
+    measured_positioning=True,
 ):
     """The FINE (all-atom) design surface, built the way ``get_surface`` detail='fine' builds
     it (fast_bridges + flexible override + adaptive grid + Taubin smooth), so these tests guard
     the actually-rendered mesh."""
     model = build_atomistic_model(
-        design, nuc_frame_override=_flexible_display_override(design), fast_bridges=True
+        design,
+        nuc_frame_override=_flexible_display_override(design),
+        fast_bridges=True,
+        measured_positioning=measured_positioning,
     )
     gs = adaptive_grid_spacing(model.atoms, grid_spacing)
     mesh = compute_surface(
@@ -192,7 +201,11 @@ def _voltroncore() -> Design:
 
 
 # Baselines measured on this machine (uv.lock-pinned scipy/skimage; marching cubes is
-# deterministic → fine-self distance is exactly 0).  Counts/faces get an 8% band, volume +
+# deterministic). These July baselines used the legacy 1ZEW templates, before the
+# August promotion of measured templates. Keep that input explicit for the frozen
+# envelope oracle; the vectorized/exact and determinism tests exercise native
+# measured templates. No baseline or production geometry is changed here.
+# Counts/faces get an 8% band, volume +
 # area a 5% band — loose enough for library micro-variation, tight enough that a real
 # envelope change (grid coarsen → −47% verts, radius inflate → +21% vol) trips them.
 # ``cf_mean`` is the coarse-vs-fine characterization (~2.8 Å).
@@ -238,7 +251,7 @@ def test_fine_surface_invariants(builder, base):
     """Vertex/face counts + enclosed volume + surface area stay within a small band of the
     pinned baseline — an envelope change (grid, radius, frame math) moves them well beyond it."""
     design = builder()
-    m = fine_surface(design)
+    m = fine_surface(design, measured_positioning=False)
     assert abs(len(m.vertices) / base["verts"] - 1.0) < _COUNT_BAND, (
         f"vertex count {len(m.vertices)} vs baseline {base['verts']}"
     )

@@ -185,7 +185,7 @@ describe('crossover extra-base cluster display', () => {
     // used to snap simulated insert beads back onto their native Bezier.
     const body = functionBody(SRC, '_applyXoverClusterAlpha')
     expect(body).toContain('const hidden =')
-    expect(body).toContain('hidden ? 0')
+    expect(body).toContain('hidden || !repVisible(ad) ? 0')
     expect(functionBody(SRC, '_applyXoverVisibility')).not.toContain('setMatrixAt')
     expect(functionBody(SRC, '_applyReferenceXoverVisibility')).not.toContain('setMatrixAt')
   })

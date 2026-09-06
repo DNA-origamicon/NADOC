@@ -90,7 +90,13 @@ export function initCrossTabSync({
   const unsubscribeStore = store.subscribe((newState, previousState = {}) => {
     if (newState.selection !== previousState.selection && !syncingSelection) {
       const strandIds = selectedStrandIds(newState)
-      if (strandIds.length > 0) broadcast.emit('selection-changed', { strandIds })
+      // Design reconciliation rebuilds the canonical selection object even when
+      // its strand owners are unchanged. Echoing that rebuild reselects entire
+      // connected strands in the cadnano editor after a pencil ligation.
+      const previousIds = new Set(selectedStrandIds(previousState))
+      const changed = strandIds.length !== previousIds.size
+        || strandIds.some(id => !previousIds.has(id))
+      if (strandIds.length > 0 && changed) broadcast.emit('selection-changed', { strandIds })
     }
     const designId = newState.currentDesign?.id ?? null
     if (designId !== lastAnnouncedDesignId) {

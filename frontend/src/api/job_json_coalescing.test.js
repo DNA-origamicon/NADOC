@@ -36,7 +36,8 @@ describe('job JSON GET coalescing', () => {
 
     const a = enginesStatus()
     const b = enginesStatus()
-    expect(global.fetch).toHaveBeenCalledTimes(1)
+    // Assembly preparation is awaited before transport, even for part requests.
+    await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1))
     first.release()
     await expect(Promise.all([a, b])).resolves.toEqual([
       { available: true }, { available: true },

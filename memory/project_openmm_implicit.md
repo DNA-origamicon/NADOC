@@ -10,6 +10,23 @@ metadata:
 
 # OpenMM implicit-solvent origami — head
 
+## CPU checker test audit (2026-09-06)
+
+Under the user's dedicated test-session authorization, the legacy checker's real
+CPU smoke and single-duplex 10 ps drift tests passed. Nine smoke assertions now
+share one real simulation. No local CUDA validation is implied by these checks.
+
+The user requested an audit and removal of the ongoing two-unconnected-duplex
+COM-drift test if unnecessary. It was stopped and removed: its arbitrary
+`<0.5 nm` separation-drift requirement is a model-validation claim, not a software
+invariant, and the legacy checker has no app/API callers (only exp21). The exp57
+paired-reference campaign below is the appropriate place to evaluate collective
+separation/reorientation; its documented GBn2 limitations cannot be turned into
+a software pass/fail gate for unconstrained duplexes. Exact metric tests retain
+zero drift and add prescribed positive/negative separation changes under global
+translation, without running dynamics. The real smoke and single-duplex MD
+checks remain; no model, force-field setting, or production code was removed.
+
 ## Goal
 
 Evaluate GPU-resident AMBER OL15 + GBn2 at 0.150 M generic monovalent ionic

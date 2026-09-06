@@ -27,6 +27,9 @@ describe('low-vision and reflow contract', () => {
     expect(css).toContain('@media (pointer: coarse)')
     expect(css).toContain('outline: 3px solid var(--color-accent)')
     expect(css).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))')
-    expect(css).toContain('width: min(520px, calc(100% - 24px))')
+    // Reflow depends on the viewport clamp, not the preferred desktop width.
+    const welcomeRules = css.match(/#welcome-box\s*\{([^}]+)\}/)[1]
+    expect(welcomeRules).toMatch(/width:\s*min\(\d+px, calc\(100% - 24px\)\)/)
+    expect(welcomeRules).toContain('max-width: calc(100% - 24px)')
   })
 })

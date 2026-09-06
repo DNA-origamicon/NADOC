@@ -464,3 +464,58 @@ def test_stale_promotion_is_rejected_without_extra_recovery_version(tmp_path):
     assert store.branch_head(design.id, "main") == root.revision_id
     assert store.branch_head(design.id, "candidate") == candidate.revision_id
     assert set(store.project_manifest(design.id)["refs"]) == before
+
+
+def test_overlapping_topology_autosave_adopts_identical_winning_head(tmp_path):
+    from backend.api.routes import _demo_design
+    from backend.core.lattice import _ligate
+
+    baseline = refresh_active_revision(tmp_path, _demo_design())
+    changed = _ligate(baseline, baseline.strands[0], baseline.strands[1])
+    winner = refresh_active_revision(tmp_path, changed)
+    repeated = refresh_active_revision(tmp_path, changed)
+
+    assert repeated.loadouts[0].head_revision_id == winner.loadouts[0].head_revision_id
+    assert len(ProjectRevisionStore(tmp_path).load_design(
+        winner.id, winner.loadouts[0].head_revision_id
+    ).strands) == len(changed.strands)
+
+
+def test_overlapping_different_topology_autosave_preserves_conflict(tmp_path):
+    from backend.api.routes import _demo_design
+    from backend.core.lattice import _ligate
+
+    baseline = refresh_active_revision(tmp_path, _demo_design())
+    winner = refresh_active_revision(
+        tmp_path, _ligate(baseline, baseline.strands[0], baseline.strands[1])
+    )
+    competing = _ligate(baseline, baseline.strands[1], baseline.strands[0])
+    with pytest.raises(BranchConflict):
+        refresh_active_revision(tmp_path, competing)
+    assert ProjectRevisionStore(tmp_path).branch_head(winner.id, winner.active_loadout_id) == winner.loadouts[0].head_revision_id
+
+
+@pytest.mark.parametrize("identical", [True, False])
+def test_topology_autosave_commit_race(monkeypatch, tmp_path, identical):
+    from backend.api.routes import _demo_design
+    from backend.core.lattice import _ligate
+
+    baseline = refresh_active_revision(tmp_path, _demo_design())
+    changed = _ligate(baseline, baseline.strands[0], baseline.strands[1])
+    competing = changed if identical else _ligate(baseline, baseline.strands[1], baseline.strands[0])
+    commit = ProjectRevisionStore.commit
+    winners = []
+
+    def interleaved_commit(store, design, **kwargs):
+        if not winners:
+            winners.append(commit(store, competing, **kwargs))
+        return commit(store, design, **kwargs)
+
+    monkeypatch.setattr(ProjectRevisionStore, "commit", interleaved_commit)
+    if identical:
+        saved = refresh_active_revision(tmp_path, changed)
+        assert saved.loadouts[0].head_revision_id == winners[0].revision_id
+    else:
+        with pytest.raises(BranchConflict):
+            refresh_active_revision(tmp_path, changed)
+    assert ProjectRevisionStore(tmp_path).branch_head(baseline.id, "main") == winners[0].revision_id

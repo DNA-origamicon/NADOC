@@ -18,7 +18,7 @@ from backend.core.atomistic_validation import (
 from backend.core.models import Design, StrandType
 
 
-_FIXTURE = Path("workspace/24hb_1xT.nadoc")
+_FIXTURE = Path(__file__).parents[1] / "workspace" / "24hb_1xT.nadoc"
 
 
 def _positions(model) -> np.ndarray:
@@ -67,6 +67,10 @@ def test_exact_seed_bridge_path_does_not_consult_display_bow(monkeypatch):
 def test_scaffold_holliday_bow_clears_24hb_contacts_and_moves_only_linkers(
     monkeypatch,
 ):
+    if not _FIXTURE.is_file():
+        pytest.skip(
+            f"Original geometry fixture missing: {_FIXTURE} (workspace is not synced)"
+        )
     design = Design.model_validate_json(_FIXTURE.read_text())
     bow_solver = atomistic._scaffold_holliday_bridge_bows
 

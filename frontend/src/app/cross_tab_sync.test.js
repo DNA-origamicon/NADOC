@@ -99,3 +99,28 @@ describe('initCrossTabSync', () => {
     expect(dropdown.style.display).toBe('none')
   })
 })
+
+describe('selection broadcasts', () => {
+  const selection = (...ids) => ({ items: ids.map(id => ({ kind: 'strand', id })) })
+
+  it('does not echo an unchanged selection after design reconciliation', () => {
+    const { deps, storeHandler } = harness()
+    deps.broadcast.emit.mockClear()
+    storeHandler({ selection: selection('merged') }, { selection: selection('merged') })
+    expect(deps.broadcast.emit).not.toHaveBeenCalledWith('selection-changed', expect.anything())
+  })
+
+  it('ignores order-only changes in the selected strand set', () => {
+    const { deps, storeHandler } = harness()
+    deps.broadcast.emit.mockClear()
+    storeHandler({ selection: selection('b', 'a') }, { selection: selection('a', 'b') })
+    expect(deps.broadcast.emit).not.toHaveBeenCalledWith('selection-changed', expect.anything())
+  })
+
+  it('still broadcasts a different positive selection', () => {
+    const { deps, storeHandler } = harness()
+    deps.broadcast.emit.mockClear()
+    storeHandler({ selection: selection('b') }, { selection: selection('a') })
+    expect(deps.broadcast.emit).toHaveBeenCalledWith('selection-changed', { strandIds: ['b'] })
+  })
+})

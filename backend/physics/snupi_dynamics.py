@@ -386,16 +386,37 @@ def _kabsch(P: np.ndarray, Q: np.ndarray) -> np.ndarray:
     return Vt.T @ Dm @ U.T
 
 
-def trajectory_rmsf(frames: np.ndarray, ref: np.ndarray) -> np.ndarray:
+def trajectory_rmsf(
+    frames: np.ndarray, ref: np.ndarray, *, linearized: bool = False
+) -> np.ndarray:
     """Per-node RMSF (nm) from a stack of absolute-position frames ``(n_frame, N, 3)``, after
     removing rigid-body translation+rotation of each frame (Kabsch-aligned to ``ref``) — the same
-    treatment the MD RMSF pipeline uses, and the correct comparison to free-free NMA (which projects
-    out the 6 rigid modes). ``ref`` (N,3) is the reference config (typically the mean or X0)."""
+    treatment the MD RMSF pipeline uses. ``ref`` (N,3) is the reference config (typically X0).
+
+    Linear FEM trajectories instead require ``linearized=True``: their zero-energy rotations
+    are displacements ``omega × X0``, not finite rotations of X0. Project out that linear rigid
+    subspace before taking the variance, as free-free NMA does. Kabsch cannot remove these
+    displacements exactly and would count their diffusive growth as internal deformation.
+    This changes only the fluctuation analysis, not the input trajectory or force model.
+    """
     ref_c = ref - ref.mean(axis=0)
-    aligned = np.empty_like(frames)
-    for k, fr in enumerate(frames):
-        fc = fr - fr.mean(axis=0)
-        aligned[k] = fc @ _kabsch(fc, ref_c).T
+    if linearized:
+        rigid = np.column_stack(
+            [np.tile(axis, (len(ref), 1)).ravel() for axis in np.eye(3)]
+            + [np.cross(axis, ref_c).ravel() for axis in np.eye(3)]
+        )
+        basis, singular, _ = np.linalg.svd(rigid, full_matrices=False)
+        # Collinear nodes have only five observable rigid modes: rotation about
+        # their axis moves no positions. Do not remove an arbitrary sixth mode.
+        tol = singular.max() * max(rigid.shape) * np.finfo(float).eps
+        basis = basis[:, singular > tol]
+        disp = (frames - ref).reshape(len(frames), -1)
+        aligned = (disp - (disp @ basis) @ basis.T).reshape(frames.shape)
+    else:
+        aligned = np.empty_like(frames)
+        for k, fr in enumerate(frames):
+            fc = fr - fr.mean(axis=0)
+            aligned[k] = fc @ _kabsch(fc, ref_c).T
     mean = aligned.mean(axis=0)
     var = ((aligned - mean) ** 2).sum(axis=2).mean(axis=0)  # <|Δr_i|²> per node
     return np.sqrt(var)
@@ -1134,7 +1155,7 @@ def simulate_equilibrium(
     # bug the VoltronCore DISPLAY fix had to undo. The tails are reported separately.
     disp = disp_all[:, :n, :]
     frames = frames_all[:, :n, :]
-    rmsf = trajectory_rmsf(frames, X0[:n])
+    rmsf = trajectory_rmsf(frames, X0[:n], linearized=not nonlinear_force)
     mean_u = np.zeros(6 * n, dtype=float)
     mean_u.reshape(n, 6)[:, :3] = disp.mean(
         axis=0

@@ -108,7 +108,15 @@ else
 fi
 
 info "Backend  → http://localhost:8000"
-uv run uvicorn backend.api.main:app --host "$BACKEND_HOST" --port 8000 &
+# Match `just dev`: watch source only, so autosaves and simulation outputs never
+# restart the backend. Bound shutdown because status websockets stay connected.
+BACKEND_RELOAD_ARGS=()
+if [ "${NADOC_RELOAD:-1}" != "0" ]; then
+  BACKEND_RELOAD_ARGS=(--reload --reload-dir backend --reload-dir scripts)
+  info "Backend code reload enabled (NADOC_RELOAD=0 disables it)."
+fi
+uv run uvicorn backend.api.main:app --host "$BACKEND_HOST" --port 8000 \
+  --timeout-graceful-shutdown 5 "${BACKEND_RELOAD_ARGS[@]}" &
 BACKEND_PID=$!
 
 # Uvicorn opens the health endpoint only after FastAPI's lifespan startup has

@@ -58,8 +58,10 @@ def import_pdb_design(body: PdbImportRequest) -> dict:
     except Exception as exc:
         raise HTTPException(400, detail=f"PDB import failed: {exc}") from exc
 
-    design_state.clear_history()
-    design_state.set_design(design)
+    if existing and existing.helices:
+        design_state.set_design(design)  # Merge is an edit, not file navigation.
+    else:
+        design_state.load_design(design)
     design_state.set_pdb_atomistic(pdb_atomistic)
     report = validate_design(design)
     # New lineage — nothing in the client's cache matches this design's history.
@@ -284,8 +286,10 @@ async def import_pdb_auto(body: PdbAutoImportRequest, request: Request) -> dict:
     stages_ms["parse_dna"] = (time.perf_counter() - stage_started) * 1000.0
     stage_started = time.perf_counter()
     await _reject_disconnected_import(request, operation_id, started, stages_ms)
-    design_state.clear_history()
-    design_state.set_design(design)
+    if existing and existing.helices:
+        design_state.set_design(design)  # Merge is an edit, not file navigation.
+    else:
+        design_state.load_design(design)
     design_state.set_pdb_atomistic(pdb_atomistic)
     report = validate_design(design)
     # New lineage — nothing in the client's cache matches this design's history.

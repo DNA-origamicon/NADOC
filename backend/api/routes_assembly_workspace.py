@@ -810,7 +810,7 @@ def library_delete(path: str, delete_jobs: bool = False) -> dict:
 @router.post("/design/save-workspace", status_code=200)
 def save_design_to_workspace(body: SaveDesignWorkspaceRequest) -> dict:
     """Write the active in-memory design to a workspace file."""
-    design = design_state.get_or_404()
+    design, save_revision, known_heads = design_state.copy_for_workspace_save()
     dest = _safe_workspace_path(body.path)
     if not body.overwrite and dest.exists():
         raise HTTPException(409, detail=f"File already exists: {body.path!r}")
@@ -850,7 +850,20 @@ def save_design_to_workspace(body: SaveDesignWorkspaceRequest) -> dict:
     # Mirror embedded loadout snapshots into immutable project revisions before
     # publishing the compatibility .nadoc.  A stale branch pointer is a real
     # multi-server conflict and must never degrade to last-writer-wins.
-    from backend.core.project_revisions import BranchConflict, refresh_active_revision
+    from backend.core.project_revisions import BranchConflict, ProjectRevisionStore, refresh_active_revision
+
+    # Undo and feature-history restores rewind content, but must not rewind the
+    # save cursor. Adopt only a head this SAME session has observed; an unknown
+    # head from another document/server must still produce a real conflict.
+    if saved.id == design.id:
+        revisions = ProjectRevisionStore(_asm._WORKSPACE_DIR)
+        loadouts = []
+        for loadout in saved.loadouts:
+            head = revisions.branch_head(saved.id, loadout.id)
+            if head and head in known_heads.get(loadout.id, set()):
+                loadout = loadout.model_copy(update={"head_revision_id": head})
+            loadouts.append(loadout)
+        saved = saved.model_copy(update={"loadouts": loadouts})
 
     try:
         saved = refresh_active_revision(_asm._WORKSPACE_DIR, saved)
@@ -865,8 +878,7 @@ def save_design_to_workspace(body: SaveDesignWorkspaceRequest) -> dict:
             },
         ) from exc
     dest.write_text(saved.to_json(), encoding="utf-8")
-    if saved != design:
-        design_state.set_design_silent(saved)
+    design_state.acknowledge_workspace_save(design, saved, save_revision)
     # Same-path autosave is an acknowledgement, not a state sync: the frontend
     # deliberately keeps its current Design object to avoid an autosave loop.
     # Returning the full multi-megabyte design here made it JSON.parse data it

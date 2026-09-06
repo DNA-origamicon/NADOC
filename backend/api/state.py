@@ -91,6 +91,8 @@ class _DesignSession:
     # Monotonic counter bumped on every reassignment of this doc's design. The
     # session-cache flush thread reads it to skip serializing unchanged docs.
     revision: int = 0
+    # Persistence cursors belong to the document session, not undoable content.
+    workspace_heads: dict[tuple[str, str], set[str]] = field(default_factory=dict)
 
 
 _lock = threading.Lock()
@@ -167,6 +169,10 @@ def restore_doc_design(doc_id: str, design: Design) -> None:
         if s is None:
             s = _DesignSession()
             _sessions[doc_id] = s
+        s.history.clear()
+        s.redo.clear()
+        s.workspace_heads.clear()
+        s.pdb_atomistic = None
         s.design = design
         _bump_revision(s)
 
@@ -237,6 +243,83 @@ def copy_for_persist() -> tuple[Design | None, int]:
         return snap, s.revision
 
 
+def copy_for_workspace_save() -> tuple[Design, int, dict[str, set[str]]]:
+    """Snapshot edits and the branch heads this document has already observed."""
+    with _lock:
+        s = _session()
+        if s.design is None:
+            raise HTTPException(404, detail="No active design.")
+        design = s.design.model_copy(deep=True)
+        known: dict[str, set[str]] = {}
+        # Include history for sessions opened before persistence cursors were
+        # tracked separately. Undo/redo may restore an older embedded head.
+        for candidate in (s.design, *s.history, *s.redo):
+            if candidate.id != design.id:
+                continue
+            for loadout in candidate.loadouts:
+                if loadout.head_revision_id:
+                    known.setdefault(loadout.id, set()).add(loadout.head_revision_id)
+        for (project_id, loadout_id), heads in s.workspace_heads.items():
+            if project_id == design.id:
+                known.setdefault(loadout_id, set()).update(heads)
+        return design, s.revision, known
+
+
+def acknowledge_workspace_save(before: Design, saved: Design, revision: int) -> None:
+    """Advance save cursors without overwriting edits made during disk I/O."""
+    with _lock:
+        s = _session()
+        for loadout in saved.loadouts:
+            if loadout.head_revision_id:
+                s.workspace_heads.setdefault((saved.id, loadout.id), set()).add(loadout.head_revision_id)
+        if s.design is None or s.design.id != before.id:
+            return  # The user navigated to another document during the save.
+        if saved.id != before.id:
+            # Save As forks a project. Its undo stack must not carry snapshots
+            # with the source file's identity and workspace path.
+            s.history.clear()
+            s.redo.clear()
+        if s.revision == revision:
+            s.design = saved
+        else:
+            heads = {item.id: item.head_revision_id for item in saved.loadouts}
+            loadouts = [item.model_copy(update={"head_revision_id": heads[item.id]})
+                        if item.id in heads else item for item in s.design.loadouts]
+            updates = {"loadouts": loadouts or saved.loadouts}
+            if not s.design.active_loadout_id:
+                updates["active_loadout_id"] = saved.active_loadout_id
+            if saved.id != before.id or saved.metadata != before.metadata:
+                updates["id"] = saved.id
+                updates["metadata"] = s.design.metadata.model_copy(update={
+                    "identity_last_known_path": saved.metadata.identity_last_known_path,
+                    "identity_confirmed_at": saved.metadata.identity_confirmed_at,
+                })
+            s.design = s.design.model_copy(update=updates)
+        _bump_revision(s)
+
+
+def workspace_heads_for_doc(doc_id: str) -> dict[str, dict[str, list[str]]]:
+    """Portable recovery metadata, kept outside undoable design snapshots."""
+    with _lock:
+        session = _sessions.get(doc_id)
+        result: dict[str, dict[str, list[str]]] = {}
+        if session is not None:
+            for (project_id, loadout_id), heads in session.workspace_heads.items():
+                result.setdefault(project_id, {})[loadout_id] = sorted(heads)
+        return result
+
+
+def restore_workspace_heads(doc_id: str, heads: dict[str, dict[str, list[str]]]) -> None:
+    with _lock:
+        session = _sessions.get(doc_id)
+        if session is not None:
+            session.workspace_heads = {
+                (project_id, loadout_id): set(revisions)
+                for project_id, branches in heads.items()
+                for loadout_id, revisions in branches.items()
+            }
+
+
 def _assert_active_loadout_editable(
     current: Design | None, replacement: Design | None = None
 ) -> None:
@@ -262,6 +345,18 @@ def _assert_active_loadout_editable(
         )
 
 
+def load_design(d: Design) -> None:
+    """Establish a file/new-design baseline without making navigation undoable."""
+    with _lock:
+        s = _session()
+        s.history.clear()
+        s.redo.clear()
+        s.workspace_heads.clear()
+        s.pdb_atomistic = None
+        s.design = d
+        _bump_revision(s)
+
+
 def set_design(d: Design) -> None:
     with _lock:
         s = _session()
@@ -273,13 +368,15 @@ def set_design(d: Design) -> None:
         _bump_revision(s)
 
 
-def set_design_branch(d: Design, *, push_history: bool = True) -> None:
-    """Replace state for explicit file/branch navigation, bypassing edit protection."""
+def set_design_branch(d: Design) -> None:
+    """Navigate to a branch without undoing back into a different branch."""
     with _lock:
         s = _session()
-        if push_history and s.design is not None:
-            s.history.append(s.design.model_copy(deep=True))
+        if s.design is None or s.design.id != d.id:
+            s.workspace_heads.clear()
+        s.history.clear()
         s.redo.clear()
+        s.pdb_atomistic = None
         s.design = d
         _bump_revision(s)
 
@@ -732,6 +829,18 @@ def mutate_with_minor_log(
         return s.design, validation, minor_entry
 
 
+def _restore_edit_snapshot(snapshot: Design, current: Design) -> Design:
+    """File location/signoff are persistence metadata, not editable content."""
+    if snapshot.id != current.id:
+        return snapshot
+    return snapshot.model_copy(update={
+        "metadata": snapshot.metadata.model_copy(update={
+            "identity_last_known_path": current.metadata.identity_last_known_path,
+            "identity_confirmed_at": current.metadata.identity_confirmed_at,
+        }),
+    })
+
+
 def undo() -> tuple[Design, ValidationReport]:
     """Restore the previous design state.
 
@@ -743,7 +852,7 @@ def undo() -> tuple[Design, ValidationReport]:
         if not s.history:
             raise HTTPException(status_code=404, detail="Nothing to undo.")
         s.redo.append(s.design.model_copy(deep=True))
-        s.design = s.history.pop()
+        s.design = _restore_edit_snapshot(s.history.pop(), s.design)
         report = validate_design(s.design)
         _bump_revision(s)
         return s.design, report
@@ -760,7 +869,7 @@ def redo() -> tuple[Design, ValidationReport]:
         if not s.redo:
             raise HTTPException(status_code=404, detail="Nothing to redo.")
         s.history.append(s.design.model_copy(deep=True))
-        s.design = s.redo.pop()
+        s.design = _restore_edit_snapshot(s.redo.pop(), s.design)
         report = validate_design(s.design)
         _bump_revision(s)
         return s.design, report
@@ -773,6 +882,7 @@ def clear_history() -> None:
         s = _session()
         s.history.clear()
         s.redo.clear()
+        s.workspace_heads.clear()
         s.pdb_atomistic = None
 
 
@@ -789,6 +899,7 @@ def close_session() -> None:
         s.design = None
         s.history.clear()
         s.redo.clear()
+        s.workspace_heads.clear()
         s.pdb_atomistic = None
         _bump_revision(s)
         _protein_library.clear()

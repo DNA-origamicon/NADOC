@@ -553,6 +553,17 @@ class ProjectRevisionStore:
                                         "last_editable_loadout_id": None}
                             ).model_dump_json()
                         )
+                        # The active fallback still contains the pre-edit
+                        # topology. A sibling autosave may already have saved
+                        # our exact live edit (e.g. a forced ligation).
+                        if loadout.id == design.active_loadout_id and not loadout.protected:
+                            same_snapshot = same_snapshot or (
+                                current.model_dump_json()
+                                == design.model_copy(update={
+                                    "loadouts": [], "active_loadout_id": None,
+                                    "last_editable_loadout_id": None,
+                                }).model_dump_json()
+                            )
                     except (FileNotFoundError, ValueError, OSError):
                         same_snapshot = False
                 if same_snapshot:
@@ -618,13 +629,26 @@ def refresh_active_revision(workspace: Path, design: Design) -> Design:
                 for item in materialized.loadouts
             ]
             return materialized.model_copy(update={"loadouts": loadouts})
-    revision = store.commit(
-        materialized,
-        loadout_id=active.id,
-        loadout_name=active.name,
-        parent_revision_id=head,
-        expected_head=head,
-    )
+    try:
+        revision = store.commit(
+            materialized,
+            loadout_id=active.id,
+            loadout_name=active.name,
+            parent_revision_id=active.head_revision_id,
+            expected_head=active.head_revision_id,
+        )
+    except BranchConflict as exc:
+        # A concurrent save can win after materialization. Acknowledge only
+        # byte-identical content; a different edit must retain the conflict.
+        if not exc.current:
+            raise
+        revision = store.read_revision(materialized.id, exc.current)
+        stripped = materialized.model_copy(update={
+            "loadouts": [], "active_loadout_id": None,
+            "last_editable_loadout_id": None,
+        })
+        if hashlib.sha256(stripped.model_dump_json().encode("utf-8")).hexdigest() != revision.snapshot_sha256:
+            raise
     payload, size = encode_snapshot(materialized)
     loadouts = [
         item.model_copy(update={
