@@ -373,6 +373,8 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
     path === '/design/load' || path === '/design/import' ||
     path === '/design/bundle' || path === '/design/bundle-segment' ||
     path === '/design/bundle-continuation' || path === '/design/bundle-deformed-continuation' ||
+    path === '/design/flexible-segment' || path === '/design/flexible-segment/batch' ||
+    path.startsWith('/design/flexible-segment/') ||
     path === '/design/overhang/extrude' || /\/assembly\/instances\/[^/]+\/overhang\/extrude$/.test(path)
   )
   // An optimistic UI may start the trace immediately before calling the API so
@@ -380,7 +382,7 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
   // trace instead of replacing it at fetch time.
   const activeTrace = activeOperationTiming()
   const operationTrace = isTimedOperation
-    ? activeTrace?.details?.optimisticPreview
+    ? (activeTrace?.details?.optimisticPreview || activeTrace?.details?.requestPath === path)
       ? activeTrace
       : beginOperationTiming(`${method} ${path}`, { body })
     : null
@@ -434,7 +436,9 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
     r = await fetch(`${BASE}${path}`, opts)
     tNetwork = performance.now() - t0
     markOperationTiming('response-received', {
-      serverTiming: r.headers?.get?.('Server-Timing') ?? null, status: r.status,
+      serverTiming: r.headers?.get?.('Server-Timing') ?? null,
+      contentLength: r.headers?.get?.('Content-Length') ?? null,
+      status: r.status,
     }, operationTrace)
     notifyRequestSuccess()   // any HTTP response means the backend is reachable
     json = await r.json().catch(() => null)

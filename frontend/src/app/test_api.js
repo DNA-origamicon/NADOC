@@ -36,11 +36,13 @@ export function installTestApi({
   _enterAssemblyMode,
   _exitAssemblyMode,
   forceCrossoverTool,
+  markFlexibleRun,
   multiOverlay,
   multiView,
 }) {
   window.__nadocTest = {
     scene,
+    markFlexibleRun,
     getProteinGizmoMode: () => proteinGizmo?.getMode?.() ?? null,
     isProteinGizmoAttached: () => proteinGizmo?.isAttached?.() ?? false,
     selectProteinForTest(id) {
@@ -349,6 +351,33 @@ export function installTestApi({
         out.push({
           x: rect.left + (ndc.x  *  0.5 + 0.5) * rect.width,
           y: rect.top  + (-ndc.y * 0.5 + 0.5) * rect.height,
+        })
+      }
+      return out
+    },
+    /** Unpaired rigid beads that can open "Mark flexible segment".
+     *  Includes identity so latency/rapid-click Playwright probes can select
+     *  distinct runs while still driving the real canvas context menu. */
+    getFlexibleMarkScreenPositions() {
+      const rect = canvas.getBoundingClientRect()
+      const out = []
+      const v = new THREE.Vector3(), m = new THREE.Matrix4()
+      const marked = new Set((store.getState().currentDesign?.flexible_segment_marks ?? [])
+        .map(mark => `${mark.strand_id}:${mark.domain_index}:${mark.bp_index}:${mark.direction}`))
+      for (const entry of designRenderer.getBackboneEntries?.() ?? []) {
+        const nuc = entry.nuc
+        if (!nuc?.is_unpaired || !entry.instMesh?.visible) continue
+        const key = `${nuc.strand_id}:${nuc.domain_index}:${nuc.bp_index}:${nuc.direction}`
+        if (marked.has(key)) continue
+        entry.instMesh.getMatrixAt(entry.id, m)
+        v.setFromMatrixPosition(m).applyMatrix4(entry.instMesh.matrixWorld)
+        const ndc = v.clone().project(camera)
+        if (ndc.z > 1 || Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) continue
+        out.push({
+          x: rect.left + (ndc.x * 0.5 + 0.5) * rect.width,
+          y: rect.top + (-ndc.y * 0.5 + 0.5) * rect.height,
+          strand_id: nuc.strand_id, domain_index: nuc.domain_index,
+          bp_index: nuc.bp_index, direction: nuc.direction,
         })
       }
       return out

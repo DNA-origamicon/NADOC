@@ -778,15 +778,27 @@ export function initDesignRenderer(scene, storeRef) {
       }
     }
 
-    // 2. Check that no nuc flips is_five_prime or is_three_prime.
+    // 2. Check that no nuc flips a mesh-membership field. Flexible-segment
+    //    classification removes/adds a nucleotide from the rigid meshes, so it
+    //    must use the structural overlay path rather than a matrix-only patch.
     //    is_five_prime: sphere↔cube mesh-type change needs full rebuild.
     //    is_three_prime: a new strand terminal means cone topology changed
     //    (a nick was placed), requiring a full rebuild to re-sort strands
     //    and rebuild cross-helix connections.
     const helixSet = new Set(realIds)
+    const previousByKey = new Map((prevGeo ?? [])
+      .filter(n => helixSet.has(n.helix_id))
+      .map(n => [`${n.helix_id}:${n.bp_index}:${n.direction}`, n]))
     for (const nuc of newGeo) {
       if (!helixSet.has(nuc.helix_id)) continue
       const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+      const previous = previousByKey.get(key)
+      if (!!previous?.is_flexible_segment !== !!nuc.is_flexible_segment) {
+        markOperationTiming('partial-patch-rejected', {
+          reason: 'flexible-mesh-membership-changed', helixId: nuc.helix_id,
+        })
+        return false
+      }
       const existing = _helixCtrl.lookupEntry(key)
       if (existing && existing.nuc.is_five_prime !== !!nuc.is_five_prime) {
         markOperationTiming('partial-patch-rejected', { reason: 'five-prime-mesh-changed', helixId: nuc.helix_id })

@@ -78,6 +78,12 @@ describe('structural partial reconciliation', () => {
     expect(body).toContain("reason: 'helix-axis-changed'")
   })
 
+  it('rejects matrix-only patching when flexible marks change mesh membership', () => {
+    const body = functionBody(SRC, '_tryPatchInPlace')
+    expect(body).toContain('is_flexible_segment')
+    expect(body).toContain("reason: 'flexible-mesh-membership-changed'")
+  })
+
   it('bounds the overlay fast path and preserves a full-rebuild fallback', () => {
     const body = functionBody(SRC, '_tryStructuralOverlay')
     expect(body).not.toBeNull()

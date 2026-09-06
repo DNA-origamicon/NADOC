@@ -643,6 +643,23 @@ async function main() {
   let clusterPanel = null
   let _currentRepr = 'full'
   const selectionController = createSelectionController({ store })
+  // The exact post-context-menu mark path is named so Playwright can time it
+  // deterministically without making a software-WebGL raycast part of the
+  // latency measurement.
+  const _markFlexibleRun = async (run) => {
+    const trace = beginOperationTiming('Mark flexible segment', {
+      requestPath: '/design/flexible-segment/batch', nMarks: run.length,
+    })
+    markOperationTiming('run-resolved', undefined, trace)
+    // Acknowledge synchronously: persistence and the structural scene patch can
+    // finish in the background while the user opens the next context menu.
+    showToast(`Marked ${run.length}-base flexible segment`)
+    markOperationTiming('optimistic-confirmation-visible', undefined, trace)
+    // Add only this run. The backend merges/deduplicates against its latest
+    // design, so rapid marks cannot overwrite an earlier in-flight mark whose
+    // response has not reached this tab yet.
+    await api.batchFlexibleSegment({ marks: run })
+  }
   selectionManager = initSelectionManager(canvas, camera, designRenderer, {
     selectionController,
     onHideSelection: refs => {
@@ -775,13 +792,7 @@ async function main() {
         const run = flexibleRunForBead(currentDesign, currentGeometry, nuc)
         if (!run.length) return
         if (action === 'mark') {
-          const existing = currentDesign?.flexible_segment_marks ?? []
-          const keep = existing.map(m => ({
-            strand_id: m.strand_id, domain_index: m.domain_index,
-            bp_index: m.bp_index, direction: m.direction,
-          }))
-          await api.batchFlexibleSegment({ marks: [...keep, ...run], replace: true })
-          showToast(`Marked ${run.length}-base flexible segment`)
+          await _markFlexibleRun(run)
         } else if (action === 'unmark') {
           const runKeys = new Set(run.map(r => `${r.strand_id}:${r.domain_index}:${r.bp_index}:${r.direction}`))
           const keep = (currentDesign?.flexible_segment_marks ?? [])
@@ -6838,6 +6849,7 @@ async function main() {
       _enterAssemblyMode,
       _exitAssemblyMode,
       forceCrossoverTool,
+      markFlexibleRun: _markFlexibleRun,
       multiOverlay: _multiOverlay,
       multiView: _multiView,
     })
