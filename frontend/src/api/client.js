@@ -2607,8 +2607,8 @@ async function _oxdnaJSONRequest(method, path, body = undefined, { signal } = {}
   return json
 }
 
-async function _backgroundJobList(path) {
-  await whenOperationIdle()
+async function _backgroundJobList(path, { waitForIdle = true } = {}) {
+  if (waitForIdle) await whenOperationIdle()
   return _oxdnaJSON('GET', path)
 }
 
@@ -2781,7 +2781,7 @@ export const getLammpsDeviation = (id, opts) => {
 export const estimateOxdnaDisk   = (body)        => _oxdnaJSON('POST', '/oxdna/jobs/estimate-disk', body)
 /** Forecast free-disk-after for an oxDNA production/run stage ({steps}). */
 export const estimateOxdnaRunDisk = (id, body)   => _oxdnaJSON('POST', `/oxdna/jobs/${id}/estimate-run-disk`, body)
-export const listOxdnaJobs       = ()            => _backgroundJobList('/oxdna/jobs')
+export const listOxdnaJobs       = (opts)        => _backgroundJobList('/oxdna/jobs', opts)
 export const getOxdnaJob         = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}`)
 export const getOxdnaErrorLog    = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/error-log`)
 export const getOxdnaProgress    = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/progress`)
@@ -3189,7 +3189,7 @@ export const preflightMdVram     = (body)        => _oxdnaJSON('POST', '/md/jobs
 /** Forecast free-disk-after for a NAMD production stage (same body as appendMdProduction). */
 export const estimateMdProductionDisk = (id, body) => _oxdnaJSON('POST', `/md/jobs/${id}/estimate-production-disk`, body)
 /** List NAMD/MD jobs (for the trajectory-keyframe dropdown). */
-export const listMdJobs          = ()            => _backgroundJobList('/md/jobs')
+export const listMdJobs          = (opts)        => _backgroundJobList('/md/jobs', opts)
 /** Start moving an MD job's folder to <destRoot>/<job_id> (background; poll status). */
 export const archiveMdJob        = (id, destRoot) => _oxdnaJSON('POST', `/md/jobs/${id}/archive`, { dest_root: destRoot })
 export const unarchiveMdJob      = (id)          => _oxdnaJSON('POST', `/md/jobs/${id}/unarchive`)

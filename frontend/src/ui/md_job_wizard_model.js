@@ -346,7 +346,7 @@ export function presetSummary(preset, plan) {
  *  risks a 400 when they disagree. */
 export const WIZARD_FIELDS = [
   'threads', 'devices', 'salt_mode', 'mg_conc_mM', 'ion_conc_mM', 'padding_nm',
-  'box_mode', 'minimize_steps', 'adaptive_minimization', 'fast',
+  'box_mode', 'box_size_nm', 'minimize_steps', 'adaptive_minimization', 'fast',
   'gpu_fallback_policy', 'gpu_resident', 'early_stop_relax',
   'allow_ring_pierced_seed', 'seed',
   'force_soft', 'declash',

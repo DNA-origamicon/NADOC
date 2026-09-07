@@ -27,6 +27,7 @@
  */
 
 import * as THREE from 'three'
+import { initGrapheneRepresentation } from './graphene_representation.js'
 
 import { ELEMENTS, BALL_RADIUS, BOND_RADIUS } from './atomistic_renderer/atom_palette.js'
 import {
@@ -77,6 +78,7 @@ export function capacityFor(n, current = 0) {
 }
 
 export function initMdSolventOverlay(scene) {
+  const graphene = initGrapheneRepresentation(scene)
   const _geom = createGeometryState()
   const _matCache = new Map()
   const _meshes = new Map()      // key → { mesh, capacity }
@@ -266,6 +268,8 @@ export function initMdSolventOverlay(scene) {
 
     getMode() { return _mode },
 
+    setGrapheneDisplay(settings) { graphene.setDisplay(settings) },
+
     /** Species codes for the ion instances — static for a job, set once per load. */
     setIonSpecies(codes) { _ionSpecies = codes ?? null },
 
@@ -278,12 +282,7 @@ export function initMdSolventOverlay(scene) {
       if (!frame || _mode === 'off') { this.clear(); return }
       _drawWater(frame)
       _drawIons(frame)
-      const nCarbon = (frame.graphene?.length ?? 0) / 3
-      if (nCarbon) {
-        const radius = ELEMENTS.C.vdw
-        _writeSpheres(_sphereMesh("graphene", radius, nCarbon, false, 0x4b5563),
-          frame.graphene, nCarbon, 3, 0, atomInstanceScale(radius))
-      } else _hide("graphene")
+      graphene.setFrame(frame.graphene)
       _stats = { nWater: _waterVisible ? (frame.nWater | 0) : 0,
                  nIons: _ionsVisible ? (frame.ions.length / 3) | 0 : 0 }
     },
@@ -304,11 +303,13 @@ export function initMdSolventOverlay(scene) {
 
     /** Hide everything, keeping the allocated meshes for the next frame. */
     clear() {
+      graphene.clear()
       for (const key of _meshes.keys()) _hide(key)
       _stats = { nWater: 0, nIons: 0 }
     },
 
     dispose() {
+      graphene.dispose()
       for (const { mesh } of _meshes.values()) { scene.remove(mesh); mesh.dispose() }
       _meshes.clear()
       for (const m of _matCache.values()) m.dispose()

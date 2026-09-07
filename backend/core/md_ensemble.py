@@ -496,6 +496,7 @@ def build_replica_package(
         graphene_pressure_conf(
             production_conf,
             enabled=bool(graphene_nanopore and anchor_k is not None),
+            fixed_cell=bool(graphene_nanopore and graphene_nanopore.get("cell_policy") == "fixed_volume"),
         )
     )
 

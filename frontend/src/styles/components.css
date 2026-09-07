@@ -1141,6 +1141,10 @@ body:has(#right-panel.locked-inactive) .toast {
   padding: var(--space-2) 0;
   border-bottom: 1px solid var(--color-border-default);
 }
+.wizard-box-size { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
+.wizard-box-size > strong, .wizard-box-size > .btn { grid-column: 1 / -1; justify-self: start; }
+.wizard-box-size > label { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+.wizard-box-size input { width: 100%; min-width: 0; box-sizing: border-box; order: 1; }
 .wizard-field__label { font-size: var(--text-sm); }
 .wizard-field__unit { color: var(--color-text-dim); }
 .wizard-field__control { grid-column: 2; width: 100%; }

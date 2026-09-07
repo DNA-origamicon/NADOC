@@ -292,6 +292,7 @@ def _design_flags(*, padding_nm: float = 1.2) -> dict:
 
 def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> dict:
     carved = False
+    wall = bool(resolved.graphene_nanopore)
     gbis = resolved.protocol == md_presets.IMPLICIT_PROTOCOL
     flags = _design_flags(padding_nm=float(resolved.padding_nm))
     high_aspect_ratio = resolved.relax_preset == md_presets.HIGH_ASPECT_RATIO
@@ -355,7 +356,7 @@ def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
             ctx,
             soft=force_soft,
             gentle=gentle_ladder,
-            nvt_only=carved,
+            nvt_only=carved or wall,
             timestep_fs=ladder_dt,
             stage_overrides=body.stage_overrides or None,
             high_aspect_ratio=high_aspect_ratio,
@@ -452,6 +453,8 @@ def _relaxation_plan(body: ProtocolPlanRequest, resolved: CreateJobRequest) -> d
             },
         ]
     warnings: list[str] = []
+    if wall:
+        warnings.append("Periodic graphene spans the entire cell. The restrained wall uses a fixed-volume cell to keep its edges sealed; validate solvent density before transport production.")
     if gbis:
         warnings.append(
             "Implicit-solvent stages keep the explicit ladder's NAMES (they say NPT and "
@@ -1328,6 +1331,19 @@ async def protocol_plan(body: ProtocolPlanRequest) -> dict:
         if kind == "production"
         else _relaxation_plan(body, resolved)
     )
+
+    if kind == "relaxation" and resolved.protocol != md_presets.IMPLICIT_PROTOCOL:
+        from starlette.concurrency import run_in_threadpool
+        from backend.core.md_box_preview import preview_box
+        try:
+            current_design = design_state.get_or_404()
+        except HTTPException:
+            current_design = None
+        if current_design is not None:
+            try:
+                plan["box_preview"] = await run_in_threadpool(preview_box, current_design, resolved)
+            except Exception as exc:
+                plan["warnings"].append(f"Box estimate unavailable: {exc}")
 
     stages = plan["stages"]
     edited = sorted({k for k, v in (body.stage_overrides or {}).items() if v})

@@ -170,6 +170,7 @@ def _graphene_pdb_atoms(dna_pdb: str, spec: dict) -> list[str]:
         spec["plane_point_nm"] = center.tolist()
     margin = float(spec.get("sheet_margin_nm", 1.5))
     extent = max(5.0, float(np.ptp(pts, axis=0).max() / 2 + margin)) if len(pts) else 5.0
+    extent = max(extent, radius + max(margin, 0.3))
     trial = np.array([1.0, 0.0, 0.0]) if abs(n[0]) < 0.8 else np.array([0.0, 1.0, 0.0])
     u = np.cross(n, trial); u /= np.linalg.norm(u)
     v = np.cross(n, u)
@@ -203,7 +204,7 @@ def _graphene_pdb_atoms(dna_pdb: str, spec: dict) -> list[str]:
 
 
 def _exclude_waters_near_graphene(
-    waters: list["_Water"], pdb_text: str, *, clearance_nm: float = 0.30
+    waters: list["_Water"], pdb_text: str, *, clearance_nm: float = 0.30, box_nm=None
 ) -> tuple[list["_Water"], int]:
     """Remove waters whose oxygen overlaps the fixed graphene LJ surface."""
     import numpy as np
@@ -223,7 +224,11 @@ def _exclude_waters_near_graphene(
     from scipy.spatial import cKDTree
 
     oxygens = np.asarray([[w.ox, w.oy, w.oz] for w in waters], dtype=float)
-    keep = cKDTree(graph).query(oxygens, k=1)[0] >= clearance_nm
+    if box_nm is not None:
+        box = np.asarray(box_nm)
+        keep = cKDTree(graph % box, boxsize=box).query(oxygens % box, k=1)[0] >= clearance_nm
+    else:
+        keep = cKDTree(graph).query(oxygens, k=1)[0] >= clearance_nm
     filtered = [water for water, retain in zip(waters, keep, strict=True) if retain]
     return filtered, len(waters) - len(filtered)
 
@@ -692,6 +697,7 @@ def resolve_box_mode(
 def _recenter_pdb_in_padded_box(
     pdb_text: str, padding_nm: float, box_mode: str = DEFAULT_BOX_MODE,
     padding_xyz_nm: "tuple[float, float, float] | None" = None,
+    box_size_nm: "tuple[float | None, float | None, float | None] | None" = None,
 ) -> tuple[str, tuple[float, float, float]]:
     """Translate every ATOM/HETATM so the structure's bounding box is centred in a
     rectangular ``[0, L]`` cell of size ``span + 2·padding`` per axis.
@@ -750,8 +756,33 @@ def _recenter_pdb_in_padded_box(
             f"unknown box_mode {box_mode!r} (expected 'bbox' or 'rotation')"
         )
 
-    # Translation that centres the structure in a cell of ``span + 2*padding``.
-    tx, ty, tz = (pad_a + span / 2.0) - centre
+    physical = np.asarray([
+        [float(line[k:k + 8]) for k in (30, 38, 46)]
+        for line in pdb_text.splitlines()
+        if line.startswith(("ATOM", "HETATM"))
+        and not line[72:76].strip().startswith("GR")
+    ])
+    minimum_span = np.ptp(physical, axis=0) if len(physical) else np.zeros(3)
+    lengths = span + 2 * pad_a
+    if box_size_nm is not None:
+        if len(box_size_nm) != 3:
+            raise ValueError("Box size must contain X, Y and Z dimensions in nm")
+        for i, value in enumerate(box_size_nm):
+            if value is None:
+                continue
+            if not np.isfinite(value) or value <= 0:
+                raise ValueError("Box dimensions must be finite and positive")
+            if value * 10 <= minimum_span[i]:
+                raise ValueError(f"Box {'XYZ'[i]} must exceed the solute extent ({minimum_span[i] / 10:.3f} nm)")
+            lengths[i] = value * 10
+
+    # The finite graphene seed is resized later, but actual solute atoms must fit.
+    if len(physical) and box_size_nm is not None:
+        shifted = physical + lengths / 2 - centre
+        if np.any(shifted.min(axis=0) < 0) or np.any(shifted.max(axis=0) >= lengths):
+            raise ValueError("Requested box does not contain the centered solute; increase its dimensions.")
+    # Translation that centres the structure in the selected cell.
+    tx, ty, tz = lengths / 2.0 - centre
 
     out: list[str] = []
     for ln in pdb_text.splitlines():
@@ -767,7 +798,7 @@ def _recenter_pdb_in_padded_box(
         else:
             out.append(ln)
 
-    bx, by, bz = (span + 2 * pad_a) / 10.0  # Å → nm
+    bx, by, bz = lengths / 10.0  # Å → nm
     return "\n".join(out) + "\n", (float(bx), float(by), float(bz))
 
 
@@ -779,6 +810,8 @@ def _gmx_solvate(
     *,
     box_mode: str = DEFAULT_BOX_MODE,
     padding_xyz_nm: "tuple[float, float, float] | None" = None,
+    box_size_nm: "tuple[float | None, float | None, float | None] | None" = None,
+    graphene_spec: "dict | None" = None,
 ) -> tuple[list[_Water], tuple[float, float, float], str]:
     """Place TIP3P water around the DNA using GROMACS.
 
@@ -794,9 +827,13 @@ def _gmx_solvate(
     # Centre the DNA ourselves in a rectangular box, then tell editconf NOT to move
     # it (-noc) — so the DNA we hand back and the water gmx places share one frame.
     pdb_text, box_nm = _recenter_pdb_in_padded_box(
-        pdb_text, padding_nm, box_mode, padding_xyz_nm
+        pdb_text, padding_nm, box_mode, padding_xyz_nm, box_size_nm
     )
     bx, by, bz = box_nm
+
+    if graphene_spec:
+        from backend.core.namd_graphene import tile_graphene_to_cell
+        pdb_text = tile_graphene_to_cell(pdb_text, box_nm, graphene_spec)
 
     (tmpdir / "dry.pdb").write_text(pdb_text)
 
@@ -2767,6 +2804,7 @@ def build_namd_solvated_package(
     *,
     padding_nm: float = 1.2,
     box_mode: str = DEFAULT_BOX_MODE,
+    box_size_nm: "tuple[float | None, float | None, float | None] | None" = None,
     ion_conc_mM: float = 150.0,
     mg_conc_mM: float = 0.0,
     mg_hexahydrate: bool = False,
@@ -2853,22 +2891,18 @@ def build_namd_solvated_package(
     if solute_coords is not None:
         dna_pdb = _overwrite_solute_coords(dna_pdb, solute_coords)
     graphene_count = 0
-    graphene_centroid_before = None
-    graphene_pore_before = None
     if graphene_nanopore:
         from backend.core.namd_graphene import describe_graphene_wall
 
         describe_graphene_wall(graphene_nanopore)
         graphene_lines = _graphene_pdb_atoms(dna_pdb, graphene_nanopore)
         graphene_count = len(graphene_lines)
-        if graphene_lines:
-            graphene_centroid_before = np.asarray(
-                [[float(line[30:38]) / 10, float(line[38:46]) / 10,
-                  float(line[46:54]) / 10] for line in graphene_lines], dtype=float
-            ).mean(axis=0)
-            graphene_pore_before = np.asarray(
-                graphene_nanopore["pore_center_nm"], dtype=float
-            ).copy()
+        if not graphene_lines:
+            raise ValueError("Graphene pore removes the entire seed sheet; increase the sheet margin.")
+        # Reference for recovering the rigid recentering translation before tiling.
+        graphene_nanopore["_first_site_nm"] = [
+            float(graphene_lines[0][i:i + 8]) / 10 for i in (30, 38, 46)
+        ]
         dna_pdb = dna_pdb.rstrip().removesuffix("END").rstrip() + "\n" + "\n".join(graphene_lines) + "\nEND\n"
     dry_audit = audit_psf(
         dna_psf,
@@ -2905,48 +2939,37 @@ def build_namd_solvated_package(
         if box_mode_note:
             logger.warning("box sizing: %s", box_mode_note)
             _emit(progress, "assemble", 0.4, f"Box sizing: {box_mode_note}")
+        cell_options = {}
+        if box_size_nm is not None:
+            cell_options["box_size_nm"] = box_size_nm
+        if graphene_nanopore:
+            cell_options["graphene_spec"] = graphene_nanopore
         waters, box_nm, dna_pdb = _gmx_solvate(
             dna_pdb,
             padding_nm,
             tmpdir,
             progress=progress,
             box_mode="bbox" if graphene_only else box_mode,
-            # The sheet must tile the XY periodic boundary; ordinary isotropic
-            # padding leaves an open annulus around its edge and ions bypass the pore.
-            # 0.08 nm per side is narrower than a carbon LJ diameter, while Z retains
-            # the requested water reservoir on both sides.
-            padding_xyz_nm=(0.08, 0.08, padding_nm) if graphene_only else None,
+            # Keep the control's usual compact lateral cell, independent of its
+            # surface axis. All walls are retiled over the final cell before water
+            # is placed; normal padding remains the requested reservoir depth.
+            padding_xyz_nm=tuple(
+                padding_nm if abs(graphene_nanopore["dir"][i]) > 0.5 else 0.08
+                for i in range(3)
+            ) if graphene_only else None,
+            **cell_options,
         )
         if graphene_nanopore and graphene_count:
             waters, removed = _exclude_waters_near_graphene(
                 waters, dna_pdb,
                 clearance_nm=float(graphene_nanopore.get("water_clearance_nm", 0.30)),
+                box_nm=box_nm,
             )
             graphene_nanopore["excluded_overlapping_waters"] = removed
-            graph_xyz = []
-            for line in dna_pdb.splitlines():
-                if line.startswith("HETATM") and line[72:76].strip().startswith("GR"):
-                    graph_xyz.append([float(line[30:38]) / 10, float(line[38:46]) / 10,
-                                      float(line[46:54]) / 10])
-            if graph_xyz:
-                graphene_centroid_after = np.asarray(graph_xyz, dtype=float).mean(axis=0)
-                # Solvation translates the whole solute into [0,L].  Propagate that
-                # rigid translation to the aperture centre.  The carbon centroid is
-                # not itself the aperture centre (a cut lattice/finite edge/multilayer
-                # sheet need not have a perfectly symmetric remaining atom census).
-                center = (
-                    graphene_pore_before
-                    + graphene_centroid_after
-                    - graphene_centroid_before
-                    if graphene_pore_before is not None
-                    and graphene_centroid_before is not None
-                    else graphene_centroid_after
-                )
-                normal = np.asarray(graphene_nanopore["dir"], dtype=float)
-                normal /= np.linalg.norm(normal)
-                graphene_nanopore["pore_center_nm"] = center.tolist()
-                graphene_nanopore["plane_point_nm"] = center.tolist()
-                graphene_nanopore["position_nm"] = float(center[int(np.argmax(np.abs(normal)))])
+            graphene_count = sum(
+                line.startswith("HETATM") and line[72:76].strip().startswith("GR")
+                for line in dna_pdb.splitlines()
+            )
 
     # 3. Count DNA net charge (1 phosphate = -1 charge) and calculate ion counts.
     #    Under the Aksimentiev recipe the counterion is Mg(H₂O)₆²⁺, not Na⁺ — see
@@ -3036,7 +3059,7 @@ def build_namd_solvated_package(
         progress=progress,
     )
     mgh_extrabonds = _mgh_extrabonds(
-        dna_n_atoms,
+        dna_n_atoms + graphene_count,
         len(waters),
         len(na_pos),
         len(mg_pos),
@@ -3072,6 +3095,11 @@ def build_namd_solvated_package(
         n_hmr=n_hmr,
         nvt_only=False,
     )
+
+    if graphene_nanopore:
+        from backend.core.namd_graphene import graphene_pressure_conf
+        namd_conf = graphene_pressure_conf(namd_conf, enabled=True, fixed_cell=True)
+        fast_conf = graphene_pressure_conf(fast_conf, enabled=True, fixed_cell=True)
 
     readme = _README.format(name=name)
     prompt = _AI_PROMPT.replace("{name}", name)
@@ -3118,6 +3146,7 @@ def build_namd_solvated_package(
         "box_sizing": {
             "padding_nm": padding_nm,
             "box_mode": box_mode,
+            "requested_box_size_nm": box_size_nm,
             "padding_note": padding_note,
             "box_mode_note": box_mode_note,
             # What the cell was sized FOR.  A package sized for a short ladder cannot

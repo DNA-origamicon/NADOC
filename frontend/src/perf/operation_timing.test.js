@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  activeOperationTiming,
   beginOperationTiming,
   finishOperationAfterRender,
   markOperationTiming,
@@ -8,6 +9,7 @@ import {
 
 describe('operation timing', () => {
   afterEach(() => {
+    vi.useRealTimers()
     vi.unstubAllGlobals()
     window.__nadocOperationTiming.clear()
   })
@@ -47,6 +49,24 @@ describe('operation timing', () => {
     frames.shift()(2)
     await idle
     expect(released).toBe(true)
+  })
+
+  it('bounds idle deferral without cancelling or falsely completing a stale operation', async () => {
+    vi.useFakeTimers()
+    const frames = []
+    vi.stubGlobal('requestAnimationFrame', cb => { frames.push(cb); return frames.length })
+    const trace = beginOperationTiming('import with no render completion')
+    let released = false
+    const idle = whenOperationIdle({ maxWaitMs: 100 }).then(() => { released = true })
+    await vi.advanceTimersByTimeAsync(99)
+    expect(released).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
+    await idle
+    expect(activeOperationTiming()).toBe(trace)
+    expect(trace.finished).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
+    finishOperationAfterRender(trace)
+    frames.shift()(1); frames.shift()(2)
   })
 
   it('broadcasts a JSON-safe completed phase trace for Playwright diagnostics', () => {

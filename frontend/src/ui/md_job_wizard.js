@@ -327,7 +327,7 @@ const PROVENANCE_TEXT = {
  *        is where settings are.
  */
 export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs, getPartPath,
-  onJobCreated, onOptimizeMount, onTargetChange = () => {} } = {}) {
+  onJobCreated, onOptimizeMount, onTargetChange = () => {}, getPreparationContext = () => ({}) } = {}) {
   let modal = null
   let presets = []
   let plan = null
@@ -473,9 +473,10 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
     }
     mounts.status.textContent = 'Working out what this will run…'
     try {
-      const next = await api.fetchProtocolPlan(
-        planPayload({ ...state, touched: { ...ladderPin(), ...state.touched } })
-      )
+      const next = await api.fetchProtocolPlan({
+        ...(!readOnly && state.mode !== 'production' ? getPreparationContext() : {}),
+        ...planPayload({ ...state, touched: { ...ladderPin(), ...state.touched } }),
+      })
       plan = next || null
       // The API client returns null on a non-OK response rather than throwing, so an
       // un-surfaced failure would leave the table silently blank — which is exactly the
@@ -714,8 +715,47 @@ export function initJobWizard({ api, launch, spawnProduction, updateJob, getJobs
           body,
         ],
       }))
-      for (const field of fields) renderField(field, fieldConds, body)
+      for (const field of fields) {
+        renderField(field, fieldConds, body)
+        if (field.key === 'box_mode') renderBoxSize(body)
+      }
     }
+  }
+
+  function renderBoxSize(parent) {
+    const implicit = plan?.protocol === 'implicit_gbis_namd'
+    if (implicit) return
+    const manual = valueOf('box_size_nm') || [null, null, null]
+    const calculated = plan?.box_preview?.calculated_nm || []
+    const group = el('div', { className: 'wizard-field wizard-box-size', attrs: { 'data-testid': 'box-size-controls' } })
+    group.appendChild(el('strong', { text: 'Initial box size (nm)' }))
+    for (const [i, axis] of ['X', 'Y', 'Z'].entries()) {
+      const override = manual[i] != null
+      const input = createInput({
+        size: 'sm', type: 'number', min: 0.1, step: 0.1, disabled: readOnly,
+        value: override ? String(manual[i]) : (calculated[i] == null ? '' : calculated[i].toFixed(3)),
+        onChange: v => {
+          const next = [...manual]
+          next[i] = v === '' ? null : Number(v)
+          setField('box_size_nm', next)
+        },
+      })
+      const nativeInput = input.matches?.('input') ? input : input.querySelector?.('input')
+      nativeInput?.setAttribute('aria-label', `Box ${axis} (nm)`)
+      group.appendChild(el('label', { className: 'wizard-field__label', children: [
+        document.createTextNode(`${axis} `), input,
+        override ? el('span', { className: 'wizard-field__alert wizard-field__alert--warning',
+          text: '⚠', attrs: { 'aria-label': `Box ${axis} manually changed`,
+            title: 'Manual dimension: check solute clearance and reservoir depth. Reset restores automatic sizing.' } }) : null,
+      ] }))
+    }
+    group.appendChild(createButton({ label: 'Reset box size', size: 'sm', disabled: readOnly,
+      onClick: () => setField('box_size_nm', null),
+    }))
+    group.appendChild(el('div', { className: 'wizard-field__help',
+      text: 'Automatic dimensions are estimates until preparation measures the final seed. Reset follows the selected cell sizing and water padding. Production inherits the prepared cell.',
+    }))
+    parent.appendChild(group)
   }
 
   function renderField(field, fieldConds, parent) {

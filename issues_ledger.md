@@ -803,3 +803,15 @@ EXCLUDES same-docId siblings (cadnano child windows share our backend doc = genu
 
 
 > **History.** Closed issues live in [issues_ledger_archive.md](issues_ledger_archive.md). Read on demand only — never in a routine loop.
+
+## ISSUE-24 — [x] Animation trajectory rows wait forever on stale operation timing
+
+User observed all trajectory dropdowns stuck at Loading jobs with indeterminate bars.
+Read-only browser evidence showed unfinished POST /design/import timing after the backend
+was idle. Job-list lookup awaited the timing idle gate without a deadline; row metadata
+and preparation subscriptions depended on that lookup. The exact orphaned render-callback
+origin was not established. Fixed visible-request bypass, bounded background wait, and
+independent row initialization. Regression tests cover stale timing and pending job lists;
+the original panel fails the new pending-list regression. See
+[trajectory audit](docs/animation_trajectory_loading_audit.md) for validation and the
+subsequent ordered preparation/readiness feature. No topology changes; main.js delta 0.

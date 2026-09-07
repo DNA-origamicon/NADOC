@@ -1,3 +1,5 @@
+import { initTrajectoryPreparationQueue } from './trajectory_preparation_queue.js'
+
 /**
  * Trajectory keyframes — the animation player's view of a simulation trajectory.
  *
@@ -20,13 +22,9 @@
  * what makes an animation and a panel scrub share one cache, one budget, one fetch queue
  * and one job-topology rebuild.
  *
- * **One job per controller at a time.** A controller holds a single job's trajectory
- * (`loadTrajectory` drops the previous job's bakes), so `prepare` loads the FIRST job per
- * controller and a second job on the SAME engine is swapped in when its segment is
- * reached — a reload each time it comes round. Two jobs on DIFFERENT engines are free
- * (they land on different controllers). Every animation in the workspace today uses one
- * job; if multi-job on one engine ever becomes real, the fix is a per-job cache inside
- * the controller, not a second pipeline back in here.
+ * Each controller displays one job at a time. Its off-screen preparation cache retains
+ * the active animation's jobs and adopts their completed frame buffers on a segment
+ * switch. Downloads and heavy reconstruction are shared with foreground playback.
  *
  * Display-only, like everything else on this path: the controllers write bead/atom
  * positions and never touch topology (Three-Layer Law).
@@ -90,6 +88,8 @@ export function initTrajectoryKeyframes({
 } = {}) {
   // jobId → frame count of its loaded composite trajectory (0 = failed / not loaded).
   const _frames  = new Map()
+  const _variantFrames = new Map()
+  const variantKey = (jobId, spec) => JSON.stringify([jobId, spec.engine, spec.scope, spec.stride ?? null])
   // jobId → the {engine, scope, stride} resolution it was asked for, so a mid-playback
   // swap and a preview scrub reload at the SAME resolution the frame indices assume.
   const _specs   = new Map()
@@ -99,6 +99,10 @@ export function initTrajectoryKeyframes({
   // controller → the jobId it currently holds FOR US.
   const _loaded  = new Map()
   // controller → its state before we touched it, so release() can put it back.
+  const metadataFrames = new Map()
+  const recordMetadata = (jobId, spec, count) => { if (count > 0) metadataFrames.set(variantKey(jobId, spec), count) }
+  const preparationQueue = initTrajectoryPreparationQueue()
+  const schedulePreparation = (jobId, spec) => run => preparationQueue.enqueue(variantKey(jobId, spec), run)
   const _prev    = new Map()
   // Last (job, frame) actually pushed to a controller — the frame-change guard. The old
   // player re-applied the same frame on every rAF: a full framesToUpdates rebuild plus an
@@ -106,6 +110,8 @@ export function initTrajectoryKeyframes({
   let _lastJob   = null
   let _lastFrame = -1
   let _swapping  = null
+  let _requested = null
+  let _generation = 0
   let _companionSetup = null
   let _companionJob = null
 
@@ -158,9 +164,17 @@ export function initTrajectoryKeyframes({
    *  job AT THAT RESOLUTION — the whole point of sharing the panel's controller) and
    *  prebuild its heavy frames within budget. */
   async function _loadInto(ctrl, jobId, spec, onProgress) {
+    const generation = _generation
     const { engine, scope, stride } = spec
     _remember(ctrl)
     _specs.set(jobId, spec)
+    if (ctrl.prepareTrajectory) {
+      await ctrl.prepareTrajectory(jobId, spec, {
+        planPrebuild, schedule: schedulePreparation(jobId, spec),
+        onProgress: p => onProgress?.({ ...p, jobId, engine }),
+      })
+      if (generation !== _generation) return false
+    }
     // Reusing a held trajectory is only sound at the SAME resolution: the caller's frame
     // indices are composite indices, and 'job'/stride=1 is a different frame space from
     // the sparse lineage view. A mismatch falls through to a real load.
@@ -192,6 +206,7 @@ export function initTrajectoryKeyframes({
         r = await Promise.resolve(
           ctrl.loadTrajectory?.(jobId, true, scope, stride)).catch(() => null)
       } finally { stop() }
+      if (generation !== _generation) return false
       if (!r?.ok) { _frames.set(jobId, 0); return false }
       const n = Number(r.n_frames) || 0
       // Close the phase at 100% — the poller stops reporting the moment the build
@@ -199,8 +214,11 @@ export function initTrajectoryKeyframes({
       onProgress?.({ phase: 'load', jobId, engine, done: n, total: n })
       _frames.set(jobId, n)
     }
+    _variantFrames.set(variantKey(jobId, spec), _frames.get(jobId))
     _loaded.set(ctrl, jobId)
     _lastJob = null; _lastFrame = -1   // the model just moved under us
+
+    ctrl.adoptTrajectoryPreparation?.(jobId, spec)
 
     // Heavy reps only: prebuildHeavy is a no-op in a CG representation, so a bead-rep
     // animation pays nothing here.
@@ -216,10 +234,72 @@ export function initTrajectoryKeyframes({
       // baked cell, so this — not the trajectory's frame count — is how many different
       // surfaces/atom sets an export can possibly show. Silent capping here is what made
       // a 501-frame trajectory render as 8 surfaces.
+      if (generation !== _generation || !bake || bake.ok === false) return false
       if (bake) _bakes.set(jobId, { frames: bake.frames ?? bake.n ?? 0,
                                     capped: !!bake.capped, total: bake.trajFrames ?? 0 })
     }
     return true
+  }
+
+  /** Prepare coordinates and display frames without taking scene ownership. */
+  async function prefetch(animation, { onProgress } = {}) {
+    const requests = new Map()
+    // Include empty lists to evict downloads from an animation that was closed.
+    for (const engine of ['oxdna', 'namd']) {
+      const ctrl = getController?.(engine)
+      if (ctrl) requests.set(ctrl, [])
+    }
+    for (const kf of animation?.keyframes ?? []) {
+      if (!kf.trajectory_job_id) continue
+      const spec = keyframeTrajSpec(kf)
+      const ctrl = getController?.(spec.engine)
+      if (!ctrl) continue
+      if (!requests.has(ctrl)) requests.set(ctrl, [])
+      requests.get(ctrl).push({ jobId: kf.trajectory_job_id, ...spec })
+    }
+    for (const [ctrl, list] of requests) {
+      ctrl.retainTrajectoryDownloads?.(list)
+      ctrl.retainPreparedTrajectories?.(list)
+    }
+    const ordered = new Map()
+    for (const kf of animation?.keyframes ?? []) {
+      if (!kf.trajectory_job_id) continue
+      const spec = keyframeTrajSpec(kf), jobId = kf.trajectory_job_id
+      const ctrl = getController?.(spec.engine)
+      if (ctrl) ordered.set(variantKey(jobId, spec), { ctrl, jobId, spec })
+    }
+    for (const key of metadataFrames.keys()) if (!ordered.has(key)) metadataFrames.delete(key)
+    preparationQueue.prioritize([...ordered.keys()])
+    const tasks = []
+    for (const { ctrl, jobId, spec } of ordered.values()) {
+      let stop = () => {}, polling = false
+      const progress = p => {
+        if (p.phase === 'load' && !polling) {
+          polling = true
+          stop = _pollLoad(jobId, spec.engine, event => onProgress?.({ ...spec, ...event }))
+        }
+        if (['download', 'decode', 'frames', 'ready', 'error', 'cancelled'].includes(p.phase)) stop()
+        onProgress?.({ ...spec, ...p, jobId })
+      }
+      const options = { planPrebuild, onProgress: progress, schedule: schedulePreparation(jobId, spec) }
+      const request = ctrl.prepareTrajectory
+        ? ctrl.prepareTrajectory(jobId, spec, options)
+        : options.schedule(async () => {
+          progress({ phase: 'load', done: 0, total: 0 })
+          return ctrl.prefetchTrajectory?.(jobId, spec, options)
+        })
+      tasks.push(Promise.resolve(request).then(payload => {
+        if ((ctrl.prepareTrajectory || ctrl.prefetchTrajectory) && (!(payload?.ready || payload?.ok) || !(payload.n_frames > 0 || payload.frames?.length))) {
+          throw new Error(`No trajectory frames available for ${jobId}`)
+        }
+        return payload
+      }).finally(() => stop()))
+    }
+    return Promise.all(tasks)
+  }
+
+  function cancelPreparation() {
+    for (const engine of ['oxdna', 'namd']) getController?.(engine)?.cancelTrajectoryPreparation?.()
   }
 
   /**
@@ -227,27 +307,58 @@ export function initTrajectoryKeyframes({
    * Returns Map<jobId, nFrames> so the caller can clamp its authored frame ranges
    * against what the trajectory actually has.
    */
-  async function prepare(animation, { onProgress } = {}) {
+  async function prepare(animation, { onProgress, strict = false } = {}) {
+    const generation = _generation
     _frames.clear()
     _specs.clear()
     _bakes.clear()
-    const jobs = trajectoryJobs(animation)
+    _variantFrames.clear()
+    const jobs = new Map()
+    for (const kf of animation?.keyframes ?? []) {
+      if (!kf.trajectory_job_id) continue
+      const spec = keyframeTrajSpec(kf)
+      jobs.set(variantKey(kf.trajectory_job_id, spec), { jobId: kf.trajectory_job_id, spec })
+    }
     if (!jobs.size) return _frames
     const first = new Map()   // controller → the first job that lands on it
-    for (const [jobId, spec] of jobs) {
+    for (const { jobId, spec } of jobs.values()) {
       const ctrl = getController?.(spec.engine)
-      if (!ctrl) { _frames.set(jobId, 0); continue }
+      if (!ctrl) {
+        if (strict) throw new Error(`Trajectory controller unavailable for ${spec.engine}`)
+        _frames.set(jobId, 0); continue
+      }
+      _remember(ctrl)
       _specs.set(jobId, spec)
-      if (!first.has(ctrl)) first.set(ctrl, { jobId, spec })
+      if (!first.has(ctrl)) {
+        first.set(ctrl, { jobId, spec })
+        if (ctrl.prepareTrajectory) await ctrl.prepareTrajectory(jobId, spec, { planPrebuild, schedule: schedulePreparation(jobId, spec) })
+      }
+      else if (metadataFrames.has(variantKey(jobId, spec))) {
+        const count = metadataFrames.get(variantKey(jobId, spec))
+        _frames.set(jobId, count); _variantFrames.set(variantKey(jobId, spec), count)
+      } else if (ctrl.prefetchTrajectory || ctrl.prepareTrajectory) {
+        const payload = ctrl.prepareTrajectory
+          ? await ctrl.prepareTrajectory(jobId, spec, { planPrebuild, schedule: schedulePreparation(jobId, spec) })
+          : await ctrl.prefetchTrajectory(jobId, spec)
+        if (generation !== _generation) throw new DOMException('cancelled', 'AbortError')
+        const count = Number(payload?.n_frames) || payload?.frames?.length || 0
+        _frames.set(jobId, count)
+        _variantFrames.set(variantKey(jobId, spec), count)
+        if (strict && !count) throw new Error(`No trajectory frames available for ${jobId}`)
+      } else if (strict) throw new Error(`Cannot prepare trajectory ${jobId}`)
     }
     for (const [ctrl, { jobId, spec }] of first) {
-      await _loadInto(ctrl, jobId, spec, onProgress)
+      if (generation !== _generation) throw new DOMException('cancelled', 'AbortError')
+      const ok = await _loadInto(ctrl, jobId, spec, onProgress)
+      if (strict && (!ok || !frameCount(jobId))) throw new Error(`Could not load trajectory ${jobId}`)
     }
     return _frames
   }
 
   /** Frames in this job's loaded trajectory (0 = not loaded / no trajectory). */
-  function frameCount(jobId) { return _frames.get(jobId) ?? 0 }
+  function frameCount(jobId, spec = null) {
+    return spec ? (_variantFrames.get(variantKey(jobId, spec)) ?? 0) : (_frames.get(jobId) ?? 0)
+  }
 
   /** Distinct HEAVY frames baked for this job, or null when no heavy rep was baked
    *  (a bead-rep animation, where every trajectory frame is exact). */
@@ -258,12 +369,18 @@ export function initTrajectoryKeyframes({
 
   /** Swap a second same-engine job into its controller. Async and single-flighted: the
    *  frame loop is synchronous, so playback holds the current frame until it lands. */
-  function _swap(ctrl, jobId, engine) {
+  function _swap(ctrl, jobId, engine, requestedSpec = null) {
     if (_swapping) return
-    const spec = _specs.get(jobId) ?? { engine, scope: 'lineage', stride: undefined }
+    const spec = requestedSpec ?? _specs.get(jobId) ?? { engine, scope: 'lineage', stride: undefined }
+    const generation = _generation
     _swapping = _loadInto(ctrl, jobId, spec, null)
-      .catch(() => {})
-      .finally(() => { _swapping = null })
+      .then(ok => {
+        if (generation !== _generation) return
+        if (!ok) throw new Error(`Could not load trajectory ${jobId}`)
+      })
+      .finally(() => { if (generation === _generation) _swapping = null })
+    // The render loop / exporter awaits this promise through settle().
+    _swapping.catch(() => {})
   }
 
   /**
@@ -271,10 +388,17 @@ export function initTrajectoryKeyframes({
    * the controller's showFrame does a full CG position sweep plus a heavy-rep apply,
    * which is not something to run per rAF for an unchanged frame.
    */
-  function show(jobId, engine, frameIdx, companions = null) {
+  function show(jobId, engine, frameIdx, companions = null, spec = null) {
     const ctrl = getController?.(engine)
     if (!ctrl) return
-    if (_loaded.get(ctrl) !== jobId) { _swap(ctrl, jobId, engine); return }
+    if (_loaded.get(ctrl) !== jobId
+        || (ctrl.activeJobId && ctrl.activeJobId() !== jobId)
+        || (ctrl.isActive && !ctrl.isActive())
+        || (spec && ctrl.trajSpecMatches && !ctrl.trajSpecMatches(spec))) {
+      _requested = { jobId, engine, frameIdx, companions, spec }
+      _swap(ctrl, jobId, engine, spec)
+      return
+    }
     const companion = getCompanion?.(engine)
     const companionSig = companions
       ? `${companions.ions ? 1 : 0}|${companions.box ? 1 : 0}` : '0|0'
@@ -332,14 +456,19 @@ export function initTrajectoryKeyframes({
   /** Abandon an in-flight prepare: aborts a trajectory download in transfer and stops a
    *  grinding prebuild. Leaves whatever landed in place — release() does the restoring. */
   function cancel() {
+    _generation++
+    _requested = null
+    _swapping = null
     for (const ctrl of _prev.keys()) {
       ctrl.setPlaying?.(false)      // bumps the controller's prebuild token
       ctrl.cancelPendingLoad?.()    // and terminates the HTTP body transfer
+      ctrl.cancelTrajectoryPreparation?.()
     }
   }
 
   /** Put every controller back the way the animation found it. */
   function release() {
+    cancel()
     for (const [ctrl, prev] of _prev) {
       ctrl.setPlaying?.(false)
       if (!prev.active) {
@@ -358,6 +487,7 @@ export function initTrajectoryKeyframes({
         ctrl.stopAndRestore?.()
       }
     }
+    _variantFrames.clear()
     _prev.clear(); _loaded.clear(); _frames.clear(); _specs.clear(); _bakes.clear()
     getCompanion?.('namd')?.setEnabled?.(false, 'traj')
     invalidate()
@@ -388,6 +518,15 @@ export function initTrajectoryKeyframes({
   }
 
   async function settle() {
+    const generation = _generation
+    if (_swapping) await _swapping
+    if (generation !== _generation) return false
+    if (_requested) {
+      const request = _requested
+      _requested = null
+      show(request.jobId, request.engine, request.frameIdx, request.companions, request.spec)
+      if (_swapping) return settle()
+    }
     if (_companionSetup) await _companionSetup
     if (_lastJob == null || _lastFrame < 0) return true
     const companion = getCompanion?.(_specs.get(_lastJob)?.engine)
@@ -397,8 +536,8 @@ export function initTrajectoryKeyframes({
   /** True when this module is holding a controller for preview (nothing is playing). */
   function isPreviewing() { return _prev.size > 0 }
 
-  return {
-    prepare, frameCount, heavyBake, show, invalidate, suspend, setPlaying, cancel, release,
+  return { recordMetadata,
+    prepare, prefetch, cancelPreparation, frameCount, heavyBake, show, invalidate, suspend, setPlaying, cancel, release,
     hasJobs, previewLoad, previewShow, isPreviewing, settle,
   }
 }

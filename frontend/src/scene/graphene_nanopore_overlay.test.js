@@ -29,3 +29,30 @@ it('suppresses the design preview throughout MD display, including preview edits
   expect(view.mesh().visible).toBe(true)
   view.dispose()
 })
+
+it('keeps visibility independent of inclusion and resets cached preview on document clear', () => {
+  const scene = new THREE.Scene(), view = initGrapheneNanoporeOverlay(scene)
+  view.update({ enabled: true, surface: { dir: [0, 1, 0], positionNm: -2 },
+    bounds: { min: [-1, -1, -1], max: [1, 1, 1] } })
+  view.setDisplay({ visible: false, representation: 'ball' })
+  expect(view.mesh().isInstancedMesh).toBe(true)
+  expect(view.mesh().visible).toBe(false)
+  view.setSimulationActive(true)
+  view.setDisplay({ visible: true, representation: 'stick' })
+  expect(view.mesh().visible).toBe(false)
+  view.setSimulationActive(false)
+  expect(view.mesh().visible).toBe(true)
+  expect(scene.children).toHaveLength(1)
+  view.clear()
+  view.setDisplay({ representation: 'plane' })
+  expect(view.mesh()).toBeNull()
+  expect(scene.children).toHaveLength(0)
+})
+
+it('handles a pore larger than the preview without crashing the renderer', () => {
+  const view = initGrapheneNanoporeOverlay(new THREE.Scene())
+  view.setDisplay({ representation: 'stick', visible: true })
+  view.update({ enabled: true, poreDiameterNm: 100, surface: { positionNm: 0 } })
+  expect(view.mesh()).toBeNull()
+  view.dispose()
+})

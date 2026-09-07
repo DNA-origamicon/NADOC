@@ -31,7 +31,7 @@ from collections import OrderedDict
 from pathlib import Path
 import os
 import re
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
@@ -181,6 +181,11 @@ class CreateJobRequest(BaseModel):
     ion_conc_mM: float = Field(0.0, ge=0.0)
     mg_conc_mM: float = Field(12.5, ge=0.0)
     padding_nm: float = Field(1.2, gt=0.0)
+    box_size_nm: Optional[tuple[
+        Optional[Annotated[float, Field(gt=0, allow_inf_nan=False)]],
+        Optional[Annotated[float, Field(gt=0, allow_inf_nan=False)]],
+        Optional[Annotated[float, Field(gt=0, allow_inf_nan=False)]],
+    ]] = Field(None, description="Initial X/Y/Z cell lengths in nm; null axes use calculated sizes.")
     box_mode: Literal["bbox", "rotation"] = Field(
         "rotation",
         description="Cell geometry chosen at solvation. 'rotation' is a cubic cell "
@@ -2011,7 +2016,8 @@ def _conservative_production_conf(
         json.loads(manifest_path.read_text()).get("graphene_nanopore")
         if manifest_path and manifest_path.exists() else None
     )
-    return graphene_pressure_conf(conf, enabled=bool(wall and anchor_k is not None))
+    return graphene_pressure_conf(conf, enabled=bool(wall and anchor_k is not None),
+                                  fixed_cell=bool(wall and wall.get("cell_policy") == "fixed_volume"))
 
 
 def _seed_production_conf(
@@ -2673,7 +2679,8 @@ def _harmonicize_seed_anchors(
 
         conf_path.write_text(
             graphene_pressure_conf(
-                "".join(kept), enabled=bool(manifest.get("graphene_nanopore"))
+                "".join(kept), enabled=bool(manifest.get("graphene_nanopore")),
+                fixed_cell=(manifest.get("graphene_nanopore") or {}).get("cell_policy") == "fixed_volume"
             ),
             encoding="utf-8",
         )
@@ -4127,6 +4134,7 @@ async def _prepare_job_bg(
             # Same reason as above: the GBIS prep has its own signature and never
             # takes an md_protocols kwarg.
             seed_kwargs["seed_lattice_nm"] = body.seed_lattice_nm
+            seed_kwargs["box_size_nm"] = body.box_size_nm
         package_subdir, name_stem, segments = await run_in_threadpool(
             prepare,
             local_design,

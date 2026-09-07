@@ -3558,6 +3558,7 @@ def prepare_mgh_slow_release(
     salt_mode: str = "custom",
     padding_nm: float = 1.2,
     box_mode: str = "rotation",
+    box_size_nm: Optional[tuple[Optional[float], Optional[float], Optional[float]]] = None,
     #: Deprecated compatibility input. Cell geometry is now selected directly with
     #: ``box_mode`` instead of inferred from a future run length.
     free_ns: Optional[float] = None,
@@ -3697,6 +3698,7 @@ def prepare_mgh_slow_release(
         # so a CPU-targeted job was sized against VRAM on any host that has a GPU.
         devices=devices,
         box_mode=box_mode,
+        box_size_nm=box_size_nm,
         # Cell geometry is an explicit preparation choice. Production children inherit
         # it verbatim and cannot re-solvate, so run length must not silently change it.
         free_ns=None,
@@ -3958,9 +3960,9 @@ def prepare_mgh_slow_release(
         name_stem,
         soft=force_soft,
         gentle=gentle_ladder,
-        # A restrained solid membrane must not be pulled against a rescaling
-        # barostat. The graphene-only control equilibrates the already-sized cell.
-        nvt_only=graphene_only,
+        # Fixed Cartesian wall restraints require a fixed cell so periodic seams
+        # cannot reopen. Solvent density must be validated before transport.
+        nvt_only=bool(graphene_nanopore),
         timestep_fs=ladder_dt,
         high_aspect_ratio=high_aspect_ratio,
     )
@@ -4144,8 +4146,9 @@ def prepare_mgh_slow_release(
         # production path had no way to know and hardcoded the barostat on.
         "solvation": {
             "padding_nm": float(padding_nm),
+            "requested_box_size_nm": box_size_nm,
             "carved": False,
-            "npt_allowed": not graphene_only,
+            "npt_allowed": not bool(graphene_nanopore),
             # Unrestrained ns the cell was sized for.  A production child re-uses this
             # cell verbatim, so this is the record of the decision every descendant
             # inherits — without it, a package that cannot host a long free run is

@@ -116,13 +116,18 @@ describe('mdVizApiAdapter', () => {
 
     it('carries signal, interval, and progress through the compact binary path', async () => {
       const progress = vi.fn()
-      const api = { getMdTrajectoryBin: vi.fn(async () => null), getMdTrajectory: vi.fn(async () => ({ ready: false })) }
+      const event = { phase: 'download', done: 10, total: 20 }
+      const api = { getMdTrajectoryBin: vi.fn(async (_id, _signal, opts) => {
+        opts.onProgress(event)
+        return null
+      }), getMdTrajectory: vi.fn(async () => ({ ready: false })) }
       const ctrl = initOxdnaDisplay({ designRenderer: renderer(), api: mdVizApiAdapter(api) })
       await ctrl.loadTrajectory('J1', true, 'lineage', 7, progress)
       const [id, signal, opts] = api.getMdTrajectoryBin.mock.calls[0]
       expect(id).toBe('J1')
       expect(signal).toBeInstanceOf(AbortSignal)
-      expect(opts).toEqual({ stride: 7, onProgress: progress })
+      expect(opts).toEqual({ stride: 7, onProgress: expect.any(Function) })
+      expect(progress).toHaveBeenCalledWith(event)
     })
 
     it('maps the companion display request used while applying trajectory frame zero', async () => {

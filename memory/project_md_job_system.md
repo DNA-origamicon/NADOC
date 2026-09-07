@@ -87,3 +87,19 @@ piston-only controls completed 5000 steps at 4 fs; full-ladder stability is unve
 The user-created Alpine copy `e75ffd56c6f8` / SLURM `32108809` was observed RUNNING
 with all 75 inputs successfully transferred and all 22 NPT configurations corrected.
 See [barostat diagnosis and validation](../docs/namd_graphene_barostat_failure_audit.md).
+
+## Graphene display controls — 2026-09-05
+
+The NAMD Hard surface card has a display-only **Show nanopore** checkbox and
+**Simple plane / Ball / Stick** dropdown, separate from **Add graphene nanopore**.
+Browser preferences (`nadoc.grapheneDisplay`) apply to the setup preview and actual
+MD carbon coordinates, including paused frames. These controls never alter job
+parameters, force fields, or simulation inclusion. MD display continues to suppress
+the design preview; hiding graphene persists through frame updates and returning
+to the preview.
+
+`graphene_display_controls.js` owns preferences; `graphene_representation.js` owns
+carbon rendering. Sticks infer nearest-neighbor visual edges with a 0.19 nm cutoff,
+without adding simulation bonds or drawing periodic edges across the cell. The MD
+plane fills complete carbon hexagons, preserving the pore and transformed membrane
+position. Visual adjacency is retained between frames and reset on clear/new data.

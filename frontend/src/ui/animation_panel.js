@@ -19,8 +19,10 @@
  * @param {object}   opts.scene                — THREE.Scene
  * @param {object}   opts.camera               — THREE.PerspectiveCamera
  */
+import { showToast } from './toast.js'
 import { openKeyframeTextPopup } from './keyframe_text_popup.js'
-import { showOpProgress, hideOpProgress, setOpProgressLabel, setOpProgressFraction } from './op_progress.js'
+import { initAnimationReadinessBar } from './animation_readiness_bar.js'
+import { initAnimationPreparationProgress } from './animation_preparation_progress.js'
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { filterJobsForPart, makeSpinner, mdChildLabelFor } from './md_jobs_panel.js'
 import { jobDisplayName, productionState, relaxIndexMap, relaxRowLabel, runRowLabel } from './oxdna_jobs_panel.js'
@@ -145,6 +147,9 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   const timeEl         = document.getElementById('anim-time-display')
   if (!heading || !kfListEl) return
 
+  const readinessBar = initAnimationReadinessBar({ scrub: scrubEl })
+  let reportReadiness = () => {}
+
   let _collapsed    = getSectionCollapsed('scene', 'animation-panel', false)
   let _activeAnimId = null   // currently selected animation ID
   let _dragId       = null
@@ -192,6 +197,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       opt.disabled = true
       selectEl.appendChild(opt)
       _activeAnimId = null
+      void trajectoryKeyframes?.prefetch?.(null)
       _rebuildKfList([])
       return
     }
@@ -347,6 +353,8 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
   function _rebuildKfList(keyframes) {
     kfListEl.innerHTML = ''
+    reportReadiness = readinessBar.setAnimation(_getActiveAnim()) || (() => {})
+    void trajectoryKeyframes?.prefetch?.(_getActiveAnim(), { onProgress: reportReadiness }).catch(() => {})
     // Bind/Unbind pose authoring (design editor only) — shown even with no
     // keyframes so the user can set open/closed angles before building the timeline.
     const posesSection = _makeBindingPosesSection(_bindingsDesign())
@@ -501,7 +509,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
   async function _patchKfNoRebuild(kf, patch) {
     _selfKfPatch++
-    try { await _patchKf(kf, patch) } finally { _selfKfPatch-- }
+    try { await _patchKf(kf, patch) } finally { _selfKfPatch--; readinessBar.refreshAnimation(_getActiveAnim()) }
   }
 
   /** Drop any active preview and put the display back the way it was found. Safe to call
@@ -562,8 +570,8 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   async function _trajJobsForDesign() {
     const path = getWorkspacePath ? getWorkspacePath() : null
     const [ox, md] = await Promise.all([
-      api.listOxdnaJobs().catch(() => null),
-      api.listMdJobs().catch(() => null),
+      api.listOxdnaJobs({ waitForIdle: false }).catch(() => null),
+      api.listMdJobs({ waitForIdle: false }).catch(() => null),
     ])
     return normalizeTrajJobs(ox, md, path)
   }
@@ -600,7 +608,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
    *  LOADED count (authoritative — a job still writing can disagree with its meta), then
    *  the meta cache, so the export check works before anything has been downloaded. */
   function _framesForKeyframe(kf) {
-    const loaded = trajectoryKeyframes?.frameCount?.(kf.trajectory_job_id) ?? 0
+    const loaded = trajectoryKeyframes?.frameCount?.(kf.trajectory_job_id, keyframeTrajSpec(kf)) ?? 0
     if (loaded > 0) return loaded
     return _trajMetaCache.get(_specKey(kf.trajectory_job_id, keyframeTrajSpec(kf)))?.nFrames ?? 0
   }
@@ -711,9 +719,22 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
     const previewBtn = document.createElement('button')
     previewBtn.textContent = '▶ Preview'
-    previewBtn.title = 'Load this trajectory and scrub it with the bar below'
+    previewBtn.title = 'Show this trajectory and scrub it with the bar below'
     previewBtn.style.cssText = _editStyle
     resRow.append(scopeSel, strideWrap, previewBtn)
+    const reportRowReadiness = reportReadiness
+    const downloadStatus = document.createElement('span')
+    downloadStatus.dataset.role = 'trajectory-download-status'
+    downloadStatus.style.cssText = 'font-size:var(--text-xs);color:#8b949e'
+    const downloadBar = document.createElement('progress')
+    downloadBar.max = 1
+    downloadBar.setAttribute('aria-label', 'Trajectory frame preparation')
+    downloadBar.style.cssText = 'width:100%;height:6px;accent-color:#58a6ff'
+    const cancelPreparation = document.createElement('button')
+    cancelPreparation.type = 'button'; cancelPreparation.textContent = 'Cancel preparation'
+    cancelPreparation.style.cssText = _editStyle
+    cancelPreparation.addEventListener('click', () => trajectoryKeyframes?.cancelPreparation?.())
+    let downloadGeneration = 0
 
     // The one bar: start grip, end grip, previewed-frame needle, stage ticks.
     const bar = initFrameRangeSlider({
@@ -804,7 +825,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       companionToggle('Bounding box', 'trajectory_show_box', 'Show the periodic cell for this NAMD trajectory keyframe'),
     )
 
-    wrap.append(jobRow, resRow, companionRow, rangeInputs, bar.el, rangeLbl, heavyNote)
+    wrap.append(jobRow, resRow, downloadStatus, downloadBar, cancelPreparation, companionRow, rangeInputs, bar.el, rangeLbl, heavyNote)
 
     let _nFrames = 0
 
@@ -844,7 +865,50 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
     // Fetch + apply trajectory metadata with a loading spinner in between.
     async function _loadMeta() {
-      if (!kf.trajectory_job_id) { _nFrames = 0; bar.setFrames(0); bar.setEnabled(false); _setLabel(0, 0, 0); return }
+      if (!kf.trajectory_job_id) {
+        downloadGeneration++
+        downloadStatus.textContent = ''
+        downloadBar.hidden = true
+        cancelPreparation.hidden = true
+        void trajectoryKeyframes?.prefetch?.(_getActiveAnim()).catch(() => {})
+        _nFrames = 0; bar.setFrames(0); bar.setEnabled(false); _setLabel(0, 0, 0); return }
+      // Download in parallel with metadata. This must not activate the preview or
+      // steal the scene from another sidebar; Play joins the same download.
+      const generation = ++downloadGeneration
+      let rowReady = false
+      downloadStatus.textContent = 'Loading trajectory…'
+      downloadBar.hidden = false
+      cancelPreparation.hidden = false
+      downloadBar.removeAttribute('value')
+      Promise.resolve(trajectoryKeyframes?.prefetch?.(_getActiveAnim(), {
+        onProgress: event => {
+          reportRowReadiness(event)
+          if (generation !== downloadGeneration || event.jobId !== kf.trajectory_job_id) return
+          if (event.phase === 'ready') {
+            rowReady = true
+            downloadBar.value = 1
+            cancelPreparation.hidden = true
+            downloadStatus.textContent = event.capped ? 'Trajectory preview ready · detail frames limited by memory' : 'Trajectory preview frames ready'
+            return
+          }
+          const phase = event.phase === 'queued' ? 'Queued — earlier keyframes first' : ['load', 'download', 'decode'].includes(event.phase) ? 'Loading trajectory' : 'Preparing preview frames'
+          downloadStatus.textContent = event.total > 0 ? `${phase} · ${event.done} / ${event.total}` : `${phase}…`
+          if (event.total > 0) downloadBar.value = Math.max(0, Math.min(1, event.done / event.total))
+          else downloadBar.removeAttribute('value')
+        },
+      })).then(results => {
+        if (generation !== downloadGeneration || rowReady) return
+        downloadBar.value = 1
+        cancelPreparation.hidden = true
+        const capped = results?.some?.(result => result?.capped)
+        downloadStatus.textContent = capped ? 'Trajectory preview ready · detail frames limited by memory' : 'Trajectory preview frames ready'
+      }).catch(error => {
+        if (generation === downloadGeneration && !rowReady) {
+          downloadStatus.textContent = error?.name === 'AbortError' ? 'Preparation cancelled — Play to retry' : 'Preparation failed — Play to retry'
+          cancelPreparation.hidden = true
+          downloadBar.hidden = true
+        }
+      })
       const spec = _spec()
       if (!_trajMetaCached(kf.trajectory_job_id, spec)) _setLoading('Loading trajectory…')
       await _applyMeta(await _trajMeta(kf.trajectory_job_id, spec))
@@ -853,6 +917,10 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     // Apply trajectory metadata to the bar (enable + set bounds + values).
     async function _applyMeta(meta) {
       _nFrames = meta?.nFrames ?? 0
+      if (_nFrames) {
+        trajectoryKeyframes?.recordMetadata?.(kf.trajectory_job_id, _spec(), _nFrames)
+        reportRowReadiness({ ..._spec(), jobId: kf.trajectory_job_id, phase: 'metadata', trajectoryFrames: _nFrames })
+      }
       if (!meta || meta.nFrames < 2) {
         bar.setFrames(0)
         bar.setEnabled(false)
@@ -929,7 +997,12 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       _setLabel(bar.getRange().start, bar.getRange().end, _nFrames)
     })
 
-    // Async populate: jobs dropdown (with timestamps), then meta for the selected job.
+    // A saved job's frame metadata/progress is independent of discovering other jobs.
+    // Subscribe before the list request so a slow list cannot hide completed preparation.
+    _syncResolutionControls()
+    void _loadMeta().then(_renderPreviewBtn).catch(() => {})
+
+    // Populate job choices independently; this is visible UI, not an idle-only poll.
     ;(async () => {
       jobSel.innerHTML = ''
       const loadingOpt = document.createElement('option')
@@ -957,9 +1030,6 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       })
       jobSel.value = kf.trajectory_job_id ?? ''
       _syncResolutionControls()
-      // _loadMeta FIRST: it sizes the bar. Restoring the playhead before the bar knows
-      // its frame count is how a rebuilt row used to lose it.
-      await _loadMeta()
       _renderPreviewBtn()
     })()
 
@@ -1658,6 +1728,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   // ── Playback controls ─────────────────────────────────────────────────────────
 
   function _updateScrub(current, total) {
+    readinessBar.setTime(current)
     if (!scrubEl) return
     scrubEl.max   = total > 0 ? total.toFixed(2) : '0'
     scrubEl.value = current.toFixed(2)
@@ -1694,6 +1765,13 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         k.spin_axis ?? 'null',
         k.spin_rotations ?? 0,
         k.spin_invert ? '1' : '0',
+        k.is_trajectory ? '1' : '0',
+        k.trajectory_job_id ?? '',
+        k.trajectory_engine ?? '',
+        k.trajectory_scope ?? '',
+        k.trajectory_stride ?? '',
+        k.trajectory_frame_start ?? '',
+        k.trajectory_frame_end ?? '',
         k.trajectory_show_ions ? '1' : '0',
         k.trajectory_show_box ? '1' : '0',
         k.text_overlay?.text ?? '',
@@ -1734,7 +1812,11 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         // Playback takes the controllers over; a preview still holding them would fight
         // the player for every frame.
         _stopPreview()
-        player.play(anim, playOpts)
+        Promise.resolve(player.play(anim, playOpts)).catch(err => {
+          _lastPlayedKfSig = null
+          onPlayerEvent({ type: 'baking_cancelled' })
+          showToast(`Could not load animation: ${err.message}`, { severity: 'error' })
+        })
       } else {
         player.resume()
       }
@@ -1784,22 +1866,9 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
   // ── Player event sync ─────────────────────────────────────────────────────────
 
-  const _bakingTrack = document.getElementById('anim-baking-track')
-  const _bakingLabel = document.getElementById('anim-baking-label')
-
-  function _showBakingBar(label) {
-    if (_bakingTrack) _bakingTrack.style.display = ''
-    if (_bakingLabel) { _bakingLabel.style.display = ''; _bakingLabel.textContent = label }
-  }
-  function _hideBakingBar() {
-    if (_bakingTrack) _bakingTrack.style.display = 'none'
-    if (_bakingLabel) _bakingLabel.style.display = 'none'
-  }
-
-  // Track which centred op-progress sessions we've opened so hideOpProgress
-  // is called the right number of times (its ref-counter fights with itself
-  // if we lose track).
-  let _bakeProgressOpen = false
+  const _preparationProgress = initAnimationPreparationProgress({
+    host: body, onCancel: () => { player.cancelBake?.() },
+  })
 
   // Player calls this via onEvent callback (wired in main.js)
   function onPlayerEvent(evt) {
@@ -1814,46 +1883,25 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       _exportSession.handleBakeEvent(evt)
     }
     if (evt.type === 'baking') {
-      // Geometry/atomistic batch fetch in progress — disable play button and show progress bar
       if (playPauseBtn) { playPauseBtn.disabled = true; playPauseBtn.textContent = '…' }
-      const prepMsg = evt.hasSlow
-        ? 'Building atomistic / surface frames — this can take a while…'
-        : 'Preparing frames…'
-      _showBakingBar(prepMsg)
-      // Centred popup with frame-by-frame progress + Cancel button.
-      // Skipped during export — the export session already owns the popup.
-      if (!_exportSession) {
-        _bakeProgressOpen = true
-        showOpProgress('Rendering Animation', prepMsg, {
-          onCancel: () => { player.cancelBake?.() },
-        })
-      }
+      if (!_exportSession) _preparationProgress.start('Preparing preview frames')
     } else if (evt.type === 'baking_progress') {
-      const { done, total } = evt
-      // The panel-local indeterminate strip is all the user has to go on when the
-      // popup belongs to an export, so keep its label current either way.
-      if (evt.label) _showBakingBar(evt.label)
-      if (_bakeProgressOpen) {
-        if (total > 0) setOpProgressFraction(done / total)
-        // The trajectory phase counts a different thing (frames of a simulation, not
-        // feature-log positions) and says so in its own label.
-        setOpProgressLabel(null, evt.label || `Rendering frame ${done} of ${total}`)
-      }
+      if (!_exportSession) _preparationProgress.update(evt)
     } else if (evt.type === 'baking_done') {
-      // Batch complete, playback now starting — restore play button to pause label
       if (playPauseBtn) { playPauseBtn.disabled = false; playPauseBtn.textContent = '⏸'; playPauseBtn.title = 'Pause' }
-      _hideBakingBar()
-      if (_bakeProgressOpen) { _bakeProgressOpen = false; hideOpProgress() }
+      if (!_exportSession) _preparationProgress.ready()
+    } else if (evt.type === 'baking_error') {
+      onPlayerEvent({ type: 'baking_cancelled' })
+      _preparationProgress.error(`Preview unavailable: ${evt.message}`)
+      showToast(`Could not load animation: ${evt.message}`, { severity: 'error' })
     } else if (evt.type === 'baking_cancelled') {
       // User clicked Cancel; revert UI to idle state.
       if (playPauseBtn) { playPauseBtn.disabled = false; playPauseBtn.textContent = '▶'; playPauseBtn.title = 'Play' }
-      _hideBakingBar()
-      if (_bakeProgressOpen) { _bakeProgressOpen = false; hideOpProgress() }
+      _preparationProgress.clear()
     } else if (evt.type === 'tick') {
       _updateScrub(evt.currentTime, evt.totalDuration)
     } else if (evt.type === 'finished' || evt.type === 'stopped') {
-      _hideBakingBar()
-      if (_bakeProgressOpen) { _bakeProgressOpen = false; hideOpProgress() }
+      _preparationProgress.clear()
       _updateScrub(
         evt.type === 'finished' ? player.getTotalDuration() : 0,
         player.getTotalDuration(),
@@ -2013,6 +2061,12 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     if (n.currentAssembly === p.currentAssembly) return
     if (_selfKfPatch > 0) return           // our own edit; the row already shows it
     if (!_collapsed) _rebuildSelectMaybeDefer(n.currentAssembly?.animations ?? [])
+  })
+
+  // A ready VDW cache is not a ready surface cache. Re-warm after display settings
+  // change without taking the viewport over or starting playback.
+  window.addEventListener('nadoc:representation-change', () => {
+    if (!player.isPlaying()) _rebuildKfList(_getActiveAnim()?.keyframes ?? [])
   })
 
   // Initial render

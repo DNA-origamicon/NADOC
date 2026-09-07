@@ -264,6 +264,7 @@ import { initMdEngines }   from './ui/md_engines.js'
 import { initEfieldGizmo } from './scene/efield_gizmo.js'
 import { initForcesCard } from './ui/forces_card.js'
 import { initOxdnaFloorSetup } from './ui/oxdna_floor_setup.js'
+import { initGrapheneDisplayControls } from './ui/graphene_display_controls.js'
 import { initGrapheneNanoporeOverlay } from './scene/graphene_nanopore_overlay.js'
 import { initOxdnaSurfaceStrandsSetup } from './ui/oxdna_surface_strands_setup.js'
 import { initSurfaceStrandsOverlay } from './scene/surface_strands_overlay.js'
@@ -1008,8 +1009,8 @@ async function main() {
     getDesignGeometry:      () => store.getState().currentGeometry,
     // Pass through any opts (signal, suppressBusy) the player provides — the
     // bake loop wires its own AbortController and asks _request to skip the
-    // generic "Working…" auto-popup so the panel's "Rendering Animation"
-    // popup stays in front.
+    // generic "Working…" auto-popup so frame preparation remains non-modal.
+    // The animation panel reports its progress inline.
     onFetchGeometryBatch:   (positions, opts) => api.getGeometryBatch(positions, opts),
     trajectoryKeyframes,
     onFetchAtomisticBatch:  (positions, opts) => api.getAtomisticBatch(positions, opts),
@@ -1615,6 +1616,7 @@ async function main() {
     },
   })
   const grapheneNanoporeOverlay = initGrapheneNanoporeOverlay(scene)
+  initGrapheneDisplayControls({ preview: grapheneNanoporeOverlay, simulation: mdSolventOverlay })
   window.addEventListener("nadoc:graphene-md-active", (event) => {
     grapheneNanoporeOverlay.setSimulationActive(event.detail?.active)
   })
