@@ -31,6 +31,11 @@ let _twistTotal   = null
 let _twistPerNm   = null
 let _bendDir      = null
 let _bendAngle    = null
+let _bendRadius   = null
+let _polymerCircle = null
+let _polymerCircleLabel = null
+let _polymerCount = null
+let _polymerCountRow = null
 let _compassArm   = null
 let _compassHdl   = null
 let _previewChk   = null
@@ -53,6 +58,63 @@ let _toolType    = null  // 'twist' | 'bend'
 let _dragging    = false
 let _selectedClusterIds = []  // current cluster scope (mirrors checkbox state)
 let _validateTimer = null     // debounce handle for the live /validate POST
+let _bendDriver = 'angle'     // field most recently edited by the user
+
+/** Radius for a circular bend spanning `spanBp` base pairs at `angleDeg`. */
+export function bendRadiusNm(angleDeg, spanBp) {
+  const thetaRad = Math.abs(Number(angleDeg)) * Math.PI / 180
+  if (!Number.isFinite(thetaRad) || thetaRad < 1e-12) return Infinity
+  return Math.max(1, Math.abs(Number(spanBp))) * BDNA_RISE_PER_BP / thetaRad
+}
+
+/** Bend angle subtended by `spanBp` base pairs at `radiusNm`. */
+export function bendAngleDeg(radiusNm, spanBp) {
+  const radius = Number(radiusNm)
+  if (!Number.isFinite(radius) || radius <= 0) return 0
+  const arcLengthNm = Math.max(1, Math.abs(Number(spanBp))) * BDNA_RISE_PER_BP
+  return arcLengthNm / radius * 180 / Math.PI
+}
+
+/** True only for a design carrying routed connector staples and a periodic seam. */
+export function hasPolymerizationStrands(design) {
+  const d = design?.design ?? design
+  const hasConnector = (d?.strands ?? []).some(strand =>
+    String(strand?.notes ?? '').toLowerCase().includes('polymerization connector'),
+  )
+  const hasPeriodicSeam = (d?.forced_ligations ?? []).some(ligation =>
+    ligation?.is_periodic_seam === true,
+  )
+  return hasConnector && hasPeriodicSeam
+}
+
+/**
+ * Effective number of bent base-pair steps seen by the routed periodic seams.
+ *
+ * Polymer copies join at the seam endpoints, which can be staggered relative
+ * to the two bend planes. Using the typed plane span here is wrong whenever a
+ * seam begins before plane A or ends before plane B (pulleyv2 is exactly this
+ * case). The repeat rotation is driven by the overlap of each seam interval
+ * with the bend window, so use the mean overlap across routed seam helices.
+ */
+export function polymerBendSpanBp(design, planeA, planeB) {
+  const d = design?.design ?? design
+  const bendLo = Math.min(Number(planeA), Number(planeB))
+  const bendHi = Math.max(Number(planeA), Number(planeB))
+  if (!Number.isFinite(bendLo) || !Number.isFinite(bendHi) || bendHi <= bendLo) return 0
+  const overlaps = (d?.forced_ligations ?? [])
+    .filter(ligation => ligation?.is_periodic_seam === true)
+    .map(ligation => {
+      const a = Number(ligation.three_prime_bp)
+      const b = Number(ligation.five_prime_bp)
+      if (!Number.isFinite(a) || !Number.isFinite(b)) return 0
+      const seamLo = Math.min(a, b)
+      const seamHi = Math.max(a, b)
+      return Math.max(0, Math.min(seamHi, bendHi) - Math.max(seamLo, bendLo))
+    })
+    .filter(span => span > 0)
+  if (!overlaps.length) return 0
+  return overlaps.reduce((sum, span) => sum + span, 0) / overlaps.length
+}
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -78,6 +140,11 @@ export function initBendTwistPopup(callbacks) {
   _twistPerNm = document.getElementById('def-twist-pernm-radio')
   _bendDir    = document.getElementById('def-bend-dir')
   _bendAngle  = document.getElementById('def-bend-angle')
+  _bendRadius = document.getElementById('def-bend-radius')
+  _polymerCircle = document.getElementById('def-polymer-circle')
+  _polymerCircleLabel = document.getElementById('def-polymer-circle-label')
+  _polymerCount = document.getElementById('def-polymer-count')
+  _polymerCountRow = document.getElementById('def-polymer-count-row')
   _compassArm = document.getElementById('def-compass-arm')
   _compassHdl = document.getElementById('def-compass-handle')
   _previewChk = document.getElementById('def-preview-check')
@@ -128,8 +195,28 @@ export function initBendTwistPopup(callbacks) {
     _firePreview()
   })
   _bendAngle.addEventListener('input', () => {
+    _bendDriver = 'angle'
+    _syncRadiusFromAngle()
     _updateBendHint()
     _firePreview()
+  })
+  _bendRadius.addEventListener('input', () => {
+    _bendDriver = 'radius'
+    _syncAngleFromRadius()
+    _updateBendHint()
+    _firePreview()
+  })
+  _polymerCircle.addEventListener('change', () => {
+    _setPolymerCircleMode(_polymerCircle.checked)
+    if (_polymerCircle.checked) _driveBendFromPolymerCount()
+  })
+  _polymerCount.addEventListener('input', () => {
+    if (_validPolymerCount() != null) _driveBendFromPolymerCount()
+  })
+  _polymerCount.addEventListener('change', () => {
+    const count = _validPolymerCount() ?? 2
+    _polymerCount.value = String(count)
+    _driveBendFromPolymerCount()
   })
 
   // Plane position inputs — reposition the plane and re-preview
@@ -137,15 +224,19 @@ export function initBendTwistPopup(callbacks) {
     const bp = Math.max(0, Math.round(parseFloat(_planeABp.value) || 0))
     _planeABp.value = bp
     if (_planeANm) _planeANm.textContent = (bp * BDNA_RISE_PER_BP).toFixed(2) + ' nm'
+    if (_toolType === 'bend') _syncBendFieldsForSpan()
     _callbacks?.onPlaneChanged?.('A', bp)
-    _fireValidate()  // window width changed → re-check achievability
+    if (_toolType === 'bend') _firePreview()
+    else _fireValidate()  // window width changed → re-check achievability
   })
   _planeBBp?.addEventListener('change', () => {
     const bp = Math.max(0, Math.round(parseFloat(_planeBBp.value) || 0))
     _planeBBp.value = bp
     if (_planeBNm) _planeBNm.textContent = (bp * BDNA_RISE_PER_BP).toFixed(2) + ' nm'
+    if (_toolType === 'bend') _syncBendFieldsForSpan()
     _callbacks?.onPlaneChanged?.('B', bp)
-    _fireValidate()  // window width changed → re-check achievability
+    if (_toolType === 'bend') _firePreview()
+    else _fireValidate()  // window width changed → re-check achievability
   })
 
   // Preview checkbox
@@ -184,6 +275,8 @@ export function openPopup(toolType, bpA = 0, bpB = 0, params = null, initialClus
   _twistCtrl.style.display = toolType === 'twist' ? '' : 'none'
   _bendCtrl.style.display  = toolType === 'bend'  ? '' : 'none'
 
+  if (toolType === 'bend') _resetPolymerCircleOption()
+
   // Set plane position inputs
   setPlanePositions(bpA, bpB)
 
@@ -216,8 +309,16 @@ export function openPopup(toolType, bpA = 0, bpB = 0, params = null, initialClus
       const kappa = params.curvature_deg_per_bp ?? 0
       _bendAngle.value = (kappa * span).toFixed(2)
       _bendDir.value   = params.direction_deg ?? 0
+      _bendDriver = 'angle'
+      _syncRadiusFromAngle()
       _updateCompassFromInput()
       _updateBendHint()
+      const savedCircleCount = Number(params.polymer_circle_count)
+      if (!_polymerCircle.disabled && Number.isInteger(savedCircleCount) && savedCircleCount >= 2) {
+        _polymerCount.value = String(savedCircleCount)
+        _polymerCircle.checked = true
+        _setPolymerCircleMode(true)
+      }
     }
   } else {
     // Reset to sensible defaults
@@ -230,6 +331,8 @@ export function openPopup(toolType, bpA = 0, bpB = 0, params = null, initialClus
     } else {
       _bendDir.value   = '0'
       _bendAngle.value = '0'
+      _bendRadius.value = ''
+      _bendDriver = 'angle'
       _updateCompassFromInput()
       _updateBendHint()
     }
@@ -256,8 +359,10 @@ export function setPlanePositions(bpA, bpB) {
   if (_planeANm) _planeANm.textContent = (bpA * BDNA_RISE_PER_BP).toFixed(2) + ' nm'
   if (_planeBNm) _planeBNm.textContent = (bpB * BDNA_RISE_PER_BP).toFixed(2) + ' nm'
   // Effective span (auto-extended for stagger) depends on plane positions —
-  // refresh the hint so κ display stays consistent with the visual bend.
-  if (_toolType === 'bend') _updateBendHint()
+  // refresh the dependent field and hint so all values describe the same arc.
+  if (_toolType === 'bend') {
+    _syncBendFieldsForSpan()
+  }
   _fireValidate()  // plane drag in the 3D scene changes the window → re-check
 }
 
@@ -290,12 +395,15 @@ function _readParams() {
     // don't fully span [plane_a, plane_b] pick up proportionally less rotation
     // (the user moves the planes to bracket all stagger when uniformity matters).
     const span = _typedBendSpanBp()
-    const theta = ((parseFloat(_bendAngle.value) || 0) % 360 + 360) % 360
-    return {
+    const theta = Math.max(0, parseFloat(_bendAngle.value) || 0)
+    const params = {
       kind:                  'bend',
       curvature_deg_per_bp:  span > 0 ? theta / span : 0,
       direction_deg: ((parseFloat(_bendDir.value) || 0) % 360 + 360) % 360,
     }
+    const circleCount = _polymerCircle?.checked ? _validPolymerCount() : null
+    if (circleCount != null) params.polymer_circle_count = circleCount
+    return params
   }
 }
 
@@ -304,6 +412,89 @@ function _typedBendSpanBp() {
   const planeA = parseFloat(_planeABp?.value) || 0
   const planeB = parseFloat(_planeBBp?.value) || 0
   return Math.max(1, Math.abs(planeB - planeA))
+}
+
+function _formatRadius(radiusNm) {
+  if (!Number.isFinite(radiusNm)) return ''
+  // Enough precision to make angle → radius → angle stable without filling the
+  // compact popup with insignificant digits.
+  return Number(radiusNm.toPrecision(6)).toString()
+}
+
+function _syncRadiusFromAngle() {
+  if (!_bendRadius) return
+  _bendRadius.value = _formatRadius(
+    bendRadiusNm(parseFloat(_bendAngle?.value) || 0, _typedBendSpanBp()),
+  )
+}
+
+function _syncAngleFromRadius() {
+  if (!_bendAngle) return
+  const radius = parseFloat(_bendRadius?.value)
+  const angle = bendAngleDeg(radius, _typedBendSpanBp())
+  _bendAngle.value = Number(angle.toPrecision(6)).toString()
+}
+
+function _syncBendFieldsForSpan() {
+  if (_bendDriver === 'circle') _updateBendFromPolymerCount()
+  else if (_bendDriver === 'radius') _syncAngleFromRadius()
+  else _syncRadiusFromAngle()
+  _updateBendHint()
+}
+
+function _resetPolymerCircleOption() {
+  if (!_polymerCircle) return
+  const eligible = hasPolymerizationStrands(store.getState().currentDesign)
+  _polymerCircle.checked = false
+  _polymerCircle.disabled = !eligible
+  _polymerCircleLabel?.classList.toggle('is-disabled', !eligible)
+  if (_polymerCircleLabel) {
+    _polymerCircleLabel.style.opacity = eligible ? '' : '0.5'
+    _polymerCircleLabel.title = eligible
+      ? 'Set the bend for a closed circle containing this many copies of the current design.'
+      : 'Run Route for Polymerization first to create polymerization connector strands.'
+  }
+  _setPolymerCircleMode(false)
+}
+
+function _setPolymerCircleMode(enabled) {
+  if (_polymerCountRow) _polymerCountRow.style.display = enabled ? '' : 'none'
+  if (_polymerCount) _polymerCount.disabled = !enabled
+  if (_bendAngle) _bendAngle.readOnly = enabled
+  if (_bendRadius) _bendRadius.readOnly = enabled
+  if (enabled) _bendDriver = 'circle'
+  else if (_bendDriver === 'circle') _bendDriver = 'angle'
+}
+
+function _validPolymerCount() {
+  const raw = Number(_polymerCount?.value)
+  if (!Number.isFinite(raw) || raw < 2) return null
+  return Math.round(raw)
+}
+
+function _driveBendFromPolymerCount() {
+  const count = _validPolymerCount()
+  if (count == null || !_polymerCircle?.checked) return
+  _polymerCount.value = String(count)
+  _bendDriver = 'circle'
+  _updateBendFromPolymerCount()
+  _updateBendHint()
+  _firePreview()
+}
+
+function _updateBendFromPolymerCount() {
+  const count = _validPolymerCount()
+  if (count == null || !_polymerCircle?.checked) return
+  const planeA = parseFloat(_planeABp?.value) || 0
+  const planeB = parseFloat(_planeBBp?.value) || 0
+  const seamBendSpan = polymerBendSpanBp(store.getState().currentDesign, planeA, planeB)
+  const typedSpan = _typedBendSpanBp()
+  // Fall back to the typed span only for malformed legacy routing. Normal
+  // routed designs always have at least one resolvable periodic seam.
+  const effectiveSpan = seamBendSpan > 0 ? seamBendSpan : typedSpan
+  const curvature = (360 / count) / effectiveSpan
+  _bendAngle.value = Number((curvature * typedSpan).toPrecision(8)).toString()
+  _syncRadiusFromAngle()
 }
 
 /**

@@ -25,6 +25,32 @@ def test_parse_bend_params():
     assert isinstance(p, BendParams)
 
 
+def test_parse_bend_params_preserves_polymer_circle_intent():
+    p = parse_deformation_params(
+        "bend",
+        {
+            "curvature_deg_per_bp": 0.5,
+            "direction_deg": 270.0,
+            "polymer_circle_count": 3,
+        },
+    )
+    assert isinstance(p, BendParams)
+    assert p.polymer_circle_count == 3
+    assert p.model_dump()["polymer_circle_count"] == 3
+
+
+def test_parse_bend_params_rejects_invalid_polymer_circle_count():
+    with pytest.raises(ValueError):
+        parse_deformation_params(
+            "bend", {"curvature_deg_per_bp": 0.5, "polymer_circle_count": 1}
+        )
+
+
+def test_plain_bend_omits_empty_polymer_circle_intent_from_saved_json():
+    p = BendParams(curvature_deg_per_bp=0.5)
+    assert "polymer_circle_count" not in p.model_dump()
+
+
 def test_parse_twist_params():
     p = parse_deformation_params("twist", {"angle_deg": 45.0})
     assert isinstance(p, TwistParams)

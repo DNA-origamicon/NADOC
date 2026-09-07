@@ -1239,11 +1239,10 @@ class BendParams(BaseModel):
       θ_period = κ × length_bp             — angle per polymer period
     Polymer ring closure in N copies ⇔ θ_period = 360°/N.
 
-    Storing κ instead of a window-spanning angle makes the per-helix rotation
-    between near and far_next equal to κ × L for every helix in a uniform-length
-    bundle, regardless of bp-stagger. Combined with auto-extension of the bend
-    region (see ``_effective_bend_window``), this eliminates Kabsch averaging
-    artifacts in periodic polymerization.
+    Storing κ instead of a window-spanning angle lets the editor derive both
+    angle and radius. For polymer-circle bends, the editor accounts for how
+    each staggered periodic seam overlaps the explicitly selected bend window;
+    helices outside that window intentionally accumulate less rotation.
     """
 
     kind: Literal["bend"] = "bend"
@@ -1251,6 +1250,13 @@ class BendParams(BaseModel):
         0.0  # per-bp curvature; positive = bend toward +direction
     )
     direction_deg: float = 0.0  # 0 = +X in the bundle cross-section plane
+    # Persisted bend-editor intent. Non-null means "Curve to make polymer
+    # circle" is enabled and this many copies should close one revolution.
+    # Geometry remains canonical in curvature_deg_per_bp so legacy consumers
+    # and files continue to work unchanged.
+    polymer_circle_count: Optional[int] = Field(
+        default=None, ge=2, exclude_if=lambda value: value is None
+    )
 
 
 class DeformationOp(BaseModel):
