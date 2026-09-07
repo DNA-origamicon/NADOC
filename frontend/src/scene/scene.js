@@ -11,6 +11,7 @@ import { OrbitControls }    from 'three/addons/controls/OrbitControls.js'
 import { TrackballControls } from 'three/addons/controls/TrackballControls.js'
 import { makeMultiscaleControls } from './multiscale_controls.js'
 import { fovPanScale } from './fov_pan.js'
+import { screenPlaneCameraUp } from './camera_basis.js'
 
 function _makeOrbitControls(camera, canvas, target) {
   const c = new OrbitControls(camera, canvas)
@@ -28,6 +29,12 @@ function _makeTrackballControls(camera, canvas, target) {
   c.panSpeed    = 0.8
   c.staticMoving = true
   if (target) c.target.copy(target)
+  const innerUpdate = c.update.bind(c)
+  c.update = () => {
+    camera.up.copy(screenPlaneCameraUp(camera.position, c.target, camera.up))
+    return innerUpdate()
+  }
+  c.update()
   return c
 }
 

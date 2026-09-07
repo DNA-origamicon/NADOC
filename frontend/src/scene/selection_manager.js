@@ -12,7 +12,8 @@
  * Modifier semantics (remapped 2026-05-17):
  *   Ctrl+left-drag             → rectangle lasso multi-select.
  *   Ctrl+left-click (no drag)  → no-op (was bead/arc toggle pre-remap).
- *   Alt+left-click             → toggle backbone bead in _ctrlBeads (distance measurement).
+ *   Alt+left-click             → toggle a legacy dimension anchor.
+ *   Plain click (Dimensions)   → select one of the two live dimension bases.
  *   Shift+left-click           → toggle the hit element at the active level.
  *
  * Right-click behaviour:
@@ -1674,7 +1675,7 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
  * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldAssignSequence?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onEditStrandSequence, onHideSelection, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, getDomainEndTable, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getNanoparticleRenderer, getAtomisticRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionStickRenderer, getRegionSurfaceRenderer, onDrillLevel, selectionController } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onEditStrandSequence, onHideSelection, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, getDomainEndTable, controls, getHoverEntry, getCamera, isDisabled, isDimensionPicking, getProteinRenderer, getNanoparticleRenderer, getAtomisticRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionStickRenderer, getRegionSurfaceRenderer, onDrillLevel, selectionController } = opts
   if (!selectionController) throw new TypeError('selection manager requires the canonical selection controller')
   _onEditStrandSequence = onEditStrandSequence ?? null
   _onHideSelection = onHideSelection ?? null
@@ -3404,7 +3405,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // toggles a hit overhang in/out of _multiOverhangIds (capped at 2 — older
     // ids drop off so the manager popup always sees the most recent two).
     const sel = store.getState().selectableTypes
-    if (sel.overhangs) {
+    if (sel.overhangs && !isDimensionPicking?.()) {
       _setNdc(e.clientX, e.clientY)
       raycaster.setFromCamera(_ndc, _cam())
       const backboneEntries = designRenderer.getBackboneEntries()
@@ -3457,6 +3458,16 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if (_ctrlBeads[idx].entry.instMesh.instanceMatrix) _ctrlBeads[idx].entry.instMesh.instanceMatrix.needsUpdate = true
       _ctrlBeads.splice(idx, 1)
     } else {
+      // Dimensions mode is an ordered two-point picker. Once both endpoints are
+      // present, selecting another base drops the oldest so the live dimension
+      // always follows the user's last two base picks.
+      if (isDimensionPicking?.() && _ctrlBeads.length >= 2) {
+        const oldest = _ctrlBeads.shift()
+        designRenderer.setEntryColor(oldest.entry, oldest.entry.defaultColor)
+        designRenderer.setBeadScale(oldest.entry, 1.0)
+        if (oldest.entry.instMesh.instanceColor) oldest.entry.instMesh.instanceColor.needsUpdate = true
+        if (oldest.entry.instMesh.instanceMatrix) oldest.entry.instMesh.instanceMatrix.needsUpdate = true
+      }
       // Select
       designRenderer.setEntryColor(entry, C_CTRL_BEAD)
       designRenderer.setBeadScale(entry, 1.6)
@@ -4000,7 +4011,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // click (Ctrl-drag → lasso; Alt-click → bead pick; Shift-click → additive pick).
   canvas.addEventListener('pointerdown', e => {
     if (e.button !== 0 || !controls) return
-    if (e.ctrlKey || e.altKey || e.shiftKey) controls.enabled = false
+    if (e.ctrlKey || e.altKey || e.shiftKey || isDimensionPicking?.()) controls.enabled = false
   }, { capture: true })
 
   let _downPos     = null
@@ -4142,6 +4153,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     if (_downPos && Math.hypot(e.clientX - _downPos.x, e.clientY - _downPos.y) > 4) return
     if (e.clientX > window.innerWidth - 300) return
+
+    // While the Dimensions card is open, an ordinary click is an individual
+    // base endpoint pick regardless of the normal selection drill level.
+    if (isDimensionPicking?.()) {
+      _dismissMenu()
+      _handleCtrlClickNuc(e)
+      _downPos = null
+      return
+    }
 
     _dismissMenu()
 

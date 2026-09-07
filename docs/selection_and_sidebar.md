@@ -11,15 +11,46 @@ The right sidebar is divided into four vertical tabs:
 
 | Tab | Sections |
 |---|---|
-| **Properties** | Properties, Strand Lengths, Staple Groups |
+| **Properties** | Properties, Dimensions, Strand Lengths, Staple Groups |
 | **Visualization** | Representation toggles, Representation Options, View Actions (Reset Camera, Unhide All, Section view), Multi-view, Multi-overlay, View Volumes |
 | **Clustering** | Movable Clusters, Joints |
 | **Overhangs** | Overhangs, Overhang Connections, Strand Animation |
 
 Each section uses the same grey-gradient card treatment as the left sidebar. Use the
 chevron at the top of the tab strip to collapse or restore the sidebar. Drag the divider
-between the tab strip and viewport to resize it. The Blunt End and empty Measurements
-cards are intentionally absent.
+between the tab strip and viewport to resize it. The Blunt End card is intentionally
+absent; distance measurement is provided by the persistent **Dimensions** card.
+
+### Dimensions
+
+Press **D** to open **Properties → Dimensions**. The card remembers its collapsed
+state across reloads, but opening a document does not create or save measurement
+geometry automatically.
+
+For a part, open Dimensions and click two individual bases. The picks are pending
+endpoints only: no line is drawn and no measurement is added to the list until
+**Record** is clicked. Recording freezes a world-space line and its distance in
+nanometres, clears the pending base picks, and allows another pair to be selected.
+
+For an assembly, opening Dimensions creates two translation gizmos connected by a
+live line. Moving either gizmo updates the distance. **Record** freezes a copy while
+leaving the two handles available for another measurement. Closing the card removes
+the live line and gizmos; only recorded lines remain in the viewport.
+
+The scrollable list contains the recorded dimensions. Each row has an eye control to
+show or hide that line and an X control to delete it. **Clear** removes the live
+dimension, pending endpoints, and every recorded dimension. Pressing **Escape**,
+selecting another right-sidebar tab, changing documents, or closing the session
+deactivates and collapses the card. Recorded lines survive ordinary card/tab closure,
+but are cleared at the document/session boundary. Dimensions are view-session state
+and are not serialized into `.nadoc` or `.nass` files.
+
+### Camera navigation
+
+Orbit, Trackball, and Multiscale navigation pan in the rendered screen plane.
+Trackball-based modes orthogonalize the camera up vector after resets, camera-pose
+transitions, and part/assembly changes, preventing vertical pan from acquiring a
+forward/backward component in strongly curved designs.
 
 ### Section view
 

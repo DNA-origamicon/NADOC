@@ -33,6 +33,7 @@
 import * as THREE from 'three'
 import { TrackballControls } from 'three/addons/controls/TrackballControls.js'
 import { clientToNdc } from './ndc.js'
+import { screenPlaneCameraUp } from './camera_basis.js'
 import {
   MULTISCALE_DEFAULTS,
   nearestAxisDistance,
@@ -56,6 +57,16 @@ export function makeMultiscaleControls(camera, canvas, target, getSegments) {
   c.panSpeed     = 0.8
   c.staticMoving = true      // no rotational inertia
   if (target) c.target.copy(target)
+
+  // TrackballControls uses camera.up itself as its vertical pan vector. Keep it
+  // in the rendered screen plane so up/down drags cannot acquire a dolly
+  // component after camera reset, pose restore, or assembly/part transitions.
+  const _updateInner = c.update.bind(c)
+  c.update = () => {
+    camera.up.copy(screenPlaneCameraUp(camera.position, c.target, camera.up))
+    return _updateInner()
+  }
+  c.update()
 
   const params = { ...MULTISCALE_DEFAULTS }
 

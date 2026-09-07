@@ -36,7 +36,7 @@ import { initPrimitiveLibrary }      from './ui/primitive_library.js'
 import { axesVisibleForDesign }      from './ui/extrude_panel_logic.js'
 import { bundleMidOffset }           from './scene/bundle_geometry.js'
 import { quatToEulerDeg, extractJointAngleDeg } from './scene/rotation_math.js'
-import { initMeasurementTool }       from './scene/measurement_tool.js'
+import { initDimensionsTool }        from './scene/dimensions_tool.js'
 import { intersectCoverage, findHamiltonianPath } from './scene/scaffold_coverage.js'
 import { isNewPositioningOn, setNewPositioning } from './ui/new_positioning.js'
 import { initCreateSeam } from './scene/create_seam.js'
@@ -51,6 +51,7 @@ import { assemblyDuplicateOffset } from './scene/assembly_layout.js'
 import { nucleotideLocalBox, selectionBBox } from './scene/selection_bbox.js'
 import { navigationDesign, navigationGeometry } from './scene/reference_navigation.js'
 import { fitViewPose } from './scene/fit_view_math.js'
+import { screenPlaneCameraUp } from './scene/camera_basis.js'
 import { initAssemblyMultiBox } from './scene/assembly_multi_box.js'
 import { initAssemblyConfigAnimator } from './scene/assembly_config_animator.js'
 import { makeSegmentCache } from './scene/multiscale_nav.js'
@@ -635,6 +636,7 @@ async function main() {
   let _atomSurface = null
   let visibilityController = null
   let selectionManager = null
+  let dimensionsTool = null
   // Part-edit mode imports its design during boot, before the lower UI sections
   // are composed. Store subscribers can run synchronously during that import, so
   // every value they touch must already be initialized (optional chaining does
@@ -836,6 +838,7 @@ async function main() {
     controls,
     getHoverEntry: () => zoomScope.getHoverEntry(),
     getCamera:     () => sceneCtx.getRenderCamera(),
+    isDimensionPicking: () => dimensionsTool?.isPickingBases?.() ?? false,
     isDisabled:    () => slicePlane?.isContinuation() || store.getState().forceXoverActive,
   })
   store.subscribe((newState, prevState) => {
@@ -850,25 +853,19 @@ async function main() {
     getControls: () => sceneCtx.getActiveControls(),
   })
 
-  // ── Measurement tool ─────────────────────────────────────────────────────────
-  // 3D line + distance readout between exactly 2 ctrl-clicked beads (press 'M';
-  // not valid in unfold view). Self-wires to ctrl-bead changes and also refreshes
-  // the selection-count HUD on each change. _updateSelectionHud is hoisted (defined
-  // just below), so the callback resolves it lazily.
-  const measurementTool = initMeasurementTool({
-    scene,
-    selectionManager,
-    onSelectionHudChange: () => _updateSelectionHud(),
+  // ── Dimensions tool ──────────────────────────────────────────────────────────
+  // Persistent Properties card: base-to-base dimensions in parts, draggable
+  // endpoint gizmos in assemblies, plus frozen/individually visible records.
+  dimensionsTool = initDimensionsTool({
+    scene, camera, canvas, controls, store, selectionManager, assemblyRenderer, rightSidebar,
   })
 
-  // One-time hint about the 2026-05-17 selection-modifier remap. Ctrl was
-  // overloaded (lasso AND measurement-bead pick); measurement bead now lives
-  // on Alt-click and Shift-click is the new additive-selection modifier.
+  // One-time hint about selection modifiers and the CAD-style Dimensions mode.
   const _SEL_HINT_KEY = 'nadoc.hint.selModifiers.v1'
   if (!localStorage.getItem(_SEL_HINT_KEY)) {
     setTimeout(() => {
       showToast(
-        'Selection: Alt-click = measure distance · Shift-click = add to selection · Ctrl-drag = lasso',
+        'Selection: D = dimensions · Shift-click = add to selection · Ctrl-drag = lasso',
         { duration: 8000 },
       )
       localStorage.setItem(_SEL_HINT_KEY, '1')
@@ -3086,6 +3083,8 @@ async function main() {
 
   /** Clear per-file state (slice plane, store) and return to workspace. */
   function _resetForNewDesign() {
+    dimensionsTool?.clear?.()
+    dimensionsTool?.close?.()
     selectionController.reload('design')
     // Leave photo mode before tearing the scene down. Otherwise the photo
     // render override stays installed and the next loaded design comes up
@@ -3204,6 +3203,7 @@ async function main() {
   let _hiddenStripEls = []
 
   function _enterAssemblyMode() {
+    dimensionsTool?.clear?.()
     selectionController.reload('assembly')
     if (window.nadocDebug?.verbose)
       console.log('[restore] _enterAssemblyMode() — assemblyActive →', true)
@@ -3255,6 +3255,7 @@ async function main() {
   }
 
   function _exitAssemblyMode() {
+    dimensionsTool?.clear?.()
     selectionController.reload('design')
     _setDesignGeometryVisible(true)
     _assemblyFileHandle = null
@@ -3866,6 +3867,7 @@ async function main() {
       camera.position.set(6, 3, 18)
       controls.target.set(6, 3, 0)
     }
+    camera.up.copy(screenPlaneCameraUp(camera.position, controls.target, camera.up))
     controls.update()
   })
 
@@ -4151,6 +4153,7 @@ async function main() {
       camera.position.set(6, 3, 18)
       controls.target.set(6, 3, 0)
     }
+    camera.up.copy(screenPlaneCameraUp(camera.position, controls.target, camera.up))
     controls.update()
   })
 
@@ -4173,7 +4176,7 @@ async function main() {
   // document 'keydown' listener.
   initKeyboardShortcuts({
     store, api,
-    slicePlane, expandedSpacing, debugOverlay, measurementTool, selectionManager,
+    slicePlane, expandedSpacing, debugOverlay, dimensionsTool, selectionManager,
     clusterClipboard: _clusterClipboard,
     extrudePanel: _extrudePanel, deformView, crossSectionMinimap, sliceHighlighter,
     primitiveLibrary: _primitiveLibrary,
@@ -6828,6 +6831,7 @@ async function main() {
       _anchorSelectionState,
       atomisticRenderer,
       selectionManager,
+      dimensionsTool,
       selectionController,
       _nucleotideTransformTool,
       bluntEnds,

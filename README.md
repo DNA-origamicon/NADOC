@@ -156,7 +156,10 @@ IDs, and every visible helix reference uses its display label rather than its in
 lattice ID. Single-base Properties show the base letter, labeled location, and ordinal
 within the strand; with the spreadsheet expanded, base selection scrolls to the owning
 strand and marks the selected sequence letters. Multiple bases are grouped into
-helix-aware labels such as `Staple - 1[34,35]`. See [Selection and right sidebar](docs/selection_and_sidebar.md)
+helix-aware labels such as `Staple - 1[34,35]`. Press **D** for the persistent
+**Dimensions** card: parts record distances between two selected bases, while
+assemblies use two movable endpoint gizmos; recorded lines can be independently
+shown, hidden, or deleted. See [Selection and right sidebar](docs/selection_and_sidebar.md)
 for interaction rules and the developer contract.
 
 Visualization includes a two-, three-, or four-panel Multi-view for comparing

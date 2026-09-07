@@ -7636,6 +7636,23 @@
           </div>
         </div>
 
+        <!-- Dimensions — persistent part/assembly distance measurements -->
+        <div class="panel-section" id="dimensions-section">
+          <h2 id="dimensions-heading" tabindex="0" role="button" aria-expanded="false"
+              style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>Dimensions <span class="dim" style="font-weight:400">D</span></span>
+            <span id="dimensions-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
+          </h2>
+          <div id="dimensions-body" style="display:none;margin-top:8px">
+            <div id="dimensions-hint" class="dim" style="font-size:11px;line-height:1.35;margin-bottom:8px"></div>
+            <div class="dimensions-actions">
+              <button id="dimensions-record" class="def-btn primary" type="button" disabled>Record</button>
+              <button id="dimensions-clear" class="def-btn" type="button">Clear</button>
+            </div>
+            <div id="dimensions-list" class="dimensions-list" aria-live="polite"></div>
+          </div>
+        </div>
+
         <div class="panel-section" id="reverse-complement-section">
           <h2 id="reverse-complement-heading" tabindex="0" role="button" aria-expanded="true"
               style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">

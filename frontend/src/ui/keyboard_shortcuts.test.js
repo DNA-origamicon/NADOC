@@ -52,7 +52,7 @@ function makeDeps(overrides = {}) {
     slicePlane: { isVisible: vi.fn(() => false), hide: vi.fn() },
     expandedSpacing: { toggle: vi.fn() },
     debugOverlay: { toggle: vi.fn(), isActive: vi.fn(() => true) },
-    measurementTool: { isActive: vi.fn(() => false), clear: vi.fn(), show: vi.fn() },
+    dimensionsTool: { isActive: vi.fn(() => false), clear: vi.fn(), open: vi.fn(), close: vi.fn() },
     clusterClipboard: {
       copy: vi.fn(), paste: vi.fn(), cancel: vi.fn(), isActive: vi.fn(() => false),
     },
@@ -242,28 +242,19 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
     expect(d.frameSelectionOrAll).toHaveBeenCalledTimes(1)
   })
 
-  it("'m' shows measurement when exactly 2 ctrl-beads are picked; clears when already active", async () => {
+  it("'d' opens the Dimensions card", async () => {
     const d = makeDeps()
-    d.selectionManager.getCtrlBeads.mockReturnValue([{}, {}])
     initKeyboardShortcuts(d)
-    await press('m', { shift: true })
-    expect(d.measurementTool.show).toHaveBeenCalled()
-
-    // Already active → clears instead.
-    d.measurementTool.isActive.mockReturnValue(true)
-    d.measurementTool.show.mockClear()
-    await press('m', { shift: true })
-    expect(d.measurementTool.clear).toHaveBeenCalled()
-    expect(d.measurementTool.show).not.toHaveBeenCalled()
+    await press('d')
+    expect(d.dimensionsTool.open).toHaveBeenCalledTimes(1)
   })
 
-  it("'m' is suppressed in unfold view (shows mode-indicator message)", async () => {
+  it("'d' is suppressed in unfold view (shows mode-indicator message)", async () => {
     const d = makeDeps()
     d.store.setState({ unfoldActive: true })
-    d.selectionManager.getCtrlBeads.mockReturnValue([{}, {}])
     initKeyboardShortcuts(d)
-    await press('m', { shift: true })
-    expect(d.measurementTool.show).not.toHaveBeenCalled()
+    await press('d')
+    expect(d.dimensionsTool.open).not.toHaveBeenCalled()
     expect(document.getElementById('mode-indicator').textContent).toMatch(/not available/i)
   })
 
@@ -639,7 +630,17 @@ describe('initKeyboardShortcuts — Group 2 file/edit + Delete/Escape', () => {
     await press('Escape')
     expect(d.ooClose).toHaveBeenCalled()
 
-    // ctrl-beads present → clearCtrlBeads (after measurement clear)
+    // Active Dimensions closes before the ordinary ctrl-bead cleanup path.
+    clearShortcuts()
+    d = makeDeps()
+    d.dimensionsTool.isActive.mockReturnValue(true)
+    initKeyboardShortcuts(d)
+    await press('Escape')
+    expect(d.dimensionsTool.close).toHaveBeenCalled()
+    expect(d.selectionManager.clearCtrlBeads).toHaveBeenCalled()
+    expect(d.cancelTranslateRotateTool).not.toHaveBeenCalled()
+
+    // ctrl-beads present → clearCtrlBeads
     clearShortcuts()
     d = makeDeps()
     d.selectionManager.getCtrlBeads.mockReturnValue([{}])

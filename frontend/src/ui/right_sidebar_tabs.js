@@ -1,6 +1,6 @@
 const TAB_SECTIONS = {
   assembly: ['assembly-panel'],
-  properties: ['properties-section', 'reverse-complement-section', 'move-rotate-panel', 'extrude-panel', 'deform-panel', 'strand-hist-section', 'groups-panel'],
+  properties: ['properties-section', 'dimensions-section', 'reverse-complement-section', 'move-rotate-panel', 'extrude-panel', 'deform-panel', 'strand-hist-section', 'groups-panel'],
   visualization: ['representation-modes-section', 'view-volumes-section', 'coloring-options-section', 'repr-options-section', 'right-view-actions', 'right-multi-view', 'right-multi-overlay'],
   clustering: ['cluster-panel', 'joints-panel'],
   overhangs: ['overhang-panel', 'overhang-connections-section', 'assembly-overhang-panel', 'assembly-oconn-panel', 'strand-anim-panel'],
@@ -88,6 +88,7 @@ export function initRightSidebarTabs({ document, storage = globalThis.localStora
 
   const buttons = [...strip.querySelectorAll('.right-tab-btn')]
   const tabs = buttons.map(button => button.dataset.tab)
+  const changeListeners = new Set()
   let activeTab = 'properties'
   let collapsed = false
   try {
@@ -120,6 +121,7 @@ export function initRightSidebarTabs({ document, storage = globalThis.localStora
       toggle.textContent = shut ? '◀' : '▶'
       toggle.title = shut ? 'Show sidebar' : 'Hide sidebar'
     }
+    for (const listener of changeListeners) listener({ activeTab, collapsed: shut })
   }
 
   function select(tab) {
@@ -168,5 +170,14 @@ export function initRightSidebarTabs({ document, storage = globalThis.localStora
   }
   updateRepresentation()
 
-  return { select, open, setAssemblyMode, render, getActiveTab: () => activeTab, isCollapsed: () => collapsed, dispose: () => observer.disconnect() }
+  return {
+    select, open, setAssemblyMode, render,
+    getActiveTab: () => activeTab,
+    isCollapsed: () => collapsed,
+    onChange(listener) {
+      changeListeners.add(listener)
+      return () => changeListeners.delete(listener)
+    },
+    dispose() { changeListeners.clear(); observer.disconnect() },
+  }
 }

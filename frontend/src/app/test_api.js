@@ -17,6 +17,7 @@ export function installTestApi({
   _anchorSelectionState,
   atomisticRenderer,
   selectionManager,
+  dimensionsTool,
   selectionController,
   _nucleotideTransformTool,
   bluntEnds,
@@ -42,6 +43,15 @@ export function installTestApi({
 }) {
   window.__nadocTest = {
     scene,
+    dimensions: {
+      open: () => dimensionsTool?.open?.(),
+      record: () => dimensionsTool?.record?.(),
+      clear: () => dimensionsTool?.clear?.(),
+      measurements: () => dimensionsTool?.getMeasurements?.() ?? [],
+      endpoints: () => dimensionsTool?.getAssemblyEndpoints?.() ?? [],
+      isPickingBases: () => dimensionsTool?.isPickingBases?.() ?? false,
+      setEndpoint: (index, position) => dimensionsTool?.setAssemblyEndpoint?.(index, position) ?? false,
+    },
     markFlexibleRun,
     getProteinGizmoMode: () => proteinGizmo?.getMode?.() ?? null,
     isProteinGizmoAttached: () => proteinGizmo?.isAttached?.() ?? false,
@@ -334,7 +344,7 @@ export function installTestApi({
       return out
     },
     /** Screen {x,y} centres of up to `maxN` visible, on-screen backbone beads.
-     *  Reusable primitive for gesture e2e tests (e.g. measurement_tool.spec.js). */
+     *  Reusable primitive for gesture e2e tests (e.g. dimensions_tool.spec.js). */
     getBackboneBeadScreenPositions(maxN = 12) {
       const rect = canvas.getBoundingClientRect()
       let mesh = null
@@ -528,7 +538,7 @@ export function installTestApi({
       const helix = store.getState().currentDesign?.helices?.find(h => h.id === helixId)
       if (helix?.grid_pos) slicePlane.selectCellForTest(...helix.grid_pos)
     },
-    /** Count of Alt-picked measurement beads (the measurement tool's input). */
+    /** Count of picked dimension bases (also covers the legacy Alt-pick path). */
     getCtrlBeadCount: () => selectionManager.getCtrlBeads?.().length ?? 0,
     /** Count of committed canonical End refs (never measurement anchors). */
     getSelectedEndCount: () => (store.getState().selection?.items ?? []).filter(ref => ref.kind === 'end').length,
