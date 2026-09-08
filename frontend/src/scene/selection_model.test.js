@@ -5,7 +5,7 @@ import {
   selectedStrandIds, relatedStrandIds, selectedOverhangIds, selectedExtensionIds,
   selectedClusterIds, primaryOverhangId, primaryExtensionId, primaryClusterId,
   selectedCrossoverRefs, primaryCrossoverRef, selectedEndRefs, primaryEndRef,
-  overhangSelectionTarget, extensionSelectionTarget,
+  overhangSelectionTarget, extensionSelectionTarget, moveRotateSelectionLocked,
 } from './selection_model.js'
 
 const strand = id => ({ kind: 'strand', id })
@@ -13,6 +13,12 @@ const overhang = id => ({ kind: 'overhang', id })
 const base = key => ({ kind: 'base', key })
 
 describe('selection_model — approved Phase 1 reducer contract', () => {
+  it('locks Move/Rotate selection only after its target is populated', () => {
+    expect(moveRotateSelectionLocked({ translateRotateActive: false, selection: { items: [strand('a')] } })).toBe(false)
+    expect(moveRotateSelectionLocked({ translateRotateActive: true, selection: { items: [] } })).toBe(false)
+    expect(moveRotateSelectionLocked({ translateRotateActive: true, selection: { items: [strand('a')] } })).toBe(true)
+  })
+
   it('creates a normalized empty design selection', () => {
     expect(createSelectionState()).toEqual({ context: 'design', level: 'default', items: [], primary: null })
   })

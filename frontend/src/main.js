@@ -191,6 +191,7 @@ import {
 } from './scene/selection_model.js'
 import { isSelectionRefLive } from './scene/selection_ref.js'
 import { initForceCrossoverTool }   from './scene/force_crossover_tool.js'
+import { forceLigateSelectedEnds }  from './scene/force_ligation.js'
 import { initOverhangOrientationPanel } from './ui/overhang_orientation_panel.js'
 import { showToast, showPersistentToast, dismissToast } from './ui/toast.js'
 import { showOpProgress, hideOpProgress }                from './ui/op_progress.js'
@@ -692,6 +693,11 @@ async function main() {
     },
     onDrillLevel: selectionFilter.reflectDrillLevel,
     onNick: async ({ helixId, bpIndex, direction }) => {
+      // The gizmo paints an unapplied transform directly into the live meshes,
+      // while topology responses rebuild from the committed design.  Commit the
+      // visible pose first so a nick cannot snap a moved cluster back to its
+      // previous transform during the structural rebuild.
+      if (_translateRotateActive) await _confirmTranslateRotateTool()
       _clearStapleChecks()
       // A nick is a topology change; drop the scaffold-routing indicator (the
       // unified scaffold context menu's "Nick here" routes through here).
@@ -702,6 +708,7 @@ async function main() {
         console.error('Nick failed:', err?.message)
       }
     },
+    onForceLigateSelectedEnds: () => forceLigateSelectedEnds({ store, selectionManager, api }),
     onLoopSkip: async ({ helixId, bpIndex, delta }) => {
       _clearStapleChecks()
       const result = await api.insertLoopSkip(helixId, bpIndex, delta)
@@ -4538,6 +4545,7 @@ async function main() {
     applyAssemblyPrimaryLive:     _applyAssemblyPrimaryLive,
     queueAssemblyPrimaryCommit:   _queueAssemblyPrimaryCommit,
     setClusterRotationPoint:      api.setClusterRotationPoint,
+    clearSelection:               () => selectionManager.clearSelection(),
   })
   proteinSubsystem.setMoveRotatePanel(_moveRotatePanel)
   nanoparticleSubsystem.setMoveRotatePanel(_moveRotatePanel)
@@ -6824,6 +6832,7 @@ async function main() {
       store,
       visibilityController,
       designRenderer,
+      unfoldView,
       _setRepresentation,
       controls,
       camera,

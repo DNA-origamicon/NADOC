@@ -29,6 +29,7 @@ import { clusterAlphaForNuc, clusterAlphaKeys, clusterDisplaySignature } from '.
 import { baseKey } from './base_ref.js'
 import { selectedStrandIds } from './selection_model.js'
 import { crossoverArcHiddenForRepresentations } from './view_volume_rules.js'
+import { sameConnectionTopology } from './connection_topology.js'
 
 const ANIM_DURATION_MS = 500   // linear lerp duration
 const ARC_SEGS         = 20    // bezier sample count per arc line
@@ -1040,7 +1041,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       if (p && n &&
           p.helices.length      === n.helices.length      &&
           p.strands.length      === n.strands.length      &&
-          p.crossovers.length   === n.crossovers.length   &&
+          sameConnectionTopology(p, n) &&
           p.deformations.length === n.deformations.length &&
           p.extensions.length   === n.extensions.length   &&
           p.overhangs.length    === n.overhangs.length) return

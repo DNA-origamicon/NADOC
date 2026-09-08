@@ -27,43 +27,12 @@
 
 import * as THREE from 'three'
 import { crossoverControlPoint as arcControlPoint, quadraticPoint as bezierAt } from './crossover_extra_placement.js'
+import { endRole, isValidPair, ligationArgs } from './force_ligation.js'
+
+export { endRole, isValidPair, ligationArgs } from './force_ligation.js'
 
 const _SNAP_PX  = 80     // screen-space hover/click snap radius (matches selection_manager)
 const _ARC_SEGS = 16     // preview-arc sample count
-
-// ── Pure helpers (unit-tested) ───────────────────────────────────────────────
-
-/** Strand-end polarity of a nucleotide: '3p' | '5p' | null (null if neither, or
- *  ambiguously both — a 1-nt strand whose single bead is both ends). */
-export function endRole(nuc) {
-  if (!nuc) return null
-  const three = !!nuc.is_three_prime
-  const five  = !!nuc.is_five_prime
-  if (three && five) return null   // ambiguous single-bead strand — not usable
-  if (three) return '3p'
-  if (five)  return '5p'
-  return null
-}
-
-/** True when `secondNuc` is a legal forced-ligation partner for `firstNuc`:
- *  one 3′ + one 5′ (opposite polarity), on DIFFERENT strands. */
-export function isValidPair(firstNuc, secondNuc) {
-  const r1 = endRole(firstNuc)
-  const r2 = endRole(secondNuc)
-  if (!r1 || !r2) return false
-  if (r1 === r2) return false
-  return firstNuc.strand_id !== secondNuc.strand_id
-}
-
-/** Map a (first, second) end pair to the backend request fields, independent of
- *  the order the user clicked them in: the 3′ end → three_prime_strand_id, the
- *  5′ end → five_prime_strand_id. Assumes the pair is already validated. */
-export function ligationArgs(firstNuc, secondNuc) {
-  const firstIsThree = endRole(firstNuc) === '3p'
-  const three = firstIsThree ? firstNuc : secondNuc
-  const five  = firstIsThree ? secondNuc : firstNuc
-  return { three_prime_strand_id: three.strand_id, five_prime_strand_id: five.strand_id }
-}
 
 /** Sample points of the crossover preview arc between two end nucleotides.
  *  Uses the same quadratic-Bezier control point as the committed crossover arc

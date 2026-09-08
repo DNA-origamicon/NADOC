@@ -190,6 +190,22 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
     expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('base')
   })
 
+  it("Q/E keep cycling while Move/Rotate is armed empty, then stop after selection", async () => {
+    const d = makeDeps()
+    d.store.setState({ translateRotateActive: true, selection: { items: [] } })
+    initKeyboardShortcuts(d)
+    await press('e', { tag: 'CANVAS' })
+    await press('q', { tag: 'CANVAS' })
+    expect(d.selectionManager.setSelectionLevel).toHaveBeenNthCalledWith(1, 'strand')
+    expect(d.selectionManager.setSelectionLevel).toHaveBeenNthCalledWith(2, 'base')
+
+    d.selectionManager.setSelectionLevel.mockClear()
+    d.store.setState({ selection: { items: [{ kind: 'cluster', id: 'c1' }] } })
+    await press('e', { tag: 'CANVAS' })
+    await press('q', { tag: 'CANVAS' })
+    expect(d.selectionManager.setSelectionLevel).not.toHaveBeenCalled()
+  })
+
   it("'v' captures a camera pose named by count", async () => {
     const d = makeDeps()
     d.store.setState({ currentDesign: { helices: [{}], camera_poses: [{}, {}] } })
@@ -269,7 +285,19 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
     expect(d.api.forcedLigation).not.toHaveBeenCalled()
   })
 
-  it("'x' rejects an invalid pair (same polarity / same strand) without calling the api", async () => {
+  it("'i' force-ligates a selected 5′/3′ pair in backend argument order", async () => {
+    const d = makeDeps()
+    d.selectionManager.getSelectedEndBeads.mockReturnValue([
+      { nuc: { strand_id: 'five-strand', is_five_prime: true } },
+      { nuc: { strand_id: 'three-strand', is_three_prime: true } },
+    ])
+    initKeyboardShortcuts(d)
+    await press('i')
+    expect(d.selectionManager.clearEndSelection).toHaveBeenCalledTimes(1)
+    expect(d.api.forcedLigation).toHaveBeenCalledWith('three-strand', 'five-strand')
+  })
+
+  it("'i' rejects an invalid pair (same polarity / same strand) without calling the api", async () => {
     const d = makeDeps()
     // Two 5′ ends → not a 3′/5′ pair.
     d.selectionManager.getSelectedEndBeads.mockReturnValue([
@@ -277,16 +305,16 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
       { nuc: { strand_id: 'B', is_five_prime: true } },
     ])
     initKeyboardShortcuts(d)
-    await press('x')
+    await press('i')
     expect(d.api.forcedLigation).not.toHaveBeenCalled()
     expect(d.selectionManager.clearEndSelection).not.toHaveBeenCalled()
   })
 
-  it("'x' is a no-op unless exactly 2 ends are selected, and never in assembly mode", async () => {
+  it("'i' is a no-op unless exactly 2 ends are selected, and never in assembly mode", async () => {
     const d = makeDeps()
     d.selectionManager.getSelectedEndBeads.mockReturnValue([{ nuc: { strand_id: 'A', is_five_prime: true } }])
     initKeyboardShortcuts(d)
-    await press('x')
+    await press('i')
     expect(d.api.forcedLigation).not.toHaveBeenCalled()
 
     // Even a valid pair is ignored while an assembly is active.
@@ -295,7 +323,7 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
       { nuc: { strand_id: 'A', is_five_prime: true } },
       { nuc: { strand_id: 'B', is_three_prime: true } },
     ])
-    await press('x')
+    await press('i')
     expect(d.api.forcedLigation).not.toHaveBeenCalled()
   })
 

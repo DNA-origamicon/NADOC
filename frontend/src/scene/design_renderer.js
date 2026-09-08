@@ -23,6 +23,7 @@ import { buildClusterColorLookup } from './helix_renderer/palette.js'
 import { installInstanceAlpha, setInstanceAlpha } from './instance_alpha.js'
 import { markOperationTiming, finishOperationAfterRender } from '../perf/operation_timing.js'
 import { designRebuildAwaitingGeometry } from './design_render_readiness.js'
+import { sameConnectionTopology, sameCrossoverTopology, sameForcedLigationTopology } from './connection_topology.js'
 
 /**
  * Initialise the design renderer.
@@ -822,14 +823,6 @@ export function initDesignRenderer(scene, storeRef) {
     return true
   }
 
-  function _sameCrossoverTopology(a, b) {
-    const signature = (design) => JSON.stringify((design?.crossovers ?? []).map(x => [
-      x.id, x.half_a?.helix_id, x.half_a?.index, x.half_a?.strand,
-      x.half_b?.helix_id, x.half_b?.index, x.half_b?.strand, x.extra_bases,
-    ]))
-    return signature(a) === signature(b)
-  }
-
   function _crossoverChangesAreLocal(a, b, changedHelixSet) {
     const sig = (x) => JSON.stringify([
       x.half_a?.helix_id, x.half_a?.index, x.half_a?.strand,
@@ -859,7 +852,10 @@ export function initDesignRenderer(scene, storeRef) {
     const realIds = changedHelixIds.filter(id => !id.startsWith('__'))
     if (!realIds.length || realIds.length > 12) return false
     const realSet = new Set(realIds)
-    const sameCrossovers = _sameCrossoverTopology(prevState.currentDesign, newState.currentDesign)
+    const sameCrossovers = sameCrossoverTopology(prevState.currentDesign, newState.currentDesign)
+    // This overlay replaces helix meshes but not unfold_view's persistent arc
+    // group. Force-ligation edits therefore require the full rebuild path.
+    if (!sameForcedLigationTopology(prevState.currentDesign, newState.currentDesign)) return false
     // Full/bead representations retain the conservative original contract.
     // In cylinder LOD, crossover cones are not visible and whole-helix cylinder
     // instances can be suppressed safely, so local crossover/scaffold changes
@@ -1086,8 +1082,7 @@ export function initDesignRenderer(scene, storeRef) {
       if (p && n &&
           p.helices.length      === n.helices.length      &&
           p.strands.length      === n.strands.length      &&
-          p.crossovers.length   === n.crossovers.length   &&
-          p.crossovers.every((xo, i) => xo.extra_bases === n.crossovers[i]?.extra_bases) &&
+          sameConnectionTopology(p, n) &&
           p.deformations.length === n.deformations.length &&
           p.extensions.length   === n.extensions.length   &&
           p.overhangs.length    === n.overhangs.length) {

@@ -1585,6 +1585,12 @@
       background: var(--color-bg-inset, #0d1117); font-size: var(--text-sm, 12px);
     }
     .mr-selection-item { padding: 3px 0; overflow-wrap: anywhere; }
+    .mr-selection-clear {
+      margin-top: 5px; padding: 2px 7px; border: 1px solid var(--color-border-default, #30363d);
+      border-radius: 4px; background: transparent; color: var(--color-text-muted, #8b949e);
+      font: inherit; cursor: pointer;
+    }
+    .mr-selection-clear:hover { color: var(--color-text-primary, #e6edf3); border-color: #484f58; }
     .mr-selection-empty { color: var(--color-text-muted, #8b949e); font-style: italic; }
     .mr-step { padding: 4px 8px; font-size: var(--text-xs, 11px); flex-shrink: 0; }
     .mr-check { cursor: pointer; color: var(--color-text-secondary, #c9d1d9); font-size: var(--text-sm, 12px); }
@@ -7713,6 +7719,16 @@
           <div class="mr-section-label">Current selection</div>
           <div id="mr-current-selection" class="mr-selection-box" aria-live="polite"></div>
           <div id="mr-session-hint" class="dim" style="font-size:11px;margin-top:5px" aria-live="polite"></div>
+
+          <!-- Gizmo orientation. Local follows the selected object's current
+               rotation, so (for example) Z follows a rotated helix axis. -->
+          <div class="def-row mr-row">
+            <label class="mr-label">Frame</label>
+            <select id="mr-frame-sel" class="mr-select" title="Choose whether gizmo axes follow the scene or the selected object">
+              <option value="world">Global</option>
+              <option value="local">Local</option>
+            </select>
+          </div>
 
           <!-- Translation -->
           <div class="mr-section-label">Translation (nm)</div>

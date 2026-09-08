@@ -1,11 +1,11 @@
 /**
- * Forced ligation via the NORMAL end multi-select + 'x' key — interactive
+ * Forced ligation via the NORMAL end multi-select + 'i' key/context menu — interactive
  * gesture e2e (HARD-tier, on the shared scene-harness).
  *
  * What the vitest unit tests + smoke gate CANNOT cover: the REAL user gestures —
  * engage the End selection level, multi-select a 5′ end and a 3′ end (via a
  * ctrl-drag LASSO, or a plain-click then Ctrl-click — all feed canonical End refs),
- * press 'x' → the two strands merge into ONE via /design/forced-ligation,
+ * press 'i' or right-click an endpoint → the strands merge via /design/forced-ligation,
  * driven end-to-end through selection_manager + the main.js shortcut wiring.
  *
  * Fixture: a 200-bp auto-scaffolded helix, nicked at two visible interior
@@ -13,14 +13,14 @@
  * cylinder-LOD) for the gesture.
  */
 import { test, expect } from '@playwright/test'
-import { loadScaffoldedPart, selectEndsForLigation, selectEndsPlainThenCtrl } from './helpers/scene_harness.js'
+import { loadScaffoldedPart, rightClickVerifiedEnd, selectEndsForLigation } from './helpers/scene_harness.js'
 
 const API = (process.env.NADOC_E2E_API_BASE || 'http://127.0.0.1:8000') + '/api'
 
 // Build the fixture: a fresh auto-scaffolded helix, nicked at two visible interior
 // positions. Returns { doc, H, before } (before = the pre-ligation design).
 async function setupNickedScaffold(page, tag) {
-  const doc = `e2e-forcedlig-${tag}-${Date.now()}`
+  const doc = `__e2e__forcedlig-${tag}-${Date.now()}`
   const H = { 'Content-Type': 'application/json', 'X-NADOC-Doc': doc }
   await loadScaffoldedPart(page, { doc, name: `forcedlig-${tag}` })
   await page.locator('#canvas').click({ position: { x: 5, y: 5 } })
@@ -72,36 +72,67 @@ async function fetchDesign(page, H) {
   return (await (await page.request.get(`${API}/design`, { headers: H })).json()).design
 }
 
-test.describe('Forced ligation — end multi-select + x', () => {
+async function setupTwoHelixScaffolds(page, tag) {
+  const doc = `__e2e__forcedlig-${tag}-${Date.now()}`
+  const H = { 'Content-Type': 'application/json', 'X-NADOC-Doc': doc }
+  await loadScaffoldedPart(page, { doc, name: `forcedlig-${tag}` })
+  const initial = await fetchDesign(page, H)
+  const firstId = initial.helices[0].id
+  await page.request.post(`${API}/design/helix-at-cell`, {
+    data: { row: 0, col: 1, length_bp: 200 }, headers: H,
+  })
+  const withSecond = await fetchDesign(page, H)
+  const secondId = withSecond.helices.find(helix => helix.id !== firstId).id
+  await page.request.post(`${API}/design/scaffold-domain-paint`, {
+    data: { helix_id: secondId, lo_bp: 0, hi_bp: 199 }, headers: H,
+  })
+  await page.evaluate((d) => {
+    const bc = new BroadcastChannel('nadoc-design')
+    bc.postMessage({ type: 'design-changed', source: 'e2e-' + Math.random(), docId: d })
+    bc.close()
+  }, doc)
+  await page.waitForTimeout(800)
+  await page.locator('#canvas').click({ position: { x: 5, y: 5 } })
+  await page.keyboard.press('f')
+  await page.waitForTimeout(400)
+  const before = await fetchDesign(page, H)
+  expect(before.strands.length, 'one scaffold strand per helix').toBe(2)
+  return { H, before }
+}
+
+test.describe('Forced ligation — selected 5′/3′ ends', () => {
   // The scene-harness boot (loadScaffoldedPart: build + auto-scaffold + first
   // WebGL render) can race on a cold throwaway backend; retry so a boot flake
   // doesn't mask the gesture assertion (which is deterministic once booted).
-  test.describe.configure({ retries: 2 })
+  test.describe.configure({ retries: 2, timeout: 45_000 })
 
-  test('LASSO a 5′ and a 3′ end at End level, press x → strands merge into one', async ({ page }) => {
-    const { H, before } = await setupNickedScaffold(page, 'lasso')
+  test('LASSO a 5′ and a 3′ end at End level, press i → strands merge into one', async ({ page }) => {
+    const { H, before } = await setupTwoHelixScaffolds(page, 'lasso')
     const flBefore = (before.forced_ligations ?? []).length
 
     const sel = await selectEndsForLigation(page)
     expect(sel.count, `two opposite-polarity ends selected via lasso: ${JSON.stringify(sel.diagnostics)}`).toBe(2)
-    await page.keyboard.press('x')
+    const arcsBefore = await page.evaluate(() => window.__nadocTest.getRenderedCrossoverArcCount())
+    await page.keyboard.press('i')
     await page.waitForTimeout(800)
 
     const after = await fetchDesign(page, H)
     expect((after.forced_ligations ?? []).length, 'a forced ligation was recorded').toBe(flBefore + 1)
     expect(after.strands.length, 'the two selected strands merged into one').toBe(before.strands.length - 1)
+    const arcsAfter = await page.evaluate(() => window.__nadocTest.getRenderedCrossoverArcCount())
+    expect(arcsAfter, 'the cross-helix ligation arc is present without reload').toBe(arcsBefore + 1)
   })
 
-  test('PLAIN-click one end, then CTRL-click a second → BOTH selected, press x → merge', async ({ page }) => {
-    const { H, before } = await setupNickedScaffold(page, 'plainctrl')
+  test('right-click either member of a selected pair → Force ligate menu → merge', async ({ page }) => {
+    const { H, before } = await setupNickedScaffold(page, 'context')
     const flBefore = (before.forced_ligations ?? []).length
 
-    // The reported bug: plain-click end A, ctrl-click end B used to leave only ONE
-    // selected. The plain-clicked end must remain in the canonical selected set.
-    const sel = await selectEndsPlainThenCtrl(page)
-    expect(sel.afterPlain?.items?.[0]?.kind, 'plain click selected one canonical End ref').toBe('end')
-    expect(sel.count, 'plain-click + ctrl-click counts BOTH ends (was 1)').toBe(2)
-    await page.keyboard.press('x')
+    const sel = await selectEndsForLigation(page)
+    expect(sel.count, `two opposite-polarity ends selected: ${JSON.stringify(sel.diagnostics)}`).toBe(2)
+    await rightClickVerifiedEnd(page, sel.five)
+    const action = page.getByText('Force ligate', { exact: true })
+    await expect(action).toBeVisible()
+    await action.click()
     await page.waitForTimeout(800)
 
     const after = await fetchDesign(page, H)

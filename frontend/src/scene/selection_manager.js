@@ -42,7 +42,7 @@ import {
   nearestCandidate, candidatesInRect, makeProjector, worldPosOf,
 } from './base_pick.js'
 import { flexAnchorKey } from './flexible_arcs.js'
-import { selectedCrossoverRefs, selectedEndRefs } from './selection_model.js'
+import { moveRotateSelectionLocked, selectedCrossoverRefs, selectedEndRefs } from './selection_model.js'
 import {
   bondRefForCone, coneForBondRef, crossoverRefForArc, endRefForEntry, vrPrimitiveOwner,
   vrDeformationPlanePick, vrInitialSelectionOwnerTokens, vrOwnerTokens,
@@ -53,6 +53,7 @@ import { referenceStrandInteractionHidden } from './reference_navigation.js'
 import { resolveVREndToolContext } from './vr_tool_context.js'
 import { resolveVRDeformationScope } from './vr_tool_execution_plan.js'
 import { getVRDeformationPlaneFrames } from './deformation_editor.js'
+import { selectedEndLigationArgs, selectedEndsIncludeNuc } from './force_ligation.js'
 
 // Kick off the FJC lookup fetch at module load so the linker-config modal
 // opens instantly with the per-bin histograms already cached.
@@ -1365,6 +1366,15 @@ function _showNickMenu(x, y, coneEntry, onNick) {
   _menuOutsideListeners(menu)
 }
 
+function _showForceLigateMenu(x, y, onForceLigateSelectedEnds) {
+  _dismissMenu()
+  const menu = _menuBase(x, y)
+  menu.appendChild(_menuItem('Force ligate', () => onForceLigateSelectedEnds?.()))
+  document.body.appendChild(menu)
+  _menuEl = menu
+  _menuOutsideListeners(menu)
+}
+
 function _showLoopSkipMenu(x, y, nuc, onLoopSkip) {
   _dismissMenu()
   const menu = _menuBase(x, y)
@@ -1672,10 +1682,10 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
  * @param {HTMLCanvasElement} canvas
  * @param {THREE.Camera} camera
  * @param {object} designRenderer
- * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldAssignSequence?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
+ * @param {{ onNick?: Function, onForceLigateSelectedEnds?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldAssignSequence?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onEditStrandSequence, onHideSelection, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, getDomainEndTable, controls, getHoverEntry, getCamera, isDisabled, isDimensionPicking, getProteinRenderer, getNanoparticleRenderer, getAtomisticRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionStickRenderer, getRegionSurfaceRenderer, onDrillLevel, selectionController } = opts
+  const { onNick, onForceLigateSelectedEnds, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onEditStrandSequence, onHideSelection, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, getDomainEndTable, controls, getHoverEntry, getCamera, isDisabled, isDimensionPicking, getProteinRenderer, getNanoparticleRenderer, getAtomisticRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionStickRenderer, getRegionSurfaceRenderer, onDrillLevel, selectionController } = opts
   if (!selectionController) throw new TypeError('selection manager requires the canonical selection controller')
   _onEditStrandSequence = onEditStrandSequence ?? null
   _onHideSelection = onHideSelection ?? null
@@ -4021,6 +4031,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   canvas.addEventListener('pointerdown', e => {
     if (e.button !== 0) return
+    if (moveRotateSelectionLocked(store.getState())) return
     if (isDisabled?.()) return
 
     // Modifier precedence: Alt > Shift > Ctrl. They never combine meaningfully
@@ -4088,6 +4099,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // a ctrl/lasso drag or while disabled.
     if (e.buttons !== 0) {
       _clearHoverPreview()
+    } else if (moveRotateSelectionLocked(store.getState())) {
+      _clearHoverPreview()
     } else if (!_ctrlDownPos && !_inLassoMode && !isDisabled?.()) {
       _updateHoverPreview(e.clientX, e.clientY)
     }
@@ -4116,6 +4129,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   canvas.addEventListener('pointerup', e => {
     if (controls) controls.enabled = true
     if (e.button !== 0) return
+
+    // Once Move/Rotate has a target, canvas selection is frozen. Clear stale
+    // gesture bookkeeping without consuming right-click/context-menu behavior;
+    // the panel's Clear selection action explicitly re-arms picking.
+    if (moveRotateSelectionLocked(store.getState())) {
+      _downPos = _ctrlDownPos = _altDownPos = _shiftDownPos = null
+      _clearHoverPreview()
+      return
+    }
 
     // Lasso finalize
     if (_inLassoMode) {
@@ -4606,6 +4628,19 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     // Whether the frontmost hit is a bead (vs a terminal cone sitting behind it).
     const _beadFrontmost = hitBead && (!coneHit || beadHit.distance <= coneHit.distance)
+
+    // A valid canonical End pair owns this context click when the pointer is on
+    // either selected endpoint.  Check both a frontmost bead and a cone's two
+    // nucleotides so the action is reliable across representation/overlap cases.
+    const _selectedEnds = selectedEndRefs(store.getState()).map(_entryForEndRef).filter(Boolean)
+    const _clickedSelectedEnd = _beadFrontmost
+      ? selectedEndsIncludeNuc(_selectedEnds, hitBead?.nuc)
+      : selectedEndsIncludeNuc(_selectedEnds, hitCone?.fromNuc) ||
+        selectedEndsIncludeNuc(_selectedEnds, hitCone?.toNuc)
+    if (onForceLigateSelectedEnds && selectedEndLigationArgs(_selectedEnds) && _clickedSelectedEnd) {
+      _showForceLigateMenu(e.clientX, e.clientY, onForceLigateSelectedEnds)
+      return
+    }
 
     // Multi-selection right-click — dispatch to the appropriate menu.
     if (_multiLoopSkipEntries.length > 0) {

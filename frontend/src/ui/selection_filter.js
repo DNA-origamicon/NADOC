@@ -26,6 +26,7 @@
 // preserve store-subscription order.
 
 import { BTN_LEVEL, LEVEL_BTN as LEVEL_BTN_V2, normalizeLevel, toggleLevel } from '../scene/selection_level.js'
+import { moveRotateSelectionLocked } from '../scene/selection_model.js'
 
 // The five dataKeys that act as selectionLevel buttons.
 const V2_LEVEL_KEYS = new Set(Object.keys(BTN_LEVEL))   // clust/strand/line/ends/xover
@@ -235,8 +236,8 @@ export function initSelectionFilter({ store, getSelectionManager }) {
       if (!btn) continue
 
       btn.addEventListener('click', () => {
-        const { deformToolActive, translateRotateActive } = store.getState()
-        if (deformToolActive || translateRotateActive) return
+        const state = store.getState()
+        if (state.deformToolActive || moveRotateSelectionLocked(state)) return
 
         // "default" is the no-level row (the drill ladder). It has no BTN_LEVEL
         // entry — `default` is the absence of an engaged level — so it is set
@@ -285,8 +286,8 @@ export function initSelectionFilter({ store, getSelectionManager }) {
     // Trigger opens/closes; outside-click and Escape close. Escape is NOT swallowed —
     // keyboard_shortcuts.js also uses it to drop back to the default level.
     $trigger()?.addEventListener('click', () => {
-      const { deformToolActive, translateRotateActive } = store.getState()
-      if (deformToolActive || translateRotateActive) return
+      const state = store.getState()
+      if (state.deformToolActive || moveRotateSelectionLocked(state)) return
       _menuOpen ? closeMenu() : openMenu()
     })
     document.addEventListener('pointerdown', e => {
@@ -299,13 +300,26 @@ export function initSelectionFilter({ store, getSelectionManager }) {
 
     refreshTrigger()
 
-    // Lock the selectable filter while a tool is active
-    store.subscribe((newState, prevState) => {
-      if (newState.deformToolActive === prevState.deformToolActive &&
-          newState.translateRotateActive === prevState.translateRotateActive) return
-      const locked = !!(newState.deformToolActive || newState.translateRotateActive)
+    const syncLocked = state => {
+      const locked = !!state.deformToolActive || moveRotateSelectionLocked(state)
       _selectFilter?.classList.toggle('filter-inactive', locked)
+      $trigger()?.setAttribute('aria-disabled', String(locked))
       if (locked) closeMenu()
+    }
+    syncLocked(store.getState())
+
+    // Move/Rotate leaves the picker live while armed empty, then freezes its
+    // selection policy as soon as the first target populates the tool.
+    store.subscribe((newState, prevState) => {
+      if (newState.deformToolActive === prevState.deformToolActive) return
+      syncLocked(newState)
+    })
+    store.subscribe((newState, prevState) => {
+      if (newState.translateRotateActive === prevState.translateRotateActive &&
+          newState.selection === prevState.selection &&
+          newState.assemblyActive === prevState.assemblyActive &&
+          newState.activeInstanceId === prevState.activeInstanceId) return
+      syncLocked(newState)
     })
   }
 

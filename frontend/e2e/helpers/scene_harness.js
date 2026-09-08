@@ -246,6 +246,14 @@ async function _verifiedEndPixel(page, target) {
   }, { t: target })
 }
 
+/** Right-click a pixel whose real frontmost bead is the requested endpoint. */
+export async function rightClickVerifiedEnd(page, target) {
+  const point = await _verifiedEndPixel(page, target)
+  expect(point, `frontmost raycast pixel for selected end ${target.strand_id}`).not.toBeNull()
+  await page.mouse.click(point.x, point.y, { button: 'right' })
+  return point
+}
+
 /**
  * The exact bug scenario: at End level, PLAIN-click one end (→ single selection),
  * then CTRL-click a different-strand opposite-polarity end. Correct behavior folds

@@ -702,7 +702,7 @@ export function initTranslateRotateTool(deps) {
     document.getElementById('mode-indicator').textContent =
       `MOVE/ROTATE (${groupIds.length} clusters) — Tab: move/rotate · Esc: cancel`
     _moveRotatePanel.setAssemblyCtx(null)
-    _moveRotatePanel.setSessionMode?.('cluster')
+    _moveRotatePanel.setSessionMode?.('cluster-group')
     if (_mrPivotSel) _mrPivotSel.disabled = true       // pivot is the combined centroid
     _mrRefreshCurrentSelection?.()
     _mrSetPivotOptions([])

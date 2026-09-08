@@ -39,19 +39,20 @@ const _AXIS_VECS = {
 }
 
 /**
- * Compose a relative rotation of `deg` about a WORLD axis onto the current pose.
- * Takes the current XYZ-Euler degrees, world-premultiplies a `deg`-about-axis
- * increment (matching the world-space cluster gizmo), and returns the resulting
- * XYZ-Euler degrees. `axis` is 'x' | 'y' | 'z'.
+ * Compose a relative rotation of `deg` about a world or object-local axis onto
+ * the current pose. World increments pre-multiply; local increments post-multiply,
+ * matching Three.js TransformControls. `axis` is 'x' | 'y' | 'z'.
  */
-export function stepEulerDeg(eulerDeg, axis, deg) {
+export function stepEulerDeg(eulerDeg, axis, deg, space = 'world') {
   const vec = _AXIS_VECS[axis]
   if (!vec) return [eulerDeg[0], eulerDeg[1], eulerDeg[2]]
   const toRad = d => d * (Math.PI / 180)
   const qCur = new THREE.Quaternion().setFromEuler(
     new THREE.Euler(toRad(eulerDeg[0]), toRad(eulerDeg[1]), toRad(eulerDeg[2]), 'XYZ'))
   const qStep = new THREE.Quaternion().setFromAxisAngle(vec, toRad(deg))
-  const qNew = qStep.multiply(qCur) // world-space (pre-multiply)
+  const qNew = space === 'local'
+    ? qCur.multiply(qStep)           // object-local (post-multiply)
+    : qStep.multiply(qCur)           // world-space (pre-multiply)
   return quatToEulerDeg([qNew.x, qNew.y, qNew.z, qNew.w])
 }
 

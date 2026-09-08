@@ -39,8 +39,9 @@ import { registerShortcut, dispatchKeyEvent } from '../input/shortcuts.js'
 import { showToast } from './toast.js'
 import { nextTabLevel, previousTabLevel } from '../scene/selection_level.js'
 import { nearestWorkspaceAxis, signedAlong } from '../scene/axis_snap.js'
-import { canonicalSelection } from '../scene/selection_model.js'
+import { canonicalSelection, moveRotateSelectionLocked } from '../scene/selection_model.js'
 import { parseBaseKey } from '../scene/base_ref.js'
+import { forceLigateSelectedEnds } from '../scene/force_ligation.js'
 
 export function initKeyboardShortcuts(deps) {
   const {
@@ -306,7 +307,7 @@ export function initKeyboardShortcuts(deps) {
     description: 'Cycle selectable forward',
     blockedInInput: true,
     canvasOnly: true,
-    blockedWhen: () => isTranslateRotateActive() || isProteinMoveActive?.(),
+    blockedWhen: () => moveRotateSelectionLocked(store.getState()) || isProteinMoveActive?.(),
     handler(e) {
       e.preventDefault()
       cycleSelectionLevel(1)
@@ -318,7 +319,7 @@ export function initKeyboardShortcuts(deps) {
     description: 'Cycle selectable backward',
     blockedInInput: true,
     canvasOnly: true,
-    blockedWhen: () => isTranslateRotateActive() || isProteinMoveActive?.(),
+    blockedWhen: () => moveRotateSelectionLocked(store.getState()) || isProteinMoveActive?.(),
     handler(e) {
       e.preventDefault()
       cycleSelectionLevel(-1)
@@ -355,6 +356,16 @@ export function initKeyboardShortcuts(deps) {
       handler(e) { e.preventDefault(); document.querySelector(selector)?.click() },
     })
   }
+
+  registerShortcut({
+    key: 'i', ctrl: false, shift: false, alt: false,
+    description: 'Force ligate selected 5′ and 3′ ends',
+    blockedInInput: true, noRepeat: true,
+    async handler(e) {
+      e.preventDefault()
+      await forceLigateSelectedEnds({ store, selectionManager, api })
+    },
+  })
 
   registerShortcut({
     key: 'd', ctrl: false, shift: true,

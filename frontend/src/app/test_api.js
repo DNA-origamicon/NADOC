@@ -8,6 +8,7 @@ export function installTestApi({
   store,
   visibilityController,
   designRenderer,
+  unfoldView,
   _setRepresentation,
   controls,
   camera,
@@ -127,6 +128,9 @@ export function installTestApi({
       return response
     },
     store,
+    /** Exact live CG mesh inventory/rebuild state (not backend topology). */
+    getRenderedDesignAudit: () => designRenderer.debugRenderedAudit?.() ?? null,
+    getRenderedCrossoverArcCount: () => unfoldView?.getArcEntries?.().length ?? 0,
     multiOverlayDiagnostics: () => multiOverlay?.diagnostics?.() ?? [],
     multiOverlayRenderOrder: () => multiOverlay?.renderOrder?.() ?? [],
     /** Final-frame color census: catches colored instance buffers that nevertheless

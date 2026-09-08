@@ -29,6 +29,7 @@ const DOM = {
   'mr-rz-dec':              'button',
   'mr-rz-inc':              'button',
   'mr-snap-45':             'input',
+  'mr-frame-sel':           'select',
   'mr-reset-btn':           'button',
   'mr-apply-btn':           'button',
 }
@@ -57,6 +58,21 @@ describe('session-mode UX', () => {
     expect(els['mr-pivot-sel'].disabled).toBe(false)
     expect(els['mr-apply-btn'].textContent).toBe('Apply')
   })
+
+  it('uses global axes for a cluster group and restores the chosen local frame for one cluster', () => {
+    const els = mountPanelDom()
+    const deps = makeDeps()
+    const panel = initMoveRotatePanel(deps)
+    els['mr-frame-sel'].value = 'local'
+    panel.setSessionMode('cluster-group')
+    expect(els['mr-frame-sel'].disabled).toBe(true)
+    expect(deps.clusterGizmo.setSpace).toHaveBeenLastCalledWith('world')
+    expect(els['mr-session-hint'].textContent).toContain('global axes')
+
+    panel.setSessionMode('cluster')
+    expect(els['mr-frame-sel'].disabled).toBe(false)
+    expect(deps.clusterGizmo.setSpace).toHaveBeenLastCalledWith('local')
+  })
 })
 
 function mountPanelDom() {
@@ -64,6 +80,8 @@ function mountPanelDom() {
   // The pivot select ships with a default "centroid" option (index.html); the
   // setPivotOptions loop preserves option[0] and clears the rest.
   els['mr-pivot-sel'].appendChild(new Option('Centroid', 'centroid'))
+  els['mr-frame-sel'].appendChild(new Option('Global', 'world'))
+  els['mr-frame-sel'].appendChild(new Option('Local', 'local'))
   return els
 }
 
@@ -75,9 +93,9 @@ function makeDeps(initialState = {}) {
     clusterGizmo: {
       isActive: vi.fn(() => true), getActiveJoint: vi.fn(() => ({ id: 'j1' })),
       setJointRotation: vi.fn(), setTransform: vi.fn(), setConstraint: vi.fn(), attach: vi.fn(),
-      clearPendingTransform: vi.fn(), setRotationSnap: vi.fn(),
+      clearPendingTransform: vi.fn(), setRotationSnap: vi.fn(), setSpace: vi.fn(),
     },
-    instanceGizmo: { setMatrix: vi.fn() },
+    instanceGizmo: { setMatrix: vi.fn(), setSpace: vi.fn() },
     flexRelax: {
       hasGate: vi.fn(() => false),
       hasTetherOption: vi.fn(() => false),
@@ -89,6 +107,7 @@ function makeDeps(initialState = {}) {
     applyAssemblyPrimaryLive: vi.fn(),
     queueAssemblyPrimaryCommit: vi.fn(),
     setClusterRotationPoint: vi.fn(() => Promise.resolve()),
+    clearSelection: vi.fn(),
   }
 }
 
@@ -155,12 +174,15 @@ describe('initMoveRotatePanel — view setters', () => {
     expect(els['mr-ja'].value).toBe('42.4')
   })
 
-  it('setCurrentSelection renders a scrollable read-only list or empty state', () => {
+  it('setCurrentSelection renders the target list with an explicit clear action', () => {
     const els = mountPanelDom()
-    const api = initMoveRotatePanel(makeDeps())
+    const deps = makeDeps({ selection: { items: [{ kind: 'base', key: 'h:1:F' }] } })
+    const api = initMoveRotatePanel(deps)
     api.setCurrentSelection(['Base · h:1:F', 'Strand · s1'])
-    expect([...els['mr-current-selection'].children].map(e => e.textContent))
+    expect([...els['mr-current-selection'].querySelectorAll('.mr-selection-item')].map(e => e.textContent))
       .toEqual(['Base · h:1:F', 'Strand · s1'])
+    els['mr-current-selection'].querySelector('.mr-selection-clear').click()
+    expect(deps.clearSelection).toHaveBeenCalledOnce()
     api.setCurrentSelection([])
     expect(els['mr-current-selection'].textContent).toBe('Nothing selected')
   })
@@ -276,6 +298,23 @@ describe('initMoveRotatePanel — 45° step buttons / reset / snap', () => {
     expect(parseFloat(els['mr-rx'].value)).toBeCloseTo(90)
   })
 
+  it('step buttons rotate about the selected local frame', () => {
+    const els = mountPanelDom()
+    const deps = makeDeps({ assemblyActive: false })
+    initMoveRotatePanel(deps)
+    els['mr-tx'].value = '0'; els['mr-ty'].value = '0'; els['mr-tz'].value = '0'
+    els['mr-rx'].value = '30'; els['mr-ry'].value = '20'; els['mr-rz'].value = '10'
+    els['mr-frame-sel'].value = 'local'
+    els['mr-rz-inc'].click()
+
+    const [, actual] = deps.clusterGizmo.setTransform.mock.calls.at(-1)
+    const qCur = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+      THREE.MathUtils.degToRad(30), THREE.MathUtils.degToRad(20), THREE.MathUtils.degToRad(10), 'XYZ'))
+    const qStep = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 4)
+    const expected = qCur.multiply(qStep)
+    expect(new THREE.Quaternion(...actual).angleTo(expected)).toBeCloseTo(0)
+  })
+
   // Reset ("restore saved positions") is handled in translate_rotate_tool.js (a lifecycle action:
   // discard the in-progress move + revert geometry + re-attach at the committed pose), not the panel.
   // Its behavior is pinned in translate_rotate_tool.test.js.
@@ -291,6 +330,22 @@ describe('initMoveRotatePanel — 45° step buttons / reset / snap', () => {
     els['mr-snap-45'].checked = false
     els['mr-snap-45'].dispatchEvent(new Event('change'))
     expect(deps.clusterGizmo.setRotationSnap).toHaveBeenLastCalledWith(null)
+  })
+
+  it('frame selector switches both design and assembly gizmos between global and local axes', () => {
+    const els = mountPanelDom()
+    const deps = makeDeps()
+    const api = initMoveRotatePanel(deps)
+    els['mr-frame-sel'].value = 'local'
+    els['mr-frame-sel'].dispatchEvent(new Event('change'))
+    expect(deps.clusterGizmo.setSpace).toHaveBeenLastCalledWith('local')
+    expect(deps.instanceGizmo.setSpace).toHaveBeenLastCalledWith('local')
+    expect(api.getFrameSpace()).toBe('local')
+
+    els['mr-frame-sel'].value = 'world'
+    els['mr-frame-sel'].dispatchEvent(new Event('change'))
+    expect(deps.clusterGizmo.setSpace).toHaveBeenLastCalledWith('world')
+    expect(deps.instanceGizmo.setSpace).toHaveBeenLastCalledWith('world')
   })
 })
 

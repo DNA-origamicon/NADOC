@@ -26,7 +26,8 @@ export function moveRotateSelectionLabels(state) {
 
 /**
  * Move/Rotate right-sidebar panel — numeric transform inputs (tx/ty/tz, rx/ry/rz,
- * joint-angle) + pivot dropdown and a read-only current-selection box. Drives the
+ * joint-angle) + pivot dropdown and a current-selection box with an explicit clear
+ * action. Drives the
  * design cluster gizmo (clusterGizmo) and the assembly instance gizmo
  * (instanceGizmo) depending on store.assemblyActive.
  *
@@ -47,12 +48,13 @@ export function moveRotateSelectionLabels(state) {
  * @param deps.flexRelax                       scene/flex_relax.js factory API
  * @param deps.applyAssemblyPrimaryLive        from scene/assembly_transform.js
  * @param deps.queueAssemblyPrimaryCommit      from scene/assembly_transform.js
+ * @param deps.clearSelection                  clears the canonical tool selection
  */
 export function initMoveRotatePanel({
   store, scene, camera, canvas,
   clusterGizmo, instanceGizmo, flexRelax,
   applyAssemblyPrimaryLive, queueAssemblyPrimaryCommit,
-  setClusterRotationPoint,
+  setClusterRotationPoint, clearSelection,
 }) {
   const _mrPanel         = document.getElementById('move-rotate-panel')
   const _mrSelectionBox  = document.getElementById('mr-current-selection')
@@ -68,6 +70,7 @@ export function initMoveRotatePanel({
   const _mrRotSection    = document.getElementById('mr-rotation-section')
   const _mrJaSection     = document.getElementById('mr-joint-angle-section')
   const _mrSnapChk       = document.getElementById('mr-snap-45')
+  const _mrFrameSel      = document.getElementById('mr-frame-sel')
   let   _mrPivotIsJoint  = false
   let   _mrAssemblyCtx   = null
   let   _proteinController = null
@@ -94,6 +97,7 @@ export function initMoveRotatePanel({
 
   function _mrSetSessionMode(sessionMode = 'cluster') {
     const gizmoOnly = sessionMode === 'nucleotide' || sessionMode === 'waiting'
+    const frameUnavailable = gizmoOnly || sessionMode === 'protein' || sessionMode === 'cluster-group'
     const fieldIds = ['mr-tx', 'mr-ty', 'mr-tz', 'mr-rx', 'mr-ry', 'mr-rz', 'mr-ja',
       'mr-rx-dec', 'mr-rx-inc', 'mr-ry-dec', 'mr-ry-inc', 'mr-rz-dec', 'mr-rz-inc',
       'mr-snap-45', 'mr-pivot-sel']
@@ -105,11 +109,19 @@ export function initMoveRotatePanel({
     if (reset) reset.disabled = sessionMode === 'waiting'
     const apply = document.getElementById('mr-apply-btn')
     if (apply) apply.textContent = sessionMode === 'waiting' ? 'Done' : 'Apply'
+    if (_mrFrameSel) _mrFrameSel.disabled = frameUnavailable
+    // A multi-cluster selection has no single local frame. Use global axes for
+    // that attachment, then restore the selected preference on the next
+    // single-cluster or assembly session.
+    if (sessionMode === 'cluster-group') clusterGizmo.setSpace?.('world')
+    else if (sessionMode === 'cluster' || sessionMode === 'assembly') _mrApplyFrame()
     if (_mrSessionHint) {
       _mrSessionHint.textContent = sessionMode === 'waiting'
         ? 'Select a cluster or nucleotide to attach the gizmo.'
         : sessionMode === 'nucleotide'
           ? 'Drag the gizmo. Press Tab to switch move/rotate.'
+          : sessionMode === 'cluster-group'
+            ? 'Drag the gizmo as one rigid group. Multi-selection uses global axes.'
           : sessionMode === 'protein'
             ? 'Translate or rotate the protein about its centroid. Tethers remain constrained live.'
           : 'Drag the gizmo or enter an exact transform below.'
@@ -226,6 +238,16 @@ export function initMoveRotatePanel({
       item.textContent = label
       _mrSelectionBox.appendChild(item)
     }
+    // Assembly/protein labels may be projected into this box without a canonical
+    // design selection. Only show the re-arm action when it can actually clear one.
+    if (canonicalSelection(store.getState()).items.length) {
+      const clear = document.createElement('button')
+      clear.type = 'button'
+      clear.className = 'mr-selection-clear'
+      clear.textContent = 'Clear selection'
+      clear.addEventListener('click', () => clearSelection?.())
+      _mrSelectionBox.appendChild(clear)
+    }
   }
 
   function _mrCommitInputs() {
@@ -286,7 +308,7 @@ export function initMoveRotatePanel({
     _mrJaInp.addEventListener('change', _mrCommitInputs)
   }
 
-  // ── Relative 45° rotation buttons (per world axis) ──────────────────────────
+  // ── Relative 45° rotation buttons (per selected frame axis) ─────────────────
   // Compose a `deg`-about-axis increment onto the current pose, then commit the
   // resulting absolute Euler (see rotation_math.stepEulerDeg). Mirrors the overhang
   // orientation panel's step buttons.
@@ -296,7 +318,8 @@ export function initMoveRotatePanel({
       parseFloat(_mrRyInp?.value) || 0,
       parseFloat(_mrRzInp?.value) || 0,
     ]
-    const [rx, ry, rz] = stepEulerDeg(cur, axis, deg)
+    const space = _mrFrameSel?.value === 'local' ? 'local' : 'world'
+    const [rx, ry, rz] = stepEulerDeg(cur, axis, deg, space)
     if (_mrRxInp) _mrRxInp.value = rx.toFixed(3)
     if (_mrRyInp) _mrRyInp.value = ry.toFixed(3)
     if (_mrRzInp) _mrRzInp.value = rz.toFixed(3)
@@ -318,6 +341,16 @@ export function initMoveRotatePanel({
     _proteinController?.setRotationSnap?.(_mrSnapChk?.checked ? 45 : null)
   }
   _mrSnapChk?.addEventListener('change', _mrApplySnap)
+
+  // ── Global / local gizmo frame ─────────────────────────────────────────────
+  // Transform values remain the same absolute values shown in the fields; this
+  // setting changes the orientation of the interactive arrows and rings only.
+  function _mrApplyFrame() {
+    const space = _mrFrameSel?.value === 'local' ? 'local' : 'world'
+    clusterGizmo.setSpace?.(space)
+    instanceGizmo.setSpace?.(space)
+  }
+  _mrFrameSel?.addEventListener('change', _mrApplyFrame)
 
   // Re-pivot a duplex cluster to a rotation point (overhang root or centroid): the backend
   // sets the pivot + rebases the translation, then we re-attach the gizmo so it rotates
@@ -415,5 +448,7 @@ export function initMoveRotatePanel({
     getPivotIsJoint:              () => _mrPivotIsJoint,
     setProteinController:         controller => { _proteinController = controller },
     getProteinController:         () => _proteinController,
+    getFrameSpace:                () => _mrFrameSel?.value === 'local' ? 'local' : 'world',
+    applyFrame:                   _mrApplyFrame,
   }
 }
