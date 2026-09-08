@@ -1,0 +1,42 @@
+{
+  "schema": "nadoc.photoproduct-response-fit-policy.v1",
+  "version": "1.0.0",
+  "status": "workflow_policy",
+  "policy": "dimensionless-heldout-bounded-ridge-v1",
+  "dataset_weighting": "equal_dataset_rms",
+  "block_weighting": "inverse_squared_training_target_rms",
+  "minimum_target_rms": 1e-12,
+  "ridge_lambdas": [0.0, 1e-08, 1e-06, 0.0001, 0.01, 1.0, 100.0],
+  "coefficient_rules": {
+    "theta^2": {"scale": 50.0, "lower_bound": 0.0, "upper_bound": 300.0},
+    "theta": {"scale": 200.0, "lower_bound": -1200.0, "upper_bound": 0.0},
+    "r13^2": {"scale": 10.0, "lower_bound": 0.0, "upper_bound": 100.0},
+    "r13": {"scale": 50.0, "lower_bound": -500.0, "upper_bound": 0.0},
+    "cosine_dihedral": {"scale": 2.0, "lower_bound": -20.0, "upper_bound": 20.0},
+    "wrapped_delta^2": {"scale": 20.0, "lower_bound": 0.0, "upper_bound": 200.0},
+    "wrapped_delta": {"scale": 50.0, "lower_bound": -500.0, "upper_bound": 500.0}
+  },
+  "candidate_selection": {
+    "score": "validation_gradient_nrmse_squared_plus_validation_hessian_nrmse_squared",
+    "simplicity_window_fraction": 0.05,
+    "tie_breakers": [
+      "fewest Fourier periodicities",
+      "fewest active coefficient bounds",
+      "largest ridge lambda",
+      "smallest scaled coefficient L2 norm"
+    ],
+    "requirements": [
+      "the CHARMM algebraic transform has positive angle and improper curvature",
+      "all equilibrium values are finite and in their declared physical domains",
+      "the selected training design is full rank",
+      "validation data are never used to fit coefficients",
+      "selection creates a smoke-test candidate only and cannot release parameters"
+    ]
+  },
+  "references": [
+    {"id": "ForceBalance-2022", "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9649520/"},
+    {"id": "OpenFF-Sage-2023", "url": "https://doi.org/10.1021/acs.jctc.3c00039"},
+    {"id": "CGenFF-2010", "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2888302/"}
+  ],
+  "release_boundary": "This policy fixes objective normalization, bounds, regularization, and model-selection rules before held-out errors are evaluated. It produces candidate coefficients only; MM geometry, energy, topology, and NAMD validation remain mandatory."
+}

@@ -1,0 +1,41 @@
+{
+  "schema": "nadoc.photoproduct-reference-forcefields.v1",
+  "target": "CHARMM36 additive nucleic acid with explicitly fitted compatible lesion terms",
+  "base_forcefield": {
+    "release": "CHARMM36 February 2026",
+    "topology": {"path": "top_all36_na.rtf", "sha256": "57fed4acc6bc755f2f422b136a385f0c1b1b0a9958e79ea6c6e392b90227ee49"},
+    "parameters": {"path": "par_all36_na.prm", "sha256": "1ada57015c112529aa985ee60163f11a94e991a334cc9928e030d2236899df05"}
+  },
+  "cgenff_reference_library": {
+    "version": "5.0",
+    "release": "CHARMM36 February 2026",
+    "archive_url": "https://mackerell.umaryland.edu/download.php?filename=CHARMM_ff_params_files/toppar_c36_feb26.tgz",
+    "archive_sha256": "7d4d21ebdb216a48f600fadee862dc77d369a10d5753150635f35e09c3209e08",
+    "topology_sha256": "18b0f76e4d9fba1918e321327984850b1bb216403a2fe21e251d038f84b48069",
+    "parameters_sha256": "32e4d2fee31b5170384d1f9bb8e0064adf72b25408e6eba2d64fd702e15df183",
+    "relevant_existing_models": [
+      {"residue": "1MTH", "role": "1-methyl-thymine charge/bonded reference"},
+      {"residue": "TTHY", "role": "tetrahydrofuran-thymine glycosidic boundary reference"},
+      {"residue": "BMDU", "role": "5-methyldihydrouracil reference for the nonaromatic, C5-C6-saturated thymine ring environment; charges and bonded terms are transfer candidates only"},
+      {"residue": "BH2U", "role": "dihydrouracil reference separating saturation effects from the C5 methyl substituent; transfer candidate only"},
+      {"residue": "CBU", "role": "cyclobutane ring-strain bond, angle, torsion, and CG3C41 nonbonded reference; the unsubstituted hydrocarbon is not a lesion model"},
+      {"atom_type": "CG3C41", "role": "cyclobutyl-carbon initial nonbonded/bonded reference only"}
+    ],
+    "authority": "initial atom-type, Lennard-Jones, and transferable-term candidates requiring lesion-specific tests",
+    "not_authority": [
+      "TT-CPD product charges",
+      "TT-CPD crosslink terms",
+      "TT-CPD stereochemical impropers",
+      "automatic transfer of BMDU or CBU charges and terms to the fused TT-CPD ring",
+      "DNA-lesion validation"
+    ],
+    "access": {
+      "archive_requires_account": false,
+      "archive_requires_sudo": false,
+      "cgenff_program_requires_separate_license": true,
+      "paramchem_service_requires_account": true
+    },
+    "source_page": "https://mackerell.umaryland.edu/charmm_ff.shtml"
+  },
+  "mixing_rule": "Do not replace the CHARMM36 nucleic-acid model with CGenFF. Use compatible CGenFF terms only as documented candidates at the chemically modified site, then fit and validate the lesion-specific package."
+}

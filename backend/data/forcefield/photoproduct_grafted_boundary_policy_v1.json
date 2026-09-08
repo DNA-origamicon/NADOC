@@ -1,0 +1,47 @@
+{
+  "schema": "nadoc.photoproduct-grafted-boundary-policy.v1",
+  "version": "1.0.0",
+  "status": "workflow_policy",
+  "target_forcefield": "CHARMM36 additive plus compatible CGenFF terms",
+  "gate_id": "grafted_dna_boundary_model",
+  "gate": {
+    "policy": "proper-rotation-product-graft-and-replicates-v1",
+    "requirements": [
+      "the product minimum and complete d(TpT) reference are hash-pinned",
+      "one rigid proper rotation and translation is applied to the complete two-base product with no reflection or endpoint swap",
+      "all sugar and phosphate coordinates remain identical to the selected reference",
+      "the complete product-base internal distance matrix remains identical to the audited QM minimum",
+      "the SDF, XYZ, and stable atom map encode exactly 63 atoms, formal charge -1, both glycosidic bonds, the phosphodiester, terminal caps, and the selected product crosslinks",
+      "all four product signed-volume stereocenters retain their declared sign",
+      "glycosidic and product-crosslink bond lengths remain within catastrophic-input bounds",
+      "nonbonded heavy atoms have no severe covalent-radius overlap",
+      "two independently extracted 1N4E sugar/phosphate references agree after product grafting and proper-rotation alignment"
+    ],
+    "anchor_rmsd_angstrom": {
+      "maximum": 0.6,
+      "role": "Rigid-graft compatibility screen, not an equilibrium-geometry target."
+    },
+    "glycosidic_bond_length_angstrom": {
+      "minimum": 1.25,
+      "maximum": 1.7,
+      "reference": "Pinned CHARMM36 CN7B-NN2B equilibrium distance is 1.458 angstrom; the wider interval is only a catastrophic QM-input screen."
+    },
+    "product_crosslink_distance_angstrom": {
+      "minimum": 1.3,
+      "maximum": 1.7
+    },
+    "minimum_nonbonded_covalent_radius_ratio": {
+      "minimum": 0.7,
+      "role": "PoseBusters-style severe-overlap screen excluding bonded and 1-3 pairs."
+    },
+    "replicate_all_heavy_rmsd_angstrom": {
+      "maximum": 0.5
+    },
+    "replicate_maximum_heavy_displacement_angstrom": {
+      "maximum": 0.75
+    }
+  },
+  "scope": "QM input authorization only",
+  "simulation_ready": false,
+  "gate_effect": "none"
+}

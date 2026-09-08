@@ -1,0 +1,121 @@
+{
+  "schema": "nadoc.photoproduct-qm-protocol.v1",
+  "version": "1.7.0",
+  "target_forcefield": "CHARMM36 additive plus compatible CGenFF terms",
+  "engine": {
+    "name": "Psi4",
+    "version": "1.11"
+  },
+  "jobs": {
+    "geometry_optimization": {
+      "method": "mp2",
+      "basis": "6-31G(d)",
+      "scf_type": "df",
+      "mp2_type": "df",
+      "freeze_core": true,
+      "geometry_convergence": "gau_tight",
+      "optimizer_settings": {
+        "intrafrag_step_limit": 0.1,
+        "intrafrag_step_limit_max": 0.25
+      }
+    },
+    "frequency": {
+      "method": "mp2",
+      "basis": "6-31G(d)",
+      "scf_type": "df",
+      "mp2_type": "df",
+      "freeze_core": true
+    },
+    "fixed_geometry_hessian": {
+      "method": "mp2",
+      "basis": "6-31G(d)",
+      "scf_type": "df",
+      "mp2_type": "df",
+      "freeze_core": true,
+      "geometry": "stereochemistry-preserving off-equilibrium conformer accepted by the registered evidence policy",
+      "required_derivatives": ["gradient", "full_cartesian_hessian"]
+    },
+    "electrostatic_properties": {
+      "method": "hf",
+      "basis": "6-31G(d)",
+      "properties": ["DIPOLE"],
+      "dipole_units": "atomic_unit_e_bohr",
+      "geometry": "passed MP2/6-31G(d) optimized minimum"
+    },
+    "electrostatic_potential": {
+      "method": "hf",
+      "basis": "6-31G(d)",
+      "scf_type": "df",
+      "properties": ["GRID_ESP", "DIPOLE"],
+      "dipole_units": "atomic_unit_e_bohr",
+      "grid_units": "angstrom",
+      "potential_units": "atomic_unit",
+      "surface_radius_scales": [1.4, 1.6, 1.8, 2.0],
+      "directions_per_atom_per_surface": 50,
+      "geometry": "passed MP2/6-31G(d) optimized minimum"
+    },
+    "water_interaction": {
+      "method": "hf",
+      "basis": "6-31G(d)",
+      "scf_type": "df",
+      "reference_scf_type": "direct",
+      "water_geometry": "CHARMM-TIP3P",
+      "neutral_energy_scale": 1.16,
+      "distance_offset_angstrom": -0.2,
+      "counterpoise_corrected": false,
+      "df_calibration": {
+        "minimum_sites": 3,
+        "maximum_absolute_interaction_error_kcal_mol": 0.02
+      }
+    },
+    "torsion_scan": {
+      "method": "mp2",
+      "basis": "6-31G(d)",
+      "scan_type": "relaxed-constrained",
+      "minimum_step_degrees": 15
+    },
+    "conformer_single_point": {
+      "method": "mp2",
+      "basis": "cc-pVTZ",
+      "scf_type": "df",
+      "mp2_type": "df",
+      "freeze_core": true
+    }
+  },
+  "rules": {
+    "charged_model_diffuse_basis": "6-31+G(d)",
+    "geometry_optimizer": "For large charged d(TpT) transfer models, cap OptKing intrafragment steps to prevent trust-radius escalation after a nearly converged cycle. Restarts must preserve atom order, graph identity, and target stereochemistry and must end in an unrestricted gau_tight minimum.",
+    "water_interaction_charge_scaling": "Scale neutral interaction energies only; do not scale charged compounds.",
+    "water_interaction_scf": "Use density-fitted HF for production distance curves only after representative, identical-geometry comparisons against DIRECT HF pass the declared tolerance; do not use disk-integral PK for these model compounds.",
+    "electrostatic_potential": "Use a deterministic multi-shell Bondi-radius grid with points buried inside another atom removed; retain the grid and raw atomic-unit potentials for the charge objective. Record the molecular dipole from the same wavefunction for an independent whole-molecule charge-fit observable.",
+    "fixed_geometry_hessian": "The input geometry must come from a hash-pinned coupled-conformer plan accepted by the registered evidence policy. Preserve atom order and stereochemistry; never optimize, reflect, or silently replace the geometry. Record both the analytic gradient and the full Cartesian Hessian.",
+    "release_effect": "Generated or completed QM jobs do not pass a registry gate until parsed results and validation reports are attached and reviewed."
+  },
+  "references": [
+    {
+      "id": "Psi4-OptKing-Step-Limit",
+      "url": "https://forum.psicode.org/t/maximum-dynamic-level-reached/1700",
+      "authority": "OptKing recovery guidance for excessive trust-radius steps"
+    },
+    {
+      "id": "CGenFF-2010",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2888302/",
+      "authority": "additive-CHARMM-target-data-protocol"
+    },
+    {
+      "id": "ffTK-2013",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3874408/",
+      "authority": "reproducible-QM-and-fitting-workflow"
+    },
+    {
+      "id": "CGenFF-5.0-2025",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11938330/",
+      "authority": "ESP as a charge-optimization objective component"
+    },
+    {
+      "id": "Psi4-GRID-ESP",
+      "url": "https://psicode.org/psi4manual/master/oeprop.html",
+      "authority": "electrostatic-potential grid API, molecular properties, and units"
+    }
+  ]
+}

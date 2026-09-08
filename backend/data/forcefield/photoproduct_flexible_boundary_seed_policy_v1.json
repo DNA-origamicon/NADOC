@@ -1,0 +1,42 @@
+{
+  "schema": "nadoc.photoproduct-flexible-boundary-seed-policy.v1",
+  "version": "1.0.0",
+  "status": "workflow_policy",
+  "gate_id": "flexibly_relaxed_dna_boundary_seed",
+  "policy": "fixed-product-core-uff-boundary-relaxation-v1",
+  "construction": "UFF relaxation of sugar, phosphate, terminal caps, and glycosidic attachments while every atom of the audited product-base core is fixed",
+  "requirements": [
+    "the input rigid graft, chemical definition, product minimum, stable atom map, and all outputs are hash-pinned",
+    "the exact 63-atom, charge -1 product graph is retained",
+    "the complete audited product-base core is fixed coordinate-for-coordinate, so no reflection, endpoint exchange, or product-core deformation is possible",
+    "UFF reports parameters for every atom and converges; UFF is used only to repair a QM starting geometry and is not a parameter or energy authority",
+    "both glycosidic bonds and both product crosslinks lie within catastrophic-input bounds",
+    "all covalent bonds and nonbonded heavy-atom contacts pass broad covalent-radius overlap screens",
+    "the declared four-center product chirality is retained"
+  ],
+  "thresholds": {
+    "fixed_product_core_maximum_displacement_angstrom": 1e-08,
+    "glycosidic_bond_length_angstrom": {
+      "minimum": 1.3,
+      "maximum": 1.7
+    },
+    "product_crosslink_distance_angstrom": {
+      "minimum": 1.3,
+      "maximum": 1.7
+    },
+    "covalent_bond_radius_ratio": {
+      "minimum": 0.7,
+      "maximum": 1.35
+    },
+    "minimum_nonbonded_covalent_radius_ratio": 0.7
+  },
+  "known_limitations": [
+    "UFF emits a phosphate charge-state warning in RDKit even though every atom receives a UFF type",
+    "the 1N4E d(TpT) sugar/phosphate coordinates are a deterministic boundary seed, not structural or parameter authority for an anti photoproduct",
+    "different boundary seeds may converge to different QM minima and must be compared rather than silently selected",
+    "a completed optimization still requires a frequency calculation and all force-field validation gates"
+  ],
+  "authorizes": "boundary_qm_evidence_generation_only",
+  "simulation_ready": false,
+  "gate_effect": "none"
+}

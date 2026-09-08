@@ -1,0 +1,242 @@
+{
+  "schema": "nadoc.photoproduct-parameter-acceptance.v2",
+  "version": "2.1.0",
+  "status": "workflow_policy",
+  "target_forcefield": "CHARMM36 additive plus compatible CGenFF terms",
+  "visual_review_scope": [
+    "chemical identity",
+    "ordered endpoint atom mapping",
+    "product crosslink connectivity",
+    "stereochemical assignment",
+    "absence of reflection or endpoint exchange",
+    "chemical relevance of proposed coupled conformers",
+    "obvious clashes or broken geometry"
+  ],
+  "visual_review_exclusions": [
+    "partial-charge acceptance",
+    "atom-type acceptance",
+    "bond, angle, dihedral, or improper force-constant acceptance",
+    "Lennard-Jones acceptance",
+    "parameter completeness",
+    "simulation release"
+  ],
+  "automated_qm_input_gates": {
+    "coupled_conformer": {
+      "policy": "proper-rotation-coupled-response-v1",
+      "requirements": [
+        "hash-pinned atom order, elements, molecular graph, and reference minimum",
+        "all four product signed-volume stereocenters retain their declared sign",
+        "alignment uses a proper rotation with no reflection",
+        "each candidate is distinct from the minimum and every other candidate",
+        "both signs of each of the two highest-active-fraction normal modes are retained",
+        "training and validation each contain one sign of every selected mode",
+        "fixed-geometry QM must not optimize the candidate before force/Hessian evaluation"
+      ],
+      "proper_rotation_aligned_rmsd_angstrom": {
+        "minimum": 0.01,
+        "maximum": 0.5,
+        "role": "Reject numerical duplicates and gross distortions; not an equilibrium-geometry target."
+      },
+      "graph_bond_length_ratio_to_qm_minimum": {
+        "minimum": 0.75,
+        "maximum": 1.3,
+        "role": "Catastrophic-input screen for intentionally displaced structures, not a force-field acceptance tolerance."
+      },
+      "minimum_nonbonded_covalent_radius_ratio": {
+        "minimum": 0.7,
+        "role": "PoseBusters-inspired severe internal-overlap screen; bonded and 1-3 pairs are excluded."
+      },
+      "partition_policy": "alternating-mode-sign-v1"
+    },
+    "dna_boundary_model": {
+      "policy": "exact-dtpdt-boundary-and-replicates-v1",
+      "requirements": [
+        "RDKit sanitization succeeds for the explicit Lewis structure",
+        "stable atom map is bijective and matches the XYZ and SDF atom order",
+        "exactly 63 atoms and formal charge -1 for the declared d(TpT) cap model",
+        "both terminal hydroxyl caps, the inter-residue phosphodiester, both glycosidic bonds, and both CPD crosslinks are present",
+        "phosphorus stereochemistry is unspecified for the resonance-equivalent nonbridging oxygens",
+        "all four product signed-volume stereocenters retain their declared sign",
+        "two independent 1N4E copies agree after proper-rotation heavy-atom alignment without reflection"
+      ],
+      "product_crosslink_distance_angstrom": {
+        "minimum": 1.3,
+        "maximum": 1.7
+      },
+      "replicate_all_heavy_rmsd_angstrom": {
+        "maximum": 0.5
+      },
+      "replicate_maximum_heavy_displacement_angstrom": {
+        "maximum": 0.75
+      }
+    }
+  },
+  "hard_failures": [
+    "missing or duplicate stable atom identity",
+    "unexpected atom addition or deletion",
+    "pair charge not conserved within 1e-6 elementary charge",
+    "missing expected product bond or duplicate product bond",
+    "missing required product atom type, charge, bonded term, improper, or parameter",
+    "unexpected stereochemical inversion, reflection, or endpoint exchange",
+    "imaginary vibrational mode at the declared optimized minimum",
+    "non-finite energy or force",
+    "failed psfgen/PSF topology audit",
+    "failed 2 fs explicit-solvent NAMD smoke test"
+  ],
+  "quantitative_targets": {
+    "nonbonded": {
+      "water_interaction_energy_rmse_kcal_mol": {
+        "target": 0.2,
+        "role": "CHARMM target accuracy; evaluate training and held-out probes separately"
+      },
+      "water_interaction_distance_rmse_angstrom": {
+        "target": 0.1,
+        "role": "CHARMM target accuracy after the protocol's -0.2 angstrom QM distance offset"
+      },
+      "dipole_component_sigma_debye": {
+        "target": 0.5,
+        "role": "NADOC provisional objective scale, not a literature universal cutoff"
+      },
+      "esp": {
+        "target": "report training and held-out RMSE and improvement over the initial transferable-charge baseline",
+        "role": "diagnostic until an independently reviewed target-specific cutoff is preregistered"
+      },
+      "charge_constraints": {
+        "pair_charge_tolerance_e": 1e-6,
+        "cap_charge_tolerance_e": 1e-6
+      }
+    },
+    "bonded": {
+      "equilibrium_bond_deviation_angstrom": {
+        "objective_scale": 0.03,
+        "role": "ffTK/CHARMM objective scale"
+      },
+      "equilibrium_angle_deviation_degree": {
+        "objective_scale": 3.0,
+        "role": "ffTK/CHARMM objective scale"
+      },
+      "small_distortion_energy_kcal_mol": {
+        "objective_scale": 1.0,
+        "role": "ffTK/CHARMM objective scale for bond and angle distortions"
+      },
+      "hessian": {
+        "qm_level": "MP2/6-31G(d)",
+        "scale": 0.89,
+        "requirements": [
+          "fit the coupled internal-coordinate response, not isolated force constants",
+          "weight low-frequency product-ring modes explicitly",
+          "demonstrate held-out coupled-conformer performance",
+          "reject non-identifiable parameter bases"
+        ]
+      },
+      "torsions": {
+        "qm_level": "MP2/6-31G(d) relaxed constrained scans",
+        "fit_region_kcal_mol_above_minimum": 12.0,
+        "requirements": [
+          "fit the QM/MM potential-energy-surface difference",
+          "use CHARMM-compatible phases and justified multiplicities",
+          "preserve minima ordering and accessible barriers",
+          "reevaluate after charge or other bonded-term changes",
+          "reserve coupled conformers for validation"
+        ],
+        "validation_targets": {
+          "low_energy_relative_energy_rmse_kcal_mol": 1.0,
+          "low_energy_maximum_error_kcal_mol": 2.0,
+          "optimized_heavy_atom_rmsd_angstrom": 0.1,
+          "torsion_fingerprint_deviation": 0.1,
+          "role": "Preregistered NADOC targets informed by modern force-field benchmarking; failures require model revision, not threshold relaxation."
+        },
+        "universal_numeric_pass_cutoff": null
+      }
+    },
+    "system_validation": {
+      "requirements": [
+        "all explicit-solvent NAMD energies and forces finite",
+        "exact PSF bond/type/charge/improper and reverse-identity audit",
+        "stereochemistry retained through staged minimization and 2 fs dynamics",
+        "no systematic lesion/backbone instability attributable to setup",
+        "compare solution ensembles with experimental observables when available",
+        "paired reactant/product simulations use matched protocols"
+      ],
+      "universal_numeric_pass_cutoff": null
+    }
+  },
+  "literature_correction_sequence": {
+    "status": "preregistered_before_corrected_candidate_fit",
+    "trigger": "candidate-v3 generic cyclobutane transfer diverges from the CPD-specific Ma/van der Vaart comparison and produces an asymmetric C6-C6 trajectory distribution",
+    "required_candidate_variants": [
+      "current candidate baseline retained byte-for-byte",
+      "complete CPD ring-block refit against the existing coupled QM response evidence",
+      "Ma/van der Vaart published-table reconstruction used as a comparison model only when every applied term can be represented without inventing unavailable topology information"
+    ],
+    "ring_block_scope": {
+      "stable_atoms": ["1:C5", "1:C6", "2:C5", "2:C6"],
+      "replace_together": ["four ring bonds", "four internal ring angles", "all ring proper terms", "four ordered stereochemical impropers"],
+      "forbidden": [
+        "repairing only the long C6-C6 bond",
+        "retaining a covered generic ring term outside the refit without a documented sensitivity comparison",
+        "using a crystal or literature equilibrium value as an unoptimized force-field parameter"
+      ]
+    },
+    "mm_vs_qm": {
+      "requirements": [
+        "minimize every training and held-out conformer in the candidate MM model",
+        "compare both crosslinks, both retained C5-C6 bonds, four ring angles, ring puckering, glycosidic bonds, and all stereochemical signed volumes",
+        "compare low-frequency ring modes or an equivalent mass-weighted Hessian projection",
+        "report relative energies without interpreting the neutral N-methyl gas-phase ordering as DNA isomer populations"
+      ],
+      "equilibrium_bond_deviation_angstrom": 0.03,
+      "equilibrium_angle_deviation_degree": 3.0,
+      "optimized_heavy_atom_rmsd_angstrom": 0.1,
+      "stereochemical_sign_retention_fraction": 1.0
+    },
+    "nonbonded_revalidation": {
+      "water_interaction_energy_rmse_kcal_mol": 0.2,
+      "water_interaction_distance_rmse_angstrom": 0.1,
+      "require_held_out_probes": true,
+      "focus_atoms": ["N3", "C5", "C6"],
+      "require_charge_and_pair_charge_audits": true
+    },
+    "namd_candidate_execution": {
+      "gate_effect": "none",
+      "ordinary_mass_only": true,
+      "maximum_timestep_fs": 2.0,
+      "require_unique_variant_id_and_parent_hash": true,
+      "require_real_psfgen_and_namd": true,
+      "require_static_product_vs_reactant_psf_audit": true,
+      "production_registry_bypass_allowed": false
+    },
+    "explicit_solution_validation": {
+      "required_contexts": [
+        "adjacent intrastrand cis-syn TT-CPD duplex",
+        "antiparallel interstrand TT-CPD pair",
+        "matched unmodified reactant controls"
+      ],
+      "solvent": "explicit CHARMM TIP3P",
+      "salt": "recorded physiological monovalent salt; use 0.15 M NaCl for literature comparison unless the experimental construct requires another condition",
+      "minimum_independent_replicates": 3,
+      "minimum_sampling_ns_per_replicate": 250,
+      "observables": [
+        "crosslink and retained-ring bond distributions",
+        "ring pucker populations and transitions",
+        "chirality retention",
+        "Watson-Crick hydrogen-bond occupancy and asymmetric 5-prime/3-prime opening",
+        "local stacking, twist, roll, bend, unwinding, groove widths, and 3-prime backbone BI/BII state",
+        "backbone and glycosidic integrity",
+        "finite energies and absence of systematic setup-driven instability"
+      ]
+    },
+    "family_extension": "Every other ordered TT-CPD form requires its own MM-vs-QM and engine audits. Sharing a parameter block requires a passed atom-mapped equivalence or joint-fit validation; stereochemical labels alone are insufficient."
+  },
+  "decision_rule": "A parameter set is releasable only when every hard gate passes, all preregistered quantitative target and held-out checks pass, and known limitations are recorded. Passing an automated QM-input screen only authorizes evidence generation; it does not release parameters. Visual approval alone never releases parameters.",
+  "references": [
+    {"id": "CGenFF-2010", "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2888302/"},
+    {"id": "ffTK-2013", "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3874408/"},
+    {"id": "CHARMM36-modified-nucleotides-2016", "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4801715/"},
+    {"id": "CHARMM36-DNA-2012", "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3285246/"},
+    {"id": "CGenFF-5-2025", "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11938330/"},
+    {"id": "OpenFF-Sage-2023", "url": "https://doi.org/10.1021/acs.jctc.3c00039"},
+    {"id": "PoseBusters-2024", "url": "https://doi.org/10.1039/D3SC04185A"},
+    {"id": "ForceBalance-2022", "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9649520/"}
+  ]
+}

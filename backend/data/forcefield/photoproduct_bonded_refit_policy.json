@@ -1,0 +1,76 @@
+{
+  "schema": "nadoc.photoproduct-bonded-refit-policy.v1",
+  "version": "1.0.0",
+  "status": "workflow_policy",
+  "product_id": "tt-cpd-cis-syn",
+  "variant_family": "cis-syn-ring-refit-v1",
+  "purpose": "Replace transferable generic cyclobutane terms with one jointly fitted CPD ring block while retaining a hash-linked comparison to the original candidate.",
+  "selection": {
+    "stable_ring_atoms": [
+      "1:C5",
+      "1:C6",
+      "2:C5",
+      "2:C6"
+    ],
+    "categories": [
+      "bonds",
+      "angles",
+      "dihedrals"
+    ],
+    "rule": "promote every covered bond, angle, and proper whose atoms are all in stable_ring_atoms",
+    "expected_occurrence_counts": {
+      "bonds": 4,
+      "angles": 4,
+      "dihedrals": 4
+    },
+    "include_stereochemical_impropers": true,
+    "allow_partial_ring_promotion": false
+  },
+  "fit_requirements": {
+    "joint_coupled_response": true,
+    "training_and_held_out_conformers": true,
+    "fixed_qm_improper_equilibria": true,
+    "nonnegative_harmonic_curvatures": true,
+    "ring_dihedrals_are_not_independent_rotor_scans": true,
+    "generic_transfer_may_be_used_only_as_a_regularization_prior": true,
+    "ma_van_der_vaart_terms_are_comparison_data_not_automatic_authority": true
+  },
+  "candidate_lineage": {
+    "require_parent_candidate_hash": true,
+    "require_unique_variant_id": true,
+    "require_parameter_workbook_hash": true,
+    "require_topology_parameter_and_audit_hashes": true
+  },
+  "engine_validation": {
+    "candidate_runs_are_gate_neutral": true,
+    "ordinary_mass_only": true,
+    "maximum_timestep_fs": 2.0,
+    "required_stages": [
+      "psfgen_product_and_reactant",
+      "static_psf_audit",
+      "zero_step_parameter_load",
+      "minimization",
+      "2_fs_dynamics",
+      "trajectory_geometry_and_chirality_audit"
+    ],
+    "production_registry_bypass_allowed": false
+  },
+  "literature_comparators": [
+    {
+      "id": "ma-van-der-vaart-2017",
+      "doi": "10.1021/acs.jcim.7b00215",
+      "role": "independent CHARMM-compatible CPD parameter comparison; published supporting tables do not replace the unavailable original topology stream"
+    },
+    {
+      "id": "rcsb-1n4e",
+      "url": "https://www.rcsb.org/structure/1N4E",
+      "role": "experimental cis-syn duplex structural validation, not parameter authority"
+    },
+    {
+      "id": "rcsb-1ttd",
+      "url": "https://www.rcsb.org/structure/1TTD",
+      "role": "solution ensemble and backbone-state validation, not an exact covalent-bond target"
+    }
+  ],
+  "release_rule": "Promotion creates a non-released candidate. Production readiness still requires every registry gate, explicit-solvent DNA-context validation, and independent release review."
+}

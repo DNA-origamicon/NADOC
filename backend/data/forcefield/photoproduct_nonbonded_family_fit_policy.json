@@ -1,0 +1,42 @@
+{
+  "schema": "nadoc.photoproduct-nonbonded-family-fit-policy.v1",
+  "version": "1.0.0",
+  "status": "workflow_policy",
+  "rationale": "Anti TT-CPD ordered endpoints are stereochemically distinct. Do not impose the cis-syn endpoint-exchange charge constraint after it fails independent water-curve transfer. Preserve charge equivalence only within each chemically equivalent hydrogen set and validate the untrained O4 acceptor sites.",
+  "families": {
+    "cis-anti-ordered": {
+      "product_ids": [
+        "tt-cpd-cis-anti-i",
+        "tt-cpd-cis-anti-ii"
+      ],
+      "endpoint_charge_symmetry": "ordered_distinct",
+      "training_site_suffixes": [
+        "h3-donor",
+        "o2-acceptor"
+      ],
+      "held_out_site_suffixes": [
+        "o4-acceptor"
+      ]
+    },
+    "trans-anti-ordered": {
+      "product_ids": [
+        "tt-cpd-trans-anti-i",
+        "tt-cpd-trans-anti-ii"
+      ],
+      "endpoint_charge_symmetry": "ordered_distinct",
+      "training_site_suffixes": [
+        "h3-donor",
+        "o2-acceptor"
+      ],
+      "held_out_site_suffixes": [
+        "o4-acceptor"
+      ]
+    }
+  },
+  "unchanged_targets": {
+    "water_interaction_energy_rmse_kcal_mol": 0.2,
+    "water_interaction_distance_rmse_angstrom": 0.1
+  },
+  "gate_effect": "none",
+  "simulation_ready": false
+}

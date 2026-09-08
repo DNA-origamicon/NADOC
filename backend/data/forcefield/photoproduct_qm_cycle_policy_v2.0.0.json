@@ -1,0 +1,87 @@
+{
+  "schema": "nadoc.photoproduct-qm-cycle-policy.v1",
+  "version": "2.0.0",
+  "status": "active_evidence_generation_policy",
+  "gate_effect": "none",
+  "simulation_ready": false,
+  "objective": "Obtain minimum and transfer-validation evidence needed for the first NAMD-capable TT-CPD parameter release without assuming one independent parameter fit per design stereoisomer.",
+  "catalog_policy": {
+    "preserve_all_eight_ordered_product_identities": true,
+    "independent_patch_orientation_and_improper_audit_per_identity": true,
+    "automatic_parameter_equivalence": false
+  },
+  "first_wave": [
+    {
+      "product_id": "tt-cpd-trans-syn-i",
+      "action": "recover_completed_optimization",
+      "role": "low-yield syn sentinel and held-out transfer case"
+    },
+    {
+      "product_id": "tt-cpd-cis-syn",
+      "action": "fresh_robust_optimization",
+      "role": "principal cis-syn product"
+    },
+    {
+      "product_id": "tt-cpd-cis-syn-ii",
+      "action": "restart_last_preserved_geometry",
+      "role": "syn family held-out orientation case"
+    },
+    {
+      "product_id": "tt-cpd-cis-anti-i",
+      "action": "fresh_robust_optimization",
+      "role": "anti family optimizer pilot and principal cis-anti product"
+    }
+  ],
+  "second_wave": [
+    {
+      "product_id": "tt-cpd-trans-anti-i",
+      "action": "restart_pre_instability_geometry",
+      "condition": "cis-anti-I robust optimizer pilot completes or supplies a diagnostically stable restart path"
+    }
+  ],
+  "deferred_independent_full_boundary": [
+    "tt-cpd-trans-syn-ii",
+    "tt-cpd-cis-anti-ii",
+    "tt-cpd-trans-anti-ii"
+  ],
+  "parameter_sharing_hypotheses": [
+    {
+      "id": "syn-head-to-head",
+      "members": ["tt-cpd-cis-syn", "tt-cpd-cis-syn-ii", "tt-cpd-trans-syn-i", "tt-cpd-trans-syn-ii"]
+    },
+    {
+      "id": "anti-head-to-tail",
+      "members": ["tt-cpd-cis-anti-i", "tt-cpd-cis-anti-ii", "tt-cpd-trans-anti-i", "tt-cpd-trans-anti-ii"]
+    }
+  ],
+  "sharing_release_requirements": [
+    "identical stable atom-type and fitted-term scopes",
+    "all product-specific signed-volume stereochemistry audits pass",
+    "held-out relative conformer energies meet the registered acceptance policy",
+    "held-out gradients or Hessian-derived bonded responses meet the registered acceptance policy",
+    "explicit-solvent topology and NAMD smoke audits pass for every released identity"
+  ],
+  "optimizer": {
+    "protocol_version": "1.7.0",
+    "method": "mp2",
+    "charged_basis": "6-31+G(d)",
+    "geometry_convergence": "gau_tight",
+    "intrafrag_step_limit": 0.1,
+    "intrafrag_step_limit_max": 0.25,
+    "maximum_geometry_iterations": 400,
+    "reflection": "forbidden",
+    "final_optimization": "unrestrained"
+  },
+  "alpine_pilot_resources": {
+    "partition": "amem",
+    "qos": "mem-long",
+    "cpus_per_case": 32,
+    "slurm_memory_gib": 110,
+    "psi4_memory_gib": 100,
+    "walltime": "72:00:00",
+    "durable_local_root": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence",
+    "active_compute_storage": "Alpine SLURM_SCRATCH with periodic recovery copies"
+  },
+  "expansion_rule": "Do not launch all-eight optimizations or Hessians merely because product identities exist. Expand a family only after its first-wave fit fails a named held-out quantitative criterion or a product-specific term is shown to be non-transferable.",
+  "interpretation": "This policy authorizes evidence generation only. It does not create parameters, pass a force-field gate, or make any TT-CPD simulation-ready."
+}
