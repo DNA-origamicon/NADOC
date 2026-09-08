@@ -1,0 +1,27 @@
+{
+  "schema": "nadoc.base-key-fixtures.v1",
+  "valid": [
+    {"key": "h1:12:FORWARD", "parsed": {"helix_id": "h1", "bp_index": 12, "direction": "FORWARD", "copy": 0}, "family": "backbone"},
+    {"key": "h1:5:forward", "parsed": {"helix_id": "h1", "bp_index": 5, "direction": "forward", "copy": 0}, "family": "backbone"},
+    {"key": "h:weird:1:7:REVERSE", "parsed": {"helix_id": "h:weird:1", "bp_index": 7, "direction": "REVERSE", "copy": 0}, "family": "backbone"},
+    {"key": "h1:12:REVERSE:3", "parsed": {"helix_id": "h1", "bp_index": 12, "direction": "REVERSE", "copy": 3}, "family": "backbone"},
+    {"key": "__ext_tail:with:colons:4:FORWARD", "parsed": {"helix_id": "__ext_tail:with:colons", "bp_index": 4, "direction": "FORWARD", "copy": 0}, "family": "extension"},
+    {"key": "__lnk__conn:with:colons:0:REVERSE", "parsed": {"helix_id": "__lnk__conn:with:colons", "bp_index": 0, "direction": "REVERSE", "copy": 0}, "family": "sslink"},
+    {"key": "__xb__:xo-7:2", "parsed": {"helix_id": "__xb__", "crossover_id": "xo-7", "k": 2}, "family": "xover"},
+    {"key": "__xb__:assembly:xo:alpha:5", "parsed": {"helix_id": "__xb__", "crossover_id": "assembly:xo:alpha", "k": 5}, "family": "xover"}
+  ],
+  "invalid": [
+    "",
+    "h1:12",
+    "h1:notanumber:FORWARD",
+    "h1:12:SIDEWAYS",
+    "h1:12.5:FORWARD",
+    "h1:12:FORWARD:-1",
+    "h1:12:FORWARD:0",
+    "h1:12:FORWARD:1.5",
+    "__xb__:nope",
+    "__xb__::2",
+    "__xb__:xo:-1",
+    "__xb__:xo:1.5"
+  ]
+}

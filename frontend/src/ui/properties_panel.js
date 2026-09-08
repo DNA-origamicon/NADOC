@@ -28,6 +28,7 @@ import {
 export function initPropertiesPanel({ clearSelection } = {}) {
   const content = document.getElementById('properties-content')
   if (!content) return
+  let renderEpoch = 0
 
   function _fmt(arr) {
     return arr.map(v => Number(v.toFixed(4))).join(', ')
@@ -519,6 +520,7 @@ export function initPropertiesPanel({ clearSelection } = {}) {
 
   /** Canonical Base-ref readout. Keys are app-wide identities from base_ref.js. */
   function _renderBaseKeys(keys) {
+    const epoch = ++renderEpoch
     const state = store.getState()
     const rows = selectedBaseDisplayRows(keys, state.currentDesign, state.currentGeometry)
     if (keys.length === 1) {
@@ -564,6 +566,8 @@ export function initPropertiesPanel({ clearSelection } = {}) {
         <div class="prop-row"><span class="prop-label">location</span><span class="prop-val">${location}</span></div>
         <div class="prop-row"><span class="prop-label">position</span><span class="prop-val">${position ?? '—'} in ${strandType} ${strandId}</span></div>
       `
+      _appendExistingPhotoproducts(keys)
+      _appendDisabledPhotoproductAction('Select exactly two nucleotide bases.')
       return
     }
     content.innerHTML = `
@@ -581,9 +585,160 @@ export function initPropertiesPanel({ clearSelection } = {}) {
       el.appendChild(value)
       content.appendChild(el)
     }
+    _appendExistingPhotoproducts(keys)
+    if (keys.length === 2) void _appendPhotoproductPreflight(keys, epoch)
+    else _appendDisabledPhotoproductAction('Select exactly two nucleotide bases.')
+  }
+
+  function _appendDisabledPhotoproductAction(message) {
+    const host = document.createElement('div')
+    host.className = 'cpd-preflight'
+    host.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px solid #30363d'
+    const button = document.createElement('button')
+    button.className = 'primary-btn cpd-form-btn'
+    button.textContent = 'Form cis-syn TT-CPD'
+    button.disabled = true
+    const reason = document.createElement('div')
+    reason.className = 'dim cpd-disabled-reason'
+    reason.textContent = message
+    host.append(button, reason)
+    content.appendChild(host)
+  }
+
+  function _appendExistingPhotoproducts(keys) {
+    const keySet = new Set(keys)
+    const lesions = (store.getState().currentDesign?.photoproduct_junctions ?? [])
+      .filter(item => keySet.has(item.base_key_1) || keySet.has(item.base_key_2))
+    for (const lesion of lesions) {
+      const card = document.createElement('div')
+      card.className = 'cpd-product-card'
+      card.style.cssText = 'margin-top:8px;padding:8px;border:1px solid #d29922;border-radius:5px;background:#241a08'
+      const title = document.createElement('strong')
+      title.textContent = `Formed product · ${lesion.stereochemistry ?? 'cis-syn'} TT-CPD`
+      card.appendChild(title)
+      for (const key of [lesion.base_key_1, lesion.base_key_2].filter(Boolean)) {
+        const row = document.createElement('div')
+        row.className = 'mono dim'
+        row.textContent = key
+        card.appendChild(row)
+      }
+      if (!lesion.base_key_1 || !lesion.base_key_2) {
+        const unresolved = document.createElement('div')
+        unresolved.className = 'dim'
+        unresolved.textContent = 'Legacy scadnano identity is unresolved; simulation is blocked.'
+        card.appendChild(unresolved)
+      }
+      const remove = document.createElement('button')
+      remove.className = 'danger-btn cpd-remove-btn'
+      remove.textContent = 'Remove TT-CPD'
+      remove.addEventListener('click', async () => {
+        if (globalThis.confirm?.('Remove this formed-product annotation?') === false) return
+        await api.deletePhotoproduct(lesion.id)
+      })
+      card.appendChild(remove)
+      content.appendChild(card)
+    }
+  }
+
+  async function _appendPhotoproductPreflight(keys, epoch) {
+    const host = document.createElement('div')
+    host.className = 'cpd-preflight'
+    host.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px solid #30363d'
+    content.appendChild(host)
+
+    const catalog = await api.getPhotoproductCatalog?.()
+    if (epoch !== renderEpoch || !host.isConnected) return
+    const products = catalog?.products?.length ? catalog.products : [{
+      stereochemistry: 'cis-syn', label: 'cis-syn TT-CPD', simulation_ready: false,
+    }]
+    const selectorRow = document.createElement('label')
+    selectorRow.className = 'prop-row'
+    const selectorLabel = document.createElement('span')
+    selectorLabel.className = 'prop-label'
+    selectorLabel.textContent = 'product form'
+    const selector = document.createElement('select')
+    selector.className = 'prop-val cpd-stereochemistry-select'
+    for (const product of products) {
+      const option = document.createElement('option')
+      option.value = product.stereochemistry
+      option.textContent = `${product.label}${product.simulation_ready ? '' : ' · intent only'}`
+      selector.appendChild(option)
+    }
+    selectorRow.append(selectorLabel, selector)
+    const reportHost = document.createElement('div')
+    host.append(selectorRow, reportHost)
+    let requestEpoch = 0
+
+    async function renderSelectedForm() {
+      const stereochemistry = selector.value
+      const request = ++requestEpoch
+      reportHost.innerHTML = `<button class="primary-btn cpd-form-btn" disabled>Checking ${stereochemistry} TT-CPD…</button><div class="dim cpd-disabled-reason">Server is resolving nucleotide identity and C5/C6 atoms.</div>`
+      const report = await api.preflightPhotoproduct(keys, stereochemistry)
+      if (request !== requestEpoch || epoch !== renderEpoch || !host.isConnected) return
+      if (!report) {
+        reportHost.querySelector('.cpd-disabled-reason').textContent = store.getState().lastError?.message ?? 'Preflight failed.'
+        return
+      }
+      reportHost.replaceChildren()
+      const endpointByKey = new Map((report.endpoints ?? []).map(item => [item.key, item]))
+      for (const key of keys) {
+        const endpoint = endpointByKey.get(key)
+        const row = document.createElement('div')
+        row.className = 'prop-row'
+        const value = document.createElement('span')
+        value.className = 'prop-val mono'
+        value.textContent = endpoint ? `${endpoint.base} · ${endpoint.source_class} · ${key}` : key
+        row.appendChild(value)
+        reportHost.appendChild(row)
+      }
+      const rel = report.relationship
+      if (rel) {
+        const summary = document.createElement('div')
+        summary.className = 'dim'
+        const geom = report.reactant_geometry
+        const dist = v => Number.isFinite(v) ? `${(v * 10).toFixed(2)} Å` : '—'
+        const candidateBonds = geom?.candidate_product_bond_distances
+        const bondText = Array.isArray(candidateBonds) && candidateBonds.length
+          ? candidateBonds.map(item => `${item.atom_1.replace(/^\d:/, '')}–${item.atom_2.replace(/^\d:/, '')} ${dist(item.distance_nm)}`).join(', ')
+          : `C5–C5 ${dist(geom?.c5_c5_distance_nm)}, C6–C6 ${dist(geom?.c6_c6_distance_nm)}`
+        summary.textContent = `${rel.strand_relationship} · ${rel.extra_pairing} · reactant candidate-bond distances ${bondText}`
+        reportHost.appendChild(summary)
+      }
+      const action = document.createElement('button')
+      action.className = 'primary-btn cpd-form-btn'
+      action.textContent = `Form ${stereochemistry} TT-CPD`
+      action.disabled = !report.eligible
+      reportHost.appendChild(action)
+      const messages = [...(report.errors ?? []), ...(report.warnings ?? [])]
+      for (const item of messages) {
+        const msg = document.createElement('div')
+        msg.className = item.code === 'parameters_unavailable' ? 'dim' : 'validation-error'
+        msg.textContent = item.message
+        reportHost.appendChild(msg)
+      }
+      if (!messages.length) {
+        const note = document.createElement('div')
+        note.className = 'dim'
+        note.textContent = 'Reactant geometry is used only for product placement, not as a stability verdict.'
+        reportHost.appendChild(note)
+      }
+      action.addEventListener('click', async () => {
+        const chemistry = report.simulation_ready
+          ? 'A validated product topology is available.'
+          : 'This saves product intent only; NAMD/export remains blocked because validated CHARMM36 CPD parameters are unavailable.'
+        const relationship = rel ? `${rel.strand_relationship}, ${rel.extra_pairing}` : 'resolved pair'
+        if (globalThis.confirm?.(`Form a ${stereochemistry} TT-CPD (${relationship})?\n\n${chemistry}`) === false) return
+        action.disabled = true
+        await api.createPhotoproduct(keys, stereochemistry)
+      })
+    }
+
+    selector.addEventListener('change', renderSelectedForm)
+    await renderSelectedForm()
   }
 
   function _render(displayObject) {
+    renderEpoch++
     if (!displayObject) {
       content.innerHTML = '<span class="dim">Click a backbone bead to select.</span>'
       return

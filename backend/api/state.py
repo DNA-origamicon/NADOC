@@ -266,6 +266,7 @@ def set_design(d: Design) -> None:
     with _lock:
         s = _session()
         _assert_active_loadout_editable(s.design, d)
+        _assert_photoproduct_dependencies(d)
         if s.design is not None:
             s.history.append(s.design.model_copy(deep=True))
         s.redo.clear()
@@ -277,6 +278,7 @@ def set_design_branch(d: Design, *, push_history: bool = True) -> None:
     """Replace state for explicit file/branch navigation, bypassing edit protection."""
     with _lock:
         s = _session()
+        _assert_photoproduct_dependencies(d)
         if push_history and s.design is not None:
             s.history.append(s.design.model_copy(deep=True))
         s.redo.clear()
@@ -304,6 +306,24 @@ def redo_depth() -> int:
         return len(_session().redo)
 
 
+def _assert_photoproduct_dependencies(design: Design | None) -> None:
+    """Reject edits that make a canonical formed-product endpoint stale/non-T."""
+    if design is None:
+        return
+    from backend.core.photoproducts import stale_photoproduct_ids
+
+    stale = stale_photoproduct_ids(design)
+    if stale:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "photoproduct_dependency",
+                "message": "This edit would delete or change a formed TT-CPD endpoint. Remove the photoproduct first, then retry.",
+                "photoproduct_ids": stale,
+            },
+        )
+
+
 def mutate_and_validate(
     fn: Callable[[Design], None],
 ) -> tuple[Design, ValidationReport]:
@@ -317,9 +337,18 @@ def mutate_and_validate(
         if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
         _assert_active_loadout_editable(s.design)
-        s.history.append(s.design.model_copy(deep=True))
+        before = s.design.model_copy(deep=True)
+        redo_before = deque(s.redo, maxlen=s.redo.maxlen)
+        s.history.append(before)
         s.redo.clear()
-        fn(s.design)
+        try:
+            fn(s.design)
+            _assert_photoproduct_dependencies(s.design)
+        except Exception:
+            s.design = before
+            s.history.pop()
+            s.redo.extend(redo_before)
+            raise
         report = validate_design(s.design)
         _bump_revision(s)
         return s.design, report
@@ -352,11 +381,19 @@ def mutate_with_reconcile(
             raise HTTPException(status_code=404, detail="No active design.")
         _assert_active_loadout_editable(s.design)
         before = s.design.model_copy(deep=True)
+        redo_before = deque(s.redo, maxlen=s.redo.maxlen)
         s.history.append(before)
         s.redo.clear()
-        report = fn(s.design)
-        reconciled = reconcile_cluster_membership(before, s.design, report)
-        s.design = _retry_pending_ligations(before, reconciled)
+        try:
+            report = fn(s.design)
+            reconciled = reconcile_cluster_membership(before, s.design, report)
+            s.design = _retry_pending_ligations(before, reconciled)
+            _assert_photoproduct_dependencies(s.design)
+        except Exception:
+            s.design = before
+            s.history.pop()
+            s.redo.extend(redo_before)
+            raise
         validation = validate_design(s.design)
         _bump_revision(s)
         return s.design, validation
@@ -380,10 +417,18 @@ def replace_with_reconcile(
             raise HTTPException(status_code=404, detail="No active design.")
         _assert_active_loadout_editable(s.design, new_design)
         before = s.design.model_copy(deep=True)
+        redo_before = deque(s.redo, maxlen=s.redo.maxlen)
         s.history.append(before)
         s.redo.clear()
-        reconciled = reconcile_cluster_membership(before, new_design, report)
-        s.design = _retry_pending_ligations(before, reconciled)
+        try:
+            reconciled = reconcile_cluster_membership(before, new_design, report)
+            s.design = _retry_pending_ligations(before, reconciled)
+            _assert_photoproduct_dependencies(s.design)
+        except Exception:
+            s.design = before
+            s.history.pop()
+            s.redo.extend(redo_before)
+            raise
         validation = validate_design(s.design)
         _bump_revision(s)
         return s.design, validation
@@ -567,6 +612,28 @@ def mutate_with_feature_log(
         else:
             s.design = _retry_pending_ligations(before, reconciled)
 
+        # A canonical product endpoint may not silently become stale or non-T.
+        # Reject the enclosing edit inside this same undo transaction; the user
+        # can remove the lesion explicitly and retry. Legacy scadnano-only IDs
+        # remain losslessly stored and are handled by the simulation gate.
+        from backend.core.photoproducts import stale_photoproduct_ids
+
+        stale_cpd_ids = stale_photoproduct_ids(s.design)
+        if stale_cpd_ids:
+            s.design = before
+            s.history.clear()
+            s.history.extend(history_before)
+            s.redo.clear()
+            s.redo.extend(redo_before)
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "photoproduct_dependency",
+                    "message": "This edit would delete or change a formed TT-CPD endpoint. Remove the photoproduct first, then retry.",
+                    "photoproduct_ids": stale_cpd_ids,
+                },
+            )
+
         # Capture POST-state AFTER reconcile + retry so back-and-forth seeking
         # can restore the live topology even after the slider has been scrubbed
         # back through this entry.
@@ -631,6 +698,7 @@ def mutate_with_minor_log(
             raise HTTPException(status_code=404, detail="No active design.")
         _assert_active_loadout_editable(s.design)
         before = s.design.model_copy(deep=True)
+        redo_before = deque(s.redo, maxlen=s.redo.maxlen)
         s.history.append(before)
         s.redo.clear()
 
@@ -657,6 +725,22 @@ def mutate_with_minor_log(
 
         reconciled = reconcile_cluster_membership(before, s.design, report)
         s.design = _retry_pending_ligations(before, reconciled)
+
+        from backend.core.photoproducts import stale_photoproduct_ids
+
+        stale_cpd_ids = stale_photoproduct_ids(s.design)
+        if stale_cpd_ids:
+            s.design = before
+            s.history.pop()
+            s.redo.extend(redo_before)
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "photoproduct_dependency",
+                    "message": "This edit would delete or change a formed TT-CPD endpoint. Remove the photoproduct first, then retry.",
+                    "photoproduct_ids": stale_cpd_ids,
+                },
+            )
 
         # Re-encode post-state after reconcile + retry so back-and-forth
         # seeking restores the live topology even after the slider has been
@@ -841,6 +925,7 @@ def set_design_silent(d: Design) -> None:
     with _lock:
         s = _session()
         _assert_active_loadout_editable(s.design, d)
+        _assert_photoproduct_dependencies(d)
         s.design = d
         _bump_revision(s)
 
@@ -861,6 +946,7 @@ def set_design_silent_reconciled(
         s = _session()
         _assert_active_loadout_editable(s.design, new_design)
         reconciled = reconcile_cluster_membership(before, new_design, report)
+        _assert_photoproduct_dependencies(reconciled)
         s.design = reconciled
         validation = validate_design(s.design)
         _bump_revision(s)

@@ -86,23 +86,34 @@ export function parseBaseKey(key) {
     const rest = key.slice(XB_HELIX.length + 1)
     const i = rest.lastIndexOf(':')
     if (i < 0) return null
-    const k = Number(rest.slice(i + 1))
-    if (!Number.isFinite(k)) return null
-    return { helix_id: XB_HELIX, crossover_id: rest.slice(0, i), k }
+    const owner = rest.slice(0, i)
+    const tail = rest.slice(i + 1)
+    if (!owner || !/^\d+$/.test(tail)) return null
+    return { helix_id: XB_HELIX, crossover_id: owner, k: Number(tail) }
   }
-  const parts = key.split(':')
-  if (parts.length < 3) return null
-  // Trailing numeric field = the loop-copy ordinal (4-part form).
+  // Parse only right-hand grammar fields; the remaining owner id is opaque.
+  let head = key
+  let i = head.lastIndexOf(':')
+  if (i < 0) return null
+  let tailValue = head.slice(i + 1)
+  head = head.slice(0, i)
   let copy = 0
-  let tail = parts.length
-  if (parts.length >= 4 && /^\d+$/.test(parts[parts.length - 1])) {
-    copy = Number(parts[parts.length - 1])
-    tail -= 1
+  let direction = tailValue
+  if (/^\d+$/.test(tailValue)) {
+    copy = Number(tailValue)
+    if (copy === 0) return null
+    i = head.lastIndexOf(':')
+    if (i < 0) return null
+    direction = head.slice(i + 1)
+    head = head.slice(0, i)
   }
-  const direction = parts[tail - 1]
-  const bp_index  = Number(parts[tail - 2])
-  const helix_id  = parts.slice(0, tail - 2).join(':')
-  if (!helix_id || !Number.isFinite(bp_index)) return null
+  if (!['FORWARD', 'REVERSE', 'forward', 'reverse'].includes(direction)) return null
+  i = head.lastIndexOf(':')
+  if (i < 0) return null
+  const helix_id = head.slice(0, i)
+  const bpText = head.slice(i + 1)
+  if (!helix_id || !/^-?\d+$/.test(bpText)) return null
+  const bp_index = Number(bpText)
   return { helix_id, bp_index, direction, copy }
 }
 

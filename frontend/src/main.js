@@ -126,6 +126,7 @@ import { initSequenceOverlay }     from './scene/sequence_overlay.js'
 import { initAtomisticRenderer }   from './scene/atomistic_renderer.js'
 import { initNucleotideTransformTool } from './scene/nucleotide_transform_tool.js'
 import { initCpdWeldOverlay }      from './scene/cpd_weld_overlay.js'
+import { initPhotoproductOverlay } from './scene/photoproduct_overlay.js'
 import { initSurfaceRenderer }     from './scene/surface_renderer.js'
 import { initAtomSurfaceDisplay }  from './scene/atom_surface_display.js'
 import { installAtomisticLoadingProbe } from './scene/debug/atomistic_loading_probe.js'
@@ -4139,6 +4140,10 @@ async function main() {
   }
 
   initPropertiesPanel({ clearSelection: () => selectionManager.clearSelection() })
+  initPhotoproductOverlay({
+    scene, THREE, store,
+    getBasePosition: key => selectionManager.getBaseWorldPosition?.(key) ?? null,
+  })
   initReverseComplement()
   // Periodic parts surface inside the Polymerize Origami panel's Mate dropdown
   // as "<part> — via periodic boundary" (unified with regular polymerize).
@@ -6534,6 +6539,16 @@ async function main() {
   document.getElementById('menu-help-about-file')?.addEventListener('click', async () => {
     const { showAboutFileModal } = await import('./ui/about_file_modal.js')
     showAboutFileModal({ api, path: _workspacePath })
+  })
+
+  document.getElementById('menu-help-tt-cpd-trajectories')?.addEventListener('click', async () => {
+    const { showTTCpdTrajectoryHelp } = await import('./ui/tt_cpd_trajectory_help.js')
+    showTTCpdTrajectoryHelp({ api })
+  })
+
+  document.getElementById('menu-help-tt-cpd-scientific-review')?.addEventListener('click', async () => {
+    const { showTTCpdScientificReview } = await import('./ui/tt_cpd_scientific_review.js')
+    showTTCpdScientificReview({ api })
   })
 
   // MD Engines: Help-menu install/status panel + sidebar install gates.

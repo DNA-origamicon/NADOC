@@ -303,6 +303,28 @@ def test_photoproduct_junctions():
     assert design.photoproduct_junctions[1].photoproduct_id == "TT-CPD"
 
 
+def test_manual_photoproduct_round_trip_preserves_ordered_and_legacy_identity():
+    record = {
+        "id": "cpd-round-trip",
+        "base_key_1": "helix:with:colons:5:FORWARD",
+        "base_key_2": "__xb__:crossover:with:colons:1",
+        "product": "TT-CPD",
+        "stereochemistry": "trans-anti-II",
+        "formation": "manual",
+        "patch_order": "base-key-2-first",
+        "orientation_method": "released-template-assignment-v1",
+        "t1_stable_id": "legacy:first",
+        "t2_stable_id": "legacy:second",
+        "photoproduct_id": "TT-CPD",
+    }
+    data = _sq_design(photoproduct_junctions=[record])
+    design, _warnings = import_scadnano(data)
+    exported = export_scadnano(design)
+    restored, _warnings = import_scadnano(exported)
+
+    assert restored.photoproduct_junctions[0].model_dump() == record
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # EXPERIMENT 10 — Domain direction and bp range
 # ═════════════════════════════════════════════════════════════════════════════

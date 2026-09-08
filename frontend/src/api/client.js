@@ -3443,6 +3443,60 @@ export async function deleteNucleotideTransform(transformId) {
   return _syncFromDesignResponse(json, { skipGeometry: json?.geometry_unchanged === true })
 }
 
+// ── Manual formed TT-CPD intent ─────────────────────────────────────────────
+
+export async function getPhotoproductCatalog() {
+  return _request('GET', '/design/photoproducts/catalog', undefined, { suppressBusy: true })
+}
+
+export async function getPhotoproductToolchain() {
+  return _request('GET', '/design/photoproducts/toolchain', undefined, { suppressBusy: true })
+}
+
+export async function getPhotoproductScientificReview() {
+  return _request('GET', '/design/photoproducts/scientific-review', undefined, { suppressBusy: true })
+}
+
+export async function putPhotoproductScientificReviewDecision(body) {
+  return _request(
+    'PUT',
+    '/design/photoproducts/scientific-review/decision',
+    body,
+    { suppressBusy: true },
+  )
+}
+
+export async function getPhotoproductModelTrajectory(productId) {
+  return _request(
+    'GET',
+    `/design/photoproducts/catalog/${encodeURIComponent(productId)}/model-trajectory`,
+    undefined,
+    { suppressBusy: true },
+  )
+}
+
+export async function preflightPhotoproduct(baseKeys, stereochemistry = 'cis-syn') {
+  return _request('POST', '/design/photoproducts/preflight', {
+    base_keys: baseKeys,
+    stereochemistry,
+    expected_revision: currentRevisionWatermark(),
+  }, { suppressBusy: true })
+}
+
+export async function createPhotoproduct(baseKeys, stereochemistry = 'cis-syn') {
+  const json = await _request('POST', '/design/photoproducts', {
+    base_keys: baseKeys,
+    stereochemistry,
+    expected_revision: currentRevisionWatermark(),
+  })
+  return _syncFromDesignResponse(json, { skipGeometry: true })
+}
+
+export async function deletePhotoproduct(photoproductId) {
+  const json = await _request('DELETE', `/design/photoproducts/${encodeURIComponent(photoproductId)}`)
+  return _syncFromDesignResponse(json, { skipGeometry: true })
+}
+
 /**
  * Paste a copy of `clusterIds` at a lattice offset (Ctrl+C / Ctrl+V).
  * `(deltaRow + deltaCol)` must be EVEN — an odd shift flips helix polarity and moves

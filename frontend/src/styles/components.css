@@ -476,6 +476,7 @@
 .modal--md  { width: 480px; }
 .modal--lg  { width: 640px; }
 .modal--xl  { width: 800px; }
+.modal--cpd-review { width: min(1220px, 96vw); }
 
 .modal__header {
   display: flex;

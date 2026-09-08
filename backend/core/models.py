@@ -974,17 +974,82 @@ class Strand(BaseModel):
         return self.strand_type == StrandType.OH_BINDER
 
 
+TTCPDStereochemistry = Literal[
+    "cis-syn",
+    "cis-syn-II",
+    "trans-syn-I",
+    "trans-syn-II",
+    "cis-anti-I",
+    "cis-anti-II",
+    "trans-anti-I",
+    "trans-anti-II",
+]
+
+
 class PhotoproductJunction(BaseModel):
     """
-    A confirmed CPD (cyclobutane pyrimidine dimer) photoproduct site imported
-    from a scadnano_cpd design.  Stores the two thymine stable-IDs and the
-    photoproduct type.  Not rendered by NADOC yet — preserved for future use.
+    Manual product-state intent for one ordered nucleotide pair.
+
+    New records use canonical NADOC base keys.  The legacy scadnano stable IDs
+    remain optional first-class fields so old records round-trip losslessly even
+    when they cannot be resolved in a NADOC design.  No simulation identity
+    (atom serial, segid, resid) is persisted here.
     """
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    t1_stable_id: str
-    t2_stable_id: str
+    base_key_1: Optional[str] = None
+    base_key_2: Optional[str] = None
+    product: Literal["TT-CPD"] = "TT-CPD"
+    stereochemistry: TTCPDStereochemistry = "cis-syn"
+    formation: Literal["manual", "legacy-scadnano"] = "manual"
+    patch_order: Literal["base-key-1-first", "base-key-2-first"] = "base-key-1-first"
+    orientation_method: str = "canonical-key-order"
+    t1_stable_id: Optional[str] = None
+    t2_stable_id: Optional[str] = None
     photoproduct_id: str = "TT-CPD"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_legacy_record(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        out = dict(data)
+        # The first registry draft used the aglycone shorthand ``trans-anti``.
+        # Ordered DNA endpoints distinguish I and II; preserve loadability while
+        # canonicalizing that old value to the endpoint-ordered I isomer.
+        if out.get("stereochemistry") == "trans-anti":
+            out["stereochemistry"] = "trans-anti-I"
+        legacy_only = not out.get("base_key_1") or not out.get("base_key_2")
+        if legacy_only and out.get("t1_stable_id") and out.get("t2_stable_id"):
+            out.setdefault("formation", "legacy-scadnano")
+        if "product" not in out:
+            # ``photoproduct_id`` is a lossless legacy extension field and may
+            # contain a producer-specific token. Do not feed that token into
+            # the deliberately narrow manual-product enum.
+            out["product"] = (
+                "TT-CPD"
+                if legacy_only
+                else out.get("photoproduct_id", "TT-CPD")
+            )
+        out.setdefault("photoproduct_id", out.get("product", "TT-CPD"))
+        return out
+
+    @model_validator(mode="after")
+    def _validate_identity_pair(self) -> "PhotoproductJunction":
+        has_key_1, has_key_2 = bool(self.base_key_1), bool(self.base_key_2)
+        if has_key_1 != has_key_2:
+            raise ValueError("photoproduct base keys must be supplied as a pair")
+        if has_key_1 and self.base_key_1 == self.base_key_2:
+            raise ValueError("photoproduct endpoints must be distinct")
+        if not has_key_1 and not (self.t1_stable_id and self.t2_stable_id):
+            raise ValueError("photoproduct requires canonical base keys or both legacy stable IDs")
+        if self.formation == "manual" and self.photoproduct_id != self.product:
+            raise ValueError("photoproduct_id and product must agree")
+        return self
+
+    @property
+    def is_resolved_identity(self) -> bool:
+        return bool(self.base_key_1 and self.base_key_2)
 
 
 # ── Crossover models ──────────────────────────────────────────────────────────
@@ -1713,6 +1778,8 @@ SnapshotOpKind = Literal[
     "route-for-polymerization",
     "create-near-ends",
     "create-far-ends",
+    "photoproduct-create",
+    "photoproduct-delete",
     "overhang-bulk",
     "apply-loop-skips",
     "autorefine-skips",

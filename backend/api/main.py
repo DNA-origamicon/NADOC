@@ -94,11 +94,13 @@ from backend.api.routes_vr import router as vr_router
 from backend.api.routes_simulate import router as simulate_router
 from backend.api.routes_primitives import router as primitives_router
 from backend.api.routes_protein import router as protein_router
+from backend.api.routes_photoproducts import router as photoproducts_router
 from backend.api.routes_project_collaboration import router as project_collaboration_router
 from backend.api.routes_assign_sequences import router as assign_sequences_router
 from backend.api.routes_scaffold_routing import router as scaffold_routing_router
 from backend.api.ws import router as ws_router
 from backend.core.namd_runner import resume_interrupted_jobs
+from backend.core.cpd_forcefield import CpdCapabilityError
 
 logger = logging.getLogger(__name__)
 
@@ -335,6 +337,15 @@ app = FastAPI(
     default_response_class=ORJSONResponse,
 )
 
+
+@app.exception_handler(CpdCapabilityError)
+async def _cpd_capability_error_handler(request, exc):
+    """Turn the deliberate CPD fail-closed exception into an actionable API error."""
+    return ORJSONResponse(
+        status_code=409,
+        content={"detail": {"code": "cpd_parameters_unavailable", "message": str(exc)}},
+    )
+
 # Bind each request's document (X-NADOC-Doc header / ?doc=) to a ContextVar so
 # state.py / assembly_state.py resolve the right per-document session.  Pure-ASGI
 # middleware (not BaseHTTPMiddleware) so the value propagates to the endpoint.
@@ -427,6 +438,7 @@ app.include_router(engines_router, prefix="/api")
 app.include_router(primitives_router, prefix="/api")
 app.include_router(fs_router, prefix="/api")
 app.include_router(protein_router, prefix="/api")
+app.include_router(photoproducts_router, prefix="/api")
 app.include_router(project_collaboration_router, prefix="/api")
 app.include_router(ws_router)  # WebSocket routes have no /api prefix
 
