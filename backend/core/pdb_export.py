@@ -3,7 +3,7 @@ PDB and PSF export for NAMD simulations — Phase AA.
 
 Exports the heavy-atom all-atom model as:
   - PDB:  ATOM records + CONECT records (all covalent bonds) + LINK records for
-          non-standard inter-residue bonds (CPD-ready).
+          non-standard inter-residue bonds (structural export only).
   - PSF:  NAMD-compatible extended-format topology with !NATOM and !NBOND sections,
           CHARMM36 atom types and partial charges.
 
@@ -12,7 +12,12 @@ CPD extensibility
 The ``non_std_bonds`` parameter accepts a list of (serial_i, serial_j) pairs
 (0-based, matching AtomisticModel.atoms indices) for any non-canonical
 inter-residue covalent bonds.  For CPD photoproducts this would be the
-C5–C5 and C6–C6 bond pairs between adjacent thymines.
+head-to-head C5–C5/C6–C6 pair for syn products or the head-to-tail
+C5–C6/C6–C5 pair for anti products.  This argument cannot make a CPD
+simulation topology: product types, charges, all regenerated bonded terms,
+and stereochemical impropers are also required.  Photoproduct designs are
+therefore rejected by this legacy exporter and must use the audited psfgen
+path after a complete product asset set is released.
 
 Coordinate convention
 ─────────────────────
@@ -25,8 +30,9 @@ CHARMM36 atom types
 Backbone and base atom types / charges / masses are hard-coded from
 CHARMM36 top_all36_na.rtf (MacKerell lab, 2012+).  A fallback (element
 symbol as type, zero charge, standard atomic mass) is used for any atom
-name not in the lookup table — which covers future non-standard residues
-until explicit entries are added.
+name not in the lookup table.  That fallback is not parameter authority and
+must never be used for a photoproduct or another simulation-ready
+non-standard residue.
 """
 
 from __future__ import annotations
@@ -1186,6 +1192,14 @@ def export_pdb(
     """
     import math
 
+    from backend.core.cpd_forcefield import reject_photoproduct_design
+
+    reject_photoproduct_design(
+        design,
+        path="legacy PDB exporter",
+        supported_path="the full-topology explicit-solvent NAMD workflow",
+    )
+
     if non_std_bonds is None:
         non_std_bonds = []
 
@@ -1495,6 +1509,13 @@ def export_psf(
     str
         Full PSF file contents, ready to write to disk.
     """
+    from backend.core.cpd_forcefield import reject_photoproduct_design
+
+    reject_photoproduct_design(
+        design,
+        path="legacy PSF exporter",
+        supported_path="the full-topology explicit-solvent NAMD workflow",
+    )
     if non_std_bonds is None:
         non_std_bonds = []
 

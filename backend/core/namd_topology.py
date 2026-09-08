@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -11,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from backend.core.atomistic import Atom, AtomisticModel, build_atomistic_model
+from backend.core.base_keys import atom_base_key
 from backend.core.md_charge import audit_psf
 from backend.core.models import Design
 from backend.core.pdb_export import _chain_char, _cryst1_record, _h36
@@ -79,6 +82,12 @@ _ATOM_TO_CHARMM = {
     "OP2": "O2P",
     "C7": "C5M",
 }
+
+
+def charmm_atom_name(nadoc_atom_name: str) -> str:
+    """Translate NADOC/PDB atom names to the bundled CHARMM topology spelling."""
+
+    return _ATOM_TO_CHARMM.get(nadoc_atom_name, nadoc_atom_name)
 
 
 @dataclass(frozen=True)
@@ -560,13 +569,134 @@ def resolve_anchor_residue_indices(
     )
 
 
-def _psfgen_script(segments: list[dict], output_prefix: Path) -> str:
+def photoproduct_patch_plan(
+    design: Design,
+    model: AtomisticModel,
+    segments: list[dict],
+    *,
+    registry: dict | None = None,
+    registry_root: Path = _FF_DIR,
+) -> dict:
+    """Resolve stable design keys to transient psfgen residue identities.
+
+    The returned mapping belongs in package audit metadata only. Neither atom serials
+    nor ``segid:resid`` identifiers are written back into the design.
+    """
+
+    lesions = list(getattr(design, "photoproduct_junctions", None) or [])
+    if not lesions:
+        return {"topology_paths": [], "patches": [], "reverse_identity": []}
+    if registry is None:
+        from backend.core.photoproduct_registry import photoproduct_registry
+
+        registry = photoproduct_registry()
+    segment_by_chain = {item["chain_id"]: item["segid"] for item in segments}
+    residue_by_key: dict[str, set[tuple[str, int]]] = {}
+    for atom in model.atoms:
+        key = atom_base_key(atom)
+        if key:
+            residue_by_key.setdefault(key, set()).add((atom.chain_id, atom.seq_num))
+    topology_paths: list[Path] = []
+    patches: list[dict] = []
+    reverse_identity: list[dict] = []
+    for lesion in lesions:
+        entry = next(
+            (
+                item
+                for item in registry["products"]
+                if item["product"] == lesion.product
+                and item["stereochemistry"] == lesion.stereochemistry
+            ),
+            None,
+        )
+        if entry is None:
+            raise RuntimeError(
+                f"unregistered photoproduct patch: {lesion.product}/{lesion.stereochemistry}"
+            )
+        topology = (entry.get("assets") or {}).get("topology")
+        if not isinstance(topology, dict):
+            raise RuntimeError(f"{entry['id']}: released topology asset is missing")
+        patch_name = topology.get("patch_name")
+        if not isinstance(patch_name, str) or not re.fullmatch(
+            r"[A-Z0-9]{1,8}", patch_name
+        ):
+            raise RuntimeError(f"{entry['id']}: invalid or missing psfgen patch_name")
+        topology_path = (registry_root / str(topology.get("path") or "")).resolve()
+        try:
+            topology_path.relative_to(registry_root.resolve())
+        except ValueError:
+            raise RuntimeError(f"{entry['id']}: topology asset escapes force-field root") from None
+        if (
+            not topology_path.is_file()
+            or hashlib.sha256(topology_path.read_bytes()).hexdigest()
+            != topology.get("sha256")
+        ):
+            raise RuntimeError(
+                f"{entry['id']}: topology asset is missing or hash-mismatched"
+            )
+        if topology_path not in topology_paths:
+            topology_paths.append(topology_path)
+
+        keys = [lesion.base_key_1, lesion.base_key_2]
+        if not all(isinstance(key, str) and key for key in keys) or keys[0] == keys[1]:
+            raise RuntimeError(
+                f"{entry['id']}: patch endpoints are unresolved or duplicated"
+            )
+        derived: list[dict] = []
+        for endpoint_number, key in enumerate(keys, start=1):
+            residues = residue_by_key.get(key, set())
+            if len(residues) != 1:
+                raise RuntimeError(
+                    f"{entry['id']}: base key {key!r} maps to {len(residues)} residues"
+                )
+            chain_id, resid = next(iter(residues))
+            segid = segment_by_chain.get(chain_id)
+            if segid is None:
+                raise RuntimeError(f"{entry['id']}: endpoint chain has no psfgen segment")
+            derived.append(
+                {
+                    "endpoint": endpoint_number,
+                    "base_key": key,
+                    "segid": segid,
+                    "resid": resid,
+                }
+            )
+        patch = {
+            "lesion_id": lesion.id,
+            "product_id": entry["id"],
+            "patch_name": patch_name,
+            "endpoints": derived,
+        }
+        patches.append(patch)
+        reverse_identity.extend(
+            {
+                "lesion_id": lesion.id,
+                "product_id": entry["id"],
+                **endpoint,
+            }
+            for endpoint in derived
+        )
+    return {
+        "topology_paths": topology_paths,
+        "patches": patches,
+        "reverse_identity": reverse_identity,
+    }
+
+
+def _psfgen_script(
+    segments: list[dict],
+    output_prefix: Path,
+    *,
+    extra_topologies: list[Path] | None = None,
+    photoproduct_patches: list[dict] | None = None,
+) -> str:
     has_protein = any(seg.get("is_protein") for seg in segments)
     lines = [
         "package require psfgen",
         "resetpsf",
         f"topology {_TOP_ALL36_NA}",
     ]
+    lines.extend(f"topology {path}" for path in (extra_topologies or []))
     if has_protein:
         lines.append(f"topology {_TOP_ALL36_PROT}")
         lines.extend(_PROT_PDBALIASES)
@@ -608,6 +738,12 @@ def _psfgen_script(segments: list[dict], output_prefix: Path) -> str:
                 f"coordpdb {path} {segid}",
             ]
         )
+    for patch in photoproduct_patches or []:
+        endpoint_tokens = " ".join(
+            f"{endpoint['segid']}:{endpoint['resid']}"
+            for endpoint in patch["endpoints"]
+        )
+        lines.append(f"patch {patch['patch_name']} {endpoint_tokens}")
     lines.extend(
         [
             "regenerate angles dihedrals",
@@ -638,6 +774,9 @@ def build_charmm_psfgen_topology(
     instead of ideal B-DNA (the Phase-2 NAMD seed).  Default: build ideal B-DNA.
     """
     design = design.without_reference_geometry()
+    from backend.core.cpd_forcefield import assert_cpd_simulation_supported
+
+    assert_cpd_simulation_supported(design, path="full CHARMM/psfgen topology builder")
     if not _TOP_ALL36_NA.exists():
         raise RuntimeError(f"Missing CHARMM NA topology file: {_TOP_ALL36_NA}")
     psfgen = psfgen_path or find_psfgen()
@@ -645,13 +784,26 @@ def build_charmm_psfgen_topology(
         # include_proteins so any visible protein attachment becomes its own
         # psfgen protein segment (Part B); no-op for protein-free designs.
         atomistic_model = build_atomistic_model(design, include_proteins=True)
+    placement_reports = []
+    if design.photoproduct_junctions:
+        from backend.core.cpd_product import build_cpd_product_coordinates
+
+        atomistic_model, placement_reports = build_cpd_product_coordinates(
+            design, atomistic_model
+        )
     with tempfile.TemporaryDirectory(prefix="nadoc_psfgen_") as raw_tmp:
         tmpdir = Path(raw_tmp)
         segments, input_pdb = _write_segment_pdbs(design, tmpdir, atomistic_model)
         if not segments:
             raise RuntimeError("No DNA segments found for psfgen topology build.")
+        patch_plan = photoproduct_patch_plan(design, atomistic_model, segments)
         out_prefix = tmpdir / "nadoc_charmm"
-        script = _psfgen_script(segments, out_prefix)
+        script = _psfgen_script(
+            segments,
+            out_prefix,
+            extra_topologies=patch_plan["topology_paths"],
+            photoproduct_patches=patch_plan["patches"],
+        )
         script_path = tmpdir / "build_psfgen.tcl"
         script_path.write_text(script)
         proc = subprocess.run(
@@ -686,6 +838,62 @@ def build_charmm_psfgen_topology(
             raise RuntimeError(
                 "psfgen topology failed audit: " + "; ".join(audit.errors)
             )
+        photoproduct_static_audit = None
+        reactant_baseline_metadata = None
+        if patch_plan["patches"]:
+            baseline_prefix = tmpdir / "nadoc_charmm_reactant_baseline"
+            baseline_script = _psfgen_script(segments, baseline_prefix)
+            baseline_script_path = tmpdir / "build_reactant_baseline_psfgen.tcl"
+            baseline_script_path.write_text(baseline_script)
+            baseline_proc = subprocess.run(
+                [psfgen, str(baseline_script_path)],
+                cwd=tmpdir,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            baseline_psf_path = baseline_prefix.with_suffix(".psf")
+            if baseline_proc.returncode != 0 or not baseline_psf_path.is_file():
+                raise RuntimeError(
+                    "psfgen failed to build the mandatory reactant topology audit "
+                    f"baseline.\nstdout:\n{baseline_proc.stdout[-4000:]}\n"
+                    f"stderr:\n{baseline_proc.stderr[-4000:]}"
+                )
+            from backend.core.photoproduct_psf_audit import audit_photoproduct_psf
+            from backend.core.photoproduct_registry import photoproduct_registry
+
+            registry = photoproduct_registry()
+            topology_specs = {}
+            for product_id in {item["product_id"] for item in patch_plan["patches"]}:
+                entry = next(item for item in registry["products"] if item["id"] == product_id)
+                record = entry["assets"]["topology_audit_spec"]
+                spec_path = (_FF_DIR / record["path"]).resolve()
+                if (
+                    not spec_path.is_file()
+                    or hashlib.sha256(spec_path.read_bytes()).hexdigest()
+                    != record["sha256"]
+                ):
+                    raise RuntimeError(
+                        f"{product_id}: topology audit specification is missing or hash-mismatched"
+                    )
+                topology_specs[product_id] = json.loads(spec_path.read_text())
+            photoproduct_static_audit = audit_photoproduct_psf(
+                product_psf_text=psf_text,
+                reactant_psf_text=baseline_psf_path.read_text(errors="replace"),
+                patch_plan=patch_plan,
+                topology_specs=topology_specs,
+            )
+            if not photoproduct_static_audit["passed"]:
+                raise RuntimeError(
+                    "photoproduct static topology audit failed: "
+                    + "; ".join(photoproduct_static_audit["errors"])
+                )
+            reactant_baseline_metadata = {
+                "purpose": "atom-count, charge, and bonded-graph comparison only",
+                "psf_sha256": hashlib.sha256(baseline_psf_path.read_bytes()).hexdigest(),
+                "psfgen_stdout_tail": baseline_proc.stdout[-4000:],
+                "psfgen_stderr_tail": baseline_proc.stderr[-4000:],
+            }
         metadata = {
             "topology_builder": "charmm_psfgen",
             "psfgen_path": psfgen,
@@ -699,6 +907,13 @@ def build_charmm_psfgen_topology(
                 for seg in segments
             ],
             "audit": audit.to_dict(),
+            "photoproduct_placement_audits": placement_reports,
+            "photoproduct_patch_audit": {
+                **patch_plan,
+                "topology_paths": [str(path) for path in patch_plan["topology_paths"]],
+            },
+            "photoproduct_static_topology_audit": photoproduct_static_audit,
+            "reactant_topology_audit_baseline": reactant_baseline_metadata,
             "psfgen_stdout_tail": proc.stdout[-4000:],
             "psfgen_stderr_tail": proc.stderr[-4000:],
         }

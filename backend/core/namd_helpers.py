@@ -39,6 +39,13 @@ def complete_psf(design: Design, model=None) -> str:
     protein-bearing PDB — the protein backbone/sidechain angles + dihedrals are
     generated from the inferred protein bond graph.
     """
+    from backend.core.cpd_forcefield import reject_photoproduct_design
+
+    reject_photoproduct_design(
+        design,
+        path="legacy completed-PSF exporter",
+        supported_path="the full-topology explicit-solvent NAMD workflow",
+    )
     stub = export_psf(design, model=model) if model is not None else export_psf(design)
     return _complete_psf_from_stub(stub)
 

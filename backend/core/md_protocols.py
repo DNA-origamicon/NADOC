@@ -3594,6 +3594,44 @@ def prepare_mgh_slow_release(
 
     Returns (package_subdir, name_stem) relative to job_dir.
     """
+    from backend.core.cpd_forcefield import (
+        assert_cpd_simulation_supported,
+        design_has_photoproducts,
+        inject_photoproduct_parameters,
+    )
+
+    assert_cpd_simulation_supported(design, path="shared NAMD relaxation/package workflow")
+    has_photoproducts = design_has_photoproducts(design)
+    product_policy_adjustments: list[str] = []
+    if has_photoproducts:
+        # Product chemistry is supported only by the authoritative psfgen path.  The
+        # interim integrator contract is ordinary masses and at most 2 fs; 4 fs/HMR
+        # stays disabled until it has its own lesion-specific validation campaign.
+        if not require_full_topology:
+            product_policy_adjustments.append("require_full_topology enabled")
+        require_full_topology = True
+        if fast:
+            product_policy_adjustments.append("fast relaxation disabled")
+        fast = False
+        if relax_timestep_fs is None or float(relax_timestep_fs) > 2.0:
+            if relax_timestep_fs is not None:
+                product_policy_adjustments.append(
+                    f"relaxation timestep capped from {float(relax_timestep_fs):g} to 2 fs"
+                )
+            relax_timestep_fs = 2.0
+        if relax_hmr is not False:
+            if relax_hmr:
+                product_policy_adjustments.append("relaxation HMR disabled")
+            relax_hmr = False
+        if float(production_timestep_fs) > 2.0:
+            product_policy_adjustments.append(
+                f"production timestep capped from {float(production_timestep_fs):g} to 2 fs"
+            )
+            production_timestep_fs = 2.0
+        if production_hmr is not False:
+            if production_hmr:
+                product_policy_adjustments.append("production HMR disabled")
+            production_hmr = False
     from backend.core.namd_solvate import build_namd_solvated_package  # noqa: PLC0415
 
     # Refuse to build an all-atom MD package whose SCAFFOLD sequence is unassigned: every
@@ -3945,24 +3983,25 @@ def prepare_mgh_slow_release(
             minimize_steps = scaled_min
 
     # Write minimization conf
+    min_conf = _min_conf(
+        min_name,
+        name_stem,
+        box,
+        mgh_extrabonds,
+        minimize_steps,
+        min_scale,
+        seed=seed,
+        enm_file=declash_enm_file,
+        no_enm=rebuild_enm_from_min,
+        anchors_file=anchors_file,
+        field=field,
+        n_atoms=solvated_atoms,
+        adaptive_minimization=adaptive_minimization,
+        # Stage 0 is the minimisation; the ladder segments are 1..N.
+        overrides=overrides_for_stage(stage_overrides, 0),
+    )
     (package_dir / f"{min_name}.conf").write_text(
-        _min_conf(
-            min_name,
-            name_stem,
-            box,
-            mgh_extrabonds,
-            minimize_steps,
-            min_scale,
-            seed=seed,
-            enm_file=declash_enm_file,
-            no_enm=rebuild_enm_from_min,
-            anchors_file=anchors_file,
-            field=field,
-            n_atoms=solvated_atoms,
-            adaptive_minimization=adaptive_minimization,
-            # Stage 0 is the minimisation; the ladder segments are 1..N.
-            overrides=overrides_for_stage(stage_overrides, 0),
-        )
+        inject_photoproduct_parameters(min_conf, design)
     )
 
     # Write segment confs.  Stamp each spec with the timestep it will actually run at
@@ -3973,33 +4012,34 @@ def prepare_mgh_slow_release(
             spec, fast, ladder_dt, pinned=ladder_pinned
         )
     for idx, spec in enumerate(segments, start=1):
+        segment_conf = _segment_conf(
+            spec,
+            name_stem,
+            box,
+            mgh_extrabonds,
+            # The wizard displays the job's base seed. Each separate NAMD process
+            # advances it so the Langevin stream does not restart at stage boundaries.
+            seed=namd_stage_seed(seed, idx),
+            fast=fast,
+            carved=False,
+            fill_fraction=1.0,
+            structure_psf=structure_psf,
+            rigid_bonds=relax_rigid_bonds,
+            hmr=relax_hmr,
+            base_timestep_fs=ladder_dt,
+            pinned=ladder_pinned,
+            anchors_file=anchors_file,
+            field=field,
+            capture_vel_force=capture_vel_force,
+            n_atoms=solvated_atoms,
+            force_resident=_resident_override,
+            overrides=overrides_for_stage(stage_overrides, idx),
+            npt_margin_ang=(
+                HIGH_ASPECT_NPT_MARGIN_ANG if high_aspect_ratio else NPT_MARGIN_ANG
+            ),
+        )
         (package_dir / f"{spec.name}.conf").write_text(
-            _segment_conf(
-                spec,
-                name_stem,
-                box,
-                mgh_extrabonds,
-                # The wizard displays the job's base seed. Each separate NAMD process
-                # advances it so the Langevin stream does not restart at stage boundaries.
-                seed=namd_stage_seed(seed, idx),
-                fast=fast,
-                carved=False,
-                fill_fraction=1.0,
-                structure_psf=structure_psf,
-                rigid_bonds=relax_rigid_bonds,
-                hmr=relax_hmr,
-                base_timestep_fs=ladder_dt,
-                pinned=ladder_pinned,
-                anchors_file=anchors_file,
-                field=field,
-                capture_vel_force=capture_vel_force,
-                n_atoms=solvated_atoms,
-                force_resident=_resident_override,
-                overrides=overrides_for_stage(stage_overrides, idx),
-                npt_margin_ang=(
-                    HIGH_ASPECT_NPT_MARGIN_ANG if high_aspect_ratio else NPT_MARGIN_ANG
-                ),
-            )
+            inject_photoproduct_parameters(segment_conf, design)
         )
 
     charge_audit = {}
@@ -4189,6 +4229,20 @@ def prepare_mgh_slow_release(
         # from `fast` and guess which tier applied. An untouched production run starts
         # from these values, but its own request always wins.
         "relax_integrator": ladder_choice.as_dict(),
+        "production_timestep_fs": float(production_timestep_fs),
+        "production_rigid_bonds": production_rigid_bonds,
+        "production_hmr": production_hmr,
+        "photoproduct_integrator_policy": (
+            {
+                "active": True,
+                "ordinary_mass_psf_required": True,
+                "maximum_timestep_fs": 2.0,
+                "hmr_4fs_validated": False,
+                "adjustments": product_policy_adjustments,
+            }
+            if has_photoproducts
+            else None
+        ),
         # Advisory only — never used to override the pin; see relax_timestep_risk_warning.
         "relax_timestep_warning": relax_timestep_risk_warning(
             gentle=gentle_ladder,
@@ -4266,6 +4320,9 @@ def prepare_equilibrium_aware_namd(
     This wraps the same Mg slow-release ladder, but requires a complete DNA
     topology with hydrogens and a neutral final PSF before any job can queue.
     """
+    from backend.core.cpd_forcefield import assert_cpd_simulation_supported
+
+    assert_cpd_simulation_supported(design, path="equilibrium-aware explicit-solvent NAMD workflow")
     return prepare_mgh_slow_release(
         design,
         job_dir,
@@ -4299,6 +4356,9 @@ def prepare_propagator_reference(
     ``dcd_freq`` (velDCD/forceDCD inherit that cadence, keeping the three DCDs
     frame-aligned).  Any of the pinned kwargs may still be overridden explicitly.
     """
+    from backend.core.cpd_forcefield import assert_cpd_simulation_supported
+
+    assert_cpd_simulation_supported(design, path="NAMD propagator-reference workflow")
     kwargs.setdefault("production_timestep_fs", 2.0)
     kwargs.setdefault("fast", False)
     kwargs.setdefault("require_full_topology", True)

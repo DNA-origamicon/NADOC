@@ -200,6 +200,20 @@ def build_replica_package(
     """
     parent_pkg = parent.package_dir(workspace)
     manifest = json.loads((parent_pkg / "manifest.json").read_text())
+    from backend.core.cpd_forcefield import (  # noqa: PLC0415
+        assert_packaged_photoproduct_integrator,
+        inject_packaged_photoproduct_parameters,
+        package_has_photoproducts,
+    )
+
+    product_package = package_has_photoproducts(parent_pkg)
+    requested_hmr = bool(fast) if hmr is None else bool(hmr)
+    assert_packaged_photoproduct_integrator(
+        parent_pkg,
+        timestep_fs=timestep_fs,
+        hmr=requested_hmr,
+        path="NAMD production replica",
+    )
     name_stem = manifest["name_stem"]
     box = tuple(float(x) for x in manifest["box_ang"])
     mgh_extrabonds = bool(manifest.get("mgh_extrabonds"))
@@ -240,7 +254,7 @@ def build_replica_package(
     # hmr=False at 4 fs is a legal, measured-but-warned choice (standard masses), and it
     # must NOT be treated as a failed repartition — only a PSF that cannot be built is
     # that, and only that downgrades the timestep below.
-    use_fast = bool(fast) if hmr is None else bool(hmr)
+    use_fast = requested_hmr
     if use_fast:
         if (parent_pkg / hmr_name).exists():
             _link_or_copy(parent_pkg / hmr_name, child_pkg / hmr_name)
@@ -278,6 +292,11 @@ def build_replica_package(
     # 21 phosphate-less 5' bases render un-positioned/un-coloured.  Immutable, shared.
     if (parent_pkg / "charge_audit.json").exists():
         _link_or_copy(parent_pkg / "charge_audit.json", child_pkg / "charge_audit.json")
+    if (parent_pkg / "photoproduct_forcefield_manifest.json").exists():
+        _link_or_copy(
+            parent_pkg / "photoproduct_forcefield_manifest.json",
+            child_pkg / "photoproduct_forcefield_manifest.json",
+        )
 
     ff = parent_pkg / "forcefield"
     if ff.is_dir():
@@ -351,18 +370,19 @@ def build_replica_package(
     # manifest is the record of how it was solvated.  The replica inherits that.
     npt_allowed = package_npt_allowed(parent_pkg)
     reseed_name = f"{name_stem}_00_reseed"
+    reseed_conf = build_reseed_conf(
+        reseed_name,
+        name_stem,
+        box,
+        mgh_extrabonds,
+        seed=seed,
+        equil_base="equilibrated",
+        structure_psf=structure_psf,
+        preserve_velocities=continuation,
+        npt=npt_allowed,
+    )
     (child_pkg / f"{reseed_name}.conf").write_text(
-        build_reseed_conf(
-            reseed_name,
-            name_stem,
-            box,
-            mgh_extrabonds,
-            seed=seed,
-            equil_base="equilibrated",
-            structure_psf=structure_psf,
-            preserve_velocities=continuation,
-            npt=npt_allowed,
-        )
+        inject_packaged_photoproduct_parameters(reseed_conf, parent_pkg)
     )
 
     steps = max(100, int(total_steps))
@@ -446,33 +466,34 @@ def build_replica_package(
     # builds, so it needs the same size gate + explicit override as every other conf
     # writer.  Without n_atoms this fell to "unknown" and forced resident ON, which is
     # why turning the Advanced-card dropdown off changed nothing for a production run.
+    production_conf = build_production_conf(
+        prod,
+        name_stem,
+        box,
+        mgh_extrabonds,
+        seed=seed,
+        fast=use_fast,
+        timestep_fs=eff_timestep_fs,
+        # The third axis. Without it a child that asked for 2 fs with rigid bonds OFF
+        # got `rigidBonds all` anyway, because the writer derived it from the timestep.
+        rigid_bonds=("none" if hmr_build_failed else rigid_bonds),
+        hmr=use_fast,
+        structure_psf=structure_psf,
+        n_atoms=psf_atom_count(child_pkg / f"{name_stem}.psf"),
+        force_resident=force_resident,
+        npt=npt_allowed,
+        damping=damping,
+        enm_file=enm_file,
+        # Stage 0 of a production child is the velocity reseed (which takes no
+        # overrides — it runs zero steps); the production stage itself is 1.
+        overrides=overrides_for_stage(stage_overrides, 1),
+        anchors_file=anchors_file,
+        anchor_k=anchor_k,
+        field=field,
+        colvars_file=colvars_file,
+    )
     (child_pkg / f"{prod_name}.conf").write_text(
-        build_production_conf(
-            prod,
-            name_stem,
-            box,
-            mgh_extrabonds,
-            seed=seed,
-            fast=use_fast,
-            timestep_fs=eff_timestep_fs,
-            # The third axis. Without it a child that asked for 2 fs with rigid bonds OFF
-            # got `rigidBonds all` anyway, because the writer derived it from the timestep.
-            rigid_bonds=("none" if hmr_build_failed else rigid_bonds),
-            hmr=use_fast,
-            structure_psf=structure_psf,
-            n_atoms=psf_atom_count(child_pkg / f"{name_stem}.psf"),
-            force_resident=force_resident,
-            npt=npt_allowed,
-            damping=damping,
-            enm_file=enm_file,
-            # Stage 0 of a production child is the velocity reseed (which takes no
-            # overrides — it runs zero steps); the production stage itself is 1.
-            overrides=overrides_for_stage(stage_overrides, 1),
-            anchors_file=anchors_file,
-            anchor_k=anchor_k,
-            field=field,
-            colvars_file=colvars_file,
-        )
+        inject_packaged_photoproduct_parameters(production_conf, parent_pkg)
     )
 
     # ── Manifest (production-only; total_ns == length_ns) ───────────────────────
@@ -567,6 +588,16 @@ def build_replica_package(
         "production_timestep_fs": eff_timestep_fs,
         "production_rigid_bonds": rigid_bonds,
         "production_hmr": use_fast,
+        "photoproduct_integrator_policy": (
+            {
+                "active": True,
+                "ordinary_mass_psf_required": True,
+                "maximum_timestep_fs": 2.0,
+                "hmr_4fs_validated": False,
+            }
+            if product_package
+            else None
+        ),
         "ensemble": {
             "parent_job_id": parent.job_id,
             "seed": int(seed),

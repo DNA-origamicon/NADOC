@@ -78,6 +78,13 @@ def build_namd_package(
     ring. Off by default — see :func:`backend.core.ring_piercing.gate_seed_piercing`.
     """
     design = design.without_reference_geometry()
+    from backend.core.cpd_forcefield import reject_photoproduct_design
+
+    reject_photoproduct_design(
+        design,
+        path="legacy complete NAMD ZIP exporter",
+        supported_path="the full-topology explicit-solvent NAMD workflow",
+    )
     _check_ff_files()
 
     name = (design.metadata.name or "design").replace(" ", "_")

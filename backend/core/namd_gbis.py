@@ -84,6 +84,13 @@ def build_namd_gbis_package(
 
     Returns ``(package_subdir, name_stem, segments)`` relative to ``job_dir``.
     """
+    from backend.core.cpd_forcefield import reject_photoproduct_design
+
+    reject_photoproduct_design(
+        design,
+        path="GBIS NAMD package builder",
+        supported_path="the full-topology explicit-solvent NAMD workflow",
+    )
     # Lazy imports to avoid pulling namd_solvate's heavy module tail unless a GBIS
     # job actually runs (and to sidestep any import-order coupling).
     from backend.core.namd_solvate import _FF_DIR, _FF_FILES, _check_ff_files  # noqa: PLC0415

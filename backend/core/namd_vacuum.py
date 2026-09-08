@@ -126,6 +126,13 @@ def build_namd_vacuum_package(
     Returns ``(package_subdir, name_stem, segments)`` — the same contract as the
     explicit and GBIS builders, so ``namd_runner.run_job`` drives it unmodified.
     """
+    from backend.core.cpd_forcefield import reject_photoproduct_design
+
+    reject_photoproduct_design(
+        design,
+        path="vacuum NAMD package builder",
+        supported_path="the full-topology explicit-solvent NAMD workflow",
+    )
     name = (design.metadata.name or "design").replace(" ", "_")
     name_stem = name
 
