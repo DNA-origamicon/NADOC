@@ -1,0 +1,57 @@
+{
+  "schema": "nadoc.alpine-photoproduct-qm-benchmark-plan.v1",
+  "status": "prepared_not_submitted",
+  "gate_effect": "none",
+  "purpose": "Compare Alpine throughput for independent TT-CPD displaced-gradient tasks at 64 and 128 allocated CPU cores.",
+  "source": {
+    "product_id": "tt-cpd-cis-syn",
+    "model_id": "n1-methyl-tt-cpd-cis-syn",
+    "plan_sha256": "364bc5bb043ec72c8c5940dab00f81a4a5a4ba01a7b29230ef8d32bf87d8a3f6",
+    "plan_task_count": 211,
+    "sample_rule": "first 128 plan tasks in declared order",
+    "sample_task_count": 128,
+    "method": "mp2",
+    "basis": "6-31G(d)",
+    "atom_count": 36
+  },
+  "software": {
+    "python": "3.12",
+    "psi4": "1.11",
+    "qcengine": "0.51.0",
+    "qcelemental": "0.51.0",
+    "numpy": "2.5.2",
+    "environment_sha256": "c16e96df889026f209f31cd93596840ad70aa4de1ced4927eef381ed11702b9f"
+  },
+  "workloads": [
+    {
+      "label": "64",
+      "partition": "acpu",
+      "qos": "cpu-normal",
+      "nodes": 1,
+      "allocated_cores": 64,
+      "parallel_workers": 32,
+      "threads_per_worker": 2,
+      "memory_gib_per_worker": 3,
+      "memory_gib_requested": 110,
+      "walltime": "01:00:00"
+    },
+    {
+      "label": "128",
+      "partition": "acpu",
+      "qos": "cpu-normal",
+      "nodes": 1,
+      "allocated_cores": 128,
+      "parallel_workers": 64,
+      "threads_per_worker": 2,
+      "memory_gib_per_worker": 3,
+      "memory_gib_requested": 220,
+      "walltime": "01:00:00"
+    }
+  ],
+  "storage": {
+    "remote_persistent_root": "/scratch/alpine/jojo6687/nadoc_qm_benchmarks/v1",
+    "compute_working_storage": "$SLURM_SCRATCH",
+    "local_archive_root": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/alpine-qm-benchmark-v1/results"
+  },
+  "interpretation": "The two jobs use identical QCSchema inputs, but Alpine is heterogeneous. Compare CPU model and node metadata in each report before interpreting scaling efficiency. Duplicate results are performance evidence only."
+}

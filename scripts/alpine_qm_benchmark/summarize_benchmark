@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+from datetime import datetime, timezone
+import hashlib
+import json
+import os
+from pathlib import Path
+import platform
+import statistics
+import subprocess
+import sys
+
+plan_path = Path(sys.argv[1]).resolve()
+output_path = Path(sys.argv[2]).resolve()
+label = sys.argv[3]
+parallel = int(sys.argv[4])
+task_count = int(sys.argv[5])
+started_ns = int(sys.argv[6])
+finished_ns = int(sys.argv[7])
+plan = json.loads(plan_path.read_text())
+root = plan_path.parent
+records = []
+for task in plan["tasks"][:task_count]:
+    path = root / task["run_record"]["path"]
+    if path.is_file():
+        records.append(json.loads(path.read_text()))
+if len(records) != task_count or any(row.get("status") != "completed_unreviewed" for row in records):
+    raise RuntimeError(f"only {len(records)}/{task_count} benchmark tasks completed successfully")
+elapsed = sorted(float(row["execution"]["elapsed_seconds"]) for row in records)
+wall_seconds = (finished_ns - started_ns) / 1e9
+cpu_info = subprocess.run(
+    ["lscpu"], text=True, capture_output=True, check=False,
+).stdout
+payload = {
+    "schema": "nadoc.alpine-photoproduct-qm-benchmark.v1",
+    "status": "passed",
+    "simulation_ready": False,
+    "gate_effect": "none",
+    "created_at": datetime.now(timezone.utc).isoformat(),
+    "label": label,
+    "slurm": {
+        "job_id": os.environ.get("SLURM_JOB_ID"),
+        "job_name": os.environ.get("SLURM_JOB_NAME"),
+        "partition": os.environ.get("SLURM_JOB_PARTITION"),
+        "node": os.environ.get("SLURMD_NODENAME"),
+        "cpus_per_task": int(os.environ.get("SLURM_CPUS_PER_TASK", "0")),
+        "memory_per_node": os.environ.get("SLURM_MEM_PER_NODE"),
+    },
+    "workload": {
+        "task_count": task_count,
+        "parallel_workers": parallel,
+        "threads_per_task": 2,
+        "memory_gib_per_task": 3,
+        "method": plan.get("method"),
+        "basis": plan.get("basis"),
+        "atom_count": plan.get("atom_count"),
+        "plan_sha256": hashlib.sha256(plan_path.read_bytes()).hexdigest(),
+    },
+    "timing": {
+        "wall_seconds": wall_seconds,
+        "tasks_per_hour": task_count / wall_seconds * 3600.0,
+        "task_elapsed_mean_seconds": statistics.fmean(elapsed),
+        "task_elapsed_median_seconds": statistics.median(elapsed),
+        "task_elapsed_p90_seconds": elapsed[min(len(elapsed) - 1, int(0.9 * len(elapsed)))],
+        "task_elapsed_max_seconds": max(elapsed),
+    },
+    "environment": {
+        "host": platform.node(),
+        "platform": platform.platform(),
+        "python": platform.python_version(),
+        "cpu_count": os.cpu_count(),
+        "lscpu": cpu_info,
+    },
+    "interpretation": "Performance evidence only; duplicate QM results do not advance a chemistry or release gate.",
+}
+output_path.parent.mkdir(parents=True, exist_ok=True)
+output_path.write_text(json.dumps(payload, indent=2) + "\n")
+print(json.dumps(payload, indent=2))
