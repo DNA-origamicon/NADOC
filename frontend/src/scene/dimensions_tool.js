@@ -120,6 +120,7 @@ export function initDimensionsTool({
   const hint = document.getElementById('dimensions-hint')
   const list = document.getElementById('dimensions-list')
   const recordButton = document.getElementById('dimensions-record')
+  const recordWrap = document.getElementById('dimensions-record-wrap')
   const clearButton = document.getElementById('dimensions-clear')
   if (!section || !heading || !body || !list) return null
 
@@ -132,11 +133,6 @@ export function initDimensionsTool({
   let disposed = false
 
   function _isAssembly() { return Boolean(store.getState().assemblyActive) }
-  function _isPickingBases() {
-    const state = store.getState()
-    return !collapsed && !state.assemblyActive && !state.unfoldActive
-  }
-
   function _removeLive() {
     live?.visual?.dispose()
     live = null
@@ -226,6 +222,33 @@ export function initDimensionsTool({
       list.appendChild(empty)
     }
     if (recordButton) recordButton.disabled = !(live || pending)
+    if (recordWrap) {
+      const unavailable = !_isAssembly() && !pending
+      recordWrap.title = unavailable ? 'You must first select exactly two bases.' : ''
+      recordWrap.setAttribute('aria-label', unavailable ? recordWrap.title : 'Measure selected bases')
+      if (recordButton) {
+        recordButton.title = recordWrap.title
+        // Disabled buttons do not consistently dispatch hover events. Let the
+        // wrapper own the pointer so its native tooltip always appears.
+        recordButton.style.pointerEvents = unavailable ? 'none' : ''
+      }
+    }
+  }
+
+  function _syncPartSelection() {
+    if (collapsed || _isAssembly()) {
+      _clearPending()
+      return
+    }
+    const bases = selectionManager.getSelectedIndividualBases?.() ?? []
+    if (bases.length !== 2) {
+      _clearPending()
+      return
+    }
+    pending = {
+      a: bases[0].pos.clone(), b: bases[1].pos.clone(),
+      labels: [_anchorLabel(bases[0], 'Base A'), _anchorLabel(bases[1], 'Base B')],
+    }
   }
 
   function _disposeAssemblyHandles() {
@@ -300,21 +323,18 @@ export function initDimensionsTool({
       _disposeAssemblyHandles()
       _removeLive()
       _clearPending()
-      if (!_isAssembly()) selectionManager.clearCtrlBeads?.()
       _renderList()
       return
     }
     if (_isAssembly()) {
-      selectionManager.clearCtrlBeads?.()
       _removeLive()
       _createAssemblyHandles()
-      if (hint) hint.textContent = 'Drag either endpoint gizmo. Record freezes the current dimension.'
+      if (hint) hint.textContent = 'Drag either endpoint gizmo. Measure freezes the current dimension.'
     } else {
       _disposeAssemblyHandles()
       _removeLive()
-      _clearPending()
-      selectionManager.clearCtrlBeads?.()
-      if (hint) hint.textContent = 'Select two individual bases, then click Record to create the dimension.'
+      _syncPartSelection()
+      if (hint) hint.textContent = 'Select exactly two individual bases using Base or Ends, then click Measure.'
     }
     _renderList()
   }
@@ -348,7 +368,7 @@ export function initDimensionsTool({
     snapshot.visual = _makeVisual(scene, snapshot.a, snapshot.b, RECORDED_COLOR)
     records.unshift(snapshot)
     if (!_isAssembly()) {
-      selectionManager.clearCtrlBeads?.()
+      selectionManager.clearSelectedIndividualBases?.()
       _clearPending()
     }
     _renderList()
@@ -360,7 +380,6 @@ export function initDimensionsTool({
     _clearPending()
     for (const record of records) record.visual.dispose()
     records = []
-    selectionManager.clearCtrlBeads?.()
     _renderList()
   }
 
@@ -374,21 +393,15 @@ export function initDimensionsTool({
   recordButton?.addEventListener('click', record)
   clearButton?.addEventListener('click', clear)
 
-  selectionManager.onCtrlBeadsChange(beads => {
-    if (!_isPickingBases()) return
-    const lastTwo = beads.slice(-2)
-    if (lastTwo.length !== 2) { _clearPending(); _renderList(); return }
-    const a = selectionManager.getCtrlBeadPos(beads.length - 2)
-    const b = selectionManager.getCtrlBeadPos(beads.length - 1)
-    pending = a && b ? {
-      a: a.clone(), b: b.clone(),
-      labels: [_anchorLabel(lastTwo[0], 'Base A'), _anchorLabel(lastTwo[1], 'Base B')],
-    } : null
-    _renderList()
-  })
-
   const unsubscribe = store.subscribe((next, prev) => {
-    if (next.assemblyActive !== prev.assemblyActive) _syncMode()
+    if (next.assemblyActive !== prev.assemblyActive) {
+      _syncMode()
+    } else if ((next.selection !== prev.selection ||
+                next.currentGeometry !== prev.currentGeometry ||
+                next.currentDesign !== prev.currentDesign) && !_isAssembly()) {
+      _syncPartSelection()
+      _renderList()
+    }
   })
   const unsubscribeSidebar = rightSidebar?.onChange?.(({ activeTab }) => {
     if (activeTab !== 'properties' && !collapsed) close()
@@ -400,7 +413,6 @@ export function initDimensionsTool({
   return {
     open, close, record, clear,
     isActive: () => !collapsed,
-    isPickingBases: _isPickingBases,
     getMeasurements: () => [live, ...records].filter(Boolean).map(item => ({
       id: item.id, name: item.name, distance: dimensionDistance(item.a, item.b), visible: item.visible,
     })),

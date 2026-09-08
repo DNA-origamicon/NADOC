@@ -846,7 +846,6 @@ async function main() {
     controls,
     getHoverEntry: () => zoomScope.getHoverEntry(),
     getCamera:     () => sceneCtx.getRenderCamera(),
-    isDimensionPicking: () => dimensionsTool?.isPickingBases?.() ?? false,
     isDisabled:    () => slicePlane?.isContinuation() || store.getState().forceXoverActive,
   })
   store.subscribe((newState, prevState) => {

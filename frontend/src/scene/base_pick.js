@@ -28,7 +28,7 @@
 // its meshes on every `_render()`, which fires on every cluster-drag frame.
 
 import * as THREE from 'three'
-import { baseKey, xbKey } from './base_ref.js'
+import { baseKey, parseBaseKey, xbKey } from './base_ref.js'
 
 /**
  * A leaf is pickable only if every ancestor up to the scene root is visible — Three's
@@ -206,6 +206,29 @@ const _v3 = new THREE.Vector3()
 export function worldPosOf(cand, out = new THREE.Vector3()) {
   cand.instMesh.getMatrixAt(cand.id, _m4)
   return out.setFromMatrixPosition(_m4)
+}
+
+/**
+ * Resolve canonical Base and End refs through one key-to-live-element path.
+ * An end is the same individual nucleotide named by its base key, so it must not
+ * have a separate geometry adapter.
+ */
+export function resolveIndividualBaseElements(candidates = [], refs = []) {
+  const byKey = new Map(candidates.map(candidate => [candidate.key, candidate]))
+  const seen = new Set()
+  const out = []
+  for (const ref of refs) {
+    if ((ref?.kind !== 'base' && ref?.kind !== 'end') || seen.has(ref.key)) continue
+    const candidate = byKey.get(ref.key)
+    if (!candidate) continue
+    seen.add(ref.key)
+    out.push({
+      key: ref.key,
+      nuc: candidate.nuc ?? parseBaseKey(ref.key),
+      pos: worldPosOf(candidate, new THREE.Vector3()),
+    })
+  }
+  return out
 }
 
 /**

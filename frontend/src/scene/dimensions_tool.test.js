@@ -21,14 +21,15 @@ function markup() {
     <div id="dimensions-section">
       <h2 id="dimensions-heading" tabindex="0"><span></span><span id="dimensions-arrow"></span></h2>
       <div id="dimensions-body"><div id="dimensions-hint"></div>
-        <button id="dimensions-record"></button><button id="dimensions-clear"></button>
+        <span id="dimensions-record-wrap"><button id="dimensions-record">Measure</button></span>
+        <button id="dimensions-clear"></button>
         <div id="dimensions-list"></div>
       </div>
     </div>`
 }
 
 function makeStore(assemblyActive = false) {
-  let state = { assemblyActive }
+  let state = { assemblyActive, unfoldActive: false, selection: { items: [] } }
   const listeners = []
   return {
     getState: () => state,
@@ -37,18 +38,34 @@ function makeStore(assemblyActive = false) {
       state = { ...state, assemblyActive: value }
       listeners.forEach(fn => fn(state, prev))
     },
+    setSelection(items) {
+      const prev = state
+      state = { ...state, selection: { items } }
+      listeners.forEach(fn => fn(state, prev))
+    },
     subscribe(fn) { listeners.push(fn); return () => listeners.splice(listeners.indexOf(fn), 1) },
   }
 }
 
-function makeSelection() {
-  let callback = null
-  let beads = []
+function makeSelection(store) {
+  let bases = []
   return {
-    onCtrlBeadsChange(fn) { callback = fn },
-    clearCtrlBeads: vi.fn(() => { beads = []; callback?.(beads) }),
-    getCtrlBeadPos(index) { return beads[index]?.entry.pos.clone() ?? null },
-    fire(next) { beads = next; callback?.(beads) },
+    getSelectedIndividualBases: () => bases.map(base => ({
+      key: `${base.nuc.helix_id}:${base.nuc.bp_index}:${base.nuc.direction}`,
+      nuc: base.nuc,
+      pos: base.entry.pos.clone(),
+    })),
+    clearSelectedIndividualBases: vi.fn(() => {
+      bases = []
+      store.setSelection([])
+    }),
+    fire(next, kind = 'base') {
+      bases = next
+      store.setSelection(next.map(base => ({
+        kind,
+        key: `${base.nuc.helix_id}:${base.nuc.bp_index}:${base.nuc.direction}`,
+      })))
+    },
   }
 }
 
@@ -57,7 +74,7 @@ function setup({ assembly = false } = {}) {
   localStorage.clear()
   const scene = new THREE.Scene()
   const store = makeStore(assembly)
-  const selectionManager = makeSelection()
+  const selectionManager = makeSelection(store)
   let sidebarListener = null
   const rightSidebar = {
     open: vi.fn(),
@@ -76,7 +93,7 @@ function setup({ assembly = false } = {}) {
 
 const bead = (x, y, z, bp) => ({
   entry: { pos: new THREE.Vector3(x, y, z) },
-  nuc: { strand_id: 'strand-a', bp_index: bp, direction: 'forward' },
+  nuc: { helix_id: 'helix-a', strand_id: 'strand-a', bp_index: bp, direction: 'forward' },
 })
 
 beforeEach(() => {
@@ -94,7 +111,7 @@ describe('Dimensions tool', () => {
     expect(localStorage.getItem('nadoc.leftSidebar.sections.v1')).toContain('dimensions-section')
   })
 
-  it('does not draw a part dimension until two selected bases are recorded', () => {
+  it('does not draw a part dimension until exactly two selected bases are measured', () => {
     const { tool, scene, selectionManager } = setup()
     tool.open()
     selectionManager.fire([bead(0, 0, 0, 4), bead(3, 4, 0, 9)])
@@ -111,6 +128,40 @@ describe('Dimensions tool', () => {
     lines = 0
     scene.traverse(object => { if (object.isLine) lines++ })
     expect(lines).toBe(1)
+  })
+
+  it('resolves two Ends selections through the same individual-base route', () => {
+    const { tool, selectionManager } = setup()
+    tool.open()
+    selectionManager.fire([bead(0, 0, 0, 4), bead(0, 0, 6, 9)], 'end')
+
+    expect(document.getElementById('dimensions-record').disabled).toBe(false)
+    expect(tool.record()).toBe(true)
+    expect(tool.getMeasurements()[0].distance).toBe(6)
+  })
+
+  it('keeps Measure disabled with guidance unless exactly two bases are selected', () => {
+    const { tool, selectionManager } = setup()
+    tool.open()
+    const button = document.getElementById('dimensions-record')
+    const wrapper = document.getElementById('dimensions-record-wrap')
+
+    expect(button.textContent).toBe('Measure')
+    expect(button.disabled).toBe(true)
+    expect(button.style.pointerEvents).toBe('none')
+    expect(wrapper.title).toBe('You must first select exactly two bases.')
+    selectionManager.fire([bead(0, 0, 0, 1)])
+    expect(button.disabled).toBe(true)
+    expect(wrapper.title).toBe('You must first select exactly two bases.')
+
+    selectionManager.fire([bead(0, 0, 0, 1), bead(1, 0, 0, 2), bead(2, 0, 0, 3)])
+    expect(button.disabled).toBe(true)
+    expect(wrapper.title).toBe('You must first select exactly two bases.')
+
+    selectionManager.fire([bead(0, 0, 0, 1), bead(1, 0, 0, 2)])
+    expect(button.disabled).toBe(false)
+    expect(button.style.pointerEvents).toBe('')
+    expect(wrapper.title).toBe('')
   })
 
   it('collapses and drops pending base endpoints when another sidebar tab opens', () => {

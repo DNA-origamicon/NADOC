@@ -1479,6 +1479,11 @@ body:has(#right-panel.locked-inactive) .toast {
   margin-bottom: 7px;
 }
 
+.dimensions-action-wrap,
+.dimensions-action-wrap > .def-btn {
+  width: 100%;
+}
+
 .dimensions-list {
   max-height: 190px;
   overflow-y: auto;

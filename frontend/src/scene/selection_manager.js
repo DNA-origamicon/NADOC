@@ -40,6 +40,7 @@ import { baseKey, xbKey, atomBaseKey, parseBaseKey, toggleBaseKey, mergeBaseKeys
 import {
   backboneCandidates, xoverCandidates, flexCandidates, ssLinkCandidates,
   nearestCandidate, candidatesInRect, makeProjector, worldPosOf,
+  resolveIndividualBaseElements,
 } from './base_pick.js'
 import { flexAnchorKey } from './flexible_arcs.js'
 import { moveRotateSelectionLocked, selectedCrossoverRefs, selectedEndRefs } from './selection_model.js'
@@ -1685,7 +1686,7 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
  * @param {{ onNick?: Function, onForceLigateSelectedEnds?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldAssignSequence?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onForceLigateSelectedEnds, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onEditStrandSequence, onHideSelection, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, getDomainEndTable, controls, getHoverEntry, getCamera, isDisabled, isDimensionPicking, getProteinRenderer, getNanoparticleRenderer, getAtomisticRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionStickRenderer, getRegionSurfaceRenderer, onDrillLevel, selectionController } = opts
+  const { onNick, onForceLigateSelectedEnds, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onEditStrandSequence, onHideSelection, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, getDomainEndTable, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getNanoparticleRenderer, getAtomisticRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionStickRenderer, getRegionSurfaceRenderer, onDrillLevel, selectionController } = opts
   if (!selectionController) throw new TypeError('selection manager requires the canonical selection controller')
   _onEditStrandSequence = onEditStrandSequence ?? null
   _onHideSelection = onHideSelection ?? null
@@ -3199,6 +3200,29 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     })
   }
 
+  // Measurement resolution must survive representation/filter changes after the
+  // selection was made. Include the renderer's live nucleotide entries even when
+  // their mesh is currently hidden; exotic base families still come from the shared
+  // selectable-candidate union above.
+  function _individualBaseCandidates() {
+    const candidates = [..._baseCandidates()]
+    const seen = new Set(candidates.map(candidate => candidate.key))
+    const entries = [
+      ...designRenderer.getBackboneEntries(),
+      ...(designRenderer.getFluoroEntries?.() ?? []),
+    ]
+    for (const entry of entries) {
+      const key = baseKey(entry?.nuc, entry?._copy)
+      if (!key || seen.has(key) || !entry?.instMesh) continue
+      seen.add(key)
+      candidates.push({
+        key, instMesh: entry.instMesh, id: entry.id,
+        family: 'backbone', nuc: entry.nuc,
+      })
+    }
+    return candidates
+  }
+
   // Live position accessor — glow_layer's refresh() re-reads entry.pos on every
   // simulation frame, and _writeEntries copies immediately, so one shared scratch vector
   // is safe and the glow tracks a bead that is moving under MD playback.
@@ -3415,7 +3439,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // toggles a hit overhang in/out of _multiOverhangIds (capped at 2 — older
     // ids drop off so the manager popup always sees the most recent two).
     const sel = store.getState().selectableTypes
-    if (sel.overhangs && !isDimensionPicking?.()) {
+    if (sel.overhangs) {
       _setNdc(e.clientX, e.clientY)
       raycaster.setFromCamera(_ndc, _cam())
       const backboneEntries = designRenderer.getBackboneEntries()
@@ -3468,16 +3492,6 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if (_ctrlBeads[idx].entry.instMesh.instanceMatrix) _ctrlBeads[idx].entry.instMesh.instanceMatrix.needsUpdate = true
       _ctrlBeads.splice(idx, 1)
     } else {
-      // Dimensions mode is an ordered two-point picker. Once both endpoints are
-      // present, selecting another base drops the oldest so the live dimension
-      // always follows the user's last two base picks.
-      if (isDimensionPicking?.() && _ctrlBeads.length >= 2) {
-        const oldest = _ctrlBeads.shift()
-        designRenderer.setEntryColor(oldest.entry, oldest.entry.defaultColor)
-        designRenderer.setBeadScale(oldest.entry, 1.0)
-        if (oldest.entry.instMesh.instanceColor) oldest.entry.instMesh.instanceColor.needsUpdate = true
-        if (oldest.entry.instMesh.instanceMatrix) oldest.entry.instMesh.instanceMatrix.needsUpdate = true
-      }
       // Select
       designRenderer.setEntryColor(entry, C_CTRL_BEAD)
       designRenderer.setBeadScale(entry, 1.6)
@@ -4021,7 +4035,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // click (Ctrl-drag → lasso; Alt-click → bead pick; Shift-click → additive pick).
   canvas.addEventListener('pointerdown', e => {
     if (e.button !== 0 || !controls) return
-    if (e.ctrlKey || e.altKey || e.shiftKey || isDimensionPicking?.()) controls.enabled = false
+    if (e.ctrlKey || e.altKey || e.shiftKey) controls.enabled = false
   }, { capture: true })
 
   let _downPos     = null
@@ -4175,15 +4189,6 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     if (_downPos && Math.hypot(e.clientX - _downPos.x, e.clientY - _downPos.y) > 4) return
     if (e.clientX > window.innerWidth - 300) return
-
-    // While the Dimensions card is open, an ordinary click is an individual
-    // base endpoint pick regardless of the normal selection drill level.
-    if (isDimensionPicking?.()) {
-      _dismissMenu()
-      _handleCtrlClickNuc(e)
-      _downPos = null
-      return
-    }
 
     _dismissMenu()
 
@@ -5084,6 +5089,21 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     /** Copy of the base-level pool — app-wide base keys (see scene/base_ref.js). */
     getSelectedBaseKeys() { return [..._baseKeys] },
+
+    /** Canonical Base and End refs resolved through one live base-element path. */
+    getSelectedIndividualBases() {
+      const refs = (store.getState().selection?.items ?? [])
+        .filter(ref => ref.kind === 'base' || ref.kind === 'end')
+      if (refs.length !== 2) return []
+      const bases = resolveIndividualBaseElements(_individualBaseCandidates(), refs)
+      return bases.length === 2 ? bases : []
+    },
+
+    /** Remove only the canonical individual-base refs after a measurement. */
+    clearSelectedIndividualBases() {
+      const items = store.getState().selection?.items ?? []
+      selectionController.replace(items.filter(ref => ref.kind !== 'base' && ref.kind !== 'end'))
+    },
 
     /**
      * Every base-level pick candidate right now, as `{key, family}` — the same union a

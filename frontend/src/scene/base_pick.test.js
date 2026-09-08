@@ -1,7 +1,8 @@
+import * as THREE from 'three'
 import { describe, it, expect } from 'vitest'
 import {
   isVisibleChain, backboneCandidates, xoverCandidates, flexCandidates, ssLinkCandidates,
-  nearestCandidate, candidatesInRect,
+  nearestCandidate, candidatesInRect, resolveIndividualBaseElements,
 } from './base_pick.js'
 
 // ── Fakes ────────────────────────────────────────────────────────────────────
@@ -179,6 +180,41 @@ describe('ssLinkCandidates', () => {
 
   it('returns empty without a group', () => {
     expect(ssLinkCandidates(null)).toEqual([])
+  })
+})
+
+describe('resolveIndividualBaseElements', () => {
+  const candidate = (key, x) => ({
+    key,
+    nuc: { helix_id: 'h1', bp_index: x, direction: 'FORWARD', strand_id: 's1' },
+    id: 0,
+    instMesh: {
+      getMatrixAt(_id, matrix) { matrix.makeTranslation(x, 0, 0) },
+    },
+  })
+
+  it('routes Base and End refs to identical live nucleotide elements', () => {
+    const candidates = [candidate('h1:2:FORWARD', 2), candidate('h1:7:FORWARD', 7)]
+    const base = resolveIndividualBaseElements(candidates, [
+      { kind: 'base', key: 'h1:2:FORWARD' }, { kind: 'base', key: 'h1:7:FORWARD' },
+    ])
+    const ends = resolveIndividualBaseElements(candidates, [
+      { kind: 'end', key: 'h1:2:FORWARD' }, { kind: 'end', key: 'h1:7:FORWARD' },
+    ])
+
+    expect(base.map(item => item.key)).toEqual(ends.map(item => item.key))
+    expect(base.map(item => item.pos.toArray())).toEqual([[2, 0, 0], [7, 0, 0]])
+    expect(ends.map(item => item.pos.toArray())).toEqual(base.map(item => item.pos.toArray()))
+    expect(base[0].pos).toBeInstanceOf(THREE.Vector3)
+  })
+
+  it('deduplicates the same base identity and drops unrelated selection kinds', () => {
+    const candidates = [candidate('h1:2:FORWARD', 2)]
+    expect(resolveIndividualBaseElements(candidates, [
+      { kind: 'base', key: 'h1:2:FORWARD' },
+      { kind: 'end', key: 'h1:2:FORWARD' },
+      { kind: 'strand', id: 's1' },
+    ])).toHaveLength(1)
   })
 })
 
