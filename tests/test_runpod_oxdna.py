@@ -83,10 +83,12 @@ def test_campaign_ledger_caps_cumulative_attempts(tmp_path):
     ledger.open_pod("p1", 2.0, now=100.0)
     ledger.close_pod("p1", now=1900.0)  # $1
     ledger.open_pod("p2", 4.0, now=2000.0)
+    assert ledger.open_pod_ids() == ["p2"]
     assert ledger.spent_usd(now=3800.0) == pytest.approx(3.0)
     with pytest.raises(RunpodOxdnaError, match="campaign remainder"):
         ledger.authorize(4.0, 1801)
     ledger.close_pod("p2", now=3800.0)
+    assert ledger.open_pod_ids() == []
     assert json.loads((tmp_path / "spend.json").read_text())[1]["ended_at"] == 3800.0
 
 

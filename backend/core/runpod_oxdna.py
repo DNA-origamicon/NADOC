@@ -69,9 +69,10 @@ def target_for_gpu(gpu_id: str) -> OxdnaGpuTarget:
 class CampaignLedger:
     """Durable cumulative spend authorization shared by every attempt in a campaign.
 
-    A provider-side ``terminateAfter`` bounds one pod.  This ledger bounds the sum of
-    retries, failed boots, builds, and simulations, which is the user's actual $5 cap.
-    Corrupt state fails closed.
+    A requested provider-side ``terminateAfter`` is defense in depth, not a proven hard
+    bound: an observed pod outlived it on 2026-09-04. This ledger bounds authorization for
+    the sum of retries, failed boots, builds, and simulations. Exact-pod termination still
+    needs an independently surviving watchdog. Corrupt state fails closed.
     """
 
     def __init__(self, path: Path, *, cap_usd: float = MAX_CAMPAIGN_USD):
@@ -108,6 +109,11 @@ class CampaignLedger:
 
     def remaining_usd(self, *, now: float | None = None) -> float:
         return max(0.0, self.cap_usd - self.spent_usd(now=now))
+
+    def open_pod_ids(self) -> list[str]:
+        """Return billing attempts with no recorded end, preserving fail-closed state."""
+
+        return [str(row["pod_id"]) for row in self._rows() if row.get("ended_at") is None]
 
     def authorize(self, rate_usd_per_hour: float, lifetime_s: int) -> None:
         projected = float(rate_usd_per_hour) * int(lifetime_s) / 3600.0
