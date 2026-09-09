@@ -2815,15 +2815,6 @@ async def create_md_job(body: CreateJobRequest) -> dict:
     indeterminate spinner with no ETA and no way to detect a hung run.
     """
     body = _apply_runpod_gpu_resident_default(body)
-    if not (body.oxdna_job_id or body.mrdna_job_id or body.blade_job_id):
-        from backend.core.cpd_forcefield import CpdCapabilityError, assert_cpd_simulation_supported
-        try:
-            assert_cpd_simulation_supported(
-                design_state.get_or_404().without_reference_geometry(),
-                path="NAMD job creation",
-            )
-        except CpdCapabilityError as exc:
-            raise HTTPException(400, str(exc)) from exc
     preset = get_preset(body.relax_preset)
     # Host-aware, not just build-aware: GBIS needs a non-CUDA NAMD binary, and finding
     # that out AFTER solvation (which is what happened) wastes a prep and looks like a
