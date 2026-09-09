@@ -1023,3 +1023,21 @@ full Hessians/charge/bonded/smoke continuations were stopped, without deleting t
 definitions or logs.  That prevents stale automation from spending compute or implying
 that product count is parameter-count evidence.  Downstream expansion is now fail-closed
 behind the quantitative family-transfer decisions in the new policy.
+
+## Literature-tiered fragment campaign (2026-09-08)
+
+The next local cycle follows the established additive-CHARMM model-compound hierarchy
+rather than independently optimizing the charged 63-atom d(TpT) model for every ordered
+TT-CPD. The complete product core is retained in 36-atom N1-methyl models, and each
+glycosidic boundary is isolated in a neutral 49-atom model containing one complete
+deoxyribose and an opposite N1 methyl cap. Unchanged phosphate/backbone parameters are
+transferred from CHARMM36 and tested after assembly. The already submitted Alpine
+full-boundary calculation remains untouched and will be treated as independent
+validation if it completes.
+
+The exact partition, literature authorities, escalation rules, and fail-closed effect are
+recorded in `backend/data/forcefield/photoproduct_qm_fragment_policy_v1.json` version
+1.0.0. Prepared inputs and their decision batches are documented in
+`docs/cpd_qm_fragment_campaign.md` and stored under the Archive-backed
+`tt-cpd-local-fragment-campaign-v1` evidence directory. Input preparation does not pass
+the force-field or NAMD gates.
