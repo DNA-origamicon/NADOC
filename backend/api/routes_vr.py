@@ -1,9 +1,11 @@
 """Local native-OpenXR companion lifecycle for Linux VR.
 
 Stock Linux browsers do not currently bridge WebXR to SteamVR. These endpoints
-are therefore deliberately localhost-only: they snapshot the active NADOC part
-into a compact read-only scene file and launch/stop the bundled native viewer.
-No design data is mutated and no shell command is constructed from request data.
+therefore accept only a browser on localhost or the exact HTTPS Tailscale origin
+declared by ``start.sh --tailscale``. They snapshot the active NADOC part into a
+compact read-only scene file and launch/stop the bundled native viewer on this
+host. No design data is mutated and no shell command is constructed from request
+data.
 """
 
 from __future__ import annotations
@@ -11,6 +13,7 @@ from __future__ import annotations
 import copy
 import gzip
 import hashlib
+import ipaddress
 import json
 import math
 import os
@@ -58,6 +61,10 @@ _TRAJECTORY_FEEDBACK_LOCK = threading.Lock()
 _COORDINATE_MAGIC = b"NVRCOORD"
 _COORDINATE_HEADER = struct.Struct("<8sIIQIII")
 _MAX_VR_TRAJECTORY_ATOMS = 1_000_000
+_TAILSCALE_NETWORKS = (
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("fd7a:115c:a1e0::/48"),
+)
 
 SelectionKind = Literal[
     "none",
@@ -303,22 +310,87 @@ class VRPlaneFeedbackRequest(BaseModel):
     )
 
 
+def _tailnet_origin(url: str | None) -> tuple[str, str, int] | None:
+    """Return one normalized HTTPS ``*.ts.net`` origin, never a URL path."""
+    if not url:
+        return None
+    try:
+        parsed = urlparse(url)
+        hostname = (parsed.hostname or "").lower()
+        port = parsed.port or 443
+    except ValueError:
+        return None
+    if (
+        parsed.scheme.lower() != "https"
+        or not hostname.endswith(".ts.net")
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path not in {"", "/"}
+        or parsed.params
+        or parsed.query
+        or parsed.fragment
+    ):
+        return None
+    return ("https", hostname, port)
+
+
+def _tailscale_client_ip(value: str | None) -> str | None:
+    """Normalize an address only when it belongs to Tailscale's address ranges."""
+    if not value:
+        return None
+    try:
+        address = ipaddress.ip_address(value.strip())
+    except ValueError:
+        return None
+    return (
+        str(address)
+        if any(address in network for network in _TAILSCALE_NETWORKS)
+        else None
+    )
+
+
 def _require_local(request: Request) -> None:
     host = request.client.host if request.client else ""
-    if host not in {"127.0.0.1", "::1", "localhost"}:
+    configured_tailscale_ip = _tailscale_client_ip(
+        os.environ.get("NADOC_TAILSCALE_IP")
+    )
+    request_tailscale_ip = _tailscale_client_ip(host)
+    local_client = host in {"127.0.0.1", "::1", "localhost"}
+    self_tailscale_client = (
+        configured_tailscale_ip is not None
+        and request_tailscale_ip == configured_tailscale_ip
+    )
+    if not local_client and not self_tailscale_client:
         raise HTTPException(
-            403, detail="Native VR launch is available only from localhost."
+            403,
+            detail=(
+                "Native VR launch is available only from localhost or this "
+                "host's configured Tailscale URL."
+            ),
         )
-    # A local Vite reverse proxy makes every backend peer look loopback. Preserve
-    # the workstation-only boundary by also checking the browser's Origin.
+    # Vite may preserve Tailscale Serve's client address rather than presenting
+    # loopback. The launcher-declared self address admits that one local route;
+    # another tailnet peer address remains insufficient. Also bind browser writes
+    # to the exact launcher-declared Origin whenever the browser supplies one.
     origin = request.headers.get("origin")
-    if origin and (urlparse(origin).hostname or "") not in {
-        "127.0.0.1",
-        "::1",
-        "localhost",
-    }:
+    try:
+        origin_hostname = (urlparse(origin).hostname or "") if origin else ""
+    except ValueError:
+        origin_hostname = ""
+    local_origin = origin_hostname in {"127.0.0.1", "::1", "localhost"}
+    configured_tailnet_origin = _tailnet_origin(os.environ.get("NADOC_PUBLIC_URL"))
+    request_tailnet_origin = _tailnet_origin(origin)
+    tailnet_origin_allowed = (
+        configured_tailnet_origin is not None
+        and request_tailnet_origin == configured_tailnet_origin
+    )
+    if origin and not local_origin and not tailnet_origin_allowed:
         raise HTTPException(
-            403, detail="Native VR launch is available only from localhost."
+            403,
+            detail=(
+                "Native VR launch is available only from localhost or this "
+                "host's configured Tailscale URL."
+            ),
         )
 
 

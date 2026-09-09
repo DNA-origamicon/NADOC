@@ -4632,9 +4632,9 @@ export async function getSystemResources(devices = '0') {
   }
 }
 
-/** Local native-OpenXR companion used when the browser has no immersive WebXR
- * bridge (notably stock Firefox/Chromium on Linux). These endpoints are
- * localhost-only and never mutate the active design. */
+/** Host-local native-OpenXR companion used when the browser has no immersive
+ * WebXR bridge (notably stock Firefox/Chromium on Linux). These endpoints accept
+ * localhost or this host's configured Tailscale origin and never mutate design. */
 export async function getVRStatus() {
   return _request('GET', '/vr/status', undefined, { suppressBusy: true })
 }

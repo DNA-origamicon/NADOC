@@ -139,12 +139,55 @@ def _semantic_extra_base_id(base_key: str, primitive: str) -> str:
     return quote(f"extra-base-ref:{payload}", safe="-_.:~")
 
 
-def test_native_vr_routes_are_workstation_only() -> None:
+def test_native_vr_routes_are_workstation_only(monkeypatch) -> None:
+    monkeypatch.delenv("NADOC_PUBLIC_URL", raising=False)
+    monkeypatch.delenv("NADOC_TAILSCALE_IP", raising=False)
     _require_local(_request("127.0.0.1", "http://localhost:5173"))
     with pytest.raises(HTTPException, match="localhost"):
         _require_local(_request("192.0.2.4"))
     with pytest.raises(HTTPException, match="localhost"):
         _require_local(_request("127.0.0.1", "http://192.0.2.4:5173"))
+
+
+def test_native_vr_routes_accept_only_configured_tailscale_origin(
+    monkeypatch,
+) -> None:
+    public_url = "https://workstation.example-tailnet.ts.net:5173"
+    monkeypatch.setenv("NADOC_PUBLIC_URL", public_url)
+    monkeypatch.setenv("NADOC_TAILSCALE_IP", "100.89.83.24")
+
+    _require_local(_request("127.0.0.1", public_url))
+    _require_local(_request("100.89.83.24", public_url))
+    # Same-origin GET requests may omit Origin; the exact launcher-declared self
+    # address must still support the native status/event polling loop.
+    _require_local(_request("100.89.83.24"))
+
+    for origin in (
+        "https://other.example-tailnet.ts.net:5173",
+        "https://workstation.example-tailnet.ts.net",
+        "http://workstation.example-tailnet.ts.net:5173",
+        "https://workstation.example-tailnet.ts.net:5173/not-an-origin",
+    ):
+        with pytest.raises(HTTPException, match="configured Tailscale URL"):
+            _require_local(_request("127.0.0.1", origin))
+
+    with pytest.raises(HTTPException, match="configured Tailscale URL"):
+        _require_local(_request("100.64.0.2", public_url))
+
+
+def test_native_vr_routes_ignore_non_tailnet_public_url(monkeypatch) -> None:
+    public_url = "https://public.example.com:5173"
+    monkeypatch.setenv("NADOC_PUBLIC_URL", public_url)
+    with pytest.raises(HTTPException, match="configured Tailscale URL"):
+        _require_local(_request("127.0.0.1", public_url))
+
+
+def test_native_vr_routes_ignore_non_tailnet_client_setting(monkeypatch) -> None:
+    public_url = "https://workstation.example-tailnet.ts.net:5173"
+    monkeypatch.setenv("NADOC_PUBLIC_URL", public_url)
+    monkeypatch.setenv("NADOC_TAILSCALE_IP", "192.0.2.4")
+    with pytest.raises(HTTPException, match="configured Tailscale URL"):
+        _require_local(_request("192.0.2.4", public_url))
 
 
 def test_expanded_quick_view_matches_desktop_centroid_spacing() -> None:

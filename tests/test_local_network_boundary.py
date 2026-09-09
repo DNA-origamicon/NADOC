@@ -22,6 +22,7 @@ def test_combined_launcher_defaults_to_loopback_and_requires_explicit_lan_flag()
     assert 'TAILSCALE_IP="$("${TAILSCALE_CMD[@]}" ip -4' in script
     assert '["Self"]["DNSName"]' in script
     assert 'PUBLIC_URL="https://${TAILSCALE_DNS_NAME}:5173"' in script
+    assert 'export NADOC_TAILSCALE_IP="$TAILSCALE_IP"' in script
     assert 'serve --bg --https=5173 http://127.0.0.1:5173' in script
     assert 'serve --https=5173 off' in script
     assert 'FRONTEND_HOST="$TAILSCALE_IP"' not in script

@@ -37,6 +37,12 @@ paired computer appears as a separate server tab and is refreshed automatically;
 it can be offline without affecting local work and becomes selectable shortly
 after its own NADOC server starts.
 
+Native VR is also available from that computer's printed Tailscale URL. It still
+launches SteamVR and the native viewer on the NADOC host whose URL is open, not on
+another paired workspace host. Other Tailscale origins remain unable to call the
+host-local VR bridge, and the launcher admits only this computer's own Tailscale
+address to the native companion endpoints.
+
 Both computers must be paired once from **Help → Tailscale Workspace Setup**.
 Saved Tailscale HTTP/IP peers are upgraded automatically to HTTPS MagicDNS when
 the updated remote server is detected. If an unusually configured legacy peer

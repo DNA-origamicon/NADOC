@@ -164,7 +164,8 @@ benchmark is available as
 thresholds, SteamVR timing gate, evidence semantics, and failure map are in
 [`docs/scrywrite_atomistic_md.md`](../../docs/scrywrite_atomistic_md.md).
 For native-to-browser interaction, the backend creates a private (`0600`), bounded
-event record and passes its path directly to the viewer. A localhost-only endpoint
+event record and passes its path directly to the viewer. A host-local endpoint,
+restricted to localhost or the launcher's exact Tailscale self-address and origin,
 exposes validated, sequenced hover, Select, and selection-level intents. The browser
 routes those intents through NADOC's canonical selection controller; the companion
 never writes design state directly. A second private, bounded record carries only the
