@@ -543,10 +543,13 @@ _SLOW_MODULES = {
 #   • TestMinimize3ExtraBase — test_atomistic_minimisers: real 3-extra-base minimise
 #     (marked by class because its methods have generic names like ``test_cache_path``
 #     that would over-match same-named tests in other files if listed individually).
+#   • TestOpenMMSmoke — every method builds a real AMBER14+GBNeck2 OpenMM system,
+#     creates a CPU Context, minimises it, and runs NVT; together they cost ~53 s.
 _SLOW_CLASSES = {
     "TestSyntheticRoundTrip",
     "TestRoutedPrimitiveIntegration",
     "TestMinimize3ExtraBase",
+    "TestOpenMMSmoke",
 }
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
