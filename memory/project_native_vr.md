@@ -165,6 +165,27 @@ Phase 5A acknowledged Move/Rotate checkpoint: Confirm is now reachable for exact
 
 ## Workstation VR runtime gotcha (system-local, not a NADOC feature)
 
+**2026-09-08 saved-session regression:** the workstation was logged into GNOME Shell 46
+Wayland. `wayland-info` exposed no `wp_drm_lease_device_v1`; SteamVR 2.16.7 failed
+with `VRInitError_Compositor_GnomeNoDRMLeasing`. Forcing SDL/Xwayland found the
+Vive's 2160×1200 Vulkan display and selected 90 Hz, but Xwayland could not acquire
+it and failed with `VRInitError_Compositor_CannotDRMLeaseDisplay`. This is distinct
+from the Xorg connector-ownership case below. `_assert_vr_display_lease_available()`
+now fails before launching SteamVR when a Wayland session does not advertise the
+lease protocol. Boot journals show the successful 2026-08-17 and 2026-08-28 runs
+were automatically selected GDM X11 sessions. The 2026-08-30 reboot instead used
+Wayland after the account's saved session reverted to generic `ubuntu`. Persist
+`Session=ubuntu-xorg` and `SessionType=x11` through AccountsService, then sign out
+and back in; no per-login gear-menu choice is required. A process-local X11
+override cannot transfer DRM master ownership away from a running Mutter session.
+
+The 2026-08-17 Codex transcript and preserved 2026-08-28 SteamVR logs settle the
+architecture: the custom component was NADOC's native OpenXR companion, including
+the real submitted-eye mirror, while SteamVR remained the runtime/compositor. The
+physical success path recorded `CHmdWindowSDL: Using X11`, `Direct mode: enabled`,
+`Headset is using direct mode`, and `Startup Complete`; no alternate runtime or
+bespoke headset driver participated.
+
 SteamVR's compositor fails `xrCreateSession` with `CannotDRMLeaseDisplay` ("Failed to acquire xlib
 display" / "VR requires direct mode") whenever the Vive's `HDMI-0` connector is a live ordinary
 GNOME/X desktop monitor: the Vive's own EDID does not self-report as non-desktop, so X does not

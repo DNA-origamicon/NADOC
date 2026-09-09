@@ -1499,6 +1499,38 @@ def test_build_environment_keeps_sbin_on_path_but_drops_conda() -> None:
         assert leaked not in env
 
 
+def test_vr_display_lease_preflight_rejects_wayland_without_protocol(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")
+    monkeypatch.setattr(routes_vr.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(
+        routes_vr.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=0, stdout="wl_compositor\n"),
+    )
+    with pytest.raises(HTTPException, match="saved X11 session"):
+        routes_vr._assert_vr_display_lease_available()
+
+
+def test_vr_display_lease_preflight_accepts_xorg_or_wayland_lease(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("XDG_SESSION_TYPE", "x11")
+    routes_vr._assert_vr_display_lease_available()
+
+    monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")
+    monkeypatch.setattr(routes_vr.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(
+        routes_vr.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=0, stdout="interface: 'wp_drm_lease_device_v1'\n"
+        ),
+    )
+    routes_vr._assert_vr_display_lease_available()
+
+
 def test_start_steamvr_is_noop_when_runtime_and_dashboard_are_ready(
     monkeypatch,
 ) -> None:
@@ -1541,6 +1573,7 @@ def test_start_steamvr_launches_steam_with_sanitized_environment(
     payloads = iter([not_ready, ready])
     monkeypatch.setattr(routes_vr, "_runtime_payload", lambda: next(payloads))
     monkeypatch.setattr(routes_vr, "_detach_hmd_from_desktop", lambda: None)
+    monkeypatch.setattr(routes_vr, "_assert_vr_display_lease_available", lambda: None)
     monkeypatch.setattr(routes_vr.Path, "is_file", lambda self: True)
     monkeypatch.setattr(
         routes_vr, "_STEAMVR_LOG_PATH", tmp_path / "steamvr.log"

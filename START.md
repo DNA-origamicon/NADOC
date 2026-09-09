@@ -49,6 +49,14 @@ another paired workspace host. Other Tailscale origins remain unable to call the
 host-local VR bridge, and the launcher admits only this computer's own Tailscale
 address to the native companion endpoints.
 
+On the Vive workstation, the `jojo` account's saved Ubuntu session is X11 because
+GNOME 46 Wayland does not expose the `wp_drm_lease_device_v1` protocol SteamVR
+needs to lease the headset connector. Normal sign-in uses that saved session; no
+login-screen session choice is required. If an OS update resets the saved session
+to generic `ubuntu`, restore `Session=ubuntu-xorg` and `SessionType=x11` through
+AccountsService, sign out and back in, then start NADOC. Headless ScryWrite
+validation remains available in either session.
+
 Both computers must be paired once from **Help → Tailscale Workspace Setup**.
 Saved Tailscale HTTP/IP peers are upgraded automatically to HTTPS MagicDNS when
 the updated remote server is detected. If an unusually configured legacy peer

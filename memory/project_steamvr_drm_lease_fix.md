@@ -14,6 +14,25 @@ whenever the Vive's `HDMI-0` output is live as an ordinary GNOME/X desktop monit
 does not self-report as non-desktop, so X won't release the connector for SteamVR's DRM lease even
 though tracking (lighthouse/basestations/controllers) works fine over USB independently.
 
+**2026-09-08 addendum — saved-session regression.** The active
+GNOME Shell 46 Wayland session advertised no `wp_drm_lease_device_v1` in
+`wayland-info`, and SteamVR failed with `VRInitError_Compositor_GnomeNoDRMLeasing`.
+Forcing its X11 backend changed the trace to the older Xlib path and found the Vive,
+but Xwayland still could not acquire the physical display because Mutter retained
+DRM ownership. Boot journals prove that the original 2026-08-17 bring-up and the
+2026-08-28 live run were both ordinary GDM-managed X11 sessions selected
+automatically. On the 2026-08-30 reboot GDM instead selected Wayland because the
+account's saved AccountsService session had reverted to generic `ubuntu`. Restore
+the saved values to `Session=ubuntu-xorg` and `SessionType=x11`; subsequent normal
+sign-ins use the proven stack without choosing a session from the gear menu. NADOC
+preflights the Wayland protocol rather than waiting 60 seconds for SteamVR to fail.
+
+Historical clarification from the 2026-08-17 session transcript: NADOC's custom
+Linux component is the native OpenXR viewer (including the real submitted-left-eye
+mirror), while SteamVR remains the OpenXR runtime and compositor. The successful
+2026-08-28 compositor log records `CHmdWindowSDL: Using X11`, then direct-mode
+acquisition. No alternate runtime or bespoke headset driver participated.
+
 **Fix:** `xrandr --output HDMI-0 --set non-desktop 1 --off`. This is **session-local** — it resets
 on every connector re-link (headset standby/wake, replug, X logout), so running it once by hand does
 not stick across a new session or the next day.

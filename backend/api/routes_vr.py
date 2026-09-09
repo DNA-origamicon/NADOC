@@ -3032,6 +3032,40 @@ def _detach_hmd_from_desktop() -> None:
     )
 
 
+def _assert_vr_display_lease_available() -> None:
+    """Fail before launch when the current Wayland compositor cannot lease an HMD."""
+    if os.environ.get("XDG_SESSION_TYPE", "x11").lower() != "wayland":
+        return
+    wayland_info = shutil.which("wayland-info")
+    if wayland_info:
+        try:
+            result = subprocess.run(
+                [wayland_info],
+                env=dict(os.environ),
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            result = None
+        if (
+            result is not None
+            and result.returncode == 0
+            and "wp_drm_lease_device_v1" in result.stdout
+        ):
+            return
+    raise HTTPException(
+        503,
+        detail=(
+            "This Wayland desktop does not expose wp_drm_lease_device_v1, so SteamVR "
+            "cannot lease the headset display. Restore this account's saved X11 "
+            "session, sign out and back in, then restart NADOC; no per-login session "
+            "choice is required."
+        ),
+    )
+
+
 def _start_steamvr() -> dict[str, bool]:
     """Start SteamVR through Steam so its dashboard owns the runtime lifecycle."""
     with _RUNTIME_LOCK:
@@ -3043,6 +3077,7 @@ def _start_steamvr() -> dict[str, bool]:
             and status["desktop_overlay_running"]
         ):
             return status
+        _assert_vr_display_lease_available()
         steam = Path("/usr/bin/steam")
         if not steam.is_file():
             raise HTTPException(503, detail="Steam is not installed at /usr/bin/steam.")
