@@ -9,6 +9,12 @@ review_after: 2026-09-01
 
 ## Mission and current state
 
+VR recovery starts with [the restoration guardrails](feedback_vr_restore_proven_path.md)
+and [the workstation fix record](project_steamvr_drm_lease_fix.md). On 2026-09-08 the
+user confirmed the existing physical left-eye mirror displaying `24hb_0xT` worked
+after restoring direct mode/GPU selection and using existing dummy framing. Do not
+recreate that method; this confirmation does not close controller/editing gates.
+
 Make NADOC's native VR view a faithful, comfortable counterpart to the desktop application without creating a second geometry, selection, or job model. As redirected on 2026-08-20, the active implementation priority is now complete in-headset **Extrude** and **Move/Rotate** UI/UX; Twist/Bend and simulation-result expansion remain secondary until those two workflows have safe Confirm/Cancel/Undo transactions and pass their physical gates.
 
 Active branch: `feature/native-vr-navigation` (tracked at `origin/feature/native-vr-navigation`).

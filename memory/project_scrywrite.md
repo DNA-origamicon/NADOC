@@ -7,6 +7,11 @@ review_after: 2026-09-21
 
 # ScryWrite VR troubleshooting
 
+For Vive recovery or a requested dummy left-eye window, first read
+[VR recovery guardrails](feedback_vr_restore_proven_path.md). The existing physical
+mirror and view-relative framing were user-confirmed working on 2026-09-08; do not
+substitute a scripted actor view or new display method.
+
 ## Mission
 
 Give NADOC's custom Linux C++ OpenXR viewer a Playwright-style troubleshooting

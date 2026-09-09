@@ -1,18 +1,82 @@
 ---
 name: project_steamvr_drm_lease_fix
-description: "SteamVR CannotDRMLeaseDisplay on this workstation — root cause, the fix, and where it now lives in code"
+description: "User-confirmed Vive recovery: Tailscale authorization, saved session, desktop exclusion, Steam GPU environment, and existing left-eye dummy framing"
 metadata:
   node_type: memory
   type: project
   originSessionId: 1b7b3467-7fea-49a3-9a58-e4599fce864f
-  modified: 2026-08-19T01:36:43.966Z
+  modified: 2026-09-08
 ---
+
+## Confirmed baseline — read first
+
+**User confirmed working on 2026-09-08:** `24hb_0xT` visible in the existing native
+physical left-eye mirror, with submitted frames and active headset tracking.
+Read [VR recovery guardrails](feedback_vr_restore_proven_path.md) before further
+troubleshooting. The Tailscale browser launch also succeeded without 403. The final
+dummy-framed window was standalone (current-document snapshot, no browser-edit
+sync). Final configuration persistence across another login/reboot remains untested.
+
+## Workstation evidence and installed fixes
 
 On Joshua's Vive workstation, SteamVR's compositor fails `xrCreateSession` with
 `CannotDRMLeaseDisplay` (log shows "Failed to acquire xlib display" / "VR requires direct mode")
 whenever the Vive's `HDMI-0` output is live as an ordinary GNOME/X desktop monitor. The Vive's EDID
 does not self-report as non-desktop, so X won't release the connector for SteamVR's DRM lease even
 though tracking (lighthouse/basestations/controllers) works fine over USB independently.
+
+**2026-09-08 follow-up — X11 login selected the Vive as primary.** After the user
+rebooted into the restored X11 session, RandR reported Vive `HDMI-0` primary at
+2160×1200 and Dell `DP-5` offset by 2160 pixels. The root-owned
+`/etc/X11/xorg.conf.d/20-nvidia-vr.conf` explicitly set `AllowHMD "yes"` (mtime
+2026-04-30). NVIDIA's installed README documents that this overrides its default
+exclusion of HMDs from the desktop. The login problem is therefore earlier than
+NADOC's launch-time detach. Restored `DP-5` primary at 1920×1080/60 Hz, position
+0,0, detached the Vive with `non-desktop=1`, and reduced the framebuffer to
+1920×1080. Verified 96 DPI and text scale 1.0.
+
+Local prevention installed: `~/.config/monitors.xml` now includes the actual
+Dell-alone and Dell-with-Vive-disabled layouts, retaining all old layouts and a
+`monitors.xml.before-vive-fix` backup. GNOME's Initialization autostart entry
+`~/.config/autostart/nadoc-vive-desktop-guard.desktop` invokes
+`~/.local/bin/nadoc-vive-desktop-guard`, which recognizes the Vive's HVR/AA01 EDID
+before setting non-desktop/off. It was run successfully in the live session;
+another login/reboot has not been tested. The user installed the corrected NVIDIA
+config omitting `AllowHMD`; its contents in `/etc/X11/xorg.conf.d/20-nvidia-vr.conf`
+were verified afterward. The staged copy remains at
+`~/.config/nadoc/20-nvidia-vr.conf`, with the original beside it as
+`20-nvidia-vr.conf.original`. The driver-level correction is installed but its
+greeter behavior still needs a future login/reboot check.
+
+**2026-09-08 live retest — Steam selected the wrong GPU.** Steam was already
+running with `DRI_PRIME=pci-0000_0a_00_0` (AMD integrated), while the Vive is
+attached to the NVIDIA RTX 3080 Ti. SteamVR found the Vive through RandR but could
+not match its Vulkan display. The system Steam desktop entry requests the
+non-default GPU; on this workstation the default display GPU is NVIDIA, so GNOME
+selected AMD. Installed a user-local copy at
+`~/.local/share/applications/steam.desktop` with `PrefersNonDefaultGPU=false` and
+`X-KDE-RunOnDiscreteGpu=false`, preserving its other entries/actions. Desktop-file
+validation passed. Gracefully stopped Steam, terminated the orphaned failed
+VR server/monitor, and restarted through NADOC's Tailscale runtime endpoint with
+the inherited override absent. Existing SteamVR per-app NVIDIA launch options
+were preserved. At 21:47 the compositor logged `Acquired xlib display!`,
+`Direct mode: enabled`, `Headset is using direct mode`, NVIDIA RTX 3080 Ti, and
+`Startup Complete`. The Dell stayed at 1920×1080; the Vive stayed off the desktop.
+
+Live document verification: Firefox's Tailscale tab held `24hb_0xT`, document
+`b992029cae21412a89d5dd6f0631eda8`. Help → View in VR successfully launched its
+real snapshot (59.4 s export, 69.7 s click-to-first-frame), with `mirror_eye=left`,
+tracked poses and submitted frames. The stationary dummy faced away from default
+world placement, so the initial mirror correctly showed empty background. Preserved
+that exact scene/visualization under `/tmp/nadoc-vr-live-verification/`, stopped the
+browser-managed viewer normally, then used the existing native framing flags
+`--place-scene-in-view on --scene-view mirror --scene-orientation front
+--scene-distance 1.30 --scene-scale 2.0`, with left mirror and no grid. After 15
+stable tracked poses, the model was visibly centered in the actual submitted eye;
+the maximized window reported `SUBMITTED | DESIGN ONLY | O FRONT | TRACKED` and
+advancing frames. `viewer.log`, `left-eye.jsonl`, and `desktop.png` there retain the
+evidence. This final standalone viewer uses the current document's snapshot, not
+the browser's live editing bridge. Closing it ends that viewer; SteamVR stays up.
 
 **2026-09-08 addendum — saved-session regression.** The active
 GNOME Shell 46 Wayland session advertised no `wp_drm_lease_device_v1` in

@@ -56,6 +56,8 @@ Topic heads use `type`/`status`/`authority`/`review_after` frontmatter when usef
 
 Files are `feedback_<name>.md`. Match the name against what you're editing; each is short.
 
+**VR recovery:** **[vr_restore_proven_path](feedback_vr_restore_proven_path.md)** — READ FIRST for SteamVR/Vive/Tailscale launch or dummy left-eye issues; diagnostic order and no replacement-viewer detours.
+
 **General:** **[refer_to_jobs_by_part_and_time](feedback_refer_to_jobs_by_part_and_time.md)** (name jobs by part+time)·**[runpod_downloads_to_archive](feedback_runpod_downloads_to_archive.md)** (→ `/media/jojo/Archive`) ·
 **[concurrent_sessions](feedback_concurrent_sessions.md)** (shared worktree — never `git stash`/`reset`/`restore`)·**[geometry_change_authorization](feedback_geometry_change_authorization.md)** (show atoms/deltas before authorization) ·
 **[no_live_server_mutation_for_verify](feedback_no_live_server_mutation_for_verify.md)**·**[use_completion_triggers](feedback_use_completion_triggers.md)** (never foreground sleep/poll) ·
